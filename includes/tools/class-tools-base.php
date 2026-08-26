@@ -136,11 +136,49 @@ abstract class AB_MCP_Tools_Base {
 	 * @return bool
 	 */
 	protected static function is_sensitive_meta_key( $key ) {
-		$key = strtolower( (string) $key );
+		$key = strtolower( trim( (string) $key ) );
+		if ( '' === $key ) {
+			return false;
+		}
+
+		// Bare credential names, matched as the WHOLE key and never as a
+		// substring. A key called exactly "token" or "secret" is a credential in
+		// practice, but the same word inside a longer name usually is not:
+		// matching these as substrings would wrongly refuse token_count,
+		// password_hint or credential_type. Plurals are listed explicitly.
+		$exact = array(
+			'token',
+			'tokens',
+			'secret',
+			'secrets',
+			'password',
+			'passwords',
+			'passphrase',
+			'passphrases',
+			'passcode',
+			'passcodes',
+			'pwd',
+			'pwds',
+			'otp',
+			'otps',
+			'credential',
+			'credentials',
+		);
+		if ( in_array( $key, $exact, true ) ) {
+			return true;
+		}
+
 		// High-precision compound credential patterns: these virtually never
 		// occur in legitimate content meta, so they avoid false positives on
 		// keys like token_count, email_signature, password_hint or
 		// credential_type while still catching real API keys and tokens.
+		//
+		// Matched as written, on purpose. Normalising the key first — removing
+		// separators, or treating camelCase as a word boundary — would catch
+		// accessToken as well, but it also turns co_author into "coauthor",
+		// which contains "oauth". Ordinary fields must not be refused, so the
+		// guard stays literal and leaves such spellings to the meta capability
+		// check that runs after it.
 		$needles = array(
 			'api_key',
 			'apikey',
@@ -158,6 +196,7 @@ abstract class AB_MCP_Tools_Base {
 			'refresh_token',
 			'auth_token',
 			'bearer_token',
+			'license_key',
 			'oauth',
 			'_token',
 			'_secret',

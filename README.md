@@ -38,13 +38,17 @@ Handing an AI access to a site should feel safe, so control comes first:
   Plus a global read-only mode.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed.
-- **Layered meta protection** — protected keys, `is_protected_meta()` keys and keys matching
-  compound credential patterns (`api_key`, `access_token`, `client_secret`, `oauth`, …) are
-  refused. The patterns are deliberately compound, so that ordinary keys such as `token_count`
-  or `password_hint` are not caught; they are defence-in-depth, not the primary control. Generic
-  meta access additionally passes WordPress's own per-key meta capability
+- **Layered meta protection** — protected keys, `is_protected_meta()` keys and two kinds of
+  credential-shaped key are refused: keys whose whole name is a credential word, singular or
+  plural (`token`, `secret`, `password`, `passphrase`, `passcode`, `pwd`, `otp`, `credential`),
+  and keys containing one of a fixed list of compound patterns (`api_key`, `access_token`,
+  `client_secret`, `license_key`, `oauth`, `_token`, `_secret`, `_password`, …). The list is
+  matched literally, which makes the guard deliberately conservative rather than exhaustive:
+  ordinary keys such as `token_count`, `password_hint` and counters such as `maxTokens` pass it,
+  and so do camelCase spellings such as `accessToken`. It is defence-in-depth, not the primary
+  control. Generic meta access additionally passes WordPress's own per-key meta capability
   (`edit_post_meta` / `edit_term_meta` / `edit_user_meta`), which honours `auth_callback` rules
-  registered by other plugins.
+  registered by other plugins — that is the layer doing the real work.
 - **Audit log** of every tool call, plus a fixed rate limit against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html
