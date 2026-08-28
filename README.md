@@ -1,5 +1,7 @@
 # AlphaBridge MCP — free plugin
 
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/alphabridge-mcp-com)
+
 **Your WordPress site, managed in conversation.** AlphaBridge MCP turns a WordPress site into a
 native [Model Context Protocol](https://modelcontextprotocol.io) server. Claude and other MCP
 clients connect over one authenticated HTTPS endpoint and manage content, media, taxonomies,
