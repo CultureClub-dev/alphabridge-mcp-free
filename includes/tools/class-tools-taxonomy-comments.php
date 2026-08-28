@@ -312,12 +312,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $tax_obj->cap->manage_terms ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy.', 'alphabridge-mcp' ) );
 		}
+		// wp_insert_term() unslashes exactly two of these — name and
+		// description — so only those are slashed. Slashing the slug would add
+		// a backslash that sanitize_title() then turns into a dash.
 		$res = wp_insert_term(
-			self::s( $a, 'name' ),
+			wp_slash( self::s( $a, 'name' ) ),
 			$tax,
 			array(
 				'slug'        => self::s( $a, 'slug', '' ),
-				'description' => self::s( $a, 'description', '' ),
+				'description' => wp_slash( self::s( $a, 'description', '' ) ),
 				'parent'      => self::i( $a, 'parent', 0 ),
 			)
 		);
@@ -352,7 +355,10 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$fields = array();
 		foreach ( array( 'name', 'slug', 'description' ) as $k ) {
 			if ( array_key_exists( $k, $a ) ) {
-				$fields[ $k ] = self::s( $a, $k );
+				// wp_update_term() unslashes name and description, not slug.
+				$fields[ $k ] = in_array( $k, array( 'name', 'description' ), true )
+					? wp_slash( self::s( $a, $k ) )
+					: self::s( $a, $k );
 			}
 		}
 		if ( array_key_exists( 'parent', $a ) ) {
@@ -478,8 +484,9 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
 		}
 		$user = wp_get_current_user();
+		// wp_insert_comment() unslashes the whole array it is given.
 		$id   = wp_insert_comment(
-			array(
+			wp_slash( array(
 				'comment_post_ID'      => $post_id,
 				'comment_parent'       => self::i( $a, 'parent', 0 ),
 				'comment_content'      => wp_kses_post( self::s( $a, 'content' ) ),
@@ -487,7 +494,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 				'comment_author'       => $user->display_name,
 				'comment_author_email' => $user->user_email,
 				'comment_approved'     => 1,
-			)
+			) )
 		);
 		if ( ! $id ) {
 			return new WP_Error( 'ab_mcp_comment_failed', __( 'Could not create comment.', 'alphabridge-mcp' ) );

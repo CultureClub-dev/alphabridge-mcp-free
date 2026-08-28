@@ -206,8 +206,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! $pto || ! current_user_can( $pto->cap->create_posts ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
 		}
+		// The source values come out of the database unslashed, and
+		// wp_insert_post() expects them slashed — without this a copy of a post
+		// whose title holds a backslash loses it.
 		$id = wp_insert_post(
-			array(
+			wp_slash( array(
 				'post_type'    => $src->post_type,
 				'post_title'   => $src->post_title . ' (Copy)',
 				'post_content' => $src->post_content,
@@ -217,7 +220,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				'menu_order'   => $src->menu_order,
 			),
 			true
-		);
+		) );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -423,7 +426,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			$postarr['post_date'] = self::s( $a, 'date' );
 		}
 
-		$id = wp_insert_post( $postarr, true );
+		// Slashed on the way in. WordPress unslashes what it is given here
+		// ("Expected_slashed (everything!)" says wp_insert_post itself), so
+		// handing it raw data stores a backslash-bearing value mangled:
+		// "C:\Docs" becomes "C:Docs".
+		$id = wp_insert_post( wp_slash( $postarr ), true );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -491,7 +498,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			unset( $postarr['post_author'] );
 		}
 
-		$res = wp_update_post( $postarr, true );
+		// Same rule as create: wp_update_post() hands this straight to
+		// wp_insert_post(), which unslashes it.
+		$res = wp_update_post( wp_slash( $postarr ), true );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -589,7 +598,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( ! current_user_can( 'edit_post_meta', $id, $clean ) ) {
 				continue;
 			}
-			update_post_meta( $id, $clean, $value );
+			// update_metadata() unslashes key and value; the key is already
+			// sanitize_key()'d above, the value is not.
+			update_post_meta( $id, $clean, wp_slash( $value ) );
 		}
 
 		$terms = self::arr( $a, 'terms', array() );
@@ -612,7 +623,8 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						if ( ! current_user_can( $tax_obj->cap->manage_terms ) ) {
 							continue;
 						}
-						$term = wp_insert_term( $t, $tax );
+						// wp_insert_term() unslashes the name.
+						$term = wp_insert_term( wp_slash( $t ), $tax );
 					}
 					if ( ! is_wp_error( $term ) && isset( $term['term_id'] ) ) {
 						$ids[] = (int) $term['term_id'];

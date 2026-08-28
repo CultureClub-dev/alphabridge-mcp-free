@@ -4,7 +4,7 @@ Tags: mcp, ai, automation, rest-api, tools
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 4.2.2
+Stable tag: 4.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -84,6 +84,9 @@ No. It contacts no external service on its own. The only outbound request happen
 This plugin makes no automatic outbound requests and sends no telemetry. One tool can contact an external address, and only on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked). The plugin itself initiates no other outbound requests.
 
 == Changelog ==
+
+= 4.2.3 =
+* Fix: a backslash in a title, name, description, comment or custom field was silently dropped when writing. WordPress expects the data it is given to be escaped and removes one level of escaping itself, so passing it through unchanged turned "C:\Docs" into "C:Docs" — with no error anywhere. Every write path now escapes what it hands over: posts and pages, media titles and alt text, terms, post meta and comments. Values without a backslash are unaffected, and nothing already stored changes.
 
 = 4.2.2 =
 * Hardening: the meta-key credential guard now refuses keys whose whole name is a bare credential word — token, secret, password, passphrase, passcode, pwd, otp, credential, and their plurals. Previously only compound patterns such as api_token or client_secret were caught, so a key named exactly "token" could be read or written by a user who already held the key's own edit capability. The compound list itself is unchanged apart from license_key, so everything 4.2.0 refused stays refused and no ordinary key changes behaviour. If one of your fields is named exactly like one of those words, its value stays untouched in the database but is no longer readable or writable over MCP.

@@ -321,7 +321,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		}
 
 		if ( self::s( $a, 'alt', '' ) ) {
-			update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( self::s( $a, 'alt' ) ) );
+			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( self::s( $a, 'alt' ) ) ) );
 		}
 
 		return array(
@@ -396,7 +396,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			return $id;
 		}
 		if ( self::s( $a, 'alt', '' ) ) {
-			update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( self::s( $a, 'alt' ) ) );
+			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( self::s( $a, 'alt' ) ) ) );
 		}
 		return array(
 			'uploaded' => true,
@@ -428,10 +428,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			$update['post_excerpt'] = self::s( $a, 'caption' );
 		}
 		if ( count( $update ) > 1 ) {
-			wp_update_post( $update );
+			wp_update_post( wp_slash( $update ) );
 		}
 		if ( array_key_exists( 'alt', $a ) ) {
-			update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( self::s( $a, 'alt' ) ) );
+			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( self::s( $a, 'alt' ) ) ) );
 		}
 		return array(
 			'updated' => true,
