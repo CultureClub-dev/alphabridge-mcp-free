@@ -43,6 +43,21 @@ class AB_MCP_OAuth {
 	const CODE_PREFIX   = 'abac_';
 	const CLIENT_PREFIX = 'abc_';
 
+	/**
+	 * Client name the AlphaBridge Connect hub registers itself under (RFC 7591
+	 * `client_name`). Connections created by it are labelled with this name
+	 * alone, so a site owner sees at a glance that the connection came through
+	 * the hub rather than from a client that talks to this site directly.
+	 *
+	 * The name is SELF-ASSERTED. Dynamic client registration lets any client pick
+	 * any name, so this label says "this client called itself AlphaBridge Connect",
+	 * not "this is verified to be AlphaBridge Connect". That is true of every
+	 * client name in the list, and the label grants nothing — it is a reading aid.
+	 * Verifiable provenance needs CIMD, where the client id is a URL this site can
+	 * fetch and check; that is planned and not available here yet.
+	 */
+	const CONNECT_CLIENT_NAME = 'AlphaBridge Connect';
+
 	/* ---------------------------------------------------------------- state */
 
 	/**
@@ -108,6 +123,8 @@ class AB_MCP_OAuth {
 			'authorization_endpoint'                => home_url( '/?ab_mcp_oauth=authorize' ),
 			'token_endpoint'                        => rest_url( self::ns() . '/oauth/token' ),
 			'registration_endpoint'                 => rest_url( self::ns() . '/oauth/register' ),
+			'revocation_endpoint'                   => rest_url( self::ns() . '/oauth/revoke' ),
+			'revocation_endpoint_auth_methods_supported' => array( 'none' ),
 			'response_types_supported'              => array( 'code' ),
 			'grant_types_supported'                 => array( 'authorization_code' ),
 			'code_challenge_methods_supported'      => array( 'S256' ),
@@ -368,7 +385,7 @@ class AB_MCP_OAuth {
 		$ttl     = (int) apply_filters( 'ab_mcp_oauth_token_ttl', 0, (string) $data['scope'] );
 		$expires = $ttl > 0 ? time() + $ttl : 0;
 
-		$label = $client['name'] . ' · Claude Connect';
+		$label = self::connection_label( isset( $client['name'] ) ? (string) $client['name'] : '' );
 		$token = AB_MCP_Settings::add_token( (int) $data['user_id'], $label, (string) $data['scope'], $expires );
 
 		return array(
@@ -488,6 +505,15 @@ class AB_MCP_OAuth {
 				'permission_callback' => '__return_true', // Public by RFC 6749; PKCE + single-use consented codes gate it.
 			)
 		);
+		register_rest_route(
+			self::ns(),
+			'/oauth/revoke',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'rest_revoke' ),
+				'permission_callback' => '__return_true', // Public by RFC 7009: the presented token IS the credential.
+			)
+		);
 	}
 
 	/**
@@ -537,6 +563,131 @@ class AB_MCP_OAuth {
 			return self::rest_json( $out, 'invalid_client' === $out['error'] ? 401 : 400 );
 		}
 		return self::rest_json( $out, 200 );
+	}
+
+	/**
+	 * POST /oauth/revoke — RFC 7009 token revocation.
+	 *
+	 * The presented token is itself the credential, so the endpoint needs no
+	 * further authentication. RFC 7009 section 2.2 requires HTTP 200 with an
+	 * empty body whenever the request is well formed, whether or not the token
+	 * existed: an attacker must not be able to tell a valid token from an
+	 * invalid one by the response. The only non-200 answers are a missing
+	 * `token` parameter (400, per section 2.1) and the rate limit.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public static function rest_revoke( $request ) {
+		// Defence in depth only. Guessing a token is infeasible (192 bits), but a
+		// public endpoint that touches stored state gets the same brake as the
+		// other two. The bound is generous: a hub revokes on disconnect, rarely.
+		if ( ! self::within_rate_limit( 'rev', 60 ) ) {
+			return self::rest_json(
+				array(
+					'error'             => 'invalid_request',
+					'error_description' => 'Too many attempts, try later.',
+				),
+				429
+			);
+		}
+
+		$params = $request->get_body_params();
+		if ( empty( $params ) ) {
+			$json   = $request->get_json_params();
+			$params = is_array( $json ) ? $json : array();
+		}
+
+		// `token` must be a string: a caller can post token[]=x, and casting an
+		// array raises a PHP warning and yields the literal "Array". A length cap
+		// keeps an unauthenticated request from making the site hash megabytes.
+		// Issued tokens are 54 characters ("abmcp_" + 48 hex); 512 is generous.
+		$token = isset( $params['token'] ) && is_string( $params['token'] ) ? $params['token'] : '';
+		if ( strlen( $token ) > 512 ) {
+			$token = '';
+		}
+		if ( '' === $token ) {
+			// RFC 7009 section 2.1: `token` is REQUIRED. A request without it is
+			// malformed, not "a token that happens not to exist".
+			return self::rest_json(
+				array(
+					'error'             => 'invalid_request',
+					'error_description' => 'Parameter token is required.',
+				),
+				400
+			);
+		}
+
+		// token_type_hint (section 2.1) is optional and advisory. This server
+		// issues exactly one kind of token, so an unknown or wrong hint must not
+		// change the outcome — RFC 7009 requires the server to keep searching.
+		self::revoke_token( $token );
+
+		$response = new WP_REST_Response( null, 200 );
+		$response->header( 'Cache-Control', 'no-store' );
+		$response->header( 'Pragma', 'no-cache' );
+		return $response;
+	}
+
+	/**
+	 * Revoke one access token. Pure logic — no HTTP, so it is testable and can
+	 * be called from elsewhere.
+	 *
+	 * @param string $token Presented plaintext token.
+	 * @return bool True when a stored token was removed, false when none matched.
+	 */
+	public static function revoke_token( $token ) {
+		$token = (string) $token;
+		if ( '' === $token ) {
+			return false;
+		}
+
+		// Tokens are stored as SHA-256 hashes only (see AB_MCP_Settings::add_token),
+		// so revocation works on the hash of what was presented.
+		$hash  = hash( 'sha256', $token );
+		$known = false;
+		foreach ( AB_MCP_Settings::get_tokens() as $entry ) {
+			// hash_equals for the comparison, and no early break: the loop costs
+			// the same whether the match sits first or last, so its duration says
+			// nothing about WHERE a token is stored.
+			if ( ! empty( $entry['hash'] ) && hash_equals( (string) $entry['hash'], $hash ) ) {
+				$known = true;
+			}
+		}
+
+		// One residual difference is accepted knowingly: a hit writes the option,
+		// a miss does not, and that is measurable. The alternative — writing on
+		// every request — would turn a public endpoint into a write amplifier that
+		// anyone can aim at the database with junk tokens. Guessing a token to
+		// exploit the timing means guessing 192 bits; the write amplifier needs
+		// nothing but a loop. The cheaper attack is the one that gets closed.
+		if ( $known ) {
+			AB_MCP_Settings::delete_token( $hash );
+		}
+
+		return $known;
+	}
+
+	/**
+	 * The label a connection gets in the settings list, derived from the OAuth
+	 * client that created it.
+	 *
+	 * A connection made through the AlphaBridge Connect hub is labelled with the
+	 * hub's name alone. Appending "· Claude Connect" as well would read
+	 * "AlphaBridge Connect · Claude Connect", which says the same thing twice and
+	 * hides which of the two the site owner is actually looking at.
+	 *
+	 * @param string $client_name RFC 7591 `client_name` of the registered client.
+	 * @return string
+	 */
+	public static function connection_label( $client_name ) {
+		$client_name = trim( (string) $client_name );
+
+		if ( 0 === strcasecmp( $client_name, self::CONNECT_CLIENT_NAME ) ) {
+			return self::CONNECT_CLIENT_NAME;
+		}
+
+		return $client_name . ' · Claude Connect';
 	}
 
 	/**

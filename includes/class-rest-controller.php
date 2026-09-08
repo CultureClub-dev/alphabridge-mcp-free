@@ -26,6 +26,20 @@ class AB_MCP_REST_Controller {
 	const SUPPORTED_PROTOCOL_VERSIONS = array( '2024-11-05', '2025-03-26', '2025-06-18' );
 
 	/**
+	 * Key of the AlphaBridge self-description inside the initialize `_meta`.
+	 *
+	 * Reverse-DNS namespaced as MCP requires for vendor extensions, so it can
+	 * never collide with another server's `_meta` entries.
+	 */
+	const SITE_META_KEY = 'com.alphabridge-mcp/site';
+
+	/**
+	 * Version of the AlphaBridge Site Contract this plugin implements. A hub
+	 * refuses to link a site whose contract version it does not know.
+	 */
+	const SITE_CONTRACT_VERSION = 1;
+
+	/**
 	 * Registry.
 	 *
 	 * @var AB_MCP_Tool_Registry
@@ -376,6 +390,54 @@ class AB_MCP_REST_Controller {
 				'version' => AB_MCP_VERSION,
 			),
 			'instructions'    => $instructions,
+			'_meta'           => array(
+				self::SITE_META_KEY => $this->site_meta(),
+			),
+		);
+	}
+
+	/**
+	 * Self-description carried in the `_meta` field of the initialize result.
+	 *
+	 * This is the AlphaBridge Site Contract (version 1). A hub that proxies MCP
+	 * to this site reads it to learn which CMS answered, which edition is
+	 * licensed and which scope the presented token carries — without probing
+	 * the site or guessing from serverInfo strings.
+	 *
+	 * What this is NOT: a licence proof. Every field here is what the site says
+	 * about itself, and the site is under its owner's control — a one-line filter
+	 * in a must-use plugin can report any edition. A consumer may use `edition`
+	 * to decide what to OFFER (which is a courtesy, and wrong at worst), never as
+	 * the sole gate on something that costs money. Real proof has to come from
+	 * the licence server, not from the licensee.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function site_meta() {
+		/**
+		 * The licensed edition of this installation.
+		 *
+		 * The free plugin always reports 'free'. The Pro add-on hooks in and
+		 * reports 'pro' or 'agency' according to the active licence; with an
+		 * expired or missing licence it must report 'free'.
+		 *
+		 * @param string $edition 'free' | 'pro' | 'agency'.
+		 */
+		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
+		// Fail closed: an unknown value from a filter becomes 'free', never a
+		// higher edition. Gating on the hub side depends on this field, so a
+		// typo in an add-on must not hand out agency features.
+		if ( ! in_array( $edition, array( 'free', 'pro', 'agency' ), true ) ) {
+			$edition = 'free';
+		}
+
+		return array(
+			'contract'       => self::SITE_CONTRACT_VERSION,
+			'cms'            => 'wordpress',
+			'cms_version'    => (string) get_bloginfo( 'version' ),
+			'edition'        => $edition,
+			'plugin_version' => AB_MCP_VERSION,
+			'scope'          => AB_MCP_Auth::current_scope(),
 		);
 	}
 

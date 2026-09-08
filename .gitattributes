@@ -1,0 +1,15 @@
+# Everything a release must not carry. `git archive` honours these, so the CI
+# job builds the same tree a release does and can look inside it — a check that
+# reads a list of filenames proves nothing.
+/.github          export-ignore
+/.gitattributes   export-ignore
+/.gitignore       export-ignore
+/.distignore      export-ignore
+/composer.json    export-ignore
+/composer.lock    export-ignore
+/phpunit.xml.dist export-ignore
+/tests            export-ignore
+/README.md        export-ignore
+/SECURITY.md      export-ignore
+/glama.json       export-ignore
+/RELEASE.md       export-ignore

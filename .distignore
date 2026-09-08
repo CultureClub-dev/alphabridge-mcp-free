@@ -1,0 +1,13 @@
+# Files that must never reach the WordPress.org ZIP.
+/.git
+/.github
+/.gitignore
+/.distignore
+/composer.json
+/composer.lock
+/phpunit.xml.dist
+/tests
+/vendor
+/README.md
+/SECURITY.md
+/glama.json

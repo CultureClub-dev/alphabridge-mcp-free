@@ -1,0 +1,110 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Parses on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The plugin header promises "Requires PHP: 8.0", so the shipped code has
+        # to parse there. The test tooling does not run on 8.0 (PHPUnit 10 needs
+        # 8.1), which is why parsing and testing are separate jobs rather than one
+        # matrix that would quietly drop the oldest version.
+        php: ['8.0', '8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Lint every shipped PHP file
+        run: |
+          set -e
+          # Only the files that actually ship: tests are dev-only and may use
+          # newer syntax than the plugin promises.
+          find . -path ./vendor -prune -o -path ./tests -prune -o -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+  unit:
+    name: PHPUnit on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dev dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit --testdox
+
+  package:
+    name: ZIP stays clean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The plugin ships without Composer. This builds the archive the same way
+      # a release does (git archive honours .gitattributes export-ignore) and
+      # looks INSIDE it — checking that a filename appears in an ignore list
+      # would prove nothing about what actually ships.
+      - name: Build the shippable tree and inspect it
+        run: |
+          set -e
+          git archive HEAD --prefix=alphabridge-mcp/ -o /tmp/plugin.tar
+          echo "--- files that would ship ---"
+          tar -tf /tmp/plugin.tar
+          echo "--- forbidden entries ---"
+          if tar -tf /tmp/plugin.tar | grep -E 'composer\.(json|lock)|phpunit|/tests/|/vendor/|/\.github/|\.gitattributes|\.distignore'; then
+            echo "FAIL: development files would reach the plugin directory"
+            exit 1
+          fi
+          echo "none"
+          # The two files WordPress.org needs must be there.
+          for required in alphabridge-mcp/alphabridge-mcp.php alphabridge-mcp/readme.txt; do
+            tar -tf /tmp/plugin.tar | grep -qx "$required" || { echo "FAIL: $required missing"; exit 1; }
+          done
+          echo "readme.txt and the plugin file are present"
+
+      # readme.txt is what WordPress.org serves from. Its Stable tag decides
+      # which version users get, so it must never quietly drift ahead of a
+      # version that was never released — nor lag behind one that was.
+      - name: Stable tag is not ahead of the plugin version
+        run: |
+          set -e
+          stable=$(grep -m1 -oE '^Stable tag: *[0-9.]+' readme.txt | grep -oE '[0-9.]+')
+          version=$(grep -m1 -oE '^ \* Version: +[0-9.]+' alphabridge-mcp.php | grep -oE '[0-9.]+')
+          echo "Stable tag=$stable  plugin version=$version"
+          if [ "$(printf '%s\n%s\n' "$stable" "$version" | sort -V | tail -1)" != "$version" ]; then
+            echo "FAIL: Stable tag $stable is ahead of the plugin version $version"
+            exit 1
+          fi
+          [ "$stable" = "$version" ] || echo "NOTE: release pending — bump Stable tag to $version when publishing (see RELEASE.md)"
+
+      - name: Plugin header version matches the constant
+        run: |
+          set -e
+          header=$(grep -m1 -oE '^ \* Version: +[0-9.]+' alphabridge-mcp.php | grep -oE '[0-9.]+')
+          const=$(grep -m1 -oE "AB_MCP_VERSION', '[0-9.]+" alphabridge-mcp.php | grep -oE '[0-9.]+')
+          echo "header=$header constant=$const"
+          [ "$header" = "$const" ]
