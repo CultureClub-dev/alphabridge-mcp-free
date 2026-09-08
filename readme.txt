@@ -85,6 +85,11 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 
 == Changelog ==
 
+= 4.3.0 =
+* New: a revocation endpoint (RFC 7009) at `/wp-json/alphabridge/v1/oauth/revoke`. A client that holds a connection token can now hand it back and end the connection itself, instead of the connection lingering until somebody deletes it in the settings. The endpoint is announced in the discovery document, so clients find it without being told the path. It answers the same way whether or not the token existed, which is what the standard requires: the answer must not reveal whether a token is valid.
+* New: the `initialize` response now carries a short self-description under `_meta` — which CMS answered, its version, the plugin version, the licensed edition and the scope of the token that was used. A hub or client that speaks to several sites can tell them apart without guessing from version strings. Nothing about your content is included.
+* Change: a connection created through AlphaBridge Connect is now labelled with that name alone in the connections list, instead of "AlphaBridge Connect · Claude Connect".
+
 = 4.2.3 =
 * Fix: a backslash in a title, name, description, comment or custom field was silently dropped when writing. WordPress expects the data it is given to be escaped and removes one level of escaping itself, so passing it through unchanged turned "C:\Docs" into "C:Docs" — with no error anywhere. Every write path now escapes what it hands over: posts and pages, media titles and alt text, terms, post meta and comments. Values without a backslash are unaffected, and nothing already stored changes.
 

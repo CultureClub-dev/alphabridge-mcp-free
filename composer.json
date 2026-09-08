@@ -1,0 +1,20 @@
+{
+    "name": "alphabridge/mcp-free",
+    "description": "AlphaBridge MCP for WordPress — development tooling only. The plugin itself ships without Composer.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require-dev": {
+        "phpunit/phpunit": "^10.5 || ^11.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AlphaBridge\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
