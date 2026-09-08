@@ -9,15 +9,40 @@ permissions:
   contents: read
 
 jobs:
-  unit:
-    name: PHPUnit
+  lint:
+    name: Parses on PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # The plugin header requires PHP 8.0; the oldest supported version has to
-        # stay green, and the newest catches deprecations before a host does.
-        php: ['8.0', '8.3', '8.4']
+        # The plugin header promises "Requires PHP: 8.0", so the shipped code has
+        # to parse there. The test tooling does not run on 8.0 (PHPUnit 10 needs
+        # 8.1), which is why parsing and testing are separate jobs rather than one
+        # matrix that would quietly drop the oldest version.
+        php: ['8.0', '8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Lint every shipped PHP file
+        run: |
+          set -e
+          # Only the files that actually ship: tests are dev-only and may use
+          # newer syntax than the plugin promises.
+          find . -path ./vendor -prune -o -path ./tests -prune -o -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+  unit:
+    name: PHPUnit on PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
     steps:
       - uses: actions/checkout@v4
 
@@ -29,9 +54,6 @@ jobs:
 
       - name: Install dev dependencies
         run: composer update --no-interaction --no-progress --prefer-dist
-
-      - name: Lint every PHP file
-        run: find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: PHPUnit
         run: vendor/bin/phpunit --testdox

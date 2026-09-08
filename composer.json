@@ -1,6 +1,6 @@
 {
     "name": "alphabridge/mcp-free",
-    "description": "AlphaBridge MCP for WordPress — development tooling only. The plugin itself ships without Composer.",
+    "description": "AlphaBridge MCP for WordPress — development tooling only. The plugin itself ships without Composer and runs on PHP 8.0; the test suite needs 8.2.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require-dev": {
@@ -15,6 +15,9 @@
         "test": "phpunit"
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2.0"
+        }
     }
 }
