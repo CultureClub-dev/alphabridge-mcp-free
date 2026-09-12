@@ -60,6 +60,55 @@ class AB_MCP_Settings {
 			}
 			update_option( self::OPT_TOOLSTATE, $state );
 		}
+
+		self::rename_tool_state_keys();
+	}
+
+	/**
+	 * Tools renamed in 4.3.0, old name => new name.
+	 *
+	 * @var array<string,string>
+	 */
+	const RENAMED_TOOLS = array(
+		'seo_detect' => 'wp_seo_detect',
+		'seo_get'    => 'wp_seo_get',
+	);
+
+	/**
+	 * Carry per-tool on/off overrides across a rename.
+	 *
+	 * The override map is keyed by tool name. After a rename the old key points
+	 * at nothing and the tool falls back to its default — which for these two
+	 * is "on". An admin who had deliberately switched the SEO tool off would
+	 * find it back after updating, with no error and nothing to see in the
+	 * settings. Silently re-enabling something somebody switched off is the
+	 * kind of regression nobody reports, because it looks like it was always
+	 * that way.
+	 *
+	 * Runs on every load and costs one option read. A new name already present
+	 * wins: it is the more recent decision.
+	 */
+	private static function rename_tool_state_keys() {
+		$state = get_option( self::OPT_TOOLSTATE );
+		if ( ! is_array( $state ) ) {
+			return;
+		}
+
+		$changed = false;
+		foreach ( self::RENAMED_TOOLS as $old => $new ) {
+			if ( ! array_key_exists( $old, $state ) ) {
+				continue;
+			}
+			if ( ! array_key_exists( $new, $state ) ) {
+				$state[ $new ] = $state[ $old ];
+			}
+			unset( $state[ $old ] );
+			$changed = true;
+		}
+
+		if ( $changed ) {
+			update_option( self::OPT_TOOLSTATE, $state );
+		}
 	}
 
 	/* -------------------------------------------------------------- Tool state */
