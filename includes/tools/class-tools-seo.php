@@ -67,7 +67,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 	public static function register( AB_MCP_Tool_Registry $r ) {
 
 		$r->register(
-			'seo_detect',
+			'wp_seo_detect',
 			array(
 				'description' => 'Detect the active SEO plugin (Yoast, Rank Math, AIOSEO or none).',
 				'capability'  => 'edit_posts',
@@ -76,7 +76,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		);
 
 		$r->register(
-			'seo_get',
+			'wp_seo_get',
 			array(
 				'description' => 'Get the SEO title, meta description and focus keyword for a post.',
 				'capability'  => 'edit_posts',

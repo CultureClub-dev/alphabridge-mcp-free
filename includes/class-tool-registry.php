@@ -118,8 +118,8 @@ class AB_MCP_Tool_Registry {
 			'wp_deploy_read',
 			'wp_deploy_test',
 			'wp_network_list_sites',
-			'seo_detect',
-			'seo_get',
+			'wp_seo_detect',
+			'wp_seo_get',
 		);
 		return in_array( $name, $reads, true );
 	}
