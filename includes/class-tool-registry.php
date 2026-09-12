@@ -101,7 +101,7 @@ class AB_MCP_Tool_Registry {
 		if ( isset( $def['readonly'] ) && null !== $def['readonly'] ) {
 			return (bool) $def['readonly'];
 		}
-		foreach ( array( 'wp_list_', 'wp_get_', 'wp_read_', 'wc_list_', 'wc_get_' ) as $prefix ) {
+		foreach ( array( 'wp_list_', 'wp_get_', 'wp_read_', 'wp_wc_list_', 'wp_wc_get_' ) as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
 				return true;
 			}
