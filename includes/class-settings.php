@@ -76,6 +76,16 @@ class AB_MCP_Settings {
 		// file, and one place for the whole family beats two that drift apart.
 		// A free installation simply never holds that key.
 		'seo_set'    => 'wp_seo_set',
+		// The WooCommerce tools, also Pro. Same rule, same reason.
+		'wc_create_coupon'       => 'wp_wc_create_coupon',
+		'wc_get_order'           => 'wp_wc_get_order',
+		'wc_get_product'         => 'wp_wc_get_product',
+		'wc_list_coupons'        => 'wp_wc_list_coupons',
+		'wc_list_customers'      => 'wp_wc_list_customers',
+		'wc_list_orders'         => 'wp_wc_list_orders',
+		'wc_list_products'       => 'wp_wc_list_products',
+		'wc_update_order_status' => 'wp_wc_update_order_status',
+		'wc_update_product'      => 'wp_wc_update_product',
 	);
 
 	/**
