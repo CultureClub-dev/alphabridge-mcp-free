@@ -39,7 +39,12 @@ final class ToolNamesTest extends TestCase {
 		$names = array();
 		foreach ( glob( dirname( __DIR__ ) . '/includes/tools/*.php' ) as $file ) {
 			$source = file_get_contents( $file );
-			if ( preg_match_all( "/->register\\(\\s*'([a-z0-9_]+)'/", $source, $m ) ) {
+			// Deliberately permissive: anything between the quotes. A pattern
+			// that only matched [a-z0-9_] would not find a name with a capital
+			// letter — and the rule about capitals would then pass because the
+			// offending name was never extracted. An assertion that cannot see
+			// its own counter-example is not an assertion.
+			if ( preg_match_all( '/->register\\(\\s*[\'"]([^\'"]+)[\'"]/', $source, $m ) ) {
 				$names = array_merge( $names, $m[1] );
 			}
 		}
@@ -50,6 +55,22 @@ final class ToolNamesTest extends TestCase {
 		// Without this the rules below would pass on an empty list, which is
 		// how a test about names survives the file layout changing under it.
 		$this->assertGreaterThan( 20, count( $this->registeredNames() ) );
+	}
+
+	public function testEveryRegistrationYieldedAName(): void {
+		// A tool registered through a variable or a constant is invisible to
+		// the pattern above, and the rules would then simply not apply to it.
+		// Counting the calls and the names catches that: the two must match.
+		$calls = 0;
+		foreach ( glob( dirname( __DIR__ ) . '/includes/tools/*.php' ) as $file ) {
+			$calls += preg_match_all( '/->register\\(/', file_get_contents( $file ) );
+		}
+
+		$this->assertSame(
+			$calls,
+			count( $this->registeredNames() ),
+			'Some register() call does not pass a literal name, so the naming rules below never see it.'
+		);
 	}
 
 	public function testEveryToolNameCarriesTheWordPressPrefix(): void {
