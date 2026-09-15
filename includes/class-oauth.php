@@ -40,6 +40,32 @@ class AB_MCP_OAuth {
 	const OPT_CLIENTS   = 'ab_mcp_oauth_clients';
 	const CODE_TTL      = 120;
 	const MAX_CLIENTS   = 100;
+
+	/**
+	 * Wie lange ein Zaehlfenster gilt. Fest, nicht verlaengerbar.
+	 *
+	 * Ein festes Fenster hat einen bekannten Randeffekt: wer das Fenster
+	 * ausschoepft und gleich nach seinem Ende ein neues ausschoepft, bringt in
+	 * wenigen Sekunden das Doppelte durch — bei dreissig also sechzig. Das ist in Kauf genommen. Ein gleitendes Fenster waere genauer,
+	 * braeuchte aber je Absender eine Liste von Zeitpunkten in wp_options —
+	 * teurer als das, was es abwehrt. Und die Transienten von WordPress duerfen
+	 * ohnehin frueher verschwinden; die Ablaufzeit ist eine Hoechstdauer, keine
+	 * Zusage. Codex, 15.09.2026.
+	 */
+	const RATE_WINDOW_SECONDS = HOUR_IN_SECONDS;
+
+	/**
+	 * Registrierungen je Absender und Fenster.
+	 *
+	 * Zehn waren zu wenig. Die Bremse ist nicht der Schutz — eine Registrierung
+	 * gewaehrt fuer sich nichts, und gegen das Vollschreiben des Speichers hilft
+	 * MAX_CLIENTS mit Verdraengung. Getroffen wurde fast nur ehrliche Nutzung:
+	 * wer eine Verbindung herstellt, trennt und neu herstellt, war nach zehn
+	 * Anlaeufen draussen. Ueber einen gehosteten Hub kommen ausserdem alle
+	 * Verbindungen einer Site von wenigen Adressen. Am 15.09.2026 zweimal
+	 * dagegengelaufen, beim blossen Pruefen.
+	 */
+	const MAX_REGISTRATIONS_PER_WINDOW = 30;
 	const CODE_PREFIX   = 'abac_';
 	const CLIENT_PREFIX = 'abc_';
 
@@ -405,14 +431,39 @@ class AB_MCP_OAuth {
 	 * @param int    $max    Allowed hits per hour.
 	 * @return bool True when the request is still within the limit.
 	 */
-	private static function within_rate_limit( $bucket, $max ) {
-		$ip    = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used only hashed, for a counter key.
-		$key   = 'ab_mcp_o' . $bucket . '_' . md5( $ip );
-		$count = (int) get_transient( $key );
+	public static function within_rate_limit( $bucket, $max ) {
+		$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- used only hashed, for a counter key.
+		$key = 'ab_mcp_o' . $bucket . '_' . md5( $ip );
+		$now = time();
+
+		// Zaehler und Fensteranfang gehoeren zusammen: ohne Anfang ist ein
+		// Zaehler wertlos, weil niemand weiss, wann er ablaeuft. Darum werden
+		// beide nur gemeinsam uebernommen. Eine aeltere Fassung legte hier eine
+		// blosse Zahl ab; die faellt damit weg und kostet einmalig eine
+		// Schonfrist — die harmlosere Seite des Irrtums.
+		$data  = get_transient( $key );
+		$start = 0;
+		$count = 0;
+		if ( is_array( $data ) && isset( $data['start'], $data['count'] ) ) {
+			$start = (int) $data['start'];
+			$count = (int) $data['count'];
+		}
+
+		if ( 0 === $start || $now - $start >= self::RATE_WINDOW_SECONDS ) {
+			$start = $now;
+			$count = 0;
+		}
+
 		if ( $count >= $max ) {
 			return false;
 		}
-		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+
+		// Die Laufzeit ist der REST des Fensters, nicht eine neue volle Stunde.
+		// Mit einer vollen Stunde je Schreibvorgang schiebt sich das Fenster vor
+		// sich her: wer regelmaessig verbindet, kommt nie wieder heraus. Genau
+		// das ist am 15.09.2026 beim Pruefen passiert.
+		$rest = self::RATE_WINDOW_SECONDS - ( $now - $start );
+		set_transient( $key, array( 'count' => $count + 1, 'start' => $start ), max( 1, $rest ) );
 		return true;
 	}
 
@@ -523,7 +574,7 @@ class AB_MCP_OAuth {
 	 * @return WP_REST_Response
 	 */
 	public static function rest_register( $request ) {
-		if ( ! self::within_rate_limit( 'reg', 10 ) ) {
+		if ( ! self::within_rate_limit( 'reg', self::MAX_REGISTRATIONS_PER_WINDOW ) ) {
 			return self::rest_json(
 				array(
 					'error'             => 'invalid_client_metadata',
