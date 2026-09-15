@@ -578,21 +578,15 @@ class AB_MCP_REST_Controller {
 
 	/**
 	 * MCP tool annotations (protocol 2025-03-26+; older clients ignore them).
-	 * Derived from the central read-only classification and the dangerous flag.
+	 * Both hints come from the central classification in the registry; the
+	 * `dangerous` flag is a different question and no longer feeds the hint.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Definition.
 	 * @return array
 	 */
 	private function tool_annotations( $name, $def ) {
-		$read_only = AB_MCP_Tool_Registry::is_read_only( $name, $def );
-		return array(
-			'title'           => $this->tool_title( $name, $def ),
-			'readOnlyHint'    => $read_only,
-			'destructiveHint' => ! $read_only && ! empty( $def['dangerous'] ),
-			'idempotentHint'  => $read_only,
-			'openWorldHint'   => AB_MCP_Tool_Registry::is_open_world( $name, $def ),
-		);
+		return AB_MCP_Tool_Registry::annotations( $name, $def, $this->tool_title( $name, $def ) );
 	}
 
 	/**
