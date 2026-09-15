@@ -27,6 +27,8 @@ $GLOBALS['ab_test_options']    = array();
 $GLOBALS['ab_test_writes']     = array();
 /** @var array<string,mixed> $ab_test_transients */
 $GLOBALS['ab_test_transients'] = array();
+/** @var array<string,int> $ab_test_transient_ttl */
+$GLOBALS['ab_test_transient_ttl'] = array();
 /** @var array<string,array<int,array{fn:callable,prio:int}>> $ab_test_filters */
 $GLOBALS['ab_test_filters']    = array();
 /** @var array<int,object> $ab_test_users */
@@ -39,6 +41,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_options']    = array();
 	$GLOBALS['ab_test_writes']     = array();
 	$GLOBALS['ab_test_transients'] = array();
+	$GLOBALS['ab_test_transient_ttl'] = array();
 	$GLOBALS['ab_test_filters']    = array();
 	$GLOBALS['ab_test_users']      = array();
 }
@@ -73,11 +76,15 @@ function get_transient( $key ) {
 
 function set_transient( $key, $value, $ttl = 0 ) {
 	$GLOBALS['ab_test_transients'][ $key ] = $value;
+	// Die Laufzeit wird mitgeschrieben, weil genau sie zu prüfen ist: ein
+	// Zähler, der bei jedem Schreiben eine volle Stunde bekommt, schiebt sein
+	// Fenster vor sich her und läuft nie ab.
+	$GLOBALS['ab_test_transient_ttl'][ $key ] = $ttl;
 	return true;
 }
 
 function delete_transient( $key ) {
-	unset( $GLOBALS['ab_test_transients'][ $key ] );
+	unset( $GLOBALS['ab_test_transients'][ $key ], $GLOBALS['ab_test_transient_ttl'][ $key ] );
 	return true;
 }
 
