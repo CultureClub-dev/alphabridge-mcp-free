@@ -21,6 +21,22 @@ defined( 'ABSPATH' ) || exit;
 class AB_MCP_Tool_Registry {
 
 	/**
+	 * Name prefixes of tools that only ever add something new. Everything else
+	 * that writes counts as destructive — see is_destructive().
+	 */
+	private const ADDITIVE_PREFIXES = array(
+		'wp_create_',
+		'wp_add_',
+		'wp_upload_',
+		'wp_duplicate_',
+		'wp_reply_',
+		'wp_network_create_',
+		'wp_wc_create_',
+		'wp_wc_add_',
+	);
+
+
+	/**
 	 * Registered tools keyed by name.
 	 *
 	 * @var array<string,array>
@@ -83,6 +99,70 @@ class AB_MCP_Tool_Registry {
 		}
 
 		$this->tools[ $name ] = $def;
+	}
+
+	/**
+	 * The MCP annotation object for one tool, exactly as it goes over the wire.
+	 *
+	 * It lives here rather than in the REST controller so the answer can be
+	 * measured: the controller needs WordPress around it, this does not. The
+	 * controller keeps the one line that calls this.
+	 *
+	 * @param string $name  Tool name.
+	 * @param array  $def   Tool definition.
+	 * @param string $title Human title, resolved by the caller.
+	 * @return array
+	 */
+	public static function annotations( $name, array $def, $title ) {
+		$read_only = self::is_read_only( $name, $def );
+		return array(
+			'title'           => (string) $title,
+			'readOnlyHint'    => $read_only,
+			'destructiveHint' => self::is_destructive( $name, $def ),
+			'idempotentHint'  => $read_only,
+			'openWorldHint'   => self::is_open_world( $name, $def ),
+		);
+	}
+
+	/**
+	 * Does this tool change or destroy something that is already there?
+	 *
+	 * This is the MCP `destructiveHint`, and it is NOT the same question as the
+	 * `dangerous` flag next to it. `dangerous` decides whether a tool is off
+	 * until an admin switches it on; it marks tools worth a second thought.
+	 * `destructiveHint` tells the client whether a call overwrites existing
+	 * state, and clients use it to decide whether to ask the user first.
+	 *
+	 * The two were the same thing here until 15.09.2026, and the result was a
+	 * false statement: `wp_update_post` overwrites a post and announced
+	 * `destructiveHint: false`, which the protocol defines as "performs only
+	 * additive updates". Four tools said that. A client that trusts the hint —
+	 * and it is there to be trusted — could overwrite a page without asking.
+	 *
+	 * So the default follows the protocol's own: anything that writes is
+	 * destructive unless it demonstrably only adds. Creating, uploading,
+	 * duplicating and replying add; everything else that writes is assumed to
+	 * change. A tool that knows better says so with `destructive`.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return bool
+	 */
+	public static function is_destructive( $name, array $def ) {
+		if ( isset( $def['destructive'] ) && null !== $def['destructive'] ) {
+			return (bool) $def['destructive'];
+		}
+		// Meaningful only for writing tools; the protocol says so, and a
+		// reading tool that answered "destructive" would be nonsense.
+		if ( self::is_read_only( $name, $def ) ) {
+			return false;
+		}
+		foreach ( self::ADDITIVE_PREFIXES as $prefix ) {
+			if ( 0 === strpos( $name, $prefix ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
