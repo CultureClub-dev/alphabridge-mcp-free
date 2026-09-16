@@ -11,3 +11,6 @@
 /README.md
 /SECURITY.md
 /glama.json
+/RELEASE.md
+/.gitattributes
+.phpunit.result.cache

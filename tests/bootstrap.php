@@ -253,7 +253,7 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'DAY_IN_SECONDS', 86400 );
 
-define( 'AB_MCP_VERSION', '4.3.0' );
+define( 'AB_MCP_VERSION', '4.3.2' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );

@@ -42,7 +42,14 @@ class AB_MCP_OAuth {
 	const MAX_CLIENTS   = 100;
 
 	/**
-	 * Wie lange ein Zaehlfenster gilt. Fest, nicht verlaengerbar.
+	 * Wie lange ein Zaehlfenster gilt. Fest: kein Versuch verlaengert es.
+	 *
+	 * Eine Ausnahme, weil sie sonst niemand kennt: laeuft die Uhr rueckwaerts
+	 * (NTP-Sprung, VM-Schnappschuss), greift der Ablauf bei einem negativen
+	 * Abstand nicht, und die Restlaufzeit faellt um die Sprunggroesse zu gross
+	 * aus — das Fenster gilt dann laenger als eine Stunde. Es heilt von selbst
+	 * und ist nach oben durch den Sprung begrenzt, aber «nicht verlaengerbar»
+	 * waere eine Zusage, die der Code nicht einloest.
 	 *
 	 * Ein festes Fenster hat einen bekannten Randeffekt: wer das Fenster
 	 * ausschoepft und gleich nach seinem Ende ein neues ausschoepft, bringt in

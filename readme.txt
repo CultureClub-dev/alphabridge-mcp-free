@@ -4,7 +4,7 @@ Tags: mcp, ai, automation, rest-api, tools
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 4.3.1
+Stable tag: 4.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -84,6 +84,9 @@ No. It contacts no external service on its own. The only outbound request happen
 This plugin makes no automatic outbound requests and sends no telemetry. One tool can contact an external address, and only on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked). The plugin itself initiates no other outbound requests.
 
 == Changelog ==
+
+= 4.3.2 =
+* **Change: the rate limit on client registration is thirty per hour instead of ten.** The public registration endpoint (RFC 7591) allowed ten requests per sender and hour. Ordinary use ran into it: connecting, disconnecting and connecting again on the same site is enough. The limit was never what protects this endpoint — a registration grants nothing by itself, and `MAX_CLIENTS` with eviction is what keeps the client store from filling up. Anyone set on causing trouble uses several addresses anyway, so what the limit mostly caught was people using the software. Behind a hosted hub it is sharper still: every connection from that hub arrives from a handful of addresses that share one counter. The window is now a fixed hour that starts with the first request and expires on its own, so a blocked sender is never blocked indefinitely.
 
 = 4.3.1 =
 * **Fix: four tools told MCP clients they only add data, while they overwrite it.** `wp_update_post`, `wp_update_media`, `wp_update_term` and `wp_moderate_comment` reported `destructiveHint: false`, which the Model Context Protocol defines as "performs only additive updates". Clients use that hint to decide whether to ask you before a call, so an overwrite could run without a prompt. All four now report `destructiveHint: true`. The hint no longer comes from the "off by default" flag, which answers a different question: anything that writes counts as destructive unless it only ever adds (create, upload, duplicate, reply).
