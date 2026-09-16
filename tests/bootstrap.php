@@ -77,8 +77,8 @@ function get_transient( $key ) {
 function set_transient( $key, $value, $ttl = 0 ) {
 	$GLOBALS['ab_test_transients'][ $key ] = $value;
 	// Die Laufzeit wird mitgeschrieben, weil genau sie zu prüfen ist: ein
-	// Zähler, der bei jedem Schreiben eine volle Stunde bekommt, schiebt sein
-	// Fenster vor sich her und läuft nie ab.
+	// Zähler, der bei jedem zugelassenen Schreiben eine volle Stunde bekommt,
+	// beginnt erst nach einer Stunde ohne zugelassene Anfrage von vorn.
 	$GLOBALS['ab_test_transient_ttl'][ $key ] = $ttl;
 	return true;
 }
