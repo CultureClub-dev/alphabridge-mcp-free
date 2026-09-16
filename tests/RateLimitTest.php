@@ -5,8 +5,9 @@
  * Bis zum 15.09.2026 gab es hierzu keinen einzigen Test — und genau darin
  * steckten zwei Fehler, die beim Prüfen des Hubs auffielen: die Grenze war mit
  * zehn Registrierungen je Stunde so eng, dass ehrliches Ausprobieren dagegen
- * lief, und das Fenster schob sich bei jedem Zugriff um eine volle Stunde
- * weiter, statt abzulaufen.
+ * lief, und jede zugelassene Anfrage gab dem Zähler eine neue volle Stunde —
+ * die Zählung begann also erst nach einer Stunde ohne zugelassene Anfrage von
+ * vorn. (Abgewiesene Anfragen schrieben nichts, eine Sperre lief ab.)
  *
  * Die Bremse ist nicht der Schutz des Endpunkts. Eine Registrierung gewährt für
  * sich nichts, und gegen das Vollschreiben des Klientenspeichers hilft
@@ -55,10 +56,11 @@ final class RateLimitTest extends TestCase {
 
 	public function test_the_window_does_not_slide(): void {
 		/*
-		 * Der eigentliche Fehler: set_transient() bekam bei JEDEM Zugriff eine
-		 * volle Stunde. Eine Site mit regelmässigem Verkehr kam damit nie aus
-		 * dem Fenster heraus. Die Laufzeit muss mit jedem Zugriff kleiner
-		 * werden, nicht wieder voll sein.
+		 * Der eigentliche Fehler: set_transient() bekam bei jedem ZUGELASSENEN
+		 * Zugriff eine volle Stunde. Die Zählung begann damit erst nach einer
+		 * Stunde ohne zugelassene Anfrage von vorn. Die Laufzeit muss der
+		 * verbleibenden Zeit des laufenden Fensters entsprechen, statt bei jeder
+		 * zugelassenen Anfrage erneut eine volle Stunde zu betragen.
 		 */
 		AB_MCP_OAuth::within_rate_limit( 'probe', 10 );
 		$erste = $GLOBALS['ab_test_transient_ttl'][ $this->key( 'probe' ) ];

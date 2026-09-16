@@ -466,9 +466,13 @@ class AB_MCP_OAuth {
 		}
 
 		// Die Laufzeit ist der REST des Fensters, nicht eine neue volle Stunde.
-		// Mit einer vollen Stunde je Schreibvorgang schiebt sich das Fenster vor
-		// sich her: wer regelmaessig verbindet, kommt nie wieder heraus. Genau
-		// das ist am 15.09.2026 beim Pruefen passiert.
+		// Mit einer vollen Stunde je Schreibvorgang begann die Zaehlung erst nach
+		// einer Stunde ohne zugelassene Anfrage von vorn: zehn Anfragen mit
+		// jeweils weniger als einer Stunde Abstand erreichten die Grenze, auch
+		// ueber einen Nachmittag verteilt. Abgewiesene Anfragen schreiben nicht
+		// (siehe oben), eine Sperre lief also eine Stunde nach der zehnten
+		// zugelassenen Anfrage ab. Eine fruehere Fassung dieses Kommentars
+		// behauptete «kommt nie wieder heraus» - das stimmte nicht.
 		$rest = self::RATE_WINDOW_SECONDS - ( $now - $start );
 		set_transient( $key, array( 'count' => $count + 1, 'start' => $start ), max( 1, $rest ) );
 		return true;
