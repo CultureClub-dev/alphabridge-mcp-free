@@ -258,6 +258,22 @@ class AB_MCP_Settings {
 	}
 
 	/**
+	 * The stored entry for a token hash, or null when there is none. Used to
+	 * learn whose connection an admin is about to rotate.
+	 *
+	 * @param string $hash Token hash.
+	 * @return array|null
+	 */
+	public static function get_token_by_hash( $hash ) {
+		foreach ( self::get_tokens() as $entry ) {
+			if ( ! empty( $entry['hash'] ) && hash_equals( (string) $entry['hash'], (string) $hash ) ) {
+				return $entry;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Rotate a token: issue a fresh secret for an existing entry, keeping its
 	 * user, label, scope and expiry. The old secret stops working immediately.
 	 * Returns the new plaintext token, or '' if the hash was not found.

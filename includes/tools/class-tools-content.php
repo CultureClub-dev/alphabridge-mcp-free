@@ -202,6 +202,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'read_post', $src->ID ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
 		}
+		// The copy would carry the text into a draft that anyone with the
+		// draft's rights can read — the password would be gone.
+		if ( ! self::raw_content_allowed( $src ) ) {
+			return self::raw_content_error( $src );
+		}
 		$pto = get_post_type_object( $src->post_type );
 		if ( ! $pto || ! current_user_can( $pto->cap->create_posts ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
@@ -297,6 +302,16 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 * @return array
 	 */
 	public static function list_posts( $a ) {
+		// Revisions can be listed for one post at a time, by someone who may
+		// edit it: a wider query would still count them in `total` for
+		// everyone else, and a count of matching revisions is a leak of the
+		// text. The type is normalised the way WP_Query normalises it.
+		if ( 'revision' === sanitize_key( self::s( $a, 'type', 'post' ) ) ) {
+			$parent = isset( $a['parent'] ) ? self::i( $a, 'parent' ) : 0;
+			if ( $parent <= 0 || ! current_user_can( 'edit_post', $parent ) ) {
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Revisions are listed per post, and only for an account that may edit that post: pass its id as parent.', 'alphabridge-mcp' ) );
+			}
+		}
 		$per_page = self::clamp( self::i( $a, 'per_page', 20 ), 1, 100 );
 		$query    = new WP_Query(
 			array(
@@ -315,6 +330,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$items = array();
 		foreach ( $query->posts as $post ) {
+			// With the gate above, a revision the caller may not edit can only
+			// get here through a third-party query filter; the entry is withheld
+			// regardless. The counts are WordPress' own and are not corrected —
+			// a filter that injects other people's revisions into queries has
+			// already decided to reveal them.
+			if ( 'revision' === $post->post_type && ! self::raw_content_allowed( $post ) ) {
+				continue;
+			}
 			// Objektbezogener Filter: fremde Drafts/private Posts nicht ausliefern.
 			if ( ! current_user_can( 'read_post', $post->ID ) ) {
 				continue;
@@ -350,6 +373,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		if ( ! current_user_can( 'read_post', $post->ID ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+		}
+
+		if ( ! self::raw_content_allowed( $post ) ) {
+			return self::raw_content_error( $post );
 		}
 
 		$data            = self::post_summary( $post );
@@ -560,6 +587,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		if ( ! current_user_can( 'read_post', $post->ID ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+		}
+		// Revisions belong to whoever may edit the post (the REST API's rule);
+		// reading the post is not enough to see its history.
+		if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this post, so its revisions are not available.', 'alphabridge-mcp' ) );
 		}
 		$revs = wp_get_post_revisions( $post->ID );
 		$out  = array();
