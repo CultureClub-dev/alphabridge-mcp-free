@@ -137,6 +137,11 @@ class AB_MCP_Admin {
 		check_ajax_referer( 'ab_mcp_ajax', 'nonce' );
 
 		$user_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : get_current_user_id();
+		// The token acts as that user; only someone who may edit the user may
+		// hand out its authority (see AB_MCP_Auth::may_issue_token_for()).
+		if ( ! AB_MCP_Auth::may_issue_token_for( $user_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'You cannot create a connection for that user.', 'alphabridge-mcp' ) ), 403 );
+		}
 		$label   = isset( $_POST['label'] ) ? sanitize_text_field( wp_unslash( $_POST['label'] ) ) : '';
 		if ( '' === $label ) {
 			$label = __( 'Connection', 'alphabridge-mcp' );
@@ -160,6 +165,15 @@ class AB_MCP_Admin {
 		check_ajax_referer( 'ab_mcp_ajax', 'nonce' );
 
 		$hash  = isset( $_POST['hash'] ) ? sanitize_text_field( wp_unslash( $_POST['hash'] ) ) : '';
+		// Rotating hands out a fresh secret for the entry's user: the same rule
+		// as creating one for that user.
+		$entry = AB_MCP_Settings::get_token_by_hash( $hash );
+		if ( null === $entry ) {
+			wp_send_json_error( array( 'message' => __( 'Connection not found.', 'alphabridge-mcp' ) ), 404 );
+		}
+		if ( ! AB_MCP_Auth::may_issue_token_for( isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0 ) ) {
+			wp_send_json_error( array( 'message' => __( 'You cannot rotate a connection that belongs to that user.', 'alphabridge-mcp' ) ), 403 );
+		}
 		$plain = AB_MCP_Settings::rotate_token( $hash );
 		if ( '' === (string) $plain ) {
 			wp_send_json_error( array( 'message' => __( 'Connection not found.', 'alphabridge-mcp' ) ), 404 );

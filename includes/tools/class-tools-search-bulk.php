@@ -49,6 +49,12 @@ class AB_MCP_Tools_Search_Bulk extends AB_MCP_Tools_Base {
 	 */
 	public static function search( $a ) {
 		$per_page = self::clamp( self::i( $a, 'per_page', 20 ), 1, 100 );
+		// Revisions are not searched: a hit count over other people's revisions
+		// would tell of their text. "any" leaves them out by itself; an explicit
+		// type is normalised the way WP_Query normalises it.
+		if ( 'revision' === sanitize_key( self::s( $a, 'type', 'any' ) ) ) {
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Revisions cannot be searched; use wp_list_revisions on a post you may edit.', 'alphabridge-mcp' ) );
+		}
 		$query    = new WP_Query(
 			array(
 				'post_type'      => self::s( $a, 'type', 'any' ) ?: 'any',
@@ -62,6 +68,12 @@ class AB_MCP_Tools_Search_Bulk extends AB_MCP_Tools_Base {
 		foreach ( $query->posts as $post ) {
 			// Objektbezogener Filter: fremde Drafts/private Posts nicht ausliefern.
 			if ( ! current_user_can( 'read_post', $post->ID ) ) {
+				continue;
+			}
+			// With the gate above, a revision can only get here through a
+			// third-party query filter; the entry is withheld regardless (the
+			// count is WordPress' own, see list_posts).
+			if ( 'revision' === $post->post_type && ! self::raw_content_allowed( $post ) ) {
 				continue;
 			}
 			$items[] = self::post_summary( $post );

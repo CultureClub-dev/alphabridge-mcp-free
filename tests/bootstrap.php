@@ -38,6 +38,13 @@ $GLOBALS['ab_test_users']      = array();
  * Reset every emulated store. Called from the test base class.
  */
 function ab_test_reset(): void {
+	$GLOBALS['ab_test_current_user'] = 0;
+	$GLOBALS['ab_test_can']          = null;
+	$GLOBALS['ab_test_multisite']    = false;
+	$GLOBALS['ab_test_super_admins'] = array();
+	$GLOBALS['ab_test_posts']        = array();
+	$GLOBALS['ab_test_query']        = null;
+	$GLOBALS['ab_test_json_fail']    = false;
 	$GLOBALS['ab_test_options']    = array();
 	$GLOBALS['ab_test_writes']     = array();
 	$GLOBALS['ab_test_transients'] = array();
@@ -179,6 +186,235 @@ function get_user_by( $field, $value ) {
 	return $GLOBALS['ab_test_users'][ (int) $value ] ?? false;
 }
 
+/* ------------------------------------------- users, capabilities, posts */
+
+/** @var int $ab_test_current_user */
+$GLOBALS['ab_test_current_user'] = 0;
+/** @var callable|null $ab_test_can Decides current_user_can(): fn( string $cap, array $args ): bool */
+$GLOBALS['ab_test_can'] = null;
+/** @var bool $ab_test_multisite */
+$GLOBALS['ab_test_multisite'] = false;
+/** @var int[] $ab_test_super_admins */
+$GLOBALS['ab_test_super_admins'] = array();
+/** @var array<int,object> $ab_test_posts */
+$GLOBALS['ab_test_posts'] = array();
+
+function get_current_user_id() {
+	return (int) $GLOBALS['ab_test_current_user'];
+}
+
+/**
+ * Capabilities are not emulated as a role model: each test says, through a
+ * closure, exactly which checks pass. A test that forgets to say so gets
+ * "no" for everything — the safe direction.
+ */
+function current_user_can( $cap, ...$args ) {
+	$decide = $GLOBALS['ab_test_can'];
+	return is_callable( $decide ) ? (bool) $decide( (string) $cap, $args ) : false;
+}
+
+function is_multisite() {
+	return (bool) $GLOBALS['ab_test_multisite'];
+}
+
+function is_super_admin( $user_id = false ) {
+	$id = ( false === $user_id ) ? get_current_user_id() : (int) $user_id;
+	return in_array( $id, $GLOBALS['ab_test_super_admins'], true );
+}
+
+function wp_salt( $scheme = 'auth' ) {
+	return 'test-salt-' . $scheme;
+}
+
+function ab_test_add_post( int $id, array $fields = array() ): object {
+	$post = (object) array_merge(
+		array(
+			'ID'            => $id,
+			'post_type'     => 'post',
+			'post_status'   => 'publish',
+			'post_password' => '',
+			'post_title'    => 'Post ' . $id,
+			'post_content'  => 'Text of post ' . $id,
+			'post_excerpt'  => '',
+			'post_parent'   => 0,
+			'post_author'   => 1,
+			'menu_order'    => 0,
+			'post_name'     => 'post-' . $id,
+			'post_date_gmt' => '2026-09-21 10:00:00',
+			'post_modified_gmt' => '2026-09-21 10:00:00',
+			'post_mime_type' => '',
+		),
+		$fields
+	);
+	$GLOBALS['ab_test_posts'][ $id ] = $post;
+	return $post;
+}
+
+function get_post( $post = null ) {
+	return $GLOBALS['ab_test_posts'][ (int) $post ] ?? null;
+}
+
+class WP_Error {
+	private $code;
+	private $message;
+	private $data;
+
+	public function __construct( $code = '', $message = '', $data = '' ) {
+		$this->code    = $code;
+		$this->message = $message;
+		$this->data    = $data;
+	}
+
+	public function get_error_code() {
+		return $this->code;
+	}
+
+	public function get_error_message() {
+		return $this->message;
+	}
+
+	public function get_error_data() {
+		return $this->data;
+	}
+}
+
+function is_wp_error( $thing ) {
+	return $thing instanceof WP_Error;
+}
+
+/** @var bool $ab_test_json_fail When true, wp_json_encode() fails like it does on unencodable input. */
+$GLOBALS['ab_test_json_fail'] = false;
+
+function wp_json_encode( $data, $options = 0, $depth = 512 ) {
+	if ( ! empty( $GLOBALS['ab_test_json_fail'] ) ) {
+		return false;
+	}
+	return json_encode( $data, $options, $depth );
+}
+
+/* -------------------------------------------------------- queries, summaries */
+
+/** @var callable|null $ab_test_query Answers WP_Query: fn( array $args ): object[] */
+$GLOBALS['ab_test_query'] = null;
+
+class WP_Query {
+	public $posts         = array();
+	public $found_posts   = 0;
+	public $max_num_pages = 0;
+	public $args;
+
+	public function __construct( $args = array() ) {
+		$this->args          = $args;
+		$answer              = $GLOBALS['ab_test_query'];
+		$this->posts         = is_callable( $answer ) ? (array) $answer( $args ) : array();
+		$this->found_posts   = count( $this->posts );
+		$this->max_num_pages = $this->found_posts > 0 ? 1 : 0;
+	}
+}
+
+function get_the_title( $post ) {
+	return (string) $post->post_title;
+}
+
+function get_permalink( $post ) {
+	return 'https://example.test/?p=' . (int) $post->ID;
+}
+
+// Like core: a protected post yields a placeholder, otherwise the stored
+// excerpt or the start of the text.
+function get_the_excerpt( $post ) {
+	if ( '' !== (string) $post->post_password ) {
+		return 'There is no excerpt because this is a protected post.';
+	}
+	return '' !== (string) $post->post_excerpt ? (string) $post->post_excerpt : substr( (string) $post->post_content, 0, 55 );
+}
+
+function wp_strip_all_tags( $text ) {
+	return strip_tags( (string) $text );
+}
+
+function get_post_meta( $post_id, $key = '', $single = false ) {
+	return $single ? '' : array();
+}
+
+function wp_get_attachment_url( $id ) {
+	return 'https://example.test/wp-content/uploads/' . (int) $id . '.jpg';
+}
+
+function wp_get_attachment_metadata( $id ) {
+	return array();
+}
+
+/* ---------------------------------------------------------- admin ajax */
+
+/**
+ * wp_send_json_*() end the request. Here they end the handler by throwing,
+ * so a test can read status and payload and assert on the state left behind.
+ */
+class AbTestJsonExit extends Exception {
+	public $status;
+	public $payload;
+
+	public function __construct( int $status, $payload ) {
+		parent::__construct( 'json exit ' . $status );
+		$this->status  = $status;
+		$this->payload = $payload;
+	}
+}
+
+function wp_send_json_error( $data = null, $status_code = null ) {
+	throw new AbTestJsonExit( (int) ( $status_code ?? 500 ), $data );
+}
+
+function wp_send_json_success( $data = null, $status_code = null ) {
+	throw new AbTestJsonExit( (int) ( $status_code ?? 200 ), $data );
+}
+
+function check_ajax_referer( $action = -1, $query_arg = false, $die = true ) {
+	return 1;
+}
+
+function wp_unslash( $value ) {
+	return $value;
+}
+
+function absint( $value ) {
+	return abs( (int) $value );
+}
+
+function sanitize_key( $key ) {
+	return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+}
+
+// Rendering helpers the connections row uses; the row's HTML is not under test.
+function esc_attr( $text ) {
+	return (string) $text;
+}
+
+function esc_attr__( $text, $domain = '' ) {
+	return (string) $text;
+}
+
+function esc_url( $url ) {
+	return (string) $url;
+}
+
+function admin_url( $path = '' ) {
+	return 'https://example.test/wp-admin/' . ltrim( (string) $path, '/' );
+}
+
+function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) {
+	return '';
+}
+
+function current_time( $type = 'timestamp', $gmt = 0 ) {
+	return time();
+}
+
+function human_time_diff( $from, $to = 0 ) {
+	return abs( (int) $to - (int) $from ) . ' seconds';
+}
+
 /**
  * Minimal stand-in for WP_REST_Response.
  */
@@ -253,7 +489,7 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'DAY_IN_SECONDS', 86400 );
 
-define( 'AB_MCP_VERSION', '4.3.2' );
+define( 'AB_MCP_VERSION', '4.3.3' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
@@ -266,3 +502,7 @@ require_once __DIR__ . '/../includes/class-settings.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
+require_once __DIR__ . '/../includes/tools/class-tools-content.php';
+require_once __DIR__ . '/../includes/tools/class-tools-search-bulk.php';
+require_once __DIR__ . '/../includes/tools/class-tools-media.php';
+require_once __DIR__ . '/../includes/class-admin.php';

@@ -316,19 +316,88 @@ class AB_MCP_OAuth {
 	 */
 	public static function create_auth_code( $client_id, $redirect_uri, $user_id, $scope, $challenge ) {
 		$code = self::CODE_PREFIX . bin2hex( random_bytes( 32 ) );
-		set_transient(
-			self::code_key( $code ),
-			array(
-				'client_id'    => (string) $client_id,
-				'redirect_uri' => (string) $redirect_uri,
-				'user_id'      => (int) $user_id,
-				'scope'        => AB_MCP_Settings::sanitize_scope( $scope ),
-				'challenge'    => (string) $challenge,
-				'created'      => time(),
-			),
-			self::CODE_TTL
+		$data = array(
+			'client_id'    => (string) $client_id,
+			'redirect_uri' => (string) $redirect_uri,
+			'user_id'      => (int) $user_id,
+			'scope'        => AB_MCP_Settings::sanitize_scope( $scope ),
+			'challenge'    => (string) $challenge,
+			'created'      => time(),
 		);
+		$key = self::code_key( $code );
+		$sig = self::code_sig( $key, $data );
+		if ( null === $sig ) {
+			return ''; // Nothing stored: a record that cannot be signed cannot be redeemed either.
+		}
+		$data['sig'] = $sig;
+		set_transient( $key, $data, self::CODE_TTL );
 		return $code;
+	}
+
+	/**
+	 * Signature over a consent record. The transient store is shared with every
+	 * plugin on the site and with generic "set transient" tools, so a record
+	 * found under a code key is not by itself proof that the consent step wrote
+	 * it. The HMAC binds every field that redeem_code() trusts, plus the key the
+	 * record is filed under, to this site's auth salt: a record written any
+	 * other way, or moved under another code, does not verify.
+	 *
+	 * The fields are serialised as JSON with a fixed key order. A separator
+	 * join would not do: a redirect URI may legally contain any character the
+	 * client registered, so two different field splits could produce the same
+	 * bytes. JSON escapes the boundaries.
+	 *
+	 * @param string $key  Transient key the record lives under.
+	 * @param array  $data Consent record without its signature.
+	 * @return string|null The signature, or null when the record cannot be
+	 *                     serialised — signing an empty string instead would
+	 *                     give every unencodable record the same signature.
+	 */
+	private static function code_sig( $key, array $data ) {
+		$canonical = wp_json_encode(
+			array(
+				'key'          => (string) $key,
+				'client_id'    => isset( $data['client_id'] ) ? (string) $data['client_id'] : '',
+				'redirect_uri' => isset( $data['redirect_uri'] ) ? (string) $data['redirect_uri'] : '',
+				'user_id'      => isset( $data['user_id'] ) ? (int) $data['user_id'] : 0,
+				'scope'        => isset( $data['scope'] ) ? (string) $data['scope'] : '',
+				'challenge'    => isset( $data['challenge'] ) ? (string) $data['challenge'] : '',
+				'created'      => isset( $data['created'] ) ? (int) $data['created'] : 0,
+			)
+		);
+		if ( ! is_string( $canonical ) || '' === $canonical ) {
+			return null;
+		}
+		return hash_hmac( 'sha256', $canonical, wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Whether a stored consent record is one the consent step wrote for this
+	 * key, is still within its lifetime, and names a scope the registry knows.
+	 * The lifetime is checked here and not only through the transient's own
+	 * expiry, because a rewritten transient can carry any expiry.
+	 *
+	 * @param string $key  Transient key the record was loaded from.
+	 * @param array  $data Record as loaded from the transient store.
+	 * @return bool
+	 */
+	private static function code_record_valid( $key, array $data ) {
+		if ( ! isset( $data['sig'] ) || ! is_string( $data['sig'] ) ) {
+			return false;
+		}
+		$expected = self::code_sig( $key, $data );
+		if ( null === $expected || ! hash_equals( $expected, $data['sig'] ) ) {
+			return false;
+		}
+		$created = isset( $data['created'] ) ? (int) $data['created'] : 0;
+		if ( $created <= 0 || $created + self::CODE_TTL < time() ) {
+			return false;
+		}
+		$scope = isset( $data['scope'] ) ? (string) $data['scope'] : '';
+		if ( ! array_key_exists( $scope, AB_MCP_Tool_Registry::scopes() ) ) {
+			return false;
+		}
+		return isset( $data['user_id'] ) && (int) $data['user_id'] > 0;
 	}
 
 	/**
@@ -357,6 +426,12 @@ class AB_MCP_OAuth {
 		$data = get_transient( $key );
 		delete_transient( $key );
 		if ( ! is_array( $data ) ) {
+			return array( 'error' => 'invalid_grant' );
+		}
+		// A record that did not come from create_auth_code() for this very key,
+		// or that has outlived a code's two minutes, must not become a token,
+		// whatever it says about user and scope.
+		if ( ! self::code_record_valid( $key, $data ) ) {
 			return array( 'error' => 'invalid_grant' );
 		}
 
@@ -853,6 +928,9 @@ class AB_MCP_OAuth {
 			// Absent field falls back to the narrower "content", never "full".
 			$scope = isset( $_POST['ab_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['ab_scope'] ) ) : 'content';
 			$code  = self::create_auth_code( $client_id, $redirect, get_current_user_id(), $scope, $challenge );
+			if ( '' === $code ) {
+				self::error_page( __( 'The connection could not be started. Please try again.', 'alphabridge-mcp' ) );
+			}
 
 			// RFC 9207: identify the issuer in the authorization response so the
 			// client can detect a mix-up if it talks to several servers.

@@ -195,7 +195,8 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			'mime'     => $att->post_mime_type,
 			'url'      => wp_get_attachment_url( $id ),
 			'alt'      => get_post_meta( $id, '_wp_attachment_image_alt', true ),
-			'caption'  => $att->post_excerpt,
+			// An attachment can carry its own post password; its caption is text.
+			'caption'  => self::raw_content_allowed( $att ) ? $att->post_excerpt : '',
 			'metadata' => wp_get_attachment_metadata( $id ),
 		);
 	}

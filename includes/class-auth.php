@@ -146,6 +146,42 @@ class AB_MCP_Auth {
 	}
 
 	/**
+	 * Whether the current user may create (or rotate) a connection that acts as
+	 * $target_id.
+	 *
+	 * A connection runs every tool as its mapped user, so issuing one for
+	 * somebody else is delegation of that person's authority. `manage_options`
+	 * covers the settings page, not that: on a multisite network a site
+	 * administrator holds it and must still not mint a token in the name of a
+	 * network administrator. WordPress already encodes who may act for whom in
+	 * `edit_user` (on multisite that requires `manage_network_users`, and only a
+	 * super admin passes it for a super admin), so that is the rule applied
+	 * here. The explicit super-admin clause repeats what map_meta_cap does for
+	 * `edit_user`, so a `map_meta_cap` filter that widens `edit_user` cannot
+	 * widen this.
+	 *
+	 * @param int $target_id User the connection would act as.
+	 * @return bool
+	 */
+	public static function may_issue_token_for( $target_id ) {
+		$target_id = (int) $target_id;
+		$issuer_id = (int) get_current_user_id();
+		if ( $target_id <= 0 || $issuer_id <= 0 ) {
+			return false;
+		}
+		if ( $target_id === $issuer_id ) {
+			return true;
+		}
+		if ( ! current_user_can( 'edit_user', $target_id ) ) {
+			return false;
+		}
+		if ( is_multisite() && is_super_admin( $target_id ) && ! is_super_admin( $issuer_id ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Generate a fresh cryptographically strong token.
 	 *
 	 * @return string

@@ -213,6 +213,72 @@ abstract class AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * Whether the caller may see a post's raw text.
+	 *
+	 * A post password guards the published text from readers, but `read_post`
+	 * does not check it: for a published post that capability maps to plain
+	 * `read`, so every account with a token passed the check and got the text
+	 * without ever giving the password. Raw text of a protected post is
+	 * therefore handed out only to someone who could edit the post — the rule
+	 * the WordPress REST API applies in
+	 * WP_REST_Posts_Controller::can_access_password_content().
+	 *
+	 * A revision (autosaves included) carries the text but never the
+	 * password, and `read_post` on it maps to the parent's read right — so
+	 * the parent's protection would be gone. WordPress' REST API hands a
+	 * revision only to someone who may edit the parent; same rule here.
+	 *
+	 * @param WP_Post $post Post, revision or attachment.
+	 * @return bool
+	 */
+	public static function raw_content_allowed( $post ) {
+		if ( 'revision' === $post->post_type ) {
+			$parent = (int) $post->post_parent;
+			return $parent > 0 && current_user_can( 'edit_post', $parent );
+		}
+		if ( '' === (string) $post->post_password ) {
+			return true;
+		}
+		return current_user_can( 'edit_post', $post->ID );
+	}
+
+	/**
+	 * The refusal that goes with raw_content_allowed() being false.
+	 *
+	 * @param WP_Post $post Post that was refused.
+	 * @return WP_Error
+	 */
+	protected static function raw_content_error( $post ) {
+		if ( 'revision' === $post->post_type ) {
+			return new WP_Error(
+				'ab_mcp_forbidden',
+				__( 'Revisions are available only to an account that may edit the post.', 'alphabridge-mcp' )
+			);
+		}
+		return new WP_Error(
+			'ab_mcp_password_protected',
+			__( 'This post is password-protected. Its text is available over MCP only to an account that may edit the post.', 'alphabridge-mcp' )
+		);
+	}
+
+	/**
+	 * The excerpt for a summary. WordPress itself withholds the excerpt of a
+	 * password-protected post; a revision carries the same text but never the
+	 * password, so its excerpt — stored, or trimmed from the text — would show
+	 * a protected parent's words. Revisions belong to whoever may edit the
+	 * parent (the REST API's rule); everyone else gets no excerpt.
+	 *
+	 * @param WP_Post $post Post.
+	 * @return string
+	 */
+	protected static function summary_excerpt( $post ) {
+		if ( 'revision' === $post->post_type && ! current_user_can( 'edit_post', (int) $post->post_parent ) ) {
+			return '';
+		}
+		return wp_strip_all_tags( get_the_excerpt( $post ) );
+	}
+
+	/**
 	 * Compact summary of a post object.
 	 *
 	 * @param WP_Post $post Post.
@@ -230,7 +296,7 @@ abstract class AB_MCP_Tools_Base {
 			'modified'  => $post->post_modified_gmt,
 			'author'    => (int) $post->post_author,
 			'parent'    => (int) $post->post_parent,
-			'excerpt'   => wp_strip_all_tags( get_the_excerpt( $post ) ),
+			'excerpt'   => self::summary_excerpt( $post ),
 			'menu_order'=> (int) $post->menu_order,
 		);
 	}
