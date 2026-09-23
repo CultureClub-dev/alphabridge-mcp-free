@@ -86,6 +86,7 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 == Changelog ==
 
 = 4.3.4 =
+* Widget ids are trimmed and matched to the end of the string. An id such as `text-2` followed by a newline was split into its base and number (the pattern ended in `$`, which also matches before a trailing newline) but never found in the sidebar map, so a delete removed the settings row and left the sidebar entry behind. Found while re-reading the widget tools after the September 2026 security review.
 * `wp_upload_media_from_url` now says what it does. The site itself downloads the file from a public http(s) URL through WordPress' safe-URL check (private and internal hosts refused unless WordPress itself allows them, such as the site's own host; checked on every redirect), with at most 3 redirects, 20 seconds per request and 20 MB by default; the URL or the content type must say JPEG, PNG, GIF, WebP or PDF, and WordPress then checks the file as for any upload. Behaviour unchanged; the description is what Claude reads before choosing a tool, and the automatic check in Anthropic's connector portal asked for a description that names the source.
 
 = 4.3.3 =

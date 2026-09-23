@@ -69,7 +69,15 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	 * @return array{0:string,1:int} [ id_base, number ]
 	 */
 	protected static function split_id( $id ) {
-		if ( preg_match( '/^(.+)-(\d+)$/', (string) $id, $m ) ) {
+		// \z, not $: $ also matches before a trailing newline, so "text-2\n" was
+		// split into text/2 while the sidebar map holds "text-2" — the option
+		// row went, the sidebar entry stayed behind as an orphan. Surrounding
+		// whitespace is trimmed first; the widgets screen never sends any.
+		if ( ! is_scalar( $id ) ) {
+			return array( '', 0 );
+		}
+		$id = trim( (string) $id );
+		if ( preg_match( '/^(.+)-(\d+)\z/', $id, $m ) ) {
 			return array( $m[1], (int) $m[2] );
 		}
 		return array( '', 0 );
