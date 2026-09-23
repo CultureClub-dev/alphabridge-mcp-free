@@ -56,13 +56,13 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media_from_url',
 			array(
-				'description' => 'Download a file from a URL and add it to the media library.',
+				'description' => 'Download a file from a public http(s) URL and add it to the media library. Your site fetches the file itself through WordPress\' safe-URL check (private and internal hosts are refused unless WordPress itself allows them, such as the site\'s own host; checked on every redirect): at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must say JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are rejected, and WordPress then checks the file itself as for any upload. No third-party API is involved.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'url' ),
 					'properties' => array(
-						'url'      => array( 'type' => 'string', 'description' => 'Public URL of the file.' ),
+						'url'      => array( 'type' => 'string', 'description' => 'Public http(s) URL of the file. Your site downloads it; nothing is sent anywhere else.' ),
 						'title'    => array( 'type' => 'string' ),
 						'alt'      => array( 'type' => 'string' ),
 						'post_id'  => array( 'type' => 'integer', 'description' => 'Attach to this post id.' ),
