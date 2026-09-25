@@ -76,7 +76,10 @@ class AB_MCP_Admin {
 		// Global read-only switch (blocks every writing tool regardless of the per-tool toggles).
 		AB_MCP_Settings::set( 'read_only', isset( $_POST['read_only'] ) );
 
-		$this->redirect( 'saved' );
+		// A connected client may cache the tool list it loaded, and this endpoint
+		// offers no server-initiated stream, so it cannot push a
+		// notifications/tools/list_changed. Say what to do if the change is not visible.
+		$this->redirect( 'tools_saved' );
 	}
 
 	/**
@@ -442,6 +445,7 @@ class AB_MCP_Admin {
 		}
 
 		echo '<p style="margin:14px 0 0"><button class="button button-primary">' . esc_html__( 'Save capabilities', 'alphabridge-mcp' ) . '</button></p>';
+		echo '<p class="description" style="margin:6px 0 0">' . esc_html__( 'New connections see the change at once. A client that is already connected may cache the tool list it loaded; if the change is not visible there, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) . '</p>';
 		echo '</form>';
 		echo '<p class="description" style="margin:12px 0 0">' . esc_html__( 'Abuse protection active (fixed):', 'alphabridge-mcp' ) . ' ' . (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) . ' ' . esc_html__( 'requests/min.', 'alphabridge-mcp' ) . '</p>';
 		echo '</div>';
@@ -612,6 +616,7 @@ class AB_MCP_Admin {
 		}
 		$map = array(
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
+			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: Settings → Connectors, disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
