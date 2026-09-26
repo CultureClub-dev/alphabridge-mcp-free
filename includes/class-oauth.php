@@ -807,12 +807,21 @@ class AB_MCP_OAuth {
 
 	/**
 	 * The label a connection gets in the settings list, derived from the OAuth
-	 * client that created it.
+	 * client that created it: the client's name and "OAuth", for example
+	 * "ChatGPT · OAuth".
+	 *
+	 * The suffix names the way the connection was made, not a product. It used
+	 * to read "· Claude Connect", which put Claude's name on every client that
+	 * connects this way — "ChatGPT · Claude Connect" on 26.09.2026. "OAuth" is
+	 * true for all of them and reads the same in every language; the label is
+	 * stored as it is, it is not translated later.
 	 *
 	 * A connection made through the AlphaBridge Connect hub is labelled with the
-	 * hub's name alone. Appending "· Claude Connect" as well would read
-	 * "AlphaBridge Connect · Claude Connect", which says the same thing twice and
-	 * hides which of the two the site owner is actually looking at.
+	 * hub's name alone: the site owner should see at a glance that it came
+	 * through the hub. A registration without a name is stored as "MCP client"
+	 * (register_client()), so an empty name only reaches this helper for a client
+	 * record that has none; it then reads "OAuth" alone rather than a dangling
+	 * separator.
 	 *
 	 * @param string $client_name RFC 7591 `client_name` of the registered client.
 	 * @return string
@@ -824,7 +833,11 @@ class AB_MCP_OAuth {
 			return self::CONNECT_CLIENT_NAME;
 		}
 
-		return $client_name . ' · Claude Connect';
+		if ( '' === $client_name ) {
+			return 'OAuth';
+		}
+
+		return $client_name . ' · OAuth';
 	}
 
 	/**
