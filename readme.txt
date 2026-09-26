@@ -31,7 +31,7 @@ Paste your endpoint URL into Claude, click Connect, approve on your own site's l
 
 **Several sites, one connection — AlphaBridge Connect**
 
-If you look after more than one WordPress site, you can add one connector in Claude instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub calls your site only for the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
+If you look after more than one WordPress site, you can add one connector in Claude instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
 
 **Nothing extra to host**
 
