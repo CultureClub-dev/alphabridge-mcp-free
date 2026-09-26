@@ -95,7 +95,46 @@ final class SiteTimeTest extends TestCase {
 		$seconds = $this->secondsAgo( $this->row( array( 'last_used' => time() - 60 ) ) );
 
 		self::assertGreaterThanOrEqual( 60, $seconds );
-		self::assertLessThan( 120, $seconds, 'A connection used a minute ago must not look hours older or younger.' );
+		self::assertLessThan( 65, $seconds, 'A connection used a minute ago must look a minute old, not hours older or younger.' );
+	}
+
+	public function testLastUsedIsRightWhenTheSiteNamesItsZone(): void {
+		// A named zone alone: WordPress derives gmt_offset from it. India has no
+		// daylight saving, so the offset is +5:30 whenever the test runs.
+		update_option( 'timezone_string', 'Asia/Kolkata' );
+
+		$seconds = $this->secondsAgo( $this->row( array( 'last_used' => time() - 60 ) ) );
+
+		self::assertGreaterThanOrEqual( 60, $seconds );
+		self::assertLessThan( 65, $seconds );
+	}
+
+	public function testUsingATokenStoresARealUnixTimestamp(): void {
+		// The display is only right if what it reads is time(). A writer that
+		// stored current_time( 'timestamp' ) would put every use hours off.
+		update_option( 'gmt_offset', 2.0 );
+		ab_test_add_user( 7 );
+		$token = \AB_MCP_Settings::add_token( 7, 'Test', 'read', 0 );
+		$hash  = hash( 'sha256', $token );
+
+		$before = time();
+		\AB_MCP_Settings::touch_token( $hash );
+		$stored = (int) \AB_MCP_Settings::get_token_by_hash( $hash )['last_used'];
+
+		self::assertGreaterThanOrEqual( $before, $stored );
+		self::assertLessThanOrEqual( time(), $stored );
+	}
+
+	public function testALogEntryStoresARealUnixTimestamp(): void {
+		update_option( 'gmt_offset', 2.0 );
+
+		$before = time();
+		AB_MCP_Audit_Log::record( 'wp_site_info', array(), 'ok' );
+		$log = get_option( AB_MCP_Audit_Log::OPTION, array() );
+
+		self::assertCount( 1, $log );
+		self::assertGreaterThanOrEqual( $before, (int) $log[0]['ts'] );
+		self::assertLessThanOrEqual( time(), (int) $log[0]['ts'] );
 	}
 
 	public function testANeverUsedConnectionShowsADash(): void {
@@ -109,7 +148,6 @@ final class SiteTimeTest extends TestCase {
 
 	public function testTheLogShowsTheSiteClockInSummer(): void {
 		update_option( 'timezone_string', 'Europe/Zurich' );
-		update_option( 'gmt_offset', 2.0 );
 		$this->logEntryAt( '2026-09-26 20:10:22' );
 
 		$html = $this->logHtml();
@@ -120,12 +158,29 @@ final class SiteTimeTest extends TestCase {
 
 	public function testTheLogFollowsTheNamedZoneAcrossDaylightSaving(): void {
 		// gmt_offset holds today's offset only; a January entry in Zurich is one
-		// hour ahead of UTC, not two. Arithmetic with gmt_offset would say 14:00.
+		// hour ahead of UTC. Arithmetic with gmt_offset would be right in winter
+		// and an hour off from March to October.
 		update_option( 'timezone_string', 'Europe/Zurich' );
-		update_option( 'gmt_offset', 2.0 );
 		$this->logEntryAt( '2026-01-15 12:00:00' );
 
 		self::assertStringContainsString( '<td>2026-01-15 13:00:00</td>', $this->logHtml() );
+	}
+
+	/** @return array<string,array{0:float,1:string}> */
+	public static function fixedOffsets(): array {
+		return array(
+			'US Eastern, west of UTC'                  => array( -5.0, '2026-09-26 15:10:22' ),
+			'India, half an hour, over midnight'       => array( 5.5, '2026-09-27 01:40:22' ),
+		);
+	}
+
+	/** A site without a zone name, only a fixed offset, as WordPress allows it. */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'fixedOffsets' )]
+	public function testTheLogFollowsAFixedOffsetWithoutAZoneName( float $offset, string $expected ): void {
+		update_option( 'gmt_offset', $offset );
+		$this->logEntryAt( '2026-09-26 20:10:22' );
+
+		self::assertStringContainsString( '<td>' . $expected . '</td>', $this->logHtml() );
 	}
 
 	public function testOnAUtcSiteTheLogShowsTheUtcClock(): void {

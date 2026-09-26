@@ -818,8 +818,10 @@ class AB_MCP_OAuth {
 	 *
 	 * A connection made through the AlphaBridge Connect hub is labelled with the
 	 * hub's name alone: the site owner should see at a glance that it came
-	 * through the hub. A client that sends no name is labelled "OAuth" alone
-	 * rather than with a dangling separator.
+	 * through the hub. A registration without a name is stored as "MCP client"
+	 * (register_client()), so an empty name only reaches this helper for a client
+	 * record that has none; it then reads "OAuth" alone rather than a dangling
+	 * separator.
 	 *
 	 * @param string $client_name RFC 7591 `client_name` of the registered client.
 	 * @return string

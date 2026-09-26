@@ -54,6 +54,16 @@ function ab_test_reset(): void {
 }
 
 function get_option( $name, $default = false ) {
+	// WordPress answers gmt_offset from a named timezone when one is set
+	// (pre_option_gmt_offset -> wp_timezone_override_offset): the offset of
+	// that zone NOW, whatever is stored. Without this a test that names only a
+	// zone would see an offset of 0 and could hide a timezone mistake again.
+	if ( 'gmt_offset' === $name && ! empty( $GLOBALS['ab_test_options']['timezone_string'] ) ) {
+		$zone = timezone_open( (string) $GLOBALS['ab_test_options']['timezone_string'] );
+		if ( false !== $zone ) {
+			return round( timezone_offset_get( $zone, date_create() ) / HOUR_IN_SECONDS, 2 );
+		}
+	}
 	return array_key_exists( $name, $GLOBALS['ab_test_options'] ) ? $GLOBALS['ab_test_options'][ $name ] : $default;
 }
 
@@ -436,7 +446,7 @@ function wp_timezone() {
  * former stand-in returned time() and so hid exactly the mistake of comparing
  * one kind of timestamp with the other («Last used», 26.09.2026).
  */
-function current_time( $type = 'timestamp', $gmt = 0 ) {
+function current_time( $type, $gmt = 0 ) {
 	if ( 'timestamp' === $type || 'U' === $type ) {
 		return $gmt ? time() : time() + (int) ( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
 	}
@@ -456,7 +466,7 @@ function human_time_diff( $from, $to = 0 ) {
 	if ( empty( $to ) ) {
 		$to = time();
 	}
-	return abs( (int) $to - (int) $from ) . ' seconds';
+	return (int) abs( $to - $from ) . ' seconds';
 }
 
 /**
