@@ -407,6 +407,10 @@ function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $dis
 	return '';
 }
 
+function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
+	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . $name . '=testnonce';
+}
+
 function current_time( $type = 'timestamp', $gmt = 0 ) {
 	return time();
 }
@@ -489,7 +493,7 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'DAY_IN_SECONDS', 86400 );
 
-define( 'AB_MCP_VERSION', '4.3.4' );
+define( 'AB_MCP_VERSION', '4.3.5' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
@@ -499,6 +503,7 @@ define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
