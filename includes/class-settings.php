@@ -217,11 +217,15 @@ class AB_MCP_Settings {
 	 * @param int    $user_id User id.
 	 * @param string $label   Human label.
 	 * @param string $scope   Token scope: 'read' | 'content' | 'full' (default).
-	 * @param int    $expires Unix timestamp after which the token stops working,
-	 *                        or 0 for no expiry.
+	 * @param int    $expires   Unix timestamp after which the token stops working,
+	 *                          or 0 for no expiry.
+	 * @param string $client_id OAuth client the token was issued to, '' for a
+	 *                          connection an admin created by hand. Lets the
+	 *                          list show which connections belong to the same
+	 *                          app (older_of_same_app()); it grants nothing.
 	 * @return string The plaintext token.
 	 */
-	public static function add_token( $user_id, $label = '', $scope = 'full', $expires = 0 ) {
+	public static function add_token( $user_id, $label = '', $scope = 'full', $expires = 0, $client_id = '' ) {
 		$tokens = self::get_tokens();
 		$token  = AB_MCP_Auth::generate_token();
 
@@ -237,10 +241,60 @@ class AB_MCP_Settings {
 			'expires'   => max( 0, (int) $expires ),
 			'created'   => time(),
 			'last_used' => 0,
+			'client_id' => sanitize_text_field( (string) $client_id ),
 		);
 
 		update_option( self::OPT_TOKENS, $tokens );
 		return $token;
+	}
+
+	/**
+	 * The connections a newer one of the same app has followed, for the same
+	 * user: another entry with the same client_id and user_id is newer.
+	 *
+	 * A client that connects again gets a new token and need not hand back the
+	 * old one — ChatGPT's «reconnect» leaves the earlier connection working
+	 * (seen on 26.09.2026). Nothing is revoked here, on purpose: a second
+	 * connection of the same app can be wanted, one for reading and one for
+	 * writing, or two people sharing an app registration and a WordPress
+	 * account. This only tells the admin which entries to look at; "older" does
+	 * not mean "unused", which is what the Last used column is for.
+	 *
+	 * Only tokens the OAuth flow issued from 4.3.5 on carry a client_id.
+	 * Connections made by hand and older entries are never grouped. "Newer"
+	 * means a later `created`; on a tie the entry further down the list wins,
+	 * because add_token() appends.
+	 *
+	 * @param array $tokens Stored token entries, in stored order.
+	 * @return array<string,bool> Hash => true for every older entry.
+	 */
+	public static function older_of_same_app( array $tokens ) {
+		$groups = array();
+		foreach ( $tokens as $i => $t ) {
+			// empty() on the offset of anything that is not an entry is true,
+			// so a stray value is skipped here as well.
+			if ( empty( $t['hash'] ) || empty( $t['client_id'] ) ) {
+				continue;
+			}
+			$key              = (int) ( isset( $t['user_id'] ) ? $t['user_id'] : 0 ) . "\n" . (string) $t['client_id'];
+			$groups[ $key ][] = array( (int) ( isset( $t['created'] ) ? $t['created'] : 0 ), $i, (string) $t['hash'] );
+		}
+
+		$older = array();
+		foreach ( $groups as $members ) {
+			$newest = $members[0];
+			foreach ( $members as $m ) {
+				if ( $m[0] >= $newest[0] ) {
+					$newest = $m;
+				}
+			}
+			foreach ( $members as $m ) {
+				if ( $m[1] !== $newest[1] ) {
+					$older[ $m[2] ] = true;
+				}
+			}
+		}
+		return $older;
 	}
 
 	/**

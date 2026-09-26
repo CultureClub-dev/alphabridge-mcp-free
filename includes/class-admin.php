@@ -550,8 +550,10 @@ class AB_MCP_Admin {
 	private function render_connection_table( $tokens ) {
 		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Label', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Access', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Token', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Expires', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Last used', 'alphabridge-mcp' ) . '</th><th></th></tr></thead><tbody class="ab-conn-rows">';
 		echo '<tr class="ab-empty-row"' . ( empty( $tokens ) ? '' : ' hidden' ) . '><td colspan="6"><em>' . esc_html__( 'No connections yet — click “Create connection” above.', 'alphabridge-mcp' ) . '</em></td></tr>';
+		$older = AB_MCP_Settings::older_of_same_app( $tokens );
 		foreach ( $tokens as $t ) {
-			echo $this->connection_row_html( $t ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connection_row_html().
+			$is_older = isset( $t['hash'] ) && isset( $older[ (string) $t['hash'] ] );
+			echo $this->connection_row_html( $t, $is_older ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connection_row_html().
 		}
 		echo '</tbody></table>';
 		echo '<p class="description" style="margin:8px 0 0">' . esc_html__( 'Rotate re-issues a connection’s token (the old one stops working at once). Delete removes it.', 'alphabridge-mcp' ) . '</p>';
@@ -562,10 +564,12 @@ class AB_MCP_Admin {
 	 * render and by the ajax create/rotate response so a new or rotated row can be
 	 * inserted in place without a reload. Everything is escaped here.
 	 *
-	 * @param array $t Token entry (hash, prefix, label, scope, expires, last_used).
+	 * @param array $t        Token entry (hash, prefix, label, scope, expires, last_used).
+	 * @param bool  $is_older The same app has a newer connection for the same
+	 *                        user (AB_MCP_Settings::older_of_same_app()).
 	 * @return string A single <tr>…</tr>.
 	 */
-	private function connection_row_html( $t ) {
+	private function connection_row_html( $t, $is_older = false ) {
 		$scope_labels = array(
 			'read'    => __( 'Read', 'alphabridge-mcp' ),
 			'content' => __( 'Content', 'alphabridge-mcp' ),
@@ -587,7 +591,12 @@ class AB_MCP_Admin {
 		}
 		$hash = isset( $t['hash'] ) ? (string) $t['hash'] : '';
 
-		$html  = '<tr data-hash="' . esc_attr( $hash ) . '"><td>' . esc_html( ! empty( $t['label'] ) ? $t['label'] : '—' ) . '</td>';
+		$html  = '<tr data-hash="' . esc_attr( $hash ) . '"><td>' . esc_html( ! empty( $t['label'] ) ? $t['label'] : '—' );
+		if ( $is_older ) {
+			// A hint, not a verdict: the older connection may still be in use.
+			$html .= '<br><span class="description ab-older">' . esc_html__( 'The same app connected again later. Compare “Last used” before you delete this older connection.', 'alphabridge-mcp' ) . '</span>';
+		}
+		$html .= '</td>';
 		$html .= '<td>' . esc_html( $scope ) . '</td>';
 		$html .= '<td><code>' . esc_html( isset( $t['prefix'] ) ? $t['prefix'] : '' ) . '…</code></td>';
 		$html .= '<td>' . $exp_txt . '</td>';

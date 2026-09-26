@@ -494,7 +494,7 @@ class AB_MCP_OAuth {
 		$expires = $ttl > 0 ? time() + $ttl : 0;
 
 		$label = self::connection_label( isset( $client['name'] ) ? (string) $client['name'] : '' );
-		$token = AB_MCP_Settings::add_token( (int) $data['user_id'], $label, (string) $data['scope'], $expires );
+		$token = AB_MCP_Settings::add_token( (int) $data['user_id'], $label, (string) $data['scope'], $expires, $client_id );
 
 		return array(
 			'access_token' => $token,
