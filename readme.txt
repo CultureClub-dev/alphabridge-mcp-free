@@ -1,6 +1,6 @@
-=== AlphaBridge MCP ===
+=== AlphaBridge MCP – Connect Claude to WordPress: MCP server with permissions per connection and audit log ===
 Contributors: cultureclub
-Tags: mcp, ai, automation, rest-api, tools
+Tags: claude, mcp, mcp-server, ai-assistant, ai
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.0
@@ -8,15 +8,13 @@ Stable tag: 4.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Talk to your WordPress site. Claude and other AI assistants manage content, media and settings over one secure, native MCP endpoint.
+Connect Claude to your WordPress site through a native MCP server: rights per connection, audit log, one hub for all your sites.
 
 == Description ==
 
-**Your WordPress site, managed in conversation.**
+**Connect Claude to WordPress — with the rights you choose.**
 
-Tell Claude what you want done — "draft a post from these notes, add last week's photos, fix the SEO titles and schedule everything for Friday" — and it happens on your site. Not through screen-clicking or raw admin access, but through structured tools that respect WordPress permissions on every single call.
-
-AlphaBridge MCP turns your WordPress site into a native **Model Context Protocol (MCP) server**. AI clients such as Claude connect over one authenticated HTTPS endpoint and manage content, media, taxonomies, comments, widgets and site settings.
+AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — connects over one authenticated HTTPS endpoint and manages content, media, taxonomies, comments, widgets and site settings through structured tools that check WordPress permissions on every single call. Tell Claude what you want done — "draft a post from these notes, add last week's photos, fix the SEO titles and schedule everything for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
 
 **You stay in control**
 
@@ -30,6 +28,10 @@ Handing an AI the keys to your site should feel safe — so control comes first:
 **Connected in two minutes**
 
 Paste your endpoint URL into Claude, click Connect, approve on your own site's login-protected consent screen — no token copying (standard OAuth 2.1 with PKCE; the login is your WordPress login, no account with us). For clients without a Connect button, create a token manually and paste one ready-made config.
+
+**Several sites, one connection — AlphaBridge Connect**
+
+If you look after more than one WordPress site, add one connector in Claude instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is free; how it works and what it stores is described on the plugin website.
 
 **Nothing extra to host**
 
@@ -46,7 +48,11 @@ Everything in this plugin is fully functional: no license keys, no registration,
 * Bearer-token authentication mapped to a real WordPress user, with per-tool capability checks.
 * Unlimited connections — create one deliberately limited key per client.
 
-Need more? A separate commercial add-on, AlphaBridge MCP Pro, adds tool groups for the database, users, plugin and theme files, WooCommerce, migration and one-step site deployment over SFTP. It is entirely optional — this free plugin is complete on its own and stays fully functional without it. Details are on the plugin website.
+**How it compares**
+
+A dated comparison with other WordPress MCP plugins, every cell checked against the vendors' own pages: https://alphabridge-mcp.com/compare.html
+
+Need more? A separate commercial add-on, AlphaBridge MCP Pro, adds tool groups for the database, users, plugin and theme files, WooCommerce and migration, plus an undo for changes made through it (undo points expire after 24 hours). The Agency plan adds Site Deploy: files, themes and whole builds published onto your own hosting over SFTP, atomically and with rollback. Both are entirely optional — this free plugin is complete on its own and stays fully functional without them. Details are on the plugin website.
 
 AlphaBridge is our own product brand for this project. MCP (Model Context Protocol) is an open protocol standard; this plugin is an independent implementation and is not affiliated with or endorsed by the protocol's authors or by any other vendor.
 
