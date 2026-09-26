@@ -53,6 +53,11 @@ final class ToolDatesTest extends TestCase {
 			'a UTC column without seconds is not trusted'  => array( 'Europe/Zurich', '2026-06-16 07:00', '2026-06-16 09:30:00', '2026-06-16T09:30:00+02:00' ),
 			'a day that does not exist is not rolled over' => array( 'UTC', '2026-02-30 10:00:00', '', null ),
 			'a trailing newline is not a stored date'      => array( 'UTC', "2026-06-16 07:00:00\n", '', null ),
+			'year zero is not a date'                      => array( 'UTC', '0000-01-01 12:00:00', '', null ),
+			'Zurich before 1894 is given in UTC'           => array( 'Europe/Zurich', '1890-06-16 07:00:00', '', '1890-06-16T07:00:00Z' ),
+			'a draft in the hour the clocks skip'          => array( 'Europe/Zurich', '0000-00-00 00:00:00', '2026-03-29 02:30:00', '2026-03-29T03:30:00+02:00' ),
+			'a draft in the hour the clocks repeat'        => array( 'Europe/Zurich', '0000-00-00 00:00:00', '2026-10-25 02:30:00', '2026-10-25T02:30:00+01:00' ),
+			'the UTC column tells the two 02:30s apart'    => array( 'Europe/Zurich', '2026-10-25 00:30:00', '2026-10-25 02:30:00', '2026-10-25T02:30:00+02:00' ),
 		);
 	}
 
@@ -119,6 +124,57 @@ final class ToolDatesTest extends TestCase {
 		self::assertSame( '2026-06-16T09:00:00+02:00', $out['items'][0]['date'] );
 	}
 
+	public function testTheMediaListFallsBackToTheLocalColumn(): void {
+		self::site( 'Europe/Zurich' );
+		$GLOBALS['ab_test_query'] = static fn(): array => array(
+			ab_test_add_post(
+				21,
+				array(
+					'post_type'     => 'attachment',
+					'post_status'   => 'inherit',
+					'post_date_gmt' => '0000-00-00 00:00:00',
+					'post_date'     => '2026-06-16 09:00:00',
+				)
+			),
+		);
+
+		self::assertSame( '2026-06-16T09:00:00+02:00', AB_MCP_Tools_Media::list_media( array() )['items'][0]['date'] );
+	}
+
+	public function testTheRevisionListFallsBackToTheLocalColumn(): void {
+		self::site( 'Europe/Zurich' );
+		ab_test_add_post( 32 );
+		$GLOBALS['ab_test_revisions'][32] = array(
+			ab_test_add_post(
+				33,
+				array(
+					'post_type'         => 'revision',
+					'post_parent'       => 32,
+					'post_modified_gmt' => '0000-00-00 00:00:00',
+					'post_modified'     => '2026-06-16 09:00:00',
+				)
+			),
+		);
+
+		self::assertSame( '2026-06-16T09:00:00+02:00', AB_MCP_Tools_Content::list_revisions( array( 'id' => 32 ) )['revisions'][0]['date'] );
+	}
+
+	public function testCommentsFallBackToTheLocalColumn(): void {
+		self::site( 'Europe/Zurich' );
+		$GLOBALS['ab_test_comments'][41] = (object) array(
+			'comment_ID'       => 41,
+			'comment_post_ID'  => 30,
+			'comment_author'   => 'Ben',
+			'comment_content'  => 'Hallo',
+			'comment_date_gmt' => '0000-00-00 00:00:00',
+			'comment_date'     => '2026-06-16 09:00:00',
+			'comment_parent'   => 0,
+		);
+
+		self::assertSame( '2026-06-16T09:00:00+02:00', AB_MCP_Tools_Taxonomy_Comments::get_comment_tool( array( 'comment_id' => 41 ) )['date'] );
+		self::assertSame( '2026-06-16T09:00:00+02:00', AB_MCP_Tools_Taxonomy_Comments::list_comments( array() )['comments'][0]['date'] );
+	}
+
 	public function testTheRevisionListShowsSiteTime(): void {
 		self::site( 'Europe/Zurich' );
 		ab_test_add_post( 30 );
@@ -173,7 +229,25 @@ final class ToolDatesTest extends TestCase {
 			'an offset without seconds'           => array( '2026-10-02T09:00+02:00', '2026-10-02 09:00:00', '2026-10-02 07:00:00' ),
 			'a space instead of T, with offset'   => array( '2026-10-02 09:00:00+02:00', '2026-10-02 09:00:00', '2026-10-02 07:00:00' ),
 			'lower case t and z'                  => array( '2026-10-02t09:00:00z', '2026-10-02 11:00:00', '2026-10-02 09:00:00' ),
+			'the later 02:30 when clocks go back' => array( '2026-10-25T02:30:00+01:00', '2026-10-25 02:30:00', '2026-10-25 01:30:00' ),
+			'that hour in site time, as WordPress takes it' => array( '2026-10-25 02:30', '2026-10-25 02:30:00', '' ),
+			'before 1894, from UTC'               => array( '1890-06-16T07:00:00Z', '1890-06-16 07:29:46', '1890-06-16 07:00:00' ),
 		);
+	}
+
+	/** @return array<string,array{0:string,1:string,2:string,3:string}> */
+	public static function readableDatesElsewhere(): array {
+		return array(
+			'UTC from Z, west of UTC'         => array( '-5', '2026-10-02T09:00:00Z', '2026-10-02 04:00:00', '2026-10-02 09:00:00' ),
+			'an offset, on a UTC site'        => array( 'UTC', '2026-10-02T09:00:00+02:00', '2026-10-02 07:00:00', '2026-10-02 07:00:00' ),
+			'site time, half an hour offset'  => array( '+5.5', '2026-10-02 09:00', '2026-10-02 09:00:00', '' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'readableDatesElsewhere' )]
+	public function testTheParserUsesTheSitesOwnZone( string $zone, string $given, string $local, string $gmt ): void {
+		self::site( $zone );
+		self::assertSame( array( 'post_date' => $local, 'post_date_gmt' => $gmt ), AB_MCP_Tools_Base::parse_post_date( $given ) );
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'readableDates' )]
@@ -182,42 +256,62 @@ final class ToolDatesTest extends TestCase {
 		self::assertSame( array( 'post_date' => $local, 'post_date_gmt' => $gmt ), AB_MCP_Tools_Base::parse_post_date( $given ) );
 	}
 
-	/** @return array<string,array{0:string}> */
+	/** @return array<string,array{0:string,1:string}> */
 	public static function unreadableDates(): array {
 		return array(
-			'a thirteenth month'          => array( '2026-13-01' ),
-			'the thirtieth of February'   => array( '2026-02-30 10:00:00' ),
-			'hour 24'                     => array( '2026-10-02 24:00:00' ),
-			'minute 60'                   => array( '2026-10-02 09:60' ),
-			'second 60'                   => array( '2026-10-02 09:00:60' ),
-			'year zero'                   => array( '0000-01-01' ),
-			'words'                       => array( 'next friday' ),
-			'nothing'                     => array( '' ),
-			'a local notation'            => array( '02.10.2026 09:00' ),
-			'an offset without minutes'   => array( '2026-10-02T09:00:00+2' ),
-			'an offset without a colon'   => array( '2026-10-02T09:00:00+0200' ),
-			'an offset of 24 hours'       => array( '2026-10-02T09:00:00+24:00' ),
-			'an offset with minute 60'    => array( '2026-10-02T09:00:00+02:60' ),
-			'a second line'               => array( "2026-10-02 09:00:00\n2026-10-03" ),
+			'a thirteenth month'                    => array( '2026-13-01', 'no-such-date' ),
+			'the thirtieth of February'             => array( '2026-02-30 10:00:00', 'no-such-date' ),
+			'hour 24'                               => array( '2026-10-02 24:00:00', 'no-such-date' ),
+			'minute 60'                             => array( '2026-10-02 09:60', 'no-such-date' ),
+			'second 60'                             => array( '2026-10-02 09:00:60', 'no-such-date' ),
+			'year zero'                             => array( '0000-01-01', 'no-such-date' ),
+			'an offset of 24 hours'                 => array( '2026-10-02T09:00:00+24:00', 'no-such-date' ),
+			'an offset with minute 60'              => array( '2026-10-02T09:00:00+02:60', 'no-such-date' ),
+			'words'                                 => array( 'next friday', 'unreadable' ),
+			'nothing'                               => array( '', 'unreadable' ),
+			'a local notation'                      => array( '02.10.2026 09:00', 'unreadable' ),
+			'an offset without minutes'             => array( '2026-10-02T09:00:00+2', 'unreadable' ),
+			'an offset without a colon'             => array( '2026-10-02T09:00:00+0200', 'unreadable' ),
+			'a second line'                         => array( "2026-10-02 09:00:00\n2026-10-03", 'unreadable' ),
+			'a site time the clocks skip'           => array( '2026-03-29 02:30', 'skipped' ),
+			'the earlier 02:30 when clocks go back' => array( '2026-10-25T02:30:00+02:00', 'repeated' ),
+			'past the year 9999 after conversion'   => array( '9999-12-31T23:30:00-02:00', 'year' ),
+			'before the year 1 after conversion'    => array( '0001-01-01T00:30:00+02:00', 'year' ),
 		);
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'unreadableDates' )]
-	public function testAnUnreadableDateIsRefused( string $given ): void {
+	public function testAnUnusableDateIsRefusedWithItsReason( string $given, string $reason ): void {
 		self::site( 'Europe/Zurich' );
 		$result = AB_MCP_Tools_Base::parse_post_date( $given );
 		self::assertInstanceOf( WP_Error::class, $result );
 		self::assertSame( 'ab_mcp_invalid_date', $result->get_error_code() );
+		self::assertSame( $reason, $result->get_error_data()['reason'] );
 	}
 
-	public function testADateReadFromAToolCanBePassedBackUnchanged(): void {
+	public function testTheRepeatedHourRefusalSaysHowWordPressWouldReadIt(): void {
 		self::site( 'Europe/Zurich' );
-		$read = AB_MCP_Tools_Base::site_time( '2026-06-16 07:00:00', '2026-06-16 09:00:00' );
+		$result = AB_MCP_Tools_Base::parse_post_date( '2026-10-25T02:30:00+02:00' );
+		self::assertStringContainsString( '2026-10-25T02:30:00+01:00', $result->get_error_message() );
+	}
 
-		self::assertSame(
-			array( 'post_date' => '2026-06-16 09:00:00', 'post_date_gmt' => '2026-06-16 07:00:00' ),
-			AB_MCP_Tools_Base::parse_post_date( (string) $read )
+	/** @return array<string,array{0:string,1:string}> */
+	public static function storedMoments(): array {
+		return array(
+			'summer'          => array( '2026-06-16 07:00:00', '2026-06-16 09:00:00' ),
+			'winter'          => array( '2026-01-15 12:00:00', '2026-01-15 13:00:00' ),
+			'before 1894'     => array( '1890-06-16 07:00:00', '1890-06-16 07:29:46' ),
+			'later 02:30'     => array( '2026-10-25 01:30:00', '2026-10-25 02:30:00' ),
 		);
+	}
+
+	/** What a tool returns comes back as the same moment. */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'storedMoments' )]
+	public function testADateReadFromAToolCanBePassedBack( string $gmt, string $local ): void {
+		self::site( 'Europe/Zurich' );
+		$read = (string) AB_MCP_Tools_Base::site_time( $gmt, $local );
+
+		self::assertSame( array( 'post_date' => $local, 'post_date_gmt' => $gmt ), AB_MCP_Tools_Base::parse_post_date( $read ) );
 	}
 
 	/* ------------------------------------------------------------ wp_create_post */

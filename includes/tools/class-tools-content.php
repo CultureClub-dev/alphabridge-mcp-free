@@ -83,7 +83,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'slug'    => array( 'type' => 'string' ),
 						'author'  => array( 'type' => 'integer' ),
 						'parent'  => array( 'type' => 'integer' ),
-						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset like the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00" — a date read from another tool can be passed back unchanged.' ),
+						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time in the hour the clocks go back that WordPress would read as the other one of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => 'Key/value meta to set.' ),
 						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}.' ),
 					),
