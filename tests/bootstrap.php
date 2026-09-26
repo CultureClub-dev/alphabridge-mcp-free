@@ -51,6 +51,9 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_transient_ttl'] = array();
 	$GLOBALS['ab_test_filters']    = array();
 	$GLOBALS['ab_test_users']      = array();
+	$GLOBALS['ab_test_comments']   = array();
+	$GLOBALS['ab_test_revisions']  = array();
+	$GLOBALS['ab_test_inserted']   = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -251,7 +254,9 @@ function ab_test_add_post( int $id, array $fields = array() ): object {
 			'menu_order'    => 0,
 			'post_name'     => 'post-' . $id,
 			'post_date_gmt' => '2026-09-21 10:00:00',
+			'post_date'     => '2026-09-21 10:00:00',
 			'post_modified_gmt' => '2026-09-21 10:00:00',
+			'post_modified' => '2026-09-21 10:00:00',
 			'post_mime_type' => '',
 		),
 		$fields
@@ -345,6 +350,75 @@ function wp_strip_all_tags( $text ) {
 
 function get_post_meta( $post_id, $key = '', $single = false ) {
 	return $single ? '' : array();
+}
+
+/* ------------------------------------------------ comments, revisions, insert */
+
+/** @var array<int,object> $ab_test_comments */
+$GLOBALS['ab_test_comments'] = array();
+/** @var array<int,object[]> $ab_test_revisions Post id => its revisions. */
+$GLOBALS['ab_test_revisions'] = array();
+/** @var array[] $ab_test_inserted What wp_insert_post() was handed, unslashed. */
+$GLOBALS['ab_test_inserted'] = array();
+
+function get_comment( $id ) {
+	return $GLOBALS['ab_test_comments'][ (int) $id ] ?? null;
+}
+
+function get_comments( $args = array() ) {
+	return array_values( $GLOBALS['ab_test_comments'] );
+}
+
+function wp_get_comment_status( $id ) {
+	return 'approved';
+}
+
+function wp_get_post_revisions( $post_id ) {
+	return $GLOBALS['ab_test_revisions'][ (int) $post_id ] ?? array();
+}
+
+function get_post_type_object( $type ) {
+	if ( ! in_array( $type, array( 'post', 'page' ), true ) ) {
+		return null;
+	}
+	return (object) array(
+		'name' => $type,
+		'cap'  => (object) array(
+			'create_posts'      => 'edit_posts',
+			'publish_posts'     => 'publish_posts',
+			'edit_others_posts' => 'edit_others_posts',
+		),
+	);
+}
+
+/** wp_slash() and wp_insert_post() as a pair: core slashes on the way in and unslashes inside. */
+function wp_slash( $value ) {
+	return is_array( $value ) ? array_map( 'wp_slash', $value ) : ( is_string( $value ) ? addslashes( $value ) : $value );
+}
+
+function ab_test_unslash_deep( $value ) {
+	return is_array( $value ) ? array_map( 'ab_test_unslash_deep', $value ) : ( is_string( $value ) ? stripslashes( $value ) : $value );
+}
+
+/**
+ * Records what it is handed and stores a post from it. The dates are stored
+ * as given; how WordPress derives a missing post_date_gmt is not modelled.
+ */
+function wp_insert_post( $postarr, $wp_error = false ) {
+	$postarr                        = ab_test_unslash_deep( $postarr );
+	$GLOBALS['ab_test_inserted'][] = $postarr;
+	$id                             = 1000 + count( $GLOBALS['ab_test_inserted'] );
+	ab_test_add_post(
+		$id,
+		array(
+			'post_type'     => $postarr['post_type'] ?? 'post',
+			'post_status'   => $postarr['post_status'] ?? 'draft',
+			'post_title'    => $postarr['post_title'] ?? '',
+			'post_date'     => $postarr['post_date'] ?? '2026-09-21 10:00:00',
+			'post_date_gmt' => $postarr['post_date_gmt'] ?? '0000-00-00 00:00:00',
+		)
+	);
+	return $id;
 }
 
 function wp_get_attachment_url( $id ) {
@@ -604,4 +678,5 @@ require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/tools/class-tools-content.php';
 require_once __DIR__ . '/../includes/tools/class-tools-search-bulk.php';
 require_once __DIR__ . '/../includes/tools/class-tools-media.php';
+require_once __DIR__ . '/../includes/tools/class-tools-taxonomy-comments.php';
 require_once __DIR__ . '/../includes/class-admin.php';

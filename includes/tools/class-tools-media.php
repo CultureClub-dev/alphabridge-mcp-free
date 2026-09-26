@@ -161,7 +161,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 				'title' => get_the_title( $post ),
 				'mime'  => $post->post_mime_type,
 				'url'   => wp_get_attachment_url( $post->ID ),
-				'date'  => $post->post_date_gmt,
+				'date'  => self::site_time( $post->post_date_gmt, $post->post_date ),
 			);
 		}
 
