@@ -100,13 +100,17 @@ final class ToolDatesTest extends TestCase {
 		$post = ab_test_add_post(
 			11,
 			array(
-				'post_status'   => 'draft',
-				'post_date_gmt' => '0000-00-00 00:00:00',
-				'post_date'     => '2026-10-02 09:00:00',
+				'post_status'       => 'draft',
+				'post_date_gmt'     => '0000-00-00 00:00:00',
+				'post_date'         => '2026-10-02 09:00:00',
+				'post_modified_gmt' => '0000-00-00 00:00:00',
+				'post_modified'     => '2026-09-27 14:15:00',
 			)
 		);
 
-		self::assertSame( '2026-10-02T09:00:00+02:00', self::summary( $post )['date'] );
+		$summary = self::summary( $post );
+		self::assertSame( '2026-10-02T09:00:00+02:00', $summary['date'] );
+		self::assertSame( '2026-09-27T14:15:00+02:00', $summary['modified'] );
 	}
 
 	public function testTheMediaListShowsSiteTime(): void {
