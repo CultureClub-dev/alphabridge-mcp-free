@@ -660,6 +660,7 @@ class AB_MCP_REST_Controller {
 		}
 
 		AB_MCP_Audit_Log::record( $name, $args, 'ok', null );
+		AB_MCP_Review_Notice::count_call();
 		return $this->result( $id, $this->tool_ok( $result ) );
 	}
 

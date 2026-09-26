@@ -23,6 +23,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
 		add_action( 'admin_post_ab_mcp_oauth_settings', array( $this, 'handle_oauth_settings' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
+		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
 		// Creating or rotating a token reveals a secret. That is done over
 		// authenticated admin-ajax so the plaintext is returned once, directly to
 		// the admin's own browser, and is never written to the database — not even
@@ -251,6 +252,16 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * «Don't ask again» on the review notice. Final — see AB_MCP_Review_Notice.
+	 */
+	public function handle_review_dismiss() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_review_dismiss' );
+		AB_MCP_Review_Notice::dismiss();
+		$this->redirect( 'review_dismissed' );
+	}
+
+	/**
 	 * Redirect back with a notice code.
 	 *
 	 * @param string $notice Notice key.
@@ -297,6 +308,9 @@ class AB_MCP_Admin {
 		echo '<div class="wrap"><h1>AlphaBridge MCP</h1>';
 		echo '<p class="description" style="margin:0 0 14px">' . esc_html__( 'Settings › AlphaBridge MCP', 'alphabridge-mcp' ) . '</p>';
 		$this->notice();
+		// The one-time review request: only here, only once the site has really
+		// used the plugin, and never again after «don't ask again».
+		echo AB_MCP_Review_Notice::render(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts.
 		if ( AB_MCP_Settings::get( 'read_only', false ) ) {
 			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Read-only mode is active.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'All writing tools are blocked until you switch it off under Capabilities.', 'alphabridge-mcp' ) . '</p></div>';
 		}
@@ -620,6 +634,7 @@ class AB_MCP_Admin {
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
+			'review_dismissed' => array( 'success', __( 'Noted — the plugin will not ask for a review again.', 'alphabridge-mcp' ) ),
 		);
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );
