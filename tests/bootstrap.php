@@ -241,9 +241,19 @@ function is_multisite() {
  * hundredth site of a network.
  */
 function get_sites( $args = array() ) {
-	$number = array_key_exists( 'number', (array) $args ) ? absint( $args['number'] ) : 100;
-	$ids    = $GLOBALS['ab_test_sites'];
-	return 0 === $number ? $ids : array_slice( $ids, 0, $number );
+	$args   = (array) $args;
+	$number = array_key_exists( 'number', $args ) ? absint( $args['number'] ) : 100;
+	$ids    = 0 === $number ? $GLOBALS['ab_test_sites'] : array_slice( $GLOBALS['ab_test_sites'], 0, $number );
+	if ( 'ids' === ( $args['fields'] ?? '' ) ) {
+		return $ids;
+	}
+	// Without 'fields' => 'ids' WordPress answers site objects, not numbers.
+	return array_map(
+		static function ( $id ) {
+			return (object) array( 'blog_id' => (string) $id );
+		},
+		$ids
+	);
 }
 
 /**
@@ -257,12 +267,22 @@ function ab_test_enter_blog( int $id ): void {
 }
 
 function switch_to_blog( $id ) {
+	// A site object where an id belongs is a bug in the caller; WordPress would
+	// not say so, the emulation does.
+	if ( ! is_numeric( $id ) ) {
+		throw new TypeError( 'switch_to_blog() expects a site id, got ' . get_debug_type( $id ) );
+	}
 	$GLOBALS['ab_test_blog_stack'][] = $GLOBALS['ab_test_blog'];
-	ab_test_enter_blog( (int) $id );
+	// WordPress stays on the current site for an empty id.
+	ab_test_enter_blog( 0 === (int) $id ? $GLOBALS['ab_test_blog'] : (int) $id );
 	return true;
 }
 
 function restore_current_blog() {
+	// WordPress answers false and stays where it is when nothing was switched.
+	if ( empty( $GLOBALS['ab_test_blog_stack'] ) ) {
+		return false;
+	}
 	ab_test_enter_blog( (int) array_pop( $GLOBALS['ab_test_blog_stack'] ) );
 	return true;
 }
