@@ -86,7 +86,7 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 == Changelog ==
 
 = 4.3.5 =
-* A one-time request for a review on WordPress.org, on the plugin's own settings page only. It appears once a site has been using the plugin for at least 14 days and has made at least 50 successful tool calls, links to the review form (whatever your verdict), and «Don't ask again» ends it for good — also across updates. The count stops at 50, so it costs a site at most 50 extra option writes in its whole life; nothing is sent anywhere.
+* A one-time request for a review on WordPress.org, on the plugin's own settings page only. It appears once a site has been using the plugin for at least 14 days and has made at least 50 successful tool calls, links to the review form (whatever your verdict), and «Don't ask again» ends it for good — also across updates, and no tool call that is still counting can undo it. The counter stops once 50 successful calls are stored, so counting is a small, bounded cost rather than a write per call; nothing is sent anywhere.
 
 = 4.3.4 =
 * The capabilities screen says what to do after saving: a client that is already connected may cache the tool list it loaded, and this endpoint offers no server-initiated stream, so it cannot push `notifications/tools/list_changed`; if a change is not visible in such a client, refresh its tool list or reconnect it. The message after saving and a note under the Save button say so. Found by the acceptance test of 25 September 2026, where a newly enabled tool stayed invisible to a connected client until it reconnected.

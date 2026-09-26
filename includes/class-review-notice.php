@@ -8,8 +8,12 @@
  * survives updates, because the state lives in its own option, not among the
  * settings that an update rewrites.
  *
- * The counter stops at MIN_CALLS, so a site pays for at most MIN_CALLS extra
- * option writes in its whole life; once dismissed, nothing is written again.
+ * The counter stops once MIN_CALLS successful calls are stored, so counting is
+ * a small, bounded cost rather than a write per call, and once dismissed the
+ * counter is not written at all. The dismissal lives in an option of its own
+ * that the counter never writes: a counting request that is still in flight
+ * while the admin clicks «don't ask again» cannot write a stale «not
+ * dismissed» over it.
  * Nothing is sent anywhere: the notice is a link to the review form on
  * WordPress.org and a link that records the dismissal on this site. It asks
  * everyone the same way — there is no «are you happy?» fork in front of it.
@@ -24,13 +28,17 @@ defined( 'ABSPATH' ) || exit;
  */
 class AB_MCP_Review_Notice {
 
-	const OPTION     = 'ab_mcp_review';
+	const OPTION           = 'ab_mcp_review';
+	const OPTION_DISMISSED = 'ab_mcp_review_dismissed';
 	const MIN_DAYS   = 14;
 	const MIN_CALLS  = 50;
 	const REVIEW_URL = 'https://wordpress.org/support/plugin/alphabridge-mcp/reviews/#new-post';
 
 	/**
-	 * The stored state with every field present, whatever is in the option.
+	 * The stored state with every field present, whatever is in the options.
+	 *
+	 * The counter and the dismissal are read from two options on purpose; see
+	 * the file comment.
 	 *
 	 * @return array{first_call:int,calls:int,dismissed:bool}
 	 */
@@ -42,7 +50,7 @@ class AB_MCP_Review_Notice {
 		return array(
 			'first_call' => isset( $raw['first_call'] ) ? (int) $raw['first_call'] : 0,
 			'calls'      => isset( $raw['calls'] ) ? (int) $raw['calls'] : 0,
-			'dismissed'  => ! empty( $raw['dismissed'] ),
+			'dismissed'  => (bool) get_option( self::OPTION_DISMISSED, false ),
 		);
 	}
 
@@ -73,6 +81,7 @@ class AB_MCP_Review_Notice {
 	 * Count one successful tool call.
 	 *
 	 * Cheap by design: after MIN_CALLS, and once dismissed, nothing is written.
+	 * Only the counter option is ever written here, never the dismissal.
 	 *
 	 * @param int|null $now Unix timestamp; null means the current time.
 	 */
@@ -82,21 +91,21 @@ class AB_MCP_Review_Notice {
 			return;
 		}
 		$now = null === $now ? time() : (int) $now;
-		if ( $state['first_call'] <= 0 ) {
-			$state['first_call'] = $now;
-		}
-		++$state['calls'];
-		update_option( self::OPTION, $state );
+		update_option(
+			self::OPTION,
+			array(
+				'first_call' => $state['first_call'] > 0 ? $state['first_call'] : $now,
+				'calls'      => $state['calls'] + 1,
+			)
+		);
 	}
 
 	/**
 	 * Record «don't ask again». Final: it survives updates, the question never
-	 * comes back.
+	 * comes back, and no counting request can overwrite it.
 	 */
 	public static function dismiss() {
-		$state              = self::state();
-		$state['dismissed'] = true;
-		update_option( self::OPTION, $state );
+		update_option( self::OPTION_DISMISSED, 1 );
 	}
 
 	/**

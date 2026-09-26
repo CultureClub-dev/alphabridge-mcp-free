@@ -25,6 +25,7 @@ $ab_mcp_options = array(
 	'ab_mcp_tool_state',
 	'ab_mcp_audit',
 	'ab_mcp_review',
+	'ab_mcp_review_dismissed',
 );
 
 foreach ( $ab_mcp_options as $ab_mcp_option ) {
