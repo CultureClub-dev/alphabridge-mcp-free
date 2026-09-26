@@ -8,6 +8,9 @@
  * does not repeat the list. It asks the plugin's own classes which option names
  * they declare and checks that uninstall.php deletes every one of them — a new
  * option that is not added to the list fails here the day it is introduced.
+ * The scan sees class constants whose value is an ab_mcp_ name; an option
+ * name written inline or built at runtime is not seen, so option names live
+ * in constants.
  *
  * @package AlphaBridge_MCP
  */
@@ -73,6 +76,11 @@ final class UninstallTest extends TestCase {
 		return array_values( array_unique( $names ) );
 	}
 
+	/** Whether the row exists at all — get_option() would also say false for a row set to false. */
+	private static function stored( string $name ): bool {
+		return array_key_exists( $name, $GLOBALS['ab_test_options'] );
+	}
+
 	private function runUninstall(): void {
 		include dirname( __DIR__ ) . '/uninstall.php';
 	}
@@ -116,7 +124,7 @@ final class UninstallTest extends TestCase {
 		$this->runUninstall();
 
 		foreach ( $declared as $name ) {
-			self::assertFalse( get_option( $name ), $name . ' is still in the database after uninstall' );
+			self::assertFalse( self::stored( $name ), $name . ' is still in the database after uninstall' );
 		}
 		self::assertSame( 'Not ours', get_option( 'blogname' ), 'only the plugin\'s own rows go' );
 	}
@@ -138,7 +146,35 @@ final class UninstallTest extends TestCase {
 
 		$this->runUninstall();
 
-		self::assertFalse( get_option( AB_MCP_OAuth::OPT_CLIENTS ) );
+		self::assertFalse( self::stored( AB_MCP_OAuth::OPT_CLIENTS ) );
+	}
+
+	public function testEverySiteOfANetworkIsCleanedNotOnlyTheFirstHundred(): void {
+		// get_sites() answers 100 sites unless told otherwise; the loop in
+		// uninstall.php stopped there and left tokens and app lists on the rest.
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = range( 1, 101 );
+		$declared                     = self::declaredOptions();
+		foreach ( $GLOBALS['ab_test_sites'] as $site ) {
+			switch_to_blog( $site );
+			foreach ( $declared as $name ) {
+				update_option( $name, 'site ' . $site );
+			}
+			update_option( 'blogname', 'Site ' . $site );
+			restore_current_blog();
+		}
+
+		$this->runUninstall();
+
+		self::assertSame( 1, $GLOBALS['ab_test_blog'], 'uninstall ends on the site it started on' );
+		foreach ( $GLOBALS['ab_test_sites'] as $site ) {
+			switch_to_blog( $site );
+			foreach ( $declared as $name ) {
+				self::assertFalse( self::stored( $name ), $name . ' is still stored on site ' . $site );
+			}
+			self::assertSame( 'Site ' . $site, get_option( 'blogname' ), 'only the plugin\'s own rows go, on site ' . $site );
+			restore_current_blog();
+		}
 	}
 
 	public function testNothingIsDeletedWhileProIsStillInstalled(): void {

@@ -33,9 +33,15 @@ foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }
 
-// Multisite: clean per-site options too.
+// Multisite: clean per-site options too — on every site. get_sites() stops
+// at 100 unless told otherwise, and 'number' => 0 is "no limit".
 if ( is_multisite() ) {
-	$ab_mcp_sites = get_sites( array( 'fields' => 'ids' ) );
+	$ab_mcp_sites = get_sites(
+		array(
+			'fields' => 'ids',
+			'number' => 0,
+		)
+	);
 	foreach ( $ab_mcp_sites as $ab_mcp_site_id ) {
 		switch_to_blog( $ab_mcp_site_id );
 		foreach ( $ab_mcp_options as $ab_mcp_option ) {

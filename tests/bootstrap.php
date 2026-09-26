@@ -54,6 +54,10 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_comments']   = array();
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
+	$GLOBALS['ab_test_sites']      = array( 1 );
+	$GLOBALS['ab_test_blog']       = 1;
+	$GLOBALS['ab_test_blog_stack'] = array();
+	$GLOBALS['ab_test_blog_store'] = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -228,6 +232,39 @@ function current_user_can( $cap, ...$args ) {
 
 function is_multisite() {
 	return (bool) $GLOBALS['ab_test_multisite'];
+}
+
+/**
+ * get_sites() as WP_Site_Query answers it for the arguments uninstall uses:
+ * 'fields' => 'ids', and 'number' — 100 unless given, 0 for no limit. The
+ * default matters: a loop over get_sites() without 'number' stops at the
+ * hundredth site of a network.
+ */
+function get_sites( $args = array() ) {
+	$number = array_key_exists( 'number', (array) $args ) ? absint( $args['number'] ) : 100;
+	$ids    = $GLOBALS['ab_test_sites'];
+	return 0 === $number ? $ids : array_slice( $ids, 0, $number );
+}
+
+/**
+ * Every site of a network keeps its own options. Switching parks the current
+ * site's options and brings the other site's in.
+ */
+function ab_test_enter_blog( int $id ): void {
+	$GLOBALS['ab_test_blog_store'][ $GLOBALS['ab_test_blog'] ] = $GLOBALS['ab_test_options'];
+	$GLOBALS['ab_test_options']                                = $GLOBALS['ab_test_blog_store'][ $id ] ?? array();
+	$GLOBALS['ab_test_blog']                                   = $id;
+}
+
+function switch_to_blog( $id ) {
+	$GLOBALS['ab_test_blog_stack'][] = $GLOBALS['ab_test_blog'];
+	ab_test_enter_blog( (int) $id );
+	return true;
+}
+
+function restore_current_blog() {
+	ab_test_enter_blog( (int) array_pop( $GLOBALS['ab_test_blog_stack'] ) );
+	return true;
 }
 
 function is_super_admin( $user_id = false ) {
