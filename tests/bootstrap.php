@@ -411,12 +411,95 @@ function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
 	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . $name . '=testnonce';
 }
 
-function current_time( $type = 'timestamp', $gmt = 0 ) {
-	return time();
+/**
+ * The site's timezone as WordPress derives it: the named zone if one is set,
+ * otherwise a fixed offset built from gmt_offset (hours, may be fractional).
+ */
+function wp_timezone_string() {
+	$timezone_string = get_option( 'timezone_string' );
+	if ( $timezone_string ) {
+		return (string) $timezone_string;
+	}
+	$offset  = (float) get_option( 'gmt_offset' );
+	$hours   = (int) $offset;
+	$minutes = abs( ( $offset - $hours ) * 60 );
+	return sprintf( '%s%02d:%02d', $offset < 0 ? '-' : '+', abs( $hours ), $minutes );
 }
 
+function wp_timezone() {
+	return new DateTimeZone( wp_timezone_string() );
+}
+
+/**
+ * current_time() as WordPress defines it. 'timestamp' and 'U' are time() PLUS
+ * the site's UTC offset unless $gmt is set — not a real Unix timestamp. The
+ * former stand-in returned time() and so hid exactly the mistake of comparing
+ * one kind of timestamp with the other («Last used», 26.09.2026).
+ */
+function current_time( $type = 'timestamp', $gmt = 0 ) {
+	if ( 'timestamp' === $type || 'U' === $type ) {
+		return $gmt ? time() : time() + (int) ( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+	}
+	if ( 'mysql' === $type ) {
+		$type = 'Y-m-d H:i:s';
+	}
+	$timezone = $gmt ? new DateTimeZone( 'UTC' ) : wp_timezone();
+	return ( new DateTime( 'now', $timezone ) )->format( (string) $type );
+}
+
+/**
+ * WordPress rounds to minutes, hours, days; this stand-in prints the exact
+ * seconds so a test can see a shift of any size. Like WordPress it measures
+ * against time() when no second argument is given.
+ */
 function human_time_diff( $from, $to = 0 ) {
+	if ( empty( $to ) ) {
+		$to = time();
+	}
 	return abs( (int) $to - (int) $from ) . ' seconds';
+}
+
+/**
+ * wp_date() as WordPress defines it: a real Unix timestamp shown in the
+ * site's timezone (or the one given). Month and day names are not localised
+ * here; numeric formats come out as in WordPress.
+ */
+function wp_date( $format, $timestamp = null, $timezone = null ) {
+	if ( null === $timestamp ) {
+		$timestamp = time();
+	} elseif ( ! is_numeric( $timestamp ) ) {
+		return false;
+	}
+	$datetime = date_create( '@' . (int) $timestamp );
+	$datetime->setTimezone( $timezone ? $timezone : wp_timezone() );
+	return $datetime->format( (string) $format );
+}
+
+/**
+ * date_i18n() as WordPress (5.3 and later) defines it. The plugin no longer
+ * calls it; the stand-in is faithful so that a return to it shows up as a
+ * wrong time in the tests, not as a missing function. Given a timestamp, it
+ * reads that number as ALREADY shifted to local time — its UTC clock reading
+ * is taken as the local time. Handed a real Unix timestamp, it therefore
+ * prints the UTC clock.
+ */
+function date_i18n( $format, $timestamp_with_offset = false, $gmt = false ) {
+	$timestamp = $timestamp_with_offset;
+	if ( ! is_numeric( $timestamp ) ) {
+		$timestamp = current_time( 'timestamp', $gmt );
+	}
+	if ( 'U' === $format ) {
+		return $timestamp;
+	}
+	if ( $gmt && false === $timestamp_with_offset ) {
+		return wp_date( $format, null, new DateTimeZone( 'UTC' ) );
+	}
+	if ( false === $timestamp_with_offset ) {
+		return wp_date( $format );
+	}
+	$timezone = wp_timezone();
+	$datetime = date_create( gmdate( 'Y-m-d H:i:s', (int) $timestamp ), $timezone );
+	return wp_date( $format, $datetime->getTimestamp(), $timezone );
 }
 
 /**
@@ -503,6 +586,7 @@ define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';

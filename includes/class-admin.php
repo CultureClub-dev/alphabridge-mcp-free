@@ -571,7 +571,11 @@ class AB_MCP_Admin {
 			'content' => __( 'Content', 'alphabridge-mcp' ),
 			'full'    => __( 'Full', 'alphabridge-mcp' ),
 		);
-		$used         = ! empty( $t['last_used'] ) ? sprintf( /* translators: %s: time ago */ esc_html__( '%s ago', 'alphabridge-mcp' ), human_time_diff( (int) $t['last_used'], current_time( 'timestamp' ) ) ) : '—'; // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
+		// last_used is stored as time(), a UTC timestamp, so the distance is
+		// measured against time() as well. current_time( 'timestamp' ) adds the
+		// site's UTC offset and made every connection look that much older
+		// (two hours in Central European summer time).
+		$used         = ! empty( $t['last_used'] ) ? sprintf( /* translators: %s: time ago */ esc_html__( '%s ago', 'alphabridge-mcp' ), human_time_diff( (int) $t['last_used'], time() ) ) : '—';
 		$scope        = isset( $t['scope'] ) && isset( $scope_labels[ $t['scope'] ] ) ? $scope_labels[ $t['scope'] ] : $scope_labels['full'];
 		$exp          = isset( $t['expires'] ) ? (int) $t['expires'] : 0;
 		if ( $exp <= 0 ) {
@@ -612,7 +616,11 @@ class AB_MCP_Admin {
 		}
 		foreach ( $log as $row ) {
 			$color = 'ok' === $row['status'] ? '#008a20' : ( 'denied' === $row['status'] ? '#a06400' : '#c00' );
-			echo '<tr><td>' . esc_html( date_i18n( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td style="color:' . esc_attr( $color ) . '">' . esc_html( $row['status'] ) . '</td></tr>';
+			// ts is time(), a UTC timestamp. wp_date() shows it in the site's
+			// timezone, like every other date in WordPress. date_i18n() reads its
+			// argument as a timestamp already shifted to local time and printed
+			// the UTC clock instead.
+			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td style="color:' . esc_attr( $color ) . '">' . esc_html( $row['status'] ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px">';

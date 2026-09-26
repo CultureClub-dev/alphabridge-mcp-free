@@ -18,7 +18,7 @@ final class ConnectionLabelTest extends TestCase {
 		self::assertSame(
 			'AlphaBridge Connect',
 			AB_MCP_OAuth::connection_label( 'AlphaBridge Connect' ),
-			'No "· Claude Connect" suffix: it would say the same thing twice.'
+			'No "· OAuth" suffix: the site owner should see at a glance that it came through the hub.'
 		);
 	}
 
@@ -30,20 +30,29 @@ final class ConnectionLabelTest extends TestCase {
 		self::assertSame( 'AlphaBridge Connect', AB_MCP_OAuth::connection_label( 'alphabridge connect' ) );
 	}
 
-	public function testEveryOtherClientKeepsTheSuffix(): void {
-		self::assertSame( 'Claude · Claude Connect', AB_MCP_OAuth::connection_label( 'Claude' ) );
-		self::assertSame( 'Cursor · Claude Connect', AB_MCP_OAuth::connection_label( 'Cursor' ) );
+	public function testEveryOtherClientGetsItsNameAndOAuth(): void {
+		self::assertSame( 'Claude · OAuth', AB_MCP_OAuth::connection_label( 'Claude' ) );
+		self::assertSame( 'Cursor · OAuth', AB_MCP_OAuth::connection_label( 'Cursor' ) );
+	}
+
+	public function testNoClientIsLabelledWithAnotherVendorsProduct(): void {
+		// On 26.09.2026 the connections list of a live site read
+		// "ChatGPT · Claude Connect".
+		$label = AB_MCP_OAuth::connection_label( 'ChatGPT' );
+		self::assertSame( 'ChatGPT · OAuth', $label );
+		self::assertStringNotContainsString( 'Claude', $label );
 	}
 
 	public function testALookalikeNameIsNotTreatedAsTheHub(): void {
 		self::assertSame(
-			'AlphaBridge Connector · Claude Connect',
+			'AlphaBridge Connector · OAuth',
 			AB_MCP_OAuth::connection_label( 'AlphaBridge Connector' ),
 			'Only the exact name counts; a similar one must stay distinguishable.'
 		);
 	}
 
-	public function testAnEmptyClientNameStillProducesAReadableLabel(): void {
-		self::assertSame( ' · Claude Connect', AB_MCP_OAuth::connection_label( '' ) );
+	public function testANamelessClientIsLabelledOAuthWithoutADanglingSeparator(): void {
+		self::assertSame( 'OAuth', AB_MCP_OAuth::connection_label( '' ) );
+		self::assertSame( 'OAuth', AB_MCP_OAuth::connection_label( "  \t " ), 'Whitespace alone is no name.' );
 	}
 }
