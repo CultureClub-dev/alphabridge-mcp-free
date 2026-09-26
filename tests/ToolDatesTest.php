@@ -58,6 +58,9 @@ final class ToolDatesTest extends TestCase {
 			'a draft in the hour the clocks skip'          => array( 'Europe/Zurich', '0000-00-00 00:00:00', '2026-03-29 02:30:00', '2026-03-29T03:30:00+02:00' ),
 			'a draft in the hour the clocks repeat'        => array( 'Europe/Zurich', '0000-00-00 00:00:00', '2026-10-25 02:30:00', '2026-10-25T02:30:00+01:00' ),
 			'the UTC column tells the two 02:30s apart'    => array( 'Europe/Zurich', '2026-10-25 00:30:00', '2026-10-25 02:30:00', '2026-10-25T02:30:00+02:00' ),
+			'past 9999 in site time, given in UTC'         => array( '+2', '9999-12-31 23:30:00', '', '9999-12-31T23:30:00Z' ),
+			'year 1 in site time stays in site time'       => array( '+2', '0000-00-00 00:00:00', '0001-01-01 00:30:00', '0001-01-01T00:30:00+02:00' ),
+			'neither form fits the calendar: no date'      => array( 'Europe/Zurich', '0000-00-00 00:00:00', '0001-01-01 00:10:00', null ),
 		);
 	}
 
@@ -79,9 +82,10 @@ final class ToolDatesTest extends TestCase {
 			10,
 			array(
 				'post_date_gmt'     => '2026-06-16 07:00:00',
-				'post_date'         => '2026-06-16 09:00:00',
+				// Local columns that disagree on purpose: the UTC column must win.
+				'post_date'         => '2026-06-16 11:11:11',
 				'post_modified_gmt' => '2026-06-17 08:30:00',
-				'post_modified'     => '2026-06-17 10:30:00',
+				'post_modified'     => '2026-06-17 11:11:11',
 			)
 		);
 
@@ -114,7 +118,7 @@ final class ToolDatesTest extends TestCase {
 					'post_type'     => 'attachment',
 					'post_status'   => 'inherit',
 					'post_date_gmt' => '2026-06-16 07:00:00',
-					'post_date'     => '2026-06-16 09:00:00',
+					'post_date'     => '2026-06-16 11:11:11',
 				)
 			),
 		);
@@ -185,7 +189,7 @@ final class ToolDatesTest extends TestCase {
 					'post_type'         => 'revision',
 					'post_parent'       => 30,
 					'post_modified_gmt' => '2026-06-16 07:00:00',
-					'post_modified'     => '2026-06-16 09:00:00',
+					'post_modified'     => '2026-06-16 11:11:11',
 				)
 			),
 		);
@@ -203,7 +207,7 @@ final class ToolDatesTest extends TestCase {
 			'comment_author'   => 'Anna',
 			'comment_content'  => 'Hallo',
 			'comment_date_gmt' => '2026-06-16 07:00:00',
-			'comment_date'     => '2026-06-16 09:00:00',
+			'comment_date'     => '2026-06-16 11:11:11',
 			'comment_parent'   => 0,
 		);
 
@@ -287,6 +291,13 @@ final class ToolDatesTest extends TestCase {
 		self::assertInstanceOf( WP_Error::class, $result );
 		self::assertSame( 'ab_mcp_invalid_date', $result->get_error_code() );
 		self::assertSame( $reason, $result->get_error_data()['reason'] );
+	}
+
+	public function testASiteTimeWhoseUtcYearLeaves9999IsRefused(): void {
+		self::site( '-5' );
+		$result = AB_MCP_Tools_Base::parse_post_date( '9999-12-31 23:30:00' );
+		self::assertInstanceOf( WP_Error::class, $result );
+		self::assertSame( 'year', $result->get_error_data()['reason'] );
 	}
 
 	public function testTheRepeatedHourRefusalSaysHowWordPressWouldReadIt(): void {
