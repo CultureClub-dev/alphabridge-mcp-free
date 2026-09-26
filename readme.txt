@@ -8,13 +8,13 @@ Stable tag: 4.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect Claude to your WordPress site through a native MCP server: rights per connection, audit log, one hub for all your sites.
+Connect Claude to your WordPress site through a native MCP server: rights per connection, audit log, an optional hub for all your sites.
 
 == Description ==
 
 **Connect Claude to WordPress — with the rights you choose.**
 
-AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — connects over one authenticated HTTPS endpoint and manages content, media, taxonomies, comments, widgets and site settings through structured tools that check WordPress permissions on every single call. Tell Claude what you want done — "draft a post from these notes, add last week's photos, fix the SEO titles and schedule everything for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
+AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — connects over one authenticated HTTPS endpoint and manages content, media, taxonomies, comments, widgets and site settings through structured tools that check WordPress permissions on every single call. Tell Claude what you want done — "draft a post from these notes, add last week's photos, file it under the right categories and schedule it for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
 
 **You stay in control**
 
@@ -31,11 +31,11 @@ Paste your endpoint URL into Claude, click Connect, approve on your own site's l
 
 **Several sites, one connection — AlphaBridge Connect**
 
-If you look after more than one WordPress site, add one connector in Claude instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is free; how it works and what it stores is described on the plugin website.
+If you look after more than one WordPress site, you can add one connector in Claude instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub calls your site only for the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
 
 **Nothing extra to host**
 
-Unlike bridge-based solutions, AlphaBridge speaks MCP directly in PHP inside WordPress. No Node middleware, no external service, nothing else to run or pay for — it works on ordinary WordPress hosting, which makes it faster and more stable.
+Unlike bridge-based solutions, AlphaBridge speaks MCP directly in PHP inside WordPress. With a direct connection there is no Node middleware, no external service and nothing else to run or pay for — it works on ordinary WordPress hosting, which makes it faster and more stable. The hub above is the one optional exception, and you choose whether to use it.
 
 **Free means free**
 
@@ -80,7 +80,7 @@ No. It contacts no external service on its own. The only outbound request happen
 == Screenshots ==
 
 1. Set up the Claude.ai connector in two steps — copy the endpoint, then create a connection. Existing connections are listed and managed in the same place.
-2. The moment you create a connection, everything you need is shown once — the ready-made connector URL for Claude.ai, the Bearer token, and a copy-paste config for Cursor / Claude Code — with a reminder to save it, because the token is shown in full only once.
+2. The moment you create a connection, everything you need is shown once — the Bearer token and a copy-paste config for Cursor / Claude Code, plus the ready-made connector URL if you have switched connector-URL authentication on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, a read-only or content-only access scope, the WordPress user it acts as, and an optional expiry.
 4. Enable or disable tools by functional group. Powerful ("mighty") tools are off by default, and one switch turns on a global read-only mode.
 5. Every tool call is written to the activity log with its status (allowed or denied).
