@@ -52,7 +52,7 @@ Everything in this plugin is fully functional: no license keys, no registration,
 
 A dated comparison with other WordPress MCP plugins, every cell checked against the vendors' own pages: https://alphabridge-mcp.com/compare.html
 
-Need more? A separate commercial add-on, AlphaBridge MCP Pro, adds tool groups for the database, users, plugin and theme files, WooCommerce and migration, plus an undo for changes made through it (undo points expire after 24 hours). The Agency plan adds Site Deploy: files, themes and whole builds published onto your own hosting over SFTP, atomically and with rollback. Both are entirely optional — this free plugin is complete on its own and stays fully functional without them. Details are on the plugin website.
+Need more? A separate commercial add-on, AlphaBridge MCP Pro, adds tool groups for the database, users, plugin and theme files, WooCommerce and migration, plus an undo for changes made through it (undo points expire after 24 hours). The Agency plan adds Site Deploy: files, themes and whole builds published onto your own hosting over SFTP; ZIP deploys can run atomically, with rollback when the swap fails. Both are entirely optional — this free plugin is complete on its own and stays fully functional without them. Details are on the plugin website.
 
 AlphaBridge is our own product brand for this project. MCP (Model Context Protocol) is an open protocol standard; this plugin is an independent implementation and is not affiliated with or endorsed by the protocol's authors or by any other vendor.
 
