@@ -116,6 +116,12 @@ final class SiteTimeTest extends TestCase {
 		ab_test_add_user( 7 );
 		$token = \AB_MCP_Settings::add_token( 7, 'Test', 'read', 0 );
 		$hash  = hash( 'sha256', $token );
+		// Made three days ago, last used ten minutes ago: past the five-minute
+		// throttle, and neither old value may pass for the time of this use.
+		$tokens                 = get_option( \AB_MCP_Settings::OPT_TOKENS );
+		$tokens[0]['created']   = time() - 3 * DAY_IN_SECONDS;
+		$tokens[0]['last_used'] = time() - 10 * MINUTE_IN_SECONDS;
+		update_option( \AB_MCP_Settings::OPT_TOKENS, $tokens );
 
 		$before = time();
 		\AB_MCP_Settings::touch_token( $hash );
