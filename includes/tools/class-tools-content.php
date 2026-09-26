@@ -83,7 +83,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'slug'    => array( 'type' => 'string' ),
 						'author'  => array( 'type' => 'integer' ),
 						'parent'  => array( 'type' => 'integer' ),
-						'date'    => array( 'type' => 'string', 'description' => 'Publish date (Y-m-d H:i:s).' ),
+						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => 'Key/value meta to set.' ),
 						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}.' ),
 					),
@@ -449,8 +449,17 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( self::i( $a, 'author', 0 ) && current_user_can( $pto->cap->edit_others_posts ) ) {
 			$postarr['post_author'] = self::i( $a, 'author' );
 		}
-		if ( self::s( $a, 'date', '' ) ) {
-			$postarr['post_date'] = self::s( $a, 'date' );
+		if ( '' !== self::s( $a, 'date', '' ) ) {
+			$when = self::parse_post_date( self::s( $a, 'date' ) );
+			if ( is_wp_error( $when ) ) {
+				return $when;
+			}
+			$postarr['post_date'] = $when['post_date'];
+			// Only a date that named its offset fixes the UTC column; a site-time
+			// date leaves it to WordPress, as the admin screen does.
+			if ( '' !== $when['post_date_gmt'] ) {
+				$postarr['post_date_gmt'] = $when['post_date_gmt'];
+			}
 		}
 
 		// Slashed on the way in. WordPress unslashes what it is given here
@@ -598,7 +607,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		foreach ( $revs as $rev ) {
 			$out[] = array(
 				'revision_id' => (int) $rev->ID,
-				'date'        => $rev->post_modified_gmt,
+				'date'        => self::site_time( $rev->post_modified_gmt, $rev->post_modified ),
 				'author'      => (int) $rev->post_author,
 			);
 		}

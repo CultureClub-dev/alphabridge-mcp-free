@@ -249,7 +249,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			'author'     => $c->comment_author,
 			'content'    => $c->comment_content,
 			'status'     => wp_get_comment_status( $c->comment_ID ),
-			'date'       => $c->comment_date_gmt,
+			'date'       => self::site_time( $c->comment_date_gmt, $c->comment_date ),
 			'parent'     => (int) $c->comment_parent,
 		);
 	}
@@ -436,7 +436,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 				'author'     => $c->comment_author,
 				'content'    => $c->comment_content,
 				'status'     => wp_get_comment_status( $c->comment_ID ),
-				'date'       => $c->comment_date_gmt,
+				'date'       => self::site_time( $c->comment_date_gmt, $c->comment_date ),
 			);
 		}
 		return array( 'comments' => $out );

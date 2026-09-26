@@ -279,6 +279,209 @@ abstract class AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * A stored date as RFC 3339 in the site's timezone, with the offset written
+	 * out: "2026-06-16T09:00:00+02:00".
+	 *
+	 * WordPress keeps two columns, the UTC one (…_gmt) and the local one. The
+	 * tools used to hand out the UTC column bare, "2026-06-16 07:00:00", and a
+	 * reader took that for local time: on 26.09.2026 ChatGPT reported a post
+	 * published at 09:00 in Zurich as published at 07:00. With the offset in the
+	 * value nobody has to know which column it came from.
+	 *
+	 * The UTC column wins when it holds a date, because a local time can be
+	 * ambiguous in the hour the clocks go back. A draft whose date is not fixed
+	 * yet has no UTC time ("0000-00-00 00:00:00"); WordPress then goes by the
+	 * local column, and so does this. With neither, there is no date: null.
+	 *
+	 * Two cases are given in UTC ("…Z") instead. Before standard time some
+	 * places ran on local mean time — Zurich on +00:29:46 until 1894 — and RFC
+	 * 3339 writes offsets in whole minutes, so the site form would be off by
+	 * those seconds. And a date at the edge of the calendar can leave the years
+	 * 1 to 9999 once shifted into site time; RFC 3339 has four digits for the
+	 * year. If UTC leaves them too, there is no date to give: null.
+	 *
+	 * @param string $gmt   UTC column, "Y-m-d H:i:s".
+	 * @param string $local Local column, "Y-m-d H:i:s".
+	 * @return string|null
+	 */
+	public static function site_time( $gmt, $local = '' ) {
+		$when = self::stored_time( (string) $gmt, new DateTimeZone( 'UTC' ) );
+		if ( null === $when ) {
+			$when = self::stored_time( (string) $local, wp_timezone() );
+		}
+		if ( null === $when ) {
+			return null;
+		}
+		$site = $when->setTimezone( wp_timezone() );
+		if ( 0 === $site->getOffset() % 60 && self::four_digit_year( $site ) ) {
+			return $site->format( DATE_RFC3339 );
+		}
+		$utc = $when->setTimezone( new DateTimeZone( 'UTC' ) );
+		return self::four_digit_year( $utc ) ? $utc->format( 'Y-m-d\TH:i:s\Z' ) : null;
+	}
+
+	/**
+	 * Is the year between 1 and 9999, the range WordPress stores and RFC 3339
+	 * writes?
+	 *
+	 * @param DateTimeInterface $when Moment in the zone it will be written in.
+	 * @return bool
+	 */
+	private static function four_digit_year( DateTimeInterface $when ) {
+		$year = (int) $when->format( 'Y' );
+		return $year >= 1 && $year <= 9999;
+	}
+
+	/**
+	 * A database datetime read in the given zone, or null unless it is exactly
+	 * "Y-m-d H:i:s" naming a real day in the years 1 to 9999.
+	 *
+	 * The form is checked in UTC, where no clock change interferes, by letting
+	 * the value come back unchanged: createFromFormat() refuses other formats
+	 * and trailing characters, but rolls "02-30" over into March and the zero
+	 * date back to November of the year -1. Then the value is read in its own
+	 * zone the way WordPress reads a local time (get_gmt_from_date() uses the
+	 * same date_create()): one in a stretch the clocks skip moves forward, and
+	 * one in a stretch they repeat is taken as PHP resolves it for that zone.
+	 *
+	 * @param string       $value Column value.
+	 * @param DateTimeZone $zone  Zone the column is in.
+	 * @return DateTimeImmutable|null
+	 */
+	private static function stored_time( $value, DateTimeZone $zone ) {
+		$utc = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', $value, new DateTimeZone( 'UTC' ) );
+		if ( false === $utc || $utc->format( 'Y-m-d H:i:s' ) !== $value || (int) $utc->format( 'Y' ) < 1 ) {
+			return null;
+		}
+		$when = date_create_immutable( $value, $zone );
+		return false === $when ? null : $when;
+	}
+
+	/**
+	 * A date an agent hands in, as WordPress wants it: the local post_date and,
+	 * when the value names its offset, the matching post_date_gmt.
+	 *
+	 * Two forms. Site time — "Y-m-d H:i:s", "Y-m-d H:i" or "Y-m-d", with a space
+	 * or "T" before the time — which is what WordPress itself means by a post
+	 * date; post_date_gmt then stays empty and WordPress derives it. Or the RFC
+	 * 3339 form with "Z" or an offset (a space instead of "T" is allowed, as RFC
+	 * 3339 permits), the form the dates in this plugin's answers take; it is
+	 * converted into both columns.
+	 *
+	 * Refused, each with its own reason rather than a guess: a value in neither
+	 * form; a day or time of day that does not exist; a site time the clocks
+	 * skip; a year outside 1 to 9999 on either side of the conversion; and a
+	 * moment where the clocks go back that WordPress would read as the other of
+	 * the two. WordPress schedules and re-reads a post by its local time: in
+	 * Zurich on 25 October 2026 a post meant for 02:30+02:00 would be read as
+	 * 02:30+01:00 and published an hour late.
+	 *
+	 * @param string $value Date as given.
+	 * @return array{post_date:string,post_date_gmt:string}|WP_Error
+	 */
+	public static function parse_post_date( $value ) {
+		$value = trim( (string) $value );
+
+		if ( 1 === preg_match( '/^(\d{4})-(\d{2})-(\d{2})(?:[ Tt](\d{2}):(\d{2})(?::(\d{2}))?)?\z/', $value, $m ) ) {
+			$parts = self::date_parts( $m );
+			if ( null === $parts ) {
+				return self::date_refused( 'no-such-date', $value );
+			}
+			$local = vsprintf( '%04d-%02d-%02d %02d:%02d:%02d', $parts );
+			$read  = date_create_immutable( $local, wp_timezone() );
+			if ( false === $read || $read->format( 'Y-m-d H:i:s' ) !== $local ) {
+				return self::date_refused( 'skipped', $value );
+			}
+			// WordPress derives the UTC column from it; that year must fit too.
+			if ( ! self::four_digit_year( $read->setTimezone( new DateTimeZone( 'UTC' ) ) ) ) {
+				return self::date_refused( 'year', $value );
+			}
+			return array(
+				'post_date'     => $local,
+				'post_date_gmt' => '',
+			);
+		}
+
+		if ( 1 === preg_match( '/^(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?([Zz]|[+-]\d{2}:\d{2})\z/', $value, $m ) ) {
+			$parts  = self::date_parts( $m );
+			$offset = 'Z' === strtoupper( $m[7] ) ? '+00:00' : $m[7];
+			if ( null === $parts || (int) substr( $offset, 1, 2 ) > 23 || (int) substr( $offset, 4, 2 ) > 59 ) {
+				return self::date_refused( 'no-such-date', $value );
+			}
+			$when = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:sP', vsprintf( '%04d-%02d-%02d %02d:%02d:%02d', $parts ) . $offset );
+			if ( false === $when ) {
+				return self::date_refused( 'no-such-date', $value );
+			}
+			$local = $when->setTimezone( wp_timezone() );
+			$gmt   = $when->setTimezone( new DateTimeZone( 'UTC' ) );
+			if ( ! self::four_digit_year( $local ) || ! self::four_digit_year( $gmt ) ) {
+				return self::date_refused( 'year', $value );
+			}
+			$read = date_create_immutable( $local->format( 'Y-m-d H:i:s' ), wp_timezone() );
+			if ( false === $read || $read->getTimestamp() !== $when->getTimestamp() ) {
+				return self::date_refused( 'repeated', $value, false === $read ? '' : $read->format( DATE_RFC3339 ) );
+			}
+			return array(
+				'post_date'     => $local->format( 'Y-m-d H:i:s' ),
+				'post_date_gmt' => $gmt->format( 'Y-m-d H:i:s' ),
+			);
+		}
+
+		return self::date_refused( 'unreadable', $value );
+	}
+
+	/**
+	 * The refusal for parse_post_date(), naming the reason it found.
+	 *
+	 * @param string $reason unreadable | no-such-date | skipped | year | repeated.
+	 * @param string $value  The date as given.
+	 * @param string $read   For "repeated": how WordPress would read it.
+	 * @return WP_Error
+	 */
+	private static function date_refused( $reason, $value, $read = '' ) {
+		switch ( $reason ) {
+			case 'no-such-date':
+				/* translators: %s: the date as given. */
+				$message = sprintf( __( 'No such date or time: "%s".', 'alphabridge-mcp' ), $value );
+				break;
+			case 'skipped':
+				/* translators: %s: the date as given. */
+				$message = sprintf( __( '"%s" does not exist in the site\'s timezone: the clocks skip over it. Choose another time.', 'alphabridge-mcp' ), $value );
+				break;
+			case 'year':
+				/* translators: %s: the date as given. */
+				$message = sprintf( __( '"%s" falls outside the years WordPress can store (1 to 9999).', 'alphabridge-mcp' ), $value );
+				break;
+			case 'repeated':
+				/* translators: 1: the date as given, 2: the same local time as WordPress reads it. */
+				$message = sprintf( __( '"%1$s" falls where the clocks go back in the site\'s timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as "%2$s". Choose a time outside that stretch, or give that offset.', 'alphabridge-mcp' ), $value, $read );
+				break;
+			default:
+				/* translators: %s: the date as given. */
+				$message = sprintf( __( 'Unreadable date: "%s". Use site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, for example "2026-10-02T09:00:00+02:00".', 'alphabridge-mcp' ), $value );
+		}
+		return new WP_Error( 'ab_mcp_invalid_date', $message, array( 'reason' => $reason ) );
+	}
+
+	/**
+	 * Year, month, day, hour, minute, second from a match, or null unless they
+	 * name a real calendar day and a time of day. A missing time is midnight.
+	 *
+	 * @param array $m preg_match() groups 1 to 6.
+	 * @return int[]|null
+	 */
+	private static function date_parts( array $m ) {
+		$parts = array();
+		for ( $i = 1; $i <= 6; $i++ ) {
+			$parts[] = isset( $m[ $i ] ) && '' !== $m[ $i ] ? (int) $m[ $i ] : 0;
+		}
+		if ( ! checkdate( $parts[1], $parts[2], $parts[0] ) || $parts[3] > 23 || $parts[4] > 59 || $parts[5] > 59 ) {
+			return null;
+		}
+		return $parts;
+	}
+
+	/**
 	 * Compact summary of a post object.
 	 *
 	 * @param WP_Post $post Post.
@@ -292,8 +495,8 @@ abstract class AB_MCP_Tools_Base {
 			'title'     => get_the_title( $post ),
 			'slug'      => $post->post_name,
 			'link'      => get_permalink( $post ),
-			'date'      => $post->post_date_gmt,
-			'modified'  => $post->post_modified_gmt,
+			'date'      => self::site_time( $post->post_date_gmt, $post->post_date ),
+			'modified'  => self::site_time( $post->post_modified_gmt, $post->post_modified ),
 			'author'    => (int) $post->post_author,
 			'parent'    => (int) $post->post_parent,
 			'excerpt'   => self::summary_excerpt( $post ),
