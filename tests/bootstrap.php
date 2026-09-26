@@ -54,6 +54,10 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_comments']   = array();
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
+	$GLOBALS['ab_test_sites']      = array( 1 );
+	$GLOBALS['ab_test_blog']       = 1;
+	$GLOBALS['ab_test_blog_stack'] = array();
+	$GLOBALS['ab_test_blog_store'] = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -228,6 +232,59 @@ function current_user_can( $cap, ...$args ) {
 
 function is_multisite() {
 	return (bool) $GLOBALS['ab_test_multisite'];
+}
+
+/**
+ * get_sites() as WP_Site_Query answers it for the arguments uninstall uses:
+ * 'fields' => 'ids', and 'number' — 100 unless given, 0 for no limit. The
+ * default matters: a loop over get_sites() without 'number' stops at the
+ * hundredth site of a network.
+ */
+function get_sites( $args = array() ) {
+	$args   = (array) $args;
+	$number = array_key_exists( 'number', $args ) ? absint( $args['number'] ) : 100;
+	$ids    = 0 === $number ? $GLOBALS['ab_test_sites'] : array_slice( $GLOBALS['ab_test_sites'], 0, $number );
+	if ( 'ids' === ( $args['fields'] ?? '' ) ) {
+		return $ids;
+	}
+	// Without 'fields' => 'ids' WordPress answers site objects, not numbers.
+	return array_map(
+		static function ( $id ) {
+			return (object) array( 'blog_id' => (string) $id );
+		},
+		$ids
+	);
+}
+
+/**
+ * Every site of a network keeps its own options. Switching parks the current
+ * site's options and brings the other site's in.
+ */
+function ab_test_enter_blog( int $id ): void {
+	$GLOBALS['ab_test_blog_store'][ $GLOBALS['ab_test_blog'] ] = $GLOBALS['ab_test_options'];
+	$GLOBALS['ab_test_options']                                = $GLOBALS['ab_test_blog_store'][ $id ] ?? array();
+	$GLOBALS['ab_test_blog']                                   = $id;
+}
+
+function switch_to_blog( $id ) {
+	// A site object where an id belongs is a bug in the caller; WordPress would
+	// not say so, the emulation does.
+	if ( ! is_numeric( $id ) ) {
+		throw new TypeError( 'switch_to_blog() expects a site id, got ' . get_debug_type( $id ) );
+	}
+	$GLOBALS['ab_test_blog_stack'][] = $GLOBALS['ab_test_blog'];
+	// WordPress stays on the current site for an empty id.
+	ab_test_enter_blog( 0 === (int) $id ? $GLOBALS['ab_test_blog'] : (int) $id );
+	return true;
+}
+
+function restore_current_blog() {
+	// WordPress answers false and stays where it is when nothing was switched.
+	if ( empty( $GLOBALS['ab_test_blog_stack'] ) ) {
+		return false;
+	}
+	ab_test_enter_blog( (int) array_pop( $GLOBALS['ab_test_blog_stack'] ) );
+	return true;
 }
 
 function is_super_admin( $user_id = false ) {
