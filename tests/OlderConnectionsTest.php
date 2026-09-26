@@ -15,6 +15,7 @@ namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
 use AB_MCP_Admin;
+use AB_MCP_Auth;
 use AB_MCP_OAuth;
 use AB_MCP_Settings;
 use ReflectionMethod;
@@ -82,6 +83,15 @@ final class OlderConnectionsTest extends TestCase {
 				array( 'garbage', self::entry( 'a', 7, 'abc_1', 100 ), self::entry( 'b', 7, 'abc_1', 200 ) ),
 				array( 'a' ),
 			),
+			'two groups in one list, each on its own'      => array(
+				array(
+					self::entry( 'a', 7, 'abc_1', 100 ),
+					self::entry( 'x', 9, 'abc_2', 100 ),
+					self::entry( 'b', 7, 'abc_1', 200 ),
+					self::entry( 'y', 9, 'abc_2', 200 ),
+				),
+				array( 'a', 'x' ),
+			),
 		);
 	}
 
@@ -92,7 +102,8 @@ final class OlderConnectionsTest extends TestCase {
 		self::assertSame( $expected, $older );
 	}
 
-	private function exchange( string $client_id, int $user, string $scope ): void {
+	/** @return string The plaintext token the exchange issued. */
+	private function exchange( string $client_id, int $user, string $scope ): string {
 		$challenge = rtrim( strtr( base64_encode( hash( 'sha256', self::VERIFIER, true ) ), '+/', '-_' ), '=' );
 		$code      = AB_MCP_OAuth::create_auth_code( $client_id, self::REDIRECT, $user, $scope, $challenge );
 		$out       = AB_MCP_OAuth::redeem_code(
@@ -105,6 +116,7 @@ final class OlderConnectionsTest extends TestCase {
 			)
 		);
 		self::assertArrayHasKey( 'access_token', $out, print_r( $out, true ) );
+		return (string) $out['access_token'];
 	}
 
 	/** The connections table as the settings screen renders it. */
@@ -128,11 +140,17 @@ final class OlderConnectionsTest extends TestCase {
 		);
 
 		// The sequence of 26.09.2026: read, then reconnect with content.
-		$this->exchange( 'abc_chatgpt', 7, 'read' );
-		$this->exchange( 'abc_chatgpt', 7, 'content' );
+		$first  = $this->exchange( 'abc_chatgpt', 7, 'read' );
+		$second = $this->exchange( 'abc_chatgpt', 7, 'content' );
+
+		// Marked, not touched: the older connection still works as it was.
+		self::assertSame( 7, AB_MCP_Auth::verify_token( $first ), 'The older token still authenticates.' );
+		self::assertSame( 'read', AB_MCP_Auth::current_scope(), 'With the scope it was given.' );
+		self::assertSame( 7, AB_MCP_Auth::verify_token( $second ) );
+		self::assertSame( 'content', AB_MCP_Auth::current_scope() );
 
 		$tokens = AB_MCP_Settings::get_tokens();
-		self::assertCount( 2, $tokens, 'Nothing is revoked.' );
+		self::assertCount( 2, $tokens );
 		self::assertSame( 'abc_chatgpt', $tokens[0]['client_id'] );
 		self::assertSame( 'abc_chatgpt', $tokens[1]['client_id'] );
 
@@ -140,6 +158,27 @@ final class OlderConnectionsTest extends TestCase {
 		self::assertCount( 2, $cells );
 		self::assertStringContainsString( 'ab-older', $cells[0], 'The earlier connection is marked.' );
 		self::assertStringNotContainsString( 'ab-older', $cells[1], 'The newest one is not.' );
+	}
+
+	public function testRotatingTheOlderConnectionMovesTheMarkToTheOtherOne(): void {
+		update_option(
+			AB_MCP_OAuth::OPT_CLIENTS,
+			array( 'abc_chatgpt' => array( 'name' => 'ChatGPT', 'redirect_uris' => array( self::REDIRECT ) ) )
+		);
+		$this->exchange( 'abc_chatgpt', 7, 'read' );
+		$this->exchange( 'abc_chatgpt', 7, 'content' );
+		$older = AB_MCP_Settings::get_tokens()[0]['hash'];
+
+		// Rotation issues a new secret and counts as the newest connection; the
+		// app it belongs to stays the same.
+		self::assertNotSame( '', AB_MCP_Settings::rotate_token( $older ) );
+
+		$tokens = AB_MCP_Settings::get_tokens();
+		self::assertSame( 'abc_chatgpt', $tokens[0]['client_id'] );
+		self::assertSame( 'abc_chatgpt', $tokens[1]['client_id'] );
+		$marked = array_keys( AB_MCP_Settings::older_of_same_app( $tokens ) );
+		self::assertSame( array( $tokens[0]['hash'] ), $marked, 'The one that was not rotated is now the older one.' );
+		self::assertSame( 'content', $tokens[0]['scope'] );
 	}
 
 	public function testTwoPeopleOnTheSameAppMarkNobody(): void {
