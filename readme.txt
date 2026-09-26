@@ -14,7 +14,7 @@ Connect Claude and ChatGPT to your WordPress site through a native MCP server: r
 
 **Connect Claude and ChatGPT to WordPress — with the rights you choose.**
 
-AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — or ChatGPT (as an MCP app on the Plus, Pro, Business, Enterprise and Edu plans) connects over one authenticated HTTPS endpoint and manages content, media, taxonomies, comments, widgets and site settings through structured tools that check WordPress permissions on every single call. Tell Claude what you want done — "draft a post from these notes, add last week's photos, file it under the right categories and schedule it for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
+AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — connects over one authenticated HTTPS endpoint and manages content, media, taxonomies, comments, widgets and site settings through structured tools that check WordPress permissions on every single call. ChatGPT connects the same way, as an MCP app on the Plus, Pro, Business, Enterprise and Edu plans. Tell Claude what you want done — "draft a post from these notes, add last week's photos, file it under the right categories and schedule it for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
 
 **You stay in control**
 
@@ -31,7 +31,7 @@ Paste your endpoint URL into Claude, click Connect, approve on your own site's l
 
 **Several sites, one connection — AlphaBridge Connect**
 
-If you look after more than one WordPress site, you can add one connector in Claude or ChatGPT instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single Claude connection. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
+If you look after more than one WordPress site, you can add one connector in Claude or ChatGPT instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single connection in the client you use. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
 
 **Nothing extra to host**
 
