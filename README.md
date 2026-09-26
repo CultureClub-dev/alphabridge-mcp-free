@@ -57,7 +57,7 @@ Details: https://alphabridge-mcp.com/security.html
 
 ## Requirements
 
-WordPress 6.5+ (tested up to 7.0) · PHP 8.0+
+WordPress 6.5+ (tested up to 7.1) · PHP 8.0+
 
 ## Installation
 
