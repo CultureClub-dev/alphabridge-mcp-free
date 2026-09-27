@@ -1,11 +1,16 @@
 <?php
 /**
- * Times on the settings screen follow the site's timezone. Both values shown
- * here are stored as time(), a UTC timestamp: «Last used» in the connections
- * list and the time column of the log. Until 4.3.5 the first was compared with
- * the local-offset timestamp and the second was formatted as if it already
- * were one — on a site in Central European summer time a connection used a
- * minute ago read «2 hours ago», and the log showed the UTC clock.
+ * Times on the settings screen follow the site's timezone. The values shown
+ * here are stored as time(), a UTC timestamp: «Last used» and «Expires» in the
+ * connections list and the time column of the log. Until 4.3.5 the first was
+ * compared with the local-offset timestamp and the log was formatted as if it
+ * already were one — on a site in Central European summer time a connection
+ * used a minute ago read «2 hours ago», and the log showed the UTC clock.
+ *
+ * Since 4.3.6 «Last used» and «Expires» are a date and time in digits, like the
+ * log. They were phrases around human_time_diff(): WordPress translates the
+ * time span, this plugin's words around it need its own language pack, and a
+ * German site without one read «2 Wochen ago».
  *
  * @package AlphaBridge_MCP
  */
@@ -45,12 +50,18 @@ final class SiteTimeTest extends TestCase {
 	}
 
 	/**
-	 * The seconds in the «Last used» cell. The stand-in for human_time_diff()
-	 * prints exact seconds, so any shift is visible.
+	 * The plain cells of a row, the ones before the buttons: label, access,
+	 * token prefix, «Expires», «Last used».
+	 *
+	 * @return array<string,string>
 	 */
-	private function secondsAgo( string $html ): int {
-		self::assertSame( 1, preg_match( '#<td>(\d+) seconds ago</td>#', $html, $m ), 'The row says how long ago the connection was used: ' . $html );
-		return (int) $m[1];
+	private function cells( string $html ): array {
+		self::assertSame( 5, preg_match_all( '#<td>(.*?)</td>#s', $html, $m ), 'A row has five plain cells before the buttons: ' . $html );
+		return array_combine( array( 'label', 'access', 'token', 'expires', 'used' ), $m[1] );
+	}
+
+	private static function utc( string $time ): int {
+		return ( new DateTimeImmutable( $time, new DateTimeZone( 'UTC' ) ) )->getTimestamp();
 	}
 
 	/** The log card as the settings screen renders it. */
@@ -62,7 +73,7 @@ final class SiteTimeTest extends TestCase {
 	}
 
 	private function logEntryAt( string $utc ): void {
-		$ts = ( new DateTimeImmutable( $utc, new DateTimeZone( 'UTC' ) ) )->getTimestamp();
+		$ts = self::utc( $utc );
 		update_option(
 			AB_MCP_Audit_Log::OPTION,
 			array(
@@ -78,24 +89,23 @@ final class SiteTimeTest extends TestCase {
 		);
 	}
 
-	/** @return array<string,array{0:float}> */
+	/** @return array<string,array{0:float,1:string}> */
 	public static function offsets(): array {
 		return array(
-			'UTC'                        => array( 0.0 ),
-			'Central European summer'    => array( 2.0 ),
-			'US Eastern, west of UTC'    => array( -5.0 ),
-			'India, half an hour offset' => array( 5.5 ),
+			'UTC'                                => array( 0.0, '2026-09-26 20:10' ),
+			'Central European summer'            => array( 2.0, '2026-09-26 22:10' ),
+			'US Eastern, west of UTC'            => array( -5.0, '2026-09-26 15:10' ),
+			'India, half an hour, over midnight' => array( 5.5, '2026-09-27 01:40' ),
 		);
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'offsets' )]
-	public function testLastUsedIsTheRealTimeSinceTheCallWhateverTheSiteOffset( float $offset ): void {
+	public function testLastUsedShowsTheSiteClockWhateverTheOffset( float $offset, string $expected ): void {
 		update_option( 'gmt_offset', $offset );
 
-		$seconds = $this->secondsAgo( $this->row( array( 'last_used' => time() - 60 ) ) );
+		$cells = $this->cells( $this->row( array( 'last_used' => self::utc( '2026-09-26 20:10:22' ) ) ) );
 
-		self::assertGreaterThanOrEqual( 60, $seconds );
-		self::assertLessThan( 65, $seconds, 'A connection used a minute ago must look a minute old, not hours older or younger.' );
+		self::assertSame( $expected, $cells['used'], 'A connection used at 20:10 UTC shows the site clock at that moment, neither the UTC clock nor a doubled offset.' );
 	}
 
 	public function testLastUsedIsRightWhenTheSiteNamesItsZone(): void {
@@ -103,10 +113,84 @@ final class SiteTimeTest extends TestCase {
 		// daylight saving, so the offset is +5:30 whenever the test runs.
 		update_option( 'timezone_string', 'Asia/Kolkata' );
 
-		$seconds = $this->secondsAgo( $this->row( array( 'last_used' => time() - 60 ) ) );
+		$cells = $this->cells( $this->row( array( 'last_used' => self::utc( '2026-09-26 20:10:22' ) ) ) );
 
-		self::assertGreaterThanOrEqual( 60, $seconds );
-		self::assertLessThan( 65, $seconds );
+		self::assertSame( '2026-09-27 01:40', $cells['used'] );
+	}
+
+	public function testLastUsedFollowsTheNamedZoneAcrossDaylightSaving(): void {
+		// gmt_offset holds today's offset only: Zurich is one hour ahead of UTC
+		// in January and two in September.
+		update_option( 'timezone_string', 'Europe/Zurich' );
+
+		$winter = $this->cells( $this->row( array( 'last_used' => self::utc( '2026-01-15 12:00:00' ) ) ) );
+		$summer = $this->cells( $this->row( array( 'last_used' => self::utc( '2026-09-26 20:10:22' ) ) ) );
+
+		self::assertSame( '2026-01-15 13:00', $winter['used'] );
+		self::assertSame( '2026-09-26 22:10', $summer['used'] );
+	}
+
+	public function testExpiresShowsTheSiteClockOfTheExpiry(): void {
+		// A fixed offset, so the expected text does not depend on the daylight
+		// saving rules of a year far ahead.
+		update_option( 'gmt_offset', 2.0 );
+
+		$cells = $this->cells( $this->row( array( 'expires' => self::utc( '2099-10-01 08:00:00' ) ) ) );
+
+		self::assertSame( '2099-10-01 10:00', $cells['expires'] );
+	}
+
+	public function testExpiresFollowsTheNamedZoneAcrossDaylightSaving(): void {
+		// Zurich is one hour ahead of UTC in winter and two in summer. The two
+		// expiries lie ahead, one in each season, and the expected text comes
+		// from PHP's zone database, so a later change to the daylight saving
+		// rules cannot break the test. Arithmetic with today's gmt_offset is
+		// right for one of the two and an hour off for the other.
+		update_option( 'timezone_string', 'Europe/Zurich' );
+		$zone = new DateTimeZone( 'Europe/Zurich' );
+
+		foreach ( array( '01-15 12:00:00', '07-15 12:00:00' ) as $day ) {
+			$expires  = self::nextUtc( $day );
+			$expected = ( new DateTimeImmutable( '@' . $expires ) )->setTimezone( $zone )->format( 'Y-m-d H:i' );
+
+			$cells = $this->cells( $this->row( array( 'expires' => $expires ) ) );
+
+			self::assertSame( $expected, $cells['expires'], 'Expiry on ' . $day . ' UTC.' );
+		}
+	}
+
+	/** The next moment at least a day ahead with this month, day and UTC time. */
+	private static function nextUtc( string $monthDayTime ): int {
+		$year = (int) gmdate( 'Y' );
+		$ts   = self::utc( $year . '-' . $monthDayTime );
+		return $ts > time() + DAY_IN_SECONDS ? $ts : self::utc( ( $year + 1 ) . '-' . $monthDayTime );
+	}
+
+	public function testExpiresStillSaysNeverAndExpired(): void {
+		$never   = $this->cells( $this->row( array( 'expires' => 0 ) ) );
+		$expired = $this->cells( $this->row( array( 'expires' => time() - 60 ) ) );
+
+		self::assertStringContainsString( '>never</span>', $never['expires'] );
+		self::assertStringContainsString( '>expired</span>', $expired['expires'] );
+	}
+
+	public function testTheTimeCellsHoldDigitsOnly(): void {
+		// Words around a time span need this plugin's language pack, the span
+		// itself comes translated from WordPress: without the pack a German site
+		// read «2 Wochen ago». Digits read the same in every language.
+		update_option( 'timezone_string', 'Europe/Zurich' );
+
+		$cells = $this->cells(
+			$this->row(
+				array(
+					'last_used' => time() - 14 * DAY_IN_SECONDS,
+					'expires'   => time() + 3 * DAY_IN_SECONDS,
+				)
+			)
+		);
+
+		self::assertMatchesRegularExpression( '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}\z/', $cells['used'] );
+		self::assertMatchesRegularExpression( '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}\z/', $cells['expires'] );
 	}
 
 	public function testUsingATokenStoresARealUnixTimestamp(): void {
@@ -146,10 +230,9 @@ final class SiteTimeTest extends TestCase {
 	public function testANeverUsedConnectionShowsADash(): void {
 		update_option( 'gmt_offset', 2.0 );
 
-		$html = $this->row( array( 'last_used' => 0 ) );
+		$cells = $this->cells( $this->row( array( 'last_used' => 0 ) ) );
 
-		self::assertStringContainsString( '<td>—</td>', $html );
-		self::assertStringNotContainsString( 'seconds ago', $html );
+		self::assertSame( '—', $cells['used'] );
 	}
 
 	public function testTheLogShowsTheSiteClockInSummer(): void {
