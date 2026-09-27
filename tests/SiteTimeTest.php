@@ -140,6 +140,32 @@ final class SiteTimeTest extends TestCase {
 		self::assertSame( '2099-10-01 10:00', $cells['expires'] );
 	}
 
+	public function testExpiresFollowsTheNamedZoneAcrossDaylightSaving(): void {
+		// Zurich is one hour ahead of UTC in winter and two in summer. The two
+		// expiries lie ahead, one in each season, and the expected text comes
+		// from PHP's zone database, so a later change to the daylight saving
+		// rules cannot break the test. Arithmetic with today's gmt_offset is
+		// right for one of the two and an hour off for the other.
+		update_option( 'timezone_string', 'Europe/Zurich' );
+		$zone = new DateTimeZone( 'Europe/Zurich' );
+
+		foreach ( array( '01-15 12:00:00', '07-15 12:00:00' ) as $day ) {
+			$expires  = self::nextUtc( $day );
+			$expected = ( new DateTimeImmutable( '@' . $expires ) )->setTimezone( $zone )->format( 'Y-m-d H:i' );
+
+			$cells = $this->cells( $this->row( array( 'expires' => $expires ) ) );
+
+			self::assertSame( $expected, $cells['expires'], 'Expiry on ' . $day . ' UTC.' );
+		}
+	}
+
+	/** The next moment at least a day ahead with this month, day and UTC time. */
+	private static function nextUtc( string $monthDayTime ): int {
+		$year = (int) gmdate( 'Y' );
+		$ts   = self::utc( $year . '-' . $monthDayTime );
+		return $ts > time() + DAY_IN_SECONDS ? $ts : self::utc( ( $year + 1 ) . '-' . $monthDayTime );
+	}
+
 	public function testExpiresStillSaysNeverAndExpired(): void {
 		$never   = $this->cells( $this->row( array( 'expires' => 0 ) ) );
 		$expired = $this->cells( $this->row( array( 'expires' => time() - 60 ) ) );
