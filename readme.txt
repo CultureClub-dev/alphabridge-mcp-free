@@ -27,11 +27,11 @@ Handing an AI the keys to your site should feel safe — so control comes first:
 
 **Connected in two minutes**
 
-Paste your endpoint URL into Claude, click Connect, approve on your own site's login-protected consent screen — no token copying (standard OAuth 2.1 with PKCE; the login is your WordPress login, no account with us). For clients without a Connect button, create a token manually and paste one ready-made config. ChatGPT connects the same way: add the endpoint as an MCP app (Plugins → Add → Create MCP app, authentication OAuth) and approve on your site — checked on 26 September 2026 with ChatGPT Pro, directly and through the hub.
+In Claude, connect «AlphaBridge MCP for WordPress» from the connector directory, enter your site's address and approve on your own site's login-protected consent screen — no address or token to copy (standard OAuth 2.1 with PKCE; the login is your WordPress login, no account with us). That entry runs through the AlphaBridge Connect hub described below; to connect directly, paste your endpoint URL into Claude as a custom connector instead. For clients without a Connect button, create a token manually and paste one ready-made config. ChatGPT connects the same way: add the endpoint as an MCP app (Plugins → Add → Create MCP app, authentication OAuth) and approve on your site — checked on 26 September 2026 with ChatGPT Pro, directly and through the hub.
 
-**Several sites, one connection — AlphaBridge Connect**
+**AlphaBridge Connect — the optional hub**
 
-If you look after more than one WordPress site, you can add one connector in Claude or ChatGPT instead of one per site: the hosted hub at connect.alphabridge-mcp.com links your sites to a single connection in the client you use. Each site keeps its own rights and its own audit log, and you approve every site on that site's own login screen. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
+The entry «AlphaBridge MCP for WordPress» in Claude's connector directory is the hosted hub at connect.alphabridge-mcp.com: you enter your site's address instead of copying the endpoint, and you approve the site on its own login screen. The site keeps its own rights and its own audit log. A connection through the hub links one site. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
 
 **Nothing extra to host**
 
@@ -60,7 +60,7 @@ AlphaBridge is our own product brand for this project. MCP (Model Context Protoc
 
 1. Upload the `alphabridge-mcp` folder to `/wp-content/plugins/` (or install the ZIP via Plugins → Add New → Upload).
 2. Activate the plugin.
-3. In Claude, open Connectors, add a custom connector with the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` and connect — you approve on your own site's login-protected consent screen. Done. In ChatGPT: Plugins → Add → Create MCP app with the same URL and OAuth.
+3. In Claude, open Connectors, find «AlphaBridge MCP for WordPress» in the directory and connect: enter your site's address and approve on your own site's login-protected consent screen. Done. To connect directly, without the AlphaBridge Connect hub in between, add a custom connector with the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` instead. In ChatGPT: Plugins → Add → Create MCP app with the endpoint and OAuth.
 4. For clients without a Connect button (Cursor, Claude Code, scripts): open **Settings → AlphaBridge MCP**, create a connection manually and copy its token.
 
 == Frequently Asked Questions ==
@@ -94,6 +94,7 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 
 = 4.3.6 =
 * In the connections list, the time a connection was last used and an expiry still ahead are shown as the site's date and time in digits, to the minute, for example «2026-09-27 12:52» — the form of the log below, which adds the seconds. They were phrases such as «2 weeks ago» and «in 3 days»: WordPress translates the time span, the words around it come from this plugin, and a site whose language this plugin has no translation for yet mixed the two — a German site read «2 Wochen ago». «never», «expired» and the dash for a connection not used yet stay as they were. Found while recording a setup video on 27 September 2026.
+* The steps for Claude start with the simplest way: «AlphaBridge MCP for WordPress» in Claude's connector directory, where you enter your site's address instead of copying the endpoint; it connects through the AlphaBridge Connect hub. The settings screen shows that way first, with this site's address, while connecting from Claude (OAuth) is switched on — the hub signs in through it. The direct way, a custom connector with the endpoint, follows as the way without the hub.
 * The steps for Claude no longer spell out its menus. Claude has rearranged them — Connectors now sit under «Customize», and a custom connector is added through an «Add» menu — so the settings screen, the notice after saving the tool selection and the installation steps, which pointed to «Settings → Connectors», no longer matched what Claude shows. The settings screen and the installation steps now say to open Connectors in Claude and add a custom connector there. The notice after saving says where in Claude to make a change visible: in Connectors, refresh the connector's tool list — new in the notice — or disconnect and connect again.
 
 = 4.3.5 =

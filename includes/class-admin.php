@@ -322,17 +322,18 @@ class AB_MCP_Admin {
 
 		// ── Connector box: the ONE place to create and manage connections. ──
 		echo '<div class="postbox" style="padding:4px 16px 16px"><h2 class="hndle" style="padding:10px 0;border:0">Claude.ai Connector</h2>';
-		echo '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Copy the endpoint, add it in Claude and click Connect — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
+		$oauth = class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled();
+		echo $this->connector_intro_html( $oauth ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connector_intro_html().
 
 		// Step 1 — endpoint (not a secret; always visible).
 		echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 1 — Copy the endpoint URL', 'alphabridge-mcp' ) . '</p>';
 		echo '<div style="display:flex;gap:8px;align-items:center;margin:0 0 12px"><input type="text" readonly value="' . esc_attr( $endpoint ) . '" class="regular-text ab-select" style="flex:1;font-family:monospace;font-size:12px"><button type="button" class="button ab-copy" data-copy="' . esc_attr( $endpoint ) . '">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
 
-		// Step 2 — the recommended path: Claude's native Connect button (OAuth).
+		// Step 2 — the direct path: a custom connector with the endpoint (OAuth).
 		// The site handles login + consent itself; nothing to copy but the URL.
-		if ( class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() ) {
-			echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 2 — Connect from Claude (recommended)', 'alphabridge-mcp' ) . '</p>';
-			echo '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #b7e0c1;border-radius:6px;background:#f4fbf6">';
+		if ( $oauth ) {
+			echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 2 — Add it in Claude as a custom connector', 'alphabridge-mcp' ) . '</p>';
+			echo '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #dcdcde;border-radius:6px;background:#f6f7f7">';
 			echo '<p style="margin:0">' . esc_html__( 'In Claude, open Connectors, add a custom connector with the endpoint URL and connect. Claude opens this site’s login and asks for your approval — no token to copy. The approved connection appears below and can be revoked at any time.', 'alphabridge-mcp' ) . '</p>';
 			echo '</div>';
 			echo '<p style="margin:0 0 6px;font-weight:600">' . esc_html__( 'Manual setup — create a token (Cursor, Claude Code, scripts)', 'alphabridge-mcp' ) . '</p>';
@@ -557,6 +558,29 @@ class AB_MCP_Admin {
 		}
 		echo '</tbody></table>';
 		echo '<p class="description" style="margin:8px 0 0">' . esc_html__( 'Rotate re-issues a connection’s token (the old one stops working at once). Delete removes it.', 'alphabridge-mcp' ) . '</p>';
+	}
+
+	/**
+	 * The top of the connector box: what it is for and, while this site's OAuth
+	 * flow is switched on, the simplest way in — the entry in Claude's
+	 * connector directory. That entry connects through the AlphaBridge Connect
+	 * hub, which signs in with this site's own login and consent, so without
+	 * OAuth it cannot work and is not offered.
+	 *
+	 * @param bool $oauth Whether this site's OAuth flow is switched on.
+	 * @return string HTML, escaped.
+	 */
+	private function connector_intro_html( $oauth ) {
+		if ( ! $oauth ) {
+			return '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Copy the endpoint, add it in Claude and click Connect — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
+		}
+		$html  = '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Connect Claude from its connector directory, or directly with this site’s endpoint — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Easiest — from Claude’s connector directory', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #b7e0c1;border-radius:6px;background:#f4fbf6">';
+		$html .= '<p style="margin:0">' . esc_html( sprintf( /* translators: %s: this site's address */ __( 'In Claude, open Connectors, find “AlphaBridge MCP for WordPress” in the directory and connect. When asked, enter this site’s address, %s — this site then asks you to sign in and to approve. That connection runs through the AlphaBridge Connect hub.', 'alphabridge-mcp' ), home_url() ) ) . '</p>';
+		$html .= '</div>';
+		$html .= '<p style="margin:0 0 12px;font-weight:600">' . esc_html__( 'Or directly, without the hub:', 'alphabridge-mcp' ) . '</p>';
+		return $html;
 	}
 
 	/**
