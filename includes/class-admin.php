@@ -322,8 +322,8 @@ class AB_MCP_Admin {
 
 		// ── Connector box: the ONE place to create and manage connections. ──
 		echo '<div class="postbox" style="padding:4px 16px 16px"><h2 class="hndle" style="padding:10px 0;border:0">Claude.ai Connector</h2>';
-		$oauth = class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled();
-		echo $this->connector_intro_html( $oauth ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connector_intro_html().
+		$oauth = self::oauth_on();
+		echo $this->connector_intro_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connector_intro_html().
 
 		// Step 1 — endpoint (not a secret; always visible).
 		echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 1 — Copy the endpoint URL', 'alphabridge-mcp' ) . '</p>';
@@ -561,17 +561,26 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * Whether this site's OAuth flow (connecting from Claude) is switched on.
+	 *
+	 * @return bool
+	 */
+	private static function oauth_on() {
+		return class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled();
+	}
+
+	/**
 	 * The top of the connector box: what it is for and, while this site's OAuth
 	 * flow is switched on, the simplest way in — the entry in Claude's
 	 * connector directory. That entry connects through the AlphaBridge Connect
 	 * hub, which signs in with this site's own login and consent, so without
-	 * OAuth it cannot work and is not offered.
+	 * OAuth it cannot work and is not offered. The method reads the switch
+	 * itself, so no caller can offer the entry while OAuth is off.
 	 *
-	 * @param bool $oauth Whether this site's OAuth flow is switched on.
 	 * @return string HTML, escaped.
 	 */
-	private function connector_intro_html( $oauth ) {
-		if ( ! $oauth ) {
+	private function connector_intro_html() {
+		if ( ! self::oauth_on() ) {
 			return '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Copy the endpoint, add it in Claude and click Connect — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
 		}
 		$html  = '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Connect Claude from its connector directory, or directly with this site’s endpoint — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';

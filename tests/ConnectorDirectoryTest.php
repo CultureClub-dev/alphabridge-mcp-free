@@ -14,6 +14,7 @@ namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
 use AB_MCP_Admin;
+use AB_MCP_Settings;
 use ReflectionMethod;
 
 final class ConnectorDirectoryTest extends TestCase {
@@ -22,16 +23,20 @@ final class ConnectorDirectoryTest extends TestCase {
 		ab_test_reset();
 	}
 
+	/** The top of the connector box, with OAuth set as the site has it stored. */
 	private function intro( bool $oauth ): string {
+		AB_MCP_Settings::set( 'oauth_enabled', $oauth );
 		$method = new ReflectionMethod( AB_MCP_Admin::class, 'connector_intro_html' );
-		return (string) $method->invoke( new AB_MCP_Admin(), $oauth );
+		return (string) $method->invoke( new AB_MCP_Admin() );
 	}
 
 	public function testWithOAuthTheDirectoryEntryComesFirstWithThisSitesAddress(): void {
 		$html = $this->intro( true );
 
 		self::assertStringContainsString( 'AlphaBridge MCP for WordPress', $html );
-		self::assertStringContainsString( home_url(), $html, 'The hub asks for the site address; the box says which one to enter.' );
+		// The hub asks for the site's address, not for the endpoint, which merely
+		// starts with it: the address must stand on its own, as the site has it.
+		self::assertStringContainsString( 'address, ' . home_url() . ' —', $html );
 		self::assertStringContainsString( 'AlphaBridge Connect hub', $html, 'The box says that this way runs through the hub.' );
 		self::assertLessThan(
 			strpos( $html, 'Or directly, without the hub' ),
@@ -46,5 +51,12 @@ final class ConnectorDirectoryTest extends TestCase {
 		self::assertStringNotContainsString( 'AlphaBridge MCP for WordPress', $html );
 		self::assertStringNotContainsString( 'hub', $html );
 		self::assertStringContainsString( 'Copy the endpoint', $html );
+	}
+
+	public function testOAuthIsOnUnlessTheSiteSwitchedItOff(): void {
+		// A new site has no stored value: OAuth is on by default, so the entry shows.
+		$method = new ReflectionMethod( AB_MCP_Admin::class, 'connector_intro_html' );
+
+		self::assertStringContainsString( 'AlphaBridge MCP for WordPress', (string) $method->invoke( new AB_MCP_Admin() ) );
 	}
 }
