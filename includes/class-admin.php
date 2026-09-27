@@ -333,7 +333,7 @@ class AB_MCP_Admin {
 		if ( class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() ) {
 			echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 2 — Connect from Claude (recommended)', 'alphabridge-mcp' ) . '</p>';
 			echo '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #b7e0c1;border-radius:6px;background:#f4fbf6">';
-			echo '<p style="margin:0">' . esc_html__( 'In Claude: Settings → Connectors → “Add custom connector” → paste the endpoint URL → Connect. Claude opens this site’s login and asks for your approval — no token to copy. The approved connection appears below and can be revoked at any time.', 'alphabridge-mcp' ) . '</p>';
+			echo '<p style="margin:0">' . esc_html__( 'In Claude, open Connectors, add a custom connector with the endpoint URL and connect. Claude opens this site’s login and asks for your approval — no token to copy. The approved connection appears below and can be revoked at any time.', 'alphabridge-mcp' ) . '</p>';
 			echo '</div>';
 			echo '<p style="margin:0 0 6px;font-weight:600">' . esc_html__( 'Manual setup — create a token (Cursor, Claude Code, scripts)', 'alphabridge-mcp' ) . '</p>';
 		} else {
@@ -388,7 +388,7 @@ class AB_MCP_Admin {
 		echo '<p style="margin:0 0 4px"><strong>' . esc_html__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '</strong></p>';
 		echo '<div style="display:flex;gap:8px;align-items:flex-start;margin:0 0 12px"><textarea readonly rows="9" class="ab-reveal-json ab-select" style="flex:1;font-family:monospace;font-size:12px;white-space:pre;overflow:auto"></textarea><button type="button" class="button ab-copy" data-copy-target=".ab-reveal-json">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
 
-		echo '<p class="description" style="margin:0">' . esc_html__( 'Claude.ai: Settings → Connectors → “Add custom connector” and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file.', 'alphabridge-mcp' ) . '</p>';
+		echo '<p class="description" style="margin:0">' . esc_html__( 'Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file.', 'alphabridge-mcp' ) . '</p>';
 		echo '</div>';
 
 		// Your connections (manage list — rotate / delete; no second create button).
@@ -560,6 +560,21 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * A stored UTC timestamp as the site's date and time, in digits only
+	 * («2026-09-27 12:52»). Digits read the same in every language, so the
+	 * text needs no translation, and the form matches the log's time column.
+	 * Minutes, not seconds: AB_MCP_Settings::touch_token() writes last_used at
+	 * most every five minutes.
+	 *
+	 * @param int $ts Unix timestamp (time()).
+	 * @return string Unescaped text.
+	 */
+	private static function site_datetime( $ts ) {
+		$text = wp_date( 'Y-m-d H:i', (int) $ts );
+		return is_string( $text ) ? $text : '—';
+	}
+
+	/**
 	 * One connections-table row for a stored token entry. Shared by the initial
 	 * render and by the ajax create/rotate response so a new or rotated row can be
 	 * inserted in place without a reload. Everything is escaped here.
@@ -575,11 +590,12 @@ class AB_MCP_Admin {
 			'content' => __( 'Content', 'alphabridge-mcp' ),
 			'full'    => __( 'Full', 'alphabridge-mcp' ),
 		);
-		// last_used is stored as time(), a UTC timestamp, so the distance is
-		// measured against time() as well. current_time( 'timestamp' ) adds the
-		// site's UTC offset and made every connection look that much older
-		// (two hours in Central European summer time).
-		$used         = ! empty( $t['last_used'] ) ? sprintf( /* translators: %s: time ago */ esc_html__( '%s ago', 'alphabridge-mcp' ), human_time_diff( (int) $t['last_used'], time() ) ) : '—';
+		// last_used and expires are stored as time(), UTC timestamps, and shown
+		// as the site's date and time in digits, like the log below. They used
+		// to read «%s ago» and «in %s» around human_time_diff(): WordPress
+		// translates the time span, the words around it need this plugin's own
+		// language pack, and without one a German site read «2 Wochen ago».
+		$used         = ! empty( $t['last_used'] ) ? self::site_datetime( (int) $t['last_used'] ) : '—';
 		$scope        = isset( $t['scope'] ) && isset( $scope_labels[ $t['scope'] ] ) ? $scope_labels[ $t['scope'] ] : $scope_labels['full'];
 		$exp          = isset( $t['expires'] ) ? (int) $t['expires'] : 0;
 		if ( $exp <= 0 ) {
@@ -587,7 +603,7 @@ class AB_MCP_Admin {
 		} elseif ( time() > $exp ) {
 			$exp_txt = '<span style="color:#d63638">' . esc_html__( 'expired', 'alphabridge-mcp' ) . '</span>';
 		} else {
-			$exp_txt = esc_html( sprintf( /* translators: %s: duration */ __( 'in %s', 'alphabridge-mcp' ), human_time_diff( time(), $exp ) ) );
+			$exp_txt = esc_html( self::site_datetime( $exp ) );
 		}
 		$hash = isset( $t['hash'] ) ? (string) $t['hash'] : '';
 
@@ -647,7 +663,7 @@ class AB_MCP_Admin {
 		}
 		$map = array(
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
-			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: Settings → Connectors, disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
+			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),

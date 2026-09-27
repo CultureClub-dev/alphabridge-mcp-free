@@ -60,7 +60,7 @@ AlphaBridge is our own product brand for this project. MCP (Model Context Protoc
 
 1. Upload the `alphabridge-mcp` folder to `/wp-content/plugins/` (or install the ZIP via Plugins → Add New → Upload).
 2. Activate the plugin.
-3. In Claude (Settings → Connectors → Add custom connector) add the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` and click Connect — you approve on your own site's login-protected consent screen. Done. In ChatGPT: Plugins → Add → Create MCP app with the same URL and OAuth.
+3. In Claude, open Connectors, add a custom connector with the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` and connect — you approve on your own site's login-protected consent screen. Done. In ChatGPT: Plugins → Add → Create MCP app with the same URL and OAuth.
 4. For clients without a Connect button (Cursor, Claude Code, scripts): open **Settings → AlphaBridge MCP**, create a connection manually and copy its token.
 
 == Frequently Asked Questions ==
@@ -91,6 +91,10 @@ No. It contacts no external service on its own. The only outbound request happen
 This plugin makes no automatic outbound requests and sends no telemetry. One tool can contact an external address, and only on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked). The plugin itself initiates no other outbound requests.
 
 == Changelog ==
+
+= 4.3.6 =
+* «Last used» and «Expires» in the connections list show the site's date and time in digits, for example «2026-09-27 12:52», in the same form as the log below them. They were phrases such as «2 weeks ago» and «in 3 days»: WordPress translates the time span, the words around it come from this plugin, and a site whose language this plugin has no translation for yet mixed the two — a German site read «2 Wochen ago». Found while recording a setup video on 27 September 2026.
+* The steps for Claude no longer spell out its menus. Claude has rearranged them — Connectors now sit under «Customize», and a custom connector is added through an «Add» menu — so the settings screen, the notice after saving the tool selection and the installation steps, which pointed to «Settings → Connectors», no longer matched what Claude shows. They now say to open Connectors in Claude and add a custom connector there. For a change to become visible in Claude, the notice after saving also names refreshing the connector's tool list next to disconnecting and connecting again.
 
 = 4.3.5 =
 * A request for a review on WordPress.org, on the plugin's own settings page only. It appears once a site has been using the plugin for at least 14 days and has made at least 50 successful tool calls, links to the review form (whatever your verdict), and stays on that page until «Don't ask again» ends it for good — also across updates, and no tool call that is still counting can undo it. The counter stops once 50 successful calls are stored, so counting is a small, bounded cost rather than a write per call; nothing is sent anywhere.
