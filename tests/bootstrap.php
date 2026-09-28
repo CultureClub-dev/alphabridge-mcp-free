@@ -63,6 +63,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_insert_fails']    = false;
 	$GLOBALS['ab_test_update_fails']    = false;
 	$GLOBALS['ab_test_update_errors_after_write'] = false;
+	$GLOBALS['ab_test_update_wp_error']  = array();
+	$GLOBALS['ab_test_template_reset']   = array();
 	$GLOBALS['ab_test_meta']         = array();
 	$GLOBALS['ab_test_meta_deleted'] = array();
 	$GLOBALS['ab_test_actions']      = array();
@@ -592,6 +594,7 @@ $GLOBALS['ab_test_updated'] = array();
 function wp_update_post( $postarr, $wp_error = false ) {
 	$postarr                       = ab_test_unslash_deep( $postarr );
 	$GLOBALS['ab_test_updated'][] = $postarr;
+	$GLOBALS['ab_test_update_wp_error'][] = $wp_error;
 	$post                          = get_post( (int) ( $postarr['ID'] ?? 0 ) );
 	if ( ! $post ) {
 		return $wp_error ? new WP_Error( 'invalid_post', 'Invalid post ID.' ) : 0;
@@ -615,10 +618,14 @@ function wp_update_post( $postarr, $wp_error = false ) {
 		}
 	}
 	$post->post_status = $data['post_status'];
-	// As core with $wp_error where the page template is gone: the row is
-	// written, then the error comes back.
-	if ( $wp_error && ! empty( $GLOBALS['ab_test_update_errors_after_write'] ) ) {
-		return new WP_Error( 'invalid_page_template', 'Invalid page template.' );
+	// As core where the post's page template is gone: with $wp_error the row
+	// is written, then the error comes back, before any hook; without it the
+	// template falls back to the default and the save goes on.
+	if ( ! empty( $GLOBALS['ab_test_update_errors_after_write'] ) ) {
+		if ( $wp_error ) {
+			return new WP_Error( 'invalid_page_template', 'Invalid page template.' );
+		}
+		$GLOBALS['ab_test_template_reset'][] = (int) $post->ID;
 	}
 	return (int) $post->ID;
 }
