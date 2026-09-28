@@ -13,6 +13,30 @@ defined( 'ABSPATH' ) || exit;
 abstract class AB_MCP_Tools_Base {
 
 	/**
+	 * Post fields WP_Query orders by that several posts can share, under the
+	 * names it accepts (WP_Query::parse_orderby()). The id is unique and not
+	 * among them.
+	 */
+	protected const SHARED_ORDER_FIELDS = array(
+		'date',
+		'title',
+		'modified',
+		'menu_order',
+		'name',
+		'author',
+		'parent',
+		'type',
+		'comment_count',
+		'post_date',
+		'post_title',
+		'post_modified',
+		'post_name',
+		'post_author',
+		'post_parent',
+		'post_type',
+	);
+
+	/**
 	 * String argument.
 	 *
 	 * @param array  $a   Args.
@@ -94,6 +118,30 @@ abstract class AB_MCP_Tools_Base {
 				__( 'Missing required argument(s): %s', 'alphabridge-mcp' ),
 				implode( ', ', $missing )
 			)
+		);
+	}
+
+	/**
+	 * The orderby for a listing paged with LIMIT and OFFSET. On a field that
+	 * several posts share, the database returns the tied posts in any order
+	 * it likes, and may do so differently for every page: a post then shows up
+	 * on two pages or on none. The id breaks the tie, in the same direction.
+	 * Any other value goes through as it came: the id needs no second key,
+	 * «rand» has no order to settle, «relevance» and «none» work only as the
+	 * whole orderby string, which a list would lose, and for a value it does
+	 * not know WordPress orders by date, as before.
+	 *
+	 * @param string $orderby Requested field.
+	 * @param string $order   ASC or DESC.
+	 * @return string|array Value for WP_Query's orderby.
+	 */
+	protected static function paged_orderby( $orderby, $order ) {
+		if ( ! in_array( $orderby, self::SHARED_ORDER_FIELDS, true ) ) {
+			return $orderby;
+		}
+		return array(
+			$orderby => $order,
+			'ID'     => $order,
 		);
 	}
 
