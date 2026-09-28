@@ -443,13 +443,14 @@ function wp_get_post_revisions( $post_id ) {
 }
 
 function get_post_type_object( $type ) {
-	if ( ! in_array( $type, array( 'post', 'page' ), true ) ) {
+	if ( ! in_array( $type, array( 'post', 'page', 'attachment' ), true ) ) {
 		return null;
 	}
 	return (object) array(
 		'name' => $type,
 		'cap'  => (object) array(
-			'create_posts'      => 'edit_posts',
+			// As WordPress: a file is created with the right to upload.
+			'create_posts'      => 'attachment' === $type ? 'upload_files' : 'edit_posts',
 			'publish_posts'     => 'publish_posts',
 			'edit_others_posts' => 'edit_others_posts',
 		),
