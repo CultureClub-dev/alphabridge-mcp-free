@@ -59,6 +59,14 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
 	$GLOBALS['ab_test_updated']    = array();
+	$GLOBALS['ab_test_insert_wp_error'] = array();
+	$GLOBALS['ab_test_insert_fails']    = false;
+	$GLOBALS['ab_test_update_fails']    = false;
+	$GLOBALS['ab_test_update_errors_after_write'] = false;
+	$GLOBALS['ab_test_meta']         = array();
+	$GLOBALS['ab_test_meta_deleted'] = array();
+	$GLOBALS['ab_test_actions']      = array();
+	$GLOBALS['ab_test_comments_untrashed'] = array();
 	$GLOBALS['ab_test_now']        = null;
 	$GLOBALS['ab_test_core_delay'] = 0;
 	$GLOBALS['ab_test_sites']      = array( 1 );
@@ -413,8 +421,38 @@ function wp_strip_all_tags( $text ) {
 	return strip_tags( (string) $text );
 }
 
+/**
+ * Post meta from $ab_test_meta: every value of a key, in the order it was
+ * added — as WordPress, which gives the first where one is asked for.
+ */
 function get_post_meta( $post_id, $key = '', $single = false ) {
-	return $single ? '' : array();
+	$values = $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array();
+	return $single ? ( $values ? $values[0] : '' ) : $values;
+}
+
+function delete_post_meta( $post_id, $key, $value = '' ) {
+	$GLOBALS['ab_test_meta_deleted'][] = array( (int) $post_id, $key );
+	unset( $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] );
+	return true;
+}
+
+/** Runs what add_action() hooked, and notes the call. */
+function do_action( $hook, ...$args ) {
+	$GLOBALS['ab_test_actions'][] = array( $hook, $args );
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $entry ) {
+		( $entry['fn'] )( ...$args );
+	}
+}
+
+/** No taxonomies: the copy made by wp_duplicate_post carries no terms here. */
+function get_object_taxonomies( $object ) {
+	return array();
+}
+
+/** Notes that the comments of a post were given their states back. */
+function wp_untrash_post_comments( $post = null ) {
+	$GLOBALS['ab_test_comments_untrashed'][] = is_object( $post ) ? (int) $post->ID : (int) $post;
+	return true;
 }
 
 /* ------------------------------------------------ comments, revisions, insert */
@@ -496,6 +534,10 @@ function ab_test_core_save( array $data, array $postarr ): array {
 function wp_insert_post( $postarr, $wp_error = false ) {
 	$postarr                        = ab_test_unslash_deep( $postarr );
 	$GLOBALS['ab_test_inserted'][] = $postarr;
+	$GLOBALS['ab_test_insert_wp_error'][] = $wp_error;
+	if ( ! empty( $GLOBALS['ab_test_insert_fails'] ) ) {
+		return $wp_error ? new WP_Error( 'db_insert_error', 'Could not insert post into the database.' ) : 0;
+	}
 	$id                             = 1000 + count( $GLOBALS['ab_test_inserted'] );
 	ab_test_add_post(
 		$id,
@@ -529,6 +571,10 @@ function wp_update_post( $postarr, $wp_error = false ) {
 	if ( ! $post ) {
 		return $wp_error ? new WP_Error( 'invalid_post', 'Invalid post ID.' ) : 0;
 	}
+	// A save that fails before it writes anything (an empty post, the database).
+	if ( ! empty( $GLOBALS['ab_test_update_fails'] ) ) {
+		return $wp_error ? new WP_Error( 'db_update_error', 'Could not update post in the database.' ) : 0;
+	}
 	$data = ab_test_core_save(
 		array(
 			'post_type'     => $post->post_type,
@@ -544,6 +590,11 @@ function wp_update_post( $postarr, $wp_error = false ) {
 		}
 	}
 	$post->post_status = $data['post_status'];
+	// As core with $wp_error where the page template is gone: the row is
+	// written, then the error comes back.
+	if ( $wp_error && ! empty( $GLOBALS['ab_test_update_errors_after_write'] ) ) {
+		return new WP_Error( 'invalid_page_template', 'Invalid page template.' );
+	}
 	return (int) $post->ID;
 }
 

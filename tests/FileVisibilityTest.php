@@ -85,7 +85,6 @@ final class FileVisibilityTest extends TestCase {
 		ab_test_add_post( 7, array( 'post_status' => 'draft' ) );
 		self::file( 5, 'inherit', 7 );
 		self::assertTrue( self::refused( array( 'id' => 5, 'parent' => 0 ) ), 'away from the draft, without a parent, the file is public' );
-		self::assertTrue( self::refused( array( 'id' => 5, 'parent' => null ) ), 'a parent given as null reaches WordPress as 0' );
 	}
 
 	public function testAnotherParentIsRefusedWhateverItsStatus(): void {
@@ -117,10 +116,11 @@ final class FileVisibilityTest extends TestCase {
 		self::assertTrue( self::written( array( 'id' => 5, 'title' => 'New caption' ) ) );
 	}
 
-	public function testTheFileItselfAsParentCountsAsNone(): void {
+	public function testAFileIsNotItsOwnParent(): void {
 		ab_test_add_post( 7, array( 'post_status' => 'draft' ) );
 		self::file( 5, 'inherit', 7 );
-		self::assertTrue( self::refused( array( 'id' => 5, 'parent' => 5 ) ), 'WordPress stores no parent, and the file would be public' );
+		$res = AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'parent' => 5 ) );
+		self::assertTrue( is_wp_error( $res ) && 'ab_mcp_invalid_parent' === $res->get_error_code() && array() === $GLOBALS['ab_test_updated'], 'a file cannot be attached to a file' );
 	}
 
 	public function testASaveWordPressReparentsNeedsTheRight(): void {

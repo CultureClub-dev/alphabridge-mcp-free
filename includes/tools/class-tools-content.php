@@ -219,6 +219,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'read_post', $src->ID ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
 		}
+		// A copy of a file would have no file behind it, and "draft" makes it
+		// "inherit": its title, caption and description would be as visible as
+		// its parent — a private file's included.
+		if ( 'attachment' === $src->post_type ) {
+			return new WP_Error( 'ab_mcp_invalid_type', __( 'Files cannot be duplicated: the copy would have no file, and its title, caption and description would follow the parent\'s visibility. Upload the file again with wp_upload_media instead.', 'alphabridge-mcp' ) );
+		}
 		// The copy would carry the text into a draft that anyone with the
 		// draft's rights can read — the password would be gone.
 		if ( ! self::raw_content_allowed( $src ) ) {
@@ -230,7 +236,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		// The source values come out of the database unslashed, and
 		// wp_insert_post() expects them slashed — without this a copy of a post
-		// whose title holds a backslash loses it.
+		// whose title holds a backslash loses it. With $wp_error, so a failed
+		// insert is reported: the flag used to sit inside wp_slash(), and a
+		// failure came back as a copy with the id 0.
 		$id = wp_insert_post(
 			wp_slash( array(
 				'post_type'    => $src->post_type,
@@ -240,9 +248,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				'post_status'  => 'draft',
 				'post_parent'  => $src->post_parent,
 				'menu_order'   => $src->menu_order,
-			),
+			) ),
 			true
-		) );
+		);
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -442,6 +450,16 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! $pto ) {
 			return new WP_Error( 'ab_mcp_invalid_type', __( 'Unknown post type.', 'alphabridge-mcp' ) );
 		}
+		// A file created here would have no file behind it: an attachment page
+		// and a REST entry with whatever text was given — and "draft" stored as
+		// "inherit", public without a parent. Files come with the upload tools.
+		if ( 'attachment' === $type ) {
+			return new WP_Error( 'ab_mcp_invalid_type', __( 'Files are added with wp_upload_media or wp_upload_media_from_url; wp_create_post would make an attachment without a file.', 'alphabridge-mcp' ) );
+		}
+		// A parent given as a list would reach WordPress as 1, an unrelated post.
+		if ( array_key_exists( 'parent', $a ) && null !== $a['parent'] && ! is_scalar( $a['parent'] ) ) {
+			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id.', 'alphabridge-mcp' ) );
+		}
 		if ( ! current_user_can( $pto->cap->create_posts ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
 		}
@@ -560,6 +578,29 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				return new WP_Error( 'ab_mcp_forbidden', $cannot_publish );
 			}
 		}
+		// Nor is a parent given as null or a list: it would reach WordPress as
+		// 0 — a file taken off its post, a page moved to the top level.
+		if ( array_key_exists( 'parent', $a ) && ! is_scalar( $a['parent'] ) ) {
+			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id.', 'alphabridge-mcp' ) );
+		}
+		// A file shows in its parent's gallery and attached media: another post
+		// as its parent needs the right to edit that post, as the upload tools
+		// ask — and, as in the REST API, is neither a revision nor a file.
+		if ( 'attachment' === $post->post_type && array_key_exists( 'parent', $a ) ) {
+			$new_parent = (int) $a['parent'];
+			if ( $new_parent > 0 && (int) $post->post_parent !== $new_parent ) {
+				$target = get_post( $new_parent );
+				if ( ! $target ) {
+					return new WP_Error( 'ab_mcp_not_found', __( 'The parent post does not exist.', 'alphabridge-mcp' ) );
+				}
+				if ( in_array( $target->post_type, array( 'revision', 'attachment' ), true ) ) {
+					return new WP_Error( 'ab_mcp_invalid_parent', __( 'A file cannot be attached to a revision or to another file.', 'alphabridge-mcp' ) );
+				}
+				if ( ! current_user_can( 'edit_post', $new_parent ) ) {
+					return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post.', 'alphabridge-mcp' ) );
+				}
+			}
+		}
 
 		$postarr = array( 'ID' => $id );
 		$map     = array(
@@ -626,15 +667,47 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		// auto-draft as "inherit". So a save that leaves a file to a parent it
 		// did not follow before needs the right to publish too, whatever the
 		// parent's status is now (file_newly_inherits()).
-		if ( 'attachment' === $post->post_type
-			&& self::file_newly_inherits( $id, (string) $post->post_status, (int) $post->post_parent, $handed, array_key_exists( 'post_parent', $postarr ) ? (int) $postarr['post_parent'] : (int) $post->post_parent )
-			&& ( ! $pto || ! current_user_can( $pto->cap->publish_posts ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish: after this save the file would take its visibility from a parent it did not follow before (WordPress stores it as "inherit", or gives it "inherit" on the way out of the trash; where a loop runs through the file, any save leaves it without a parent) — public wherever that parent is published, and everywhere without one. Ask someone who can publish.', 'alphabridge-mcp' ) );
+		if ( 'attachment' === $post->post_type ) {
+			$refused = self::file_publish_refusal( $id, (string) $post->post_status, (int) $post->post_parent, $handed, array_key_exists( 'post_parent', $postarr ) ? (int) $postarr['post_parent'] : (int) $post->post_parent );
+			if ( null !== $refused ) {
+				return $refused;
+			}
+		}
+
+		// A post in the trash that is given a status comes out the way
+		// wp_untrash_post() takes one out: a pre_untrash_post filter may keep it
+		// in, the hooks other plugins listen to run, the trash notes go and the
+		// comments get their states back. But in the one save that writes the
+		// status, date and fields asked for: wp_untrash_post() saves a status
+		// alone, with the post's old date — a second save would have to follow,
+		// and a status such as "future" given to it would be judged by that old
+		// date, publishing a post whose date has passed. The notes go after the save,
+		// not before it as in wp_untrash_post(): a save that fails leaves the
+		// post in the trash with them, and a file under it keeps the visibility
+		// that note gives it.
+		$untrash  = 'trash' === (string) $post->post_status && null !== $asked;
+		$previous = '';
+		if ( $untrash ) {
+			$previous = (string) get_post_meta( $id, '_wp_trash_meta_status', true );
+			if ( null !== apply_filters( 'pre_untrash_post', null, $post, $previous ) ) {
+				return new WP_Error( 'ab_mcp_untrash_refused', __( 'A plugin keeps this post in the trash; nothing was written.', 'alphabridge-mcp' ) );
+			}
+			do_action( 'untrash_post', $id, $previous );
 		}
 
 		// Same rule as create: wp_update_post() hands this straight to
 		// wp_insert_post(), which unslashes it.
 		$res = wp_update_post( wp_slash( $postarr ), true );
+		// The row decides whether the post left the trash, not the answer: a
+		// missing page template makes WordPress answer with an error after
+		// the row is written.
+		$saved_post = $untrash ? get_post( $id ) : null;
+		if ( $saved_post && 'trash' !== (string) $saved_post->post_status ) {
+			delete_post_meta( $id, '_wp_trash_meta_status' );
+			delete_post_meta( $id, '_wp_trash_meta_time' );
+			wp_untrash_post_comments( $id );
+			do_action( 'untrashed_post', $id, $previous );
+		}
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -786,6 +859,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 * public when the draft is published. A file left private follows no
 	 * parent until a later save makes it "inherit" — which then asks the same.
 	 *
+	 * Public, because every tool that saves a file asks it: wp_update_media
+	 * saves one too, and any save can take a file off its parent.
+	 *
 	 * @param int    $id         File id.
 	 * @param string $status_now Status it has.
 	 * @param int    $parent_now Parent it has.
@@ -793,13 +869,36 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 * @param int    $parent     Parent it is saved with.
 	 * @return bool
 	 */
-	private static function file_newly_inherits( $id, $status_now, $parent_now, $status, $parent ) {
+	public static function file_newly_inherits( $id, $status_now, $parent_now, $status, $parent ) {
 		$after = in_array( $status, array( 'private', 'trash', 'auto-draft' ), true ) ? $status : 'inherit';
 		if ( 'inherit' === $after && 'inherit' !== $status_now ) {
 			return true;
 		}
 		return in_array( $after, array( 'inherit', 'trash' ), true )
 			&& self::stored_parent( (int) $id, (int) $parent ) !== (int) $parent_now;
+	}
+
+	/**
+	 * The refusal for a save of a file that file_newly_inherits() leaves to a
+	 * parent it did not follow before, for an account without the right to
+	 * publish files; null where the save may go ahead.
+	 *
+	 * @param int    $id         File id.
+	 * @param string $status_now Status it has.
+	 * @param int    $parent_now Parent it has.
+	 * @param string $status     Status it is saved with.
+	 * @param int    $parent     Parent it is saved with.
+	 * @return WP_Error|null
+	 */
+	public static function file_publish_refusal( $id, $status_now, $parent_now, $status, $parent ) {
+		if ( ! self::file_newly_inherits( $id, $status_now, $parent_now, $status, $parent ) ) {
+			return null;
+		}
+		$pto = get_post_type_object( 'attachment' );
+		if ( $pto && current_user_can( $pto->cap->publish_posts ) ) {
+			return null;
+		}
+		return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish: after this save the file would take its visibility from a parent it did not follow before (WordPress stores it as "inherit", or gives it "inherit" on the way out of the trash; where a loop runs through the file, any save leaves it without a parent) — public wherever that parent is published, and everywhere without one. Ask someone who can publish.', 'alphabridge-mcp' ) );
 	}
 
 	/**
