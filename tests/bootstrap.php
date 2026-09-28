@@ -33,6 +33,10 @@ $GLOBALS['ab_test_transient_ttl'] = array();
 $GLOBALS['ab_test_filters']    = array();
 /** @var array<int,object> $ab_test_users */
 $GLOBALS['ab_test_users']      = array();
+/** @var int|null $ab_test_now A fixed Unix time for current_time(), or null for the real clock. */
+$GLOBALS['ab_test_now']        = null;
+/** @var int $ab_test_core_delay Seconds by which wp_insert_post() reads the clock after the tool did. */
+$GLOBALS['ab_test_core_delay'] = 0;
 
 /**
  * Reset every emulated store. Called from the test base class.
@@ -54,6 +58,9 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_comments']   = array();
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
+	$GLOBALS['ab_test_updated']    = array();
+	$GLOBALS['ab_test_now']        = null;
+	$GLOBALS['ab_test_core_delay'] = 0;
 	$GLOBALS['ab_test_sites']      = array( 1 );
 	$GLOBALS['ab_test_blog']       = 1;
 	$GLOBALS['ab_test_blog_stack'] = array();
@@ -136,6 +143,7 @@ function apply_filters( $hook, $value, ...$args ) {
 function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
+
 
 /* ------------------------------------------------------------- WP helpers */
 
@@ -458,8 +466,31 @@ function ab_test_unslash_deep( $value ) {
 }
 
 /**
- * Records what it is handed and stores a post from it. The dates are stored
- * as given; how WordPress derives a missing post_date_gmt is not modelled.
+ * The one decision of wp_insert_post() the tools depend on: "publish" and
+ * "future" settled by the UTC date against the clock, a lead of a minute
+ * making a post "future" — then wp_insert_post_data, which core runs after
+ * that decision and before it writes the row. WordPress reads its clock a
+ * moment after the tool read it; ab_test_core_delay is that moment. Without
+ * a UTC date in hand the status stays as handed: the undated cases (a draft
+ * dated at the save) are not modelled here.
+ */
+function ab_test_core_save( array $data, array $postarr ): array {
+	$gmt = (string) ( $data['post_date_gmt'] ?? '' );
+	if ( 'attachment' !== $data['post_type'] && '' !== $gmt && '0000-00-00 00:00:00' !== $gmt ) {
+		$lead = strtotime( $gmt . ' UTC' ) - ( (int) current_time( 'timestamp', true ) + (int) $GLOBALS['ab_test_core_delay'] );
+		if ( 'publish' === $data['post_status'] && $lead >= MINUTE_IN_SECONDS ) {
+			$data['post_status'] = 'future';
+		} elseif ( 'future' === $data['post_status'] && $lead < MINUTE_IN_SECONDS ) {
+			$data['post_status'] = 'publish';
+		}
+	}
+	return apply_filters( 'wp_insert_post_data', $data, $postarr );
+}
+
+/**
+ * Records what it is handed and stores a post from it, with the status
+ * ab_test_core_save() settles. The dates are stored as given; how WordPress
+ * derives a missing post_date_gmt is not modelled.
  */
 function wp_insert_post( $postarr, $wp_error = false ) {
 	$postarr                        = ab_test_unslash_deep( $postarr );
@@ -467,15 +498,52 @@ function wp_insert_post( $postarr, $wp_error = false ) {
 	$id                             = 1000 + count( $GLOBALS['ab_test_inserted'] );
 	ab_test_add_post(
 		$id,
-		array(
-			'post_type'     => $postarr['post_type'] ?? 'post',
-			'post_status'   => $postarr['post_status'] ?? 'draft',
-			'post_title'    => $postarr['post_title'] ?? '',
-			'post_date'     => $postarr['post_date'] ?? '2026-09-21 10:00:00',
-			'post_date_gmt' => $postarr['post_date_gmt'] ?? '0000-00-00 00:00:00',
+		ab_test_core_save(
+			array(
+				'post_type'     => $postarr['post_type'] ?? 'post',
+				'post_status'   => $postarr['post_status'] ?? 'draft',
+				'post_title'    => $postarr['post_title'] ?? '',
+				'post_date'     => $postarr['post_date'] ?? '2026-09-21 10:00:00',
+				'post_date_gmt' => $postarr['post_date_gmt'] ?? '0000-00-00 00:00:00',
+			),
+			$postarr
 		)
 	);
 	return $id;
+}
+
+/** @var array[] $ab_test_updated What wp_update_post() was handed, unslashed. */
+$GLOBALS['ab_test_updated'] = array();
+
+/**
+ * Records what it is handed and writes those columns onto the stored post,
+ * with the status ab_test_core_save() settles from the handed status and
+ * date, or the stored ones. How WordPress gives a draft without a UTC date the
+ * time of the save is not modelled.
+ */
+function wp_update_post( $postarr, $wp_error = false ) {
+	$postarr                       = ab_test_unslash_deep( $postarr );
+	$GLOBALS['ab_test_updated'][] = $postarr;
+	$post                          = get_post( (int) ( $postarr['ID'] ?? 0 ) );
+	if ( ! $post ) {
+		return $wp_error ? new WP_Error( 'invalid_post', 'Invalid post ID.' ) : 0;
+	}
+	$data = ab_test_core_save(
+		array(
+			'post_type'     => $post->post_type,
+			'post_status'   => $postarr['post_status'] ?? $post->post_status,
+			'post_date_gmt' => $postarr['post_date_gmt'] ?? $post->post_date_gmt,
+		),
+		$postarr
+	);
+	// Like core, only post columns are written; anything else handed over is not.
+	foreach ( $postarr as $key => $value ) {
+		if ( 0 === strpos( (string) $key, 'post_' ) ) {
+			$post->$key = $value;
+		}
+	}
+	$post->post_status = $data['post_status'];
+	return (int) $post->ID;
 }
 
 function wp_get_attachment_url( $id ) {
@@ -578,14 +646,15 @@ function wp_timezone() {
  * one kind of timestamp with the other («Last used», 26.09.2026).
  */
 function current_time( $type, $gmt = 0 ) {
+	$now = null !== $GLOBALS['ab_test_now'] ? (int) $GLOBALS['ab_test_now'] : time();
 	if ( 'timestamp' === $type || 'U' === $type ) {
-		return $gmt ? time() : time() + (int) ( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
+		return $gmt ? $now : $now + (int) ( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS );
 	}
 	if ( 'mysql' === $type ) {
 		$type = 'Y-m-d H:i:s';
 	}
 	$timezone = $gmt ? new DateTimeZone( 'UTC' ) : wp_timezone();
-	return ( new DateTime( 'now', $timezone ) )->format( (string) $type );
+	return ( new DateTime( '@' . $now ) )->setTimezone( $timezone )->format( (string) $type );
 }
 
 /**

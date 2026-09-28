@@ -39,6 +39,22 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	);
 
 	/**
+	 * The least lead a post is scheduled with, in seconds. WordPress publishes
+	 * a "future" post at once whenever it is saved less than a minute before
+	 * its date. A schedule closer than a few minutes could be lost that way to
+	 * a save still running a minute later, or to a second save another plugin
+	 * makes of the same post while this one is written. Five minutes leave room
+	 * for either.
+	 */
+	const SCHEDULE_LEAD = 300;
+
+	/**
+	 * The date field of wp_update_post, shared with an edition that registers
+	 * the tool again, so both describe the same rules.
+	 */
+	const UPDATE_DATE_DESCRIPTION = 'New publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two. A date alone never changes the status: a save that would publish the post or take it off the site is refused unless that status is passed as well, and a post is scheduled only for a date at least five minutes ahead.';
+
+	/**
 	 * Register tools.
 	 *
 	 * @param AB_MCP_Tool_Registry $r Registry.
@@ -102,7 +118,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'type'    => array( 'type' => 'string', 'description' => 'Post type. Default "post".' ),
 						'title'   => array( 'type' => 'string', 'description' => 'Title.' ),
 						'content' => array( 'type' => 'string', 'description' => 'Content (HTML or block markup).' ),
-						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private. Default "draft".' ),
+						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. Default "draft". "future" needs a date at least five minutes ahead; "publish" with such a date schedules the post, as in WordPress.' ),
 						'excerpt' => array( 'type' => 'string' ),
 						'slug'    => array( 'type' => 'string' ),
 						'author'  => array( 'type' => 'integer' ),
@@ -128,11 +144,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'id'      => array( 'type' => 'integer', 'description' => 'Post id.' ),
 						'title'   => array( 'type' => 'string' ),
 						'content' => array( 'type' => 'string' ),
-						'status'  => array( 'type' => 'string' ),
+						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. "future" needs a date at least five minutes ahead.' ),
 						'excerpt' => array( 'type' => 'string' ),
 						'slug'    => array( 'type' => 'string' ),
 						'author'  => array( 'type' => 'integer' ),
 						'parent'  => array( 'type' => 'integer' ),
+						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
 						'meta'    => array( 'type' => 'object' ),
 						'terms'   => array( 'type' => 'object' ),
 					),
@@ -498,7 +515,21 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( self::i( $a, 'author', 0 ) && current_user_can( $pto->cap->edit_others_posts ) ) {
 			$postarr['post_author'] = self::i( $a, 'author' );
 		}
-		if ( '' !== self::s( $a, 'date', '' ) ) {
+		// One reading of the clock for the whole save. Without a date, a post
+		// saved as "publish" or "future" is dated here, both columns from that
+		// reading, rather than by WordPress, which would read the site's clock
+		// again and derive the UTC date from it — an hour off where the clocks
+		// go back. What is checked below is then what is stored. A draft stays
+		// undated, as in WordPress.
+		$now       = (int) current_time( 'timestamp', true );
+		$dated     = '' !== self::s( $a, 'date', '' );
+		$at        = self::dates_at( $now );
+		$saved_gmt = $at['post_date_gmt'];
+		if ( ! $dated && in_array( $status, array( 'publish', 'future' ), true ) ) {
+			$postarr['post_date']     = $at['post_date'];
+			$postarr['post_date_gmt'] = $at['post_date_gmt'];
+		}
+		if ( $dated ) {
 			$when = self::parse_post_date( self::s( $a, 'date' ) );
 			if ( is_wp_error( $when ) ) {
 				return $when;
@@ -509,6 +540,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( '' !== $when['post_date_gmt'] ) {
 				$postarr['post_date_gmt'] = $when['post_date_gmt'];
 			}
+			$saved_gmt = '' !== $when['post_date_gmt'] ? $when['post_date_gmt'] : self::utc_of_site_time( $when['post_date'] );
+		}
+		$refusal = self::status_date_refusal( $type, null, $status, $saved_gmt, $dated, $now );
+		if ( '' !== $refusal ) {
+			return self::status_date_error( $refusal, $saved_gmt );
 		}
 
 		// Slashed on the way in. WordPress unslashes what it is given here
@@ -550,8 +586,13 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$post = get_post( $id );
 		$pto  = get_post_type_object( $post->post_type );
 
-		if ( isset( $a['status'] ) ) {
-			$new_status = (string) $a['status'];
+		// A status given as null or a list is refused like an unknown one: it
+		// would reach WordPress as "", which it stores as "draft" — a published
+		// post taken off the site by a call that named no status.
+		$asked = null;
+		if ( array_key_exists( 'status', $a ) ) {
+			$new_status = is_scalar( $a['status'] ) ? (string) $a['status'] : '';
+			$asked      = $new_status;
 			if ( ! self::is_allowed_status( $new_status ) ) {
 				return new WP_Error( 'ab_mcp_invalid_status', __( 'Unsupported post status.', 'alphabridge-mcp' ) );
 			}
@@ -583,6 +624,45 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			unset( $postarr['post_author'] );
 		}
 
+		$now    = (int) current_time( 'timestamp', true );
+		$dated  = '' !== self::s( $a, 'date', '' );
+		$handed = null !== $asked ? $asked : (string) $post->post_status;
+		if ( $dated ) {
+			$when = self::parse_post_date( self::s( $a, 'date' ) );
+			if ( is_wp_error( $when ) ) {
+				return $when;
+			}
+			// Both columns, and edit_date. Without the UTC column
+			// wp_update_post() keeps the stored one beside the new local date;
+			// without edit_date it gives a draft the time of the save instead.
+			$postarr['post_date']     = $when['post_date'];
+			$postarr['post_date_gmt'] = '' !== $when['post_date_gmt'] ? $when['post_date_gmt'] : self::utc_of_site_time( $when['post_date'] );
+			$postarr['edit_date']     = true;
+		} elseif ( self::undated_draft( $post ) && in_array( $handed, array( 'publish', 'future' ), true ) ) {
+			// wp_update_post() would date this draft at the save by the site's
+			// clock and derive the UTC date from that — an hour off where the
+			// clocks go back. It is dated here instead, both columns from the
+			// one reading of the clock, so the check below sees what is stored.
+			$at                       = self::dates_at( $now );
+			$postarr['post_date']     = $at['post_date'];
+			$postarr['post_date_gmt'] = $at['post_date_gmt'];
+			$postarr['edit_date']     = true;
+		}
+		$saved_gmt = isset( $postarr['post_date_gmt'] ) ? $postarr['post_date_gmt'] : self::stored_gmt( $post );
+		$refusal   = self::status_date_refusal( $post->post_type, (string) $post->post_status, $asked, $saved_gmt, $dated, $now );
+		if ( '' !== $refusal ) {
+			return self::status_date_error( $refusal, $saved_gmt );
+		}
+		// The same capability again, for the status WordPress will store: the
+		// date can turn "publish" into "future", and so take a published post
+		// off the site without "future" ever being asked for.
+		$saved = self::saved_status( $post->post_type, $handed, $saved_gmt, $now );
+		if ( in_array( $saved, array( 'publish', 'private', 'future' ), true )
+			&& $saved !== $post->post_status
+			&& ( ! $pto || ! current_user_can( $pto->cap->publish_posts ) ) ) {
+			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' ) );
+		}
+
 		// Same rule as create: wp_update_post() hands this straight to
 		// wp_insert_post(), which unslashes it.
 		$res = wp_update_post( wp_slash( $postarr ), true );
@@ -596,6 +676,165 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			'updated' => true,
 			'post'    => self::post_summary( get_post( $id ) ),
 		);
+	}
+
+	/**
+	 * Why a save must not go ahead as asked, or '' when it may.
+	 *
+	 * WordPress settles "publish" and "future" by the date: wp_insert_post()
+	 * stores "future" for a date at least a minute ahead and "publish" for any
+	 * other, whichever of the two it was handed. So a save could publish a
+	 * post, or take one off the site, without the call asking for it — the
+	 * date would decide, not the call. Refused:
+	 *
+	 * - would_publish: "future" asked for, the date not a minute ahead;
+	 * - would_publish_scheduled: no status asked for, a scheduled post whose
+	 *   date — a new one, or its own that has passed — is not a minute ahead;
+	 * - would_unpublish: no status asked for, a published post dated ahead;
+	 * - stays_scheduled: "publish" asked for without a date, the post dated
+	 *   ahead, so WordPress would keep it scheduled;
+	 * - too_close: a post that would be saved as scheduled, less than
+	 *   SCHEDULE_LEAD ahead — see there.
+	 *
+	 * "publish" with a date ahead schedules the post, as it does in WordPress.
+	 * Attachments are exempt, as they are in wp_insert_post().
+	 *
+	 * @param string      $type  Post type.
+	 * @param string|null $old   Status the post has, or null for a new post.
+	 * @param string|null $asked Status the call asks for, or null.
+	 * @param string      $gmt   UTC date the post will be saved with, "Y-m-d H:i:s".
+	 * @param bool        $dated Whether the call sets that date.
+	 * @param int         $now   Unix time of the save.
+	 * @return string Reason, or ''.
+	 */
+	public static function status_date_refusal( $type, $old, $asked, $gmt, $dated, $now ) {
+		$handed = null !== $asked ? $asked : (string) $old;
+		$saved  = self::saved_status( $type, $handed, $gmt, $now );
+		if ( $saved !== $handed ) {
+			if ( 'future' === $handed ) {
+				return null === $asked ? 'would_publish_scheduled' : 'would_publish';
+			}
+			// Handed "publish", saved "future".
+			if ( null === $asked ) {
+				return 'would_unpublish';
+			}
+			if ( ! $dated ) {
+				return 'stays_scheduled';
+			}
+		}
+		if ( 'future' === $saved && 'attachment' !== $type && self::lead( $gmt, $now ) < self::SCHEDULE_LEAD ) {
+			return 'too_close';
+		}
+		return '';
+	}
+
+	/**
+	 * The status wp_insert_post() stores for a post handed to it with this
+	 * status and UTC date: "future" for a date at least a minute ahead and
+	 * "publish" for any other, when handed either of the two; any other status,
+	 * and any attachment, as handed. A date that cannot be read counts as not
+	 * ahead, as it does in WordPress' strtotime() comparison.
+	 *
+	 * @param string $type   Post type.
+	 * @param string $status Status handed over.
+	 * @param string $gmt    UTC date, "Y-m-d H:i:s".
+	 * @param int    $now    Unix time of the save.
+	 * @return string
+	 */
+	public static function saved_status( $type, $status, $gmt, $now ) {
+		if ( 'attachment' === $type || ( 'publish' !== $status && 'future' !== $status ) ) {
+			return (string) $status;
+		}
+		return self::lead( $gmt, $now ) >= MINUTE_IN_SECONDS ? 'future' : 'publish';
+	}
+
+	/**
+	 * Seconds from $now to a UTC date, or PHP_INT_MIN when it cannot be read.
+	 *
+	 * @param string $gmt UTC date, "Y-m-d H:i:s".
+	 * @param int    $now Unix time.
+	 * @return int
+	 */
+	private static function lead( $gmt, $now ) {
+		$when = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', (string) $gmt, new DateTimeZone( 'UTC' ) );
+		return false === $when ? PHP_INT_MIN : $when->getTimestamp() - (int) $now;
+	}
+
+	/**
+	 * The refusal for status_date_refusal(), with the date in site time.
+	 *
+	 * @param string $reason Reason from status_date_refusal().
+	 * @param string $gmt    UTC date the post would have been saved with.
+	 * @return WP_Error
+	 */
+	private static function status_date_error( $reason, $gmt ) {
+		$date = (string) self::site_time( $gmt );
+		switch ( $reason ) {
+			case 'would_publish':
+				/* translators: %s: the date the post would have, in site time. */
+				$message = sprintf( __( 'WordPress schedules a post only for a date ahead of the save. Dated %s, this post would be published now. Pass a "date" at least five minutes ahead to schedule it.', 'alphabridge-mcp' ), $date );
+				break;
+			case 'would_publish_scheduled':
+				/* translators: %s: the date the post would have, in site time. */
+				$message = sprintf( __( 'This post is scheduled, but its date %s is not a minute ahead: saving would publish it now. Pass status "publish" to publish it, or a "date" at least five minutes ahead to keep it scheduled.', 'alphabridge-mcp' ), $date );
+				break;
+			case 'would_unpublish':
+				/* translators: %s: the date the post would have, in site time. */
+				$message = sprintf( __( 'The date %s is ahead: saving would take this published post off the site until then. To schedule it, pass status "future" with a "date" at least five minutes ahead; to keep it published, pass a "date" that is not ahead.', 'alphabridge-mcp' ), $date );
+				break;
+			case 'too_close':
+				/* translators: %s: the date the post would have, in site time. */
+				$message = sprintf( __( 'The post would be scheduled for %s, less than five minutes ahead. So close to its date, WordPress would publish it early if it were saved again within the last minute — by a save still running, or by another plugin saving it too. To schedule it, pass a "date" at least five minutes ahead; to publish it now, pass status "publish" with a "date" that is not ahead, such as the current time.', 'alphabridge-mcp' ), $date );
+				break;
+			default:
+				/* translators: %s: the date the post would have, in site time. */
+				$message = sprintf( __( 'This post is dated %s, which is ahead, so WordPress would keep it scheduled instead of publishing it. To publish it now, pass a "date" that is not ahead as well, such as the current time; to schedule it, pass status "future" with a "date" at least five minutes ahead.', 'alphabridge-mcp' ), $date );
+		}
+		return new WP_Error( 'ab_mcp_status_by_date', $message, array( 'reason' => $reason ) );
+	}
+
+	/**
+	 * Both date columns for a moment, from one reading of the clock: the site
+	 * time and the UTC time of that same instant.
+	 *
+	 * @param int $now Unix time.
+	 * @return array{post_date:string,post_date_gmt:string}
+	 */
+	private static function dates_at( $now ) {
+		$utc = new DateTimeImmutable( '@' . (int) $now );
+		return array(
+			'post_date'     => $utc->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' ),
+			'post_date_gmt' => $utc->format( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	/**
+	 * Whether wp_update_post() would date this post at the save: a draft,
+	 * pending or auto-draft post without a UTC date, saved without edit_date.
+	 *
+	 * @param object $post The post as it is.
+	 * @return bool
+	 */
+	private static function undated_draft( $post ) {
+		return '0000-00-00 00:00:00' === (string) $post->post_date_gmt
+			&& in_array( (string) $post->post_status, array( 'draft', 'pending', 'auto-draft' ), true );
+	}
+
+	/**
+	 * The UTC date a post keeps when a save does not date it: its own, or for
+	 * one without, the one WordPress derives from its local date. (An undated
+	 * draft is dated by update_post() before it could be saved as "publish" or
+	 * "future"; handed on as anything else, its date decides nothing.)
+	 *
+	 * @param object $post The post as it is.
+	 * @return string "Y-m-d H:i:s" in UTC.
+	 */
+	private static function stored_gmt( $post ) {
+		$gmt = (string) $post->post_date_gmt;
+		if ( '' !== $gmt && '0000-00-00 00:00:00' !== $gmt ) {
+			return $gmt;
+		}
+		return self::utc_of_site_time( (string) $post->post_date );
 	}
 
 	/**

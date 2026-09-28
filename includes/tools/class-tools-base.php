@@ -431,6 +431,18 @@ abstract class AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * The UTC column for a site time, derived the way WordPress derives it
+	 * (get_gmt_from_date()): read in the site's zone, then shifted to UTC.
+	 *
+	 * @param string $local "Y-m-d H:i:s" in site time.
+	 * @return string "Y-m-d H:i:s" in UTC, or "" when it cannot be read.
+	 */
+	protected static function utc_of_site_time( $local ) {
+		$when = date_create_immutable( (string) $local, wp_timezone() );
+		return false === $when ? '' : $when->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
 	 * The refusal for parse_post_date(), naming the reason it found.
 	 *
 	 * @param string $reason unreadable | no-such-date | skipped | year | repeated.
