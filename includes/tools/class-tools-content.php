@@ -537,6 +537,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$post = get_post( $id );
 		$pto  = get_post_type_object( $post->post_type );
+		// For a file, "draft" and "pending" are no way around the right to
+		// publish: WordPress stores them as "inherit" (see below).
+		$cannot_publish = 'attachment' === $post->post_type
+			? __( 'You cannot publish: this status needs the right to publish. For a file, "draft" and "pending" do not help: WordPress stores them as "inherit", so the file follows its parent. Ask someone who can publish.', 'alphabridge-mcp' )
+			: __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' );
 
 		// A status given as null or a list is refused like an unknown one: it
 		// would reach WordPress as "", which it stores as "draft" — a published
@@ -552,7 +557,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( in_array( $new_status, array( 'publish', 'private', 'future' ), true )
 				&& $new_status !== $post->post_status
 				&& ( ! $pto || ! current_user_can( $pto->cap->publish_posts ) ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', $cannot_publish );
 			}
 		}
 
@@ -612,7 +617,19 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( in_array( $saved, array( 'publish', 'private', 'future' ), true )
 			&& $saved !== $post->post_status
 			&& ( ! $pto || ! current_user_can( $pto->cap->publish_posts ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', $cannot_publish );
+		}
+		// A file with "inherit" is as visible as its parent: public without
+		// one, and public the moment the parent is published — whoever
+		// publishes a post looks at the post, not at the files under it. And
+		// WordPress stores a file with any status but private, trash or
+		// auto-draft as "inherit". So a save that leaves a file to a parent it
+		// did not follow before needs the right to publish too, whatever the
+		// parent's status is now (file_newly_inherits()).
+		if ( 'attachment' === $post->post_type
+			&& self::file_newly_inherits( $id, (string) $post->post_status, (int) $post->post_parent, $handed, array_key_exists( 'post_parent', $postarr ) ? (int) $postarr['post_parent'] : (int) $post->post_parent )
+			&& ( ! $pto || ! current_user_can( $pto->cap->publish_posts ) ) ) {
+			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish: after this save the file would take its visibility from a parent it did not follow before (WordPress stores it as "inherit", or gives it "inherit" on the way out of the trash; where a loop runs through the file, any save leaves it without a parent) — public wherever that parent is published, and everywhere without one. Ask someone who can publish.', 'alphabridge-mcp' ) );
 		}
 
 		// Same rule as create: wp_update_post() hands this straight to
@@ -758,6 +775,58 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			'post_date'     => $utc->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' ),
 			'post_date_gmt' => $utc->format( 'Y-m-d H:i:s' ),
 		);
+	}
+
+	/**
+	 * Whether a save leaves a file to a parent it did not follow before: it
+	 * gets "inherit" and did not have it, or it is left "inherit" or in the
+	 * trash (from where it comes back as "inherit") under another parent. The
+	 * parent that counts is the one WordPress stores (stored_parent()). The
+	 * parent's status is left out on purpose: a file hidden under a draft goes
+	 * public when the draft is published. A file left private follows no
+	 * parent until a later save makes it "inherit" — which then asks the same.
+	 *
+	 * @param int    $id         File id.
+	 * @param string $status_now Status it has.
+	 * @param int    $parent_now Parent it has.
+	 * @param string $status     Status it is saved with.
+	 * @param int    $parent     Parent it is saved with.
+	 * @return bool
+	 */
+	private static function file_newly_inherits( $id, $status_now, $parent_now, $status, $parent ) {
+		$after = in_array( $status, array( 'private', 'trash', 'auto-draft' ), true ) ? $status : 'inherit';
+		if ( 'inherit' === $after && 'inherit' !== $status_now ) {
+			return true;
+		}
+		return in_array( $after, array( 'inherit', 'trash' ), true )
+			&& self::stored_parent( (int) $id, (int) $parent ) !== (int) $parent_now;
+	}
+
+	/**
+	 * The parent WordPress stores for a post given $parent:
+	 * wp_check_post_hierarchy_for_loops() stores none where the post would
+	 * become its own ancestor — the post itself included, and also when the
+	 * save keeps the parent the post has and a loop through the post runs
+	 * over it.
+	 *
+	 * @param int $id     Post id.
+	 * @param int $parent Parent it is given.
+	 * @return int
+	 */
+	private static function stored_parent( $id, $parent ) {
+		if ( $parent <= 0 ) {
+			return 0;
+		}
+		$seen = array();
+		for ( $cur = $parent; $cur > 0 && ! isset( $seen[ $cur ] ); ) {
+			if ( $cur === $id ) {
+				return 0;
+			}
+			$seen[ $cur ] = true;
+			$p            = get_post( $cur );
+			$cur          = $p ? (int) $p->post_parent : 0;
+		}
+		return $parent;
 	}
 
 	/**
