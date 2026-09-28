@@ -156,11 +156,11 @@ final class FilePathsTest extends TestCase {
 		self::assertSame( array( 'untrash_post' ), self::actions() );
 	}
 
-	public function testAnErrorAfterTheWriteStillFinishesTheWayOut(): void {
+	public function testAGonePageTemplateDoesNotStopTheWayOut(): void {
 		self::trashed( 5 );
 		$GLOBALS['ab_test_update_errors_after_write'] = true;
-		self::assertTrue( is_wp_error( AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'status' => 'draft' ) ) ), 'the error is reported' );
-		self::assertSame( array(), $GLOBALS['ab_test_meta'][5], 'but the row left the trash, so the notes go' );
+		self::assertFalse( is_wp_error( AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'status' => 'draft' ) ) ), 'the save goes through with the default template' );
+		self::assertSame( array(), $GLOBALS['ab_test_meta'][5], 'the notes go' );
 		self::assertSame( array( 5 ), $GLOBALS['ab_test_comments_untrashed'] );
 	}
 

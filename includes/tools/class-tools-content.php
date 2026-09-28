@@ -696,11 +696,15 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 
 		// Same rule as create: wp_update_post() hands this straight to
-		// wp_insert_post(), which unslashes it.
-		$res = wp_update_post( wp_slash( $postarr ), true );
-		// The row decides whether the post left the trash, not the answer: a
-		// missing page template makes WordPress answer with an error after
-		// the row is written.
+		// wp_insert_post(), which unslashes it. And without $wp_error:
+		// WordPress saves a post's page template along on every save, and
+		// where that template is gone — a theme switched since, say — it gives
+		// up with $wp_error after the row is written, before the hooks that
+		// schedule a post and clear caches. Without it, it falls back to the
+		// default template and finishes the save, as the classic editor does;
+		// 0 then means nothing was written.
+		$res = wp_update_post( wp_slash( $postarr ) );
+		// The row decides whether the post left the trash, not the answer.
 		$saved_post = $untrash ? get_post( $id ) : null;
 		if ( $saved_post && 'trash' !== (string) $saved_post->post_status ) {
 			delete_post_meta( $id, '_wp_trash_meta_status' );
@@ -708,8 +712,8 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			wp_untrash_post_comments( $id );
 			do_action( 'untrashed_post', $id, $previous );
 		}
-		if ( is_wp_error( $res ) ) {
-			return $res;
+		if ( ! $res || is_wp_error( $res ) ) {
+			return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the post.', 'alphabridge-mcp' ) );
 		}
 
 		self::apply_meta_and_terms( $id, $a );
