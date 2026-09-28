@@ -148,6 +148,13 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		if ( $mime ) {
 			$args['post_mime_type'] = $mime;
 		}
+		// Newest first, as WordPress orders them anyway, with the id breaking a
+		// tie (see paged_orderby()). A search keeps WordPress' order by
+		// relevance, which it applies only when no orderby is given.
+		if ( '' === $args['s'] ) {
+			$args['orderby'] = self::paged_orderby( 'date', 'DESC' );
+			$args['order']   = 'DESC';
+		}
 
 		$query = new WP_Query( $args );
 		$items = array();
