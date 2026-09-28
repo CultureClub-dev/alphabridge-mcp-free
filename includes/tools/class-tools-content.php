@@ -137,7 +137,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_post',
 			array(
-				'description' => 'Delete a post (trash by default, or permanently with force=true).',
+				'description' => 'Delete a post: into the trash by default, for good with force=true. Files are deleted with wp_delete_media (or force=true): the media library has no trash unless a site turns it on.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -968,21 +968,56 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $need ) ) {
 			return $need;
 		}
-		$id = self::i( $a, 'id' );
-		if ( ! get_post( $id ) ) {
+		$id   = self::i( $a, 'id' );
+		$post = get_post( $id );
+		if ( ! $post ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'delete_post', $id ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this specific post.', 'alphabridge-mcp' ) );
 		}
 		$force = self::b( $a, 'force', false );
-		$res   = wp_delete_post( $id, $force );
+		if ( ! $force ) {
+			// Without force, into the trash, as the tool promises.
+			// wp_delete_post() moves only posts and pages there: any other type
+			// — a product, an event — it deletes for good, and a file together
+			// with the file on the server, as the media trash is off unless a
+			// site turns it on.
+			if ( 'attachment' === $post->post_type ) {
+				return new WP_Error( 'ab_mcp_file_not_trashed', __( 'Files have no trash here: WordPress deletes a file for good, together with the file on the server. Delete it with wp_delete_media, or here with force=true.', 'alphabridge-mcp' ) );
+			}
+			if ( 'trash' === $post->post_status ) {
+				return new WP_Error( 'ab_mcp_already_trashed', __( 'The post is already in the trash. Pass force=true to delete it for good.', 'alphabridge-mcp' ) );
+			}
+			if ( defined( 'EMPTY_TRASH_DAYS' ) && ! EMPTY_TRASH_DAYS ) {
+				return new WP_Error( 'ab_mcp_no_trash', __( 'This site has no trash (EMPTY_TRASH_DAYS is 0): WordPress would delete the post for good. Pass force=true to delete it.', 'alphabridge-mcp' ) );
+			}
+			// A post taken out of the trash by a plain status write (the REST
+			// API does that) keeps the status and time noted then. WordPress
+			// adds its own next to them and reads the first: the old status on
+			// the way out, and the old time for its daily clean-up, which would
+			// delete the post for good at once. The note on the comments stays:
+			// comments left hidden then have their states only there.
+			delete_post_meta( $id, '_wp_trash_meta_status' );
+			delete_post_meta( $id, '_wp_trash_meta_time' );
+			wp_trash_post( $id );
+			$after = get_post( $id );
+			if ( ! $after || 'trash' !== (string) $after->post_status ) {
+				return new WP_Error( 'ab_mcp_trash_failed', __( 'The post could not be moved to the trash.', 'alphabridge-mcp' ) );
+			}
+			return array(
+				'deleted'   => true,
+				'permanent' => false,
+				'id'        => $id,
+			);
+		}
+		$res = wp_delete_post( $id, true );
 		if ( ! $res ) {
 			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted'   => true,
-			'permanent' => $force,
+			'permanent' => true,
 			'id'        => $id,
 		);
 	}

@@ -67,6 +67,9 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_meta_deleted'] = array();
 	$GLOBALS['ab_test_actions']      = array();
 	$GLOBALS['ab_test_comments_untrashed'] = array();
+	$GLOBALS['ab_test_trashed']       = array();
+	$GLOBALS['ab_test_trash_refused'] = false;
+	$GLOBALS['ab_test_deleted']       = array();
 	$GLOBALS['ab_test_now']        = null;
 	$GLOBALS['ab_test_core_delay'] = 0;
 	$GLOBALS['ab_test_sites']      = array( 1 );
@@ -447,6 +450,28 @@ function do_action( $hook, ...$args ) {
 /** No taxonomies: the copy made by wp_duplicate_post carries no terms here. */
 function get_object_taxonomies( $object ) {
 	return array();
+}
+
+/** As WordPress: into the trash, or false — already there, or a pre_trash_post filter said no. */
+function wp_trash_post( $post_id = 0 ) {
+	$GLOBALS['ab_test_trashed'][] = (int) $post_id;
+	$post = get_post( (int) $post_id );
+	if ( ! $post || 'trash' === $post->post_status || ! empty( $GLOBALS['ab_test_trash_refused'] ) ) {
+		return false;
+	}
+	$post->post_status = 'trash';
+	return $post;
+}
+
+/** Deletes for good (only called with force here), and notes the call. */
+function wp_delete_post( $post_id = 0, $force_delete = false ) {
+	$GLOBALS['ab_test_deleted'][] = array( (int) $post_id, (bool) $force_delete );
+	$post = get_post( (int) $post_id );
+	if ( ! $post ) {
+		return false;
+	}
+	unset( $GLOBALS['ab_test_posts'][ (int) $post_id ] );
+	return $post;
 }
 
 /** Notes that the comments of a post were given their states back. */
