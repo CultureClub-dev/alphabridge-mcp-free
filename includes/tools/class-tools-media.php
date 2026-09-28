@@ -436,7 +436,18 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			$update['post_excerpt'] = self::s( $a, 'caption' );
 		}
 		if ( count( $update ) > 1 ) {
-			wp_update_post( wp_slash( $update ) );
+			// Any save gives the file the parent WordPress stores: none where a
+			// loop runs through the file, which a file with "inherit" leaves
+			// public. The rule of wp_update_post decides (file_publish_refusal()).
+			$now     = (string) $att->post_status;
+			$parent  = (int) $att->post_parent;
+			$refused = AB_MCP_Tools_Content::file_publish_refusal( $id, $now, $parent, $now, $parent );
+			if ( null !== $refused ) {
+				return $refused;
+			}
+			if ( ! wp_update_post( wp_slash( $update ) ) ) {
+				return new WP_Error( 'ab_mcp_update_failed', __( 'The attachment could not be saved.', 'alphabridge-mcp' ) );
+			}
 		}
 		if ( array_key_exists( 'alt', $a ) ) {
 			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( self::s( $a, 'alt' ) ) ) );
