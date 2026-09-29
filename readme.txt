@@ -8,7 +8,7 @@ Stable tag: 4.3.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect Claude and ChatGPT to your WordPress site through a native MCP server: rights per connection, audit log, optional hub for all sites.
+Connect Claude and ChatGPT to your WordPress site through a native MCP server: rights per connection, audit log, free hub for up to 10 sites.
 
 == Description ==
 
@@ -37,7 +37,7 @@ In German: [Claude mit WordPress verbinden](https://www.youtube.com/watch?v=M262
 
 **AlphaBridge Connect — the optional hub**
 
-The entry «AlphaBridge MCP for WordPress» in Claude's connector directory is the hosted hub at connect.alphabridge-mcp.com: you enter your site's address instead of copying the endpoint, and you approve the site on its own login screen. The site keeps its own rights and its own audit log. A connection through the hub links one site. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
+The entry «AlphaBridge MCP for WordPress» in Claude's connector directory is the hosted hub at connect.alphabridge-mcp.com: you enter your site's address instead of copying the endpoint, and you approve the site on its own login screen. The site keeps its own rights and its own audit log. One connection through the hub reaches up to 10 sites, in every edition including this free plugin: add a site from the chat and keep working in the same conversation. The hub is optional and free, and this plugin never contacts it on its own — the hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it; the details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
 
 **Nothing extra to host**
 
