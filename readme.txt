@@ -98,6 +98,9 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 
 == Changelog ==
 
+= 4.3.9 =
+* **The box about AlphaBridge MCP Pro on the settings page says what Pro adds, how to try it and what it costs.** It now stands at the top of the side column: what the separately sold plugin adds on this site, a button that starts the 7-day trial without a card, and the monthly and the yearly price. Each link opens the Freemius checkout, which sells AlphaBridge MCP Pro, for exactly what it names — trial, monthly or yearly — and carries no tracking. On a site where AlphaBridge MCP Pro runs with a valid Pro or Agency licence the box no longer shows; it offered what the site already had. Its look comes from a small stylesheet that ships with the plugin and loads only on this settings page; nothing is loaded from outside. No tool or setting changed: this free plugin remains complete and fully functional on its own.
+
 = 4.3.8 =
 * **`wp_update_post` saves a page whose page template is gone like any other.** WordPress saves a post's page template along on every save; where that template no longer exists — after a theme switch, say — the tool reported «Invalid page template» although the change was already saved, and the hooks after the save did not run: a scheduled post got no schedule, caches were not cleared. Now WordPress falls back to the default template, as the classic editor does, and finishes the save; the page already looked that way.
 
