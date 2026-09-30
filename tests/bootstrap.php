@@ -160,6 +160,35 @@ function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
+/**
+ * As in WordPress: without a callback, whether the hook has any; with one, its
+ * priority when it is registered, else false.
+ */
+function has_filter( $hook, $callback = false ) {
+	$entries = $GLOBALS['ab_test_filters'][ $hook ] ?? array();
+	if ( false === $callback ) {
+		return array() !== $entries;
+	}
+	foreach ( $entries as $entry ) {
+		if ( $entry['fn'] === $callback ) {
+			return $entry['prio'];
+		}
+	}
+	return false;
+}
+
+function has_action( $hook, $callback = false ) {
+	return has_filter( $hook, $callback );
+}
+
+function __return_true() {
+	return true;
+}
+
+function __return_false() {
+	return false;
+}
+
 
 /* ------------------------------------------------------------- WP helpers */
 
