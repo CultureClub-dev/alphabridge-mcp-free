@@ -83,6 +83,9 @@ final class ConnectorDirectoryTest extends TestCase {
 			self::assertStringNotContainsString( 'hub', $panel, $client );
 			self::assertStringContainsString( 'href="#ab-oauth"', $panel, $client . ': the way to the setting.' );
 		}
+		// Claude still has the way from before OAuth: a token in its connector URL.
+		self::assertStringContainsString( 'pick “Other”', $this->html( $this->panel( $x, 'claude' ) ) );
+		self::assertStringNotContainsString( 'pick “Other”', $this->html( $this->panel( $x, 'chatgpt' ) ) );
 	}
 
 	public function testOAuthIsOnUnlessTheSiteSwitchedItOff(): void {

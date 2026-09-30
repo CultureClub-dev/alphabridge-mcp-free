@@ -135,7 +135,9 @@
 			all += n;
 			var gt = g.querySelector( '.ab-group-toggle' );
 			if ( gt ) {
-				gt.checked = k > 0;
+				// Checked only when all are on: a click on a group that is partly
+				// on switches all of it on, like the switch for all tools.
+				gt.checked = n > 0 && k === n;
 				gt.indeterminate = k > 0 && k < n;
 			}
 			var st = g.querySelector( '.ab-status' );

@@ -119,6 +119,8 @@ final class AdminPageTest extends TestCase {
 				self::assertFalse( $in->hasAttribute( 'name' ), $class . ' posts nothing itself.' );
 			}
 		}
+		self::assertSame( 'nonce-ab_mcp_save', $x->query( '//form[@id="ab-caps"]//input[@name="_wpnonce"]' )->item( 0 )->getAttribute( 'value' ), 'Signed for the save handler.' );
+		self::assertSame( 'ab_mcp_save', $x->query( '//form[@id="ab-caps"]//input[@name="action"]' )->item( 0 )->getAttribute( 'value' ) );
 		self::assertSame( 1, $x->query( '//input[@type="search"][contains(@class, "ab-search")]' )->length );
 		self::assertSame( '2', trim( $x->query( '//*[contains(@class, "ab-on-count")]' )->item( 0 )->textContent ) );
 	}
@@ -133,6 +135,8 @@ final class AdminPageTest extends TestCase {
 		self::assertSame( 'On', trim( $x->query( './/summary//*[contains(@class, "ab-status")]', $seo )->item( 0 )->textContent ) );
 		self::assertSame( '2 tools', trim( $x->query( './/*[contains(@class, "ab-group__n")]', $content )->item( 0 )->textContent ) );
 		self::assertSame( '1 tool', trim( $x->query( './/*[contains(@class, "ab-group__n")]', $seo )->item( 0 )->textContent ), 'Singular, not «1 tools».' );
+		self::assertFalse( $x->query( './/input[contains(@class, "ab-group-toggle")]', $content )->item( 0 )->hasAttribute( 'checked' ), 'Partly on: not checked, so a click switches all of it on.' );
+		self::assertTrue( $x->query( './/input[contains(@class, "ab-group-toggle")]', $seo )->item( 0 )->hasAttribute( 'checked' ), 'All on: checked.' );
 		self::assertSame( 1, $x->query( './/*[contains(@class, "ab-pill--mighty")]', $content )->length );
 		self::assertSame( 0, $x->query( './/*[contains(@class, "ab-pill--mighty")]', $seo )->length );
 	}
@@ -143,6 +147,10 @@ final class AdminPageTest extends TestCase {
 		$row = $x->query( '//li[.//input[@value="wp_list_posts"]]' )->item( 0 );
 		self::assertSame( 'List posts.', trim( $x->query( './/p', $row )->item( 0 )->textContent ) );
 		self::assertSame( 'List posts. With filters and paging.', trim( $x->query( './/*[contains(@class, "ab-tip")]', $row )->item( 0 )->textContent ) );
+
+		$info = $x->query( './/button[contains(@class, "ab-info")]', $row )->item( 0 );
+		self::assertSame( 'ab-tip-wp_list_posts', $info->getAttribute( 'aria-describedby' ), 'Screen readers get the whole description.' );
+		self::assertSame( 1, $x->query( '//*[@id="ab-tip-wp_list_posts"]' )->length );
 
 		$one = $x->query( '//li[.//input[@value="wp_seo_get"]]' )->item( 0 );
 		self::assertSame( 0, $x->query( './/*[contains(@class, "ab-info")]', $one )->length, 'One sentence needs no «i».' );
@@ -167,6 +175,29 @@ final class AdminPageTest extends TestCase {
 		$sorted = $at;
 		sort( $sorted );
 		self::assertSame( $sorted, $at, 'Connect, capabilities, connections, add-on boxes, log.' );
+	}
+
+	public function testEveryFormOnThePageIsSignedForItsHandler(): void {
+		$x = $this->xpath( $this->call( 'render_connections_card', array() ) . $this->call( 'render_audit' ) );
+
+		$forms = array();
+		foreach ( $x->query( '//form' ) as $form ) {
+			$action = $x->query( './/input[@name="action"]', $form )->item( 0 );
+			$nonce  = $x->query( './/input[@name="_wpnonce"]', $form )->item( 0 );
+			self::assertNotNull( $action );
+			self::assertNotNull( $nonce );
+			$forms[ $action->getAttribute( 'value' ) ] = $nonce->getAttribute( 'value' );
+		}
+		self::assertSame(
+			array(
+				'ab_mcp_connector_auth'  => 'nonce-ab_mcp_connector_auth',
+				'ab_mcp_oauth_settings'  => 'nonce-ab_mcp_oauth_settings',
+				'ab_mcp_audit_clear'     => 'nonce-ab_mcp_audit_clear',
+			),
+			$forms
+		);
+		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="connector_url_auth_enabled"]' )->length );
+		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="oauth_enabled"]' )->length );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {

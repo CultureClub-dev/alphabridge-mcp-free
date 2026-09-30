@@ -699,8 +699,14 @@ function admin_url( $path = '' ) {
 	return 'https://example.test/wp-admin/' . ltrim( (string) $path, '/' );
 }
 
+// Like WordPress: the hidden field names its action, so a test can see which
+// action a form is signed for.
 function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) {
-	return '';
+	$field = '<input type="hidden" name="' . $name . '" value="nonce-' . $action . '">';
+	if ( $display ) {
+		echo $field; // phpcs:ignore
+	}
+	return $field;
 }
 
 function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {

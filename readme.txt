@@ -85,10 +85,10 @@ No. It contacts no external service on its own. The only outbound request happen
 
 == Screenshots ==
 
-1. Set up the Claude connector in two steps: copy the endpoint URL, then connect from Claude — or create a token manually for Cursor, Claude Code and scripts. Existing connections are listed and managed in the same place.
+1. Pick your assistant — Claude, ChatGPT, Cursor or another client — and follow its steps: for Claude a direct link into its connector directory, this site's address to copy, the video and the guide. A token is created only where one is needed.
 2. The moment you create a connection, the plugin shows what you need once — the Bearer token and a copy-paste config for Cursor / Claude Code, and the connector URL if connector-URL authentication is switched on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
-4. Enable or disable tools by functional group. Powerful ("mighty") tools are off by default, and one switch turns on a global read-only mode.
+4. Switch all tools, a group or a single tool; open a group to see what each tool does, or search for one. Powerful ("mighty") tools are off by default, and one switch turns on a global read-only mode.
 5. Connect from Claude is on by default: Claude discovers the site, you approve on a login-protected consent screen, and the approved connection appears in the list, revocable any time. Switching it off removes the OAuth endpoints.
 6. Connector-URL authentication is off by default, because a token in a URL leaks more easily than one in a header; the setting explains the trade-off before you switch it on.
 

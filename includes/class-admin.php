@@ -507,7 +507,13 @@ class AB_MCP_Admin {
 	private function oauth_off_html( $name ) {
 		/* translators: %s: Claude or ChatGPT. */
 		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under Your connections → “Connect from Claude (OAuth, advanced)”.', 'alphabridge-mcp' ), $name );
-		return '<div class="ab-callout"><p>' . esc_html( $text ) . '</p><p><a class="ab-more" href="#ab-oauth">' . esc_html__( 'Go to the setting', 'alphabridge-mcp' ) . '</a></p></div>';
+		$html = '<div class="ab-callout"><p>' . esc_html( $text ) . '</p>';
+		if ( 'Claude' === $name ) {
+			// The way the page offered before OAuth existed: a token in the
+			// connector URL (connector-URL authentication, off by default).
+			$html .= '<p>' . esc_html__( 'Until then, Claude.ai can connect with a token in its connector URL: pick “Other”, create a connection and switch on the connector URL it offers.', 'alphabridge-mcp' ) . '</p>';
+		}
+		return $html . '<p><a class="ab-more" href="#ab-oauth">' . esc_html__( 'Go to the setting', 'alphabridge-mcp' ) . '</a></p></div>';
 	}
 
 	/**
@@ -692,7 +698,8 @@ class AB_MCP_Admin {
 				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
 				$items .= '<div class="ab-tool-row__text"><code>' . esc_html( $tname ) . '</code>';
 				if ( is_array( $parts ) && count( $parts ) > 1 ) {
-					$items .= '<button type="button" class="ab-info" aria-label="' . esc_attr__( 'Full description', 'alphabridge-mcp' ) . '">i<span class="ab-tip" role="tooltip">' . esc_html( $desc ) . '</span></button>';
+					/* translators: %s: tool name. */
+					$items .= '<button type="button" class="ab-info" aria-label="' . esc_attr( sprintf( __( 'Full description of %s', 'alphabridge-mcp' ), $tname ) ) . '" aria-describedby="ab-tip-' . esc_attr( $tname ) . '">i<span class="ab-tip" role="tooltip" id="ab-tip-' . esc_attr( $tname ) . '">' . esc_html( $desc ) . '</span></button>';
 				}
 				$items .= '<p>' . esc_html( $short ) . '</p></div></li>';
 			}
@@ -701,7 +708,7 @@ class AB_MCP_Admin {
 
 			$rows .= '<details class="ab-group" data-group="' . esc_attr( (string) $slug ) . '"><summary>';
 			/* translators: %s: name of a tool group. */
-			$rows .= '<label class="ab-switch ab-group-switch"><input type="checkbox" class="ab-group-toggle"' . checked( $on > 0, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( sprintf( __( 'All tools in %s', 'alphabridge-mcp' ), $g['label'] ) ) . '</span></label>';
+			$rows .= '<label class="ab-switch ab-group-switch"><input type="checkbox" class="ab-group-toggle"' . checked( $n > 0 && $on >= $n, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( sprintf( __( 'All tools in %s', 'alphabridge-mcp' ), $g['label'] ) ) . '</span></label>';
 			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) : '' );
 			/* translators: %d: number of tools. */
 			$rows .= ' <span class="ab-group__n">' . esc_html( sprintf( _n( '%d tool', '%d tools', $n, 'alphabridge-mcp' ), $n ) ) . '</span>';
