@@ -2,9 +2,10 @@
  * AlphaBridge MCP — Settings › AlphaBridge MCP.
  *
  * Loaded on that screen only (AB_MCP_Admin::enqueue_assets()). The rest of the
- * screen is styled inline; this file holds what inline styles cannot express:
- * the hover, focus and press states of the Pro box's button and the fallbacks
- * for reduced motion and forced colours. Nothing here loads from outside.
+ * screen is styled inline; this file styles the Pro box
+ * (AB_MCP_Admin::pro_box_html()), whose button needs what inline styles cannot
+ * express: hover, focus and press states and the fallbacks for reduced motion
+ * and forced colours. Nothing here loads from outside.
  *
  * Colours are the website's: indigo #4f46e5, violet #7c3aed, cyan #06b6d4.
  * White text keeps a contrast of at least 5.7:1 across the button's gradient.
@@ -35,6 +36,18 @@
 	font-weight: 700;
 	letter-spacing: .08em;
 	text-transform: uppercase;
+}
+
+.ab-pro .ab-pro__pill {
+	display: inline-block;
+	margin-inline-start: 8px;
+	padding: 2px 9px;
+	border-radius: 999px;
+	background: linear-gradient(135deg, #4f46e5, #7c3aed);
+	color: #fff;
+	font-size: 10px;
+	letter-spacing: .06em;
+	vertical-align: 1px;
 }
 
 .ab-pro .ab-pro__title {
@@ -143,20 +156,23 @@
 	transform: translateY(3px);
 }
 
-.ab-pro .ab-pro__trial {
-	margin: 14px 0 0;
-	font-size: 13px;
+/* The line under the button: no card, then the two prices, each a link. */
+.ab-pro .ab-pro__alt {
+	margin: 13px 0 0;
+	color: #50575e;
+	font-size: 12.5px;
+	line-height: 1.5;
 	text-align: center;
 }
 
-.ab-pro .ab-pro__trial a {
+.ab-pro .ab-pro__alt a {
 	color: #4338ca;
 	font-weight: 600;
 	text-decoration: none;
 }
 
-.ab-pro .ab-pro__trial a:hover,
-.ab-pro .ab-pro__trial a:focus {
+.ab-pro .ab-pro__alt a:hover,
+.ab-pro .ab-pro__alt a:focus {
 	color: #3730a3;
 	text-decoration: underline;
 }

@@ -493,11 +493,18 @@ class AB_MCP_Admin {
 	 * Allowed on the plugin's OWN settings page (WordPress.org guideline 11): it
 	 * advertises a separately distributed product and says that nothing in THIS
 	 * plugin is limited — no feature here is presented as locked (guideline 9).
-	 * The link carries no tracking parameter, and the look comes from
-	 * assets/admin.css, which ships with the plugin; nothing loads from outside.
+	 * The look comes from assets/admin.css, which ships with the plugin; nothing
+	 * loads from outside.
+	 *
+	 * The button starts the 7-day trial, which needs no card; the two prices
+	 * below it buy right away. Each link opens the Freemius checkout of the Pro
+	 * plan for exactly what it names — the addresses the website's buttons fall
+	 * back to. The query says only what opens (trial, monthly or yearly) and
+	 * carries no tracking. The website cannot preselect the monthly price, so a
+	 * link there would land a «$9/month» click on the yearly one.
 	 *
 	 * The list names what the Pro edition adds. Site Deploy belongs to the Agency
-	 * edition and is left out, so the price on the button buys everything listed.
+	 * edition and is left out, so the Pro prices buy everything listed.
 	 *
 	 * A site whose add-on reports a Pro or Agency licence through
 	 * `ab_mcp_site_edition` is not offered what it already has. Every other value,
@@ -512,9 +519,12 @@ class AB_MCP_Admin {
 			return '';
 		}
 
-		$url     = 'https://www.alphabridge-mcp.com/#pricing';
-		$new_tab = '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span>';
-		$items   = array(
+		$checkout = 'https://checkout.freemius.com/plugin/35076/plan/57642/';
+		$new_tab  = '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span>';
+		$link     = static function ( $query, $label, $class = '' ) use ( $checkout, $new_tab ) {
+			return '<a' . ( '' !== $class ? ' class="' . esc_attr( $class ) . '"' : '' ) . ' href="' . esc_url( $checkout . '?' . $query ) . '" target="_blank" rel="noopener">' . esc_html( $label ) . $new_tab . '</a>';
+		};
+		$items    = array(
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, database, users, menus', 'alphabridge-mcp' ),
 			__( 'WooCommerce, SEO editing, installs and updates', 'alphabridge-mcp' ),
@@ -523,16 +533,22 @@ class AB_MCP_Admin {
 		);
 
 		$html  = '<div class="postbox ab-pro">';
-		$html .= '<p class="ab-pro__eyebrow">AlphaBridge MCP Pro</p>';
+		$html .= '<p class="ab-pro__eyebrow">AlphaBridge MCP Pro <span class="ab-pro__pill">' . esc_html__( '7 days free', 'alphabridge-mcp' ) . '</span></p>';
 		$html .= '<h2 class="ab-pro__title">' . esc_html__( 'Let Claude run the whole site', 'alphabridge-mcp' ) . '</h2>';
 		$html .= '<ul class="ab-pro__list">';
 		foreach ( $items as $item ) {
 			$html .= '<li>' . esc_html( $item ) . '</li>';
 		}
 		$html .= '</ul>';
-		/* translators: button label; $49 is the yearly price of AlphaBridge MCP Pro in US dollars. */
-		$html .= '<a class="ab-pro__cta" href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html__( 'Get Pro — $49/year', 'alphabridge-mcp' ) . $new_tab . '</a>';
-		$html .= '<p class="ab-pro__trial"><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html__( 'Or try it free for 7 days — no card needed', 'alphabridge-mcp' ) . $new_tab . '</a></p>';
+		$html .= $link( 'trial=free&billing_cycle=monthly', __( 'Try Pro free for 7 days', 'alphabridge-mcp' ), 'ab-pro__cta' );
+		$html .= '<p class="ab-pro__alt">' . sprintf(
+			/* translators: 1: link with the monthly price, 2: link with the yearly price. */
+			esc_html__( 'No card needed · then %1$s or %2$s · cancel anytime', 'alphabridge-mcp' ),
+			/* translators: monthly price of AlphaBridge MCP Pro in US dollars; keep the amount. */
+			$link( 'billing_cycle=monthly', __( '$9/month', 'alphabridge-mcp' ) ),
+			/* translators: yearly price of AlphaBridge MCP Pro in US dollars; keep the amount. */
+			$link( 'billing_cycle=annual', __( '$49/year', 'alphabridge-mcp' ) )
+		) . '</p>';
 		$html .= '<p class="ab-pro__note">' . esc_html__( 'A separate plugin. Everything in this free plugin is complete on its own and stays fully functional without it.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '</div>';
 

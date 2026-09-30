@@ -4,7 +4,7 @@
  *
  * It sells a separately distributed plugin, inside the bounds WordPress.org
  * sets: only on this plugin's own settings page, no feature of THIS plugin
- * presented as locked, no tracking parameter in the link, nothing loaded from
+ * presented as locked, no tracking parameter in the links, nothing loaded from
  * outside. A site that already runs Pro or Agency is not offered what it has.
  *
  * @package AlphaBridge_MCP
@@ -19,8 +19,6 @@ use AB_MCP_Admin;
 use ReflectionMethod;
 
 final class ProBoxTest extends TestCase {
-
-	private const PRICING = 'https://www.alphabridge-mcp.com/#pricing';
 
 	protected function setUp(): void {
 		ab_test_reset();
@@ -40,25 +38,67 @@ final class ProBoxTest extends TestCase {
 		return (string) $method->invoke( new AB_MCP_Admin() );
 	}
 
-	public function testAFreeSiteIsOfferedProWithPriceAndTrial(): void {
+	/**
+	 * Every link in the box: its opening tag, its visible text and its query.
+	 *
+	 * @return array<int, array{tag: string, text: string, url: array<string, mixed>, query: array<string, string>}>
+	 */
+	private function links( string $html ): array {
+		preg_match_all( '/(<a\s[^>]*>)(.*?)<\/a>/s', $html, $found, PREG_SET_ORDER );
+		$links = array();
+		foreach ( $found as $match ) {
+			preg_match( '/href="([^"]*)"/', $match[1], $href );
+			$url   = (array) parse_url( html_entity_decode( $href[1] ?? '', ENT_QUOTES ) );
+			$query = array();
+			parse_str( (string) ( $url['query'] ?? '' ), $query );
+			// The screen-reader note «(opens in a new tab)» is not what the link says.
+			$text    = trim( (string) preg_replace( '/<span class="screen-reader-text">.*?<\/span>/s', '', $match[2] ) );
+			$links[] = array(
+				'tag'   => $match[1],
+				'text'  => $text,
+				'url'   => $url,
+				'query' => $query,
+			);
+		}
+		return $links;
+	}
+
+	public function testAFreeSiteIsOfferedTheTrialAndBothPrices(): void {
 		$html = $this->box();
 
 		self::assertStringContainsString( 'AlphaBridge MCP Pro', $html );
-		self::assertStringContainsString( 'class="ab-pro__cta"', $html );
-		self::assertStringContainsString( 'Get Pro — $49/year', $html );
-		self::assertStringContainsString( 'free for 7 days — no card needed', $html );
+		self::assertStringContainsString( '7 days free', $html );
+		self::assertStringContainsString( 'No card needed', $html );
+		self::assertSame(
+			array( 'Try Pro free for 7 days', '$9/month', '$49/year' ),
+			array_column( $this->links( $html ), 'text' ),
+			'The trial first, then the monthly and the yearly price.'
+		);
 	}
 
-	public function testEveryLinkLeadsToThePricesWithoutATrackingParameter(): void {
-		$html = $this->box();
+	public function testEachLinkOpensTheCheckoutForWhatItSays(): void {
+		$links = $this->links( $this->box() );
 
-		preg_match_all( '/<a\s[^>]*>/', $html, $links );
-		self::assertCount( 2, $links[0], 'The button and the trial line.' );
-		foreach ( $links[0] as $link ) {
-			self::assertStringContainsString( 'href="' . self::PRICING . '"', $link );
-			self::assertStringContainsString( 'target="_blank"', $link );
-			self::assertStringContainsString( 'rel="noopener"', $link );
+		self::assertCount( 3, $links );
+		$expected = array(
+			'Try Pro free for 7 days' => array(
+				'trial'         => 'free',
+				'billing_cycle' => 'monthly',
+			),
+			'$9/month'                => array( 'billing_cycle' => 'monthly' ),
+			'$49/year'                => array( 'billing_cycle' => 'annual' ),
+		);
+		foreach ( $links as $link ) {
+			self::assertSame( 'https', $link['url']['scheme'] ?? null, $link['text'] );
+			self::assertSame( 'checkout.freemius.com', $link['url']['host'] ?? null, $link['text'] );
+			self::assertSame( '/plugin/35076/plan/57642/', $link['url']['path'] ?? null, $link['text'] );
+			// Only what opens — trial, monthly or yearly. A tracking or referral
+			// parameter (WordPress.org guidelines 7 and 11) would show up here.
+			self::assertSame( $expected[ $link['text'] ] ?? null, $link['query'], $link['text'] );
+			self::assertStringContainsString( 'target="_blank"', $link['tag'] );
+			self::assertStringContainsString( 'rel="noopener"', $link['tag'] );
 		}
+		self::assertStringContainsString( 'class="ab-pro__cta"', $links[0]['tag'], 'The trial is the button.' );
 	}
 
 	public function testASiteWithAPaidLicenceIsNotOfferedWhatItHas(): void {
@@ -76,7 +116,7 @@ final class ProBoxTest extends TestCase {
 	public function testAnyOtherEditionIsOfferedPro(): void {
 		foreach ( array( 'free', '', 'enterprise', 'Pro' ) as $edition ) {
 			ab_test_reset();
-			self::assertStringContainsString( 'Get Pro — $49/year', $this->box( $edition ), var_export( $edition, true ) );
+			self::assertStringContainsString( 'Try Pro free for 7 days', $this->box( $edition ), var_export( $edition, true ) );
 		}
 	}
 
@@ -93,7 +133,7 @@ final class ProBoxTest extends TestCase {
 		$html = $this->box();
 
 		// Site Deploy comes with Agency, not with Pro; listed beside the Pro
-		// price it would promise something the button does not buy.
+		// prices it would promise something they do not buy.
 		self::assertStringNotContainsStringIgnoringCase( 'deploy', $html );
 		self::assertStringNotContainsString( 'SFTP', $html );
 	}
