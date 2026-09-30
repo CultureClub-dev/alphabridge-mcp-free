@@ -165,16 +165,17 @@
 	text-align: center;
 }
 
+/* Underlined: colour alone barely sets the prices apart from the text around. */
 .ab-pro .ab-pro__alt a {
 	color: #4338ca;
 	font-weight: 600;
-	text-decoration: none;
+	text-decoration: underline;
+	text-underline-offset: 2px;
 }
 
 .ab-pro .ab-pro__alt a:hover,
 .ab-pro .ab-pro__alt a:focus {
 	color: #3730a3;
-	text-decoration: underline;
 }
 
 .ab-pro .ab-pro__note {
