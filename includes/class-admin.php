@@ -950,7 +950,9 @@ class AB_MCP_Admin {
 		 *
 		 * @since 4.3.11
 		 *
-		 * @param bool $show True unless an older Pro add-on hangs its own affiliate box there.
+		 * @param bool $show False wherever the Pro add-on's affiliate box (ab_mcp_pro_aff_side_box)
+		 *                   hangs on the side column, true everywhere else. From Pro 4.5.14 the
+		 *                   add-on gives its own answer.
 		 */
 		$show = (bool) apply_filters( 'ab_mcp_affiliate_invite', false === has_action( 'ab_mcp_admin_side_boxes', 'ab_mcp_pro_aff_side_box' ) );
 		if ( ! $show ) {
