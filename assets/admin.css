@@ -1311,3 +1311,47 @@
 		border: 2px solid ButtonText;
 	}
 }
+
+/* ---------- The invitation to the affiliate programme ---------- */
+
+.ab-mcp .ab-invite {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	margin: 0 0 20px;
+	padding: 14px 16px;
+	border: 1px solid var(--ab-line);
+	border-radius: 14px;
+	background: var(--ab-tint);
+}
+
+.ab-mcp .ab-invite__pct {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+	color: #fff;
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.ab-mcp .ab-invite p {
+	margin: 0;
+	color: var(--ab-ink);
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.ab-mcp .ab-invite .ab-more {
+	margin-top: 4px;
+}
+
+@media (forced-colors: active) {
+	.ab-mcp .ab-invite__pct {
+		border: 1px solid CanvasText;
+	}
+}

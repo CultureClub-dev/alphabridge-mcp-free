@@ -98,6 +98,10 @@ This plugin makes no automatic outbound requests and sends no telemetry. One too
 
 == Changelog ==
 
+= 4.3.11 =
+* **An invitation to the affiliate programme, on the settings page.** One line in the side column, below the box about AlphaBridge MCP Pro: the commission — 60% of every Pro and Agency sale you refer, renewals included — and a link to the programme's page on alphabridge-mcp.com, which has the full terms and says how to apply. The link opens in a new tab and carries no tracking. The commission comes from sales of the separately sold Pro and Agency editions; this free plugin itself earns none. Where the Pro add-on shows your own affiliate figures, it takes the line's place. No tool or setting changed.
+* For add-ons: the filter `ab_mcp_affiliate_invite` decides whether the line shows.
+
 = 4.3.10 =
 * **A new settings page: pick your assistant first, then follow its steps.** The page opens with the plugin's logo, this site's state (connections, tools switched on, read-only mode) and a choice of assistant — Claude, ChatGPT, Cursor or another client. Each gets its own steps with direct links: for Claude into its connector directory, with this site's address ready to copy, the setup video and the step-by-step guide; for ChatGPT to its plugins page, with this site's endpoint. Creating a token is offered where one is needed — for Cursor and other clients — and no longer next to the ways that never use one. The page remembers the assistant you picked in your browser.
 * **Capabilities with switches.** One switch turns all tools on or off, one read-only mode, and every group has a switch of its own. Open a group to see each tool with what it does — the first sentence, the whole description behind the «i» — and switch it on its own. A search finds a tool by name or description. A group that is partly on shows it; the bar at the bottom tells you when switches have changed and are not saved yet. What the form saves is unchanged.

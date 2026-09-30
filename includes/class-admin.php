@@ -903,8 +903,8 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The side column: the Pro box (free edition only), boxes from add-ons,
-	 * the guides.
+	 * The side column: the Pro box (free edition only), the invitation to the
+	 * affiliate programme, boxes from add-ons, the guides.
 	 *
 	 * @return string HTML; add-on boxes escape their own output.
 	 */
@@ -919,7 +919,58 @@ class AB_MCP_Admin {
 		do_action( 'ab_mcp_admin_side_boxes' );
 		$addons = (string) ob_get_clean();
 
-		return '<div class="ab-side">' . $this->pro_box_html() . $addons . $this->guides_html() . '</div>';
+		return '<div class="ab-side">' . $this->pro_box_html() . $this->affiliate_invite_html() . $addons . $this->guides_html() . '</div>';
+	}
+
+	/**
+	 * One line that invites to the affiliate programme, or ''.
+	 *
+	 * Like the Pro box it stands only on the plugin's OWN settings page
+	 * (WordPress.org guideline 11). It links to the programme's page on the
+	 * product website, which carries the current terms and how to apply; the
+	 * address has no query and so no tracking. The commission is paid on Pro and
+	 * Agency sales, never on this free plugin, and the line says so.
+	 *
+	 * The 60% is the programme's commission as set at Freemius on 29.09.2026
+	 * (renewals included, lifetime commission on). This plugin cannot ask
+	 * Freemius; a change of the terms needs a new release of this line.
+	 *
+	 * Where the Pro add-on reads the site's own affiliate state from Freemius,
+	 * its box in the side column (figures, invitation or pending application)
+	 * takes this line's place. From Pro 4.5.14 the add-on answers the filter
+	 * `ab_mcp_affiliate_invite`; an older Pro that already hangs its affiliate
+	 * box on the side column has no answer, so the line then stays away rather
+	 * than stand next to that box.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function affiliate_invite_html() {
+		/**
+		 * Whether the side column shows the invitation to the affiliate programme.
+		 *
+		 * @since 4.3.11
+		 *
+		 * @param bool $show False wherever the Pro add-on's affiliate box (ab_mcp_pro_aff_side_box)
+		 *                   hangs on the side column, true everywhere else. From Pro 4.5.14 the
+		 *                   add-on gives its own answer.
+		 */
+		$show = (bool) apply_filters( 'ab_mcp_affiliate_invite', false === has_action( 'ab_mcp_admin_side_boxes', 'ab_mcp_pro_aff_side_box' ) );
+		if ( ! $show ) {
+			return '';
+		}
+
+		/* translators: the commission of the AlphaBridge affiliate programme; keep the number. */
+		$pct = __( '60%', 'alphabridge-mcp' );
+
+		$html  = '<div class="ab-invite">';
+		$html .= '<span class="ab-invite__pct" aria-hidden="true">' . esc_html( $pct ) . '</span>';
+		$html .= '<p><strong>' . esc_html__( 'Earn with AlphaBridge.', 'alphabridge-mcp' ) . '</strong> ';
+		/* translators: %s: the commission, e.g. 60% */
+		$html .= esc_html( sprintf( __( '%s of every Pro and Agency sale you refer, renewals included.', 'alphabridge-mcp' ), $pct ) );
+		$html .= ' <a class="ab-more" href="' . esc_url( 'https://www.alphabridge-mcp.com/affiliates.html' ) . '" target="_blank" rel="noopener">' . esc_html__( 'Become an affiliate', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a></p>';
+		$html .= '</div>';
+
+		return $html;
 	}
 
 	/**
