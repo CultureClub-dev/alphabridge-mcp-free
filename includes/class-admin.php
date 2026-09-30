@@ -280,190 +280,72 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Badge markup for powerful ("mighty") tool groups.
+	 * The «Mighty» mark for tool groups that can change a lot at once.
 	 *
-	 * @param bool $mighty Whether the group contains dangerous tools.
+	 * @param bool $mighty Whether the group contains powerful tools.
 	 * @return string
 	 */
 	private function badge( $mighty ) {
 		if ( ! $mighty ) {
 			return '';
 		}
-		return '<span style="font-size:11px;border-radius:10px;padding:1px 8px;color:#8a2b00;background:#fbeae3">' . esc_html__( 'Mighty', 'alphabridge-mcp' ) . '</span>';
+		return '<span class="ab-pill ab-pill--mighty">' . esc_html__( 'Mighty', 'alphabridge-mcp' ) . '</span>';
 	}
 
 	/**
 	 * Render the page.
+	 *
+	 * Top to bottom: the band with the logo, this site's state and the choice of
+	 * assistant; how to connect the chosen one; what connected assistants may do;
+	 * the connections; boxes from add-ons; the log. The side column carries the
+	 * Pro box (free edition only), boxes from add-ons and the guides.
 	 */
 	public function render() {
 		$this->guard();
 
-		$endpoint  = untrailingslashit( rest_url( AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE ) );
 		$tokens    = AB_MCP_Settings::get_tokens();
-		$path_auth = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
 		$registry  = AB_MCP_Plugin::instance()->registry;
 		$groups    = $registry->groups();
 		$all       = $registry->all();
+		$read_only = (bool) AB_MCP_Settings::get( 'read_only', false );
 
-		echo '<div class="wrap"><h1>AlphaBridge MCP</h1>';
-		echo '<p class="description" style="margin:0 0 14px">' . esc_html__( 'Settings › AlphaBridge MCP', 'alphabridge-mcp' ) . '</p>';
+		echo '<div class="wrap ab-mcp">';
+		// WordPress moves admin notices right after this marker. Without it they
+		// land after the first heading, which sits inside the band.
+		echo '<hr class="wp-header-end">';
 		$this->notice();
 		// The one-time review request: only here, only once the site has really
 		// used the plugin, and never again after «don't ask again».
 		echo AB_MCP_Review_Notice::render(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts.
-		if ( AB_MCP_Settings::get( 'read_only', false ) ) {
+		if ( $read_only ) {
 			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Read-only mode is active.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'All writing tools are blocked until you switch it off under Capabilities.', 'alphabridge-mcp' ) . '</p></div>';
 		}
 
-		echo '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-top:10px">';
+		echo $this->hero_html( $tokens, $all, $read_only ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside hero_html().
 
-		/* ---- Main column ---- */
-		echo '<div style="flex:2;min-width:340px">';
+		echo '<div class="ab-cols">';
+		$this->render_main_column( $tokens, $groups, $all, $read_only );
+		echo $this->sidebar_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside sidebar_html(); add-on boxes escape their own output.
+		echo '</div>'; // columns.
+		echo '</div>'; // wrap.
+	}
 
-		// ── Connector box: the ONE place to create and manage connections. ──
-		echo '<div class="postbox" style="padding:4px 16px 16px"><h2 class="hndle" style="padding:10px 0;border:0">Claude.ai Connector</h2>';
-		$oauth = self::oauth_on();
-		echo $this->connector_intro_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connector_intro_html().
-
-		// Step 1 — endpoint (not a secret; always visible).
-		echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 1 — Copy the endpoint URL', 'alphabridge-mcp' ) . '</p>';
-		echo '<div style="display:flex;gap:8px;align-items:center;margin:0 0 12px"><input type="text" readonly value="' . esc_attr( $endpoint ) . '" class="regular-text ab-select" style="flex:1;font-family:monospace;font-size:12px"><button type="button" class="button ab-copy" data-copy="' . esc_attr( $endpoint ) . '">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
-
-		// Step 2 — the direct path: a custom connector with the endpoint (OAuth).
-		// The site handles login + consent itself; nothing to copy but the URL.
-		if ( $oauth ) {
-			echo '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Step 2 — Add it in Claude as a custom connector', 'alphabridge-mcp' ) . '</p>';
-			echo '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #dcdcde;border-radius:6px;background:#f6f7f7">';
-			echo '<p style="margin:0">' . esc_html__( 'In Claude, open Connectors, add a custom connector with the endpoint URL and connect. Claude opens this site’s login and asks for your approval — no token to copy. The approved connection appears below and can be revoked at any time.', 'alphabridge-mcp' ) . '</p>';
-			echo '</div>';
-			echo '<p style="margin:0 0 6px;font-weight:600">' . esc_html__( 'Manual setup — create a token (Cursor, Claude Code, scripts)', 'alphabridge-mcp' ) . '</p>';
-		} else {
-			echo '<p style="margin:0 0 6px;font-weight:600">' . esc_html__( 'Step 2 — Create a connection', 'alphabridge-mcp' ) . '</p>';
-		}
-		echo '<div class="ab-create-form">';
-		echo '<p style="margin:0 0 6px"><button type="button" class="button button-primary button-hero ab-create">' . esc_html__( 'Create connection', 'alphabridge-mcp' ) . '</button></p>';
-		echo '<details style="margin:0"><summary style="cursor:pointer;color:#2271b1;display:inline-block;padding:2px 0">' . esc_html__( 'Advanced options (optional)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<div style="padding:10px 0 2px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center">';
-		echo '<label>' . esc_html__( 'Label', 'alphabridge-mcp' ) . ' <input type="text" name="label" placeholder="' . esc_attr__( 'e.g. Claude Desktop', 'alphabridge-mcp' ) . '" class="regular-text" style="width:170px"></label>';
-		echo '<label>' . esc_html__( 'User', 'alphabridge-mcp' ) . ' ';
-		wp_dropdown_users(
-			array(
-				'name'     => 'user_id',
-				'selected' => get_current_user_id(),
-				'show'     => 'user_login',
-			)
-		);
-		echo '</label>';
-		echo '<label>' . esc_html__( 'Access', 'alphabridge-mcp' ) . ' <select name="scope"><option value="full">' . esc_html__( 'Full', 'alphabridge-mcp' ) . '</option><option value="content">' . esc_html__( 'Content only', 'alphabridge-mcp' ) . '</option><option value="read">' . esc_html__( 'Read only', 'alphabridge-mcp' ) . '</option></select></label>';
-		echo '<label>' . esc_html__( 'Expires in', 'alphabridge-mcp' ) . ' <input type="number" name="expires_days" min="0" max="3650" step="1" value="0" style="width:64px"> ' . esc_html__( 'days (0 = never)', 'alphabridge-mcp' ) . '</label>';
-		echo '</div>';
-		echo '<p class="description" style="margin:6px 0 0">' . esc_html__( 'Default: full access for you, no expiry. Choose “Content only” or “Read only” to hand a client a deliberately limited key.', 'alphabridge-mcp' ) . '</p>';
-		echo '</details>';
-		echo '</div>';
-
-		// One-time reveal — appears in place, right below the button, the moment a
-		// token is created or rotated. Populated by JS from the ajax response and
-		// never shown again (only the hash is stored server-side).
-		echo '<div class="ab-reveal" hidden style="margin:14px 0 0;padding:12px 14px;border:1px solid #b7e0c1;border-radius:6px;background:#f4fbf6">';
-		echo '<p style="margin:0 0 8px;font-weight:600;color:#008a20">' . esc_html__( '✓ Connection created.', 'alphabridge-mcp' ) . '</p>';
-		echo '<div class="notice notice-warning inline" style="margin:0 0 14px;padding:8px 12px"><p style="margin:0"><strong>' . esc_html__( 'Note this down now — it is shown in full only once.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'The token is never stored in readable form. Save it somewhere safe (e.g. a password manager). If you lose it, rotate the connection to get a new one.', 'alphabridge-mcp' ) . '</p></div>';
-
-		// 1) Connector URL with the token embedded — the one-paste form for Claude.ai.
-		// The URL row is shown ONLY when connector-URL authentication is enabled, so
-		// a copied URL always works. Otherwise a one-click enable button takes its
-		// place (same option as under Advanced, same warning) — enabling reveals the
-		// URL in place without losing the one-time token.
-		echo '<p style="margin:0 0 4px"><strong>' . esc_html__( 'Connector URL', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(for Claude.ai — token included)', 'alphabridge-mcp' ) . '</span></p>';
-		echo '<div class="ab-reveal-url-row" hidden style="display:flex;gap:8px;align-items:center;margin:0 0 4px"><input type="text" readonly value="" class="regular-text ab-select ab-reveal-url" style="flex:1;font-family:monospace;font-size:12px"><button type="button" class="button button-primary ab-copy" data-copy-target=".ab-reveal-url">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
-		echo '<div class="ab-reveal-url-enable" hidden style="margin:0 0 4px;padding:8px 12px;border:1px solid #dba617;border-radius:4px;background:#fcf9e8">';
-		echo '<p style="margin:0 0 8px">' . esc_html__( 'Claude.ai connects via a URL that embeds the token in its path. This is currently switched off, so no connector URL is offered yet.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password.', 'alphabridge-mcp' ) . '</span></p>';
-		echo '<button type="button" class="button ab-enable-url-auth">' . esc_html__( 'Enable and show the connector URL', 'alphabridge-mcp' ) . '</button>';
-		echo '</div>';
-		echo '<div class="ab-reveal-url-gap" style="height:10px"></div>';
-
-		// 2) Bearer token — for clients that take a URL and a token separately.
-		echo '<p style="margin:0 0 4px"><strong>' . esc_html__( 'Bearer token', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(URL + token entered separately)', 'alphabridge-mcp' ) . '</span></p>';
-		echo '<div style="display:flex;gap:8px;align-items:center;margin:0 0 14px"><input type="text" readonly value="" class="regular-text ab-select ab-reveal-token" style="flex:1;font-family:monospace;font-size:12px"><button type="button" class="button ab-copy" data-copy-target=".ab-reveal-token">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
-
-		// 3) Ready-made config for Cursor / Claude Code (header authentication).
-		echo '<p style="margin:0 0 4px"><strong>' . esc_html__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '</strong></p>';
-		echo '<div style="display:flex;gap:8px;align-items:flex-start;margin:0 0 12px"><textarea readonly rows="9" class="ab-reveal-json ab-select" style="flex:1;font-family:monospace;font-size:12px;white-space:pre;overflow:auto"></textarea><button type="button" class="button ab-copy" data-copy-target=".ab-reveal-json">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
-
-		echo '<p class="description" style="margin:0">' . esc_html__( 'Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file.', 'alphabridge-mcp' ) . '</p>';
-		echo '</div>';
-
-		// Your connections (manage list — rotate / delete; no second create button).
-		echo '<hr style="margin:20px 0 12px;border:0;border-top:1px solid #f0f0f1">';
-		echo '<p id="ab-connections" style="margin:0 0 8px;font-weight:600">' . esc_html__( 'Your connections', 'alphabridge-mcp' ) . '</p>';
-		$this->render_connection_table( $tokens );
-
-		// Advanced (collapsed): connector-URL (token-in-path) authentication, opt-in.
-		echo '<details style="margin:16px 0 0;padding:12px 0 0;border-top:1px solid #f0f0f1"><summary style="cursor:pointer;color:#2271b1;display:inline-block">' . esc_html__( 'Connector-URL authentication (advanced)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin:10px 0 0">';
-		wp_nonce_field( 'ab_mcp_connector_auth' );
-		echo '<input type="hidden" name="action" value="ab_mcp_connector_auth">';
-		echo '<label style="display:flex;align-items:flex-start;gap:8px"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $path_auth, true, false ) . '><span>' . esc_html__( 'Also offer a connector URL that embeds the token in its path.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'Off by default. Header authentication (Authorization / X-Api-Key) always works. A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
-		echo '<p style="margin:8px 0 0"><button class="button button-small">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form></details>';
-
-		// Advanced (collapsed): AlphaBridge Connect — Claude's native Connect
-		// button (OAuth). On by default; switching it off removes the discovery
-		// metadata, the consent page and the OAuth endpoints entirely.
-		$oauth_on = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
-		echo '<details style="margin:10px 0 0;padding:12px 0 0;border-top:1px solid #f0f0f1"><summary style="cursor:pointer;color:#2271b1;display:inline-block">' . esc_html__( 'Connect from Claude (OAuth, advanced)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin:10px 0 0">';
-		wp_nonce_field( 'ab_mcp_oauth_settings' );
-		echo '<input type="hidden" name="action" value="ab_mcp_oauth_settings">';
-		echo '<label style="display:flex;align-items:flex-start;gap:8px"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Let Claude connect with its native Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
-		echo '<p style="margin:8px 0 0"><button class="button button-small">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form></details>';
-		echo '</div>';
-
-		// Capabilities card.
-		echo '<div class="postbox" style="padding:4px 16px 14px"><h2 class="hndle" style="padding:10px 0;border:0">' . esc_html__( 'Capabilities', 'alphabridge-mcp' ) . '</h2>';
-		echo '<p class="description" style="margin:0 0 8px">' . esc_html__( 'Enable or disable tool groups. Disabled tools are removed from the MCP server and REST API entirely — Claude cannot see or call them.', 'alphabridge-mcp' ) . '</p>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps">';
-		wp_nonce_field( 'ab_mcp_save' );
-		echo '<input type="hidden" name="action" value="ab_mcp_save">';
-		echo '<input type="hidden" name="all_tools" value="' . esc_attr( implode( ',', array_keys( $all ) ) ) . '">';
-		echo '<p style="margin:6px 0 12px"><button type="button" class="button ab-all" data-on="1">' . esc_html__( 'Enable all', 'alphabridge-mcp' ) . '</button> <button type="button" class="button ab-all" data-on="0">' . esc_html__( 'Disable all', 'alphabridge-mcp' ) . '</button></p>';
-
-		$read_only = (bool) AB_MCP_Settings::get( 'read_only', false );
-		echo '<label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:9px 12px;border:1px solid ' . ( $read_only ? '#f0b849' : '#dcdcde' ) . ';border-radius:6px;background:' . ( $read_only ? '#fcf9e8' : '#f6f7f7' ) . '">';
-		echo '<input type="checkbox" name="read_only" value="1" ' . checked( $read_only, true, false ) . '>';
-		echo '<span><strong>' . esc_html__( 'Read-only mode', 'alphabridge-mcp' ) . '</strong> — <span class="description">' . esc_html__( 'blocks every writing tool with one switch, regardless of the toggles below; read, list and search tools keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
-
-		foreach ( $groups as $slug => $g ) {
-			$on_count = 0;
-			foreach ( $g['tools'] as $tname ) {
-				if ( AB_MCP_Settings::is_tool_enabled( $tname, $all[ $tname ] ) ) {
-					++$on_count;
-				}
-			}
-			$status = $this->group_status( $on_count, (int) $g['count'] );
-
-			echo '<details class="ab-group" style="border:1px solid #dcdcde;border-radius:6px;margin:0 0 8px">';
-			echo '<summary style="list-style:none;cursor:pointer;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">';
-			echo '<span style="display:flex;align-items:center;gap:8px"><strong>' . esc_html( $g['label'] ) . '</strong> ' . wp_kses( $this->badge( ! empty( $g['mighty'] ) ), array( 'span' => array( 'style' => true ) ) ) . ' <span class="description">' . sprintf( /* translators: %d: number of tools */ esc_html__( '%d tools', 'alphabridge-mcp' ), (int) $g['count'] ) . '</span></span>';
-			echo '<span class="ab-status" style="font-size:12px;font-weight:600">' . wp_kses( $status, array( 'span' => array( 'style' => true ) ) ) . '</span>';
-			echo '</summary>';
-			echo '<div style="padding:4px 14px 12px">';
-			echo '<p style="margin:0 0 6px"><button type="button" class="button button-small ab-grp" data-on="1">' . esc_html__( 'Group on', 'alphabridge-mcp' ) . '</button> <button type="button" class="button button-small ab-grp" data-on="0">' . esc_html__( 'Group off', 'alphabridge-mcp' ) . '</button></p>';
-			foreach ( $g['tools'] as $tname ) {
-				$def     = $all[ $tname ];
-				$checked = AB_MCP_Settings::is_tool_enabled( $tname, $def );
-				echo '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">';
-				echo '<input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '" ' . checked( $checked, true, false ) . '>';
-				echo '<code>' . esc_html( $tname ) . '</code> <span class="description">' . esc_html( wp_strip_all_tags( $def['description'] ) ) . '</span></label>';
-			}
-			echo '</div></details>';
-		}
-
-		echo '<p style="margin:14px 0 0"><button class="button button-primary">' . esc_html__( 'Save capabilities', 'alphabridge-mcp' ) . '</button></p>';
-		echo '<p class="description" style="margin:6px 0 0">' . esc_html__( 'New connections see the change at once. A client that is already connected may cache the tool list it loaded; if the change is not visible there, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) . '</p>';
-		echo '</form>';
-		echo '<p class="description" style="margin:12px 0 0">' . esc_html__( 'Abuse protection active (fixed):', 'alphabridge-mcp' ) . ' ' . (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) . ' ' . esc_html__( 'requests/min.', 'alphabridge-mcp' ) . '</p>';
-		echo '</div>';
+	/**
+	 * The main column, top to bottom: connect the chosen assistant, what
+	 * connected assistants may do, the connections, boxes from add-ons, the log.
+	 * The connections follow the capabilities: first decide what a connection
+	 * may do, then manage the connections.
+	 *
+	 * @param array $tokens    Stored connections.
+	 * @param array $groups    Tool groups from the registry.
+	 * @param array $all       Every registered tool (name => definition).
+	 * @param bool  $read_only Whether read-only mode is on.
+	 */
+	private function render_main_column( $tokens, $groups, $all, $read_only ) {
+		echo '<div class="ab-main">';
+		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
+		echo $this->capabilities_card_html( $groups, $all, $read_only ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
+		$this->render_connections_card( $tokens );
 
 		/**
 		 * Add-ons render extra boxes in the main column here (e.g. the Pro
@@ -472,19 +354,588 @@ class AB_MCP_Admin {
 		do_action( 'ab_mcp_admin_main_boxes' );
 
 		$this->render_audit();
+		echo '</div>';
+	}
 
-		echo '</div>'; // main.
+	/**
+	 * The assistants the connect card knows, in the order they are offered.
+	 * Claude and ChatGPT connect with this site's login and approval (OAuth);
+	 * Cursor and everything else with a token created here.
+	 *
+	 * @return array<string, array{name: string, hint: string, mark: string}>
+	 */
+	private function clients() {
+		return array(
+			'claude'  => array(
+				'name' => 'Claude',
+				'hint' => __( 'claude.ai, Desktop, iPhone', 'alphabridge-mcp' ),
+				'mark' => 'C',
+			),
+			'chatgpt' => array(
+				'name' => 'ChatGPT',
+				'hint' => __( 'Plus, Pro, Business', 'alphabridge-mcp' ),
+				'mark' => 'G',
+			),
+			'cursor'  => array(
+				'name' => 'Cursor',
+				'hint' => __( 'Code editor', 'alphabridge-mcp' ),
+				'mark' => 'Cu',
+			),
+			'other'   => array(
+				'name' => __( 'Other', 'alphabridge-mcp' ),
+				'hint' => __( 'Claude Code, scripts', 'alphabridge-mcp' ),
+				'mark' => '…',
+			),
+		);
+	}
 
-		/* ---- Sidebar ---- */
-		echo '<div style="flex:1;min-width:220px">';
+	/**
+	 * The band at the top: logo and name, this site's state in three figures,
+	 * and the choice of assistant that the connect card below follows.
+	 *
+	 * @param array $tokens    Stored connections.
+	 * @param array $all       Every registered tool (name => definition).
+	 * @param bool  $read_only Whether read-only mode is on.
+	 * @return string HTML, escaped.
+	 */
+	private function hero_html( $tokens, $all, $read_only ) {
+		$on = 0;
+		foreach ( $all as $name => $def ) {
+			if ( AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
+				++$on;
+			}
+		}
+		$count = count( (array) $tokens );
+		$site  = trim( wp_strip_all_tags( (string) get_bloginfo( 'name' ) ) );
+		if ( '' === $site ) {
+			$site = home_url();
+		}
 
-		echo $this->pro_box_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside pro_box_html().
+		$html  = '<div class="ab-hero">';
+		$html .= '<div class="ab-hero__top">';
+		$html .= '<img class="ab-logo" src="' . esc_url( AB_MCP_URL . 'assets/logo-128.png' ) . '" width="44" height="44" alt="">';
+		$html .= '<h1 class="ab-hero__brand">AlphaBridge MCP</h1>';
+		$html .= '<div class="ab-chips">';
+		/* translators: %s: number of connections. */
+		$html .= '<span class="ab-chip">' . sprintf( esc_html( _n( '%s connection', '%s connections', $count, 'alphabridge-mcp' ) ), '<b>' . (int) $count . '</b>' ) . '</span>';
+		/* translators: 1: tools switched on, 2: all tools. */
+		$html .= '<span class="ab-chip">' . sprintf( esc_html__( '%1$s of %2$s tools on', 'alphabridge-mcp' ), '<b>' . (int) $on . '</b>', '<b>' . count( $all ) . '</b>' ) . '</span>';
+		$html .= '<span class="ab-chip"><span class="ab-dot' . ( $read_only ? ' ab-dot--warn' : '' ) . '" aria-hidden="true"></span>' . ( $read_only ? esc_html__( 'Read-only on', 'alphabridge-mcp' ) : esc_html__( 'Read-only off', 'alphabridge-mcp' ) ) . '</span>';
+		$html .= '</div></div>';
+		$html .= '<h2 class="ab-hero__title">' . esc_html__( 'Connect your AI assistant', 'alphabridge-mcp' ) . '</h2>';
+		/* translators: %s: the site's name. */
+		$html .= '<p class="ab-hero__lead">' . esc_html( sprintf( __( 'Which one do you want to connect to “%s”?', 'alphabridge-mcp' ), $site ) ) . '</p>';
+		$html .= '<div class="ab-clients" role="group" aria-label="' . esc_attr__( 'Assistant', 'alphabridge-mcp' ) . '">';
+		foreach ( $this->clients() as $key => $c ) {
+			$html .= '<button type="button" class="ab-client" data-client="' . esc_attr( $key ) . '" aria-controls="ab-panel-' . esc_attr( $key ) . '" aria-pressed="' . ( 'claude' === $key ? 'true' : 'false' ) . '">';
+			$html .= '<span class="ab-mark ab-mark--' . esc_attr( $key ) . '" aria-hidden="true">' . esc_html( $c['mark'] ) . '</span>';
+			$html .= '<span>' . esc_html( $c['name'] ) . '<small>' . esc_html( $c['hint'] ) . '</small></span></button>';
+		}
+		$html .= '</div></div>';
 
-		echo '<div class="postbox" style="padding:4px 16px 14px"><h2 class="hndle" style="padding:10px 0;border:0">' . esc_html__( 'Documentation', 'alphabridge-mcp' ) . '</h2><p class="description" style="margin:0 0 8px">' . esc_html__( 'Setup, all tools and examples.', 'alphabridge-mcp' ) . '</p><p style="margin:0 0 6px"><a href="https://www.alphabridge-mcp.com/docs" target="_blank" rel="noopener">' . esc_html__( 'Getting started →', 'alphabridge-mcp' ) . '</a></p><p style="margin:0"><a href="https://www.alphabridge-mcp.com/docs" target="_blank" rel="noopener">' . esc_html__( 'View all tools →', 'alphabridge-mcp' ) . '</a></p></div>';
+		return $html;
+	}
 
-		echo '</div>'; // sidebar.
-		echo '</div>'; // columns.
-		echo '</div>'; // wrap.
+	/**
+	 * The setup video in the admin's language: German for German, English
+	 * otherwise. Linked, never embedded — nothing loads from YouTube until the
+	 * viewer clicks.
+	 *
+	 * @return string
+	 */
+	private static function video_url() {
+		$locale = function_exists( 'get_user_locale' ) ? get_user_locale() : get_locale();
+		return 0 === strpos( (string) $locale, 'de' ) ? 'https://www.youtube.com/watch?v=M262gCOc7gM' : 'https://www.youtube.com/watch?v=DlMJ9tfrqJg';
+	}
+
+	/**
+	 * A read-only field with a copy button.
+	 *
+	 * @param string $value  What is shown and copied.
+	 * @param string $label  The field's accessible name.
+	 * @param string $button Button text; «Copy» when empty.
+	 * @return string HTML, escaped.
+	 */
+	private function copy_field( $value, $label, $button = '' ) {
+		$button = '' !== $button ? $button : __( 'Copy', 'alphabridge-mcp' );
+		return '<div class="ab-field"><input type="text" readonly value="' . esc_attr( $value ) . '" class="ab-select" aria-label="' . esc_attr( $label ) . '"><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy="' . esc_attr( $value ) . '">' . esc_html( $button ) . '</button></div>';
+	}
+
+	/**
+	 * A link to another site, opening in a new tab, with a small icon.
+	 *
+	 * @param string $url   Address.
+	 * @param string $label Text.
+	 * @param string $icon  One character.
+	 * @return string HTML, escaped.
+	 */
+	private function ext_link( $url, $label, $icon ) {
+		return '<a class="ab-link" href="' . esc_url( $url ) . '" target="_blank" rel="noopener"><span class="ab-link__ico" aria-hidden="true">' . esc_html( $icon ) . '</span>' . esc_html( $label ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a>';
+	}
+
+	/**
+	 * A button-styled link to another site, opening in a new tab.
+	 *
+	 * @param string $url   Address.
+	 * @param string $label Text.
+	 * @return string HTML, escaped.
+	 */
+	private function ext_button( $url, $label ) {
+		return '<a class="ab-btn ab-btn--sm" href="' . esc_url( $url ) . '" target="_blank" rel="noopener">' . esc_html( $label ) . ' <span aria-hidden="true">↗</span><span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a>';
+	}
+
+	/**
+	 * One numbered step.
+	 *
+	 * @param int    $n     Number.
+	 * @param string $title Title (plain text).
+	 * @param string $body  HTML, already escaped.
+	 * @return string HTML.
+	 */
+	private function step( $n, $title, $body ) {
+		return '<div class="ab-step"><h3 class="ab-step__title"><span class="ab-step__n" aria-hidden="true">' . (int) $n . '</span>' . esc_html( $title ) . '</h3>' . $body . '</div>';
+	}
+
+	/**
+	 * What Claude or ChatGPT needs while this site's OAuth flow is switched off.
+	 * Both connect with this site's login and approval; the directory entry and
+	 * ChatGPT's app cannot work without it, so they are not offered then.
+	 *
+	 * @param string $name Claude or ChatGPT.
+	 * @return string HTML, escaped.
+	 */
+	private function oauth_off_html( $name ) {
+		/* translators: %s: Claude or ChatGPT. */
+		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under Your connections → “Connect from Claude (OAuth, advanced)”.', 'alphabridge-mcp' ), $name );
+		return '<div class="ab-callout"><p>' . esc_html( $text ) . '</p><p><a class="ab-more" href="#ab-oauth">' . esc_html__( 'Go to the setting', 'alphabridge-mcp' ) . '</a></p></div>';
+	}
+
+	/**
+	 * The connect card: one panel per assistant (the band above picks which one
+	 * shows), the token form for the assistants that need a token, and the
+	 * one-time reveal of a new token.
+	 *
+	 * The reveal sits outside the panels: rotating a connection further down
+	 * reveals a new token too, whichever assistant is picked.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function connect_card_html() {
+		$endpoint = untrailingslashit( rest_url( AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE ) );
+		$oauth    = self::oauth_on();
+		$guide    = 'https://www.alphabridge-mcp.com/connector.html';
+		$docs     = 'https://www.alphabridge-mcp.com/docs';
+
+		$html  = '<div class="ab-card ab-connect" id="ab-connect">';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Connect', 'alphabridge-mcp' ) . '</p>';
+
+		// Claude: the directory entry first, the direct way folded away.
+		$html .= '<div class="ab-panel" id="ab-panel-claude" data-panel="claude">';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect Claude', 'alphabridge-mcp' ) . '</h2>';
+		if ( $oauth ) {
+			$html .= '<div class="ab-steps">';
+			$html .= $this->step( 1, __( 'Open AlphaBridge in Claude’s directory', 'alphabridge-mcp' ), '<p>' . esc_html__( 'The listing “AlphaBridge MCP for WordPress” opens in Claude.', 'alphabridge-mcp' ) . '</p>' . $this->ext_button( 'https://claude.ai/directory/alphabridge', __( 'Open Claude’s directory', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 2, __( 'Click Connect, enter this address', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Claude asks for your site’s address.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( home_url(), __( 'This site’s address', 'alphabridge-mcp' ), __( 'Copy address', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 3, __( 'Sign in here and approve', 'alphabridge-mcp' ), '<p>' . esc_html__( 'This site asks you to sign in and to approve. The connection then shows up under Your connections.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div>';
+			$html .= '<div class="ab-links">' . $this->ext_link( self::video_url(), __( 'Watch the video', 'alphabridge-mcp' ), '▶' ) . $this->ext_link( $guide, __( 'Step-by-step guide', 'alphabridge-mcp' ), '?' ) . '</div>';
+			$html .= '<p class="ab-note">' . esc_html__( 'This way runs through the AlphaBridge Connect hub — one hub connection reaches up to 10 sites.', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<details class="ab-alt"><summary>' . esc_html__( 'Without the hub: add a custom connector', 'alphabridge-mcp' ) . '</summary>';
+			$html .= '<p>' . esc_html__( 'In Claude: Customize → Connectors → Add → Add custom connector. Paste this endpoint and connect; this site asks for your approval — no token to copy.', 'alphabridge-mcp' ) . '</p>';
+			$html .= $this->copy_field( $endpoint, __( 'Endpoint URL', 'alphabridge-mcp' ) ) . '</details>';
+		} else {
+			$html .= $this->oauth_off_html( 'Claude' );
+		}
+		$html .= '</div>';
+
+		// ChatGPT: an app of its own, pointed at this site's endpoint.
+		$html .= '<div class="ab-panel" id="ab-panel-chatgpt" data-panel="chatgpt" hidden>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect ChatGPT', 'alphabridge-mcp' ) . '</h2>';
+		if ( $oauth ) {
+			$html .= '<p class="ab-req">' . esc_html__( 'Needs ChatGPT Plus, Pro, Business, Enterprise or Edu.', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<div class="ab-steps">';
+			$html .= $this->step( 1, __( 'Open ChatGPT’s plugins', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Sign in to ChatGPT and open the plugins page.', 'alphabridge-mcp' ) . '</p>' . $this->ext_button( 'https://chatgpt.com/plugins', __( 'Open ChatGPT', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 2, __( 'Create an MCP app with this endpoint', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Give it a name, paste this endpoint as the server URL, choose OAuth and leave the advanced fields empty.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( $endpoint, __( 'Endpoint URL', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 3, __( 'Approve on this site', 'alphabridge-mcp' ), '<p>' . esc_html__( 'ChatGPT opens this site’s consent page in the same tab. Choose the access level and allow.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div>';
+			$html .= '<div class="ab-links">' . $this->ext_link( $guide, __( 'Step-by-step guide', 'alphabridge-mcp' ), '?' ) . '</div>';
+		} else {
+			$html .= $this->oauth_off_html( 'ChatGPT' );
+		}
+		$html .= '</div>';
+
+		// Cursor: a token and the ready-made configuration.
+		$html .= '<div class="ab-panel" id="ab-panel-cursor" data-panel="cursor" hidden>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect Cursor', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<div class="ab-steps">';
+		$html .= $this->step( 1, __( 'Create a connection', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor connects with a token. Create one below.', 'alphabridge-mcp' ) . '</p>' );
+		$html .= $this->step( 2, __( 'Copy the configuration', 'alphabridge-mcp' ), '<p>' . esc_html__( 'It appears right after you create the connection, and only then.', 'alphabridge-mcp' ) . '</p>' );
+		$html .= $this->step( 3, __( 'Paste it into Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers.', 'alphabridge-mcp' ) . '</p>' );
+		$html .= '</div>';
+		$html .= '<div class="ab-links">' . $this->ext_link( $docs, __( 'Setup guide', 'alphabridge-mcp' ), '?' ) . '</div>';
+		$html .= '</div>';
+
+		// Everything else: the endpoint and a token.
+		$html .= '<div class="ab-panel" id="ab-panel-other" data-panel="other" hidden>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Claude Code, scripts and other clients', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'Create a token and send it with every request to this endpoint as “Authorization: Bearer …” — or paste the ready-made configuration.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $this->copy_field( $endpoint, __( 'Endpoint URL', 'alphabridge-mcp' ) );
+		$html .= '<div class="ab-links">' . $this->ext_link( $docs, __( 'Setup guide', 'alphabridge-mcp' ), '?' ) . '</div>';
+		$html .= '</div>';
+
+		$html .= $this->token_form_html();
+		$html .= $this->reveal_html();
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * The token form, shown for Cursor and «Other» — the assistants that need a
+	 * token. Claude and ChatGPT never do.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function token_form_html() {
+		$users = wp_dropdown_users(
+			array(
+				'name'     => 'user_id',
+				'selected' => get_current_user_id(),
+				'show'     => 'user_login',
+				'echo'     => 0,
+			)
+		);
+
+		$html  = '<div class="ab-token" data-for="cursor other" hidden>';
+		$html .= '<div class="ab-create-form">';
+		$html .= '<button type="button" class="ab-btn ab-create"><span aria-hidden="true">＋</span> ' . esc_html__( 'Create connection', 'alphabridge-mcp' ) . '</button>';
+		$html .= '<details class="ab-advanced"><summary>' . esc_html__( 'Label, user, access, expiry (optional)', 'alphabridge-mcp' ) . '</summary>';
+		$html .= '<div class="ab-advanced__fields">';
+		$html .= '<label>' . esc_html__( 'Label', 'alphabridge-mcp' ) . ' <input type="text" name="label" placeholder="' . esc_attr__( 'e.g. Cursor on my laptop', 'alphabridge-mcp' ) . '" class="regular-text"></label>';
+		$html .= '<label>' . esc_html__( 'User', 'alphabridge-mcp' ) . ' ' . $users . '</label>';
+		$html .= '<label>' . esc_html__( 'Access', 'alphabridge-mcp' ) . ' <select name="scope"><option value="full">' . esc_html__( 'Full', 'alphabridge-mcp' ) . '</option><option value="content">' . esc_html__( 'Content only', 'alphabridge-mcp' ) . '</option><option value="read">' . esc_html__( 'Read only', 'alphabridge-mcp' ) . '</option></select></label>';
+		$html .= '<label>' . esc_html__( 'Expires in', 'alphabridge-mcp' ) . ' <input type="number" name="expires_days" min="0" max="3650" step="1" value="0"> ' . esc_html__( 'days (0 = never)', 'alphabridge-mcp' ) . '</label>';
+		$html .= '</div>';
+		$html .= '<p class="ab-note">' . esc_html__( 'Default: full access for you, no expiry. Choose “Content only” or “Read only” to hand a client a deliberately limited key.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '</details></div>';
+		$html .= '<p class="ab-note">' . esc_html__( 'The token is shown in full only once, right after you create it. Rotate or delete it under Your connections.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * One-time reveal of a new token — appears in place the moment a connection
+	 * is created or rotated. Populated by JS from the ajax response and never
+	 * shown again (only the hash is stored server-side).
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function reveal_html() {
+		$html  = '<div class="ab-reveal" hidden>';
+		$html .= '<p class="ab-reveal__ok">' . esc_html__( '✓ Connection created.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div class="notice notice-warning inline ab-reveal__warn"><p><strong>' . esc_html__( 'Note this down now — it is shown in full only once.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'The token is never stored in readable form. Save it somewhere safe (e.g. a password manager). If you lose it, rotate the connection to get a new one.', 'alphabridge-mcp' ) . '</p></div>';
+
+		// 1) Connector URL with the token embedded — shown ONLY when connector-URL
+		// authentication is on, so a copied URL always works; otherwise a one-click
+		// enable button takes its place (same option and warning as further down).
+		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Connector URL', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(for Claude.ai — token included)', 'alphabridge-mcp' ) . '</span></p>';
+		$html .= '<div class="ab-reveal-url-row ab-field" hidden><input type="text" readonly value="" class="ab-select ab-reveal-url" aria-label="' . esc_attr__( 'Connector URL', 'alphabridge-mcp' ) . '"><button type="button" class="ab-btn ab-btn--sm ab-copy" data-copy-target=".ab-reveal-url">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+		$html .= '<div class="ab-reveal-url-enable ab-callout" hidden>';
+		$html .= '<p>' . esc_html__( 'Claude.ai connects via a URL that embeds the token in its path. This is currently switched off, so no connector URL is offered yet.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password.', 'alphabridge-mcp' ) . '</span></p>';
+		$html .= '<button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-enable-url-auth">' . esc_html__( 'Enable and show the connector URL', 'alphabridge-mcp' ) . '</button>';
+		$html .= '</div>';
+
+		// 2) Bearer token — for clients that take a URL and a token separately.
+		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Bearer token', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(URL + token entered separately)', 'alphabridge-mcp' ) . '</span></p>';
+		$html .= '<div class="ab-field"><input type="text" readonly value="" class="ab-select ab-reveal-token" aria-label="' . esc_attr__( 'Bearer token', 'alphabridge-mcp' ) . '"><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-token">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+
+		// 3) Ready-made config for Cursor / Claude Code (header authentication).
+		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '</strong></p>';
+		$html .= '<div class="ab-field ab-field--top"><textarea readonly rows="9" class="ab-reveal-json ab-select" aria-label="' . esc_attr__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '"></textarea><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-json">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+		$html .= '<p class="ab-note">' . esc_html__( 'Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * The capabilities card: a switch for all tools, read-only mode, a search,
+	 * and one foldable row per group with a switch of its own. Opening a group
+	 * lists its tools, each with a switch and what it does (the first sentence;
+	 * the whole description behind the «i»).
+	 *
+	 * The form posts what it always posted: every enabled tool as
+	 * enabled_tools[], the list of all tools, and read_only. The switches for
+	 * all tools and for a group carry no name — they only set the tool switches.
+	 *
+	 * @param array $groups    Tool groups from the registry.
+	 * @param array $all       Every registered tool (name => definition).
+	 * @param bool  $read_only Whether read-only mode is on.
+	 * @return string HTML, escaped.
+	 */
+	private function capabilities_card_html( $groups, $all, $read_only ) {
+		$on_total = 0;
+		$rows     = '';
+		foreach ( $groups as $slug => $g ) {
+			$on    = 0;
+			$items = '';
+			foreach ( $g['tools'] as $tname ) {
+				$def     = $all[ $tname ];
+				$enabled = AB_MCP_Settings::is_tool_enabled( $tname, $def );
+				$on     += $enabled ? 1 : 0;
+				$desc    = trim( wp_strip_all_tags( (string) $def['description'] ) );
+				$parts   = preg_split( '/(?<=[.!?])\s+/', $desc, 2 );
+				$short   = is_array( $parts ) ? (string) $parts[0] : $desc;
+
+				$items .= '<li class="ab-tool-row" data-search="' . esc_attr( strtolower( $tname . ' ' . $desc ) ) . '">';
+				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
+				$items .= '<div class="ab-tool-row__text"><code>' . esc_html( $tname ) . '</code>';
+				if ( is_array( $parts ) && count( $parts ) > 1 ) {
+					$items .= '<button type="button" class="ab-info" aria-label="' . esc_attr__( 'Full description', 'alphabridge-mcp' ) . '">i<span class="ab-tip" role="tooltip">' . esc_html( $desc ) . '</span></button>';
+				}
+				$items .= '<p>' . esc_html( $short ) . '</p></div></li>';
+			}
+			$on_total += $on;
+			$n         = (int) $g['count'];
+
+			$rows .= '<details class="ab-group" data-group="' . esc_attr( (string) $slug ) . '"><summary>';
+			/* translators: %s: name of a tool group. */
+			$rows .= '<label class="ab-switch ab-group-switch"><input type="checkbox" class="ab-group-toggle"' . checked( $on > 0, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( sprintf( __( 'All tools in %s', 'alphabridge-mcp' ), $g['label'] ) ) . '</span></label>';
+			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) : '' );
+			/* translators: %d: number of tools. */
+			$rows .= ' <span class="ab-group__n">' . esc_html( sprintf( _n( '%d tool', '%d tools', $n, 'alphabridge-mcp' ), $n ) ) . '</span>';
+			$rows .= '<span class="ab-group__right">' . $this->group_status( $on, $n ) . '<span class="ab-chev" aria-hidden="true">›</span></span>';
+			$rows .= '</summary><ul class="ab-tool-list">' . $items . '</ul></details>';
+		}
+		$total = count( $all );
+
+		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps" class="ab-card ab-caps">';
+		$html .= wp_nonce_field( 'ab_mcp_save', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_save">';
+		$html .= '<input type="hidden" name="all_tools" value="' . esc_attr( implode( ',', array_keys( $all ) ) ) . '">';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Capabilities', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'What connected assistants may do', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'Switch whole groups or single tools. Open a group to see every tool and what it does. Disabled tools are removed from the MCP server and REST API entirely — no client can see or call them.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div class="ab-capbar">';
+		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" class="ab-all-toggle"' . checked( $on_total === $total, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'All tools', 'alphabridge-mcp' ) . '</label>';
+		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" name="read_only" value="1"' . checked( $read_only, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'Read-only mode', 'alphabridge-mcp' ) . '</label>';
+		$html .= '<input type="search" class="ab-search" placeholder="' . esc_attr__( 'Find a tool…', 'alphabridge-mcp' ) . '" aria-label="' . esc_attr__( 'Find a tool', 'alphabridge-mcp' ) . '">';
+		/* translators: 1: tools switched on, 2: all tools. */
+		$html .= '<span class="ab-capbar__count">' . sprintf( esc_html__( '%1$s of %2$s on', 'alphabridge-mcp' ), '<b class="ab-on-count">' . (int) $on_total . '</b>', '<b>' . (int) $total . '</b>' ) . '</span>';
+		$html .= '</div>';
+		$html .= '<p class="ab-note ab-caps__ro">' . esc_html__( 'Read-only mode blocks every writing tool with one switch, regardless of the switches below; read, list and search tools keep working.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $rows;
+		$html .= '<p class="ab-note ab-caps__none" hidden>' . esc_html__( 'No tool matches.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div class="ab-savebar"><button type="submit" class="ab-btn">' . esc_html__( 'Save capabilities', 'alphabridge-mcp' ) . '</button>';
+		$html .= '<span class="ab-savebar__text" data-dirty="' . esc_attr__( 'Unsaved changes — save to apply them.', 'alphabridge-mcp' ) . '">' . esc_html__( 'New connections see the change at once. A client that is already connected may cache the tool list it loaded; if the change is not visible there, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) . '</span></div>';
+		/* translators: %d: requests per minute. */
+		$html .= '<p class="ab-note">' . esc_html( sprintf( __( 'Abuse protection active (fixed): %d requests/min.', 'alphabridge-mcp' ), (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) ) ) . '</p>';
+		$html .= '</form>';
+
+		return $html;
+	}
+
+	/**
+	 * A group's state as a pill: on, off, or how many of how many are on.
+	 * admin.js keeps it current while switches change (same words, same form).
+	 *
+	 * @param int $on    Tools switched on.
+	 * @param int $total Tools in the group.
+	 * @return string HTML, escaped.
+	 */
+	private function group_status( $on, $total ) {
+		if ( $on <= 0 ) {
+			return '<span class="ab-pill ab-pill--off ab-status">' . esc_html__( 'Off', 'alphabridge-mcp' ) . '</span>';
+		}
+		if ( $on >= $total ) {
+			return '<span class="ab-pill ab-pill--on ab-status">' . esc_html__( 'On', 'alphabridge-mcp' ) . '</span>';
+		}
+		/* translators: 1: tools switched on, 2: tools in the group. */
+		return '<span class="ab-pill ab-pill--partial ab-status">' . esc_html( sprintf( __( '%1$d/%2$d', 'alphabridge-mcp' ), (int) $on, (int) $total ) ) . '</span>';
+	}
+
+	/**
+	 * The connections card: the table, then the two advanced settings that
+	 * decide how connections may authenticate.
+	 *
+	 * @param array $tokens Stored connections.
+	 */
+	private function render_connections_card( $tokens ) {
+		$path_auth = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
+		$oauth_on  = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
+
+		echo '<div class="ab-card ab-connections" id="ab-connections">';
+		echo '<p class="ab-eyebrow">' . esc_html__( 'Connections', 'alphabridge-mcp' ) . '</p>';
+		echo '<h2 class="ab-card__title">' . esc_html__( 'Your connections', 'alphabridge-mcp' ) . '</h2>';
+		echo '<p class="ab-lead">' . esc_html__( 'Every assistant and client connected to this site.', 'alphabridge-mcp' ) . '</p>';
+		$this->render_connection_table( $tokens );
+
+		// Advanced (collapsed): connector-URL (token-in-path) authentication, opt-in.
+		echo '<details class="ab-alt" id="ab-url-auth"><summary>' . esc_html__( 'Connector-URL authentication (advanced)', 'alphabridge-mcp' ) . '</summary>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'ab_mcp_connector_auth' );
+		echo '<input type="hidden" name="action" value="ab_mcp_connector_auth">';
+		echo '<label class="ab-check"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $path_auth, true, false ) . '><span>' . esc_html__( 'Also offer a connector URL that embeds the token in its path.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'Off by default. Header authentication (Authorization / X-Api-Key) always works. A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
+		echo '</form></details>';
+
+		// Advanced (collapsed): connecting from Claude or ChatGPT (OAuth). On by
+		// default; switching it off removes the discovery metadata, the consent
+		// page and the OAuth endpoints entirely.
+		echo '<details class="ab-alt" id="ab-oauth"><summary>' . esc_html__( 'Connect from Claude (OAuth, advanced)', 'alphabridge-mcp' ) . '</summary>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'ab_mcp_oauth_settings' );
+		echo '<input type="hidden" name="action" value="ab_mcp_oauth_settings">';
+		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Let Claude connect with its native Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
+		echo '</form></details>';
+		echo '</div>';
+	}
+
+	/**
+	 * The connections table (label, access, token, expiry, last used, actions).
+	 * Just the table — connections are created in the connect card above.
+	 *
+	 * @param array $tokens Tokens.
+	 */
+	private function render_connection_table( $tokens ) {
+		echo '<div class="ab-table-wrap"><table class="ab-table"><thead><tr><th scope="col">' . esc_html__( 'Label', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Access', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Token', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Expires', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Last used', 'alphabridge-mcp' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'alphabridge-mcp' ) . '</span></th></tr></thead><tbody class="ab-conn-rows">';
+		echo '<tr class="ab-empty-row"' . ( empty( $tokens ) ? '' : ' hidden' ) . '><td colspan="6"><em>' . esc_html__( 'No connections yet — pick your assistant at the top and follow the steps.', 'alphabridge-mcp' ) . '</em></td></tr>';
+		$older = AB_MCP_Settings::older_of_same_app( $tokens );
+		foreach ( $tokens as $t ) {
+			$is_older = isset( $t['hash'] ) && isset( $older[ (string) $t['hash'] ] );
+			echo $this->connection_row_html( $t, $is_older ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connection_row_html().
+		}
+		echo '</tbody></table></div>';
+		echo '<p class="ab-note">' . esc_html__( 'Rotate re-issues a connection’s token (the old one stops working at once). Delete removes it.', 'alphabridge-mcp' ) . '</p>';
+	}
+
+	/**
+	 * One connections-table row for a stored token entry. Shared by the initial
+	 * render and by the ajax create/rotate response so a new or rotated row can be
+	 * inserted in place without a reload. Everything is escaped here.
+	 *
+	 * The five cells before the actions carry no attributes; the tests read them
+	 * as plain cells.
+	 *
+	 * @param array $t        Token entry (hash, prefix, label, scope, expires, last_used).
+	 * @param bool  $is_older The same app has a newer connection for the same
+	 *                        user (AB_MCP_Settings::older_of_same_app()).
+	 * @return string A single <tr>…</tr>.
+	 */
+	private function connection_row_html( $t, $is_older = false ) {
+		$scope_labels = array(
+			'read'    => __( 'Read', 'alphabridge-mcp' ),
+			'content' => __( 'Content', 'alphabridge-mcp' ),
+			'full'    => __( 'Full', 'alphabridge-mcp' ),
+		);
+		// last_used and expires are stored as time(), UTC timestamps, and shown
+		// as the site's date and time in digits, like the log below. They used
+		// to read «%s ago» and «in %s» around human_time_diff(): WordPress
+		// translates the time span, the words around it need this plugin's own
+		// language pack, and without one a German site read «2 Wochen ago».
+		$used      = ! empty( $t['last_used'] ) ? self::site_datetime( (int) $t['last_used'] ) : '—';
+		$scope_key = isset( $t['scope'] ) && isset( $scope_labels[ $t['scope'] ] ) ? (string) $t['scope'] : 'full';
+		$exp       = isset( $t['expires'] ) ? (int) $t['expires'] : 0;
+		if ( $exp <= 0 ) {
+			$exp_txt = '<span class="ab-muted">' . esc_html__( 'never', 'alphabridge-mcp' ) . '</span>';
+		} elseif ( time() > $exp ) {
+			$exp_txt = '<span class="ab-bad">' . esc_html__( 'expired', 'alphabridge-mcp' ) . '</span>';
+		} else {
+			$exp_txt = esc_html( self::site_datetime( $exp ) );
+		}
+		$hash = isset( $t['hash'] ) ? (string) $t['hash'] : '';
+
+		$html = '<tr data-hash="' . esc_attr( $hash ) . '"><td><strong>' . esc_html( ! empty( $t['label'] ) ? $t['label'] : '—' ) . '</strong>';
+		if ( $is_older ) {
+			// A hint, not a verdict: the older connection may still be in use.
+			$html .= '<br><span class="description ab-older">' . esc_html__( 'The same app connected again later. Compare “Last used” before you delete this older connection.', 'alphabridge-mcp' ) . '</span>';
+		}
+		$html .= '</td>';
+		$html .= '<td><span class="ab-pill ab-pill--' . esc_attr( $scope_key ) . '">' . esc_html( $scope_labels[ $scope_key ] ) . '</span></td>';
+		$html .= '<td><code>' . esc_html( isset( $t['prefix'] ) ? $t['prefix'] : '' ) . '…</code></td>';
+		$html .= '<td>' . $exp_txt . '</td>';
+		$html .= '<td>' . esc_html( $used ) . '</td>';
+		$html .= '<td class="ab-actions">';
+		// Rotate reveals a new secret, so it runs over ajax like create.
+		$html .= '<button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-rotate" data-hash="' . esc_attr( $hash ) . '" data-confirm="' . esc_attr__( 'Issue a new secret for this connection? The current token stops working immediately.', 'alphabridge-mcp' ) . '">' . esc_html__( 'Rotate', 'alphabridge-mcp' ) . '</button> ';
+		// Delete reveals nothing, so it stays a plain nonce-protected form post.
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-confirm-form" data-confirm="' . esc_attr__( 'Delete connection?', 'alphabridge-mcp' ) . '">';
+		$html .= wp_nonce_field( 'ab_mcp_token', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_token"><input type="hidden" name="delete_token" value="' . esc_attr( $hash ) . '"><button class="ab-btn ab-btn--ghost ab-btn--sm ab-btn--danger">' . esc_html__( 'Delete', 'alphabridge-mcp' ) . '</button></form></td></tr>';
+
+		return $html;
+	}
+
+	/**
+	 * Audit log card.
+	 */
+	private function render_audit() {
+		echo '<div class="ab-card ab-log" id="ab-log">';
+		echo '<p class="ab-eyebrow">' . esc_html__( 'Log', 'alphabridge-mcp' ) . '</p>';
+		echo '<h2 class="ab-card__title">' . esc_html__( 'Recent tool calls', 'alphabridge-mcp' ) . '</h2>';
+		echo '<p class="ab-lead">' . esc_html__( 'Tool calls are always logged.', 'alphabridge-mcp' ) . '</p>';
+		$log = AB_MCP_Audit_Log::recent( 15 );
+		echo '<div class="ab-table-wrap"><table class="ab-table"><thead><tr><th scope="col">' . esc_html__( 'Time', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Tool', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Status', 'alphabridge-mcp' ) . '</th></tr></thead><tbody>';
+		if ( empty( $log ) ) {
+			echo '<tr><td colspan="3"><em>' . esc_html__( 'No entries yet.', 'alphabridge-mcp' ) . '</em></td></tr>';
+		}
+		foreach ( $log as $row ) {
+			$dot = 'ok' === $row['status'] ? 'ab-dot' : ( 'denied' === $row['status'] ? 'ab-dot ab-dot--warn' : 'ab-dot ab-dot--bad' );
+			// ts is time(), a UTC timestamp. wp_date() shows it in the site's
+			// timezone, like every other date in WordPress. date_i18n() reads its
+			// argument as a timestamp already shifted to local time and printed
+			// the UTC clock instead.
+			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $row['status'] ) . '</td></tr>';
+		}
+		echo '</tbody></table></div>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-log__clear">';
+		wp_nonce_field( 'ab_mcp_audit_clear' );
+		echo '<input type="hidden" name="action" value="ab_mcp_audit_clear"><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Clear log', 'alphabridge-mcp' ) . '</button></form></div>';
+	}
+
+	/**
+	 * The side column: the Pro box (free edition only), boxes from add-ons,
+	 * the guides.
+	 *
+	 * @return string HTML; add-on boxes escape their own output.
+	 */
+	private function sidebar_html() {
+		ob_start();
+		/**
+		 * Add-ons render boxes in the side column here, below the Pro box and
+		 * above the guides — the Pro add-on's affiliate box, for one.
+		 *
+		 * @since 4.3.10
+		 */
+		do_action( 'ab_mcp_admin_side_boxes' );
+		$addons = (string) ob_get_clean();
+
+		return '<div class="ab-side">' . $this->pro_box_html() . $addons . $this->guides_html() . '</div>';
+	}
+
+	/**
+	 * The guides card: the video, connecting step by step, all tools.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function guides_html() {
+		$links = array(
+			array( self::video_url(), __( 'Watch the video', 'alphabridge-mcp' ) ),
+			array( 'https://www.alphabridge-mcp.com/connector.html', __( 'Connect step by step', 'alphabridge-mcp' ) ),
+			array( 'https://www.alphabridge-mcp.com/docs', __( 'All tools', 'alphabridge-mcp' ) ),
+		);
+
+		$html  = '<div class="ab-card ab-guides"><p class="ab-eyebrow">' . esc_html__( 'Help', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Guides', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'Setup, every tool and examples.', 'alphabridge-mcp' ) . '</p><ul class="ab-guides__list">';
+		foreach ( $links as $l ) {
+			$html .= '<li><a class="ab-more" href="' . esc_url( $l[0] ) . '" target="_blank" rel="noopener">' . esc_html( $l[1] ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a></li>';
+		}
+		$html .= '</ul></div>';
+
+		return $html;
 	}
 
 	/**
@@ -556,8 +1007,9 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Enqueue the settings-screen script (copy buttons, group toggles) and its
-	 * stylesheet (the Pro box) — only on our own admin page.
+	 * Enqueue the settings screen's script (copy buttons, the choice of
+	 * assistant, the capability switches and search, the token create/rotate
+	 * flow) and its stylesheet — only on our own admin page.
 	 *
 	 * @param string $hook Current admin page hook suffix.
 	 */
@@ -583,44 +1035,12 @@ class AB_MCP_Admin {
 				'working'    => __( 'Working…', 'alphabridge-mcp' ),
 				'createHint' => __( 'A connection is active. Copy the token above now — it is not shown again.', 'alphabridge-mcp' ),
 				'failed'     => __( 'Something went wrong. Please reload and try again.', 'alphabridge-mcp' ),
+				'on'         => __( 'On', 'alphabridge-mcp' ),
+				'off'        => __( 'Off', 'alphabridge-mcp' ),
+				/* translators: 1: tools switched on, 2: tools in the group. */
+				'partial'    => __( '%1$d/%2$d', 'alphabridge-mcp' ),
 			)
 		);
-	}
-
-	/**
-	 * Group status label (coloured).
-	 *
-	 * @param int $on    Enabled count.
-	 * @param int $total Total.
-	 * @return string
-	 */
-	private function group_status( $on, $total ) {
-		if ( $on <= 0 ) {
-			return '<span style="color:#d63638">' . esc_html__( 'Off', 'alphabridge-mcp' ) . '</span>';
-		}
-		if ( $on >= $total ) {
-			return '<span style="color:#008a20">' . esc_html__( 'On', 'alphabridge-mcp' ) . '</span>';
-		}
-		return '<span style="color:#a06400">' . sprintf( /* translators: 1: enabled, 2: total */ esc_html__( 'Partial (%1$d/%2$d)', 'alphabridge-mcp' ), (int) $on, (int) $total ) . '</span>';
-	}
-
-	/**
-	 * The connections table (label, access, token, expiry, last used, actions).
-	 * Just the table — the create flow lives in the connector box above, so there
-	 * is a single, unambiguous place to create a connection.
-	 *
-	 * @param array $tokens Tokens.
-	 */
-	private function render_connection_table( $tokens ) {
-		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Label', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Access', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Token', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Expires', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Last used', 'alphabridge-mcp' ) . '</th><th></th></tr></thead><tbody class="ab-conn-rows">';
-		echo '<tr class="ab-empty-row"' . ( empty( $tokens ) ? '' : ' hidden' ) . '><td colspan="6"><em>' . esc_html__( 'No connections yet — click “Create connection” above.', 'alphabridge-mcp' ) . '</em></td></tr>';
-		$older = AB_MCP_Settings::older_of_same_app( $tokens );
-		foreach ( $tokens as $t ) {
-			$is_older = isset( $t['hash'] ) && isset( $older[ (string) $t['hash'] ] );
-			echo $this->connection_row_html( $t, $is_older ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connection_row_html().
-		}
-		echo '</tbody></table>';
-		echo '<p class="description" style="margin:8px 0 0">' . esc_html__( 'Rotate re-issues a connection’s token (the old one stops working at once). Delete removes it.', 'alphabridge-mcp' ) . '</p>';
 	}
 
 	/**
@@ -630,29 +1050,6 @@ class AB_MCP_Admin {
 	 */
 	private static function oauth_on() {
 		return class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled();
-	}
-
-	/**
-	 * The top of the connector box: what it is for and, while this site's OAuth
-	 * flow is switched on, the simplest way in — the entry in Claude's
-	 * connector directory. That entry connects through the AlphaBridge Connect
-	 * hub, which signs in with this site's own login and consent, so without
-	 * OAuth it cannot work and is not offered. The method reads the switch
-	 * itself, so no caller can offer the entry while OAuth is off.
-	 *
-	 * @return string HTML, escaped.
-	 */
-	private function connector_intro_html() {
-		if ( ! self::oauth_on() ) {
-			return '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Copy the endpoint, add it in Claude and click Connect — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
-		}
-		$html  = '<p class="description" style="margin:0 0 16px">' . esc_html__( 'Connect Claude from its connector directory, or directly with this site’s endpoint — or create a token manually for other clients.', 'alphabridge-mcp' ) . '</p>';
-		$html .= '<p style="margin:0 0 4px;font-weight:600">' . esc_html__( 'Easiest — from Claude’s connector directory', 'alphabridge-mcp' ) . '</p>';
-		$html .= '<div style="margin:0 0 20px;padding:10px 14px;border:1px solid #b7e0c1;border-radius:6px;background:#f4fbf6">';
-		$html .= '<p style="margin:0">' . esc_html( sprintf( /* translators: %s: this site's address */ __( 'In Claude, open Connectors, find “AlphaBridge MCP for WordPress” in the directory and connect. When asked, enter this site’s address, %s — this site then asks you to sign in and to approve. That connection runs through the AlphaBridge Connect hub.', 'alphabridge-mcp' ), home_url() ) ) . '</p>';
-		$html .= '</div>';
-		$html .= '<p style="margin:0 0 12px;font-weight:600">' . esc_html__( 'Or directly, without the hub:', 'alphabridge-mcp' ) . '</p>';
-		return $html;
 	}
 
 	/**
@@ -668,85 +1065,6 @@ class AB_MCP_Admin {
 	private static function site_datetime( $ts ) {
 		$text = wp_date( 'Y-m-d H:i', (int) $ts );
 		return is_string( $text ) ? $text : '—';
-	}
-
-	/**
-	 * One connections-table row for a stored token entry. Shared by the initial
-	 * render and by the ajax create/rotate response so a new or rotated row can be
-	 * inserted in place without a reload. Everything is escaped here.
-	 *
-	 * @param array $t        Token entry (hash, prefix, label, scope, expires, last_used).
-	 * @param bool  $is_older The same app has a newer connection for the same
-	 *                        user (AB_MCP_Settings::older_of_same_app()).
-	 * @return string A single <tr>…</tr>.
-	 */
-	private function connection_row_html( $t, $is_older = false ) {
-		$scope_labels = array(
-			'read'    => __( 'Read', 'alphabridge-mcp' ),
-			'content' => __( 'Content', 'alphabridge-mcp' ),
-			'full'    => __( 'Full', 'alphabridge-mcp' ),
-		);
-		// last_used and expires are stored as time(), UTC timestamps, and shown
-		// as the site's date and time in digits, like the log below. They used
-		// to read «%s ago» and «in %s» around human_time_diff(): WordPress
-		// translates the time span, the words around it need this plugin's own
-		// language pack, and without one a German site read «2 Wochen ago».
-		$used         = ! empty( $t['last_used'] ) ? self::site_datetime( (int) $t['last_used'] ) : '—';
-		$scope        = isset( $t['scope'] ) && isset( $scope_labels[ $t['scope'] ] ) ? $scope_labels[ $t['scope'] ] : $scope_labels['full'];
-		$exp          = isset( $t['expires'] ) ? (int) $t['expires'] : 0;
-		if ( $exp <= 0 ) {
-			$exp_txt = '<span style="color:#787c82">' . esc_html__( 'never', 'alphabridge-mcp' ) . '</span>';
-		} elseif ( time() > $exp ) {
-			$exp_txt = '<span style="color:#d63638">' . esc_html__( 'expired', 'alphabridge-mcp' ) . '</span>';
-		} else {
-			$exp_txt = esc_html( self::site_datetime( $exp ) );
-		}
-		$hash = isset( $t['hash'] ) ? (string) $t['hash'] : '';
-
-		$html  = '<tr data-hash="' . esc_attr( $hash ) . '"><td>' . esc_html( ! empty( $t['label'] ) ? $t['label'] : '—' );
-		if ( $is_older ) {
-			// A hint, not a verdict: the older connection may still be in use.
-			$html .= '<br><span class="description ab-older">' . esc_html__( 'The same app connected again later. Compare “Last used” before you delete this older connection.', 'alphabridge-mcp' ) . '</span>';
-		}
-		$html .= '</td>';
-		$html .= '<td>' . esc_html( $scope ) . '</td>';
-		$html .= '<td><code>' . esc_html( isset( $t['prefix'] ) ? $t['prefix'] : '' ) . '…</code></td>';
-		$html .= '<td>' . $exp_txt . '</td>';
-		$html .= '<td>' . esc_html( $used ) . '</td>';
-		$html .= '<td style="white-space:nowrap">';
-		// Rotate reveals a new secret, so it runs over ajax like create.
-		$html .= '<button type="button" class="button button-small ab-rotate" data-hash="' . esc_attr( $hash ) . '" data-confirm="' . esc_attr__( 'Issue a new secret for this connection? The current token stops working immediately.', 'alphabridge-mcp' ) . '">' . esc_html__( 'Rotate', 'alphabridge-mcp' ) . '</button> ';
-		// Delete reveals nothing, so it stays a plain nonce-protected form post.
-		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-confirm-form" data-confirm="' . esc_attr__( 'Delete connection?', 'alphabridge-mcp' ) . '" style="display:inline">';
-		$html .= wp_nonce_field( 'ab_mcp_token', '_wpnonce', true, false );
-		$html .= '<input type="hidden" name="action" value="ab_mcp_token"><input type="hidden" name="delete_token" value="' . esc_attr( $hash ) . '"><button class="button button-small">' . esc_html__( 'Delete', 'alphabridge-mcp' ) . '</button></form></td></tr>';
-
-		return $html;
-	}
-
-	/**
-	 * Audit log card.
-	 */
-	private function render_audit() {
-		echo '<div class="postbox" style="padding:4px 16px 14px"><h2 class="hndle" style="padding:10px 0;border:0">' . esc_html__( 'Log', 'alphabridge-mcp' ) . '</h2>';
-		echo '<p class="description" style="margin:0 0 8px">' . esc_html__( 'Tool calls are always logged.', 'alphabridge-mcp' ) . '</p>';
-		$log = AB_MCP_Audit_Log::recent( 15 );
-		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Time', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Tool', 'alphabridge-mcp' ) . '</th><th>' . esc_html__( 'Status', 'alphabridge-mcp' ) . '</th></tr></thead><tbody>';
-		if ( empty( $log ) ) {
-			echo '<tr><td colspan="3"><em>' . esc_html__( 'No entries yet.', 'alphabridge-mcp' ) . '</em></td></tr>';
-		}
-		foreach ( $log as $row ) {
-			$color = 'ok' === $row['status'] ? '#008a20' : ( 'denied' === $row['status'] ? '#a06400' : '#c00' );
-			// ts is time(), a UTC timestamp. wp_date() shows it in the site's
-			// timezone, like every other date in WordPress. date_i18n() reads its
-			// argument as a timestamp already shifted to local time and printed
-			// the UTC clock instead.
-			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td style="color:' . esc_attr( $color ) . '">' . esc_html( $row['status'] ) . '</td></tr>';
-		}
-		echo '</tbody></table>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px">';
-		wp_nonce_field( 'ab_mcp_audit_clear' );
-		echo '<input type="hidden" name="action" value="ab_mcp_audit_clear"><button class="button button-small">' . esc_html__( 'Clear log', 'alphabridge-mcp' ) . '</button></form></div>';
 	}
 
 	/**

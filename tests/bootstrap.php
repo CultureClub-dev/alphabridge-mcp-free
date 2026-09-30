@@ -80,6 +80,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_blog_store'] = array();
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
+	$GLOBALS['ab_test_locale']     = 'en_US';
 }
 
 function get_option( $name, $default = false ) {
@@ -721,6 +722,32 @@ function wp_localize_script( $handle, $object_name, $l10n ) {
 
 function wp_create_nonce( $action = -1 ) {
 	return 'testnonce';
+}
+
+// The settings screen's builders: plural forms, the admin's language, the
+// user dropdown and checked(), as WordPress answers them.
+function _n( $single, $plural, $number, $domain = '' ) {
+	return 1 === (int) $number ? (string) $single : (string) $plural;
+}
+
+function get_locale() {
+	return (string) ( $GLOBALS['ab_test_locale'] ?? 'en_US' );
+}
+
+function checked( $checked, $current = true, $display = true ) {
+	$out = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
+	if ( $display ) {
+		echo $out; // phpcs:ignore
+	}
+	return $out;
+}
+
+function wp_dropdown_users( $args = array() ) {
+	$html = '<select name="' . ( $args['name'] ?? 'user' ) . '"></select>';
+	if ( ! isset( $args['echo'] ) || $args['echo'] ) {
+		echo $html; // phpcs:ignore
+	}
+	return $html;
 }
 
 /**
