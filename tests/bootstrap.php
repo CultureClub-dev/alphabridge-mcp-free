@@ -78,6 +78,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_blog']       = 1;
 	$GLOBALS['ab_test_blog_stack'] = array();
 	$GLOBALS['ab_test_blog_store'] = array();
+	$GLOBALS['ab_test_styles']     = array();
+	$GLOBALS['ab_test_scripts']    = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -704,6 +706,23 @@ function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
 	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . $name . '=testnonce';
 }
 
+// The settings screen's assets, recorded so a test can see what loads where.
+function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false, $media = 'all' ) {
+	$GLOBALS['ab_test_styles'][ $handle ] = (string) $src;
+}
+
+function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $args = array() ) {
+	$GLOBALS['ab_test_scripts'][ $handle ] = (string) $src;
+}
+
+function wp_localize_script( $handle, $object_name, $l10n ) {
+	return true;
+}
+
+function wp_create_nonce( $action = -1 ) {
+	return 'testnonce';
+}
+
 /**
  * The site's timezone as WordPress derives it: the named zone if one is set,
  * otherwise a fixed offset built from gmt_offset (hours, may be fractional).
@@ -875,6 +894,7 @@ define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
+define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 
 /* --------------------------------------------------------- classes to test */
 
