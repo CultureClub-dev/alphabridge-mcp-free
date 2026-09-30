@@ -1,8 +1,9 @@
 /**
- * AlphaBridge MCP settings screen: copy buttons, tool group toggles, and the
- * token create/rotate flow. Creating or rotating a connection reveals a secret;
- * that is done over authenticated admin-ajax so the plaintext is returned once,
- * straight to this browser, and is never persisted server-side.
+ * AlphaBridge MCP settings screen: the choice of assistant, copy buttons, the
+ * capability switches and search, and the token create/rotate flow. Creating or
+ * rotating a connection reveals a secret; that is done over authenticated
+ * admin-ajax so the plaintext is returned once, straight to this browser, and
+ * is never persisted server-side.
  *
  * Enqueued via admin_enqueue_scripts on the plugin's own page only.
  *
@@ -36,32 +37,228 @@
 		}, 1200 );
 	} );
 
-	/* ---- Capability toggles ---- */
-	function boxes( scope ) {
-		return scope.querySelectorAll( 'input.ab-tool:not([disabled])' );
-	}
+	/* ---- The choice of assistant: one panel shows; the token form only for
+	 * the assistants that need a token. The choice is remembered in this
+	 * browser only. ---- */
+	var CLIENT_KEY = 'abMcpClient';
 
-	document.querySelectorAll( '.ab-all' ).forEach( function ( b ) {
-		b.addEventListener( 'click', function () {
-			var on = b.getAttribute( 'data-on' ) === '1';
-			boxes( document ).forEach( function ( c ) {
-				c.checked = on;
-			} );
-			var f = document.getElementById( 'ab-caps' );
-			if ( f ) {
-				f.submit();
+	function pickClient( client, remember ) {
+		var buttons = document.querySelectorAll( '.ab-client' );
+		if ( ! buttons.length ) {
+			return;
+		}
+		var known = false;
+		buttons.forEach( function ( b ) {
+			if ( b.getAttribute( 'data-client' ) === client ) {
+				known = true;
 			}
 		} );
+		if ( ! known ) {
+			client = 'claude';
+		}
+		buttons.forEach( function ( b ) {
+			b.setAttribute( 'aria-pressed', b.getAttribute( 'data-client' ) === client ? 'true' : 'false' );
+		} );
+		document.querySelectorAll( '.ab-panel' ).forEach( function ( p ) {
+			p.hidden = p.getAttribute( 'data-panel' ) !== client;
+		} );
+		var token = document.querySelector( '.ab-token' );
+		if ( token ) {
+			token.hidden = ( ' ' + ( token.getAttribute( 'data-for' ) || '' ) + ' ' ).indexOf( ' ' + client + ' ' ) === -1;
+		}
+		if ( remember ) {
+			try {
+				window.localStorage.setItem( CLIENT_KEY, client );
+			} catch ( err ) {
+				// Storage blocked: the choice simply is not remembered.
+			}
+		}
+	}
+
+	document.addEventListener( 'click', function ( e ) {
+		var b = e.target.closest ? e.target.closest( '.ab-client' ) : null;
+		if ( b ) {
+			pickClient( b.getAttribute( 'data-client' ), true );
+		}
 	} );
 
-	document.querySelectorAll( '.ab-grp' ).forEach( function ( b ) {
-		b.addEventListener( 'click', function () {
-			var on = b.getAttribute( 'data-on' ) === '1';
-			var d = b.closest( 'details' );
-			boxes( d ).forEach( function ( c ) {
-				c.checked = on;
+	( function () {
+		var stored = null;
+		try {
+			stored = window.localStorage.getItem( CLIENT_KEY );
+		} catch ( err ) {
+			stored = null;
+		}
+		if ( stored ) {
+			pickClient( stored, false );
+		}
+	}() );
+
+	/* ---- Links to a folded setting on this page open it. ---- */
+	document.addEventListener( 'click', function ( e ) {
+		var a = e.target.closest ? e.target.closest( 'a[href^="#ab-"]' ) : null;
+		if ( ! a ) {
+			return;
+		}
+		var t = document.getElementById( a.getAttribute( 'href' ).slice( 1 ) );
+		if ( t && 'DETAILS' === t.tagName ) {
+			t.open = true;
+		}
+	} );
+
+	/* ---- Capabilities: all tools, groups, single tools, search ---- */
+	var caps = document.getElementById( 'ab-caps' );
+	var dirty = false;
+
+	function fmt( s, a, b ) {
+		return String( s ).replace( '%1$d', a ).replace( '%2$d', b );
+	}
+
+	// Recount every group from its tool switches: the group switch (on, off, or
+	// part on), the group's pill, the counter and the switch for all tools.
+	function refresh() {
+		if ( ! caps ) {
+			return;
+		}
+		var on = 0;
+		var all = 0;
+		caps.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
+			var tools = g.querySelectorAll( 'input.ab-tool' );
+			var n = tools.length;
+			var k = 0;
+			tools.forEach( function ( t ) {
+				if ( t.checked ) {
+					k++;
+				}
 			} );
+			on += k;
+			all += n;
+			var gt = g.querySelector( '.ab-group-toggle' );
+			if ( gt ) {
+				// Checked only when all are on: a click on a group that is partly
+				// on switches all of it on, like the switch for all tools.
+				gt.checked = n > 0 && k === n;
+				gt.indeterminate = k > 0 && k < n;
+			}
+			var st = g.querySelector( '.ab-status' );
+			if ( st ) {
+				st.className = 'ab-pill ab-status ' + ( 0 === k ? 'ab-pill--off' : ( k === n ? 'ab-pill--on' : 'ab-pill--partial' ) );
+				st.textContent = 0 === k ? ( cfg.off || 'Off' ) : ( k === n ? ( cfg.on || 'On' ) : fmt( cfg.partial || '%1$d/%2$d', k, n ) );
+			}
 		} );
+		var c = caps.querySelector( '.ab-on-count' );
+		if ( c ) {
+			c.textContent = on;
+		}
+		var a = caps.querySelector( '.ab-all-toggle' );
+		if ( a ) {
+			a.checked = all > 0 && on === all;
+			a.indeterminate = on > 0 && on < all;
+		}
+	}
+
+	function markDirty() {
+		dirty = true;
+		var bar = caps.querySelector( '.ab-savebar' );
+		if ( ! bar || bar.classList.contains( 'is-dirty' ) ) {
+			return;
+		}
+		bar.classList.add( 'is-dirty' );
+		var t = bar.querySelector( '.ab-savebar__text' );
+		if ( t && t.getAttribute( 'data-dirty' ) ) {
+			t.textContent = t.getAttribute( 'data-dirty' );
+		}
+	}
+
+	function filter( q ) {
+		q = String( q || '' ).trim().toLowerCase();
+		var any = false;
+		caps.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
+			var hits = 0;
+			g.querySelectorAll( '.ab-tool-row' ).forEach( function ( r ) {
+				var ok = ! q || ( r.getAttribute( 'data-search' ) || '' ).indexOf( q ) !== -1;
+				r.hidden = ! ok;
+				if ( ok ) {
+					hits++;
+				}
+			} );
+			g.hidden = !! q && 0 === hits;
+			if ( q && hits ) {
+				g.open = true;
+			}
+			if ( hits ) {
+				any = true;
+			}
+		} );
+		var none = caps.querySelector( '.ab-caps__none' );
+		if ( none ) {
+			none.hidden = any;
+		}
+	}
+
+	if ( caps ) {
+		refresh();
+
+		caps.addEventListener( 'change', function ( e ) {
+			var el = e.target;
+			if ( el.classList.contains( 'ab-search' ) ) {
+				return;
+			}
+			if ( el.classList.contains( 'ab-all-toggle' ) ) {
+				caps.querySelectorAll( 'input.ab-tool:not([disabled])' ).forEach( function ( t ) {
+					t.checked = el.checked;
+				} );
+			} else if ( el.classList.contains( 'ab-group-toggle' ) ) {
+				el.closest( '.ab-group' ).querySelectorAll( 'input.ab-tool:not([disabled])' ).forEach( function ( t ) {
+					t.checked = el.checked;
+				} );
+			}
+			refresh();
+			markDirty();
+		} );
+
+		// The switch in a group's summary switches the group without folding it.
+		// A cancelled click puts the checkbox back after the event, so the new
+		// state is set right after it.
+		caps.addEventListener( 'click', function ( e ) {
+			var sw = e.target.closest ? e.target.closest( '.ab-group > summary .ab-switch' ) : null;
+			if ( ! sw ) {
+				return;
+			}
+			e.preventDefault();
+			var input = sw.querySelector( 'input' );
+			var want = e.target === input ? input.checked : ! input.checked;
+			window.setTimeout( function () {
+				input.checked = want;
+				input.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
+			}, 0 );
+		} );
+
+		caps.addEventListener( 'submit', function () {
+			dirty = false;
+		} );
+
+		var search = caps.querySelector( '.ab-search' );
+		if ( search ) {
+			search.addEventListener( 'input', function () {
+				filter( search.value );
+			} );
+			// Enter in the search field must not save the capabilities.
+			search.addEventListener( 'keydown', function ( e ) {
+				if ( 'Enter' === e.key ) {
+					e.preventDefault();
+				}
+			} );
+		}
+	}
+
+	// Switches changed but not saved: the browser asks before leaving.
+	window.addEventListener( 'beforeunload', function ( e ) {
+		if ( ! dirty ) {
+			return;
+		}
+		e.preventDefault();
+		e.returnValue = '';
 	} );
 
 	/* ---- Click-to-select read-only fields (delegated, covers revealed inputs) ---- */
@@ -164,10 +361,12 @@
 			'}';
 		setVal( '.ab-reveal-json', json );
 
+		// The reveal sits outside the assistants' panels: a rotation further
+		// down shows here too, whichever assistant is picked.
 		var box = document.querySelector( '.ab-reveal' );
 		if ( box ) {
 			box.hidden = false;
-			box.scrollIntoView( { behavior: 'smooth', block: 'nearest' } );
+			box.scrollIntoView( { behavior: 'smooth', block: 'center' } );
 		}
 		var hint = document.querySelector( '.ab-connector-hint' );
 		if ( hint && cfg.createHint ) {
@@ -212,12 +411,12 @@
 		}
 		btn.disabled = on;
 		if ( on ) {
-			btn.dataset.abLabel = btn.textContent;
+			btn.dataset.abLabel = btn.innerHTML;
 			if ( cfg.working ) {
 				btn.textContent = cfg.working;
 			}
 		} else if ( btn.dataset.abLabel ) {
-			btn.textContent = btn.dataset.abLabel;
+			btn.innerHTML = btn.dataset.abLabel;
 		}
 	}
 

@@ -85,10 +85,10 @@ No. It contacts no external service on its own. The only outbound request happen
 
 == Screenshots ==
 
-1. Set up the Claude connector in two steps: copy the endpoint URL, then connect from Claude — or create a token manually for Cursor, Claude Code and scripts. Existing connections are listed and managed in the same place.
+1. Pick your assistant — Claude, ChatGPT, Cursor or another client — and follow its steps: for Claude a direct link into its connector directory, this site's address to copy, the video and the guide. A token is created only where one is needed.
 2. The moment you create a connection, the plugin shows what you need once — the Bearer token and a copy-paste config for Cursor / Claude Code, and the connector URL if connector-URL authentication is switched on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
-4. Enable or disable tools by functional group. Powerful ("mighty") tools are off by default, and one switch turns on a global read-only mode.
+4. Switch all tools, a group or a single tool; open a group to see what each tool does, or search for one. Powerful ("mighty") tools are off by default, and one switch turns on a global read-only mode.
 5. Connect from Claude is on by default: Claude discovers the site, you approve on a login-protected consent screen, and the approved connection appears in the list, revocable any time. Switching it off removes the OAuth endpoints.
 6. Connector-URL authentication is off by default, because a token in a URL leaks more easily than one in a header; the setting explains the trade-off before you switch it on.
 
@@ -97,6 +97,12 @@ No. It contacts no external service on its own. The only outbound request happen
 This plugin makes no automatic outbound requests and sends no telemetry. One tool can contact an external address, and only on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked). The plugin itself initiates no other outbound requests.
 
 == Changelog ==
+
+= 4.3.10 =
+* **A new settings page: pick your assistant first, then follow its steps.** The page opens with the plugin's logo, this site's state (connections, tools switched on, read-only mode) and a choice of assistant — Claude, ChatGPT, Cursor or another client. Each gets its own steps with direct links: for Claude into its connector directory, with this site's address ready to copy, the setup video and the step-by-step guide; for ChatGPT to its plugins page, with this site's endpoint. Creating a token is offered where one is needed — for Cursor and other clients — and no longer next to the ways that never use one. The page remembers the assistant you picked in your browser.
+* **Capabilities with switches.** One switch turns all tools on or off, one read-only mode, and every group has a switch of its own. Open a group to see each tool with what it does — the first sentence, the whole description behind the «i» — and switch it on its own. A search finds a tool by name or description. A group that is partly on shows it; the bar at the bottom tells you when switches have changed and are not saved yet. What the form saves is unchanged.
+* The connections now follow the capabilities, above the log. «1 tool» instead of «1 tools».
+* For add-ons: the side column has a place for their boxes (`ab_mcp_admin_side_boxes`), between the box about AlphaBridge MCP Pro and the guides.
 
 = 4.3.9 =
 * **The box about AlphaBridge MCP Pro on the settings page says what Pro adds, how to try it and what it costs.** It now stands at the top of the side column: what the separately sold plugin adds on this site, a button that starts the 7-day trial without a card, and the monthly and the yearly price. Each link opens the Freemius checkout, which sells AlphaBridge MCP Pro, for exactly what it names — trial, monthly or yearly — and carries no tracking. On a site where AlphaBridge MCP Pro runs with a valid Pro or Agency licence the box no longer shows; it offered what the site already had. Its look comes from a small stylesheet that ships with the plugin and loads only on this settings page; nothing is loaded from outside. No tool or setting changed: this free plugin remains complete and fully functional on its own.

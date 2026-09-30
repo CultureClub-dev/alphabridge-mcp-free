@@ -80,6 +80,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_blog_store'] = array();
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
+	$GLOBALS['ab_test_locale']     = 'en_US';
 }
 
 function get_option( $name, $default = false ) {
@@ -698,8 +699,14 @@ function admin_url( $path = '' ) {
 	return 'https://example.test/wp-admin/' . ltrim( (string) $path, '/' );
 }
 
+// Like WordPress: the hidden field names its action, so a test can see which
+// action a form is signed for.
 function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) {
-	return '';
+	$field = '<input type="hidden" name="' . $name . '" value="nonce-' . $action . '">';
+	if ( $display ) {
+		echo $field; // phpcs:ignore
+	}
+	return $field;
 }
 
 function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
@@ -721,6 +728,32 @@ function wp_localize_script( $handle, $object_name, $l10n ) {
 
 function wp_create_nonce( $action = -1 ) {
 	return 'testnonce';
+}
+
+// The settings screen's builders: plural forms, the admin's language, the
+// user dropdown and checked(), as WordPress answers them.
+function _n( $single, $plural, $number, $domain = '' ) {
+	return 1 === (int) $number ? (string) $single : (string) $plural;
+}
+
+function get_locale() {
+	return (string) ( $GLOBALS['ab_test_locale'] ?? 'en_US' );
+}
+
+function checked( $checked, $current = true, $display = true ) {
+	$out = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
+	if ( $display ) {
+		echo $out; // phpcs:ignore
+	}
+	return $out;
+}
+
+function wp_dropdown_users( $args = array() ) {
+	$html = '<select name="' . ( $args['name'] ?? 'user' ) . '"></select>';
+	if ( ! isset( $args['echo'] ) || $args['echo'] ) {
+		echo $html; // phpcs:ignore
+	}
+	return $html;
 }
 
 /**
