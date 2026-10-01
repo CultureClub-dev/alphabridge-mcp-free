@@ -13,12 +13,15 @@
  *   {
  *     "id": string,          the builder's own id where it has one (Elementor id,
  *                            GenerateBlocks uniqueId, Kadence uniqueID, Spectra
- *                            block_id, Beaver node, SeedProd id), else a path:
+ *                            block_id, Pagelayer pagelayer-id, Beaver node,
+ *                            SeedProd id, Enfold av_uid), else a path:
  *                            "b" + indices joined by "." for blocks ("b0.2.1"),
- *                            "s" + indices for shortcodes, "w" + index for
- *                            SiteOrigin widgets, "e" + indices for Elementor
- *                            elements. A path id is valid only together with
- *                            the layout_hash it was read with.
+ *                            "s" + indices for shortcodes, "e" + indices for
+ *                            Elementor elements, "p" + indices for SeedProd
+ *                            blocks, "w" + index for SiteOrigin widgets and
+ *                            "r<n>" / "r<n>.c<n>" for its rows and cells. A
+ *                            path id is valid only together with the
+ *                            layout_hash it was read with.
  *     "type": string,        block name, widget type, shortcode tag …
  *     "parent": string|null, id of the enclosing element.
  *     "depth": int,          0 for top-level elements.

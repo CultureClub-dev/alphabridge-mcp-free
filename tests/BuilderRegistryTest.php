@@ -113,6 +113,47 @@ final class BuilderRegistryTest extends TestCase {
 		self::assertInstanceOf( \AB_MCP_Builder_Adapter_Elementor::class, AB_MCP_Builders::adapter_for_builder( 'elementor' ), 'The free core reads Elementor.' );
 	}
 
+	public function testTheFreeCoreRegistersEveryReader(): void {
+		// The adapters of the builder branches meet in one list in
+		// AB_MCP_Builders::adapters(); a reader dropped while merging would
+		// leave its builder "detected only" without any test of its own
+		// noticing, because each of those tests builds its adapter itself.
+		$expected = array(
+			'blocks'         => 'AB_MCP_Builder_Adapter_Blocks',
+			'generateblocks' => 'AB_MCP_Builder_Adapter_Blocks',
+			'kadence'        => 'AB_MCP_Builder_Adapter_Blocks',
+			'spectra'        => 'AB_MCP_Builder_Adapter_Blocks',
+			'stackable'      => 'AB_MCP_Builder_Adapter_Blocks',
+			'pagelayer'      => 'AB_MCP_Builder_Adapter_Blocks',
+			'otter'          => 'AB_MCP_Builder_Adapter_Blocks',
+			'coblocks'       => 'AB_MCP_Builder_Adapter_Blocks',
+			'elementor'      => 'AB_MCP_Builder_Adapter_Elementor',
+			'beaver'         => 'AB_MCP_Builder_Adapter_Beaver',
+			'siteorigin'     => 'AB_MCP_Builder_Adapter_SiteOrigin',
+			'seedprod'       => 'AB_MCP_Builder_Adapter_SeedProd',
+			'wpbakery'       => 'AB_MCP_Builder_Adapter_Shortcodes',
+			'divi4'          => 'AB_MCP_Builder_Adapter_Shortcodes',
+			'avada'          => 'AB_MCP_Builder_Adapter_Shortcodes',
+			'flatsome'       => 'AB_MCP_Builder_Adapter_Shortcodes',
+			'enfold'         => 'AB_MCP_Builder_Adapter_Shortcodes',
+		);
+		$read = array();
+		foreach ( array_merge( array( 'blocks' ), AB_MCP_Builders::builder_ids() ) as $id ) {
+			$reader = AB_MCP_Builders::adapter_for_builder( $id );
+			if ( null !== $reader ) {
+				$read[ $id ] = get_class( $reader );
+			}
+		}
+		ksort( $expected );
+		ksort( $read );
+		self::assertSame( $expected, $read, 'Every builder the free core reads, and the class that reads it.' );
+		self::assertSame(
+			array( 'blocks', 'elementor', 'beaver', 'siteorigin', 'seedprod', 'avada', 'divi4', 'enfold', 'flatsome', 'wpbakery' ),
+			array_keys( AB_MCP_Builders::adapters() ),
+			'One adapter per reader, the shortcode readers in profile file order.'
+		);
+	}
+
 	public function testAdaptersComeThroughTheFilterAndTheLastOneWins(): void {
 		$first  = new FakeBuilderAdapter( 'elementor' );
 		$second = new FakeBuilderAdapter( 'elementor' );

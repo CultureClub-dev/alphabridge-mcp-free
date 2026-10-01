@@ -23,6 +23,24 @@ directory. It is the same code WordPress.org ships.
   middleware, no external service, nothing extra to host.
 - **40 structured tools** across content, media, taxonomies, comments, widgets, site settings,
   site info, SEO reads and search.
+- **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page
+  order, with their visible text, link and image fields; elements that cannot be read safely,
+  such as code, forms or unknown elements, are listed as locked, with the reason and without
+  their content. As of 1 October 2026:
+  - Read: WordPress blocks, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd,
+    GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Otter Blocks and CoBlocks
+    (both as plain blocks), WPBakery Page Builder, Divi 4, Avada (Fusion Builder), Flatsome (UX
+    Builder) and Enfold (Avia Layout Builder).
+  - Read from the vendors' documentation and code, not yet checked on a live installation (the
+    answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
+  - Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone,
+    Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual
+    Composer Website Builder, Divi 5, Etch and Mosaic.
+
+  Where a builder shows its own data and post_content is only a copy — Elementor, Beaver
+  Builder, SiteOrigin Page Builder and Enfold — `wp_update_post` refuses a change to the content
+  while the builder is active, because it would not show, and says how to change the page
+  instead.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site. Header authentication (`Authorization` / `X-Api-Key`) for
   clients without a Connect button.
@@ -54,7 +72,8 @@ Handing an AI access to a site should feel safe, so control comes first:
   reaches further, by design: `wp_get_builder_layout`, for an account that may edit the post,
   reads the page builder's own stored data of that post, protected keys included, and returns
   only the visible text, link and image fields of its elements — never the raw meta, code,
-  styling or attributes; keys that hold a page's own scripts or CSS are not read at all.
+  styling or attributes; separate keys that hold a page's own scripts or CSS are not read at
+  all.
 - **Audit log** of every tool call, plus a fixed rate limit against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html
