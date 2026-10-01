@@ -28,7 +28,7 @@ final class BuilderGuardTest extends TestCase {
 		$this->mayDoAnything();
 	}
 
-	/** An Elementor reader is registered (the free core ships none yet). */
+	/** A stand-in Elementor reader, so the guard is tested apart from what the real one reads. */
 	private function elementorReader(): void {
 		add_filter(
 			'ab_mcp_builder_adapters',
@@ -95,7 +95,22 @@ final class BuilderGuardTest extends TestCase {
 	public function testStorageBWithoutAReaderWritesAndWarns(): void {
 		// Nothing gets worse than it was: without a reader for the builder the
 		// free plugin cannot offer a way, so it does not take the old one away.
+		// The free core reads Elementor, so its reader is taken out here.
 		$this->builders( array( 'elementor' ) );
+		add_filter(
+			'ab_mcp_builder_adapters',
+			static function ( $list ) {
+				return array_values(
+					array_filter(
+						$list,
+						static function ( $adapter ): bool {
+							return 'elementor' !== $adapter->id();
+						}
+					)
+				);
+			}
+		);
+		AB_MCP_Builders::reset();
 		$this->elementorPage();
 
 		$out = AB_MCP_Tools_Content::update_post( array( 'id' => 50, 'content' => '<p>New</p>' ) );
