@@ -5,8 +5,9 @@
  * A client id that is an HTTPS URL names a JSON document describing the
  * client. Fetching it is the one outbound request the OAuth flow makes, so
  * every limit on that request has a test here: only https, only public
- * addresses, no redirects, at most 5 KB, a few seconds, and only once a
- * logged-in approver is on the consent page. The fetched document must match
+ * addresses and a connection to exactly those, no redirects, at most 5 KB, a
+ * few seconds, only once a logged-in approver is on the consent page, and at
+ * the token endpoint only for the client id an approver consented to. The fetched document must match
  * its own URL exactly and carry valid redirect addresses; the cached copy is
  * signed like the consent records.
  *
@@ -90,13 +91,53 @@ final class CimdTest extends TestCase {
 		self::assertTrue( $meta['authorization_response_iss_parameter_supported'] );
 	}
 
-	public function testSwitchedOffNothingIsAdvertisedOrFetched(): void {
-		add_filter( 'ab_mcp_oauth_cimd', '__return_false' );
+	/**
+	 * @return array<string,array{0:callable}>
+	 */
+	public static function switchedOff(): array {
+		return array(
+			'setting' => array( static function (): void {
+				AB_MCP_Settings::set( 'oauth_cimd', false );
+			} ),
+			'filter'  => array( static function (): void {
+				add_filter( 'ab_mcp_oauth_cimd', '__return_false' );
+			} ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'switchedOff' )]
+	public function testSwitchedOffNothingIsAdvertisedOrFetched( callable $off ): void {
+		$off();
 
 		self::assertArrayNotHasKey( 'client_id_metadata_document_supported', AB_MCP_OAuth::metadata() );
+		self::assertArrayHasKey( 'registration_endpoint', AB_MCP_OAuth::metadata() );
 		self::assertStringContainsString( 'register', $this->refusal(), 'The refusal names the way that still works.' );
 		self::assertFalse( AB_MCP_OAuth::get_client( self::URL ) );
 		self::assertSame( 0, $this->fetches() );
+	}
+
+	public function testTheFilterHasTheLastWordOverTheSetting(): void {
+		AB_MCP_Settings::set( 'oauth_cimd', false );
+		add_filter( 'ab_mcp_oauth_cimd', '__return_true' );
+
+		self::assertTrue( AB_MCP_OAuth::metadata()['client_id_metadata_document_supported'] ?? null );
+	}
+
+	/**
+	 * A site that cannot reach other servers must not send clients down a
+	 * way that fails every time: they prefer CIMD as soon as it is offered.
+	 */
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testASiteThatBlocksOutgoingRequestsDoesNotOfferDocuments(): void {
+		define( 'WP_HTTP_BLOCK_EXTERNAL', true );
+
+		self::assertArrayNotHasKey( 'client_id_metadata_document_supported', AB_MCP_OAuth::metadata(), 'Registration only, as before CIMD.' );
+		self::assertStringContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->refusal(), 'The refusal names why.' );
+		self::assertSame( 0, $this->fetches() );
+
+		add_filter( 'ab_mcp_oauth_cimd', '__return_true' );
+		self::assertTrue( AB_MCP_OAuth::metadata()['client_id_metadata_document_supported'] ?? null, 'A site that lists the app hosts in WP_ACCESSIBLE_HOSTS can switch it on.' );
 	}
 
 	/* ------------------------------------------------------- a good fetch */
@@ -125,6 +166,66 @@ final class CimdTest extends TestCase {
 		self::assertSame( 0, $call['args']['redirection'], 'A redirect could lead where the address check did not look.' );
 		self::assertSame( 5121, $call['args']['limit_response_size'], 'One byte over 5 KB, so an oversized document shows as such.' );
 		self::assertSame( 'AlphaBridge-MCP/' . AB_MCP_VERSION, $call['args']['user-agent'], 'Not WordPress\'s default, which names the site.' );
+	}
+
+	/**
+	 * @return array<string,array{0:array<int,string>,1:string}>
+	 */
+	public static function pins(): array {
+		return array(
+			'one address'    => array( array( self::PUBLIC ), 'app.example:443:' . self::PUBLIC ),
+			'IPv4 and IPv6'  => array( array( self::PUBLIC, '2606:2800:21f:cb07:6820:80da:af6b:8b2c' ), 'app.example:443:' . self::PUBLIC . ',2606:2800:21f:cb07:6820:80da:af6b:8b2c' ),
+		);
+	}
+
+	/**
+	 * cURL connects to the addresses that were checked and does not look the
+	 * name up again (DNS rebinding). Observed in cURL's own log of a real
+	 * handle, see wp_safe_remote_get() in the bootstrap.
+	 *
+	 * @param array<int,string> $addresses What the host resolves to.
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'pins' )]
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testTheConnectionGoesToTheCheckedAddresses( array $addresses, string $entry ): void {
+		$GLOBALS['ab_test_filters']['ab_mcp_oauth_cimd_addresses'] = array();
+		add_filter( 'ab_mcp_oauth_cimd_addresses', static fn(): array => $addresses );
+		$GLOBALS['ab_test_http_curl'] = true;
+
+		$this->resolve();
+
+		self::assertStringContainsString( ' ' . $entry . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+		self::assertFalse( has_action( 'http_api_curl' ), 'Gone after the request: no other request of the site is pinned.' );
+	}
+
+	public function testTheHookIsGoneAfterAFailedRequestToo(): void {
+		$GLOBALS['ab_test_http_answer'] = static fn(): WP_Error => new WP_Error( 'http_request_failed', 'timed out' );
+
+		$this->refusal();
+
+		self::assertSame( 1, $this->fetches() );
+		self::assertFalse( has_action( 'http_api_curl' ) );
+	}
+
+	/**
+	 * @return array<string,array{0:string,1:array<int,string>,2:string|null}>
+	 */
+	public static function resolveEntries(): array {
+		return array(
+			'default port'      => array( 'https://app.example/c.json', array( '93.184.215.14' ), 'app.example:443:93.184.215.14' ),
+			'own port'          => array( 'https://app.example:8080/c.json', array( '93.184.215.14' ), 'app.example:8080:93.184.215.14' ),
+			'spelled as in URL' => array( 'https://App.Example/c.json', array( '93.184.215.14' ), 'App.Example:443:93.184.215.14' ),
+			'IPv4 as host'      => array( 'https://93.184.215.14/c.json', array( '93.184.215.14' ), null ),
+			'IPv6 as host'      => array( 'https://[2606:2800:21f:cb07:6820:80da:af6b:8b2c]/c.json', array( '2606:2800:21f:cb07:6820:80da:af6b:8b2c' ), null ),
+		);
+	}
+
+	/**
+	 * @param array<int,string> $addresses
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'resolveEntries' )]
+	public function testTheResolveEntry( string $url, array $addresses, ?string $entry ): void {
+		self::assertSame( $entry, ( new \ReflectionMethod( AB_MCP_OAuth::class, 'curl_resolve_entry' ) )->invoke( null, $url, $addresses ) );
 	}
 
 	public function testTheDocumentIsCachedAndReused(): void {
@@ -171,6 +272,18 @@ final class CimdTest extends TestCase {
 
 		self::assertSame( array( self::REDIRECT ), $client['redirect_uris'] );
 		self::assertSame( 2, $this->fetches(), 'The forged entry was discarded and the document fetched again.' );
+	}
+
+	public function testACacheEntryWithAFieldTheSignatureDoesNotCoverIsNotTrusted(): void {
+		$this->resolve();
+		// Correctly signed, since the signature covers name, redirect_uris
+		// and expiry only; the extra field rides along unsigned.
+		$GLOBALS['ab_test_transients'][ self::key() ]['client']['scope'] = 'full';
+
+		$client = $this->resolve();
+
+		self::assertArrayNotHasKey( 'scope', $client );
+		self::assertSame( 2, $this->fetches(), 'Discarded and fetched again.' );
 	}
 
 	public function testAnExpiredCacheEntryIsNotUsedEvenIfTheStoreKeepsIt(): void {
@@ -291,7 +404,17 @@ final class CimdTest extends TestCase {
 			'inside 172.16/12' => array( '172.31.255.255', false ),
 			'inside 100.64/10' => array( '100.127.255.255', false ),
 			'documentation'    => array( '2001:db8::1', false ),
+			'documentation, new' => array( '3fff::1', false ),
+			'benchmarking IPv6'  => array( '2001:2::1', false ),
 			'6to4'             => array( '2002:a00:1::1', false ),
+			'NAT64 well-known, metadata service' => array( '64:ff9b::a9fe:a9fe', false ),
+			'NAT64 local, private'               => array( '64:ff9b:1::a00:1', false ),
+			'NAT64 local, metadata service'      => array( '64:ff9b:1::a9fe:a9fe', false ),
+			'IPv4-compatible, private'           => array( '::a00:1', false ),
+			'IPv4-compatible, loopback'          => array( '::7f00:1', false ),
+			'IPv4-translated, loopback'          => array( '::ffff:0:7f00:1', false ),
+			'IPv4-mapped, loopback'              => array( '::ffff:127.0.0.1', false ),
+			'unspecified IPv6'                   => array( '::', false ),
 			'garbage'          => array( 'not-an-ip', false ),
 		);
 	}
@@ -306,7 +429,9 @@ final class CimdTest extends TestCase {
 	public function testAFailedRequestIsReported(): void {
 		$GLOBALS['ab_test_http_answer'] = static fn(): WP_Error => new WP_Error( 'http_request_failed', 'timed out' );
 
-		self::assertStringContainsString( 'timed out', $this->refusal() );
+		$message = $this->refusal();
+		self::assertStringContainsString( 'timed out', $message );
+		self::assertStringContainsString( '"Accept apps with a metadata document"', $message, 'The refusal names the switch that lets such an app connect by registering.' );
 	}
 
 	/**
@@ -430,6 +555,34 @@ final class CimdTest extends TestCase {
 
 		self::assertSame( array( 'error' => 'invalid_grant' ), $out );
 		self::assertSame( 0, $this->fetches(), 'The public token endpoint cannot be used to make the site fetch addresses.' );
+	}
+
+	public function testAValidCodeCannotMakeTheSiteFetchAnotherAddress(): void {
+		ab_test_add_user( 7 );
+		update_option(
+			AB_MCP_OAuth::OPT_CLIENTS,
+			array(
+				'abc_registered' => array(
+					'name'          => 'Registered',
+					'redirect_uris' => array( self::REDIRECT ),
+				),
+			)
+		);
+		$challenge = rtrim( strtr( base64_encode( hash( 'sha256', self::VERIFIER, true ) ), '+/', '-_' ), '=' );
+		$code      = AB_MCP_OAuth::create_auth_code( 'abc_registered', self::REDIRECT, 7, 'content', $challenge );
+
+		$out = AB_MCP_OAuth::redeem_code(
+			array(
+				'grant_type'    => 'authorization_code',
+				'code'          => $code,
+				'client_id'     => 'https://attacker-chosen.example/any/path',
+				'redirect_uri'  => self::REDIRECT,
+				'code_verifier' => self::VERIFIER,
+			)
+		);
+
+		self::assertSame( array( 'error' => 'invalid_client' ), $out );
+		self::assertSame( 0, $this->fetches(), 'Only the client id an approver consented to is ever looked up.' );
 	}
 
 	/**

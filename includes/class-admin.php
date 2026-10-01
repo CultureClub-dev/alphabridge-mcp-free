@@ -123,11 +123,14 @@ class AB_MCP_Admin {
 	 * Toggle AlphaBridge Connect (Claude's native Connect button / OAuth) on or
 	 * off. Off = the well-known metadata, consent page and OAuth endpoints all
 	 * disappear; existing connections keep working (they are ordinary tokens).
+	 * The second switch in the same form decides whether apps may identify
+	 * themselves with a client metadata document (AB_MCP_OAuth::cimd_enabled()).
 	 */
 	public function handle_oauth_settings() {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_oauth_settings' );
 		AB_MCP_Settings::set( 'oauth_enabled', isset( $_POST['oauth_enabled'] ) );
+		AB_MCP_Settings::set( 'oauth_cimd', isset( $_POST['oauth_cimd'] ) );
 		$this->redirect( 'saved' );
 	}
 
@@ -808,6 +811,15 @@ class AB_MCP_Admin {
 		wp_nonce_field( 'ab_mcp_oauth_settings' );
 		echo '<input type="hidden" name="action" value="ab_mcp_oauth_settings">';
 		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Let Claude connect with its native Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
+		$cimd_on = (bool) AB_MCP_Settings::get( 'oauth_cimd', true );
+		echo '<label class="ab-check"><input type="checkbox" name="oauth_cimd" value="1"' . checked( $cimd_on, true, false ) . '><span>' . esc_html__( 'Accept apps with a metadata document.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Such an app names the address of a small file about itself instead of registering with the site; when you open its consent screen, the site loads that file from the app\'s server. Switch this off if this site cannot reach other servers, or should not: apps that can register with the site then do that, as before.', 'alphabridge-mcp' ) . '</span></span></label>';
+		if ( has_filter( 'ab_mcp_oauth_cimd' ) ) {
+			// A filter overrides the switch and the block below. Say so, and
+			// what is in force, so saving that changes nothing is explained.
+			echo '<p class="ab-note">' . esc_html( AB_MCP_OAuth::cimd_enabled() ? __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted.', 'alphabridge-mcp' ) ) . '</p>';
+		} elseif ( $cimd_on && AB_MCP_OAuth::outbound_blocked() ) {
+			echo '<p class="ab-note">' . esc_html__( 'This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter.', 'alphabridge-mcp' ) . '</p>';
+		}
 		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
 		echo '</form></details>';
 

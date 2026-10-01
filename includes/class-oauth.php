@@ -14,7 +14,10 @@
  *  - Client ID Metadata Documents (CIMD, the registration MCP 2026-07-28
  *    prefers): a client id that is an HTTPS URL is resolved by fetching the
  *    JSON document there. This is the only outbound request the OAuth flow
- *    makes, and only an approver who is logged in can set it off.
+ *    makes: on the consent page only once an approver is logged in, at the
+ *    token endpoint only for the client id an approver consented to. The
+ *    address is the app's choice either way, so cimd_fetch() limits where
+ *    the request may go.
  *  - Authorization-code grant with PKCE (S256 REQUIRED, RFC 7636) and
  *    resource indication (RFC 8707); the issuer in every authorization
  *    response (RFC 9207).
@@ -120,7 +123,8 @@ class AB_MCP_OAuth {
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
 	 * space, and the IPv6 forms that can carry one of those inside (mapped,
-	 * NAT64, 6to4, Teredo). WordPress's own check for safe requests misses
+	 * translated, IPv4-compatible, NAT64 with the well-known and the local
+	 * prefix, 6to4, Teredo). WordPress's own check for safe requests misses
 	 * link-local, shared address space and IPv6.
 	 */
 	const NON_PUBLIC_RANGES = array(
@@ -138,14 +142,17 @@ class AB_MCP_OAuth {
 		'203.0.113.0/24',
 		'224.0.0.0/4',
 		'240.0.0.0/4',
-		'::/128',
-		'::1/128',
+		'::/96',
 		'::ffff:0:0/96',
+		'::ffff:0:0:0/96',
 		'64:ff9b::/96',
+		'64:ff9b:1::/48',
 		'100::/64',
 		'2001::/32',
+		'2001:2::/48',
 		'2001:db8::/32',
 		'2002::/16',
+		'3fff::/20',
 		'fc00::/7',
 		'fe80::/10',
 		'fec0::/10',
@@ -393,7 +400,7 @@ class AB_MCP_OAuth {
 
 		if ( self::is_cimd_client_id( $client_id ) ) {
 			if ( ! self::cimd_enabled() ) {
-				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → Connect from Claude, by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
 			}
 			return self::cimd_client( $client_id );
 		}
@@ -408,21 +415,42 @@ class AB_MCP_OAuth {
 	/* ------------------------------------- client id metadata documents */
 
 	/**
-	 * Whether this site resolves client ids that are URLs. On by default; the
-	 * ab_mcp_oauth_cimd filter switches it off, leaving dynamic registration
-	 * as the only way in.
+	 * Whether this site resolves client ids that are URLs. On by default; off
+	 * by the setting, or while WordPress blocks outgoing requests. Off leaves
+	 * dynamic registration as the only way in, as before CIMD existed.
+	 *
+	 * Advertising CIMD where the documents cannot be loaded would cost
+	 * connections: a client prefers CIMD over registration as soon as the
+	 * server metadata offers it, and would then fail on every attempt.
 	 *
 	 * @return bool
 	 */
 	public static function cimd_enabled() {
+		$enabled = (bool) AB_MCP_Settings::get( 'oauth_cimd', true ) && ! self::outbound_blocked();
+
 		/**
 		 * Whether OAuth clients may identify themselves with a Client ID
 		 * Metadata Document (an HTTPS URL as client_id). Off, such a client id
-		 * is unknown, as before, and the discovery metadata stops advertising it.
+		 * is unknown, as before, and the discovery metadata stops advertising
+		 * it. The setting and WP_HTTP_BLOCK_EXTERNAL provide the starting
+		 * value; the filter has the last word, for example on a site that
+		 * blocks outgoing requests but lists the app hosts in
+		 * WP_ACCESSIBLE_HOSTS.
 		 *
-		 * @param bool $enabled Default true.
+		 * @param bool $enabled Starting value.
 		 */
-		return (bool) apply_filters( 'ab_mcp_oauth_cimd', true );
+		return (bool) apply_filters( 'ab_mcp_oauth_cimd', $enabled );
+	}
+
+	/**
+	 * Whether WordPress refuses requests to other servers
+	 * (WP_HTTP_BLOCK_EXTERNAL). Which app hosts WP_ACCESSIBLE_HOSTS lets
+	 * through cannot be known in advance, so a block counts as a block.
+	 *
+	 * @return bool
+	 */
+	public static function outbound_blocked() {
+		return defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && WP_HTTP_BLOCK_EXTERNAL;
 	}
 
 	/**
@@ -510,15 +538,33 @@ class AB_MCP_OAuth {
 	 * address, through WordPress's safe HTTP API, without following
 	 * redirects, for at most CIMD_TIMEOUT seconds and CIMD_MAX_BYTES.
 	 *
+	 * The connection goes to the addresses checked here and nowhere else:
+	 * cURL would otherwise look the name up again, and a name that answers
+	 * differently the second time (DNS rebinding) could lead the request to
+	 * an address never checked. CURLOPT_RESOLVE hands cURL the checked
+	 * answer; the name still serves for TLS, so the certificate must match
+	 * it. Without cURL (WordPress then falls back to fsockopen) and through
+	 * a proxy, the name is looked up again on connecting, as before.
+	 *
 	 * @param string $url Document URL.
 	 * @return array|WP_Error array( 'client' => …, 'ttl' => seconds to keep it ).
 	 */
 	private static function cimd_fetch( $url ) {
-		$problem = self::cimd_host_problem( (string) wp_parse_url( $url, PHP_URL_HOST ) );
-		if ( null !== $problem ) {
-			return self::cimd_error( $url, $problem );
+		$host      = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$addresses = self::cimd_host_addresses( $host );
+		if ( is_string( $addresses ) ) {
+			return self::cimd_error( $url, $addresses );
 		}
 
+		// The entry names host and port, so a request to any other host that
+		// might run while the hook is in place keeps its own lookup.
+		$resolve = self::curl_resolve_entry( $url, $addresses );
+		$pin     = static function ( $handle ) use ( $resolve ) {
+			if ( null !== $resolve ) {
+				curl_setopt( $handle, CURLOPT_RESOLVE, array( $resolve ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- the WordPress HTTP API offers no other way to fix the address a name connects to.
+			}
+		};
+		add_action( 'http_api_curl', $pin );
 		$response = wp_safe_remote_get(
 			$url,
 			array(
@@ -535,6 +581,7 @@ class AB_MCP_OAuth {
 				'user-agent'          => 'AlphaBridge-MCP/' . AB_MCP_VERSION,
 			)
 		);
+		remove_action( 'http_api_curl', $pin );
 		if ( is_wp_error( $response ) ) {
 			return self::cimd_error( $url, 'it could not be loaded (' . $response->get_error_message() . ')' );
 		}
@@ -607,18 +654,17 @@ class AB_MCP_OAuth {
 	}
 
 	/**
-	 * Why a metadata host may not be fetched from, or null when it may.
+	 * The addresses a metadata host may be fetched from, or why it may not.
 	 *
 	 * Every address the host resolves to must be public, IPv4 and IPv6 alike,
-	 * since the connection may use either. WordPress resolves the name again
-	 * when it connects; a name that changes its answer in between (DNS
-	 * rebinding) is not excluded by this check alone, which is why only an
-	 * approver who is logged in can set a fetch off at all.
+	 * since the connection may use either. cimd_fetch() then connects to
+	 * exactly these addresses, so a name that changes its answer in between
+	 * (DNS rebinding) gains nothing.
 	 *
 	 * @param string $host Host of the document URL.
-	 * @return string|null
+	 * @return string[]|string The addresses, or the problem.
 	 */
-	private static function cimd_host_problem( $host ) {
+	private static function cimd_host_addresses( $host ) {
 		$host = strtolower( trim( (string) $host, '[]' ) );
 		if ( '' === $host || 'localhost' === $host || '.localhost' === substr( $host, -10 ) ) {
 			return 'its host is this machine';
@@ -629,7 +675,7 @@ class AB_MCP_OAuth {
 		 * them up itself. Return a list to answer from elsewhere (a resolver
 		 * of your own, a fixed mapping); null leaves the lookup to the plugin.
 		 * Every address is checked either way: a filter cannot open the way
-		 * to a private one.
+		 * to a private one. The request then connects to these addresses.
 		 *
 		 * @param string[]|null $addresses Null.
 		 * @param string        $host      Host name.
@@ -641,12 +687,36 @@ class AB_MCP_OAuth {
 		if ( ! is_array( $addresses ) || empty( $addresses ) ) {
 			return 'its host name could not be resolved';
 		}
+		$checked = array();
 		foreach ( $addresses as $address ) {
 			if ( ! self::is_public_ip( (string) $address ) ) {
 				return 'its host resolves to an address that is not public; documents are fetched only from public addresses';
 			}
+			$checked[] = (string) $address;
 		}
-		return null;
+		return $checked;
+	}
+
+	/**
+	 * The CURLOPT_RESOLVE entry that ties a URL's host to checked addresses:
+	 * "host:port:address,address". None for a host that is an address
+	 * already, since nothing is looked up for it.
+	 *
+	 * The host is written as the URL spells it, which is what older cURL
+	 * versions compare the entry with; every version reads a bare IPv6
+	 * address here.
+	 *
+	 * @param string   $url       Document URL.
+	 * @param string[] $addresses Checked addresses.
+	 * @return string|null
+	 */
+	private static function curl_resolve_entry( $url, array $addresses ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		if ( '' === $host || false !== filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) || empty( $addresses ) ) {
+			return null;
+		}
+		$port = (int) wp_parse_url( $url, PHP_URL_PORT );
+		return $host . ':' . ( $port > 0 ? $port : 443 ) . ':' . implode( ',', $addresses );
 	}
 
 	/**
@@ -790,7 +860,7 @@ class AB_MCP_OAuth {
 			'ab_mcp_cimd',
 			sprintf(
 				/* translators: 1: host name, 2: what is wrong (English, technical). */
-				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. The app\'s maker can fix the document; until then the app can register with the site instead.', 'alphabridge-mcp' ),
+				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off "Accept apps with a metadata document" under Settings → AlphaBridge MCP → Connect from Claude; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
 				'' !== $host ? $host : substr( $url, 0, 200 ),
 				$problem
 			)
@@ -940,9 +1010,16 @@ class AB_MCP_OAuth {
 			return array( 'error' => 'invalid_grant' );
 		}
 
+		// The id is compared before the client is looked up: looking up an id
+		// that is a URL fetches it, and the id in this request is the
+		// caller's choice, while the one in the record is what an approver
+		// consented to.
 		$client_id = isset( $p['client_id'] ) ? (string) $p['client_id'] : '';
-		$client    = self::get_client( $client_id );
-		if ( false === $client || ! hash_equals( (string) $data['client_id'], $client_id ) ) {
+		if ( ! hash_equals( (string) $data['client_id'], $client_id ) ) {
+			return array( 'error' => 'invalid_client' );
+		}
+		$client = self::get_client( $client_id );
+		if ( false === $client ) {
 			return array( 'error' => 'invalid_client' );
 		}
 

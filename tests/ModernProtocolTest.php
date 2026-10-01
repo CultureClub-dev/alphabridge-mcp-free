@@ -711,6 +711,10 @@ final class ModernProtocolTest extends TestCase {
 			'name header differs'         => array( 'tools/call', $call, array( 'Mcp-Name' => 'wp_update_answer' ) ),
 			'name header base64 differs'  => array( 'tools/call', $call, array( 'Mcp-Name' => '=?base64?' . base64_encode( 'wp_update_answer' ) . '?=' ) ),
 			'name header bad base64'      => array( 'tools/call', $call, array( 'Mcp-Name' => '=?base64?not*base64?=' ) ),
+			// Decoded leniently, the stray "*" is skipped and the value reads
+			// wp_get_answer, the name in the body. Only strict decoding sees
+			// the invalid character.
+			'name header base64 with invalid char' => array( 'tools/call', $call, array( 'Mcp-Name' => '=?base64?d3Bf*Z2V0X2Fuc3dlcg==?=' ) ),
 			'name header non-ASCII'       => array( 'tools/call', array( 'name' => 'wp_get_änswer' ), array( 'Mcp-Name' => 'wp_get_änswer' ) ),
 			'prompt name header differs'  => array( 'prompts/get', array( 'name' => 'draft' ), array( 'Mcp-Name' => 'other' ) ),
 			'resource uri header differs' => array( 'resources/read', array( 'uri' => 'file:///a' ), array( 'Mcp-Name' => 'file:///b' ) ),
@@ -961,19 +965,131 @@ final class ModernProtocolTest extends TestCase {
 		return $methods;
 	}
 
-	public function testDeleteIsAnswered405WhileTheModernRevisionIsOn(): void {
-		$methods = array_column( $this->routes(), 1 );
-		self::assertSame( array( 'POST', 'GET', 'DELETE', 'POST', 'GET', 'DELETE' ), $methods, 'Both endpoints, the plain one and the one with the token in the path.' );
-
-		$answer = $this->controller()->handle_get();
-		self::assertSame( 405, $answer->get_status() );
-		self::assertSame( 'POST', $answer->get_headers()['Allow'] ?? null );
+	/**
+	 * One request through the emulated REST server (ab_test_rest_dispatch),
+	 * which adds the Allow header the way WordPress does.
+	 */
+	private function dispatch( string $method, string $route = '/alphabridge/v1/mcp', bool $signed_in = true ): WP_REST_Response {
+		$this->routes();
+		$request = new WP_REST_Request();
+		$request->set_method( $method );
+		$request->set_route( $route );
+		$request->set_json_params(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'ping',
+			)
+		);
+		if ( $signed_in ) {
+			ab_test_add_user( 7 );
+			$request->set_header( 'Authorization', 'Bearer ' . AB_MCP_Settings::add_token( 7, 'Test', 'full', 0 ) );
+		}
+		return ab_test_rest_dispatch( $request );
 	}
 
-	public function testDeleteIsLeftToWordPressWhenTheModernRevisionIsOff(): void {
-		AB_MCP_Settings::set( 'modern_protocol', false );
+	/**
+	 * @return array<string,array{0:bool}>
+	 */
+	public static function bothModes(): array {
+		return array(
+			'modern on'  => array( true ),
+			'modern off' => array( false ),
+		);
+	}
 
-		self::assertSame( array( 'POST', 'GET', 'POST', 'GET' ), array_column( $this->routes(), 1 ), 'As before.' );
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'bothModes' )]
+	public function testTheRoutesKeepTheirHandlers( bool $modern ): void {
+		AB_MCP_Settings::set( 'modern_protocol', $modern );
+
+		self::assertSame( array( 'POST', 'GET', 'POST', 'GET' ), array_column( $this->routes(), 1 ), 'Both endpoints, the plain one and the one with the token in the path, as before.' );
+	}
+
+	/**
+	 * WordPress writes Allow on every answer of a route from the route's
+	 * handlers. These are the values the endpoint has always sent, in both
+	 * modes: a further handler would add itself to each of them.
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'bothModes' )]
+	public function testTheAllowHeaderOfEveryOtherAnswerIsAsBefore( bool $modern ): void {
+		AB_MCP_Settings::set( 'modern_protocol', $modern );
+
+		$post = $this->dispatch( 'POST' );
+		self::assertSame( 200, $post->get_status() );
+		self::assertSame( 'POST, GET', $post->get_headers()['Allow'] ?? null );
+
+		$get = $this->dispatch( 'GET' );
+		self::assertSame( 405, $get->get_status() );
+		self::assertSame( 'POST, GET', $get->get_headers()['Allow'] ?? null, 'WordPress replaces the handler\'s own "POST" here, and always has.' );
+
+		$anonymous = $this->dispatch( 'POST', '/alphabridge/v1/mcp', false );
+		self::assertSame( 401, $anonymous->get_status() );
+		self::assertArrayNotHasKey( 'Allow', $anonymous->get_headers() );
+	}
+
+	/**
+	 * @return array<string,array{0:string,1:bool}>
+	 */
+	public static function deletes(): array {
+		return array(
+			'plain endpoint, signed in'  => array( '/alphabridge/v1/mcp', true ),
+			'plain endpoint, anonymous'  => array( '/alphabridge/v1/mcp', false ),
+			'token in the path'          => array( '/alphabridge/v1/mcp/abmcp_0123456789abcdef', false ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'deletes' )]
+	public function testDeleteIsAnswered405WhileTheModernRevisionIsOn( string $route, bool $signed_in ): void {
+		$answer = $this->dispatch( 'DELETE', $route, $signed_in );
+
+		self::assertSame( 405, $answer->get_status() );
+		self::assertSame( 'ab_mcp_method_not_allowed', $answer->get_data()['code'] );
+		self::assertStringContainsString( 'POST', $answer->get_data()['message'], 'The refusal names the way in.' );
+		self::assertSame( 'POST', $answer->get_headers()['Allow'] ?? null, 'Matched no route, so WordPress leaves this Allow alone.' );
+		self::assertSame( 'no-store', $answer->get_headers()['Cache-Control'] ?? null );
+	}
+
+	public function testDeleteFindsThePathTheWayWordPressDoes(): void {
+		self::assertSame( 405, $this->dispatch( 'DELETE', '/AlphaBridge/v1/MCP', false )->get_status(), 'WordPress matches routes without regard to case.' );
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'switchedOff' )]
+	public function testDeleteIsLeftToWordPressWhenTheModernRevisionIsOff( callable $off ): void {
+		$off();
+		$answer = $this->dispatch( 'DELETE' );
+
+		self::assertSame( 404, $answer->get_status(), 'As before: no route for DELETE.' );
+		self::assertSame( 'rest_no_route', $answer->get_data()['code'] );
+	}
+
+	/**
+	 * @return array<string,array{0:string}>
+	 */
+	public static function notOurs(): array {
+		return array(
+			'another route of the plugin' => array( '/alphabridge/v1/oauth/token' ),
+			'a longer path'               => array( '/alphabridge/v1/mcpx' ),
+			'a deeper path'               => array( '/alphabridge/v1/mcp/abc/def' ),
+			'another plugin'              => array( '/wp/v2/posts/1' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'notOurs' )]
+	public function testDeleteElsewhereIsLeftToWordPress( string $route ): void {
+		$request = new WP_REST_Request();
+		$request->set_method( 'DELETE' );
+		$request->set_route( $route );
+
+		self::assertNull( $this->controller()->refuse_delete( null, null, $request ) );
+	}
+
+	public function testAnAnswerAnotherFilterChoseIsKept(): void {
+		$request = new WP_REST_Request();
+		$request->set_method( 'DELETE' );
+		$request->set_route( '/alphabridge/v1/mcp' );
+		$chosen = new WP_REST_Response( null, 418 );
+
+		self::assertSame( $chosen, $this->controller()->refuse_delete( $chosen, null, $request ) );
 	}
 
 	public function testTheEventStreamWriterIsHookedWithTheRoutes(): void {

@@ -211,18 +211,6 @@ class AB_MCP_REST_Controller {
 			),
 		);
 
-		// 2026-07-28 asks a server without sessions to answer DELETE (the old
-		// way to end a session) with 405 instead of WordPress's 404 "no route".
-		// Only together with the modern revision, so switching it off restores
-		// the old answer too.
-		if ( self::modern_enabled() ) {
-			$handlers[] = array(
-				'methods'             => 'DELETE',
-				'callback'            => array( $this, 'handle_get' ),
-				'permission_callback' => array( $this, 'check_permission' ),
-			);
-		}
-
 		// Header-token endpoint (Authorization: Bearer / X-Api-Key clients).
 		register_rest_route( AB_MCP_REST_NAMESPACE, AB_MCP_REST_ROUTE, $handlers );
 
@@ -235,6 +223,12 @@ class AB_MCP_REST_Controller {
 			$handlers
 		);
 
+		// DELETE is answered before WordPress looks for a handler, not by a
+		// handler of its own: WordPress lists every handler of a route in the
+		// Allow header of each response (rest_send_allow_header), so a DELETE
+		// handler would change that header on every answer of this endpoint.
+		add_filter( 'rest_pre_dispatch', array( $this, 'refuse_delete' ), 10, 3 );
+
 		// Apply the no-referrer / no-store headers to EVERY response from these
 		// routes — GET, POST and error responses (e.g. 401) alike.
 		add_filter( 'rest_post_dispatch', array( $this, 'add_security_headers' ), 10, 3 );
@@ -242,6 +236,41 @@ class AB_MCP_REST_Controller {
 		// subscriptions/listen answers with an event stream, which the REST
 		// server would otherwise encode as JSON.
 		add_filter( 'rest_pre_serve_request', array( $this, 'serve_event_stream' ), 10, 3 );
+	}
+
+	/**
+	 * DELETE on this endpoint, while the modern revision is answered: 405.
+	 *
+	 * 2026-07-28 asks a server without sessions to answer DELETE (the old way
+	 * to end a session) with 405; WordPress would say 404 "no route". Off, the
+	 * request passes on to WordPress and gets that 404, as before.
+	 *
+	 * No token is checked: the answer says only that this endpoint takes POST,
+	 * which an unauthenticated POST learns from its 401 as well. The response
+	 * matches no route, so WordPress adds no Allow header of its own and the
+	 * one set here stands.
+	 *
+	 * @param mixed           $result  Response another filter already chose, or null.
+	 * @param WP_REST_Server  $server  Server (unused).
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public function refuse_delete( $result, $server, $request ) {
+		unset( $server );
+		// Like WordPress, which serves whatever is not empty here.
+		if ( ! empty( $result ) || ! is_object( $request ) || 'DELETE' !== strtoupper( (string) $request->get_method() ) ) {
+			return $result;
+		}
+		// The two routes registered above, matched the way WordPress matches
+		// them: the whole path, without regard to case.
+		$base = '/' . AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE;
+		if ( 1 !== preg_match( '@^' . preg_quote( $base, '@' ) . '(?:/[A-Za-z0-9_]+)?$@i', (string) $request->get_route() ) ) {
+			return $result;
+		}
+		if ( ! self::modern_enabled() ) {
+			return $result;
+		}
+		return self::method_not_allowed( 'This MCP endpoint keeps no sessions, so there is none to end. Send JSON-RPC 2.0 requests via HTTP POST.' );
 	}
 
 	/**
@@ -385,10 +414,24 @@ class AB_MCP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function handle_get() {
+		return self::method_not_allowed( 'This MCP endpoint does not offer a server-initiated stream. Send JSON-RPC 2.0 requests via HTTP POST.' );
+	}
+
+	/**
+	 * A 405 that names POST as the way in.
+	 *
+	 * For GET, WordPress replaces this Allow header with the methods of the
+	 * route's handlers ("POST, GET"), as it always has; that answer is kept so
+	 * older clients see the same bytes as before.
+	 *
+	 * @param string $message What to do instead.
+	 * @return WP_REST_Response
+	 */
+	private static function method_not_allowed( $message ) {
 		$response = new WP_REST_Response(
 			array(
 				'code'    => 'ab_mcp_method_not_allowed',
-				'message' => 'This MCP endpoint does not offer a server-initiated stream. Send JSON-RPC 2.0 requests via HTTP POST.',
+				'message' => $message,
 			),
 			405
 		);

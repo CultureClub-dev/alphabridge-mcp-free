@@ -37,6 +37,11 @@ class AB_MCP_Settings {
 			// either generation are served; older ones exactly as before. See
 			// AB_MCP_REST_Controller::modern_enabled().
 			'modern_protocol'            => true,
+			// OAuth clients that identify themselves with a client metadata
+			// document (an https URL as client_id). See
+			// AB_MCP_OAuth::cimd_enabled(), which also honours
+			// WP_HTTP_BLOCK_EXTERNAL and a filter.
+			'oauth_cimd'                 => true,
 		);
 	}
 

@@ -8,12 +8,13 @@
  * classes touch. That keeps the suite fast and dependency-free, and it means a
  * test failure points at plugin code rather than at a WordPress fixture.
  *
- * What is deliberately NOT emulated: the REST dispatcher, capabilities and the
- * database. Anything that needs those belongs in the end-to-end run against a
- * real site, not here. There is no network either: wp_safe_remote_get() is
- * answered by a callback the test sets (ab_test_http_answer), and every call is
- * recorded, so a test can prove that a request was made, or was not.
- * register_rest_route() only records what is registered.
+ * What is deliberately NOT emulated: capabilities and the database. Anything
+ * that needs those belongs in the end-to-end run against a real site, not
+ * here. Of the REST dispatcher only the part that decides status and headers
+ * is copied (ab_test_rest_dispatch(), see there); register_rest_route() records
+ * what is registered for it. There is no network either: wp_safe_remote_get()
+ * is answered by a callback the test sets (ab_test_http_answer), and every call
+ * is recorded, so a test can prove that a request was made, or was not.
  *
  * @package AlphaBridge_MCP
  */
@@ -86,6 +87,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_locale']     = 'en_US';
 	$GLOBALS['ab_test_http']        = array();
 	$GLOBALS['ab_test_http_answer'] = null;
+	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
 }
@@ -167,6 +169,27 @@ function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
+function remove_filter( $hook, $callback, $priority = 10 ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $i => $entry ) {
+		if ( $entry['fn'] === $callback && $entry['prio'] === $priority ) {
+			unset( $GLOBALS['ab_test_filters'][ $hook ][ $i ] );
+			return true;
+		}
+	}
+	return false;
+}
+
+function remove_action( $hook, $callback, $priority = 10 ) {
+	return remove_filter( $hook, $callback, $priority );
+}
+
+/** Runs what add_action() hooked, with the elements of $args as arguments. */
+function do_action_ref_array( $hook, $args ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $entry ) {
+		( $entry['fn'] )( ...$args );
+	}
+}
+
 /**
  * As in WordPress: without a callback, whether the hook has any; with one, its
  * priority when it is registered, else false.
@@ -227,6 +250,18 @@ function esc_html__( $text, $domain = '' ) {
 
 function home_url( $path = '' ) {
 	return 'https://example.test' . $path;
+}
+
+function site_url( $path = '' ) {
+	return 'https://example.test' . $path;
+}
+
+function esc_url_raw( $url ) {
+	return (string) $url;
+}
+
+function wp_set_current_user( $id ) {
+	$GLOBALS['ab_test_current_user'] = (int) $id;
 }
 
 function rest_url( $path = '' ) {
@@ -933,6 +968,24 @@ class WP_REST_Request {
 	private $headers = array();
 	/** @var string */
 	private $route = '';
+	/** @var string POST unless a test says otherwise: most tests call the POST handler directly. */
+	private $method = 'POST';
+	/** @var array<string,string> */
+	private $url_params = array();
+
+	/** Upper case, as WP_REST_Request::set_method() stores it. */
+	public function set_method( string $method ): void {
+		$this->method = strtoupper( $method );
+	}
+
+	public function get_method(): string {
+		return $this->method;
+	}
+
+	/** @param array<string,string> $params */
+	public function set_url_params( array $params ): void {
+		$this->url_params = $params;
+	}
 
 	public function set_route( string $route ): void {
 		$this->route = $route;
@@ -967,8 +1020,96 @@ class WP_REST_Request {
 	}
 
 	public function get_param( $key ) {
-		return $this->body[ $key ] ?? null;
+		return $this->body[ $key ] ?? $this->url_params[ $key ] ?? null;
 	}
+}
+
+/**
+ * The part of the REST server that decides status and headers of an answer,
+ * over the routes register_rest_route() recorded. Copied from WordPress 7.0.2:
+ * WP_REST_Server::dispatch() (rest_pre_dispatch; a non-empty result is served
+ * as it is and matches no route), match_request_to_handler() (the whole path,
+ * case-insensitive; the first handler whose method fits; none: 404
+ * rest_no_route), respond_to_request() (permission_callback, then callback;
+ * WP_Error to response), then rest_post_dispatch with rest_send_allow_header()
+ * first, as rest_api_default_filters() hooks it before any plugin: for a
+ * matched route, Allow lists every method whose permission_callback returns
+ * true for this request, and replaces whatever Allow the answer had.
+ *
+ * Left out: OPTIONS and HEAD, argument validation, embedding, batches.
+ */
+function ab_test_rest_dispatch( WP_REST_Request $request ): WP_REST_Response {
+	$routes = array();
+	foreach ( $GLOBALS['ab_test_routes'] as $entry ) {
+		$handlers = isset( $entry['args']['methods'] ) ? array( $entry['args'] ) : $entry['args'];
+		foreach ( $handlers as $handler ) {
+			$methods = is_array( $handler['methods'] ) ? $handler['methods'] : preg_split( '/,\s*/', (string) $handler['methods'] );
+			$handler['methods'] = array_fill_keys( array_map( 'strtoupper', $methods ), true );
+			$routes[ '/' . trim( $entry['namespace'], '/' ) . $entry['route'] ][] = $handler;
+		}
+	}
+
+	$pre      = apply_filters( 'rest_pre_dispatch', null, null, $request );
+	$response = empty( $pre ) ? null : ab_test_rest_response( $pre );
+	$matched  = null;
+	if ( null === $response ) {
+		foreach ( $routes as $route => $handlers ) {
+			if ( 1 !== preg_match( '@^' . $route . '$@i', $request->get_route(), $m ) ) {
+				continue;
+			}
+			foreach ( $handlers as $handler ) {
+				if ( empty( $handler['methods'][ $request->get_method() ] ) ) {
+					continue;
+				}
+				$request->set_url_params( array_filter( $m, 'is_string', ARRAY_FILTER_USE_KEY ) );
+				$matched    = $route;
+				$permission = call_user_func( $handler['permission_callback'], $request );
+				$result     = true === $permission ? call_user_func( $handler['callback'], $request ) : $permission;
+				$response   = ab_test_rest_response( $result );
+				break 2;
+			}
+		}
+		if ( null === $matched ) {
+			$response = ab_test_rest_response( new WP_Error( 'rest_no_route', 'No route was found matching the URL and request method.', array( 'status' => 404 ) ) );
+		}
+	}
+
+	// rest_send_allow_header().
+	if ( null !== $matched ) {
+		$allowed = array();
+		foreach ( $routes[ $matched ] as $handler ) {
+			foreach ( $handler['methods'] as $method => $on ) {
+				$allowed[ $method ] = true === call_user_func( $handler['permission_callback'], $request );
+			}
+		}
+		$allowed = array_filter( $allowed );
+		if ( $allowed ) {
+			$response->header( 'Allow', implode( ', ', array_keys( $allowed ) ) );
+		}
+	}
+
+	return apply_filters( 'rest_post_dispatch', $response, null, $request );
+}
+
+/**
+ * A callback's result as WordPress serves it: a WP_Error becomes its code,
+ * message and data with the status from the data (500 without one).
+ *
+ * @param mixed $result
+ */
+function ab_test_rest_response( $result ): WP_REST_Response {
+	if ( $result instanceof WP_Error ) {
+		$data = $result->get_error_data();
+		return new WP_REST_Response(
+			array(
+				'code'    => $result->get_error_code(),
+				'message' => $result->get_error_message(),
+				'data'    => $data,
+			),
+			is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 500
+		);
+	}
+	return $result instanceof WP_REST_Response ? $result : new WP_REST_Response( $result );
 }
 
 /* ------------------------------------------------------------ URLs, HTTP */
@@ -981,21 +1122,54 @@ function add_query_arg( $args, $url = '' ) {
 	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . http_build_query( (array) $args );
 }
 
-/** @var array<int,array{url:string,args:array}> $ab_test_http Every wp_safe_remote_get() call, in order. */
+/** @var array<int,array{url:string,args:array,curl?:string}> $ab_test_http Every wp_safe_remote_get() call, in order. */
 $GLOBALS['ab_test_http'] = array();
 /** @var callable|null $ab_test_http_answer Answers wp_safe_remote_get(): fn( string $url, array $args ): array|WP_Error */
 $GLOBALS['ab_test_http_answer'] = null;
+/** @var bool $ab_test_http_curl When true, every call also records what cURL was told about host addresses ('curl'). */
+$GLOBALS['ab_test_http_curl'] = false;
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
  * limit_response_size cuts the body after that many bytes. Without an answer
  * configured, the request fails, as it would without network.
+ *
+ * As WordPress does with its cURL transport, the http_api_curl action runs
+ * with a real cURL handle before the answer. With ab_test_http_curl set, that
+ * handle is then started against a proxy on this machine that refuses the
+ * connection: cURL loads CURLOPT_RESOLVE entries when a transfer starts and
+ * says so in its verbose log ("added host:port:address"), and the proxy keeps
+ * it from looking up or reaching the host itself. The log is recorded.
  */
 function wp_safe_remote_get( $url, $args = array() ) {
-	$GLOBALS['ab_test_http'][] = array(
+	$call = array(
 		'url'  => (string) $url,
 		'args' => (array) $args,
 	);
+	if ( function_exists( 'curl_init' ) ) {
+		$handle = curl_init();
+		do_action_ref_array( 'http_api_curl', array( &$handle, (array) $args, (string) $url ) );
+		if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {
+			$log = fopen( 'php://temp', 'w+' );
+			curl_setopt_array(
+				$handle,
+				array(
+					CURLOPT_URL               => (string) $url,
+					CURLOPT_PROXY             => 'http://127.0.0.1:9',
+					CURLOPT_VERBOSE           => true,
+					CURLOPT_STDERR            => $log,
+					CURLOPT_RETURNTRANSFER    => true,
+					CURLOPT_CONNECTTIMEOUT_MS => 500,
+					CURLOPT_TIMEOUT_MS        => 1000,
+				)
+			);
+			curl_exec( $handle );
+			rewind( $log );
+			$call['curl'] = (string) stream_get_contents( $log );
+			fclose( $log );
+		}
+	}
+	$GLOBALS['ab_test_http'][] = $call;
 	$answer = $GLOBALS['ab_test_http_answer'];
 	if ( ! is_callable( $answer ) ) {
 		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
@@ -1091,8 +1265,16 @@ function wp_verify_nonce( $nonce, $action = -1 ) {
 	return 'nonce-' . $action === (string) $nonce ? 1 : false;
 }
 
+/**
+ * Like WordPress: the nonce in the request must be the one made for this
+ * action; otherwise the request ends ("The link you followed has expired").
+ */
 function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
-	return 1;
+	$result = isset( $_REQUEST[ $query_arg ] ) ? wp_verify_nonce( $_REQUEST[ $query_arg ], $action ) : false;
+	if ( ! $result ) {
+		wp_die( 'The link you followed has expired.' );
+	}
+	return $result;
 }
 
 /** @var array<int,array{namespace:string,route:string,args:array}> $ab_test_routes Every register_rest_route() call. */
