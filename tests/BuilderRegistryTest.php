@@ -11,6 +11,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Builder_Adapter_Blocks;
+use AB_MCP_Builder_Adapter_Shortcodes;
 use AB_MCP_Builders;
 use PHPUnit\Framework\TestCase;
 
@@ -127,7 +128,11 @@ final class BuilderRegistryTest extends TestCase {
 		AB_MCP_Builders::reset();
 		self::assertSame( $second, AB_MCP_Builders::adapters()['elementor'] );
 		self::assertSame( $second, AB_MCP_Builders::adapter_for_builder( 'elementor' ) );
-		self::assertSame( array( 'blocks', 'elementor', 'beaver', 'siteorigin', 'seedprod' ), array_keys( AB_MCP_Builders::adapters() ), 'The built-in adapters, the last elementor in place of the built-in one, nothing else.' );
+		$expected = array( 'blocks', 'elementor', 'beaver', 'siteorigin', 'seedprod' );
+		foreach ( AB_MCP_Builder_Adapter_Shortcodes::defaults() as $reader ) {
+			$expected[] = $reader->id();
+		}
+		self::assertSame( $expected, array_keys( AB_MCP_Builders::adapters() ), 'The built-in adapters, the last elementor in place of the built-in one, nothing else.' );
 	}
 
 	public function testADedicatedAdapterTakesOverABlockLibrary(): void {

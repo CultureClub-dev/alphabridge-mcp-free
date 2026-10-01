@@ -96,6 +96,22 @@ final class BuilderLayoutToolTest extends TestCase {
 
 	public function testABuilderWithoutReader(): void {
 		$this->builders( array( 'wpbakery' ) );
+		// The free core reads WPBakery; a site (or Pro) can take a reader
+		// away through the filter, and then the builder is only recognised.
+		add_filter(
+			'ab_mcp_builder_adapters',
+			static function ( $list ) {
+				return array_values(
+					array_filter(
+						$list,
+						static function ( $adapter ): bool {
+							return 'wpbakery' !== $adapter->id();
+						}
+					)
+				);
+			}
+		);
+		AB_MCP_Builders::reset();
 		$this->page( 63, '[vc_row][vc_column][vc_column_text]<p>Hi</p>[/vc_column_text][/vc_column][/vc_row]', array( '_wpb_shortcodes_custom_css' => '.vc{}' ) );
 		$out = $this->layout( array( 'id' => 63 ) );
 		self::assertSame( 'wpbakery', $out['builder'] );

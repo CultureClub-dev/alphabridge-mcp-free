@@ -52,12 +52,14 @@ require_once __DIR__ . '/class-builder-html.php';
 require_once __DIR__ . '/class-builder-adapter.php';
 require_once __DIR__ . '/class-block-reader.php';
 require_once __DIR__ . '/class-shortcode-reader.php';
+require_once __DIR__ . '/class-shortcode-codecs.php';
 require_once __DIR__ . '/adapters/class-adapter-blocks.php';
 require_once __DIR__ . '/class-element-profile.php';
 require_once __DIR__ . '/adapters/class-adapter-elementor.php';
 require_once __DIR__ . '/adapters/class-adapter-beaver.php';
 require_once __DIR__ . '/adapters/class-adapter-siteorigin.php';
 require_once __DIR__ . '/adapters/class-adapter-seedprod.php';
+require_once __DIR__ . '/adapters/class-adapter-shortcodes.php';
 
 /**
  * Class AB_MCP_Builders
@@ -233,9 +235,9 @@ final class AB_MCP_Builders {
 
 	/**
 	 * Registered adapters, keyed by id. The free plugin registers its own
-	 * readers (the list below); others come through the filter
-	 * ab_mcp_builder_adapters. An adapter registered later replaces an
-	 * earlier one with the same id.
+	 * readers (the list below, plus one shortcode reader per profile);
+	 * others come through the filter ab_mcp_builder_adapters. An adapter
+	 * registered later replaces an earlier one with the same id.
 	 *
 	 * @return array<string,AB_MCP_Builder_Adapter>
 	 */
@@ -243,21 +245,22 @@ final class AB_MCP_Builders {
 		if ( null !== self::$adapters ) {
 			return self::$adapters;
 		}
+		$defaults = array(
+			new AB_MCP_Builder_Adapter_Blocks(),
+			new AB_MCP_Builder_Adapter_Elementor(),
+			new AB_MCP_Builder_Adapter_Beaver(),
+			new AB_MCP_Builder_Adapter_SiteOrigin(),
+			new AB_MCP_Builder_Adapter_SeedProd(),
+		);
+		// Shortcode builders (WPBakery, Divi 4, Avada, Flatsome, Enfold): one
+		// adapter per profile in profiles/shortcodes-*.php.
+		$defaults = array_merge( $defaults, AB_MCP_Builder_Adapter_Shortcodes::defaults() );
 		/**
 		 * Register page-builder adapters.
 		 *
 		 * @param AB_MCP_Builder_Adapter[] $adapters Adapters, in order.
 		 */
-		$list = apply_filters(
-			'ab_mcp_builder_adapters',
-			array(
-				new AB_MCP_Builder_Adapter_Blocks(),
-				new AB_MCP_Builder_Adapter_Elementor(),
-				new AB_MCP_Builder_Adapter_Beaver(),
-				new AB_MCP_Builder_Adapter_SiteOrigin(),
-				new AB_MCP_Builder_Adapter_SeedProd(),
-			)
-		);
+		$list = apply_filters( 'ab_mcp_builder_adapters', $defaults );
 		$out  = array();
 		foreach ( (array) $list as $adapter ) {
 			if ( $adapter instanceof AB_MCP_Builder_Adapter && '' !== $adapter->id() ) {
@@ -456,7 +459,8 @@ final class AB_MCP_Builders {
 	 *
 	 * - Storage B, builder active, an adapter reads it: block. post_content is
 	 *   only a copy the builder does not show (measured for Elementor, Beaver,
-	 *   SiteOrigin, Themify, Zion, Live Composer and Brizy).
+	 *   SiteOrigin, Themify, Zion, Live Composer and Brizy; for Enfold from the
+	 *   vendor's documentation and code, quellen/enfold.md b), not measured).
 	 * - Storage B, builder active or of unknown state, no adapter: write,
 	 *   with a warning — nothing gets worse than it was (plan, principle 9).
 	 * - Storage A2: write, with a warning that the builder restores its own
