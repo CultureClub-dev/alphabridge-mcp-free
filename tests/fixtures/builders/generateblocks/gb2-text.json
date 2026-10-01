@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb2.json (GenerateBlocks 2.4.1, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[1].serialisiert — Text (generateblocks/text)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/text {\"uniqueId\":\"d8667756\",\"tagName\":\"p\",\"styles\":{\"marginBottom\":\"1rem\",\"fontSize\":\"1.25rem\"},\"css\":\".gb-text-d8667756{font-size:1.25rem;margin-bottom:1rem}\"} -->\n<p class=\"gb-text gb-text-d8667756\">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>\n<!-- /wp:generateblocks/text -->"
+}

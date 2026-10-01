@@ -12,6 +12,11 @@
  * database. Anything that needs those belongs in the end-to-end run against a
  * real site, not here.
  *
+ * Not emulated but copied: WordPress' block parser and serializer and its
+ * shortcode pattern, unchanged from WordPress 7.0.2 (tests/support/, each file
+ * says where from), because the page-builder readers must read exactly what
+ * WordPress reads.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -81,6 +86,14 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
 	$GLOBALS['ab_test_locale']     = 'en_US';
+	$GLOBALS['ab_test_template']   = 'twentytwentyfive';
+	$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
+	$GLOBALS['ab_test_site_options'] = array();
+	// The builder registry caches signatures, adapters and block profiles
+	// for a request; every test starts without them.
+	if ( class_exists( 'AB_MCP_Builders', false ) ) {
+		AB_MCP_Builders::reset();
+	}
 }
 
 function get_option( $name, $default = false ) {
@@ -179,6 +192,22 @@ function has_filter( $hook, $callback = false ) {
 
 function has_action( $hook, $callback = false ) {
 	return has_filter( $hook, $callback );
+}
+
+/** As in WordPress: removes the callback registered at that priority. */
+function remove_filter( $hook, $callback, $priority = 10 ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $i => $entry ) {
+		if ( $entry['fn'] === $callback && $entry['prio'] === $priority ) {
+			unset( $GLOBALS['ab_test_filters'][ $hook ][ $i ] );
+			$GLOBALS['ab_test_filters'][ $hook ] = array_values( $GLOBALS['ab_test_filters'][ $hook ] );
+			return true;
+		}
+	}
+	return false;
+}
+
+function remove_action( $hook, $callback, $priority = 10 ) {
+	return remove_filter( $hook, $callback, $priority );
 }
 
 function __return_true() {
@@ -427,13 +456,23 @@ class WP_Query {
 	public $found_posts   = 0;
 	public $max_num_pages = 0;
 	public $args;
+	/** @var string The WHERE clause posts_where made of '' for this query. */
+	public $where         = '';
 
 	public function __construct( $args = array() ) {
-		$this->args          = $args;
+		$this->args = $args;
+		// Like WP_Query::get_posts(): the WHERE filter runs with the query
+		// object, so a filter can tell its own query from any other.
+		$this->where         = (string) apply_filters( 'posts_where', '', $this );
 		$answer              = $GLOBALS['ab_test_query'];
-		$this->posts         = is_callable( $answer ) ? (array) $answer( $args ) : array();
+		$this->posts         = is_callable( $answer ) ? (array) $answer( $args, $this->where ) : array();
 		$this->found_posts   = count( $this->posts );
 		$this->max_num_pages = $this->found_posts > 0 ? 1 : 0;
+	}
+
+	/** A query var, as WP_Query::get(). */
+	public function get( $key, $default = '' ) {
+		return $this->args[ $key ] ?? $default;
 	}
 }
 
@@ -456,6 +495,27 @@ function get_the_excerpt( $post ) {
 
 function wp_strip_all_tags( $text ) {
 	return strip_tags( (string) $text );
+}
+
+/* ---------------------------------------------------- themes, network */
+
+/** @var string $ab_test_template Active (parent) theme. */
+$GLOBALS['ab_test_template']   = 'twentytwentyfive';
+/** @var string $ab_test_stylesheet Active (child) theme. */
+$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
+/** @var array<string,mixed> $ab_test_site_options Network options. */
+$GLOBALS['ab_test_site_options'] = array();
+
+function get_template() {
+	return (string) $GLOBALS['ab_test_template'];
+}
+
+function get_stylesheet() {
+	return (string) $GLOBALS['ab_test_stylesheet'];
+}
+
+function get_site_option( $name, $default = false ) {
+	return array_key_exists( $name, $GLOBALS['ab_test_site_options'] ) ? $GLOBALS['ab_test_site_options'][ $name ] : $default;
 }
 
 /**
@@ -967,7 +1027,16 @@ require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
+// WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
+// file headers): the builder readers call parse_blocks().
+require_once __DIR__ . '/support/class-wp-block-parser.php';
+require_once __DIR__ . '/support/blocks-functions.php';
+// WordPress' shortcode pattern and attribute parser, the yardstick for the
+// shortcode reader (same version, same kind of copy).
+require_once __DIR__ . '/support/shortcodes-functions.php';
+require_once __DIR__ . '/../includes/builders/class-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-content.php';
+require_once __DIR__ . '/../includes/tools/class-tools-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-search-bulk.php';
 require_once __DIR__ . '/../includes/tools/class-tools-media.php';
 require_once __DIR__ . '/../includes/tools/class-tools-taxonomy-comments.php';

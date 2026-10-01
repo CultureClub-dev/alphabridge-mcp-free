@@ -57,6 +57,8 @@ require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';
 require_once AB_MCP_DIR . 'includes/class-rest-controller.php';
+// Page builders: recognition and reading; defines AB_MCP_BUILDER_API, which Pro checks.
+require_once AB_MCP_DIR . 'includes/builders/class-builders.php';
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

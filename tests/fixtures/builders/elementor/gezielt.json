@@ -1,0 +1,13 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/ergebnis-4-gezielt-aendern.json and messen4.php (Elementor 4.3.3, measured 30.09.2026). content is el_post_content_nach as measured. The two _elementor_data values were NOT recorded: they are the elements messen4.php hands to Document::save() before and after the change, encoded the way ergebnis-1 shows Elementor stores them (wp_json_encode: \\u escapes, \\/); el_frontend_zeigt_neu=true says Elementor showed the new text.",
+ "measured": false,
+ "meta": {
+  "_elementor_data": "[{\"id\":\"c0ffee1\",\"elType\":\"container\",\"settings\":[],\"elements\":[{\"id\":\"b2c3d4e\",\"elType\":\"widget\",\"settings\":{\"editor\":\"<p>\\u00d6ffnungszeiten: Mo\\u2013Sa 9\\u201317 Uhr<\\/p>\"},\"elements\":[],\"widgetType\":\"text-editor\"}],\"isInner\":false}]",
+  "_elementor_edit_mode": "builder"
+ },
+ "meta_before": {
+  "_elementor_data": "[{\"id\":\"c0ffee1\",\"elType\":\"container\",\"settings\":[],\"elements\":[{\"id\":\"b2c3d4e\",\"elType\":\"widget\",\"settings\":{\"editor\":\"<p>\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr<\\/p>\"},\"elements\":[],\"widgetType\":\"text-editor\"}],\"isInner\":false}]",
+  "_elementor_edit_mode": "builder"
+ },
+ "content": "<p>Öffnungszeiten: Mo–Sa 9–17 Uhr</p>"
+}

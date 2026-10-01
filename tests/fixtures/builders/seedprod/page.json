@@ -1,0 +1,16 @@
+{
+ "source": "Measured 01.10.2026: WordPress 7.1.2, PHP 8.3.33, SeedProd Lite 6.20.10 (coming-soon) in WordPress Playground; the page of seedprod-pagelayer/web/sp.php step \"anlegen\" (header, text, button, image), saved through SeedProd's ability seedprod/save-page as in the plan measurement. post_content and post_content_filtered as stored in wp_posts, meta as stored. Method: README.md in this folder.",
+ "measured": true,
+ "versions": {
+  "wordpress": "7.1.2",
+  "php": "8.3.33",
+  "seedprod": "6.20.10"
+ },
+ "post_content": "",
+ "post_content_filtered": "{\"page_type\":\"lp\",\"post_title\":\"SeedProd Messseite\",\"post_name\":\"seedprod-messseite\",\"post_status\":\"publish\",\"show_header_template\":true,\"show_footer_template\":true,\"no_conflict_mode\":false,\"no_index\":false,\"is_new\":false,\"template_id\":0,\"document\":{\"sections\":[{\"id\":\"sec001\",\"type\":\"section\",\"settings\":{\"bgStyle\":\"s\",\"paddingTop\":\"10\",\"paddingBottom\":\"10\",\"paddingLeft\":\"10\",\"paddingRight\":\"10\",\"contentWidth\":1,\"width\":\"1000\"},\"rows\":[{\"id\":\"row001\",\"type\":\"row\",\"colType\":\"1-col\",\"settings\":{\"bgStyle\":\"s\",\"paddingTop\":\"10\",\"paddingBottom\":\"10\",\"paddingLeft\":\"10\",\"paddingRight\":\"10\",\"colGutter\":0,\"contentWidth\":2,\"width\":\"1000\"},\"cols\":[{\"id\":\"col001\",\"type\":\"col\",\"settings\":{\"bgStyle\":\"s\",\"paddingTop\":\"10\",\"paddingBottom\":\"10\",\"paddingLeft\":\"10\",\"paddingRight\":\"10\"},\"blocks\":[{\"id\":\"blk001\",\"elType\":\"block\",\"type\":\"header\",\"settings\":{\"headerTxt\":\"Willkommen bei Alpine Bikes\",\"tag\":\"h1\"}},{\"id\":\"blk002\",\"elType\":\"block\",\"type\":\"text\",\"settings\":{\"txt\":\"<p>\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr<\\/p>\"}},{\"id\":\"blk003\",\"elType\":\"block\",\"type\":\"button\",\"settings\":{\"btnTxt\":\"Jetzt reservieren\",\"link\":\"https:\\/\\/example.com\\/reservieren\"}},{\"id\":\"blk004\",\"elType\":\"block\",\"type\":\"image\",\"settings\":{\"src\":\"http:\\/\\/127.0.0.1:52352\\/wp-content\\/uploads\\/2026\\/10\\/alpine-velo.png\",\"altTxt\":\"Velo vor dem Laden\"}}]}]}]}],\"settings\":{\"bgStyle\":\"s\",\"bgColor\":\"#FFFFFF\",\"textColor\":\"#333333\",\"headerColor\":\"#111111\",\"buttonColor\":\"#3858E9\",\"textFont\":\"Roboto\",\"textFontVariant\":\"400\"}}}",
+ "meta": {
+  "_seedprod_page": "1",
+  "_seedprod_page_template_type": "lp",
+  "_seedprod_page_uuid": "ca2e1f29-3c86-416f-8347-c7063b19aed9"
+ }
+}
