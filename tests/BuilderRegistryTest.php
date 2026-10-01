@@ -11,6 +11,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Builder_Adapter_Blocks;
+use AB_MCP_Builder_Adapter_Shortcodes;
 use AB_MCP_Builders;
 use PHPUnit\Framework\TestCase;
 
@@ -127,7 +128,7 @@ final class BuilderRegistryTest extends TestCase {
 		AB_MCP_Builders::reset();
 		self::assertSame( $second, AB_MCP_Builders::adapters()['elementor'] );
 		self::assertSame( $second, AB_MCP_Builders::adapter_for_builder( 'elementor' ) );
-		self::assertCount( 2, AB_MCP_Builders::adapters(), 'blocks and elementor, nothing else.' );
+		self::assertCount( 2 + count( AB_MCP_Builder_Adapter_Shortcodes::defaults() ), AB_MCP_Builders::adapters(), 'blocks, the shortcode readers and elementor, nothing else.' );
 	}
 
 	public function testADedicatedAdapterTakesOverABlockLibrary(): void {

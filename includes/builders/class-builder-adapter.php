@@ -6,7 +6,8 @@
  * The contract between the free plugin (reading) and Pro (writing) is
  * AB_MCP_BUILDER_API (see class-builders.php). An adapter only needs code
  * where a builder needs code; block libraries and shortcode builders are
- * profiles (plain arrays) read by one shared adapter each.
+ * profiles (plain arrays): one shared adapter reads every block library, and
+ * one class reads the shortcode builders, an instance per builder.
  *
  * Signatures, kept on purpose:
  * - Parameters that take a post are untyped (documented as WP_Post), as
@@ -30,7 +31,7 @@ defined( 'ABSPATH' ) || exit;
 abstract class AB_MCP_Builder_Adapter {
 
 	/**
-	 * Stable key, e.g. 'elementor', 'blocks', 'beaver', 'shortcodes'.
+	 * Stable key, e.g. 'elementor', 'blocks', 'beaver', 'wpbakery'.
 	 *
 	 * @return string
 	 */
@@ -52,7 +53,7 @@ abstract class AB_MCP_Builder_Adapter {
 
 	/**
 	 * Builder ids (keys of signatures.php) whose pages this adapter reads.
-	 * A shared adapter — blocks, shortcodes — names several.
+	 * A shared adapter — blocks — names several.
 	 *
 	 * @return string[]
 	 */
