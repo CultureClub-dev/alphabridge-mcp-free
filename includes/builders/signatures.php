@@ -100,7 +100,10 @@ return array(
 			array( 'loc' => 'meta:_fl_builder_draft', 'shown' => false, 'role' => 'draft' ), // [M ergebnis-3] beaver_meta_schluessel.
 			array( 'loc' => 'post_content', 'shown' => false, 'role' => 'copy' ), // [M ergebnis-3] beaver_post_content.
 		),
-		'locked_meta'  => array( '_fl_builder_data_settings' ), // [M ergebnis-1] beaver_meta: holds the page's "css" and "js".
+		'locked_meta'  => array(
+			'_fl_builder_data_settings', // [M ergebnis-1] beaver_meta: holds the page's "css" and "js".
+			'_fl_builder_draft_settings', // [SVN beaver-builder-lite-version@2.11.0.6 classes/class-fl-builder-model.php:6278, :6314] the draft's "css" and "js"; measured 01.10.2026 (tests/fixtures/builders/beaver/README.md).
+		),
 	),
 
 	'siteorigin'      => array(

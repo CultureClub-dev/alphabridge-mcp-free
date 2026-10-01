@@ -53,7 +53,11 @@ require_once __DIR__ . '/class-builder-adapter.php';
 require_once __DIR__ . '/class-block-reader.php';
 require_once __DIR__ . '/class-shortcode-reader.php';
 require_once __DIR__ . '/adapters/class-adapter-blocks.php';
+require_once __DIR__ . '/class-element-profile.php';
 require_once __DIR__ . '/adapters/class-adapter-elementor.php';
+require_once __DIR__ . '/adapters/class-adapter-beaver.php';
+require_once __DIR__ . '/adapters/class-adapter-siteorigin.php';
+require_once __DIR__ . '/adapters/class-adapter-seedprod.php';
 
 /**
  * Class AB_MCP_Builders
@@ -230,8 +234,8 @@ final class AB_MCP_Builders {
 	/**
 	 * Registered adapters, keyed by id. The free plugin registers its own
 	 * readers (the list below); others come through the filter
-	 * ab_mcp_builder_adapters. An
-	 * adapter registered later replaces an earlier one with the same id.
+	 * ab_mcp_builder_adapters. An adapter registered later replaces an
+	 * earlier one with the same id.
 	 *
 	 * @return array<string,AB_MCP_Builder_Adapter>
 	 */
@@ -249,6 +253,9 @@ final class AB_MCP_Builders {
 			array(
 				new AB_MCP_Builder_Adapter_Blocks(),
 				new AB_MCP_Builder_Adapter_Elementor(),
+				new AB_MCP_Builder_Adapter_Beaver(),
+				new AB_MCP_Builder_Adapter_SiteOrigin(),
+				new AB_MCP_Builder_Adapter_SeedProd(),
 			)
 		);
 		$out  = array();
