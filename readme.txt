@@ -49,7 +49,7 @@ Everything in this plugin is fully functional: no license keys, no registration,
 
 **What's inside**
 
-* Native MCP endpoint (JSON-RPC 2.0 over HTTP POST; protocol versions 2024-11-05, 2025-03-26, 2025-06-18) — no external server required.
+* Native MCP endpoint (JSON-RPC 2.0 over HTTP POST; protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by side on the same endpoint; the newest one can be switched off) — no external server required.
 * 39 structured tools across content, media, taxonomies, comments, widgets, site settings, site info, SEO reads and search.
 * Bearer-token authentication mapped to a real WordPress user, with per-tool capability checks.
 * Unlimited connections — create one deliberately limited key per client.

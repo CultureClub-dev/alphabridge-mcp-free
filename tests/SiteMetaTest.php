@@ -52,10 +52,26 @@ final class SiteMetaTest extends TestCase {
 
 	public function testEveryContractFieldIsPresent(): void {
 		self::assertSame(
-			array( 'contract', 'cms', 'cms_version', 'edition', 'plugin_version', 'scope' ),
+			array( 'contract', 'cms', 'cms_version', 'edition', 'plugin_version', 'scope', 'protocol_versions' ),
 			array_keys( $this->meta() ),
-			'A hub reads these six fields; none may silently disappear.'
+			'A hub reads these seven fields; none may silently disappear.'
 		);
+	}
+
+	public function testTheProtocolVersionsAreAnAdditionWithinContractOne(): void {
+		$meta = $this->meta();
+
+		self::assertSame( 1, $meta['contract'], 'An optional field more does not make a new contract: a hub that knows contract 1 keeps linking the site.' );
+		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18', '2026-07-28' ), $meta['protocol_versions'], 'Every revision the site answers, newest last.' );
+	}
+
+	public function testTheProtocolVersionsLeaveOutTheModernRevisionWhenItIsSwitchedOff(): void {
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18' ), $this->meta()['protocol_versions'], 'The hub must then treat the site as legacy-only.' );
+
+		\AB_MCP_Settings::set( 'modern_protocol', true );
+		add_filter( 'ab_mcp_modern_protocol', '__return_false' );
+		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18' ), $this->meta()['protocol_versions'], 'The filter has the last word.' );
 	}
 
 	public function testScopeMirrorsTheAuthenticatedToken(): void {

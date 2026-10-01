@@ -22,6 +22,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
 		add_action( 'admin_post_ab_mcp_oauth_settings', array( $this, 'handle_oauth_settings' ) );
+		add_action( 'admin_post_ab_mcp_protocol_settings', array( $this, 'handle_protocol_settings' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
 		// Creating or rotating a token reveals a secret. That is done over
@@ -127,6 +128,18 @@ class AB_MCP_Admin {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_oauth_settings' );
 		AB_MCP_Settings::set( 'oauth_enabled', isset( $_POST['oauth_enabled'] ) );
+		$this->redirect( 'saved' );
+	}
+
+	/**
+	 * Switch MCP revision 2026-07-28 on or off. Off = the endpoint answers
+	 * exactly as before that revision existed; clients that speak both fall
+	 * back to the older one, older clients notice nothing either way.
+	 */
+	public function handle_protocol_settings() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_protocol_settings' );
+		AB_MCP_Settings::set( 'modern_protocol', isset( $_POST['modern_protocol'] ) );
 		$this->redirect( 'saved' );
 	}
 
@@ -795,6 +808,23 @@ class AB_MCP_Admin {
 		wp_nonce_field( 'ab_mcp_oauth_settings' );
 		echo '<input type="hidden" name="action" value="ab_mcp_oauth_settings">';
 		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Let Claude connect with its native Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
+		echo '</form></details>';
+
+		// Advanced (collapsed): MCP revision 2026-07-28. On by default; off
+		// restores the answers from before that revision.
+		$modern_on = (bool) AB_MCP_Settings::get( 'modern_protocol', true );
+		echo '<details class="ab-alt" id="ab-protocol"><summary>' . esc_html__( 'MCP protocol 2026-07-28 (advanced)', 'alphabridge-mcp' ) . '</summary>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'ab_mcp_protocol_settings' );
+		echo '<input type="hidden" name="action" value="ab_mcp_protocol_settings">';
+		echo '<label class="ab-check"><input type="checkbox" name="modern_protocol" value="1"' . checked( $modern_on, true, false ) . '><span>' . esc_html__( 'Answer clients that speak MCP 2026-07-28.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Clients of the newer revision are served in it; clients of the older revisions keep the one they ask for either way. Switch this off only if a client, or a proxy between client and site, has trouble with the newer revision: the site then answers exactly as before, and clients that speak both revisions fall back to the older one.', 'alphabridge-mcp' ) . '</span></span></label>';
+		if ( has_filter( 'ab_mcp_modern_protocol' ) ) {
+			// A filter overrides the switch. Say so, and what is in force, so
+			// the admin is not left wondering why saving changes nothing.
+			$effective = AB_MCP_REST_Controller::modern_enabled();
+			echo '<p class="ab-note">' . esc_html( $effective ? __( 'Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is answered.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is not answered.', 'alphabridge-mcp' ) ) . '</p>';
+		}
 		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
 		echo '</form></details>';
 		echo '</div>';

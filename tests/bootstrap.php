@@ -10,7 +10,7 @@
  *
  * What is deliberately NOT emulated: the REST dispatcher, capabilities and the
  * database. Anything that needs those belongs in the end-to-end run against a
- * real site, not here.
+ * real site, not here. register_rest_route() only records what is registered.
  *
  * @package AlphaBridge_MCP
  */
@@ -81,6 +81,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
 	$GLOBALS['ab_test_locale']     = 'en_US';
+	$GLOBALS['ab_test_routes']      = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -899,6 +900,11 @@ class WP_REST_Response {
 		return $this->status;
 	}
 
+	/** @return array<string,string> */
+	public function get_headers(): array {
+		return $this->headers;
+	}
+
 	public function get_data() {
 		return $this->data;
 	}
@@ -919,6 +925,16 @@ class WP_REST_Request {
 	private $json = null;
 	/** @var array<string,string> */
 	private $headers = array();
+	/** @var string */
+	private $route = '';
+
+	public function set_route( string $route ): void {
+		$this->route = $route;
+	}
+
+	public function get_route(): string {
+		return $this->route;
+	}
 
 	public function set_body_params( array $params ): void {
 		$this->body = $params;
@@ -949,6 +965,61 @@ class WP_REST_Request {
 	}
 }
 
+/* ------------------------------------------------------------------ URLs */
+
+function add_query_arg( $args, $url = '' ) {
+	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . http_build_query( (array) $args );
+}
+
+/* ------------------------------------------------------- redirects, exits */
+
+/**
+ * wp_safe_redirect() and wp_die() end the request in WordPress. Here they end
+ * the code under test by throwing, so a test can see which one was reached and
+ * with what.
+ */
+class AbTestExit extends Exception {
+	/** @var string 'redirect' | 'die' */
+	public $kind;
+	/** @var string Location or message. */
+	public $detail;
+
+	public function __construct( string $kind, string $detail = '' ) {
+		parent::__construct( $kind . ': ' . $detail );
+		$this->kind   = $kind;
+		$this->detail = $detail;
+	}
+}
+
+function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
+function wp_die( $message = '', $title = '', $args = array() ) {
+	throw new AbTestExit( 'die', (string) $message );
+}
+
+function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
+	return 1;
+}
+
+/** @var array<int,array{namespace:string,route:string,args:array}> $ab_test_routes Every register_rest_route() call. */
+$GLOBALS['ab_test_routes'] = array();
+
+function register_rest_route( $route_namespace, $route, $args = array(), $override = false ) {
+	$GLOBALS['ab_test_routes'][] = array(
+		'namespace' => (string) $route_namespace,
+		'route'     => (string) $route,
+		'args'      => (array) $args,
+	);
+	return true;
+}
+
+/** No persistent object cache: counters live in transients, as on most sites. */
+function wp_using_ext_object_cache( $using = null ) {
+	return false;
+}
+
 /* ------------------------------------------------------- plugin constants */
 
 // WordPress time constants the plugin relies on.
@@ -960,6 +1031,7 @@ define( 'AB_MCP_VERSION', '4.3.6' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
+define( 'AB_MCP_MAX_BATCH', 25 );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 
@@ -967,6 +1039,7 @@ define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/'
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';

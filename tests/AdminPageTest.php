@@ -190,14 +190,72 @@ final class AdminPageTest extends TestCase {
 		}
 		self::assertSame(
 			array(
-				'ab_mcp_connector_auth'  => 'nonce-ab_mcp_connector_auth',
-				'ab_mcp_oauth_settings'  => 'nonce-ab_mcp_oauth_settings',
-				'ab_mcp_audit_clear'     => 'nonce-ab_mcp_audit_clear',
+				'ab_mcp_connector_auth'    => 'nonce-ab_mcp_connector_auth',
+				'ab_mcp_oauth_settings'    => 'nonce-ab_mcp_oauth_settings',
+				'ab_mcp_protocol_settings' => 'nonce-ab_mcp_protocol_settings',
+				'ab_mcp_audit_clear'       => 'nonce-ab_mcp_audit_clear',
 			),
 			$forms
 		);
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="connector_url_auth_enabled"]' )->length );
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="oauth_enabled"]' )->length );
+		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="modern_protocol"]' )->length );
+	}
+
+	public function testTheProtocolSwitchShowsTheStoredSetting(): void {
+		$checked = function (): bool {
+			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
+			$box = $x->query( '//input[@name="modern_protocol"]' )->item( 0 );
+			self::assertNotNull( $box );
+			return $box->hasAttribute( 'checked' );
+		};
+
+		self::assertTrue( $checked(), 'On by default.' );
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		self::assertFalse( $checked() );
+	}
+
+	public function testSavingTheProtocolSwitchStoresIt(): void {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$save                   = function ( array $post ): string {
+			$_POST = $post;
+			try {
+				( new AB_MCP_Admin() )->handle_protocol_settings();
+			} catch ( \AbTestExit $exit ) {
+				return $exit->kind;
+			} finally {
+				$_POST = array();
+			}
+			return 'no exit';
+		};
+
+		self::assertSame( 'redirect', $save( array() ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'An unticked box is not posted: off.' );
+
+		self::assertSame( 'redirect', $save( array( 'modern_protocol' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ) );
+	}
+
+	public function testOnlyAnAdministratorCanSaveTheProtocolSwitch(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		$_POST                  = array();
+
+		try {
+			( new AB_MCP_Admin() )->handle_protocol_settings();
+			self::fail( 'The guard did not stop the request.' );
+		} catch ( \AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged.' );
+	}
+
+	public function testTheProtocolSwitchSaysWhenAFilterDecides(): void {
+		$note = fn(): string => $this->call( 'render_connections_card', array() );
+
+		self::assertStringNotContainsString( 'ab_mcp_modern_protocol filter', $note(), 'Without a filter the switch alone decides.' );
+
+		add_filter( 'ab_mcp_modern_protocol', '__return_false' );
+		self::assertStringContainsString( 'right now the revision is not answered', $note(), 'The admin learns why saving the switch changes nothing.' );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {

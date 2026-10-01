@@ -19,8 +19,9 @@ directory. It is the same code WordPress.org ships.
 ## What it does
 
 - **Native MCP endpoint** — JSON-RPC 2.0 over HTTP POST at `/wp-json/alphabridge/v1/mcp`
-  (protocol versions 2024-11-05, 2025-03-26, 2025-06-18). Pure PHP inside WordPress: no Node
-  middleware, no external service, nothing extra to host.
+  (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
+  side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
+  external service, nothing extra to host.
 - **39 structured tools** across content, media, taxonomies, comments, widgets, site settings,
   site info, SEO reads and search.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is

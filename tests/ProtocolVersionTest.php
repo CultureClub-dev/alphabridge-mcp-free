@@ -71,12 +71,21 @@ final class ProtocolVersionTest extends TestCase {
 		);
 	}
 
-	public function testTheSupportedListIsPinned(): void {
+	public function testTheLegacyListIsPinned(): void {
 		self::assertSame(
 			self::SUPPORTED,
-			AB_MCP_REST_Controller::SUPPORTED_PROTOCOL_VERSIONS,
-			'Adding a revision is a deliberate change: 2026-07-28 has no initialize and needs server/discover and resultType. Change this list only together with that implementation.'
+			AB_MCP_REST_Controller::LEGACY_PROTOCOL_VERSIONS,
+			'initialize negotiates these and only these. 2026-07-28 has no initialize and lives in the modern list; adding 2025-11-25 here would change what an older client is answered.'
 		);
+	}
+
+	public function testTheModernListIsPinned(): void {
+		self::assertSame(
+			array( '2026-07-28' ),
+			AB_MCP_REST_Controller::MODERN_PROTOCOL_VERSIONS,
+			'A modern revision is listed only together with its implementation (server/discover, resultType, caching hints, header check, subscriptions/listen), see ModernProtocolTest.'
+		);
+		self::assertSame( array(), array_intersect( AB_MCP_REST_Controller::LEGACY_PROTOCOL_VERSIONS, AB_MCP_REST_Controller::MODERN_PROTOCOL_VERSIONS ), 'No revision is both.' );
 	}
 
 	public function testTheFallbackOfThePluginFileIsTheNewestSupportedVersion(): void {
