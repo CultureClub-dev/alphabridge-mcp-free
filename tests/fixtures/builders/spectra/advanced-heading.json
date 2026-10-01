@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-spectra.json (Spectra 2.20.4, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[0].serialisiert — heading (uagb/advanced-heading)",
+ "measured": true,
+ "content": "<!-- wp:uagb/advanced-heading {\"block_id\":\"28f119cb\",\"classMigrate\":true,\"headingDescToggle\":false,\"headingAlign\":\"left\",\"headingTag\":\"h3\"} -->\n<div class=\"wp-block-uagb-advanced-heading uagb-block-28f119cb\"><h3 class=\"uagb-heading-text\">Our Vision</h3></div>\n<!-- /wp:uagb/advanced-heading -->"
+}

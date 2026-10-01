@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb1.json (GenerateBlocks 2.4.1, 1.x blocks, WordPress 7.1.2, measured 30.09.2026), kodierung.block_im_speicher: the stored heading after saving metadata.name and the text «A & B \"Zitat\" <x> – Grüsse ü»; the first complete block of the stored fragment",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/headline {\"uniqueId\":\"0f1bafd0\",\"element\":\"h3\",\"blockVersion\":4,\"spacing\":{\"marginBottom\":\"0.5rem\"},\"metadata\":{\"name\":\"A \\u0026 B \\u0022Zitat\\u0022 \\u003cx\\u003e – Grüsse ü\"}} -->\n<h3 class=\"gb-headline gb-headline-0f1bafd0 gb-headline-text\">A &amp; B \"Zitat\" &lt;x> – Grüsse ü</h3>\n<!-- /wp:generateblocks/headline -->"
+}

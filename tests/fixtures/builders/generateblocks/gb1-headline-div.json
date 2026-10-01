@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb1.json (GenerateBlocks 2.4.1, 1.x blocks, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[1].serialisiert — Text (generateblocks/headline)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/headline {\"uniqueId\":\"303a9e03\",\"element\":\"div\",\"blockVersion\":3} -->\n<div class=\"gb-headline gb-headline-303a9e03 gb-headline-text\">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>\n<!-- /wp:generateblocks/headline -->"
+}

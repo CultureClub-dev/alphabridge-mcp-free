@@ -36,8 +36,18 @@
  *       'kadence/rowlayout'   => array( 'container' => true ),       // structure only, children are read
  *       'generateblocks/shape' => array( 'locked' => 'svg markup' ),  // listed without content, children skipped
  *       'core/block'          => array( 'locked' => 'global element', 'global' => true, 'ref_attr' => 'ref' ),
+ *       'generateblocks/button' => array(
+ *           'locked_when' => array( 'useDynamicData' => 'dynamic value' ), // locked when the block sets it
+ *           'fields'      => array( … ),
+ *       ),
  *     ),
  *   );
+ *
+ * "locked_when" maps attribute paths to a reason: the element is locked like
+ * one with "locked" when the block sets any of them (present and not false,
+ * null, '', 0, '0' or an empty array). It is for blocks whose saved markup is
+ * only a placeholder once an option is on — the page then shows something
+ * else, so the stored text is neither what visitors see nor worth changing.
  *
  * Field sources ("from"), all read from the block's OWN markup (its
  * innerContent strings; inner blocks are separate elements):
@@ -230,10 +240,11 @@ final class AB_MCP_Block_Reader {
 				'depth'  => $depth,
 			);
 
-			if ( null !== $spec && '' !== $spec['locked'] ) {
+			$reason = null !== $spec ? self::locked_reason( $spec, $block ) : '';
+			if ( '' !== $reason ) {
 				if ( $o['include_locked'] ) {
 					$element['locked'] = true;
-					$element['reason'] = $spec['locked'];
+					$element['reason'] = $reason;
 					if ( $spec['global'] ) {
 						$element['global'] = true;
 					}
@@ -379,6 +390,32 @@ final class AB_MCP_Block_Reader {
 				return $value;
 		}
 		return null;
+	}
+
+	/**
+	 * Why an element is locked: the entry's fixed reason, else the reason of
+	 * the first "locked_when" attribute the block sets, else ''.
+	 *
+	 * @param array $spec  Profile entry.
+	 * @param array $block Block.
+	 * @return string
+	 */
+	private static function locked_reason( array $spec, array $block ) {
+		if ( '' !== $spec['locked'] ) {
+			return $spec['locked'];
+		}
+		foreach ( $spec['locked_when'] as $path => $reason ) {
+			$value = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+			foreach ( explode( '.', $path ) as $segment ) {
+				$value = is_array( $value ) && array_key_exists( $segment, $value ) ? $value[ $segment ] : null;
+			}
+			// empty() is the test on purpose: false, null, '', 0, '0' and an
+			// empty array all mean "the option is off".
+			if ( ! empty( $value ) ) {
+				return $reason;
+			}
+		}
+		return '';
 	}
 
 	/**
@@ -578,15 +615,22 @@ final class AB_MCP_Block_Reader {
 					$fields[ $field_name ] = $norm;
 				}
 			}
+			$locked_when = array();
+			foreach ( isset( $spec['locked_when'] ) && is_array( $spec['locked_when'] ) ? $spec['locked_when'] : array() as $path => $reason ) {
+				if ( is_string( $path ) && '' !== $path && is_string( $reason ) && '' !== $reason ) {
+					$locked_when[ $path ] = $reason;
+				}
+			}
 			$out['blocks'][ $name ] = array(
-				'type'      => isset( $spec['type'] ) && is_string( $spec['type'] ) ? $spec['type'] : '',
-				'container' => ! empty( $spec['container'] ),
-				'locked'    => isset( $spec['locked'] ) && is_string( $spec['locked'] ) ? $spec['locked'] : '',
-				'global'    => ! empty( $spec['global'] ),
-				'ref_attr'  => isset( $spec['ref_attr'] ) && is_string( $spec['ref_attr'] ) ? $spec['ref_attr'] : '',
-				'id_attr'   => isset( $spec['id_attr'] ) && is_string( $spec['id_attr'] ) ? $spec['id_attr'] : '',
-				'verified'  => array_key_exists( 'verified', $spec ) ? (bool) $spec['verified'] : $verified,
-				'fields'    => $fields,
+				'type'        => isset( $spec['type'] ) && is_string( $spec['type'] ) ? $spec['type'] : '',
+				'container'   => ! empty( $spec['container'] ),
+				'locked'      => isset( $spec['locked'] ) && is_string( $spec['locked'] ) ? $spec['locked'] : '',
+				'locked_when' => $locked_when,
+				'global'      => ! empty( $spec['global'] ),
+				'ref_attr'    => isset( $spec['ref_attr'] ) && is_string( $spec['ref_attr'] ) ? $spec['ref_attr'] : '',
+				'id_attr'     => isset( $spec['id_attr'] ) && is_string( $spec['id_attr'] ) ? $spec['id_attr'] : '',
+				'verified'    => array_key_exists( 'verified', $spec ) ? (bool) $spec['verified'] : $verified,
+				'fields'      => $fields,
 			);
 		}
 		return $out;
