@@ -127,7 +127,7 @@ final class BuilderRegistryTest extends TestCase {
 		AB_MCP_Builders::reset();
 		self::assertSame( $second, AB_MCP_Builders::adapters()['elementor'] );
 		self::assertSame( $second, AB_MCP_Builders::adapter_for_builder( 'elementor' ) );
-		self::assertCount( 2, AB_MCP_Builders::adapters(), 'blocks and elementor, nothing else.' );
+		self::assertSame( array( 'blocks', 'beaver', 'siteorigin', 'seedprod', 'elementor' ), array_keys( AB_MCP_Builders::adapters() ), 'The built-in adapters and elementor, nothing else.' );
 	}
 
 	public function testADedicatedAdapterTakesOverABlockLibrary(): void {

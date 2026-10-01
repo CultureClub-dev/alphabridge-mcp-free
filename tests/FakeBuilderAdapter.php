@@ -1,7 +1,7 @@
 <?php
 /**
  * An adapter that reads nothing real: it stands in for the builder adapters
- * the free core does not ship yet (Elementor, Beaver …), so the registry,
+ * the free core does not ship yet (Elementor …), so the registry,
  * the guard and the tool can be tested with a supported storage-B builder.
  *
  * @package AlphaBridge_MCP

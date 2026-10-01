@@ -52,6 +52,10 @@ require_once __DIR__ . '/class-builder-adapter.php';
 require_once __DIR__ . '/class-block-reader.php';
 require_once __DIR__ . '/class-shortcode-reader.php';
 require_once __DIR__ . '/adapters/class-adapter-blocks.php';
+require_once __DIR__ . '/class-element-profile.php';
+require_once __DIR__ . '/adapters/class-adapter-beaver.php';
+require_once __DIR__ . '/adapters/class-adapter-siteorigin.php';
+require_once __DIR__ . '/adapters/class-adapter-seedprod.php';
 
 /**
  * Class AB_MCP_Builders
@@ -227,7 +231,8 @@ final class AB_MCP_Builders {
 
 	/**
 	 * Registered adapters, keyed by id. The free plugin registers the block
-	 * reader; others come through the filter ab_mcp_builder_adapters. An
+	 * reader and the readers of Beaver Builder, SiteOrigin and SeedProd;
+	 * others come through the filter ab_mcp_builder_adapters. An
 	 * adapter registered later replaces an earlier one with the same id.
 	 *
 	 * @return array<string,AB_MCP_Builder_Adapter>
@@ -241,7 +246,15 @@ final class AB_MCP_Builders {
 		 *
 		 * @param AB_MCP_Builder_Adapter[] $adapters Adapters, in order.
 		 */
-		$list = apply_filters( 'ab_mcp_builder_adapters', array( new AB_MCP_Builder_Adapter_Blocks() ) );
+		$list = apply_filters(
+			'ab_mcp_builder_adapters',
+			array(
+				new AB_MCP_Builder_Adapter_Blocks(),
+				new AB_MCP_Builder_Adapter_Beaver(),
+				new AB_MCP_Builder_Adapter_SiteOrigin(),
+				new AB_MCP_Builder_Adapter_SeedProd(),
+			)
+		);
 		$out  = array();
 		foreach ( (array) $list as $adapter ) {
 			if ( $adapter instanceof AB_MCP_Builder_Adapter && '' !== $adapter->id() ) {
