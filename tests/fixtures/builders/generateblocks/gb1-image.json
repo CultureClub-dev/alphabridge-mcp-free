@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb1.json (GenerateBlocks 2.4.1, 1.x blocks, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[3].serialisiert — Bild (generateblocks/image)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/image {\"uniqueId\":\"17547336\",\"mediaId\":4346,\"sizeSlug\":\"medium\",\"width\":\"150px\",\"widthMobile\":\"auto\",\"height\":\"150px\",\"heightMobile\":\"auto\",\"blockVersion\":2} -->\n<figure class=\"gb-block-image gb-block-image-17547336\"><img class=\"gb-image gb-image-17547336\" src=\"https://patterns.generateblocks.com/wp-content/uploads/2023/08/placeholder800x-300x300.png\" alt=\"\" title=\"placeholder800x\"/></figure>\n<!-- /wp:generateblocks/image -->"
+}

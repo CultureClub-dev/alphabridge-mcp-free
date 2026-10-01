@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-stackable.json (Stackable 3.20.2, WordPress 7.1.2, measured 30.09.2026), kodierung.block_im_speicher: the stored heading after saving metadata.name and the text «A & B \"Zitat\" <x> – Grüsse ü»; the first complete block of the stored fragment",
+ "measured": true,
+ "content": "<!-- wp:stackable/heading {\"uniqueId\":\"ab2c9eb\",\"metadata\":{\"name\":\"A \\u0026 B \\u0022Zitat\\u0022 \\u003cx\\u003e – Grüsse ü\"}} -->\n<div class=\"wp-block-stackable-heading stk-block-heading stk-block-heading--v2 stk-block stk-ab2c9eb\" id=\"heading-placeholder\" data-block-id=\"ab2c9eb\"><h2 class=\"stk-block-heading__text\">A &amp; B \"Zitat\" &lt;x> – Grüsse ü</h2></div>\n<!-- /wp:stackable/heading -->"
+}
