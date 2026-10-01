@@ -906,6 +906,11 @@ class WP_REST_Response {
 
 /**
  * Minimal stand-in for WP_REST_Request: body params, JSON params and headers.
+ *
+ * Header names are canonicalised like WP_REST_Request::canonicalize_header_name()
+ * (lower case, dashes to underscores), so a test sends "MCP-Protocol-Version"
+ * as a client spells it and the plugin reads "mcp_protocol_version" as WordPress
+ * hands it over.
  */
 class WP_REST_Request {
 	/** @var array<string,mixed> */
@@ -924,7 +929,7 @@ class WP_REST_Request {
 	}
 
 	public function set_header( string $key, string $value ): void {
-		$this->headers[ strtolower( $key ) ] = $value;
+		$this->headers[ str_replace( '-', '_', strtolower( $key ) ) ] = $value;
 	}
 
 	public function get_body_params(): array {
@@ -936,7 +941,7 @@ class WP_REST_Request {
 	}
 
 	public function get_header( $key ) {
-		return $this->headers[ strtolower( (string) $key ) ] ?? '';
+		return $this->headers[ str_replace( '-', '_', strtolower( (string) $key ) ) ] ?? '';
 	}
 
 	public function get_param( $key ) {

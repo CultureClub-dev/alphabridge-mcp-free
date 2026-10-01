@@ -98,6 +98,26 @@ final class SiteMetaTest extends TestCase {
 		self::assertSame( 1, $result['_meta']['com.alphabridge-mcp/site']['contract'] );
 	}
 
+	public function testTheHandshakeReportsTheEditionFromTheFilter(): void {
+		// The hub decides what it offers from this one field. site_meta() and
+		// initialize() are covered above on their own; this checks the whole
+		// path a client sees, so a Pro site can never report 'free' here.
+		add_filter( 'ab_mcp_site_edition', static fn( string $e ): string => 'pro' );
+		$request = new \WP_REST_Request();
+		$request->set_json_params(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'initialize',
+				'params'  => array( 'protocolVersion' => '2025-06-18' ),
+			)
+		);
+
+		$data = $this->controller()->handle( $request )->get_data();
+
+		self::assertSame( 'pro', $data['result']['_meta']['com.alphabridge-mcp/site']['edition'] );
+	}
+
 	public function testInitializeStillCarriesServerInfo(): void {
 		$result = $this->initializeResult();
 
