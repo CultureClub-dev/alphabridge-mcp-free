@@ -61,7 +61,7 @@ final class BuiltWithToolsTest extends TestCase {
 
 	public function testGetPostCarriesBuiltWith(): void {
 		$this->builders( array( 'elementor' ) );
-		$this->page( 90, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder' ) );
+		$this->page( 90, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => $this->elementorTree() ) );
 		$out = AB_MCP_Tools_Content::get_post( array( 'id' => 90, 'include_meta' => false ) );
 		self::assertSame( 'elementor', $out['built_with']['builder'] );
 		self::assertStringContainsString( 'post_content is only a copy', $out['built_with']['note'] );

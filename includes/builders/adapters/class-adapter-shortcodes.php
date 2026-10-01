@@ -204,6 +204,24 @@ class AB_MCP_Builder_Adapter_Shortcodes extends AB_MCP_Builder_Adapter {
 	}
 
 	/**
+	 * For a builder that keeps its shortcodes in a meta field (Enfold):
+	 * true while that field holds them. When it holds none, the page is read
+	 * from post_content (layout_source()), and what the site then shows is
+	 * not documented (quellen/enfold.md b), the display template is not
+	 * public), so the answer is null: not known. Builders that keep the page
+	 * in post_content: null, they are not storage B.
+	 *
+	 * @param WP_Post $post Post.
+	 * @return bool|null
+	 */
+	public function own_data_shown( $post ): ?bool {
+		if ( '' === $this->profile['layout_meta'] ) {
+			return null;
+		}
+		return $this->layout_source( $post )['fallback'] ? null : true;
+	}
+
+	/**
 	 * Where the shortcodes of this page are read from: the profile's meta
 	 * field, or post_content. When the meta field holds no shortcode, the
 	 * page is read from post_content — what Enfold's editor loads in that

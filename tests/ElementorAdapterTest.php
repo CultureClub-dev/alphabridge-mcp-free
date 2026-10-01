@@ -681,19 +681,26 @@ final class ElementorAdapterTest extends TestCase {
 	}
 
 	public function testUnreadableAndEmptyData(): void {
+		// Whatever Document::get_json_meta() reads as empty is an empty page:
+		// broken JSON included [SVN elementor@4.3.3 core/base/document.php:1041-1053].
 		$broken = $this->page( 116, 'copy', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => '[{"id":"x"' ) );
-		$out    = $this->outline( $broken );
-		self::assertCount( 1, $out );
-		self::assertTrue( $out[0]['locked'] );
-		self::assertSame( 'unreadable data', $out[0]['reason'] );
-		self::assertSame( array(), $this->outline( $broken, array( 'include_locked' => false ) ) );
-
+		self::assertSame( array(), $this->outline( $broken ) );
 		$empty = $this->page( 117, 'copy', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => '' ) );
 		self::assertSame( array(), $this->outline( $empty ) );
 		$none = $this->page( 118, 'copy', array( '_elementor_edit_mode' => 'builder' ) );
 		self::assertSame( array(), $this->outline( $none ) );
 		$list = $this->page( 119, 'copy', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => '[]' ) );
 		self::assertSame( array(), $this->outline( $list ) );
+
+		// Not empty, but no list of elements: nothing can be read, and the
+		// note does not claim what Elementor makes of it.
+		$scalar = $this->page( 126, 'copy', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => '"Hello"' ) );
+		$out    = $this->outline( $scalar );
+		self::assertCount( 1, $out );
+		self::assertTrue( $out[0]['locked'] );
+		self::assertSame( 'unreadable data', $out[0]['reason'] );
+		self::assertSame( '_elementor_data holds no list of elements', $out[0]['note'] );
+		self::assertSame( array(), $this->outline( $scalar, array( 'include_locked' => false ) ) );
 	}
 
 	/* ------------------------------------------------- Elementor loaded */
@@ -756,7 +763,7 @@ final class ElementorAdapterTest extends TestCase {
 			),
 			$els['bb00001']['fields']
 		);
-		self::assertSame( "text: Elementor's default, not stored on the page; link: Elementor's default, not stored on the page", $els['bb00001']['note'] );
+		self::assertSame( "text: Elementor's default, not stored on the page; link: Elementor's default, not stored on the page; " . AB_MCP_Block_Reader::NOTE_UNMEASURED, $els['bb00001']['note'], 'Defaults are read through the controls, which no measurement covered.' );
 		self::assertSame(
 			array(
 				'text' => array( 'kind' => 'text', 'value' => 'Buchen' ),
@@ -846,6 +853,140 @@ final class ElementorAdapterTest extends TestCase {
 		$flat = $this->flat( $el );
 		foreach ( array( 'alert', 'flat', 'evil.example', 'sk_live', 'zz9', 'hover.jpg', '<script' ) as $never ) {
 			self::assertStringNotContainsString( $never, $flat, $never );
+		}
+	}
+
+	public function testWithElementorLoadedControlsThatAreOnlyAttributesAreNeverFields(): void {
+		// Content-tab text controls Elementor 4.3.3 writes only into an
+		// attribute or an embed address (sources at WIDGETS, "skip").
+		$this->loadElementor(
+			array(
+				'menu-anchor'    => self::type( array( 'anchor' => self::control( 'anchor', 'text', '' ) ) ),
+				'image-carousel' => self::type(
+					array(
+						'carousel_name' => self::control( 'carousel_name', 'text', 'Image Carousel' ),
+						'link'          => self::control( 'link', 'url', array( 'url' => '' ) ),
+					)
+				),
+				'google-maps'    => self::type( array( 'address' => self::control( 'address', 'text', 'London Eye, London, United Kingdom' ) ) ),
+				'video'          => self::type(
+					array(
+						'youtube_url'   => self::control( 'youtube_url', 'text', 'https://www.youtube.com/watch?v=XHOmBV4js_E' ),
+						'external_url'  => self::control( 'external_url', 'url', array( 'url' => '' ) ),
+						'hosted_url'    => self::control( 'hosted_url', 'media', array( 'url' => '' ) ),
+						'image_overlay' => self::control( 'image_overlay', 'media', array( 'url' => '' ) ),
+					)
+				),
+				'audio'          => self::type( array( 'link' => self::control( 'link', 'url', array( 'url' => 'https://soundcloud.com/shchxango/john-coltrane-1963-my-favorite' ) ) ) ),
+			)
+		);
+		$post = $this->elementorPage(
+			127,
+			array(
+				self::widget( 'ca00001', 'menu-anchor', array( 'anchor' => 'kontakt' ) ),
+				self::widget( 'ca00002', 'image-carousel', array( 'link' => array( 'url' => '/galerie' ) ) ),
+				self::widget( 'ca00003', 'google-maps', array( 'address' => 'Bundesplatz 3, Bern' ) ),
+				self::widget(
+					'ca00004',
+					'video',
+					array(
+						'youtube_url'   => 'https://youtu.be/abc',
+						'hosted_url'    => array( 'id' => 9, 'url' => 'https://example.com/clip.mp4' ),
+						'image_overlay' => array( 'id' => 12, 'url' => 'https://example.com/poster.jpg' ),
+					)
+				),
+				self::widget( 'ca00005', 'audio', array() ),
+			)
+		);
+		$els = $this->byId( $this->outline( $post ) );
+		self::assertArrayNotHasKey( 'fields', $els['ca00001'], 'anchor is the id of an empty div.' );
+		self::assertSame( array( 'link' => array( 'kind' => 'url', 'value' => '/galerie' ) ), $els['ca00002']['fields'], 'carousel_name is an aria-label; the link is a link.' );
+		self::assertArrayNotHasKey( 'fields', $els['ca00003'], 'The address goes into the map\'s src, title and aria-label.' );
+		self::assertSame( array( 'image_overlay' => array( 'kind' => 'image', 'value' => 12 ) ), $els['ca00004']['fields'], 'The video\'s sources are no fields; its overlay image is.' );
+		self::assertArrayNotHasKey( 'fields', $els['ca00005'], 'The audio address is embedded, not a link.' );
+		$flat = $this->flat( $els );
+		foreach ( array( 'kontakt', 'Image Carousel', 'Bundesplatz', 'London Eye', 'youtu', 'clip.mp4', 'soundcloud' ) as $never ) {
+			self::assertStringNotContainsString( $never, $flat, $never );
+		}
+
+		// Without Elementor loaded, an entry that only skips does not make a widget readable.
+		\Elementor\Plugin::$instance = null;
+		$els = $this->byId( $this->outline( $post ) );
+		self::assertSame( 'unknown element type', $els['ca00001']['reason'] );
+		self::assertSame( 'unknown element type', $els['ca00004']['reason'] );
+	}
+
+	public function testWithElementorLoadedOnlyTableFieldsTheMeasurementCoveredCountAsMeasured(): void {
+		$this->loadElementor(
+			array(
+				'container'   => self::type( array() ),
+				'heading'     => self::headingType(),
+				'text-editor' => self::type( array( 'editor' => self::control( 'editor', 'wysiwyg', '' ) ) ),
+				'button'      => self::buttonType(),
+			)
+		);
+		// The measured page, read through the controls: every field is one
+		// the table names for a measured widget, and the page stores it.
+		$this->fixturePage( 128, 'klassisch', array( '_elementor_edit_mode' => 'builder' ) );
+		$out = AB_MCP_Tools_Builders::get_builder_layout( array( 'id' => 128 ) );
+		self::assertSame( 4, $out['element_count'] );
+		self::assertTrue( $out['verified'] );
+		self::assertStringNotContainsString( AB_MCP_Block_Reader::NOTE_UNMEASURED, $this->flat( $out['elements'] ) );
+
+		// A content control the table does not name for this measured widget.
+		$this->loadElementor(
+			array(
+				'heading' => self::type(
+					array(
+						'title'    => self::control( 'title', 'textarea', '' ),
+						'subtitle' => self::control( 'subtitle', 'text', '' ),
+					)
+				),
+			)
+		);
+		$this->elementorPage( 129, array( self::widget( 'cb00001', 'heading', array( 'title' => 'Hallo', 'subtitle' => 'Willkommen' ) ) ) );
+		$out = AB_MCP_Tools_Builders::get_builder_layout( array( 'id' => 129 ) );
+		self::assertSame( 'Willkommen', $out['elements'][0]['fields']['subtitle']['value'] );
+		self::assertSame( AB_MCP_Block_Reader::NOTE_UNMEASURED, $out['elements'][0]['note'] );
+		self::assertFalse( $out['verified'], 'Read through the controls beyond what was measured.' );
+	}
+
+	public function testV4SettingsUnderADeniedNameAreNeverFields(): void {
+		// An add-on's atomic widget may type a code or attribute setting as
+		// html, a string or a link: the name decides first (B1), as on V3.
+		$typed = static function ( string $type, $value ): array {
+			return array( '$$type' => $type, 'value' => $value );
+		};
+		$link  = $typed( 'link', array( 'destination' => $typed( 'url', 'https://track.example/x' ) ) );
+		foreach ( array( false, true ) as $loaded ) {
+			if ( $loaded ) {
+				$this->loadElementor( array( 'e-acme' => self::type( array() ) ) );
+			}
+			$post = $this->elementorPage(
+				$loaded ? 131 : 130,
+				array(
+					self::widget(
+						'cc00001',
+						'e-acme',
+						array(
+							'title'         => $typed( 'escaped-html', 'Sichtbar' ),
+							'custom_html'   => $typed( 'html', '<b>Code</b>' ),
+							'embed_code'    => $typed( 'html', 'embedded' ),
+							'api_key'       => $typed( 'escaped-html', 'sk_live_1' ),
+							'onclick'       => $typed( 'escaped-html', 'alert(1)' ),
+							'css_classes'   => $typed( 'escaped-html', 'big' ),
+							'tracking_attr' => $link,
+							'script_src'    => $typed( 'escaped-html', 'https://evil.example/x.js' ),
+						)
+					),
+				)
+			);
+			$el = $this->outline( $post )[0];
+			self::assertSame( array( 'title' ), array_keys( $el['fields'] ), $loaded ? 'Elementor loaded.' : 'Elementor not loaded.' );
+			$flat = $this->flat( $el );
+			foreach ( array( 'Code', 'embedded', 'sk_live', 'alert', 'big', 'track.example', 'evil.example' ) as $never ) {
+				self::assertStringNotContainsString( $never, $flat, $never );
+			}
 		}
 	}
 

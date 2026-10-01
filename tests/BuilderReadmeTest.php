@@ -6,9 +6,10 @@
  * of the builders the free core reads and of those it only recognises. A
  * list written by hand goes stale the day an adapter is added, removed or
  * marked measured, so this test reads both lists and compares them with what
- * AB_MCP_Builders actually registers: every known builder must stand in the
- * right list and in no other. The same goes for the tool count, which the
- * readmes state as a number.
+ * AB_MCP_Builders actually registers: every builder that can be recognised
+ * must stand in the right list and in no other, and one that cannot (a
+ * signature without any marker, such as Mosaic) in neither. The same goes
+ * for the tool count, which the readmes state as a number.
  *
  * Names are matched by the part of the signature name before " (", so the
  * readme may write «Cornerstone» for «Cornerstone (X, Pro)» and no reader
@@ -89,7 +90,11 @@ final class BuilderReadmeTest extends TestCase {
 			foreach ( $signatures as $id => $sig ) {
 				$name   = $this->short_name( $sig['name'] );
 				$reader = AB_MCP_Builders::adapter_for_builder( $id );
-				if ( null !== $reader ) {
+				if ( array() === $sig['markers'] ) {
+					// Nothing on a page marks it: never recognised, so named in no list.
+					self::assertFalse( $this->names( $recognised, $name ), $file . ': ' . $name . ' has no marker, so it is never recognised.' );
+					self::assertFalse( $this->names( $read, $name ), $file . ': ' . $name . ' has no marker, so it is never read.' );
+				} elseif ( null !== $reader ) {
 					self::assertTrue( $this->names( $read, $name ), $file . ': ' . $name . ' is read, so it stands under «Read».' );
 					self::assertFalse( $this->names( $recognised, $name ), $file . ': ' . $name . ' is read, not only recognised.' );
 				} else {

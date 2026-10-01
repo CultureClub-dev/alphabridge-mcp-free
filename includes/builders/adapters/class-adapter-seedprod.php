@@ -69,7 +69,11 @@ class AB_MCP_Builder_Adapter_SeedProd extends AB_MCP_Builder_Adapter {
 	 */
 	public function outline( $post, array $o ): array {
 		$o    = AB_MCP_Builder_Element_Profile::options( $o );
-		$json = json_decode( isset( $post->post_content_filtered ) ? (string) $post->post_content_filtered : '', true );
+		$raw  = isset( $post->post_content_filtered ) ? (string) $post->post_content_filtered : '';
+		$json = json_decode( $raw, true );
+		if ( '' !== trim( $raw ) && ! is_array( $json ) ) {
+			return self::unreadable_outline( 'post_content_filtered', 'post_content_filtered', 'post_content_filtered is not readable SeedProd data, so its blocks cannot be listed; the site shows post_content', $o );
+		}
 		$secs = is_array( $json ) ? AB_MCP_Builder_Element_Profile::value_at( $json, 'document.sections' ) : null;
 		if ( ! is_array( $secs ) ) {
 			return array();

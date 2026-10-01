@@ -176,7 +176,16 @@ final class SiteOriginAdapterTest extends TestCase {
 		self::assertCount( 5, $this->outline( $post, array( 'include_locked' => false ) ) );
 		self::assertCount( 3, $this->outline( $post, array( 'max_elements' => 3 ) ) );
 		$this->fixturePage( 207, $fx, array( 'panels_data' => 'kein Layout' ) );
-		self::assertSame( array(), $this->outline( get_post( 207 ) ) );
+		$broken = $this->outline( get_post( 207 ) );
+		self::assertCount( 1, $broken, 'A layout that cannot be read is named, not shown as an empty page.' );
+		self::assertSame( 'panels_data', $broken[0]['type'] );
+		self::assertSame( 'unreadable data', $broken[0]['reason'] );
+		self::assertSame( array(), $this->outline( get_post( 207 ), array( 'include_locked' => false ) ) );
+		// SiteOrigin finds no rows in it and shows post_content, which the tool reads.
+		$out = AB_MCP_Tools_Builders::get_builder_layout( array( 'id' => 207 ) );
+		self::assertSame( 'A', $out['storage'] );
+		self::assertNotSame( 'unreadable data', $out['elements'][0]['reason'] ?? null );
+		self::assertSame( array( 'wp_update_post' ), $out['write_via'] );
 	}
 
 	public function testToolAndGuard(): void {

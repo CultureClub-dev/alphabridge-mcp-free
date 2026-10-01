@@ -5,8 +5,8 @@
  * The free plugin recognises every builder listed in signatures.php and reads
  * the ones an adapter is registered for, as a compact outline. It writes only
  * through the tools it already has (wp_update_post for pages whose source is
- * post_content) and refuses a content change that would have no visible
- * effect. Pro writes through its own adapters; it checks the integer
+ * post_content) and refuses a content change the page would not show. Pro
+ * writes through its own adapters; it checks the integer
  * AB_MCP_BUILDER_API (never the plugin version) before it loads them.
  *
  * Element format (one row of an outline):
@@ -77,6 +77,9 @@ final class AB_MCP_Builders {
 
 	/** Default cap of one field value, in characters (filter ab_mcp_builder_field_max_chars). */
 	const FIELD_MAX_CHARS = 2000;
+
+	/** Longest element type or field name an answer carries, in characters; no builder's is longer. */
+	const NAME_MAX_CHARS = 100;
 
 	/**
 	 * Normalised signatures, keyed by builder id.
@@ -298,6 +301,10 @@ final class AB_MCP_Builders {
 	 * Every builder whose markers the post carries, supported or not, in the
 	 * order of signatures.php:
 	 * [ id, name, active (bool|null), support ('read'|'detected_only'), storage, detected_by ].
+	 * storage is this post's, as the reading adapter says (a storage-B
+	 * builder that shows post_content for this post makes it 'A'), else the
+	 * signature's; it does not depend on whether the builder is active (see
+	 * effective_storage()).
 	 *
 	 * @param WP_Post $post Post.
 	 * @return array<int,array>
@@ -312,12 +319,14 @@ final class AB_MCP_Builders {
 			if ( array() === $found ) {
 				continue;
 			}
-			$out[] = array(
+			$reader  = self::adapter_for_builder( $id );
+			$storage = null !== $reader ? $reader->storage( $post ) : $sig['storage'];
+			$out[]   = array(
 				'id'          => $id,
 				'name'        => $sig['name'],
 				'active'      => self::signature_active( $id ),
-				'support'     => null !== self::adapter_for_builder( $id ) ? 'read' : 'detected_only',
-				'storage'     => $sig['storage'],
+				'support'     => null !== $reader ? 'read' : 'detected_only',
+				'storage'     => in_array( $storage, self::STORAGE, true ) ? $storage : $sig['storage'],
 				'detected_by' => $found,
 			);
 		}
@@ -363,7 +372,9 @@ final class AB_MCP_Builders {
 	 * The adapter that reads what the site shows for this post: the primary
 	 * builder's adapter when that builder is (or may be) active — null when
 	 * no adapter reads it — and otherwise the block reader, because without
-	 * an active builder WordPress shows post_content.
+	 * an active builder WordPress shows post_content. The same holds where an
+	 * active builder shows post_content for this post itself
+	 * (own_data_shown() false, e.g. Elementor without a layout).
 	 *
 	 * @param WP_Post $post Post.
 	 * @return AB_MCP_Builder_Adapter|null
@@ -371,15 +382,20 @@ final class AB_MCP_Builders {
 	public static function for_post( $post ): ?AB_MCP_Builder_Adapter {
 		$primary = self::primary( $post );
 		if ( null !== $primary && false !== $primary['active'] ) {
-			return self::adapter_for_builder( $primary['id'] );
+			$adapter = self::adapter_for_builder( $primary['id'] );
+			if ( null === $adapter || false !== $adapter->own_data_shown( $post ) ) {
+				return $adapter;
+			}
 		}
 		$adapters = self::adapters();
 		return isset( $adapters['blocks'] ) ? $adapters['blocks'] : null;
 	}
 
 	/**
-	 * Storage kind of what the site shows: the primary builder's, unless that
-	 * builder is inactive — then WordPress shows post_content (A).
+	 * Storage kind of what the site shows: the primary builder's for this
+	 * post, unless that builder is inactive — then WordPress shows
+	 * post_content (A). This is the storage the tools report; the builder's
+	 * own, where it differs, is builder_storage.
 	 *
 	 * @param WP_Post $post Post.
 	 * @return string
@@ -391,7 +407,9 @@ final class AB_MCP_Builders {
 
 	/**
 	 * Builder information for wp_get_post; null when no builder is detected.
-	 * builder, name, active, version, storage, support, write_via, note
+	 * builder, name, active, version, storage (what the site shows, see
+	 * effective_storage()), builder_storage (only where the builder's own
+	 * storage differs, e.g. while it is inactive), support, write_via, note
 	 * (only where post_content is not simply the page), also (other builders
 	 * detected on the same post).
 	 *
@@ -408,16 +426,20 @@ final class AB_MCP_Builders {
 			return null;
 		}
 		$primary = self::primary( $post );
+		$storage = self::effective_storage( $post );
 		$out     = array(
-			'builder'   => $primary['id'],
-			'name'      => $primary['name'],
-			'active'    => $primary['active'],
-			'version'   => true === $primary['active'] ? self::builder_version( $primary['id'] ) : null,
-			'storage'   => $primary['storage'],
-			'support'   => $primary['support'],
-			'write_via' => self::write_via( $post ),
+			'builder' => $primary['id'],
+			'name'    => $primary['name'],
+			'active'  => $primary['active'],
+			'version' => true === $primary['active'] ? self::builder_version( $primary['id'] ) : null,
+			'storage' => $storage,
 		);
-		$note = self::note_for( $primary );
+		if ( $primary['storage'] !== $storage ) {
+			$out['builder_storage'] = $primary['storage'];
+		}
+		$out['support']   = $primary['support'];
+		$out['write_via'] = self::write_via( $post );
+		$note             = self::note_for( $primary );
 		if ( '' !== $note ) {
 			$out['note'] = $note;
 		}
@@ -457,15 +479,20 @@ final class AB_MCP_Builders {
 	/**
 	 * What wp_update_post must know before it writes the field content:
 	 * null — nothing to say; [ 'block' => true, 'message' ] — refuse, the
-	 * change would have no visible effect; [ 'block' => false, 'message' ] —
+	 * page would not show the change; [ 'block' => false, 'message' ] —
 	 * write, and pass the message on.
 	 *
-	 * - Storage B, builder active, an adapter reads it: block. post_content is
-	 *   only a copy the builder does not show (measured for Elementor, Beaver,
-	 *   SiteOrigin, Themify, Zion, Live Composer and Brizy; for Enfold from the
-	 *   vendor's documentation and code, quellen/enfold.md b), not measured).
-	 * - Storage B, builder active or of unknown state, no adapter: write,
-	 *   with a warning — nothing gets worse than it was (plan, principle 9).
+	 * - Storage B, builder active, an adapter reads it and says the builder
+	 *   shows its own data for this post (own_data_shown() true): block.
+	 *   post_content is only a copy the builder does not show (measured for
+	 *   Elementor, Beaver, SiteOrigin, Themify, Zion, Live Composer and Brizy;
+	 *   for Enfold from the vendor's documentation and code, quellen/enfold.md
+	 *   b), not measured).
+	 * - Storage B, builder active or of unknown state, no adapter or the
+	 *   adapter cannot tell: write, with a warning — nothing gets worse than
+	 *   it was (plan, principle 9).
+	 * - A storage-B builder that shows post_content for this post (e.g.
+	 *   Elementor without a layout): the post is storage A, see below.
 	 * - Storage A2: write, with a warning that the builder restores its own
 	 *   copy on the next save in the builder.
 	 * - Builder inactive: write, with a note — WordPress shows post_content.
@@ -497,7 +524,8 @@ final class AB_MCP_Builders {
 					);
 				}
 			} elseif ( 'B' === $storage ) {
-				if ( true === $primary['active'] && 'read' === $primary['support'] ) {
+				$reader = self::adapter_for_builder( $primary['id'] );
+				if ( true === $primary['active'] && 'read' === $primary['support'] && null !== $reader && true === $reader->own_data_shown( $post ) ) {
 					$guard = array(
 						'block'   => true,
 						'message' => self::copy_only_message( $post, $name ),
@@ -506,7 +534,7 @@ final class AB_MCP_Builders {
 					$guard = array(
 						'block'   => false,
 						/* translators: %s: page builder name */
-						'message' => sprintf( __( 'This page looks built with %s, which shows its own data rather than post_content, so this change may not be visible. Check the page; to change what it shows, edit it in the builder.', 'alphabridge-mcp' ), $name ),
+						'message' => sprintf( __( 'This page looks built with %s, which may show its own data rather than post_content, so this change may not be visible. Check the page; to change what it shows, edit it in the builder.', 'alphabridge-mcp' ), $name ),
 					);
 				}
 			} elseif ( 'A2' === $storage ) {
@@ -725,6 +753,51 @@ final class AB_MCP_Builders {
 			$field['truncated'] = true;
 		}
 		return $field;
+	}
+
+	/**
+	 * An element with every text that comes from the page bounded, not only
+	 * its field values: a type, a field name or a note is written by whoever
+	 * wrote the page as much as a text is (a widget type, a settings key, a
+	 * dynamic field named in a note), and cap_field() alone would leave
+	 * those to run to any length. The type is cut to NAME_MAX_CHARS; a field
+	 * whose name is longer is left out — a cut name would address nothing —
+	 * and the note counts it; field values, note and reason are cut to $max
+	 * characters. A cut type, note or reason ends in "…".
+	 *
+	 * @param array $element Element (see the format at the top).
+	 * @param int   $max     Characters, as for field values.
+	 * @return array
+	 */
+	public static function bound_element( array $element, $max ): array {
+		$max = max( 1, (int) $max );
+		if ( isset( $element['type'] ) && is_string( $element['type'] ) && self::length( $element['type'] ) > self::NAME_MAX_CHARS ) {
+			$element['type'] = self::cut( $element['type'], self::NAME_MAX_CHARS ) . '…';
+		}
+		$dropped = 0;
+		if ( isset( $element['fields'] ) && is_array( $element['fields'] ) ) {
+			foreach ( $element['fields'] as $name => $field ) {
+				if ( self::length( (string) $name ) > self::NAME_MAX_CHARS ) {
+					unset( $element['fields'][ $name ] );
+					++$dropped;
+				} elseif ( is_array( $field ) && array_key_exists( 'value', $field ) ) {
+					$element['fields'][ $name ] = self::cap_field( $field, $max );
+				}
+			}
+			if ( array() === $element['fields'] ) {
+				unset( $element['fields'] );
+			}
+		}
+		foreach ( array( 'note', 'reason' ) as $key ) {
+			if ( isset( $element[ $key ] ) && is_string( $element[ $key ] ) && self::length( $element[ $key ] ) > $max ) {
+				$element[ $key ] = self::cut( $element[ $key ], $max ) . '…';
+			}
+		}
+		if ( $dropped > 0 ) {
+			$note            = sprintf( '%d field(s) with a name longer than %d characters left out', $dropped, self::NAME_MAX_CHARS );
+			$element['note'] = isset( $element['note'] ) && is_string( $element['note'] ) && '' !== $element['note'] ? $element['note'] . '; ' . $note : $note;
+		}
+		return $element;
 	}
 
 	/**
@@ -990,6 +1063,11 @@ final class AB_MCP_Builders {
 	 */
 	private static function note_for( array $primary ): string {
 		$name = $primary['name'];
+		$sig  = self::signature( $primary['id'] );
+		if ( false !== $primary['active'] && 'A' === $primary['storage'] && null !== $sig && 'B' === $sig['storage'] ) {
+			/* translators: %s: page builder name */
+			return sprintf( __( '%s is set for this page but shows no layout of its own for it, so the site shows post_content.', 'alphabridge-mcp' ), $name );
+		}
 		if ( false === $primary['active'] ) {
 			if ( in_array( $primary['storage'], array( 'B', 'A2' ), true ) ) {
 				/* translators: %s: page builder name */
@@ -999,7 +1077,7 @@ final class AB_MCP_Builders {
 		}
 		if ( 'B' === $primary['storage'] ) {
 			/* translators: %s: page builder name */
-			return sprintf( __( 'post_content is only a copy: %s shows its own data, so changing content has no visible effect. Read the page with wp_get_builder_layout.', 'alphabridge-mcp' ), $name );
+			return sprintf( __( 'post_content is only a copy: %s shows its own data, so a change to content does not appear on the page. Read the page with wp_get_builder_layout.', 'alphabridge-mcp' ), $name );
 		}
 		if ( 'A2' === $primary['storage'] ) {
 			/* translators: %1$s, %2$s: page builder name */
@@ -1021,7 +1099,7 @@ final class AB_MCP_Builders {
 	 */
 	private static function copy_only_message( $post, $name ) {
 		/* translators: %s: page builder name */
-		$msg   = sprintf( __( 'Nothing was written: this page is built with %s, which shows its own data. post_content is only a copy, so changing content would have no visible effect. Read the page with wp_get_builder_layout.', 'alphabridge-mcp' ), $name );
+		$msg   = sprintf( __( 'Nothing was written: this page is built with %s, which shows its own data. post_content is only a copy the page does not show, so this change would not appear on the page. Read the page with wp_get_builder_layout.', 'alphabridge-mcp' ), $name );
 		$tools = array_values( array_diff( self::write_via( $post ), array( 'wp_update_post' ) ) );
 		if ( array() !== $tools ) {
 			/* translators: %s: comma-separated tool names */

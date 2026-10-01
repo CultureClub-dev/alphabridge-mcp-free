@@ -56,6 +56,21 @@ class AB_MCP_Builder_Adapter_SiteOrigin extends AB_MCP_Builder_Adapter {
 	}
 
 	/**
+	 * Whether SiteOrigin shows its layout for this post: only when
+	 * panels_data is a layout with at least one row. Otherwise its renderer
+	 * returns nothing and the site shows post_content
+	 * [SVN siteorigin-panels@2.36.1 siteorigin-panels.php:330-343,
+	 * inc/renderer.php:711-713].
+	 *
+	 * @param WP_Post $post Post.
+	 * @return bool|null
+	 */
+	public function own_data_shown( $post ): ?bool {
+		$data = get_post_meta( (int) $post->ID, self::DATA, true );
+		return is_array( $data ) && ! empty( $data['grids'] );
+	}
+
+	/**
 	 * Rows, cells and widgets in page order.
 	 *
 	 * @param WP_Post $post Post.
@@ -63,10 +78,16 @@ class AB_MCP_Builder_Adapter_SiteOrigin extends AB_MCP_Builder_Adapter {
 	 * @return array<int,array>
 	 */
 	public function outline( $post, array $o ): array {
-		$o    = AB_MCP_Builder_Element_Profile::options( $o );
-		$data = get_post_meta( (int) $post->ID, self::DATA, true );
+		$o      = AB_MCP_Builder_Element_Profile::options( $o );
+		$stored = get_post_meta( (int) $post->ID, self::DATA, false );
+		$data   = array() !== $stored ? reset( $stored ) : '';
 		if ( ! is_array( $data ) ) {
-			return array();
+			// A value WordPress could not unserialize (false, or the raw
+			// string): SiteOrigin finds no rows in it and the site shows
+			// post_content (own_data_shown() false, so the tools read that).
+			return '' === $data || null === $data
+				? array()
+				: self::unreadable_outline( self::DATA, self::DATA, self::DATA . ' is not a readable layout; SiteOrigin Page Builder then shows post_content', $o );
 		}
 
 		// The renderer's model: rows as listed, cells appended to their row.
@@ -97,7 +118,7 @@ class AB_MCP_Builder_Adapter_SiteOrigin extends AB_MCP_Builder_Adapter {
 		}
 
 		$profile = AB_MCP_Builder_Element_Profile::get( 'siteorigin' );
-		$widgets = $data['widgets'];
+		$widgets = isset( $data['widgets'] ) && is_array( $data['widgets'] ) ? $data['widgets'] : array();
 		$out     = array();
 		foreach ( $rows as $r => $cells ) {
 			$row_id = 'r' . $r;

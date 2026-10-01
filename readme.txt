@@ -82,7 +82,7 @@ Yes. It is pure PHP and uses the WordPress REST API. PHP 8.0+ and HTTPS are reco
 
 * Read: WordPress blocks, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Otter Blocks and CoBlocks (both as plain blocks), WPBakery Page Builder, Divi 4, Avada (Fusion Builder), Flatsome (UX Builder) and Enfold (Avia Layout Builder).
 * Read from the vendors' documentation and code, not yet checked on a live installation (the answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
-* Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5, Etch and Mosaic.
+* Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5 and Etch.
 
 Where a builder shows its own data and post_content is only a copy — Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold — `wp_update_post` refuses a change to the content while the builder is active, because it would not show, and says how to change the page instead. Called without content, it still changes the title, status, excerpt and the other fields.
 

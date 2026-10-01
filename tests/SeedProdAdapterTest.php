@@ -168,8 +168,14 @@ final class SeedProdAdapterTest extends TestCase {
 		self::assertSame( 'unknown element type', $by['blk004']['reason'] );
 		self::assertCount( 5, $this->outline( $post, array( 'include_locked' => false ) ) );
 		self::assertCount( 2, $this->outline( $post, array( 'max_elements' => 2 ) ) );
-		self::assertSame( array(), $this->outline( $this->variant( 310, $fx, null, '{"document":' ) ) );
+		$broken = $this->outline( $this->variant( 310, $fx, null, '{"document":' ) );
+		self::assertCount( 1, $broken, 'Broken JSON is named, not shown as an empty page.' );
+		self::assertSame( 'post_content_filtered', $broken[0]['type'] );
+		self::assertSame( 'unreadable data', $broken[0]['reason'] );
+		self::assertStringContainsString( 'the site shows post_content', $broken[0]['note'] );
+		self::assertSame( array(), $this->outline( $this->variant( 310, $fx, null, '{"document":' ), array( 'include_locked' => false ) ) );
 		self::assertSame( array(), $this->outline( $this->variant( 311, $fx, null, '' ) ) );
+		self::assertSame( array(), $this->outline( $this->variant( 313, $fx, null, '{"document":{}}' ) ), 'A document without sections is an empty page.' );
 	}
 
 	public function testToolHashAndGuard(): void {

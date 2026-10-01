@@ -2,7 +2,9 @@
 /**
  * Adapter for pages built with Elementor (storage B): the page is the JSON
  * tree in the meta key _elementor_data; post_content is only a text copy
- * Elementor writes for search and does not show while it is active.
+ * Elementor writes for search and does not show while it is active — as
+ * long as the tree is not empty. A page marked as built with Elementor that
+ * holds no tree shows post_content and is an 'A' page (own_data_shown()).
  *
  * Two formats live in the same tree and are read side by side:
  * - V3: elType section/column/container/widget, widgetType, and plain
@@ -16,7 +18,12 @@
  *   the widget registers. Controls of type text, textarea, wysiwyg, url and
  *   media on the panel's content tab are fields, also inside repeaters (the
  *   style and advanced tabs hold styling and code); a setting that is not
- *   stored is read from the control's default, as Elementor renders it. An element
+ *   stored is read from the control's default, as Elementor renders it.
+ *   Content controls the widget only writes into an attribute (an id, an
+ *   aria-label, an embed address) are listed per widget type under "skip"
+ *   in the table and never read. A field counts as measured only where the
+ *   table names it for a measured widget and the page stores it; any other
+ *   field read this way makes the element say it is unmeasured. An element
  *   whose type Elementor does not know is locked: Elementor neither shows it
  *   nor keeps it when the page is saved.
  * - Without Elementor loaded: the widget table below (WIDGETS), taken from
@@ -129,7 +136,12 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	 *                     repeater name => [ field name => kind ] ],
 	 *     'locked'   => reason, 'global' => bool,
 	 *     'ref'      => path to the id of the post holding the content
-	 *                   (element keys, dots for nesting) ].
+	 *                   (element keys, dots for nesting),
+	 *     'skip'     => [ control name, … ] content controls that are never
+	 *                   a field because the widget writes them only into an
+	 *                   attribute (read with Elementor loaded; an entry with
+	 *                   nothing but "skip" does not make a widget readable
+	 *                   without Elementor) ].
 	 * Kinds: text, heading, html (a string setting), url (setting['url'] in
 	 * V3), image (setting['id'], else setting['url']). V4 entries take the
 	 * value from its $$type; the table gives only the kind.
@@ -264,6 +276,18 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 		// [developers.elementor.com/docs/form-actions/advanced-example]; V4 form [SVN … atomic-form/atomic-form.php:69, :118-142].
 		'form'          => array( 'locked' => 'form' ),
 		'e-form'        => array( 'locked' => 'form' ),
+
+		// Content controls written only into attributes, never shown as text or followed as a link.
+		// [SVN elementor@4.3.3 includes/widgets/menu-anchor.php:112-127, :150-160] anchor: the id of an empty div.
+		'menu-anchor'    => array( 'skip' => array( 'anchor' ) ),
+		// [SVN elementor@4.3.3 includes/widgets/image-carousel.php:150-157, :1029] carousel_name: an aria-label.
+		'image-carousel' => array( 'skip' => array( 'carousel_name' ) ),
+		// [SVN elementor@4.3.3 includes/widgets/google-maps.php:152-167, :285-313] address: the map's src, title and aria-label.
+		'google-maps'    => array( 'skip' => array( 'address' ) ),
+		// [SVN elementor@4.3.3 includes/widgets/video.php:170, :195, :219, :299, :1344-1347, :1378-1381, :1429] the embed's source.
+		'video'          => array( 'skip' => array( 'youtube_url', 'vimeo_url', 'dailymotion_url', 'videopress_url', 'external_url', 'hosted_url' ) ),
+		// [SVN elementor@4.3.3 includes/widgets/audio.php:109, :277] link: the address wp_oembed_get() embeds.
+		'audio'          => array( 'skip' => array( 'link' ) ),
 	);
 
 	/**
@@ -272,6 +296,13 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	 * @var array<string,array>
 	 */
 	private $table = array();
+
+	/**
+	 * The last stored tree decoded (see stored_tree()).
+	 *
+	 * @var array{raw:mixed,tree:mixed}|null
+	 */
+	private static $decoded = null;
 
 	/**
 	 * Adapter id, the builder id of signatures.php.
@@ -293,9 +324,26 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	}
 
 	/**
-	 * The page tree as Elementor reads it (Document::get_json_meta():
-	 * a JSON string is decoded, an empty value is an empty page), or null
-	 * when a stored value cannot be read as a tree.
+	 * Whether Elementor shows its own layout for this post: only when the
+	 * stored tree is not empty. With nothing stored, "[]", or JSON that does
+	 * not decode (broken, or nested deeper than json_decode() reads),
+	 * Elementor renders nothing and the site shows post_content — also on a
+	 * page that was only opened in the Elementor editor, which marks it as
+	 * built with Elementor before anything is saved.
+	 * [SVN elementor@4.3.3 includes/frontend.php:1105-1110, :1176-1180;
+	 * core/editor/editor.php:111-112]
+	 *
+	 * @param WP_Post $post Post.
+	 * @return bool|null
+	 */
+	public function own_data_shown( $post ): ?bool {
+		return ! empty( self::stored_tree( $post ) );
+	}
+
+	/**
+	 * The page tree as Elementor reads it (Document::get_json_meta()):
+	 * whatever is empty after decoding is an empty page; null when the value
+	 * is not empty but no list of elements either (a JSON number or string).
 	 * [SVN elementor@4.3.3 core/base/document.php:1041-1053]
 	 *
 	 * @param WP_Post $post Post.
@@ -305,17 +353,40 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 		if ( ! is_object( $post ) ) {
 			return null;
 		}
-		$meta = get_post_meta( (int) $post->ID, self::DATA_KEY, true );
-		if ( is_string( $meta ) && '' !== $meta ) {
-			$meta = json_decode( $meta, true );
-			if ( ! is_array( $meta ) ) {
-				return null;
-			}
-		}
-		if ( empty( $meta ) ) {
+		$tree = self::stored_tree( $post );
+		if ( empty( $tree ) ) {
 			return array();
 		}
-		return is_array( $meta ) ? $meta : null;
+		return is_array( $tree ) ? $tree : null;
+	}
+
+	/**
+	 * _elementor_data decoded exactly as Document::get_json_meta() does it,
+	 * before its empty check. The last value is kept: one answer asks for it
+	 * many times (recognition, guard, outline, hash), and a page tree can be
+	 * megabytes of JSON. Keyed by the stored value itself, so it never goes
+	 * stale.
+	 *
+	 * @param WP_Post $post Post.
+	 * @return mixed
+	 */
+	private static function stored_tree( $post ) {
+		if ( ! is_object( $post ) ) {
+			return null;
+		}
+		$meta = get_post_meta( (int) $post->ID, self::DATA_KEY, true );
+		if ( null !== self::$decoded && self::$decoded['raw'] === $meta ) {
+			return self::$decoded['tree'];
+		}
+		$tree = $meta;
+		if ( is_string( $tree ) && ! empty( $tree ) ) {
+			$tree = json_decode( $tree, true );
+		}
+		self::$decoded = array(
+			'raw'  => $meta,
+			'tree' => $tree,
+		);
+		return $tree;
 	}
 
 	/**
@@ -333,20 +404,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 		);
 		$data = self::elements_data( $post );
 		if ( null === $data ) {
-			if ( ! $o['include_locked'] ) {
-				return array();
-			}
-			return array(
-				array(
-					'id'     => 'e0',
-					'type'   => self::DATA_KEY,
-					'parent' => null,
-					'depth'  => 0,
-					'locked' => true,
-					'reason' => 'unreadable data',
-					'note'   => self::DATA_KEY . ' is not a JSON list of elements, so Elementor shows nothing of it either',
-				),
-			);
+			return self::unreadable_outline( 'e0', self::DATA_KEY, self::DATA_KEY . ' holds no list of elements', $o );
 		}
 		$this->table = self::widgets();
 		$counts      = array();
@@ -422,6 +480,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				'locked'   => isset( $entry['locked'] ) && is_string( $entry['locked'] ) ? $entry['locked'] : '',
 				'global'   => ! empty( $entry['global'] ),
 				'ref'      => isset( $entry['ref'] ) && is_string( $entry['ref'] ) ? $entry['ref'] : '',
+				'skip'     => isset( $entry['skip'] ) && is_array( $entry['skip'] ) ? array_values( array_filter( $entry['skip'], 'is_string' ) ) : array(),
 			);
 			foreach ( isset( $entry['fields'] ) && is_array( $entry['fields'] ) ? $entry['fields'] : array() as $name => $kind ) {
 				if ( ! is_string( $name ) || self::denied_name( $name ) ) {
@@ -497,18 +556,19 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				continue; // Children of a locked element are not listed.
 			}
 
-			$notes  = array();
-			$fields = array();
+			$notes    = array();
+			$fields   = array();
+			$measured = $read['measured'];
 			if ( 'typed' === $read['mode'] ) {
 				$this->typed_fields( $settings, $read['entry'], $o, $fields, $notes );
 			} elseif ( 'controls' === $read['mode'] ) {
-				$this->control_fields( $settings, $read['controls'], $read['entry'], $o, $fields, $notes );
+				$this->control_fields( $settings, $read['controls'], $read['entry'], $o, $fields, $notes, $measured );
 			} else {
 				$this->table_fields( $settings, $read['entry'], $o, $fields, $notes );
 			}
 			if ( array() !== $fields ) {
 				$element['fields'] = $fields;
-				if ( ! $read['measured'] ) {
+				if ( ! $measured ) {
 					$notes[] = AB_MCP_Block_Reader::NOTE_UNMEASURED;
 				}
 			}
@@ -615,7 +675,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				'measured' => $measured,
 			);
 		}
-		if ( null !== $entry || ( 'widget' !== $el_type && in_array( $el_type, self::STRUCTURE, true ) ) ) {
+		if ( ( null !== $entry && array() !== $entry['fields'] ) || ( 'widget' !== $el_type && in_array( $el_type, self::STRUCTURE, true ) ) ) {
 			return array(
 				'mode'     => 'table',
 				'entry'    => $entry,
@@ -661,6 +721,9 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 
 	/**
 	 * Fields of a V3 element from its registered controls (Elementor loaded).
+	 * $measured stays true only while every field read is one the table
+	 * names and the page stores: the controls path itself was checked
+	 * against a stand-in of Elementor, not a live installation.
 	 *
 	 * @param array      $settings Settings.
 	 * @param array      $controls Controls of the element type, by name.
@@ -668,12 +731,14 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	 * @param array      $o        Options.
 	 * @param array      $fields   Fields (by reference).
 	 * @param array      $notes    Notes (by reference).
+	 * @param bool       $measured Whether the element counts as measured (by reference).
 	 */
-	private function control_fields( array $settings, array $controls, $entry, array $o, array &$fields, array &$notes ) {
+	private function control_fields( array $settings, array $controls, $entry, array $o, array &$fields, array &$notes, &$measured ) {
 		$named = null !== $entry ? $entry['fields'] : array();
+		$skip  = null !== $entry ? $entry['skip'] : array();
 		foreach ( $controls as $control ) {
 			if ( ! is_array( $control ) || ! isset( $control['name'], $control['type'], $control['tab'] ) || ! is_string( $control['name'] )
-				|| self::CONTENT_TAB !== $control['tab'] || self::denied_name( $control['name'] ) ) {
+				|| self::CONTENT_TAB !== $control['tab'] || self::denied_name( $control['name'] ) || in_array( $control['name'], $skip, true ) ) {
 				continue;
 			}
 			$name = $control['name'];
@@ -689,8 +754,12 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 						if ( ! is_array( $sub ) || ! isset( $sub['name'], $sub['type'] ) || ! is_string( $sub['name'] ) || ! self::content_type( $sub['type'] ) ) {
 							continue;
 						}
-						$kind = self::kind_for( $sub['type'], isset( $named[ $name ] ) && is_array( $named[ $name ] ) && isset( $named[ $name ][ $sub['name'] ] ) ? $named[ $name ][ $sub['name'] ] : null );
-						$this->add_v3_field( $name . '.' . $k . '.' . $sub['name'], $sub['name'], $kind, $item, $defaulted, $sub, $o, $fields, $notes );
+						$table = isset( $named[ $name ] ) && is_array( $named[ $name ] ) && isset( $named[ $name ][ $sub['name'] ] ) ? $named[ $name ][ $sub['name'] ] : null;
+						$kind  = self::kind_for( $sub['type'], $table );
+						$added = $this->add_v3_field( $name . '.' . $k . '.' . $sub['name'], $sub['name'], $kind, $item, $defaulted, $sub, $o, $fields, $notes );
+						if ( null !== $added && ( 'default' === $added || null === $table ) ) {
+							$measured = false;
+						}
 					}
 				}
 				continue;
@@ -698,8 +767,12 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 			if ( ! self::content_type( $control['type'] ) ) {
 				continue;
 			}
-			$kind = self::kind_for( $control['type'], isset( $named[ $name ] ) && is_string( $named[ $name ] ) ? $named[ $name ] : null );
-			$this->add_v3_field( $name, $name, $kind, $settings, false, $control, $o, $fields, $notes );
+			$table = isset( $named[ $name ] ) && is_string( $named[ $name ] ) ? $named[ $name ] : null;
+			$kind  = self::kind_for( $control['type'], $table );
+			$added = $this->add_v3_field( $name, $name, $kind, $settings, false, $control, $o, $fields, $notes );
+			if ( null !== $added && ( 'default' === $added || null === $table ) ) {
+				$measured = false;
+			}
 		}
 	}
 
@@ -718,14 +791,15 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	 * @param array      $o          Options.
 	 * @param array      $fields     Fields (by reference).
 	 * @param array      $notes      Notes (by reference).
+	 * @return string|null 'stored' or 'default' for a field added, null for none.
 	 */
 	private function add_v3_field( $field_name, $key, $kind, array $settings, $defaulted, $control, array $o, array &$fields, array &$notes ) {
 		if ( self::denied_name( $key ) ) {
-			return;
+			return null;
 		}
 		if ( isset( $settings[ self::DYNAMIC_KEY ] ) && is_array( $settings[ self::DYNAMIC_KEY ] ) && ! empty( $settings[ self::DYNAMIC_KEY ][ $key ] ) ) {
 			$notes[] = $field_name . ': dynamic value, not read';
-			return;
+			return null;
 		}
 		$stored = isset( $settings[ $key ] );
 		if ( $stored ) {
@@ -733,17 +807,18 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 		} elseif ( null !== $control && isset( $control['default'] ) ) {
 			$raw = $control['default'];
 		} else {
-			return;
+			return null;
 		}
 		$value = self::v3_value( $kind, $raw );
 		if ( null === $value ) {
-			return;
+			return null;
 		}
 		if ( false === $value ) {
 			$notes[] = $field_name . ': an address that would run code, left out';
-			return;
+			return null;
 		}
-		if ( ! $stored || $defaulted ) {
+		$from_default = ! $stored || $defaulted;
+		if ( $from_default ) {
 			$notes[] = $field_name . ': Elementor\'s default, not stored on the page';
 		}
 		$fields[ $field_name ] = AB_MCP_Builders::cap_field(
@@ -753,6 +828,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 			),
 			$o['max_field_chars']
 		);
+		return $from_default ? 'default' : 'stored';
 	}
 
 	/**

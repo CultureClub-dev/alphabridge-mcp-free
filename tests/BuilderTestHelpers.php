@@ -72,6 +72,32 @@ trait BuilderTestHelpers {
 		AB_MCP_Builders::reset();
 	}
 
+	/**
+	 * A small Elementor tree, as _elementor_data holds it: one container with
+	 * a heading. Elementor shows a page as its own only while this is not
+	 * empty (AB_MCP_Builder_Adapter_Elementor::own_data_shown()).
+	 */
+	private function elementorTree( string $title = 'Willkommen' ): string {
+		return (string) json_encode(
+			array(
+				array(
+					'id'       => 'c0ffee1',
+					'elType'   => 'container',
+					'settings' => array(),
+					'elements' => array(
+						array(
+							'id'         => 'a1b2c3d',
+							'elType'     => 'widget',
+							'widgetType' => 'heading',
+							'settings'   => array( 'title' => $title ),
+							'elements'   => array(),
+						),
+					),
+				),
+			)
+		);
+	}
+
 	/** The current user may do everything. */
 	private function mayDoAnything(): void {
 		$GLOBALS['ab_test_can'] = static function (): bool {

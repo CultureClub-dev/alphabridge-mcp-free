@@ -59,6 +59,35 @@ class AB_MCP_Builder_Adapter_Beaver extends AB_MCP_Builder_Adapter {
 	}
 
 	/**
+	 * Whether Beaver shows its layout for this post. Beaver renders a post
+	 * only when its type is one the builder is enabled for (the setting
+	 * _fl_builder_post_types and the filter fl_builder_post_types, read
+	 * through FLBuilderModel::get_post_types()); for any other type the site
+	 * shows post_content [SVN beaver-builder-lite-version@2.11.0.6
+	 * classes/class-fl-builder-model.php:756-761, classes/class-fl-builder.php:
+	 * 2185]. Without Beaver's model loaded that is not known here, and the
+	 * signature's answer stands. A layout that is empty or cannot be read is
+	 * still Beaver's: it renders an empty layout, not post_content
+	 * (class-fl-builder-model.php:6065-6068, :5921-5924).
+	 *
+	 * @param WP_Post $post Post.
+	 * @return bool|null
+	 */
+	public function own_data_shown( $post ): ?bool {
+		if ( class_exists( 'FLBuilderModel', false ) && method_exists( 'FLBuilderModel', 'get_post_types' ) ) {
+			try {
+				$types = FLBuilderModel::get_post_types();
+			} catch ( Throwable $e ) {
+				$types = null;
+			}
+			if ( is_array( $types ) && ! in_array( (string) $post->post_type, array_map( 'strval', array_filter( $types, 'is_scalar' ) ), true ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * Whether the editor's draft differs from the published layout: then
 	 * the next "Publish" in the Beaver editor publishes the draft, not what
 	 * the site shows now. Compared as Beaver loads them (unserialized), so
@@ -86,10 +115,18 @@ class AB_MCP_Builder_Adapter_Beaver extends AB_MCP_Builder_Adapter {
 	 * @return array<int,array>
 	 */
 	public function outline( $post, array $o ): array {
-		$o    = AB_MCP_Builder_Element_Profile::options( $o );
-		$data = get_post_meta( (int) $post->ID, self::DATA, true );
+		$o      = AB_MCP_Builder_Element_Profile::options( $o );
+		$stored = get_post_meta( (int) $post->ID, self::DATA, false );
+		$data   = array() !== $stored ? reset( $stored ) : '';
 		if ( ! is_array( $data ) ) {
-			return array();
+			// Nothing stored is an empty layout. Anything else that is no
+			// array — a value WordPress could not unserialize comes back as
+			// false or as the raw string — Beaver reads as an empty layout
+			// too (FLBuilderModel::clean_layout_data(), class-fl-builder-model.php:
+			// 6065-6068), but the page holds one: say so.
+			return '' === $data || null === $data
+				? array()
+				: self::unreadable_outline( self::DATA, self::DATA, self::DATA . ' is not a readable layout; Beaver Builder reads it as an empty one', $o );
 		}
 
 		$nodes = array();

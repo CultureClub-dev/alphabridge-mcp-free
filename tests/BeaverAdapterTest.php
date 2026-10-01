@@ -132,6 +132,27 @@ final class BeaverAdapterTest extends TestCase {
 		self::assertSame( $box->node, $els[10]['parent'], 'A module inside a box is its child.' );
 	}
 
+	public function testSiblingsFollowTheirPositionNotTheStorageOrder(): void {
+		// Beaver sorts the children of a node by position (FLBuilderModel::
+		// get_nodes(), order_nodes(); class-fl-builder-model.php:1323-1324,
+		// :1955-1957 of 2.11.0.6), whatever order the array is stored in.
+		$layout  = $this->layout();
+		$heading = $this->module( $layout, 'heading' );
+		$button  = $this->module( $layout, 'button' );
+		self::assertSame( $heading->parent, $button->parent, 'Siblings in the first column.' );
+		self::assertNotSame( (int) $heading->position, (int) $button->position );
+		list( $heading->position, $button->position ) = array( $button->position, $heading->position );
+
+		$els = $this->outline( $this->pageWith( 140, array_reverse( $layout, true ) ) );
+		self::assertSame(
+			array( 'row', 'column-group', 'column', 'button', 'rich-text', 'heading', 'photo', 'html', 'widget', 'box', 'heading', 'row', 'column-group', 'column', 'callout', 'cta', 'icon', 'numbers', 'star-rating', 'button-group', 'video', 'audio', 'menu', 'sidebar', 'reusable-block' ),
+			array_column( $els, 'type' ),
+			'Stored in reverse, read in Beaver\'s order; the swapped pair swapped.'
+		);
+		self::assertSame( $button->node, $els[3]['id'] );
+		self::assertSame( $heading->node, $els[5]['id'] );
+	}
+
 	public function testTheMeasuredFieldsAndOnlyThose(): void {
 		$els = $this->byId( $this->outline( $this->fixturePage( 103, $this->fx ) ) );
 		$by  = array();
@@ -306,14 +327,29 @@ final class BeaverAdapterTest extends TestCase {
 		self::assertArrayNotHasKey( 'mzschleife01', $els );
 	}
 
-	public function testUnreadableDataGivesAnEmptyOutline(): void {
-		$meta                     = $this->asLoaded( $this->fx['meta'] );
-		$meta['_fl_builder_data'] = 'a:1:{broken';
-		$post                     = $this->fixturePage( 116, $this->fx, $meta );
-		self::assertSame( array(), $this->outline( $post ) );
-		$answer = AB_MCP_Tools_Builders::get_builder_layout( array( 'id' => 116 ) );
-		self::assertSame( 'beaver', $answer['builder'] );
-		self::assertSame( array(), $answer['elements'] );
+	public function testUnreadableDataIsNamedNotShownAsAnEmptyPage(): void {
+		// WordPress hands back a value it cannot unserialize as the raw
+		// string, or as false when it looked serialized.
+		foreach ( array( 'a:1:{broken', false ) as $i => $broken ) {
+			$meta                     = $this->asLoaded( $this->fx['meta'] );
+			$meta['_fl_builder_data'] = $broken;
+			$post                     = $this->fixturePage( 116 + 20 * $i, $this->fx, $meta );
+			$out                      = $this->outline( $post );
+			self::assertCount( 1, $out );
+			self::assertSame( '_fl_builder_data', $out[0]['type'] );
+			self::assertTrue( $out[0]['locked'] );
+			self::assertSame( 'unreadable data', $out[0]['reason'] );
+			self::assertStringContainsString( 'reads it as an empty one', $out[0]['note'] );
+			self::assertSame( array(), $this->outline( $post, array( 'include_locked' => false ) ) );
+			$answer = AB_MCP_Tools_Builders::get_builder_layout( array( 'id' => 116 + 20 * $i ) );
+			self::assertSame( 'beaver', $answer['builder'] );
+			self::assertSame( 'unreadable data', $answer['elements'][0]['reason'] );
+			self::assertSame( 'B', $answer['storage'], 'Beaver still renders its (empty) layout, not post_content.' );
+		}
+
+		$meta = $this->asLoaded( $this->fx['meta'] );
+		unset( $meta['_fl_builder_data'] );
+		self::assertSame( array(), $this->outline( $this->fixturePage( 118, $this->fx, $meta ) ), 'Nothing stored: an empty layout, nothing to name.' );
 	}
 
 	public function testLimitsOfTheOutline(): void {

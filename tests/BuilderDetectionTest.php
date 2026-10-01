@@ -181,7 +181,7 @@ final class BuilderDetectionTest extends TestCase {
 		// Kadence blocks in the copy of an Elementor page: Elementor answers
 		// while it is active, the blocks when it is not.
 		$this->builders( array( 'elementor', 'kadence' ) );
-		$post = $this->page( 43, '<!-- wp:kadence/advancedheading {"uniqueID":"k1"} --><h2>Hi</h2><!-- /wp:kadence/advancedheading -->', array( '_elementor_edit_mode' => 'builder' ) );
+		$post = $this->page( 43, '<!-- wp:kadence/advancedheading {"uniqueID":"k1"} --><h2>Hi</h2><!-- /wp:kadence/advancedheading -->', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => $this->elementorTree() ) );
 		self::assertSame( 'elementor', AB_MCP_Builders::primary( $post )['id'] );
 		self::assertSame( 'B', AB_MCP_Builders::effective_storage( $post ) );
 
@@ -196,7 +196,7 @@ final class BuilderDetectionTest extends TestCase {
 
 	public function testBuiltWithSaysWhatPostContentIs(): void {
 		$this->builders( array( 'elementor', 'seedprod', 'kadence' ) );
-		$b = AB_MCP_Builders::built_with( $this->page( 44, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder' ) ) );
+		$b = AB_MCP_Builders::built_with( $this->page( 44, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder', '_elementor_data' => $this->elementorTree() ) ) );
 		self::assertSame( 'elementor', $b['builder'] );
 		self::assertSame( 'B', $b['storage'] );
 		self::assertSame( 'read', $b['support'], 'The free core reads Elementor pages.' );

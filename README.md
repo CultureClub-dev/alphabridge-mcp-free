@@ -35,7 +35,7 @@ directory. It is the same code WordPress.org ships.
     answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
   - Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone,
     Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual
-    Composer Website Builder, Divi 5, Etch and Mosaic.
+    Composer Website Builder, Divi 5 and Etch.
 
   Where a builder shows its own data and post_content is only a copy — Elementor, Beaver
   Builder, SiteOrigin Page Builder and Enfold — `wp_update_post` refuses a change to the content

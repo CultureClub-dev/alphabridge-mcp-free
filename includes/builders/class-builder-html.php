@@ -41,6 +41,12 @@ final class AB_MCP_Builder_Html {
 	const BLOCK = array( 'address', 'article', 'aside', 'blockquote', 'br', 'dd', 'details', 'div', 'dl', 'dt', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'summary', 'table', 'td', 'th', 'tr', 'ul' );
 
 	/**
+	 * Marks a rebuilt tag in simple() while the rest is stripped: a control
+	 * character no visible text needs, which strip_tags() leaves alone.
+	 */
+	const MARK = "\x1A";
+
+	/**
 	 * Elements that never have an end tag.
 	 */
 	const VOID = array( 'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr' );
@@ -78,34 +84,68 @@ final class AB_MCP_Builder_Html {
 	 * only the inline tags of INLINE kept, without attributes except a safe
 	 * href on links. Entities stay as they are.
 	 *
+	 * Only tags this method writes itself survive. A tag the pattern does
+	 * not take — malformed attributes such as a quoted name or a bare "=x" —
+	 * would otherwise reach strip_tags() with its attributes, and a list of
+	 * allowed tags there keeps every attribute of an allowed tag. So each
+	 * rebuilt tag stands in as a placeholder while strip_tags() removes
+	 * everything else that looks like a tag, and only then comes back. A
+	 * closing tag without an opening one is dropped.
+	 *
 	 * @param string $html Fragment.
 	 * @return string
 	 */
 	public static function simple( $html ) {
-		$html = self::drop_hidden( (string) $html );
-		$out  = preg_replace_callback(
+		// The placeholder mark cannot come from the page: it is removed first.
+		$html  = str_replace( self::MARK, '', self::drop_hidden( (string) $html ) );
+		$built = array();
+		$out   = preg_replace_callback(
 			self::TAG,
-			static function ( $m ) {
+			static function ( $m ) use ( &$built ) {
 				$name = strtolower( $m[2] );
 				if ( ! in_array( $name, self::INLINE, true ) ) {
 					return in_array( $name, self::BLOCK, true ) ? ' ' : '';
 				}
 				if ( '/' === $m[1] ) {
-					return 'br' === $name ? '' : '</' . $name . '>';
-				}
-				if ( 'a' === $name ) {
+					if ( 'br' === $name ) {
+						return '';
+					}
+					$tag = '</' . $name . '>';
+				} elseif ( 'a' === $name ) {
 					$href = self::attr( $m[3], 'href' );
 					$href = null === $href ? null : self::safe_url( $href );
-					return null === $href ? '<a>' : '<a href="' . htmlspecialchars( $href, ENT_QUOTES, 'UTF-8' ) . '">';
+					$tag  = null === $href ? '<a>' : '<a href="' . htmlspecialchars( $href, ENT_QUOTES, 'UTF-8' ) . '">';
+				} else {
+					$tag = '<' . $name . '>';
 				}
-				return '<' . $name . '>';
+				$built[] = array( $name, '/' === $m[1], $tag );
+				return self::MARK . ( count( $built ) - 1 ) . self::MARK;
 			},
 			$html
 		);
-		// A "<" that opened no tag (broken markup) would turn into a tag on the
-		// way back; strip_tags() removes what the pattern above did not keep.
-		$out = strip_tags( (string) $out, '<' . implode( '><', self::INLINE ) . '>' );
-		return self::squash( $out );
+		// Everything still shaped like a tag is the page's, not ours.
+		$out  = strip_tags( (string) $out );
+		$open = array();
+		$out  = preg_replace_callback(
+			'~' . self::MARK . '(\d+)' . self::MARK . '~',
+			static function ( $m ) use ( $built, &$open ) {
+				list( $name, $closing, $tag ) = $built[ (int) $m[1] ];
+				if ( 'br' === $name ) {
+					return $tag;
+				}
+				if ( $closing ) {
+					if ( empty( $open[ $name ] ) ) {
+						return '';
+					}
+					--$open[ $name ];
+					return $tag;
+				}
+				$open[ $name ] = ( isset( $open[ $name ] ) ? $open[ $name ] : 0 ) + 1;
+				return $tag;
+			},
+			(string) $out
+		);
+		return self::squash( (string) $out );
 	}
 
 	/**
