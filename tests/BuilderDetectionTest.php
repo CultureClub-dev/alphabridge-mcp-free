@@ -199,7 +199,7 @@ final class BuilderDetectionTest extends TestCase {
 		$b = AB_MCP_Builders::built_with( $this->page( 44, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder' ) ) );
 		self::assertSame( 'elementor', $b['builder'] );
 		self::assertSame( 'B', $b['storage'] );
-		self::assertSame( 'detected_only', $b['support'] );
+		self::assertSame( 'read', $b['support'], 'The free core reads Elementor pages.' );
 		self::assertSame( array(), $b['write_via'], 'Nothing on this site writes Elementor data.' );
 		self::assertStringContainsString( 'post_content is only a copy', $b['note'] );
 		self::assertStringContainsString( 'wp_get_builder_layout', $b['note'] );

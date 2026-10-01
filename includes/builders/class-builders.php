@@ -16,8 +16,9 @@
  *                            block_id, Beaver node, SeedProd id), else a path:
  *                            "b" + indices joined by "." for blocks ("b0.2.1"),
  *                            "s" + indices for shortcodes, "w" + index for
- *                            SiteOrigin widgets. A path id is valid only
- *                            together with the layout_hash it was read with.
+ *                            SiteOrigin widgets, "e" + indices for Elementor
+ *                            elements. A path id is valid only together with
+ *                            the layout_hash it was read with.
  *     "type": string,        block name, widget type, shortcode tag …
  *     "parent": string|null, id of the enclosing element.
  *     "depth": int,          0 for top-level elements.
@@ -52,6 +53,7 @@ require_once __DIR__ . '/class-builder-adapter.php';
 require_once __DIR__ . '/class-block-reader.php';
 require_once __DIR__ . '/class-shortcode-reader.php';
 require_once __DIR__ . '/adapters/class-adapter-blocks.php';
+require_once __DIR__ . '/adapters/class-adapter-elementor.php';
 
 /**
  * Class AB_MCP_Builders
@@ -226,8 +228,9 @@ final class AB_MCP_Builders {
 	/* --------------------------------------------------------- adapters */
 
 	/**
-	 * Registered adapters, keyed by id. The free plugin registers the block
-	 * reader; others come through the filter ab_mcp_builder_adapters. An
+	 * Registered adapters, keyed by id. The free plugin registers its own
+	 * readers (the list below); others come through the filter
+	 * ab_mcp_builder_adapters. An
 	 * adapter registered later replaces an earlier one with the same id.
 	 *
 	 * @return array<string,AB_MCP_Builder_Adapter>
@@ -241,7 +244,13 @@ final class AB_MCP_Builders {
 		 *
 		 * @param AB_MCP_Builder_Adapter[] $adapters Adapters, in order.
 		 */
-		$list = apply_filters( 'ab_mcp_builder_adapters', array( new AB_MCP_Builder_Adapter_Blocks() ) );
+		$list = apply_filters(
+			'ab_mcp_builder_adapters',
+			array(
+				new AB_MCP_Builder_Adapter_Blocks(),
+				new AB_MCP_Builder_Adapter_Elementor(),
+			)
+		);
 		$out  = array();
 		foreach ( (array) $list as $adapter ) {
 			if ( $adapter instanceof AB_MCP_Builder_Adapter && '' !== $adapter->id() ) {

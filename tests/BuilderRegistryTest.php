@@ -109,7 +109,7 @@ final class BuilderRegistryTest extends TestCase {
 		// Blocks that keep their text in JSON attributes are not read as blocks.
 		self::assertNull( AB_MCP_Builders::adapter_for_builder( 'divi5' ) );
 		self::assertNull( AB_MCP_Builders::adapter_for_builder( 'etch' ) );
-		self::assertNull( AB_MCP_Builders::adapter_for_builder( 'elementor' ), 'No Elementor reader in this build.' );
+		self::assertInstanceOf( \AB_MCP_Builder_Adapter_Elementor::class, AB_MCP_Builders::adapter_for_builder( 'elementor' ), 'The free core reads Elementor.' );
 	}
 
 	public function testAdaptersComeThroughTheFilterAndTheLastOneWins(): void {
@@ -145,15 +145,15 @@ final class BuilderRegistryTest extends TestCase {
 	}
 
 	public function testSupportFollowsTheAdapters(): void {
-		$this->builders( array( 'elementor' ) );
-		$post = $this->page( 30, '<p>copy</p>', array( '_elementor_edit_mode' => 'builder' ) );
+		$this->builders( array( 'themify' ) );
+		$post = $this->page( 30, '<p>copy</p>', array( '_themify_builder_settings_json' => '[]' ) );
 		$all  = AB_MCP_Builders::detect_all( $post );
 		self::assertSame( 'detected_only', $all[0]['support'] );
 
 		add_filter(
 			'ab_mcp_builder_adapters',
 			static function ( $list ) {
-				$list[] = new FakeBuilderAdapter( 'elementor' );
+				$list[] = new FakeBuilderAdapter( 'themify' );
 				return $list;
 			}
 		);
