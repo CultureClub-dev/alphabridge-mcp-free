@@ -74,6 +74,12 @@ Handing an AI access to a site should feel safe, so control comes first:
   only the visible text, link and image fields of its elements — never the raw meta, code,
   styling or attributes; separate keys that hold a page's own scripts or CSS are not read at
   all.
+  `wp_duplicate_post` copies protected keys too, into the new draft only and only for an
+  account that may edit the original: WordPress's own page template, featured image and list of
+  removed hooked blocks, and — with the `unfiltered_html` capability, because it holds markup —
+  the post meta of page builders, each builder's keys together or not at all. Credential-shaped
+  keys, the original's editing state, the meta of a revision,
+  builder caches and other plugins' protected keys are not copied.
 - **Audit log** of every tool call, plus a fixed rate limit against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html

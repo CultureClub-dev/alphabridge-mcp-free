@@ -72,6 +72,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_template_reset']   = array();
 	$GLOBALS['ab_test_meta']         = array();
 	$GLOBALS['ab_test_meta_deleted'] = array();
+	$GLOBALS['ab_test_meta_added']   = array();
+	$GLOBALS['ab_test_rand']         = array();
 	$GLOBALS['ab_test_actions']      = array();
 	$GLOBALS['ab_test_comments_untrashed'] = array();
 	$GLOBALS['ab_test_trashed']       = array();
@@ -519,15 +521,165 @@ function get_site_option( $name, $default = false ) {
 }
 
 /**
- * Post meta from $ab_test_meta: every value of a key, in the order it was
- * added — as WordPress, which gives the first where one is asked for.
+ * Post meta from $ab_test_meta, which holds values as the database does:
+ * serialized where WordPress serialized them. As in WordPress, a key asked
+ * for comes out unserialized — every value in the order it was added, or the
+ * first — and without a key every key comes out with its values raw.
  */
 function get_post_meta( $post_id, $key = '', $single = false ) {
-	$values = $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array();
+	if ( '' === $key ) {
+		return $GLOBALS['ab_test_meta'][ (int) $post_id ] ?? array();
+	}
+	$values = array_map( 'maybe_unserialize', $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array() );
 	return $single ? ( $values ? $values[0] : '' ) : $values;
 }
 
+/**
+ * add_post_meta() as add_metadata() works: key and value unslashed all the
+ * way down, objects included (stripslashes_deep() is map_deep()), the
+ * sanitize filter, then maybe_serialize() — which serializes a string that
+ * already looks serialized a second time. The stored form is appended. As in
+ * core, meta for a revision goes to the post the revision belongs to.
+ */
+function add_post_meta( $post_id, $meta_key, $meta_value, $unique = false ) {
+	$post_id    = wp_is_post_revision( $post_id ) ?: $post_id;
+	$meta_key   = stripslashes( (string) $meta_key );
+	$meta_value = stripslashes_deep( $meta_value );
+	$meta_value = apply_filters( "sanitize_post_meta_{$meta_key}", $meta_value, $meta_key, 'post' );
+	if ( $unique && ! empty( $GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ] ) ) {
+		return false;
+	}
+	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ][] = maybe_serialize( $meta_value );
+	$GLOBALS['ab_test_meta_added'][] = array( (int) $post_id, $meta_key );
+	return count( $GLOBALS['ab_test_meta_added'] );
+}
+
+// The four helpers below are WordPress' own (6.9 / 7.0), so a test sees
+// exactly what core does with a value on its way into the meta table.
+
+function is_protected_meta( $meta_key, $meta_type = '' ) {
+	$sanitized_key = preg_replace( "/[^\x20-\x7E\p{L}]/", '', (string) $meta_key );
+	$protected     = strlen( $sanitized_key ) > 0 && ( '_' === $sanitized_key[0] );
+	return apply_filters( 'is_protected_meta', $protected, $meta_key, $meta_type );
+}
+
+function map_deep( $value, $callback ) {
+	if ( is_array( $value ) ) {
+		foreach ( $value as $index => $item ) {
+			$value[ $index ] = map_deep( $item, $callback );
+		}
+	} elseif ( is_object( $value ) ) {
+		$object_vars = get_object_vars( $value );
+		foreach ( $object_vars as $property_name => $property_value ) {
+			$value->$property_name = map_deep( $property_value, $callback );
+		}
+	} else {
+		$value = call_user_func( $callback, $value );
+	}
+	return $value;
+}
+
+function stripslashes_from_strings_only( $value ) {
+	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
+
+function stripslashes_deep( $value ) {
+	return map_deep( $value, 'stripslashes_from_strings_only' );
+}
+
+function is_serialized( $data, $strict = true ) {
+	if ( ! is_string( $data ) ) {
+		return false;
+	}
+	$data = trim( $data );
+	if ( 'N;' === $data ) {
+		return true;
+	}
+	if ( strlen( $data ) < 4 ) {
+		return false;
+	}
+	if ( ':' !== $data[1] ) {
+		return false;
+	}
+	if ( $strict ) {
+		$lastc = substr( $data, -1 );
+		if ( ';' !== $lastc && '}' !== $lastc ) {
+			return false;
+		}
+	} else {
+		$semicolon = strpos( $data, ';' );
+		$brace     = strpos( $data, '}' );
+		if ( false === $semicolon && false === $brace ) {
+			return false;
+		}
+		if ( false !== $semicolon && $semicolon < 3 ) {
+			return false;
+		}
+		if ( false !== $brace && $brace < 4 ) {
+			return false;
+		}
+	}
+	$token = $data[0];
+	switch ( $token ) {
+		case 's':
+			if ( $strict ) {
+				if ( '"' !== substr( $data, -2, 1 ) ) {
+					return false;
+				}
+			} elseif ( ! str_contains( $data, '"' ) ) {
+				return false;
+			}
+			// Or else fall through.
+		case 'a':
+		case 'O':
+		case 'E':
+			return (bool) preg_match( "/^{$token}:[0-9]+:/s", $data );
+		case 'b':
+		case 'i':
+		case 'd':
+			$end = $strict ? '$' : '';
+			return (bool) preg_match( "/^{$token}:[0-9.E+-]+;$end/", $data );
+	}
+	return false;
+}
+
+function maybe_serialize( $data ) {
+	if ( is_array( $data ) || is_object( $data ) ) {
+		return serialize( $data );
+	}
+	if ( is_serialized( $data, false ) ) {
+		return serialize( $data );
+	}
+	return $data;
+}
+
+function maybe_unserialize( $data ) {
+	if ( is_serialized( $data ) ) {
+		return @unserialize( trim( $data ) );
+	}
+	return $data;
+}
+
+/** @var int[] $ab_test_rand Numbers wp_rand() hands out first, in order; random ones after. */
+$GLOBALS['ab_test_rand'] = array();
+
+function wp_rand( $min = null, $max = null ) {
+	if ( ! empty( $GLOBALS['ab_test_rand'] ) ) {
+		return (int) array_shift( $GLOBALS['ab_test_rand'] );
+	}
+	return random_int( (int) $min, (int) $max );
+}
+
+/** As core: the id of the post a revision belongs to, or false. */
+function wp_is_post_revision( $post ) {
+	$post = get_post( is_object( $post ) ? $post->ID : $post );
+	return ( $post && 'revision' === $post->post_type ) ? (int) $post->post_parent : false;
+}
+
+/** As core: the key unslashed (delete_metadata()), a revision's meta deleted from its post. */
 function delete_post_meta( $post_id, $key, $value = '' ) {
+	$post_id = wp_is_post_revision( $post_id ) ?: $post_id;
+	$key     = stripslashes( (string) $key );
 	$GLOBALS['ab_test_meta_deleted'][] = array( (int) $post_id, $key );
 	unset( $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] );
 	return true;
@@ -600,7 +752,7 @@ function wp_get_post_revisions( $post_id ) {
 }
 
 function get_post_type_object( $type ) {
-	if ( ! in_array( $type, array( 'post', 'page', 'attachment' ), true ) ) {
+	if ( ! in_array( $type, array( 'post', 'page', 'attachment', 'revision' ), true ) ) {
 		return null;
 	}
 	return (object) array(
@@ -671,6 +823,8 @@ function wp_insert_post( $postarr, $wp_error = false ) {
 			$postarr
 		)
 	);
+	// Kept apart from the data above, which wp_insert_post_data filters in tests see.
+	$GLOBALS['ab_test_posts'][ $id ]->post_parent = (int) ( $postarr['post_parent'] ?? 0 );
 	return $id;
 }
 

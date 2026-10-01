@@ -9,6 +9,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
+require_once __DIR__ . '/class-duplicate-meta.php';
 
 /**
  * Class AB_MCP_Tools_Content
@@ -171,7 +172,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_duplicate_post',
 			array(
-				'description' => 'Duplicate a post/page (as a new draft, including its terms).',
+				'description' => 'Duplicate a post or page as a new draft: title, content, excerpt, parent, menu order and terms, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Elementor element ids are renewed, so copy and original do not share them. Page builder data holds markup and is copied only for accounts with the unfiltered_html capability. A builder\'s keys, its page template included, are copied together or not at all. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and the meta of a revision, which WordPress would write to the post the revision belongs to. The response lists the copied keys and the skipped ones with the reason, and names the builder the original is built with.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -236,6 +237,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! $pto || ! current_user_can( $pto->cap->create_posts ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
 		}
+		// post_content_filtered holds what SeedProd's editor opens, as JSON
+		// (measured 30.09.2026). WordPress runs it through kses for an account
+		// without unfiltered_html, which breaks JSON, so it goes with the page
+		// builder data, under the same rights.
+		$filtered      = (string) ( $src->post_content_filtered ?? '' );
+		$copy_filtered = '' !== $filtered && current_user_can( 'edit_post', $src->ID ) && current_user_can( 'unfiltered_html' );
 		// The source values come out of the database unslashed, and
 		// wp_insert_post() expects them slashed — without this a copy of a post
 		// whose title holds a backslash loses it. With $wp_error, so a failed
@@ -243,13 +250,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		// failure came back as a copy with the id 0.
 		$id = wp_insert_post(
 			wp_slash( array(
-				'post_type'    => $src->post_type,
-				'post_title'   => $src->post_title . ' (Copy)',
-				'post_content' => $src->post_content,
-				'post_excerpt' => $src->post_excerpt,
-				'post_status'  => 'draft',
-				'post_parent'  => $src->post_parent,
-				'menu_order'   => $src->menu_order,
+				'post_type'             => $src->post_type,
+				'post_title'            => $src->post_title . ' (Copy)',
+				'post_content'          => $src->post_content,
+				'post_content_filtered' => $copy_filtered ? $filtered : '',
+				'post_excerpt'          => $src->post_excerpt,
+				'post_status'           => 'draft',
+				'post_parent'           => $src->post_parent,
+				'menu_order'            => $src->menu_order,
 			) ),
 			true
 		);
@@ -266,10 +274,23 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				wp_set_object_terms( $id, $terms, $tax, false );
 			}
 		}
-		return array(
-			'duplicated' => true,
-			'new_id'     => (int) $id,
+		// Custom fields, builder layout, page template and featured image. The
+		// read right above is enough for the copy of the post itself, as
+		// before; the meta needs the right to edit the original
+		// (AB_MCP_Duplicate_Meta::copy()).
+		$out = array_merge(
+			array(
+				'duplicated' => true,
+				'new_id'     => (int) $id,
+			),
+			AB_MCP_Duplicate_Meta::copy( $src, (int) $id )
 		);
+		if ( '' !== $filtered && ! $copy_filtered ) {
+			$out['notes'][] = AB_MCP_Duplicate_Meta::unfiltered_html_disallowed()
+				? __( 'The original\'s post_content_filtered (where SeedProd, for one, keeps its layout) was not copied: like page builder data, it needs the unfiltered_html capability, which this site gives to no account, administrators included (DISALLOW_UNFILTERED_HTML in wp-config.php). Where the page builder offers its own copy or template function in wp-admin, use that.', 'alphabridge-mcp' )
+				: __( 'The original\'s post_content_filtered (where SeedProd, for one, keeps its layout) was not copied: like page builder data, it needs the right to edit the original and the unfiltered_html capability. Run wp_duplicate_post with such an account to copy it.', 'alphabridge-mcp' );
+		}
+		return $out;
 	}
 
 	/**
