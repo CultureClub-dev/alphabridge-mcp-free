@@ -10,7 +10,10 @@
  *
  * What is deliberately NOT emulated: the REST dispatcher, capabilities and the
  * database. Anything that needs those belongs in the end-to-end run against a
- * real site, not here. register_rest_route() only records what is registered.
+ * real site, not here. There is no network either: wp_safe_remote_get() is
+ * answered by a callback the test sets (ab_test_http_answer), and every call is
+ * recorded, so a test can prove that a request was made, or was not.
+ * register_rest_route() only records what is registered.
  *
  * @package AlphaBridge_MCP
  */
@@ -81,6 +84,9 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
 	$GLOBALS['ab_test_locale']     = 'en_US';
+	$GLOBALS['ab_test_http']        = array();
+	$GLOBALS['ab_test_http_answer'] = null;
+	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
 }
 
@@ -965,21 +971,88 @@ class WP_REST_Request {
 	}
 }
 
-/* ------------------------------------------------------------------ URLs */
+/* ------------------------------------------------------------ URLs, HTTP */
+
+function wp_parse_url( $url, $component = -1 ) {
+	return parse_url( (string) $url, $component );
+}
 
 function add_query_arg( $args, $url = '' ) {
 	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . http_build_query( (array) $args );
 }
 
-/* ------------------------------------------------------- redirects, exits */
+/** @var array<int,array{url:string,args:array}> $ab_test_http Every wp_safe_remote_get() call, in order. */
+$GLOBALS['ab_test_http'] = array();
+/** @var callable|null $ab_test_http_answer Answers wp_safe_remote_get(): fn( string $url, array $args ): array|WP_Error */
+$GLOBALS['ab_test_http_answer'] = null;
 
 /**
- * wp_safe_redirect() and wp_die() end the request in WordPress. Here they end
- * the code under test by throwing, so a test can see which one was reached and
- * with what.
+ * Records the call and answers through ab_test_http_answer. Like WordPress,
+ * limit_response_size cuts the body after that many bytes. Without an answer
+ * configured, the request fails, as it would without network.
+ */
+function wp_safe_remote_get( $url, $args = array() ) {
+	$GLOBALS['ab_test_http'][] = array(
+		'url'  => (string) $url,
+		'args' => (array) $args,
+	);
+	$answer = $GLOBALS['ab_test_http_answer'];
+	if ( ! is_callable( $answer ) ) {
+		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
+	}
+	$response = $answer( (string) $url, (array) $args );
+	if ( is_array( $response ) && isset( $args['limit_response_size'] ) ) {
+		$response['body'] = substr( (string) $response['body'], 0, (int) $args['limit_response_size'] );
+	}
+	return $response;
+}
+
+/**
+ * A response array as the WordPress HTTP API returns it. Header names are
+ * looked up without regard to case, as WordPress does.
+ *
+ * @param array<string,string> $headers
+ */
+function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
+	return array(
+		'response' => array(
+			'code'    => $code,
+			'message' => '',
+		),
+		'body'     => $body,
+		'headers'  => array_change_key_case( $headers, CASE_LOWER ),
+	);
+}
+
+function wp_remote_retrieve_response_code( $response ) {
+	return is_array( $response ) && isset( $response['response']['code'] ) ? $response['response']['code'] : '';
+}
+
+function wp_remote_retrieve_body( $response ) {
+	return is_array( $response ) && isset( $response['body'] ) ? $response['body'] : '';
+}
+
+function wp_remote_retrieve_header( $response, $header ) {
+	$header = strtolower( (string) $header );
+	return is_array( $response ) && isset( $response['headers'][ $header ] ) ? $response['headers'][ $header ] : '';
+}
+
+/* ------------------------------------------------- login, redirects, exits */
+
+/** @var bool $ab_test_logged_in */
+$GLOBALS['ab_test_logged_in'] = false;
+
+function is_user_logged_in() {
+	return (bool) $GLOBALS['ab_test_logged_in'];
+}
+
+/**
+ * auth_redirect(), wp_redirect(), wp_safe_redirect() and wp_die() end the
+ * request in WordPress. Here they end the code under test by throwing, so a
+ * test can see which one was reached and with what.
  */
 class AbTestExit extends Exception {
-	/** @var string 'redirect' | 'die' */
+	/** @var string 'login' | 'redirect' | 'die' */
 	public $kind;
 	/** @var string Location or message. */
 	public $detail;
@@ -991,12 +1064,31 @@ class AbTestExit extends Exception {
 	}
 }
 
+function auth_redirect() {
+	throw new AbTestExit( 'login' );
+}
+
+function wp_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
 function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
 	throw new AbTestExit( 'redirect', (string) $location );
 }
 
 function wp_die( $message = '', $title = '', $args = array() ) {
 	throw new AbTestExit( 'die', (string) $message );
+}
+
+function status_header( $code, $description = '' ) {
+}
+
+function nocache_headers() {
+}
+
+/** Like WordPress: the nonce made for an action (see wp_nonce_field()) verifies for that action only. */
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return 'nonce-' . $action === (string) $nonce ? 1 : false;
 }
 
 function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {

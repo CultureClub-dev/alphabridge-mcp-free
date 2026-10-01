@@ -81,7 +81,7 @@ Yes. It is pure PHP and uses the WordPress REST API. PHP 8.0+ and HTTPS are reco
 No. Every feature in this plugin works without payment, registration or license keys, and there are no plan-based, cumulative or time-based usage limits. A uniform security throttle (120 requests/minute, identical for every user) protects your server from abusive request bursts.
 
 = Does the plugin send data anywhere? =
-No. It contacts no external service on its own. The only outbound request happens when you explicitly ask a tool to fetch a file from a URL you provide (see External services).
+No. It contacts no external service on its own. Outbound requests happen only when you explicitly ask a tool to fetch a file from a URL you provide, and when an app you are connecting identifies itself with the address of its client metadata document and you, logged in, open its consent screen (see External services).
 
 == Screenshots ==
 
@@ -94,7 +94,12 @@ No. It contacts no external service on its own. The only outbound request happen
 
 == External services ==
 
-This plugin makes no automatic outbound requests and sends no telemetry. One tool can contact an external address, and only on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked). The plugin itself initiates no other outbound requests.
+This plugin makes no automatic outbound requests and sends no telemetry. Two things can contact an external address, each only on a deliberate step:
+
+* One tool, on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked).
+* Connecting an app through OAuth: an app may identify itself not by registering with your site but by the HTTPS address of its client metadata document (OAuth Client ID Metadata Documents, the registration the MCP specification prefers since 2026-07-28). When such an app sends you to your site's consent screen, and only once you are logged in there with the right to approve connections, the site fetches that one document from the address the app named — a small JSON file with the app's name and return addresses — to check where the approval may be sent (and once more when the app collects its access, if the copy has expired by then). The request comes from your server's address and names only the plugin and its version as user agent; it carries no cookies, no tokens and nothing else about your site or you. The address must be https and resolve to a public network address; redirects are not followed; the document may be at most 5 KB, the request waits at most 5 seconds, and the document is kept for at most a day (five minutes unless its server says otherwise). Which apps use this is up to the app makers; the consent screen names the host the document comes from. A developer can switch it off with the `ab_mcp_oauth_cimd` filter; registration then remains the only way to connect.
+
+The plugin itself initiates no other outbound requests.
 
 == Changelog ==
 
