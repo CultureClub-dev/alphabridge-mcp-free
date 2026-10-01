@@ -184,19 +184,6 @@ function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
-function remove_filter( $hook, $callback, $priority = 10 ) {
-	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $i => $entry ) {
-		if ( $entry['fn'] === $callback && $entry['prio'] === $priority ) {
-			unset( $GLOBALS['ab_test_filters'][ $hook ][ $i ] );
-			return true;
-		}
-	}
-	return false;
-}
-
-function remove_action( $hook, $callback, $priority = 10 ) {
-	return remove_filter( $hook, $callback, $priority );
-}
 
 /** Runs what add_action() hooked, with the elements of $args as arguments. */
 function do_action_ref_array( $hook, $args ) {
