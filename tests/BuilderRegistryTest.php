@@ -45,12 +45,12 @@ final class BuilderRegistryTest extends TestCase {
 
 	public function testEverySignatureLineNamesItsSource(): void {
 		// The rule for signatures.php: nothing without a source. Every line that
-		// holds a marker, an active check, a copy, a storage kind or locked keys
-		// carries a comment, or follows one.
+		// holds a marker, an active check, a copy, a storage kind, locked keys or
+		// further markup keys carries a comment, or follows one.
 		$lines   = file( dirname( __DIR__ ) . '/includes/builders/signatures.php' );
 		$checked = 0;
 		foreach ( $lines as $n => $line ) {
-			if ( ! preg_match( "~array\\( '(meta|content|content_prefix|content_regex|constant|class|function|plugin|theme|loc)' =>|'storage'\\s+=>|'locked_meta'\\s+=> array\\( '|'active'\\s+=> array\\(\\),|'markers'\\s+=> array\\(\\),~", $line ) ) {
+			if ( ! preg_match( "~array\\( '(meta|content|content_prefix|content_regex|constant|class|function|plugin|theme|loc)' =>|'storage'\\s+=>|'(locked|markup)_meta'\\s+=> array\\( '|'active'\\s+=> array\\(\\),|'markers'\\s+=> array\\(\\),~", $line ) ) {
 				continue;
 			}
 			++$checked;

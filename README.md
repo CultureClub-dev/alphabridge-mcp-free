@@ -69,7 +69,12 @@ Handing an AI access to a site should feel safe, so control comes first:
   and so do camelCase spellings such as `accessToken`. It is defence-in-depth, not the primary
   control. Generic meta access additionally passes WordPress's own per-key meta capability
   (`edit_post_meta` / `edit_term_meta` / `edit_user_meta`), which honours `auth_callback` rules
-  registered by other plugins — that is the layer doing the real work. One read-only tool
+  registered by other plugins — that is the layer doing the real work. Page-builder data that
+  ends up in the page as markup or code, also where a builder keeps it under a key without `_`
+  (such as `panels_data`, `dslc_code`, `pagelayer-data`, `brizy`, `mfn-page-items` or
+  `tve_updated_post`), is written through the `meta` argument of `wp_create_post` and
+  `wp_update_post` only for accounts with the `unfiltered_html` capability; for any other
+  account the call is refused before anything is written. One read-only tool
   reaches further, by design: `wp_get_builder_layout`, for an account that may edit the post,
   reads the page builder's own stored data of that post, protected keys included, and returns
   only the visible text, link and image fields of its elements — never the raw meta, code,

@@ -48,6 +48,11 @@
  * - copies   Stored copies of a page: [ 'loc', 'shown', 'role' ], see
  *            AB_MCP_Builder_Adapter::copies().
  * - locked_meta  Meta keys with page code that are never read ("*" = prefix).
+ * - markup_meta  Optional. Further meta keys with markup or code of the page,
+ *            or that decide how it renders, beyond the meta copies and
+ *            locked_meta ("*" = prefix). All three together are the keys only
+ *            an account with unfiltered_html may write through a meta
+ *            argument (AB_MCP_Builders::markup_meta_keys()).
  *
  * Order matters: when a post carries the markers of several builders, the
  * first active one in this list answers for the page. Builders that render
@@ -81,6 +86,11 @@ return array(
 			array( 'loc' => 'post_content', 'shown' => false, 'role' => 'copy' ), // [M ergebnis-1] elementor_post_content: text copy.
 		),
 		'locked_meta'  => array(),
+		// [Plan §5.1] the keys besides _elementor_data that Pro's search and
+		// replace keeps to accounts with unfiltered_html (META_KEYS_WITH_MARKUP,
+		// search-bulk-pro:70): page settings, edit mode, template type
+		// ([M ergebnis-1]) and controls usage.
+		'markup_meta'  => array( '_elementor_page_settings', '_elementor_edit_mode', '_elementor_template_type', '_elementor_controls_usage' ),
 	),
 
 	'beaver'          => array(
@@ -281,6 +291,7 @@ return array(
 			array( 'loc' => 'meta:_bricks_page_content_2', 'shown' => true, 'role' => 'source' ), // [M quellen/bricks-breakdance-betheme.md B1].
 		),
 		'locked_meta'  => array( '_bricks_page_settings' ), // [Plan §5.1] page settings with own CSS/JS.
+		'markup_meta'  => array( '_bricks_page_header_2', '_bricks_page_footer_2' ), // [M quellen/bricks-breakdance-betheme.md B1] header and footer.
 	),
 
 	'breakdance'      => array(
