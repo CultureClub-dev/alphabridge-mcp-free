@@ -51,6 +51,12 @@ Handing an AI access to a site should feel safe, so control comes first:
   control. Generic meta access additionally passes WordPress's own per-key meta capability
   (`edit_post_meta` / `edit_term_meta` / `edit_user_meta`), which honours `auth_callback` rules
   registered by other plugins — that is the layer doing the real work.
+  `wp_duplicate_post` copies protected keys too, into the new draft only and only for an
+  account that may edit the original: WordPress's own page template, featured image and list of
+  removed hooked blocks, and — with the `unfiltered_html` capability, because it holds markup —
+  the post meta of page builders, each builder's keys together or not at all. Credential-shaped
+  keys, the original's editing state, the meta of a revision,
+  builder caches and other plugins' protected keys are not copied.
 - **Audit log** of every tool call, plus a fixed rate limit against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html
