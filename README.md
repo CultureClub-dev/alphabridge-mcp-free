@@ -21,7 +21,7 @@ directory. It is the same code WordPress.org ships.
 - **Native MCP endpoint** — JSON-RPC 2.0 over HTTP POST at `/wp-json/alphabridge/v1/mcp`
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18). Pure PHP inside WordPress: no Node
   middleware, no external service, nothing extra to host.
-- **39 structured tools** across content, media, taxonomies, comments, widgets, site settings,
+- **40 structured tools** across content, media, taxonomies, comments, widgets, site settings,
   site info, SEO reads and search.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site. Header authentication (`Authorization` / `X-Api-Key`) for
@@ -50,7 +50,11 @@ Handing an AI access to a site should feel safe, so control comes first:
   and so do camelCase spellings such as `accessToken`. It is defence-in-depth, not the primary
   control. Generic meta access additionally passes WordPress's own per-key meta capability
   (`edit_post_meta` / `edit_term_meta` / `edit_user_meta`), which honours `auth_callback` rules
-  registered by other plugins — that is the layer doing the real work.
+  registered by other plugins — that is the layer doing the real work. One read-only tool
+  reaches further, by design: `wp_get_builder_layout`, for an account that may edit the post,
+  reads the page builder's own stored data of that post, protected keys included, and returns
+  only the visible text, link and image fields of its elements — never the raw meta, code,
+  styling or attributes; keys that hold a page's own scripts or CSS are not read at all.
 - **Audit log** of every tool call, plus a fixed rate limit against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html

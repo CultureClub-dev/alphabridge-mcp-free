@@ -74,6 +74,7 @@ final class AB_MCP_Plugin {
 	private function load_tools() {
 		$files = array(
 			'content',
+			'builders',
 			'media',
 			'taxonomy-comments',
 			'widgets',
@@ -98,6 +99,8 @@ final class AB_MCP_Plugin {
 		// tools into these and further groups via the ab_mcp_register_tools hook.
 		$classes = array(
 			'AB_MCP_Tools_Content'           => array( 'content', __( 'Posts & Pages', 'alphabridge-mcp' ) ),
+			// The page-builder outline is a way of reading posts and pages.
+			'AB_MCP_Tools_Builders'          => array( 'content', __( 'Posts & Pages', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Media'             => array( 'media', __( 'Media', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Taxonomy_Comments' => array( 'taxonomy', __( 'Taxonomies & Comments', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Widgets'           => array( 'widgets', __( 'Widgets', 'alphabridge-mcp' ) ),

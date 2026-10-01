@@ -8,6 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+require_once dirname( __DIR__ ) . '/builders/class-builders.php';
 
 /**
  * Class AB_MCP_Tools_Content
@@ -60,6 +61,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'page'     => array( 'type' => 'integer', 'description' => 'Page number. Default 1.' ),
 						'orderby'  => array( 'type' => 'string', 'description' => 'date, title, modified, menu_order, ID.' ),
 						'order'    => array( 'type' => 'string', 'description' => 'ASC or DESC. Default DESC.' ),
+						'built_with' => array( 'type' => 'string', 'description' => 'Only posts built with this page builder: a builder id as wp_get_post names it in built_with (e.g. "elementor", "kadence", "wpbakery"), "any" for every known builder, or "none" for posts without one. Matched by the builder\'s markers (meta keys, content patterns); each listed item then names the builder found on it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'list_posts' ),
@@ -69,7 +71,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post',
 			array(
-				'description' => 'Get a single post/page including raw content, meta and terms.',
+				'description' => 'Get a single post/page including raw content, meta and terms. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -111,7 +113,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post',
 			array(
-				'description' => 'Update an existing post/page. Only provided fields change.',
+				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a change to content is refused there, with the way to make it, while title, status, excerpt and the other fields still change. Read such pages with wp_get_builder_layout.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -339,20 +341,54 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$per_page = self::clamp( self::i( $a, 'per_page', 20 ), 1, 100 );
 		$order    = strtoupper( self::s( $a, 'order', 'DESC' ) ) === 'ASC' ? 'ASC' : 'DESC';
-		$query    = new WP_Query(
-			array(
-				'post_type'      => self::s( $a, 'type', 'post' ) ?: 'post',
-				'post_status'    => self::s( $a, 'status', 'any' ) ?: 'any',
-				'perm'           => 'readable',
-				's'              => self::s( $a, 'search', '' ),
-				'author'         => self::i( $a, 'author', 0 ) ?: '',
-				'post_parent'    => isset( $a['parent'] ) ? self::i( $a, 'parent' ) : null,
-				'posts_per_page' => $per_page,
-				'paged'          => max( 1, self::i( $a, 'page', 1 ) ),
-				'orderby'        => self::paged_orderby( self::s( $a, 'orderby', 'date' ) ?: 'date', $order ),
-				'order'          => $order,
-			)
+		$args     = array(
+			'post_type'      => self::s( $a, 'type', 'post' ) ?: 'post',
+			'post_status'    => self::s( $a, 'status', 'any' ) ?: 'any',
+			'perm'           => 'readable',
+			's'              => self::s( $a, 'search', '' ),
+			'author'         => self::i( $a, 'author', 0 ) ?: '',
+			'post_parent'    => isset( $a['parent'] ) ? self::i( $a, 'parent' ) : null,
+			'posts_per_page' => $per_page,
+			'paged'          => max( 1, self::i( $a, 'page', 1 ) ),
+			'orderby'        => self::paged_orderby( self::s( $a, 'orderby', 'date' ) ?: 'date', $order ),
+			'order'          => $order,
 		);
+
+		// built_with narrows the query in SQL, so total and pages count only
+		// matching posts. The condition is added to this one query alone: the
+		// WHERE filter looks for its own query var and is removed right after.
+		$built  = self::s( $a, 'built_with', '' );
+		$filter = null;
+		if ( '' !== $built ) {
+			$known = array_merge( array( 'any', 'none' ), AB_MCP_Builders::builder_ids() );
+			if ( ! in_array( $built, $known, true ) ) {
+				return new WP_Error(
+					'ab_mcp_invalid_builder',
+					/* translators: %s: comma-separated list of accepted values */
+					sprintf( __( 'Unknown built_with value. Use one of: %s.', 'alphabridge-mcp' ), implode( ', ', $known ) )
+				);
+			}
+			global $wpdb;
+			$where = AB_MCP_Builders::list_where( $built, $wpdb );
+			if ( null === $where ) {
+				return new WP_Error( 'ab_mcp_db_unavailable', __( 'The built_with filter needs the database, which is not available here. List without built_with and read each post\'s built_with with wp_get_post.', 'alphabridge-mcp' ) );
+			}
+			$args['ab_mcp_built_with'] = $built;
+			$filter = static function ( $sql, $query = null ) use ( $built, $where ) {
+				if ( is_object( $query ) && method_exists( $query, 'get' ) && $built === $query->get( 'ab_mcp_built_with' ) ) {
+					$sql .= ' AND ' . $where;
+				}
+				return $sql;
+			};
+			add_filter( 'posts_where', $filter, 10, 2 );
+		}
+		try {
+			$query = new WP_Query( $args );
+		} finally {
+			if ( null !== $filter ) {
+				remove_filter( 'posts_where', $filter, 10 );
+			}
+		}
 
 		$items = array();
 		foreach ( $query->posts as $post ) {
@@ -368,7 +404,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( ! current_user_can( 'read_post', $post->ID ) ) {
 				continue;
 			}
-			$items[] = self::post_summary( $post );
+			$item = self::post_summary( $post );
+			if ( '' !== $built ) {
+				$primary            = AB_MCP_Builders::primary( $post );
+				$item['built_with'] = null !== $primary ? $primary['id'] : null;
+			}
+			$items[] = $item;
 		}
 
 		return array(
@@ -407,6 +448,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$data            = self::post_summary( $post );
 		$data['content'] = $post->post_content;
+		// Which page builder the post is built with, and — where post_content
+		// is not what the site shows — a note pointing to the outline.
+		$built = AB_MCP_Builders::built_with( $post );
+		if ( null !== $built ) {
+			$data['built_with'] = $built;
+		}
 
 		if ( self::b( $a, 'include_meta', true ) ) {
 			$meta = get_post_meta( $post->ID );
@@ -554,6 +601,23 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 
 		$post = get_post( $id );
+
+		// On a builder page post_content may be only a copy the site does not
+		// show (AB_MCP_Builders::content_update_guard()). A change to content
+		// there is refused before anything is written, with the way to make
+		// it; other fields stay writable. Where it would show but not last,
+		// the save goes ahead and the answer says why.
+		$builder_note = '';
+		if ( array_key_exists( 'content', $a ) ) {
+			$guard = AB_MCP_Builders::content_update_guard( $post );
+			if ( null !== $guard ) {
+				if ( $guard['block'] ) {
+					return new WP_Error( 'ab_mcp_builder_content_copy', $guard['message'], array( 'builder' => $guard['builder'] ) );
+				}
+				$builder_note = $guard['message'];
+			}
+		}
+
 		$pto  = get_post_type_object( $post->post_type );
 		// For a file, "draft" and "pending" are no way around the right to
 		// publish: WordPress stores them as "inherit" (see below).
@@ -718,10 +782,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		self::apply_meta_and_terms( $id, $a );
 
-		return array(
+		$out = array(
 			'updated' => true,
 			'post'    => self::post_summary( get_post( $id ) ),
 		);
+		if ( '' !== $builder_note ) {
+			$out['builder_note'] = $builder_note;
+		}
+		return $out;
 	}
 
 	/**
