@@ -33,6 +33,15 @@ class AB_MCP_Settings {
 			// the connector URL path is a convenience an admin must opt into, because
 			// URLs leak more easily (referrers, history, logs, shoulder-surfing).
 			'connector_url_auth_enabled' => false,
+			// MCP revision 2026-07-28 next to the older ones. On: clients of
+			// either generation are served; older ones exactly as before. See
+			// AB_MCP_REST_Controller::modern_enabled().
+			'modern_protocol'            => true,
+			// OAuth clients that identify themselves with a client metadata
+			// document (an https URL as client_id). See
+			// AB_MCP_OAuth::cimd_enabled(), which also honours
+			// WP_HTTP_BLOCK_EXTERNAL and a filter.
+			'oauth_cimd'                 => true,
 		);
 	}
 

@@ -37,8 +37,10 @@ define( 'AB_MCP_BASENAME', plugin_basename( __FILE__ ) );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 
-// Latest MCP protocol version we speak. initialize() echoes the client's
-// requested version when it is one we support, so older clients keep working.
+// Newest MCP revision with an initialize handshake. initialize() echoes the
+// client's requested version when it is one we support, so older clients keep
+// working, and answers anything else with this one. Revision 2026-07-28 has no
+// handshake and is served per request (see AB_MCP_REST_Controller).
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
 
 // Maximum number of JSON-RPC messages accepted in a single batch request.

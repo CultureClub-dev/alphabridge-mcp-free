@@ -8,9 +8,13 @@
  * classes touch. That keeps the suite fast and dependency-free, and it means a
  * test failure points at plugin code rather than at a WordPress fixture.
  *
- * What is deliberately NOT emulated: the REST dispatcher, capabilities and the
- * database. Anything that needs those belongs in the end-to-end run against a
- * real site, not here.
+ * What is deliberately NOT emulated: capabilities and the database. Anything
+ * that needs those belongs in the end-to-end run against a real site, not
+ * here. Of the REST dispatcher only the part that decides status and headers
+ * is copied (ab_test_rest_dispatch(), see there); register_rest_route() records
+ * what is registered for it. There is no network either: wp_safe_remote_get()
+ * is answered by a callback the test sets (ab_test_http_answer), and every call
+ * is recorded, so a test can prove that a request was made, or was not.
  *
  * Not emulated but copied: WordPress' block parser and serializer and its
  * shortcode pattern, unchanged from WordPress 7.0.2 (tests/support/, each file
@@ -96,6 +100,11 @@ function ab_test_reset(): void {
 	if ( class_exists( 'AB_MCP_Builders', false ) ) {
 		AB_MCP_Builders::reset();
 	}
+	$GLOBALS['ab_test_http']        = array();
+	$GLOBALS['ab_test_http_answer'] = null;
+	$GLOBALS['ab_test_http_curl']   = false;
+	$GLOBALS['ab_test_logged_in']   = false;
+	$GLOBALS['ab_test_routes']      = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -175,6 +184,27 @@ function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
+function remove_filter( $hook, $callback, $priority = 10 ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $i => $entry ) {
+		if ( $entry['fn'] === $callback && $entry['prio'] === $priority ) {
+			unset( $GLOBALS['ab_test_filters'][ $hook ][ $i ] );
+			return true;
+		}
+	}
+	return false;
+}
+
+function remove_action( $hook, $callback, $priority = 10 ) {
+	return remove_filter( $hook, $callback, $priority );
+}
+
+/** Runs what add_action() hooked, with the elements of $args as arguments. */
+function do_action_ref_array( $hook, $args ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $entry ) {
+		( $entry['fn'] )( ...$args );
+	}
+}
+
 /**
  * As in WordPress: without a callback, whether the hook has any; with one, its
  * priority when it is registered, else false.
@@ -251,6 +281,18 @@ function esc_html__( $text, $domain = '' ) {
 
 function home_url( $path = '' ) {
 	return 'https://example.test' . $path;
+}
+
+function site_url( $path = '' ) {
+	return 'https://example.test' . $path;
+}
+
+function esc_url_raw( $url ) {
+	return (string) $url;
+}
+
+function wp_set_current_user( $id ) {
+	$GLOBALS['ab_test_current_user'] = (int) $id;
 }
 
 function rest_url( $path = '' ) {
@@ -1113,6 +1155,11 @@ class WP_REST_Response {
 		return $this->status;
 	}
 
+	/** @return array<string,string> */
+	public function get_headers(): array {
+		return $this->headers;
+	}
+
 	public function get_data() {
 		return $this->data;
 	}
@@ -1120,6 +1167,11 @@ class WP_REST_Response {
 
 /**
  * Minimal stand-in for WP_REST_Request: body params, JSON params and headers.
+ *
+ * Header names are canonicalised like WP_REST_Request::canonicalize_header_name()
+ * (lower case, dashes to underscores), so a test sends "MCP-Protocol-Version"
+ * as a client spells it and the plugin reads "mcp_protocol_version" as WordPress
+ * hands it over.
  */
 class WP_REST_Request {
 	/** @var array<string,mixed> */
@@ -1128,6 +1180,34 @@ class WP_REST_Request {
 	private $json = null;
 	/** @var array<string,string> */
 	private $headers = array();
+	/** @var string */
+	private $route = '';
+	/** @var string POST unless a test says otherwise: most tests call the POST handler directly. */
+	private $method = 'POST';
+	/** @var array<string,string> */
+	private $url_params = array();
+
+	/** Upper case, as WP_REST_Request::set_method() stores it. */
+	public function set_method( string $method ): void {
+		$this->method = strtoupper( $method );
+	}
+
+	public function get_method(): string {
+		return $this->method;
+	}
+
+	/** @param array<string,string> $params */
+	public function set_url_params( array $params ): void {
+		$this->url_params = $params;
+	}
+
+	public function set_route( string $route ): void {
+		$this->route = $route;
+	}
+
+	public function get_route(): string {
+		return $this->route;
+	}
 
 	public function set_body_params( array $params ): void {
 		$this->body = $params;
@@ -1138,7 +1218,7 @@ class WP_REST_Request {
 	}
 
 	public function set_header( string $key, string $value ): void {
-		$this->headers[ strtolower( $key ) ] = $value;
+		$this->headers[ str_replace( '-', '_', strtolower( $key ) ) ] = $value;
 	}
 
 	public function get_body_params(): array {
@@ -1150,12 +1230,282 @@ class WP_REST_Request {
 	}
 
 	public function get_header( $key ) {
-		return $this->headers[ strtolower( (string) $key ) ] ?? '';
+		return $this->headers[ str_replace( '-', '_', strtolower( (string) $key ) ) ] ?? '';
 	}
 
 	public function get_param( $key ) {
-		return $this->body[ $key ] ?? null;
+		return $this->body[ $key ] ?? $this->url_params[ $key ] ?? null;
 	}
+}
+
+/**
+ * The part of the REST server that decides status and headers of an answer,
+ * over the routes register_rest_route() recorded. Copied from WordPress 7.0.2:
+ * WP_REST_Server::dispatch() (rest_pre_dispatch; a non-empty result is served
+ * as it is and matches no route), match_request_to_handler() (the whole path,
+ * case-insensitive; the first handler whose method fits; none: 404
+ * rest_no_route), respond_to_request() (permission_callback, then callback;
+ * WP_Error to response), then rest_post_dispatch with rest_send_allow_header()
+ * first, as rest_api_default_filters() hooks it before any plugin: for a
+ * matched route, Allow lists every method whose permission_callback returns
+ * true for this request, and replaces whatever Allow the answer had.
+ *
+ * Left out: OPTIONS and HEAD, argument validation, embedding, batches.
+ */
+function ab_test_rest_dispatch( WP_REST_Request $request ): WP_REST_Response {
+	$routes = array();
+	foreach ( $GLOBALS['ab_test_routes'] as $entry ) {
+		$handlers = isset( $entry['args']['methods'] ) ? array( $entry['args'] ) : $entry['args'];
+		foreach ( $handlers as $handler ) {
+			$methods = is_array( $handler['methods'] ) ? $handler['methods'] : preg_split( '/,\s*/', (string) $handler['methods'] );
+			$handler['methods'] = array_fill_keys( array_map( 'strtoupper', $methods ), true );
+			$routes[ '/' . trim( $entry['namespace'], '/' ) . $entry['route'] ][] = $handler;
+		}
+	}
+
+	$pre      = apply_filters( 'rest_pre_dispatch', null, null, $request );
+	$response = empty( $pre ) ? null : ab_test_rest_response( $pre );
+	$matched  = null;
+	if ( null === $response ) {
+		foreach ( $routes as $route => $handlers ) {
+			if ( 1 !== preg_match( '@^' . $route . '$@i', $request->get_route(), $m ) ) {
+				continue;
+			}
+			foreach ( $handlers as $handler ) {
+				if ( empty( $handler['methods'][ $request->get_method() ] ) ) {
+					continue;
+				}
+				$request->set_url_params( array_filter( $m, 'is_string', ARRAY_FILTER_USE_KEY ) );
+				$matched    = $route;
+				$permission = call_user_func( $handler['permission_callback'], $request );
+				$result     = true === $permission ? call_user_func( $handler['callback'], $request ) : $permission;
+				$response   = ab_test_rest_response( $result );
+				break 2;
+			}
+		}
+		if ( null === $matched ) {
+			$response = ab_test_rest_response( new WP_Error( 'rest_no_route', 'No route was found matching the URL and request method.', array( 'status' => 404 ) ) );
+		}
+	}
+
+	// rest_send_allow_header().
+	if ( null !== $matched ) {
+		$allowed = array();
+		foreach ( $routes[ $matched ] as $handler ) {
+			foreach ( $handler['methods'] as $method => $on ) {
+				$allowed[ $method ] = true === call_user_func( $handler['permission_callback'], $request );
+			}
+		}
+		$allowed = array_filter( $allowed );
+		if ( $allowed ) {
+			$response->header( 'Allow', implode( ', ', array_keys( $allowed ) ) );
+		}
+	}
+
+	return apply_filters( 'rest_post_dispatch', $response, null, $request );
+}
+
+/**
+ * A callback's result as WordPress serves it: a WP_Error becomes its code,
+ * message and data with the status from the data (500 without one).
+ *
+ * @param mixed $result
+ */
+function ab_test_rest_response( $result ): WP_REST_Response {
+	if ( $result instanceof WP_Error ) {
+		$data = $result->get_error_data();
+		return new WP_REST_Response(
+			array(
+				'code'    => $result->get_error_code(),
+				'message' => $result->get_error_message(),
+				'data'    => $data,
+			),
+			is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 500
+		);
+	}
+	return $result instanceof WP_REST_Response ? $result : new WP_REST_Response( $result );
+}
+
+/* ------------------------------------------------------------ URLs, HTTP */
+
+function wp_parse_url( $url, $component = -1 ) {
+	return parse_url( (string) $url, $component );
+}
+
+function add_query_arg( $args, $url = '' ) {
+	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . http_build_query( (array) $args );
+}
+
+/** @var array<int,array{url:string,args:array,curl?:string}> $ab_test_http Every wp_safe_remote_get() call, in order. */
+$GLOBALS['ab_test_http'] = array();
+/** @var callable|null $ab_test_http_answer Answers wp_safe_remote_get(): fn( string $url, array $args ): array|WP_Error */
+$GLOBALS['ab_test_http_answer'] = null;
+/** @var bool $ab_test_http_curl When true, every call also records what cURL was told about host addresses ('curl'). */
+$GLOBALS['ab_test_http_curl'] = false;
+
+/**
+ * Records the call and answers through ab_test_http_answer. Like WordPress,
+ * limit_response_size cuts the body after that many bytes. Without an answer
+ * configured, the request fails, as it would without network.
+ *
+ * As WordPress does with its cURL transport, the http_api_curl action runs
+ * with a real cURL handle before the answer. With ab_test_http_curl set, that
+ * handle is then started against a proxy on this machine that refuses the
+ * connection: cURL loads CURLOPT_RESOLVE entries when a transfer starts and
+ * says so in its verbose log ("added host:port:address"), and the proxy keeps
+ * it from looking up or reaching the host itself. The log is recorded.
+ */
+function wp_safe_remote_get( $url, $args = array() ) {
+	$call = array(
+		'url'  => (string) $url,
+		'args' => (array) $args,
+	);
+	if ( function_exists( 'curl_init' ) ) {
+		$handle = curl_init();
+		do_action_ref_array( 'http_api_curl', array( &$handle, (array) $args, (string) $url ) );
+		if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {
+			$log = fopen( 'php://temp', 'w+' );
+			curl_setopt_array(
+				$handle,
+				array(
+					CURLOPT_URL               => (string) $url,
+					CURLOPT_PROXY             => 'http://127.0.0.1:9',
+					CURLOPT_VERBOSE           => true,
+					CURLOPT_STDERR            => $log,
+					CURLOPT_RETURNTRANSFER    => true,
+					CURLOPT_CONNECTTIMEOUT_MS => 500,
+					CURLOPT_TIMEOUT_MS        => 1000,
+				)
+			);
+			curl_exec( $handle );
+			rewind( $log );
+			$call['curl'] = (string) stream_get_contents( $log );
+			fclose( $log );
+		}
+	}
+	$GLOBALS['ab_test_http'][] = $call;
+	$answer = $GLOBALS['ab_test_http_answer'];
+	if ( ! is_callable( $answer ) ) {
+		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
+	}
+	$response = $answer( (string) $url, (array) $args );
+	if ( is_array( $response ) && isset( $args['limit_response_size'] ) ) {
+		$response['body'] = substr( (string) $response['body'], 0, (int) $args['limit_response_size'] );
+	}
+	return $response;
+}
+
+/**
+ * A response array as the WordPress HTTP API returns it. Header names are
+ * looked up without regard to case, as WordPress does.
+ *
+ * @param array<string,string> $headers
+ */
+function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
+	return array(
+		'response' => array(
+			'code'    => $code,
+			'message' => '',
+		),
+		'body'     => $body,
+		'headers'  => array_change_key_case( $headers, CASE_LOWER ),
+	);
+}
+
+function wp_remote_retrieve_response_code( $response ) {
+	return is_array( $response ) && isset( $response['response']['code'] ) ? $response['response']['code'] : '';
+}
+
+function wp_remote_retrieve_body( $response ) {
+	return is_array( $response ) && isset( $response['body'] ) ? $response['body'] : '';
+}
+
+function wp_remote_retrieve_header( $response, $header ) {
+	$header = strtolower( (string) $header );
+	return is_array( $response ) && isset( $response['headers'][ $header ] ) ? $response['headers'][ $header ] : '';
+}
+
+/* ------------------------------------------------- login, redirects, exits */
+
+/** @var bool $ab_test_logged_in */
+$GLOBALS['ab_test_logged_in'] = false;
+
+function is_user_logged_in() {
+	return (bool) $GLOBALS['ab_test_logged_in'];
+}
+
+/**
+ * auth_redirect(), wp_redirect(), wp_safe_redirect() and wp_die() end the
+ * request in WordPress. Here they end the code under test by throwing, so a
+ * test can see which one was reached and with what.
+ */
+class AbTestExit extends Exception {
+	/** @var string 'login' | 'redirect' | 'die' */
+	public $kind;
+	/** @var string Location or message. */
+	public $detail;
+
+	public function __construct( string $kind, string $detail = '' ) {
+		parent::__construct( $kind . ': ' . $detail );
+		$this->kind   = $kind;
+		$this->detail = $detail;
+	}
+}
+
+function auth_redirect() {
+	throw new AbTestExit( 'login' );
+}
+
+function wp_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
+function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
+function wp_die( $message = '', $title = '', $args = array() ) {
+	throw new AbTestExit( 'die', (string) $message );
+}
+
+function status_header( $code, $description = '' ) {
+}
+
+function nocache_headers() {
+}
+
+/** Like WordPress: the nonce made for an action (see wp_nonce_field()) verifies for that action only. */
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return 'nonce-' . $action === (string) $nonce ? 1 : false;
+}
+
+/**
+ * Like WordPress: the nonce in the request must be the one made for this
+ * action; otherwise the request ends ("The link you followed has expired").
+ */
+function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
+	$result = isset( $_REQUEST[ $query_arg ] ) ? wp_verify_nonce( $_REQUEST[ $query_arg ], $action ) : false;
+	if ( ! $result ) {
+		wp_die( 'The link you followed has expired.' );
+	}
+	return $result;
+}
+
+/** @var array<int,array{namespace:string,route:string,args:array}> $ab_test_routes Every register_rest_route() call. */
+$GLOBALS['ab_test_routes'] = array();
+
+function register_rest_route( $route_namespace, $route, $args = array(), $override = false ) {
+	$GLOBALS['ab_test_routes'][] = array(
+		'namespace' => (string) $route_namespace,
+		'route'     => (string) $route,
+		'args'      => (array) $args,
+	);
+	return true;
+}
+
+/** No persistent object cache: counters live in transients, as on most sites. */
+function wp_using_ext_object_cache( $using = null ) {
+	return false;
 }
 
 /* ------------------------------------------------------- plugin constants */
@@ -1169,6 +1519,7 @@ define( 'AB_MCP_VERSION', '4.3.6' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
+define( 'AB_MCP_MAX_BATCH', 25 );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 
@@ -1176,6 +1527,7 @@ define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/'
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';

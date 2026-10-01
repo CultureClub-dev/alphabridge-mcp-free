@@ -11,8 +11,16 @@
  *  - RFC 9728 protected-resource metadata + RFC 8414 server metadata, served
  *    under /.well-known/… (and referenced from 401s via WWW-Authenticate).
  *  - RFC 7591 dynamic client registration (public clients, no secrets).
+ *  - Client ID Metadata Documents (CIMD, the registration MCP 2026-07-28
+ *    prefers): a client id that is an HTTPS URL is resolved by fetching the
+ *    JSON document there. This is the only outbound request the OAuth flow
+ *    makes: on the consent page only once an approver is logged in, at the
+ *    token endpoint only for the client id an approver consented to. The
+ *    address is the app's choice either way, so cimd_fetch() limits where
+ *    the request may go.
  *  - Authorization-code grant with PKCE (S256 REQUIRED, RFC 7636) and
- *    resource indication (RFC 8707).
+ *    resource indication (RFC 8707); the issuer in every authorization
+ *    response (RFC 9207).
  *
  * Issued access tokens ARE the existing abmcp_ connection tokens
  * (AB_MCP_Settings::add_token) — hashed at rest, scoped, revocable in the
@@ -86,10 +94,70 @@ class AB_MCP_OAuth {
 	 * any name, so this label says "this client called itself AlphaBridge Connect",
 	 * not "this is verified to be AlphaBridge Connect". That is true of every
 	 * client name in the list, and the label grants nothing — it is a reading aid.
-	 * Verifiable provenance needs CIMD, where the client id is a URL this site can
-	 * fetch and check; that is planned and not available here yet.
+	 * A client that connects with a metadata document (CIMD) instead is tied to
+	 * the domain that serves the document, and the consent screen names that
+	 * domain; the name inside the document is still whatever that domain says.
 	 */
 	const CONNECT_CLIENT_NAME = 'AlphaBridge Connect';
+
+	/**
+	 * Limits for fetching a client metadata document. 5 KB is the maximum the
+	 * CIMD draft recommends; a real document is a few hundred bytes. Five
+	 * seconds bound the wait of the person on the consent screen.
+	 */
+	const CIMD_MAX_BYTES = 5120;
+	const CIMD_TIMEOUT   = 5;
+
+	/**
+	 * How long a fetched document is reused, in seconds, when its response
+	 * names no lifetime (Cache-Control max-age), and the most it is ever kept.
+	 * One connection takes three requests within a few minutes (consent page,
+	 * approval, token), so five minutes cover it without a second fetch; the
+	 * upper bound keeps a withdrawn redirect address from living on for long.
+	 */
+	const CIMD_DEFAULT_TTL = 300;
+	const CIMD_MAX_TTL     = DAY_IN_SECONDS;
+
+	/**
+	 * Address ranges a metadata document is never fetched from: this machine,
+	 * private and shared networks, link-local (cloud metadata services live at
+	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
+	 * space, and the IPv6 forms that can carry one of those inside (mapped,
+	 * translated, IPv4-compatible, NAT64 with the well-known and the local
+	 * prefix, 6to4, Teredo). WordPress's own check for safe requests misses
+	 * link-local, shared address space and IPv6.
+	 */
+	const NON_PUBLIC_RANGES = array(
+		'0.0.0.0/8',
+		'10.0.0.0/8',
+		'100.64.0.0/10',
+		'127.0.0.0/8',
+		'169.254.0.0/16',
+		'172.16.0.0/12',
+		'192.0.0.0/24',
+		'192.0.2.0/24',
+		'192.168.0.0/16',
+		'198.18.0.0/15',
+		'198.51.100.0/24',
+		'203.0.113.0/24',
+		'224.0.0.0/4',
+		'240.0.0.0/4',
+		'::/96',
+		'::ffff:0:0/96',
+		'::ffff:0:0:0/96',
+		'64:ff9b::/96',
+		'64:ff9b:1::/48',
+		'100::/64',
+		'2001::/32',
+		'2001:2::/48',
+		'2001:db8::/32',
+		'2002::/16',
+		'3fff::/20',
+		'fc00::/7',
+		'fe80::/10',
+		'fec0::/10',
+		'ff00::/8',
+	);
 
 	/* ---------------------------------------------------------------- state */
 
@@ -151,7 +219,7 @@ class AB_MCP_OAuth {
 	 * @return array
 	 */
 	public static function metadata() {
-		return array(
+		$meta = array(
 			'issuer'                                => self::issuer(),
 			'authorization_endpoint'                => home_url( '/?ab_mcp_oauth=authorize' ),
 			'token_endpoint'                        => rest_url( self::ns() . '/oauth/token' ),
@@ -165,6 +233,11 @@ class AB_MCP_OAuth {
 			'scopes_supported'                      => array_keys( AB_MCP_Tool_Registry::scopes() ),
 			'authorization_response_iss_parameter_supported' => true,
 		);
+		// Dynamic registration stays: clients that only know it keep working.
+		if ( self::cimd_enabled() ) {
+			$meta['client_id_metadata_document_supported'] = true;
+		}
+		return $meta;
 	}
 
 	/**
@@ -192,41 +265,9 @@ class AB_MCP_OAuth {
 	public static function register_client( $body ) {
 		$body = is_array( $body ) ? $body : array();
 
-		$uris = isset( $body['redirect_uris'] ) && is_array( $body['redirect_uris'] ) ? $body['redirect_uris'] : array();
-		if ( empty( $uris ) ) {
-			return array(
-				'error'             => 'invalid_client_metadata',
-				'error_description' => 'redirect_uris is required.',
-			);
-		}
-		if ( count( $uris ) > 20 ) {
-			return array(
-				'error'             => 'invalid_client_metadata',
-				'error_description' => 'Too many redirect_uris.',
-			);
-		}
-
-		$clean_uris = array();
-		foreach ( $uris as $uri ) {
-			$uri   = (string) $uri;
-			$parts = wp_parse_url( $uri );
-			$valid = is_array( $parts )
-				&& isset( $parts['scheme'], $parts['host'] )
-				&& ! isset( $parts['fragment'] )
-				&& strlen( $uri ) <= 2000
-				&& (
-					'https' === strtolower( $parts['scheme'] )
-					// Loopback redirects stay http by spec (native/dev clients).
-					|| ( 'http' === strtolower( $parts['scheme'] )
-						&& in_array( strtolower( $parts['host'] ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) )
-				);
-			if ( ! $valid ) {
-				return array(
-					'error'             => 'invalid_redirect_uri',
-					'error_description' => 'redirect_uris must be https (or http on localhost) without fragments.',
-				);
-			}
-			$clean_uris[] = $uri;
+		$clean_uris = self::clean_redirect_uris( isset( $body['redirect_uris'] ) ? $body['redirect_uris'] : null );
+		if ( isset( $clean_uris['error'] ) ) {
+			return $clean_uris;
 		}
 
 		$name = isset( $body['client_name'] ) ? sanitize_text_field( (string) $body['client_name'] ) : '';
@@ -282,14 +323,548 @@ class AB_MCP_OAuth {
 	}
 
 	/**
-	 * Look up a registered client.
+	 * The redirect addresses a client may use, checked the same way for a
+	 * registration and for a metadata document: at most 20, each https (or
+	 * http on a loopback host, which native and development clients use by
+	 * spec), without a fragment, at most 2000 characters.
+	 *
+	 * @param mixed $uris redirect_uris as the client sent them.
+	 * @return array The addresses as a list, or array( 'error' => …, 'error_description' => … ).
+	 */
+	private static function clean_redirect_uris( $uris ) {
+		$uris = is_array( $uris ) ? $uris : array();
+		if ( empty( $uris ) ) {
+			return array(
+				'error'             => 'invalid_client_metadata',
+				'error_description' => 'redirect_uris is required.',
+			);
+		}
+		if ( count( $uris ) > 20 ) {
+			return array(
+				'error'             => 'invalid_client_metadata',
+				'error_description' => 'Too many redirect_uris.',
+			);
+		}
+
+		$clean_uris = array();
+		foreach ( $uris as $uri ) {
+			$uri   = is_string( $uri ) ? $uri : '';
+			$parts = wp_parse_url( $uri );
+			$valid = is_array( $parts )
+				&& isset( $parts['scheme'], $parts['host'] )
+				&& ! isset( $parts['fragment'] )
+				&& strlen( $uri ) <= 2000
+				&& (
+					'https' === strtolower( $parts['scheme'] )
+					// Loopback redirects stay http by spec (native/dev clients).
+					|| ( 'http' === strtolower( $parts['scheme'] )
+						&& in_array( strtolower( $parts['host'] ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) )
+				);
+			if ( ! $valid ) {
+				return array(
+					'error'             => 'invalid_redirect_uri',
+					'error_description' => 'redirect_uris must be https (or http on localhost) without fragments.',
+				);
+			}
+			$clean_uris[] = $uri;
+		}
+		return $clean_uris;
+	}
+
+	/**
+	 * Look up a client: a registered one, or one named by the URL of its
+	 * metadata document.
 	 *
 	 * @param string $client_id Client id.
-	 * @return array|false
+	 * @return array|false Name and redirect_uris, or false.
 	 */
 	public static function get_client( $client_id ) {
+		$client = self::resolve_client( $client_id );
+		return is_wp_error( $client ) ? false : $client;
+	}
+
+	/**
+	 * Look up a client, with the reason when there is none.
+	 *
+	 * A client id that is an HTTPS URL is a Client ID Metadata Document: the
+	 * document at that URL describes the client, no registration needed.
+	 * Every other id must have been registered here.
+	 *
+	 * @param string $client_id Client id.
+	 * @return array|WP_Error Name and redirect_uris ('cimd' => true for a
+	 *                        document), or what went wrong, said so that the
+	 *                        person on the consent screen can act on it.
+	 */
+	public static function resolve_client( $client_id ) {
+		$client_id = (string) $client_id;
+
+		if ( self::is_cimd_client_id( $client_id ) ) {
+			if ( ! self::cimd_enabled() ) {
+				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → Connect from Claude, by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
+			}
+			return self::cimd_client( $client_id );
+		}
+
 		$clients = get_option( self::OPT_CLIENTS, array() );
-		return ( is_array( $clients ) && isset( $clients[ $client_id ] ) ) ? $clients[ $client_id ] : false;
+		if ( is_array( $clients ) && isset( $clients[ $client_id ] ) ) {
+			return $clients[ $client_id ];
+		}
+		return new WP_Error( 'ab_mcp_unknown_client', __( 'Unknown client. Ask the connecting app to register again.', 'alphabridge-mcp' ) );
+	}
+
+	/* ------------------------------------- client id metadata documents */
+
+	/**
+	 * Whether this site resolves client ids that are URLs. On by default; off
+	 * by the setting, or while WordPress blocks outgoing requests. Off leaves
+	 * dynamic registration as the only way in, as before CIMD existed.
+	 *
+	 * Advertising CIMD where the documents cannot be loaded would cost
+	 * connections: a client prefers CIMD over registration as soon as the
+	 * server metadata offers it, and would then fail on every attempt.
+	 *
+	 * @return bool
+	 */
+	public static function cimd_enabled() {
+		$enabled = (bool) AB_MCP_Settings::get( 'oauth_cimd', true ) && ! self::outbound_blocked();
+
+		/**
+		 * Whether OAuth clients may identify themselves with a Client ID
+		 * Metadata Document (an HTTPS URL as client_id). Off, such a client id
+		 * is unknown, as before, and the discovery metadata stops advertising
+		 * it. The setting and WP_HTTP_BLOCK_EXTERNAL provide the starting
+		 * value; the filter has the last word, for example on a site that
+		 * blocks outgoing requests but lists the app hosts in
+		 * WP_ACCESSIBLE_HOSTS.
+		 *
+		 * @param bool $enabled Starting value.
+		 */
+		return (bool) apply_filters( 'ab_mcp_oauth_cimd', $enabled );
+	}
+
+	/**
+	 * Whether WordPress refuses requests to other servers
+	 * (WP_HTTP_BLOCK_EXTERNAL). Which app hosts WP_ACCESSIBLE_HOSTS lets
+	 * through cannot be known in advance, so a block counts as a block.
+	 *
+	 * @return bool
+	 */
+	public static function outbound_blocked() {
+		return defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && WP_HTTP_BLOCK_EXTERNAL;
+	}
+
+	/**
+	 * Whether a client id names a metadata document. Registered ids start
+	 * with CLIENT_PREFIX, so the two can never be confused.
+	 *
+	 * @param mixed $client_id Client id.
+	 * @return bool
+	 */
+	public static function is_cimd_client_id( $client_id ) {
+		return is_string( $client_id ) && 0 === strpos( $client_id, 'https://' );
+	}
+
+	/**
+	 * The client a metadata document describes, from the cache or fetched.
+	 *
+	 * @param string $url Client id, the document's URL.
+	 * @return array|WP_Error
+	 */
+	private static function cimd_client( $url ) {
+		$problem = self::cimd_url_problem( $url );
+		if ( null !== $problem ) {
+			return self::cimd_error( $url, $problem );
+		}
+
+		$key    = 'ab_mcp_cimd_' . substr( hash( 'sha256', $url ), 0, 40 );
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && self::cimd_cache_valid( $key, $url, $cached ) ) {
+			return $cached['client'];
+		}
+
+		$fetched = self::cimd_fetch( $url );
+		if ( is_wp_error( $fetched ) ) {
+			return $fetched;
+		}
+
+		if ( $fetched['ttl'] > 0 ) {
+			$expires = time() + $fetched['ttl'];
+			$sig     = self::cimd_sig( $key, $url, $fetched['client'], $expires );
+			if ( null !== $sig ) {
+				set_transient(
+					$key,
+					array(
+						'client'  => $fetched['client'],
+						'expires' => $expires,
+						'sig'     => $sig,
+					),
+					$fetched['ttl']
+				);
+			}
+		}
+		return $fetched['client'];
+	}
+
+	/**
+	 * What is wrong with a client id URL by the CIMD rules: https, a host, a
+	 * path, no fragment, no user or password, no dot segments.
+	 *
+	 * @param string $url Client id.
+	 * @return string|null The problem, or null.
+	 */
+	private static function cimd_url_problem( $url ) {
+		if ( strlen( $url ) > 2000 || 1 === preg_match( '/[\x00-\x20\x7F]/', $url ) ) {
+			return 'the address is too long or contains spaces or control characters';
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) || 'https' !== $parts['scheme'] ) {
+			return 'the address is not a valid https URL';
+		}
+		if ( isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['fragment'] ) ) {
+			return 'the address must not contain a user name, a password or a fragment';
+		}
+		$path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+		if ( '' === $path || '/' === $path ) {
+			return 'the address has no path; a client id names a document, for example https://app.example/client.json';
+		}
+		if ( 1 === preg_match( '#(^|/)\.{1,2}(/|$)#', $path ) ) {
+			return 'the address contains "." or ".." path segments';
+		}
+		return null;
+	}
+
+	/**
+	 * Fetch and check a metadata document. The request goes only to a public
+	 * address, through WordPress's safe HTTP API, without following
+	 * redirects, for at most CIMD_TIMEOUT seconds and CIMD_MAX_BYTES.
+	 *
+	 * The connection goes to the addresses checked here and nowhere else:
+	 * cURL would otherwise look the name up again, and a name that answers
+	 * differently the second time (DNS rebinding) could lead the request to
+	 * an address never checked. CURLOPT_RESOLVE hands cURL the checked
+	 * answer; the name still serves for TLS, so the certificate must match
+	 * it. Without cURL (WordPress then falls back to fsockopen) and through
+	 * a proxy, the name is looked up again on connecting, as before.
+	 *
+	 * @param string $url Document URL.
+	 * @return array|WP_Error array( 'client' => …, 'ttl' => seconds to keep it ).
+	 */
+	private static function cimd_fetch( $url ) {
+		$host      = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$addresses = self::cimd_host_addresses( $host );
+		if ( is_string( $addresses ) ) {
+			return self::cimd_error( $url, $addresses );
+		}
+
+		// The entry names host and port, so a request to any other host that
+		// might run while the hook is in place keeps its own lookup.
+		$resolve = self::curl_resolve_entry( $url, $addresses );
+		$pin     = static function ( $handle ) use ( $resolve ) {
+			if ( null !== $resolve ) {
+				curl_setopt( $handle, CURLOPT_RESOLVE, array( $resolve ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- the WordPress HTTP API offers no other way to fix the address a name connects to.
+			}
+		};
+		add_action( 'http_api_curl', $pin );
+		$response = wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'             => self::CIMD_TIMEOUT,
+				// The document must sit at its own URL (its client_id says so);
+				// a redirect could only lead somewhere this check did not see.
+				'redirection'         => 0,
+				// One byte over the limit, so that an oversized document shows
+				// as such instead of as a cut-off one.
+				'limit_response_size' => self::CIMD_MAX_BYTES + 1,
+				'headers'             => array( 'Accept' => 'application/json' ),
+				// WordPress's default user agent names this site's address; the
+				// document's host has no need to learn it.
+				'user-agent'          => 'AlphaBridge-MCP/' . AB_MCP_VERSION,
+			)
+		);
+		remove_action( 'http_api_curl', $pin );
+		if ( is_wp_error( $response ) ) {
+			return self::cimd_error( $url, 'it could not be loaded (' . $response->get_error_message() . ')' );
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $code ) {
+			return self::cimd_error( $url, 'it answered HTTP ' . $code . ' instead of 200 (redirects are not followed)' );
+		}
+		$body = (string) wp_remote_retrieve_body( $response );
+		if ( strlen( $body ) > self::CIMD_MAX_BYTES ) {
+			return self::cimd_error( $url, 'it is larger than ' . self::CIMD_MAX_BYTES . ' bytes' );
+		}
+		$doc = json_decode( $body, true );
+		if ( ! is_array( $doc ) ) {
+			return self::cimd_error( $url, 'it is not a JSON object' );
+		}
+
+		$client = self::cimd_validate( $url, $doc );
+		if ( is_wp_error( $client ) ) {
+			return $client;
+		}
+
+		$cache_control = wp_remote_retrieve_header( $response, 'cache-control' );
+		return array(
+			'client' => $client,
+			'ttl'    => self::cimd_ttl( is_array( $cache_control ) ? implode( ',', $cache_control ) : (string) $cache_control ),
+		);
+	}
+
+	/**
+	 * Check a fetched document and take from it what the flow needs.
+	 *
+	 * @param string $url Document URL.
+	 * @param array  $doc Decoded document.
+	 * @return array|WP_Error Name, redirect_uris and 'cimd' => true.
+	 */
+	private static function cimd_validate( $url, array $doc ) {
+		// Exact string comparison, as the draft requires: the document
+		// vouches for this very URL, not for a variant of it.
+		if ( ! isset( $doc['client_id'] ) || ! is_string( $doc['client_id'] ) || $doc['client_id'] !== $url ) {
+			return self::cimd_error( $url, 'its client_id does not match its own address' );
+		}
+		if ( array_key_exists( 'client_secret', $doc ) || array_key_exists( 'client_secret_expires_at', $doc ) ) {
+			return self::cimd_error( $url, 'it contains a client secret, which a public document must never carry' );
+		}
+		if ( isset( $doc['token_endpoint_auth_method'] ) && 'none' !== $doc['token_endpoint_auth_method'] ) {
+			return self::cimd_error( $url, 'it asks for client authentication at the token endpoint; this site serves public clients ("none") only' );
+		}
+		if ( isset( $doc['grant_types'] ) && ( ! is_array( $doc['grant_types'] ) || ! in_array( 'authorization_code', $doc['grant_types'], true ) ) ) {
+			return self::cimd_error( $url, 'its grant_types do not include authorization_code' );
+		}
+		if ( isset( $doc['response_types'] ) && ( ! is_array( $doc['response_types'] ) || ! in_array( 'code', $doc['response_types'], true ) ) ) {
+			return self::cimd_error( $url, 'its response_types do not include code' );
+		}
+
+		$uris = self::clean_redirect_uris( isset( $doc['redirect_uris'] ) ? $doc['redirect_uris'] : null );
+		if ( isset( $uris['error'] ) ) {
+			return self::cimd_error( $url, 'its redirect_uris are missing or invalid (' . $uris['error_description'] . ')' );
+		}
+
+		$name = isset( $doc['client_name'] ) && is_string( $doc['client_name'] ) ? substr( sanitize_text_field( $doc['client_name'] ), 0, 80 ) : '';
+		if ( '' === $name ) {
+			return self::cimd_error( $url, 'it has no client_name' );
+		}
+
+		return array(
+			'name'          => $name,
+			'redirect_uris' => $uris,
+			'cimd'          => true,
+		);
+	}
+
+	/**
+	 * The addresses a metadata host may be fetched from, or why it may not.
+	 *
+	 * Every address the host resolves to must be public, IPv4 and IPv6 alike,
+	 * since the connection may use either. cimd_fetch() then connects to
+	 * exactly these addresses, so a name that changes its answer in between
+	 * (DNS rebinding) gains nothing.
+	 *
+	 * @param string $host Host of the document URL.
+	 * @return string[]|string The addresses, or the problem.
+	 */
+	private static function cimd_host_addresses( $host ) {
+		$host = strtolower( trim( (string) $host, '[]' ) );
+		if ( '' === $host || 'localhost' === $host || '.localhost' === substr( $host, -10 ) ) {
+			return 'its host is this machine';
+		}
+
+		/**
+		 * The addresses a metadata host resolves to, before the plugin looks
+		 * them up itself. Return a list to answer from elsewhere (a resolver
+		 * of your own, a fixed mapping); null leaves the lookup to the plugin.
+		 * Every address is checked either way: a filter cannot open the way
+		 * to a private one. The request then connects to these addresses.
+		 *
+		 * @param string[]|null $addresses Null.
+		 * @param string        $host      Host name.
+		 */
+		$addresses = apply_filters( 'ab_mcp_oauth_cimd_addresses', null, $host );
+		if ( null === $addresses ) {
+			$addresses = false !== filter_var( $host, FILTER_VALIDATE_IP ) ? array( $host ) : self::resolve_host( $host );
+		}
+		if ( ! is_array( $addresses ) || empty( $addresses ) ) {
+			return 'its host name could not be resolved';
+		}
+		$checked = array();
+		foreach ( $addresses as $address ) {
+			if ( ! self::is_public_ip( (string) $address ) ) {
+				return 'its host resolves to an address that is not public; documents are fetched only from public addresses';
+			}
+			$checked[] = (string) $address;
+		}
+		return $checked;
+	}
+
+	/**
+	 * The CURLOPT_RESOLVE entry that ties a URL's host to checked addresses:
+	 * "host:port:address,address". None for a host that is an address
+	 * already, since nothing is looked up for it.
+	 *
+	 * The host is written as the URL spells it, which is what older cURL
+	 * versions compare the entry with; every version reads a bare IPv6
+	 * address here.
+	 *
+	 * @param string   $url       Document URL.
+	 * @param string[] $addresses Checked addresses.
+	 * @return string|null
+	 */
+	private static function curl_resolve_entry( $url, array $addresses ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		if ( '' === $host || false !== filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) || empty( $addresses ) ) {
+			return null;
+		}
+		$port = (int) wp_parse_url( $url, PHP_URL_PORT );
+		return $host . ':' . ( $port > 0 ? $port : 443 ) . ':' . implode( ',', $addresses );
+	}
+
+	/**
+	 * IPv4 and IPv6 addresses of a host name.
+	 *
+	 * @param string $host Host name.
+	 * @return string[]
+	 */
+	private static function resolve_host( $host ) {
+		$addresses = gethostbynamel( $host );
+		$addresses = is_array( $addresses ) ? $addresses : array();
+		if ( function_exists( 'dns_get_record' ) ) {
+			$records = @dns_get_record( $host, DNS_AAAA ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed lookup is handled as "no address", not as a PHP warning on the consent page.
+			foreach ( is_array( $records ) ? $records : array() as $record ) {
+				if ( isset( $record['ipv6'] ) ) {
+					$addresses[] = (string) $record['ipv6'];
+				}
+			}
+		}
+		return $addresses;
+	}
+
+	/**
+	 * Whether an address is a public one: valid, and in none of the
+	 * NON_PUBLIC_RANGES.
+	 *
+	 * @param string $ip Address.
+	 * @return bool
+	 */
+	public static function is_public_ip( $ip ) {
+		$packed = false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? inet_pton( $ip ) : false;
+		if ( false === $packed ) {
+			return false;
+		}
+		foreach ( self::NON_PUBLIC_RANGES as $range ) {
+			list( $network, $bits ) = explode( '/', $range );
+			$net                    = inet_pton( $network );
+			if ( false === $net || strlen( $net ) !== strlen( $packed ) ) {
+				continue;
+			}
+			$bits  = (int) $bits;
+			$bytes = intdiv( $bits, 8 );
+			$rest  = $bits % 8;
+			if ( substr( $packed, 0, $bytes ) !== substr( $net, 0, $bytes ) ) {
+				continue;
+			}
+			if ( 0 === $rest ) {
+				return false;
+			}
+			$mask = chr( ( 0xff << ( 8 - $rest ) ) & 0xff );
+			if ( ( $packed[ $bytes ] & $mask ) === ( $net[ $bytes ] & $mask ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Seconds to keep a fetched document, from its Cache-Control header:
+	 * no-store, no-cache and max-age=0 keep nothing, max-age is honoured up to
+	 * CIMD_MAX_TTL, and without either CIMD_DEFAULT_TTL applies.
+	 *
+	 * @param string $cache_control Header value.
+	 * @return int
+	 */
+	private static function cimd_ttl( $cache_control ) {
+		$cache_control = strtolower( $cache_control );
+		if ( false !== strpos( $cache_control, 'no-store' ) || false !== strpos( $cache_control, 'no-cache' ) ) {
+			return 0;
+		}
+		if ( 1 === preg_match( '/(?:^|[,\s])max-age\s*=\s*"?(\d+)/', $cache_control, $m ) ) {
+			return min( (int) $m[1], self::CIMD_MAX_TTL );
+		}
+		return self::CIMD_DEFAULT_TTL;
+	}
+
+	/**
+	 * Signature over a cached document. The transient store is shared with
+	 * every plugin and with generic "set transient" tools, like the consent
+	 * records (see code_sig()): a cache entry written any other way could
+	 * slip a foreign redirect address into a trusted client id.
+	 *
+	 * @param string $key     Transient key.
+	 * @param string $url     Client id.
+	 * @param array  $client  Cached client.
+	 * @param int    $expires Unix time the entry ends.
+	 * @return string|null
+	 */
+	private static function cimd_sig( $key, $url, array $client, $expires ) {
+		$canonical = wp_json_encode(
+			array(
+				'key'           => (string) $key,
+				'url'           => (string) $url,
+				'name'          => isset( $client['name'] ) ? (string) $client['name'] : '',
+				'redirect_uris' => isset( $client['redirect_uris'] ) && is_array( $client['redirect_uris'] ) ? array_values( $client['redirect_uris'] ) : array(),
+				'expires'       => (int) $expires,
+			)
+		);
+		if ( ! is_string( $canonical ) || '' === $canonical ) {
+			return null;
+		}
+		return hash_hmac( 'sha256', $canonical, wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Whether a cache entry is one cimd_client() wrote for this URL and is
+	 * still within its lifetime (checked here too, as a rewritten transient
+	 * can carry any expiry). Only name and redirect_uris are signed, so only
+	 * those are taken from it.
+	 *
+	 * @param string $key   Transient key.
+	 * @param string $url   Client id.
+	 * @param array  $entry Cached entry.
+	 * @return bool
+	 */
+	private static function cimd_cache_valid( $key, $url, array $entry ) {
+		if ( ! isset( $entry['client'], $entry['expires'], $entry['sig'] ) || ! is_array( $entry['client'] ) || ! is_string( $entry['sig'] ) ) {
+			return false;
+		}
+		if ( (int) $entry['expires'] < time() ) {
+			return false;
+		}
+		if ( array_diff( array_keys( $entry['client'] ), array( 'name', 'redirect_uris', 'cimd' ) ) ) {
+			return false;
+		}
+		$expected = self::cimd_sig( $key, $url, $entry['client'], (int) $entry['expires'] );
+		return null !== $expected && hash_equals( $expected, $entry['sig'] );
+	}
+
+	/**
+	 * An error about a metadata document that says where it lives and what
+	 * is wrong, so the person approving can tell the app's maker.
+	 *
+	 * @param string $url     Document URL.
+	 * @param string $problem What is wrong.
+	 * @return WP_Error
+	 */
+	private static function cimd_error( $url, $problem ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		return new WP_Error(
+			'ab_mcp_cimd',
+			sprintf(
+				/* translators: 1: host name, 2: what is wrong (English, technical). */
+				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off "Accept apps with a metadata document" under Settings → AlphaBridge MCP → Connect from Claude; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
+				'' !== $host ? $host : substr( $url, 0, 200 ),
+				$problem
+			)
+		);
 	}
 
 	/* --------------------------------------------------- codes and redeeming */
@@ -435,9 +1010,16 @@ class AB_MCP_OAuth {
 			return array( 'error' => 'invalid_grant' );
 		}
 
+		// The id is compared before the client is looked up: looking up an id
+		// that is a URL fetches it, and the id in this request is the
+		// caller's choice, while the one in the record is what an approver
+		// consented to.
 		$client_id = isset( $p['client_id'] ) ? (string) $p['client_id'] : '';
-		$client    = self::get_client( $client_id );
-		if ( false === $client || ! hash_equals( (string) $data['client_id'], $client_id ) ) {
+		if ( ! hash_equals( (string) $data['client_id'], $client_id ) ) {
+			return array( 'error' => 'invalid_client' );
+		}
+		$client = self::get_client( $client_id );
+		if ( false === $client ) {
 			return array( 'error' => 'invalid_client' );
 		}
 
@@ -879,9 +1461,18 @@ class AB_MCP_OAuth {
 		$get = wp_unslash( $_REQUEST ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- OAuth params validated against the registered client; the mutation below is nonce-verified.
 
 		$client_id = isset( $get['client_id'] ) ? (string) $get['client_id'] : '';
-		$client    = self::get_client( $client_id );
-		if ( false === $client ) {
-			self::error_page( __( 'Unknown client. Ask the connecting app to register again.', 'alphabridge-mcp' ) );
+
+		// A client id that is a URL makes this site fetch it. Only a logged-in
+		// approver may set that off, the order the MCP specification draws
+		// (authenticate, then fetch): otherwise any visitor could have the site
+		// request addresses of their choosing through this page.
+		if ( self::is_cimd_client_id( $client_id ) ) {
+			self::require_approver();
+		}
+
+		$client = self::resolve_client( $client_id );
+		if ( is_wp_error( $client ) ) {
+			self::error_page( $client->get_error_message() );
 		}
 
 		$redirect = isset( $get['redirect_uri'] ) ? (string) $get['redirect_uri'] : '';
@@ -909,22 +1500,7 @@ class AB_MCP_OAuth {
 			self::client_error_redirect( $redirect, 'invalid_target', $state );
 		}
 
-		if ( ! is_user_logged_in() ) {
-			auth_redirect(); // Sends to wp-login and returns here afterwards.
-			exit;
-		}
-
-		/**
-		 * Capability required to approve a Claude Connect authorization.
-		 * Connections act as the approving user, so this defaults to admins —
-		 * the same audience that can create tokens manually.
-		 *
-		 * @param string $capability Capability name.
-		 */
-		$cap = apply_filters( 'ab_mcp_oauth_capability', 'manage_options' );
-		if ( ! current_user_can( $cap ) ) {
-			self::error_page( __( 'Your account is not allowed to approve connections on this site. Ask an administrator.', 'alphabridge-mcp' ) );
-		}
+		self::require_approver();
 
 		$scopes = AB_MCP_Tool_Registry::scopes();
 
@@ -956,6 +1532,29 @@ class AB_MCP_OAuth {
 		}
 
 		self::consent_page( $client, $get, $state, $scopes );
+	}
+
+	/**
+	 * Stop unless a logged-in user who may approve connections is here: send
+	 * a visitor to wp-login (and back), refuse anyone else.
+	 */
+	private static function require_approver() {
+		if ( ! is_user_logged_in() ) {
+			auth_redirect(); // Sends to wp-login and returns here afterwards.
+			exit;
+		}
+
+		/**
+		 * Capability required to approve a Claude Connect authorization.
+		 * Connections act as the approving user, so this defaults to admins —
+		 * the same audience that can create tokens manually.
+		 *
+		 * @param string $capability Capability name.
+		 */
+		$cap = apply_filters( 'ab_mcp_oauth_capability', 'manage_options' );
+		if ( ! current_user_can( $cap ) ) {
+			self::error_page( __( 'Your account is not allowed to approve connections on this site. Ask an administrator.', 'alphabridge-mcp' ) );
+		}
 	}
 
 	/**
@@ -1075,6 +1674,22 @@ class AB_MCP_OAuth {
 		);
 		?>
 	</div>
+	<?php if ( in_array( strtolower( $dest_host ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) ) : ?>
+		<div class="dest"><?php esc_html_e( 'That address is on your own computer, where any program can use it, so the app\'s name proves nothing here. Only continue if you started this connection yourself just now.', 'alphabridge-mcp' ); ?></div>
+	<?php endif; ?>
+	<?php if ( ! empty( $client['cimd'] ) ) : ?>
+		<div class="who">
+		<?php
+		echo esc_html(
+			sprintf(
+				/* translators: %s: host name serving the app's metadata document */
+				__( 'The app identifies itself with a document on %s; its name above comes from there.', 'alphabridge-mcp' ),
+				(string) wp_parse_url( (string) $get['client_id'], PHP_URL_HOST )
+			)
+		);
+		?>
+		</div>
+	<?php endif; ?>
 	<form method="post" action="<?php echo esc_url( $self_url ); ?>">
 		<?php wp_nonce_field( 'ab_mcp_oauth_approve' ); ?>
 		<input type="hidden" name="client_id" value="<?php echo esc_attr( (string) $get['client_id'] ); ?>">

@@ -4,11 +4,31 @@
  *
  * Endpoint: POST /wp-json/alphabridge/v1/mcp
  *
- * Implements: initialize, ping, tools/list, tools/call, resources/list,
- * prompts/list and notifications/*. Responds with application/json (single or
- * batch). SSE streaming is intentionally not used: JSON-RPC over HTTP POST is
- * the widely-supported MCP transport and is far more stable behind shared
- * hosting. Clients that require a server-initiated SSE stream are not supported.
+ * Speaks both protocol generations on one endpoint ("dual-era"):
+ *
+ * - Legacy revisions (2024-11-05, 2025-03-26, 2025-06-18) open with an
+ *   initialize handshake: initialize, ping, tools/list, tools/call,
+ *   resources/list, resources/templates/list, prompts/list, prompts/get and
+ *   notifications/*, single messages or batches, answered with
+ *   application/json.
+ * - Revision 2026-07-28 is stateless: every request names its revision and
+ *   the client's capabilities in params._meta. On top of the methods above it
+ *   adds server/discover, resultType on every result, caching hints on the
+ *   lists, the check of the Mcp-Method / Mcp-Name headers against the body,
+ *   and subscriptions/listen. One message per POST, no batches.
+ *
+ * The generation is decided per request: a request is modern exactly when its
+ * params._meta carries io.modelcontextprotocol/protocolVersion (initialize is
+ * always legacy). Every other request runs the legacy code unchanged, so an
+ * older client receives the same bytes as before. The modern side can be
+ * switched off (setting, or the ab_mcp_modern_protocol filter); the endpoint
+ * then answers exactly like a legacy-only server, which is also what lets a
+ * client that speaks both generations fall back to initialize.
+ *
+ * There is no server-initiated stream: GET is answered 405, and
+ * subscriptions/listen acknowledges an empty subscription and ends it at once,
+ * because a PHP request held open for notifications this server never sends
+ * would only tie up a worker on shared hosting.
  *
  * @package AlphaBridge_MCP
  */
@@ -21,12 +41,96 @@ defined( 'ABSPATH' ) || exit;
 class AB_MCP_REST_Controller {
 
 	/**
-	 * MCP protocol versions this server supports (newest last).
+	 * Legacy MCP revisions (newest last): the ones initialize negotiates. A
+	 * revision from 2026-07-28 on never appears here, because initialize does
+	 * not exist there and the hub links sites through initialize 2025-06-18.
 	 */
-	const SUPPORTED_PROTOCOL_VERSIONS = array( '2024-11-05', '2025-03-26', '2025-06-18' );
+	const LEGACY_PROTOCOL_VERSIONS = array( '2024-11-05', '2025-03-26', '2025-06-18' );
 
 	/**
-	 * Key of the AlphaBridge self-description inside the initialize `_meta`.
+	 * Modern MCP revisions (newest last): stateless, named per request in
+	 * params._meta. Served only while modern_enabled() says so.
+	 */
+	const MODERN_PROTOCOL_VERSIONS = array( '2026-07-28' );
+
+	/**
+	 * Reserved _meta keys of the modern revision.
+	 */
+	const META_PROTOCOL_VERSION    = 'io.modelcontextprotocol/protocolVersion';
+	const META_CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
+	const META_SERVER_INFO         = 'io.modelcontextprotocol/serverInfo';
+	const META_SUBSCRIPTION_ID     = 'io.modelcontextprotocol/subscriptionId';
+
+	/**
+	 * JSON-RPC error codes the 2026-07-28 specification defines. The range
+	 * -32020 to -32099 belongs to the specification; nothing else from it is
+	 * sent here.
+	 */
+	const ERROR_HEADER_MISMATCH     = -32020;
+	const ERROR_UNSUPPORTED_VERSION = -32022;
+
+	/**
+	 * Methods whose request must mirror a body field in the Mcp-Name header,
+	 * and the field it mirrors.
+	 */
+	const NAMED_METHODS = array(
+		'tools/call'     => 'name',
+		'prompts/get'    => 'name',
+		'resources/read' => 'uri',
+	);
+
+	/**
+	 * Methods both generations answer with the same code. The modern side adds
+	 * resultType, caching hints and serverInfo to their results afterwards.
+	 */
+	const SHARED_METHODS = array(
+		'ping',
+		'tools/list',
+		'tools/call',
+		'resources/list',
+		'resources/templates/list',
+		'prompts/list',
+		'prompts/get',
+	);
+
+	/**
+	 * Caching hints of the modern revision: method => [ ttlMs, cacheScope ].
+	 * The specification requires them on these results (CacheableResult).
+	 *
+	 * cacheScope is 'private' throughout. tools/list is filtered by the
+	 * presented token's scope (read, content, full), so two connections to the
+	 * same site see different lists; server/discover carries that scope in the
+	 * site contract; prompts come from a filter that may look at the current
+	 * user. 'public' would let a shared gateway hand one connection's list to
+	 * another, whose client would then offer tools that tools/call refuses or
+	 * hide tools it may call. The always-empty resource lists lose nothing by
+	 * being private either, and stay right if resources ever arrive.
+	 *
+	 * 60 seconds for discover, tools and prompts: those change by an admin's
+	 * hand (tool switches, read-only mode, the Pro licence), and this server
+	 * cannot announce a change (listChanged is false, subscriptions/listen
+	 * honours nothing), so the hint is the only bound on how long a client
+	 * keeps a stale list. 0, which equals having no hint at all, would make a
+	 * client fetch again for every use; a minute spares the repeats within one
+	 * stretch of work, and a client that follows the hint sees a switch the
+	 * admin flips within a minute.
+	 *
+	 * One hour for the resource lists: they are empty for every caller and can
+	 * only change with a plugin update.
+	 *
+	 * The ab_mcp_cache_ttl_ms filter adjusts the lifetime per method.
+	 */
+	const CACHE_HINTS = array(
+		'server/discover'          => array( 60000, 'private' ),
+		'tools/list'               => array( 60000, 'private' ),
+		'prompts/list'             => array( 60000, 'private' ),
+		'resources/list'           => array( 3600000, 'private' ),
+		'resources/templates/list' => array( 3600000, 'private' ),
+	);
+
+	/**
+	 * Key of the AlphaBridge self-description inside the `_meta` of initialize
+	 * and server/discover.
 	 *
 	 * Reverse-DNS namespaced as MCP requires for vendor extensions, so it can
 	 * never collide with another server's `_meta` entries.
@@ -53,6 +157,41 @@ class AB_MCP_REST_Controller {
 	 */
 	public function __construct( AB_MCP_Tool_Registry $registry ) {
 		$this->registry = $registry;
+	}
+
+	/**
+	 * Whether the modern revision (2026-07-28) is answered. On by default.
+	 *
+	 * Off, the endpoint behaves exactly as before the modern revision existed:
+	 * a request in it is refused with HTTP 400 and a body that is not a
+	 * JSON-RPC error, which is the signal for a client that speaks both
+	 * generations to fall back to initialize. No modern error code is sent
+	 * then. Meant for a client or a proxy in between that trips over the new
+	 * revision.
+	 *
+	 * @return bool
+	 */
+	public static function modern_enabled() {
+		$enabled = (bool) AB_MCP_Settings::get( 'modern_protocol', true );
+
+		/**
+		 * Whether this site answers MCP revision 2026-07-28. The settings
+		 * switch provides the starting value; a filter has the last word.
+		 *
+		 * @param bool $enabled Starting value from the settings screen.
+		 */
+		return (bool) apply_filters( 'ab_mcp_modern_protocol', $enabled );
+	}
+
+	/**
+	 * Every revision this site answers right now, newest last.
+	 *
+	 * @return string[]
+	 */
+	public static function protocol_versions() {
+		return self::modern_enabled()
+			? array_merge( self::LEGACY_PROTOCOL_VERSIONS, self::MODERN_PROTOCOL_VERSIONS )
+			: self::LEGACY_PROTOCOL_VERSIONS;
 	}
 
 	/**
@@ -84,9 +223,98 @@ class AB_MCP_REST_Controller {
 			$handlers
 		);
 
+		// DELETE is answered before WordPress looks for a handler, not by a
+		// handler of its own: WordPress lists every handler of a route in the
+		// Allow header of each response (rest_send_allow_header), so a DELETE
+		// handler would change that header on every answer of this endpoint.
+		add_filter( 'rest_pre_dispatch', array( $this, 'refuse_delete' ), 10, 3 );
+
 		// Apply the no-referrer / no-store headers to EVERY response from these
 		// routes — GET, POST and error responses (e.g. 401) alike.
 		add_filter( 'rest_post_dispatch', array( $this, 'add_security_headers' ), 10, 3 );
+
+		// subscriptions/listen answers with an event stream, which the REST
+		// server would otherwise encode as JSON.
+		add_filter( 'rest_pre_serve_request', array( $this, 'serve_event_stream' ), 10, 3 );
+	}
+
+	/**
+	 * DELETE on this endpoint, while the modern revision is answered: 405.
+	 *
+	 * 2026-07-28 asks a server without sessions to answer DELETE (the old way
+	 * to end a session) with 405; WordPress would say 404 "no route". Off, the
+	 * request passes on to WordPress and gets that 404, as before.
+	 *
+	 * No token is checked: the answer says only that this endpoint takes POST,
+	 * which an unauthenticated POST learns from its 401 as well. The response
+	 * matches no route, so WordPress adds no Allow header of its own and the
+	 * one set here stands.
+	 *
+	 * @param mixed           $result  Response another filter already chose, or null.
+	 * @param WP_REST_Server  $server  Server (unused).
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public function refuse_delete( $result, $server, $request ) {
+		unset( $server );
+		// Like WordPress, which serves whatever is not empty here.
+		if ( ! empty( $result ) || ! is_object( $request ) || 'DELETE' !== strtoupper( (string) $request->get_method() ) ) {
+			return $result;
+		}
+		// The two routes registered above, matched the way WordPress matches
+		// them: the whole path, without regard to case.
+		$base = '/' . AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE;
+		if ( 1 !== preg_match( '@^' . preg_quote( $base, '@' ) . '(?:/[A-Za-z0-9_]+)?$@i', (string) $request->get_route() ) ) {
+			return $result;
+		}
+		if ( ! self::modern_enabled() ) {
+			return $result;
+		}
+		return self::method_not_allowed( 'This MCP endpoint keeps no sessions, so there is none to end. Send JSON-RPC 2.0 requests via HTTP POST.' );
+	}
+
+	/**
+	 * Write an event-stream response of this endpoint as Server-Sent Events.
+	 *
+	 * The REST server has sent status and headers (Content-Type among them)
+	 * before this filter runs; returning true stops it from echoing the data
+	 * as JSON. Every other response passes through untouched.
+	 *
+	 * @param bool             $served  Whether the request has been served already.
+	 * @param WP_REST_Response $result  Response.
+	 * @param WP_REST_Request  $request Request.
+	 * @return bool
+	 */
+	public function serve_event_stream( $served, $result, $request ) {
+		if ( $served || ! is_object( $result ) || ! method_exists( $result, 'get_headers' ) || ! is_object( $request ) ) {
+			return $served;
+		}
+		$route = (string) $request->get_route();
+		if ( 0 !== strpos( $route, '/' . AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE ) ) {
+			return $served;
+		}
+		$headers = (array) $result->get_headers();
+		$type    = isset( $headers['Content-Type'] ) ? (string) $headers['Content-Type'] : '';
+		if ( 0 !== strpos( $type, 'text/event-stream' ) ) {
+			return $served;
+		}
+		echo self::event_stream( (array) $result->get_data() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON-RPC messages encoded by wp_json_encode, sent as text/event-stream.
+		return true;
+	}
+
+	/**
+	 * Messages as Server-Sent Events, one event each. wp_json_encode escapes
+	 * line breaks inside strings, so every message fits on one data line.
+	 *
+	 * @param array $messages JSON-RPC messages in order.
+	 * @return string
+	 */
+	public static function event_stream( array $messages ) {
+		$out = '';
+		foreach ( $messages as $message ) {
+			$out .= "event: message\ndata: " . wp_json_encode( $message ) . "\n\n";
+		}
+		return $out;
 	}
 
 	/**
@@ -186,10 +414,24 @@ class AB_MCP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function handle_get() {
+		return self::method_not_allowed( 'This MCP endpoint does not offer a server-initiated stream. Send JSON-RPC 2.0 requests via HTTP POST.' );
+	}
+
+	/**
+	 * A 405 that names POST as the way in.
+	 *
+	 * For GET, WordPress replaces this Allow header with the methods of the
+	 * route's handlers ("POST, GET"), as it always has; that answer is kept so
+	 * older clients see the same bytes as before.
+	 *
+	 * @param string $message What to do instead.
+	 * @return WP_REST_Response
+	 */
+	private static function method_not_allowed( $message ) {
 		$response = new WP_REST_Response(
 			array(
 				'code'    => 'ab_mcp_method_not_allowed',
-				'message' => 'This MCP endpoint does not offer a server-initiated stream. Send JSON-RPC 2.0 requests via HTTP POST.',
+				'message' => $message,
 			),
 			405
 		);
@@ -204,22 +446,32 @@ class AB_MCP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function handle( $request ) {
+		$body = $request->get_json_params();
+
+		// The generation is a property of the request, not of a session: one
+		// that names its revision in params._meta is modern. Everything below
+		// the branch is the legacy path, unchanged.
+		if ( is_array( $body ) && self::is_modern_message( $body ) && self::modern_enabled() ) {
+			return $this->secure( $this->handle_modern( $request, $body ) );
+		}
+
 		// MCP-Protocol-Version header (sent by Streamable-HTTP clients after
 		// initialize): when present it must be a version this server supports.
+		// A modern revision named here without _meta in the body is refused the
+		// same way, with a body that is not JSON-RPC: that is what tells a
+		// client speaking both generations to fall back to initialize.
 		$proto = (string) $request->get_header( 'mcp_protocol_version' );
-		if ( '' !== $proto && ! in_array( $proto, self::SUPPORTED_PROTOCOL_VERSIONS, true ) ) {
+		if ( '' !== $proto && ! in_array( $proto, self::LEGACY_PROTOCOL_VERSIONS, true ) ) {
 			return $this->secure(
 				new WP_REST_Response(
 					array(
 						'code'    => 'ab_mcp_bad_protocol_version',
-						'message' => 'Unsupported MCP-Protocol-Version. Supported: ' . implode( ', ', self::SUPPORTED_PROTOCOL_VERSIONS ) . '.',
+						'message' => 'Unsupported MCP-Protocol-Version. Supported: ' . implode( ', ', self::LEGACY_PROTOCOL_VERSIONS ) . '.',
 					),
 					400
 				)
 			);
 		}
-
-		$body = $request->get_json_params();
 
 		if ( null === $body || ! is_array( $body ) ) {
 			return $this->secure( new WP_REST_Response( $this->error( null, -32700, 'Parse error' ), 200 ) );
@@ -272,6 +524,310 @@ class AB_MCP_REST_Controller {
 		$response->header( 'Referrer-Policy', 'no-referrer' );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
+	}
+
+	/* ------------------------------------------------- modern revision */
+
+	/**
+	 * Whether a single message is a request of the modern revision: its
+	 * params._meta names a protocol version. initialize always opens a legacy
+	 * session, whatever it carries, as the specification has a dual-era server
+	 * decide by how the client opens.
+	 *
+	 * @param array $message Decoded body.
+	 * @return bool
+	 */
+	private static function is_modern_message( array $message ) {
+		if ( isset( $message['method'] ) && 'initialize' === $message['method'] ) {
+			return false;
+		}
+		return isset( $message['params']['_meta'] ) && is_array( $message['params']['_meta'] )
+			&& array_key_exists( self::META_PROTOCOL_VERSION, $message['params']['_meta'] );
+	}
+
+	/**
+	 * Answer one request of the modern revision.
+	 *
+	 * Order of the checks: shape of the message, the revision in _meta, the
+	 * client capabilities, then the headers against the body. The revision
+	 * comes before the capabilities so that a client of a later revision,
+	 * whose required fields may differ, learns the versions that work instead
+	 * of reading about a missing field.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @param array           $message Decoded single message.
+	 * @return WP_REST_Response
+	 */
+	private function handle_modern( $request, array $message ) {
+		// No id: a notification. 2026-07-28 defines none a client sends over
+		// HTTP; it is accepted without an answer, as before.
+		if ( ! array_key_exists( 'id', $message ) ) {
+			return new WP_REST_Response( null, 202 );
+		}
+
+		$id = $message['id'];
+		if ( ! is_string( $id ) && ! is_int( $id ) ) {
+			return $this->modern_error( null, -32600, 'Invalid Request: id must be a string or an integer.', 400 );
+		}
+		if ( isset( $message['jsonrpc'] ) && '2.0' !== $message['jsonrpc'] ) {
+			return $this->modern_error( $id, -32600, 'Invalid Request: jsonrpc must be "2.0".', 400 );
+		}
+		$method = isset( $message['method'] ) ? $message['method'] : '';
+		if ( ! is_string( $method ) || '' === $method ) {
+			return $this->modern_error( $id, -32600, 'Invalid Request: method is missing.', 400 );
+		}
+
+		$params  = $message['params'];
+		$meta    = $params['_meta'];
+		$version = $meta[ self::META_PROTOCOL_VERSION ];
+		if ( ! is_string( $version ) || '' === $version ) {
+			return $this->modern_error( $id, -32602, 'Invalid params: _meta["' . self::META_PROTOCOL_VERSION . '"] must name a protocol version.', 400 );
+		}
+		if ( ! in_array( $version, self::MODERN_PROTOCOL_VERSIONS, true ) ) {
+			// The full list, legacy revisions included, as in the
+			// specification's own example: a client that also speaks a legacy
+			// revision learns it can open a session with initialize instead.
+			return $this->modern_error(
+				$id,
+				self::ERROR_UNSUPPORTED_VERSION,
+				'Unsupported protocol version: ' . $version . '. Per-request metadata is served for ' . implode( ', ', self::MODERN_PROTOCOL_VERSIONS )
+					. '; ' . implode( ', ', self::LEGACY_PROTOCOL_VERSIONS ) . ' are served after an initialize handshake.',
+				400,
+				array(
+					'supported' => self::protocol_versions(),
+					'requested' => $version,
+				)
+			);
+		}
+		if ( ! isset( $meta[ self::META_CLIENT_CAPABILITIES ] ) || ! is_array( $meta[ self::META_CLIENT_CAPABILITIES ] ) ) {
+			return $this->modern_error( $id, -32602, 'Invalid params: _meta["' . self::META_CLIENT_CAPABILITIES . '"] is required (an object, {} when the client declares none).', 400 );
+		}
+
+		$mismatch = $this->header_mismatch( $request, $method, $params, $version );
+		if ( null !== $mismatch ) {
+			return $this->modern_error( $id, self::ERROR_HEADER_MISMATCH, $mismatch, 400 );
+		}
+
+		if ( 'subscriptions/listen' === $method ) {
+			return $this->listen( $id );
+		}
+
+		if ( in_array( $method, self::SHARED_METHODS, true ) ) {
+			// ping is gone from 2026-07-28. Answering it anyway costs nothing,
+			// and a client that still pings to keep a connection alive would
+			// read a 404 as a lost connection.
+			$envelope = $this->dispatch( $message );
+		} elseif ( 'server/discover' === $method ) {
+			$envelope = $this->result( $id, $this->discover() );
+		} elseif ( 'resources/read' === $method ) {
+			// No resources here, so any URI is unknown. -32602 is the code the
+			// revision assigns to a missing resource (formerly -32002).
+			$uri      = isset( $params['uri'] ) && is_string( $params['uri'] ) ? $params['uri'] : '';
+			$envelope = $this->error( $id, -32602, 'Resource not found: ' . $uri . '. This server offers no resources; its features are tools (tools/list).' );
+		} else {
+			return $this->modern_error( $id, -32601, 'Method not found: ' . $method, 404 );
+		}
+
+		if ( is_array( $envelope ) && array_key_exists( 'result', $envelope ) ) {
+			$envelope['result'] = $this->modern_result( $method, $envelope['result'] );
+		}
+		return new WP_REST_Response( $envelope, 200 );
+	}
+
+	/**
+	 * Complete a result for the modern revision: resultType on every result
+	 * (isError tool results and empty lists included), caching hints where the
+	 * revision requires them, and the server's identity in _meta.
+	 *
+	 * This server never asks the client for input mid-request, so the type is
+	 * always 'complete', never 'input_required'.
+	 *
+	 * @param string $method Method answered.
+	 * @param mixed  $result Legacy result (array, or an empty object for ping).
+	 * @return array
+	 */
+	private function modern_result( $method, $result ) {
+		$result = is_object( $result ) ? get_object_vars( $result ) : (array) $result;
+
+		$result['resultType'] = 'complete';
+
+		if ( array_key_exists( $method, self::CACHE_HINTS ) ) {
+			/**
+			 * Lifetime in milliseconds a client may treat a list or discovery
+			 * result as fresh (the ttlMs caching hint of MCP 2026-07-28).
+			 * Negative values become 0, which means "fetch again every time".
+			 *
+			 * @param int    $ttl    Default lifetime, see CACHE_HINTS.
+			 * @param string $method The method answered.
+			 */
+			$ttl                  = (int) apply_filters( 'ab_mcp_cache_ttl_ms', self::CACHE_HINTS[ $method ][0], $method );
+			$result['ttlMs']      = max( 0, $ttl );
+			$result['cacheScope'] = self::CACHE_HINTS[ $method ][1];
+		}
+
+		$meta                           = isset( $result['_meta'] ) && is_array( $result['_meta'] ) ? $result['_meta'] : array();
+		$meta[ self::META_SERVER_INFO ] = $this->server_info();
+		$result['_meta']                = $meta;
+
+		return $result;
+	}
+
+	/**
+	 * The headers a modern request must carry, checked against the body.
+	 * Every server that reads the body must refuse a mismatch, so that a proxy
+	 * routing by header and this server acting on the body can never disagree
+	 * about what is being called.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @param string          $method  JSON-RPC method from the body.
+	 * @param array           $params  Params from the body.
+	 * @param string          $version Revision from _meta.
+	 * @return string|null What is wrong, or null when everything matches.
+	 */
+	private function header_mismatch( $request, $method, array $params, $version ) {
+		$header = (string) $request->get_header( 'mcp_protocol_version' );
+		if ( '' === $header ) {
+			return 'Header mismatch: the MCP-Protocol-Version header is missing; it must repeat _meta["' . self::META_PROTOCOL_VERSION . '"].';
+		}
+		if ( $header !== $version ) {
+			return 'Header mismatch: the MCP-Protocol-Version header does not match _meta["' . self::META_PROTOCOL_VERSION . '"].';
+		}
+
+		$header = (string) $request->get_header( 'mcp_method' );
+		if ( '' === $header ) {
+			return 'Header mismatch: the Mcp-Method header is missing; it must repeat the JSON-RPC method. A proxy between client and site may have dropped it.';
+		}
+		if ( $header !== $method ) {
+			return 'Header mismatch: the Mcp-Method header does not match the JSON-RPC method.';
+		}
+
+		if ( ! array_key_exists( $method, self::NAMED_METHODS ) ) {
+			return null;
+		}
+		$field  = self::NAMED_METHODS[ $method ];
+		$header = (string) $request->get_header( 'mcp_name' );
+		if ( '' === $header ) {
+			return 'Header mismatch: the Mcp-Name header is missing; for ' . $method . ' it must repeat params.' . $field . '. A proxy between client and site may have dropped it.';
+		}
+		$name = self::decode_header_value( $header );
+		if ( null === $name ) {
+			return 'Header mismatch: the Mcp-Name header holds characters a header may not carry, or a malformed =?base64?…?= value.';
+		}
+		$body = isset( $params[ $field ] ) && is_string( $params[ $field ] ) ? $params[ $field ] : null;
+		if ( null === $body || $name !== $body ) {
+			return 'Header mismatch: the Mcp-Name header does not match params.' . $field . '.';
+		}
+		return null;
+	}
+
+	/**
+	 * A mirrored header value as the client meant it: the Base64 form
+	 * =?base64?…?= decoded, a plain value checked for characters a header may
+	 * carry (visible ASCII, space, tab).
+	 *
+	 * @param string $raw Header value as received.
+	 * @return string|null The value, or null when it is malformed.
+	 */
+	private static function decode_header_value( $raw ) {
+		if ( 1 === preg_match( '/^=\?base64\?(.*)\?=$/s', $raw, $m ) ) {
+			// Base64 is the transport encoding MCP prescribes for header values
+			// outside plain ASCII; decoding it is required before the comparison.
+			$decoded = base64_decode( $m[1], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- MCP header value encoding, not obfuscation.
+			return false === $decoded ? null : $decoded;
+		}
+		if ( 1 === preg_match( '/[^\x20-\x7E\t]/', $raw ) ) {
+			return null;
+		}
+		return $raw;
+	}
+
+	/**
+	 * server/discover: revisions, capabilities and identity in one answer.
+	 *
+	 * supportedVersions names the modern revisions only. A client uses the
+	 * list to choose the revision it then sends in _meta, and a legacy
+	 * revision does not work there; it needs initialize, which the -32022
+	 * answer points out. The site contract rides along in _meta so that a hub
+	 * reading discover learns the same about the site as from initialize.
+	 *
+	 * @return array
+	 */
+	private function discover() {
+		return array(
+			'supportedVersions' => self::MODERN_PROTOCOL_VERSIONS,
+			'capabilities'      => $this->capabilities(),
+			'instructions'      => $this->instructions(),
+			'_meta'             => array(
+				self::SITE_META_KEY => $this->site_meta(),
+			),
+		);
+	}
+
+	/**
+	 * subscriptions/listen in the minimal form the specification allows.
+	 *
+	 * This server announces no changes (listChanged is false everywhere and
+	 * there are no resources), so it acknowledges an empty subscription, which
+	 * says exactly that, and ends it gracefully in the same response. Holding
+	 * the stream open would tie up a PHP worker for notifications that never
+	 * come. Not answering, or answering 404, made clients of one SDK drop the
+	 * whole connection (reported in a support thread for another plugin, not
+	 * checked here).
+	 *
+	 * @param string|int $id Request id, which is also the subscription id.
+	 * @return WP_REST_Response An event stream, written by serve_event_stream().
+	 */
+	private function listen( $id ) {
+		$acknowledged = array(
+			'jsonrpc' => '2.0',
+			'method'  => 'notifications/subscriptions/acknowledged',
+			'params'  => array(
+				'_meta'         => array( self::META_SUBSCRIPTION_ID => $id ),
+				'notifications' => (object) array(),
+			),
+		);
+		$closed       = $this->result(
+			$id,
+			array(
+				'resultType' => 'complete',
+				'_meta'      => array(
+					self::META_SUBSCRIPTION_ID => $id,
+					self::META_SERVER_INFO     => $this->server_info(),
+				),
+			)
+		);
+
+		$response = new WP_REST_Response( array( $acknowledged, $closed ), 200 );
+		$response->header( 'Content-Type', 'text/event-stream' );
+		// Lets the two events through a buffering proxy (nginx) at once.
+		$response->header( 'X-Accel-Buffering', 'no' );
+		return $response;
+	}
+
+	/**
+	 * Name and version of this server, as both generations report it.
+	 *
+	 * @return array{name:string,version:string}
+	 */
+	private function server_info() {
+		return array(
+			'name'    => 'AlphaBridge MCP',
+			'version' => AB_MCP_VERSION,
+		);
+	}
+
+	/**
+	 * A JSON-RPC error of the modern revision with its HTTP status.
+	 *
+	 * @param mixed  $id      Request id, null when it could not be read.
+	 * @param int    $code    Error code.
+	 * @param string $message Message.
+	 * @param int    $status  HTTP status.
+	 * @param mixed  $data    Optional data.
+	 * @return WP_REST_Response
+	 */
+	private function modern_error( $id, $code, $message, $status, $data = null ) {
+		return new WP_REST_Response( $this->error( $id, $code, $message, $data ), $status );
 	}
 
 	/**
@@ -340,16 +896,50 @@ class AB_MCP_REST_Controller {
 	}
 
 	/**
-	 * initialize handshake.
+	 * initialize handshake. Negotiates legacy revisions only and never
+	 * answers with a modern one: a client asking for an unknown revision gets
+	 * the newest legacy one, as before.
 	 *
 	 * @param array $params Params.
 	 * @return array
 	 */
 	private function initialize( $params ) {
 		$requested = isset( $params['protocolVersion'] ) && is_string( $params['protocolVersion'] ) ? $params['protocolVersion'] : '';
-		$supported = self::SUPPORTED_PROTOCOL_VERSIONS;
+		$supported = self::LEGACY_PROTOCOL_VERSIONS;
 		$version   = in_array( $requested, $supported, true ) ? $requested : AB_MCP_PROTOCOL_VERSION;
 
+		return array(
+			'protocolVersion' => $version,
+			'capabilities'    => $this->capabilities(),
+			'serverInfo'      => $this->server_info(),
+			'instructions'    => $this->instructions(),
+			'_meta'           => array(
+				self::SITE_META_KEY => $this->site_meta(),
+			),
+		);
+	}
+
+	/**
+	 * Server capabilities, the same in initialize and server/discover.
+	 *
+	 * @return array
+	 */
+	private function capabilities() {
+		$capabilities = array(
+			'tools' => array( 'listChanged' => false ),
+		);
+		if ( ! empty( $this->prompts() ) ) {
+			$capabilities['prompts'] = array( 'listChanged' => false );
+		}
+		return $capabilities;
+	}
+
+	/**
+	 * Server instructions, the same in initialize and server/discover.
+	 *
+	 * @return string
+	 */
+	private function instructions() {
 		$counts = sprintf( '%d tools available.', $this->registry->count() );
 
 		$instructions = 'Control this WordPress site through AlphaBridge MCP. ' . $counts .
@@ -367,9 +957,9 @@ class AB_MCP_REST_Controller {
 		}
 
 		/**
-		 * Filter the MCP server instructions delivered on initialize. Add-ons
-		 * append edition-specific guidance here, only when their features are
-		 * actually available on this site.
+		 * Filter the MCP server instructions delivered on initialize and on
+		 * server/discover. Add-ons append edition-specific guidance here, only
+		 * when their features are actually available on this site.
 		 *
 		 * Keep additions short and high-signal: this string is loaded into the
 		 * client's context on every session.
@@ -382,29 +972,12 @@ class AB_MCP_REST_Controller {
 			$instructions .= ' READ-ONLY MODE is active: every writing tool is blocked by the administrator right now; only read, list and search tools will run.';
 		}
 
-		$capabilities = array(
-			'tools' => array( 'listChanged' => false ),
-		);
-		if ( ! empty( $this->prompts() ) ) {
-			$capabilities['prompts'] = array( 'listChanged' => false );
-		}
-
-		return array(
-			'protocolVersion' => $version,
-			'capabilities'    => $capabilities,
-			'serverInfo'      => array(
-				'name'    => 'AlphaBridge MCP',
-				'version' => AB_MCP_VERSION,
-			),
-			'instructions'    => $instructions,
-			'_meta'           => array(
-				self::SITE_META_KEY => $this->site_meta(),
-			),
-		);
+		return $instructions;
 	}
 
 	/**
-	 * Self-description carried in the `_meta` field of the initialize result.
+	 * Self-description carried in the `_meta` field of the initialize and the
+	 * server/discover result.
 	 *
 	 * This is the AlphaBridge Site Contract (version 1). A hub that proxies MCP
 	 * to this site reads it to learn which CMS answered, which edition is
@@ -439,12 +1012,19 @@ class AB_MCP_REST_Controller {
 		}
 
 		return array(
-			'contract'       => self::SITE_CONTRACT_VERSION,
-			'cms'            => 'wordpress',
-			'cms_version'    => (string) get_bloginfo( 'version' ),
-			'edition'        => $edition,
-			'plugin_version' => AB_MCP_VERSION,
-			'scope'          => AB_MCP_Auth::current_scope(),
+			'contract'          => self::SITE_CONTRACT_VERSION,
+			'cms'               => 'wordpress',
+			'cms_version'       => (string) get_bloginfo( 'version' ),
+			'edition'           => $edition,
+			'plugin_version'    => AB_MCP_VERSION,
+			'scope'             => AB_MCP_Auth::current_scope(),
+			// Added within contract 1, optional for a reader: every MCP revision
+			// this site answers right now, newest last. A hub decides per site
+			// from it whether to forward a modern request as it is or to
+			// translate it to a legacy revision; a site that does not send the
+			// field counts as legacy-only. The modern revision is listed only
+			// while it is switched on.
+			'protocol_versions' => self::protocol_versions(),
 		);
 	}
 

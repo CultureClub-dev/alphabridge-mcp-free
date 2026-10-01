@@ -190,14 +190,151 @@ final class AdminPageTest extends TestCase {
 		}
 		self::assertSame(
 			array(
-				'ab_mcp_connector_auth'  => 'nonce-ab_mcp_connector_auth',
-				'ab_mcp_oauth_settings'  => 'nonce-ab_mcp_oauth_settings',
-				'ab_mcp_audit_clear'     => 'nonce-ab_mcp_audit_clear',
+				'ab_mcp_connector_auth'    => 'nonce-ab_mcp_connector_auth',
+				'ab_mcp_oauth_settings'    => 'nonce-ab_mcp_oauth_settings',
+				'ab_mcp_protocol_settings' => 'nonce-ab_mcp_protocol_settings',
+				'ab_mcp_audit_clear'       => 'nonce-ab_mcp_audit_clear',
 			),
 			$forms
 		);
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="connector_url_auth_enabled"]' )->length );
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="oauth_enabled"]' )->length );
+		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="modern_protocol"]' )->length );
+	}
+
+	public function testTheProtocolSwitchShowsTheStoredSetting(): void {
+		$checked = function (): bool {
+			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
+			$box = $x->query( '//input[@name="modern_protocol"]' )->item( 0 );
+			self::assertNotNull( $box );
+			return $box->hasAttribute( 'checked' );
+		};
+
+		self::assertTrue( $checked(), 'On by default.' );
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		self::assertFalse( $checked() );
+	}
+
+	/**
+	 * Post a settings form to its handler as an administrator. The form's
+	 * own nonce is added unless the post brings one.
+	 *
+	 * @param array<string,string> $post
+	 * @return string How the request ended: 'redirect', 'die' or 'no exit'.
+	 */
+	private function submit( string $handler, string $action, array $post ): string {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_POST                  = $post + array( '_wpnonce' => 'nonce-' . $action );
+		$_REQUEST               = $_POST;
+		try {
+			( new AB_MCP_Admin() )->$handler();
+		} catch ( \AbTestExit $exit ) {
+			return $exit->kind;
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return 'no exit';
+	}
+
+	public function testSavingTheProtocolSwitchStoresIt(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post );
+
+		self::assertSame( 'redirect', $save( array() ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'An unticked box is not posted: off.' );
+
+		self::assertSame( 'redirect', $save( array( 'modern_protocol' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ) );
+	}
+
+	/**
+	 * @return array<string,array{0:array<string,string>}>
+	 */
+	public static function foreignNonces(): array {
+		return array(
+			'no nonce'                => array( array( '_wpnonce' => '' ) ),
+			'the nonce of another form' => array( array( '_wpnonce' => 'nonce-ab_mcp_oauth_settings' ) ),
+		);
+	}
+
+	/**
+	 * @param array<string,string> $post
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'foreignNonces' )]
+	public function testTheProtocolSwitchIsNotSavedWithoutItsNonce( array $post ): void {
+		self::assertSame( 'die', $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged: a page elsewhere cannot switch the revision off for the admin.' );
+	}
+
+	public function testOnlyAnAdministratorCanSaveTheProtocolSwitch(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		$_POST                  = array();
+
+		try {
+			( new AB_MCP_Admin() )->handle_protocol_settings();
+			self::fail( 'The guard did not stop the request.' );
+		} catch ( \AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged.' );
+	}
+
+	public function testTheMetadataDocumentSwitchShowsTheStoredSetting(): void {
+		$checked = function (): bool {
+			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
+			$box = $x->query( '//form[.//input[@name="action"][@value="ab_mcp_oauth_settings"]]//input[@name="oauth_cimd"]' )->item( 0 );
+			self::assertNotNull( $box, 'In the OAuth form, next to the OAuth switch.' );
+			return $box->hasAttribute( 'checked' );
+		};
+
+		self::assertTrue( $checked(), 'On by default.' );
+		\AB_MCP_Settings::set( 'oauth_cimd', false );
+		self::assertFalse( $checked() );
+	}
+
+	public function testSavingTheOAuthFormStoresBothSwitches(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', $post );
+
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'An unticked box is not posted: off.' );
+		self::assertFalse( \AB_MCP_OAuth::cimd_enabled() );
+
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ) );
+		self::assertTrue( \AB_MCP_OAuth::cimd_enabled() );
+	}
+
+	public function testTheOAuthFormIsNotSavedWithoutItsNonce(): void {
+		self::assertSame( 'die', $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', array( '_wpnonce' => 'nonce-ab_mcp_protocol_settings' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Unchanged.' );
+	}
+
+	public function testTheMetadataDocumentSwitchSaysWhenAFilterDecides(): void {
+		$card = fn(): string => $this->call( 'render_connections_card', array() );
+
+		self::assertStringNotContainsString( 'ab_mcp_oauth_cimd filter', $card() );
+
+		add_filter( 'ab_mcp_oauth_cimd', '__return_false' );
+		self::assertStringContainsString( 'right now apps with a metadata document are not accepted', $card() );
+	}
+
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testTheMetadataDocumentSwitchSaysWhenTheSiteBlocksRequests(): void {
+		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'render_connections_card', array() ) );
+
+		define( 'WP_HTTP_BLOCK_EXTERNAL', true );
+		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'render_connections_card', array() ), 'The note names the way to use it anyway.' );
+	}
+
+	public function testTheProtocolSwitchSaysWhenAFilterDecides(): void {
+		$note = fn(): string => $this->call( 'render_connections_card', array() );
+
+		self::assertStringNotContainsString( 'ab_mcp_modern_protocol filter', $note(), 'Without a filter the switch alone decides.' );
+
+		add_filter( 'ab_mcp_modern_protocol', '__return_false' );
+		self::assertStringContainsString( 'right now the revision is not answered', $note(), 'The admin learns why saving the switch changes nothing.' );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {
