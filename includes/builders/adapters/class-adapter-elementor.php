@@ -448,6 +448,13 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 			if ( in_array( $word, self::DENIED_NAME_WORDS, true ) || 0 === strpos( $word, 'script' ) || 'script' === substr( $word, -6 ) ) {
 				return true;
 			}
+			// B1 asks for "tag" anywhere in a name. As a bare substring that
+			// would also lock visible texts such as "tagline" or "hashtag", so
+			// a word that ends in "tag(s)" ("customtag") or starts with "tag"
+			// ("tagname") is locked; taglines and hashtags stay readable.
+			if ( ( preg_match( '~tags?$~', $word ) && ! preg_match( '~^hashtags?$~', $word ) ) || ( 0 === strpos( $word, 'tag' ) && 0 !== strpos( $word, 'tagline' ) ) ) {
+				return true;
+			}
 		}
 		return AB_MCP_Block_Reader::denied_segment( $name );
 	}

@@ -539,7 +539,7 @@ final class ElementorAdapterTest extends TestCase {
 			'custom_attributes', '_attributes', 'link_attr', 'css_classes', '_css_classes', 'button_css_id', 'custom_css',
 			'custom_js', 'code', 'embed_code', 'html', 'html_tag', 'title_tag', 'selector', '_element_id', 'template_id', 'templateID',
 			// Run together, without a separator.
-			'customcss', 'boxshadowcss', 'headerscript', 'scriptsrc',
+			'customcss', 'boxshadowcss', 'headerscript', 'scriptsrc', 'customtag', 'htmltag', 'tagname', 'tags_list',
 			// Scripts, styling, handlers.
 			'script', 'inline_script', 'javascript', 'style', 'svg_icon', 'onclick', 'onMouseOver', 'shortcode',
 			// Secrets an integration keeps in a text control.
@@ -558,7 +558,7 @@ final class ElementorAdapterTest extends TestCase {
 
 	public static function allowedNames(): array {
 		$out = array();
-		foreach ( array( 'title', 'editor', 'text', 'link', 'image', 'caption', 'title_text', 'description_text', 'description', 'subscription_text', 'icon_list', 'testimonial_content', 'testimonial_job', 'paragraph', 'tagline', 'hashtag', 'percentage_text', 'keyword' ) as $name ) {
+		foreach ( array( 'title', 'editor', 'text', 'link', 'image', 'caption', 'title_text', 'description_text', 'description', 'subscription_text', 'icon_list', 'testimonial_content', 'testimonial_job', 'paragraph', 'tagline', 'hashtag', 'percentage_text', 'keyword', 'stage_title', 'percentage' ) as $name ) {
 			$out[ $name ] = array( $name );
 		}
 		return $out;
