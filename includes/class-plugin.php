@@ -56,7 +56,7 @@ final class AB_MCP_Plugin {
 		AB_MCP_OAuth::boot();
 
 		if ( is_admin() ) {
-			new AB_MCP_Admin();
+			new AB_MCP_Admin( $this->registry );
 		}
 	}
 

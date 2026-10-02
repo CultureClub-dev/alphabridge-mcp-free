@@ -155,10 +155,63 @@
 			a.checked = all > 0 && on === all;
 			a.indeterminate = on > 0 && on < all;
 		}
+		markProfile();
+	}
+
+	// Which profile the switches follow, by the rule of
+	// AB_MCP_Tool_Profiles::current(): the offered profile (a button) that has
+	// every switch as it is (data-profiles on each switch names the profiles
+	// it is on in); none fits: Custom. Offered profiles never share their
+	// switches, so at most one fits.
+	function markProfile() {
+		var box = caps.querySelector( '.ab-profiles' );
+		if ( ! box ) {
+			return;
+		}
+		var tools = caps.querySelectorAll( 'input.ab-tool' );
+		var fits = [];
+		box.querySelectorAll( 'button.ab-profile' ).forEach( function ( b ) {
+			var p = b.getAttribute( 'data-profile' );
+			for ( var i = 0; i < tools.length; i++ ) {
+				var want = ( ' ' + ( tools[ i ].getAttribute( 'data-profiles' ) || '' ) + ' ' ).indexOf( ' ' + p + ' ' ) !== -1;
+				if ( want !== tools[ i ].checked ) {
+					return;
+				}
+			}
+			fits.push( p );
+		} );
+		var cur = fits.length ? fits[ 0 ] : 'custom';
+		box.setAttribute( 'data-current', cur );
+		box.querySelectorAll( '.ab-profile' ).forEach( function ( el ) {
+			var p = el.getAttribute( 'data-profile' );
+			if ( p === cur ) {
+				el.setAttribute( 'aria-current', 'true' );
+			} else {
+				el.removeAttribute( 'aria-current' );
+			}
+			if ( 'custom' === p ) {
+				el.hidden = 'custom' !== cur;
+			}
+		} );
+		labelProfile();
+	}
+
+	// The mark on the profile the switches follow: «In use» for the saved
+	// state, «When saved» while the form holds changes not saved yet.
+	function labelProfile() {
+		var box = caps ? caps.querySelector( '.ab-profiles' ) : null;
+		if ( ! box ) {
+			return;
+		}
+		var text = box.getAttribute( dirty ? 'data-now-unsaved' : 'data-now' ) || '';
+		box.querySelectorAll( '.ab-profile__now' ).forEach( function ( el ) {
+			el.textContent = text;
+		} );
 	}
 
 	function markDirty() {
 		dirty = true;
+		labelProfile();
 		var bar = caps.querySelector( '.ab-savebar' );
 		if ( ! bar || bar.classList.contains( 'is-dirty' ) ) {
 			return;
@@ -237,6 +290,30 @@
 		caps.addEventListener( 'submit', function () {
 			dirty = false;
 		} );
+
+		// A profile replaces every tool switch, saved or not. It asks first
+		// where that loses something: switches that follow no profile
+		// (Custom), saved or not, or a change of read-only mode not yet saved,
+		// which the profile form does not post.
+		var profileForm = document.getElementById( 'ab-profile-form' );
+		if ( profileForm ) {
+			profileForm.addEventListener( 'submit', function ( e ) {
+				var box = caps.querySelector( '.ab-profiles' );
+				var ro = caps.querySelector( 'input[name="read_only"]' );
+				var lost = [];
+				if ( box && 'custom' === box.getAttribute( 'data-current' ) ) {
+					lost.push( box.getAttribute( 'data-confirm-custom' ) || '' );
+				}
+				if ( box && ro && ro.checked !== ro.defaultChecked ) {
+					lost.push( box.getAttribute( 'data-confirm-read-only' ) || '' );
+				}
+				if ( lost.length && ! window.confirm( lost.join( '\n\n' ) + '\n\n' + ( box.getAttribute( 'data-confirm-ask' ) || '' ) ) ) {
+					e.preventDefault();
+					return;
+				}
+				dirty = false;
+			} );
+		}
 
 		var search = caps.querySelector( '.ab-search' );
 		if ( search ) {

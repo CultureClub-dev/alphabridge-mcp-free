@@ -57,6 +57,13 @@ Handing an AI access to a site should feel safe, so control comes first:
   one click.
 - **Tool groups you can switch off** entirely; disabled tools vanish from the MCP surface.
   Plus a global read-only mode.
+- **Profiles** set all tool switches in one click: *Simple*, how the plugin ships (read the
+  site, edit content, every tool marked Mighty off); *Expert*, every tool on; and, where an add-on
+  or the site marks Mighty groups Advanced, *Advanced*, which adds just those (this plugin marks
+  none of its own). Single groups and tools stay switchable; the page then shows *Custom*. A
+  profile changes only the tool switches, never connections or read-only mode. Choosing a profile
+  replaces every tool switch; until you choose one, switches set before stay as they are. Code
+  that registers a group can mark its level, or use the `ab_mcp_group_levels` filter.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed.
 - **Layered meta protection** — protected keys, `is_protected_meta()` keys and two kinds of
