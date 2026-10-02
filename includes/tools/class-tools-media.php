@@ -194,7 +194,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this attachment. Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this attachment. Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'id'       => $id,
@@ -426,7 +426,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this attachment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this attachment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$update = array( 'ID' => $id );
 		if ( array_key_exists( 'title', $a ) ) {
@@ -470,7 +470,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'delete_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// wp_delete_attachment() also says false for an id that is not a file
 		// (a post or a page), which the check above lets through.

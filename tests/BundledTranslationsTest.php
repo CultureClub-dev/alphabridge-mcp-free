@@ -79,6 +79,11 @@ final class BundledTranslationsTest extends TestCase {
 		'Write access on since %s · set by code, not confirmed on this page · every connection keeps its access level',
 		'%1$s of %2$s tools can run with write access off',
 		'Fine-tuning',
+		'Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off.',
+		'If the account "%s" should be allowed to do this, an administrator can give it a role that allows it under Users.',
+		"date and time format\x04Y-m-d H:i",
+		"%s connection\0%s connections",
+		"%s ability off\0%s abilities off",
 	);
 
 	protected function setUp(): void {
@@ -111,7 +116,8 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/**
-	 * Entries of a .po file, keyed like mo().
+	 * Entries of a .po file, keyed like mo(): a text with a plural form as
+	 * «singular\0plural» => «form 0\0form 1».
 	 *
 	 * @return array<string,string>
 	 */
@@ -120,7 +126,14 @@ final class BundledTranslationsTest extends TestCase {
 		$unq     = static fn( string $s ): string => stripcslashes( substr( $s, 1, -1 ) );
 		foreach ( preg_split( '/\n\s*\n/', (string) file_get_contents( $path ) ) as $block ) {
 			$ctx = preg_match( '/^msgctxt (".*")$/m', $block, $m ) ? $unq( $m[1] ) . "\x04" : '';
-			if ( ! preg_match( '/^msgid (".*")$/m', $block, $id ) || ! preg_match( '/^msgstr (".*")$/m', $block, $str ) ) {
+			if ( ! preg_match( '/^msgid (".*")$/m', $block, $id ) ) {
+				continue;
+			}
+			if ( preg_match( '/^msgid_plural (".*")$/m', $block, $pl ) && preg_match( '/^msgstr\[0\] (".*")$/m', $block, $s0 ) && preg_match( '/^msgstr\[1\] (".*")$/m', $block, $s1 ) ) {
+				$entries[ $ctx . $unq( $id[1] ) . "\0" . $unq( $pl[1] ) ] = $unq( $s0[1] ) . "\0" . $unq( $s1[1] );
+				continue;
+			}
+			if ( ! preg_match( '/^msgstr (".*")$/m', $block, $str ) ) {
 				continue;
 			}
 			$key = $ctx . $unq( $id[1] );
@@ -177,7 +190,9 @@ final class BundledTranslationsTest extends TestCase {
 		$literals = self::literals();
 		foreach ( array_keys( self::mo( self::file( $locale, 'mo' ) ) ) as $key ) {
 			$text = false !== strpos( $key, "\x04" ) ? substr( $key, strpos( $key, "\x04" ) + 1 ) : $key;
-			self::assertArrayHasKey( $text, $literals, 'Not in the code (changed or removed?): ' . $text );
+			foreach ( explode( "\0", $text ) as $form ) {
+				self::assertArrayHasKey( $form, $literals, 'Not in the code (changed or removed?): ' . $form );
+			}
 		}
 	}
 
@@ -253,6 +268,47 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertSame( 'Datenbank & Betrieb', $mo["main group of tools\x04Database & operations"] );
 		self::assertSame( 'Änderungen speichern', $mo['Save changes'] );
 		self::assertSame( 'Feineinstellung', $mo['Fine-tuning'] );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testEveryShortNameOfAToolIsTranslated( string $locale ): void {
+		$mo    = self::mo( self::file( $locale, 'mo' ) );
+		$names = \AB_MCP_Tool_Labels::all();
+		self::assertCount( 143, $names, 'Every tool of the core, of Pro and of its Agency plan.' );
+		foreach ( $names as $tool => $label ) {
+			self::assertArrayHasKey( "tool label\x04" . $label, $mo, $locale . ': ' . $tool );
+			self::assertNotSame( '', $mo[ "tool label\x04" . $label ] );
+		}
+		$ss = 0 === strpos( $locale, 'de_CH' );
+		// The names of the approved draft of the fine-tuning.
+		self::assertSame( 'Snippets auflisten', $mo["tool label\x04List snippets"] );
+		self::assertSame( 'Ein Snippet lesen', $mo["tool label\x04Read a snippet"] );
+		self::assertSame( 'Snippet anlegen oder ändern', $mo["tool label\x04Create or change a snippet"] );
+		self::assertSame( 'Snippet ein- oder ausschalten', $mo["tool label\x04Switch a snippet on or off"] );
+		self::assertSame( 'Snippet löschen', $mo["tool label\x04Delete a snippet"] );
+		self::assertSame( 'Fähigkeiten auflisten', $mo["tool label\x04List abilities"] );
+		self::assertSame( 'Eine Fähigkeit ausführen', $mo["tool label\x04Run an ability"] );
+		self::assertSame( $ss ? 'Grossen Upload beginnen' : 'Großen Upload beginnen', $mo["tool label\x04Start a large upload"] );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testTheRefusalsForTheRoleReadInOneLanguage( string $locale ): void {
+		// A refusal of a tool for the account's role is the tool's sentences,
+		// the steps, the link and the handover: on a German site all German.
+		$mo      = self::mo( self::file( $locale, 'mo' ) );
+		$sources = '';
+		foreach ( array_merge( glob( dirname( __DIR__ ) . '/includes/*.php' ), glob( dirname( __DIR__ ) . '/includes/*/*.php' ) ) as $file ) {
+			$sources .= (string) file_get_contents( $file );
+		}
+		preg_match_all( "/role_refusal\\(\\s*__\\(\\s*'((?:[^'\\\\]|\\\\.)*)'/", $sources, $m );
+		preg_match_all( "/(?:\\?|:) __\\( '(You cannot publish[^']*)'/", $sources, $publish );
+		$texts = array_unique( array_merge( array_map( 'stripcslashes', $m[1] ), $publish[1] ) );
+		self::assertGreaterThan( 20, count( $texts ), 'The scan finds them.' );
+		foreach ( $texts as $text ) {
+			self::assertArrayHasKey( $text, $mo, $locale . ': ' . $text );
+		}
+		self::assertArrayHasKey( \AB_MCP_Guidance::handover(), $mo );
+		self::assertArrayHasKey( 'Direct link: %s', $mo );
 	}
 
 	public function testTheTextsInTheCodeAreTheOnesTranslated(): void {

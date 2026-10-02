@@ -1379,6 +1379,19 @@
 	white-space: nowrap;
 }
 
+.ab-mcp .ab-status__more {
+	display: block;
+	font-weight: 500;
+}
+
+.ab-mcp .ab-status__more[hidden] {
+	display: none;
+}
+
+.ab-mcp .ab-capbar__more::before {
+	content: " · ";
+}
+
 .ab-mcp .ab-group__state[data-state="partial"] {
 	color: #8a5300;
 }
@@ -1429,13 +1442,17 @@
 	gap: 12px;
 	align-items: center;
 	min-height: 44px;
-	padding: 0 12px;
+	padding: 6px 12px;
 }
 
+/* Name, badges and chevron on one line; where the list is narrow the
+ * badges go below the name and the chevron stays beside it (container
+ * query below), so the name never gets squeezed. */
 .ab-mcp .ab-sub__toggle {
-	display: flex;
+	display: grid;
 	flex: 1;
-	flex-wrap: wrap;
+	grid-template-areas: "name badges chev";
+	grid-template-columns: minmax(0, 1fr) auto auto;
 	gap: 6px 12px;
 	align-items: center;
 	min-width: 0;
@@ -1451,9 +1468,25 @@
 }
 
 .ab-mcp .ab-sub__name {
-	flex: 1;
+	grid-area: name;
 	font-size: 15px;
 	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.ab-mcp .ab-sub__toggle > .ab-sub__badges {
+	grid-area: badges;
+}
+
+.ab-mcp .ab-sub__toggle > .ab-chev {
+	grid-area: chev;
+}
+
+@container abfine (max-width: 480px) {
+	.ab-mcp .ab-sub__toggle {
+		grid-template-areas: "name chev" "badges badges";
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
 }
 
 .ab-mcp .ab-sub__badges .ab-pill {
@@ -1471,9 +1504,11 @@
 	list-style: none;
 }
 
-/* One tool: switch, name, what it does, note, badge, on one line where the
- * list is wide; where it is not, what the tool does goes on a line of its
- * own (container queries below). */
+/* One tool: switch, name, short name, note, badge, on one line down to a
+ * list of 600 px (the fine-tuning of a desktop is about 800 px wide); below
+ * that the short name goes on a line of its own, and below 480 px the name
+ * in code takes the whole first line, so it is not broken, with the badge
+ * and the note on a line under the short name (container queries below). */
 .ab-mcp .ab-groups {
 	container-name: abfine;
 	container-type: inline-size;
@@ -1512,7 +1547,7 @@
 	justify-self: end;
 }
 
-@container abfine (max-width: 900px) {
+@container abfine (max-width: 600px) {
 	.ab-mcp .ab-tool-row {
 		grid-template-areas: "sw code note badge" ". what what what";
 		grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -1523,12 +1558,14 @@
 	}
 }
 
-@container abfine (max-width: 560px) {
+@container abfine (max-width: 480px) {
 	.ab-mcp .ab-tool-row {
-		grid-template-areas: "sw code badge" ". note note" ". what what";
-		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-areas: "sw code code" ". what what" ". badge note";
+		grid-template-columns: auto auto minmax(0, 1fr);
 	}
 
+	.ab-mcp .ab-tool-row > code,
+	.ab-mcp .ab-tool-row > .ab-pill,
 	.ab-mcp .ab-tool-row > .ab-tool-row__note {
 		justify-self: start;
 	}
@@ -1612,6 +1649,7 @@
 .ab-mcp .ab-info {
 	position: relative;
 	display: inline-flex;
+	flex: none;
 	align-items: center;
 	justify-content: center;
 	width: 18px;
@@ -1630,13 +1668,25 @@
 	vertical-align: 1px;
 }
 
+/* The «i» is drawn 18 px wide; it takes taps and clicks on 24 by 24 px
+ * (WCAG 2.5.8) without moving anything around it. */
+.ab-mcp .ab-info::before {
+	content: "";
+	position: absolute;
+	inset: -4px;
+}
+
+/* The description behind the «i». Not drawn at all until the «i» is hovered
+ * or has the focus: a hidden box that kept its place made the page wider
+ * than a phone (the text is still read out through aria-describedby). */
 .ab-mcp .ab-tip {
 	position: absolute;
 	bottom: calc(100% + 8px);
 	left: 50%;
 	z-index: 20;
+	display: none;
 	width: 320px;
-	max-width: 70vw;
+	max-width: calc(100vw - 32px);
 	padding: 10px 12px;
 	border-radius: 10px;
 	background: #0b0f19;
@@ -1646,18 +1696,27 @@
 	font-weight: 400;
 	line-height: 1.5;
 	text-align: left;
-	opacity: 0;
-	pointer-events: none;
-	transform: translate(-50%, 4px);
-	transition: opacity .12s ease, transform .12s ease;
-	visibility: hidden;
+	white-space: normal;
+	transform: translateX(-50%);
 }
 
 .ab-mcp .ab-info:hover .ab-tip,
 .ab-mcp .ab-info:focus .ab-tip {
-	opacity: 1;
-	transform: translate(-50%, 0);
-	visibility: visible;
+	display: block;
+}
+
+/* On a narrow screen the description stands at the bottom of the window,
+ * the full width less the margins, wherever the «i» is. */
+@media (max-width: 600px) {
+	.ab-mcp .ab-tip {
+		position: fixed;
+		right: 16px;
+		bottom: 16px;
+		left: 16px;
+		width: auto;
+		max-width: none;
+		transform: none;
+	}
 }
 
 /* The save row: one button for tools and abilities. Sticky at the bottom
@@ -1798,7 +1857,11 @@
 
 /* ---------- Tables ---------- */
 
+/* The scroller is the frame of what it holds, so a cell's hidden text
+ * (the screen-reader heading «Actions») stays inside it and does not widen
+ * the page on a phone. */
 .ab-mcp .ab-table-wrap {
+	position: relative;
 	overflow-x: auto;
 }
 

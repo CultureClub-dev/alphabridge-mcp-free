@@ -298,10 +298,7 @@ abstract class AB_MCP_Tools_Base {
 	 */
 	protected static function raw_content_error( $post ) {
 		if ( 'revision' === $post->post_type ) {
-			return new WP_Error(
-				'ab_mcp_forbidden',
-				__( 'Revisions are available only to an account that may edit the post. Connect with such an account, such as an editor or an administrator.', 'alphabridge-mcp' )
-			);
+			return AB_MCP_Guidance::role_refusal( __( 'Revisions are available only to an account that may edit the post. Connect with such an account, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		return new WP_Error(
 			'ab_mcp_password_protected',

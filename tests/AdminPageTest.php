@@ -294,11 +294,11 @@ final class AdminPageTest extends TestCase {
 		self::assertSame( 1, $x->query( '//div[@data-main="system"]//ul[contains(@class, "ab-tool-list--direct")]//input[@value="wp_db_query"]' )->length );
 	}
 
-	public function testEachToolShowsItsFirstSentenceAndTheRestBehindTheInfo(): void {
+	public function testEachToolShowsItsShortNameAndTheDescriptionBehindTheInfo(): void {
 		$x = $this->caps();
 
 		$row = $x->query( '//li[.//input[@value="wp_list_posts"]]' )->item( 0 );
-		self::assertSame( 'List posts.', trim( $x->query( './/*[contains(@class, "ab-tool-row__label")]', $row )->item( 0 )->textContent ) );
+		self::assertSame( 'List posts and pages', trim( $x->query( './/*[contains(@class, "ab-tool-row__label")]', $row )->item( 0 )->textContent ), 'The short name, not the description for the assistant.' );
 		self::assertSame( 'wp_list_posts', trim( $x->query( './/code', $row )->item( 0 )->textContent ) );
 		self::assertSame( 'List posts. With filters and paging.', trim( $x->query( './/*[contains(@class, "ab-tip")]', $row )->item( 0 )->textContent ) );
 
@@ -307,7 +307,60 @@ final class AdminPageTest extends TestCase {
 		self::assertSame( 1, $x->query( '//*[@id="ab-tip-wp_list_posts"]' )->length );
 
 		$one = $x->query( '//li[.//input[@value="wp_seo_get"]]' )->item( 0 );
-		self::assertSame( 0, $x->query( './/*[contains(@class, "ab-info")]', $one )->length, 'One sentence needs no «i».' );
+		self::assertSame( 'Read SEO title and description', trim( $x->query( './/*[contains(@class, "ab-tool-row__label")]', $one )->item( 0 )->textContent ) );
+		self::assertSame( 'Read the SEO fields of a post.', trim( $x->query( './/*[contains(@class, "ab-tip")]', $one )->item( 0 )->textContent ), 'A one-sentence description behind the «i» too.' );
+	}
+
+	public function testAToolWithoutAShortNameShowsItsFirstSentence(): void {
+		$r = $this->registry();
+		$r->set_current_group( 'acme', 'Acme' );
+		$r->register( 'acme_sync', array( 'description' => 'Sync the catalogue. Runs for minutes.' ) );
+		$r->register( 'acme_ping', array( 'description' => 'Ping the shop.' ) );
+		$r->register( 'acme_named', array( 'description' => 'Something long for the assistant. More.' ) );
+		add_filter( 'ab_mcp_tool_label', static fn( string $label, string $name ): string => 'acme_named' === $name ? 'Named by its add-on' : $label, 10, 2 );
+		$x = $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );
+
+		$label = static fn( string $tool ): string => trim( $x->query( '//li[.//input[@value="' . $tool . '"]]//*[contains(@class, "ab-tool-row__label")]' )->item( 0 )->textContent );
+		self::assertSame( 'Sync the catalogue.', $label( 'acme_sync' ) );
+		self::assertSame( 1, $x->query( '//li[.//input[@value="acme_sync"]]//*[contains(@class, "ab-info")]' )->length );
+		self::assertSame( 'Ping the shop.', $label( 'acme_ping' ) );
+		self::assertSame( 0, $x->query( '//li[.//input[@value="acme_ping"]]//*[contains(@class, "ab-info")]' )->length, 'Nothing more to say: no «i».' );
+		self::assertSame( 'Named by its add-on', $label( 'acme_named' ) );
+	}
+
+	public function testTheSearchFindsAToolByItsShortNameAndItsGroups(): void {
+		$x      = $this->caps();
+		$search = $x->query( '//li[.//input[@value="wp_seo_get"]]' )->item( 0 )->getAttribute( 'data-search' );
+
+		foreach ( array( 'wp_seo_get', 'read seo title and description', 'read the seo fields of a post.', 'seo', 'content' ) as $word ) {
+			self::assertStringContainsString( $word, $search, 'Found by: ' . $word );
+		}
+		self::assertStringContainsString( 'posts and pages', $x->query( '//li[.//input[@value="wp_delete_post"]]' )->item( 0 )->getAttribute( 'data-search' ), 'By the name of its tool group.' );
+	}
+
+	public function testEveryToolOfThisPluginHasAShortName(): void {
+		foreach ( glob( dirname( __DIR__ ) . '/includes/tools/class-tools-*.php' ) as $file ) {
+			require_once $file;
+		}
+		$r = new AB_MCP_Tool_Registry();
+		foreach ( get_declared_classes() as $class ) {
+			if ( 0 === strpos( $class, 'AB_MCP_Tools_' ) && ! ( new \ReflectionClass( $class ) )->isAbstract() && method_exists( $class, 'register' ) ) {
+				$class::register( $r );
+			}
+		}
+		$missing = array();
+		foreach ( array_keys( $r->all() ) as $name ) {
+			if ( '' === \AB_MCP_Tool_Labels::get( $name ) ) {
+				$missing[] = $name;
+			}
+		}
+		self::assertGreaterThan( 35, count( $r->all() ) );
+		self::assertSame( array(), $missing );
+		$all = \AB_MCP_Tool_Labels::all();
+		self::assertSame( count( $all ), count( array_unique( $all ) ), 'No two tools share a name.' );
+		foreach ( $all as $name => $label ) {
+			self::assertLessThanOrEqual( 40, strlen( $label ), $name . ': short enough for one line.' );
+		}
 	}
 
 	public function testTheMainColumnKeepsItsOrder(): void {
@@ -922,5 +975,39 @@ final class AdminPageTest extends TestCase {
 		self::assertStringNotContainsString( 'ab-pro', $html );
 		self::assertStringContainsString( 'id="addon-side"', $html );
 		self::assertStringContainsString( 'ab-guides', $html );
+	}
+
+	/** The rule of one selector in admin.css, as written there. */
+	private static function css_rule( string $selector ): string {
+		$css = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.css' );
+		self::assertSame( 1, preg_match( '/^' . preg_quote( $selector, '/' ) . ' \{([^}]*)\}/m', $css, $m ), $selector );
+		return $m[1];
+	}
+
+	public function testNothingHiddenMakesThePageWiderThanAPhone(): void {
+		// A hidden description that kept its place (visibility: hidden) made
+		// the page 521 px wide at 390 px; one not drawn takes no place.
+		$tip = self::css_rule( '.ab-mcp .ab-tip' );
+		self::assertStringContainsString( 'display: none;', $tip );
+		self::assertStringNotContainsString( 'visibility', $tip );
+		self::assertStringContainsString( 'max-width: calc(100vw - 32px);', $tip );
+		self::assertStringContainsString( 'display: block;', self::css_rule( '.ab-mcp .ab-info:hover .ab-tip,' . "\n" . '.ab-mcp .ab-info:focus .ab-tip' ) );
+		// The hidden heading of the connections' last column stays inside its scroller.
+		self::assertStringContainsString( 'position: relative;', self::css_rule( '.ab-mcp .ab-table-wrap' ) );
+	}
+
+	public function testTheInfoStaysACircleWithATargetOf24Pixels(): void {
+		self::assertStringContainsString( 'flex: none;', self::css_rule( '.ab-mcp .ab-info' ) );
+		self::assertStringContainsString( 'inset: -4px;', self::css_rule( '.ab-mcp .ab-info::before' ), '18 px drawn, 24 px to hit.' );
+	}
+
+	public function testAToolStaysOnOneLineOnADesktop(): void {
+		// The fine-tuning of a 1440 px window is about 800 px wide.
+		$css = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.css' );
+		self::assertStringContainsString( '@container abfine (max-width: 600px) {', $css );
+		self::assertSame( 0, preg_match( '/@container abfine \(max-width: (\d+)px\)/', str_replace( array( '(max-width: 600px)', '(max-width: 480px)' ), '', $css ) ), 'No other width breaks the line.' );
+		self::assertStringContainsString( 'grid-template-areas: "name badges chev";', self::css_rule( '.ab-mcp .ab-sub__toggle' ), 'A tool group: name, badges and chevron on one line.' );
+		self::assertStringContainsString( 'grid-template-areas: "name chev" "badges badges";', $css, 'Narrow: the badges below the name, which is never squeezed.' );
+		self::assertStringContainsString( 'padding: 6px 12px;', self::css_rule( '.ab-mcp .ab-sub__head' ) );
 	}
 }

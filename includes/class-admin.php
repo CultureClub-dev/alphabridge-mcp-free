@@ -174,7 +174,8 @@ class AB_MCP_Admin {
 	 * administrator did not have on the screen. Off needs no box; it only
 	 * takes away. Switching on switches every tool on
 	 * (AB_MCP_Site_Mode::switch_to_full()); the connections and their access
-	 * levels stay as they are.
+	 * levels stay as they are. A form to switch on that arrives while write
+	 * access is already on (an old tab, a second click) changes nothing.
 	 */
 	public function handle_site_mode() {
 		$this->guard();
@@ -187,6 +188,9 @@ class AB_MCP_Admin {
 		}
 		if ( AB_MCP_Site_Mode::FULL !== $mode ) {
 			$this->redirect( 'mode_unknown' );
+		}
+		if ( AB_MCP_Site_Mode::is_full() ) {
+			$this->redirect( 'mode_already_full' );
 		}
 		$version = isset( $_POST['notice_version'] ) ? sanitize_text_field( wp_unslash( $_POST['notice_version'] ) ) : '';
 		$hash    = isset( $_POST['notice_hash'] ) ? sanitize_text_field( wp_unslash( $_POST['notice_hash'] ) ) : '';
@@ -1284,6 +1288,8 @@ class AB_MCP_Admin {
 	 *                            add-on's item (the default; moved by the
 	 *                            switches for its group and for all).
 	 *     @type string $id       Id of the row, '' for none.
+	 *     @type string $search   More words the search finds the row by, such
+	 *                            as the names of its groups; '' for none.
 	 * }
 	 * @return string HTML, escaped.
 	 */
@@ -1301,6 +1307,7 @@ class AB_MCP_Admin {
 				'note'     => '',
 				'class'    => 'ab-item',
 				'id'       => '',
+				'search'   => '',
 			)
 		);
 		$value    = (string) $a['value'];
@@ -1309,7 +1316,7 @@ class AB_MCP_Admin {
 		$describe = (string) $a['describe'];
 		$kind     = $a['reads'] ? _x( 'Reads', 'tool badge', 'alphabridge-mcp' ) : _x( 'Writes', 'tool badge', 'alphabridge-mcp' );
 		$note     = self::tool_note( (string) $a['note'] );
-		$search   = $code . ' ' . $label . ' ' . $describe . ' ' . $kind . ( '' !== $note ? ' ' . wp_strip_all_tags( $note ) : '' );
+		$search   = $code . ' ' . $label . ' ' . $describe . ' ' . $kind . ( '' !== $note ? ' ' . wp_strip_all_tags( $note ) : '' ) . ( '' !== (string) $a['search'] ? ' ' . (string) $a['search'] : '' );
 		$class    = 'ab-tool' === $a['class'] ? 'ab-tool' : 'ab-item';
 		$tip      = 'ab-tip-' . preg_replace( '/[^A-Za-z0-9_-]+/', '-', $code );
 
@@ -1376,30 +1383,40 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * One tool: its row (fine_row_html()) with the first sentence of its
-	 * description as the label, the whole description behind the «i», and
-	 * «only with write access» for a reader that waits for write access.
+	 * One tool: its row (fine_row_html()) with its short name in the admin's
+	 * language as the label (AB_MCP_Tool_Labels), the description, which is
+	 * written for the assistant, behind the «i», and «only with write access»
+	 * for a reader that waits for write access. A tool without a short name
+	 * shows the first sentence of its description. The search finds a tool by
+	 * its name in code, its short name, its description and the names of its
+	 * groups.
 	 *
 	 * @param string $tname   Tool name.
 	 * @param array  $def     Tool definition.
 	 * @param bool   $enabled Whether it is switched on.
+	 * @param string $groups  The names of its tool group and main group, for the search.
 	 * @return string HTML, escaped.
 	 */
-	private function tool_row_html( $tname, array $def, $enabled ) {
+	private function tool_row_html( $tname, array $def, $enabled, $groups = '' ) {
 		$reads = AB_MCP_Tool_Registry::is_read_only( (string) $tname, $def );
 		$desc  = trim( wp_strip_all_tags( (string) ( $def['description'] ?? '' ) ) );
-		$parts = preg_split( '/(?<=[.!?])\s+/', $desc, 2 );
+		$label = class_exists( 'AB_MCP_Tool_Labels' ) ? AB_MCP_Tool_Labels::get( (string) $tname ) : '';
+		if ( '' === $label ) {
+			$parts = preg_split( '/(?<=[.!?])\s+/', $desc, 2 );
+			$label = is_array( $parts ) ? (string) $parts[0] : $desc;
+		}
 		return self::fine_row_html(
 			array(
 				'name'     => 'enabled_tools[]',
 				'value'    => (string) $tname,
 				'checked'  => (bool) $enabled,
-				'label'    => is_array( $parts ) ? (string) $parts[0] : $desc,
-				'describe' => is_array( $parts ) && count( $parts ) > 1 ? $desc : '',
+				'label'    => $label,
+				'describe' => $desc !== $label ? $desc : '',
 				'reads'    => $reads,
 				'note'     => $reads && ! AB_MCP_Site_Mode::runs_in_read( (string) $tname, $def ) ? 'full_only' : '',
 				'class'    => 'ab-tool',
 				'id'       => 'ab-tool-' . (string) $tname,
+				'search'   => (string) $groups,
 			)
 		);
 	}
@@ -1445,7 +1462,7 @@ class AB_MCP_Admin {
 					$def     = isset( $all[ $tname ] ) ? (array) $all[ $tname ] : array();
 					$enabled = AB_MCP_Settings::is_tool_enabled( $tname, $def );
 					$on     += $enabled ? 1 : 0;
-					$items  .= $this->tool_row_html( (string) $tname, $def, $enabled );
+					$items  .= $this->tool_row_html( (string) $tname, $def, $enabled, $g['label'] . ' ' . $m['label'] );
 				}
 				if ( $many ) {
 					$body .= self::fine_sub_html(
@@ -1518,7 +1535,7 @@ class AB_MCP_Admin {
 		$html .= '<input type="search" class="ab-search" placeholder="' . esc_attr__( 'Find a tool…', 'alphabridge-mcp' ) . '" aria-label="' . esc_attr__( 'Find a tool', 'alphabridge-mcp' ) . '">';
 		$html .= '<span class="ab-capbar__badges">' . self::count_badges( $reads, $writes ) . '</span>';
 		/* translators: 1: tools switched on, 2: all tools. */
-		$html .= '<span class="ab-capbar__count">' . sprintf( esc_html__( '%1$s of %2$s on', 'alphabridge-mcp' ), '<b class="ab-on-count">' . (int) $on_total . '</b>', '<b>' . (int) $total . '</b>' ) . '</span>';
+		$html .= '<span class="ab-capbar__count">' . sprintf( esc_html__( '%1$s of %2$s on', 'alphabridge-mcp' ), '<b class="ab-on-count">' . (int) $on_total . '</b>', '<b>' . (int) $total . '</b>' ) . '<span class="ab-capbar__more" hidden></span></span>';
 		$html .= '</div>';
 		$html .= '<div class="ab-groups">' . $rows . '</div>';
 		$html .= '<p class="ab-note ab-caps__none" hidden>' . esc_html__( 'No tool matches.', 'alphabridge-mcp' ) . '</p>';
@@ -1533,7 +1550,9 @@ class AB_MCP_Admin {
 
 	/**
 	 * How many tools of a main group are on, in plain text: «x of y on».
-	 * admin.js keeps it current while switches change (same words).
+	 * admin.js keeps it current while switches change (same words), and
+	 * fills the line under it with the items of an add-on in the group that
+	 * are off («1 ability off»): the switch of the group moves them too.
 	 *
 	 * @param int $on    Tools switched on.
 	 * @param int $total Tools in the group.
@@ -1542,7 +1561,7 @@ class AB_MCP_Admin {
 	private function group_status( $on, $total ) {
 		$state = $on <= 0 ? 'off' : ( $on >= $total ? 'on' : 'partial' );
 		/* translators: 1: tools switched on, 2: all tools. */
-		return '<span class="ab-group__state ab-status" data-state="' . $state . '">' . esc_html( sprintf( __( '%1$s of %2$s on', 'alphabridge-mcp' ), (int) $on, (int) $total ) ) . '</span>';
+		return '<span class="ab-group__state ab-status" data-state="' . $state . '"><span class="ab-status__count">' . esc_html( sprintf( __( '%1$s of %2$s on', 'alphabridge-mcp' ), (int) $on, (int) $total ) ) . '</span><span class="ab-status__more" hidden></span></span>';
 	}
 
 	/**
@@ -1904,6 +1923,10 @@ class AB_MCP_Admin {
 				'failed'     => __( 'Something went wrong. Please reload and try again.', 'alphabridge-mcp' ),
 				/* translators: 1: tools switched on, 2: all tools. */
 				'partial'    => __( '%1$s of %2$s on', 'alphabridge-mcp' ),
+				/* translators: %s: number of abilities of other plugins switched off under Fine-tuning. */
+				'itemOff'    => _n( '%s ability off', '%s abilities off', 1, 'alphabridge-mcp' ),
+				/* translators: %s: number of abilities of other plugins switched off under Fine-tuning. */
+				'itemsOff'   => _n( '%s ability off', '%s abilities off', 2, 'alphabridge-mcp' ),
 			)
 		);
 	}
@@ -1918,9 +1941,11 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * A stored UTC timestamp as the site's date and time, in digits only
-	 * («2026-09-27 12:52»). Digits read the same in every language, so the
-	 * text needs no translation, and the form matches the log's time column.
+	 * A stored UTC timestamp as the site's date and time, in the form of the
+	 * admin's language: «2026-09-27 12:52» in English, «27.09.2026, 12:52»
+	 * in German. The same format as the line under the switch for write
+	 * access (AB_MCP_Site_Mode::full_since_text()), so every date of the
+	 * settings page reads alike; the log keeps its own column with seconds.
 	 * Minutes, not seconds: AB_MCP_Settings::touch_token() writes last_used at
 	 * most every five minutes.
 	 *
@@ -1928,7 +1953,8 @@ class AB_MCP_Admin {
 	 * @return string Unescaped text.
 	 */
 	private static function site_datetime( $ts ) {
-		$text = wp_date( 'Y-m-d H:i', (int) $ts );
+		/* translators: date and time format for PHP date(), as on the settings page; see https://www.php.net/manual/datetime.format.php */
+		$text = wp_date( _x( 'Y-m-d H:i', 'date and time format', 'alphabridge-mcp' ), (int) $ts );
 		return is_string( $text ) ? $text : '—';
 	}
 
@@ -1948,6 +1974,7 @@ class AB_MCP_Admin {
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
 			'review_dismissed' => array( 'success', __( 'Noted — the plugin will not ask for a review again.', 'alphabridge-mcp' ) ),
 			'mode_full'        => array( 'success', __( 'Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. Your confirmation is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time.', 'alphabridge-mcp' ) ),
+			'mode_already_full' => array( 'success', __( 'Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off.', 'alphabridge-mcp' ) ),
 			'mode_read'        => array( 'success', __( 'Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused.', 'alphabridge-mcp' ) ),
 			'mode_unconfirmed' => array( 'error', __( 'Write access was not switched on: tick the box under the notice to confirm it, then switch again.', 'alphabridge-mcp' ) ),
 			'mode_stale'       => array( 'error', __( 'Write access was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again.', 'alphabridge-mcp' ) ),

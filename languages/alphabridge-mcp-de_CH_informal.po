@@ -493,3 +493,664 @@ msgstr "löscht"
 msgctxt "tool note"
 msgid "only with write access"
 msgstr "erst mit Schreibrechten"
+
+#, php-format
+msgid "%s ability off"
+msgid_plural "%s abilities off"
+msgstr[0] "%s Fähigkeit aus"
+msgstr[1] "%s Fähigkeiten aus"
+
+#, php-format
+msgid "%s connection"
+msgid_plural "%s connections"
+msgstr[0] "%s Verbindung"
+msgstr[1] "%s Verbindungen"
+
+#, php-format
+msgid "If the account \"%s\" should be allowed to do this, an administrator can give it a role that allows it under Users."
+msgstr "Soll das Konto «%s» das dürfen, kann ein Administrator ihm unter Benutzer eine Rolle geben, die es erlaubt."
+
+msgid "Revisions are available only to an account that may edit the post. Connect with such an account, such as an editor or an administrator."
+msgstr "Revisionen gibt es nur für ein Konto, das den Beitrag bearbeiten darf. Dafür die App mit einem solchen Konto verbinden, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off."
+msgstr "Die Schreibrechte waren schon an; nichts wurde geändert. Was du unter Feineinstellung ausgeschaltet hast, bleibt aus."
+
+msgid "You cannot attach media to that post: your account may not edit it. Choose a post your account may edit, or ask someone who may edit that post."
+msgstr "An diesen Beitrag lassen sich keine Medien anhängen: Das Konto dieser Verbindung darf ihn nicht bearbeiten. Einen Beitrag wählen, den das Konto bearbeiten darf, oder jemanden fragen, der diesen Beitrag bearbeiten darf."
+
+msgid "You cannot publish: after this save the file would take its visibility from a parent it did not follow before (WordPress stores it as \"inherit\", or gives it \"inherit\" on the way out of the trash; where a loop runs through the file, any save leaves it without a parent) — public wherever that parent is published, and everywhere without one. Ask someone who can publish."
+msgstr "Dieses Konto darf nicht veröffentlichen: Nach diesem Speichern würde die Datei ihre Sichtbarkeit von einem Elternbeitrag übernehmen, dem sie vorher nicht folgte (WordPress speichert sie als «inherit» oder gibt ihr «inherit» beim Wiederherstellen aus dem Papierkorb; wo eine Schleife durch die Datei läuft, lässt jedes Speichern sie ohne Elternbeitrag) — öffentlich überall, wo dieser Elternbeitrag veröffentlicht ist, und ohne Elternbeitrag überall. Jemanden fragen, der veröffentlichen darf."
+
+msgid "You cannot publish: this status needs the right to publish. For a file, \"draft\" and \"pending\" do not help: WordPress stores them as \"inherit\", so the file follows its parent. Ask someone who can publish."
+msgstr "Dieses Konto darf nicht veröffentlichen: Dieser Status braucht das Recht zu veröffentlichen. Bei einer Datei helfen «draft» und «pending» nicht: WordPress speichert sie als «inherit», die Datei folgt also ihrem Elternbeitrag. Jemanden fragen, der veröffentlichen darf."
+
+msgid "You cannot publish; use status \"draft\" or \"pending\", and someone who may publish can then publish it."
+msgstr "Dieses Konto darf nicht veröffentlichen; den Status «draft» oder «pending» nehmen, dann kann jemand, der veröffentlichen darf, den Beitrag veröffentlichen."
+
+msgid "Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator."
+msgstr "Das Konto dieser Verbindung darf nicht auf diesen Meta-Schlüssel zugreifen: WordPress sagt, dass es ihn nicht bearbeiten darf, meist weil das Plugin, das den Schlüssel registriert hat, ihn einschränkt. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Administrators."
+
+msgid "Your account cannot access this meta key: that takes the right to edit the post itself (an author may read a colleague's published post, but not edit it), and the plugin that registered the key can restrict it further. Connect with an account that may edit the post and the key, such as an administrator."
+msgstr "Das Konto dieser Verbindung darf nicht auf diesen Meta-Schlüssel zugreifen: Das braucht das Recht, den Beitrag selbst zu bearbeiten (ein Autor darf den veröffentlichten Beitrag eines Kollegen lesen, aber nicht bearbeiten), und das Plugin, das den Schlüssel registriert hat, kann ihn weiter einschränken. Dafür die App mit einem Konto verbinden, das den Beitrag und den Schlüssel bearbeiten darf, etwa dem eines Administrators."
+
+msgid "Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator."
+msgstr "Das Konto dieser Verbindung darf nicht auf diesen Meta-Schlüssel zugreifen: Das braucht das Recht, den Begriff selbst zu bearbeiten (für Kategorien und Schlagwörter die Berechtigung manage_categories, die Redakteure und Administratoren haben), und das Plugin, das den Schlüssel registriert hat, kann ihn weiter einschränken. Dafür die App mit einem Konto verbinden, das den Begriff und den Schlüssel bearbeiten darf, etwa dem eines Administrators."
+
+msgid "Your account cannot create entries of this post type. Connect with an account whose role may create them, or ask an administrator for that right."
+msgstr "Das Konto dieser Verbindung darf keine Einträge dieses Inhaltstyps anlegen. Dafür die App mit einem Konto verbinden, dessen Rolle sie anlegen darf, oder einen Administrator um dieses Recht bitten."
+
+msgid "Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf diesen Anhang nicht löschen. Dafür die App mit einem Konto verbinden, das ihn löschen darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot delete this specific post. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Beitrag nicht löschen. Dafür die App mit einem Konto verbinden, das ihn löschen darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot edit this attachment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf diesen Anhang nicht bearbeiten. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot edit this post, so its revisions are not available. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf diesen Beitrag nicht bearbeiten, darum sind seine Revisionen nicht verfügbar. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot edit this post. The outline reads the page builder's stored data and is for accounts that may edit the post; wp_get_post shows the post to accounts that may read it."
+msgstr "Das Konto dieser Verbindung darf diesen Beitrag nicht bearbeiten. Die Gliederung liest die gespeicherten Daten des Page-Builders und ist für Konten, die den Beitrag bearbeiten dürfen; wp_get_post zeigt den Beitrag Konten, die ihn lesen dürfen."
+
+msgid "Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Beitrag nicht bearbeiten. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf keine Begriffe dieser Taxonomie verwalten. Dafür die App mit einem Konto verbinden, das es darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator."
+msgstr "Das Konto dieser Verbindung darf keine Begriffe dieser Taxonomie lesen: Die Taxonomie ist nicht öffentlich, und das Lesen braucht das Recht, ihre Begriffe zuzuweisen. Dafür die App mit einem Konto verbinden, das es hat, etwa dem eines Administrators."
+
+msgid "Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf die Meta-Daten von Begriffen dieser Taxonomie nicht lesen: Das braucht das Recht, ihre Begriffe zuzuweisen. Dafür die App mit einem Konto verbinden, das es hat, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot read this attachment. Connect with an account that may read it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf diesen Anhang nicht lesen. Dafür die App mit einem Konto verbinden, das ihn lesen darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot read this specific post (a private post or another author's draft, for example). Connect with an account that may read it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Beitrag nicht lesen (etwa einen privaten Beitrag oder den Entwurf eines anderen Autors). Dafür die App mit einem Konto verbinden, das ihn lesen darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot read this user's meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account."
+msgstr "Das Konto dieser Verbindung darf die Meta-Daten dieses Benutzers nicht lesen: Das braucht das Recht, diesen Benutzer zu bearbeiten, das jeder Benutzer für sein eigenes Profil hat und Administratoren für andere Benutzer (in einem Multisite-Netzwerk Super-Admins). Dafür die App mit einem solchen Konto verbinden."
+
+msgid "Your account cannot view this user's application passwords: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account."
+msgstr "Das Konto dieser Verbindung darf die Anwendungspasswörter dieses Benutzers nicht sehen: Das braucht das Recht, diesen Benutzer zu bearbeiten, das jeder Benutzer für sein eigenes Profil hat und Administratoren für andere Benutzer (in einem Multisite-Netzwerk Super-Admins). Dafür die App mit einem solchen Konto verbinden."
+
+msgctxt "date and time format"
+msgid "Y-m-d H:i"
+msgstr "d.m.Y, H:i"
+
+msgctxt "tool label"
+msgid "Activate a plugin network-wide"
+msgstr "Plugin im ganzen Netzwerk aktivieren"
+
+msgctxt "tool label"
+msgid "Activate a plugin"
+msgstr "Plugin aktivieren"
+
+msgctxt "tool label"
+msgid "Add a menu item"
+msgstr "Menüeintrag hinzufügen"
+
+msgctxt "tool label"
+msgid "Add a widget"
+msgstr "Widget hinzufügen"
+
+msgctxt "tool label"
+msgid "Add media from a URL"
+msgstr "Medien von einer URL hinzufügen"
+
+msgctxt "tool label"
+msgid "Apply a blueprint"
+msgstr "Blueprint anwenden"
+
+msgctxt "tool label"
+msgid "Cancel the upload"
+msgstr "Upload abbrechen"
+
+msgctxt "tool label"
+msgid "Change a page-builder element"
+msgstr "Page-Builder-Element ändern"
+
+msgctxt "tool label"
+msgid "Change a post or page"
+msgstr "Beitrag oder Seite ändern"
+
+msgctxt "tool label"
+msgid "Change a product"
+msgstr "Produkt ändern"
+
+msgctxt "tool label"
+msgid "Change a term"
+msgstr "Begriff ändern"
+
+msgctxt "tool label"
+msgid "Change a user"
+msgstr "Benutzer ändern"
+
+msgctxt "tool label"
+msgid "Change a widget"
+msgstr "Widget ändern"
+
+msgctxt "tool label"
+msgid "Change an order's status"
+msgstr "Status einer Bestellung ändern"
+
+msgctxt "tool label"
+msgid "Change media details"
+msgstr "Mediendetails ändern"
+
+msgctxt "tool label"
+msgid "Change site settings"
+msgstr "Website-Einstellungen ändern"
+
+msgctxt "tool label"
+msgid "Change the status of many posts"
+msgstr "Status vieler Beiträge ändern"
+
+msgctxt "tool label"
+msgid "Check site health"
+msgstr "Website-Zustand prüfen"
+
+msgctxt "tool label"
+msgid "Clear caches"
+msgstr "Caches leeren"
+
+msgctxt "tool label"
+msgid "Compare a blueprint with this site"
+msgstr "Blueprint mit dieser Website vergleichen"
+
+msgctxt "tool label"
+msgid "Count content"
+msgstr "Inhalte zählen"
+
+msgctxt "tool label"
+msgid "Create a coupon"
+msgstr "Gutschein anlegen"
+
+msgctxt "tool label"
+msgid "Create a menu"
+msgstr "Menü anlegen"
+
+msgctxt "tool label"
+msgid "Create a post or page"
+msgstr "Beitrag oder Seite anlegen"
+
+msgctxt "tool label"
+msgid "Create a site in the network"
+msgstr "Website im Netzwerk anlegen"
+
+msgctxt "tool label"
+msgid "Create a term"
+msgstr "Begriff anlegen"
+
+msgctxt "tool label"
+msgid "Create a user"
+msgstr "Benutzer anlegen"
+
+msgctxt "tool label"
+msgid "Create an application password"
+msgstr "Anwendungspasswort erstellen"
+
+msgctxt "tool label"
+msgid "Create or change a snippet"
+msgstr "Snippet anlegen oder ändern"
+
+msgctxt "tool label"
+msgid "Deactivate a plugin"
+msgstr "Plugin deaktivieren"
+
+msgctxt "tool label"
+msgid "Delete a comment"
+msgstr "Kommentar löschen"
+
+msgctxt "tool label"
+msgid "Delete a plugin file"
+msgstr "Plugin-Datei löschen"
+
+msgctxt "tool label"
+msgid "Delete a plugin"
+msgstr "Plugin löschen"
+
+msgctxt "tool label"
+msgid "Delete a post or page"
+msgstr "Beitrag oder Seite löschen"
+
+msgctxt "tool label"
+msgid "Delete a snippet"
+msgstr "Snippet löschen"
+
+msgctxt "tool label"
+msgid "Delete a term"
+msgstr "Begriff löschen"
+
+msgctxt "tool label"
+msgid "Delete a theme file"
+msgstr "Theme-Datei löschen"
+
+msgctxt "tool label"
+msgid "Delete a theme"
+msgstr "Theme löschen"
+
+msgctxt "tool label"
+msgid "Delete a transient"
+msgstr "Transient löschen"
+
+msgctxt "tool label"
+msgid "Delete a user"
+msgstr "Benutzer löschen"
+
+msgctxt "tool label"
+msgid "Delete an option"
+msgstr "Option löschen"
+
+msgctxt "tool label"
+msgid "Delete an uploaded file"
+msgstr "Upload-Datei löschen"
+
+msgctxt "tool label"
+msgid "Delete expired transients"
+msgstr "Abgelaufene Transients löschen"
+
+msgctxt "tool label"
+msgid "Delete in the deploy area"
+msgstr "Im Deploy-Bereich löschen"
+
+msgctxt "tool label"
+msgid "Delete media"
+msgstr "Medien löschen"
+
+msgctxt "tool label"
+msgid "Describe a table"
+msgstr "Eine Tabelle beschreiben"
+
+msgctxt "tool label"
+msgid "Detect the SEO plugin"
+msgstr "SEO-Plugin erkennen"
+
+msgctxt "tool label"
+msgid "Discard an undo point"
+msgstr "Undo-Punkt verwerfen"
+
+msgctxt "tool label"
+msgid "Duplicate a post or page"
+msgstr "Beitrag oder Seite duplizieren"
+
+msgctxt "tool label"
+msgid "Export content (WXR)"
+msgstr "Inhalte exportieren (WXR)"
+
+msgctxt "tool label"
+msgid "Export the site structure"
+msgstr "Aufbau der Website exportieren"
+
+msgctxt "tool label"
+msgid "Finish the upload"
+msgstr "Upload abschliessen"
+
+msgctxt "tool label"
+msgid "Install a plugin from a ZIP"
+msgstr "Plugin aus ZIP installieren"
+
+msgctxt "tool label"
+msgid "Install a plugin"
+msgstr "Plugin installieren"
+
+msgctxt "tool label"
+msgid "Install a theme from a ZIP"
+msgstr "Theme aus ZIP installieren"
+
+msgctxt "tool label"
+msgid "Install a theme"
+msgstr "Theme installieren"
+
+msgctxt "tool label"
+msgid "List abilities"
+msgstr "Fähigkeiten auflisten"
+
+msgctxt "tool label"
+msgid "List application passwords"
+msgstr "Anwendungspasswörter auflisten"
+
+msgctxt "tool label"
+msgid "List comments"
+msgstr "Kommentare auflisten"
+
+msgctxt "tool label"
+msgid "List coupons"
+msgstr "Gutscheine auflisten"
+
+msgctxt "tool label"
+msgid "List cron events"
+msgstr "Cron-Ereignisse auflisten"
+
+msgctxt "tool label"
+msgid "List customers"
+msgstr "Kunden auflisten"
+
+msgctxt "tool label"
+msgid "List database tables"
+msgstr "Datenbanktabellen auflisten"
+
+msgctxt "tool label"
+msgid "List media"
+msgstr "Medien auflisten"
+
+msgctxt "tool label"
+msgid "List menus"
+msgstr "Menüs auflisten"
+
+msgctxt "tool label"
+msgid "List orders"
+msgstr "Bestellungen auflisten"
+
+msgctxt "tool label"
+msgid "List plugin files"
+msgstr "Plugin-Dateien auflisten"
+
+msgctxt "tool label"
+msgid "List plugins"
+msgstr "Plugins auflisten"
+
+msgctxt "tool label"
+msgid "List post types"
+msgstr "Inhaltstypen auflisten"
+
+msgctxt "tool label"
+msgid "List posts and pages"
+msgstr "Beiträge und Seiten auflisten"
+
+msgctxt "tool label"
+msgid "List products"
+msgstr "Produkte auflisten"
+
+msgctxt "tool label"
+msgid "List revisions"
+msgstr "Revisionen auflisten"
+
+msgctxt "tool label"
+msgid "List snippets"
+msgstr "Snippets auflisten"
+
+msgctxt "tool label"
+msgid "List taxonomies"
+msgstr "Taxonomien auflisten"
+
+msgctxt "tool label"
+msgid "List terms"
+msgstr "Begriffe auflisten"
+
+msgctxt "tool label"
+msgid "List the deploy area"
+msgstr "Deploy-Bereich auflisten"
+
+msgctxt "tool label"
+msgid "List the sites of the network"
+msgstr "Websites des Netzwerks auflisten"
+
+msgctxt "tool label"
+msgid "List theme files"
+msgstr "Theme-Dateien auflisten"
+
+msgctxt "tool label"
+msgid "List themes"
+msgstr "Themes auflisten"
+
+msgctxt "tool label"
+msgid "List undo points"
+msgstr "Undo-Punkte auflisten"
+
+msgctxt "tool label"
+msgid "List uploaded files"
+msgstr "Uploads auflisten"
+
+msgctxt "tool label"
+msgid "List users"
+msgstr "Benutzer auflisten"
+
+msgctxt "tool label"
+msgid "List widget areas"
+msgstr "Widget-Bereiche auflisten"
+
+msgctxt "tool label"
+msgid "List widgets"
+msgstr "Widgets auflisten"
+
+msgctxt "tool label"
+msgid "Moderate a comment"
+msgstr "Kommentar moderieren"
+
+msgctxt "tool label"
+msgid "Optimize database tables"
+msgstr "Datenbanktabellen optimieren"
+
+msgctxt "tool label"
+msgid "Preview a deploy"
+msgstr "Deploy vorab vergleichen"
+
+msgctxt "tool label"
+msgid "Read SEO title and description"
+msgstr "SEO-Titel und -Beschreibung lesen"
+
+msgctxt "tool label"
+msgid "Read a comment"
+msgstr "Einen Kommentar lesen"
+
+msgctxt "tool label"
+msgid "Read a file in the deploy area"
+msgstr "Datei im Deploy-Bereich lesen"
+
+msgctxt "tool label"
+msgid "Read a media file"
+msgstr "Eine Mediendatei lesen"
+
+msgctxt "tool label"
+msgid "Read a menu"
+msgstr "Ein Menü lesen"
+
+msgctxt "tool label"
+msgid "Read a page-builder layout"
+msgstr "Page-Builder-Aufbau lesen"
+
+msgctxt "tool label"
+msgid "Read a plugin file"
+msgstr "Plugin-Datei lesen"
+
+msgctxt "tool label"
+msgid "Read a post or page"
+msgstr "Einen Beitrag oder eine Seite lesen"
+
+msgctxt "tool label"
+msgid "Read a product"
+msgstr "Ein Produkt lesen"
+
+msgctxt "tool label"
+msgid "Read a snippet"
+msgstr "Ein Snippet lesen"
+
+msgctxt "tool label"
+msgid "Read a term"
+msgstr "Einen Begriff lesen"
+
+msgctxt "tool label"
+msgid "Read a theme file"
+msgstr "Theme-Datei lesen"
+
+msgctxt "tool label"
+msgid "Read a user"
+msgstr "Einen Benutzer lesen"
+
+msgctxt "tool label"
+msgid "Read an order"
+msgstr "Eine Bestellung lesen"
+
+msgctxt "tool label"
+msgid "Read an uploaded file"
+msgstr "Upload-Datei lesen"
+
+msgctxt "tool label"
+msgid "Read post meta"
+msgstr "Beitrags-Meta lesen"
+
+msgctxt "tool label"
+msgid "Read profile fields"
+msgstr "Profilfelder lesen"
+
+msgctxt "tool label"
+msgid "Read site settings"
+msgstr "Website-Einstellungen lesen"
+
+msgctxt "tool label"
+msgid "Read term meta"
+msgstr "Begriffs-Meta lesen"
+
+msgctxt "tool label"
+msgid "Read the error log"
+msgstr "Fehlerprotokoll lesen"
+
+msgctxt "tool label"
+msgid "Refresh permalinks"
+msgstr "Permalinks neu aufbauen"
+
+msgctxt "tool label"
+msgid "Remove a menu item"
+msgstr "Menüeintrag entfernen"
+
+msgctxt "tool label"
+msgid "Remove a widget"
+msgstr "Widget entfernen"
+
+msgctxt "tool label"
+msgid "Reply to a comment"
+msgstr "Auf einen Kommentar antworten"
+
+msgctxt "tool label"
+msgid "Restore a revision"
+msgstr "Revision wiederherstellen"
+
+msgctxt "tool label"
+msgid "Revoke an application password"
+msgstr "Anwendungspasswort widerrufen"
+
+msgctxt "tool label"
+msgid "Run a read-only query"
+msgstr "Lesende Abfrage ausführen"
+
+msgctxt "tool label"
+msgid "Run an ability"
+msgstr "Eine Fähigkeit ausführen"
+
+msgctxt "tool label"
+msgid "Schedule a cron event"
+msgstr "Cron-Ereignis planen"
+
+msgctxt "tool label"
+msgid "Search and replace across the site"
+msgstr "Suchen und Ersetzen auf der ganzen Website"
+
+msgctxt "tool label"
+msgid "Search content"
+msgstr "Inhalte durchsuchen"
+
+msgctxt "tool label"
+msgid "Send a part of the upload"
+msgstr "Teil des Uploads senden"
+
+msgctxt "tool label"
+msgid "Set SEO title and description"
+msgstr "SEO-Titel und -Beschreibung setzen"
+
+msgctxt "tool label"
+msgid "Set a transient"
+msgstr "Transient setzen"
+
+msgctxt "tool label"
+msgid "Set an option"
+msgstr "Option setzen"
+
+msgctxt "tool label"
+msgid "Set post meta"
+msgstr "Beitrags-Meta setzen"
+
+msgctxt "tool label"
+msgid "Set term meta"
+msgstr "Begriffs-Meta setzen"
+
+msgctxt "tool label"
+msgid "Set user meta"
+msgstr "Benutzer-Meta setzen"
+
+msgctxt "tool label"
+msgid "Show available updates"
+msgstr "Verfügbare Updates anzeigen"
+
+msgctxt "tool label"
+msgid "Show the environment"
+msgstr "Umgebung anzeigen"
+
+msgctxt "tool label"
+msgid "Start a large upload"
+msgstr "Grossen Upload beginnen"
+
+msgctxt "tool label"
+msgid "Switch a snippet on or off"
+msgstr "Snippet ein- oder ausschalten"
+
+msgctxt "tool label"
+msgid "Switch the theme"
+msgstr "Theme wechseln"
+
+msgctxt "tool label"
+msgid "Test the deploy connection"
+msgstr "Deploy-Verbindung testen"
+
+msgctxt "tool label"
+msgid "Undo a change"
+msgstr "Änderung rückgängig machen"
+
+msgctxt "tool label"
+msgid "Unpack a ZIP into the deploy area"
+msgstr "ZIP in den Deploy-Bereich entpacken"
+
+msgctxt "tool label"
+msgid "Unschedule cron events"
+msgstr "Geplante Cron-Ereignisse entfernen"
+
+msgctxt "tool label"
+msgid "Update WordPress"
+msgstr "WordPress aktualisieren"
+
+msgctxt "tool label"
+msgid "Update a plugin"
+msgstr "Plugin aktualisieren"
+
+msgctxt "tool label"
+msgid "Update a theme"
+msgstr "Theme aktualisieren"
+
+msgctxt "tool label"
+msgid "Upload media"
+msgstr "Medien hochladen"
+
+msgctxt "tool label"
+msgid "Write a file to the deploy area"
+msgstr "Datei in den Deploy-Bereich schreiben"
+
+msgctxt "tool label"
+msgid "Write a file to the uploads"
+msgstr "Datei in die Uploads schreiben"
+
+msgctxt "tool label"
+msgid "Write a plugin file"
+msgstr "Plugin-Datei schreiben"
+
+msgctxt "tool label"
+msgid "Write a theme file"
+msgstr "Theme-Datei schreiben"
+
+msgctxt "tool label"
+msgid "Write database rows"
+msgstr "Datenbankzeilen schreiben"

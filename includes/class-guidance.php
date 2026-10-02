@@ -168,6 +168,13 @@ class AB_MCP_Guidance {
 	}
 
 	/**
+	 * The handover() in English, for an answer whose own sentences are
+	 * English (compose() with $translate false). The same words as the text
+	 * handover() translates; a test holds them together.
+	 */
+	const HANDOVER = 'Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it.';
+
+	/**
 	 * The sentence that asks the assistant to pass a refusal on and to try
 	 * again: the person decides, the assistant does not look for a way
 	 * around the rule.
@@ -180,17 +187,70 @@ class AB_MCP_Guidance {
 
 	/**
 	 * A refusal with its way: the reason in one sentence, the steps for the
-	 * person, the direct link and the handover().
+	 * person, the direct link and the handover(). A part that is empty is
+	 * left out.
 	 *
-	 * @param string $reason Why, in one sentence.
-	 * @param string $steps  What the person can do.
-	 * @param string $url    Where it is done.
+	 * The link word and the handover are in the site's language. An add-on
+	 * whose reason and steps stay English (the Pro add-on ships no
+	 * translations) passes $translate false, so that one answer reads in one
+	 * language instead of English with German pieces in it.
+	 *
+	 * @param string $reason    Why, in one sentence.
+	 * @param string $steps     What the person can do.
+	 * @param string $url       Where it is done.
+	 * @param bool   $translate Whether the parts added here are translated.
 	 * @return string
 	 */
-	public static function compose( $reason, $steps, $url ) {
-		/* translators: %s: address of the page where the person can do it. */
-		$link = sprintf( __( 'Direct link: %s', 'alphabridge-mcp' ), (string) $url );
-		return trim( (string) $reason ) . ' ' . trim( (string) $steps ) . ' ' . $link . ' ' . self::handover();
+	public static function compose( $reason, $steps, $url, $translate = true ) {
+		$link = $translate
+			/* translators: %s: address of the page where the person can do it. */
+			? sprintf( __( 'Direct link: %s', 'alphabridge-mcp' ), (string) $url )
+			: sprintf( 'Direct link: %s', (string) $url );
+		$parts = array( trim( (string) $reason ), trim( (string) $steps ), $link, $translate ? self::handover() : self::HANDOVER );
+		return implode( ' ', array_filter( $parts, 'strlen' ) );
+	}
+
+	/**
+	 * The refusal for what the WordPress role of the connection's account
+	 * does not allow: this post, this user, publishing. The tool's own
+	 * sentences say what was refused and which account may do it; this adds
+	 * that an administrator can change the account's role under Users, the
+	 * direct link there and the handover(), so the assistant leads the person
+	 * to it instead of answering with a bare «no». The role itself is never
+	 * changed here.
+	 *
+	 * @param string $message What was refused and who may do it, as the tool says it.
+	 * @param array  $args {
+	 *     @type string $code      Error code; 'ab_mcp_forbidden' by default.
+	 *     @type string $steps     The steps; role_steps() by default.
+	 *     @type string $url       The link; Users (admin_url( 'users.php' )) by default.
+	 *     @type bool   $translate See compose(); true by default.
+	 * }
+	 * @return WP_Error
+	 */
+	public static function role_refusal( $message, array $args = array() ) {
+		$translate = ! array_key_exists( 'translate', $args ) || (bool) $args['translate'];
+		$steps     = isset( $args['steps'] ) ? (string) $args['steps'] : self::role_steps( $translate );
+		$url       = isset( $args['url'] ) ? (string) $args['url'] : admin_url( 'users.php' );
+		$code      = isset( $args['code'] ) && '' !== (string) $args['code'] ? (string) $args['code'] : 'ab_mcp_forbidden';
+		return new WP_Error( $code, self::compose( (string) $message, $steps, $url, $translate ) );
+	}
+
+	/**
+	 * The steps of a role_refusal(): an administrator can give the account
+	 * of the connection a role that allows it, under Users.
+	 *
+	 * @param bool $translate See compose().
+	 * @return string
+	 */
+	public static function role_steps( $translate = true ) {
+		$user  = function_exists( 'wp_get_current_user' ) ? wp_get_current_user() : null;
+		$login = is_object( $user ) && isset( $user->user_login ) && '' !== (string) $user->user_login ? (string) $user->user_login : '#' . (int) get_current_user_id();
+		$text  = $translate
+			/* translators: %s: user name of the connection's account. */
+			? __( 'If the account "%s" should be allowed to do this, an administrator can give it a role that allows it under Users.', 'alphabridge-mcp' )
+			: 'If the account "%s" should be allowed to do this, an administrator can give it a role that allows it under Users.';
+		return sprintf( $text, $login );
 	}
 
 	/**

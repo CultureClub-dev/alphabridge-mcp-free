@@ -617,7 +617,12 @@ final class SiteModeTest extends TestCase {
 		}
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_delete_post', array( 'dangerous' => true ) ), 'A writing Mighty tool follows Full.' );
 
-		// Switching write access on, here or on the page, ends the rule of before.
+		// Switching write access on, here or on the page, ends the rule of
+		// before: a switch from off to on, so off first on this site that is
+		// on already. A call while it is on changes nothing.
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::assertSame( 'ab_mcp_tool_disabled', AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_code(), 'Already on: nothing switched.' );
+		AB_MCP_Site_Mode::switch_to_read( 3 );
 		AB_MCP_Site_Mode::switch_to_full( 3 );
 		foreach ( self::mighty_readers() as $name => $def ) {
 			self::assertTrue( AB_MCP_Security::authorize( $name, $def ), $name . ' is on once write access is switched on.' );
@@ -779,7 +784,8 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', $sentence ), 'One sentence.' );
 		self::assertStringStartsWith( 'WRITE ACCESS IS OFF: ', $sentence );
 		self::assertStringContainsString( 'until an administrator switches on write access at the top of Settings → AlphaBridge MCP (https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode)', $sentence );
-		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused', $sentence, 'Says that the Mighty readers wait for write access too.' );
+		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused', $sentence, 'Says that the readers of code, files, the database, logs or credentials wait for write access too.' );
+		self::assertStringNotContainsStringIgnoringCase( 'mighty', $sentence, 'No marking that tools/list does not show.' );
 		self::assertStringContainsString( 'when the person asks for a change, tell them that kindly and where the switch is', $sentence, 'And that the assistant leads there.' );
 		self::assertStringNotContainsString( 'no code, files, database, logs or credentials', $sentence, 'Not more than the switch keeps: ordinary readers may meet a credential a guard does not recognise.' );
 		self::assertStringEndsWith( ' ' . $sentence, $m->invoke( $controller ) );

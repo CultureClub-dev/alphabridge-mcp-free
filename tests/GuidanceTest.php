@@ -7,7 +7,11 @@
  * role that does not reach, a tool switched off under Fine-tuning — says why
  * in one sentence, what the person can do, gives a direct link to the place
  * where it is done and asks the assistant to pass it on kindly and to try
- * again afterwards (AB_MCP_Guidance::compose()).
+ * again afterwards (AB_MCP_Guidance::compose()). The same holds where a
+ * tool itself refuses because the role of the connection's account does not
+ * allow it — this post, this user, publishing (AB_MCP_Guidance::
+ * role_refusal()): every such refusal under includes/ goes through it, and
+ * only refusals the assistant corrects in its own call stay plain.
  *
  * A tool of AlphaBridge MCP Pro or its Agency plan is not on a free site.
  * Its name is answered with what it is and where it comes from instead of
@@ -31,6 +35,9 @@ use AB_MCP_Guidance;
 use AB_MCP_REST_Controller;
 use AB_MCP_Security;
 use AB_MCP_Tool_Registry;
+use AB_MCP_Tools_Content;
+use AB_MCP_Tools_Media;
+use AB_MCP_Tools_Taxonomy_Comments;
 use ReflectionMethod;
 use ReflectionProperty;
 
@@ -227,5 +234,88 @@ final class GuidanceTest extends TestCase {
 
 	public function testThePricingPageIsTheOneOfTheWebsite(): void {
 		self::assertSame( 'https://alphabridge-mcp.com/#pricing', AB_MCP_Guidance::PRICING_URL );
+	}
+
+	/* ------------------------------------------------- refusals for the role */
+
+	/**
+	 * Refusals with the code ab_mcp_forbidden that are no matter of the
+	 * account's role but of the call, which the assistant corrects itself:
+	 * file => the start of the message.
+	 */
+	private const FORBIDDEN_BY_THE_CALL = array(
+		'tools/class-tools-search-bulk.php' => 'Revisions cannot be searched; use wp_list_revisions',
+		'tools/class-tools-content.php'     => 'Revisions are listed per post, and only for an account that may edit that post: pass its id as parent.',
+		'tools/class-tools-media.php'       => 'You cannot attach media to that post: it does not exist, or your account may not edit it. Leave post_id out',
+	);
+
+	public function testEveryRefusalForTheRoleLeadsToUsersAndAsksToPassItOn(): void {
+		$root   = dirname( __DIR__ ) . '/includes/';
+		$plain  = array();
+		$routed = 0;
+		foreach ( array_merge( glob( $root . '*.php' ), glob( $root . '*/*.php' ), glob( $root . '*/*/*.php' ) ) as $file ) {
+			$rel = substr( $file, strlen( $root ) );
+			$src = (string) file_get_contents( $file );
+			$routed += preg_match_all( '/AB_MCP_Guidance::role_refusal\(/', $src );
+			if ( 'class-security.php' === $rel ) {
+				continue; // The gate composes its own, with the capability (testEveryRefusalOfThePolicyGate…).
+			}
+			preg_match_all( "/new WP_Error\(\s*'ab_mcp_forbidden',\s*(?:__\(\s*)?'((?:[^'\\\\]|\\\\.)*)'/", $src, $m );
+			foreach ( $m[1] as $message ) {
+				$allowed = isset( self::FORBIDDEN_BY_THE_CALL[ $rel ] ) && 0 === strpos( stripcslashes( $message ), self::FORBIDDEN_BY_THE_CALL[ $rel ] );
+				if ( ! $allowed ) {
+					$plain[] = $rel . ': ' . $message;
+				}
+			}
+			self::assertSame( 0, preg_match( "/new WP_Error\(\s*'ab_mcp_forbidden',\s*\\$/", $src ), $rel . ': a refusal built from a variable goes through role_refusal() too.' );
+		}
+		self::assertSame( array(), $plain, 'Every refusal for the role goes through AB_MCP_Guidance::role_refusal().' );
+		self::assertGreaterThan( 28, $routed, 'The scan finds them.' );
+	}
+
+	public function testARefusalForTheRoleNamesTheAccountTheWayAndTheLink(): void {
+		ab_test_add_user( 3 );
+		$GLOBALS['ab_test_current_user'] = 3;
+		$users                           = 'https://example.test/wp-admin/users.php';
+		$GLOBALS['ab_test_can']          = static fn( string $cap ): bool => 'read' === $cap;
+
+		$create = AB_MCP_Tools_Content::create_post( array( 'type' => 'post', 'title' => 'X' ) );
+		self::assertSame( 'ab_mcp_forbidden', $create->get_error_code() );
+		self::assertStringStartsWith( 'Your account cannot create entries of this post type.', $create->get_error_message() );
+		self::assertStringContainsString( 'If the account "user3" should be allowed to do this, an administrator can give it a role that allows it under Users.', $create->get_error_message() );
+		self::assertLeadsTo( $users, $create->get_error_message() );
+
+		ab_test_add_post( 12, array( 'post_status' => 'publish' ) );
+		$update = AB_MCP_Tools_Content::update_post( array( 'id' => 12, 'title' => 'Y' ) );
+		self::assertSame( 'ab_mcp_forbidden', $update->get_error_code() );
+		self::assertStringStartsWith( 'Your account cannot edit this specific post.', $update->get_error_message() );
+		self::assertLeadsTo( $users, $update->get_error_message() );
+
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'publish_posts' !== $cap;
+		$publish                = AB_MCP_Tools_Content::create_post( array( 'type' => 'post', 'title' => 'X', 'status' => 'publish' ) );
+		self::assertSame( 'ab_mcp_forbidden', $publish->get_error_code() );
+		self::assertStringStartsWith( 'You cannot publish; use status "draft" or "pending"', $publish->get_error_message(), 'A message built in a variable, too.' );
+		self::assertLeadsTo( $users, $publish->get_error_message() );
+	}
+
+	public function testOneAnswerReadsInOneLanguage(): void {
+		self::assertSame( AB_MCP_Guidance::HANDOVER, AB_MCP_Guidance::handover(), 'The English handover is the text handover() translates.' );
+		$en = AB_MCP_Guidance::compose( 'Reason.', 'Steps.', 'https://example.test/x', false );
+		self::assertSame( 'Reason. Steps. Direct link: https://example.test/x ' . AB_MCP_Guidance::HANDOVER, $en );
+		self::assertSame( 'Reason. Direct link: https://example.test/x ' . AB_MCP_Guidance::HANDOVER, AB_MCP_Guidance::compose( 'Reason.', '', 'https://example.test/x' ), 'An empty part is left out.' );
+
+		// With the German texts loaded, the core's own parts read German; an
+		// add-on whose reason is English asks for the English frame.
+		$GLOBALS['ab_test_translations'] = array(
+			'Direct link: %s'            => 'Direkter Link: %s',
+			AB_MCP_Guidance::HANDOVER    => 'Gib das freundlich weiter.',
+			'If the account "%s" should be allowed to do this, an administrator can give it a role that allows it under Users.' => 'Soll das Konto „%s“ das dürfen, …',
+		);
+		self::assertSame( 'Reason. Steps. Direkter Link: https://example.test/x Gib das freundlich weiter.', AB_MCP_Guidance::compose( 'Reason.', 'Steps.', 'https://example.test/x' ) );
+		self::assertSame( $en, AB_MCP_Guidance::compose( 'Reason.', 'Steps.', 'https://example.test/x', false ) );
+		$role = AB_MCP_Guidance::role_refusal( 'Your account cannot edit this user.', array( 'translate' => false ) )->get_error_message();
+		self::assertStringNotContainsString( 'Direkter', $role );
+		self::assertStringNotContainsString( 'Soll das Konto', $role );
+		self::assertStringEndsWith( AB_MCP_Guidance::HANDOVER, $role );
 	}
 }

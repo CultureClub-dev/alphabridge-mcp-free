@@ -52,6 +52,7 @@ $GLOBALS['ab_test_core_delay'] = 0;
  */
 function ab_test_reset(): void {
 	$GLOBALS['ab_test_current_user'] = 0;
+	$GLOBALS['ab_test_translations'] = array();
 	$GLOBALS['ab_test_can']          = null;
 	$GLOBALS['ab_test_multisite']    = false;
 	$GLOBALS['ab_test_super_admins'] = array();
@@ -261,8 +262,12 @@ function esc_html( $text ) {
 	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 }
 
+/**
+ * Returns the text, or the translation a test put into
+ * $GLOBALS['ab_test_translations'] (text => translation) for it.
+ */
 function __( $text, $domain = '' ) {
-	return $text;
+	return $GLOBALS['ab_test_translations'][ $text ] ?? $text;
 }
 
 function esc_html__( $text, $domain = '' ) {
@@ -1063,7 +1068,7 @@ function get_locale() {
  * read from the files themselves (BundledTranslationsTest).
  */
 function _x( $text, $context, $domain = '' ) {
-	return $text;
+	return $GLOBALS['ab_test_translations'][ $context . "\x04" . $text ] ?? $text;
 }
 
 function get_user_locale( $user = 0 ) {
@@ -1608,4 +1613,5 @@ require_once __DIR__ . '/../includes/tools/class-tools-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-search-bulk.php';
 require_once __DIR__ . '/../includes/tools/class-tools-media.php';
 require_once __DIR__ . '/../includes/tools/class-tools-taxonomy-comments.php';
+require_once __DIR__ . '/../includes/class-tool-labels.php';
 require_once __DIR__ . '/../includes/class-admin.php';

@@ -217,6 +217,44 @@ final class WriteAccessSwitchTest extends TestCase {
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_update_post', array() ), 'The next switch-on switches it on again.' );
 	}
 
+	public function testSwitchingOnAgainWhileOnChangesNothing(): void {
+		AB_MCP_Settings::install_defaults();
+		$r = self::registry();
+		$this->post( 'handle_site_mode', self::on_post() );
+		$this->post(
+			'handle_save',
+			array(
+				'_wpnonce'      => 'nonce-ab_mcp_save',
+				'enabled_tools' => array( 'wp_list_posts', 'wp_get_user_meta' ),
+			),
+			$r
+		);
+		// Switched on an hour ago, so a new record would show.
+		$record         = AB_MCP_Site_Mode::confirmation();
+		$record['time'] = time() - 3600;
+		AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY_CONFIRMATION, $record );
+		$history = count( AB_MCP_Site_Mode::history() );
+		$fired   = 0;
+		add_action(
+			'ab_mcp_reset_switches',
+			static function () use ( &$fired ) {
+				++$fired;
+			}
+		);
+
+		// The form of an old tab, sent again: valid nonce, notice in force, box ticked.
+		self::assertSame( 'mode_already_full', self::notice_of( $this->post( 'handle_site_mode', self::on_post() ) ) );
+		// A script that switches on a second time.
+		self::assertSame( $record, AB_MCP_Site_Mode::switch_to_full( 3 ), 'Code gets the record in force back.' );
+
+		self::assertFalse( AB_MCP_Settings::is_tool_enabled( 'wp_update_post', array() ), 'What was switched off under Fine-tuning stays off.' );
+		self::assertSame( array( 'wp_list_posts' => true, 'wp_update_post' => false, 'wp_get_user_meta' => true ), get_option( 'ab_mcp_tool_state' ) );
+		self::assertSame( 0, $fired, 'No add-on resets its items either.' );
+		self::assertSame( $record, AB_MCP_Site_Mode::confirmation(), '«On since» keeps its date and account.' );
+		self::assertSame( $history, count( AB_MCP_Site_Mode::history() ), 'No switch in the history.' );
+		self::assertTrue( AB_MCP_Site_Mode::is_full() );
+	}
+
 	public function testAnUpdateAloneResetsNothing(): void {
 		// A site that went to Full under 4.4.0 and switched a tool off there.
 		AB_MCP_Settings::install_defaults();
@@ -266,6 +304,20 @@ final class WriteAccessSwitchTest extends TestCase {
 		$x = $this->card();
 		self::assertSame( 'true', $x->query( '//button[@role="switch"]' )->item( 0 )->getAttribute( 'aria-checked' ) );
 		self::assertSame( 0, $x->query( '//input[@name="confirm_full"]' )->length, 'Nobody is asked to confirm again.' );
+	}
+
+	public function testTheDateUnderTheSwitchReadsAsInTheAdminsLanguage(): void {
+		AB_MCP_Settings::install_defaults();
+		$this->post( 'handle_site_mode', self::on_post() );
+		$record         = AB_MCP_Site_Mode::confirmation();
+		$record['time'] = 1790000000;
+		AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY_CONFIRMATION, $record );
+
+		self::assertStringStartsWith( 'Write access on since ' . wp_date( 'Y-m-d H:i', 1790000000 ) . ' · confirmed by user3', AB_MCP_Site_Mode::full_since_text() );
+		// German: «Schreibrechte an seit 02.10.2026, 13:22», as in the approved draft.
+		$GLOBALS['ab_test_translations'] = array( "date and time format\x04Y-m-d H:i" => 'd.m.Y, H:i' );
+		self::assertStringStartsWith( 'Write access on since ' . wp_date( 'd.m.Y, H:i', 1790000000 ) . ' · ', AB_MCP_Site_Mode::full_since_text() );
+		self::assertMatchesRegularExpression( '/^\d\d\.\d\d\.\d{4}, \d\d:\d\d$/', wp_date( 'd.m.Y, H:i', 1790000000 ) );
 	}
 
 	public function testAFormOfTheFirstNoticeIsRefused(): void {

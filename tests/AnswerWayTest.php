@@ -371,6 +371,25 @@ final class AnswerWayTest extends TestCase {
 			$tokens = token_get_all( (string) file_get_contents( (string) $file ) );
 			$count  = count( $tokens );
 			for ( $i = 0; $i < $count; $i++ ) {
+				// A refusal for the account's role: its message is the first
+				// literal of AB_MCP_Guidance::role_refusal( … ), its code
+				// ab_mcp_forbidden; the method adds the way to the role.
+				if ( is_array( $tokens[ $i ] ) && T_STRING === $tokens[ $i ][0] && 'role_refusal' === $tokens[ $i ][1] && is_array( $tokens[ $i - 1 ] ) && T_DOUBLE_COLON === $tokens[ $i - 1 ][0] ) {
+					$depth = 0;
+					for ( $k = $i + 1; $k < $count; $k++ ) {
+						if ( '(' === $tokens[ $k ] ) {
+							++$depth;
+						} elseif ( ')' === $tokens[ $k ] && 0 === --$depth ) {
+							break;
+						}
+						if ( is_array( $tokens[ $k ] ) && T_CONSTANT_ENCAPSED_STRING === $tokens[ $k ][0] && preg_match( '/\s/', $tokens[ $k ][1] ) ) {
+							$where           = substr( (string) $file, strlen( $root ) + 1 ) . ':' . $tokens[ $i ][2];
+							$cases[ $where ] = array( 'ab_mcp_forbidden', stripcslashes( substr( $tokens[ $k ][1], 1, -1 ) ) );
+							break;
+						}
+					}
+					continue;
+				}
 				if ( ! is_array( $tokens[ $i ] ) || T_NEW !== $tokens[ $i ][0] ) {
 					continue;
 				}

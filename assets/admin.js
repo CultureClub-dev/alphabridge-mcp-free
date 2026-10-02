@@ -306,11 +306,32 @@
 		}
 	}
 
+	// «1 ability off», «2 abilities off»: the items of an add-on (the
+	// abilities of other plugins) that are off, '' for none.
+	function itemsOff( n ) {
+		if ( ! n ) {
+			return '';
+		}
+		return String( 1 === n ? ( cfg.itemOff || '%s ability off' ) : ( cfg.itemsOff || '%s abilities off' ) ).replace( /%(1\$)?[sd]/, n );
+	}
+
+	// Show what an add-on's switched-off items add to a count, or nothing.
+	function showMore( el, n ) {
+		if ( el ) {
+			el.textContent = itemsOff( n );
+			el.hidden = ! n;
+		}
+	}
+
 	// Recount: every tool group's switch, every main group's switch and
-	// state («x of y on», tools only), the counter and the switch for all.
+	// state, the counter and the switch for all. The switches for a group and
+	// for all move the tools and an add-on's items alike, so they show half
+	// on when an item is off; the counts say so: «x of y on» counts the tools,
+	// and a line under it the items that are off («1 ability off»).
 	function refresh() {
 		var on = 0;
 		var all = 0;
+		var offAll = 0;
 		fine.querySelectorAll( '.ab-sub' ).forEach( function ( sub ) {
 			sum( sub, sub.querySelector( '.ab-sub-toggle' ) );
 		} );
@@ -318,24 +339,38 @@
 			var tools = g.querySelectorAll( 'input.ab-tool' );
 			var n = tools.length;
 			var k = 0;
+			var off = 0;
 			tools.forEach( function ( t ) {
 				if ( t.checked ) {
 					k++;
 				}
 			} );
+			g.querySelectorAll( 'input.ab-item' ).forEach( function ( t ) {
+				if ( ! t.checked ) {
+					off++;
+				}
+			} );
 			on += k;
 			all += n;
+			offAll += off;
 			sum( g, g.querySelector( '.ab-group-toggle' ) );
 			var st = g.querySelector( '.ab-status' );
 			if ( st ) {
-				st.setAttribute( 'data-state', 0 === k ? 'off' : ( k === n ? 'on' : 'partial' ) );
-				st.textContent = fmt( cfg.partial || '%1$s of %2$s on', k, n );
+				st.setAttribute( 'data-state', 0 === k && n > 0 ? 'off' : ( k === n && 0 === off ? 'on' : 'partial' ) );
+				var count = st.querySelector( '.ab-status__count' );
+				if ( count ) {
+					count.textContent = fmt( cfg.partial || '%1$s of %2$s on', k, n );
+				} else {
+					st.textContent = fmt( cfg.partial || '%1$s of %2$s on', k, n );
+				}
+				showMore( st.querySelector( '.ab-status__more' ), off );
 			}
 		} );
 		var c = fine.querySelector( '.ab-on-count' );
 		if ( c ) {
 			c.textContent = on;
 		}
+		showMore( fine.querySelector( '.ab-capbar__more' ), offAll );
 		sum( fine, fine.querySelector( '.ab-all-toggle' ) );
 	}
 

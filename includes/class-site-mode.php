@@ -235,8 +235,10 @@ class AB_MCP_Site_Mode {
 	/**
 	 * The sentence the server instructions carry while write access is off,
 	 * so an assistant knows before its first call why writing, and the
-	 * Mighty readers of code, files, the database, logs or credentials, fail,
-	 * and that it should lead the person to the switch.
+	 * readers of code, files, the database, logs or credentials, fail, and
+	 * that it should lead the person to the switch. It names those readers by
+	 * what they read and that they run only with write access on, as their
+	 * refusal does; no marking in tools/list stands for them.
 	 *
 	 * Not translated: the instructions are written for the assistant, in
 	 * the language of the rest of them.
@@ -244,7 +246,7 @@ class AB_MCP_Site_Mode {
 	 * @return string
 	 */
 	public static function instructions_sentence() {
-		return 'WRITE ACCESS IS OFF: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused until an administrator switches on write access at the top of Settings → AlphaBridge MCP (' . AB_MCP_Guidance::settings_url( 'ab-mode' ) . '); when the person asks for a change, tell them that kindly and where the switch is.';
+		return 'WRITE ACCESS IS OFF: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused until an administrator switches on write access at the top of Settings → AlphaBridge MCP (' . AB_MCP_Guidance::settings_url( 'ab-mode' ) . '); when the person asks for a change, tell them that kindly and where the switch is.';
 	}
 
 	/**
@@ -283,7 +285,8 @@ class AB_MCP_Site_Mode {
 	 * «Write access on since <date> · confirmed by <account> · every
 	 * connection keeps its access level» with write access on, from the record
 	 * of the confirmation; '' with it off. The date is the site's date and
-	 * time in digits, like every other date on the settings page. Switched on
+	 * time in the form of the admin's language («2026-10-02 13:22», German
+	 * «02.10.2026, 13:22»), like every other date on the settings page. Switched on
 	 * by code it says so, and that nobody confirmed it on this page; on
 	 * without any record (written straight into the option) it says that no
 	 * confirmation is recorded.
@@ -298,7 +301,8 @@ class AB_MCP_Site_Mode {
 		if ( null === $record ) {
 			return __( 'Write access is on; no confirmation on this page is recorded for it.', 'alphabridge-mcp' );
 		}
-		$date = wp_date( 'Y-m-d H:i', (int) $record['time'] );
+		/* translators: date and time format for PHP date(), as on the settings page; see https://www.php.net/manual/datetime.format.php */
+		$date = wp_date( _x( 'Y-m-d H:i', 'date and time format', 'alphabridge-mcp' ), (int) $record['time'] );
 		$date = is_string( $date ) ? $date : '—';
 		if ( self::SOURCE_FORM !== ( $record['source'] ?? '' ) ) {
 			/* translators: %s: date and time. */
@@ -322,6 +326,12 @@ class AB_MCP_Site_Mode {
 	 * under Fine-tuning afterwards; that holds until write access is switched
 	 * on the next time. An update alone resets nothing.
 	 *
+	 * Only a switch from off to on is a switch-on. Called while write access
+	 * is already on (a second click from an old tab, a script that runs
+	 * twice), it changes nothing and returns the record in force (an empty
+	 * array where there is none): what an administrator switched off under
+	 * Fine-tuning since stays off, and «on since» keeps its date.
+	 *
 	 * The caller has checked the capability and the nonce; for SOURCE_FORM
 	 * also the ticked box and that the form showed the notice in force
 	 * (notice_hash()), and the record then holds that wording. It is public
@@ -331,9 +341,13 @@ class AB_MCP_Site_Mode {
 	 *
 	 * @param int    $user_id The administrator who switched.
 	 * @param string $source  SOURCE_FORM or SOURCE_CODE; anything else is code.
-	 * @return array The record.
+	 * @return array The record; the one in force when write access was on.
 	 */
 	public static function switch_to_full( $user_id, $source = self::SOURCE_CODE ) {
+		if ( self::is_full() ) {
+			$now = self::confirmation();
+			return null !== $now ? $now : array();
+		}
 		$user_id = (int) $user_id;
 		$source  = self::SOURCE_FORM === $source ? self::SOURCE_FORM : self::SOURCE_CODE;
 		$login   = self::login_of( $user_id );
@@ -361,9 +375,10 @@ class AB_MCP_Site_Mode {
 		AB_MCP_Settings::switch_all_tools_on();
 		/**
 		 * Fires when write access is switched on, right after the core
-		 * switched every tool on. An add-on switches its own items on here,
-		 * so that write access means everything (the Pro add-on empties its
-		 * list of switched-off abilities of other plugins).
+		 * switched every tool on: on a switch from off to on, not when it was
+		 * on already. An add-on switches its own items on here, so that write
+		 * access means everything (the Pro add-on empties its list of
+		 * switched-off abilities of other plugins).
 		 *
 		 * @since 4.5.0
 		 *

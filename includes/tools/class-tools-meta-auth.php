@@ -109,7 +109,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'edit_user', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
 		$allowed = self::allowed_user_meta_keys();
 		$key     = self::s( $a, 'key', '' );
@@ -126,7 +126,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
 			if ( ! current_user_can( 'edit_user_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
+				return AB_MCP_Guidance::role_refusal( __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'user_id' => $id,
@@ -164,7 +164,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		}
 		$tax_obj = get_taxonomy( $term->taxonomy );
 		if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
@@ -177,7 +177,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			// while this tool lets in accounts that may only assign terms: that,
 			// not a plugin, is the usual reason.
 			if ( ! current_user_can( 'edit_term_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator.', 'alphabridge-mcp' ) );
+				return AB_MCP_Guidance::role_refusal( __( 'Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'term_id' => $id,
@@ -236,7 +236,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			return $g;
 		}
 		if ( ! current_user_can( 'edit_user', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot view this user\'s application passwords: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot view this user\'s application passwords: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
 		$items = WP_Application_Passwords::get_user_application_passwords( $id );
 		$out   = array();

@@ -219,7 +219,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term of this taxonomy has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
 		}
 		if ( ! self::can_read_taxonomy( get_taxonomy( $term->taxonomy ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'term_id'     => (int) $term->term_id,
@@ -268,7 +268,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! self::can_read_taxonomy( get_taxonomy( $tax ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
 		}
 		$terms = get_terms(
 			array(
@@ -310,7 +310,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->manage_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// wp_insert_term() unslashes exactly two of these — name and
 		// description — so only those are slashed. Slashing the slug would add
@@ -350,7 +350,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->edit_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$fields = array();
 		foreach ( array( 'name', 'slug', 'description' ) as $k ) {
@@ -387,7 +387,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->delete_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$res = wp_delete_term( self::i( $a, 'term_id' ), $tax );
 		if ( is_wp_error( $res ) ) {

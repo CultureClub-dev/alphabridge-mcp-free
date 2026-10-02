@@ -84,13 +84,14 @@ Handing an AI access to a site should feel safe, so control comes first:
   one click.
 - **Fine-tuning** — every tool is on, and switching write access on switches every tool on
   again; switch single tools or whole groups off, and they vanish from the MCP surface until write
-  access is switched on the next time. Each tool says whether it reads or writes.
+  access is switched on the next time. Each tool shows a short name in the admin's language and
+  says whether it reads or writes.
   Code reads the switch through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`,
   `runs_in_read()`; the slugs `read` and `full` are write access off and on); a tool that reads
   code, files, the database, logs or credentials is marked with `'dangerous' => true`, which
   keeps it out while write access is off. The action `ab_mcp_site_mode_changed` fires when write
-  access is switched, `ab_mcp_reset_switches` when switching it on switched everything on (add-ons
-  switch their own items on there). The fine-tuning takes an add-on's fields into its one form
+  access is switched, `ab_mcp_reset_switches` when a switch from off to on switched everything on
+  (add-ons switch their own items on there). The fine-tuning takes an add-on's fields into its one form
   (filter `ab_mcp_fine_group_html`, action `ab_mcp_fine_save`).
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed, and the settings of
