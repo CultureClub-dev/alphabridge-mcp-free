@@ -77,6 +77,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_meta']         = array();
 	$GLOBALS['ab_test_meta_deleted'] = array();
 	$GLOBALS['ab_test_meta_added']   = array();
+	$GLOBALS['ab_test_meta_updated'] = array();
 	$GLOBALS['ab_test_rand']         = array();
 	$GLOBALS['ab_test_actions']      = array();
 	$GLOBALS['ab_test_comments_untrashed'] = array();
@@ -581,6 +582,22 @@ function add_post_meta( $post_id, $meta_key, $meta_value, $unique = false ) {
 	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ][] = maybe_serialize( $meta_value );
 	$GLOBALS['ab_test_meta_added'][] = array( (int) $post_id, $meta_key );
 	return count( $GLOBALS['ab_test_meta_added'] );
+}
+
+/**
+ * update_post_meta() as update_metadata() works without a previous value:
+ * key and value unslashed, the sanitize filter, then maybe_serialize(); the
+ * key then holds that one value, added where it was missing. As in core,
+ * meta for a revision goes to the post the revision belongs to.
+ */
+function update_post_meta( $post_id, $meta_key, $meta_value, $prev_value = '' ) {
+	$post_id    = wp_is_post_revision( $post_id ) ?: $post_id;
+	$meta_key   = stripslashes( (string) $meta_key );
+	$meta_value = stripslashes_deep( $meta_value );
+	$meta_value = apply_filters( "sanitize_post_meta_{$meta_key}", $meta_value, $meta_key, 'post' );
+	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ] = array( maybe_serialize( $meta_value ) );
+	$GLOBALS['ab_test_meta_updated'][] = array( (int) $post_id, $meta_key );
+	return true;
 }
 
 // The four helpers below are WordPress' own (6.9 / 7.0), so a test sees

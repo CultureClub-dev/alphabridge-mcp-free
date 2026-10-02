@@ -35,6 +35,20 @@ class AB_MCP_Tool_Registry {
 		'wp_wc_add_',
 	);
 
+	/**
+	 * Tools a "content" token may run whatever capability they are registered
+	 * with: a decision per tool, on top of the capability rule in
+	 * scope_allows(), which stays the general test.
+	 *
+	 * wp_update_builder_element (Pro) is the tool for the texts of pages built
+	 * with a page builder. A site handed over to a client who keeps those
+	 * texts up to date gets a content token, and this is the tool the client
+	 * needs. Its fields are typed and checked (text, heading, filtered HTML,
+	 * link, image); layout, styles and code of the page are not among them,
+	 * so naming it here gives a content token no reach into those.
+	 */
+	private const CONTENT_TOOLS = array( 'wp_update_builder_element' );
+
 
 	/**
 	 * Registered tools keyed by name.
@@ -257,7 +271,7 @@ class AB_MCP_Tool_Registry {
 	 * Both narrower scopes are fail-closed: "read" reuses the same read
 	 * classification the global read-only mode uses (an unrecognised tool counts
 	 * as writing), and "content" additionally needs the tool's capability to be
-	 * an explicitly content-level one.
+	 * an explicitly content-level one, or the tool to be named in CONTENT_TOOLS.
 	 *
 	 * @param string $scope Token scope.
 	 * @param string $name  Tool name.
@@ -276,6 +290,9 @@ class AB_MCP_Tool_Registry {
 			return false;
 		}
 		if ( 'content' === $scope ) {
+			if ( in_array( (string) $name, self::CONTENT_TOOLS, true ) ) {
+				return true;
+			}
 			$cap = isset( $def['capability'] ) ? (string) $def['capability'] : '';
 			return '' !== $cap && in_array( $cap, self::content_capabilities(), true );
 		}

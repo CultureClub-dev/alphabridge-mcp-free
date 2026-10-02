@@ -705,6 +705,114 @@ final class AB_MCP_Builders {
 		return false;
 	}
 
+	/* ------------------------------------------- page-builder data in meta */
+
+	/**
+	 * Post meta keys in which a page builder keeps markup or code that ends
+	 * up in the page, or that decide how it renders: over every signature,
+	 * those added through ab_mcp_builder_signatures included, the meta copies
+	 * of the page (copies), the keys with page code (locked_meta) and the
+	 * further keys a signature names (markup_meta). The "meta" argument of
+	 * wp_create_post and wp_update_post stores a value as given, so every key
+	 * here takes the unfiltered_html capability. That holds for keys without
+	 * "_" too (panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items,
+	 * tve_updated_post …), which the post writers would otherwise store for
+	 * anyone who may edit the post. An entry ending in "*" matches every key
+	 * that starts with what comes before it.
+	 *
+	 * Meant for both editions: on 02.10.2026 it holds the same keys as Pro's
+	 * AB_MCP_Tools_Content_Pro::markup_meta_keys().
+	 *
+	 * @return string[]
+	 */
+	public static function markup_meta_keys(): array {
+		$keys = array();
+		foreach ( self::signatures() as $sig ) {
+			foreach ( $sig['copies'] as $copy ) {
+				if ( 0 === strpos( $copy['loc'], 'meta:' ) ) {
+					$keys[] = substr( $copy['loc'], 5 );
+				}
+			}
+			$keys = array_merge( $keys, $sig['locked_meta'], $sig['markup_meta'] );
+		}
+		/**
+		 * Meta keys only an account with unfiltered_html may write through the
+		 * "meta" argument of wp_create_post and wp_update_post. Extend the
+		 * list, or narrow it: a key taken off goes back to every account that
+		 * may edit the post.
+		 *
+		 * @param string[] $keys Meta keys; an entry ending in "*" is a prefix.
+		 */
+		$keys = apply_filters( 'ab_mcp_builder_markup_meta_keys', array_values( array_unique( $keys ) ) );
+		return array_values( array_filter( (array) $keys, 'is_string' ) );
+	}
+
+	/**
+	 * Is this key page-builder data (markup_meta_keys())? Letter case does
+	 * not count: MySQL compares meta_key under a case-insensitive collation
+	 * (utf8mb4_unicode_520_ci, wp-includes/class-wpdb.php:901), and
+	 * update_metadata() picks the row it overwrites by that comparison
+	 * (wp-includes/meta.php:265). The lower-cased key the post writers store
+	 * after sanitize_key(), "vcv-pagecontent", therefore lands on the row
+	 * "vcv-pageContent".
+	 *
+	 * @param string        $key  Meta key.
+	 * @param string[]|null $keys The list, when the caller already has it.
+	 * @return bool
+	 */
+	public static function is_markup_meta_key( $key, $keys = null ): bool {
+		$key = strtolower( trim( (string) $key ) );
+		if ( '' === $key ) {
+			return false;
+		}
+		foreach ( null === $keys ? self::markup_meta_keys() : (array) $keys as $entry ) {
+			if ( ! is_scalar( $entry ) ) {
+				continue;
+			}
+			$entry = strtolower( trim( (string) $entry ) );
+			if ( '*' === substr( $entry, -1 ) ) {
+				// A bare "*" is no prefix: it would put every meta key of the
+				// site behind unfiltered_html by accident.
+				$prefix = substr( $entry, 0, -1 );
+				if ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) {
+					return true;
+				}
+			} elseif ( '' !== $entry && $entry === $key ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The refusal for writing a page-builder key, or null when the account may
+	 * write it. It says that nothing was written and names the ways: which
+	 * accounts have the capability, the builder's own editor, the tools on
+	 * this site that change the page's texts (for an existing post), the call
+	 * without the key for the other fields, and the filter for site owners.
+	 *
+	 * @param string       $key  Meta key as it would be stored.
+	 * @param WP_Post|null $post The post written to, when it exists.
+	 * @return WP_Error|null
+	 */
+	public static function markup_meta_refusal( $key, $post = null ): ?WP_Error {
+		if ( current_user_can( 'unfiltered_html' ) || ! self::is_markup_meta_key( $key ) ) {
+			return null;
+		}
+		$message = sprintf(
+			/* translators: %s: meta key */
+			__( 'Nothing was written: the meta key "%s" holds page-builder data that ends up in the page as markup or code. Writing it takes an account that may store unfiltered HTML (the unfiltered_html capability): on a single site administrators and editors have it, on a multisite network only super admins, and nobody where DISALLOW_UNFILTERED_HTML is set. Connect with such an account, or change the page in the builder\'s own editor.', 'alphabridge-mcp' ),
+			(string) $key
+		);
+		$tools = null !== $post ? array_values( array_diff( self::write_via( $post ), array( 'wp_update_post' ) ) ) : array();
+		if ( array() !== $tools ) {
+			/* translators: %s: comma-separated tool names */
+			$message .= ' ' . sprintf( __( 'Change its texts with %s.', 'alphabridge-mcp' ), implode( ', ', $tools ) );
+		}
+		$message .= ' ' . __( 'The other fields still change: send the call again without this key. A site owner can take a key off this list with the ab_mcp_builder_markup_meta_keys filter.', 'alphabridge-mcp' );
+		return new WP_Error( 'ab_mcp_needs_unfiltered_html', $message, array( 'meta_key' => (string) $key ) );
+	}
+
 	/* ------------------------------------------------------------ fields */
 
 	/**
@@ -913,6 +1021,7 @@ final class AB_MCP_Builders {
 			'data_version' => isset( $sig['data_version']['meta'] ) && is_string( $sig['data_version']['meta'] ) ? array( 'meta' => $sig['data_version']['meta'] ) : array(),
 			'copies'       => $copies,
 			'locked_meta'  => isset( $sig['locked_meta'] ) && is_array( $sig['locked_meta'] ) ? array_values( array_filter( $sig['locked_meta'], 'is_string' ) ) : array(),
+			'markup_meta'  => isset( $sig['markup_meta'] ) && is_array( $sig['markup_meta'] ) ? array_values( array_filter( $sig['markup_meta'], 'is_string' ) ) : array(),
 		);
 	}
 

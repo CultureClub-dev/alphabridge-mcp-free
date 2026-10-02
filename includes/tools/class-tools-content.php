@@ -33,6 +33,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	const UPDATE_DATE_DESCRIPTION = 'New publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two. A date alone never changes the status: a save that would publish the post or take it off the site is refused unless that status is passed as well, and a post is scheduled only for a date at least five minutes ahead.';
 
 	/**
+	 * The meta field of wp_create_post and wp_update_post, shared with an
+	 * edition that registers the tools again, so both describe the same rule.
+	 */
+	const META_DESCRIPTION = 'Key/value meta to set. Page-builder data (keys such as panels_data, dslc_code or pagelayer-data; filter ab_mcp_builder_markup_meta_keys) takes the unfiltered_html capability, which on a multisite network only a super admin has; without it the call is refused before anything is written.';
+
+	/**
 	 * Register tools.
 	 *
 	 * @param AB_MCP_Tool_Registry $r Registry.
@@ -103,7 +109,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'author'  => array( 'type' => 'integer' ),
 						'parent'  => array( 'type' => 'integer' ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
-						'meta'    => array( 'type' => 'object', 'description' => 'Key/value meta to set.' ),
+						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
 						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}.' ),
 					),
 				),
@@ -129,7 +135,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'author'  => array( 'type' => 'integer' ),
 						'parent'  => array( 'type' => 'integer' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
-						'meta'    => array( 'type' => 'object' ),
+						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
 						'terms'   => array( 'type' => 'object' ),
 					),
 				),
@@ -531,6 +537,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $pto->cap->create_posts ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
 		}
+		$refused = self::builder_meta_refusal( $a, null );
+		if ( null !== $refused ) {
+			return $refused;
+		}
 
 		$status = self::s( $a, 'status', 'draft' ) ?: 'draft';
 		if ( ! self::is_allowed_status( $status ) ) {
@@ -622,6 +632,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 
 		$post = get_post( $id );
+
+		$refused = self::builder_meta_refusal( $a, $post );
+		if ( null !== $refused ) {
+			return $refused;
+		}
 
 		// On a builder page post_content may be only a copy the site does not
 		// show (AB_MCP_Builders::content_update_guard()). A change to content
@@ -1151,6 +1166,32 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	}
 
 	/* --------------------------------------------------------------- internal */
+
+	/**
+	 * The refusal for the "meta" argument of wp_create_post and
+	 * wp_update_post, asked before anything is written. apply_meta_and_terms()
+	 * stores each key under sanitize_key() and passes over the "_" ones
+	 * itself; every other key it could store is asked here, so a call that
+	 * would store page-builder data for an account without unfiltered_html
+	 * stops before it changes anything (AB_MCP_Builders::markup_meta_refusal()).
+	 *
+	 * @param array        $a    Args.
+	 * @param WP_Post|null $post The post written to; null when it is created.
+	 * @return WP_Error|null
+	 */
+	private static function builder_meta_refusal( $a, $post ) {
+		foreach ( array_keys( self::arr( $a, 'meta', array() ) ) as $raw ) {
+			$key = sanitize_key( (string) $raw );
+			if ( '' === $key || '_' === substr( $key, 0, 1 ) ) {
+				continue;
+			}
+			$refused = AB_MCP_Builders::markup_meta_refusal( $key, $post );
+			if ( null !== $refused ) {
+				return $refused;
+			}
+		}
+		return null;
+	}
 
 	/**
 	 * Apply meta and terms from args to a post. Protected meta keys are

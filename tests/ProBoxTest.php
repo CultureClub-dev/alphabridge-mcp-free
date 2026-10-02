@@ -138,6 +138,22 @@ final class ProBoxTest extends TestCase {
 		self::assertStringNotContainsString( 'SFTP', $html );
 	}
 
+	/**
+	 * Pro keeps an undo point for 7 days by default, adjustable from 1 to 30
+	 * (AB_MCP_Pro_Undo::TTL_DAYS_DEFAULT, _MIN, _MAX, integration/pro-4.6).
+	 * The box and the readme say so, and not the former 24 hours.
+	 */
+	public function testTheUndoWindowIsTheOneProKeeps(): void {
+		$html   = $this->box();
+		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
+
+		self::assertStringContainsString( 'Undo points for 7 days, adjustable from 1 to 30', $html );
+		self::assertStringContainsString( 'undo points are kept for 7 days by default, adjustable from 1 to 30 days', $readme );
+		foreach ( array( 'box' => $html, 'readme.txt' => $readme ) as $where => $text ) {
+			self::assertDoesNotMatchRegularExpression( '/undo[^.]*24 hours/i', $text, $where );
+		}
+	}
+
 	public function testTheStylesheetLoadsOnThisScreenOnly(): void {
 		$admin = new AB_MCP_Admin();
 
