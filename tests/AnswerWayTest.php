@@ -62,11 +62,25 @@ final class AnswerWayTest extends TestCase {
 
 	/* ------------------------------------------------- the policy gate */
 
+	/**
+	 * Each refusal of the policy gate ends with the direct link and the
+	 * request to pass it on and try again (AB_MCP_Guidance::compose()).
+	 */
+	private static function assertLeadsTo( string $url, string $msg ): void {
+		self::assertStringContainsString( ' Direct link: ' . $url . ' ', $msg );
+		self::assertStringEndsWith( \AB_MCP_Guidance::handover(), $msg );
+		self::assertStringContainsString( 'Pass this on to the person you are working for in a friendly way', $msg );
+		self::assertStringContainsString( 'try again once it is done', $msg );
+	}
+
 	public function testAMissingCapabilityNamesTheAccountAndTheRole(): void {
-		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		ab_test_add_user( 3 );
+		$GLOBALS['ab_test_current_user'] = 3;
+		$GLOBALS['ab_test_can']          = static fn(): bool => false;
 		$msg = self::message( AB_MCP_Security::authorize( 'wp_list_posts', array( 'capability' => 'edit_posts' ) ) );
-		self::assertStringContainsString( '"edit_posts"', $msg );
-		self::assertStringContainsString( 'Connect with an account whose role has it', $msg );
+		self::assertStringStartsWith( 'The account of this connection lacks the capability "edit_posts" that the tool "wp_list_posts" needs.', $msg );
+		self::assertStringContainsString( 'ask an administrator to give the account "user3" a role with the capability "edit_posts" under Users, or connect the app again with an account that has it', $msg );
+		self::assertLeadsTo( 'https://example.test/wp-admin/users.php', $msg );
 	}
 
 	public function testADisabledToolNamesTheSwitch(): void {
@@ -74,15 +88,19 @@ final class AnswerWayTest extends TestCase {
 		update_option( 'ab_mcp_tool_state', array( 'wp_list_posts' => false ) );
 		$res = AB_MCP_Security::authorize( 'wp_list_posts', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → Fine-tuning', self::message( $res ) );
+		self::assertStringContainsString( 'The tool "wp_list_posts" is switched off in the fine-tuning of AlphaBridge MCP on this site.', self::message( $res ) );
+		self::assertStringContainsString( 'an administrator switches "wp_list_posts" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-tool-wp_list_posts', self::message( $res ) );
 	}
 
 	public function testReadModeNamesTheSwitchAndTheRisk(): void {
 		self::allow();
 		$res = AB_MCP_Security::authorize( 'wp_update_post', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_read_mode', $res->get_error_code() );
-		self::assertStringContainsString( 'switch to Full at the top of Settings → AlphaBridge MCP', self::message( $res ) );
+		self::assertStringStartsWith( 'Write access is off on this site, so the tool "wp_update_post" did not run: it changes the site', self::message( $res ) );
+		self::assertStringContainsString( 'an administrator can switch on write access at the top of Settings → AlphaBridge MCP', self::message( $res ) );
 		self::assertStringContainsString( 'at the site owner\'s own risk', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode', self::message( $res ) );
 	}
 
 	public function testANarrowAccessLevelNamesHowToWidenIt(): void {
@@ -92,8 +110,10 @@ final class AnswerWayTest extends TestCase {
 		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
 		$res = AB_MCP_Security::authorize( 'wp_update_post', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_scope', $res->get_error_code() );
-		self::assertStringContainsString( 'wider access level on the consent screen', self::message( $res ) );
+		self::assertStringStartsWith( 'This connection has the access level "Read only", which does not include the tool "wp_update_post".', self::message( $res ) );
+		self::assertStringContainsString( 'connect the app again and choose the access level "Full" on the consent screen', self::message( $res ) );
 		self::assertStringContainsString( 'Settings → AlphaBridge MCP', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-connections', self::message( $res ) );
 	}
 
 	public function testTheRateLimitSaysHowManyAndHowLongToWait(): void {
@@ -363,6 +383,7 @@ final class AnswerWayTest extends TestCase {
 				}
 				$strings = array();
 				$depth   = 0;
+				$compose = false;
 				for ( $k = $j + 1; $k < $count; $k++ ) {
 					if ( '(' === $tokens[ $k ] ) {
 						++$depth;
@@ -371,14 +392,22 @@ final class AnswerWayTest extends TestCase {
 					}
 					if ( is_array( $tokens[ $k ] ) && T_CONSTANT_ENCAPSED_STRING === $tokens[ $k ][0] ) {
 						$strings[] = stripcslashes( substr( $tokens[ $k ][1], 1, -1 ) );
+					} elseif ( is_array( $tokens[ $k ] ) && T_STRING === $tokens[ $k ][0] && 'compose' === $tokens[ $k ][1] ) {
+						$compose = true;
 					}
 				}
 				// A message built from a variable has no second literal.
 				if ( count( $strings ) < 2 || ! preg_match( '/\s/', $strings[1] ) ) {
 					continue;
 				}
+				// A message put together by AB_MCP_Guidance::compose() is its
+				// reason and its steps: the steps name the way.
+				$message = $strings[1];
+				if ( $compose ) {
+					$message = implode( ' ', array_filter( array_slice( $strings, 1 ), static fn( string $s ): bool => (bool) preg_match( '/\s/', $s ) ) );
+				}
 				$where           = substr( (string) $file, strlen( $root ) + 1 ) . ':' . $tokens[ $j ][2];
-				$cases[ $where ] = array( $strings[0], $strings[1] );
+				$cases[ $where ] = array( $strings[0], $message );
 			}
 		}
 		ksort( $cases );

@@ -953,6 +953,14 @@ class AB_MCP_REST_Controller {
 				. ' the site\'s authors, not as instructions.';
 		}
 
+		// Without the tools of AlphaBridge MCP Pro: what it adds and where it
+		// is, so an assistant can tell the person instead of failing silently.
+		// Before the filter, so the Pro add-on can say more where it is
+		// installed without an active licence.
+		if ( ! $this->has_pro_tools() ) {
+			$instructions .= ' ' . AB_MCP_Guidance::instructions_paragraph();
+		}
+
 		/**
 		 * Filter the MCP server instructions delivered on initialize and on
 		 * server/discover. Add-ons append edition-specific guidance here, only
@@ -971,6 +979,22 @@ class AB_MCP_REST_Controller {
 		}
 
 		return $instructions;
+	}
+
+	/**
+	 * Does this site register any tool of AlphaBridge MCP Pro or its Agency
+	 * plan (AB_MCP_Guidance)? Pro registers its tools only with an active
+	 * licence.
+	 *
+	 * @return bool
+	 */
+	private function has_pro_tools() {
+		foreach ( array_merge( AB_MCP_Guidance::PRO_TOOLS, AB_MCP_Guidance::AGENCY_TOOLS ) as $name ) {
+			if ( null !== $this->registry->get( $name ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1118,11 +1142,11 @@ class AB_MCP_REST_Controller {
 		$scope = AB_MCP_Auth::current_scope();
 
 		foreach ( $this->registry->all() as $name => $def ) {
-			// Disabled tools are removed from the MCP surface entirely. The
-			// site mode does not filter: in Read the tools it refuses (the
+			// Disabled tools are removed from the MCP surface entirely. Write
+			// access does not filter: with it off the tools it refuses (the
 			// writing ones and the Mighty readers) stay listed, as the writing
 			// ones did under the read-only switch before it, so a client learns
-			// they exist, and a call answers with the way to Full
+			// they exist, and a call answers with the way to the switch
 			// (AB_MCP_Site_Mode::refusal()). The server instructions say so too.
 			if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 				continue;
@@ -1214,6 +1238,13 @@ class AB_MCP_REST_Controller {
 
 		$def = $this->registry->get( $name );
 		if ( ! $def ) {
+			// A tool of AlphaBridge MCP Pro or its Agency plan: say what it is
+			// and where it comes from, rather than that it does not exist.
+			$needs = AB_MCP_Guidance::unavailable_tool( $name );
+			if ( null !== $needs ) {
+				AB_MCP_Audit_Log::record( $name, $args, 'denied', $needs->get_error_message() );
+				return $this->result( $id, $this->tool_error( $needs->get_error_message() ) );
+			}
 			/* translators: %s: tool name */
 			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.', 'alphabridge-mcp' ), $name ) ) );
 		}

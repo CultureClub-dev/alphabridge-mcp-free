@@ -1514,8 +1514,11 @@ class AB_MCP_OAuth {
 				self::client_error_redirect( $redirect, 'access_denied', $state );
 			}
 			// Clamped fail-closed to a known scope inside create_auth_code().
-			// Absent field falls back to the narrower "content", never "full".
-			$scope = isset( $_POST['ab_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['ab_scope'] ) ) : 'content';
+			// An absent field means the choice the page opened with: the full
+			// access level. Whether the connection may write is decided by the
+			// switch for write access on the site, off until an administrator
+			// confirms it (AB_MCP_Site_Mode), not by the access level.
+			$scope = isset( $_POST['ab_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['ab_scope'] ) ) : self::default_scope( $scopes );
 			$code  = self::create_auth_code( $client_id, $redirect, get_current_user_id(), $scope, $challenge );
 			if ( '' === $code ) {
 				self::error_page( __( 'The connection could not be started. Please try again.', 'alphabridge-mcp' ) );
@@ -1598,15 +1601,19 @@ class AB_MCP_OAuth {
 	}
 
 	/**
-	 * The access level checked when the consent screen opens: never the
-	 * widest. "content" lets the assistant do the common content work at once;
-	 * granting "full" is a deliberate choice.
+	 * The access level checked when the consent screen opens: the full one.
+	 * Whoever connects an assistant wants it to do everything they ask; what
+	 * can harm the site is held back by the switch for write access, which
+	 * every site starts with off and only an administrator switches on, with
+	 * a confirmed notice (AB_MCP_Site_Mode). The screen says so next to the
+	 * choice. A narrower level stays a deliberate choice; without a full
+	 * level among the scopes, the narrowest one.
 	 *
 	 * @param array $scopes Scope => sentence.
 	 * @return string
 	 */
 	private static function default_scope( array $scopes ) {
-		return isset( $scopes['content'] ) ? 'content' : 'read';
+		return isset( $scopes['full'] ) ? 'full' : 'read';
 	}
 
 	/**
@@ -1656,9 +1663,11 @@ class AB_MCP_OAuth {
 	 * so that the page itself, the access level checked when it opens
 	 * included, can be rendered and looked at on its own.
 	 *
-	 * In Read the page says so above the access levels: the level is
-	 * granted as chosen, but until an administrator switches to Full the
-	 * connection reads only, and approving should not suggest otherwise.
+	 * Above the access levels the page says that the switch for write
+	 * access on the site decides whether assistants may write, whatever level
+	 * is chosen, and whether it is on: the level is granted as chosen, but
+	 * with write access off the connection reads only, and approving should
+	 * not suggest otherwise.
 	 *
 	 * @param array  $client Registered client (name, redirect_uris).
 	 * @param array  $get    Validated request parameters.
@@ -1748,9 +1757,7 @@ class AB_MCP_OAuth {
 		?>
 		</div>
 	<?php endif; ?>
-	<?php if ( ! AB_MCP_Site_Mode::is_full() ) : ?>
-		<div class="dest mode-read" role="note"><?php echo esc_html( AB_MCP_Site_Mode::consent_text() ); ?></div>
-	<?php endif; ?>
+	<div class="<?php echo esc_attr( AB_MCP_Site_Mode::is_full() ? 'who mode-full' : 'dest mode-read' ); ?>" role="note"><?php echo esc_html( AB_MCP_Site_Mode::consent_text() ); ?></div>
 	<form method="post" action="<?php echo esc_url( $self_url ); ?>">
 		<?php wp_nonce_field( 'ab_mcp_oauth_approve' ); ?>
 		<input type="hidden" name="client_id" value="<?php echo esc_attr( (string) $get['client_id'] ); ?>">

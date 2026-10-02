@@ -1588,6 +1588,7 @@ define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/'
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
 require_once __DIR__ . '/../includes/class-site-mode.php';
+require_once __DIR__ . '/../includes/class-guidance.php';
 require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';

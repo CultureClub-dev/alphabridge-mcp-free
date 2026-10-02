@@ -1,13 +1,14 @@
-# German translations of the AlphaBridge MCP site mode texts (Read and Full).
+# German translations of the AlphaBridge MCP texts of the switch for write
+# access, the fine-tuning of the tool switches and the answers that lead to them.
 # Bundled with the plugin; a language pack from translate.wordpress.org takes
 # precedence for every string it translates (AB_MCP_Plugin::load_bundled_translations()).
 # This file is distributed under the same license as the AlphaBridge MCP plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: AlphaBridge MCP 4.4.0\n"
-"PO-Revision-Date: 2026-10-02 10:00+0200\n"
+"Project-Id-Version: AlphaBridge MCP 4.5.0\n"
+"PO-Revision-Date: 2026-10-02 18:00+0200\n"
 "Last-Translator: AlphaBridge MCP\n"
-"Language-Team: German (Formal)\n"
+"Language-Team: German\n"
 "Language: de_DE_formal\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -16,16 +17,65 @@ msgstr ""
 "X-Domain: alphabridge-mcp\n"
 
 #, php-format
-msgid "%1$s of %2$s tools can run in Read"
-msgstr "%1$s von %2$s Werkzeugen können im Modus Lesend laufen"
+msgid "%1$s of %2$s on"
+msgstr "%1$s von %2$s an"
 
 #, php-format
-msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
-msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ ist mit Mighty markiert, und der Modus Lesend führt kein mit Mighty markiertes Werkzeug aus, auch keines, das nur liest. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
+msgid "%1$s of %2$s tools can run with write access off"
+msgstr "%1$s von %2$s Werkzeugen können mit Schreibrechten aus laufen"
 
 #, php-format
-msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
-msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ schreibt. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
+msgid "%1$s of %2$s tools on"
+msgstr "%1$s von %2$s Werkzeugen an"
+
+#, php-format
+msgctxt "tool badge with a number"
+msgid "%d read"
+msgstr "%d lesend"
+
+#, php-format
+msgctxt "tool badge with a number"
+msgid "%d write"
+msgstr "%d schreibend"
+
+msgctxt "list separator"
+msgid ", "
+msgstr ", "
+
+msgid "AI assistants read and write: posts, pages, media, terms and comments."
+msgstr "Die KI liest und schreibt: Beiträge, Seiten, Medien, Begriffe und Kommentare."
+
+msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
+msgstr "Die KI liest und schreibt: Beiträge, Seiten, Plugins, Themes, Code und Datenbank."
+
+msgid "AI assistants read content, media and settings and advise you."
+msgstr "Die KI liest Inhalte, Medien und Einstellungen und berät Sie."
+
+msgctxt "main group of tools"
+msgid "Abilities of other plugins"
+msgstr "Fähigkeiten anderer Plugins"
+
+msgctxt "tool group"
+msgid "Abilities of other plugins"
+msgstr "Fähigkeiten anderer Plugins"
+
+#, php-format
+msgid "Abuse protection active (fixed): %d requests/min."
+msgstr "Missbrauchsschutz aktiv (fest eingestellt): %d Anfragen/Min."
+
+msgid "Actions that other plugins offer to AI assistants"
+msgstr "Aktionen, die andere Plugins KI-Assistenten anbieten"
+
+#, php-format
+msgid "All in %s"
+msgstr "Alle in %s"
+
+msgid "All tools"
+msgstr "Alle Werkzeuge"
+
+#, php-format
+msgid "All tools in %s"
+msgstr "Alle Werkzeuge in %s"
 
 msgid "AlphaBridge MCP now only reads on this site."
 msgstr "AlphaBridge MCP liest auf dieser Website jetzt nur noch."
@@ -33,95 +83,413 @@ msgstr "AlphaBridge MCP liest auf dieser Website jetzt nur noch."
 msgid "AlphaBridge MCP on this site"
 msgstr "AlphaBridge MCP auf dieser Website"
 
-msgid "Assistants can read content, media, terms, comments, settings and the structure of the site. The tools marked Mighty that read code, files, the database, logs or credentials run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say."
-msgstr "Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen. Die mit Mighty markierten Werkzeuge, die Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten lesen, laufen nur im Modus Full, wie jedes Werkzeug, das etwas erstellt, ändert oder löscht – gleich, was ihr Schalter und die Zugriffsstufe der Verbindung sagen."
+msgid "Also switched off, not offered right now (kept):"
+msgstr "Ebenfalls ausgeschaltet, gerade nicht angeboten (bleibt gespeichert):"
 
-msgid "Assistants may create, change and delete, and read code, files, the database, logs and credentials, through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level."
-msgstr "Assistenten dürfen mit jedem eingeschalteten Werkzeug erstellen, ändern und löschen sowie Code, Dateien, die Datenbank, Protokolle und Zugangsdaten lesen, auch mit den mächtigen, die mit Mighty markiert sind – im Rahmen der Rechte des verbundenen Kontos und seiner Zugriffsstufe."
+msgid "Applies to every connection: Claude, ChatGPT, Cursor and all others."
+msgstr "Gilt für jede Verbindung: Claude, ChatGPT, Cursor und alle anderen."
+
+msgctxt "tool group"
+msgid "Blueprint (site structure)"
+msgstr "Blueprint (Aufbau der Website)"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Connection created."
+msgstr "Verbindung angelegt."
+
+msgid "Connection deleted."
+msgstr "Verbindung gelöscht."
+
+msgctxt "main group of tools"
+msgid "Content"
+msgstr "Inhalte"
+
+msgctxt "tool group"
+msgid "Cron, transients and site health"
+msgstr "Cron, Transients und Website-Zustand"
+
+msgctxt "tool group"
+msgid "Database"
+msgstr "Datenbank"
+
+msgctxt "main group of tools"
+msgid "Database & operations"
+msgstr "Datenbank & Betrieb"
+
+#, php-format
+msgid "Direct link: %s"
+msgstr "Direkter Link: %s"
 
 msgid "Dismiss"
 msgstr "Ausblenden"
 
-msgid "Every tool is on until you switch it off here. In Full, switched-on tools run, the powerful ones marked Mighty included; in Read every tool that writes and every tool marked Mighty is refused, whatever its switch says. Switched-off tools are removed from the MCP server and REST API entirely — no client can see or call them."
-msgstr "Jedes Werkzeug ist eingeschaltet, bis Sie es hier ausschalten. Im Modus Full laufen eingeschaltete Werkzeuge, auch die mächtigen, die mit Mighty markiert sind; im Modus Lesend wird jedes schreibende und jedes mit Mighty markierte Werkzeug abgewiesen, gleich, was sein Schalter sagt. Ausgeschaltete Werkzeuge verschwinden ganz aus dem MCP-Server und der REST-API – kein Client kann sie sehen oder aufrufen."
+msgid "Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs."
+msgstr "Jedes Werkzeug ist an, bis Sie es hier ausschalten. Ausgeschaltete Werkzeuge sieht kein KI-Assistent. Schreibende Werkzeuge laufen nur mit Schreibrechten an, ebenso lesende mit dem Vermerk „erst mit Schreibrechten“: Sie lesen Code, Dateien, die Datenbank oder Protokolle."
 
-msgid "Fine-tuning (for advanced users)"
-msgstr "Feineinstellung (für Fortgeschrittene)"
+msgctxt "tool group"
+msgid "Export"
+msgstr "Export"
 
-msgctxt "site mode"
-msgid "Full"
-msgstr "Full"
+msgid "Find a tool"
+msgstr "Werkzeug suchen"
 
-msgid "Full is on. Assistants can now create, change and delete, and read code, files, the database, logs and credentials, through the tools that are switched on. Your confirmation is recorded with your account, the time and the version of the notice. You can switch back to Read at the top of this page at any time."
-msgstr "Full ist eingeschaltet. Assistenten können jetzt mit den eingeschalteten Werkzeugen erstellen, ändern und löschen sowie Code, Dateien, die Datenbank, Protokolle und Zugangsdaten lesen. Ihre Bestätigung ist mit Ihrem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite können Sie jederzeit zurück auf Lesend schalten."
+msgid "Find a tool…"
+msgstr "Werkzeug suchen …"
 
-msgid "Full is on; no confirmation on the settings page is recorded for it."
-msgstr "Full ist eingeschaltet; eine Bestätigung auf der Einstellungsseite ist dafür nicht festgehalten."
-
-msgid "Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup."
-msgstr "Full erlaubt KI-Assistenten, auf dieser Live-Website Inhalte, Dateien, Einstellungen und Code zu erstellen, zu ändern und zu löschen. Das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko. Stellen Sie sicher, dass Sie ein aktuelles Backup haben."
+msgid "Fine-tuning"
+msgstr "Feineinstellung"
 
 #, php-format
-msgid "Full since %1$s, confirmed by %2$s"
-msgstr "Full seit %1$s, bestätigt von %2$s"
+msgid "Full description of %s"
+msgstr "Ganze Beschreibung von %s"
 
-#, php-format
-msgid "Full since %s, set by code, not confirmed on this page"
-msgstr "Full seit %s, per Code gesetzt, nicht auf dieser Seite bestätigt"
+msgid "Install & Update"
+msgstr "Installieren & Aktualisieren"
 
-msgid "Full was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again."
-msgstr "Full wurde nicht eingeschaltet: Der Hinweis hat sich geändert, seit diese Seite geladen wurde. Lesen Sie ihn noch einmal, setzen Sie das Häkchen und schalten Sie erneut um."
+msgctxt "tool group"
+msgid "Install and update"
+msgstr "Installieren und Aktualisieren"
 
-msgid "Full was not switched on: tick the box under the notice to confirm it, then switch again."
-msgstr "Full wurde nicht eingeschaltet: Setzen Sie das Häkchen unter dem Hinweis, um ihn zu bestätigen, und schalten Sie dann erneut um."
+msgctxt "tool group"
+msgid "Large uploads in parts"
+msgstr "Große Uploads in Teilen"
 
-msgid "I understand that switching to Full can be destructive and is at my own risk, and I have a current backup."
-msgstr "Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup."
+msgid "Log cleared."
+msgstr "Protokoll geleert."
 
-msgid "In Full the tools that are switched on run; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there."
-msgstr "Im Modus Full laufen die eingeschalteten Werkzeuge; schreibende Werkzeuge, die mit Mighty markiert sind und vor diesem Update ausgeschaltet waren, sind ebenfalls eingeschaltet, und Sie können sie unter Feineinstellung ausschalten. Werkzeuge, die mit Mighty markiert sind und nur lesen, laufen nur im Modus Full, und eines, das vor diesem Update ausgeschaltet war, bleibt dort ausgeschaltet."
+msgid "Media"
+msgstr "Medien"
 
-#, php-format
-msgid "Mode: %s"
-msgstr "Modus: %s"
+msgctxt "tool group"
+msgid "Media"
+msgstr "Medien"
 
-msgid "Noted. The mode of this site is shown at the top of this page."
-msgstr "Notiert. Der Modus dieser Website steht oben auf dieser Seite."
+msgid "Meta & App Passwords"
+msgstr "Meta & Anwendungspasswörter"
 
-msgid "On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here."
-msgstr "Auf dieser Website bleiben Werkzeuge, die mit Mighty markiert sind, nur lesen und vor dem Update mit den Modi ausgeschaltet waren, im Modus Full ausgeschaltet, bis Sie sie hier einschalten."
+msgctxt "tool group"
+msgid "Meta and application passwords"
+msgstr "Meta und Anwendungspasswörter"
+
+msgctxt "main group of tools"
+msgid "More tools"
+msgstr "Weitere Werkzeuge"
+
+msgctxt "tool group"
+msgid "Multisite network"
+msgstr "Multisite-Netzwerk"
+
+msgid "New connections see the change at once. An assistant that is already connected may load the tool list again only when you connect it again."
+msgstr "Neue Verbindungen sehen die Änderung sofort. Ein schon verbundener Assistent lädt die Werkzeugliste eventuell erst neu, wenn Sie ihn neu verbinden."
+
+msgid "No plugin on this site offers abilities yet."
+msgstr "Noch kein Plugin auf dieser Website bietet Fähigkeiten an."
+
+msgid "No tool matches."
+msgstr "Kein Werkzeug passt."
+
+msgid "Noted — the plugin will not ask for a review again."
+msgstr "Notiert – das Plugin fragt nicht wieder nach einer Bewertung."
+
+msgid "Noted. Whether AI assistants may write on this site is shown at the top of this page."
+msgstr "Notiert. Ob KI-Assistenten auf dieser Website schreiben dürfen, steht oben auf dieser Seite."
+
+msgctxt "main switch"
+msgid "Off"
+msgstr "Aus"
+
+msgid "Off: AI assistants only read. For anything they should change, you flip the switch."
+msgstr "Aus: KI-Assistenten lesen nur. Für alles, was sie ändern sollen, legen Sie den Schalter um."
+
+msgid "Off: read only"
+msgstr "Aus: nur lesen"
+
+msgctxt "main switch"
+msgid "On"
+msgstr "An"
+
+msgid "On this site, tools that read code, files, the database, logs or credentials and were switched off before the update that brought write access stay off until you switch them on here or switch on write access again."
+msgstr "Auf dieser Website bleiben Werkzeuge, die Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten lesen und vor dem Update mit den Schreibrechten ausgeschaltet waren, aus, bis Sie sie hier einschalten oder die Schreibrechte erneut einschalten."
+
+msgid "On: full power"
+msgstr "An: volle Leistung"
+
+msgid "On: full power. Connected AI assistants read and write on this site."
+msgstr "An: volle Leistung. Verbundene KI-Assistenten lesen und schreiben auf dieser Website."
 
 msgid "Open Settings → AlphaBridge MCP"
 msgstr "Einstellungen → AlphaBridge MCP öffnen"
 
-msgctxt "site mode"
-msgid "Read"
+msgid "Operations (Cron, Transients, Health)"
+msgstr "Betrieb (Cron, Transients, Zustand)"
+
+msgid "Options & Settings"
+msgstr "Optionen & Einstellungen"
+
+msgctxt "tool group"
+msgid "Other"
+msgstr "Sonstiges"
+
+msgctxt "tool group"
+msgid "PHP snippets (Code Snippets, WPCode)"
+msgstr "PHP-Snippets (Code Snippets, WPCode)"
+
+msgctxt "tool group"
+msgid "Page builders"
+msgstr "Page-Builder"
+
+msgid "Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it."
+msgstr "Geben Sie das der Person, für die Sie arbeiten, freundlich weiter, mit den Schritten und dem Link, und versuchen Sie es erneut, sobald es erledigt ist; suchen Sie keinen Weg darum herum."
+
+msgctxt "tool group"
+msgid "Plugin files and uploads"
+msgstr "Plugin-Dateien und Uploads"
+
+msgctxt "tool group"
+msgid "Plugins and themes"
+msgstr "Plugins und Themes"
+
+msgid "Plugins offer their actions to AI assistants as abilities (WordPress Abilities API). With write access on, every ability runs, reading or writing, unless you switch it off here; each one also checks the rights of the connected account."
+msgstr "Plugins bieten ihre Aktionen KI-Assistenten als Fähigkeiten an (WordPress Abilities API). Mit Schreibrechten an läuft jede Fähigkeit, lesend oder schreibend, solange Sie sie hier nicht ausschalten; jede prüft zusätzlich die Rechte des verbundenen Kontos."
+
+msgctxt "main group of tools"
+msgid "Plugins, themes & code"
+msgstr "Plugins, Themes & Code"
+
+msgid "Posts & Pages"
+msgstr "Beiträge & Seiten"
+
+msgctxt "tool group"
+msgid "Posts and pages"
+msgstr "Beiträge und Seiten"
+
+msgid "Products, orders, coupons and customers"
+msgstr "Produkte, Bestellungen, Gutscheine und Kunden"
+
+msgctxt "tool badge"
+msgid "Reads"
 msgstr "Lesend"
 
-msgid "Read is on. Assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused."
-msgstr "Lesend ist eingeschaltet. Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, und jedes mit Mighty markierte, das Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten liest, wird abgewiesen."
+msgid "SEO"
+msgstr "SEO"
 
-msgid "Since this update the plugin starts in the mode Read on every site: assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool marked Mighty that reads code, files, the database, logs or credentials. To let them write again or read those, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk."
-msgstr "Seit diesem Update startet das Plugin auf jeder Website im Modus Lesend: Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen, ebenso jedes mit Mighty markierte Werkzeug, das Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten liest. Damit sie wieder schreiben oder diese lesen können, schaltet ein Administrator oben unter Einstellungen → AlphaBridge MCP auf Full um – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko."
+msgctxt "tool group"
+msgid "SEO"
+msgstr "SEO"
 
-msgid "Switch back to Read"
-msgstr "Zurück auf Lesend schalten"
+msgid "Save changes"
+msgstr "Änderungen speichern"
 
-msgid "Switch single tools off under Fine-tuning"
-msgstr "Einzelne Werkzeuge unter Feineinstellung ausschalten"
+msgid "Saved."
+msgstr "Gespeichert."
 
-msgid "Switch single tools or whole groups off"
-msgstr "Einzelne Werkzeuge oder ganze Gruppen ausschalten"
+msgid "Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect)."
+msgstr "Gespeichert. Clients können die geladene Werkzeugliste zwischenspeichern. Ist die Änderung in einem verbundenen Client nicht zu sehen, laden Sie seine Werkzeugliste neu oder verbinden Sie ihn neu (Claude: unter Konnektoren die Werkzeugliste dieses Konnektors neu laden oder ihn trennen und neu verbinden; Claude Code: /mcp, dann neu verbinden)."
 
-msgid "Switch to Full"
-msgstr "Auf Full umschalten"
+msgid "Search & Bulk Actions"
+msgstr "Suche & Massenaktionen"
+
+msgctxt "tool group"
+msgid "Search and bulk actions"
+msgstr "Suche und Massenaktionen"
+
+msgctxt "tool group"
+msgid "Settings and options"
+msgstr "Einstellungen und Optionen"
+
+msgctxt "main group of tools"
+msgid "Shop (WooCommerce)"
+msgstr "Shop (WooCommerce)"
+
+msgid "Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of Settings → AlphaBridge MCP, at the site owner's own risk."
+msgstr "Seit diesem Update startet jede Website mit Schreibrechten aus: KI-Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen; jedes Werkzeug, das erstellt, ändert oder löscht, wird abgelehnt, ebenso die lesenden Werkzeuge mit dem Vermerk „erst mit Schreibrechten“ unter Feineinstellung, die Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten lesen. Damit sie wieder schreiben, schaltet ein Administrator oben unter Einstellungen → AlphaBridge MCP die Schreibrechte ein, auf eigenes Risiko des Website-Betreibers."
+
+msgctxt "main group of tools"
+msgid "Site & users"
+msgstr "Website & Benutzer"
+
+msgctxt "tool group"
+msgid "Site Deploy (FTP/SFTP)"
+msgstr "Site Deploy (FTP/SFTP)"
+
+msgid "Switch on"
+msgstr "Einschalten"
+
+msgid "Switch on write access?"
+msgstr "Schreibrechte einschalten?"
+
+msgid "Switch single tools on and off"
+msgstr "Werkzeuge einzeln ein- und ausschalten"
+
+msgid "Switching on write access switches every tool on; afterwards you can switch single tools off under Fine-tuning."
+msgstr "Beim Einschalten der Schreibrechte geht jedes Werkzeug an; danach können Sie einzelne Werkzeuge unter Feineinstellung ausschalten."
+
+msgid "Switching on write access switches everything here on; what you switch off afterwards stays off until write access is switched on the next time."
+msgstr "Beim Einschalten der Schreibrechte geht hier alles an; was Sie danach ausschalten, bleibt aus, bis die Schreibrechte das nächste Mal eingeschaltet werden."
+
+msgid "System & Maintenance"
+msgstr "System & Wartung"
+
+msgctxt "tool group"
+msgid "System and maintenance"
+msgstr "System und Wartung"
+
+msgid "Take back changes of AI assistants"
+msgstr "Änderungen von KI-Assistenten rückgängig machen"
+
+msgid "Taxonomies & Comments"
+msgstr "Taxonomien & Kommentare"
+
+msgctxt "tool group"
+msgid "Terms and comments"
+msgstr "Begriffe und Kommentare"
 
 #, php-format
-msgid "The tool \"%s\" is switched off in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Fine-tuning."
-msgstr "Das Werkzeug „%s“ ist in den Einstellungen von AlphaBridge MCP ausgeschaltet. Ein Administrator kann es unter Einstellungen → AlphaBridge MCP → Feineinstellung einschalten."
+msgid "The account of this connection lacks the capability \"%2$s\" that the tool \"%1$s\" needs."
+msgstr "Dem Konto dieser Verbindung fehlt die Berechtigung „%2$s“, die das Werkzeug „%1$s“ braucht."
 
-msgid "This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full."
-msgstr "Diese Website ist im Modus Lesend: Gleich, welche Zugriffsstufe Sie wählen, kann die Verbindung nur lesen, bis ein Administrator AlphaBridge MCP auf Full umschaltet."
+#, php-format
+msgid "The tool \"%s\" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here."
+msgstr "Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist."
 
-msgid "Unknown mode; nothing was changed. Use the switch at the top of this page."
-msgstr "Unbekannter Modus; nichts wurde geändert. Nutzen Sie den Schalter oben auf dieser Seite."
+#, php-format
+msgid "The tool \"%s\" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here."
+msgstr "Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist."
+
+#, php-format
+msgid "The tool \"%s\" is switched off in the fine-tuning of AlphaBridge MCP on this site."
+msgstr "Das Werkzeug „%s“ ist in der Feineinstellung von AlphaBridge MCP auf dieser Website ausgeschaltet."
+
+#, php-format
+msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
+msgstr "Diese Verbindung hat die Zugriffsstufe „%2$s“, die das Werkzeug „%1$s“ nicht umfasst."
+
+#, php-format
+msgid "This site runs WordPress %s. Abilities of other plugins need WordPress 6.9 or newer (Abilities API); update WordPress under Dashboard → Updates to use them."
+msgstr "Diese Website läuft mit WordPress %s. Fähigkeiten anderer Plugins brauchen WordPress 6.9 oder neuer (Abilities API); aktualisieren Sie WordPress unter Dashboard → Aktualisierungen, um sie zu nutzen."
+
+msgid "To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner's own risk, and a current backup is advised."
+msgstr "Damit es geht, kann ein Administrator oben unter Einstellungen → AlphaBridge MCP die Schreibrechte einschalten und dort den Hinweis bestätigen; das geschieht auf eigenes Risiko des Website-Betreibers, und ein aktuelles Backup ist zu empfehlen."
+
+#, php-format
+msgid "To allow it, an administrator switches \"%s\" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes."
+msgstr "Damit es geht, schaltet ein Administrator „%s“ unter Einstellungen → AlphaBridge MCP → Feineinstellung ein und speichert die Änderungen."
+
+#, php-format
+msgid "To allow it, ask an administrator to give the account \"%1$s\" a role with the capability \"%2$s\" under Users, or connect the app again with an account that has it, such as an administrator."
+msgstr "Damit es geht, bitten Sie einen Administrator, dem Konto „%1$s“ unter Benutzer eine Rolle mit der Berechtigung „%2$s“ zu geben, oder verbinden Sie die App erneut mit einem Konto, das sie hat, etwa einem Administrator."
+
+#, php-format
+msgid "To allow it, connect the app again and choose the access level \"%s\" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP."
+msgstr "Damit es geht, verbinden Sie die App erneut und wählen auf der Zustimmungsseite die Zugriffsstufe „%s“, oder lassen Sie einen Administrator unter Einstellungen → AlphaBridge MCP eine Verbindung mit dieser Zugriffsstufe anlegen."
+
+msgid "To use it, the site owner installs and activates AlphaBridge MCP Pro with the Agency plan; its tools then show up for every connection, and the switch for write access on the settings page decides whether they may change the site."
+msgstr "Damit es genutzt werden kann, installiert und aktiviert der Website-Betreiber AlphaBridge MCP Pro mit dem Agency-Plan; seine Werkzeuge erscheinen dann für jede Verbindung, und der Schalter für Schreibrechte auf der Einstellungsseite entscheidet, ob sie die Website ändern dürfen."
+
+msgid "To use it, the site owner installs and activates AlphaBridge MCP Pro; its tools then show up for every connection, and the switch for write access on the settings page decides whether they may change the site."
+msgstr "Damit es genutzt werden kann, installiert und aktiviert der Website-Betreiber AlphaBridge MCP Pro; seine Werkzeuge erscheinen dann für jede Verbindung, und der Schalter für Schreibrechte auf der Einstellungsseite entscheidet, ob sie die Website ändern dürfen."
+
+msgid "Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup."
+msgstr "Verstanden: Änderungen wirken sofort, ich schalte Schreiben auf eigenes Risiko ein und habe ein aktuelles Backup."
+
+msgctxt "main group of tools"
+msgid "Undo"
+msgstr "Undo"
+
+msgctxt "tool group"
+msgid "Undo"
+msgstr "Undo"
+
+msgid "Unknown setting; nothing was changed. Use the switch at the top of this page."
+msgstr "Unbekannte Einstellung; nichts wurde geändert. Nutzen Sie den Schalter oben auf dieser Seite."
+
+msgid "Unsaved changes — save to apply them."
+msgstr "Nicht gespeicherte Änderungen – speichern Sie sie, damit sie gelten."
+
+msgctxt "tool group"
+msgid "Users and menus"
+msgstr "Benutzer und Menüs"
+
+msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP."
+msgstr "Gleich, welche Zugriffsstufe Sie wählen: Der Schalter für Schreibrechte auf dieser Website entscheidet, ob KI-Assistenten schreiben dürfen; gerade ist er aus, darum liest die Verbindung nur, bis ein Administrator ihn oben unter Einstellungen → AlphaBridge MCP einschaltet."
+
+msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now."
+msgstr "Gleich, welche Zugriffsstufe Sie wählen: Der Schalter für Schreibrechte auf dieser Website entscheidet, ob KI-Assistenten schreiben dürfen; gerade ist er an."
+
+msgid "Widgets"
+msgstr "Widgets"
+
+msgctxt "tool group"
+msgid "Widgets"
+msgstr "Widgets"
+
+msgid "With Pro they also read the shop's products, orders, customers and coupons."
+msgstr "Mit Pro liest sie auch Produkte, Bestellungen, Kunden und Gutscheine des Shops."
+
+msgid "With Pro they also read users and the shop's products, orders, customers and coupons."
+msgstr "Mit Pro liest sie auch Benutzer sowie Produkte, Bestellungen, Kunden und Gutscheine des Shops."
+
+msgid "With Pro they also read users."
+msgstr "Mit Pro liest sie auch Benutzer."
+
+msgid "With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side."
+msgstr "Mit Schreibrechten arbeiten Ihre KI-Assistenten direkt auf Ihrer Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit."
+
+msgid "Write access for AI assistants"
+msgstr "Schreibrechte für KI-Assistenten"
+
+#, php-format
+msgid "Write access is off on this site, so the tool \"%s\" did not run: it changes the site, and with write access off AI assistants only read."
+msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug „%s“ nicht: Es ändert die Website, und mit Schreibrechten aus lesen KI-Assistenten nur."
+
+#, php-format
+msgid "Write access is off on this site, so the tool \"%s\" did not run: it is one of the reading tools that run only with write access on."
+msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug „%s“ nicht: Es gehört zu den lesenden Werkzeugen, die nur mit Schreibrechten an laufen."
+
+msgid "Write access is off, so no ability runs; switch it on at the top of this page."
+msgstr "Die Schreibrechte sind aus, darum läuft keine Fähigkeit; schalten Sie sie oben auf dieser Seite ein."
+
+msgid "Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused."
+msgstr "Die Schreibrechte sind aus. KI-Assistenten lesen jetzt nur: Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website; jedes Werkzeug, das erstellt, ändert oder löscht, und jedes lesende Werkzeug mit dem Vermerk „erst mit Schreibrechten“ wird abgelehnt."
+
+msgid "Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. Your confirmation is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time."
+msgstr "Die Schreibrechte sind an. KI-Assistenten können jetzt mit jedem Werkzeug erstellen, ändern und löschen, und jedes Werkzeug ist eingeschaltet; einzelne Werkzeuge können Sie unter Feineinstellung ausschalten. Ihre Bestätigung ist mit Ihrem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite können Sie die Schreibrechte jederzeit ausschalten."
+
+msgid "Write access is on; no confirmation on this page is recorded for it."
+msgstr "Die Schreibrechte sind an; auf dieser Seite ist dafür keine Bestätigung festgehalten."
+
+msgctxt "site mode"
+msgid "Write access off (read only)"
+msgstr "Schreibrechte aus (nur lesen)"
+
+msgctxt "site mode"
+msgid "Write access on (full power)"
+msgstr "Schreibrechte an (volle Leistung)"
+
+#, php-format
+msgid "Write access on since %1$s · confirmed by %2$s · every connection keeps its access level"
+msgstr "Schreibrechte an seit %1$s · bestätigt von %2$s · jede Verbindung behält ihre Zugriffsstufe"
+
+#, php-format
+msgid "Write access on since %s · set by code, not confirmed on this page · every connection keeps its access level"
+msgstr "Schreibrechte an seit %s · per Code gesetzt, nicht auf dieser Seite bestätigt · jede Verbindung behält ihre Zugriffsstufe"
+
+msgid "Write access was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again."
+msgstr "Die Schreibrechte wurden nicht eingeschaltet: Der Hinweis hat sich geändert, seit diese Seite geladen wurde. Lesen Sie ihn noch einmal, setzen Sie das Häkchen und schalten Sie erneut ein."
+
+msgid "Write access was not switched on: tick the box under the notice to confirm it, then switch again."
+msgstr "Die Schreibrechte wurden nicht eingeschaltet: Setzen Sie das Häkchen unter dem Hinweis, um ihn zu bestätigen, und schalten Sie dann erneut ein."
+
+msgctxt "tool badge"
+msgid "Writes"
+msgstr "Schreibend"
+
+msgctxt "tool note"
+msgid "deletes"
+msgstr "löscht"
+
+msgctxt "tool note"
+msgid "only with write access"
+msgstr "erst mit Schreibrechten"
