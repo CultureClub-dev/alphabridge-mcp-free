@@ -27,7 +27,7 @@
  *       ),
  *       'kadence/singlebtn' => array( 'fields' => array(
  *           'text' => array( 'kind' => 'text', 'from' => 'attr', 'path' => 'text' ),
- *           'url'  => array( 'kind' => 'url',  'from' => 'attr', 'path' => 'link' ),
+ *           'url'  => array( 'kind' => 'url',  'from' => 'attr', 'path' => 'link', 'empty_ok' => true ),
  *       ) ),
  *       'generateblocks/text' => array( 'fields' => array(
  *           'url' => array( 'kind' => 'url', 'from' => 'html_attr', 'selector' => 'a', 'attr' => 'href',
@@ -59,6 +59,11 @@
  * - attr        block comment attribute at "path" (dots for nesting); paths
  *               that touch CSS, styles, scripts, classes, code, HTML or
  *               attribute maps cannot be read.
+ * "empty_ok" (attr and html_attr only) lists the field with an empty value
+ * when its attribute is missing — for attr a key on the path, for html_attr
+ * the attribute on an element that is there. It is for a link a button does
+ * not have yet: the place for it exists, so the outline shows it rather than
+ * hiding the field. A value that is there but not text is still not read.
  * "also" lists further copies of the same value (same keys as a field
  * without kind). The reader compares them and notes a stale copy; Pro's
  * writer changes them together with the field. Selector grammar: see
@@ -85,8 +90,13 @@ final class AB_MCP_Block_Reader {
 	/** Note on elements read without a profile. */
 	const NOTE_UNVERIFIED = 'profile not verified, read only';
 
-	/** Note on elements read with a profile entry that was not measured. */
-	const NOTE_UNMEASURED = 'profile not measured, read only';
+	/**
+	 * Note on elements read with a profile entry that was not measured. It
+	 * speaks of how the element was read, not of changing it: whether and with
+	 * which tool a page can be changed is write_via's answer, and a writer may
+	 * change such fields (Pro does, with a warning).
+	 */
+	const NOTE_UNMEASURED = 'profile not measured';
 
 	/** Field sources a profile may name. */
 	const SOURCES = array( 'html_text', 'html_inner', 'html_attr', 'attr' );
@@ -342,7 +352,7 @@ final class AB_MCP_Block_Reader {
 	private static function read_field( array $block, $own, array $field ) {
 		$raw = self::read_raw( $block, $own, $field );
 		if ( null === $raw ) {
-			return null;
+			return $field['empty_ok'] && self::missing( $block, $own, $field ) ? '' : null;
 		}
 		switch ( $field['kind'] ) {
 			case 'text':
@@ -390,6 +400,38 @@ final class AB_MCP_Block_Reader {
 				return $value;
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a source's attribute is missing from a place that is there: a
+	 * key absent from the block attributes along the path (each step so far
+	 * a map), or an attribute absent from the element the selector finds.
+	 * A value that is present in another form is not missing.
+	 *
+	 * @param array  $block Block.
+	 * @param string $own   Own markup.
+	 * @param array  $src   from, selector, attr, path.
+	 * @return bool
+	 */
+	private static function missing( array $block, $own, array $src ) {
+		if ( 'html_attr' === $src['from'] ) {
+			$found = AB_MCP_Builder_Html::find( $own, $src['selector'] );
+			return null !== $found && null === AB_MCP_Builder_Html::attr( $found['attrs'], $src['attr'] );
+		}
+		if ( 'attr' !== $src['from'] ) {
+			return false;
+		}
+		$value = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+		foreach ( explode( '.', $src['path'] ) as $segment ) {
+			if ( ! is_array( $value ) ) {
+				return false;
+			}
+			if ( ! array_key_exists( $segment, $value ) ) {
+				return true;
+			}
+			$value = $value[ $segment ];
+		}
+		return false;
 	}
 
 	/**
@@ -659,6 +701,7 @@ final class AB_MCP_Block_Reader {
 			'attr'     => isset( $f['attr'] ) && is_string( $f['attr'] ) ? strtolower( $f['attr'] ) : '',
 			'path'     => isset( $f['path'] ) && is_string( $f['path'] ) ? $f['path'] : '',
 			'verified' => array_key_exists( 'verified', $f ) ? (bool) $f['verified'] : null,
+			'empty_ok' => ! empty( $f['empty_ok'] ),
 			'also'     => array(),
 		);
 		if ( $with_kind ) {

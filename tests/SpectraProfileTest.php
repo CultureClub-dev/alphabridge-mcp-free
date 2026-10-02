@@ -45,6 +45,7 @@ final class SpectraProfileTest extends TestCase {
 		self::assertSame( array( 'kind' => 'heading', 'value' => 'Discover Our Journey So Far' ), $box['fields']['title'] );
 		self::assertStringStartsWith( 'We believe that everyone has the potential', $box['fields']['text']['value'] );
 		self::assertSame( AB_MCP_Block_Reader::NOTE_UNMEASURED, $box['note'], 'Prefix and title were found where they are, but not changed in the measurement.' );
+		self::assertStringNotContainsString( 'read only', $box['note'], 'Its measured text field is changed like any other; the note speaks of the profile only.' );
 	}
 
 	public function testButtonAndImageOfAbout20(): void {

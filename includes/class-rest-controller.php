@@ -19,11 +19,10 @@
  *
  * The generation is decided per request: a request is modern exactly when its
  * params._meta carries io.modelcontextprotocol/protocolVersion (initialize is
- * always legacy). Every other request runs the legacy code unchanged, so an
- * older client receives the same bytes as before. The modern side can be
- * switched off (setting, or the ab_mcp_modern_protocol filter); the endpoint
- * then answers exactly like a legacy-only server, which is also what lets a
- * client that speaks both generations fall back to initialize.
+ * always legacy). Every other request runs the legacy code. The modern side
+ * can be switched off (setting, or the ab_mcp_modern_protocol filter); the
+ * endpoint then refuses modern requests, which is what lets a client that
+ * speaks both generations fall back to initialize.
  *
  * There is no server-initiated stream: GET is answered 405, and
  * subscriptions/listen acknowledges an empty subscription and ends it at once,
@@ -162,12 +161,11 @@ class AB_MCP_REST_Controller {
 	/**
 	 * Whether the modern revision (2026-07-28) is answered. On by default.
 	 *
-	 * Off, the endpoint behaves exactly as before the modern revision existed:
-	 * a request in it is refused with HTTP 400 and a body that is not a
-	 * JSON-RPC error, which is the signal for a client that speaks both
-	 * generations to fall back to initialize. No modern error code is sent
-	 * then. Meant for a client or a proxy in between that trips over the new
-	 * revision.
+	 * Off, a request in the modern revision is refused with HTTP 400 and a
+	 * body that is not a JSON-RPC error, which is the signal for a client that
+	 * speaks both generations to fall back to initialize. No modern error code
+	 * is sent then. Meant for a client or a proxy in between that trips over
+	 * the new revision.
 	 *
 	 * @return bool
 	 */

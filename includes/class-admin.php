@@ -179,9 +179,8 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Switch MCP revision 2026-07-28 on or off. Off = the endpoint answers
-	 * exactly as before that revision existed; clients that speak both fall
-	 * back to the older one, older clients notice nothing either way.
+	 * Switch MCP revision 2026-07-28 on or off. Off = the endpoint answers the
+	 * older revisions only; clients that speak both fall back to the older one.
 	 */
 	public function handle_protocol_settings() {
 		$this->guard();
@@ -980,7 +979,7 @@ class AB_MCP_Admin {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'ab_mcp_protocol_settings' );
 		echo '<input type="hidden" name="action" value="ab_mcp_protocol_settings">';
-		echo '<label class="ab-check"><input type="checkbox" name="modern_protocol" value="1"' . checked( $modern_on, true, false ) . '><span>' . esc_html__( 'Answer clients that speak MCP 2026-07-28.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Clients of the newer revision are served in it; clients of the older revisions keep the one they ask for either way. Switch this off only if a client, or a proxy between client and site, has trouble with the newer revision: the site then answers exactly as before, and clients that speak both revisions fall back to the older one.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo '<label class="ab-check"><input type="checkbox" name="modern_protocol" value="1"' . checked( $modern_on, true, false ) . '><span>' . esc_html__( 'Answer clients that speak MCP 2026-07-28.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Clients of the newer revision are served in it; clients of the older revisions keep the one they ask for either way. Switch this off only if a client, or a proxy between client and site, has trouble with the newer revision: the site then answers in the older revisions only, and clients that speak both revisions fall back to the older one.', 'alphabridge-mcp' ) . '</span></span></label>';
 		if ( has_filter( 'ab_mcp_modern_protocol' ) ) {
 			// A filter overrides the switch. Say so, and what is in force, so
 			// the admin is not left wondering why saving changes nothing.

@@ -103,6 +103,10 @@ final class BlockReaderTest extends TestCase {
 		self::assertSame( 'https://example.com/x', $e[0]['fields']['link']['value'], 'The link around the image, not the one in the caption.' );
 		self::assertSame( 'See <a href="https://example.com/c">this</a>', $e[0]['fields']['caption']['value'] );
 		self::assertSame( AB_MCP_Block_Reader::NOTE_UNMEASURED, $e[0]['note'] );
+		// Whether and with which tool a field can be changed is write_via's
+		// answer; a writer does change unmeasured fields (with a warning), so
+		// the note must not call the element read only.
+		self::assertStringNotContainsString( 'read only', $e[0]['note'] );
 
 		$e = $this->read( '<!-- wp:image {"id":9} --><figure class="wp-block-image"><img src="https://example.com/i.jpg" alt=""/><figcaption>Only <a href="https://example.com/c">caption</a> link</figcaption></figure><!-- /wp:image -->' );
 		self::assertArrayNotHasKey( 'link', $e[0]['fields'], 'A link inside the caption is not the image link.' );
@@ -128,7 +132,77 @@ final class BlockReaderTest extends TestCase {
 		self::assertSame( 'b4', $by['b4.0']['parent'] );
 		self::assertSame( 1, $by['b4.0']['depth'] );
 		self::assertSame( 'Learn more', $by['b4.0']['fields']['text']['value'] );
-		self::assertArrayNotHasKey( 'url', $by['b4.0']['fields'], 'A button without href has no link field.' );
+		self::assertSame( array( 'kind' => 'url', 'value' => '' ), $by['b4.0']['fields']['url'], 'A button without href lists an empty link, so one can be added.' );
+	}
+
+	public function testAButtonWithoutALinkListsAnEmptyOne(): void {
+		// Twenty Twenty-Five 1.5, patterns/cta-centered-heading.php (WordPress
+		// 7.0.2): the pattern's button has no href. core/button keeps its link
+		// in the href of its <a> (block.json: url = a[href]), so the link is
+		// listed empty, the way an empty alt is: a client can see there is
+		// none yet and where one goes.
+		$e = $this->read( "<!-- wp:button -->\n<div class=\"wp-block-button\"><a class=\"wp-block-button__link wp-element-button\">Learn more</a></div>\n<!-- /wp:button -->" );
+		self::assertSame(
+			array(
+				'text' => array(
+					'kind'  => 'text',
+					'value' => 'Learn more',
+				),
+				'url'  => array(
+					'kind'  => 'url',
+					'value' => '',
+				),
+			),
+			$e[0]['fields']
+		);
+		self::assertArrayNotHasKey( 'note', $e[0], 'Text and link are measured fields of core/button.' );
+
+		// Constructed in the form core/button saves with tagName button: no
+		// <a>, so nothing could carry a link, and none is listed.
+		$e = $this->read( '<!-- wp:button {"tagName":"button"} --><div class="wp-block-button"><button type="button" class="wp-block-button__link wp-element-button">Send</button></div><!-- /wp:button -->' );
+		self::assertSame( array( 'text' ), array_keys( $e[0]['fields'] ) );
+	}
+
+	public function testEmptyOkListsAMissingAttributeAndNothingElse(): void {
+		add_filter(
+			'ab_mcp_builder_block_profiles',
+			static function ( array $profiles ): array {
+				$profiles[] = array(
+					'id'         => 'acme',
+					'verified'   => true,
+					'namespaces' => array( 'acme/' ),
+					'blocks'     => array(
+						'acme/cta' => array(
+							'fields' => array(
+								'url'   => array( 'kind' => 'url', 'from' => 'attr', 'path' => 'link.url', 'empty_ok' => true ),
+								'href'  => array( 'kind' => 'url', 'from' => 'html_attr', 'selector' => 'a', 'attr' => 'href', 'empty_ok' => true ),
+								'title' => array( 'kind' => 'text', 'from' => 'html_text', 'selector' => 'h3', 'empty_ok' => true ),
+							),
+						),
+					),
+				);
+				return $profiles;
+			}
+		);
+		AB_MCP_Builders::reset();
+
+		// Missing attribute, <a> without href, no <h3>: two empty links, no title.
+		$e = $this->read( '<!-- wp:acme/cta --><div><a>Go</a></div><!-- /wp:acme/cta -->' );
+		self::assertSame( array( 'url', 'href' ), array_keys( $e[0]['fields'] ) );
+		self::assertSame( array( '', '' ), array( $e[0]['fields']['url']['value'], $e[0]['fields']['href']['value'] ) );
+
+		// No <a> at all: nothing could take a link. A value that is there but
+		// no text (an object, true) is not "missing" either.
+		$e = $this->read( '<!-- wp:acme/cta {"link":{"url":{"id":5}}} --><div><span>Go</span></div><!-- /wp:acme/cta -->' );
+		self::assertArrayNotHasKey( 'fields', $e[0] );
+		$e = $this->read( '<!-- wp:acme/cta {"link":{"url":true}} --><div></div><!-- /wp:acme/cta -->' );
+		self::assertArrayNotHasKey( 'fields', $e[0] );
+		$e = $this->read( '<!-- wp:acme/cta {"link":"https://example.org/"} --><div></div><!-- /wp:acme/cta -->' );
+		self::assertArrayNotHasKey( 'fields', $e[0], 'link is a text, not a map with url: not a missing key.' );
+
+		// A value that is there is read as always.
+		$e = $this->read( '<!-- wp:acme/cta {"link":{"url":"/kontakt"}} --><div><a href="/x">Go</a></div><!-- /wp:acme/cta -->' );
+		self::assertSame( array( '/kontakt', '/x' ), array( $e[0]['fields']['url']['value'], $e[0]['fields']['href']['value'] ) );
 	}
 
 	public function testCoreBlocksFromCodeAreReadAndMarkedNotMeasured(): void {

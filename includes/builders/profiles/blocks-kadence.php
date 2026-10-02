@@ -50,11 +50,13 @@ return array(
 
 		// Measured: text and link only in the comment; the block is self-closing.
 		// text is rich text (the editor stores RichText HTML) and is output raw, so it
-		// is read as a visitor sees it.
+		// is read as a visitor sees it. Without the attribute link (every button of the
+		// vendor's Example Page) url is listed empty: measured, a link set in that attribute
+		// is the visible link (variant K2).
 		'kadence/singlebtn'       => array(
 			'fields' => array(
 				'text' => array( 'kind' => 'text', 'from' => 'attr', 'path' => 'text' ),
-				'url'  => array( 'kind' => 'url', 'from' => 'attr', 'path' => 'link' ),
+				'url'  => array( 'kind' => 'url', 'from' => 'attr', 'path' => 'link', 'empty_ok' => true ),
 			),
 		),
 
