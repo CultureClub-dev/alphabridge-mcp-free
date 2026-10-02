@@ -120,11 +120,11 @@ No. It contacts no external service on its own. Outbound requests happen only wh
 
 == Screenshots ==
 
-1. Pick your assistant — Claude, ChatGPT, Cursor or another client — and follow its steps: for Claude a direct link into its connector directory, this site's address to copy, the video and the guide. A token is created only where one is needed.
+1. At the top, the main switch for write access, off until you turn it on. Below it, pick your assistant — Claude, ChatGPT, Cursor or another client — and follow its steps: for Claude a direct link into its connector directory, this site's address to copy, the video and the guide. A token is created only where one is needed.
 2. The moment you create a connection, the plugin shows what you need once — the Bearer token and a copy-paste config for Cursor / Claude Code, and the connector URL if connector-URL authentication is switched on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
 4. Switch all tools, a group or a single tool; open a group to see its tool groups and what each tool does, whether it reads or writes, or search for one. These switches sit under «Fine-tuning», below the main switch for write access at the top of the page.
-5. Connect from Claude is on by default: Claude discovers the site, you approve on a login-protected consent screen, and the approved connection appears in the list, revocable any time. Switching it off removes the OAuth endpoints.
+5. Connect from Claude is on by default: Claude discovers the site, you approve on a login-protected consent screen, and the approved connection appears in the list, revocable any time. Switching it off removes the OAuth endpoints. A second box lets apps identify themselves with a metadata document instead of registering.
 6. Connector-URL authentication is off by default, because a token in a URL leaks more easily than one in a header; the setting explains the trade-off before you switch it on.
 
 == External services ==
