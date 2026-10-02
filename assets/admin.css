@@ -34,6 +34,193 @@
 	display: none !important;
 }
 
+/* ---------- The site mode, first on the page ---------- */
+
+/*
+ * Read is the calm state (green), Full the one to notice (orange). White text
+ * on #15803d and on #c2410c keeps a contrast of at least 5:1.
+ */
+.ab-mcp .ab-mode {
+	margin: 10px 0 16px;
+	padding: 18px 24px 20px;
+	border: 2px solid #86efac;
+	border-radius: 14px;
+	background: #f0fdf4;
+	color: var(--ab-ink);
+	--ab-mode: #15803d;
+}
+
+.ab-mcp .ab-mode--full {
+	border-color: #f97316;
+	background: #fff7ed;
+	--ab-mode: #c2410c;
+}
+
+.ab-mcp .ab-mode__head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 18px;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 0 10px;
+}
+
+.ab-mcp .ab-mode__eyebrow {
+	margin: 0 0 2px;
+	color: var(--ab-soft);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.ab-mcp .ab-mode__title {
+	margin: 0;
+	padding: 0;
+	color: var(--ab-ink);
+	font-size: 22px;
+	font-weight: 800;
+	line-height: 1.3;
+}
+
+.ab-mcp .ab-mode__word {
+	display: inline-block;
+	padding: 1px 14px;
+	border-radius: 999px;
+	background: var(--ab-mode);
+	color: #fff;
+}
+
+.ab-mcp .ab-mode__toggle {
+	display: inline-flex;
+	padding: 3px;
+	border: 1px solid #c3c4c7;
+	border-radius: 999px;
+	background: #fff;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.ab-mcp .ab-mode__opt {
+	padding: 4px 14px;
+	border-radius: 999px;
+	color: #646970;
+}
+
+.ab-mcp .ab-mode__opt.is-on {
+	background: var(--ab-mode);
+	color: #fff;
+}
+
+.ab-mcp .ab-mode__lead,
+.ab-mcp .ab-mode__since {
+	max-width: 860px;
+	margin: 0 0 10px;
+	font-size: 13.5px;
+	line-height: 1.55;
+}
+
+.ab-mcp .ab-mode__since {
+	color: #7c2d12;
+	font-weight: 700;
+}
+
+.ab-mcp .ab-mode__warning {
+	max-width: 860px;
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	border: 1px solid #fdba74;
+	border-left: 4px solid #ea580c;
+	border-radius: 8px;
+	background: #fff;
+	color: #7c2d12;
+}
+
+.ab-mcp .ab-mode__warning p {
+	margin: 0;
+	font-size: 13.5px;
+	font-weight: 600;
+	line-height: 1.55;
+}
+
+.ab-mcp .ab-mode__confirm {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	max-width: 860px;
+	margin: 0 0 12px;
+	font-size: 13.5px;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+.ab-mcp .ab-mode__confirm input {
+	flex: none;
+	margin: 2px 0 0;
+}
+
+.ab-mcp .ab-mode__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px 18px;
+	align-items: center;
+	margin: 0;
+}
+
+/* Two classes: the generic .ab-btn rules come later in this file. */
+.ab-mcp .ab-btn.ab-btn--warn,
+.ab-mcp .ab-btn.ab-btn--warn:focus {
+	background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%);
+	box-shadow: 0 4px 0 #7c2d12, 0 10px 20px -8px rgba(194, 65, 12, .6);
+}
+
+.ab-mcp .ab-btn.ab-btn--warn:hover,
+.ab-mcp .ab-btn.ab-btn--warn:focus-visible {
+	box-shadow: 0 6px 0 #7c2d12, 0 16px 26px -10px rgba(194, 65, 12, .7);
+}
+
+.ab-mcp .ab-btn.ab-btn--warn:active {
+	box-shadow: 0 1px 0 #7c2d12, 0 4px 10px -6px rgba(194, 65, 12, .6);
+}
+
+.ab-mcp .ab-mode-notice__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+/* ---------- Fine-tuning (folded card) ---------- */
+
+.ab-mcp .ab-fine > summary {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	cursor: pointer;
+	list-style: none;
+}
+
+.ab-mcp .ab-fine > summary::-webkit-details-marker {
+	display: none;
+}
+
+.ab-mcp .ab-fine > summary .ab-eyebrow {
+	display: block;
+}
+
+.ab-mcp .ab-fine > summary .ab-card__title {
+	margin: 0;
+}
+
+.ab-mcp .ab-fine[open] > summary {
+	margin: 0 0 14px;
+}
+
+.ab-mcp .ab-fine[open] > summary .ab-chev {
+	transform: rotate(90deg);
+}
+
 /* ---------- The band at the top ---------- */
 
 .ab-mcp .ab-hero {
@@ -700,125 +887,6 @@
 	font-weight: 600;
 }
 
-.ab-mcp .ab-caps__ro {
-	margin: 0 0 14px;
-}
-
-/* ---------- Profiles (above the switches) ---------- */
-
-.ab-mcp .ab-profiles {
-	margin: 0 0 16px;
-}
-
-.ab-mcp .ab-profiles__title {
-	margin: 0 0 8px;
-	color: var(--ab-soft);
-}
-
-.ab-mcp .ab-profiles__title strong {
-	color: var(--ab-ink);
-}
-
-.ab-mcp .ab-profiles__list {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-	gap: 10px;
-}
-
-.ab-mcp .ab-profile {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	margin: 0;
-	padding: 12px 14px;
-	border: 1.5px solid var(--ab-line);
-	border-radius: 12px;
-	background: #fff;
-	color: var(--ab-ink);
-	font-family: inherit;
-	font-size: 13px;
-	line-height: 1.45;
-	text-align: left;
-}
-
-.ab-mcp button.ab-profile {
-	cursor: pointer;
-	transition: border-color .15s ease, background-color .15s ease;
-}
-
-.ab-mcp button.ab-profile:hover,
-.ab-mcp button.ab-profile:focus-visible {
-	border-color: var(--ab-edge);
-	background: var(--ab-tint);
-}
-
-.ab-mcp button.ab-profile:focus-visible {
-	outline: 2px solid var(--ab-acc);
-	outline-offset: 2px;
-}
-
-.ab-mcp .ab-profile[aria-current="true"] {
-	border-color: var(--ab-acc);
-	background: var(--ab-tint);
-}
-
-.ab-mcp .ab-profile--custom {
-	border-style: dashed;
-}
-
-.ab-mcp .ab-profile[hidden] {
-	display: none;
-}
-
-.ab-mcp .ab-profile__head {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	align-items: center;
-}
-
-.ab-mcp .ab-profile__name {
-	font-size: 14px;
-	font-weight: 800;
-}
-
-.ab-mcp .ab-profile__tag,
-.ab-mcp .ab-profile__now {
-	padding: 1px 8px;
-	border-radius: 999px;
-	font-size: 11px;
-	font-weight: 700;
-}
-
-.ab-mcp .ab-profile__tag {
-	background: #f0f0f1;
-	color: var(--ab-soft);
-}
-
-.ab-mcp .ab-profile__now {
-	display: none;
-	margin-inline-start: auto;
-	background: var(--ab-acc);
-	color: #fff;
-}
-
-.ab-mcp .ab-profile[aria-current="true"] .ab-profile__now {
-	display: inline-block;
-}
-
-.ab-mcp .ab-profile__text {
-	color: var(--ab-soft);
-}
-
-.ab-mcp .ab-profile__count {
-	color: var(--ab-acc-deep);
-	font-size: 12px;
-	font-weight: 700;
-}
-
-.ab-mcp .ab-profiles .ab-note {
-	margin: 8px 0 0;
-}
 
 .ab-mcp .ab-switch {
 	position: relative;
@@ -1082,7 +1150,6 @@
 .ab-mcp .ab-pill--partial { background: #fdf3e2; color: #8a5300; }
 .ab-mcp .ab-pill--off { background: #fdecea; color: #b42318; }
 .ab-mcp .ab-pill--mighty { background: #fbeae3; color: #8a2b00; }
-.ab-mcp .ab-pill--level { background: #eef0ff; color: #4338ca; }
 
 /* ---------- Tables ---------- */
 
@@ -1197,7 +1264,6 @@
 @media (prefers-reduced-motion: reduce) {
 	.ab-mcp .ab-btn,
 	.ab-mcp .ab-client,
-	.ab-mcp button.ab-profile,
 	.ab-mcp .ab-switch__track,
 	.ab-mcp .ab-switch__track::before,
 	.ab-mcp .ab-chev,
@@ -1219,13 +1285,18 @@
 
 @media (forced-colors: active) {
 	.ab-mcp .ab-btn,
-	.ab-mcp .ab-client,
-	.ab-mcp .ab-profile {
+	.ab-mcp .ab-client {
 		border: 2px solid ButtonText;
 	}
 
-	.ab-mcp .ab-profile[aria-current="true"] {
-		border-color: Highlight;
+	.ab-mcp .ab-mode,
+	.ab-mcp .ab-mode__warning {
+		border: 2px solid CanvasText;
+	}
+
+	.ab-mcp .ab-mode__word,
+	.ab-mcp .ab-mode__opt.is-on {
+		border: 2px solid Highlight;
 	}
 
 	.ab-mcp .ab-switch__track {

@@ -42,9 +42,14 @@ final class AB_MCP_Plugin {
 	 * Wire everything up.
 	 */
 	private function __construct() {
-		// Translations load automatically since WP 4.6 (wordpress.org language
-		// packs) and, for the bundled .mo files, via the standard languages
-		// path — no load_plugin_textdomain() call needed.
+		// An update in place never runs the activation hook; bring the options
+		// up to date here, before anything reads them.
+		AB_MCP_Settings::maybe_upgrade();
+		self::load_bundled_translations();
+		// switch_to_locale() drops every loaded translation and reloads only
+		// the language pack; add the bundled file again for the new locale.
+		add_action( 'change_locale', array( __CLASS__, 'load_bundled_translations' ) );
+
 		$this->registry = new AB_MCP_Tool_Registry();
 		$this->load_tools();
 
@@ -58,6 +63,36 @@ final class AB_MCP_Plugin {
 		if ( is_admin() ) {
 			new AB_MCP_Admin( $this->registry );
 		}
+	}
+
+	/**
+	 * Load the translations this plugin ships in languages/, behind the
+	 * language pack from translate.wordpress.org.
+	 *
+	 * WordPress loads a plugin's language pack by itself, when the plugin
+	 * first translates a string. The files in languages/ carry the texts of
+	 * the site mode (the notice and the box an administrator confirms before
+	 * switching to Full, the refusal in Read), so that they read in German
+	 * from the release that introduced them on. Asking WordPress for the
+	 * domain first lets it load the language pack where there is one; the
+	 * bundled file is added after it and so only answers what the pack does
+	 * not have yet. Where there is no pack, the bundled file is all there is.
+	 *
+	 * Runs on init, when the plugin boots: translations must not load before.
+	 * Bundled are de_DE, de_DE_formal, de_AT, de_CH and de_CH_informal.
+	 *
+	 * @param string $locale Locale to load; the current one when empty (the
+	 *                       change_locale action passes the new one).
+	 * @return bool Whether a bundled file was loaded.
+	 */
+	public static function load_bundled_translations( $locale = '' ) {
+		$locale = is_string( $locale ) && '' !== $locale ? $locale : determine_locale();
+		$file   = AB_MCP_DIR . 'languages/alphabridge-mcp-' . $locale . '.mo';
+		if ( ! is_readable( $file ) ) {
+			return false;
+		}
+		get_translations_for_domain( 'alphabridge-mcp' );
+		return (bool) load_textdomain( 'alphabridge-mcp', $file, $locale );
 	}
 
 	/**

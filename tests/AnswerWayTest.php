@@ -74,12 +74,22 @@ final class AnswerWayTest extends TestCase {
 		update_option( 'ab_mcp_tool_state', array( 'wp_list_posts' => false ) );
 		$res = AB_MCP_Security::authorize( 'wp_list_posts', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → Capabilities', self::message( $res ) );
+		self::assertStringContainsString( 'Settings → AlphaBridge MCP → Fine-tuning', self::message( $res ) );
+	}
+
+	public function testReadModeNamesTheSwitchAndTheRisk(): void {
+		self::allow();
+		$res = AB_MCP_Security::authorize( 'wp_update_post', array( 'capability' => 'edit_posts' ) );
+		self::assertSame( 'ab_mcp_read_mode', $res->get_error_code() );
+		self::assertStringContainsString( 'switch to Full at the top of Settings → AlphaBridge MCP', self::message( $res ) );
+		self::assertStringContainsString( 'at the site owner\'s own risk', self::message( $res ) );
 	}
 
 	public function testANarrowAccessLevelNamesHowToWidenIt(): void {
 		self::allow();
 		self::scope( 'read' );
+		// The scope is checked after the site mode; in Read the mode answers first.
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
 		$res = AB_MCP_Security::authorize( 'wp_update_post', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_scope', $res->get_error_code() );
 		self::assertStringContainsString( 'wider access level on the consent screen', self::message( $res ) );

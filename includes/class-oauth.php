@@ -1656,6 +1656,10 @@ class AB_MCP_OAuth {
 	 * so that the page itself, the access level checked when it opens
 	 * included, can be rendered and looked at on its own.
 	 *
+	 * In Read the page says so above the access levels: the level is
+	 * granted as chosen, but until an administrator switches to Full the
+	 * connection reads only, and approving should not suggest otherwise.
+	 *
 	 * @param array  $client Registered client (name, redirect_uris).
 	 * @param array  $get    Validated request parameters.
 	 * @param string $state  Opaque state.
@@ -1743,6 +1747,9 @@ class AB_MCP_OAuth {
 		);
 		?>
 		</div>
+	<?php endif; ?>
+	<?php if ( ! AB_MCP_Site_Mode::is_full() ) : ?>
+		<div class="dest mode-read" role="note"><?php echo esc_html( AB_MCP_Site_Mode::consent_text() ); ?></div>
 	<?php endif; ?>
 	<form method="post" action="<?php echo esc_url( $self_url ); ?>">
 		<?php wp_nonce_field( 'ab_mcp_oauth_approve' ); ?>

@@ -106,7 +106,7 @@ class AB_MCP_REST_Controller {
 	 * being private either, and stay right if resources ever arrive.
 	 *
 	 * 60 seconds for discover, tools and prompts: those change by an admin's
-	 * hand (tool switches, read-only mode, the Pro licence), and this server
+	 * hand (tool switches, the site mode, the Pro licence), and this server
 	 * cannot announce a change (listChanged is false, subscriptions/listen
 	 * honours nothing), so the hint is the only bound on how long a client
 	 * keeps a stale list. 0, which equals having no hint at all, would make a
@@ -943,9 +943,8 @@ class AB_MCP_REST_Controller {
 		$instructions = 'Control this WordPress site through AlphaBridge MCP. ' . $counts .
 			' Tools cover content, media, taxonomies, comments, widgets, site settings, site info, ' .
 			'SEO reads and search. ' .
-			'Working effectively: enable only the tool groups you need — powerful ("mighty") tools are off by ' .
-			'default and are hidden until the admin switches them on. Prefer the specific list/get tools over ' .
-			'broad queries, and read a resource before overwriting it. Tool groups can be switched off by the admin.';
+			'Working effectively: prefer the specific list/get tools over broad queries, and read a resource ' .
+			'before overwriting it. The admin can switch single tools and whole tool groups off.';
 
 		$outline = $this->registry->get( 'wp_get_builder_layout' );
 		if ( is_array( $outline ) && AB_MCP_Settings::is_tool_enabled( 'wp_get_builder_layout', $outline ) ) {
@@ -966,8 +965,9 @@ class AB_MCP_REST_Controller {
 		 */
 		$instructions = (string) apply_filters( 'ab_mcp_instructions', $instructions );
 
-		if ( AB_MCP_Settings::get( 'read_only', false ) ) {
-			$instructions .= ' READ-ONLY MODE is active: every writing tool is blocked by the administrator right now; only read, list and search tools will run.';
+		// Appended after the filter, so an add-on's guidance cannot drop it.
+		if ( ! AB_MCP_Site_Mode::is_full() ) {
+			$instructions .= ' ' . AB_MCP_Site_Mode::instructions_sentence();
 		}
 
 		return $instructions;
@@ -1118,7 +1118,11 @@ class AB_MCP_REST_Controller {
 		$scope = AB_MCP_Auth::current_scope();
 
 		foreach ( $this->registry->all() as $name => $def ) {
-			// Disabled tools are removed from the MCP surface entirely.
+			// Disabled tools are removed from the MCP surface entirely. The
+			// site mode does not filter: in Read the writing tools stay listed,
+			// as they did under the read-only switch before it, so a client
+			// learns they exist, and a call answers with the way to Full
+			// (AB_MCP_Site_Mode::refusal()). The server instructions say so too.
 			if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 				continue;
 			}

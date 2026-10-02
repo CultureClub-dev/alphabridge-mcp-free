@@ -175,8 +175,18 @@ final class ReviewNoticeTest extends TestCase {
 
 		$this->assertStringContainsString( 'AB_MCP_Review_Notice::render()', $admin, 'gezeigt auf der eigenen Seite' );
 		$this->assertStringContainsString( 'AB_MCP_Review_Notice::count_call()', $rest, 'gezählt bei jedem gelungenen Aufruf' );
+		// Die Bitte um eine Bewertung hängt sich nicht in jede Admin-Seite. Der
+		// einzige Haken an admin_notices ist der Hinweis nach dem Update auf
+		// den Site-Modus (AB_MCP_Admin::mode_notice()): abweisbar und weg,
+		// sobald jemand den Modus umschaltet.
 		foreach ( glob( $root . '/includes/*.php' ) as $datei ) {
-			$this->assertStringNotContainsString( 'admin_notices', (string) file_get_contents( $datei ), basename( $datei ) . ' hängt sich nicht in jede Admin-Seite' );
+			$inhalt = (string) file_get_contents( $datei );
+			if ( 'class-admin.php' === basename( $datei ) ) {
+				$this->assertSame( 1, substr_count( $inhalt, 'admin_notices' ), 'nur ein Haken' );
+				$this->assertStringContainsString( "add_action( 'admin_notices', array( \$this, 'mode_notice' ) );", $inhalt );
+				continue;
+			}
+			$this->assertStringNotContainsString( 'admin_notices', $inhalt, basename( $datei ) . ' hängt sich nicht in jede Admin-Seite' );
 		}
 	}
 }

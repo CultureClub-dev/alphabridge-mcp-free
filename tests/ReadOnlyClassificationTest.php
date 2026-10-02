@@ -3,7 +3,7 @@
  * A tool that lists or gets something is read-only.
  *
  * The classification decides three things at once: the `readOnlyHint`
- * annotation a client sees, the global read-only mode, and whether a
+ * annotation a client sees, the site mode Read, and whether a
  * read-scoped token may run the tool. It works partly by name prefix, which
  * means a rename can change it silently — and silently is the problem. A
  * listing tool reclassified as writing keeps working for full tokens and stops

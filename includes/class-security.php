@@ -1,6 +1,7 @@
 <?php
 /**
- * Policy enforcement: capability, Safe-Mode, rate limiting + shared guards.
+ * Policy enforcement: capability, site mode, tool switches, token scope, rate
+ * limiting + shared guards.
  *
  * @package AlphaBridge_MCP
  */
@@ -35,27 +36,21 @@ class AB_MCP_Security {
 			);
 		}
 
-		// 2. Global read-only mode: while it is on, only read tools may run.
-		if ( AB_MCP_Settings::get( 'read_only', false ) && ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
-			return new WP_Error(
-				'ab_mcp_read_only',
-				sprintf(
-					/* translators: %s: tool */
-					__( 'Read-only mode is active; the writing tool "%s" is blocked. Disable read-only mode under Settings → AlphaBridge MCP → Capabilities to allow writes.', 'alphabridge-mcp' ),
-					$name
-				)
-			);
+		// 2. Site mode: in Read (the default) only reading tools run, whatever
+		// their switch and the token's scope say. See AB_MCP_Site_Mode.
+		if ( ! AB_MCP_Site_Mode::allows( $name, $def ) ) {
+			return AB_MCP_Site_Mode::refusal( $name );
 		}
 
-		// 3. Tool must be enabled. Non-dangerous tools default on; dangerous
-		// ("mighty") tools default off until the admin switches them on in the
-		// AlphaBridge MCP settings. Disabled tools are also hidden from tools/list.
+		// 3. Tool must be switched on. Every tool is on until an administrator
+		// switches it off under Fine-tuning; switched-off tools are also hidden
+		// from tools/list.
 		if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 			return new WP_Error(
 				'ab_mcp_tool_disabled',
 				sprintf(
 					/* translators: %s: tool */
-					__( 'The tool "%s" is disabled in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Capabilities.', 'alphabridge-mcp' ),
+					__( 'The tool "%s" is switched off in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Fine-tuning.', 'alphabridge-mcp' ),
 					$name
 				)
 			);

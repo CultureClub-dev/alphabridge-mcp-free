@@ -33,7 +33,9 @@ class AB_MCP_Admin {
 		add_action( 'admin_menu', array( $this, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_ab_mcp_save', array( $this, 'handle_save' ) );
-		add_action( 'admin_post_ab_mcp_profile', array( $this, 'handle_profile' ) );
+		add_action( 'admin_post_ab_mcp_site_mode', array( $this, 'handle_site_mode' ) );
+		add_action( 'admin_post_ab_mcp_mode_notice', array( $this, 'handle_mode_notice_dismiss' ) );
+		add_action( 'admin_notices', array( $this, 'mode_notice' ) );
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
 		add_action( 'admin_post_ab_mcp_oauth_settings', array( $this, 'handle_oauth_settings' ) );
@@ -102,9 +104,6 @@ class AB_MCP_Admin {
 		}
 		AB_MCP_Settings::set_tool_state( $state );
 
-		// Global read-only switch (blocks every writing tool regardless of the per-tool toggles).
-		AB_MCP_Settings::set( 'read_only', isset( $_POST['read_only'] ) );
-
 		// A connected client may cache the tool list it loaded, and this endpoint
 		// offers no server-initiated stream, so it cannot push a
 		// notifications/tools/list_changed. Say what to do if the change is not visible.
@@ -112,20 +111,133 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Set the tool switches to a profile (Simple, Advanced, Expert).
+	 * Switch the site mode: Read or Full (AB_MCP_Site_Mode).
 	 *
-	 * Only the tool switches change: read-only mode, the connections and their
-	 * tokens stay as they are. An unknown profile changes nothing.
+	 * Full only with the box under the notice ticked, and only for the
+	 * notice in force: a form loaded under an earlier version of the notice
+	 * is refused, so the record never names a text the administrator did not
+	 * have on the screen. Back to Read needs no box; it only takes away. The
+	 * tool switches, the connections and their tokens stay as they are.
 	 */
-	public function handle_profile() {
+	public function handle_site_mode() {
 		$this->guard();
-		check_admin_referer( 'ab_mcp_profile' );
+		check_admin_referer( 'ab_mcp_site_mode' );
 
-		$profile = isset( $_POST['profile'] ) ? sanitize_key( wp_unslash( $_POST['profile'] ) ) : '';
-		if ( ! AB_MCP_Tool_Profiles::apply( $profile, $this->registry() ) ) {
-			$this->redirect( 'profile_unknown' );
+		$mode = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : '';
+		if ( AB_MCP_Site_Mode::READ === $mode ) {
+			AB_MCP_Site_Mode::switch_to_read( get_current_user_id() );
+			$this->redirect( 'mode_read' );
 		}
-		$this->redirect( 'profile_saved' );
+		if ( AB_MCP_Site_Mode::FULL !== $mode ) {
+			$this->redirect( 'mode_unknown' );
+		}
+		$version = isset( $_POST['notice_version'] ) ? sanitize_text_field( wp_unslash( $_POST['notice_version'] ) ) : '';
+		if ( AB_MCP_Site_Mode::NOTICE_VERSION !== $version ) {
+			$this->redirect( 'mode_stale' );
+		}
+		$confirmed = isset( $_POST['confirm_full'] ) ? sanitize_text_field( wp_unslash( $_POST['confirm_full'] ) ) : '';
+		if ( '1' !== $confirmed ) {
+			$this->redirect( 'mode_unconfirmed' );
+		}
+		AB_MCP_Site_Mode::switch_to_full( get_current_user_id() );
+		$this->redirect( 'mode_full' );
+	}
+
+	/**
+	 * «Dismiss» on the notice about the update that brought the site mode.
+	 */
+	public function handle_mode_notice_dismiss() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_mode_notice' );
+		AB_MCP_Settings::set( AB_MCP_Settings::KEY_MODE_NOTICE, false );
+		$this->redirect( 'mode_notice_dismissed' );
+	}
+
+	/**
+	 * The notice after the update that brought the site mode, on the admin
+	 * screens of administrators until one of them dismisses it or switches
+	 * the mode (AB_MCP_Settings::KEY_MODE_NOTICE). The plugin's own page
+	 * shows it right under the switch instead (render()), so the switch
+	 * stays the first thing there.
+	 */
+	public function mode_notice() {
+		if ( ! current_user_can( 'manage_options' ) || ! AB_MCP_Settings::get( AB_MCP_Settings::KEY_MODE_NOTICE, false ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only decides where the notice is shown; no state is changed.
+		if ( isset( $_GET['page'] ) && 'alphabridge-mcp' === sanitize_key( wp_unslash( $_GET['page'] ) ) ) {
+			return;
+		}
+		echo $this->mode_notice_html( true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_notice_html().
+	}
+
+	/**
+	 * The notice after the update: the site reads only now, and where Full
+	 * is switched on. A form, so that dismissing works without JavaScript.
+	 *
+	 * @param bool $elsewhere Shown on another screen than the plugin's own,
+	 *                        with a link to it.
+	 * @return string HTML, escaped.
+	 */
+	private function mode_notice_html( $elsewhere ) {
+		$html  = '<div class="notice notice-warning ab-mode-notice"><p><strong>' . esc_html__( 'AlphaBridge MCP now only reads on this site.', 'alphabridge-mcp' ) . '</strong> ';
+		$html .= esc_html__( 'Since this update the plugin starts in the mode Read on every site: assistants can read, and every tool that creates, changes or deletes is refused. To let them write again, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p class="ab-mode-notice__actions">';
+		if ( $elsewhere ) {
+			$html .= '<a class="button button-primary" href="' . esc_url( admin_url( 'options-general.php?page=alphabridge-mcp' ) ) . '">' . esc_html__( 'Open Settings → AlphaBridge MCP', 'alphabridge-mcp' ) . '</a> ';
+		}
+		$html .= wp_nonce_field( 'ab_mcp_mode_notice', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_mode_notice"><button type="submit" class="button">' . esc_html__( 'Dismiss', 'alphabridge-mcp' ) . '</button></p></form></div>';
+		return $html;
+	}
+
+	/**
+	 * The site mode, the first thing on the page: the state in one word,
+	 * what it means, and the switch. Read is calm; Full carries the warning
+	 * colour, since when and by whom it was confirmed, and the notice again.
+	 *
+	 * To Full only with the box ticked: it starts unticked, the browser asks
+	 * for it (required), and handle_site_mode() refuses the switch without
+	 * it. Back to Read is one button.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function mode_card_html() {
+		$mode = AB_MCP_Site_Mode::get();
+		$full = AB_MCP_Site_Mode::FULL === $mode;
+		$word = '<span class="ab-mode__word">' . esc_html( AB_MCP_Site_Mode::label( $mode ) ) . '</span>';
+
+		$html  = '<section class="ab-mode ab-mode--' . esc_attr( $mode ) . '" id="ab-mode" aria-labelledby="ab-mode-title">';
+		$html .= '<div class="ab-mode__head"><div>';
+		$html .= '<p class="ab-mode__eyebrow">' . esc_html__( 'AlphaBridge MCP on this site', 'alphabridge-mcp' ) . '</p>';
+		/* translators: %s: the site mode in one word, Read or Full. */
+		$html .= '<h2 class="ab-mode__title" id="ab-mode-title">' . sprintf( esc_html__( 'Mode: %s', 'alphabridge-mcp' ), $word ) . '</h2>';
+		$html .= '</div><span class="ab-mode__toggle" aria-hidden="true">';
+		foreach ( array( AB_MCP_Site_Mode::READ, AB_MCP_Site_Mode::FULL ) as $m ) {
+			$html .= '<span class="ab-mode__opt' . ( $m === $mode ? ' is-on' : '' ) . '">' . esc_html( AB_MCP_Site_Mode::label( $m ) ) . '</span>';
+		}
+		$html .= '</span></div>';
+
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-mode__form" id="ab-mode-form">';
+		$html .= wp_nonce_field( 'ab_mcp_site_mode', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_site_mode">';
+		if ( $full ) {
+			$html .= '<p class="ab-mode__since">' . esc_html( AB_MCP_Site_Mode::full_since_text() ) . '</p>';
+			$html .= '<p class="ab-mode__lead">' . esc_html__( 'Assistants may create, change and delete through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level.', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<div class="ab-mode__warning" role="note"><p>' . esc_html( AB_MCP_Site_Mode::notice_text() ) . '</p></div>';
+			$html .= '<input type="hidden" name="mode" value="' . esc_attr( AB_MCP_Site_Mode::READ ) . '">';
+			$html .= '<p class="ab-mode__actions"><button type="submit" class="ab-btn">' . esc_html__( 'Switch back to Read', 'alphabridge-mcp' ) . '</button> <a class="ab-more" href="#ab-fine">' . esc_html__( 'Switch single tools off under Fine-tuning', 'alphabridge-mcp' ) . '</a></p>';
+		} else {
+			$html .= '<p class="ab-mode__lead">' . esc_html__( 'Assistants can read, list and search. Every tool that creates, changes or deletes is refused, whatever its switch and the access level of the connection say.', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<div class="ab-mode__warning" role="note"><p>' . esc_html( AB_MCP_Site_Mode::notice_text() ) . '</p></div>';
+			$html .= '<input type="hidden" name="mode" value="' . esc_attr( AB_MCP_Site_Mode::FULL ) . '">';
+			$html .= '<input type="hidden" name="notice_version" value="' . esc_attr( AB_MCP_Site_Mode::NOTICE_VERSION ) . '">';
+			$html .= '<label class="ab-mode__confirm"><input type="checkbox" name="confirm_full" value="1" required><span>' . esc_html( AB_MCP_Site_Mode::checkbox_text() ) . '</span></label>';
+			$html .= '<p class="ab-mode__actions"><button type="submit" class="ab-btn ab-btn--warn">' . esc_html__( 'Switch to Full', 'alphabridge-mcp' ) . '</button></p>';
+		}
+		$html .= '</form></section>';
+
+		return $html;
 	}
 
 	/**
@@ -354,56 +466,56 @@ class AB_MCP_Admin {
 	/**
 	 * Render the page.
 	 *
-	 * Top to bottom: the band with the logo, this site's state and the choice of
-	 * assistant; how to connect the chosen one; what connected assistants may do;
-	 * the connections; boxes from add-ons; the log. The side column carries the
-	 * Pro box (free edition only), boxes from add-ons and the guides.
+	 * Top to bottom: the site mode with its switch; the band with the logo,
+	 * this site's state and the choice of assistant; how to connect the chosen
+	 * one; the fine-tuning of the tool switches (folded); the connections;
+	 * boxes from add-ons; the log. The side column carries the Pro box (free
+	 * edition only), boxes from add-ons and the guides.
 	 */
 	public function render() {
 		$this->guard();
 
-		$tokens    = AB_MCP_Settings::get_tokens();
-		$registry  = $this->registry();
-		$groups    = $registry->groups();
-		$all       = $registry->all();
-		$read_only = (bool) AB_MCP_Settings::get( 'read_only', false );
+		$tokens   = AB_MCP_Settings::get_tokens();
+		$registry = $this->registry();
+		$groups   = $registry->groups();
+		$all      = $registry->all();
 
 		echo '<div class="wrap ab-mcp">';
-		// WordPress moves admin notices right after this marker. Without it they
-		// land after the first heading, which sits inside the band.
+		// The site mode comes first, above the marker below: WordPress moves
+		// admin notices right after the marker, so none lands above the switch.
+		echo $this->mode_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_card_html().
+		if ( AB_MCP_Settings::get( AB_MCP_Settings::KEY_MODE_NOTICE, false ) ) {
+			echo $this->mode_notice_html( false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_notice_html().
+		}
+		// Without the marker admin notices land after the first heading.
 		echo '<hr class="wp-header-end">';
 		$this->notice();
 		// The one-time review request: only here, only once the site has really
 		// used the plugin, and never again after «don't ask again».
 		echo AB_MCP_Review_Notice::render(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts.
-		if ( $read_only ) {
-			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Read-only mode is active.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'All writing tools are blocked until you switch it off under Capabilities.', 'alphabridge-mcp' ) . '</p></div>';
-		}
 
-		echo $this->hero_html( $tokens, $all, $read_only ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside hero_html().
+		echo $this->hero_html( $tokens, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside hero_html().
 
 		echo '<div class="ab-cols">';
-		$this->render_main_column( $tokens, $groups, $all, $read_only );
+		$this->render_main_column( $tokens, $groups, $all );
 		echo $this->sidebar_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside sidebar_html(); add-on boxes escape their own output.
 		echo '</div>'; // columns.
 		echo '</div>'; // wrap.
 	}
 
 	/**
-	 * The main column, top to bottom: connect the chosen assistant, what
-	 * connected assistants may do, the connections, boxes from add-ons, the log.
-	 * The connections follow the capabilities: first decide what a connection
-	 * may do, then manage the connections.
+	 * The main column, top to bottom: connect the chosen assistant, the
+	 * fine-tuning of the tool switches, the connections, boxes from add-ons,
+	 * the log.
 	 *
-	 * @param array $tokens    Stored connections.
-	 * @param array $groups    Tool groups from the registry.
-	 * @param array $all       Every registered tool (name => definition).
-	 * @param bool  $read_only Whether read-only mode is on.
+	 * @param array $tokens Stored connections.
+	 * @param array $groups Tool groups from the registry.
+	 * @param array $all    Every registered tool (name => definition).
 	 */
-	private function render_main_column( $tokens, $groups, $all, $read_only ) {
+	private function render_main_column( $tokens, $groups, $all ) {
 		echo '<div class="ab-main">';
 		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
-		echo $this->capabilities_card_html( $groups, $all, $read_only ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
+		echo $this->capabilities_card_html( $groups, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
 		$this->render_connections_card( $tokens );
 
 		/**
@@ -452,12 +564,11 @@ class AB_MCP_Admin {
 	 * The band at the top: logo and name, this site's state in three figures,
 	 * and the choice of assistant that the connect card below follows.
 	 *
-	 * @param array $tokens    Stored connections.
-	 * @param array $all       Every registered tool (name => definition).
-	 * @param bool  $read_only Whether read-only mode is on.
+	 * @param array $tokens Stored connections.
+	 * @param array $all    Every registered tool (name => definition).
 	 * @return string HTML, escaped.
 	 */
-	private function hero_html( $tokens, $all, $read_only ) {
+	private function hero_html( $tokens, $all ) {
 		$on = 0;
 		foreach ( $all as $name => $def ) {
 			if ( AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
@@ -479,7 +590,9 @@ class AB_MCP_Admin {
 		$html .= '<span class="ab-chip">' . sprintf( esc_html( _n( '%s connection', '%s connections', $count, 'alphabridge-mcp' ) ), '<b>' . (int) $count . '</b>' ) . '</span>';
 		/* translators: 1: tools switched on, 2: all tools. */
 		$html .= '<span class="ab-chip">' . sprintf( esc_html__( '%1$s of %2$s tools on', 'alphabridge-mcp' ), '<b>' . (int) $on . '</b>', '<b>' . count( $all ) . '</b>' ) . '</span>';
-		$html .= '<span class="ab-chip"><span class="ab-dot' . ( $read_only ? ' ab-dot--warn' : '' ) . '" aria-hidden="true"></span>' . ( $read_only ? esc_html__( 'Read-only on', 'alphabridge-mcp' ) : esc_html__( 'Read-only off', 'alphabridge-mcp' ) ) . '</span>';
+		$mode  = AB_MCP_Site_Mode::get();
+		/* translators: %s: the site mode in one word, Read or Full. */
+		$html .= '<span class="ab-chip ab-chip--mode"><span class="ab-dot' . ( AB_MCP_Site_Mode::FULL === $mode ? ' ab-dot--warn' : '' ) . '" aria-hidden="true"></span>' . esc_html( sprintf( __( 'Mode: %s', 'alphabridge-mcp' ), AB_MCP_Site_Mode::label( $mode ) ) ) . '</span>';
 		$html .= '</div></div>';
 		$html .= '<h2 class="ab-hero__title">' . esc_html__( 'Connect your AI assistant', 'alphabridge-mcp' ) . '</h2>';
 		/* translators: %s: the site's name. */
@@ -725,34 +838,27 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The capabilities card: a switch for all tools, read-only mode, a search,
-	 * and one foldable row per group with a switch of its own. Opening a group
-	 * lists its tools, each with a switch and what it does (the first sentence;
-	 * the whole description behind the «i»).
+	 * The fine-tuning of the tool switches, folded by default: a switch for
+	 * all tools, a search, and one foldable row per group with a switch of its
+	 * own. Opening a group lists its tools, each with a switch and what it
+	 * does (the first sentence; the whole description behind the «i»).
 	 *
-	 * The form posts what it always posted: every enabled tool as
-	 * enabled_tools[], the list of all tools, and read_only. The switches for
-	 * all tools and for a group carry no name — they only set the tool switches.
+	 * Every tool is on until an administrator switches it off here; whether
+	 * a switched-on tool may write is the site mode's question (the card at
+	 * the top). The form posts what it always posted: every enabled tool as
+	 * enabled_tools[] and the list of all tools. The switches for all tools
+	 * and for a group carry no name — they only set the tool switches.
 	 *
-	 * Above the switches sit the profiles. Their buttons belong to a form of
-	 * their own (ab-profile-form, before this one), so choosing a profile posts
-	 * nothing of this form, and saving this form posts no profile. Every tool
-	 * switch names the profiles it is on in (data-profiles), which lets
-	 * admin.js show «Custom» the moment a switch leaves every profile.
-	 *
-	 * @param array $groups    Tool groups from the registry.
-	 * @param array $all       Every registered tool (name => definition).
-	 * @param bool  $read_only Whether read-only mode is on.
+	 * @param array $groups Tool groups from the registry.
+	 * @param array $all    Every registered tool (name => definition).
 	 * @return string HTML, escaped.
 	 */
-	private function capabilities_card_html( $groups, $all, $read_only ) {
+	private function capabilities_card_html( $groups, $all ) {
 		$on_total = 0;
 		$rows     = '';
-		$offered  = AB_MCP_Tool_Profiles::offered( AB_MCP_Tool_Profiles::states( $all, $groups ) );
 		foreach ( $groups as $slug => $g ) {
 			$on    = 0;
 			$items = '';
-			$level = isset( $g['level'] ) ? (string) $g['level'] : 'expert';
 			foreach ( $g['tools'] as $tname ) {
 				$def     = $all[ $tname ];
 				$enabled = AB_MCP_Settings::is_tool_enabled( $tname, $def );
@@ -760,10 +866,9 @@ class AB_MCP_Admin {
 				$desc    = trim( wp_strip_all_tags( (string) $def['description'] ) );
 				$parts   = preg_split( '/(?<=[.!?])\s+/', $desc, 2 );
 				$short   = is_array( $parts ) ? (string) $parts[0] : $desc;
-				$in      = implode( ' ', AB_MCP_Tool_Profiles::profiles_of( $def, $level ) );
 
 				$items .= '<li class="ab-tool-row" data-search="' . esc_attr( strtolower( $tname . ' ' . $desc ) ) . '">';
-				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '" data-profiles="' . esc_attr( $in ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
+				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
 				$items .= '<div class="ab-tool-row__text"><code>' . esc_html( $tname ) . '</code>';
 				if ( is_array( $parts ) && count( $parts ) > 1 ) {
 					/* translators: %s: tool name. */
@@ -777,7 +882,7 @@ class AB_MCP_Admin {
 			$rows .= '<details class="ab-group" data-group="' . esc_attr( (string) $slug ) . '"><summary>';
 			/* translators: %s: name of a tool group. */
 			$rows .= '<label class="ab-switch ab-group-switch"><input type="checkbox" class="ab-group-toggle"' . checked( $n > 0 && $on >= $n, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( sprintf( __( 'All tools in %s', 'alphabridge-mcp' ), $g['label'] ) ) . '</span></label>';
-			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) . ' ' . $this->level_pill( $level, $offered ) : '' );
+			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) : '' );
 			/* translators: %d: number of tools. */
 			$rows .= ' <span class="ab-group__n">' . esc_html( sprintf( _n( '%d tool', '%d tools', $n, 'alphabridge-mcp' ), $n ) ) . '</span>';
 			$rows .= '<span class="ab-group__right">' . $this->group_status( $on, $n ) . '<span class="ab-chev" aria-hidden="true">›</span></span>';
@@ -785,127 +890,30 @@ class AB_MCP_Admin {
 		}
 		$total = count( $all );
 
-		// The profile buttons below submit this form, not the capabilities form.
-		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-profile-form" hidden>';
-		$html .= wp_nonce_field( 'ab_mcp_profile', '_wpnonce', true, false );
-		$html .= '<input type="hidden" name="action" value="ab_mcp_profile"></form>';
-
-		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps" class="ab-card ab-caps">';
+		$html  = '<details class="ab-card ab-fine" id="ab-fine"><summary class="ab-fine__summary"><span class="ab-fine__head">';
+		$html .= '<span class="ab-eyebrow">' . esc_html__( 'Fine-tuning (for advanced users)', 'alphabridge-mcp' ) . '</span>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Switch single tools or whole groups off', 'alphabridge-mcp' ) . '</h2></span>';
+		$html .= '<span class="ab-chev" aria-hidden="true">›</span></summary>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps" class="ab-caps">';
 		$html .= wp_nonce_field( 'ab_mcp_save', '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_save">';
 		$html .= '<input type="hidden" name="all_tools" value="' . esc_attr( implode( ',', array_keys( $all ) ) ) . '">';
-		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Capabilities', 'alphabridge-mcp' ) . '</p>';
-		$html .= '<h2 class="ab-card__title">' . esc_html__( 'What connected assistants may do', 'alphabridge-mcp' ) . '</h2>';
-		$html .= '<p class="ab-lead">' . esc_html__( 'Switch whole groups or single tools. Open a group to see every tool and what it does. Disabled tools are removed from the MCP server and REST API entirely — no client can see or call them.', 'alphabridge-mcp' ) . '</p>';
-		$html .= $this->profiles_html( $groups, $all );
+		$html .= '<p class="ab-lead">' . esc_html__( 'Every tool is on until you switch it off here. In Full, switched-on tools may write, the powerful ones marked Mighty included; in Read every tool that writes is refused, whatever its switch says. Switched-off tools are removed from the MCP server and REST API entirely — no client can see or call them.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<div class="ab-capbar">';
 		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" class="ab-all-toggle"' . checked( $on_total === $total, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'All tools', 'alphabridge-mcp' ) . '</label>';
-		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" name="read_only" value="1"' . checked( $read_only, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'Read-only mode', 'alphabridge-mcp' ) . '</label>';
 		$html .= '<input type="search" class="ab-search" placeholder="' . esc_attr__( 'Find a tool…', 'alphabridge-mcp' ) . '" aria-label="' . esc_attr__( 'Find a tool', 'alphabridge-mcp' ) . '">';
 		/* translators: 1: tools switched on, 2: all tools. */
 		$html .= '<span class="ab-capbar__count">' . sprintf( esc_html__( '%1$s of %2$s on', 'alphabridge-mcp' ), '<b class="ab-on-count">' . (int) $on_total . '</b>', '<b>' . (int) $total . '</b>' ) . '</span>';
 		$html .= '</div>';
-		$html .= '<p class="ab-note ab-caps__ro">' . esc_html__( 'Read-only mode blocks every writing tool with one switch, regardless of the switches below; read, list and search tools keep working.', 'alphabridge-mcp' ) . '</p>';
 		$html .= $rows;
 		$html .= '<p class="ab-note ab-caps__none" hidden>' . esc_html__( 'No tool matches.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<div class="ab-savebar"><button type="submit" class="ab-btn">' . esc_html__( 'Save capabilities', 'alphabridge-mcp' ) . '</button>';
 		$html .= '<span class="ab-savebar__text" data-dirty="' . esc_attr__( 'Unsaved changes — save to apply them.', 'alphabridge-mcp' ) . '">' . esc_html__( 'New connections see the change at once. A client that is already connected may cache the tool list it loaded; if the change is not visible there, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) . '</span></div>';
 		/* translators: %d: requests per minute. */
 		$html .= '<p class="ab-note">' . esc_html( sprintf( __( 'Abuse protection active (fixed): %d requests/min.', 'alphabridge-mcp' ), (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) ) ) . '</p>';
-		$html .= '</form>';
+		$html .= '</form></details>';
 
 		return $html;
-	}
-
-	/**
-	 * The profiles above the switches: one button per profile with a sentence
-	 * on what the assistant may then do and what not, how many tools it
-	 * switches on, and «Custom» when the switches follow none of them.
-	 *
-	 * Only the offered profiles get a button (AB_MCP_Tool_Profiles::offered()).
-	 * The buttons submit ab-profile-form (see capabilities_card_html()). The
-	 * profile in use carries aria-current; admin.js moves it while switches
-	 * change, by the same rule as AB_MCP_Tool_Profiles::current(), and marks
-	 * it «When saved» until the form is saved. Before a profile replaces a
-	 * choice of switches of the admin's own, or discards a change of
-	 * read-only mode not yet saved, admin.js asks with the data-confirm-*
-	 * sentences.
-	 *
-	 * @param array $groups Tool groups from the registry.
-	 * @param array $all    Every registered tool (name => definition).
-	 * @return string HTML, escaped.
-	 */
-	private function profiles_html( $groups, $all ) {
-		$current = AB_MCP_Tool_Profiles::current( $all, $groups );
-		$states  = AB_MCP_Tool_Profiles::states( $all, $groups );
-		$total   = count( $all );
-
-		// Named from the registry, so the sentence says what Advanced adds on
-		// this site and nothing that is not here. Advanced is offered only
-		// where it adds a group and leaves one off, so neither list is empty.
-		$advanced = array();
-		foreach ( $groups as $g ) {
-			if ( ! empty( $g['mighty'] ) && isset( $g['level'] ) && 'advanced' === $g['level'] ) {
-				$advanced[] = (string) $g['label'];
-			}
-		}
-		$texts = array(
-			'simple'   => __( 'The assistant reads the site and edits content such as posts, pages, media, terms and comments; tools marked Mighty, which delete or change a lot at once, stay off.', 'alphabridge-mcp' ),
-			/* translators: %s: names of tool groups, separated by commas. */
-			'advanced' => sprintf( __( 'Everything in Simple plus the Mighty groups marked Advanced: %s; groups marked Expert stay off.', 'alphabridge-mcp' ), implode( ', ', $advanced ) ),
-			'expert'   => __( 'Every tool is on, Mighty ones included; the assistant can still do only what the connected account and its access level allow.', 'alphabridge-mcp' ),
-		);
-		$now = '<span class="ab-profile__now">' . esc_html__( 'In use', 'alphabridge-mcp' ) . '</span>';
-
-		$html  = '<div class="ab-profiles" role="group" aria-labelledby="ab-profiles-title" data-current="' . esc_attr( $current ) . '"';
-		$html .= ' data-now="' . esc_attr__( 'In use', 'alphabridge-mcp' ) . '" data-now-unsaved="' . esc_attr__( 'When saved', 'alphabridge-mcp' ) . '"';
-		$html .= ' data-confirm-custom="' . esc_attr__( 'The profile replaces your own choice of switches: tools you switched off come back on if the profile has them on, and tools the profile has off go off.', 'alphabridge-mcp' ) . '"';
-		$html .= ' data-confirm-read-only="' . esc_attr__( 'Read-only mode was changed but not saved; choosing a profile discards that change.', 'alphabridge-mcp' ) . '"';
-		$html .= ' data-confirm-ask="' . esc_attr__( 'Choose this profile?', 'alphabridge-mcp' ) . '">';
-		$html .= '<p class="ab-profiles__title" id="ab-profiles-title"><strong>' . esc_html__( 'Profile', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'One click sets every switch below; adjust single groups or tools afterwards.', 'alphabridge-mcp' ) . '</p>';
-		$html .= '<div class="ab-profiles__list">';
-		foreach ( AB_MCP_Tool_Profiles::offered( $states ) as $slug => $name ) {
-			$on    = count( array_filter( $states[ $slug ] ) );
-			$html .= '<button type="submit" form="ab-profile-form" name="profile" value="' . esc_attr( $slug ) . '" class="ab-profile" data-profile="' . esc_attr( $slug ) . '"' . ( $slug === $current ? ' aria-current="true"' : '' ) . '>';
-			$html .= '<span class="ab-profile__head"><span class="ab-profile__name">' . esc_html( $name ) . '</span>';
-			if ( 'simple' === $slug ) {
-				$html .= '<span class="ab-profile__tag">' . esc_html__( 'default', 'alphabridge-mcp' ) . '</span>';
-			}
-			$html .= $now . '</span>';
-			$html .= '<span class="ab-profile__text">' . esc_html( $texts[ $slug ] ) . '</span>';
-			/* translators: 1: tools this profile switches on, 2: all tools. */
-			$html .= '<span class="ab-profile__count">' . esc_html( sprintf( __( '%1$d of %2$d tools on', 'alphabridge-mcp' ), $on, $total ) ) . '</span>';
-			$html .= '</button>';
-		}
-		$html .= '<div class="ab-profile ab-profile--custom" data-profile="custom"' . ( 'custom' === $current ? ' aria-current="true"' : ' hidden' ) . '>';
-		$html .= '<span class="ab-profile__head"><span class="ab-profile__name">' . esc_html__( 'Custom', 'alphabridge-mcp' ) . '</span>' . $now . '</span>';
-		$html .= '<span class="ab-profile__text">' . esc_html__( 'Your own choice of the switches below. Choosing a profile replaces it with that profile’s switches.', 'alphabridge-mcp' ) . '</span>';
-		$html .= '</div>';
-		$html .= '</div>';
-		$html .= '<p class="ab-note">' . esc_html__( 'A profile sets only the tool switches below. Read-only mode and your connections stay as they are.', 'alphabridge-mcp' ) . '</p>';
-		$html .= '</div>';
-
-		return $html;
-	}
-
-	/**
-	 * The level of a Mighty group as a pill: the first offered profile that
-	 * switches its Mighty tools on. The words say that it is about those
-	 * tools; the group's other tools are on in every profile, and a bare
-	 * «Expert» beside «Posts & Pages» would read as if editing posts were.
-	 *
-	 * @param string $level   Group level.
-	 * @param array  $offered Offered profiles, slug => name, narrowest first.
-	 * @return string HTML, escaped.
-	 */
-	private function level_pill( $level, $offered ) {
-		foreach ( $offered as $profile => $name ) {
-			if ( AB_MCP_Tool_Registry::level_rank( $profile ) >= AB_MCP_Tool_Registry::level_rank( $level ) ) {
-				/* translators: %s: name of a profile, e.g. Expert. */
-				return '<span class="ab-pill ab-pill--level ab-pill--' . esc_attr( (string) $profile ) . '">' . esc_html( sprintf( __( 'Mighty tools: from %s', 'alphabridge-mcp' ), $name ) ) . '</span>';
-			}
-		}
-		return '';
 	}
 
 	/**
@@ -1331,8 +1339,12 @@ class AB_MCP_Admin {
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
 			'review_dismissed' => array( 'success', __( 'Noted — the plugin will not ask for a review again.', 'alphabridge-mcp' ) ),
-			'profile_saved'    => array( 'success', __( 'Profile applied: the tool switches now follow it. Clients may cache the tool list they loaded; if the change is not visible in a connected client, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) ),
-			'profile_unknown'  => array( 'error', __( 'Unknown profile; nothing was changed.', 'alphabridge-mcp' ) ),
+			'mode_full'        => array( 'success', __( 'Full is on. Assistants can now create, change and delete through the tools that are switched on. Your confirmation is recorded with your account, the time and the version of the notice. You can switch back to Read at the top of this page at any time.', 'alphabridge-mcp' ) ),
+			'mode_read'        => array( 'success', __( 'Read is on. Assistants can only read; every tool that creates, changes or deletes is refused.', 'alphabridge-mcp' ) ),
+			'mode_unconfirmed' => array( 'error', __( 'Full was not switched on: tick the box under the notice to confirm it, then switch again.', 'alphabridge-mcp' ) ),
+			'mode_stale'       => array( 'error', __( 'Full was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again.', 'alphabridge-mcp' ) ),
+			'mode_unknown'     => array( 'error', __( 'Unknown mode; nothing was changed. Use the switch at the top of this page.', 'alphabridge-mcp' ) ),
+			'mode_notice_dismissed' => array( 'success', __( 'Noted. The mode of this site is shown at the top of this page.', 'alphabridge-mcp' ) ),
 		);
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );

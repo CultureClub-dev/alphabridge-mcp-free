@@ -107,6 +107,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
+	$GLOBALS['ab_test_i18n']        = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -1054,6 +1055,35 @@ function get_locale() {
 	return (string) ( $GLOBALS['ab_test_locale'] ?? 'en_US' );
 }
 
+/*
+ * Translation loading, as far as AB_MCP_Plugin::load_bundled_translations()
+ * touches it. Nothing is translated here: every call is recorded in order in
+ * $GLOBALS['ab_test_i18n'], so a test can see that the language pack was
+ * asked for before the bundled file was added. What the bundled files say is
+ * read from the files themselves (BundledTranslationsTest).
+ */
+function _x( $text, $context, $domain = '' ) {
+	return $text;
+}
+
+function get_user_locale( $user = 0 ) {
+	return get_locale();
+}
+
+function determine_locale() {
+	return get_locale();
+}
+
+function get_translations_for_domain( $domain ) {
+	$GLOBALS['ab_test_i18n'][] = array( 'pack', (string) $domain );
+	return null;
+}
+
+function load_textdomain( $domain, $mofile, $locale = null ) {
+	$GLOBALS['ab_test_i18n'][] = array( 'file', (string) $domain, (string) $mofile, (string) $locale );
+	return true;
+}
+
 function checked( $checked, $current = true, $display = true ) {
 	$out = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
 	if ( $display ) {
@@ -1550,13 +1580,14 @@ define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
 define( 'AB_MCP_MAX_BATCH', 25 );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
+define( 'AB_MCP_DIR', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 
 /* --------------------------------------------------------- classes to test */
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
-require_once __DIR__ . '/../includes/class-tool-profiles.php';
+require_once __DIR__ . '/../includes/class-site-mode.php';
 require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';

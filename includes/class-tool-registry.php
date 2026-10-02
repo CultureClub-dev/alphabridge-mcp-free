@@ -7,10 +7,10 @@
  *   - description (string)  What the tool does (shown to the AI client).
  *   - inputSchema (array)   JSON Schema object describing arguments.
  *   - capability  (string)  Required WordPress capability, or null.
- *   - dangerous   (bool)    Requires Safe-Mode allow-listing.
+ *   - dangerous   (bool)    Powerful: marked «Mighty» on the settings page.
  *   - callback    (callable) function( array $args ): array|string|WP_Error.
- *   - group, group_label, group_level (string) The functional group; stamped
- *                 from set_current_group() unless the definition names one.
+ *   - group, group_label (string) The functional group; stamped from
+ *                 set_current_group() unless the definition names one.
  *
  * @package AlphaBridge_MCP
  */
@@ -52,14 +52,6 @@ class AB_MCP_Tool_Registry {
 	private const CONTENT_TOOLS = array( 'wp_update_builder_element' );
 
 	/**
-	 * The levels a tool group can have, narrowest first. A level names the
-	 * profile from which on the group's Mighty tools are switched on (see
-	 * AB_MCP_Tool_Profiles); the order is the order of the profiles.
-	 */
-	const LEVELS = array( 'simple', 'advanced', 'expert' );
-
-
-	/**
 	 * Registered tools keyed by name.
 	 *
 	 * @var array<string,array>
@@ -69,12 +61,11 @@ class AB_MCP_Tool_Registry {
 	/**
 	 * Current functional group stamped onto tools as they are registered.
 	 *
-	 * @var array{slug:string,label:string,level:string}
+	 * @var array{slug:string,label:string}
 	 */
 	private $current_group = array(
 		'slug'  => 'other',
 		'label' => 'Sonstiges',
-		'level' => '',
 	);
 
 	/**
@@ -82,44 +73,14 @@ class AB_MCP_Tool_Registry {
 	 * calls this before each tool class registers, so every tool is tagged with
 	 * a human group (e.g. "Posts & Pages") without touching each definition.
 	 *
-	 * The level is optional: 'advanced' or 'expert' says from which profile on
-	 * the group's Mighty tools are switched on. Left out, groups() decides by
-	 * the default rule. An older core ignores the argument, so an add-on can
-	 * pass it without asking which core it runs on.
-	 *
 	 * @param string $slug  Group slug.
 	 * @param string $label Human label.
-	 * @param string $level Optional: 'simple', 'advanced' or 'expert'.
 	 */
-	public function set_current_group( $slug, $label, $level = '' ) {
+	public function set_current_group( $slug, $label ) {
 		$this->current_group = array(
 			'slug'  => (string) $slug,
 			'label' => (string) $label,
-			'level' => self::sanitize_level( $level ),
 		);
-	}
-
-	/**
-	 * A known level, or '' for anything else.
-	 *
-	 * @param mixed $level Requested level.
-	 * @return string
-	 */
-	public static function sanitize_level( $level ) {
-		$level = is_string( $level ) ? strtolower( trim( $level ) ) : '';
-		return in_array( $level, self::LEVELS, true ) ? $level : '';
-	}
-
-	/**
-	 * Position of a level in LEVELS; an unknown one counts as the widest, so
-	 * a mistake can never pull a group into a narrower profile.
-	 *
-	 * @param string $level Level.
-	 * @return int
-	 */
-	public static function level_rank( $level ) {
-		$rank = array_search( (string) $level, self::LEVELS, true );
-		return false === $rank ? count( self::LEVELS ) - 1 : (int) $rank;
 	}
 
 	/**
@@ -144,14 +105,12 @@ class AB_MCP_Tool_Registry {
 				'callback'    => null,
 				'group'       => '',
 				'group_label' => '',
-				'group_level' => '',
 			)
 		);
 
 		if ( '' === $def['group'] ) {
 			$def['group']       = $this->current_group['slug'];
 			$def['group_label'] = $this->current_group['label'];
-			$def['group_level'] = $this->current_group['level'];
 		}
 
 		$this->tools[ $name ] = $def;
@@ -184,8 +143,8 @@ class AB_MCP_Tool_Registry {
 	 * Does this tool change or destroy something that is already there?
 	 *
 	 * This is the MCP `destructiveHint`, and it is NOT the same question as the
-	 * `dangerous` flag next to it. `dangerous` decides whether a tool is off
-	 * until an admin switches it on; it marks tools worth a second thought.
+	 * `dangerous` flag next to it. `dangerous` marks tools worth a second
+	 * thought («Mighty» on the settings page).
 	 * `destructiveHint` tells the client whether a call overwrites existing
 	 * state, and clients use it to decide whether to ask the user first.
 	 *
@@ -224,10 +183,11 @@ class AB_MCP_Tool_Registry {
 	/**
 	 * Central read-only classification. A definition may force the flag with
 	 * 'readonly' => true|false; otherwise the (stable, snake_case) tool name
-	 * decides. Drives the MCP readOnlyHint annotation, the global read-only mode
-	 * AND the "read" token scope, so keep this list in sync when new tools are
-	 * added — a new writing tool that is missed here would be wrongly allowed for
-	 * read-scoped tokens. Unknown names default to "not read-only" (fail-closed).
+	 * decides. Drives the MCP readOnlyHint annotation, the site mode Read
+	 * (AB_MCP_Site_Mode) AND the "read" token scope, so keep this list in sync
+	 * when new tools are added — a new writing tool that is missed here would
+	 * be wrongly allowed in Read and for read-scoped tokens. Unknown names
+	 * default to "not read-only" (fail-closed).
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
@@ -334,7 +294,7 @@ class AB_MCP_Tool_Registry {
 	 * before scopes existed keep working exactly as before.
 	 *
 	 * Both narrower scopes are fail-closed: "read" reuses the same read
-	 * classification the global read-only mode uses (an unrecognised tool counts
+	 * classification the site mode Read uses (an unrecognised tool counts
 	 * as writing), and "content" additionally needs the tool's capability to be
 	 * an explicitly content-level one, or the tool to be named in CONTENT_TOOLS.
 	 *
@@ -430,30 +390,10 @@ class AB_MCP_Tool_Registry {
 	 * Aggregate tools into their functional groups, in first-seen order.
 	 * A group is flagged "mighty" when it holds at least one dangerous tool.
 	 *
-	 * Each group also carries its level, the profile from which on its Mighty
-	 * tools are switched on (see AB_MCP_Tool_Profiles):
-	 *
-	 * - Declared with the registration (set_current_group() or a definition's
-	 *   group_level). A Mighty tool registered without a level counts as
-	 *   declaring 'expert', the default rule for it. Free and an add-on often
-	 *   register into the same group; when their levels differ, the widest
-	 *   wins, so neither can pull the other's Mighty tools into a narrower
-	 *   profile. To move such a group, use the filter below.
-	 * - Nothing declared, no Mighty tool: 'simple'.
-	 * - The filter ab_mcp_group_levels has the last word, so an add-on or the
-	 *   site owner can place a group without this plugin knowing it.
-	 *
-	 * Two rules hold whatever was declared or filtered. A group without Mighty
-	 * tools is 'simple': its tools are on in the shipping state, and no profile
-	 * switches off what a site ships with. A Mighty group is never 'simple':
-	 * Simple IS the shipping state, in which every Mighty tool is off, and a
-	 * site that never touched a switch must keep reading «Simple».
-	 *
-	 * @return array<string,array{label:string,mighty:bool,tools:string[],count:int,level:string}>
+	 * @return array<string,array{label:string,mighty:bool,tools:string[],count:int}>
 	 */
 	public function groups() {
-		$groups   = array();
-		$declared = array();
+		$groups = array();
 		foreach ( $this->tools as $name => $def ) {
 			$slug = self::group_of( $def );
 			if ( ! isset( $groups[ $slug ] ) ) {
@@ -469,56 +409,6 @@ class AB_MCP_Tool_Registry {
 			if ( ! empty( $def['dangerous'] ) ) {
 				$groups[ $slug ]['mighty'] = true;
 			}
-			$level = self::sanitize_level( isset( $def['group_level'] ) ? $def['group_level'] : '' );
-			if ( '' === $level && ! empty( $def['dangerous'] ) ) {
-				// Free registers its groups without a level. Counted as Expert,
-				// its Mighty tools stay there when an add-on declares a
-				// narrower level for the same group.
-				$level = 'expert';
-			}
-			if ( '' !== $level && ( ! isset( $declared[ $slug ] ) || self::level_rank( $level ) > self::level_rank( $declared[ $slug ] ) ) ) {
-				$declared[ $slug ] = $level;
-			}
-		}
-
-		$levels = array();
-		foreach ( array_keys( $groups ) as $slug ) {
-			$levels[ $slug ] = isset( $declared[ $slug ] ) ? $declared[ $slug ] : 'simple';
-		}
-
-		/**
-		 * The level of each tool group: the profile (simple, advanced, expert)
-		 * from which on the group's Mighty tools are switched on.
-		 *
-		 * A group without Mighty tools stays 'simple' and a Mighty group is at
-		 * least 'advanced', whatever this returns (see groups()). Unknown slugs
-		 * and values are ignored.
-		 *
-		 * @since 4.4.0
-		 *
-		 * @param array<string,string> $levels Group slug => level.
-		 * @param array                $groups The groups (label, mighty, tools, count).
-		 */
-		$filtered = apply_filters( 'ab_mcp_group_levels', $levels, $groups );
-		if ( is_array( $filtered ) ) {
-			foreach ( $filtered as $slug => $level ) {
-				$level = self::sanitize_level( $level );
-				// Only the levels of registered groups are read below, so a slug
-				// the filter makes up changes nothing.
-				if ( '' !== $level ) {
-					$levels[ $slug ] = $level;
-				}
-			}
-		}
-
-		foreach ( $groups as $slug => $g ) {
-			$level = $levels[ $slug ];
-			if ( ! $g['mighty'] ) {
-				$level = 'simple';
-			} elseif ( 'simple' === $level ) {
-				$level = 'advanced';
-			}
-			$groups[ $slug ]['level'] = $level;
 		}
 		return $groups;
 	}

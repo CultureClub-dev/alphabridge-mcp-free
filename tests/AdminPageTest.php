@@ -1,11 +1,12 @@
 <?php
 /**
  * The settings screen around the connect card: the band at the top, the
- * capabilities, the order of the main column and the side column.
+ * fine-tuning of the tool switches, the order of the main column and the side
+ * column. The site mode at the very top has a test of its own (SiteModeTest).
  *
- * The capabilities form must post what it always posted — the handler reads
- * enabled_tools[], all_tools and read_only — while the switches for all tools
- * and for a group only move the tool switches and post nothing themselves.
+ * The fine-tuning form must post what it always posted — the handler reads
+ * enabled_tools[] and all_tools — while the switches for all tools and for a
+ * group only move the tool switches and post nothing themselves.
  *
  * @package AlphaBridge_MCP
  */
@@ -28,7 +29,7 @@ final class AdminPageTest extends TestCase {
 		ab_test_reset();
 	}
 
-	/** Two groups, three tools; the dangerous one is off by default. */
+	/** Two groups, three tools; the dangerous one is marked Mighty. */
 	private function registry(): AB_MCP_Tool_Registry {
 		$r = new AB_MCP_Tool_Registry();
 		$r->set_current_group( 'content', 'Posts & Pages' );
@@ -60,26 +61,32 @@ final class AdminPageTest extends TestCase {
 		return new DOMXPath( $doc );
 	}
 
+	/** The fine-tuning card, with one tool switched off by an administrator. */
 	private function caps(): DOMXPath {
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
 		$r = $this->registry();
-		return $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all(), false ) );
+		return $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );
 	}
 
-	public function testTheBandCountsConnectionsToolsAndReadOnly(): void {
-		$all  = $this->registry()->all();
-		$html = $this->call( 'hero_html', array( array( 'hash' => 'h1' ) ), $all, false );
+	public function testTheBandCountsConnectionsToolsAndTheMode(): void {
+		$all = $this->registry()->all();
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
+		$html = $this->call( 'hero_html', array( array( 'hash' => 'h1' ) ), $all );
 
 		self::assertStringContainsString( '<b>1</b> connection<', $html, 'One connection, singular.' );
 		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools on', $html );
-		self::assertStringContainsString( 'Read-only off', $html );
+		self::assertStringContainsString( 'Mode: Read', $html );
+		self::assertStringNotContainsString( 'ab-dot--warn', $html );
 
-		$on = $this->call( 'hero_html', array(), $all, true );
-		self::assertStringContainsString( '<b>0</b> connections', $on );
-		self::assertStringContainsString( 'Read-only on', $on );
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		$full = $this->call( 'hero_html', array(), $all );
+		self::assertStringContainsString( '<b>0</b> connections', $full );
+		self::assertStringContainsString( 'Mode: Full', $full );
+		self::assertStringContainsString( 'ab-dot--warn', $full );
 	}
 
 	public function testTheBandOffersFourAssistantsWithClaudeFirst(): void {
-		$x = $this->xpath( $this->call( 'hero_html', array(), $this->registry()->all(), false ) );
+		$x = $this->xpath( $this->call( 'hero_html', array(), $this->registry()->all() ) );
 
 		$buttons = $x->query( '//button[contains(@class, "ab-client")]' );
 		$clients = array();
@@ -114,7 +121,8 @@ final class AdminPageTest extends TestCase {
 			$tools
 		);
 		self::assertSame( 'wp_list_posts,wp_delete_post,wp_seo_get', $x->query( '//form[@id="ab-caps"]//input[@name="all_tools"]' )->item( 0 )->getAttribute( 'value' ) );
-		self::assertSame( 1, $x->query( '//form[@id="ab-caps"]//input[@type="checkbox"][@name="read_only"]' )->length, 'Read-only mode is saved with the capabilities.' );
+		self::assertSame( 0, $x->query( '//input[@name="read_only"]' )->length, 'The read-only switch gave way to the site mode.' );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-profile")]' )->length, 'No profiles any more.' );
 		foreach ( array( 'ab-all-toggle', 'ab-group-toggle' ) as $class ) {
 			foreach ( $x->query( '//input[contains(@class, "' . $class . '")]' ) as $in ) {
 				self::assertFalse( $in->hasAttribute( 'name' ), $class . ' posts nothing itself.' );
@@ -165,7 +173,7 @@ final class AdminPageTest extends TestCase {
 			}
 		);
 		$r    = $this->registry();
-		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all(), false );
+		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all() );
 
 		$at = array();
 		foreach ( array( 'id="ab-connect"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
@@ -175,7 +183,29 @@ final class AdminPageTest extends TestCase {
 		}
 		$sorted = $at;
 		sort( $sorted );
-		self::assertSame( $sorted, $at, 'Connect, capabilities, connections, add-on boxes, log.' );
+		self::assertSame( $sorted, $at, 'Connect, fine-tuning, connections, add-on boxes, log.' );
+	}
+
+	public function testTheFineTuningIsFoldedAndSaysSo(): void {
+		$x    = $this->caps();
+		$card = $x->query( '//details[@id="ab-fine"]' )->item( 0 );
+
+		self::assertNotNull( $card, 'The switches sit in a card of their own.' );
+		self::assertFalse( $card->hasAttribute( 'open' ), 'Folded until an administrator opens it.' );
+		self::assertSame( 'Fine-tuning (for advanced users)', trim( $x->query( './summary//*[contains(@class, "ab-eyebrow")]', $card )->item( 0 )->textContent ) );
+		self::assertSame( 1, $x->query( './/form[@id="ab-caps"]', $card )->length, 'The form is inside the folded card.' );
+		self::assertStringContainsString( 'Every tool is on until you switch it off here.', $card->textContent );
+		self::assertStringContainsString( 'in Read every tool that writes is refused', $card->textContent );
+	}
+
+	public function testANewSiteHasEveryToolSwitchedOn(): void {
+		$r = $this->registry();
+		$x = $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );
+
+		foreach ( $x->query( '//input[@name="enabled_tools[]"]' ) as $in ) {
+			self::assertTrue( $in->hasAttribute( 'checked' ), $in->getAttribute( 'value' ) . ' is on, the Mighty one included.' );
+		}
+		self::assertSame( '3', trim( $x->query( '//*[contains(@class, "ab-on-count")]' )->item( 0 )->textContent ) );
 	}
 
 	public function testEveryFormOnThePageIsSignedForItsHandler(): void {

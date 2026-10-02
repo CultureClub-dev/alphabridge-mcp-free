@@ -53,7 +53,7 @@ if ( ! defined( 'AB_MCP_MAX_BATCH' ) ) {
 
 require_once AB_MCP_DIR . 'includes/class-tool-registry.php';
 require_once AB_MCP_DIR . 'includes/class-settings.php';
-require_once AB_MCP_DIR . 'includes/class-tool-profiles.php';
+require_once AB_MCP_DIR . 'includes/class-site-mode.php';
 require_once AB_MCP_DIR . 'includes/class-security.php';
 require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';

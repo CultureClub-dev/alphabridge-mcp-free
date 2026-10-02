@@ -328,8 +328,8 @@ final class ModernProtocolTest extends TestCase {
 		self::assertStringContainsString( 'tools/list', $result['content'][0]['text'], 'The answer names where the callable tools are listed.' );
 	}
 
-	public function testAToolBlockedByReadOnlyModeIsACompleteResultWithIsError(): void {
-		AB_MCP_Settings::set( 'read_only', true );
+	public function testAToolRefusedInReadModeIsACompleteResultWithIsError(): void {
+		AB_MCP_Settings::set( 'site_mode', 'read' );
 		$result = $this->resultOf(
 			$this->modern(
 				'tools/call',
@@ -342,6 +342,7 @@ final class ModernProtocolTest extends TestCase {
 
 		self::assertTrue( $result['isError'] );
 		self::assertSame( 'complete', $result['resultType'] );
+		self::assertStringContainsString( 'read mode', $result['content'][0]['text'] );
 	}
 
 	/**
@@ -407,10 +408,11 @@ final class ModernProtocolTest extends TestCase {
 		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18', self::MODERN ), $site['protocol_versions'] );
 	}
 
-	public function testDiscoverPassesOnTheReadOnlyNotice(): void {
-		AB_MCP_Settings::set( 'read_only', true );
+	public function testDiscoverPassesOnTheReadMode(): void {
+		self::assertStringContainsString( 'READ MODE:', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
 
-		self::assertStringContainsString( 'READ-ONLY MODE is active', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
+		AB_MCP_Settings::set( 'site_mode', 'full' );
+		self::assertStringNotContainsString( 'READ MODE', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
 	}
 
 	public function testDiscoverAndInitializeAgreeOnInstructionsAndCapabilities(): void {

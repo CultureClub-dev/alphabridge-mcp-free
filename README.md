@@ -63,19 +63,21 @@ directory. It is the same code WordPress.org ships.
 
 Handing an AI access to a site should feel safe, so control comes first:
 
+- **Read out of the box.** A new site, and every site after updating to 4.4.0, starts in the
+  mode *Read*: assistants can read, list and search, and every tool that creates, changes or
+  deletes is refused, with an answer that says how to switch. *Full*, which lets them write, is
+  switched on by an administrator at the top of Settings → AlphaBridge MCP, at the site owner's
+  own risk: switching it on can be destructive, and the administrator confirms that, and that a
+  current backup exists, with a ticked box. The account, the time and the version of that notice
+  are recorded. Back to Read takes one click.
 - Every connection acts as a **real WordPress user**; every tool enforces the matching
   capability, including object-level checks. What that user may not do, the AI cannot do.
 - **Scoped connections** — read-only or content-only keys with optional expiry, rotatable in
   one click.
-- **Tool groups you can switch off** entirely; disabled tools vanish from the MCP surface.
-  Plus a global read-only mode.
-- **Profiles** set all tool switches in one click: *Simple*, how the plugin ships (read the
-  site, edit content, every tool marked Mighty off); *Expert*, every tool on; and, where an add-on
-  or the site marks Mighty groups Advanced, *Advanced*, which adds just those (this plugin marks
-  none of its own). Single groups and tools stay switchable; the page then shows *Custom*. A
-  profile changes only the tool switches, never connections or read-only mode. Choosing a profile
-  replaces every tool switch; until you choose one, switches set before stay as they are. Code
-  that registers a group can mark its level, or use the `ab_mcp_group_levels` filter.
+- **Fine-tuning for advanced users** — in Full every tool is on, the powerful ones marked
+  Mighty included; switch single tools or whole groups off, and they vanish from the MCP surface.
+  Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`); the action
+  `ab_mcp_site_mode_changed` fires when an administrator switches.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed.
 - **Layered meta protection** — protected keys, `is_protected_meta()` keys and two kinds of

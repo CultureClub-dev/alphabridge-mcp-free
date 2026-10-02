@@ -1,0 +1,109 @@
+# German translations of the AlphaBridge MCP site mode texts (Read and Full).
+# Bundled with the plugin; a language pack from translate.wordpress.org takes
+# precedence for every string it translates (AB_MCP_Plugin::load_bundled_translations()).
+# This file is distributed under the same license as the AlphaBridge MCP plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: AlphaBridge MCP 4.4.0\n"
+"PO-Revision-Date: 2026-10-02 10:00+0200\n"
+"Last-Translator: AlphaBridge MCP\n"
+"Language-Team: German (Switzerland, Informal)\n"
+"Language: de_CH_informal\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: alphabridge-mcp\n"
+
+#, php-format
+msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
+msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug «%s» schreibt. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
+
+msgid "AlphaBridge MCP now only reads on this site."
+msgstr "AlphaBridge MCP liest auf dieser Website jetzt nur noch."
+
+msgid "AlphaBridge MCP on this site"
+msgstr "AlphaBridge MCP auf dieser Website"
+
+msgid "Assistants can read, list and search. Every tool that creates, changes or deletes is refused, whatever its switch and the access level of the connection say."
+msgstr "Assistenten können lesen, auflisten und suchen. Jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen – gleich, was sein Schalter und die Zugriffsstufe der Verbindung sagen."
+
+msgid "Assistants may create, change and delete through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level."
+msgstr "Assistenten dürfen mit jedem eingeschalteten Werkzeug erstellen, ändern und löschen, auch mit den mächtigen, die mit Mighty markiert sind – im Rahmen der Rechte des verbundenen Kontos und seiner Zugriffsstufe."
+
+msgid "Dismiss"
+msgstr "Ausblenden"
+
+msgid "Every tool is on until you switch it off here. In Full, switched-on tools may write, the powerful ones marked Mighty included; in Read every tool that writes is refused, whatever its switch says. Switched-off tools are removed from the MCP server and REST API entirely — no client can see or call them."
+msgstr "Jedes Werkzeug ist eingeschaltet, bis du es hier ausschaltest. Im Modus Full dürfen eingeschaltete Werkzeuge schreiben, auch die mächtigen, die mit Mighty markiert sind; im Modus Lesend wird jedes schreibende Werkzeug abgewiesen, gleich, was sein Schalter sagt. Ausgeschaltete Werkzeuge verschwinden ganz aus dem MCP-Server und der REST-API – kein Client kann sie sehen oder aufrufen."
+
+msgid "Fine-tuning (for advanced users)"
+msgstr "Feineinstellung (für Fortgeschrittene)"
+
+msgctxt "site mode"
+msgid "Full"
+msgstr "Full"
+
+msgid "Full is on. Assistants can now create, change and delete through the tools that are switched on. Your confirmation is recorded with your account, the time and the version of the notice. You can switch back to Read at the top of this page at any time."
+msgstr "Full ist eingeschaltet. Assistenten können jetzt mit den eingeschalteten Werkzeugen erstellen, ändern und löschen. Deine Bestätigung ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du jederzeit zurück auf Lesend schalten."
+
+msgid "Full is on; no confirmation on the settings page is recorded for it."
+msgstr "Full ist eingeschaltet; eine Bestätigung auf der Einstellungsseite ist dafür nicht festgehalten."
+
+msgid "Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup."
+msgstr "Full erlaubt KI-Assistenten, auf dieser Live-Website Inhalte, Dateien, Einstellungen und Code zu erstellen, zu ändern und zu löschen. Das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko. Stelle sicher, dass du ein aktuelles Backup hast."
+
+#, php-format
+msgid "Full since %1$s, confirmed by %2$s"
+msgstr "Full seit %1$s, bestätigt von %2$s"
+
+msgid "Full was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again."
+msgstr "Full wurde nicht eingeschaltet: Der Hinweis hat sich geändert, seit diese Seite geladen wurde. Lies ihn noch einmal, setze das Häkchen und schalte erneut um."
+
+msgid "Full was not switched on: tick the box under the notice to confirm it, then switch again."
+msgstr "Full wurde nicht eingeschaltet: Setze das Häkchen unter dem Hinweis, um ihn zu bestätigen, und schalte dann erneut um."
+
+msgid "I understand that switching to Full can be destructive and is at my own risk, and I have a current backup."
+msgstr "Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup."
+
+#, php-format
+msgid "Mode: %s"
+msgstr "Modus: %s"
+
+msgid "Noted. The mode of this site is shown at the top of this page."
+msgstr "Notiert. Der Modus dieser Website steht oben auf dieser Seite."
+
+msgid "Open Settings → AlphaBridge MCP"
+msgstr "Einstellungen → AlphaBridge MCP öffnen"
+
+msgctxt "site mode"
+msgid "Read"
+msgstr "Lesend"
+
+msgid "Read is on. Assistants can only read; every tool that creates, changes or deletes is refused."
+msgstr "Lesend ist eingeschaltet. Assistenten können nur lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen."
+
+msgid "Since this update the plugin starts in the mode Read on every site: assistants can read, and every tool that creates, changes or deletes is refused. To let them write again, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk."
+msgstr "Seit diesem Update startet das Plugin auf jeder Website im Modus Lesend: Assistenten können lesen, und jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen. Damit sie wieder schreiben können, schaltet ein Administrator oben unter Einstellungen → AlphaBridge MCP auf Full um – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko."
+
+msgid "Switch back to Read"
+msgstr "Zurück auf Lesend schalten"
+
+msgid "Switch single tools off under Fine-tuning"
+msgstr "Einzelne Werkzeuge unter Feineinstellung ausschalten"
+
+msgid "Switch single tools or whole groups off"
+msgstr "Einzelne Werkzeuge oder ganze Gruppen ausschalten"
+
+msgid "Switch to Full"
+msgstr "Auf Full umschalten"
+
+#, php-format
+msgid "The tool \"%s\" is switched off in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Fine-tuning."
+msgstr "Das Werkzeug «%s» ist in den Einstellungen von AlphaBridge MCP ausgeschaltet. Ein Administrator kann es unter Einstellungen → AlphaBridge MCP → Feineinstellung einschalten."
+
+msgid "This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full."
+msgstr "Diese Website ist im Modus Lesend: Gleich, welche Zugriffsstufe du wählst, kann die Verbindung nur lesen, bis ein Administrator AlphaBridge MCP auf Full umschaltet."
+
+msgid "Unknown mode; nothing was changed. Use the switch at the top of this page."
+msgstr "Unbekannter Modus; nichts wurde geändert. Nutze den Schalter oben auf dieser Seite."
