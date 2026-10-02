@@ -24,7 +24,8 @@ class AB_MCP_Settings {
 
 	/**
 	 * Key in OPT_OPTIONS: true while OPT_TOOLSTATE still holds switches
-	 * saved before the site mode existed (see is_tool_enabled()).
+	 * saved before the site mode existed, on a site updated from such a
+	 * version (see is_tool_enabled()). Saving the switches clears it.
 	 */
 	const KEY_LEGACY_SWITCHES = 'tool_state_legacy';
 
@@ -68,7 +69,9 @@ class AB_MCP_Settings {
 	 * the mode existed. It starts in Read like a new one, whatever its
 	 * read-only switch said; the switch itself is dropped, and the
 	 * administrators see a notice once (KEY_MODE_NOTICE). Its tool switches
-	 * stay, read by the rule for switches saved before (KEY_LEGACY_SWITCHES).
+	 * stay, read by the rule for switches saved before (KEY_LEGACY_SWITCHES):
+	 * powerful tools that only read keep what they had, so the update lets
+	 * assistants read nothing they could not read before.
 	 */
 	public static function install_defaults() {
 		$stored   = get_option( self::OPT_OPTIONS, false );
@@ -189,7 +192,8 @@ class AB_MCP_Settings {
 
 	/**
 	 * Per-tool enable overrides: tool name => bool. A tool NOT present here is
-	 * on (see is_tool_enabled()).
+	 * on, except on a site updated from before the site mode (see
+	 * is_tool_enabled()).
 	 *
 	 * @return array<string,bool>
 	 */
@@ -224,20 +228,34 @@ class AB_MCP_Settings {
 	 *
 	 * Switches saved before the site mode existed held the powerful
 	 * ("dangerous") tools off by default, and saving the form wrote that off
-	 * for every one of them, so such an entry records the old default, not a
-	 * decision. Until the switches are saved again it does not hold a powerful
-	 * tool off; a switched-off tool that was on by default stays off.
+	 * for every one of them. Until the switches are saved again, those of a
+	 * site updated from such a version are read by two rules:
+	 *
+	 * - A powerful tool that writes counts as on, whatever was stored: such an
+	 *   off records the old default, not a decision, and the tool runs only
+	 *   after an administrator confirmed Full, where every tool is on by
+	 *   default.
+	 * - A powerful tool that only reads keeps the old rule, stored value or
+	 *   off. It runs in Read too, where nobody confirms anything, and turning
+	 *   on the database query or a file reader without an administrator would
+	 *   let assistants read more after the update than before it.
+	 *
+	 * A switched-off tool that was on by default stays off either way.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
 	 * @return bool
 	 */
 	public static function is_tool_enabled( $name, $def ) {
-		$state = self::get_tool_state();
-		if ( ! array_key_exists( $name, $state ) ) {
-			return true;
+		$name   = (string) $name;
+		$def    = is_array( $def ) ? $def : array();
+		$state  = self::get_tool_state();
+		$stored = array_key_exists( $name, $state );
+		$legacy = ! empty( $def['dangerous'] ) && self::get( self::KEY_LEGACY_SWITCHES, false );
+		if ( $legacy && AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
+			return $stored && (bool) $state[ $name ];
 		}
-		if ( ! $state[ $name ] && ! empty( $def['dangerous'] ) && self::get( self::KEY_LEGACY_SWITCHES, false ) ) {
+		if ( ! $stored || $legacy ) {
 			return true;
 		}
 		return (bool) $state[ $name ];

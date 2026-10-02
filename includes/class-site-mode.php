@@ -41,11 +41,35 @@ class AB_MCP_Site_Mode {
 	/**
 	 * Version of the notice an administrator confirms when switching to
 	 * Full (notice_text() and checkbox_text()). The record of a confirmation
-	 * names the version shown, so raise this whenever either text changes in
-	 * meaning; a form loaded under an older version is then refused instead of
-	 * recorded as agreement to a text that was not on the screen.
+	 * names the version shown, so raise this whenever either English text
+	 * changes; a form loaded under an older version is then refused instead of
+	 * recorded as agreement to a text that was not on the screen. A test ties
+	 * this number to the English wording.
+	 *
+	 * A translation can change without it (a language pack from
+	 * translate.wordpress.org wins over the bundled one), so the record also
+	 * holds the wording shown and its hash (notice_hash()).
 	 */
 	const NOTICE_VERSION = '1';
+
+	/**
+	 * How a site came to Full, in the record of the confirmation: confirmed
+	 * with the box on the settings page, or set by code (a provisioning
+	 * script, a test site), where nobody ticked anything.
+	 */
+	const SOURCE_FORM = 'settings_form';
+	const SOURCE_CODE = 'code';
+
+	/**
+	 * Option with the history of the mode: every switch to Full or to Read,
+	 * oldest first, at most HISTORY_MAX. The record of the last confirmation
+	 * is replaced by the next one, and the log keeps 200 entries of every
+	 * kind and can be cleared; this keeps the earlier switches, and «Clear
+	 * log» leaves it alone. Its own option, not autoloaded: nothing reads it
+	 * on an ordinary request.
+	 */
+	const OPT_HISTORY = 'ab_mcp_mode_history';
+	const HISTORY_MAX = 20;
 
 	/**
 	 * The mode of this site.
@@ -127,6 +151,19 @@ class AB_MCP_Site_Mode {
 	}
 
 	/**
+	 * A hash of the notice and the box as the administrator sees them, in
+	 * the current language: sha256 of notice_text(), a line break and
+	 * checkbox_text(). The form carries it, and handle_site_mode() switches
+	 * only while it still matches, so the record names exactly the wording on
+	 * the screen, also when a language pack changed a translation.
+	 *
+	 * @return string 64 hex characters.
+	 */
+	public static function notice_hash() {
+		return hash( 'sha256', self::notice_text() . "\n" . self::checkbox_text() );
+	}
+
+	/**
 	 * The sentence the consent screen shows while the site is in Read: the
 	 * access level is granted as chosen, but approving should not suggest the
 	 * connection can write before an administrator switches to Full.
@@ -151,12 +188,15 @@ class AB_MCP_Site_Mode {
 	}
 
 	/**
-	 * The record of the last confirmation of Full, or null when there is
-	 * none: user_id, user_login, time (Unix, UTC), notice_version,
-	 * plugin_version, locale.
+	 * The record of the last switch to Full, or null when there is none:
+	 * user_id, user_login, time (Unix, UTC), notice_version, plugin_version,
+	 * locale and source (SOURCE_FORM or SOURCE_CODE); confirmed on the
+	 * settings page, also notice_hash, notice_text and checkbox_text, the
+	 * wording the administrator confirmed.
 	 *
 	 * It stays when the site goes back to Read: it documents who accepted
-	 * the notice last, and the next switch to Full replaces it.
+	 * the notice last, and the next switch to Full replaces it. The earlier
+	 * ones are in history().
 	 *
 	 * @return array|null
 	 */
@@ -166,11 +206,24 @@ class AB_MCP_Site_Mode {
 	}
 
 	/**
+	 * The history of the mode, oldest first: one entry per switch, with
+	 * mode ('full' or 'read'), user_id, user_login, time and source, and for
+	 * a switch to Full the rest of its record (see confirmation()).
+	 *
+	 * @return array<int,array>
+	 */
+	public static function history() {
+		$history = get_option( self::OPT_HISTORY, array() );
+		return is_array( $history ) ? array_values( array_filter( $history, 'is_array' ) ) : array();
+	}
+
+	/**
 	 * «Full since <date>, confirmed by <account>» for a site in Full, from
 	 * the record of the confirmation; '' in Read. The date is the site's
 	 * date and time in digits, like every other date on the settings page.
-	 * Full without a record (set by code, not on the settings page) says
-	 * that no confirmation is recorded.
+	 * Full set by code says so, and that nobody confirmed it on this page;
+	 * Full without any record (written straight into the option) says that
+	 * no confirmation is recorded.
 	 *
 	 * @return string Unescaped text.
 	 */
@@ -182,26 +235,36 @@ class AB_MCP_Site_Mode {
 		if ( null === $record ) {
 			return __( 'Full is on; no confirmation on the settings page is recorded for it.', 'alphabridge-mcp' );
 		}
-		$date  = wp_date( 'Y-m-d H:i', (int) $record['time'] );
+		$date = wp_date( 'Y-m-d H:i', (int) $record['time'] );
+		$date = is_string( $date ) ? $date : '—';
+		if ( self::SOURCE_FORM !== ( $record['source'] ?? '' ) ) {
+			/* translators: %s: date and time. */
+			return sprintf( __( 'Full since %s, set by code, not confirmed on this page', 'alphabridge-mcp' ), $date );
+		}
 		$login = isset( $record['user_login'] ) && '' !== (string) $record['user_login'] ? (string) $record['user_login'] : '#' . (int) ( $record['user_id'] ?? 0 );
 		/* translators: 1: date and time, 2: user name of the administrator who confirmed. */
-		return sprintf( __( 'Full since %1$s, confirmed by %2$s', 'alphabridge-mcp' ), is_string( $date ) ? $date : '—', $login );
+		return sprintf( __( 'Full since %1$s, confirmed by %2$s', 'alphabridge-mcp' ), $date, $login );
 	}
 
 	/**
-	 * Switch this site to Full and record who confirmed the notice, when,
-	 * which version of it, and under which plugin version: in the option
-	 * (confirmation()) and in the log.
+	 * Switch this site to Full and record who switched, when, which version
+	 * of the notice was in force, under which plugin version and how: in the
+	 * option (confirmation()), in the history (history()) and in the log.
 	 *
-	 * The caller has checked the capability, the nonce and the ticked box;
-	 * this only writes. It is public so that code an administrator runs on
-	 * purpose (a provisioning script, a test site) can do the same.
+	 * The caller has checked the capability and the nonce; for SOURCE_FORM
+	 * also the ticked box and that the form showed the notice in force
+	 * (notice_hash()), and the record then holds that wording. It is public
+	 * so that code an administrator runs on purpose (a provisioning script, a
+	 * test site) can switch too; that is SOURCE_CODE, the default, and the
+	 * settings page then says that nobody confirmed it there.
 	 *
-	 * @param int $user_id The administrator who confirmed.
+	 * @param int    $user_id The administrator who switched.
+	 * @param string $source  SOURCE_FORM or SOURCE_CODE; anything else is code.
 	 * @return array The record.
 	 */
-	public static function switch_to_full( $user_id ) {
+	public static function switch_to_full( $user_id, $source = self::SOURCE_CODE ) {
 		$user_id = (int) $user_id;
+		$source  = self::SOURCE_FORM === $source ? self::SOURCE_FORM : self::SOURCE_CODE;
 		$login   = self::login_of( $user_id );
 		$locale  = function_exists( 'get_user_locale' ) ? get_user_locale( $user_id ) : get_locale();
 		$record  = array(
@@ -211,38 +274,61 @@ class AB_MCP_Site_Mode {
 			'notice_version' => self::NOTICE_VERSION,
 			'plugin_version' => defined( 'AB_MCP_VERSION' ) ? AB_MCP_VERSION : '',
 			'locale'         => (string) $locale,
+			'source'         => $source,
 		);
+		if ( self::SOURCE_FORM === $source ) {
+			$record['notice_hash']   = self::notice_hash();
+			$record['notice_text']   = self::notice_text();
+			$record['checkbox_text'] = self::checkbox_text();
+		}
 
 		AB_MCP_Settings::set( self::KEY_CONFIRMATION, $record );
 		AB_MCP_Settings::set( self::KEY, self::FULL );
 		// The mode changed hands; the notice about the update has done its job.
 		AB_MCP_Settings::set( AB_MCP_Settings::KEY_MODE_NOTICE, false );
 
+		$who = '' !== $login ? $login : '?';
 		AB_MCP_Audit_Log::record(
 			'site_mode',
 			array(),
 			'ok',
-			sprintf(
-				'Full switched on by %1$s (user %2$d); notice version %3$s confirmed; plugin %4$s; locale %5$s.',
-				'' !== $login ? $login : '?',
-				$user_id,
-				$record['notice_version'],
-				$record['plugin_version'],
-				$record['locale']
-			)
+			self::SOURCE_FORM === $source
+				? sprintf(
+					'Full switched on by %1$s (user %2$d) on the settings page; notice version %3$s confirmed, wording sha256 %4$s; plugin %5$s; locale %6$s.',
+					$who,
+					$user_id,
+					$record['notice_version'],
+					$record['notice_hash'],
+					$record['plugin_version'],
+					$record['locale']
+				)
+				: sprintf(
+					'Full switched on by %1$s (user %2$d) by code, without the box on the settings page; notice version %3$s not confirmed; plugin %4$s; locale %5$s.',
+					$who,
+					$user_id,
+					$record['notice_version'],
+					$record['plugin_version'],
+					$record['locale']
+				)
 		);
 
 		self::changed( self::FULL, $user_id );
+		// After the action, so that what an add-on adds to the record (Pro
+		// its version) is in the history too.
+		$now = self::confirmation();
+		self::remember( array( 'mode' => self::FULL ) + ( null !== $now ? $now : $record ) );
 		return $record;
 	}
 
 	/**
 	 * Switch this site back to Read. Needs no confirmation: it only takes
-	 * away. The record of the last confirmation of Full stays.
+	 * away. The record of the last confirmation of Full stays; the history
+	 * notes the switch.
 	 *
-	 * @param int $user_id The administrator who switched.
+	 * @param int    $user_id The administrator who switched.
+	 * @param string $source  SOURCE_FORM or SOURCE_CODE; anything else is code.
 	 */
-	public static function switch_to_read( $user_id ) {
+	public static function switch_to_read( $user_id, $source = self::SOURCE_CODE ) {
 		$user_id = (int) $user_id;
 		$login   = self::login_of( $user_id );
 
@@ -257,6 +343,26 @@ class AB_MCP_Site_Mode {
 		);
 
 		self::changed( self::READ, $user_id );
+		self::remember(
+			array(
+				'mode'       => self::READ,
+				'user_id'    => $user_id,
+				'user_login' => $login,
+				'time'       => time(),
+				'source'     => self::SOURCE_FORM === $source ? self::SOURCE_FORM : self::SOURCE_CODE,
+			)
+		);
+	}
+
+	/**
+	 * Add a switch to the history, dropping the oldest beyond HISTORY_MAX.
+	 *
+	 * @param array $entry The switch.
+	 */
+	private static function remember( array $entry ) {
+		$history   = self::history();
+		$history[] = $entry;
+		update_option( self::OPT_HISTORY, array_slice( $history, -self::HISTORY_MAX ), false );
 	}
 
 	/**

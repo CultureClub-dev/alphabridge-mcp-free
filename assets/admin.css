@@ -112,6 +112,40 @@
 	color: #fff;
 }
 
+/* The other mode is a real control, not decoration: in Read a link to the
+ * box under the notice (it never ticks it), in Full the button that switches
+ * back. Each takes the colour of the mode it leads to. */
+.ab-mcp a.ab-mode__opt,
+.ab-mcp button.ab-mode__opt {
+	margin: 0;
+	border: 0;
+	background: transparent;
+	font: inherit;
+	line-height: inherit;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.ab-mcp a.ab-mode__opt:hover,
+.ab-mcp a.ab-mode__opt:focus-visible {
+	background: #fff7ed;
+	color: #c2410c;
+	outline: 2px solid #c2410c;
+}
+
+.ab-mcp button.ab-mode__opt:hover,
+.ab-mcp button.ab-mode__opt:focus-visible {
+	background: #f0fdf4;
+	color: #15803d;
+	outline: 2px solid #15803d;
+}
+
+.ab-mcp .ab-mode__confirm:target {
+	outline: 3px solid #ea580c;
+	outline-offset: 4px;
+	border-radius: 6px;
+}
+
 .ab-mcp .ab-mode__lead,
 .ab-mcp .ab-mode__since {
 	max-width: 860px;

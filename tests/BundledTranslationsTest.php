@@ -14,9 +14,10 @@
  * - Every locale has a .po and a compiled .mo with the same entries, and
  *   every msgid is a string the plugin's code really translates — a text
  *   changed in the code without its translation fails here.
- * - The notice, the box, the refusal, the notice after the update, the
- *   consent sentence and the two words of the mode are translated
- *   everywhere, with their placeholders.
+ * - The notice, the box, the refusal, the notice after the update and what
+ *   it says about the switches, the consent sentence, the Mighty tools that
+ *   run in Read and the two words of the mode are translated everywhere,
+ *   with their placeholders.
  * - Swiss German writes ss, never ß, and «» for quotes; de_DE_formal and
  *   de_CH address the reader as Sie, the others as du.
  * - The language pack is asked for before the bundled file is added.
@@ -53,6 +54,11 @@ final class BundledTranslationsTest extends TestCase {
 		'Switch back to Read',
 		'Fine-tuning (for advanced users)',
 		'Full since %1$s, confirmed by %2$s',
+		'Full since %s, set by code, not confirmed on this page',
+		'In Full the tools that are switched on may write; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read keep the switch they had.',
+		'Tools marked Mighty that only read run in Read too: %s. Switch them off under Fine-tuning if assistants should not use them.',
+		'On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here.',
+		'%1$s of %2$s tools can run in Read',
 	);
 
 	protected function setUp(): void {

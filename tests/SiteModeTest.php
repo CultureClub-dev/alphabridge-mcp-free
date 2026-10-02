@@ -15,9 +15,14 @@
  * - Full lets every switched-on tool run, the powerful ones included; the
  *   fine-tuning switches single tools and groups off again.
  * - Only an administrator switches, with the form's own nonce; Full only
- *   with the box under the notice ticked and for the notice in force. Who,
- *   when, which notice and which plugin version is recorded in the option
- *   and in the log; back to Read needs no box and keeps the record.
+ *   with the box under the notice ticked and for the notice in force, in
+ *   the wording the form showed. Who, when, which notice in which wording,
+ *   which plugin version and how (settings page or code) is recorded in the
+ *   option, in the history of the mode and in the log; back to Read needs no
+ *   box and keeps the record. «Clear log» leaves the history alone.
+ * - After an update, powerful tools that only read keep the switch they had
+ *   (off by default before), so assistants read nothing they could not read
+ *   before; powerful writing tools are on in Full.
  * - The switch is the first thing on the settings page.
  * - The server instructions say Read in one sentence, whatever a filter does.
  *
@@ -151,7 +156,24 @@ final class SiteModeTest extends TestCase {
 			'action'         => 'ab_mcp_site_mode',
 			'mode'           => 'full',
 			'notice_version' => AB_MCP_Site_Mode::NOTICE_VERSION,
+			'notice_hash'    => AB_MCP_Site_Mode::notice_hash(),
 			'confirm_full'   => '1',
+		);
+	}
+
+	/** Switch to Full the way the settings page does, as user 3. */
+	private function confirm_full(): array {
+		self::assertSame( 'mode_full', self::notice_of( $this->post( 'handle_site_mode', self::full_post() ) ) );
+		return AB_MCP_Site_Mode::confirmation();
+	}
+
+	/** The tools of a Pro site that are marked Mighty and only read, as Pro defines them. */
+	private static function mighty_readers(): array {
+		return array(
+			'wp_db_query'         => array( 'dangerous' => true, 'capability' => 'manage_options' ),
+			'wp_deploy_read'      => array( 'dangerous' => true, 'capability' => 'manage_options' ),
+			'wp_read_upload_file' => array( 'dangerous' => true, 'capability' => 'manage_options' ),
+			'wp_get_user_meta'    => array( 'dangerous' => true, 'capability' => 'edit_users' ),
 		);
 	}
 
@@ -445,6 +467,110 @@ final class SiteModeTest extends TestCase {
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_list_posts', array() ) );
 	}
 
+	/** @return array<string,array{0:bool}> */
+	public static function readOnlyBeforeAndStored(): array {
+		return array(
+			'read-only was on, switches saved'   => array( true ),
+			'read-only was off, switches saved'  => array( false ),
+		);
+	}
+
+	#[DataProvider( 'readOnlyBeforeAndStored' )]
+	public function testAfterTheUpdateMightyToolsThatOnlyReadKeepTheirOff( bool $read_only ): void {
+		// The update must not let assistants read more than before: the
+		// database query, the file readers, the profile fields were off by
+		// default and still are, in Read and in Full, until an administrator
+		// switches them on under Fine-tuning.
+		self::before_the_update( array( 'read_only' => $read_only ) );
+		$old = array( 'wp_list_posts' => true, 'wp_delete_post' => false );
+		foreach ( self::mighty_readers() as $name => $def ) {
+			$old[ $name ] = false;
+		}
+		update_option( 'ab_mcp_tool_state', $old );
+		AB_MCP_Settings::maybe_upgrade();
+		self::allow_everything();
+
+		foreach ( array( 'read', 'full' ) as $scope ) {
+			( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, $scope );
+			foreach ( self::mighty_readers() as $name => $def ) {
+				self::assertTrue( AB_MCP_Tool_Registry::is_read_only( $name, $def ), $name . ' only reads.' );
+				self::assertFalse( AB_MCP_Settings::is_tool_enabled( $name, $def ), $name );
+				$res = AB_MCP_Security::authorize( $name, $def );
+				self::assertInstanceOf( WP_Error::class, $res, $name . ' does not run in Read with scope ' . $scope );
+				self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code(), $name );
+				self::assertStringContainsString( 'Fine-tuning', $res->get_error_message(), 'The answer names the way.' );
+			}
+		}
+
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, 'full' );
+		self::assertSame( 'ab_mcp_tool_disabled', AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_code(), 'Nor in Full.' );
+		self::assertTrue( AB_MCP_Security::authorize( 'wp_delete_post', array( 'dangerous' => true ) ), 'A writing Mighty tool follows Full.' );
+	}
+
+	public function testAfterTheUpdateAMightyToolThatOnlyReadsAndWasNeverSavedStaysOff(): void {
+		// The old default of a Mighty tool was off, saved or not; a tool that
+		// came with an add-on after the last save is not in the switches.
+		self::before_the_update();
+		update_option( 'ab_mcp_tool_state', array( 'wp_list_posts' => true ) );
+		AB_MCP_Settings::maybe_upgrade();
+
+		self::assertFalse( AB_MCP_Settings::is_tool_enabled( 'wp_deploy_read', array( 'dangerous' => true ) ) );
+		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_db_execute', array( 'dangerous' => true ) ), 'One that writes waits for Full only.' );
+		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_get_post', array() ), 'An ordinary one is on.' );
+	}
+
+	public function testAfterTheUpdateAMightyToolThatOnlyReadsAndWasOnStaysOn(): void {
+		self::before_the_update();
+		update_option( 'ab_mcp_tool_state', array( 'wp_db_query' => true ) );
+		AB_MCP_Settings::maybe_upgrade();
+		self::allow_everything();
+
+		self::assertTrue( AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] ) );
+	}
+
+	public function testSavingTheSwitchesAfterTheUpdateKeepsWhatThePageShowed(): void {
+		self::before_the_update();
+		update_option( 'ab_mcp_tool_state', array( 'wp_get_user_meta' => false, 'wp_delete_post' => false ) );
+		AB_MCP_Settings::maybe_upgrade();
+		$r = self::free_registry();
+		self::assertTrue( $r->get( 'wp_get_user_meta' )['dangerous'] ?? false, 'wp_get_user_meta is a Mighty tool of this plugin.' );
+		self::assertTrue( AB_MCP_Tool_Registry::is_read_only( 'wp_get_user_meta', $r->get( 'wp_get_user_meta' ) ) );
+
+		// The page shows each switch as is_tool_enabled() says; sent unchanged.
+		$keep = array();
+		foreach ( $r->all() as $name => $def ) {
+			if ( AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
+				$keep[] = $name;
+			}
+		}
+		self::assertNotContains( 'wp_get_user_meta', $keep );
+		self::assertContains( 'wp_delete_post', $keep );
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_POST                  = array( '_wpnonce' => 'nonce-ab_mcp_save', 'enabled_tools' => $keep );
+		$_REQUEST               = $_POST;
+		try {
+			( new AB_MCP_Admin( $r ) )->handle_save();
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+
+		self::assertFalse( AB_MCP_Settings::get( AB_MCP_Settings::KEY_LEGACY_SWITCHES, false ) );
+		self::assertFalse( AB_MCP_Settings::is_tool_enabled( 'wp_get_user_meta', $r->get( 'wp_get_user_meta' ) ), 'Still off: nothing was widened by saving.' );
+		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_delete_post', $r->get( 'wp_delete_post' ) ) );
+	}
+
+	public function testOnANewSiteMightyToolsThatOnlyReadRunInRead(): void {
+		// Every switch is on out of the box; Read lets every reading tool
+		// run, the Mighty ones included. The mode card names them.
+		AB_MCP_Settings::install_defaults();
+		self::allow_everything();
+
+		foreach ( self::mighty_readers() as $name => $def ) {
+			self::assertTrue( AB_MCP_Security::authorize( $name, $def ), $name );
+		}
+	}
+
 	public function testOnceTheSwitchesAreSavedAgainOffMeansOff(): void {
 		self::before_the_update();
 		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
@@ -501,7 +627,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'mode_full', self::notice_of( $exit ) );
 		self::assertTrue( AB_MCP_Site_Mode::is_full() );
 		$record = AB_MCP_Site_Mode::confirmation();
-		self::assertSame( array( 'user_id', 'user_login', 'time', 'notice_version', 'plugin_version', 'locale' ), array_keys( $record ) );
+		self::assertSame( array( 'user_id', 'user_login', 'time', 'notice_version', 'plugin_version', 'locale', 'source', 'notice_hash', 'notice_text', 'checkbox_text' ), array_keys( $record ) );
 		self::assertSame( 3, $record['user_id'] );
 		self::assertSame( 'user3', $record['user_login'] );
 		self::assertGreaterThanOrEqual( $before, $record['time'] );
@@ -509,16 +635,80 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( AB_MCP_Site_Mode::NOTICE_VERSION, $record['notice_version'] );
 		self::assertSame( AB_MCP_VERSION, $record['plugin_version'] );
 		self::assertSame( 'en_US', $record['locale'] );
+		self::assertSame( 'settings_form', $record['source'], 'Confirmed with the box on the settings page.' );
+		self::assertSame( AB_MCP_Site_Mode::notice_text(), $record['notice_text'], 'The wording on the screen.' );
+		self::assertSame( AB_MCP_Site_Mode::checkbox_text(), $record['checkbox_text'] );
+		self::assertSame( hash( 'sha256', $record['notice_text'] . "\n" . $record['checkbox_text'] ), $record['notice_hash'] );
 		self::assertSame( $record, get_option( 'ab_mcp_options' )[ AB_MCP_Site_Mode::KEY_CONFIRMATION ], 'Kept in the option.' );
 
 		$log = self::mode_log();
 		self::assertCount( 1, $log );
 		self::assertSame( 'ok', $log[0]['status'] );
 		self::assertSame( 3, $log[0]['user'] );
-		self::assertStringContainsString( 'Full switched on by user3 (user 3)', $log[0]['message'] );
+		self::assertStringContainsString( 'Full switched on by user3 (user 3) on the settings page', $log[0]['message'] );
 		self::assertStringContainsString( 'notice version ' . AB_MCP_Site_Mode::NOTICE_VERSION . ' confirmed', $log[0]['message'] );
+		self::assertStringContainsString( 'wording sha256 ' . $record['notice_hash'], $log[0]['message'] );
 		self::assertStringContainsString( 'plugin ' . AB_MCP_VERSION, $log[0]['message'] );
+		self::assertLessThanOrEqual( 300, mb_strlen( $log[0]['message'] ), 'The log clips at 300 characters; nothing of it is cut.' );
+		self::assertStringEndsWith( 'locale en_US.', $log[0]['message'] );
 		self::assertSame( array( array( 'full', 3 ) ), $changed );
+		self::assertSame( array( array( 'mode' => 'full' ) + $record ), AB_MCP_Site_Mode::history(), 'And in the history.' );
+	}
+
+	public function testTheVersionOfTheNoticeIsTiedToItsEnglishWording(): void {
+		// The hash of the English notice and box per version of the notice.
+		// Changing either text without raising NOTICE_VERSION fails here: add
+		// the new version with the hash of its wording, never edit an old one.
+		$hashes = array(
+			'1' => 'e63a129b792c19f2ffa0625d200070fa821bd84ba172150a7c24264399a3b310',
+		);
+
+		self::assertArrayHasKey( AB_MCP_Site_Mode::NOTICE_VERSION, $hashes );
+		self::assertSame( $hashes[ AB_MCP_Site_Mode::NOTICE_VERSION ], AB_MCP_Site_Mode::notice_hash() );
+	}
+
+	public function testFullSetByCodeIsRecordedAsSuchAndNotAsConfirmed(): void {
+		$record = AB_MCP_Site_Mode::switch_to_full( 3 );
+
+		self::assertSame( 'code', $record['source'] );
+		self::assertArrayNotHasKey( 'notice_text', $record, 'Nobody saw a notice.' );
+		self::assertArrayNotHasKey( 'notice_hash', $record );
+		self::assertSame( 'Full since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ', set by code, not confirmed on this page', AB_MCP_Site_Mode::full_since_text() );
+		$log = self::mode_log();
+		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 1 not confirmed', end( $log )['message'] );
+		self::assertStringNotContainsString( ' confirmed,', end( $log )['message'] );
+
+		// Anything but the form's own word is code.
+		AB_MCP_Site_Mode::switch_to_full( 3, 'admin' );
+		self::assertSame( 'code', AB_MCP_Site_Mode::confirmation()['source'] );
+	}
+
+	public function testTheHistoryKeepsEverySwitchAndClearingTheLogLeavesIt(): void {
+		$first = $this->confirm_full();
+		$this->post( 'handle_site_mode', array( '_wpnonce' => 'nonce-ab_mcp_site_mode', 'mode' => 'read' ) );
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+
+		$this->post( 'handle_audit_clear', array( '_wpnonce' => 'nonce-ab_mcp_audit_clear' ) );
+
+		self::assertSame( array(), self::mode_log(), 'The log is empty.' );
+		$history = AB_MCP_Site_Mode::history();
+		self::assertSame( array( 'full', 'read', 'full' ), array_column( $history, 'mode' ) );
+		self::assertSame( array( 'settings_form', 'settings_form', 'code' ), array_column( $history, 'source' ) );
+		self::assertSame( $first['notice_text'], $history[0]['notice_text'], 'The earlier confirmation, with its wording, although the record now holds the later switch.' );
+		self::assertSame( 'user3', $history[1]['user_login'] );
+		self::assertSame( 'code', AB_MCP_Site_Mode::confirmation()['source'] );
+	}
+
+	public function testTheHistoryKeepsTheLatestSwitchesOnly(): void {
+		for ( $i = 0; $i < AB_MCP_Site_Mode::HISTORY_MAX + 5; $i++ ) {
+			AB_MCP_Site_Mode::switch_to_read( 3 );
+		}
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+
+		$history = AB_MCP_Site_Mode::history();
+		self::assertCount( AB_MCP_Site_Mode::HISTORY_MAX, $history );
+		self::assertSame( 'full', end( $history )['mode'], 'The newest is last.' );
+		self::assertSame( 20, AB_MCP_Site_Mode::HISTORY_MAX );
 	}
 
 	/** @return array<string,array{0:array}> */
@@ -551,6 +741,33 @@ final class SiteModeTest extends TestCase {
 			'older'   => array( '0' ),
 			'other'   => array( 'x' ),
 		);
+	}
+
+	/** @return array<string,array{0:mixed}> */
+	public static function staleWordings(): array {
+		return array(
+			'missing'          => array( null ),
+			'empty'            => array( '' ),
+			'another wording'  => array( hash( 'sha256', 'Full lets assistants write.' . "\n" . 'OK' ) ),
+			'upper case'       => array( 'UPPER' ),
+		);
+	}
+
+	#[DataProvider( 'staleWordings' )]
+	public function testAFormThatShowedAnotherWordingIsRefused( $hash ): void {
+		// A language pack updated between loading and sending, or the page
+		// loaded in another language: the box was ticked under another text.
+		$post = self::full_post();
+		if ( null === $hash ) {
+			unset( $post['notice_hash'] );
+		} else {
+			$post['notice_hash'] = 'UPPER' === $hash ? strtoupper( AB_MCP_Site_Mode::notice_hash() ) : $hash;
+		}
+
+		self::assertSame( 'mode_stale', self::notice_of( $this->post( 'handle_site_mode', $post ) ) );
+		self::assertFalse( AB_MCP_Site_Mode::is_full() );
+		self::assertNull( AB_MCP_Site_Mode::confirmation() );
+		self::assertSame( array(), AB_MCP_Site_Mode::history() );
 	}
 
 	#[DataProvider( 'staleVersions' )]
@@ -666,13 +883,119 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'Switch to Full', trim( $x->query( './/button[@type="submit"]', $form )->item( 0 )->textContent ) );
 	}
 
+	public function testInReadTheCardNamesTheMightyToolsThatRunThere(): void {
+		AB_MCP_Settings::install_defaults();
+		$all = self::mighty_readers() + array(
+			'wp_list_posts'  => array(),
+			'wp_delete_post' => array( 'dangerous' => true ),
+		);
+
+		$x    = $this->xpath( $this->admin( 'mode_card_html', $all ) );
+		$line = $x->query( '//*[contains(@class, "ab-mode__mighty")]' )->item( 0 );
+
+		self::assertNotNull( $line );
+		$names = array();
+		foreach ( $x->query( './/code', $line ) as $code ) {
+			$names[] = $code->textContent;
+		}
+		self::assertSame( array_keys( self::mighty_readers() ), $names, 'The Mighty tools that read, not the ones that write, nor the ordinary ones.' );
+		self::assertStringContainsString( 'run in Read too', $line->textContent );
+		self::assertStringContainsString( 'Switch them off under Fine-tuning', $line->textContent );
+
+		update_option( 'ab_mcp_tool_state', array_fill_keys( array_keys( self::mighty_readers() ), false ) );
+		self::assertSame( 0, $this->xpath( $this->admin( 'mode_card_html', $all ) )->query( '//*[contains(@class, "ab-mode__mighty")]' )->length, 'None on: no line.' );
+
+		AB_MCP_Settings::set_tool_state( array() );
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::assertSame( 0, $this->xpath( $this->admin( 'mode_card_html', $all ) )->query( '//*[contains(@class, "ab-mode__mighty")]' )->length, 'Not in Full.' );
+	}
+
+	public function testTheControlNextToTheTitleIsRealAndNeverTicksTheBox(): void {
+		$x      = $this->xpath( $this->admin( 'mode_card_html', array() ) );
+		$toggle = $x->query( '//*[contains(@class, "ab-mode__toggle")]' )->item( 0 );
+
+		self::assertFalse( $toggle->hasAttribute( 'aria-hidden' ), 'Not decoration.' );
+		self::assertSame( 'group', $toggle->getAttribute( 'role' ) );
+		self::assertSame( 'Read', trim( $x->query( './/*[@aria-current="true"]', $toggle )->item( 0 )->textContent ) );
+		$link = $x->query( './/a', $toggle )->item( 0 );
+		self::assertSame( 'Full', trim( $link->textContent ) );
+		self::assertSame( '#ab-mode-confirm', $link->getAttribute( 'href' ), 'Leads to the box.' );
+		self::assertSame( 'label', $x->query( '//*[@id="ab-mode-confirm"]' )->item( 0 )->nodeName );
+		self::assertFalse( $x->query( '//input[@name="confirm_full"]' )->item( 0 )->hasAttribute( 'checked' ) );
+		self::assertSame( 0, $x->query( './/button', $toggle )->length, 'Nothing in it submits in Read.' );
+
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		$x      = $this->xpath( $this->admin( 'mode_card_html', array() ) );
+		$toggle = $x->query( '//*[contains(@class, "ab-mode__toggle")]' )->item( 0 );
+		$button = $x->query( './/button', $toggle )->item( 0 );
+		self::assertSame( 'Read', trim( $button->textContent ) );
+		self::assertSame( 'submit', $button->getAttribute( 'type' ) );
+		self::assertSame( 'ab-mode-form', $button->getAttribute( 'form' ), 'Submits the form, whose mode is Read.' );
+		self::assertSame( 'read', $x->query( '//form[@id="ab-mode-form"]//input[@name="mode"]' )->item( 0 )->getAttribute( 'value' ) );
+		self::assertSame( 'Full', trim( $x->query( './/*[@aria-current="true"]', $toggle )->item( 0 )->textContent ) );
+	}
+
+	public function testTheFormCarriesTheWordingItShows(): void {
+		$x = $this->xpath( $this->admin( 'mode_card_html', array() ) );
+
+		self::assertSame( AB_MCP_Site_Mode::notice_hash(), $x->query( '//form[@id="ab-mode-form"]//input[@name="notice_hash"]' )->item( 0 )->getAttribute( 'value' ) );
+	}
+
+	/** @return array<string,array{0:string,1:string}> */
+	public static function bandCounts(): array {
+		return array(
+			'Read' => array( 'read', '1 of 2 tools can run in Read' ),
+			'Full' => array( 'full', '2 of 2 tools on' ),
+		);
+	}
+
+	#[DataProvider( 'bandCounts' )]
+	public function testTheBandCountsWhatCanRunInTheMode( string $mode, string $chip ): void {
+		AB_MCP_Settings::install_defaults();
+		if ( 'full' === $mode ) {
+			AB_MCP_Site_Mode::switch_to_full( 3 );
+		}
+
+		$x     = $this->page();
+		$chips = array();
+		foreach ( $x->query( '//*[contains(@class, "ab-hero")]//*[contains(concat(" ", @class, " "), " ab-chip ")]' ) as $c ) {
+			$chips[] = trim( preg_replace( '/\s+/', ' ', $c->textContent ) );
+		}
+		self::assertContains( $chip, $chips );
+	}
+
+	public function testAfterTheUpdateTheNoticeSaysWhatBecameOfTheSwitches(): void {
+		self::before_the_update();
+		AB_MCP_Settings::maybe_upgrade();
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+
+		$text = $this->xpath( $this->admin( 'mode_notice' ) )->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 )->textContent;
+
+		self::assertStringContainsString( 'writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning', $text );
+		self::assertStringContainsString( 'Tools marked Mighty that only read keep the switch they had.', $text );
+	}
+
+	public function testFineTuningSaysWhichMightyToolsStayedOffAfterTheUpdate(): void {
+		$sentence = 'On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here.';
+		AB_MCP_Settings::install_defaults();
+		self::assertStringNotContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ), 'Not on a new site.' );
+
+		ab_test_reset();
+		self::before_the_update();
+		AB_MCP_Settings::maybe_upgrade();
+		self::assertStringContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ) );
+
+		AB_MCP_Settings::set_tool_state( array() );
+		self::assertStringNotContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ), 'Saved: the rule of before is gone.' );
+	}
+
 	public function testTheNoticeAndTheBoxSayWhatWasDecided(): void {
 		self::assertSame( 'Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup.', AB_MCP_Site_Mode::notice_text() );
 		self::assertSame( 'I understand that switching to Full can be destructive and is at my own risk, and I have a current backup.', AB_MCP_Site_Mode::checkbox_text() );
 	}
 
 	public function testInFullTheCardWarnsSaysSinceWhenAndSwitchesBackWithoutABox(): void {
-		$record = AB_MCP_Site_Mode::switch_to_full( 3 );
+		$record = $this->confirm_full();
 		$x      = $this->xpath( $this->admin( 'mode_card_html' ) );
 		$card   = $x->query( '//section[@id="ab-mode"]' )->item( 0 );
 
@@ -681,7 +1004,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'Full since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ', confirmed by user3', trim( $x->query( './/*[contains(@class, "ab-mode__since")]', $card )->item( 0 )->textContent ) );
 		self::assertSame( 0, $x->query( './/input[@name="confirm_full"]', $card )->length );
 		self::assertSame( 'read', $x->query( './/input[@name="mode"]', $card )->item( 0 )->getAttribute( 'value' ) );
-		self::assertSame( 'Switch back to Read', trim( $x->query( './/button[@type="submit"]', $card )->item( 0 )->textContent ) );
+		self::assertSame( 'Switch back to Read', trim( $x->query( './/form//button[@type="submit"]', $card )->item( 0 )->textContent ) );
 		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( './/*[contains(@class, "ab-mode__warning")]', $card )->item( 0 )->textContent ) );
 	}
 
@@ -758,6 +1081,18 @@ final class SiteModeTest extends TestCase {
 			self::assertSame( $mode, AB_MCP_Site_Mode::get() );
 			self::assertFalse( AB_MCP_Settings::get( AB_MCP_Settings::KEY_MODE_NOTICE, false ), $mode );
 		}
+	}
+
+	public function testTheReadmeSaysBeforeTheUpdateWhatItChanges(): void {
+		// wordpress.org shows the Upgrade Notice on the plugin and update
+		// screens before the update, at most 300 characters of it.
+		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n\n= 4\.4\.0 =\n([^\n]+)\n/', $readme, $m ) );
+		self::assertLessThanOrEqual( 300, mb_strlen( $m[1] ) );
+		self::assertStringContainsString( 'only reads', $m[1] );
+		self::assertStringContainsString( 'switches to Full at the top of Settings → AlphaBridge MCP', $m[1] );
+		self::assertStringContainsString( "own risk", $m[1] );
+		self::assertStringContainsString( 'Mighty tools that only read keep the switch they had', $readme, 'And what became of the switches saved before.' );
 	}
 
 	public function testTheNoticesAfterSwitching(): void {

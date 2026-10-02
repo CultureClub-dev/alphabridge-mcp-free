@@ -68,14 +68,16 @@ Handing an AI access to a site should feel safe, so control comes first:
   deletes is refused, with an answer that says how to switch. *Full*, which lets them write, is
   switched on by an administrator at the top of Settings → AlphaBridge MCP, at the site owner's
   own risk: switching it on can be destructive, and the administrator confirms that, and that a
-  current backup exists, with a ticked box. The account, the time and the version of that notice
-  are recorded. Back to Read takes one click.
+  current backup exists, with a ticked box. The account, the time, the version of that notice and
+  its wording are recorded. Back to Read takes one click.
 - Every connection acts as a **real WordPress user**; every tool enforces the matching
   capability, including object-level checks. What that user may not do, the AI cannot do.
 - **Scoped connections** — read-only or content-only keys with optional expiry, rotatable in
   one click.
 - **Fine-tuning for advanced users** — in Full every tool is on, the powerful ones marked
-  Mighty included; switch single tools or whole groups off, and they vanish from the MCP surface.
+  Mighty included; on a site updated from an earlier version, Mighty tools that only read keep
+  the switch they had. Switch single tools or whole groups off, and they vanish from the MCP
+  surface.
   Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`); the action
   `ab_mcp_site_mode_changed` fires when an administrator switches.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be

@@ -16,6 +16,10 @@ msgstr ""
 "X-Domain: alphabridge-mcp\n"
 
 #, php-format
+msgid "%1$s of %2$s tools can run in Read"
+msgstr "%1$s von %2$s Werkzeugen können im Modus Lesend laufen"
+
+#, php-format
 msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
 msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug «%s» schreibt. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
 
@@ -57,6 +61,10 @@ msgstr "Full erlaubt KI-Assistenten, auf dieser Live-Website Inhalte, Dateien, E
 msgid "Full since %1$s, confirmed by %2$s"
 msgstr "Full seit %1$s, bestätigt von %2$s"
 
+#, php-format
+msgid "Full since %s, set by code, not confirmed on this page"
+msgstr "Full seit %s, per Code gesetzt, nicht auf dieser Seite bestätigt"
+
 msgid "Full was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again."
 msgstr "Full wurde nicht eingeschaltet: Der Hinweis hat sich geändert, seit diese Seite geladen wurde. Lesen Sie ihn noch einmal, setzen Sie das Häkchen und schalten Sie erneut um."
 
@@ -66,12 +74,18 @@ msgstr "Full wurde nicht eingeschaltet: Setzen Sie das Häkchen unter dem Hinwei
 msgid "I understand that switching to Full can be destructive and is at my own risk, and I have a current backup."
 msgstr "Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup."
 
+msgid "In Full the tools that are switched on may write; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read keep the switch they had."
+msgstr "Im Modus Full dürfen die eingeschalteten Werkzeuge schreiben; schreibende Werkzeuge, die mit Mighty markiert sind und vor diesem Update ausgeschaltet waren, sind ebenfalls eingeschaltet, und Sie können sie unter Feineinstellung ausschalten. Werkzeuge, die mit Mighty markiert sind und nur lesen, behalten ihren bisherigen Schalter."
+
 #, php-format
 msgid "Mode: %s"
 msgstr "Modus: %s"
 
 msgid "Noted. The mode of this site is shown at the top of this page."
 msgstr "Notiert. Der Modus dieser Website steht oben auf dieser Seite."
+
+msgid "On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here."
+msgstr "Auf dieser Website bleiben Werkzeuge, die mit Mighty markiert sind, nur lesen und vor dem Update mit den Modi ausgeschaltet waren, ausgeschaltet, bis Sie sie hier einschalten."
 
 msgid "Open Settings → AlphaBridge MCP"
 msgstr "Einstellungen → AlphaBridge MCP öffnen"
@@ -104,6 +118,10 @@ msgstr "Das Werkzeug «%s» ist in den Einstellungen von AlphaBridge MCP ausgesc
 
 msgid "This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full."
 msgstr "Diese Website ist im Modus Lesend: Gleich, welche Zugriffsstufe Sie wählen, kann die Verbindung nur lesen, bis ein Administrator AlphaBridge MCP auf Full umschaltet."
+
+#, php-format
+msgid "Tools marked Mighty that only read run in Read too: %s. Switch them off under Fine-tuning if assistants should not use them."
+msgstr "Auch Werkzeuge, die mit Mighty markiert sind und nur lesen, laufen im Modus Lesend: %s. Schalten Sie sie unter Feineinstellung aus, wenn Assistenten sie nicht nutzen sollen."
 
 msgid "Unknown mode; nothing was changed. Use the switch at the top of this page."
 msgstr "Unbekannter Modus; nichts wurde geändert. Nutzen Sie den Schalter oben auf dieser Seite."

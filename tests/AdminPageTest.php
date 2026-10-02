@@ -74,12 +74,17 @@ final class AdminPageTest extends TestCase {
 		$html = $this->call( 'hero_html', array( array( 'hash' => 'h1' ) ), $all );
 
 		self::assertStringContainsString( '<b>1</b> connection<', $html, 'One connection, singular.' );
-		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools on', $html );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools can run in Read', $html, 'In Read: switched on and reading.' );
 		self::assertStringContainsString( 'Mode: Read', $html );
 		self::assertStringNotContainsString( 'ab-dot--warn', $html );
 
+		update_option( 'ab_mcp_tool_state', array() );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools can run in Read', $this->call( 'hero_html', array(), $all ), 'A writing tool switched on does not run in Read.' );
+
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
 		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
 		$full = $this->call( 'hero_html', array(), $all );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools on', $full );
 		self::assertStringContainsString( '<b>0</b> connections', $full );
 		self::assertStringContainsString( 'Mode: Full', $full );
 		self::assertStringContainsString( 'ab-dot--warn', $full );
