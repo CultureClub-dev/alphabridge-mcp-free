@@ -1,20 +1,27 @@
 <?php
 /**
- * The German translations of the switch for write access, bundled in
- * languages/.
+ * The German translations bundled in languages/.
  *
- * WordPress has no language pack of this plugin yet, and the notice an
- * administrator confirms before switching write access on must be readable
- * in the site's language from the release that brings it. So the plugin
- * ships those texts for de_DE, de_DE_formal, de_AT, de_CH and
- * de_CH_informal, and loads them behind a language pack from
- * translate.wordpress.org, which wins for every string it has.
+ * WordPress has no language pack of this plugin yet, and a German site must
+ * read every text of the plugin a person sees in German from the release
+ * that brings it: the settings page, the consent screen, the notices, the
+ * refusals and errors an assistant passes on, and the description in the
+ * plugin list. So the plugin ships its texts for de_DE, de_DE_formal,
+ * de_AT, de_CH and de_CH_informal, and loads them behind a language pack
+ * from translate.wordpress.org, which wins for every string it has. Tool
+ * and parameter descriptions and the server instructions are written for
+ * the assistant; they are not in gettext calls and stay English.
  *
  * What must hold:
  *
  * - Every locale has a .po and a compiled .mo with the same entries, and
  *   every msgid is a string the plugin's code really translates — a text
  *   changed in the code without its translation fails here.
+ * - Every text the shipped code passes to a gettext function, and the
+ *   description in the plugin header, is translated in every locale, with
+ *   the same placeholders and the same HTML; a text added to the code
+ *   without its translation fails here, and a counter-check shows that the
+ *   check finds a missing or broken entry.
  * - The notice, the box, both refusals with write access off (a writing
  *   tool, a Mighty reader) and the way they name, the other refusals of the
  *   policy gate, the answer for a tool of Pro, the notice after the update,
@@ -26,8 +33,11 @@
  *   Writes, the notes, the lead, the controls, and the texts the core keeps
  *   for add-ons) is translated too: a text added there without its
  *   translation fails here.
- * - Swiss German writes ss, never ß, and «» for quotes; de_DE_formal and
- *   de_CH address the reader as Sie, the others as du.
+ * - A translation is not the English text itself, except for the few
+ *   names and words German uses as they are (SAME_AS_ENGLISH).
+ * - de_AT reads like de_DE. Swiss German writes ss, never ß, and «» for
+ *   quotes; de_DE_formal and de_CH address the reader as Sie, the others
+ *   as du, and the check for that also finds a capitalised Du or Dein.
  * - The language pack is asked for before the bundled file is added.
  *
  * @package AlphaBridge_MCP
@@ -150,17 +160,246 @@ final class BundledTranslationsTest extends TestCase {
 	 * @return array<string,true>
 	 */
 	private static function literals(): array {
-		$root = dirname( __DIR__ );
-		$all  = array();
-		$files = array_merge( glob( $root . '/*.php' ), glob( $root . '/includes/*.php' ), glob( $root . '/includes/*/*.php' ), glob( $root . '/includes/*/*/*.php' ) );
-		foreach ( $files as $file ) {
+		$all = array();
+		foreach ( self::shipped_files() as $file ) {
 			foreach ( token_get_all( (string) file_get_contents( $file ) ) as $t ) {
 				if ( is_array( $t ) && T_CONSTANT_ENCAPSED_STRING === $t[0] ) {
 					$all[ eval( 'return ' . $t[1] . ';' ) ] = true; // phpcs:ignore Squiz.PHP.Eval -- a literal from our own source.
 				}
 			}
 		}
+		// WordPress translates the plugin header's description with the
+		// plugin's text domain for the plugin list.
+		$all[ self::description() ] = true;
 		return $all;
+	}
+
+	/** @return array<int,string> The PHP files that ship. */
+	private static function shipped_files(): array {
+		$root = dirname( __DIR__ );
+		return array_merge( glob( $root . '/*.php' ), glob( $root . '/includes/*.php' ), glob( $root . '/includes/*/*.php' ), glob( $root . '/includes/*/*/*.php' ) );
+	}
+
+	/** The plugin header's Description, as WordPress reads it. */
+	private static function description(): string {
+		$head = (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php', false, null, 0, 8192 );
+		self::assertSame( 1, preg_match( '/^[ \t\/*#@]*Description:(.*)$/mi', $head, $m ) );
+		return trim( $m[1] );
+	}
+
+	/**
+	 * The gettext functions WordPress has, with the positions of their
+	 * arguments: the texts, the context, the domain.
+	 */
+	const GETTEXT = array(
+		'__'           => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'_e'           => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'esc_html__'   => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'esc_html_e'   => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'esc_attr__'   => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'esc_attr_e'   => array( 'text' => array( 0 ), 'ctx' => null, 'domain' => 1 ),
+		'_x'           => array( 'text' => array( 0 ), 'ctx' => 1, 'domain' => 2 ),
+		'_ex'          => array( 'text' => array( 0 ), 'ctx' => 1, 'domain' => 2 ),
+		'esc_html_x'   => array( 'text' => array( 0 ), 'ctx' => 1, 'domain' => 2 ),
+		'esc_attr_x'   => array( 'text' => array( 0 ), 'ctx' => 1, 'domain' => 2 ),
+		'_n'           => array( 'text' => array( 0, 1 ), 'ctx' => null, 'domain' => 3 ),
+		'_nx'          => array( 'text' => array( 0, 1 ), 'ctx' => 3, 'domain' => 4 ),
+		'_n_noop'      => array( 'text' => array( 0, 1 ), 'ctx' => null, 'domain' => 2 ),
+		'_nx_noop'     => array( 'text' => array( 0, 1 ), 'ctx' => 2, 'domain' => 3 ),
+	);
+
+	/**
+	 * Every text the shipped code passes to a gettext function, keyed like
+	 * mo(), and the plugin header's description. A call whose text, context
+	 * or domain is not a plain literal, or whose domain is not
+	 * alphabridge-mcp, fails: no tool could find its text to translate it.
+	 *
+	 * @return array<string,string> Key => where it is (file:line).
+	 */
+	private static function gettext_texts(): array {
+		$keys = array( self::description() => 'alphabridge-mcp.php (Description)' );
+		$root = dirname( __DIR__ ) . '/';
+		foreach ( self::shipped_files() as $file ) {
+			$tokens = array_values(
+				array_filter(
+					token_get_all( (string) file_get_contents( $file ) ),
+					static fn( $t ) => ! ( is_array( $t ) && in_array( $t[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) )
+				)
+			);
+			$n = count( $tokens );
+			for ( $i = 0; $i < $n - 1; $i++ ) {
+				$t = $tokens[ $i ];
+				if ( ! is_array( $t ) || T_STRING !== $t[0] || ! isset( self::GETTEXT[ $t[1] ] ) || '(' !== $tokens[ $i + 1 ] ) {
+					continue;
+				}
+				$before = $i > 0 ? $tokens[ $i - 1 ] : null;
+				if ( is_array( $before ) && in_array( $before[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NULLSAFE_OBJECT_OPERATOR ), true ) ) {
+					continue;
+				}
+				// The arguments at the call's own depth, each as its tokens.
+				$args  = array( array() );
+				$depth = 0;
+				for ( $j = $i + 1; $j < $n; $j++ ) {
+					$tok = $tokens[ $j ];
+					if ( in_array( $tok, array( '(', '[', '{' ), true ) || ( is_array( $tok ) && in_array( $tok[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+						++$depth;
+						if ( 1 === $depth ) {
+							continue;
+						}
+					} elseif ( in_array( $tok, array( ')', ']', '}' ), true ) ) {
+						--$depth;
+						if ( 0 === $depth ) {
+							break;
+						}
+					} elseif ( ',' === $tok && 1 === $depth ) {
+						$args[] = array();
+						continue;
+					}
+					$args[ count( $args ) - 1 ][] = $tok;
+				}
+				$where   = substr( $file, strlen( $root ) ) . ':' . $t[2];
+				$spec    = self::GETTEXT[ $t[1] ];
+				$literal = static function ( int $pos ) use ( $args, $where ): string {
+					$arg = $args[ $pos ] ?? array();
+					self::assertTrue( 1 === count( $arg ) && is_array( $arg[0] ) && T_CONSTANT_ENCAPSED_STRING === $arg[0][0], 'A plain literal as argument ' . ( $pos + 1 ) . ' at ' . $where );
+					return eval( 'return ' . $arg[0][1] . ';' ); // phpcs:ignore Squiz.PHP.Eval -- a literal from our own source.
+				};
+				self::assertSame( 'alphabridge-mcp', $literal( $spec['domain'] ), 'The text domain at ' . $where );
+				$texts = array_map( $literal, $spec['text'] );
+				$key   = ( null !== $spec['ctx'] ? $literal( $spec['ctx'] ) . "\x04" : '' ) . implode( "\0", $texts );
+				$keys[ $key ] = $where;
+			}
+		}
+		return $keys;
+	}
+
+	/**
+	 * The texts German writes as English does: names, and words German
+	 * uses unchanged. Any other translation that is the English text itself
+	 * was left untranslated.
+	 */
+	const SAME_AS_ENGLISH = array(
+		"list separator\x04, ",
+		'AlphaBridge Connect',
+		"tool group\x04Export",
+		'Plus, Pro, Business',
+		'SEO',
+		"tool group\x04SEO",
+		"main group of tools\x04Shop (WooCommerce)",
+		"tool group\x04Site Deploy (FTP/SFTP)",
+		'Status',
+		'Token',
+		"main group of tools\x04Undo",
+		"tool group\x04Undo",
+		'Widgets',
+		"tool group\x04Widgets",
+		'claude.ai, Desktop, iPhone',
+	);
+
+	/**
+	 * What is wrong with the translations of $texts in $mo: a text without
+	 * a translation, an empty one, one that is the English text itself
+	 * (outside SAME_AS_ENGLISH), or one whose placeholders or HTML tags
+	 * differ from the text's.
+	 *
+	 * @param array<string,string> $texts Key => where (gettext_texts()).
+	 * @param array<string,string> $mo    Entries (mo()).
+	 * @return array<int,string> One line per problem; empty when all is well.
+	 */
+	private static function gaps( array $texts, array $mo ): array {
+		$out = array();
+		foreach ( $texts as $key => $where ) {
+			if ( ! isset( $mo[ $key ] ) || '' === str_replace( "\0", '', $mo[ $key ] ) ) {
+				$out[] = 'untranslated (' . $where . '): ' . $key;
+				continue;
+			}
+			$text  = false !== strpos( $key, "\x04" ) ? substr( $key, strpos( $key, "\x04" ) + 1 ) : $key;
+			$forms = explode( "\0", $text );
+			foreach ( explode( "\0", $mo[ $key ] ) as $n => $translated ) {
+				$source = $forms[ min( $n, count( $forms ) - 1 ) ];
+				if ( $translated === $source && ! in_array( $key, self::SAME_AS_ENGLISH, true ) ) {
+					$out[] = 'the English text (' . $where . '): ' . $key;
+				}
+				preg_match_all( '/%(?:\d+\$)?[sd]/', $source, $want );
+				preg_match_all( '/%(?:\d+\$)?[sd]/', $translated, $have );
+				$want = $want[0];
+				$have = $have[0];
+				if ( false !== strpos( implode( '', $want ), '$' ) ) {
+					// Numbered placeholders may change places.
+					sort( $want );
+					sort( $have );
+				}
+				if ( $want !== $have ) {
+					$out[] = 'placeholders (' . $where . '): ' . $key;
+				}
+				preg_match_all( '/<\/?[a-z][^>]*>/', $source, $tags );
+				preg_match_all( '/<\/?[a-z][^>]*>/', $translated, $have_tags );
+				if ( $tags[0] !== $have_tags[0] ) {
+					$out[] = 'HTML (' . $where . '): ' . $key;
+				}
+			}
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testEveryTextTheCodeTranslatesIsTranslated( string $locale ): void {
+		$texts = self::gettext_texts();
+		self::assertSame( array(), self::gaps( $texts, self::mo( self::file( $locale, 'mo' ) ) ), $locale );
+	}
+
+	public function testTheCheckFindsEveryGettextCallAndWhatIsMissing(): void {
+		$texts = self::gettext_texts();
+		self::assertGreaterThan( 600, count( $texts ), 'The scan finds the texts.' );
+		// Some of every kind of place a person reads: the settings page, the
+		// consent screen, the log, a refusal, a tool error, the plugin list.
+		foreach ( array(
+			'Connect your AI assistant',
+			'%1$s wants to connect to %2$s',
+			'Allow',
+			"status of a tool call in the log\x04denied",
+			"date and time format with seconds\x04Y-m-d H:i:s",
+			'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.',
+			'it is not a JSON object',
+			'(unknown)',
+			"%d element was read without a measured profile (see its note); its fields may be incomplete.\0%d elements were read without a measured profile (see their note); their fields may be incomplete.",
+			self::description(),
+		) as $key ) {
+			self::assertArrayHasKey( $key, $texts );
+		}
+
+		// The counter-check: the same check on entries with one missing, one
+		// empty, one with a placeholder lost and one with its HTML changed.
+		$mo = self::mo( self::file( 'de_DE', 'mo' ) );
+		self::assertSame( array(), self::gaps( $texts, $mo ) );
+		$broken = $mo;
+		unset( $broken['Allow'] );
+		$broken['Copied'] = '';
+		$broken['%1$s wants to connect to %2$s'] = '%1$s möchte sich verbinden';
+		$broken['On approval you are sent to <b>%s</b>. Only continue if you recognise it as the app you are connecting.'] = 'Nach der Zustimmung wirst du zu %s weitergeleitet.';
+		$unknown            = 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.';
+		$broken[ $unknown ] = $unknown;
+		$gaps = implode( "\n", self::gaps( $texts, $broken ) );
+		self::assertStringContainsString( 'untranslated (includes/class-oauth.php:', $gaps );
+		self::assertStringContainsString( '): Allow', $gaps );
+		self::assertStringContainsString( '): Copied', $gaps );
+		self::assertStringContainsString( 'placeholders (includes/class-oauth.php:', $gaps );
+		self::assertStringContainsString( 'HTML (includes/class-oauth.php:', $gaps );
+		self::assertStringContainsString( 'the English text (includes/class-rest-controller.php:', $gaps );
+		self::assertCount( 5, self::gaps( $texts, $broken ) );
+		// A name German keeps as it is passes.
+		self::assertSame( 'Token', $mo['Token'] );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testThePluginListShowsTheDescriptionTranslated( string $locale ): void {
+		$mo = self::mo( self::file( $locale, 'mo' ) );
+		self::assertArrayHasKey( self::description(), $mo );
+		self::assertStringStartsWith( 'Verbindet Claude und andere MCP-Clients', $mo[ self::description() ] );
+		// An inactive plugin's description is translated from the folder the
+		// header names: WordPress loads the domain from there for the list.
+		$head = (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php', false, null, 0, 8192 );
+		self::assertMatchesRegularExpression( '/^ \* Domain Path: +\/languages$/m', $head );
 	}
 
 	/** @return array<string,array{0:string}> */
@@ -268,6 +507,12 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertSame( 'Datenbank & Betrieb', $mo["main group of tools\x04Database & operations"] );
 		self::assertSame( 'Änderungen speichern', $mo['Save changes'] );
 		self::assertSame( 'Feineinstellung', $mo['Fine-tuning'] );
+		// The lead names the tools, not «Sie», which in the Sie files reads as
+		// the reader; and «bei eingeschalteten Schreibrechten», as «laufen … an»
+		// reads as «anlaufen».
+		$lead = $mo['Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs.'];
+		self::assertStringContainsString( 'Schreibende Werkzeuge laufen nur bei eingeschalteten Schreibrechten', $lead );
+		self::assertStringContainsString( ': Diese Werkzeuge lesen Code, Dateien, die Datenbank oder Protokolle.', $lead );
 	}
 
 	#[DataProvider( 'locales' )]
@@ -355,11 +600,16 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/**
-	 * Where «Sie» after a colon starts a sentence about the assistants or
-	 * the tools («they»), not the reader: in the approved wording of the
-	 * notice and of the fine-tuning's lead.
+	 * Where «Sie» after a colon starts a sentence about the assistants
+	 * («they»), not the reader: in the approved wording of the notice.
 	 */
-	const THEY = array( ': Sie können Inhalte', ': Sie lesen Code' );
+	const THEY = array( ': Sie können Inhalte' );
+
+	/** A du form, also at the start of a sentence («Du kannst», «Deine»). */
+	const DU = '/\b(du|dein\w*|dich|dir)\b/iu';
+
+	/** A Sie form; lowercase «sie» and «ihr» are «they» and «her». */
+	const SIE = '/\b(Sie|Ihr\w*|Ihnen)\b/u';
 
 	#[DataProvider( 'address' )]
 	public function testFormalLocalesSaySieTheOthersDu( string $locale, bool $formal ): void {
@@ -368,8 +618,30 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertStringContainsString( $formal ? 'Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.' : 'Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $notice );
 		foreach ( self::mo( self::file( $locale, 'mo' ) ) as $text ) {
 			$text = str_replace( self::THEY, '', $text );
-			self::assertDoesNotMatchRegularExpression( $formal ? '/\b(du|dein\w*|dich|dir)\b/' : '/\b(Sie|Ihr\w*|Ihnen)\b/', $text, $locale );
+			self::assertDoesNotMatchRegularExpression( $formal ? self::DU : self::SIE, $text, $locale );
 		}
+	}
+
+	public function testTheAddressCheckFindsEveryForm(): void {
+		foreach ( array( 'Kopiert. Du kannst es einfügen.', 'Deine Verbindungen', 'Dein Undo-Zeitraum', 'Frag dich, ob', 'gibt dir Sicherheit' ) as $du ) {
+			self::assertMatchesRegularExpression( self::DU, $du );
+		}
+		foreach ( array( 'Ihre Verbindungen', 'Geben Sie das weiter', 'gibt Ihnen Sicherheit' ) as $sie ) {
+			self::assertMatchesRegularExpression( self::SIE, $sie );
+		}
+		// What is no address: «they» and the names in code.
+		foreach ( array( 'Diese Werkzeuge lesen Code', 'WP_LANG_DIR', 'Dienst', 'Dirigent' ) as $none ) {
+			self::assertDoesNotMatchRegularExpression( self::DU, $none );
+		}
+		self::assertDoesNotMatchRegularExpression( self::SIE, 'die Werkzeuge, die sie lesen, und ihre Felder' );
+	}
+
+	public function testAustrianGermanReadsLikeGermanGerman(): void {
+		$at = self::mo( self::file( 'de_AT', 'mo' ) );
+		$de = self::mo( self::file( 'de_DE', 'mo' ) );
+		ksort( $at, SORT_STRING );
+		ksort( $de, SORT_STRING );
+		self::assertSame( $de, $at );
 	}
 
 	#[RunInSeparateProcess]

@@ -116,6 +116,11 @@ The plugin itself initiates no other outbound requests.
 
 == Changelog ==
 
+= 4.5.1 =
+* **All visible texts of the plugin come in German on a German site** (de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal): the settings page with its cards, notices, tables, buttons, tooltips and the texts of its script; the consent screen with its access levels and its error pages; the description in the plugin list; the log, whose status and time now follow the language; and the refusals and error messages of the tools that an assistant passes on. The plugin brings these files itself; a language pack from translate.wordpress.org still takes precedence for every text it has.
+* Stays English on purpose: what is written for the assistant — the descriptions of the tools and their parameters (shown behind the «i» in the fine-tuning), the server instructions and the notes on single elements in the outline that `wp_get_builder_layout` hands over — and the protocol's own errors (JSON-RPC, and the error codes the OAuth standard sends to an app). The names and descriptions of abilities come from the plugins that offer them.
+* The reasons why an app's metadata document is refused, the note of `wp_seo_detect` about AIOSEO and the status and time in the log are translatable now. The plugin header names `/languages` as its Domain Path, so the plugin list shows the description in German also while the plugin is inactive.
+
 = 4.5.0 =
 * **The main switch «Write access for AI assistants» replaces the box with the modes Read and Full.** It sits where the box was, the first thing on Settings → AlphaBridge MCP, and holds for every connection — Claude, ChatGPT, Cursor and all others. Off (as every site starts) assistants only read; on, they read and write with full power. The page calls the states «write access off (read only)» and «write access on (full power)»; the internal names (`read`, `full`), the option and the PHP interface stay as they were. Switching on opens a small window at the switch with the notice and a box to tick (without JavaScript the same fields stand in the page); switching off takes one click. The notice is new (version 2): changes take effect immediately, they can create, change and also delete, not everything can be undone, at your own risk, a current backup. A confirmation of the notice of 4.4.0 stays valid; nobody has to confirm again.
 * **Switching on write access switches everything on.** Every tool is on afterwards, also one that was switched off before or kept off from a version before 4.4.0. Single tools can be switched off under Fine-tuning; that holds until write access is switched on the next time. Only a switch from off to on does this: a second click from an old tab while write access is on changes nothing. An update alone resets nothing.
@@ -261,6 +266,9 @@ The plugin itself initiates no other outbound requests.
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.5.1 =
+On a German site every text of the plugin a person reads is now German: settings page, consent screen, log, and the refusals an assistant passes on. Descriptions written for the assistant stay English. Nothing else changes.
 
 = 4.5.0 =
 The box with Read and Full becomes the main switch «Write access for AI assistants», for every connection. Switching it on switches every tool on; a confirmation of 4.4.0 stays valid. New connections start with the full access level.

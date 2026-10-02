@@ -1351,8 +1351,13 @@ final class SiteModeTest extends TestCase {
 	public function testTheReadmeSaysBeforeTheUpdateWhatItChanges(): void {
 		// wordpress.org shows the Upgrade Notice on the plugin and update
 		// screens before the update, at most 300 characters of it.
-		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
-		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n\n= 4\.5\.0 =\n([^\n]+)\n\n= 4\.4\.0 =\n([^\n]+)\n/', $readme, $m ) );
+		$readme  = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		$version = preg_match( '/^ \* Version:\s+([0-9.]+)/m', (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php' ), $v ) ? $v[1] : '0';
+		// The newest notice is the one of the version in the code; the notice
+		// of 4.5.0 stays below it as it was.
+		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n\n= ' . preg_quote( $version, '/' ) . ' =\n([^\n]+)\n/', $readme, $newest ) );
+		self::assertLessThanOrEqual( 300, mb_strlen( $newest[1] ) );
+		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n.*?\n= 4\.5\.0 =\n([^\n]+)\n\n= 4\.4\.0 =\n([^\n]+)\n/s', $readme, $m ) );
 		self::assertLessThanOrEqual( 300, mb_strlen( $m[1] ) );
 		self::assertStringContainsString( 'main switch «Write access for AI assistants», for every connection', $m[1] );
 		self::assertStringContainsString( 'Switching it on switches every tool on', $m[1] );
@@ -1368,7 +1373,8 @@ final class SiteModeTest extends TestCase {
 		self::assertStringNotContainsString( 'Mighty', $intro );
 		self::assertSame( 1, preg_match( '/^Stable tag: ([0-9.]+)$/m', $readme, $tag ) );
 		self::assertTrue( version_compare( $tag[1], '4.4.0', '>=' ) && version_compare( $tag[1], (string) ( preg_match( '/^ \* Version:\s+([0-9.]+)/m', (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php' ), $v ) ? $v[1] : '0' ), '<=' ), 'The stable tag moves with the release, not with the code: it names a published version and is never ahead of the code.' );
-		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= 4\.5\.0 =\n/', $readme ) );
+		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= ' . preg_quote( $version, '/' ) . ' =\n/', $readme ), 'The changelog starts with the version in the code.' );
+		self::assertSame( 1, preg_match( '/\n= 4\.5\.0 =\n\* \*\*The main switch/', $readme ) );
 	}
 
 	public function testTheNoticesAfterSwitching(): void {
