@@ -33,8 +33,11 @@
  *   Writes, the notes, the lead, the controls, and the texts the core keeps
  *   for add-ons) is translated too: a text added there without its
  *   translation fails here.
- * - Swiss German writes ss, never ß, and «» for quotes; de_DE_formal and
- *   de_CH address the reader as Sie, the others as du.
+ * - A translation is not the English text itself, except for the few
+ *   names and words German uses as they are (SAME_AS_ENGLISH).
+ * - de_AT reads like de_DE. Swiss German writes ss, never ß, and «» for
+ *   quotes; de_DE_formal and de_CH address the reader as Sie, the others
+ *   as du, and the check for that also finds a capitalised Du or Dein.
  * - The language pack is asked for before the bundled file is added.
  *
  * @package AlphaBridge_MCP
@@ -271,8 +274,32 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/**
+	 * The texts German writes as English does: names, and words German
+	 * uses unchanged. Any other translation that is the English text itself
+	 * was left untranslated.
+	 */
+	const SAME_AS_ENGLISH = array(
+		"list separator\x04, ",
+		'AlphaBridge Connect',
+		"tool group\x04Export",
+		'Plus, Pro, Business',
+		'SEO',
+		"tool group\x04SEO",
+		"main group of tools\x04Shop (WooCommerce)",
+		"tool group\x04Site Deploy (FTP/SFTP)",
+		'Status',
+		'Token',
+		"main group of tools\x04Undo",
+		"tool group\x04Undo",
+		'Widgets',
+		"tool group\x04Widgets",
+		'claude.ai, Desktop, iPhone',
+	);
+
+	/**
 	 * What is wrong with the translations of $texts in $mo: a text without
-	 * a translation, an empty one, or one whose placeholders or HTML tags
+	 * a translation, an empty one, one that is the English text itself
+	 * (outside SAME_AS_ENGLISH), or one whose placeholders or HTML tags
 	 * differ from the text's.
 	 *
 	 * @param array<string,string> $texts Key => where (gettext_texts()).
@@ -290,6 +317,9 @@ final class BundledTranslationsTest extends TestCase {
 			$forms = explode( "\0", $text );
 			foreach ( explode( "\0", $mo[ $key ] ) as $n => $translated ) {
 				$source = $forms[ min( $n, count( $forms ) - 1 ) ];
+				if ( $translated === $source && ! in_array( $key, self::SAME_AS_ENGLISH, true ) ) {
+					$out[] = 'the English text (' . $where . '): ' . $key;
+				}
 				preg_match_all( '/%(?:\d+\$)?[sd]/', $source, $want );
 				preg_match_all( '/%(?:\d+\$)?[sd]/', $translated, $have );
 				$want = $want[0];
@@ -347,13 +377,18 @@ final class BundledTranslationsTest extends TestCase {
 		$broken['Copied'] = '';
 		$broken['%1$s wants to connect to %2$s'] = '%1$s möchte sich verbinden';
 		$broken['On approval you are sent to <b>%s</b>. Only continue if you recognise it as the app you are connecting.'] = 'Nach der Zustimmung wirst du zu %s weitergeleitet.';
+		$unknown            = 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.';
+		$broken[ $unknown ] = $unknown;
 		$gaps = implode( "\n", self::gaps( $texts, $broken ) );
 		self::assertStringContainsString( 'untranslated (includes/class-oauth.php:', $gaps );
 		self::assertStringContainsString( '): Allow', $gaps );
 		self::assertStringContainsString( '): Copied', $gaps );
 		self::assertStringContainsString( 'placeholders (includes/class-oauth.php:', $gaps );
 		self::assertStringContainsString( 'HTML (includes/class-oauth.php:', $gaps );
-		self::assertCount( 4, self::gaps( $texts, $broken ) );
+		self::assertStringContainsString( 'the English text (includes/class-rest-controller.php:', $gaps );
+		self::assertCount( 5, self::gaps( $texts, $broken ) );
+		// A name German keeps as it is passes.
+		self::assertSame( 'Token', $mo['Token'] );
 	}
 
 	#[DataProvider( 'locales' )]
@@ -472,6 +507,12 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertSame( 'Datenbank & Betrieb', $mo["main group of tools\x04Database & operations"] );
 		self::assertSame( 'Änderungen speichern', $mo['Save changes'] );
 		self::assertSame( 'Feineinstellung', $mo['Fine-tuning'] );
+		// The lead names the tools, not «Sie», which in the Sie files reads as
+		// the reader; and «bei eingeschalteten Schreibrechten», as «laufen … an»
+		// reads as «anlaufen».
+		$lead = $mo['Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs.'];
+		self::assertStringContainsString( 'Schreibende Werkzeuge laufen nur bei eingeschalteten Schreibrechten', $lead );
+		self::assertStringContainsString( ': Diese Werkzeuge lesen Code, Dateien, die Datenbank oder Protokolle.', $lead );
 	}
 
 	#[DataProvider( 'locales' )]
@@ -559,11 +600,16 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/**
-	 * Where «Sie» after a colon starts a sentence about the assistants or
-	 * the tools («they»), not the reader: in the approved wording of the
-	 * notice and of the fine-tuning's lead.
+	 * Where «Sie» after a colon starts a sentence about the assistants
+	 * («they»), not the reader: in the approved wording of the notice.
 	 */
-	const THEY = array( ': Sie können Inhalte', ': Sie lesen Code' );
+	const THEY = array( ': Sie können Inhalte' );
+
+	/** A du form, also at the start of a sentence («Du kannst», «Deine»). */
+	const DU = '/\b(du|dein\w*|dich|dir)\b/iu';
+
+	/** A Sie form; lowercase «sie» and «ihr» are «they» and «her». */
+	const SIE = '/\b(Sie|Ihr\w*|Ihnen)\b/u';
 
 	#[DataProvider( 'address' )]
 	public function testFormalLocalesSaySieTheOthersDu( string $locale, bool $formal ): void {
@@ -572,8 +618,30 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertStringContainsString( $formal ? 'Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.' : 'Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $notice );
 		foreach ( self::mo( self::file( $locale, 'mo' ) ) as $text ) {
 			$text = str_replace( self::THEY, '', $text );
-			self::assertDoesNotMatchRegularExpression( $formal ? '/\b(du|dein\w*|dich|dir)\b/' : '/\b(Sie|Ihr\w*|Ihnen)\b/', $text, $locale );
+			self::assertDoesNotMatchRegularExpression( $formal ? self::DU : self::SIE, $text, $locale );
 		}
+	}
+
+	public function testTheAddressCheckFindsEveryForm(): void {
+		foreach ( array( 'Kopiert. Du kannst es einfügen.', 'Deine Verbindungen', 'Dein Undo-Zeitraum', 'Frag dich, ob', 'gibt dir Sicherheit' ) as $du ) {
+			self::assertMatchesRegularExpression( self::DU, $du );
+		}
+		foreach ( array( 'Ihre Verbindungen', 'Geben Sie das weiter', 'gibt Ihnen Sicherheit' ) as $sie ) {
+			self::assertMatchesRegularExpression( self::SIE, $sie );
+		}
+		// What is no address: «they» and the names in code.
+		foreach ( array( 'Diese Werkzeuge lesen Code', 'WP_LANG_DIR', 'Dienst', 'Dirigent' ) as $none ) {
+			self::assertDoesNotMatchRegularExpression( self::DU, $none );
+		}
+		self::assertDoesNotMatchRegularExpression( self::SIE, 'die Werkzeuge, die sie lesen, und ihre Felder' );
+	}
+
+	public function testAustrianGermanReadsLikeGermanGerman(): void {
+		$at = self::mo( self::file( 'de_AT', 'mo' ) );
+		$de = self::mo( self::file( 'de_DE', 'mo' ) );
+		ksort( $at, SORT_STRING );
+		ksort( $de, SORT_STRING );
+		self::assertSame( $de, $at );
 	}
 
 	#[RunInSeparateProcess]

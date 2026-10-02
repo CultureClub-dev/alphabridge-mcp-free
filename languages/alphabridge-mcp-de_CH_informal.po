@@ -67,7 +67,7 @@ msgstr "%1$s von %2$s an"
 
 #, php-format
 msgid "%1$s of %2$s tools can run with write access off"
-msgstr "%1$s von %2$s Werkzeugen können mit Schreibrechten aus laufen"
+msgstr "%1$s von %2$s Werkzeugen laufen auch bei ausgeschalteten Schreibrechten"
 
 #, php-format
 msgid "%1$s of %2$s tools on"
@@ -687,7 +687,7 @@ msgid "Every assistant and client connected to this site."
 msgstr "Jeder Assistent und jeder Client, der mit dieser Website verbunden ist."
 
 msgid "Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs."
-msgstr "Jedes Werkzeug ist an, bis du es hier ausschaltest. Ausgeschaltete Werkzeuge sieht kein KI-Assistent. Schreibende Werkzeuge laufen nur mit Schreibrechten an, ebenso lesende mit dem Vermerk «erst mit Schreibrechten»: Sie lesen Code, Dateien, die Datenbank oder Protokolle."
+msgstr "Jedes Werkzeug ist an, bis du es hier ausschaltest. Ausgeschaltete Werkzeuge sieht kein KI-Assistent. Schreibende Werkzeuge laufen nur bei eingeschalteten Schreibrechten, ebenso lesende mit dem Vermerk «erst mit Schreibrechten»: Diese Werkzeuge lesen Code, Dateien, die Datenbank oder Protokolle."
 
 msgid "Everything this account may do with the tools switched on here, settings and administration included."
 msgstr "Alles, was dieses Konto mit den hier eingeschalteten Werkzeugen darf, Einstellungen und Verwaltung eingeschlossen."
@@ -1164,7 +1164,7 @@ msgid "Plugins and themes"
 msgstr "Plugins und Themes"
 
 msgid "Plugins offer their actions to AI assistants as abilities (WordPress Abilities API). With write access on, every ability runs, reading or writing, unless you switch it off here; each one also checks the rights of the connected account."
-msgstr "Plugins bieten ihre Aktionen KI-Assistenten als Fähigkeiten an (WordPress Abilities API). Mit Schreibrechten an läuft jede Fähigkeit, lesend oder schreibend, solange du sie hier nicht ausschaltest; jede prüft zusätzlich die Rechte des verbundenen Kontos."
+msgstr "Plugins bieten ihre Aktionen KI-Assistenten als Fähigkeiten an (WordPress Abilities API). Bei eingeschalteten Schreibrechten läuft jede Fähigkeit, lesend oder schreibend, solange du sie hier nicht ausschaltest; jede prüft zusätzlich die Rechte des verbundenen Kontos."
 
 msgctxt "main group of tools"
 msgid "Plugins, themes & code"
@@ -1360,7 +1360,7 @@ msgid "Saved."
 msgstr "Gespeichert."
 
 msgid "Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect)."
-msgstr "Gespeichert. Clients können die geladene Werkzeugliste zwischenspeichern. Ist die Änderung in einem verbundenen Client nicht zu sehen, lade seine Werkzeugliste neu oder verbinde ihn neu (Claude: unter Konnektoren die Werkzeugliste dieses Konnektors neu laden oder ihn trennen und neu verbinden; Claude Code: /mcp, dann neu verbinden)."
+msgstr "Gespeichert. Clients können die geladene Werkzeugliste zwischenspeichern. Ist die Änderung in einem verbundenen Client nicht zu sehen, lade seine Werkzeugliste neu oder verbinde ihn neu (Claude: unter «Connectors» die Werkzeugliste dieses Konnektors neu laden oder ihn trennen und neu verbinden; Claude Code: /mcp, dann neu verbinden)."
 
 msgctxt "tool label"
 msgid "Schedule a cron event"
@@ -1553,7 +1553,7 @@ msgid "The app identifies itself with a metadata document on %1$s, and this site
 msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → Deine Verbindungen → «Aus Claude verbinden (OAuth, erweitert)» die Option «Apps mit einem Metadaten-Dokument zulassen» ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."
 
 msgid "The approval expired. Please try connecting again."
-msgstr "Die Zustimmung ist abgelaufen. Bitte erneut verbinden."
+msgstr "Die Zustimmung ist abgelaufen. Bitte verbinde die App erneut."
 
 msgid "The built_with filter needs the database, which is not available here. List without built_with and read each post's built_with with wp_get_post."
 msgstr "Der Filter built_with braucht die Datenbank, die hier nicht verfügbar ist. Ohne built_with auflisten und built_with jedes Beitrags mit wp_get_post lesen."
@@ -1563,7 +1563,7 @@ msgid "The change is visible now, but %1$s keeps its own copy of this page and r
 msgstr "Die Änderung ist jetzt sichtbar, aber %1$s führt eine eigene Kopie dieser Seite und stellt sie wieder her, sobald jemand die Seite das nächste Mal in %2$s speichert; dann geht diese Änderung verloren. Um sie zu behalten, dieselbe Änderung im Editor von %3$s vornehmen."
 
 msgid "The connection could not be started. Please try again."
-msgstr "Die Verbindung konnte nicht gestartet werden. Bitte erneut versuchen."
+msgstr "Die Verbindung konnte nicht gestartet werden. Bitte versuche es erneut."
 
 #, php-format
 msgid "The date %s is ahead: saving would take this published post off the site until then. To schedule it, pass status \"future\" with a \"date\" at least five minutes ahead; to keep it published, pass a \"date\" that is not ahead."
@@ -1605,7 +1605,7 @@ msgstr "Der Beitrag ist schon im Papierkorb. force=true übergeben, um ihn endg�
 
 #, php-format
 msgid "The post would be scheduled for %s, less than five minutes ahead. So close to its date, WordPress would publish it early if it were saved again within the last minute — by a save still running, or by another plugin saving it too. To schedule it, pass a \"date\" at least five minutes ahead; to publish it now, pass status \"publish\" with a \"date\" that is not ahead, such as the current time."
-msgstr "Der Beitrag würde für %s geplant, weniger als fünf Minuten in der Zukunft. So nah an seinem Datum würde WordPress ihn zu früh veröffentlichen, wenn er in der letzten Minute erneut gespeichert würde – durch ein noch laufendes Speichern oder durch ein anderes Plugin, das ihn ebenfalls speichert. Um ihn zu planen, ein «date» mindestens fünf Minuten in der Zukunft übergeben; um ihn jetzt zu veröffentlichen, den Status «publish» mit einem «date» übergeben, das nicht in der Zukunft liegt, etwa der aktuellen Zeit."
+msgstr "Der Beitrag würde für %s geplant, weniger als fünf Minuten in der Zukunft. So nah an seinem Datum würde WordPress ihn zu früh veröffentlichen, wenn er in der letzten Minute erneut gespeichert würde – durch ein noch laufendes Speichern oder durch ein anderes Plugin, das ihn ebenfalls speichert. Um ihn zu planen, ein «date» mindestens fünf Minuten in der Zukunft übergeben; um ihn jetzt zu veröffentlichen, den Status «publish» mit einem «date» übergeben, das nicht in der Zukunft liegt, etwa die aktuelle Zeit."
 
 msgid "The redirect address is not registered for this client."
 msgstr "Die Weiterleitungsadresse ist für diesen Client nicht registriert."
@@ -1919,11 +1919,11 @@ msgstr "Schreibrechte für KI-Assistenten"
 
 #, php-format
 msgid "Write access is off on this site, so the tool \"%s\" did not run: it changes the site, and with write access off AI assistants only read."
-msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug «%s» nicht: Es ändert die Website, und mit Schreibrechten aus lesen KI-Assistenten nur."
+msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug «%s» nicht: Es ändert die Website, und bei ausgeschalteten Schreibrechten lesen KI-Assistenten nur."
 
 #, php-format
 msgid "Write access is off on this site, so the tool \"%s\" did not run: it is one of the reading tools that run only with write access on."
-msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug «%s» nicht: Es gehört zu den lesenden Werkzeugen, die nur mit Schreibrechten an laufen."
+msgstr "Auf dieser Website sind die Schreibrechte aus, darum lief das Werkzeug «%s» nicht: Es gehört zu den lesenden Werkzeugen, die nur bei eingeschalteten Schreibrechten laufen."
 
 msgid "Write access is off, so no ability runs; switch it on at the top of this page."
 msgstr "Die Schreibrechte sind aus, darum läuft keine Fähigkeit; schalte sie oben auf dieser Seite ein."
@@ -2123,7 +2123,7 @@ msgid "its host name could not be resolved"
 msgstr "sein Hostname liess sich nicht auflösen"
 
 msgid "its host resolves to an address that is not public; documents are fetched only from public addresses"
-msgstr "sein Host löst zu einer Adresse auf, die nicht öffentlich ist; Dokumente werden nur von öffentlichen Adressen geholt"
+msgstr "sein Hostname wird zu einer nicht öffentlichen Adresse aufgelöst; Dokumente werden nur von öffentlichen Adressen geholt"
 
 #, php-format
 msgid "its redirect_uris are missing or invalid (%s)"
