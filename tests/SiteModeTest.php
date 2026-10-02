@@ -9,21 +9,28 @@
  *   a notice about the change once, until one of them dismisses it or
  *   switches the mode.
  * - In Read every tool the registry does not classify as reading is refused,
- *   wp_undo and unknown tools included, and the answer names the way: who
- *   switches, where, and that it is at the site owner's own risk. The
- *   writing tools stay listed, as they did under the read-only switch.
- * - Full lets every switched-on tool run, the powerful ones included; the
- *   fine-tuning switches single tools and groups off again.
+ *   wp_undo and unknown tools included, and so is every reading tool marked
+ *   Mighty (the readers of code, files, the database, logs or credentials),
+ *   whatever its switch and the token's scope say. Each answer says why and
+ *   names the way: who switches, where, and that it is at the site owner's
+ *   own risk. The refused tools stay listed, as the writing ones did under
+ *   the read-only switch.
+ * - Full lets every switched-on tool run, the powerful ones included, the
+ *   Mighty readers too; the fine-tuning switches single tools and groups off
+ *   again.
  * - Only an administrator switches, with the form's own nonce; Full only
  *   with the box under the notice ticked and for the notice in force, in
  *   the wording the form showed. Who, when, which notice in which wording,
  *   which plugin version and how (settings page or code) is recorded in the
  *   option, in the history of the mode and in the log; back to Read needs no
  *   box and keeps the record. «Clear log» leaves the history alone.
- * - After an update, powerful tools that only read keep the switch they had
- *   (off by default before), so assistants read nothing they could not read
- *   before; powerful writing tools are on in Full.
- * - The switch is the first thing on the settings page.
+ * - After an update, a powerful tool that only read and was switched off
+ *   keeps its off in Full, where alone it can run; one without a saved
+ *   switch is on there like every tool. Powerful writing tools are on in
+ *   Full whatever was saved.
+ * - The switch is the first thing on the settings page; in Read its card
+ *   says what assistants can read and that code, files, the database, logs
+ *   and credentials wait for Full, and the band counts only what can run.
  * - The server instructions say Read in one sentence, whatever a filter does.
  *
  * @package AlphaBridge_MCP
@@ -130,6 +137,7 @@ final class SiteModeTest extends TestCase {
 		$r->set_current_group( 'content', 'Posts & Pages' );
 		$r->register( 'wp_list_posts', array( 'description' => 'List posts.' ) );
 		$r->register( 'wp_update_post', array( 'description' => 'Update a post.' ) );
+		$r->register( 'wp_get_user_meta', array( 'description' => 'Read profile fields.', 'dangerous' => true ) );
 		ob_start();
 		( new AB_MCP_Admin( $r ) )->render();
 		return $this->xpath( (string) ob_get_clean() );
@@ -167,14 +175,23 @@ final class SiteModeTest extends TestCase {
 		return AB_MCP_Site_Mode::confirmation();
 	}
 
-	/** The tools of a Pro site that are marked Mighty and only read, as Pro defines them. */
+	/** Tools of a Pro site that are marked Mighty and only read, as Pro defines them. */
 	private static function mighty_readers(): array {
 		return array(
 			'wp_db_query'         => array( 'dangerous' => true, 'capability' => 'manage_options' ),
 			'wp_deploy_read'      => array( 'dangerous' => true, 'capability' => 'manage_options' ),
+			// Reads by its flag, not by its name: the refusal must look at
+			// the definition to say why.
+			'wp_deploy_diff'      => array( 'dangerous' => true, 'readonly' => true, 'capability' => 'manage_options' ),
+			'wp_read_plugin_file' => array( 'dangerous' => true, 'capability' => 'edit_plugins' ),
 			'wp_read_upload_file' => array( 'dangerous' => true, 'capability' => 'manage_options' ),
+			'wp_get_error_log'    => array( 'dangerous' => true, 'capability' => 'manage_options' ),
 			'wp_get_user_meta'    => array( 'dangerous' => true, 'capability' => 'edit_users' ),
 		);
+	}
+
+	private static function scope( string $scope ): void {
+		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, $scope );
 	}
 
 	private static function notice_of( AbTestExit $exit ): string {
@@ -307,24 +324,31 @@ final class SiteModeTest extends TestCase {
 
 	/* -------------------------------------------------------- the gate */
 
-	public function testInReadEveryWritingToolIsRefusedWithTheWay(): void {
+	public function testInReadOnlyTheOrdinaryReadersRunAndEveryOtherToolIsRefusedWithTheWay(): void {
 		self::allow_everything();
 		$writers = 0;
 		$readers = 0;
+		$mighty  = array();
 		foreach ( self::free_registry()->all() as $name => $def ) {
 			$res = AB_MCP_Security::authorize( $name, $def );
-			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
-				self::assertTrue( $res, $name . ' reads, so it runs in Read.' );
+			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) && empty( $def['dangerous'] ) ) {
+				self::assertTrue( $res, $name . ' reads and is not Mighty, so it runs in Read.' );
 				++$readers;
 				continue;
 			}
-			++$writers;
-			self::assertInstanceOf( WP_Error::class, $res, $name . ' writes, so Read refuses it.' );
+			self::assertInstanceOf( WP_Error::class, $res, $name . ' writes or is Mighty, so Read refuses it.' );
 			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
+			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
+				$mighty[] = $name;
+				self::assertStringContainsString( 'the tool "' . $name . '" is marked Mighty and reads what read mode keeps closed', $res->get_error_message() );
+				continue;
+			}
+			++$writers;
 			self::assertStringContainsString( 'the tool "' . $name . '" writes', $res->get_error_message() );
 		}
 		self::assertGreaterThan( 10, $writers );
 		self::assertGreaterThan( 10, $readers );
+		self::assertSame( array( 'wp_get_user_meta' ), $mighty, 'The Mighty reader of this plugin.' );
 	}
 
 	public function testTheRefusalNamesWhoSwitchesWhereAndTheRisk(): void {
@@ -332,6 +356,65 @@ final class SiteModeTest extends TestCase {
 			'AlphaBridge MCP is in read mode on this site; the tool "wp_update_post" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
 			AB_MCP_Site_Mode::refusal( 'wp_update_post' )->get_error_message()
 		);
+		self::assertSame(
+			'AlphaBridge MCP is in read mode on this site; the tool "wp_db_query" is marked Mighty and reads what read mode keeps closed: code, files, the database, logs or credentials. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
+			AB_MCP_Site_Mode::refusal( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_message()
+		);
+		self::assertSame( AB_MCP_Site_Mode::refusal( 'wp_frobnicate' )->get_error_message(), AB_MCP_Site_Mode::refusal( 'wp_frobnicate', array( 'dangerous' => true ) )->get_error_message(), 'A Mighty tool that writes is refused because it writes.' );
+	}
+
+	/** @return array<string,array{0:string}> */
+	public static function scopes(): array {
+		return array(
+			'scope read'    => array( 'read' ),
+			'scope content' => array( 'content' ),
+			'scope full'    => array( 'full' ),
+		);
+	}
+
+	#[DataProvider( 'scopes' )]
+	public function testInReadTheMightyReadersAreRefusedWithTheWayWhateverTheScope( string $scope ): void {
+		AB_MCP_Settings::install_defaults();
+		self::allow_everything();
+		self::scope( $scope );
+
+		foreach ( self::mighty_readers() as $name => $def ) {
+			self::assertTrue( AB_MCP_Tool_Registry::is_read_only( $name, $def ), $name . ' only reads.' );
+			self::assertTrue( AB_MCP_Settings::is_tool_enabled( $name, $def ), $name . ' is switched on: Read refuses it, not its switch.' );
+			self::assertFalse( AB_MCP_Site_Mode::allows( $name, $def ), $name );
+			$res = AB_MCP_Security::authorize( $name, $def );
+			self::assertInstanceOf( WP_Error::class, $res, $name . ' does not run in Read with scope ' . $scope );
+			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
+			self::assertStringContainsString( '"' . $name . '" is marked Mighty', $res->get_error_message() );
+			self::assertStringContainsString( 'switch to Full at the top of Settings → AlphaBridge MCP', $res->get_error_message(), 'The answer names the way.' );
+			self::assertStringContainsString( 'own risk', $res->get_error_message() );
+		}
+		self::assertTrue( AB_MCP_Security::authorize( 'wp_get_post', array() ), 'An ordinary reader runs.' );
+	}
+
+	public function testInFullTheMightyReadersRun(): void {
+		AB_MCP_Settings::install_defaults();
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::allow_everything();
+
+		foreach ( self::mighty_readers() as $name => $def ) {
+			self::assertTrue( AB_MCP_Site_Mode::allows( $name, $def ), $name );
+			self::assertTrue( AB_MCP_Security::authorize( $name, $def ), $name . ' runs in Full.' );
+		}
+		self::scope( 'read' );
+		self::assertTrue( AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] ), 'A read token runs it in Full, as before the mode.' );
+	}
+
+	public function testWhatRunsInReadIsAReaderThatIsNotMighty(): void {
+		self::assertTrue( AB_MCP_Site_Mode::runs_in_read( 'wp_list_posts', array() ) );
+		self::assertTrue( AB_MCP_Site_Mode::runs_in_read( 'wp_undo_list', array( 'readonly' => true ) ), 'Flagged as reading.' );
+		self::assertFalse( AB_MCP_Site_Mode::runs_in_read( 'wp_get_user_meta', array( 'dangerous' => true ) ), 'Mighty.' );
+		self::assertFalse( AB_MCP_Site_Mode::runs_in_read( 'wp_list_things', array( 'dangerous' => 1, 'readonly' => true ) ), 'Mighty, whatever the truthy value.' );
+		self::assertFalse( AB_MCP_Site_Mode::runs_in_read( 'wp_update_post', array() ), 'Writes.' );
+		self::assertFalse( AB_MCP_Site_Mode::runs_in_read( 'wp_frobnicate', array() ), 'Unknown.' );
+		self::assertTrue( AB_MCP_Tool_Registry::is_mighty( array( 'dangerous' => true ) ) );
+		self::assertFalse( AB_MCP_Tool_Registry::is_mighty( array( 'dangerous' => false ) ) );
+		self::assertFalse( AB_MCP_Tool_Registry::is_mighty( array() ) );
 	}
 
 	/** @return array<string,array{0:string,1:array}> */
@@ -416,13 +499,14 @@ final class SiteModeTest extends TestCase {
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_update_post', $r->get( 'wp_update_post' ) ) );
 	}
 
-	public function testInReadTheWritingToolsStayListedAsUnderTheReadOnlySwitch(): void {
+	public function testInReadTheRefusedToolsStayListedAsUnderTheReadOnlySwitch(): void {
 		$r     = self::free_registry();
 		$list  = ( new ReflectionMethod( AB_MCP_REST_Controller::class, 'tools_list' ) )->invoke( new AB_MCP_REST_Controller( $r ) );
 		$names = array_column( $list['tools'], 'name' );
 
 		self::assertContains( 'wp_update_post', $names );
 		self::assertContains( 'wp_delete_post', $names, 'Every tool is on until switched off, the Mighty ones too.' );
+		self::assertContains( 'wp_get_user_meta', $names, 'The Mighty reader too.' );
 		self::assertCount( count( $r->all() ), $names );
 	}
 
@@ -476,11 +560,11 @@ final class SiteModeTest extends TestCase {
 	}
 
 	#[DataProvider( 'readOnlyBeforeAndStored' )]
-	public function testAfterTheUpdateMightyToolsThatOnlyReadKeepTheirOff( bool $read_only ): void {
-		// The update must not let assistants read more than before: the
-		// database query, the file readers, the profile fields were off by
-		// default and still are, in Read and in Full, until an administrator
-		// switches them on under Fine-tuning.
+	public function testAfterTheUpdateMightyReadersWaitForFullAndKeepTheirOffThere( bool $read_only ): void {
+		// The database query, the file readers, the profile fields: in Read
+		// the mode refuses them, whatever was saved; in Full, where alone they
+		// run, an off saved before the update still holds them off until an
+		// administrator switches them on under Fine-tuning.
 		self::before_the_update( array( 'read_only' => $read_only ) );
 		$old = array( 'wp_list_posts' => true, 'wp_delete_post' => false );
 		foreach ( self::mighty_readers() as $name => $def ) {
@@ -491,41 +575,54 @@ final class SiteModeTest extends TestCase {
 		self::allow_everything();
 
 		foreach ( array( 'read', 'full' ) as $scope ) {
-			( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, $scope );
+			self::scope( $scope );
 			foreach ( self::mighty_readers() as $name => $def ) {
 				self::assertTrue( AB_MCP_Tool_Registry::is_read_only( $name, $def ), $name . ' only reads.' );
 				self::assertFalse( AB_MCP_Settings::is_tool_enabled( $name, $def ), $name );
 				$res = AB_MCP_Security::authorize( $name, $def );
 				self::assertInstanceOf( WP_Error::class, $res, $name . ' does not run in Read with scope ' . $scope );
-				self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code(), $name );
-				self::assertStringContainsString( 'Fine-tuning', $res->get_error_message(), 'The answer names the way.' );
+				self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name . ': Read answers first.' );
 			}
 		}
 
 		AB_MCP_Site_Mode::switch_to_full( 3 );
-		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, 'full' );
-		self::assertSame( 'ab_mcp_tool_disabled', AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_code(), 'Nor in Full.' );
+		self::scope( 'full' );
+		foreach ( self::mighty_readers() as $name => $def ) {
+			$res = AB_MCP_Security::authorize( $name, $def );
+			self::assertInstanceOf( WP_Error::class, $res, $name . ' keeps its off in Full.' );
+			self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code(), $name );
+			self::assertStringContainsString( 'Fine-tuning', $res->get_error_message(), 'The answer names the way.' );
+		}
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_delete_post', array( 'dangerous' => true ) ), 'A writing Mighty tool follows Full.' );
 	}
 
-	public function testAfterTheUpdateAMightyToolThatOnlyReadsAndWasNeverSavedStaysOff(): void {
-		// The old default of a Mighty tool was off, saved or not; a tool that
-		// came with an add-on after the last save is not in the switches.
+	public function testAfterTheUpdateAMightyReaderWithoutASavedSwitchWaitsForFullOnly(): void {
+		// No saved switch: never saved, or a tool that came with an add-on
+		// after the last save. Read refuses it; Full, where every tool is on
+		// until switched off, runs it.
 		self::before_the_update();
 		update_option( 'ab_mcp_tool_state', array( 'wp_list_posts' => true ) );
 		AB_MCP_Settings::maybe_upgrade();
+		self::allow_everything();
+		$read = self::mighty_readers()['wp_deploy_read'];
 
-		self::assertFalse( AB_MCP_Settings::is_tool_enabled( 'wp_deploy_read', array( 'dangerous' => true ) ) );
+		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_deploy_read', $read ) );
+		self::assertSame( 'ab_mcp_read_mode', AB_MCP_Security::authorize( 'wp_deploy_read', $read )->get_error_code() );
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_db_execute', array( 'dangerous' => true ) ), 'One that writes waits for Full only.' );
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_get_post', array() ), 'An ordinary one is on.' );
+
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::assertTrue( AB_MCP_Security::authorize( 'wp_deploy_read', $read ) );
 	}
 
-	public function testAfterTheUpdateAMightyToolThatOnlyReadsAndWasOnStaysOn(): void {
+	public function testAfterTheUpdateAMightyReaderThatWasOnRunsInFull(): void {
 		self::before_the_update();
 		update_option( 'ab_mcp_tool_state', array( 'wp_db_query' => true ) );
 		AB_MCP_Settings::maybe_upgrade();
 		self::allow_everything();
 
+		self::assertSame( 'ab_mcp_read_mode', AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_code(), 'Not in Read.' );
+		AB_MCP_Site_Mode::switch_to_full( 3 );
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] ) );
 	}
 
@@ -560,12 +657,17 @@ final class SiteModeTest extends TestCase {
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_delete_post', $r->get( 'wp_delete_post' ) ) );
 	}
 
-	public function testOnANewSiteMightyToolsThatOnlyReadRunInRead(): void {
-		// Every switch is on out of the box; Read lets every reading tool
-		// run, the Mighty ones included. The mode card names them.
+	public function testOnANewSiteTheMightyReadersAreOnAndRunOnlyInFull(): void {
+		// Every switch is on out of the box; Read refuses the Mighty readers
+		// all the same, Full runs them.
 		AB_MCP_Settings::install_defaults();
 		self::allow_everything();
 
+		foreach ( self::mighty_readers() as $name => $def ) {
+			self::assertTrue( AB_MCP_Settings::is_tool_enabled( $name, $def ), $name );
+			self::assertSame( 'ab_mcp_read_mode', AB_MCP_Security::authorize( $name, $def )->get_error_code(), $name );
+		}
+		AB_MCP_Site_Mode::switch_to_full( 3 );
 		foreach ( self::mighty_readers() as $name => $def ) {
 			self::assertTrue( AB_MCP_Security::authorize( $name, $def ), $name );
 		}
@@ -599,6 +701,8 @@ final class SiteModeTest extends TestCase {
 
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', $sentence ), 'One sentence.' );
 		self::assertStringContainsString( 'switches it to Full at the top of Settings → AlphaBridge MCP', $sentence );
+		self::assertStringContainsString( 'every tool that creates, changes or deletes and every tool that reads those is refused', $sentence );
+		self::assertStringContainsString( 'no code, files, database, logs or credentials', $sentence, 'Says that the Mighty readers wait for Full too.' );
 		self::assertStringEndsWith( ' ' . $sentence, $m->invoke( $controller ) );
 
 		add_filter( 'ab_mcp_instructions', static fn(): string => 'Add-on text only.' );
@@ -883,31 +987,34 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'Switch to Full', trim( $x->query( './/button[@type="submit"]', $form )->item( 0 )->textContent ) );
 	}
 
-	public function testInReadTheCardNamesTheMightyToolsThatRunThere(): void {
+	public function testTheCardSaysWhatEachModeOpens(): void {
 		AB_MCP_Settings::install_defaults();
-		$all = self::mighty_readers() + array(
-			'wp_list_posts'  => array(),
-			'wp_delete_post' => array( 'dangerous' => true ),
-		);
 
-		$x    = $this->xpath( $this->admin( 'mode_card_html', $all ) );
-		$line = $x->query( '//*[contains(@class, "ab-mode__mighty")]' )->item( 0 );
+		$x    = $this->xpath( $this->admin( 'mode_card_html' ) );
+		$lead = trim( $x->query( '//*[contains(@class, "ab-mode__lead")]' )->item( 0 )->textContent );
+		self::assertSame( 'Assistants can read content, media, terms, comments, settings and the structure of the site. Code, files, the database, logs and credentials stay closed: the tools marked Mighty that read them run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say.', $lead );
+		self::assertSame( 1, $x->query( '//*[contains(@class, "ab-mode__lead")]' )->length );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-mode__mighty")] | //section[@id="ab-mode"]//code' )->length, 'No list of Mighty tools that would run in Read: none does.' );
 
-		self::assertNotNull( $line );
-		$names = array();
-		foreach ( $x->query( './/code', $line ) as $code ) {
-			$names[] = $code->textContent;
-		}
-		self::assertSame( array_keys( self::mighty_readers() ), $names, 'The Mighty tools that read, not the ones that write, nor the ordinary ones.' );
-		self::assertStringContainsString( 'run in Read too', $line->textContent );
-		self::assertStringContainsString( 'Switch them off under Fine-tuning', $line->textContent );
-
-		update_option( 'ab_mcp_tool_state', array_fill_keys( array_keys( self::mighty_readers() ), false ) );
-		self::assertSame( 0, $this->xpath( $this->admin( 'mode_card_html', $all ) )->query( '//*[contains(@class, "ab-mode__mighty")]' )->length, 'None on: no line.' );
-
-		AB_MCP_Settings::set_tool_state( array() );
 		AB_MCP_Site_Mode::switch_to_full( 3 );
-		self::assertSame( 0, $this->xpath( $this->admin( 'mode_card_html', $all ) )->query( '//*[contains(@class, "ab-mode__mighty")]' )->length, 'Not in Full.' );
+		$lead = $this->xpath( $this->admin( 'mode_card_html' ) )->query( '//*[contains(@class, "ab-mode__lead")]' )->item( 0 )->textContent;
+		self::assertStringContainsString( 'create, change and delete, and read code, files, the database, logs and credentials', $lead );
+	}
+
+	/** @return array<string,array{0:string,1:string}> */
+	public static function switchNotices(): array {
+		return array(
+			'to Read' => array( 'mode_read', 'Read is on. Assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every tool that reads code, files, the database, logs or credentials, is refused.' ),
+			'to Full' => array( 'mode_full', 'Full is on. Assistants can now create, change and delete, and read code, files, the database, logs and credentials, through the tools that are switched on.' ),
+		);
+	}
+
+	#[DataProvider( 'switchNotices' )]
+	public function testTheNoticeAfterASwitchSaysWhatTheModeOpens( string $notice, string $text ): void {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_GET                   = array( 'ab_notice' => $notice );
+
+		self::assertStringContainsString( $text, $this->admin( 'notice' ) );
 	}
 
 	public function testTheControlNextToTheTitleIsRealAndNeverTicksTheBox(): void {
@@ -944,8 +1051,8 @@ final class SiteModeTest extends TestCase {
 	/** @return array<string,array{0:string,1:string}> */
 	public static function bandCounts(): array {
 		return array(
-			'Read' => array( 'read', '1 of 2 tools can run in Read' ),
-			'Full' => array( 'full', '2 of 2 tools on' ),
+			'Read' => array( 'read', '1 of 3 tools can run in Read' ),
+			'Full' => array( 'full', '3 of 3 tools on' ),
 		);
 	}
 
@@ -971,12 +1078,13 @@ final class SiteModeTest extends TestCase {
 
 		$text = $this->xpath( $this->admin( 'mode_notice' ) )->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 )->textContent;
 
+		self::assertStringContainsString( 'assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool that reads code, files, the database, logs or credentials', $text );
 		self::assertStringContainsString( 'writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning', $text );
-		self::assertStringContainsString( 'Tools marked Mighty that only read keep the switch they had.', $text );
+		self::assertStringContainsString( 'Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there.', $text );
 	}
 
 	public function testFineTuningSaysWhichMightyToolsStayedOffAfterTheUpdate(): void {
-		$sentence = 'On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here.';
+		$sentence = 'On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here.';
 		AB_MCP_Settings::install_defaults();
 		self::assertStringNotContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ), 'Not on a new site.' );
 
@@ -1092,7 +1200,11 @@ final class SiteModeTest extends TestCase {
 		self::assertStringContainsString( 'only reads', $m[1] );
 		self::assertStringContainsString( 'switches to Full at the top of Settings → AlphaBridge MCP', $m[1] );
 		self::assertStringContainsString( "own risk", $m[1] );
-		self::assertStringContainsString( 'Mighty tools that only read keep the switch they had', $readme, 'And what became of the switches saved before.' );
+		self::assertStringContainsString( 'and no code, files, database, logs or credentials', $m[1], 'Read keeps the Mighty readers closed too.' );
+		self::assertStringContainsString( 'a Mighty tool that only reads and was switched off stays off in Full', $readme, 'And what became of the switches saved before.' );
+		self::assertStringNotContainsString( 'read, list and search, and every tool', $readme, 'No longer «Read reads everything».' );
+		$intro = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
+		self::assertStringContainsString( 'and so is every tool marked Mighty that reads code, files, the database, logs or credentials', $intro );
 	}
 
 	public function testTheNoticesAfterSwitching(): void {

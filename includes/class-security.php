@@ -36,10 +36,11 @@ class AB_MCP_Security {
 			);
 		}
 
-		// 2. Site mode: in Read (the default) only reading tools run, whatever
-		// their switch and the token's scope say. See AB_MCP_Site_Mode.
+		// 2. Site mode: in Read (the default) only the ordinary reading tools
+		// run, not the Mighty ones, whatever their switch and the token's scope
+		// say. See AB_MCP_Site_Mode.
 		if ( ! AB_MCP_Site_Mode::allows( $name, $def ) ) {
-			return AB_MCP_Site_Mode::refusal( $name );
+			return AB_MCP_Site_Mode::refusal( $name, $def );
 		}
 
 		// 3. Tool must be switched on. Every tool is on until an administrator

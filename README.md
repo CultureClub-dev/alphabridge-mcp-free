@@ -64,8 +64,10 @@ directory. It is the same code WordPress.org ships.
 Handing an AI access to a site should feel safe, so control comes first:
 
 - **Read out of the box.** A new site, and every site after updating to 4.4.0, starts in the
-  mode *Read*: assistants can read, list and search, and every tool that creates, changes or
-  deletes is refused, with an answer that says how to switch. *Full*, which lets them write, is
+  mode *Read*: assistants can read content, media, terms, comments, settings and the structure
+  of the site. Every tool that creates, changes or deletes is refused, and so is every tool
+  marked Mighty that reads code, files, the database, logs or credentials, with an answer that
+  says why and how to switch. *Full*, which opens both, is
   switched on by an administrator at the top of Settings → AlphaBridge MCP, at the site owner's
   own risk: switching it on can be destructive, and the administrator confirms that, and that a
   current backup exists, with a ticked box. The account, the time, the version of that notice and
@@ -75,10 +77,12 @@ Handing an AI access to a site should feel safe, so control comes first:
 - **Scoped connections** — read-only or content-only keys with optional expiry, rotatable in
   one click.
 - **Fine-tuning for advanced users** — in Full every tool is on, the powerful ones marked
-  Mighty included; on a site updated from an earlier version, Mighty tools that only read keep
-  the switch they had. Switch single tools or whole groups off, and they vanish from the MCP
-  surface.
-  Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`); the action
+  Mighty included; on a site updated from an earlier version, a Mighty tool that only reads and
+  was switched off stays off there. Switch single tools or whole groups off, and they vanish from
+  the MCP surface.
+  Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`,
+  `runs_in_read()`); a tool that reads code, files, the database, logs or credentials is marked
+  with `'dangerous' => true`, which keeps it out of Read. The action
   `ab_mcp_site_mode_changed` fires when an administrator switches.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed.

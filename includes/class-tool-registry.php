@@ -221,6 +221,20 @@ class AB_MCP_Tool_Registry {
 	}
 
 	/**
+	 * Is a tool marked Mighty? Its definition says so with 'dangerous'. Besides
+	 * the mark on the settings page this decides what the site mode Read
+	 * leaves closed: a Mighty tool does not run there even when it only reads
+	 * (AB_MCP_Site_Mode::runs_in_read()), because the reading ones read code,
+	 * files, the database, logs or credentials. Mark such a reader so.
+	 *
+	 * @param array $def Tool definition.
+	 * @return bool
+	 */
+	public static function is_mighty( array $def ) {
+		return ! empty( $def['dangerous'] );
+	}
+
+	/**
 	 * Capabilities that count as "content work" — the everyday editorial powers.
 	 * Deliberately an allow-list: a tool whose capability is not in here (an
 	 * administrative one such as manage_options or install_plugins, or none at
@@ -406,7 +420,7 @@ class AB_MCP_Tool_Registry {
 			}
 			$groups[ $slug ]['tools'][] = $name;
 			$groups[ $slug ]['count']++;
-			if ( ! empty( $def['dangerous'] ) ) {
+			if ( self::is_mighty( $def ) ) {
 				$groups[ $slug ]['mighty'] = true;
 			}
 		}

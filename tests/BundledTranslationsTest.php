@@ -14,10 +14,11 @@
  * - Every locale has a .po and a compiled .mo with the same entries, and
  *   every msgid is a string the plugin's code really translates — a text
  *   changed in the code without its translation fails here.
- * - The notice, the box, the refusal, the notice after the update and what
- *   it says about the switches, the consent sentence, the Mighty tools that
- *   run in Read and the two words of the mode are translated everywhere,
- *   with their placeholders.
+ * - The notice, the box, both refusals in Read (a writing tool, a Mighty
+ *   reader), the notice after the update and what it says about the
+ *   switches, the consent sentence, what Read and Full open on the card and
+ *   the two words of the mode are translated everywhere, with their
+ *   placeholders.
  * - Swiss German writes ss, never ß, and «» for quotes; de_DE_formal and
  *   de_CH address the reader as Sie, the others as du.
  * - The language pack is asked for before the bundled file is added.
@@ -44,8 +45,9 @@ final class BundledTranslationsTest extends TestCase {
 		'Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup.',
 		'I understand that switching to Full can be destructive and is at my own risk, and I have a current backup.',
 		'AlphaBridge MCP is in read mode on this site; the tool "%s" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
+		'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty and reads what read mode keeps closed: code, files, the database, logs or credentials. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
 		'AlphaBridge MCP now only reads on this site.',
-		'Since this update the plugin starts in the mode Read on every site: assistants can read, and every tool that creates, changes or deletes is refused. To let them write again, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk.',
+		'Since this update the plugin starts in the mode Read on every site: assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool that reads code, files, the database, logs or credentials. To let them write again or read those, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk.',
 		'This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full.',
 		"site mode\x04Read",
 		"site mode\x04Full",
@@ -55,9 +57,10 @@ final class BundledTranslationsTest extends TestCase {
 		'Fine-tuning (for advanced users)',
 		'Full since %1$s, confirmed by %2$s',
 		'Full since %s, set by code, not confirmed on this page',
-		'In Full the tools that are switched on may write; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read keep the switch they had.',
-		'Tools marked Mighty that only read run in Read too: %s. Switch them off under Fine-tuning if assistants should not use them.',
-		'On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here.',
+		'In Full the tools that are switched on run; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there.',
+		'Assistants can read content, media, terms, comments, settings and the structure of the site. Code, files, the database, logs and credentials stay closed: the tools marked Mighty that read them run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say.',
+		'Assistants may create, change and delete, and read code, files, the database, logs and credentials, through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level.',
+		'On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here.',
 		'%1$s of %2$s tools can run in Read',
 	);
 
@@ -178,9 +181,10 @@ final class BundledTranslationsTest extends TestCase {
 
 	public function testTheTextsInTheCodeAreTheOnesTranslated(): void {
 		$mo = self::mo( self::file( 'de_DE', 'mo' ) );
-		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::refusal( '%s' )->get_error_message() ) as $text ) {
+		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::refusal( '%s' )->get_error_message(), AB_MCP_Site_Mode::refusal( '%s', array( 'dangerous' => true, 'readonly' => true ) )->get_error_message() ) as $text ) {
 			self::assertArrayHasKey( $text, $mo );
 		}
+		self::assertSame( 'AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ ist mit Mighty markiert und liest, was der Modus Lesend verschlossen hält: Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers.', $mo[ AB_MCP_Site_Mode::refusal( '%s', array( 'dangerous' => true, 'readonly' => true ) )->get_error_message() ] );
 		self::assertSame( 'Full erlaubt KI-Assistenten, auf dieser Live-Website Inhalte, Dateien, Einstellungen und Code zu erstellen, zu ändern und zu löschen. Das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko. Stelle sicher, dass du ein aktuelles Backup hast.', $mo[ AB_MCP_Site_Mode::notice_text() ] );
 		self::assertSame( 'Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup.', $mo[ AB_MCP_Site_Mode::checkbox_text() ] );
 	}

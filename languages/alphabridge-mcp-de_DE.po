@@ -20,6 +20,10 @@ msgid "%1$s of %2$s tools can run in Read"
 msgstr "%1$s von %2$s Werkzeugen können im Modus Lesend laufen"
 
 #, php-format
+msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" is marked Mighty and reads what read mode keeps closed: code, files, the database, logs or credentials. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
+msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ ist mit Mighty markiert und liest, was der Modus Lesend verschlossen hält: Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
+
+#, php-format
 msgid "AlphaBridge MCP is in read mode on this site; the tool \"%s\" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner's own risk."
 msgstr "AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ schreibt. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers."
 
@@ -29,17 +33,17 @@ msgstr "AlphaBridge MCP liest auf dieser Website jetzt nur noch."
 msgid "AlphaBridge MCP on this site"
 msgstr "AlphaBridge MCP auf dieser Website"
 
-msgid "Assistants can read, list and search. Every tool that creates, changes or deletes is refused, whatever its switch and the access level of the connection say."
-msgstr "Assistenten können lesen, auflisten und suchen. Jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen – gleich, was sein Schalter und die Zugriffsstufe der Verbindung sagen."
+msgid "Assistants can read content, media, terms, comments, settings and the structure of the site. Code, files, the database, logs and credentials stay closed: the tools marked Mighty that read them run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say."
+msgstr "Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen. Code, Dateien, die Datenbank, Protokolle und Zugangsdaten bleiben verschlossen: Die mit Mighty markierten Werkzeuge, die sie lesen, laufen nur im Modus Full, wie jedes Werkzeug, das etwas erstellt, ändert oder löscht – gleich, was ihr Schalter und die Zugriffsstufe der Verbindung sagen."
 
-msgid "Assistants may create, change and delete through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level."
-msgstr "Assistenten dürfen mit jedem eingeschalteten Werkzeug erstellen, ändern und löschen, auch mit den mächtigen, die mit Mighty markiert sind – im Rahmen der Rechte des verbundenen Kontos und seiner Zugriffsstufe."
+msgid "Assistants may create, change and delete, and read code, files, the database, logs and credentials, through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level."
+msgstr "Assistenten dürfen mit jedem eingeschalteten Werkzeug erstellen, ändern und löschen sowie Code, Dateien, die Datenbank, Protokolle und Zugangsdaten lesen, auch mit den mächtigen, die mit Mighty markiert sind – im Rahmen der Rechte des verbundenen Kontos und seiner Zugriffsstufe."
 
 msgid "Dismiss"
 msgstr "Ausblenden"
 
-msgid "Every tool is on until you switch it off here. In Full, switched-on tools may write, the powerful ones marked Mighty included; in Read every tool that writes is refused, whatever its switch says. Switched-off tools are removed from the MCP server and REST API entirely — no client can see or call them."
-msgstr "Jedes Werkzeug ist eingeschaltet, bis du es hier ausschaltest. Im Modus Full dürfen eingeschaltete Werkzeuge schreiben, auch die mächtigen, die mit Mighty markiert sind; im Modus Lesend wird jedes schreibende Werkzeug abgewiesen, gleich, was sein Schalter sagt. Ausgeschaltete Werkzeuge verschwinden ganz aus dem MCP-Server und der REST-API – kein Client kann sie sehen oder aufrufen."
+msgid "Every tool is on until you switch it off here. In Full, switched-on tools run, the powerful ones marked Mighty included; in Read every tool that writes and every tool marked Mighty is refused, whatever its switch says. Switched-off tools are removed from the MCP server and REST API entirely — no client can see or call them."
+msgstr "Jedes Werkzeug ist eingeschaltet, bis du es hier ausschaltest. Im Modus Full laufen eingeschaltete Werkzeuge, auch die mächtigen, die mit Mighty markiert sind; im Modus Lesend wird jedes schreibende und jedes mit Mighty markierte Werkzeug abgewiesen, gleich, was sein Schalter sagt. Ausgeschaltete Werkzeuge verschwinden ganz aus dem MCP-Server und der REST-API – kein Client kann sie sehen oder aufrufen."
 
 msgid "Fine-tuning (for advanced users)"
 msgstr "Feineinstellung (für Fortgeschrittene)"
@@ -48,8 +52,8 @@ msgctxt "site mode"
 msgid "Full"
 msgstr "Full"
 
-msgid "Full is on. Assistants can now create, change and delete through the tools that are switched on. Your confirmation is recorded with your account, the time and the version of the notice. You can switch back to Read at the top of this page at any time."
-msgstr "Full ist eingeschaltet. Assistenten können jetzt mit den eingeschalteten Werkzeugen erstellen, ändern und löschen. Deine Bestätigung ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du jederzeit zurück auf Lesend schalten."
+msgid "Full is on. Assistants can now create, change and delete, and read code, files, the database, logs and credentials, through the tools that are switched on. Your confirmation is recorded with your account, the time and the version of the notice. You can switch back to Read at the top of this page at any time."
+msgstr "Full ist eingeschaltet. Assistenten können jetzt mit den eingeschalteten Werkzeugen erstellen, ändern und löschen sowie Code, Dateien, die Datenbank, Protokolle und Zugangsdaten lesen. Deine Bestätigung ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du jederzeit zurück auf Lesend schalten."
 
 msgid "Full is on; no confirmation on the settings page is recorded for it."
 msgstr "Full ist eingeschaltet; eine Bestätigung auf der Einstellungsseite ist dafür nicht festgehalten."
@@ -74,8 +78,8 @@ msgstr "Full wurde nicht eingeschaltet: Setze das Häkchen unter dem Hinweis, um
 msgid "I understand that switching to Full can be destructive and is at my own risk, and I have a current backup."
 msgstr "Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup."
 
-msgid "In Full the tools that are switched on may write; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read keep the switch they had."
-msgstr "Im Modus Full dürfen die eingeschalteten Werkzeuge schreiben; schreibende Werkzeuge, die mit Mighty markiert sind und vor diesem Update ausgeschaltet waren, sind ebenfalls eingeschaltet, und du kannst sie unter Feineinstellung ausschalten. Werkzeuge, die mit Mighty markiert sind und nur lesen, behalten ihren bisherigen Schalter."
+msgid "In Full the tools that are switched on run; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there."
+msgstr "Im Modus Full laufen die eingeschalteten Werkzeuge; schreibende Werkzeuge, die mit Mighty markiert sind und vor diesem Update ausgeschaltet waren, sind ebenfalls eingeschaltet, und du kannst sie unter Feineinstellung ausschalten. Werkzeuge, die mit Mighty markiert sind und nur lesen, laufen nur im Modus Full, und eines, das vor diesem Update ausgeschaltet war, bleibt dort ausgeschaltet."
 
 #, php-format
 msgid "Mode: %s"
@@ -84,8 +88,8 @@ msgstr "Modus: %s"
 msgid "Noted. The mode of this site is shown at the top of this page."
 msgstr "Notiert. Der Modus dieser Website steht oben auf dieser Seite."
 
-msgid "On this site, tools marked Mighty that only read and were off before the update that brought the modes stay off until you switch them on here."
-msgstr "Auf dieser Website bleiben Werkzeuge, die mit Mighty markiert sind, nur lesen und vor dem Update mit den Modi ausgeschaltet waren, ausgeschaltet, bis du sie hier einschaltest."
+msgid "On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here."
+msgstr "Auf dieser Website bleiben Werkzeuge, die mit Mighty markiert sind, nur lesen und vor dem Update mit den Modi ausgeschaltet waren, im Modus Full ausgeschaltet, bis du sie hier einschaltest."
 
 msgid "Open Settings → AlphaBridge MCP"
 msgstr "Einstellungen → AlphaBridge MCP öffnen"
@@ -94,11 +98,11 @@ msgctxt "site mode"
 msgid "Read"
 msgstr "Lesend"
 
-msgid "Read is on. Assistants can only read; every tool that creates, changes or deletes is refused."
-msgstr "Lesend ist eingeschaltet. Assistenten können nur lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen."
+msgid "Read is on. Assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every tool that reads code, files, the database, logs or credentials, is refused."
+msgstr "Lesend ist eingeschaltet. Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, und jedes, das Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten liest, wird abgewiesen."
 
-msgid "Since this update the plugin starts in the mode Read on every site: assistants can read, and every tool that creates, changes or deletes is refused. To let them write again, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk."
-msgstr "Seit diesem Update startet das Plugin auf jeder Website im Modus Lesend: Assistenten können lesen, und jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen. Damit sie wieder schreiben können, schaltet ein Administrator oben unter Einstellungen → AlphaBridge MCP auf Full um – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko."
+msgid "Since this update the plugin starts in the mode Read on every site: assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool that reads code, files, the database, logs or credentials. To let them write again or read those, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk."
+msgstr "Seit diesem Update startet das Plugin auf jeder Website im Modus Lesend: Assistenten können Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website lesen; jedes Werkzeug, das etwas erstellt, ändert oder löscht, wird abgewiesen, ebenso jedes Werkzeug, das Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten liest. Damit sie wieder schreiben oder diese lesen können, schaltet ein Administrator oben unter Einstellungen → AlphaBridge MCP auf Full um – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko."
 
 msgid "Switch back to Read"
 msgstr "Zurück auf Lesend schalten"
@@ -118,10 +122,6 @@ msgstr "Das Werkzeug „%s“ ist in den Einstellungen von AlphaBridge MCP ausge
 
 msgid "This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full."
 msgstr "Diese Website ist im Modus Lesend: Gleich, welche Zugriffsstufe du wählst, kann die Verbindung nur lesen, bis ein Administrator AlphaBridge MCP auf Full umschaltet."
-
-#, php-format
-msgid "Tools marked Mighty that only read run in Read too: %s. Switch them off under Fine-tuning if assistants should not use them."
-msgstr "Auch Werkzeuge, die mit Mighty markiert sind und nur lesen, laufen im Modus Lesend: %s. Schalte sie unter Feineinstellung aus, wenn Assistenten sie nicht nutzen sollen."
 
 msgid "Unknown mode; nothing was changed. Use the switch at the top of this page."
 msgstr "Unbekannter Modus; nichts wurde geändert. Nutze den Schalter oben auf dieser Seite."

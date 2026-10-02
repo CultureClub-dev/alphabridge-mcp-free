@@ -1119,9 +1119,10 @@ class AB_MCP_REST_Controller {
 
 		foreach ( $this->registry->all() as $name => $def ) {
 			// Disabled tools are removed from the MCP surface entirely. The
-			// site mode does not filter: in Read the writing tools stay listed,
-			// as they did under the read-only switch before it, so a client
-			// learns they exist, and a call answers with the way to Full
+			// site mode does not filter: in Read the tools it refuses (the
+			// writing ones and the Mighty readers) stay listed, as the writing
+			// ones did under the read-only switch before it, so a client learns
+			// they exist, and a call answers with the way to Full
 			// (AB_MCP_Site_Mode::refusal()). The server instructions say so too.
 			if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 				continue;

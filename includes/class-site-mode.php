@@ -2,12 +2,15 @@
 /**
  * The site mode: Read or Full.
  *
- * Out of the box AlphaBridge MCP only reads. In Read, every tool that
- * AB_MCP_Tool_Registry::is_read_only() does not classify as reading is
- * refused, whatever its switch says and whatever the connection's access
- * level allows. Full lets the switched-on tools write, the powerful ones
- * included, and an administrator turns it on only by confirming a notice that
- * it can be destructive and is at the site owner's own risk.
+ * Out of the box AlphaBridge MCP only reads, and only the ordinary things:
+ * content, media, terms, comments, settings and how the site is built. In
+ * Read, every tool that AB_MCP_Tool_Registry::is_read_only() does not
+ * classify as reading is refused, and so is every reading tool marked Mighty
+ * (AB_MCP_Tool_Registry::is_mighty(): the readers of code, files, the
+ * database, logs or credentials), whatever its switch says and whatever the
+ * connection's access level allows. Full lets the switched-on tools run, the
+ * powerful ones included, and an administrator turns it on only by confirming
+ * a notice that it can be destructive and is at the site owner's own risk.
  *
  * The mode lives in the plugin's own option (AB_MCP_Settings::OPT_OPTIONS,
  * key 'site_mode'), so it is per site on a multisite network. Anything stored
@@ -90,26 +93,54 @@ class AB_MCP_Site_Mode {
 	}
 
 	/**
-	 * May a tool run in the current mode? In Read only the tools the
-	 * registry classifies as reading; an unknown tool counts as writing there.
-	 * The tool's own switch and the token scope are checked separately.
+	 * May a tool run in the current mode? In Full, yes; in Read only when
+	 * runs_in_read() says so. The tool's own switch and the token scope are
+	 * checked separately.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
 	 * @return bool
 	 */
 	public static function allows( $name, array $def ) {
-		return self::is_full() || AB_MCP_Tool_Registry::is_read_only( (string) $name, $def );
+		return self::is_full() || self::runs_in_read( $name, $def );
 	}
 
 	/**
-	 * The answer to a writing tool called in Read. It names the way: who can
-	 * switch, where, and what switching means.
+	 * Does a tool run in Read? Only a tool the registry classifies as
+	 * reading (an unknown tool counts as writing) and that is not marked
+	 * Mighty. A Mighty reader writes nothing, but what it reads — code, files,
+	 * the database, logs, credentials — is what the site owner opens with
+	 * Full, not what Read promises.
 	 *
 	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return bool
+	 */
+	public static function runs_in_read( $name, array $def ) {
+		return AB_MCP_Tool_Registry::is_read_only( (string) $name, $def ) && ! AB_MCP_Tool_Registry::is_mighty( $def );
+	}
+
+	/**
+	 * The answer to a tool that Read refuses. It says why — the tool writes,
+	 * or it is a Mighty reader, the only reading kind Read refuses — and names
+	 * the way: who can switch, where, and what switching means.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition; without one the name decides, as
+	 *                     in AB_MCP_Tool_Registry::is_read_only().
 	 * @return WP_Error
 	 */
-	public static function refusal( $name ) {
+	public static function refusal( $name, array $def = array() ) {
+		if ( AB_MCP_Tool_Registry::is_read_only( (string) $name, $def ) ) {
+			return new WP_Error(
+				'ab_mcp_read_mode',
+				sprintf(
+					/* translators: %s: tool name */
+					__( 'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty and reads what read mode keeps closed: code, files, the database, logs or credentials. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.', 'alphabridge-mcp' ),
+					(string) $name
+				)
+			);
+		}
 		return new WP_Error(
 			'ab_mcp_read_mode',
 			sprintf(
@@ -176,7 +207,8 @@ class AB_MCP_Site_Mode {
 
 	/**
 	 * The sentence the server instructions carry in Read, so an assistant
-	 * knows before its first call why writing fails and whom to ask.
+	 * knows before its first call why writing, and reading code, files, the
+	 * database, logs or credentials, fails and whom to ask.
 	 *
 	 * Not translated: the instructions are written for the assistant, in
 	 * the language of the rest of them.
@@ -184,7 +216,7 @@ class AB_MCP_Site_Mode {
 	 * @return string
 	 */
 	public static function instructions_sentence() {
-		return 'READ MODE: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes is refused until an administrator switches it to Full at the top of Settings → AlphaBridge MCP.';
+		return 'READ MODE: AlphaBridge MCP only reads on this site, and no code, files, database, logs or credentials, so every tool that creates, changes or deletes and every tool that reads those is refused until an administrator switches it to Full at the top of Settings → AlphaBridge MCP.';
 	}
 
 	/**

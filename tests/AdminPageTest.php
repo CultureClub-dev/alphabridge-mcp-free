@@ -200,7 +200,7 @@ final class AdminPageTest extends TestCase {
 		self::assertSame( 'Fine-tuning (for advanced users)', trim( $x->query( './summary//*[contains(@class, "ab-eyebrow")]', $card )->item( 0 )->textContent ) );
 		self::assertSame( 1, $x->query( './/form[@id="ab-caps"]', $card )->length, 'The form is inside the folded card.' );
 		self::assertStringContainsString( 'Every tool is on until you switch it off here.', $card->textContent );
-		self::assertStringContainsString( 'in Read every tool that writes is refused', $card->textContent );
+		self::assertStringContainsString( 'in Read every tool that writes and every tool marked Mighty is refused', $card->textContent );
 	}
 
 	public function testANewSiteHasEveryToolSwitchedOn(): void {
