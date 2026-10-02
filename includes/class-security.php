@@ -28,7 +28,7 @@ class AB_MCP_Security {
 				'ab_mcp_forbidden',
 				sprintf(
 					/* translators: 1: tool, 2: capability */
-					__( 'Your account lacks the capability "%2$s" required by "%1$s".', 'alphabridge-mcp' ),
+					__( 'Your account lacks the capability "%2$s" required by "%1$s". Connect with an account whose role has it, or ask an administrator to give your account such a role.', 'alphabridge-mcp' ),
 					$name,
 					$def['capability']
 				)
@@ -55,7 +55,7 @@ class AB_MCP_Security {
 				'ab_mcp_tool_disabled',
 				sprintf(
 					/* translators: %s: tool */
-					__( 'The tool "%s" is disabled in the AlphaBridge MCP settings.', 'alphabridge-mcp' ),
+					__( 'The tool "%s" is disabled in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Capabilities.', 'alphabridge-mcp' ),
 					$name
 				)
 			);
@@ -72,7 +72,7 @@ class AB_MCP_Security {
 				'ab_mcp_scope',
 				sprintf(
 					/* translators: 1: tool, 2: scope */
-					__( 'The token used is limited to the "%2$s" scope, which does not include the tool "%1$s". Use a wider-scoped token.', 'alphabridge-mcp' ),
+					__( 'The token used is limited to the "%2$s" scope, which does not include the tool "%1$s". Use a wider-scoped token: connect the app again and choose a wider access level on the consent screen, or have an administrator create a connection with wider access under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ),
 					$name,
 					AB_MCP_Auth::current_scope()
 				)
@@ -103,7 +103,11 @@ class AB_MCP_Security {
 			if ( $count > $per_min ) {
 				return new WP_Error(
 					'ab_mcp_rate_limited',
-					__( 'Rate limit reached (per minute). Please slow down.', 'alphabridge-mcp' )
+					sprintf(
+						/* translators: %d: tool calls per minute */
+						__( 'Rate limit reached (per minute): at most %d tool calls per minute for each account. Wait until the next minute, then continue.', 'alphabridge-mcp' ),
+						$per_min
+					)
 				);
 			}
 		}
@@ -169,7 +173,7 @@ class AB_MCP_Security {
 					}
 					if ( is_string( $value ) && strlen( $value ) > 8 * 1024 * 1024 ) {
 						/* translators: %s: argument name */
-						$problems[] = sprintf( __( '"%s" exceeds the 8 MB size limit', 'alphabridge-mcp' ), $key );
+						$problems[] = sprintf( __( '"%s" exceeds the 8 MB size limit (send less per call; a large file is fetched from a public address with wp_upload_media_from_url)', 'alphabridge-mcp' ), $key );
 					}
 					break;
 				case 'integer':
@@ -188,7 +192,7 @@ class AB_MCP_Security {
 					}
 					if ( count( $value ) > 2000 ) {
 						/* translators: %s: argument name */
-						$problems[] = sprintf( __( '"%s" has too many items (max 2000)', 'alphabridge-mcp' ), $key );
+						$problems[] = sprintf( __( '"%s" has too many items (max 2000; split them across several calls)', 'alphabridge-mcp' ), $key );
 					}
 					break;
 			}

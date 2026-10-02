@@ -386,7 +386,7 @@ class AB_MCP_REST_Controller {
 			if ( ! $match ) {
 				return new WP_Error(
 					'ab_mcp_bad_origin',
-					__( 'Origin not allowed.', 'alphabridge-mcp' ),
+					__( 'Origin not allowed: a browser page may call this endpoint only from this site, and a site owner can allow further origins with the ab_mcp_allowed_origins filter. Clients that call from a server send no Origin header.', 'alphabridge-mcp' ),
 					array( 'status' => 403 )
 				);
 			}
@@ -396,7 +396,7 @@ class AB_MCP_REST_Controller {
 		if ( ! $user_id ) {
 			return new WP_Error(
 				'ab_mcp_unauthorized',
-				__( 'Invalid or missing bearer token.', 'alphabridge-mcp' ),
+				__( 'Invalid or missing bearer token. Send the connection\'s token as "Authorization: Bearer …" or connect again; an administrator manages connections under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ),
 				array( 'status' => 401 )
 			);
 		}
@@ -485,7 +485,7 @@ class AB_MCP_REST_Controller {
 			if ( count( $body ) > AB_MCP_MAX_BATCH ) {
 				return $this->secure(
 					new WP_REST_Response(
-						$this->error( null, -32600, sprintf( 'Batch too large: max %d messages per request.', AB_MCP_MAX_BATCH ) ),
+						$this->error( null, -32600, sprintf( 'Batch too large: max %d messages per request. Send the rest in further requests.', AB_MCP_MAX_BATCH ) ),
 						200
 					)
 				);
@@ -1104,7 +1104,7 @@ class AB_MCP_REST_Controller {
 			);
 		}
 
-		return $this->error( $id, -32602, 'Unknown prompt: ' . $name );
+		return $this->error( $id, -32602, 'Unknown prompt: ' . $name . '. prompts/list names the prompts this server offers.' );
 	}
 
 	/**
@@ -1210,7 +1210,7 @@ class AB_MCP_REST_Controller {
 		$def = $this->registry->get( $name );
 		if ( ! $def ) {
 			/* translators: %s: tool name */
-			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s', 'alphabridge-mcp' ), $name ) ) );
+			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.', 'alphabridge-mcp' ), $name ) ) );
 		}
 
 		$authorized = AB_MCP_Security::authorize( $name, $def );
@@ -1227,7 +1227,7 @@ class AB_MCP_REST_Controller {
 		}
 
 		if ( ! is_callable( $def['callback'] ) ) {
-			return $this->result( $id, $this->tool_error( __( 'Tool has no handler.', 'alphabridge-mcp' ) ) );
+			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ) ) );
 		}
 
 		try {
@@ -1236,7 +1236,7 @@ class AB_MCP_REST_Controller {
 			// The real exception text (which can name file paths, SQL or internal
 			// state) goes to the audit log only; the client gets a generic message.
 			AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage() );
-			return $this->result( $id, $this->tool_error( __( 'The tool failed with an internal error. Check the AlphaBridge MCP log for details.', 'alphabridge-mcp' ) ) );
+			return $this->result( $id, $this->tool_error( __( 'The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ) ) );
 		}
 
 		if ( is_wp_error( $result ) ) {

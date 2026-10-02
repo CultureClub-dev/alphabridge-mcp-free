@@ -1193,8 +1193,8 @@ final class AB_MCP_Builders {
 			return sprintf( __( 'post_content is what the site shows, but %1$s keeps its own copy of the page and restores it the next time the page is saved in %2$s. Read the page with wp_get_builder_layout.', 'alphabridge-mcp' ), $name, $name );
 		}
 		if ( 'C' === $primary['storage'] ) {
-			/* translators: %s: page builder name */
-			return sprintf( __( '%s keeps this page in its own database tables, which no tool here reads.', 'alphabridge-mcp' ), $name );
+			/* translators: %1$s, %2$s: page builder name */
+			return sprintf( __( '%1$s keeps this page in its own database tables, which no tool here reads; read and change it in the %2$s editor in wp-admin.', 'alphabridge-mcp' ), $name, $name );
 		}
 		return '';
 	}

@@ -223,10 +223,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$src = get_post( self::i( $a, 'id' ) );
 		if ( ! $src ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $src->ID ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// A copy of a file would have no file behind it, and "draft" makes it
 		// "inherit": its title, caption and description would be as visible as
@@ -241,7 +241,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$pto = get_post_type_object( $src->post_type );
 		if ( ! $pto || ! current_user_can( $pto->cap->create_posts ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type. Connect with an account whose role may create them, or ask an administrator for that right.', 'alphabridge-mcp' ) );
 		}
 		// post_content_filtered holds what SeedProd's editor opens, as JSON
 		// (measured 30.09.2026). WordPress runs it through kses for an account
@@ -312,21 +312,21 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$id = self::i( $a, 'id' );
 		if ( ! get_post( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
 			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'post' ) || self::is_sensitive_meta_key( $key ) ) {
-				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder\'s layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Deliberately strict read rule: exposing a key over MCP requires the
 			// key's edit capability, which honours auth_callback rules that other
 			// plugins registered via register_meta().
 			if ( ! current_user_can( 'edit_post_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'id'    => $id,
@@ -463,10 +463,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$post = get_post( self::i( $a, 'id' ) );
 		if ( ! $post ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $post->ID ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 
 		if ( ! self::raw_content_allowed( $post ) ) {
@@ -522,7 +522,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$type = self::s( $a, 'type', 'post' ) ?: 'post';
 		$pto  = get_post_type_object( $type );
 		if ( ! $pto ) {
-			return new WP_Error( 'ab_mcp_invalid_type', __( 'Unknown post type.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_type', __( 'Unknown post type. wp_get_post_types lists the post types of this site; pass one of their names as type.', 'alphabridge-mcp' ) );
 		}
 		// A file created here would have no file behind it: an attachment page
 		// and a REST entry with whatever text was given — and "draft" stored as
@@ -532,10 +532,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		// A parent given as a list would reach WordPress as 1, an unrelated post.
 		if ( array_key_exists( 'parent', $a ) && null !== $a['parent'] && ! is_scalar( $a['parent'] ) ) {
-			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id: pass an integer, 0 for none.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $pto->cap->create_posts ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot create entries of this post type. Connect with an account whose role may create them, or ask an administrator for that right.', 'alphabridge-mcp' ) );
 		}
 		$refused = self::builder_meta_refusal( $a, null );
 		if ( null !== $refused ) {
@@ -544,11 +544,11 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$status = self::s( $a, 'status', 'draft' ) ?: 'draft';
 		if ( ! self::is_allowed_status( $status ) ) {
-			return new WP_Error( 'ab_mcp_invalid_status', __( 'Unsupported post status.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_status', __( 'Unsupported post status. This tool sets draft, pending, publish, private and future; a site owner can allow further statuses with the ab_mcp_allowed_post_statuses filter.', 'alphabridge-mcp' ) );
 		}
 		// publish, private and future all require the post type's publish capability.
 		if ( in_array( $status, array( 'publish', 'private', 'future' ), true ) && ! current_user_can( $pto->cap->publish_posts ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot publish; use status "draft" or "pending", and someone who may publish can then publish it.', 'alphabridge-mcp' ) );
 		}
 
 		$postarr = array(
@@ -625,10 +625,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$id = self::i( $a, 'id' );
 		if ( ! get_post( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 
 		$post = get_post( $id );
@@ -659,7 +659,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		// publish: WordPress stores them as "inherit" (see below).
 		$cannot_publish = 'attachment' === $post->post_type
 			? __( 'You cannot publish: this status needs the right to publish. For a file, "draft" and "pending" do not help: WordPress stores them as "inherit", so the file follows its parent. Ask someone who can publish.', 'alphabridge-mcp' )
-			: __( 'You cannot publish; use status "draft" or "pending".', 'alphabridge-mcp' );
+			: __( 'You cannot publish; use status "draft" or "pending", and someone who may publish can then publish it.', 'alphabridge-mcp' );
 
 		// A status given as null or a list is refused like an unknown one: it
 		// would reach WordPress as "", which it stores as "draft" — a published
@@ -669,7 +669,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			$new_status = is_scalar( $a['status'] ) ? (string) $a['status'] : '';
 			$asked      = $new_status;
 			if ( ! self::is_allowed_status( $new_status ) ) {
-				return new WP_Error( 'ab_mcp_invalid_status', __( 'Unsupported post status.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_invalid_status', __( 'Unsupported post status. This tool sets draft, pending, publish, private and future; a site owner can allow further statuses with the ab_mcp_allowed_post_statuses filter.', 'alphabridge-mcp' ) );
 			}
 			// Moving a post to publish, private or future needs the publish capability.
 			if ( in_array( $new_status, array( 'publish', 'private', 'future' ), true )
@@ -681,7 +681,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		// Nor is a parent given as null or a list: it would reach WordPress as
 		// 0 — a file taken off its post, a page moved to the top level.
 		if ( array_key_exists( 'parent', $a ) && ! is_scalar( $a['parent'] ) ) {
-			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_parent', __( 'The parent must be a post id: pass an integer, 0 for none.', 'alphabridge-mcp' ) );
 		}
 		// A file shows in its parent's gallery and attached media: another post
 		// as its parent needs the right to edit that post, as the upload tools
@@ -691,13 +691,13 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( $new_parent > 0 && (int) $post->post_parent !== $new_parent ) {
 				$target = get_post( $new_parent );
 				if ( ! $target ) {
-					return new WP_Error( 'ab_mcp_not_found', __( 'The parent post does not exist.', 'alphabridge-mcp' ) );
+					return new WP_Error( 'ab_mcp_not_found', __( 'The parent post does not exist. Look it up with wp_list_posts, or pass 0 to attach the file to no post.', 'alphabridge-mcp' ) );
 				}
 				if ( in_array( $target->post_type, array( 'revision', 'attachment' ), true ) ) {
-					return new WP_Error( 'ab_mcp_invalid_parent', __( 'A file cannot be attached to a revision or to another file.', 'alphabridge-mcp' ) );
+					return new WP_Error( 'ab_mcp_invalid_parent', __( 'A file cannot be attached to a revision or to another file. Attach it to the post itself (for a revision, the post it belongs to).', 'alphabridge-mcp' ) );
 				}
 				if ( ! current_user_can( 'edit_post', $new_parent ) ) {
-					return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post.', 'alphabridge-mcp' ) );
+					return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post: your account may not edit it. Choose a post your account may edit, or ask someone who may edit that post.', 'alphabridge-mcp' ) );
 				}
 			}
 		}
@@ -790,7 +790,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( $untrash ) {
 			$previous = (string) get_post_meta( $id, '_wp_trash_meta_status', true );
 			if ( null !== apply_filters( 'pre_untrash_post', null, $post, $previous ) ) {
-				return new WP_Error( 'ab_mcp_untrash_refused', __( 'A plugin keeps this post in the trash; nothing was written.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_untrash_refused', __( 'A plugin keeps this post in the trash (a pre_untrash_post filter refused); nothing was written. Restoring it in wp-admin meets the same filter: ask the site administrator which plugin holds it.', 'alphabridge-mcp' ) );
 			}
 			do_action( 'untrash_post', $id, $previous );
 		}
@@ -813,7 +813,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			do_action( 'untrashed_post', $id, $previous );
 		}
 		if ( ! $res || is_wp_error( $res ) ) {
-			return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the post, so nothing was written; a plugin may have stopped the save. Check the post with wp_get_post, then try again, or save it in wp-admin, where WordPress shows its own reason.', 'alphabridge-mcp' ) );
 		}
 
 		self::apply_meta_and_terms( $id, $a );
@@ -1079,10 +1079,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$id   = self::i( $a, 'id' );
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'delete_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this specific post. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$force = self::b( $a, 'force', false );
 		if ( ! $force ) {
@@ -1111,7 +1111,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			wp_trash_post( $id );
 			$after = get_post( $id );
 			if ( ! $after || 'trash' !== (string) $after->post_status ) {
-				return new WP_Error( 'ab_mcp_trash_failed', __( 'The post could not be moved to the trash.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_trash_failed', __( 'The post could not be moved to the trash and is unchanged; a plugin may keep it out (WordPress asks the pre_trash_post filter first). Ask the site administrator, or delete it for good with force=true, which cannot be undone.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'deleted'   => true,
@@ -1121,7 +1121,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$res = wp_delete_post( $id, true );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the post, so it is unchanged; a plugin may have stopped it. Check it with wp_get_post, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted'   => true,
@@ -1143,15 +1143,15 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$post = get_post( self::i( $a, 'id' ) );
 		if ( ! $post ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $post->ID ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// Revisions belong to whoever may edit the post (the REST API's rule);
 		// reading the post is not enough to see its history.
 		if ( ! current_user_can( 'edit_post', $post->ID ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this post, so its revisions are not available.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this post, so its revisions are not available. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$revs = wp_get_post_revisions( $post->ID );
 		$out  = array();

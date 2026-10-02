@@ -300,12 +300,12 @@ abstract class AB_MCP_Tools_Base {
 		if ( 'revision' === $post->post_type ) {
 			return new WP_Error(
 				'ab_mcp_forbidden',
-				__( 'Revisions are available only to an account that may edit the post.', 'alphabridge-mcp' )
+				__( 'Revisions are available only to an account that may edit the post. Connect with such an account, such as an editor or an administrator.', 'alphabridge-mcp' )
 			);
 		}
 		return new WP_Error(
 			'ab_mcp_password_protected',
-			__( 'This post is password-protected. Its text is available over MCP only to an account that may edit the post.', 'alphabridge-mcp' )
+			__( 'This post is password-protected. Its text is available over MCP only to an account that may edit the post: connect with such an account.', 'alphabridge-mcp' )
 		);
 	}
 
@@ -502,7 +502,7 @@ abstract class AB_MCP_Tools_Base {
 		switch ( $reason ) {
 			case 'no-such-date':
 				/* translators: %s: the date as given. */
-				$message = sprintf( __( 'No such date or time: "%s".', 'alphabridge-mcp' ), $value );
+				$message = sprintf( __( 'No such date or time: "%s". Give a real day and time of day, as "Y-m-d H:i:s" in site time or RFC 3339 with an offset.', 'alphabridge-mcp' ), $value );
 				break;
 			case 'skipped':
 				/* translators: %s: the date as given. */
@@ -510,7 +510,7 @@ abstract class AB_MCP_Tools_Base {
 				break;
 			case 'year':
 				/* translators: %s: the date as given. */
-				$message = sprintf( __( '"%s" falls outside the years WordPress can store (1 to 9999).', 'alphabridge-mcp' ), $value );
+				$message = sprintf( __( '"%s" falls outside the years WordPress can store (1 to 9999). Choose a date within them.', 'alphabridge-mcp' ), $value );
 				break;
 			case 'repeated':
 				/* translators: 1: the date as given, 2: the same local time as WordPress reads it. */

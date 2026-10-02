@@ -82,7 +82,7 @@ class AB_MCP_Tools_Builders extends AB_MCP_Tools_Base {
 		}
 		$post = get_post( self::i( $a, 'id' ) );
 		if ( ! $post ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		// The outline reads the builder's own stored data, protected keys
 		// included, so it is for whoever may edit the post — for a revision,
@@ -147,8 +147,8 @@ class AB_MCP_Tools_Builders extends AB_MCP_Tools_Base {
 				$elements  = array_slice( $elements, 0, $limit );
 			}
 		} else {
-			/* translators: %s: page builder name */
-			$notes[] = sprintf( __( 'No reader for %s on this site yet, so its elements are not listed. copies says where the page is stored.', 'alphabridge-mcp' ), $name );
+			/* translators: %1$s, %2$s: page builder name */
+			$notes[] = sprintf( __( 'No reader for %1$s on this site yet, so its elements are not listed. copies says where the page is stored, and write_via which tools change it with a visible effect; otherwise change it in the %2$s editor in wp-admin.', 'alphabridge-mcp' ), $name, $name );
 		}
 
 		$unverified = 0;

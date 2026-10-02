@@ -124,7 +124,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	const DENIED_NAME_WORDS = array( 'tag', 'tags', 'key', 'keys', 'apikey', 'api', 'token', 'tokens', 'secret', 'password', 'passwd', 'pwd', 'nonce', 'webhook', 'webhooks' );
 
 	/** Note on widgets locked because Elementor is not loaded and the table does not know them. */
-	const NOTE_NOT_LOADED = 'Elementor is not loaded here, so only the widgets of AlphaBridge\'s own table are read';
+	const NOTE_NOT_LOADED = 'Elementor is not loaded here, so only the widgets of AlphaBridge\'s own table are read; with Elementor active, read the page again to have every registered widget read through Elementor\'s own controls';
 
 	/** Note on an element Elementor has not registered (V3, or V4 while the Atomic Editor is on). */
 	const NOTE_UNREGISTERED = 'not registered on this site, for example because its plugin is inactive: Elementor does not show it, and saving the page in Elementor removes it; activate that plugin, and until then do not save this page in the Elementor editor';
@@ -688,7 +688,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				);
 			}
 			// Registered, but its controls could not be read: the table, if it knows the type.
-			$unknown = 'Elementor could not list the controls of this element, so it is read only if AlphaBridge\'s own table knows it';
+			$unknown = 'Elementor could not list the controls of this element, and AlphaBridge\'s own table does not know its type, so its fields are not read; change it in the Elementor editor';
 		}
 
 		if ( $atomic ) {

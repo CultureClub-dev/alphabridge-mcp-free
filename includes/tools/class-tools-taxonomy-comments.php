@@ -216,10 +216,10 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function get_term_tool( $a ) {
 		$term = get_term( self::i( $a, 'term_id' ), self::s( $a, 'taxonomy' ) );
 		if ( ! $term || is_wp_error( $term ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term of this taxonomy has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
 		}
 		if ( ! self::can_read_taxonomy( get_taxonomy( $term->taxonomy ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'term_id'     => (int) $term->term_id,
@@ -241,7 +241,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function get_comment_tool( $a ) {
 		$c = get_comment( self::i( $a, 'comment_id' ) );
 		if ( ! $c ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'comment_id' => (int) $c->comment_ID,
@@ -265,10 +265,10 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function list_terms( $a ) {
 		$tax = self::s( $a, 'taxonomy' );
 		if ( ! taxonomy_exists( $tax ) ) {
-			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! self::can_read_taxonomy( get_taxonomy( $tax ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator.', 'alphabridge-mcp' ) );
 		}
 		$terms = get_terms(
 			array(
@@ -303,14 +303,14 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function create_term( $a ) {
 		$tax = self::s( $a, 'taxonomy' );
 		if ( ! taxonomy_exists( $tax ) ) {
-			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		$tax_obj = get_taxonomy( $tax );
 		if ( ! $tax_obj ) {
-			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->manage_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// wp_insert_term() unslashes exactly two of these — name and
 		// description — so only those are slashed. Slashing the slug would add
@@ -343,14 +343,14 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$tax = self::s( $a, 'taxonomy' );
 		$id  = self::i( $a, 'term_id' );
 		if ( ! taxonomy_exists( $tax ) ) {
-			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		$tax_obj = get_taxonomy( $tax );
 		if ( ! $tax_obj ) {
-			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->edit_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$fields = array();
 		foreach ( array( 'name', 'slug', 'description' ) as $k ) {
@@ -384,17 +384,17 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$tax = self::s( $a, 'taxonomy' );
 		$tax_obj = get_taxonomy( $tax );
 		if ( ! $tax_obj ) {
-			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_invalid_tax', __( 'Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( $tax_obj->cap->delete_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$res = wp_delete_term( self::i( $a, 'term_id' ), $tax );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the term: no term of this taxonomy has this id, or it is the taxonomy\'s default term (such as the default category), which WordPress keeps. Check the id with wp_list_terms; a default category can be deleted once another one is the default (Settings → Writing in wp-admin).', 'alphabridge-mcp' ) );
 		}
 		return array( 'deleted' => true );
 	}
@@ -452,7 +452,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$id     = self::i( $a, 'comment_id' );
 		$status = self::s( $a, 'status' );
 		if ( ! get_comment( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
 		}
 
 		if ( 'spam' === $status ) {
@@ -481,7 +481,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function reply_comment( $a ) {
 		$post_id = self::i( $a, 'post_id' );
 		if ( ! get_post( $post_id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		$user = wp_get_current_user();
 		// wp_insert_comment() unslashes the whole array it is given.
@@ -497,7 +497,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			) )
 		);
 		if ( ! $id ) {
-			return new WP_Error( 'ab_mcp_comment_failed', __( 'Could not create comment.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_comment_failed', __( 'WordPress did not save the comment, so nothing was written. Try again; if it keeps failing, ask the site administrator to check the database.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'created'    => true,
@@ -514,11 +514,11 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	public static function delete_comment( $a ) {
 		$id = self::i( $a, 'comment_id' );
 		if ( ! get_comment( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
 		}
 		$res = wp_delete_comment( $id, self::b( $a, 'force', false ) );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the comment, so it is unchanged; a plugin may have stopped it. Check it with wp_get_comment and try again.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted'    => true,

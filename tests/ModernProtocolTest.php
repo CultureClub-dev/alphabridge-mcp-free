@@ -325,6 +325,7 @@ final class ModernProtocolTest extends TestCase {
 		self::assertTrue( $result['isError'] );
 		self::assertSame( 'complete', $result['resultType'], 'isError results need resultType too.' );
 		self::assertStringContainsString( 'Unknown tool', $result['content'][0]['text'] );
+		self::assertStringContainsString( 'tools/list', $result['content'][0]['text'], 'The answer names where the callable tools are listed.' );
 	}
 
 	public function testAToolBlockedByReadOnlyModeIsACompleteResultWithIsError(): void {

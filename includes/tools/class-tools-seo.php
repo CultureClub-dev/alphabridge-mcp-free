@@ -101,7 +101,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		return array(
 			'provider'  => $p,
 			'writable'  => in_array( $p, array( 'yoast', 'rankmath' ), true ),
-			'note'      => 'aioseo' === $p ? 'AIOSEO stores SEO data in a custom table; writing is not supported by this tool.' : '',
+			'note'      => 'aioseo' === $p ? 'AIOSEO stores SEO data in a custom table; writing is not supported by this tool. Its fields are edited in AIOSEO\'s panel in the post editor.' : '',
 		);
 	}
 
@@ -114,14 +114,14 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 	public static function get_seo( $a ) {
 		$id = self::i( $a, 'post_id' );
 		if ( ! get_post( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
 		// edit_post, not merely read_post: the SEO title/description/focus keyword
 		// are internal editorial metadata, so only someone who may edit the post
 		// should see them — an author should not read a colleague's SEO fields on
 		// a post they can only view.
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this specific post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$provider = self::provider();
 		$keys     = self::keys( $provider );
@@ -135,8 +135,8 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 			$out['focus_keyword'] = get_post_meta( $id, $keys['focus'], true );
 		} else {
 			$out['note'] = 'none' === $provider
-				? __( 'No supported SEO plugin detected.', 'alphabridge-mcp' )
-				: __( 'AIOSEO detected; reading its custom-table data is not supported here.', 'alphabridge-mcp' );
+				? __( 'No supported SEO plugin detected: this tool reads the fields of Yoast SEO and Rank Math. With neither active there are no SEO fields to read; the post\'s title and excerpt are in wp_get_post.', 'alphabridge-mcp' )
+				: __( 'AIOSEO detected; it keeps its fields in a table of its own, which this tool does not read. They are shown and edited in AIOSEO\'s panel in the post editor.', 'alphabridge-mcp' );
 		}
 		return $out;
 	}
