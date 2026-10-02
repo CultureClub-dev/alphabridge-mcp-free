@@ -1,39 +1,45 @@
 <?php
 /**
- * The site mode: Read out of the box, Full only on purpose.
+ * The main switch «Write access for AI assistants»: off out of the box, on
+ * only on purpose. The slugs stay those of 4.4.0: 'read' is write access off,
+ * 'full' write access on.
  *
  * What must hold:
  *
- * - A new installation and an updated one both start in Read. The read-only
- *   switch of earlier versions is gone after the update; administrators see
- *   a notice about the change once, until one of them dismisses it or
- *   switches the mode.
- * - In Read every tool the registry does not classify as reading is refused,
- *   wp_undo and unknown tools included, and so is every reading tool marked
- *   Mighty (the readers of code, files, the database, logs or credentials),
- *   whatever its switch and the token's scope say. Each answer says why and
- *   names the way: who switches, where, and that it is at the site owner's
- *   own risk. The refused tools stay listed, as the writing ones did under
- *   the read-only switch.
- * - Full lets every switched-on tool run, the powerful ones included, the
- *   Mighty readers too; the fine-tuning switches single tools and groups off
- *   again.
- * - Only an administrator switches, with the form's own nonce; Full only
- *   with the box under the notice ticked and for the notice in force, in
- *   the wording the form showed. Who, when, which notice in which wording,
- *   which plugin version and how (settings page or code) is recorded in the
- *   option, in the history of the mode and in the log; back to Read needs no
- *   box and keeps the record. «Clear log» leaves the history alone.
- * - After an update, a powerful tool that only reads keeps in Full, where
- *   alone it can run, what it had before: a saved off, and without a saved
- *   switch the old default, off — unless it is marked Mighty only since the
- *   site mode ('mighty_since'), which was on by default before. Powerful
- *   writing tools are on in Full whatever was saved.
- * - The switch is the first thing on the settings page; in Read its card
- *   says what assistants can read, an add-on adds what its tools read
- *   there, and the Mighty readers of code, files, the database, logs or
- *   credentials wait for Full; the band counts only what can run.
- * - The server instructions say Read in one sentence, whatever a filter does.
+ * - A new installation and one updated from before 4.4.0 both start with
+ *   write access off. The read-only switch of earlier versions is gone after
+ *   the update; administrators see a notice about the change once, until
+ *   one of them dismisses it or switches.
+ * - With write access off every tool the registry does not classify as
+ *   reading is refused, wp_undo and unknown tools included, and so is every
+ *   reading tool marked Mighty (the readers of code, files, the database,
+ *   logs or credentials), whatever its switch and the token's scope say. Each
+ *   answer says why, names the way (who switches, where, at the site owner's
+ *   own risk), links to the switch and asks the assistant to pass it on and
+ *   try again. The refused tools stay listed.
+ * - With write access on every switched-on tool runs, the powerful ones
+ *   included; the fine-tuning switches single tools and groups off again.
+ *   Switching write access on — on the page or by code — switches every tool
+ *   on, and add-ons switch their items on through ab_mcp_reset_switches; an
+ *   update alone resets nothing, and switching off keeps the switches.
+ * - Only an administrator switches, with the form's own nonce; on only with
+ *   the box under the notice (version 2) ticked and for the notice in force,
+ *   in the wording the form showed. Who, when, which notice in which
+ *   wording, which plugin version and how (settings page or code) is
+ *   recorded in the option, in the history and in the log; off needs no box
+ *   and keeps the record. A confirmation of notice version 1 (4.4.0) stays
+ *   valid. «Clear log» leaves the history alone.
+ * - A site that was in Full under 4.4.0 and saved no switches since keeps
+ *   the rule for switches saved before the modes until write access is
+ *   switched on again: a powerful tool that only reads keeps what it had, a
+ *   saved off, and without a saved switch the old default, off — unless it
+ *   is marked Mighty only since the site mode ('mighty_since').
+ * - The switch is the first thing on the settings page, a button with role
+ *   switch; its card says for whom it holds, what off and on mean (an add-on
+ *   adds what its tools read), and with write access on since when and by
+ *   whom; the band counts only what can run.
+ * - The server instructions say in one sentence that write access is off,
+ *   whatever a filter does.
  *
  * @package AlphaBridge_MCP
  */
@@ -101,6 +107,15 @@ final class SiteModeTest extends TestCase {
 
 	private static function full(): void {
 		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+	}
+
+	/**
+	 * A site updated from before the modes that went to Full under 4.4.0,
+	 * whose switch did not reset anything, and then got this version: the
+	 * update keeps the mode and the switches as they are.
+	 */
+	private static function full_under_440(): void {
+		AB_MCP_Settings::set( 'site_mode', 'full' );
 	}
 
 	/** Options as a version before the site mode left them. */
@@ -334,19 +349,20 @@ final class SiteModeTest extends TestCase {
 		foreach ( self::free_registry()->all() as $name => $def ) {
 			$res = AB_MCP_Security::authorize( $name, $def );
 			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) && empty( $def['dangerous'] ) ) {
-				self::assertTrue( $res, $name . ' reads and is not Mighty, so it runs in Read.' );
+				self::assertTrue( $res, $name . ' reads and is not Mighty, so it runs with write access off.' );
 				++$readers;
 				continue;
 			}
-			self::assertInstanceOf( WP_Error::class, $res, $name . ' writes or is Mighty, so Read refuses it.' );
+			self::assertInstanceOf( WP_Error::class, $res, $name . ' writes or is Mighty, so write access off refuses it.' );
 			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
+			self::assertStringContainsString( 'Direct link: https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode', $res->get_error_message() );
 			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
 				$mighty[] = $name;
-				self::assertStringContainsString( 'the tool "' . $name . '" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads', $res->get_error_message() );
+				self::assertStringContainsString( 'the tool "' . $name . '" did not run: it is one of the reading tools that run only with write access on', $res->get_error_message() );
 				continue;
 			}
 			++$writers;
-			self::assertStringContainsString( 'the tool "' . $name . '" writes', $res->get_error_message() );
+			self::assertStringContainsString( 'the tool "' . $name . '" did not run: it changes the site', $res->get_error_message() );
 		}
 		self::assertGreaterThan( 10, $writers );
 		self::assertGreaterThan( 10, $readers );
@@ -354,15 +370,19 @@ final class SiteModeTest extends TestCase {
 	}
 
 	public function testTheRefusalNamesWhoSwitchesWhereAndTheRisk(): void {
+		$way = ' To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.'
+			. ' Direct link: https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode'
+			. ' Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it.';
 		self::assertSame(
-			'AlphaBridge MCP is in read mode on this site; the tool "wp_update_post" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
+			'Write access is off on this site, so the tool "wp_update_post" did not run: it changes the site, and with write access off AI assistants only read.' . $way,
 			AB_MCP_Site_Mode::refusal( 'wp_update_post' )->get_error_message()
 		);
 		self::assertSame(
-			'AlphaBridge MCP is in read mode on this site; the tool "wp_db_query" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
+			'Write access is off on this site, so the tool "wp_db_query" did not run: it is one of the reading tools that run only with write access on.' . $way,
 			AB_MCP_Site_Mode::refusal( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_message()
 		);
 		self::assertSame( AB_MCP_Site_Mode::refusal( 'wp_frobnicate' )->get_error_message(), AB_MCP_Site_Mode::refusal( 'wp_frobnicate', array( 'dangerous' => true ) )->get_error_message(), 'A Mighty tool that writes is refused because it writes.' );
+		self::assertStringNotContainsString( 'Mighty', AB_MCP_Site_Mode::refusal( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_message(), 'The answer names what the person sees, not the internal mark.' );
 	}
 
 	/** @return array<string,array{0:string}> */
@@ -387,8 +407,8 @@ final class SiteModeTest extends TestCase {
 			$res = AB_MCP_Security::authorize( $name, $def );
 			self::assertInstanceOf( WP_Error::class, $res, $name . ' does not run in Read with scope ' . $scope );
 			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
-			self::assertStringContainsString( '"' . $name . '" is marked Mighty', $res->get_error_message() );
-			self::assertStringContainsString( 'switch to Full at the top of Settings → AlphaBridge MCP', $res->get_error_message(), 'The answer names the way.' );
+			self::assertStringContainsString( '"' . $name . '" did not run: it is one of the reading tools that run only with write access on', $res->get_error_message() );
+			self::assertStringContainsString( 'an administrator can switch on write access at the top of Settings → AlphaBridge MCP', $res->get_error_message(), 'The answer names the way.' );
 			self::assertStringContainsString( 'own risk', $res->get_error_message() );
 		}
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_get_post', array() ), 'An ordinary reader runs.' );
@@ -528,7 +548,7 @@ final class SiteModeTest extends TestCase {
 		$last = AB_MCP_Audit_Log::recent( 1 )[0];
 		self::assertSame( 'wp_create_post', $last['tool'] );
 		self::assertSame( 'denied', $last['status'] );
-		self::assertStringContainsString( 'read mode', $last['message'] );
+		self::assertStringContainsString( 'Write access is off', $last['message'] );
 		self::assertSame( array(), $GLOBALS['ab_test_inserted'], 'Nothing was written.' );
 	}
 
@@ -587,7 +607,7 @@ final class SiteModeTest extends TestCase {
 			}
 		}
 
-		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::full_under_440();
 		self::scope( 'full' );
 		foreach ( self::mighty_readers() as $name => $def ) {
 			$res = AB_MCP_Security::authorize( $name, $def );
@@ -596,6 +616,17 @@ final class SiteModeTest extends TestCase {
 			self::assertStringContainsString( 'Fine-tuning', $res->get_error_message(), 'The answer names the way.' );
 		}
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_delete_post', array( 'dangerous' => true ) ), 'A writing Mighty tool follows Full.' );
+
+		// Switching write access on, here or on the page, ends the rule of
+		// before: a switch from off to on, so off first on this site that is
+		// on already. A call while it is on changes nothing.
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::assertSame( 'ab_mcp_tool_disabled', AB_MCP_Security::authorize( 'wp_db_query', self::mighty_readers()['wp_db_query'] )->get_error_code(), 'Already on: nothing switched.' );
+		AB_MCP_Site_Mode::switch_to_read( 3 );
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		foreach ( self::mighty_readers() as $name => $def ) {
+			self::assertTrue( AB_MCP_Security::authorize( $name, $def ), $name . ' is on once write access is switched on.' );
+		}
 	}
 
 	public function testAfterTheUpdateAMightyReaderWithoutASavedSwitchStaysOffInFullToo(): void {
@@ -613,7 +644,7 @@ final class SiteModeTest extends TestCase {
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_db_execute', array( 'dangerous' => true ) ), 'One that writes waits for Full only.' );
 		self::assertTrue( AB_MCP_Settings::is_tool_enabled( 'wp_get_post', array() ), 'An ordinary one is on.' );
 
-		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::full_under_440();
 		$res = AB_MCP_Security::authorize( 'wp_deploy_read', $read );
 		self::assertInstanceOf( WP_Error::class, $res, 'Off in Full too.' );
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
@@ -628,7 +659,7 @@ final class SiteModeTest extends TestCase {
 		AB_MCP_Settings::maybe_upgrade();
 		self::assertSame( array(), get_option( 'ab_mcp_tool_state' ), 'Nothing saved.' );
 		self::assertTrue( AB_MCP_Settings::get( AB_MCP_Settings::KEY_LEGACY_SWITCHES, false ) );
-		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::full_under_440();
 		self::allow_everything();
 
 		foreach ( self::mighty_readers() as $name => $def ) {
@@ -661,7 +692,7 @@ final class SiteModeTest extends TestCase {
 		self::assertFalse( AB_MCP_Settings::is_tool_enabled( 'wp_db_tables', array( 'dangerous' => true ) ), 'Without the mark it was Mighty before, so off.' );
 		self::assertSame( 'ab_mcp_read_mode', AB_MCP_Security::authorize( 'wp_db_tables', $since )->get_error_code(), 'Read refuses it all the same.' );
 
-		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::full_under_440();
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_db_tables', $since ) );
 		self::assertSame( 'ab_mcp_tool_disabled', AB_MCP_Security::authorize( 'wp_db_schema', $since )->get_error_code(), 'Switched off before: off.' );
 	}
@@ -751,9 +782,12 @@ final class SiteModeTest extends TestCase {
 		$sentence   = AB_MCP_Site_Mode::instructions_sentence();
 
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', $sentence ), 'One sentence.' );
-		self::assertStringContainsString( 'switches it to Full at the top of Settings → AlphaBridge MCP', $sentence );
-		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused', $sentence, 'Says that the Mighty readers wait for Full too.' );
-		self::assertStringNotContainsString( 'no code, files, database, logs or credentials', $sentence, 'Not more than the mode keeps: ordinary readers may meet a credential a guard does not recognise.' );
+		self::assertStringStartsWith( 'WRITE ACCESS IS OFF: ', $sentence );
+		self::assertStringContainsString( 'until an administrator switches on write access at the top of Settings → AlphaBridge MCP (https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode)', $sentence );
+		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused', $sentence, 'Says that the readers of code, files, the database, logs or credentials wait for write access too.' );
+		self::assertStringNotContainsStringIgnoringCase( 'mighty', $sentence, 'No marking that tools/list does not show.' );
+		self::assertStringContainsString( 'when the person asks for a change, tell them that kindly and where the switch is', $sentence, 'And that the assistant leads there.' );
+		self::assertStringNotContainsString( 'no code, files, database, logs or credentials', $sentence, 'Not more than the switch keeps: ordinary readers may meet a credential a guard does not recognise.' );
 		self::assertStringEndsWith( ' ' . $sentence, $m->invoke( $controller ) );
 
 		add_filter( 'ab_mcp_instructions', static fn(): string => 'Add-on text only.' );
@@ -800,12 +834,12 @@ final class SiteModeTest extends TestCase {
 		self::assertCount( 1, $log );
 		self::assertSame( 'ok', $log[0]['status'] );
 		self::assertSame( 3, $log[0]['user'] );
-		self::assertStringContainsString( 'Full switched on by user3 (user 3) on the settings page', $log[0]['message'] );
+		self::assertStringContainsString( 'Write access (Full) switched on by user3 (user 3) on the settings page', $log[0]['message'] );
 		self::assertStringContainsString( 'notice version ' . AB_MCP_Site_Mode::NOTICE_VERSION . ' confirmed', $log[0]['message'] );
 		self::assertStringContainsString( 'wording sha256 ' . $record['notice_hash'], $log[0]['message'] );
 		self::assertStringContainsString( 'plugin ' . AB_MCP_VERSION, $log[0]['message'] );
 		self::assertLessThanOrEqual( 300, mb_strlen( $log[0]['message'] ), 'The log clips at 300 characters; nothing of it is cut.' );
-		self::assertStringEndsWith( 'locale en_US.', $log[0]['message'] );
+		self::assertStringEndsWith( 'locale en_US; every switch on.', $log[0]['message'] );
 		self::assertSame( array( array( 'full', 3 ) ), $changed );
 		self::assertSame( array( array( 'mode' => 'full' ) + $record ), AB_MCP_Site_Mode::history(), 'And in the history.' );
 	}
@@ -816,8 +850,10 @@ final class SiteModeTest extends TestCase {
 		// the new version with the hash of its wording, never edit an old one.
 		$hashes = array(
 			'1' => 'e63a129b792c19f2ffa0625d200070fa821bd84ba172150a7c24264399a3b310',
+			'2' => '9d40c270e3b9d177b5288343d51db17690e5d39ee3baf2620e7c5051d9f083e6',
 		);
 
+		self::assertSame( '2', AB_MCP_Site_Mode::NOTICE_VERSION, 'The notice of write access is version 2.' );
 		self::assertArrayHasKey( AB_MCP_Site_Mode::NOTICE_VERSION, $hashes );
 		self::assertSame( $hashes[ AB_MCP_Site_Mode::NOTICE_VERSION ], AB_MCP_Site_Mode::notice_hash() );
 	}
@@ -828,9 +864,9 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'code', $record['source'] );
 		self::assertArrayNotHasKey( 'notice_text', $record, 'Nobody saw a notice.' );
 		self::assertArrayNotHasKey( 'notice_hash', $record );
-		self::assertSame( 'Full since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ', set by code, not confirmed on this page', AB_MCP_Site_Mode::full_since_text() );
+		self::assertSame( 'Write access on since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ' · set by code, not confirmed on this page · every connection keeps its access level', AB_MCP_Site_Mode::full_since_text() );
 		$log = self::mode_log();
-		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 1 not confirmed', end( $log )['message'] );
+		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 2 not confirmed', end( $log )['message'] );
 		self::assertStringNotContainsString( ' confirmed,', end( $log )['message'] );
 
 		// Anything but the form's own word is code.
@@ -989,7 +1025,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'read', AB_MCP_Site_Mode::get() );
 		self::assertSame( $record, AB_MCP_Site_Mode::confirmation(), 'Who accepted the notice last stays documented.' );
 		$log = self::mode_log();
-		self::assertStringContainsString( 'Read switched on by user3 (user 3)', end( $log )['message'] );
+		self::assertStringContainsString( 'Write access switched off (Read) by user3 (user 3)', end( $log )['message'] );
 	}
 
 	public function testBackToReadNeedsTheNonceAndAnAdministratorToo(): void {
@@ -1019,43 +1055,100 @@ final class SiteModeTest extends TestCase {
 		$form = $x->query( './/form', $card )->item( 0 );
 
 		self::assertStringContainsString( 'ab-mode--read', $card->getAttribute( 'class' ) );
-		self::assertSame( 'Read', trim( $x->query( './/*[contains(@class, "ab-mode__word")]', $card )->item( 0 )->textContent ), 'The state in one word.' );
+		self::assertSame( 'Write access for AI assistants', trim( $x->query( './/h2', $card )->item( 0 )->textContent ) );
 		self::assertSame( 'https://example.test/wp-admin/admin-post.php', $form->getAttribute( 'action' ) );
 		self::assertSame( 'post', $form->getAttribute( 'method' ) );
 		$field = static fn( string $name ) => $x->query( './/input[@name="' . $name . '"]', $form )->item( 0 );
 		self::assertSame( 'nonce-ab_mcp_site_mode', $field( '_wpnonce' )->getAttribute( 'value' ) );
 		self::assertSame( 'ab_mcp_site_mode', $field( 'action' )->getAttribute( 'value' ) );
 		self::assertSame( 'full', $field( 'mode' )->getAttribute( 'value' ) );
+		self::assertSame( '2', $field( 'notice_version' )->getAttribute( 'value' ), 'The form carries the notice in force, version 2.' );
 		self::assertSame( AB_MCP_Site_Mode::NOTICE_VERSION, $field( 'notice_version' )->getAttribute( 'value' ) );
 
 		$box = $field( 'confirm_full' );
 		self::assertSame( 'checkbox', $box->getAttribute( 'type' ) );
 		self::assertSame( '1', $box->getAttribute( 'value' ) );
 		self::assertFalse( $box->hasAttribute( 'checked' ), 'Not ticked in advance.' );
-		self::assertTrue( $box->hasAttribute( 'required' ) );
+		self::assertTrue( $box->hasAttribute( 'required' ), 'Without JavaScript the browser asks for it.' );
 		self::assertSame( AB_MCP_Site_Mode::checkbox_text(), trim( $box->parentNode->textContent ) );
-		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( './/*[contains(@class, "ab-mode__warning")]', $card )->item( 0 )->textContent ) );
-		self::assertSame( 'Switch to Full', trim( $x->query( './/button[@type="submit"]', $form )->item( 0 )->textContent ) );
+		$dialog = $x->query( './/*[@id="ab-mode-confirm"]', $form )->item( 0 );
+		self::assertNotNull( $dialog, 'The window the switch opens is the form itself: without JavaScript it stands in the card.' );
+		self::assertFalse( $dialog->hasAttribute( 'hidden' ), 'Visible without JavaScript.' );
+		self::assertSame( 'Switch on write access?', trim( $x->query( './/*[@id="' . $dialog->getAttribute( 'aria-labelledby' ) . '"]' )->item( 0 )->textContent ) );
+		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( './/*[@id="' . $dialog->getAttribute( 'aria-describedby' ) . '"]' )->item( 0 )->textContent ) );
+		self::assertSame( 'Switch on', trim( $x->query( './/button[@type="submit"]', $dialog )->item( 0 )->textContent ) );
+		$cancel = $x->query( './/button[contains(@class, "ab-mode__cancel")]', $dialog )->item( 0 );
+		self::assertSame( 'Cancel', trim( $cancel->textContent ) );
+		self::assertSame( 'button', $cancel->getAttribute( 'type' ), 'Never submits.' );
+		self::assertTrue( $cancel->hasAttribute( 'hidden' ), 'Only the window has something to cancel; admin.js shows it.' );
+	}
+
+	public function testTheSwitchIsAButtonWithRoleSwitch(): void {
+		$x  = $this->xpath( $this->admin( 'mode_card_html' ) );
+		$sw = $x->query( '//section[@id="ab-mode"]//button[contains(@class, "ab-power")]' );
+
+		self::assertSame( 1, $sw->length );
+		$sw = $sw->item( 0 );
+		self::assertSame( 'switch', $sw->getAttribute( 'role' ) );
+		self::assertSame( 'false', $sw->getAttribute( 'aria-checked' ) );
+		self::assertSame( 'submit', $sw->getAttribute( 'type' ), 'Without JavaScript it sends the form, and the browser asks for the box.' );
+		self::assertSame( 'ab-mode-form', $sw->getAttribute( 'form' ) );
+		self::assertSame( 'ab-mode-title', $sw->getAttribute( 'aria-labelledby' ), 'Its name is the title of the card.' );
+		self::assertSame( 'ab-mode-confirm', $sw->getAttribute( 'aria-controls' ), 'It opens the window.' );
+		self::assertSame( 'dialog', $sw->getAttribute( 'aria-haspopup' ) );
+		self::assertSame( 'false', $sw->getAttribute( 'aria-expanded' ) );
+		self::assertSame( array( 'On', 'Off' ), array_map( static fn( $n ): string => trim( $n->textContent ), iterator_to_array( $x->query( './/*[contains(@class, "ab-power__word")]', $sw ) ) ) );
+		self::assertSame( 1, $x->query( './/*[contains(@class, "ab-power__knob")]/*[local-name()="svg"][@aria-hidden="true"]', $sw )->length, 'The power symbol.' );
+
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		$x  = $this->xpath( $this->admin( 'mode_card_html' ) );
+		$sw = $x->query( '//button[contains(@class, "ab-power")]' )->item( 0 );
+		self::assertSame( 'true', $sw->getAttribute( 'aria-checked' ) );
+		self::assertSame( 'ab-mode-form', $sw->getAttribute( 'form' ) );
+		self::assertFalse( $sw->hasAttribute( 'aria-controls' ), 'On, it opens nothing: one click switches off.' );
+		self::assertSame( 'read', $x->query( '//form[@id="ab-mode-form"]//input[@name="mode"]' )->item( 0 )->getAttribute( 'value' ) );
+		self::assertSame( 0, $x->query( '//input[@name="confirm_full"]' )->length, 'No box to switch off.' );
 	}
 
 	public function testTheCardSaysWhatEachModeOpens(): void {
 		AB_MCP_Settings::install_defaults();
 
-		$x    = $this->xpath( $this->admin( 'mode_card_html' ) );
-		$lead = trim( $x->query( '//*[contains(@class, "ab-mode__lead")]' )->item( 0 )->textContent );
-		self::assertSame( 'Assistants can read content, media, terms, comments, settings and the structure of the site. The tools marked Mighty that read code, files, the database, logs or credentials run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say.', $lead );
-		self::assertSame( 1, $x->query( '//*[contains(@class, "ab-mode__lead")]' )->length );
-		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-mode__mighty")] | //section[@id="ab-mode"]//code' )->length, 'No list of Mighty tools that would run in Read: none does.' );
+		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
+		self::assertSame( 'Off: AI assistants only read. For anything they should change, you flip the switch.', trim( $x->query( '//*[contains(@class, "ab-mode__status")]' )->item( 0 )->textContent ) );
+		self::assertSame( 'Applies to every connection: Claude, ChatGPT, Cursor and all others.', trim( $x->query( '//*[contains(@class, "ab-mode__scope")]' )->item( 0 )->textContent ), 'Not only Claude.' );
+		$boxes = array();
+		foreach ( $x->query( '//*[contains(concat(" ", @class, " "), " ab-mode__box ")]' ) as $b ) {
+			$boxes[] = trim( preg_replace( '/\s+/', ' ', $x->query( './/strong', $b )->item( 0 )->textContent ) ) . ' | ' . trim( $x->query( './/span', $b )->item( 0 )->textContent );
+		}
+		self::assertSame(
+			array(
+				'Off: read only | AI assistants read content, media and settings and advise you.',
+				'On: full power | AI assistants read and write: posts, pages, media, terms and comments.',
+			),
+			$boxes,
+			'The free plugin names only what its own tools write.'
+		);
+		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-mode__since")]' )->length );
+		self::assertSame( 0, $x->query( '//section[@id="ab-mode"]//code' )->length, 'No list of tools.' );
 
 		AB_MCP_Site_Mode::switch_to_full( 3 );
-		$lead = $this->xpath( $this->admin( 'mode_card_html' ) )->query( '//*[contains(@class, "ab-mode__lead")]' )->item( 0 )->textContent;
-		self::assertStringContainsString( 'create, change and delete, and read code, files, the database, logs and credentials', $lead );
+		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
+		self::assertSame( 'On: full power. Connected AI assistants read and write on this site.', trim( $x->query( '//*[contains(@class, "ab-mode__status")]' )->item( 0 )->textContent ) );
+		self::assertStringContainsString( 'ab-mode--full', $x->query( '//section[@id="ab-mode"]' )->item( 0 )->getAttribute( 'class' ), 'The deep violet card.' );
+	}
+
+	public function testWithProTheOnBoxNamesWhatProWrites(): void {
+		add_filter( 'ab_mcp_site_edition', static fn(): string => 'pro' );
+
+		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
+		self::assertSame( 'AI assistants read and write: posts, pages, plugins, themes, code and the database.', trim( $x->query( '//*[contains(@class, "ab-mode__writes")]' )->item( 0 )->textContent ) );
 	}
 
 	public function testAnAddOnCompletesWhatTheCardSaysReadReads(): void {
-		// Pro reads users and shop data in Read too; its sentence follows the
-		// list, escaped, and only in Read. The filter gets the registry, so the
-		// sentence can follow what this site really runs.
+		// Pro reads users and shop data with write access off too; its
+		// sentence follows the box «Off: read only», escaped, in both states.
+		// The filter gets the registry, so the sentence can follow what this
+		// site really runs.
 		AB_MCP_Settings::install_defaults();
 		$seen = null;
 		add_filter(
@@ -1068,21 +1161,18 @@ final class SiteModeTest extends TestCase {
 			2
 		);
 
-		$x    = $this->xpath( $this->admin( 'mode_card_html' ) );
-		$lead = trim( $x->query( '//*[contains(@class, "ab-mode__lead")]' )->item( 0 )->textContent );
-		self::assertStringEndsWith( 'access level of the connection say. With <Pro> they also read users.', $lead );
+		$x     = $this->xpath( $this->admin( 'mode_card_html' ) );
+		$reads = trim( $x->query( '//*[contains(@class, "ab-mode__reads")]' )->item( 0 )->textContent );
+		self::assertSame( 'AI assistants read content, media and settings and advise you. With <Pro> they also read users.', $reads );
 		self::assertInstanceOf( AB_MCP_Tool_Registry::class, $seen );
 		self::assertStringContainsString( 'With &lt;Pro&gt; they also read users.', $this->admin( 'mode_card_html' ), 'Escaped.' );
-
-		AB_MCP_Site_Mode::switch_to_full( 3 );
-		self::assertStringNotContainsString( 'they also read users', $this->admin( 'mode_card_html' ), 'Read only.' );
 	}
 
 	/** @return array<string,array{0:string,1:string}> */
 	public static function switchNotices(): array {
 		return array(
-			'to Read' => array( 'mode_read', 'Read is on. Assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused.' ),
-			'to Full' => array( 'mode_full', 'Full is on. Assistants can now create, change and delete, and read code, files, the database, logs and credentials, through the tools that are switched on.' ),
+			'to Read' => array( 'mode_read', 'Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused.' ),
+			'to Full' => array( 'mode_full', 'Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning.' ),
 		);
 	}
 
@@ -1094,29 +1184,12 @@ final class SiteModeTest extends TestCase {
 		self::assertStringContainsString( $text, $this->admin( 'notice' ) );
 	}
 
-	public function testTheControlNextToTheTitleIsRealAndNeverTicksTheBox(): void {
-		$x      = $this->xpath( $this->admin( 'mode_card_html', array() ) );
-		$toggle = $x->query( '//*[contains(@class, "ab-mode__toggle")]' )->item( 0 );
+	public function testTheOldReadFullControlIsGone(): void {
+		$x = $this->xpath( $this->admin( 'mode_card_html', array() ) );
 
-		self::assertFalse( $toggle->hasAttribute( 'aria-hidden' ), 'Not decoration.' );
-		self::assertSame( 'group', $toggle->getAttribute( 'role' ) );
-		self::assertSame( 'Read', trim( $x->query( './/*[@aria-current="true"]', $toggle )->item( 0 )->textContent ) );
-		$link = $x->query( './/a', $toggle )->item( 0 );
-		self::assertSame( 'Full', trim( $link->textContent ) );
-		self::assertSame( '#ab-mode-confirm', $link->getAttribute( 'href' ), 'Leads to the box.' );
-		self::assertSame( 'label', $x->query( '//*[@id="ab-mode-confirm"]' )->item( 0 )->nodeName );
-		self::assertFalse( $x->query( '//input[@name="confirm_full"]' )->item( 0 )->hasAttribute( 'checked' ) );
-		self::assertSame( 0, $x->query( './/button', $toggle )->length, 'Nothing in it submits in Read.' );
-
-		AB_MCP_Site_Mode::switch_to_full( 3 );
-		$x      = $this->xpath( $this->admin( 'mode_card_html', array() ) );
-		$toggle = $x->query( '//*[contains(@class, "ab-mode__toggle")]' )->item( 0 );
-		$button = $x->query( './/button', $toggle )->item( 0 );
-		self::assertSame( 'Read', trim( $button->textContent ) );
-		self::assertSame( 'submit', $button->getAttribute( 'type' ) );
-		self::assertSame( 'ab-mode-form', $button->getAttribute( 'form' ), 'Submits the form, whose mode is Read.' );
-		self::assertSame( 'read', $x->query( '//form[@id="ab-mode-form"]//input[@name="mode"]' )->item( 0 )->getAttribute( 'value' ) );
-		self::assertSame( 'Full', trim( $x->query( './/*[@aria-current="true"]', $toggle )->item( 0 )->textContent ) );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-mode__toggle") or contains(@class, "ab-mode__word") or contains(@class, "ab-mode__opt")]' )->length );
+		self::assertStringNotContainsString( 'Mode:', $this->admin( 'mode_card_html', array() ) );
+		self::assertStringNotContainsString( 'Full', $x->query( '//section[@id="ab-mode"]' )->item( 0 )->textContent, 'The page says write access, not Full.' );
 	}
 
 	public function testTheFormCarriesTheWordingItShows(): void {
@@ -1128,7 +1201,7 @@ final class SiteModeTest extends TestCase {
 	/** @return array<string,array{0:string,1:string}> */
 	public static function bandCounts(): array {
 		return array(
-			'Read' => array( 'read', '1 of 3 tools can run in Read' ),
+			'Read' => array( 'read', '1 of 3 tools can run with write access off' ),
 			'Full' => array( 'full', '3 of 3 tools on' ),
 		);
 	}
@@ -1155,19 +1228,26 @@ final class SiteModeTest extends TestCase {
 
 		$text = $this->xpath( $this->admin( 'mode_notice' ) )->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 )->textContent;
 
-		self::assertStringContainsString( 'assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool marked Mighty that reads code, files, the database, logs or credentials', $text );
-		self::assertStringContainsString( 'writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning', $text );
-		self::assertStringContainsString( 'Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there.', $text );
+		self::assertStringContainsString( 'Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused', $text );
+		self::assertStringContainsString( 'Switching on write access switches every tool on; afterwards you can switch single tools off under Fine-tuning.', $text );
+		self::assertStringNotContainsString( 'Mighty', $text );
+		self::assertStringNotContainsString( 'Full', $text );
 	}
 
 	public function testFineTuningSaysWhichMightyToolsStayedOffAfterTheUpdate(): void {
-		$sentence = 'On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here.';
+		// The fine-tuning names what these tools read; the mark «Mighty» is
+		// no longer shown there. Only where the rule of before still applies:
+		// on, and not switched on since.
+		$sentence = 'On this site, tools that read code, files, the database, logs or credentials and were switched off before the update that brought write access stay off until you switch them on here or switch on write access again.';
 		AB_MCP_Settings::install_defaults();
 		self::assertStringNotContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ), 'Not on a new site.' );
 
 		ab_test_reset();
 		self::before_the_update();
 		AB_MCP_Settings::maybe_upgrade();
+		self::assertStringNotContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ), 'Not while write access is off: switching it on switches every tool on.' );
+
+		self::full_under_440();
 		self::assertStringContainsString( $sentence, $this->admin( 'capabilities_card_html', array(), array() ) );
 
 		AB_MCP_Settings::set_tool_state( array() );
@@ -1175,8 +1255,10 @@ final class SiteModeTest extends TestCase {
 	}
 
 	public function testTheNoticeAndTheBoxSayWhatWasDecided(): void {
-		self::assertSame( 'Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup.', AB_MCP_Site_Mode::notice_text() );
-		self::assertSame( 'I understand that switching to Full can be destructive and is at my own risk, and I have a current backup.', AB_MCP_Site_Mode::checkbox_text() );
+		self::assertSame( 'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.', AB_MCP_Site_Mode::notice_text() );
+		self::assertSame( 'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.', AB_MCP_Site_Mode::checkbox_text() );
+		self::assertSame( 'Write access off (read only)', AB_MCP_Site_Mode::label( AB_MCP_Site_Mode::READ ) );
+		self::assertSame( 'Write access on (full power)', AB_MCP_Site_Mode::label( AB_MCP_Site_Mode::FULL ) );
 	}
 
 	public function testInFullTheCardWarnsSaysSinceWhenAndSwitchesBackWithoutABox(): void {
@@ -1184,19 +1266,17 @@ final class SiteModeTest extends TestCase {
 		$x      = $this->xpath( $this->admin( 'mode_card_html' ) );
 		$card   = $x->query( '//section[@id="ab-mode"]' )->item( 0 );
 
-		self::assertStringContainsString( 'ab-mode--full', $card->getAttribute( 'class' ), 'The warning colour.' );
-		self::assertSame( 'Full', trim( $x->query( './/*[contains(@class, "ab-mode__word")]', $card )->item( 0 )->textContent ) );
-		self::assertSame( 'Full since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ', confirmed by user3', trim( $x->query( './/*[contains(@class, "ab-mode__since")]', $card )->item( 0 )->textContent ) );
+		self::assertStringContainsString( 'ab-mode--full', $card->getAttribute( 'class' ), 'The deep violet card.' );
+		self::assertSame( 'Write access on since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ' · confirmed by user3 · every connection keeps its access level', trim( $x->query( './/*[contains(@class, "ab-mode__since")]', $card )->item( 0 )->textContent ) );
 		self::assertSame( 0, $x->query( './/input[@name="confirm_full"]', $card )->length );
 		self::assertSame( 'read', $x->query( './/input[@name="mode"]', $card )->item( 0 )->getAttribute( 'value' ) );
-		self::assertSame( 'Switch back to Read', trim( $x->query( './/form//button[@type="submit"]', $card )->item( 0 )->textContent ) );
-		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( './/*[contains(@class, "ab-mode__warning")]', $card )->item( 0 )->textContent ) );
+		self::assertSame( 'ab-mode-form', $x->query( './/button[@role="switch"]', $card )->item( 0 )->getAttribute( 'form' ), 'One click on the switch switches off.' );
 	}
 
 	public function testFullSetByCodeSaysThatNothingWasConfirmed(): void {
 		self::full();
 
-		self::assertSame( 'Full is on; no confirmation on the settings page is recorded for it.', AB_MCP_Site_Mode::full_since_text() );
+		self::assertSame( 'Write access is on; no confirmation on this page is recorded for it.', AB_MCP_Site_Mode::full_since_text() );
 	}
 
 	/* --------------------------------------------- the notice after updating */
@@ -1211,8 +1291,8 @@ final class SiteModeTest extends TestCase {
 		$notice = $x->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 );
 		self::assertNotNull( $notice );
 		self::assertStringContainsString( 'AlphaBridge MCP now only reads on this site.', $notice->textContent );
-		self::assertStringContainsString( 'switches to Full at the top of Settings → AlphaBridge MCP', $notice->textContent );
-		self::assertStringContainsString( 'can be destructive and is at your own risk', $notice->textContent );
+		self::assertStringContainsString( 'an administrator switches on write access at the top of Settings → AlphaBridge MCP', $notice->textContent );
+		self::assertStringContainsString( 'at the site owner\'s own risk', $notice->textContent );
 		self::assertSame( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp', $x->query( './/a', $notice )->item( 0 )->getAttribute( 'href' ) );
 		self::assertSame( 'nonce-ab_mcp_mode_notice', $x->query( './/input[@name="_wpnonce"]', $notice )->item( 0 )->getAttribute( 'value' ) );
 		self::assertSame( 'ab_mcp_mode_notice', $x->query( './/input[@name="action"]', $notice )->item( 0 )->getAttribute( 'value' ) );
@@ -1272,18 +1352,22 @@ final class SiteModeTest extends TestCase {
 		// wordpress.org shows the Upgrade Notice on the plugin and update
 		// screens before the update, at most 300 characters of it.
 		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
-		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n\n= 4\.4\.0 =\n([^\n]+)\n/', $readme, $m ) );
+		self::assertSame( 1, preg_match( '/\n== Upgrade Notice ==\n\n= 4\.5\.0 =\n([^\n]+)\n\n= 4\.4\.0 =\n([^\n]+)\n/', $readme, $m ) );
 		self::assertLessThanOrEqual( 300, mb_strlen( $m[1] ) );
-		self::assertStringContainsString( 'only reads', $m[1] );
-		self::assertStringContainsString( 'switches to Full at the top of Settings → AlphaBridge MCP', $m[1] );
-		self::assertStringContainsString( "own risk", $m[1] );
-		self::assertStringContainsString( 'In Full, writing Mighty tools are on, also ones that were off before.', $m[1], 'And what Full does with the switches saved before.' );
-		self::assertStringNotContainsString( 'credentials', $m[1], 'No promise that ordinary readers never meet one.' );
+		self::assertStringContainsString( 'main switch «Write access for AI assistants», for every connection', $m[1] );
+		self::assertStringContainsString( 'Switching it on switches every tool on', $m[1] );
+		self::assertStringContainsString( 'a confirmation of 4.4.0 stays valid', $m[1] );
+		self::assertStringContainsString( 'New connections start with the full access level', $m[1] );
+		self::assertLessThanOrEqual( 300, mb_strlen( $m[2] ), 'The notice of 4.4.0 stays as it was.' );
 		self::assertStringNotContainsString( 'such as `wp_get_user_meta`', $readme, 'It reads profile fields, not code, files, the database, logs or credentials.' );
-		self::assertStringContainsString( 'a Mighty tool that only reads and was switched off stays off in Full', $readme, 'And what became of the switches saved before.' );
 		self::assertStringNotContainsString( 'read, list and search, and every tool', $readme, 'No longer «Read reads everything».' );
 		$intro = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
-		self::assertStringContainsString( 'and so is every tool marked Mighty that reads code, files, the database, logs or credentials', $intro );
+		self::assertStringContainsString( 'and so is every reading tool that needs write access because it reads code, files, the database, logs or credentials', $intro );
+		self::assertStringContainsString( 'The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection', $intro );
+		self::assertStringNotContainsString( 'the mode Read', $intro, 'The description says write access, not Read or Full.' );
+		self::assertStringNotContainsString( 'Mighty', $intro );
+		self::assertSame( 1, preg_match( '/^Stable tag: 4\.4\.0$/m', $readme ), 'The stable tag moves with the release, not with the code.' );
+		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= 4\.5\.0 =\n/', $readme ) );
 	}
 
 	public function testTheNoticesAfterSwitching(): void {

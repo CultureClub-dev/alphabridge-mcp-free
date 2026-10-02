@@ -49,44 +49,50 @@ directory. It is the same code WordPress.org ships.
   and the answer says so; builder data only for accounts with `unfiltered_html`).
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
-  one sentence. Apps register with the site (RFC 7591) or identify themselves with a client
+  one sentence, with Full preselected; the switch for write access on the site decides whether
+  the connection may write. Apps register with the site (RFC 7591) or identify themselves with a client
   metadata document (CIMD), which the site fetches only once a logged-in user who may approve
   connections opens the consent screen; that can be switched off. Header authentication
   (`Authorization` / `X-Api-Key`) for clients without a Connect button.
 - **Answers that name the way** — where AlphaBridge's own checks refuse a call or report a
   failure, the answer says what did not work, why, and what does: the tool that finds an id, the
-  right it takes, the switch, the accepted values. Errors WordPress itself reports are passed on
-  as WordPress words them.
+  right it takes, the switch, the accepted values. A refusal because write access is off, the
+  access level or the role does not reach, or a tool is switched off adds the steps for the
+  person, a direct link and the request to pass it on kindly and try again; a tool of the separate
+  AlphaBridge MCP Pro is named as such instead of «Unknown tool». Errors WordPress itself reports
+  are passed on as WordPress words them.
 - **Free means free** — no license keys, no registration, no usage limits, no locked features.
 
 ## Security model
 
 Handing an AI access to a site should feel safe, so control comes first:
 
-- **Read out of the box.** A new site, and every site after updating to 4.4.0, starts in the
-  mode *Read*: assistants can read content, media, terms, comments, settings and the structure
-  of the site. Every tool that creates, changes or deletes is refused, and so is every tool
-  marked Mighty that reads code, files, the database, logs or credentials, with an answer that
-  says why and how to switch. *Full*, which opens both, is
-  switched on by an administrator at the top of Settings → AlphaBridge MCP, at the site owner's
-  own risk: switching it on can be destructive, and the administrator confirms that, and that a
-  current backup exists, with a ticked box. The account, the time, the version of that notice and
-  its wording are recorded. Back to Read takes one click.
+- **Write access off out of the box.** A new site, and every site after updating from a version
+  before 4.4.0, starts with *write access off*: assistants can read content, media, terms,
+  comments, settings and the structure of the site. Every tool that creates, changes or deletes is
+  refused, and so is every reading tool that needs write access because it reads code, files, the
+  database, logs or credentials, with an answer that says why and leads to the switch. The main
+  switch *Write access for AI assistants* at the top of Settings → AlphaBridge MCP holds for every
+  connection (Claude, ChatGPT, Cursor and all others); an administrator switches it on after
+  confirming, with a ticked box, that changes take effect immediately, that it is at the site
+  owner's own risk and that a current backup exists. The account, the time, the version of that
+  notice and its wording are recorded. Switching on switches every tool on; switching off takes
+  one click.
 - Every connection acts as a **real WordPress user**; every tool enforces the matching
   capability, including object-level checks. What that user may not do, the AI cannot do.
 - **Scoped connections** — read-only or content-only keys with optional expiry, rotatable in
   one click.
-- **Fine-tuning for advanced users** — in Full every tool is on, the powerful ones marked
-  Mighty included; on a site updated from an earlier version, a Mighty tool that only reads and
-  was switched off stays off there. Switch single tools or whole groups off, and they vanish from
-  the MCP surface.
-  Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`,
-  `runs_in_read()`); a tool that reads code, files, the database, logs or credentials is marked
-  with `'dangerous' => true`, which keeps it out of Read. A tool marked so only since the site
-  mode also carries `'mighty_since'` (the version that marked it): on a site updated from before
-  the mode, its switch then reads like that of an ordinary tool, while another Mighty reader
-  without a saved switch stays off there in Full, as it was by default before. The action
-  `ab_mcp_site_mode_changed` fires when an administrator switches.
+- **Fine-tuning** — every tool is on, and switching write access on switches every tool on
+  again; switch single tools or whole groups off, and they vanish from the MCP surface until write
+  access is switched on the next time. Each tool shows a short name in the admin's language and
+  says whether it reads or writes.
+  Code reads the switch through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`,
+  `runs_in_read()`; the slugs `read` and `full` are write access off and on); a tool that reads
+  code, files, the database, logs or credentials is marked with `'dangerous' => true`, which
+  keeps it out while write access is off. The action `ab_mcp_site_mode_changed` fires when write
+  access is switched, `ab_mcp_reset_switches` when a switch from off to on switched everything on
+  (add-ons switch their own items on there). The fine-tuning takes an add-on's fields into its one form
+  (filter `ab_mcp_fine_group_html`, action `ab_mcp_fine_save`).
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed, and the settings of
   registered widgets through `wp_get_widgets`, without the values whose key the credential guard

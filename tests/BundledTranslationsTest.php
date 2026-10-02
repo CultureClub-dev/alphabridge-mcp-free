@@ -1,11 +1,12 @@
 <?php
 /**
- * The German translations of the site mode, bundled in languages/.
+ * The German translations of the switch for write access, bundled in
+ * languages/.
  *
  * WordPress has no language pack of this plugin yet, and the notice an
- * administrator confirms before switching to Full must be readable in the
- * site's language from the release that brings it. So the plugin ships the
- * texts of the site mode for de_DE, de_DE_formal, de_AT, de_CH and
+ * administrator confirms before switching write access on must be readable
+ * in the site's language from the release that brings it. So the plugin
+ * ships those texts for de_DE, de_DE_formal, de_AT, de_CH and
  * de_CH_informal, and loads them behind a language pack from
  * translate.wordpress.org, which wins for every string it has.
  *
@@ -14,11 +15,17 @@
  * - Every locale has a .po and a compiled .mo with the same entries, and
  *   every msgid is a string the plugin's code really translates — a text
  *   changed in the code without its translation fails here.
- * - The notice, the box, both refusals in Read (a writing tool, a Mighty
- *   reader), the notice after the update and what it says about the
- *   switches, the consent sentence, what Read and Full open on the card and
- *   the two words of the mode are translated everywhere, with their
+ * - The notice, the box, both refusals with write access off (a writing
+ *   tool, a Mighty reader) and the way they name, the other refusals of the
+ *   policy gate, the answer for a tool of Pro, the notice after the update,
+ *   the consent sentences, the main switch with its states and boxes and the
+ *   notices after switching are translated everywhere, with their
  *   placeholders.
+ * - Every text of the fine-tuning (its main groups and what is in them, the
+ *   names of the tool groups of the core and of Pro, the badges Reads and
+ *   Writes, the notes, the lead, the controls, and the texts the core keeps
+ *   for add-ons) is translated too: a text added there without its
+ *   translation fails here.
  * - Swiss German writes ss, never ß, and «» for quotes; de_DE_formal and
  *   de_CH address the reader as Sie, the others as du.
  * - The language pack is asked for before the bundled file is added.
@@ -42,26 +49,41 @@ final class BundledTranslationsTest extends TestCase {
 
 	/** The texts that must read in German wherever a German locale is set. */
 	const REQUIRED = array(
-		'Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup.',
-		'I understand that switching to Full can be destructive and is at my own risk, and I have a current backup.',
-		'AlphaBridge MCP is in read mode on this site; the tool "%s" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
-		'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.',
+		'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.',
+		'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.',
+		'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.',
+		'Write access is off on this site, so the tool "%s" did not run: it is one of the reading tools that run only with write access on.',
+		"To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner's own risk, and a current backup is advised.",
+		'Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it.',
+		'Direct link: %s',
+		'The account of this connection lacks the capability "%2$s" that the tool "%1$s" needs.',
+		'This connection has the access level "%2$s", which does not include the tool "%1$s".',
+		'The tool "%s" is switched off in the fine-tuning of AlphaBridge MCP on this site.',
+		'The tool "%s" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.',
+		'The tool "%s" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.',
 		'AlphaBridge MCP now only reads on this site.',
-		'Since this update the plugin starts in the mode Read on every site: assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so is every tool marked Mighty that reads code, files, the database, logs or credentials. To let them write again or read those, an administrator switches to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at your own risk.',
-		'This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full.',
-		"site mode\x04Read",
-		"site mode\x04Full",
-		'Mode: %s',
-		'Switch to Full',
-		'Switch back to Read',
-		'Fine-tuning (for advanced users)',
-		'Full since %1$s, confirmed by %2$s',
-		'Full since %s, set by code, not confirmed on this page',
-		'In Full the tools that are switched on run; writing tools marked Mighty that were off before this update are switched on too, and you can switch them off under Fine-tuning. Tools marked Mighty that only read run in Full only, and one that was switched off before this update stays off there.',
-		'Assistants can read content, media, terms, comments, settings and the structure of the site. The tools marked Mighty that read code, files, the database, logs or credentials run only in Full, like every tool that creates, changes or deletes — whatever their switch and the access level of the connection say.',
-		'Assistants may create, change and delete, and read code, files, the database, logs and credentials, through every tool that is switched on, the powerful ones marked Mighty included, within the rights of the connected account and its access level.',
-		'On this site, tools marked Mighty that only read and were switched off before the update that brought the modes stay off in Full until you switch them on here.',
-		'%1$s of %2$s tools can run in Read',
+		'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now.',
+		'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP.',
+		"site mode\x04Write access off (read only)",
+		"site mode\x04Write access on (full power)",
+		'Write access for AI assistants',
+		'Off: AI assistants only read. For anything they should change, you flip the switch.',
+		'On: full power. Connected AI assistants read and write on this site.',
+		'Applies to every connection: Claude, ChatGPT, Cursor and all others.',
+		'Switch on write access?',
+		'Switch on',
+		'Cancel',
+		'Off: read only',
+		'On: full power',
+		'Write access on since %1$s · confirmed by %2$s · every connection keeps its access level',
+		'Write access on since %s · set by code, not confirmed on this page · every connection keeps its access level',
+		'%1$s of %2$s tools can run with write access off',
+		'Fine-tuning',
+		'Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off.',
+		'If the account "%s" should be allowed to do this, an administrator can give it a role that allows it under Users.',
+		"date and time format\x04Y-m-d H:i",
+		"%s connection\0%s connections",
+		"%s ability off\0%s abilities off",
 	);
 
 	protected function setUp(): void {
@@ -94,7 +116,8 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/**
-	 * Entries of a .po file, keyed like mo().
+	 * Entries of a .po file, keyed like mo(): a text with a plural form as
+	 * «singular\0plural» => «form 0\0form 1».
 	 *
 	 * @return array<string,string>
 	 */
@@ -103,7 +126,14 @@ final class BundledTranslationsTest extends TestCase {
 		$unq     = static fn( string $s ): string => stripcslashes( substr( $s, 1, -1 ) );
 		foreach ( preg_split( '/\n\s*\n/', (string) file_get_contents( $path ) ) as $block ) {
 			$ctx = preg_match( '/^msgctxt (".*")$/m', $block, $m ) ? $unq( $m[1] ) . "\x04" : '';
-			if ( ! preg_match( '/^msgid (".*")$/m', $block, $id ) || ! preg_match( '/^msgstr (".*")$/m', $block, $str ) ) {
+			if ( ! preg_match( '/^msgid (".*")$/m', $block, $id ) ) {
+				continue;
+			}
+			if ( preg_match( '/^msgid_plural (".*")$/m', $block, $pl ) && preg_match( '/^msgstr\[0\] (".*")$/m', $block, $s0 ) && preg_match( '/^msgstr\[1\] (".*")$/m', $block, $s1 ) ) {
+				$entries[ $ctx . $unq( $id[1] ) . "\0" . $unq( $pl[1] ) ] = $unq( $s0[1] ) . "\0" . $unq( $s1[1] );
+				continue;
+			}
+			if ( ! preg_match( '/^msgstr (".*")$/m', $block, $str ) ) {
 				continue;
 			}
 			$key = $ctx . $unq( $id[1] );
@@ -160,7 +190,9 @@ final class BundledTranslationsTest extends TestCase {
 		$literals = self::literals();
 		foreach ( array_keys( self::mo( self::file( $locale, 'mo' ) ) ) as $key ) {
 			$text = false !== strpos( $key, "\x04" ) ? substr( $key, strpos( $key, "\x04" ) + 1 ) : $key;
-			self::assertArrayHasKey( $text, $literals, 'Not in the code (changed or removed?): ' . $text );
+			foreach ( explode( "\0", $text ) as $form ) {
+				self::assertArrayHasKey( $form, $literals, 'Not in the code (changed or removed?): ' . $form );
+			}
 		}
 	}
 
@@ -174,19 +206,120 @@ final class BundledTranslationsTest extends TestCase {
 			preg_match_all( '/%(\d\$)?s/', $mo[ $key ], $have );
 			self::assertSame( $want[0], $have[0], $locale . ' keeps the placeholders of: ' . $key );
 		}
-		self::assertSame( 'Lesend', $mo["site mode\x04Read"] );
-		self::assertSame( 'Full', $mo["site mode\x04Full"] );
+		self::assertSame( 'Schreibrechte aus (nur lesen)', $mo["site mode\x04Write access off (read only)"] );
+		self::assertSame( 'Schreibrechte an (volle Leistung)', $mo["site mode\x04Write access on (full power)"] );
+		self::assertSame( 'Schreibrechte für KI-Assistenten', $mo['Write access for AI assistants'] );
 		self::assertSame( array_keys( self::mo( self::file( 'de_DE', 'mo' ) ) ), array_keys( $mo ), 'Every locale translates the same texts.' );
+	}
+
+	/** The methods of AB_MCP_Admin that draw the fine-tuning. */
+	const FINE_METHODS = array( 'main_groups', 'main_description', 'group_label', 'kind_badge', 'tool_note', 'count_badges', 'addon_text', 'fine_row_html', 'fine_sub_html', 'tool_row_html', 'capabilities_card_html', 'group_status', 'mode_card_html', 'mode_notice_html', 'notice' );
+
+	/**
+	 * Every text those methods translate, keyed like mo(): «context\x04text»
+	 * for _x(), the text for the others.
+	 *
+	 * @return array<int,string>
+	 */
+	private static function fine_texts(): array {
+		$lines = file( dirname( __DIR__ ) . '/includes/class-admin.php' );
+		$keys  = array();
+		$lit   = "'((?:[^'\\\\]|\\\\.)*)'";
+		$unq   = static fn( string $s ): string => stripcslashes( $s );
+		foreach ( self::FINE_METHODS as $method ) {
+			$m   = new \ReflectionMethod( \AB_MCP_Admin::class, $method );
+			$src = implode( '', array_slice( $lines, $m->getStartLine() - 1, $m->getEndLine() - $m->getStartLine() + 1 ) );
+			preg_match_all( '/\b_x\(\s*' . $lit . '\s*,\s*' . $lit . '/', $src, $x, PREG_SET_ORDER );
+			foreach ( $x as $hit ) {
+				$keys[] = $unq( $hit[2] ) . "\x04" . $unq( $hit[1] );
+			}
+			preg_match_all( '/\b(?:esc_html__|esc_attr__|__)\(\s*' . $lit . '/', $src, $plain, PREG_SET_ORDER );
+			foreach ( $plain as $hit ) {
+				$keys[] = $unq( $hit[1] );
+			}
+		}
+		return array_values( array_unique( $keys ) );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testEveryTextOfTheFineTuningIsTranslated( string $locale ): void {
+		$texts = self::fine_texts();
+		self::assertGreaterThan( 50, count( $texts ), 'The scan finds the texts.' );
+		self::assertContains( "tool badge\x04Reads", $texts );
+		self::assertContains( 'Save changes', $texts );
+		self::assertContains( 'With Pro they also read users.', $texts, 'The texts the core keeps for add-ons.' );
+
+		$mo = self::mo( self::file( $locale, 'mo' ) );
+		foreach ( $texts as $key ) {
+			self::assertArrayHasKey( $key, $mo, $locale . ' translates: ' . str_replace( "\x04", ' | ', $key ) );
+			self::assertNotSame( '', $mo[ $key ] );
+			preg_match_all( '/%(\d\$)?[sd]/', $key, $want );
+			preg_match_all( '/%(\d\$)?[sd]/', $mo[ $key ], $have );
+			self::assertSame( $want[0], $have[0], $locale . ' keeps the placeholders of: ' . $key );
+		}
+		self::assertSame( 'Lesend', $mo["tool badge\x04Reads"] );
+		self::assertSame( 'Schreibend', $mo["tool badge\x04Writes"] );
+		self::assertSame( '%d lesend', $mo["tool badge with a number\x04%d read"] );
+		self::assertSame( '%d schreibend', $mo["tool badge with a number\x04%d write"] );
+		self::assertSame( 'erst mit Schreibrechten', $mo["tool note\x04only with write access"] );
+		self::assertSame( 'löscht', $mo["tool note\x04deletes"] );
+		self::assertSame( 'Fähigkeiten anderer Plugins', $mo["main group of tools\x04Abilities of other plugins"] );
+		self::assertSame( 'Inhalte', $mo["main group of tools\x04Content"] );
+		self::assertSame( 'Datenbank & Betrieb', $mo["main group of tools\x04Database & operations"] );
+		self::assertSame( 'Änderungen speichern', $mo['Save changes'] );
+		self::assertSame( 'Feineinstellung', $mo['Fine-tuning'] );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testEveryShortNameOfAToolIsTranslated( string $locale ): void {
+		$mo    = self::mo( self::file( $locale, 'mo' ) );
+		$names = \AB_MCP_Tool_Labels::all();
+		self::assertCount( 143, $names, 'Every tool of the core, of Pro and of its Agency plan.' );
+		foreach ( $names as $tool => $label ) {
+			self::assertArrayHasKey( "tool label\x04" . $label, $mo, $locale . ': ' . $tool );
+			self::assertNotSame( '', $mo[ "tool label\x04" . $label ] );
+		}
+		$ss = 0 === strpos( $locale, 'de_CH' );
+		// The names of the approved draft of the fine-tuning.
+		self::assertSame( 'Snippets auflisten', $mo["tool label\x04List snippets"] );
+		self::assertSame( 'Ein Snippet lesen', $mo["tool label\x04Read a snippet"] );
+		self::assertSame( 'Snippet anlegen oder ändern', $mo["tool label\x04Create or change a snippet"] );
+		self::assertSame( 'Snippet ein- oder ausschalten', $mo["tool label\x04Switch a snippet on or off"] );
+		self::assertSame( 'Snippet löschen', $mo["tool label\x04Delete a snippet"] );
+		self::assertSame( 'Fähigkeiten auflisten', $mo["tool label\x04List abilities"] );
+		self::assertSame( 'Eine Fähigkeit ausführen', $mo["tool label\x04Run an ability"] );
+		self::assertSame( $ss ? 'Grossen Upload beginnen' : 'Großen Upload beginnen', $mo["tool label\x04Start a large upload"] );
+	}
+
+	#[DataProvider( 'locales' )]
+	public function testTheRefusalsForTheRoleReadInOneLanguage( string $locale ): void {
+		// A refusal of a tool for the account's role is the tool's sentences,
+		// the steps, the link and the handover: on a German site all German.
+		$mo      = self::mo( self::file( $locale, 'mo' ) );
+		$sources = '';
+		foreach ( array_merge( glob( dirname( __DIR__ ) . '/includes/*.php' ), glob( dirname( __DIR__ ) . '/includes/*/*.php' ) ) as $file ) {
+			$sources .= (string) file_get_contents( $file );
+		}
+		preg_match_all( "/role_refusal\\(\\s*__\\(\\s*'((?:[^'\\\\]|\\\\.)*)'/", $sources, $m );
+		preg_match_all( "/(?:\\?|:) __\\( '(You cannot publish[^']*)'/", $sources, $publish );
+		$texts = array_unique( array_merge( array_map( 'stripcslashes', $m[1] ), $publish[1] ) );
+		self::assertGreaterThan( 20, count( $texts ), 'The scan finds them.' );
+		foreach ( $texts as $text ) {
+			self::assertArrayHasKey( $text, $mo, $locale . ': ' . $text );
+		}
+		self::assertArrayHasKey( \AB_MCP_Guidance::handover(), $mo );
+		self::assertArrayHasKey( 'Direct link: %s', $mo );
 	}
 
 	public function testTheTextsInTheCodeAreTheOnesTranslated(): void {
 		$mo = self::mo( self::file( 'de_DE', 'mo' ) );
-		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::refusal( '%s' )->get_error_message(), AB_MCP_Site_Mode::refusal( '%s', array( 'dangerous' => true, 'readonly' => true ) )->get_error_message() ) as $text ) {
+		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::way_text(), \AB_MCP_Guidance::handover() ) as $text ) {
 			self::assertArrayHasKey( $text, $mo );
 		}
-		self::assertSame( 'AlphaBridge MCP ist auf dieser Website im Modus Lesend; das Werkzeug „%s“ ist mit Mighty markiert, und der Modus Lesend führt kein mit Mighty markiertes Werkzeug aus, auch keines, das nur liest. Ein Administrator kann oben unter Einstellungen → AlphaBridge MCP auf Full umschalten – das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko des Website-Betreibers.', $mo[ AB_MCP_Site_Mode::refusal( '%s', array( 'dangerous' => true, 'readonly' => true ) )->get_error_message() ] );
-		self::assertSame( 'Full erlaubt KI-Assistenten, auf dieser Live-Website Inhalte, Dateien, Einstellungen und Code zu erstellen, zu ändern und zu löschen. Das Einschalten kann destruktiv sein und geschieht auf eigenes Risiko. Stelle sicher, dass du ein aktuelles Backup hast.', $mo[ AB_MCP_Site_Mode::notice_text() ] );
-		self::assertSame( 'Ich verstehe, dass das Umschalten auf Full destruktiv sein kann und auf mein eigenes Risiko geschieht, und ich habe ein aktuelles Backup.', $mo[ AB_MCP_Site_Mode::checkbox_text() ] );
+		self::assertSame( 'Mit Schreibrechten arbeiten deine KI-Assistenten direkt auf deiner Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $mo[ AB_MCP_Site_Mode::notice_text() ], 'The wording Thomas approved.' );
+		self::assertSame( 'Verstanden: Änderungen wirken sofort, ich schalte Schreiben auf eigenes Risiko ein und habe ein aktuelles Backup.', $mo[ AB_MCP_Site_Mode::checkbox_text() ] );
+		self::assertSame( 'Mit Schreibrechten arbeiten Ihre KI-Assistenten direkt auf Ihrer Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.', self::mo( self::file( 'de_DE_formal', 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ] );
+		self::assertSame( 'Mit Schreibrechten arbeiten Ihre KI-Assistenten direkt auf Ihrer Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.', self::mo( self::file( 'de_CH', 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ], 'de_CH addresses the reader as Sie.' );
 	}
 
 	/** @return array<string,array{0:string,1:string}> */
@@ -206,7 +339,8 @@ final class BundledTranslationsTest extends TestCase {
 			self::assertStringNotContainsString( '„', $text, $swiss );
 			self::assertSame( strtr( $de[ $key ], array( 'ß' => 'ss', '„' => '«', '“' => '»' ) ), $text, $swiss . ' says what ' . $german . ' says: ' . $key );
 		}
-		self::assertStringContainsString( '«%s»', $ch['AlphaBridge MCP is in read mode on this site; the tool "%s" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.'] );
+		self::assertStringContainsString( '«%s»', $ch['Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.'] );
+		self::assertStringContainsString( 'Grosse Uploads in Teilen', $ch["tool group\x04Large uploads in parts"] );
 	}
 
 	/** @return array<string,array{0:string,1:bool}> */
@@ -220,12 +354,20 @@ final class BundledTranslationsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Where «Sie» after a colon starts a sentence about the assistants or
+	 * the tools («they»), not the reader: in the approved wording of the
+	 * notice and of the fine-tuning's lead.
+	 */
+	const THEY = array( ': Sie können Inhalte', ': Sie lesen Code' );
+
 	#[DataProvider( 'address' )]
 	public function testFormalLocalesSaySieTheOthersDu( string $locale, bool $formal ): void {
 		$notice = self::mo( self::file( $locale, 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ];
 
-		self::assertStringContainsString( $formal ? 'Stellen Sie sicher, dass Sie' : 'Stelle sicher, dass du', $notice );
+		self::assertStringContainsString( $formal ? 'Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.' : 'Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $notice );
 		foreach ( self::mo( self::file( $locale, 'mo' ) ) as $text ) {
+			$text = str_replace( self::THEY, '', $text );
 			self::assertDoesNotMatchRegularExpression( $formal ? '/\b(du|dein\w*|dich|dir)\b/' : '/\b(Sie|Ihr\w*|Ihnen)\b/', $text, $locale );
 		}
 	}

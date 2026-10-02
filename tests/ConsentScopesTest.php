@@ -4,10 +4,13 @@
  *
  * It describes each token scope in one sentence; the content sentence names
  * what a content token changes and promises nothing about code; the page
- * opens with «content» checked, and an approval without a choice is content.
- * While the site is in Read (AB_MCP_Site_Mode) it says, above the choice,
- * that the connection can only read until an administrator switches to Full;
- * the scope itself is granted as chosen.
+ * opens with «Full» checked, and an approval without a choice is full: who
+ * connects an assistant wants it to do what they ask. What can harm the site
+ * stays behind the switch for write access (AB_MCP_Site_Mode): above the
+ * choice the page says in one sentence that this switch decides whether
+ * assistants may write, and whether it is on; with it off, that the
+ * connection only reads until an administrator switches it on. The scope
+ * itself is granted as chosen.
  *
  * @package AlphaBridge_MCP
  */
@@ -64,22 +67,28 @@ final class ConsentScopesTest extends TestCase {
 		return (string) ob_get_clean();
 	}
 
-	public function testInReadTheConsentPageSaysTheConnectionOnlyReads(): void {
+	public function testWithWriteAccessOffTheConsentPageSaysTheConnectionOnlyReads(): void {
 		$x    = $this->xpath( $this->consent_page() );
 		$note = $x->query( '//*[contains(@class, "mode-read")]' );
 
 		self::assertSame( 1, $note->length );
 		self::assertSame( AB_MCP_Site_Mode::consent_text(), trim( $note->item( 0 )->textContent ) );
-		self::assertStringContainsString( 'until an administrator switches AlphaBridge MCP to Full', AB_MCP_Site_Mode::consent_text() );
+		self::assertSame( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP.', AB_MCP_Site_Mode::consent_text() );
+		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', AB_MCP_Site_Mode::consent_text() ), 'One sentence.' );
 		// Above the choice, so it is read before the access level.
 		self::assertSame( 0, $x->query( '//*[contains(@class, "mode-read")]/preceding::input[@name="ab_scope"]' )->length );
 		self::assertSame( 3, $x->query( '//*[contains(@class, "mode-read")]/following::input[@name="ab_scope"]' )->length, 'Every access level is still offered.' );
 	}
 
-	public function testInFullTheConsentPageSaysNothingAboutTheMode(): void {
+	public function testWithWriteAccessOnTheConsentPageSaysTheSwitchStillDecides(): void {
 		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		$x = $this->xpath( $this->consent_page() );
 
-		self::assertSame( 0, $this->xpath( $this->consent_page() )->query( '//*[contains(@class, "mode-read")]' )->length );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "mode-read")]' )->length, 'No warning colour.' );
+		$note = $x->query( '//*[contains(@class, "mode-full")]' );
+		self::assertSame( 1, $note->length );
+		self::assertSame( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now.', trim( $note->item( 0 )->textContent ) );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "mode-full")]/preceding::input[@name="ab_scope"]' )->length, 'Above the choice.' );
 	}
 
 	private function scope_choices( string $default ): DOMXPath {
@@ -102,11 +111,11 @@ final class ConsentScopesTest extends TestCase {
 		self::assertSame(
 			array(
 				'read'    => array( 'Read only', false ),
-				'content' => array( 'Content', true ),
-				'full'    => array( 'Full', false ),
+				'content' => array( 'Content', false ),
+				'full'    => array( 'Full', true ),
 			),
 			$choices,
-			'Narrowest first; content stays the default.'
+			'Narrowest first; the full level is the default, the names of the levels stay.'
 		);
 		$content = AB_MCP_Tool_Registry::scopes()['content'];
 		self::assertStringContainsString( 'change or delete posts, pages, media, terms and comments', $content );
@@ -119,7 +128,7 @@ final class ConsentScopesTest extends TestCase {
 		self::assertStringContainsString( 'Access level', $x->query( '//legend' )->item( 0 )->textContent );
 	}
 
-	public function testTheConsentPageOpensWithContentChecked(): void {
+	public function testTheConsentPageOpensWithFullChecked(): void {
 		$x = $this->xpath( $this->consent_page() );
 
 		$radios = $x->query( '//form[@method="post"]//input[@type="radio"][@name="ab_scope"]' );
@@ -132,7 +141,7 @@ final class ConsentScopesTest extends TestCase {
 			}
 		}
 		self::assertSame( array( 'read', 'content', 'full' ), $order, 'Every scope, narrowest first, inside the form that posts.' );
-		self::assertSame( array( 'content' ), $on, 'Exactly one checked, and never full.' );
+		self::assertSame( array( 'full' ), $on, 'Exactly one checked: the full level.' );
 		self::assertStringContainsString( 'user7', $x->query( '//*[@class="who"]' )->item( 0 )->textContent, 'The page it is part of rendered.' );
 	}
 
@@ -162,13 +171,14 @@ final class ConsentScopesTest extends TestCase {
 		);
 	}
 
-	public function testWithoutContentTheConsentScreenFallsBackToReadNeverFull(): void {
-		$default = ( new ReflectionMethod( AB_MCP_OAuth::class, 'default_scope' ) )->invoke( null, array( 'read' => 'r', 'full' => 'f' ) );
+	public function testWithoutAFullLevelTheConsentScreenFallsBackToTheNarrowest(): void {
+		$m = new ReflectionMethod( AB_MCP_OAuth::class, 'default_scope' );
 
-		self::assertSame( 'read', $default );
+		self::assertSame( 'read', $m->invoke( null, array( 'read' => 'r', 'content' => 'c' ) ) );
+		self::assertSame( 'full', $m->invoke( null, array( 'read' => 'r', 'full' => 'f' ) ) );
 	}
 
-	public function testAnApprovalWithoutAChoiceIsContent(): void {
+	public function testAnApprovalWithoutAChoiceIsFull(): void {
 		$redirect  = 'https://app.example/callback';
 		$verifier  = 'verifier-verifier-verifier-verifier-verifier-1234';
 		$challenge = rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
@@ -211,6 +221,6 @@ final class ConsentScopesTest extends TestCase {
 				$scopes[] = $record['scope'];
 			}
 		}
-		self::assertSame( array( 'content' ), $scopes );
+		self::assertSame( array( 'full' ), $scopes, 'The level the page opens with; write access decides whether it may write.' );
 	}
 }

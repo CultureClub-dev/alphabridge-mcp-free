@@ -34,187 +34,400 @@
 	display: none !important;
 }
 
-/* ---------- The site mode, first on the page ---------- */
+/* ---------- The main switch for write access, first on the page ---------- */
 
 /*
- * Read is the calm state (green), Full the one to notice (orange). White text
- * on #15803d and on #c2410c keeps a contrast of at least 5:1.
+ * Colours, sizes and spacing of the approved design (Entwurf 3). Off is
+ * calm (white); on turns the card deep violet and the switch yellow. White
+ * on #2a1d7a, #2a1d7a on #f2b100 and #3c4a5c on #c3c8d1 keep a contrast of
+ * at least 5:1.
  */
 .ab-mcp .ab-mode {
-	margin: 10px 0 16px;
-	padding: 18px 24px 20px;
-	border: 2px solid #86efac;
-	border-radius: 14px;
-	background: #f0fdf4;
-	color: var(--ab-ink);
-	--ab-mode: #15803d;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 22px;
+	margin: 10px 0 18px;
+	padding: 32px 36px;
+	border: 1px solid #dcdcde;
+	border-radius: 16px;
+	background: #fff;
+	color: #1d2327;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
 .ab-mcp .ab-mode--full {
-	border-color: #f97316;
-	background: #fff7ed;
-	--ab-mode: #c2410c;
+	border-color: #2a1d7a;
+	background: #2a1d7a;
+	color: #fff;
+}
+
+.ab-mcp .ab-mode__eyebrow {
+	margin: 0;
+	color: #50575e;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .08em;
+	text-transform: uppercase;
 }
 
 .ab-mcp .ab-mode__head {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 10px 18px;
+	gap: 28px;
 	align-items: center;
 	justify-content: space-between;
-	margin: 0 0 10px;
 }
 
-.ab-mcp .ab-mode__eyebrow {
-	margin: 0 0 2px;
-	color: var(--ab-soft);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: .08em;
-	text-transform: uppercase;
+.ab-mcp .ab-mode__text {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
 }
 
 .ab-mcp .ab-mode__title {
 	margin: 0;
 	padding: 0;
-	color: var(--ab-ink);
-	font-size: 22px;
+	color: inherit;
+	font-size: 30px;
+	font-weight: 700;
+	line-height: 1.15;
+}
+
+.ab-mcp .ab-mode__status {
+	margin: 0;
+	color: #3c434a;
+	font-size: 17px;
+	line-height: 1.5;
+}
+
+.ab-mcp .ab-mode__scope {
+	margin: 0;
+	color: #50575e;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.ab-mcp .ab-mode--full .ab-mode__eyebrow,
+.ab-mcp .ab-mode--full .ab-mode__scope {
+	color: #c9c2f5;
+}
+
+.ab-mcp .ab-mode--full .ab-mode__status {
+	color: #e7e3fc;
+}
+
+/* The switch: a big track with the words On and Off and a white knob with
+ * the power symbol. Off the knob sits left; on, and while the window asks
+ * for the box, right. */
+.ab-mcp .ab-power {
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: flex-start;
+	width: 212px;
+	height: 92px;
+	margin: 0;
+	padding: 8px;
+	border: 0;
+	border-radius: 999px;
+	background: #c3c8d1;
+	color: #3c4a5c;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background .15s ease;
+}
+
+.ab-mcp .ab-power:focus-visible {
+	outline: 3px solid #4b36c4;
+	outline-offset: 4px;
+}
+
+.ab-mcp .ab-mode--full .ab-power:focus-visible {
+	outline-color: #f2b100;
+}
+
+.ab-mcp .ab-power__word {
+	position: absolute;
+	top: 0;
+	display: flex;
+	align-items: center;
+	height: 100%;
+	font-size: 15px;
 	font-weight: 800;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
+.ab-mcp .ab-power__word--on {
+	left: 30px;
+	color: #c3c8d1;
+}
+
+.ab-mcp .ab-power__word--off {
+	right: 26px;
+	color: #3c4a5c;
+}
+
+.ab-mcp .ab-power__knob {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 76px;
+	height: 76px;
+	border-radius: 999px;
+	background: #fff;
+	color: #3c4a5c;
+}
+
+.ab-mcp .ab-power__knob .ab-ico {
+	stroke-width: 2.4;
+}
+
+.ab-mcp .ab-mode--full .ab-power,
+.ab-mcp .ab-mode.is-confirming .ab-power {
+	justify-content: flex-end;
+}
+
+.ab-mcp .ab-mode.is-confirming .ab-power {
+	background: #a497ea;
+}
+
+.ab-mcp .ab-mode.is-confirming .ab-power__word--on {
+	color: #fff;
+}
+
+.ab-mcp .ab-mode--full .ab-power {
+	background: #f2b100;
+}
+
+.ab-mcp .ab-mode--full .ab-power__word--on,
+.ab-mcp .ab-mode--full .ab-power__knob {
+	color: #2a1d7a;
+}
+
+.ab-mcp .ab-mode--full .ab-power__word--off,
+.ab-mcp .ab-mode.is-confirming .ab-power__word--off {
+	color: transparent;
+}
+
+/* What each state means. */
+.ab-mcp .ab-mode__boxes {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.ab-mcp .ab-mode__box {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 16px 18px;
+	border-radius: 12px;
+}
+
+.ab-mcp .ab-mode__box .ab-ico {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+.ab-mcp .ab-mode__box p {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 0;
+}
+
+.ab-mcp .ab-mode__box strong {
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.ab-mcp .ab-mode__box span {
+	color: #50575e;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.ab-mcp .ab-mode__box--off {
+	border: 2px solid #3c4a5c;
+	background: #f3f5f8;
+	color: #3c4a5c;
+}
+
+.ab-mcp .ab-mode__box--on {
+	border: 1px solid #d9d2fb;
+	background: #faf9ff;
+}
+
+.ab-mcp .ab-mode__box--on .ab-ico {
+	color: #f2b100;
+	fill: #f2b100;
+	stroke-width: 1.4;
+}
+
+.ab-mcp .ab-mode__box strong,
+.ab-mcp .ab-mode__box--off strong {
+	color: #1d2327;
+}
+
+.ab-mcp .ab-mode--full .ab-mode__box--off {
+	border: 1px solid rgba(255, 255, 255, .14);
+	background: rgba(255, 255, 255, .06);
+	color: #c9c2f5;
+}
+
+.ab-mcp .ab-mode--full .ab-mode__box--on {
+	border: 2px solid #f2b100;
+	background: rgba(255, 255, 255, .12);
+}
+
+.ab-mcp .ab-mode--full .ab-mode__box strong {
+	color: #fff;
+}
+
+.ab-mcp .ab-mode--full .ab-mode__box span {
+	color: #e7e3fc;
+}
+
+.ab-mcp .ab-mode__since {
+	margin: 0;
+	color: #c9c2f5;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+/* The notice, the box and the buttons. With JavaScript a small window at
+ * the switch (admin.js places it); without it a plain form in the card. */
+.ab-mcp .ab-mode__form {
+	margin: 0;
+}
+
+.ab-mcp .ab-mode__dialog {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	box-sizing: border-box;
+	max-width: 620px;
+	padding: 22px 24px;
+	border: 1px solid #d9d2fb;
+	border-radius: 16px;
+	background: #fff;
+	color: #1d2327;
+}
+
+/* WordPress marks the body «js» before the page is drawn; until admin.js
+ * has turned the fields into the window, they stay out of sight, so the
+ * notice does not flash on every load. */
+.js .ab-mcp .ab-mode:not(.ab-mode--js) .ab-mode__dialog {
+	display: none;
+}
+
+.ab-mcp .ab-mode--js .ab-mode__dialog {
+	position: absolute;
+	right: 32px;
+	z-index: 30;
+	width: 470px;
+	max-width: calc(100% - 32px);
+	box-shadow: 0 12px 32px rgba(29, 35, 39, .22);
+}
+
+.ab-mcp .ab-mode__dialog-title {
+	margin: 0;
+	padding: 0;
+	color: #1d2327;
+	font-size: 18px;
+	font-weight: 700;
 	line-height: 1.3;
 }
 
-.ab-mcp .ab-mode__word {
-	display: inline-block;
-	padding: 1px 14px;
-	border-radius: 999px;
-	background: var(--ab-mode);
-	color: #fff;
-}
-
-.ab-mcp .ab-mode__toggle {
-	display: inline-flex;
-	padding: 3px;
-	border: 1px solid #c3c4c7;
-	border-radius: 999px;
-	background: #fff;
-	font-size: 13px;
-	font-weight: 700;
-}
-
-.ab-mcp .ab-mode__opt {
-	padding: 4px 14px;
-	border-radius: 999px;
-	color: #646970;
-}
-
-.ab-mcp .ab-mode__opt.is-on {
-	background: var(--ab-mode);
-	color: #fff;
-}
-
-/* The other mode is a real control, not decoration: in Read a link to the
- * box under the notice (it never ticks it), in Full the button that switches
- * back. Each takes the colour of the mode it leads to. */
-.ab-mcp a.ab-mode__opt,
-.ab-mcp button.ab-mode__opt {
-	margin: 0;
-	border: 0;
-	background: transparent;
-	font: inherit;
-	line-height: inherit;
-	text-decoration: none;
-	cursor: pointer;
-}
-
-.ab-mcp a.ab-mode__opt:hover,
-.ab-mcp a.ab-mode__opt:focus-visible {
-	background: #fff7ed;
-	color: #c2410c;
-	outline: 2px solid #c2410c;
-}
-
-.ab-mcp button.ab-mode__opt:hover,
-.ab-mcp button.ab-mode__opt:focus-visible {
-	background: #f0fdf4;
-	color: #15803d;
-	outline: 2px solid #15803d;
-}
-
-.ab-mcp .ab-mode__confirm:target {
-	outline: 3px solid #ea580c;
-	outline-offset: 4px;
-	border-radius: 6px;
-}
-
-.ab-mcp .ab-mode__lead,
-.ab-mcp .ab-mode__since {
-	max-width: 860px;
-	margin: 0 0 10px;
-	font-size: 13.5px;
-	line-height: 1.55;
-}
-
-.ab-mcp .ab-mode__since {
-	color: #7c2d12;
-	font-weight: 700;
+.ab-mcp .ab-mode__dialog-title:focus {
+	outline: none;
 }
 
 .ab-mcp .ab-mode__warning {
-	max-width: 860px;
-	margin: 0 0 12px;
-	padding: 10px 14px;
-	border: 1px solid #fdba74;
-	border-left: 4px solid #ea580c;
-	border-radius: 8px;
-	background: #fff;
-	color: #7c2d12;
-}
-
-.ab-mcp .ab-mode__warning p {
 	margin: 0;
-	font-size: 13.5px;
-	font-weight: 600;
-	line-height: 1.55;
+	color: #2c3338;
+	font-size: 14px;
+	line-height: 1.6;
 }
 
 .ab-mcp .ab-mode__confirm {
 	display: flex;
 	gap: 10px;
 	align-items: flex-start;
-	max-width: 860px;
-	margin: 0 0 12px;
-	font-size: 13.5px;
+	margin: 0;
+	font-size: 14px;
 	line-height: 1.5;
 	cursor: pointer;
 }
 
-.ab-mcp .ab-mode__confirm input {
-	flex: none;
-	margin: 2px 0 0;
+.ab-mcp .ab-mode__confirm input[type="checkbox"] {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	margin: 0;
+	accent-color: #4b36c4;
 }
 
 .ab-mcp .ab-mode__actions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 10px 18px;
-	align-items: center;
+	gap: 10px;
+	justify-content: flex-end;
 	margin: 0;
 }
 
-/* Two classes: the generic .ab-btn rules come later in this file. */
-.ab-mcp .ab-btn.ab-btn--warn,
-.ab-mcp .ab-btn.ab-btn--warn:focus {
-	background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%);
-	box-shadow: 0 4px 0 #7c2d12, 0 10px 20px -8px rgba(194, 65, 12, .6);
+/* Flat buttons of the design, apart from the raised key elsewhere. */
+.ab-mcp .ab-mode__actions .ab-btn,
+.ab-mcp .ab-fine .ab-savebar .ab-btn {
+	min-height: 44px;
+	padding: 0 20px;
+	border: 0;
+	border-radius: 10px;
+	background: #4b36c4;
+	box-shadow: none;
+	color: #fff;
+	font-size: 15px;
+	font-weight: 650;
+	text-shadow: none;
+	transform: none;
 }
 
-.ab-mcp .ab-btn.ab-btn--warn:hover,
-.ab-mcp .ab-btn.ab-btn--warn:focus-visible {
-	box-shadow: 0 6px 0 #7c2d12, 0 16px 26px -10px rgba(194, 65, 12, .7);
+.ab-mcp .ab-mode__actions .ab-btn::after,
+.ab-mcp .ab-fine .ab-savebar .ab-btn::after {
+	display: none;
 }
 
-.ab-mcp .ab-btn.ab-btn--warn:active {
-	box-shadow: 0 1px 0 #7c2d12, 0 4px 10px -6px rgba(194, 65, 12, .6);
+.ab-mcp .ab-mode__actions .ab-btn:hover,
+.ab-mcp .ab-mode__actions .ab-btn:focus-visible,
+.ab-mcp .ab-fine .ab-savebar .ab-btn:hover,
+.ab-mcp .ab-fine .ab-savebar .ab-btn:focus-visible {
+	background: #36259a;
+	box-shadow: none;
+	transform: none;
+}
+
+.ab-mcp .ab-mode__actions .ab-btn:disabled {
+	background: #b9b0ea;
+	cursor: not-allowed;
+	opacity: 1;
+}
+
+.ab-mcp .ab-mode__actions .ab-mode__cancel {
+	padding: 0 16px;
+	border: 1px solid #c3c4c7;
+	background: #fff;
+	color: #1d2327;
+	font-weight: 400;
+}
+
+.ab-mcp .ab-mode__actions .ab-mode__cancel:hover,
+.ab-mcp .ab-mode__actions .ab-mode__cancel:focus-visible {
+	background: #f6f7f7;
+	color: #1d2327;
 }
 
 .ab-mcp .ab-mode-notice__actions {
@@ -224,35 +437,74 @@
 	align-items: center;
 }
 
-/* ---------- Fine-tuning (folded card) ---------- */
+@media (max-width: 600px) {
+	.ab-mcp .ab-mode {
+		gap: 18px;
+		padding: 22px 18px;
+	}
 
-.ab-mcp .ab-fine > summary {
-	display: flex;
-	gap: 12px;
-	align-items: center;
-	justify-content: space-between;
-	cursor: pointer;
-	list-style: none;
+	.ab-mcp .ab-mode__head {
+		flex-direction: column;
+		gap: 18px;
+		align-items: flex-start;
+	}
+
+	.ab-mcp .ab-mode__title {
+		font-size: 24px;
+	}
+
+	.ab-mcp .ab-mode__status {
+		font-size: 16px;
+	}
+
+	.ab-mcp .ab-mode__boxes {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.ab-mcp .ab-mode--js .ab-mode__dialog {
+		right: 12px;
+		left: 12px;
+		width: auto;
+		max-width: none;
+	}
+
+	.ab-mcp .ab-mode__dialog {
+		padding: 18px;
+	}
 }
 
-.ab-mcp .ab-fine > summary::-webkit-details-marker {
-	display: none;
+/* ---------- Fine-tuning ---------- */
+
+.ab-mcp .ab-fine {
+	padding: 28px 30px 4px;
+	border-color: #dcdcde;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
-.ab-mcp .ab-fine > summary .ab-eyebrow {
-	display: block;
+.ab-mcp .ab-fine .ab-eyebrow {
+	margin: 0 0 8px;
+	color: #4b36c4;
+	font-size: 12px;
+	font-weight: 600;
 }
 
-.ab-mcp .ab-fine > summary .ab-card__title {
-	margin: 0;
+.ab-mcp .ab-fine .ab-card__title {
+	margin: 0 0 8px;
+	font-size: 24px;
+	font-weight: 650;
+	line-height: 1.2;
 }
 
-.ab-mcp .ab-fine[open] > summary {
-	margin: 0 0 14px;
+.ab-mcp .ab-fine .ab-lead {
+	max-width: 820px;
+	margin: 0 0 10px;
+	color: #3c434a;
+	font-size: 15px;
+	line-height: 1.55;
 }
 
-.ab-mcp .ab-fine[open] > summary .ab-chev {
-	transform: rotate(90deg);
+.ab-mcp .ab-fine .ab-lead:last-of-type {
+	margin-bottom: 18px;
 }
 
 /* ---------- The band at the top ---------- */
@@ -330,6 +582,16 @@
 
 .ab-mcp .ab-chip b {
 	color: #fff;
+}
+
+.ab-mcp a.ab-chip {
+	text-decoration: none;
+}
+
+.ab-mcp a.ab-chip:hover,
+.ab-mcp a.ab-chip:focus {
+	color: #fff;
+	text-decoration: underline;
 }
 
 .ab-mcp .ab-hero .ab-hero__title {
@@ -887,49 +1149,68 @@
 .ab-mcp .ab-capbar {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 12px 22px;
+	gap: 12px 14px;
 	align-items: center;
-	margin: 0 0 8px;
+	margin: 0 0 18px;
 	padding: 12px 14px;
-	border: 1px solid var(--ab-line);
+	border: 1px solid #e2e4e7;
 	border-radius: 12px;
-	background: var(--ab-tint);
+	background: #f6f7f7;
 }
 
 .ab-mcp .ab-capbar__item {
 	display: inline-flex;
-	gap: 10px;
+	gap: 14px;
 	align-items: center;
-	color: var(--ab-ink);
+	color: #1d2327;
 	cursor: pointer;
-	font-weight: 700;
+	font-size: 15px;
+	font-weight: 650;
 }
 
 .ab-mcp .ab-search {
-	flex: 1 1 200px;
-	min-width: 160px;
+	flex: 1 1 160px;
+	min-width: 120px;
+	min-height: 40px;
 	margin: 0;
-	padding: 7px 12px;
-	border: 1px solid var(--ab-line);
-	border-radius: 10px;
+	padding: 0 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 8px;
 	background: #fff;
+	font-size: 14px;
+}
+
+.ab-mcp .ab-capbar__badges {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 .ab-mcp .ab-capbar__count {
-	margin-inline-start: auto;
-	color: var(--ab-soft);
+	color: #3c434a;
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.ab-mcp .ab-capbar__count b {
 	font-weight: 600;
 }
 
-
+/* A switch: a checkbox with role switch, drawn as a track with a knob. */
 .ab-mcp .ab-switch {
 	position: relative;
 	display: inline-block;
 	flex: none;
-	width: 40px;
-	height: 22px;
+	width: 44px;
+	height: 24px;
 	margin: 0;
 	cursor: pointer;
+}
+
+.ab-mcp .ab-switch--sm {
+	width: 36px;
+	height: 20px;
 }
 
 .ab-mcp .ab-switch input {
@@ -956,29 +1237,43 @@
 	position: absolute;
 	top: 3px;
 	left: 3px;
-	width: 16px;
-	height: 16px;
+	width: 18px;
+	height: 18px;
 	border-radius: 50%;
 	background: #fff;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
 	transition: transform .15s ease;
 }
 
+.ab-mcp .ab-switch--sm .ab-switch__track::before {
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+}
+
 .ab-mcp .ab-switch input:checked + .ab-switch__track {
-	background: linear-gradient(135deg, #4f46e5, #7c3aed);
+	background: #4b36c4;
 }
 
 .ab-mcp .ab-switch input:checked + .ab-switch__track::before {
-	transform: translateX(18px);
+	transform: translateX(20px);
+}
+
+.ab-mcp .ab-switch--sm input:checked + .ab-switch__track::before {
+	transform: translateX(16px);
 }
 
 /* Part of a group on. Chrome does not match :checked on an indeterminate box. */
 .ab-mcp .ab-switch input:indeterminate + .ab-switch__track {
-	background: linear-gradient(135deg, #a5b4fc, #c4b5fd);
+	background: #a497ea;
 }
 
 .ab-mcp .ab-switch input:indeterminate + .ab-switch__track::before {
-	transform: translateX(9px);
+	transform: translateX(10px);
+}
+
+.ab-mcp .ab-switch--sm input:indeterminate + .ab-switch__track::before {
+	transform: translateX(8px);
 }
 
 .ab-mcp .ab-switch input:focus-visible + .ab-switch__track {
@@ -986,104 +1281,375 @@
 	outline-offset: 2px;
 }
 
-.ab-mcp .ab-group {
-	margin: 0 0 8px;
-	border: 1px solid var(--ab-line);
+/*
+ * The main groups: one row each (switch, name and what is in it, badges,
+ * how many are on, arrow); the row's button opens the tool groups, and each
+ * of those opens its tools.
+ */
+.ab-mcp .ab-groups {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid #e2e4e7;
 	border-radius: 12px;
 	background: #fff;
 }
 
-.ab-mcp .ab-group > summary {
+.ab-mcp .ab-group + .ab-group {
+	border-top: 1px solid #e2e4e7;
+}
+
+.ab-mcp .ab-group__head {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 8px 12px;
+	gap: 14px;
 	align-items: center;
-	padding: 12px 14px;
+	padding: 10px 14px;
+}
+
+.ab-mcp .ab-group.is-open .ab-group__head,
+.ab-mcp .ab-group.is-open .ab-group__body {
+	background: #fbfbfc;
+}
+
+.ab-mcp .ab-group:first-child .ab-group__head {
+	border-radius: 12px 12px 0 0;
+}
+
+.ab-mcp .ab-group__toggle {
+	display: flex;
+	flex: 1;
+	gap: 14px;
+	align-items: center;
+	min-width: 0;
+	min-height: 44px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #1d2327;
 	cursor: pointer;
-	list-style: none;
+	font: inherit;
+	text-align: left;
 }
 
-.ab-mcp .ab-group > summary::-webkit-details-marker {
-	display: none;
+.ab-mcp .ab-group__toggle:focus-visible,
+.ab-mcp .ab-sub__toggle:focus-visible {
+	border-radius: 6px;
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
 }
 
-.ab-mcp .ab-group > summary strong {
-	color: var(--ab-ink);
-	font-size: 13.5px;
+.ab-mcp .ab-group__text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
 }
 
-.ab-mcp .ab-group__n {
-	color: var(--ab-soft);
-	font-size: 12px;
+.ab-mcp .ab-group__name {
+	font-size: 16px;
+	font-weight: 650;
+}
+
+.ab-mcp .ab-group__desc {
+	color: #646970;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.ab-mcp .ab-group__badges,
+.ab-mcp .ab-sub__badges {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 .ab-mcp .ab-group__right {
 	display: flex;
 	gap: 10px;
 	align-items: center;
-	margin-inline-start: auto;
+}
+
+.ab-mcp .ab-group__state {
+	min-width: 92px;
+	color: #1b6e32;
+	font-size: 13px;
+	font-weight: 600;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.ab-mcp .ab-status__more {
+	display: block;
+	font-weight: 500;
+}
+
+.ab-mcp .ab-status__more[hidden] {
+	display: none;
+}
+
+.ab-mcp .ab-capbar__more::before {
+	content: " · ";
+}
+
+.ab-mcp .ab-group__state[data-state="partial"] {
+	color: #8a5300;
+}
+
+.ab-mcp .ab-group__state[data-state="off"] {
+	color: #646970;
 }
 
 .ab-mcp .ab-chev {
-	color: #a7aaad;
-	font-size: 16px;
+	display: inline-flex;
+	color: #50575e;
 	transition: transform .15s ease;
 }
 
-.ab-mcp .ab-group[open] > summary .ab-chev {
+.ab-mcp .ab-group__toggle[aria-expanded="true"] .ab-chev,
+.ab-mcp .ab-sub__toggle[aria-expanded="true"] .ab-chev {
 	transform: rotate(90deg);
 }
 
-.ab-mcp .ab-group[open] > summary {
-	border-bottom: 1px solid var(--ab-line);
+.ab-mcp .ab-group__body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px 14px 14px 72px;
+	border-radius: 0 0 12px 12px;
+}
+
+/* Without JavaScript the buttons cannot open anything: show it all. */
+.no-js .ab-mcp .ab-group__body[hidden],
+.no-js .ab-mcp .ab-sub__body[hidden] {
+	display: block !important;
+}
+
+.no-js .ab-mcp .ab-group__toggle .ab-chev,
+.no-js .ab-mcp .ab-sub__toggle .ab-chev {
+	display: none;
+}
+
+/* A tool group: a card with its own row that opens its tools. */
+.ab-mcp .ab-sub {
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
+	background: #fff;
+}
+
+.ab-mcp .ab-sub__head {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	min-height: 44px;
+	padding: 6px 12px;
+}
+
+/* Name, badges and chevron on one line; where the list is narrow the
+ * badges go below the name and the chevron stays beside it (container
+ * query below), so the name never gets squeezed. */
+.ab-mcp .ab-sub__toggle {
+	display: grid;
+	flex: 1;
+	grid-template-areas: "name badges chev";
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	gap: 6px 12px;
+	align-items: center;
+	min-width: 0;
+	min-height: 44px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: #1d2327;
+	cursor: pointer;
+	font: inherit;
+	text-align: left;
+}
+
+.ab-mcp .ab-sub__name {
+	grid-area: name;
+	font-size: 15px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.ab-mcp .ab-sub__toggle > .ab-sub__badges {
+	grid-area: badges;
+}
+
+.ab-mcp .ab-sub__toggle > .ab-chev {
+	grid-area: chev;
+}
+
+@container abfine (max-width: 480px) {
+	.ab-mcp .ab-sub__toggle {
+		grid-template-areas: "name chev" "badges badges";
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+}
+
+.ab-mcp .ab-sub__badges .ab-pill {
+	padding: 2px 8px;
+	font-size: 12px;
+}
+
+.ab-mcp .ab-sub__body {
+	border-top: 1px solid #e2e4e7;
 }
 
 .ab-mcp .ab-tool-list {
 	margin: 0;
-	padding: 4px 14px 8px;
+	padding: 0;
 	list-style: none;
 }
 
+/* One tool: switch, name, short name, note, badge, on one line down to a
+ * list of 600 px (the fine-tuning of a desktop is about 800 px wide); below
+ * that the short name goes on a line of its own, and below 480 px the name
+ * in code takes the whole first line, so it is not broken, with the badge
+ * and the note on a line under the short name (container queries below). */
+.ab-mcp .ab-groups {
+	container-name: abfine;
+	container-type: inline-size;
+}
+
 .ab-mcp .ab-tool-row {
-	display: flex;
-	gap: 12px;
-	align-items: flex-start;
+	display: grid;
+	grid-template-areas: "sw code what note badge";
+	grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+	gap: 4px 12px;
+	align-items: center;
+	min-height: 40px;
 	margin: 0;
-	padding: 10px 0;
+	padding: 6px 12px 6px 20px;
 	border-bottom: 1px solid #f0f0f1;
+}
+
+.ab-mcp .ab-tool-row > .ab-switch {
+	grid-area: sw;
+}
+
+.ab-mcp .ab-tool-row > code {
+	grid-area: code;
+}
+
+.ab-mcp .ab-tool-row > .ab-tool-row__what {
+	grid-area: what;
+}
+
+.ab-mcp .ab-tool-row > .ab-tool-row__note {
+	grid-area: note;
+}
+
+.ab-mcp .ab-tool-row > .ab-pill {
+	grid-area: badge;
+	justify-self: end;
+}
+
+@container abfine (max-width: 600px) {
+	.ab-mcp .ab-tool-row {
+		grid-template-areas: "sw code note badge" ". what what what";
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
+	}
+
+	.ab-mcp .ab-tool-row > code {
+		justify-self: start;
+	}
+}
+
+@container abfine (max-width: 480px) {
+	.ab-mcp .ab-tool-row {
+		grid-template-areas: "sw code code" ". what what" ". badge note";
+		grid-template-columns: auto auto minmax(0, 1fr);
+	}
+
+	.ab-mcp .ab-tool-row > code,
+	.ab-mcp .ab-tool-row > .ab-pill,
+	.ab-mcp .ab-tool-row > .ab-tool-row__note {
+		justify-self: start;
+	}
 }
 
 .ab-mcp .ab-tool-row:last-child {
 	border-bottom: 0;
 }
 
-.ab-mcp .ab-tool-row .ab-switch {
-	margin-top: 1px;
+.ab-mcp .ab-tool-row.is-target {
+	background: #efebff;
 }
 
-.ab-mcp .ab-tool-row__text {
-	flex: 1;
+.ab-mcp .ab-tool-row code {
+	margin: 0;
+	padding: 2px 6px;
+	border-radius: 5px;
+	background: #f0f0f1;
+	color: #1d2327;
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+
+.ab-mcp .ab-tool-row .ab-pill,
+.ab-mcp .ab-tool-row__note {
+	white-space: nowrap;
+}
+
+.ab-mcp .ab-tool-row__what {
+	display: flex;
+	align-items: center;
 	min-width: 0;
 }
 
-.ab-mcp .ab-tool-row__text code {
-	margin: 0;
-	padding: 1px 6px;
-	border-radius: 6px;
-	background: var(--ab-tint);
-	color: var(--ab-ink);
-	font-size: 12px;
+.ab-mcp .ab-tool-row__label {
+	min-width: 0;
+	color: #3c434a;
+	font-size: 14px;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
 }
 
-.ab-mcp .ab-tool-row__text p {
+.ab-mcp .ab-tool-row__note {
+	color: #50575e;
+	font-size: 13px;
+}
+
+.ab-mcp .ab-tool-row__note--deletes {
+	color: #8a2424;
+}
+
+/* The tools of a main group with one tool group: rows as cards. */
+.ab-mcp .ab-tool-list--direct {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding-top: 4px;
+}
+
+.ab-mcp .ab-tool-list--direct .ab-tool-row {
+	padding-left: 12px;
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
+	background: #fff;
+}
+
+.ab-mcp .ab-group__addon {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 	margin: 4px 0 0;
-	color: var(--ab-soft);
-	line-height: 1.45;
+}
+
+.ab-mcp .ab-group__addon p {
+	margin: 6px 0 0;
+	color: #3c434a;
+	font-size: 14px;
+	line-height: 1.55;
 }
 
 .ab-mcp .ab-info {
 	position: relative;
 	display: inline-flex;
+	flex: none;
 	align-items: center;
 	justify-content: center;
 	width: 18px;
@@ -1102,13 +1668,25 @@
 	vertical-align: 1px;
 }
 
+/* The «i» is drawn 18 px wide; it takes taps and clicks on 24 by 24 px
+ * (WCAG 2.5.8) without moving anything around it. */
+.ab-mcp .ab-info::before {
+	content: "";
+	position: absolute;
+	inset: -4px;
+}
+
+/* The description behind the «i». Not drawn at all until the «i» is hovered
+ * or has the focus: a hidden box that kept its place made the page wider
+ * than a phone (the text is still read out through aria-describedby). */
 .ab-mcp .ab-tip {
 	position: absolute;
 	bottom: calc(100% + 8px);
 	left: 50%;
 	z-index: 20;
+	display: none;
 	width: 320px;
-	max-width: 70vw;
+	max-width: calc(100vw - 32px);
 	padding: 10px 12px;
 	border-radius: 10px;
 	background: #0b0f19;
@@ -1118,52 +1696,113 @@
 	font-weight: 400;
 	line-height: 1.5;
 	text-align: left;
-	opacity: 0;
-	pointer-events: none;
-	transform: translate(-50%, 4px);
-	transition: opacity .12s ease, transform .12s ease;
-	visibility: hidden;
+	white-space: normal;
+	transform: translateX(-50%);
 }
 
 .ab-mcp .ab-info:hover .ab-tip,
 .ab-mcp .ab-info:focus .ab-tip {
-	opacity: 1;
-	transform: translate(-50%, 0);
-	visibility: visible;
+	display: block;
 }
 
+/* On a narrow screen the description stands at the bottom of the window,
+ * the full width less the margins, wherever the «i» is. */
+@media (max-width: 600px) {
+	.ab-mcp .ab-tip {
+		position: fixed;
+		right: 16px;
+		bottom: 16px;
+		left: 16px;
+		width: auto;
+		max-width: none;
+		transform: none;
+	}
+}
+
+/* The save row: one button for tools and abilities. Sticky at the bottom
+ * of the window while the card is longer than it. */
 .ab-mcp .ab-savebar {
 	position: sticky;
-	bottom: 12px;
+	bottom: 0;
 	z-index: 5;
 	display: flex;
 	flex-wrap: wrap;
-	gap: 10px 16px;
+	gap: 10px 18px;
 	align-items: center;
-	margin: 16px 0 0;
-	padding: 12px 14px;
-	border: 1px solid #d9d6fb;
-	border-radius: 12px;
-	background: rgba(255, 255, 255, .96);
-	box-shadow: 0 10px 30px -18px rgba(79, 70, 229, .6);
+	margin: 18px 0 0;
+	padding: 16px 0 18px;
+	border-top: 1px solid #e2e4e7;
+	background: #fff;
 }
 
 .ab-mcp .ab-savebar__text {
 	flex: 1 1 260px;
-	color: var(--ab-soft);
-	font-size: 12.5px;
-	line-height: 1.45;
+	color: #50575e;
+	font-size: 13px;
+	line-height: 1.5;
 }
 
-.ab-mcp .ab-savebar.is-dirty {
-	border-color: #f6c56b;
-	background: rgba(253, 248, 238, .97);
+/* The save row of an add-on's own form (before 4.5.0) inside a main group:
+ * in place, not sticky, so it never covers the save row of the card. */
+.ab-mcp .ab-savebar--inline {
+	position: static;
+	margin: 10px 0 2px;
+	padding: 8px 10px;
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
 }
 
 .ab-mcp .ab-savebar.is-dirty .ab-savebar__text {
 	color: #8a5300;
 	font-weight: 700;
 }
+
+.ab-mcp .ab-fine > .ab-note:last-child {
+	margin: 0 0 18px;
+}
+
+/* Narrow screens: the group's name and what is in it above, badges and the
+ * count below; the tool groups start at the left edge. */
+@media (max-width: 600px) {
+	.ab-mcp .ab-fine {
+		padding: 22px 16px 4px;
+	}
+
+	.ab-mcp .ab-group__head {
+		align-items: flex-start;
+		padding: 12px;
+	}
+
+	.ab-mcp .ab-group__head .ab-switch {
+		margin-top: 10px;
+	}
+
+	.ab-mcp .ab-group__toggle {
+		flex-wrap: wrap;
+		gap: 8px 10px;
+	}
+
+	.ab-mcp .ab-group__text {
+		flex-basis: 100%;
+	}
+
+	.ab-mcp .ab-group__right {
+		margin-inline-start: auto;
+	}
+
+	.ab-mcp .ab-group__state {
+		min-width: 0;
+	}
+
+	.ab-mcp .ab-group__body {
+		padding: 6px 10px 12px;
+	}
+
+	.ab-mcp .ab-tool-row {
+		padding-left: 12px;
+	}
+}
+
 
 /* ---------- Pills ---------- */
 
@@ -1183,11 +1822,46 @@
 .ab-mcp .ab-pill--on { background: #e7f6ec; color: #067647; }
 .ab-mcp .ab-pill--partial { background: #fdf3e2; color: #8a5300; }
 .ab-mcp .ab-pill--off { background: #fdecea; color: #b42318; }
-.ab-mcp .ab-pill--mighty { background: #fbeae3; color: #8a2b00; }
+.ab-mcp .ab-pill--mighty { background: #fbeae3; color: #8a2b00; } /* Cards of older Pro add-ons. */
+
+/*
+ * The two badges of the fine-tuning: Reads with an eye, Writes with a pen.
+ * The symbol and the word say it; the colour only repeats it. Contrast of
+ * the text at least 7:1 on its background.
+ */
+.ab-mcp .ab-pill--reads,
+.ab-mcp .ab-pill--writes {
+	display: inline-flex;
+	gap: 5px;
+	align-items: center;
+	padding: 3px 9px;
+	font-size: 12.5px;
+	font-weight: 650;
+}
+
+.ab-mcp .ab-pill--reads {
+	border: 1px solid #d5dbe3;
+	background: #eef1f5;
+	color: #2f3d4f;
+}
+
+.ab-mcp .ab-pill--writes {
+	border: 1px solid #d9d2fb;
+	background: #efebff;
+	color: #3b2aa8;
+}
+
+.ab-mcp .ab-pill .ab-ico {
+	stroke-width: 2.4;
+}
 
 /* ---------- Tables ---------- */
 
+/* The scroller is the frame of what it holds, so a cell's hidden text
+ * (the screen-reader heading «Actions») stays inside it and does not widen
+ * the page on a phone. */
 .ab-mcp .ab-table-wrap {
+	position: relative;
 	overflow-x: auto;
 }
 
@@ -1300,6 +1974,7 @@
 	.ab-mcp .ab-client,
 	.ab-mcp .ab-switch__track,
 	.ab-mcp .ab-switch__track::before,
+	.ab-mcp .ab-power,
 	.ab-mcp .ab-chev,
 	.ab-mcp .ab-tip {
 		transition: none;
@@ -1324,17 +1999,29 @@
 	}
 
 	.ab-mcp .ab-mode,
-	.ab-mcp .ab-mode__warning {
+	.ab-mcp .ab-mode__dialog,
+	.ab-mcp .ab-mode__box {
 		border: 2px solid CanvasText;
 	}
 
-	.ab-mcp .ab-mode__word,
-	.ab-mcp .ab-mode__opt.is-on {
-		border: 2px solid Highlight;
+	.ab-mcp .ab-power {
+		border: 2px solid ButtonText;
+	}
+
+	.ab-mcp .ab-mode--full .ab-power {
+		border: 4px solid Highlight;
 	}
 
 	.ab-mcp .ab-switch__track {
 		border: 1px solid ButtonText;
+	}
+
+	.ab-mcp .ab-pill--reads {
+		border: 1px dashed CanvasText;
+	}
+
+	.ab-mcp .ab-pill--writes {
+		border: 2px solid CanvasText;
 	}
 }
 

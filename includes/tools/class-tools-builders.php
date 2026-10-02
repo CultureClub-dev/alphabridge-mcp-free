@@ -89,7 +89,7 @@ class AB_MCP_Tools_Builders extends AB_MCP_Tools_Base {
 		// whoever may edit its parent (edit_post on a revision never passes).
 		$owner = 'revision' === $post->post_type ? (int) $post->post_parent : (int) $post->ID;
 		if ( $owner <= 0 || ! current_user_can( 'edit_post', $owner ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this post. The outline reads the page builder\'s stored data and is for accounts that may edit the post; wp_get_post shows the post to accounts that may read it.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this post. The outline reads the page builder\'s stored data and is for accounts that may edit the post; wp_get_post shows the post to accounts that may read it.', 'alphabridge-mcp' ) );
 		}
 
 		$limit = self::clamp( self::i( $a, 'max_elements', 500 ), 1, 2000 );

@@ -1,6 +1,7 @@
 /**
- * AlphaBridge MCP settings screen: the choice of assistant, copy buttons, the
- * capability switches and search, and the token create/rotate flow. Creating or
+ * AlphaBridge MCP settings screen: the main switch for write access, the
+ * choice of assistant, copy buttons, the fine-tuning (switches and search),
+ * and the token create/rotate flow. Creating or
  * rotating a connection reveals a secret; that is done over authenticated
  * admin-ajax so the plaintext is returned once, straight to this browser, and
  * is never persisted server-side.
@@ -94,72 +95,286 @@
 		}
 	}() );
 
-	/* ---- Links to a folded setting on this page open it. ---- */
-	document.addEventListener( 'click', function ( e ) {
-		var a = e.target.closest ? e.target.closest( 'a[href^="#ab-"]' ) : null;
-		if ( ! a ) {
+	/* ---- The main switch for write access. Off, the switch opens a small
+	 * window at it with the notice, the box, «Switch on» and «Cancel»; the
+	 * window keeps the focus inside while open, Escape and Cancel close it
+	 * and give the focus back to the switch. Without this script the same
+	 * fields stand in the card as a plain form. On, the switch submits the
+	 * form that switches off: nothing to add here. ---- */
+	( function () {
+		var card = document.getElementById( 'ab-mode' );
+		var sw = card ? card.querySelector( '.ab-power' ) : null;
+		var dlg = document.getElementById( 'ab-mode-confirm' );
+		var form = document.getElementById( 'ab-mode-form' );
+		if ( ! card || ! sw || ! dlg || ! form ) {
 			return;
 		}
-		var t = document.getElementById( a.getAttribute( 'href' ).slice( 1 ) );
-		if ( t && 'DETAILS' === t.tagName ) {
-			t.open = true;
+		var box = dlg.querySelector( 'input[name="confirm_full"]' );
+		var go = dlg.querySelector( '.ab-mode__go' );
+		var cancel = dlg.querySelector( '.ab-mode__cancel' );
+		if ( ! box || ! go ) {
+			return;
+		}
+		dlg.setAttribute( 'role', 'dialog' );
+		dlg.setAttribute( 'aria-modal', 'false' );
+		card.classList.add( 'ab-mode--js' );
+		dlg.hidden = true;
+		if ( cancel ) {
+			cancel.hidden = false;
+		}
+
+		function sync() {
+			go.disabled = ! box.checked;
+		}
+
+		// Right under the switch, wherever the card's text made it end up.
+		function place() {
+			var c = card.getBoundingClientRect();
+			var b = sw.getBoundingClientRect();
+			dlg.style.top = Math.round( b.bottom - c.top + 12 ) + 'px';
+		}
+
+		function open() {
+			box.checked = false;
+			sync();
+			dlg.hidden = false;
+			card.classList.add( 'is-confirming' );
+			sw.setAttribute( 'aria-expanded', 'true' );
+			place();
+			box.focus();
+		}
+
+		function close( back ) {
+			if ( dlg.hidden ) {
+				return;
+			}
+			dlg.hidden = true;
+			card.classList.remove( 'is-confirming' );
+			sw.setAttribute( 'aria-expanded', 'false' );
+			if ( back ) {
+				sw.focus();
+			}
+		}
+
+		sw.addEventListener( 'click', function ( e ) {
+			e.preventDefault();
+			if ( dlg.hidden ) {
+				open();
+			} else {
+				close( true );
+			}
+		} );
+		box.addEventListener( 'change', sync );
+		if ( cancel ) {
+			cancel.addEventListener( 'click', function () {
+				close( true );
+			} );
+		}
+		card.addEventListener( 'keydown', function ( e ) {
+			if ( 'Escape' === e.key && ! dlg.hidden ) {
+				e.preventDefault();
+				close( true );
+			}
+		} );
+		// Tab from the last control goes back to the first, and back.
+		dlg.addEventListener( 'keydown', function ( e ) {
+			if ( 'Tab' !== e.key ) {
+				return;
+			}
+			var items = Array.prototype.filter.call( dlg.querySelectorAll( 'input, button' ), function ( el ) {
+				return ! el.disabled && ! el.hidden;
+			} );
+			if ( ! items.length ) {
+				return;
+			}
+			var first = items[ 0 ];
+			var last = items[ items.length - 1 ];
+			if ( e.shiftKey && document.activeElement === first ) {
+				e.preventDefault();
+				last.focus();
+			} else if ( ! e.shiftKey && document.activeElement === last ) {
+				e.preventDefault();
+				first.focus();
+			}
+		} );
+		document.addEventListener( 'click', function ( e ) {
+			if ( ! dlg.hidden && ! dlg.contains( e.target ) && ! sw.contains( e.target ) ) {
+				close( false );
+			}
+		} );
+		window.addEventListener( 'resize', function () {
+			if ( ! dlg.hidden ) {
+				place();
+			}
+		} );
+		form.addEventListener( 'submit', function ( e ) {
+			if ( ! box.checked ) {
+				e.preventDefault();
+				if ( dlg.hidden ) {
+					open();
+				} else {
+					box.focus();
+				}
+			}
+		} );
+	}() );
+
+	/* ---- Folded places on this page: a main group of the fine-tuning or a
+	 * tool group in it (a button with aria-expanded each), or a details
+	 * element. ---- */
+	function setOpen( el, open ) {
+		var sub = el.classList.contains( 'ab-sub' );
+		var btn = el.querySelector( sub ? '.ab-sub__toggle' : '.ab-group__toggle' );
+		var body = el.querySelector( sub ? '.ab-sub__body' : '.ab-group__body' );
+		if ( ! btn || ! body ) {
+			return;
+		}
+		btn.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
+		body.hidden = ! open;
+		el.classList.toggle( 'is-open', open );
+	}
+
+	function isOpen( el ) {
+		var btn = el.querySelector( el.classList.contains( 'ab-sub' ) ? '.ab-sub__toggle' : '.ab-group__toggle' );
+		return !! btn && 'true' === btn.getAttribute( 'aria-expanded' );
+	}
+
+	// Open whatever folds the element with this id away, so a link to it,
+	// or the address after a save («…#ab-fine»), or the link in an answer to
+	// an assistant («…#ab-tool-wp_update_post»), lands on it.
+	function unfold( id ) {
+		var t = id ? document.getElementById( id ) : null;
+		if ( ! t ) {
+			return null;
+		}
+		for ( var el = t; el && el !== document.body; el = el.parentElement ) {
+			if ( 'DETAILS' === el.tagName ) {
+				el.open = true;
+			} else if ( el.classList && ( el.classList.contains( 'ab-group' ) || el.classList.contains( 'ab-sub' ) ) ) {
+				setOpen( el, true );
+			}
+		}
+		return t;
+	}
+
+	document.addEventListener( 'click', function ( e ) {
+		var a = e.target.closest ? e.target.closest( 'a[href^="#ab-"]' ) : null;
+		if ( a ) {
+			unfold( a.getAttribute( 'href' ).slice( 1 ) );
 		}
 	} );
 
-	/* ---- Capabilities: all tools, groups, single tools, search ---- */
-	var caps = document.getElementById( 'ab-caps' );
-	var dirty = false;
-
-	function fmt( s, a, b ) {
-		return String( s ).replace( '%1$d', a ).replace( '%2$d', b );
+	if ( window.location.hash && /^#ab-[\w-]+$/.test( window.location.hash ) ) {
+		var landed = unfold( window.location.hash.slice( 1 ) );
+		if ( landed && landed.scrollIntoView ) {
+			landed.scrollIntoView();
+			if ( landed.classList && landed.classList.contains( 'ab-tool-row' ) ) {
+				landed.classList.add( 'is-target' );
+			}
+		}
 	}
 
-	// Recount every group from its tool switches: the group switch (on, off, or
-	// part on), the group's pill, the counter and the switch for all tools.
-	function refresh() {
-		if ( ! caps ) {
-			return;
+	/* ---- Fine-tuning: all tools, main groups, tool groups, single tools,
+	 * search ---- */
+	var fine = document.getElementById( 'ab-fine' );
+	// The form holds only its hidden fields; switches and the save button
+	// join it through their form attribute, an add-on's fields too.
+	var caps = document.getElementById( 'ab-caps' );
+	var dirty = false;
+	// Forms of add-ons of before 4.5.0 inside a main group, changed but not saved.
+	var addonDirty = [];
+	// Every switch the switches for a group or for all move: the tools, and
+	// the items an add-on put into a group.
+	var MOVED = 'input.ab-tool:not([disabled]), input.ab-item:not([disabled])';
+
+	function fmt( s, a, b ) {
+		return String( s ).replace( /%1\$[sd]/, a ).replace( /%2\$[sd]/, b );
+	}
+
+	// A switch for several: checked when all below it are on, half when some.
+	function sum( scope, toggle ) {
+		var items = scope.querySelectorAll( 'input.ab-tool, input.ab-item' );
+		var k = 0;
+		items.forEach( function ( t ) {
+			if ( t.checked ) {
+				k++;
+			}
+		} );
+		if ( toggle ) {
+			toggle.checked = items.length > 0 && k === items.length;
+			toggle.indeterminate = k > 0 && k < items.length;
 		}
+	}
+
+	// «1 ability off», «2 abilities off»: the items of an add-on (the
+	// abilities of other plugins) that are off, '' for none.
+	function itemsOff( n ) {
+		if ( ! n ) {
+			return '';
+		}
+		return String( 1 === n ? ( cfg.itemOff || '%s ability off' ) : ( cfg.itemsOff || '%s abilities off' ) ).replace( /%(1\$)?[sd]/, n );
+	}
+
+	// Show what an add-on's switched-off items add to a count, or nothing.
+	function showMore( el, n ) {
+		if ( el ) {
+			el.textContent = itemsOff( n );
+			el.hidden = ! n;
+		}
+	}
+
+	// Recount: every tool group's switch, every main group's switch and
+	// state, the counter and the switch for all. The switches for a group and
+	// for all move the tools and an add-on's items alike, so they show half
+	// on when an item is off; the counts say so: «x of y on» counts the tools,
+	// and a line under it the items that are off («1 ability off»).
+	function refresh() {
 		var on = 0;
 		var all = 0;
-		caps.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
+		var offAll = 0;
+		fine.querySelectorAll( '.ab-sub' ).forEach( function ( sub ) {
+			sum( sub, sub.querySelector( '.ab-sub-toggle' ) );
+		} );
+		fine.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
 			var tools = g.querySelectorAll( 'input.ab-tool' );
 			var n = tools.length;
 			var k = 0;
+			var off = 0;
 			tools.forEach( function ( t ) {
 				if ( t.checked ) {
 					k++;
 				}
 			} );
+			g.querySelectorAll( 'input.ab-item' ).forEach( function ( t ) {
+				if ( ! t.checked ) {
+					off++;
+				}
+			} );
 			on += k;
 			all += n;
-			var gt = g.querySelector( '.ab-group-toggle' );
-			if ( gt ) {
-				// Checked only when all are on: a click on a group that is partly
-				// on switches all of it on, like the switch for all tools.
-				gt.checked = n > 0 && k === n;
-				gt.indeterminate = k > 0 && k < n;
-			}
+			offAll += off;
+			sum( g, g.querySelector( '.ab-group-toggle' ) );
 			var st = g.querySelector( '.ab-status' );
 			if ( st ) {
-				st.className = 'ab-pill ab-status ' + ( 0 === k ? 'ab-pill--off' : ( k === n ? 'ab-pill--on' : 'ab-pill--partial' ) );
-				st.textContent = 0 === k ? ( cfg.off || 'Off' ) : ( k === n ? ( cfg.on || 'On' ) : fmt( cfg.partial || '%1$d/%2$d', k, n ) );
+				st.setAttribute( 'data-state', 0 === k && n > 0 ? 'off' : ( k === n && 0 === off ? 'on' : 'partial' ) );
+				var count = st.querySelector( '.ab-status__count' );
+				if ( count ) {
+					count.textContent = fmt( cfg.partial || '%1$s of %2$s on', k, n );
+				} else {
+					st.textContent = fmt( cfg.partial || '%1$s of %2$s on', k, n );
+				}
+				showMore( st.querySelector( '.ab-status__more' ), off );
 			}
 		} );
-		var c = caps.querySelector( '.ab-on-count' );
+		var c = fine.querySelector( '.ab-on-count' );
 		if ( c ) {
 			c.textContent = on;
 		}
-		var a = caps.querySelector( '.ab-all-toggle' );
-		if ( a ) {
-			a.checked = all > 0 && on === all;
-			a.indeterminate = on > 0 && on < all;
-		}
+		showMore( fine.querySelector( '.ab-capbar__more' ), offAll );
+		sum( fine, fine.querySelector( '.ab-all-toggle' ) );
 	}
 
-	function markDirty() {
-		dirty = true;
-		var bar = caps.querySelector( '.ab-savebar' );
+	function markBar( bar ) {
 		if ( ! bar || bar.classList.contains( 'is-dirty' ) ) {
 			return;
 		}
@@ -170,10 +385,27 @@
 		}
 	}
 
+	function markDirty() {
+		dirty = true;
+		markBar( fine.querySelector( '.ab-fine > .ab-savebar' ) );
+	}
+
+	// A search opens the groups it finds something in, and folds them again
+	// when it is cleared, unless they were open before.
+	function bySearch( el, q, hits ) {
+		if ( q && hits && ! isOpen( el ) ) {
+			el.setAttribute( 'data-opened-by-search', '1' );
+			setOpen( el, true );
+		} else if ( ! q && el.hasAttribute( 'data-opened-by-search' ) ) {
+			el.removeAttribute( 'data-opened-by-search' );
+			setOpen( el, false );
+		}
+	}
+
 	function filter( q ) {
 		q = String( q || '' ).trim().toLowerCase();
 		var any = false;
-		caps.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
+		fine.querySelectorAll( '.ab-group' ).forEach( function ( g ) {
 			var hits = 0;
 			g.querySelectorAll( '.ab-tool-row' ).forEach( function ( r ) {
 				var ok = ! q || ( r.getAttribute( 'data-search' ) || '' ).indexOf( q ) !== -1;
@@ -182,34 +414,65 @@
 					hits++;
 				}
 			} );
+			g.querySelectorAll( '.ab-sub' ).forEach( function ( sub ) {
+				var subHits = 0;
+				sub.querySelectorAll( '.ab-tool-row' ).forEach( function ( r ) {
+					if ( ! r.hidden ) {
+						subHits++;
+					}
+				} );
+				sub.hidden = !! q && 0 === subHits;
+				bySearch( sub, q, subHits );
+			} );
 			g.hidden = !! q && 0 === hits;
-			if ( q && hits ) {
-				g.open = true;
-			}
+			bySearch( g, q, hits );
 			if ( hits ) {
 				any = true;
 			}
 		} );
-		var none = caps.querySelector( '.ab-caps__none' );
+		var none = fine.querySelector( '.ab-caps__none' );
 		if ( none ) {
 			none.hidden = any;
 		}
 	}
 
-	if ( caps ) {
+	if ( fine && caps ) {
 		refresh();
 
-		caps.addEventListener( 'change', function ( e ) {
+		fine.addEventListener( 'click', function ( e ) {
+			var btn = e.target.closest ? e.target.closest( '.ab-group__toggle, .ab-sub__toggle' ) : null;
+			if ( ! btn ) {
+				return;
+			}
+			var el = btn.closest( btn.classList.contains( 'ab-sub__toggle' ) ? '.ab-sub' : '.ab-group' );
+			el.removeAttribute( 'data-opened-by-search' );
+			setOpen( el, ! isOpen( el ) );
+		} );
+
+		fine.addEventListener( 'change', function ( e ) {
 			var el = e.target;
 			if ( el.classList.contains( 'ab-search' ) ) {
 				return;
 			}
+			// A field of an add-on's own form inside a group: that form is
+			// unsaved, the fine-tuning is not.
+			if ( el.form && el.form !== caps ) {
+				if ( addonDirty.indexOf( el.form ) === -1 ) {
+					addonDirty.push( el.form );
+				}
+				markBar( el.form.querySelector( '.ab-savebar' ) );
+				return;
+			}
+			var scope = null;
 			if ( el.classList.contains( 'ab-all-toggle' ) ) {
-				caps.querySelectorAll( 'input.ab-tool:not([disabled])' ).forEach( function ( t ) {
-					t.checked = el.checked;
-				} );
+				scope = fine;
 			} else if ( el.classList.contains( 'ab-group-toggle' ) ) {
-				el.closest( '.ab-group' ).querySelectorAll( 'input.ab-tool:not([disabled])' ).forEach( function ( t ) {
+				scope = el.closest( '.ab-group' );
+			} else if ( el.classList.contains( 'ab-sub-toggle' ) ) {
+				scope = el.closest( '.ab-sub' );
+			}
+			if ( scope ) {
+				scope.querySelectorAll( MOVED ).forEach( function ( t ) {
 					t.checked = el.checked;
 				} );
 			}
@@ -217,33 +480,23 @@
 			markDirty();
 		} );
 
-		// The switch in a group's summary switches the group without folding it.
-		// A cancelled click puts the checkbox back after the event, so the new
-		// state is set right after it.
-		caps.addEventListener( 'click', function ( e ) {
-			var sw = e.target.closest ? e.target.closest( '.ab-group > summary .ab-switch' ) : null;
-			if ( ! sw ) {
+		document.addEventListener( 'submit', function ( e ) {
+			if ( e.target === caps ) {
+				dirty = false;
 				return;
 			}
-			e.preventDefault();
-			var input = sw.querySelector( 'input' );
-			var want = e.target === input ? input.checked : ! input.checked;
-			window.setTimeout( function () {
-				input.checked = want;
-				input.dispatchEvent( new window.Event( 'change', { bubbles: true } ) );
-			}, 0 );
+			var i = addonDirty.indexOf( e.target );
+			if ( i !== -1 ) {
+				addonDirty.splice( i, 1 );
+			}
 		} );
 
-		caps.addEventListener( 'submit', function () {
-			dirty = false;
-		} );
-
-		var search = caps.querySelector( '.ab-search' );
+		var search = fine.querySelector( '.ab-search' );
 		if ( search ) {
 			search.addEventListener( 'input', function () {
 				filter( search.value );
 			} );
-			// Enter in the search field must not save the capabilities.
+			// Enter in the search field must not save anything.
 			search.addEventListener( 'keydown', function ( e ) {
 				if ( 'Enter' === e.key ) {
 					e.preventDefault();
@@ -252,9 +505,10 @@
 		}
 	}
 
-	// Switches changed but not saved: the browser asks before leaving.
+	// Switches or an add-on's settings changed but not saved: the browser
+	// asks before leaving.
 	window.addEventListener( 'beforeunload', function ( e ) {
-		if ( ! dirty ) {
+		if ( ! dirty && 0 === addonDirty.length ) {
 			return;
 		}
 		e.preventDefault();

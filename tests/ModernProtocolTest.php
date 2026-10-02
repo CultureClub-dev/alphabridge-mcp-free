@@ -342,7 +342,7 @@ final class ModernProtocolTest extends TestCase {
 
 		self::assertTrue( $result['isError'] );
 		self::assertSame( 'complete', $result['resultType'] );
-		self::assertStringContainsString( 'read mode', $result['content'][0]['text'] );
+		self::assertStringContainsString( 'Write access is off on this site', $result['content'][0]['text'] );
 	}
 
 	/**
@@ -409,10 +409,10 @@ final class ModernProtocolTest extends TestCase {
 	}
 
 	public function testDiscoverPassesOnTheReadMode(): void {
-		self::assertStringContainsString( 'READ MODE:', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
+		self::assertStringContainsString( 'WRITE ACCESS IS OFF:', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
 
 		AB_MCP_Settings::set( 'site_mode', 'full' );
-		self::assertStringNotContainsString( 'READ MODE', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
+		self::assertStringNotContainsString( 'WRITE ACCESS IS OFF', $this->resultOf( $this->modern( 'server/discover' ) )['instructions'] );
 	}
 
 	public function testDiscoverAndInitializeAgreeOnInstructionsAndCapabilities(): void {

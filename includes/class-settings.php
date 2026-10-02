@@ -40,9 +40,9 @@ class AB_MCP_Settings {
 		return array(
 			'rate_limit_per_min'         => 120,
 			'audit_enabled'              => true,
-			// Read or Full, see AB_MCP_Site_Mode. Read unless an
-			// administrator confirmed Full; it replaces the read-only
-			// switch of earlier versions.
+			// Write access off ('read') or on ('full'), see
+			// AB_MCP_Site_Mode. Off unless an administrator confirmed the
+			// notice; it replaces the read-only switch of earlier versions.
 			'site_mode'                  => 'read',
 			// Token-in-URL authentication is OFF by default. Header auth
 			// (Authorization / X-Api-Key) is always available; putting the token in
@@ -221,17 +221,35 @@ class AB_MCP_Settings {
 	}
 
 	/**
+	 * Switch every tool on: no stored switch, and the rule for switches
+	 * saved before the site mode no longer applies. Runs when write access is
+	 * switched on (AB_MCP_Site_Mode::switch_to_full()): whoever switches it on
+	 * wants everything to work, and single tools can be switched off under
+	 * Fine-tuning afterwards.
+	 */
+	public static function switch_all_tools_on() {
+		update_option( self::OPT_TOOLSTATE, array() );
+		if ( self::get( self::KEY_LEGACY_SWITCHES, false ) ) {
+			self::set( self::KEY_LEGACY_SWITCHES, false );
+		}
+	}
+
+	/**
 	 * Is a tool switched on (exposed via MCP + REST)? Every tool is on until
-	 * an administrator switches it off under Fine-tuning. Whether it may run
-	 * is a separate question, answered by the site mode (AB_MCP_Site_Mode):
-	 * in Read every writing tool and every Mighty one is refused, switched on
-	 * or not, so a switch decides only in Full.
+	 * an administrator switches it off under Fine-tuning, and switching write
+	 * access on switches every tool on again (switch_all_tools_on()). Whether
+	 * it may run is a separate question, answered by the switch for write
+	 * access (AB_MCP_Site_Mode): with write access off every writing tool and
+	 * every Mighty one is refused, switched on or not, so a switch decides
+	 * only with write access on.
 	 *
 	 * Switches saved before the site mode existed held the powerful
 	 * ("dangerous") tools off by default, saved or not, and saving the form
 	 * wrote that off for every one of them. Until the switches are saved
-	 * again, those of a site updated from such a version are read by two
-	 * rules, which matter in Full only:
+	 * again or write access is switched on, those of a site updated from such
+	 * a version are read by two rules, which matter with write access on only
+	 * (a site that was in Full under 4.4.0 keeps them after the update to
+	 * 4.5.0 until then: an update alone resets nothing):
 	 *
 	 * - A powerful tool that writes counts as on, whatever was stored: such an
 	 *   off records the old default, not a decision, and Full, which an

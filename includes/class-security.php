@@ -1,6 +1,6 @@
 <?php
 /**
- * Policy enforcement: capability, site mode, tool switches, token scope, rate
+ * Policy enforcement: capability, write access, tool switches, token scope, rate
  * limiting + shared guards.
  *
  * @package AlphaBridge_MCP
@@ -23,22 +23,37 @@ class AB_MCP_Security {
 	public static function authorize( $name, array $def ) {
 		$user_id = get_current_user_id();
 
+		// Every refusal below says why, what the person can do, where (a
+		// direct link) and asks the assistant to pass it on and try again
+		// (AB_MCP_Guidance::compose()).
+
 		// 1. WordPress capability.
 		if ( ! empty( $def['capability'] ) && ! current_user_can( $def['capability'] ) ) {
+			$user  = wp_get_current_user();
+			$login = is_object( $user ) && isset( $user->user_login ) && '' !== (string) $user->user_login ? (string) $user->user_login : '#' . (int) $user_id;
 			return new WP_Error(
 				'ab_mcp_forbidden',
-				sprintf(
-					/* translators: 1: tool, 2: capability */
-					__( 'Your account lacks the capability "%2$s" required by "%1$s". Connect with an account whose role has it, or ask an administrator to give your account such a role.', 'alphabridge-mcp' ),
-					$name,
-					$def['capability']
+				AB_MCP_Guidance::compose(
+					sprintf(
+						/* translators: 1: tool, 2: capability */
+						__( 'The account of this connection lacks the capability "%2$s" that the tool "%1$s" needs.', 'alphabridge-mcp' ),
+						$name,
+						$def['capability']
+					),
+					sprintf(
+						/* translators: 1: user name of the account, 2: capability */
+						__( 'To allow it, ask an administrator to give the account "%1$s" a role with the capability "%2$s" under Users, or connect the app again with an account that has it, such as an administrator.', 'alphabridge-mcp' ),
+						$login,
+						$def['capability']
+					),
+					admin_url( 'users.php' )
 				)
 			);
 		}
 
-		// 2. Site mode: in Read (the default) only the ordinary reading tools
-		// run, not the Mighty ones, whatever their switch and the token's scope
-		// say. See AB_MCP_Site_Mode.
+		// 2. Write access: with it off (the default) only the ordinary
+		// reading tools run, not the Mighty ones, whatever their switch and the
+		// token's scope say. See AB_MCP_Site_Mode.
 		if ( ! AB_MCP_Site_Mode::allows( $name, $def ) ) {
 			return AB_MCP_Site_Mode::refusal( $name, $def );
 		}
@@ -49,10 +64,12 @@ class AB_MCP_Security {
 		if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 			return new WP_Error(
 				'ab_mcp_tool_disabled',
-				sprintf(
+				AB_MCP_Guidance::compose(
 					/* translators: %s: tool */
-					__( 'The tool "%s" is switched off in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Fine-tuning.', 'alphabridge-mcp' ),
-					$name
+					sprintf( __( 'The tool "%s" is switched off in the fine-tuning of AlphaBridge MCP on this site.', 'alphabridge-mcp' ), $name ),
+					/* translators: %s: tool */
+					sprintf( __( 'To allow it, an administrator switches "%s" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes.', 'alphabridge-mcp' ), $name ),
+					AB_MCP_Guidance::settings_url( 'ab-tool-' . $name )
 				)
 			);
 		}
@@ -64,13 +81,20 @@ class AB_MCP_Security {
 		// on top of the capability check above, useful for handing an AI client a
 		// deliberately limited key.
 		if ( ! AB_MCP_Tool_Registry::scope_allows( AB_MCP_Auth::current_scope(), $name, $def ) ) {
+			$scope  = AB_MCP_Auth::current_scope();
+			$labels = AB_MCP_Tool_Registry::scope_labels();
 			return new WP_Error(
 				'ab_mcp_scope',
-				sprintf(
-					/* translators: 1: tool, 2: scope */
-					__( 'The token used is limited to the "%2$s" scope, which does not include the tool "%1$s". Use a wider-scoped token: connect the app again and choose a wider access level on the consent screen, or have an administrator create a connection with wider access under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ),
-					$name,
-					AB_MCP_Auth::current_scope()
+				AB_MCP_Guidance::compose(
+					sprintf(
+						/* translators: 1: tool, 2: name of the access level, e.g. Read only */
+						__( 'This connection has the access level "%2$s", which does not include the tool "%1$s".', 'alphabridge-mcp' ),
+						$name,
+						isset( $labels[ $scope ] ) ? $labels[ $scope ] : $scope
+					),
+					/* translators: %s: name of the widest access level */
+					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ), $labels['full'] ),
+					AB_MCP_Guidance::settings_url( 'ab-connections' )
 				)
 			);
 		}

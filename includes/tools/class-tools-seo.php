@@ -121,7 +121,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		// should see them — an author should not read a colleague's SEO fields on
 		// a post they can only view.
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$provider = self::provider();
 		$keys     = self::keys( $provider );

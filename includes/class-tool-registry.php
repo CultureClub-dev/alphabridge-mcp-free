@@ -7,7 +7,9 @@
  *   - description (string)  What the tool does (shown to the AI client).
  *   - inputSchema (array)   JSON Schema object describing arguments.
  *   - capability  (string)  Required WordPress capability, or null.
- *   - dangerous   (bool)    Powerful: marked «Mighty» on the settings page.
+ *   - dangerous   (bool)    Powerful («Mighty»). A Mighty tool that only
+ *                 reads runs only with write access on (Full); the settings
+ *                 page notes it «only with write access».
  *   - mighty_since (string) Only on a tool that was not Mighty before the
  *                 site mode (an ordinary tool then, or none at all): the
  *                 version that marked it. Its switch then reads like any
@@ -150,7 +152,7 @@ class AB_MCP_Tool_Registry {
 	 *
 	 * This is the MCP `destructiveHint`, and it is NOT the same question as the
 	 * `dangerous` flag next to it. `dangerous` marks tools worth a second
-	 * thought («Mighty» on the settings page).
+	 * thought («Mighty»; the readers among them run only with write access on).
 	 * `destructiveHint` tells the client whether a call overwrites existing
 	 * state, and clients use it to decide whether to ask the user first.
 	 *
@@ -227,11 +229,12 @@ class AB_MCP_Tool_Registry {
 	}
 
 	/**
-	 * Is a tool marked Mighty? Its definition says so with 'dangerous'. Besides
-	 * the mark on the settings page this decides what the site mode Read
-	 * leaves closed: a Mighty tool does not run there even when it only reads
-	 * (AB_MCP_Site_Mode::runs_in_read()), because the reading ones read code,
-	 * files, the database, logs or credentials. Mark such a reader so.
+	 * Is a tool marked Mighty? Its definition says so with 'dangerous'. This
+	 * decides what the site mode Read leaves closed: a Mighty tool does not
+	 * run there even when it only reads (AB_MCP_Site_Mode::runs_in_read();
+	 * the settings page notes such a reader «only with write access»), because the reading
+	 * ones read code, files, the database, logs or credentials. Mark such a
+	 * reader so.
 	 *
 	 * @param array $def Tool definition.
 	 * @return bool
