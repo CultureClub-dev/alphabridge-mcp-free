@@ -82,10 +82,15 @@ Handing an AI access to a site should feel safe, so control comes first:
   the MCP surface.
   Code reads the mode through `AB_MCP_Site_Mode` (`get()`, `is_full()`, `allows()`,
   `runs_in_read()`); a tool that reads code, files, the database, logs or credentials is marked
-  with `'dangerous' => true`, which keeps it out of Read. The action
+  with `'dangerous' => true`, which keeps it out of Read. A tool marked so only since the site
+  mode also carries `'mighty_since'` (the version that marked it): on a site updated from before
+  the mode, its switch then reads like that of an ordinary tool, while another Mighty reader
+  without a saved switch stays off there in Full, as it was by default before. The action
   `ab_mcp_site_mode_changed` fires when an administrator switches.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
-  read at all; only a fixed list of common site settings is exposed.
+  read at all; only a fixed list of common site settings is exposed, and the settings of
+  registered widgets through `wp_get_widgets`, without the values whose key the credential guard
+  below refuses.
 - **Layered meta protection** — protected keys, `is_protected_meta()` keys and two kinds of
   credential-shaped key are refused: keys whose whole name is a credential word, singular or
   plural (`token`, `secret`, `password`, `passphrase`, `passcode`, `pwd`, `otp`, `credential`),

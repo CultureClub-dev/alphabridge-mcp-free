@@ -6,8 +6,8 @@
  * content, media, terms, comments, settings and how the site is built. In
  * Read, every tool that AB_MCP_Tool_Registry::is_read_only() does not
  * classify as reading is refused, and so is every reading tool marked Mighty
- * (AB_MCP_Tool_Registry::is_mighty(): the readers of code, files, the
- * database, logs or credentials), whatever its switch says and whatever the
+ * (AB_MCP_Tool_Registry::is_mighty(), the readers of code, files, the
+ * database or logs among them), whatever its switch says and whatever the
  * connection's access level allows. Full lets the switched-on tools run, the
  * powerful ones included, and an administrator turns it on only by confirming
  * a notice that it can be destructive and is at the site owner's own risk.
@@ -123,7 +123,9 @@ class AB_MCP_Site_Mode {
 	/**
 	 * The answer to a tool that Read refuses. It says why — the tool writes,
 	 * or it is a Mighty reader, the only reading kind Read refuses — and names
-	 * the way: who can switch, where, and what switching means.
+	 * the way: who can switch, where, and what switching means. It does not
+	 * say what a Mighty reader reads: wp_get_user_meta reads profile fields,
+	 * not code, files, the database, logs or credentials.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition; without one the name decides, as
@@ -136,7 +138,7 @@ class AB_MCP_Site_Mode {
 				'ab_mcp_read_mode',
 				sprintf(
 					/* translators: %s: tool name */
-					__( 'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty and reads what read mode keeps closed: code, files, the database, logs or credentials. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.', 'alphabridge-mcp' ),
+					__( 'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.', 'alphabridge-mcp' ),
 					(string) $name
 				)
 			);
@@ -207,8 +209,8 @@ class AB_MCP_Site_Mode {
 
 	/**
 	 * The sentence the server instructions carry in Read, so an assistant
-	 * knows before its first call why writing, and reading code, files, the
-	 * database, logs or credentials, fails and whom to ask.
+	 * knows before its first call why writing, and the Mighty readers of
+	 * code, files, the database, logs or credentials, fail and whom to ask.
 	 *
 	 * Not translated: the instructions are written for the assistant, in
 	 * the language of the rest of them.
@@ -216,7 +218,7 @@ class AB_MCP_Site_Mode {
 	 * @return string
 	 */
 	public static function instructions_sentence() {
-		return 'READ MODE: AlphaBridge MCP only reads on this site, and no code, files, database, logs or credentials, so every tool that creates, changes or deletes and every tool that reads those is refused until an administrator switches it to Full at the top of Settings → AlphaBridge MCP.';
+		return 'READ MODE: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused until an administrator switches it to Full at the top of Settings → AlphaBridge MCP.';
 	}
 
 	/**

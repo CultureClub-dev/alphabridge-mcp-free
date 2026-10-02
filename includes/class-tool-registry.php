@@ -8,6 +8,12 @@
  *   - inputSchema (array)   JSON Schema object describing arguments.
  *   - capability  (string)  Required WordPress capability, or null.
  *   - dangerous   (bool)    Powerful: marked «Mighty» on the settings page.
+ *   - mighty_since (string) Only on a tool that was not Mighty before the
+ *                 site mode (an ordinary tool then, or none at all): the
+ *                 version that marked it. Its switch then reads like any
+ *                 other on a site updated from before the mode, where a
+ *                 Mighty reader without a saved switch stays off in Full
+ *                 (AB_MCP_Settings::is_tool_enabled()).
  *   - callback    (callable) function( array $args ): array|string|WP_Error.
  *   - group, group_label (string) The functional group; stamped from
  *                 set_current_group() unless the definition names one.
