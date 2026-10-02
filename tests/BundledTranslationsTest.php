@@ -61,6 +61,7 @@ final class BundledTranslationsTest extends TestCase {
 		'The tool "%s" is switched off in the fine-tuning of AlphaBridge MCP on this site.',
 		'The tool "%s" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.',
 		'The tool "%s" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.',
+		'The editions of AlphaBridge MCP and their tools are described here: %s',
 		'AlphaBridge MCP now only reads on this site.',
 		'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now.',
 		'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP.',

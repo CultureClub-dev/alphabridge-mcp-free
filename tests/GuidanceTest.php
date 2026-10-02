@@ -14,12 +14,16 @@
  * only refusals the assistant corrects in its own call stay plain.
  *
  * A tool of AlphaBridge MCP Pro or its Agency plan is not on a free site.
- * Its name is answered with what it is and where it comes from instead of
- * «Unknown tool», from a fixed list of names (the Pro add-on's tests compare
- * it with what Pro registers); the add-on can answer for an inactive licence
- * or a plan without the tool. A site without Pro's tools tells the assistant
- * in its instructions what Pro adds and where. Nothing of Pro is in this
- * plugin and nothing here is locked: no Pro tool is registered or listed.
+ * Its name is answered with the edition it belongs to and the page that
+ * describes the editions instead of «Unknown tool», from a fixed list of
+ * names (the Pro add-on's tests compare it with what Pro registers); the
+ * add-on can answer for an inactive licence or a plan without the tool. A
+ * site without Pro's tools tells the assistant in its instructions what is
+ * not on it and where the editions are described. Both are facts only: no
+ * steps to install, no request to point the person to Pro, no link to
+ * prices or the checkout — ChatGPT's directory reviews these texts and
+ * forbids promoting upgrades. Nothing of Pro is in this plugin and nothing
+ * here is locked: no Pro tool is registered or listed.
  *
  * @package AlphaBridge_MCP
  */
@@ -122,16 +126,25 @@ final class GuidanceTest extends TestCase {
 
 	/* ----------------------------------------------- the tools of Pro */
 
-	public function testAToolOfProIsNamedWithTheWayToItInsteadOfUnknown(): void {
+	/**
+	 * What a text for the assistant about Pro must not say: a request to
+	 * point the person to Pro, steps to install or buy it, or a link to
+	 * prices or the checkout.
+	 */
+	private static function assertNoPromotion( string $text ): void {
+		foreach ( array( '#pricing', 'checkout', 'freemius', 'installs and activates', 'To use it', 'needs AlphaBridge MCP Pro', 'where it is', 'try again', 'Direct link' ) as $phrase ) {
+			self::assertStringNotContainsStringIgnoringCase( $phrase, $text );
+		}
+	}
+
+	public function testAToolOfProIsNamedWithTheEditionInsteadOfUnknown(): void {
 		$r      = self::free_registry();
 		$result = self::call( $r, 'wp_db_query' );
 		$text   = $result['content'][0]['text'];
 
 		self::assertTrue( $result['isError'] );
-		self::assertStringStartsWith( 'The tool "wp_db_query" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.', $text );
-		self::assertStringContainsString( 'To use it, the site owner installs and activates AlphaBridge MCP Pro', $text );
-		self::assertStringNotContainsString( 'Unknown tool', $text );
-		self::assertLeadsTo( 'https://alphabridge-mcp.com/#pricing', $text );
+		self::assertSame( 'The tool "wp_db_query" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here. The editions of AlphaBridge MCP and their tools are described here: https://alphabridge-mcp.com/docs', $text );
+		self::assertNoPromotion( $text );
 		$last = AB_MCP_Audit_Log::recent( 1 )[0];
 		self::assertSame( array( 'wp_db_query', 'denied' ), array( $last['tool'], $last['status'] ), 'Logged like every refusal.' );
 	}
@@ -139,9 +152,8 @@ final class GuidanceTest extends TestCase {
 	public function testAToolOfTheAgencyPlanSaysSo(): void {
 		$text = self::call( self::free_registry(), 'wp_deploy_push_zip' )['content'][0]['text'];
 
-		self::assertStringStartsWith( 'The tool "wp_deploy_push_zip" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro', $text );
-		self::assertStringContainsString( 'with the Agency plan', $text );
-		self::assertLeadsTo( 'https://alphabridge-mcp.com/#pricing', $text );
+		self::assertSame( 'The tool "wp_deploy_push_zip" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here. The editions of AlphaBridge MCP and their tools are described here: https://alphabridge-mcp.com/docs', $text );
+		self::assertNoPromotion( $text );
 	}
 
 	public function testAnyOtherNameStaysUnknown(): void {
@@ -208,15 +220,16 @@ final class GuidanceTest extends TestCase {
 
 	/* ----------------------------------------------- the instructions */
 
-	public function testWithoutProTheInstructionsSayWhatProAddsAndWhere(): void {
+	public function testWithoutProTheInstructionsSayWhatIsMissingAndWhereTheEditionsAre(): void {
 		$m         = new ReflectionMethod( AB_MCP_REST_Controller::class, 'instructions' );
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertStringStartsWith( 'NOT ON THIS SITE: the tools of AlphaBridge MCP Pro, a separate plugin.', $paragraph );
-		self::assertStringContainsString( 'its Agency plan adds applying blueprints and Site Deploy over FTP/SFTP', $paragraph );
+		self::assertStringStartsWith( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce,', $paragraph );
+		self::assertStringContainsString( 'applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here.', $paragraph );
+		self::assertStringEndsWith( 'When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it; the editions are described at https://alphabridge-mcp.com/docs', $paragraph );
+		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
-		self::assertStringContainsString( 'tell them kindly that this site needs AlphaBridge MCP Pro for it and where it is: https://alphabridge-mcp.com/#pricing', $paragraph );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );
 
 		$r = self::free_registry();
@@ -232,8 +245,8 @@ final class GuidanceTest extends TestCase {
 		self::assertStringEndsWith( \AB_MCP_Site_Mode::instructions_sentence(), $text, 'The sentence on write access stays last, whatever an add-on adds.' );
 	}
 
-	public function testThePricingPageIsTheOneOfTheWebsite(): void {
-		self::assertSame( 'https://alphabridge-mcp.com/#pricing', AB_MCP_Guidance::PRICING_URL );
+	public function testTheLinkIsTheToolReferenceNotThePrices(): void {
+		self::assertSame( 'https://alphabridge-mcp.com/docs', AB_MCP_Guidance::PRICING_URL, 'The page that describes the editions, without buttons to the checkout.' );
 	}
 
 	/* ------------------------------------------------- refusals for the role */

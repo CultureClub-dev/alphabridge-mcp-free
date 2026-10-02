@@ -351,6 +351,10 @@ msgid "The account of this connection lacks the capability \"%2$s\" that the too
 msgstr "Dem Konto dieser Verbindung fehlt die Berechtigung „%2$s“, die das Werkzeug „%1$s“ braucht."
 
 #, php-format
+msgid "The editions of AlphaBridge MCP and their tools are described here: %s"
+msgstr "Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: %s"
+
+#, php-format
 msgid "The tool \"%s\" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here."
 msgstr "Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist."
 
@@ -384,12 +388,6 @@ msgstr "Damit es geht, bitte einen Administrator, dem Konto „%1$s“ unter Ben
 #, php-format
 msgid "To allow it, connect the app again and choose the access level \"%s\" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP."
 msgstr "Damit es geht, verbinde die App erneut und wähle auf der Zustimmungsseite die Zugriffsstufe „%s“, oder lass einen Administrator unter Einstellungen → AlphaBridge MCP eine Verbindung mit dieser Zugriffsstufe anlegen."
-
-msgid "To use it, the site owner installs and activates AlphaBridge MCP Pro with the Agency plan; its tools then show up for every connection, and the switch for write access on the settings page decides whether they may change the site."
-msgstr "Damit es genutzt werden kann, installiert und aktiviert der Website-Betreiber AlphaBridge MCP Pro mit dem Agency-Plan; seine Werkzeuge erscheinen dann für jede Verbindung, und der Schalter für Schreibrechte auf der Einstellungsseite entscheidet, ob sie die Website ändern dürfen."
-
-msgid "To use it, the site owner installs and activates AlphaBridge MCP Pro; its tools then show up for every connection, and the switch for write access on the settings page decides whether they may change the site."
-msgstr "Damit es genutzt werden kann, installiert und aktiviert der Website-Betreiber AlphaBridge MCP Pro; seine Werkzeuge erscheinen dann für jede Verbindung, und der Schalter für Schreibrechte auf der Einstellungsseite entscheidet, ob sie die Website ändern dürfen."
 
 msgid "Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup."
 msgstr "Verstanden: Änderungen wirken sofort, ich schalte Schreiben auf eigenes Risiko ein und habe ein aktuelles Backup."
