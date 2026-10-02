@@ -126,6 +126,22 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	/** Note on widgets locked because Elementor is not loaded and the table does not know them. */
 	const NOTE_NOT_LOADED = 'Elementor is not loaded here, so only the widgets of AlphaBridge\'s own table are read';
 
+	/** Note on an element Elementor has not registered (V3, or V4 while the Atomic Editor is on). */
+	const NOTE_UNREGISTERED = 'not registered on this site, for example because its plugin is inactive: Elementor does not show it, and saving the page in Elementor removes it; activate that plugin, and until then do not save this page in the Elementor editor';
+
+	/**
+	 * Note on an atomic (V4) element while Elementor's Atomic Editor is off:
+	 * Elementor registers no atomic element then, so the plugin note would
+	 * point the wrong way. The Atomic Editor is one of Elementor's features
+	 * [SVN elementor@4.3.3 modules/mcp/utils/mcp-v4-gate.php:34-36], listed
+	 * on the Features tab of Elementor's settings [SVN elementor@4.3.3
+	 * core/experiments/manager.php:499-501].
+	 */
+	const NOTE_ATOMIC_EDITOR_OFF = 'Elementor\'s Atomic Editor is off, so Elementor does not show this element or anything inside it, and saving the page in Elementor removes it; switch it on under Elementor › Settings › Features (Atomic Editor), then read the page again';
+
+	/** Note on an unregistered atomic element where Elementor cannot say whether its Atomic Editor is on. */
+	const NOTE_UNREGISTERED_ATOMIC = 'not registered on this site, for example because Elementor\'s Atomic Editor is off (switch it on under Elementor › Settings › Features) or because the plugin that provides it is inactive: Elementor does not show it, and saving the page in Elementor removes it';
+
 	/**
 	 * The widget table: fields where Elementor is not loaded (and the kind of
 	 * a field where it is), locks always. Format:
@@ -647,7 +663,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				// page is saved [SVN elementor@4.3.3 core/base/document.php:1929-1941, :1074-1115].
 				return array(
 					'locked' => 'widget' === $el_type ? 'unregistered widget' : 'unknown element type',
-					'note'   => 'not registered on this site, for example because its plugin is inactive: Elementor does not show it, and saving the page in Elementor removes it',
+					'note'   => $atomic ? self::unregistered_atomic_note() : self::NOTE_UNREGISTERED,
 				);
 			}
 			if ( $atomic ) {
@@ -1020,6 +1036,43 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 			return null;
 		}
 		return $plugin->elements_manager;
+	}
+
+	/**
+	 * The note on an unregistered atomic element: the Atomic Editor where
+	 * Elementor says it is off, the plugin where it says it is on, both where
+	 * it cannot say.
+	 *
+	 * @return string
+	 */
+	private static function unregistered_atomic_note() {
+		$off = self::atomic_editor_off();
+		if ( true === $off ) {
+			return self::NOTE_ATOMIC_EDITOR_OFF;
+		}
+		return false === $off ? self::NOTE_UNREGISTERED : self::NOTE_UNREGISTERED_ATOMIC;
+	}
+
+	/**
+	 * Whether Elementor says its Atomic Editor is off: true, false, or null
+	 * where it cannot tell (before 4.3, which has no such answer, or when the
+	 * answer fails). Elementor's own check is asked rather than the feature
+	 * name, so a renamed or graduated feature keeps being answered right
+	 * [SVN elementor@4.3.3 modules/mcp/utils/mcp-v4-gate.php:34-36].
+	 *
+	 * @return bool|null
+	 */
+	protected static function atomic_editor_off() {
+		$gate = 'Elementor\\Modules\\Mcp\\Utils\\Mcp_V4_Gate';
+		// Autoloaded: Elementor loads the class only once something asks it.
+		if ( ! class_exists( $gate ) || ! method_exists( $gate, 'is_atomic_editor_active' ) ) {
+			return null;
+		}
+		try {
+			return ! call_user_func( array( $gate, 'is_atomic_editor_active' ) );
+		} catch ( Throwable $e ) {
+			return null;
+		}
 	}
 
 	/**

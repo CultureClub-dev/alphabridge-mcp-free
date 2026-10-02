@@ -27,6 +27,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/elementor-plugin-stub.php';
+require_once __DIR__ . '/elementor-v4-gate-stub.php';
 
 final class ElementorAdapterTest extends TestCase {
 
@@ -34,7 +35,8 @@ final class ElementorAdapterTest extends TestCase {
 
 	protected function setUp(): void {
 		ab_test_reset();
-		\Elementor\Plugin::$instance = null;
+		\Elementor\Plugin::$instance                          = null;
+		\Elementor\Modules\Mcp\Utils\Mcp_V4_Gate::$active = null;
 		ab_test_add_user( 7 );
 		$GLOBALS['ab_test_current_user'] = 7;
 		$this->mayDoAnything();
@@ -42,7 +44,8 @@ final class ElementorAdapterTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		\Elementor\Plugin::$instance = null;
+		\Elementor\Plugin::$instance                          = null;
+		\Elementor\Modules\Mcp\Utils\Mcp_V4_Gate::$active = null;
 	}
 
 	/* ------------------------------------------------------------ helpers */
@@ -1024,6 +1027,65 @@ final class ElementorAdapterTest extends TestCase {
 		self::assertSame( 'unknown element type', $els['bd00006']['reason'] );
 		self::assertArrayNotHasKey( 'bd00007', $els );
 		self::assertStringNotContainsString( 'Hidden', $this->flat( $els ) );
+		// The way out for each: the plugin for a V3 widget; for an atomic one
+		// Elementor cannot say whether its Atomic Editor is on, so both.
+		self::assertStringContainsString( 'activate that plugin', $els['bd00003']['note'] );
+		self::assertStringNotContainsString( 'Atomic Editor', $els['bd00003']['note'] );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED_ATOMIC, $els['bd00005']['note'] );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED_ATOMIC, $els['bd00006']['note'] );
+	}
+
+	/** A V4 page as Elementor stores it while its Atomic Editor is off: nothing atomic is registered. */
+	private function atomicPageWithEditorOff( int $id, ?bool $active ): array {
+		\Elementor\Modules\Mcp\Utils\Mcp_V4_Gate::$active = $active;
+		$this->loadElementor(
+			array(
+				'container' => self::type( array() ),
+				'heading'   => self::headingType(),
+			)
+		);
+		$post = $this->elementorPage(
+			$id,
+			array(
+				array(
+					'id'       => 'f00d001',
+					'elType'   => 'e-flexbox',
+					'settings' => array(),
+					'elements' => array(
+						self::widget( 'f00d002', 'e-heading', array( 'title' => array( '$$type' => 'html-v3', 'value' => array( 'content' => array( '$$type' => 'string', 'value' => 'V4 hidden' ) ) ) ) ),
+					),
+				),
+				self::container( 'f00d003', array( self::widget( 'f00d004', 'animated-headline', array( 'before_text' => 'Pro hidden' ) ) ) ),
+			)
+		);
+		return $this->byId( $this->outline( $post ) );
+	}
+
+	public function testWithTheAtomicEditorOffAnAtomicElementNamesTheSwitch(): void {
+		$els = $this->atomicPageWithEditorOff( 130, false );
+		self::assertTrue( $els['f00d001']['locked'] );
+		self::assertSame( 'unknown element type', $els['f00d001']['reason'] );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_ATOMIC_EDITOR_OFF, $els['f00d001']['note'] );
+		self::assertStringContainsString( 'Elementor › Settings › Features', $els['f00d001']['note'] );
+		self::assertStringNotContainsString( 'plugin', $els['f00d001']['note'] );
+		self::assertArrayNotHasKey( 'f00d002', $els, 'Children of a locked element are not listed.' );
+		// A V3 widget on the same page keeps the plugin as its way.
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED, $els['f00d004']['note'] );
+		self::assertStringNotContainsString( 'hidden', $this->flat( $els ) );
+	}
+
+	public function testWithTheAtomicEditorOnAMissingAtomicElementNamesThePlugin(): void {
+		$els = $this->atomicPageWithEditorOff( 131, true );
+		self::assertSame( 'unknown element type', $els['f00d001']['reason'] );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED, $els['f00d001']['note'] );
+		self::assertStringNotContainsString( 'Atomic Editor', $els['f00d001']['note'] );
+	}
+
+	public function testWhereElementorCannotSayAnAtomicElementNamesBothWays(): void {
+		$els = $this->atomicPageWithEditorOff( 132, null );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED_ATOMIC, $els['f00d001']['note'] );
+		self::assertStringContainsString( 'Atomic Editor is off', $els['f00d001']['note'] );
+		self::assertStringContainsString( 'plugin that provides it is inactive', $els['f00d001']['note'] );
 	}
 
 	public function testWithElementorLoadedButUnableToListControlsTheTableTakesOver(): void {
