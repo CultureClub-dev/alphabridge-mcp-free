@@ -23,6 +23,7 @@ Handing an AI the keys to your site should feel safe — so control comes first:
 * Every connection acts as a real WordPress user, and every tool checks the matching WordPress capability. What that user may not do, the AI cannot do.
 * Scoped connections: hand out a read-only or content-only key with an optional expiry instead of full access. Rotate a connection's secret in one click.
 * Tool groups you can switch off entirely — disabled tools vanish from the MCP surface. Plus a global read-only mode.
+* Profiles set all tool switches in one click. Simple is how the plugin ships: the assistant reads the site and edits content, and every tool marked Mighty stays off. Expert switches every tool on. Where an add-on or the site marks Mighty groups Advanced, a third profile, Advanced, adds just those; this plugin marks none of its own. Afterwards you can still switch single groups or tools; the settings page then shows Custom. A profile changes only the tool switches, never your connections or read-only mode. Choosing a profile replaces every tool switch; until you choose one, switches you set before stay as they are.
 * An audit log records every tool call, and a fixed rate limit stops abusive request bursts.
 
 **Connected in two minutes**

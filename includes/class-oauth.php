@@ -1598,7 +1598,42 @@ class AB_MCP_OAuth {
 	}
 
 	/**
-	 * Render the consent screen. Self-contained styling — no theme involved.
+	 * The access level checked when the consent screen opens: never the
+	 * widest. "content" lets the assistant do the common content work at once;
+	 * granting "full" is a deliberate choice.
+	 *
+	 * @param array $scopes Scope => sentence.
+	 * @return string
+	 */
+	private static function default_scope( array $scopes ) {
+		return isset( $scopes['content'] ) ? 'content' : 'read';
+	}
+
+	/**
+	 * The choice of access level on the consent screen: one radio button per
+	 * scope, narrowest first, each with its name and one sentence on what the
+	 * connection may then do and what not (AB_MCP_Tool_Registry::scopes()).
+	 *
+	 * Posts ab_scope as the select before it did; the approval reads it the
+	 * same way and clamps it fail-closed.
+	 *
+	 * @param array  $scopes  Scope => sentence.
+	 * @param string $default The scope checked when the page opens.
+	 * @return string HTML, escaped.
+	 */
+	private static function scope_choices_html( array $scopes, $default ) {
+		$labels = AB_MCP_Tool_Registry::scope_labels();
+		$html   = '<fieldset class="scopes"><legend>' . esc_html__( 'Access level', 'alphabridge-mcp' ) . '</legend>';
+		foreach ( $scopes as $key => $sentence ) {
+			$name  = isset( $labels[ $key ] ) ? $labels[ $key ] : (string) $key;
+			$html .= '<label class="scope"><input type="radio" name="ab_scope" value="' . esc_attr( (string) $key ) . '"' . checked( (string) $key, (string) $default, false ) . '>';
+			$html .= '<span><b>' . esc_html( $name ) . '</b><span class="scope-text">' . esc_html( (string) $sentence ) . '</span></span></label>';
+		}
+		return $html . '</fieldset>';
+	}
+
+	/**
+	 * Send the consent screen and end the request.
 	 *
 	 * @param array  $client Registered client (name, redirect_uris).
 	 * @param array  $get    Validated request parameters.
@@ -1606,6 +1641,27 @@ class AB_MCP_OAuth {
 	 * @param array  $scopes scope => description.
 	 */
 	private static function consent_page( $client, $get, $state, $scopes ) {
+		nocache_headers();
+		status_header( 200 );
+		header( 'Content-Type: text/html; charset=utf-8' );
+		self::send_frame_deny();
+		self::render_consent( $client, $get, $state, $scopes );
+		exit;
+	}
+
+	/**
+	 * Echo the consent screen. Self-contained styling — no theme involved.
+	 *
+	 * Apart from consent_page(), which sends the headers and ends the request,
+	 * so that the page itself, the access level checked when it opens
+	 * included, can be rendered and looked at on its own.
+	 *
+	 * @param array  $client Registered client (name, redirect_uris).
+	 * @param array  $get    Validated request parameters.
+	 * @param string $state  Opaque state.
+	 * @param array  $scopes scope => description.
+	 */
+	private static function render_consent( $client, $get, $state, $scopes ) {
 		$user = wp_get_current_user();
 		$site = get_bloginfo( 'name' );
 		$icon = function_exists( 'get_site_icon_url' ) ? get_site_icon_url( 96 ) : '';
@@ -1615,16 +1671,9 @@ class AB_MCP_OAuth {
 		// the client name alone is attacker-chosen and not trustworthy.
 		$dest_host = (string) wp_parse_url( (string) $get['redirect_uri'], PHP_URL_HOST );
 
-		// Default access level: never the widest. "content" lets Claude do the
-		// common content work immediately; granting "full" is a deliberate choice.
-		$default_scope = isset( $scopes['content'] ) ? 'content' : 'read';
+		$default_scope = self::default_scope( $scopes );
 
 		$self_url = home_url( '/?ab_mcp_oauth=authorize' );
-
-		nocache_headers();
-		status_header( 200 );
-		header( 'Content-Type: text/html; charset=utf-8' );
-		self::send_frame_deny();
 		?>
 <!DOCTYPE html>
 <html <?php language_attributes(); ?>>
@@ -1642,8 +1691,13 @@ class AB_MCP_OAuth {
 	.who{background:#f6f7f7;border:1px solid #e2e4e7;border-radius:6px;padding:10px 14px;margin:0 0 10px;font-size:13px;color:#3c434a}
 	.dest{border:1px solid #dba617;background:#fcf9e8;border-radius:6px;padding:10px 14px;margin:0 0 16px;font-size:13px;color:#3c434a}
 	.dest b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
-	label{display:block;font-weight:600;margin:0 0 6px}
-	select{width:100%;padding:8px;border:1px solid #8c8f94;border-radius:4px;font-size:14px;margin:0 0 6px;background:#fff}
+	fieldset.scopes{border:0;margin:0 0 6px;padding:0;min-width:0}
+	fieldset.scopes legend{font-weight:600;margin:0 0 6px;padding:0}
+	label.scope{display:flex;gap:10px;align-items:flex-start;margin:0 0 8px;padding:10px 12px;border:1px solid #dcdcde;border-radius:6px;cursor:pointer}
+	label.scope:has(input:checked){border-color:#2271b1;background:#f0f6fc}
+	label.scope input{margin:4px 0 0;flex:none}
+	label.scope b{display:block}
+	label.scope span.scope-text{display:block;font-size:13px;color:#50575e}
 	p.scope-hint{font-size:12px;color:#646970;margin:0 0 20px}
 	.actions{display:flex;gap:10px}
 	button{flex:1;padding:10px 0;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer}
@@ -1702,14 +1756,7 @@ class AB_MCP_OAuth {
 			?>
 			<input type="hidden" name="resource" value="<?php echo esc_attr( (string) $get['resource'] ); ?>"><?php endif; ?>
 		<input type="hidden" name="state" value="<?php echo esc_attr( $state ); ?>">
-		<label for="ab_scope"><?php esc_html_e( 'Access level', 'alphabridge-mcp' ); ?></label>
-		<select name="ab_scope" id="ab_scope">
-			<?php foreach ( array( 'content', 'read', 'full' ) as $key ) : ?>
-				<?php if ( isset( $scopes[ $key ] ) ) : ?>
-					<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $key, $default_scope ); ?>><?php echo esc_html( $scopes[ $key ] ); ?></option>
-				<?php endif; ?>
-			<?php endforeach; ?>
-		</select>
+		<?php echo self::scope_choices_html( $scopes, $default_scope ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside scope_choices_html(). ?>
 		<p class="scope-hint"><?php esc_html_e( 'You can revoke this connection at any time under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ); ?></p>
 		<div class="actions">
 			<button type="submit" class="allow" name="ab_allow" value="1"><?php esc_html_e( 'Allow', 'alphabridge-mcp' ); ?></button>
@@ -1721,6 +1768,5 @@ class AB_MCP_OAuth {
 </body>
 </html>
 		<?php
-		exit;
 	}
 }

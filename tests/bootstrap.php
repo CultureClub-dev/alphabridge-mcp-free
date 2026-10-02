@@ -267,6 +267,22 @@ function esc_html__( $text, $domain = '' ) {
 	return $text;
 }
 
+function esc_html_e( $text, $domain = '' ) {
+	echo esc_html( $text ); // phpcs:ignore
+}
+
+/**
+ * Keeps the allowed tags and drops every other one. Attributes are not
+ * checked; no caller in the plugin passes any it relies on being dropped.
+ */
+function wp_kses( $content, $allowed_html ) {
+	return strip_tags( (string) $content, is_array( $allowed_html ) ? array_keys( $allowed_html ) : array() );
+}
+
+function language_attributes( $doctype = 'html' ) {
+	echo 'lang="en-US"';
+}
+
 function home_url( $path = '' ) {
 	return 'https://example.test' . $path;
 }
@@ -296,13 +312,16 @@ function get_bloginfo( $what = '' ) {
 }
 
 /**
- * Minimal stand-in for WP_User: the plugin only reads ->ID.
+ * Minimal stand-in for WP_User: the plugin reads ->ID, and the consent
+ * screen ->user_login.
  */
 class WP_User {
 	public $ID;
+	public $user_login;
 
 	public function __construct( int $id ) {
-		$this->ID = $id;
+		$this->ID         = $id;
+		$this->user_login = 'user' . $id;
 	}
 }
 
@@ -332,6 +351,11 @@ $GLOBALS['ab_test_posts'] = array();
 
 function get_current_user_id() {
 	return (int) $GLOBALS['ab_test_current_user'];
+}
+
+/** Like WordPress: the current user, or a user with ID 0 when nobody is logged in. */
+function wp_get_current_user() {
+	return $GLOBALS['ab_test_users'][ get_current_user_id() ] ?? new WP_User( 0 );
 }
 
 /**
@@ -1531,6 +1555,7 @@ define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/'
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-tool-profiles.php';
 require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';

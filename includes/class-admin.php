@@ -13,12 +13,27 @@ defined( 'ABSPATH' ) || exit;
 class AB_MCP_Admin {
 
 	/**
-	 * Hooks.
+	 * The tool registry, handed in by the plugin; looked up when not.
+	 *
+	 * @var AB_MCP_Tool_Registry|null
 	 */
-	public function __construct() {
+	private $registry;
+
+	/**
+	 * Hooks.
+	 *
+	 * @param AB_MCP_Tool_Registry|null $registry The plugin's registry. The plugin
+	 *                                            builds this screen while it is
+	 *                                            itself still being built, so it
+	 *                                            hands its registry in rather than
+	 *                                            have it looked up then.
+	 */
+	public function __construct( $registry = null ) {
+		$this->registry = $registry instanceof AB_MCP_Tool_Registry ? $registry : null;
 		add_action( 'admin_menu', array( $this, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_ab_mcp_save', array( $this, 'handle_save' ) );
+		add_action( 'admin_post_ab_mcp_profile', array( $this, 'handle_profile' ) );
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
 		add_action( 'admin_post_ab_mcp_oauth_settings', array( $this, 'handle_oauth_settings' ) );
@@ -49,6 +64,18 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * The tool registry.
+	 *
+	 * @return AB_MCP_Tool_Registry
+	 */
+	private function registry() {
+		if ( null === $this->registry ) {
+			$this->registry = AB_MCP_Plugin::instance()->registry;
+		}
+		return $this->registry;
+	}
+
+	/**
 	 * Capability guard.
 	 */
 	private function guard() {
@@ -64,7 +91,7 @@ class AB_MCP_Admin {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_save' );
 
-		$registry = AB_MCP_Plugin::instance()->registry;
+		$registry = $this->registry();
 		$enabled  = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] )
 			? array_map( 'sanitize_text_field', wp_unslash( $_POST['enabled_tools'] ) )
 			: array();
@@ -82,6 +109,23 @@ class AB_MCP_Admin {
 		// offers no server-initiated stream, so it cannot push a
 		// notifications/tools/list_changed. Say what to do if the change is not visible.
 		$this->redirect( 'tools_saved' );
+	}
+
+	/**
+	 * Set the tool switches to a profile (Simple, Advanced, Expert).
+	 *
+	 * Only the tool switches change: read-only mode, the connections and their
+	 * tokens stay as they are. An unknown profile changes nothing.
+	 */
+	public function handle_profile() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_profile' );
+
+		$profile = isset( $_POST['profile'] ) ? sanitize_key( wp_unslash( $_POST['profile'] ) ) : '';
+		if ( ! AB_MCP_Tool_Profiles::apply( $profile, $this->registry() ) ) {
+			$this->redirect( 'profile_unknown' );
+		}
+		$this->redirect( 'profile_saved' );
 	}
 
 	/**
@@ -320,7 +364,7 @@ class AB_MCP_Admin {
 		$this->guard();
 
 		$tokens    = AB_MCP_Settings::get_tokens();
-		$registry  = AB_MCP_Plugin::instance()->registry;
+		$registry  = $this->registry();
 		$groups    = $registry->groups();
 		$all       = $registry->all();
 		$read_only = (bool) AB_MCP_Settings::get( 'read_only', false );
@@ -691,6 +735,12 @@ class AB_MCP_Admin {
 	 * enabled_tools[], the list of all tools, and read_only. The switches for
 	 * all tools and for a group carry no name — they only set the tool switches.
 	 *
+	 * Above the switches sit the profiles. Their buttons belong to a form of
+	 * their own (ab-profile-form, before this one), so choosing a profile posts
+	 * nothing of this form, and saving this form posts no profile. Every tool
+	 * switch names the profiles it is on in (data-profiles), which lets
+	 * admin.js show «Custom» the moment a switch leaves every profile.
+	 *
 	 * @param array $groups    Tool groups from the registry.
 	 * @param array $all       Every registered tool (name => definition).
 	 * @param bool  $read_only Whether read-only mode is on.
@@ -699,9 +749,11 @@ class AB_MCP_Admin {
 	private function capabilities_card_html( $groups, $all, $read_only ) {
 		$on_total = 0;
 		$rows     = '';
+		$offered  = AB_MCP_Tool_Profiles::offered( AB_MCP_Tool_Profiles::states( $all, $groups ) );
 		foreach ( $groups as $slug => $g ) {
 			$on    = 0;
 			$items = '';
+			$level = isset( $g['level'] ) ? (string) $g['level'] : 'expert';
 			foreach ( $g['tools'] as $tname ) {
 				$def     = $all[ $tname ];
 				$enabled = AB_MCP_Settings::is_tool_enabled( $tname, $def );
@@ -709,9 +761,10 @@ class AB_MCP_Admin {
 				$desc    = trim( wp_strip_all_tags( (string) $def['description'] ) );
 				$parts   = preg_split( '/(?<=[.!?])\s+/', $desc, 2 );
 				$short   = is_array( $parts ) ? (string) $parts[0] : $desc;
+				$in      = implode( ' ', AB_MCP_Tool_Profiles::profiles_of( $def, $level ) );
 
 				$items .= '<li class="ab-tool-row" data-search="' . esc_attr( strtolower( $tname . ' ' . $desc ) ) . '">';
-				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
+				$items .= '<label class="ab-switch"><input type="checkbox" class="ab-tool" name="enabled_tools[]" value="' . esc_attr( $tname ) . '" data-profiles="' . esc_attr( $in ) . '"' . checked( $enabled, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( $tname ) . '</span></label>';
 				$items .= '<div class="ab-tool-row__text"><code>' . esc_html( $tname ) . '</code>';
 				if ( is_array( $parts ) && count( $parts ) > 1 ) {
 					/* translators: %s: tool name. */
@@ -725,7 +778,7 @@ class AB_MCP_Admin {
 			$rows .= '<details class="ab-group" data-group="' . esc_attr( (string) $slug ) . '"><summary>';
 			/* translators: %s: name of a tool group. */
 			$rows .= '<label class="ab-switch ab-group-switch"><input type="checkbox" class="ab-group-toggle"' . checked( $n > 0 && $on >= $n, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html( sprintf( __( 'All tools in %s', 'alphabridge-mcp' ), $g['label'] ) ) . '</span></label>';
-			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) : '' );
+			$rows .= '<strong>' . esc_html( $g['label'] ) . '</strong>' . ( ! empty( $g['mighty'] ) ? ' ' . $this->badge( true ) . ' ' . $this->level_pill( $level, $offered ) : '' );
 			/* translators: %d: number of tools. */
 			$rows .= ' <span class="ab-group__n">' . esc_html( sprintf( _n( '%d tool', '%d tools', $n, 'alphabridge-mcp' ), $n ) ) . '</span>';
 			$rows .= '<span class="ab-group__right">' . $this->group_status( $on, $n ) . '<span class="ab-chev" aria-hidden="true">›</span></span>';
@@ -733,13 +786,19 @@ class AB_MCP_Admin {
 		}
 		$total = count( $all );
 
-		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps" class="ab-card ab-caps">';
+		// The profile buttons below submit this form, not the capabilities form.
+		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-profile-form" hidden>';
+		$html .= wp_nonce_field( 'ab_mcp_profile', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_profile"></form>';
+
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="ab-caps" class="ab-card ab-caps">';
 		$html .= wp_nonce_field( 'ab_mcp_save', '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_save">';
 		$html .= '<input type="hidden" name="all_tools" value="' . esc_attr( implode( ',', array_keys( $all ) ) ) . '">';
 		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Capabilities', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<h2 class="ab-card__title">' . esc_html__( 'What connected assistants may do', 'alphabridge-mcp' ) . '</h2>';
 		$html .= '<p class="ab-lead">' . esc_html__( 'Switch whole groups or single tools. Open a group to see every tool and what it does. Disabled tools are removed from the MCP server and REST API entirely — no client can see or call them.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $this->profiles_html( $groups, $all );
 		$html .= '<div class="ab-capbar">';
 		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" class="ab-all-toggle"' . checked( $on_total === $total, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'All tools', 'alphabridge-mcp' ) . '</label>';
 		$html .= '<label class="ab-capbar__item"><span class="ab-switch"><input type="checkbox" name="read_only" value="1"' . checked( $read_only, true, false ) . '><span class="ab-switch__track" aria-hidden="true"></span></span>' . esc_html__( 'Read-only mode', 'alphabridge-mcp' ) . '</label>';
@@ -757,6 +816,97 @@ class AB_MCP_Admin {
 		$html .= '</form>';
 
 		return $html;
+	}
+
+	/**
+	 * The profiles above the switches: one button per profile with a sentence
+	 * on what the assistant may then do and what not, how many tools it
+	 * switches on, and «Custom» when the switches follow none of them.
+	 *
+	 * Only the offered profiles get a button (AB_MCP_Tool_Profiles::offered()).
+	 * The buttons submit ab-profile-form (see capabilities_card_html()). The
+	 * profile in use carries aria-current; admin.js moves it while switches
+	 * change, by the same rule as AB_MCP_Tool_Profiles::current(), and marks
+	 * it «When saved» until the form is saved. Before a profile replaces a
+	 * choice of switches of the admin's own, or discards a change of
+	 * read-only mode not yet saved, admin.js asks with the data-confirm-*
+	 * sentences.
+	 *
+	 * @param array $groups Tool groups from the registry.
+	 * @param array $all    Every registered tool (name => definition).
+	 * @return string HTML, escaped.
+	 */
+	private function profiles_html( $groups, $all ) {
+		$current = AB_MCP_Tool_Profiles::current( $all, $groups );
+		$states  = AB_MCP_Tool_Profiles::states( $all, $groups );
+		$total   = count( $all );
+
+		// Named from the registry, so the sentence says what Advanced adds on
+		// this site and nothing that is not here. Advanced is offered only
+		// where it adds a group and leaves one off, so neither list is empty.
+		$advanced = array();
+		foreach ( $groups as $g ) {
+			if ( ! empty( $g['mighty'] ) && isset( $g['level'] ) && 'advanced' === $g['level'] ) {
+				$advanced[] = (string) $g['label'];
+			}
+		}
+		$texts = array(
+			'simple'   => __( 'The assistant reads the site and edits content such as posts, pages, media, terms and comments; tools marked Mighty, which delete or change a lot at once, stay off.', 'alphabridge-mcp' ),
+			/* translators: %s: names of tool groups, separated by commas. */
+			'advanced' => sprintf( __( 'Everything in Simple plus the Mighty groups marked Advanced: %s; groups marked Expert stay off.', 'alphabridge-mcp' ), implode( ', ', $advanced ) ),
+			'expert'   => __( 'Every tool is on, Mighty ones included; the assistant can still do only what the connected account and its access level allow.', 'alphabridge-mcp' ),
+		);
+		$now = '<span class="ab-profile__now">' . esc_html__( 'In use', 'alphabridge-mcp' ) . '</span>';
+
+		$html  = '<div class="ab-profiles" role="group" aria-labelledby="ab-profiles-title" data-current="' . esc_attr( $current ) . '"';
+		$html .= ' data-now="' . esc_attr__( 'In use', 'alphabridge-mcp' ) . '" data-now-unsaved="' . esc_attr__( 'When saved', 'alphabridge-mcp' ) . '"';
+		$html .= ' data-confirm-custom="' . esc_attr__( 'The profile replaces your own choice of switches: tools you switched off come back on if the profile has them on, and tools the profile has off go off.', 'alphabridge-mcp' ) . '"';
+		$html .= ' data-confirm-read-only="' . esc_attr__( 'Read-only mode was changed but not saved; choosing a profile discards that change.', 'alphabridge-mcp' ) . '"';
+		$html .= ' data-confirm-ask="' . esc_attr__( 'Choose this profile?', 'alphabridge-mcp' ) . '">';
+		$html .= '<p class="ab-profiles__title" id="ab-profiles-title"><strong>' . esc_html__( 'Profile', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'One click sets every switch below; adjust single groups or tools afterwards.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div class="ab-profiles__list">';
+		foreach ( AB_MCP_Tool_Profiles::offered( $states ) as $slug => $name ) {
+			$on    = count( array_filter( $states[ $slug ] ) );
+			$html .= '<button type="submit" form="ab-profile-form" name="profile" value="' . esc_attr( $slug ) . '" class="ab-profile" data-profile="' . esc_attr( $slug ) . '"' . ( $slug === $current ? ' aria-current="true"' : '' ) . '>';
+			$html .= '<span class="ab-profile__head"><span class="ab-profile__name">' . esc_html( $name ) . '</span>';
+			if ( 'simple' === $slug ) {
+				$html .= '<span class="ab-profile__tag">' . esc_html__( 'default', 'alphabridge-mcp' ) . '</span>';
+			}
+			$html .= $now . '</span>';
+			$html .= '<span class="ab-profile__text">' . esc_html( $texts[ $slug ] ) . '</span>';
+			/* translators: 1: tools this profile switches on, 2: all tools. */
+			$html .= '<span class="ab-profile__count">' . esc_html( sprintf( __( '%1$d of %2$d tools on', 'alphabridge-mcp' ), $on, $total ) ) . '</span>';
+			$html .= '</button>';
+		}
+		$html .= '<div class="ab-profile ab-profile--custom" data-profile="custom"' . ( 'custom' === $current ? ' aria-current="true"' : ' hidden' ) . '>';
+		$html .= '<span class="ab-profile__head"><span class="ab-profile__name">' . esc_html__( 'Custom', 'alphabridge-mcp' ) . '</span>' . $now . '</span>';
+		$html .= '<span class="ab-profile__text">' . esc_html__( 'Your own choice of the switches below. Choosing a profile replaces it with that profile’s switches.', 'alphabridge-mcp' ) . '</span>';
+		$html .= '</div>';
+		$html .= '</div>';
+		$html .= '<p class="ab-note">' . esc_html__( 'A profile sets only the tool switches below. Read-only mode and your connections stay as they are.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * The level of a Mighty group as a pill: the first offered profile that
+	 * switches its Mighty tools on. The words say that it is about those
+	 * tools; the group's other tools are on in every profile, and a bare
+	 * «Expert» beside «Posts & Pages» would read as if editing posts were.
+	 *
+	 * @param string $level   Group level.
+	 * @param array  $offered Offered profiles, slug => name, narrowest first.
+	 * @return string HTML, escaped.
+	 */
+	private function level_pill( $level, $offered ) {
+		foreach ( $offered as $profile => $name ) {
+			if ( AB_MCP_Tool_Registry::level_rank( $profile ) >= AB_MCP_Tool_Registry::level_rank( $level ) ) {
+				/* translators: %s: name of a profile, e.g. Expert. */
+				return '<span class="ab-pill ab-pill--level ab-pill--' . esc_attr( (string) $profile ) . '">' . esc_html( sprintf( __( 'Mighty tools: from %s', 'alphabridge-mcp' ), $name ) ) . '</span>';
+			}
+		}
+		return '';
 	}
 
 	/**
@@ -1182,6 +1332,8 @@ class AB_MCP_Admin {
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
 			'review_dismissed' => array( 'success', __( 'Noted — the plugin will not ask for a review again.', 'alphabridge-mcp' ) ),
+			'profile_saved'    => array( 'success', __( 'Profile applied: the tool switches now follow it. Clients may cache the tool list they loaded; if the change is not visible in a connected client, refresh its tool list or reconnect it.', 'alphabridge-mcp' ) ),
+			'profile_unknown'  => array( 'error', __( 'Unknown profile; nothing was changed.', 'alphabridge-mcp' ) ),
 		);
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );
