@@ -1266,6 +1266,8 @@ class AB_MCP_REST_Controller {
 			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ) ) );
 		}
 
+		self::load_admin_translations();
+
 		try {
 			$result = call_user_func( $def['callback'], $args );
 		} catch ( \Throwable $e ) {
@@ -1283,6 +1285,40 @@ class AB_MCP_REST_Controller {
 		AB_MCP_Audit_Log::record( $name, $args, 'ok', null );
 		AB_MCP_Review_Notice::count_call();
 		return $this->result( $id, $this->tool_ok( $result ) );
+	}
+
+	/**
+	 * Locales whose admin translations this request has asked for.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static $admin_locales = array();
+
+	/**
+	 * Load WordPress's own admin translations for the current locale, once
+	 * per request, before a tool runs.
+	 *
+	 * The messages of wp-admin/includes (plugin and theme management, the
+	 * upgrader, the file system) are in admin-<locale>.mo, which WordPress
+	 * loads only for wp-admin screens. A tool call is a REST request, so an
+	 * error of those functions that a tool passes on («Plugin file does not
+	 * exist.») would reach the person in English on a German site.
+	 *
+	 * @return bool Whether the file was loaded now.
+	 */
+	public static function load_admin_translations() {
+		$locale = (string) determine_locale();
+		if ( isset( self::$admin_locales[ $locale ] ) || 'en_US' === $locale || ! defined( 'WP_LANG_DIR' ) || ( function_exists( 'is_admin' ) && is_admin() ) ) {
+			return false;
+		}
+		self::$admin_locales[ $locale ] = true;
+		$file = WP_LANG_DIR . '/admin-' . $locale . '.mo';
+		// A language pack since WordPress 6.5 also brings admin-<locale>.l10n.php,
+		// which load_textdomain() reads in place of the .mo where it exists.
+		if ( ! is_readable( $file ) && ! is_readable( WP_LANG_DIR . '/admin-' . $locale . '.l10n.php' ) ) {
+			return false;
+		}
+		return (bool) load_textdomain( 'default', $file, $locale );
 	}
 
 	/**
