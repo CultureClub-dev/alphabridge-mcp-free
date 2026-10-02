@@ -1,0 +1,22 @@
+{
+ "_source": "Raw post meta as stored by Elementor 4.3.3 and Beaver Builder Lite 2.11.0.6 on WordPress 7.1.2 (WordPress Playground, 30.09.2026). Copied unchanged from the measurement docs/recherche/2026-09-30-page-builder-messung: ergebnis-1-elementor-klassisch.json (elementor_meta, beaver_meta) and ergebnis-3-atomar-beaver-ersetzen.json (atomar_data, atomar_edit_mode).",
+ "elementor_v3": {
+  "_elementor_css": "a:6:{s:4:\"time\";i:1790778507;s:5:\"fonts\";a:0:{}s:5:\"icons\";a:1:{i:0;s:0:\"\";}s:20:\"dynamic_elements_ids\";a:0:{}s:6:\"status\";s:4:\"file\";i:0;s:0:\"\";}",
+  "_elementor_data": "[{\"id\":\"c0ffee1\",\"elType\":\"container\",\"settings\":[],\"elements\":[{\"id\":\"a1b2c3d\",\"elType\":\"widget\",\"settings\":{\"title\":\"Willkommen bei Alpine Bikes\",\"header_size\":\"h1\"},\"elements\":[],\"widgetType\":\"heading\"},{\"id\":\"b2c3d4e\",\"elType\":\"widget\",\"settings\":{\"editor\":\"<p>\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr<\\/p>\"},\"elements\":[],\"widgetType\":\"text-editor\"},{\"id\":\"c3d4e5f\",\"elType\":\"widget\",\"settings\":{\"text\":\"Jetzt reservieren\",\"link\":{\"url\":\"https:\\/\\/example.com\\/reservieren\",\"is_external\":\"\",\"nofollow\":\"\"}},\"elements\":[],\"widgetType\":\"button\"}],\"isInner\":false}]",
+  "_elementor_global_class_usage_indexed": "1",
+  "_elementor_global_class_usage_indexed_preview": "1",
+  "_elementor_page_assets": "a:2:{s:6:\"styles\";a:1:{i:0;s:14:\"widget-heading\";}s:7:\"scripts\";a:1:{i:0;s:18:\"elementor-frontend\";}}",
+  "_elementor_template_type": "wp-page",
+  "_elementor_version": "4.3.3",
+  "_wp_page_template": "default"
+ },
+ "elementor_v4": {
+  "_elementor_data": "[{\"id\":\"f00d001\",\"elType\":\"e-flexbox\",\"elements\":[{\"id\":\"f00d002\",\"elType\":\"widget\",\"settings\":{\"tag\":{\"$$type\":\"string\",\"value\":\"h1\"},\"title\":{\"$$type\":\"escaped-html\",\"value\":\"Willkommen bei Alpine Bikes\"}},\"elements\":[],\"widgetType\":\"e-heading\",\"version\":\"0.0\"},{\"id\":\"f00d003\",\"elType\":\"widget\",\"settings\":{\"paragraph\":{\"$$type\":\"escaped-html\",\"value\":\"\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr\"}},\"elements\":[],\"widgetType\":\"e-paragraph\",\"version\":\"0.0\"},{\"id\":\"f00d004\",\"elType\":\"widget\",\"settings\":{\"text\":{\"$$type\":\"escaped-html\",\"value\":\"Jetzt reservieren\"}},\"elements\":[],\"widgetType\":\"e-button\",\"version\":\"0.0\"}],\"isInner\":false,\"version\":\"0.0\"}]",
+  "_elementor_edit_mode": "builder"
+ },
+ "beaver": {
+  "_fl_builder_data": "a:0:{}",
+  "_fl_builder_data_settings": "O:8:\"stdClass\":13:{s:3:\"css\";s:0:\"\";s:2:\"js\";s:0:\"\";s:5:\"title\";s:0:\"\";s:7:\"excerpt\";s:0:\"\";s:4:\"slug\";s:0:\"\";s:6:\"status\";s:7:\"publish\";s:14:\"featured_image\";s:0:\"\";s:18:\"featured_image_src\";s:0:\"\";s:6:\"parent\";s:0:\"\";s:13:\"page_template\";s:7:\"default\";s:10:\"menu_order\";s:1:\"0\";s:14:\"comment_status\";s:6:\"closed\";s:11:\"ping_status\";s:6:\"closed\";}",
+  "_fl_builder_enabled": "1"
+ }
+}

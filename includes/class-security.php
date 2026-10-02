@@ -1,6 +1,7 @@
 <?php
 /**
- * Policy enforcement: capability, Safe-Mode, rate limiting + shared guards.
+ * Policy enforcement: capability, site mode, tool switches, token scope, rate
+ * limiting + shared guards.
  *
  * @package AlphaBridge_MCP
  */
@@ -28,34 +29,29 @@ class AB_MCP_Security {
 				'ab_mcp_forbidden',
 				sprintf(
 					/* translators: 1: tool, 2: capability */
-					__( 'Your account lacks the capability "%2$s" required by "%1$s".', 'alphabridge-mcp' ),
+					__( 'Your account lacks the capability "%2$s" required by "%1$s". Connect with an account whose role has it, or ask an administrator to give your account such a role.', 'alphabridge-mcp' ),
 					$name,
 					$def['capability']
 				)
 			);
 		}
 
-		// 2. Global read-only mode: while it is on, only read tools may run.
-		if ( AB_MCP_Settings::get( 'read_only', false ) && ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
-			return new WP_Error(
-				'ab_mcp_read_only',
-				sprintf(
-					/* translators: %s: tool */
-					__( 'Read-only mode is active; the writing tool "%s" is blocked. Disable read-only mode under Settings → AlphaBridge MCP → Capabilities to allow writes.', 'alphabridge-mcp' ),
-					$name
-				)
-			);
+		// 2. Site mode: in Read (the default) only the ordinary reading tools
+		// run, not the Mighty ones, whatever their switch and the token's scope
+		// say. See AB_MCP_Site_Mode.
+		if ( ! AB_MCP_Site_Mode::allows( $name, $def ) ) {
+			return AB_MCP_Site_Mode::refusal( $name, $def );
 		}
 
-		// 3. Tool must be enabled. Non-dangerous tools default on; dangerous
-		// ("mighty") tools default off until the admin switches them on in the
-		// AlphaBridge MCP settings. Disabled tools are also hidden from tools/list.
+		// 3. Tool must be switched on. Every tool is on until an administrator
+		// switches it off under Fine-tuning; switched-off tools are also hidden
+		// from tools/list.
 		if ( ! AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
 			return new WP_Error(
 				'ab_mcp_tool_disabled',
 				sprintf(
 					/* translators: %s: tool */
-					__( 'The tool "%s" is disabled in the AlphaBridge MCP settings.', 'alphabridge-mcp' ),
+					__( 'The tool "%s" is switched off in the AlphaBridge MCP settings. An administrator can switch it on under Settings → AlphaBridge MCP → Fine-tuning.', 'alphabridge-mcp' ),
 					$name
 				)
 			);
@@ -72,7 +68,7 @@ class AB_MCP_Security {
 				'ab_mcp_scope',
 				sprintf(
 					/* translators: 1: tool, 2: scope */
-					__( 'The token used is limited to the "%2$s" scope, which does not include the tool "%1$s". Use a wider-scoped token.', 'alphabridge-mcp' ),
+					__( 'The token used is limited to the "%2$s" scope, which does not include the tool "%1$s". Use a wider-scoped token: connect the app again and choose a wider access level on the consent screen, or have an administrator create a connection with wider access under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ),
 					$name,
 					AB_MCP_Auth::current_scope()
 				)
@@ -103,7 +99,11 @@ class AB_MCP_Security {
 			if ( $count > $per_min ) {
 				return new WP_Error(
 					'ab_mcp_rate_limited',
-					__( 'Rate limit reached (per minute). Please slow down.', 'alphabridge-mcp' )
+					sprintf(
+						/* translators: %d: tool calls per minute */
+						__( 'Rate limit reached (per minute): at most %d tool calls per minute for each account. Wait until the next minute, then continue.', 'alphabridge-mcp' ),
+						$per_min
+					)
 				);
 			}
 		}
@@ -169,7 +169,7 @@ class AB_MCP_Security {
 					}
 					if ( is_string( $value ) && strlen( $value ) > 8 * 1024 * 1024 ) {
 						/* translators: %s: argument name */
-						$problems[] = sprintf( __( '"%s" exceeds the 8 MB size limit', 'alphabridge-mcp' ), $key );
+						$problems[] = sprintf( __( '"%s" exceeds the 8 MB size limit (send less per call; a large file is fetched from a public address with wp_upload_media_from_url)', 'alphabridge-mcp' ), $key );
 					}
 					break;
 				case 'integer':
@@ -188,7 +188,7 @@ class AB_MCP_Security {
 					}
 					if ( count( $value ) > 2000 ) {
 						/* translators: %s: argument name */
-						$problems[] = sprintf( __( '"%s" has too many items (max 2000)', 'alphabridge-mcp' ), $key );
+						$problems[] = sprintf( __( '"%s" has too many items (max 2000; split them across several calls)', 'alphabridge-mcp' ), $key );
 					}
 					break;
 			}

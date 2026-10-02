@@ -1,0 +1,15 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/ergebnis-1-elementor-klassisch.json (Elementor 4.3.3, WordPress 7.1.2, measured 30.09.2026): elementor_meta (raw postmeta rows after Document::save()) and elementor_post_content. The page was saved without set_is_built_with_elementor(), so it has no _elementor_edit_mode; the tests add it with the value of ergebnis-3 (atomar_edit_mode \"builder\").",
+ "measured": true,
+ "meta": {
+  "_elementor_css": "a:6:{s:4:\"time\";i:1790778507;s:5:\"fonts\";a:0:{}s:5:\"icons\";a:1:{i:0;s:0:\"\";}s:20:\"dynamic_elements_ids\";a:0:{}s:6:\"status\";s:4:\"file\";i:0;s:0:\"\";}",
+  "_elementor_data": "[{\"id\":\"c0ffee1\",\"elType\":\"container\",\"settings\":[],\"elements\":[{\"id\":\"a1b2c3d\",\"elType\":\"widget\",\"settings\":{\"title\":\"Willkommen bei Alpine Bikes\",\"header_size\":\"h1\"},\"elements\":[],\"widgetType\":\"heading\"},{\"id\":\"b2c3d4e\",\"elType\":\"widget\",\"settings\":{\"editor\":\"<p>\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr<\\/p>\"},\"elements\":[],\"widgetType\":\"text-editor\"},{\"id\":\"c3d4e5f\",\"elType\":\"widget\",\"settings\":{\"text\":\"Jetzt reservieren\",\"link\":{\"url\":\"https:\\/\\/example.com\\/reservieren\",\"is_external\":\"\",\"nofollow\":\"\"}},\"elements\":[],\"widgetType\":\"button\"}],\"isInner\":false}]",
+  "_elementor_global_class_usage_indexed": "1",
+  "_elementor_global_class_usage_indexed_preview": "1",
+  "_elementor_page_assets": "a:2:{s:6:\"styles\";a:1:{i:0;s:14:\"widget-heading\";}s:7:\"scripts\";a:1:{i:0;s:18:\"elementor-frontend\";}}",
+  "_elementor_template_type": "wp-page",
+  "_elementor_version": "4.3.3",
+  "_wp_page_template": "default"
+ },
+ "content": "<h1>Willkommen bei Alpine Bikes</h1>\t\t<p>Öffnungszeiten: Mo–Fr 9–18 Uhr</p>\t\t\t\t\t\t\t\t<a href=\"https://example.com/reservieren\">\n\t\t\t\t\t\t\t\t\tJetzt reservieren\n\t\t\t\t\t</a>"
+}

@@ -27,6 +27,7 @@ $ab_mcp_options = array(
 	'ab_mcp_oauth_clients',
 	'ab_mcp_review',
 	'ab_mcp_review_dismissed',
+	'ab_mcp_mode_history',
 );
 
 foreach ( $ab_mcp_options as $ab_mcp_option ) {

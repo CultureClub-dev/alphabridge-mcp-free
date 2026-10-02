@@ -106,20 +106,27 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 	public static function get_user_meta_tool( $a ) {
 		$id = self::i( $a, 'user_id' );
 		if ( ! get_user_by( 'id', $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'User not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'edit_user', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this user\'s meta.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
 		$allowed = self::allowed_user_meta_keys();
 		$key     = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
 			if ( ! in_array( $key, $allowed, true ) ) {
-				return new WP_Error( 'ab_mcp_protected_meta', __( 'Only standard profile fields are available for user meta.', 'alphabridge-mcp' ) );
+				return new WP_Error(
+					'ab_mcp_protected_meta',
+					sprintf(
+						/* translators: %s: comma-separated meta keys */
+						__( 'Only standard profile fields are available for user meta: %s. Pass one of them as key, or leave key out to read all of them.', 'alphabridge-mcp' ),
+						implode( ', ', $allowed )
+					)
+				);
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
 			if ( ! current_user_can( 'edit_user_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'user_id' => $id,
@@ -153,20 +160,24 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$id   = self::i( $a, 'term_id' );
 		$term = get_term( $id );
 		if ( ! $term || is_wp_error( $term ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
 		}
 		$tax_obj = get_taxonomy( $term->taxonomy );
 		if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read terms of this taxonomy.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
 			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'term' ) || self::is_sensitive_meta_key( $key ) ) {
-				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
+			// WordPress first maps it to edit_term on the term itself (case
+			// 'edit_term_meta', then 'edit_term' in wp-includes/capabilities.php),
+			// while this tool lets in accounts that may only assign terms: that,
+			// not a plugin, is the usual reason.
 			if ( ! current_user_can( 'edit_term_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'term_id' => $id,
@@ -192,20 +203,22 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 	/* --------------------------------------------------------------- app passwords */
 
 	/**
-	 * Guard: application passwords available + editable.
+	 * Guard: application passwords available + editable. Its texts name no
+	 * single action: the Pro add-on runs the same guard before creating and
+	 * revoking application passwords.
 	 *
 	 * @param int $user_id User id.
 	 * @return true|WP_Error
 	 */
 	protected static function app_pw_guard( $user_id ) {
 		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
-			return new WP_Error( 'ab_mcp_no_app_pw', __( 'Application passwords require WordPress 5.6+.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_no_app_pw', __( 'Application passwords require WordPress 5.6 or later; update WordPress to use them.', 'alphabridge-mcp' ) );
 		}
 		if ( function_exists( 'wp_is_application_passwords_available' ) && ! wp_is_application_passwords_available() ) {
-			return new WP_Error( 'ab_mcp_app_pw_off', __( 'Application passwords are disabled on this site.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_app_pw_off', __( 'Application passwords are disabled on this site: WordPress offers them only over HTTPS or in a local environment, and a plugin can switch them off with the wp_is_application_passwords_available filter.', 'alphabridge-mcp' ) );
 		}
 		if ( ! get_user_by( 'id', $user_id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'User not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
 		}
 		return true;
 	}
@@ -223,7 +236,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			return $g;
 		}
 		if ( ! current_user_can( 'edit_user', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot view this user\'s application passwords.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot view this user\'s application passwords: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
 		$items = WP_Application_Passwords::get_user_application_passwords( $id );
 		$out   = array();

@@ -8,9 +8,18 @@
  * classes touch. That keeps the suite fast and dependency-free, and it means a
  * test failure points at plugin code rather than at a WordPress fixture.
  *
- * What is deliberately NOT emulated: the REST dispatcher, capabilities and the
- * database. Anything that needs those belongs in the end-to-end run against a
- * real site, not here.
+ * What is deliberately NOT emulated: capabilities and the database. Anything
+ * that needs those belongs in the end-to-end run against a real site, not
+ * here. Of the REST dispatcher only the part that decides status and headers
+ * is copied (ab_test_rest_dispatch(), see there); register_rest_route() records
+ * what is registered for it. There is no network either: wp_safe_remote_get()
+ * is answered by a callback the test sets (ab_test_http_answer), and every call
+ * is recorded, so a test can prove that a request was made, or was not.
+ *
+ * Not emulated but copied: WordPress' block parser and serializer and its
+ * shortcode pattern, unchanged from WordPress 7.0.2 (tests/support/, each file
+ * says where from), because the page-builder readers must read exactly what
+ * WordPress reads.
  *
  * @package AlphaBridge_MCP
  */
@@ -67,10 +76,14 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_template_reset']   = array();
 	$GLOBALS['ab_test_meta']         = array();
 	$GLOBALS['ab_test_meta_deleted'] = array();
+	$GLOBALS['ab_test_meta_added']   = array();
+	$GLOBALS['ab_test_meta_updated'] = array();
+	$GLOBALS['ab_test_rand']         = array();
 	$GLOBALS['ab_test_actions']      = array();
 	$GLOBALS['ab_test_comments_untrashed'] = array();
 	$GLOBALS['ab_test_trashed']       = array();
 	$GLOBALS['ab_test_trash_refused'] = false;
+	$GLOBALS['ab_test_delete_refused'] = false;
 	$GLOBALS['ab_test_deleted']       = array();
 	$GLOBALS['ab_test_now']        = null;
 	$GLOBALS['ab_test_core_delay'] = 0;
@@ -81,6 +94,20 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
 	$GLOBALS['ab_test_locale']     = 'en_US';
+	$GLOBALS['ab_test_template']   = 'twentytwentyfive';
+	$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
+	$GLOBALS['ab_test_site_options'] = array();
+	// The builder registry caches signatures, adapters and block profiles
+	// for a request; every test starts without them.
+	if ( class_exists( 'AB_MCP_Builders', false ) ) {
+		AB_MCP_Builders::reset();
+	}
+	$GLOBALS['ab_test_http']        = array();
+	$GLOBALS['ab_test_http_answer'] = null;
+	$GLOBALS['ab_test_http_curl']   = false;
+	$GLOBALS['ab_test_logged_in']   = false;
+	$GLOBALS['ab_test_routes']      = array();
+	$GLOBALS['ab_test_i18n']        = array();
 }
 
 function get_option( $name, $default = false ) {
@@ -160,6 +187,14 @@ function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
+
+/** Runs what add_action() hooked, with the elements of $args as arguments. */
+function do_action_ref_array( $hook, $args ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $entry ) {
+		( $entry['fn'] )( ...$args );
+	}
+}
+
 /**
  * As in WordPress: without a callback, whether the hook has any; with one, its
  * priority when it is registered, else false.
@@ -179,6 +214,22 @@ function has_filter( $hook, $callback = false ) {
 
 function has_action( $hook, $callback = false ) {
 	return has_filter( $hook, $callback );
+}
+
+/** As in WordPress: removes the callback registered at that priority. */
+function remove_filter( $hook, $callback, $priority = 10 ) {
+	foreach ( $GLOBALS['ab_test_filters'][ $hook ] ?? array() as $i => $entry ) {
+		if ( $entry['fn'] === $callback && $entry['prio'] === $priority ) {
+			unset( $GLOBALS['ab_test_filters'][ $hook ][ $i ] );
+			$GLOBALS['ab_test_filters'][ $hook ] = array_values( $GLOBALS['ab_test_filters'][ $hook ] );
+			return true;
+		}
+	}
+	return false;
+}
+
+function remove_action( $hook, $callback, $priority = 10 ) {
+	return remove_filter( $hook, $callback, $priority );
 }
 
 function __return_true() {
@@ -218,8 +269,36 @@ function esc_html__( $text, $domain = '' ) {
 	return $text;
 }
 
+function esc_html_e( $text, $domain = '' ) {
+	echo esc_html( $text ); // phpcs:ignore
+}
+
+/**
+ * Keeps the allowed tags and drops every other one. Attributes are not
+ * checked; no caller in the plugin passes any it relies on being dropped.
+ */
+function wp_kses( $content, $allowed_html ) {
+	return strip_tags( (string) $content, is_array( $allowed_html ) ? array_keys( $allowed_html ) : array() );
+}
+
+function language_attributes( $doctype = 'html' ) {
+	echo 'lang="en-US"';
+}
+
 function home_url( $path = '' ) {
 	return 'https://example.test' . $path;
+}
+
+function site_url( $path = '' ) {
+	return 'https://example.test' . $path;
+}
+
+function esc_url_raw( $url ) {
+	return (string) $url;
+}
+
+function wp_set_current_user( $id ) {
+	$GLOBALS['ab_test_current_user'] = (int) $id;
 }
 
 function rest_url( $path = '' ) {
@@ -235,13 +314,16 @@ function get_bloginfo( $what = '' ) {
 }
 
 /**
- * Minimal stand-in for WP_User: the plugin only reads ->ID.
+ * Minimal stand-in for WP_User: the plugin reads ->ID, and the consent
+ * screen ->user_login.
  */
 class WP_User {
 	public $ID;
+	public $user_login;
 
 	public function __construct( int $id ) {
-		$this->ID = $id;
+		$this->ID         = $id;
+		$this->user_login = 'user' . $id;
 	}
 }
 
@@ -271,6 +353,11 @@ $GLOBALS['ab_test_posts'] = array();
 
 function get_current_user_id() {
 	return (int) $GLOBALS['ab_test_current_user'];
+}
+
+/** Like WordPress: the current user, or a user with ID 0 when nobody is logged in. */
+function wp_get_current_user() {
+	return $GLOBALS['ab_test_users'][ get_current_user_id() ] ?? new WP_User( 0 );
 }
 
 /**
@@ -427,13 +514,23 @@ class WP_Query {
 	public $found_posts   = 0;
 	public $max_num_pages = 0;
 	public $args;
+	/** @var string The WHERE clause posts_where made of '' for this query. */
+	public $where         = '';
 
 	public function __construct( $args = array() ) {
-		$this->args          = $args;
+		$this->args = $args;
+		// Like WP_Query::get_posts(): the WHERE filter runs with the query
+		// object, so a filter can tell its own query from any other.
+		$this->where         = (string) apply_filters( 'posts_where', '', $this );
 		$answer              = $GLOBALS['ab_test_query'];
-		$this->posts         = is_callable( $answer ) ? (array) $answer( $args ) : array();
+		$this->posts         = is_callable( $answer ) ? (array) $answer( $args, $this->where ) : array();
 		$this->found_posts   = count( $this->posts );
 		$this->max_num_pages = $this->found_posts > 0 ? 1 : 0;
+	}
+
+	/** A query var, as WP_Query::get(). */
+	public function get( $key, $default = '' ) {
+		return $this->args[ $key ] ?? $default;
 	}
 }
 
@@ -458,16 +555,203 @@ function wp_strip_all_tags( $text ) {
 	return strip_tags( (string) $text );
 }
 
+/* ---------------------------------------------------- themes, network */
+
+/** @var string $ab_test_template Active (parent) theme. */
+$GLOBALS['ab_test_template']   = 'twentytwentyfive';
+/** @var string $ab_test_stylesheet Active (child) theme. */
+$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
+/** @var array<string,mixed> $ab_test_site_options Network options. */
+$GLOBALS['ab_test_site_options'] = array();
+
+function get_template() {
+	return (string) $GLOBALS['ab_test_template'];
+}
+
+function get_stylesheet() {
+	return (string) $GLOBALS['ab_test_stylesheet'];
+}
+
+function get_site_option( $name, $default = false ) {
+	return array_key_exists( $name, $GLOBALS['ab_test_site_options'] ) ? $GLOBALS['ab_test_site_options'][ $name ] : $default;
+}
+
 /**
- * Post meta from $ab_test_meta: every value of a key, in the order it was
- * added — as WordPress, which gives the first where one is asked for.
+ * Post meta from $ab_test_meta, which holds values as the database does:
+ * serialized where WordPress serialized them. As in WordPress, a key asked
+ * for comes out unserialized — every value in the order it was added, or the
+ * first — and without a key every key comes out with its values raw.
  */
 function get_post_meta( $post_id, $key = '', $single = false ) {
-	$values = $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array();
+	if ( '' === $key ) {
+		return $GLOBALS['ab_test_meta'][ (int) $post_id ] ?? array();
+	}
+	$values = array_map( 'maybe_unserialize', $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array() );
 	return $single ? ( $values ? $values[0] : '' ) : $values;
 }
 
+/**
+ * add_post_meta() as add_metadata() works: key and value unslashed all the
+ * way down, objects included (stripslashes_deep() is map_deep()), the
+ * sanitize filter, then maybe_serialize() — which serializes a string that
+ * already looks serialized a second time. The stored form is appended. As in
+ * core, meta for a revision goes to the post the revision belongs to.
+ */
+function add_post_meta( $post_id, $meta_key, $meta_value, $unique = false ) {
+	$post_id    = wp_is_post_revision( $post_id ) ?: $post_id;
+	$meta_key   = stripslashes( (string) $meta_key );
+	$meta_value = stripslashes_deep( $meta_value );
+	$meta_value = apply_filters( "sanitize_post_meta_{$meta_key}", $meta_value, $meta_key, 'post' );
+	if ( $unique && ! empty( $GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ] ) ) {
+		return false;
+	}
+	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ][] = maybe_serialize( $meta_value );
+	$GLOBALS['ab_test_meta_added'][] = array( (int) $post_id, $meta_key );
+	return count( $GLOBALS['ab_test_meta_added'] );
+}
+
+/**
+ * update_post_meta() as update_metadata() works without a previous value:
+ * key and value unslashed, the sanitize filter, then maybe_serialize(); the
+ * key then holds that one value, added where it was missing. As in core,
+ * meta for a revision goes to the post the revision belongs to.
+ */
+function update_post_meta( $post_id, $meta_key, $meta_value, $prev_value = '' ) {
+	$post_id    = wp_is_post_revision( $post_id ) ?: $post_id;
+	$meta_key   = stripslashes( (string) $meta_key );
+	$meta_value = stripslashes_deep( $meta_value );
+	$meta_value = apply_filters( "sanitize_post_meta_{$meta_key}", $meta_value, $meta_key, 'post' );
+	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ] = array( maybe_serialize( $meta_value ) );
+	$GLOBALS['ab_test_meta_updated'][] = array( (int) $post_id, $meta_key );
+	return true;
+}
+
+// The four helpers below are WordPress' own (6.9 / 7.0), so a test sees
+// exactly what core does with a value on its way into the meta table.
+
+function is_protected_meta( $meta_key, $meta_type = '' ) {
+	$sanitized_key = preg_replace( "/[^\x20-\x7E\p{L}]/", '', (string) $meta_key );
+	$protected     = strlen( $sanitized_key ) > 0 && ( '_' === $sanitized_key[0] );
+	return apply_filters( 'is_protected_meta', $protected, $meta_key, $meta_type );
+}
+
+function map_deep( $value, $callback ) {
+	if ( is_array( $value ) ) {
+		foreach ( $value as $index => $item ) {
+			$value[ $index ] = map_deep( $item, $callback );
+		}
+	} elseif ( is_object( $value ) ) {
+		$object_vars = get_object_vars( $value );
+		foreach ( $object_vars as $property_name => $property_value ) {
+			$value->$property_name = map_deep( $property_value, $callback );
+		}
+	} else {
+		$value = call_user_func( $callback, $value );
+	}
+	return $value;
+}
+
+function stripslashes_from_strings_only( $value ) {
+	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
+
+function stripslashes_deep( $value ) {
+	return map_deep( $value, 'stripslashes_from_strings_only' );
+}
+
+function is_serialized( $data, $strict = true ) {
+	if ( ! is_string( $data ) ) {
+		return false;
+	}
+	$data = trim( $data );
+	if ( 'N;' === $data ) {
+		return true;
+	}
+	if ( strlen( $data ) < 4 ) {
+		return false;
+	}
+	if ( ':' !== $data[1] ) {
+		return false;
+	}
+	if ( $strict ) {
+		$lastc = substr( $data, -1 );
+		if ( ';' !== $lastc && '}' !== $lastc ) {
+			return false;
+		}
+	} else {
+		$semicolon = strpos( $data, ';' );
+		$brace     = strpos( $data, '}' );
+		if ( false === $semicolon && false === $brace ) {
+			return false;
+		}
+		if ( false !== $semicolon && $semicolon < 3 ) {
+			return false;
+		}
+		if ( false !== $brace && $brace < 4 ) {
+			return false;
+		}
+	}
+	$token = $data[0];
+	switch ( $token ) {
+		case 's':
+			if ( $strict ) {
+				if ( '"' !== substr( $data, -2, 1 ) ) {
+					return false;
+				}
+			} elseif ( ! str_contains( $data, '"' ) ) {
+				return false;
+			}
+			// Or else fall through.
+		case 'a':
+		case 'O':
+		case 'E':
+			return (bool) preg_match( "/^{$token}:[0-9]+:/s", $data );
+		case 'b':
+		case 'i':
+		case 'd':
+			$end = $strict ? '$' : '';
+			return (bool) preg_match( "/^{$token}:[0-9.E+-]+;$end/", $data );
+	}
+	return false;
+}
+
+function maybe_serialize( $data ) {
+	if ( is_array( $data ) || is_object( $data ) ) {
+		return serialize( $data );
+	}
+	if ( is_serialized( $data, false ) ) {
+		return serialize( $data );
+	}
+	return $data;
+}
+
+function maybe_unserialize( $data ) {
+	if ( is_serialized( $data ) ) {
+		return @unserialize( trim( $data ) );
+	}
+	return $data;
+}
+
+/** @var int[] $ab_test_rand Numbers wp_rand() hands out first, in order; random ones after. */
+$GLOBALS['ab_test_rand'] = array();
+
+function wp_rand( $min = null, $max = null ) {
+	if ( ! empty( $GLOBALS['ab_test_rand'] ) ) {
+		return (int) array_shift( $GLOBALS['ab_test_rand'] );
+	}
+	return random_int( (int) $min, (int) $max );
+}
+
+/** As core: the id of the post a revision belongs to, or false. */
+function wp_is_post_revision( $post ) {
+	$post = get_post( is_object( $post ) ? $post->ID : $post );
+	return ( $post && 'revision' === $post->post_type ) ? (int) $post->post_parent : false;
+}
+
+/** As core: the key unslashed (delete_metadata()), a revision's meta deleted from its post. */
 function delete_post_meta( $post_id, $key, $value = '' ) {
+	$post_id = wp_is_post_revision( $post_id ) ?: $post_id;
+	$key     = stripslashes( (string) $key );
 	$GLOBALS['ab_test_meta_deleted'][] = array( (int) $post_id, $key );
 	unset( $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] );
 	return true;
@@ -497,11 +781,11 @@ function wp_trash_post( $post_id = 0 ) {
 	return $post;
 }
 
-/** Deletes for good (only called with force here), and notes the call. */
+/** Deletes for good (only called with force here), and notes the call; false where a pre_delete_post filter said no. */
 function wp_delete_post( $post_id = 0, $force_delete = false ) {
 	$GLOBALS['ab_test_deleted'][] = array( (int) $post_id, (bool) $force_delete );
 	$post = get_post( (int) $post_id );
-	if ( ! $post ) {
+	if ( ! $post || ! empty( $GLOBALS['ab_test_delete_refused'] ) ) {
 		return false;
 	}
 	unset( $GLOBALS['ab_test_posts'][ (int) $post_id ] );
@@ -540,7 +824,7 @@ function wp_get_post_revisions( $post_id ) {
 }
 
 function get_post_type_object( $type ) {
-	if ( ! in_array( $type, array( 'post', 'page', 'attachment' ), true ) ) {
+	if ( ! in_array( $type, array( 'post', 'page', 'attachment', 'revision' ), true ) ) {
 		return null;
 	}
 	return (object) array(
@@ -611,6 +895,8 @@ function wp_insert_post( $postarr, $wp_error = false ) {
 			$postarr
 		)
 	);
+	// Kept apart from the data above, which wp_insert_post_data filters in tests see.
+	$GLOBALS['ab_test_posts'][ $id ]->post_parent = (int) ( $postarr['post_parent'] ?? 0 );
 	return $id;
 }
 
@@ -769,6 +1055,35 @@ function get_locale() {
 	return (string) ( $GLOBALS['ab_test_locale'] ?? 'en_US' );
 }
 
+/*
+ * Translation loading, as far as AB_MCP_Plugin::load_bundled_translations()
+ * touches it. Nothing is translated here: every call is recorded in order in
+ * $GLOBALS['ab_test_i18n'], so a test can see that the language pack was
+ * asked for before the bundled file was added. What the bundled files say is
+ * read from the files themselves (BundledTranslationsTest).
+ */
+function _x( $text, $context, $domain = '' ) {
+	return $text;
+}
+
+function get_user_locale( $user = 0 ) {
+	return get_locale();
+}
+
+function determine_locale() {
+	return get_locale();
+}
+
+function get_translations_for_domain( $domain ) {
+	$GLOBALS['ab_test_i18n'][] = array( 'pack', (string) $domain );
+	return null;
+}
+
+function load_textdomain( $domain, $mofile, $locale = null ) {
+	$GLOBALS['ab_test_i18n'][] = array( 'file', (string) $domain, (string) $mofile, (string) $locale );
+	return true;
+}
+
 function checked( $checked, $current = true, $display = true ) {
 	$out = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
 	if ( $display ) {
@@ -899,6 +1214,11 @@ class WP_REST_Response {
 		return $this->status;
 	}
 
+	/** @return array<string,string> */
+	public function get_headers(): array {
+		return $this->headers;
+	}
+
 	public function get_data() {
 		return $this->data;
 	}
@@ -906,6 +1226,11 @@ class WP_REST_Response {
 
 /**
  * Minimal stand-in for WP_REST_Request: body params, JSON params and headers.
+ *
+ * Header names are canonicalised like WP_REST_Request::canonicalize_header_name()
+ * (lower case, dashes to underscores), so a test sends "MCP-Protocol-Version"
+ * as a client spells it and the plugin reads "mcp_protocol_version" as WordPress
+ * hands it over.
  */
 class WP_REST_Request {
 	/** @var array<string,mixed> */
@@ -914,6 +1239,34 @@ class WP_REST_Request {
 	private $json = null;
 	/** @var array<string,string> */
 	private $headers = array();
+	/** @var string */
+	private $route = '';
+	/** @var string POST unless a test says otherwise: most tests call the POST handler directly. */
+	private $method = 'POST';
+	/** @var array<string,string> */
+	private $url_params = array();
+
+	/** Upper case, as WP_REST_Request::set_method() stores it. */
+	public function set_method( string $method ): void {
+		$this->method = strtoupper( $method );
+	}
+
+	public function get_method(): string {
+		return $this->method;
+	}
+
+	/** @param array<string,string> $params */
+	public function set_url_params( array $params ): void {
+		$this->url_params = $params;
+	}
+
+	public function set_route( string $route ): void {
+		$this->route = $route;
+	}
+
+	public function get_route(): string {
+		return $this->route;
+	}
 
 	public function set_body_params( array $params ): void {
 		$this->body = $params;
@@ -924,7 +1277,7 @@ class WP_REST_Request {
 	}
 
 	public function set_header( string $key, string $value ): void {
-		$this->headers[ strtolower( $key ) ] = $value;
+		$this->headers[ str_replace( '-', '_', strtolower( $key ) ) ] = $value;
 	}
 
 	public function get_body_params(): array {
@@ -936,12 +1289,282 @@ class WP_REST_Request {
 	}
 
 	public function get_header( $key ) {
-		return $this->headers[ strtolower( (string) $key ) ] ?? '';
+		return $this->headers[ str_replace( '-', '_', strtolower( (string) $key ) ) ] ?? '';
 	}
 
 	public function get_param( $key ) {
-		return $this->body[ $key ] ?? null;
+		return $this->body[ $key ] ?? $this->url_params[ $key ] ?? null;
 	}
+}
+
+/**
+ * The part of the REST server that decides status and headers of an answer,
+ * over the routes register_rest_route() recorded. Copied from WordPress 7.0.2:
+ * WP_REST_Server::dispatch() (rest_pre_dispatch; a non-empty result is served
+ * as it is and matches no route), match_request_to_handler() (the whole path,
+ * case-insensitive; the first handler whose method fits; none: 404
+ * rest_no_route), respond_to_request() (permission_callback, then callback;
+ * WP_Error to response), then rest_post_dispatch with rest_send_allow_header()
+ * first, as rest_api_default_filters() hooks it before any plugin: for a
+ * matched route, Allow lists every method whose permission_callback returns
+ * true for this request, and replaces whatever Allow the answer had.
+ *
+ * Left out: OPTIONS and HEAD, argument validation, embedding, batches.
+ */
+function ab_test_rest_dispatch( WP_REST_Request $request ): WP_REST_Response {
+	$routes = array();
+	foreach ( $GLOBALS['ab_test_routes'] as $entry ) {
+		$handlers = isset( $entry['args']['methods'] ) ? array( $entry['args'] ) : $entry['args'];
+		foreach ( $handlers as $handler ) {
+			$methods = is_array( $handler['methods'] ) ? $handler['methods'] : preg_split( '/,\s*/', (string) $handler['methods'] );
+			$handler['methods'] = array_fill_keys( array_map( 'strtoupper', $methods ), true );
+			$routes[ '/' . trim( $entry['namespace'], '/' ) . $entry['route'] ][] = $handler;
+		}
+	}
+
+	$pre      = apply_filters( 'rest_pre_dispatch', null, null, $request );
+	$response = empty( $pre ) ? null : ab_test_rest_response( $pre );
+	$matched  = null;
+	if ( null === $response ) {
+		foreach ( $routes as $route => $handlers ) {
+			if ( 1 !== preg_match( '@^' . $route . '$@i', $request->get_route(), $m ) ) {
+				continue;
+			}
+			foreach ( $handlers as $handler ) {
+				if ( empty( $handler['methods'][ $request->get_method() ] ) ) {
+					continue;
+				}
+				$request->set_url_params( array_filter( $m, 'is_string', ARRAY_FILTER_USE_KEY ) );
+				$matched    = $route;
+				$permission = call_user_func( $handler['permission_callback'], $request );
+				$result     = true === $permission ? call_user_func( $handler['callback'], $request ) : $permission;
+				$response   = ab_test_rest_response( $result );
+				break 2;
+			}
+		}
+		if ( null === $matched ) {
+			$response = ab_test_rest_response( new WP_Error( 'rest_no_route', 'No route was found matching the URL and request method.', array( 'status' => 404 ) ) );
+		}
+	}
+
+	// rest_send_allow_header().
+	if ( null !== $matched ) {
+		$allowed = array();
+		foreach ( $routes[ $matched ] as $handler ) {
+			foreach ( $handler['methods'] as $method => $on ) {
+				$allowed[ $method ] = true === call_user_func( $handler['permission_callback'], $request );
+			}
+		}
+		$allowed = array_filter( $allowed );
+		if ( $allowed ) {
+			$response->header( 'Allow', implode( ', ', array_keys( $allowed ) ) );
+		}
+	}
+
+	return apply_filters( 'rest_post_dispatch', $response, null, $request );
+}
+
+/**
+ * A callback's result as WordPress serves it: a WP_Error becomes its code,
+ * message and data with the status from the data (500 without one).
+ *
+ * @param mixed $result
+ */
+function ab_test_rest_response( $result ): WP_REST_Response {
+	if ( $result instanceof WP_Error ) {
+		$data = $result->get_error_data();
+		return new WP_REST_Response(
+			array(
+				'code'    => $result->get_error_code(),
+				'message' => $result->get_error_message(),
+				'data'    => $data,
+			),
+			is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 500
+		);
+	}
+	return $result instanceof WP_REST_Response ? $result : new WP_REST_Response( $result );
+}
+
+/* ------------------------------------------------------------ URLs, HTTP */
+
+function wp_parse_url( $url, $component = -1 ) {
+	return parse_url( (string) $url, $component );
+}
+
+function add_query_arg( $args, $url = '' ) {
+	return (string) $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . http_build_query( (array) $args );
+}
+
+/** @var array<int,array{url:string,args:array,curl?:string}> $ab_test_http Every wp_safe_remote_get() call, in order. */
+$GLOBALS['ab_test_http'] = array();
+/** @var callable|null $ab_test_http_answer Answers wp_safe_remote_get(): fn( string $url, array $args ): array|WP_Error */
+$GLOBALS['ab_test_http_answer'] = null;
+/** @var bool $ab_test_http_curl When true, every call also records what cURL was told about host addresses ('curl'). */
+$GLOBALS['ab_test_http_curl'] = false;
+
+/**
+ * Records the call and answers through ab_test_http_answer. Like WordPress,
+ * limit_response_size cuts the body after that many bytes. Without an answer
+ * configured, the request fails, as it would without network.
+ *
+ * As WordPress does with its cURL transport, the http_api_curl action runs
+ * with a real cURL handle before the answer. With ab_test_http_curl set, that
+ * handle is then started against a proxy on this machine that refuses the
+ * connection: cURL loads CURLOPT_RESOLVE entries when a transfer starts and
+ * says so in its verbose log ("added host:port:address"), and the proxy keeps
+ * it from looking up or reaching the host itself. The log is recorded.
+ */
+function wp_safe_remote_get( $url, $args = array() ) {
+	$call = array(
+		'url'  => (string) $url,
+		'args' => (array) $args,
+	);
+	if ( function_exists( 'curl_init' ) ) {
+		$handle = curl_init();
+		do_action_ref_array( 'http_api_curl', array( &$handle, (array) $args, (string) $url ) );
+		if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {
+			$log = fopen( 'php://temp', 'w+' );
+			curl_setopt_array(
+				$handle,
+				array(
+					CURLOPT_URL               => (string) $url,
+					CURLOPT_PROXY             => 'http://127.0.0.1:9',
+					CURLOPT_VERBOSE           => true,
+					CURLOPT_STDERR            => $log,
+					CURLOPT_RETURNTRANSFER    => true,
+					CURLOPT_CONNECTTIMEOUT_MS => 500,
+					CURLOPT_TIMEOUT_MS        => 1000,
+				)
+			);
+			curl_exec( $handle );
+			rewind( $log );
+			$call['curl'] = (string) stream_get_contents( $log );
+			fclose( $log );
+		}
+	}
+	$GLOBALS['ab_test_http'][] = $call;
+	$answer = $GLOBALS['ab_test_http_answer'];
+	if ( ! is_callable( $answer ) ) {
+		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
+	}
+	$response = $answer( (string) $url, (array) $args );
+	if ( is_array( $response ) && isset( $args['limit_response_size'] ) ) {
+		$response['body'] = substr( (string) $response['body'], 0, (int) $args['limit_response_size'] );
+	}
+	return $response;
+}
+
+/**
+ * A response array as the WordPress HTTP API returns it. Header names are
+ * looked up without regard to case, as WordPress does.
+ *
+ * @param array<string,string> $headers
+ */
+function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
+	return array(
+		'response' => array(
+			'code'    => $code,
+			'message' => '',
+		),
+		'body'     => $body,
+		'headers'  => array_change_key_case( $headers, CASE_LOWER ),
+	);
+}
+
+function wp_remote_retrieve_response_code( $response ) {
+	return is_array( $response ) && isset( $response['response']['code'] ) ? $response['response']['code'] : '';
+}
+
+function wp_remote_retrieve_body( $response ) {
+	return is_array( $response ) && isset( $response['body'] ) ? $response['body'] : '';
+}
+
+function wp_remote_retrieve_header( $response, $header ) {
+	$header = strtolower( (string) $header );
+	return is_array( $response ) && isset( $response['headers'][ $header ] ) ? $response['headers'][ $header ] : '';
+}
+
+/* ------------------------------------------------- login, redirects, exits */
+
+/** @var bool $ab_test_logged_in */
+$GLOBALS['ab_test_logged_in'] = false;
+
+function is_user_logged_in() {
+	return (bool) $GLOBALS['ab_test_logged_in'];
+}
+
+/**
+ * auth_redirect(), wp_redirect(), wp_safe_redirect() and wp_die() end the
+ * request in WordPress. Here they end the code under test by throwing, so a
+ * test can see which one was reached and with what.
+ */
+class AbTestExit extends Exception {
+	/** @var string 'login' | 'redirect' | 'die' */
+	public $kind;
+	/** @var string Location or message. */
+	public $detail;
+
+	public function __construct( string $kind, string $detail = '' ) {
+		parent::__construct( $kind . ': ' . $detail );
+		$this->kind   = $kind;
+		$this->detail = $detail;
+	}
+}
+
+function auth_redirect() {
+	throw new AbTestExit( 'login' );
+}
+
+function wp_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
+function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	throw new AbTestExit( 'redirect', (string) $location );
+}
+
+function wp_die( $message = '', $title = '', $args = array() ) {
+	throw new AbTestExit( 'die', (string) $message );
+}
+
+function status_header( $code, $description = '' ) {
+}
+
+function nocache_headers() {
+}
+
+/** Like WordPress: the nonce made for an action (see wp_nonce_field()) verifies for that action only. */
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return 'nonce-' . $action === (string) $nonce ? 1 : false;
+}
+
+/**
+ * Like WordPress: the nonce in the request must be the one made for this
+ * action; otherwise the request ends ("The link you followed has expired").
+ */
+function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
+	$result = isset( $_REQUEST[ $query_arg ] ) ? wp_verify_nonce( $_REQUEST[ $query_arg ], $action ) : false;
+	if ( ! $result ) {
+		wp_die( 'The link you followed has expired.' );
+	}
+	return $result;
+}
+
+/** @var array<int,array{namespace:string,route:string,args:array}> $ab_test_routes Every register_rest_route() call. */
+$GLOBALS['ab_test_routes'] = array();
+
+function register_rest_route( $route_namespace, $route, $args = array(), $override = false ) {
+	$GLOBALS['ab_test_routes'][] = array(
+		'namespace' => (string) $route_namespace,
+		'route'     => (string) $route,
+		'args'      => (array) $args,
+	);
+	return true;
+}
+
+/** No persistent object cache: counters live in transients, as on most sites. */
+function wp_using_ext_object_cache( $using = null ) {
+	return false;
 }
 
 /* ------------------------------------------------------- plugin constants */
@@ -955,19 +1578,32 @@ define( 'AB_MCP_VERSION', '4.3.6' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'AB_MCP_PROTOCOL_VERSION', '2025-06-18' );
+define( 'AB_MCP_MAX_BATCH', 25 );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
+define( 'AB_MCP_DIR', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 
 /* --------------------------------------------------------- classes to test */
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/../includes/class-site-mode.php';
+require_once __DIR__ . '/../includes/class-security.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
+// WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
+// file headers): the builder readers call parse_blocks().
+require_once __DIR__ . '/support/class-wp-block-parser.php';
+require_once __DIR__ . '/support/blocks-functions.php';
+// WordPress' shortcode pattern and attribute parser, the yardstick for the
+// shortcode reader (same version, same kind of copy).
+require_once __DIR__ . '/support/shortcodes-functions.php';
+require_once __DIR__ . '/../includes/builders/class-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-content.php';
+require_once __DIR__ . '/../includes/tools/class-tools-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-search-bulk.php';
 require_once __DIR__ . '/../includes/tools/class-tools-media.php';
 require_once __DIR__ . '/../includes/tools/class-tools-taxonomy-comments.php';

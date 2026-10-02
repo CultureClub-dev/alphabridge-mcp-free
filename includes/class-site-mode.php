@@ -1,0 +1,430 @@
+<?php
+/**
+ * The site mode: Read or Full.
+ *
+ * Out of the box AlphaBridge MCP only reads, and only the ordinary things:
+ * content, media, terms, comments, settings and how the site is built. In
+ * Read, every tool that AB_MCP_Tool_Registry::is_read_only() does not
+ * classify as reading is refused, and so is every reading tool marked Mighty
+ * (AB_MCP_Tool_Registry::is_mighty(), the readers of code, files, the
+ * database or logs among them), whatever its switch says and whatever the
+ * connection's access level allows. Full lets the switched-on tools run, the
+ * powerful ones included, and an administrator turns it on only by confirming
+ * a notice that it can be destructive and is at the site owner's own risk.
+ *
+ * The mode lives in the plugin's own option (AB_MCP_Settings::OPT_OPTIONS,
+ * key 'site_mode'), so it is per site on a multisite network. Anything stored
+ * there other than exactly 'full' reads as Read: a mistake never widens what
+ * assistants may do.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Class AB_MCP_Site_Mode
+ */
+class AB_MCP_Site_Mode {
+
+	const READ = 'read';
+	const FULL = 'full';
+
+	/**
+	 * Key of the mode in AB_MCP_Settings::OPT_OPTIONS.
+	 */
+	const KEY = 'site_mode';
+
+	/**
+	 * Key of the record of the last confirmation of Full in
+	 * AB_MCP_Settings::OPT_OPTIONS (see confirmation()).
+	 */
+	const KEY_CONFIRMATION = 'full_confirmation';
+
+	/**
+	 * Version of the notice an administrator confirms when switching to
+	 * Full (notice_text() and checkbox_text()). The record of a confirmation
+	 * names the version shown, so raise this whenever either English text
+	 * changes; a form loaded under an older version is then refused instead of
+	 * recorded as agreement to a text that was not on the screen. A test ties
+	 * this number to the English wording.
+	 *
+	 * A translation can change without it (a language pack from
+	 * translate.wordpress.org wins over the bundled one), so the record also
+	 * holds the wording shown and its hash (notice_hash()).
+	 */
+	const NOTICE_VERSION = '1';
+
+	/**
+	 * How a site came to Full, in the record of the confirmation: confirmed
+	 * with the box on the settings page, or set by code (a provisioning
+	 * script, a test site), where nobody ticked anything.
+	 */
+	const SOURCE_FORM = 'settings_form';
+	const SOURCE_CODE = 'code';
+
+	/**
+	 * Option with the history of the mode: every switch to Full or to Read,
+	 * oldest first, at most HISTORY_MAX. The record of the last confirmation
+	 * is replaced by the next one, and the log keeps 200 entries of every
+	 * kind and can be cleared; this keeps the earlier switches, and «Clear
+	 * log» leaves it alone. Its own option, not autoloaded: nothing reads it
+	 * on an ordinary request.
+	 */
+	const OPT_HISTORY = 'ab_mcp_mode_history';
+	const HISTORY_MAX = 20;
+
+	/**
+	 * The mode of this site.
+	 *
+	 * @return string self::READ or self::FULL.
+	 */
+	public static function get() {
+		return self::FULL === AB_MCP_Settings::get( self::KEY, self::READ ) ? self::FULL : self::READ;
+	}
+
+	/**
+	 * Is this site in Full?
+	 *
+	 * @return bool
+	 */
+	public static function is_full() {
+		return self::FULL === self::get();
+	}
+
+	/**
+	 * May a tool run in the current mode? In Full, yes; in Read only when
+	 * runs_in_read() says so. The tool's own switch and the token scope are
+	 * checked separately.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return bool
+	 */
+	public static function allows( $name, array $def ) {
+		return self::is_full() || self::runs_in_read( $name, $def );
+	}
+
+	/**
+	 * Does a tool run in Read? Only a tool the registry classifies as
+	 * reading (an unknown tool counts as writing) and that is not marked
+	 * Mighty. A Mighty reader writes nothing, but what it reads — code, files,
+	 * the database, logs, credentials — is what the site owner opens with
+	 * Full, not what Read promises.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return bool
+	 */
+	public static function runs_in_read( $name, array $def ) {
+		return AB_MCP_Tool_Registry::is_read_only( (string) $name, $def ) && ! AB_MCP_Tool_Registry::is_mighty( $def );
+	}
+
+	/**
+	 * The answer to a tool that Read refuses. It says why — the tool writes,
+	 * or it is a Mighty reader, the only reading kind Read refuses — and names
+	 * the way: who can switch, where, and what switching means. It does not
+	 * say what a Mighty reader reads: wp_get_user_meta reads profile fields,
+	 * not code, files, the database, logs or credentials.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition; without one the name decides, as
+	 *                     in AB_MCP_Tool_Registry::is_read_only().
+	 * @return WP_Error
+	 */
+	public static function refusal( $name, array $def = array() ) {
+		if ( AB_MCP_Tool_Registry::is_read_only( (string) $name, $def ) ) {
+			return new WP_Error(
+				'ab_mcp_read_mode',
+				sprintf(
+					/* translators: %s: tool name */
+					__( 'AlphaBridge MCP is in read mode on this site; the tool "%s" is marked Mighty, and read mode runs no tool marked Mighty, also none that only reads. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.', 'alphabridge-mcp' ),
+					(string) $name
+				)
+			);
+		}
+		return new WP_Error(
+			'ab_mcp_read_mode',
+			sprintf(
+				/* translators: %s: tool name */
+				__( 'AlphaBridge MCP is in read mode on this site; the tool "%s" writes. An administrator can switch to Full at the top of Settings → AlphaBridge MCP — switching it on can be destructive and is at the site owner\'s own risk.', 'alphabridge-mcp' ),
+				(string) $name
+			)
+		);
+	}
+
+	/**
+	 * The name of a mode in one word, for the settings page.
+	 *
+	 * @param string $mode self::READ or self::FULL.
+	 * @return string
+	 */
+	public static function label( $mode ) {
+		return self::FULL === $mode ? _x( 'Full', 'site mode', 'alphabridge-mcp' ) : _x( 'Read', 'site mode', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The notice shown next to the switch to Full. Its wording is versioned
+	 * by NOTICE_VERSION.
+	 *
+	 * @return string
+	 */
+	public static function notice_text() {
+		return __( 'Full lets AI assistants create, change and delete content, files, settings and code on this live site. Switching it on can be destructive and is at your own risk. Make sure you have a current backup.', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The text of the box an administrator ticks to switch to Full. Its
+	 * wording is versioned by NOTICE_VERSION.
+	 *
+	 * @return string
+	 */
+	public static function checkbox_text() {
+		return __( 'I understand that switching to Full can be destructive and is at my own risk, and I have a current backup.', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * A hash of the notice and the box as the administrator sees them, in
+	 * the current language: sha256 of notice_text(), a line break and
+	 * checkbox_text(). The form carries it, and handle_site_mode() switches
+	 * only while it still matches, so the record names exactly the wording on
+	 * the screen, also when a language pack changed a translation.
+	 *
+	 * @return string 64 hex characters.
+	 */
+	public static function notice_hash() {
+		return hash( 'sha256', self::notice_text() . "\n" . self::checkbox_text() );
+	}
+
+	/**
+	 * The sentence the consent screen shows while the site is in Read: the
+	 * access level is granted as chosen, but approving should not suggest the
+	 * connection can write before an administrator switches to Full.
+	 *
+	 * @return string
+	 */
+	public static function consent_text() {
+		return __( 'This site is in read mode: whatever access level you choose, the connection can only read until an administrator switches AlphaBridge MCP to Full.', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The sentence the server instructions carry in Read, so an assistant
+	 * knows before its first call why writing, and the Mighty readers of
+	 * code, files, the database, logs or credentials, fail and whom to ask.
+	 *
+	 * Not translated: the instructions are written for the assistant, in
+	 * the language of the rest of them.
+	 *
+	 * @return string
+	 */
+	public static function instructions_sentence() {
+		return 'READ MODE: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every tool marked Mighty that reads code, files, the database, logs or credentials, is refused until an administrator switches it to Full at the top of Settings → AlphaBridge MCP.';
+	}
+
+	/**
+	 * The record of the last switch to Full, or null when there is none:
+	 * user_id, user_login, time (Unix, UTC), notice_version, plugin_version,
+	 * locale and source (SOURCE_FORM or SOURCE_CODE); confirmed on the
+	 * settings page, also notice_hash, notice_text and checkbox_text, the
+	 * wording the administrator confirmed.
+	 *
+	 * It stays when the site goes back to Read: it documents who accepted
+	 * the notice last, and the next switch to Full replaces it. The earlier
+	 * ones are in history().
+	 *
+	 * @return array|null
+	 */
+	public static function confirmation() {
+		$record = AB_MCP_Settings::get( self::KEY_CONFIRMATION, null );
+		return is_array( $record ) && ! empty( $record['time'] ) ? $record : null;
+	}
+
+	/**
+	 * The history of the mode, oldest first: one entry per switch, with
+	 * mode ('full' or 'read'), user_id, user_login, time and source, and for
+	 * a switch to Full the rest of its record (see confirmation()).
+	 *
+	 * @return array<int,array>
+	 */
+	public static function history() {
+		$history = get_option( self::OPT_HISTORY, array() );
+		return is_array( $history ) ? array_values( array_filter( $history, 'is_array' ) ) : array();
+	}
+
+	/**
+	 * «Full since <date>, confirmed by <account>» for a site in Full, from
+	 * the record of the confirmation; '' in Read. The date is the site's
+	 * date and time in digits, like every other date on the settings page.
+	 * Full set by code says so, and that nobody confirmed it on this page;
+	 * Full without any record (written straight into the option) says that
+	 * no confirmation is recorded.
+	 *
+	 * @return string Unescaped text.
+	 */
+	public static function full_since_text() {
+		if ( ! self::is_full() ) {
+			return '';
+		}
+		$record = self::confirmation();
+		if ( null === $record ) {
+			return __( 'Full is on; no confirmation on the settings page is recorded for it.', 'alphabridge-mcp' );
+		}
+		$date = wp_date( 'Y-m-d H:i', (int) $record['time'] );
+		$date = is_string( $date ) ? $date : '—';
+		if ( self::SOURCE_FORM !== ( $record['source'] ?? '' ) ) {
+			/* translators: %s: date and time. */
+			return sprintf( __( 'Full since %s, set by code, not confirmed on this page', 'alphabridge-mcp' ), $date );
+		}
+		$login = isset( $record['user_login'] ) && '' !== (string) $record['user_login'] ? (string) $record['user_login'] : '#' . (int) ( $record['user_id'] ?? 0 );
+		/* translators: 1: date and time, 2: user name of the administrator who confirmed. */
+		return sprintf( __( 'Full since %1$s, confirmed by %2$s', 'alphabridge-mcp' ), $date, $login );
+	}
+
+	/**
+	 * Switch this site to Full and record who switched, when, which version
+	 * of the notice was in force, under which plugin version and how: in the
+	 * option (confirmation()), in the history (history()) and in the log.
+	 *
+	 * The caller has checked the capability and the nonce; for SOURCE_FORM
+	 * also the ticked box and that the form showed the notice in force
+	 * (notice_hash()), and the record then holds that wording. It is public
+	 * so that code an administrator runs on purpose (a provisioning script, a
+	 * test site) can switch too; that is SOURCE_CODE, the default, and the
+	 * settings page then says that nobody confirmed it there.
+	 *
+	 * @param int    $user_id The administrator who switched.
+	 * @param string $source  SOURCE_FORM or SOURCE_CODE; anything else is code.
+	 * @return array The record.
+	 */
+	public static function switch_to_full( $user_id, $source = self::SOURCE_CODE ) {
+		$user_id = (int) $user_id;
+		$source  = self::SOURCE_FORM === $source ? self::SOURCE_FORM : self::SOURCE_CODE;
+		$login   = self::login_of( $user_id );
+		$locale  = function_exists( 'get_user_locale' ) ? get_user_locale( $user_id ) : get_locale();
+		$record  = array(
+			'user_id'        => $user_id,
+			'user_login'     => $login,
+			'time'           => time(),
+			'notice_version' => self::NOTICE_VERSION,
+			'plugin_version' => defined( 'AB_MCP_VERSION' ) ? AB_MCP_VERSION : '',
+			'locale'         => (string) $locale,
+			'source'         => $source,
+		);
+		if ( self::SOURCE_FORM === $source ) {
+			$record['notice_hash']   = self::notice_hash();
+			$record['notice_text']   = self::notice_text();
+			$record['checkbox_text'] = self::checkbox_text();
+		}
+
+		AB_MCP_Settings::set( self::KEY_CONFIRMATION, $record );
+		AB_MCP_Settings::set( self::KEY, self::FULL );
+		// The mode changed hands; the notice about the update has done its job.
+		AB_MCP_Settings::set( AB_MCP_Settings::KEY_MODE_NOTICE, false );
+
+		$who = '' !== $login ? $login : '?';
+		AB_MCP_Audit_Log::record(
+			'site_mode',
+			array(),
+			'ok',
+			self::SOURCE_FORM === $source
+				? sprintf(
+					'Full switched on by %1$s (user %2$d) on the settings page; notice version %3$s confirmed, wording sha256 %4$s; plugin %5$s; locale %6$s.',
+					$who,
+					$user_id,
+					$record['notice_version'],
+					$record['notice_hash'],
+					$record['plugin_version'],
+					$record['locale']
+				)
+				: sprintf(
+					'Full switched on by %1$s (user %2$d) by code, without the box on the settings page; notice version %3$s not confirmed; plugin %4$s; locale %5$s.',
+					$who,
+					$user_id,
+					$record['notice_version'],
+					$record['plugin_version'],
+					$record['locale']
+				)
+		);
+
+		self::changed( self::FULL, $user_id );
+		// After the action, so that what an add-on adds to the record (Pro
+		// its version) is in the history too.
+		$now = self::confirmation();
+		self::remember( array( 'mode' => self::FULL ) + ( null !== $now ? $now : $record ) );
+		return $record;
+	}
+
+	/**
+	 * Switch this site back to Read. Needs no confirmation: it only takes
+	 * away. The record of the last confirmation of Full stays; the history
+	 * notes the switch.
+	 *
+	 * @param int    $user_id The administrator who switched.
+	 * @param string $source  SOURCE_FORM or SOURCE_CODE; anything else is code.
+	 */
+	public static function switch_to_read( $user_id, $source = self::SOURCE_CODE ) {
+		$user_id = (int) $user_id;
+		$login   = self::login_of( $user_id );
+
+		AB_MCP_Settings::set( self::KEY, self::READ );
+		AB_MCP_Settings::set( AB_MCP_Settings::KEY_MODE_NOTICE, false );
+
+		AB_MCP_Audit_Log::record(
+			'site_mode',
+			array(),
+			'ok',
+			sprintf( 'Read switched on by %1$s (user %2$d).', '' !== $login ? $login : '?', $user_id )
+		);
+
+		self::changed( self::READ, $user_id );
+		self::remember(
+			array(
+				'mode'       => self::READ,
+				'user_id'    => $user_id,
+				'user_login' => $login,
+				'time'       => time(),
+				'source'     => self::SOURCE_FORM === $source ? self::SOURCE_FORM : self::SOURCE_CODE,
+			)
+		);
+	}
+
+	/**
+	 * Add a switch to the history, dropping the oldest beyond HISTORY_MAX.
+	 *
+	 * @param array $entry The switch.
+	 */
+	private static function remember( array $entry ) {
+		$history   = self::history();
+		$history[] = $entry;
+		update_option( self::OPT_HISTORY, array_slice( $history, -self::HISTORY_MAX ), false );
+	}
+
+	/**
+	 * The login of a user, '' when there is none.
+	 *
+	 * @param int $user_id User id.
+	 * @return string
+	 */
+	private static function login_of( $user_id ) {
+		$user = $user_id > 0 ? get_user_by( 'id', $user_id ) : false;
+		return $user && isset( $user->user_login ) ? (string) $user->user_login : '';
+	}
+
+	/**
+	 * Tell add-ons that the mode changed.
+	 *
+	 * @param string $mode    The new mode.
+	 * @param int    $user_id Who switched.
+	 */
+	private static function changed( $mode, $user_id ) {
+		/**
+		 * Fires after an administrator switched the site mode.
+		 *
+		 * @since 4.4.0
+		 *
+		 * @param string $mode    'read' or 'full'.
+		 * @param int    $user_id The administrator who switched.
+		 */
+		do_action( 'ab_mcp_site_mode_changed', $mode, $user_id );
+	}
+}

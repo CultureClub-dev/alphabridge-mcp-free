@@ -1,11 +1,12 @@
 <?php
 /**
  * The settings screen around the connect card: the band at the top, the
- * capabilities, the order of the main column and the side column.
+ * fine-tuning of the tool switches, the order of the main column and the side
+ * column. The site mode at the very top has a test of its own (SiteModeTest).
  *
- * The capabilities form must post what it always posted — the handler reads
- * enabled_tools[], all_tools and read_only — while the switches for all tools
- * and for a group only move the tool switches and post nothing themselves.
+ * The fine-tuning form must post what it always posted — the handler reads
+ * enabled_tools[] and all_tools — while the switches for all tools and for a
+ * group only move the tool switches and post nothing themselves.
  *
  * @package AlphaBridge_MCP
  */
@@ -16,6 +17,7 @@ namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
 use AB_MCP_Admin;
+use AB_MCP_REST_Controller;
 use AB_MCP_Tool_Registry;
 use DOMDocument;
 use DOMXPath;
@@ -27,7 +29,7 @@ final class AdminPageTest extends TestCase {
 		ab_test_reset();
 	}
 
-	/** Two groups, three tools; the dangerous one is off by default. */
+	/** Two groups, three tools; the dangerous one is marked Mighty. */
 	private function registry(): AB_MCP_Tool_Registry {
 		$r = new AB_MCP_Tool_Registry();
 		$r->set_current_group( 'content', 'Posts & Pages' );
@@ -59,26 +61,37 @@ final class AdminPageTest extends TestCase {
 		return new DOMXPath( $doc );
 	}
 
+	/** The fine-tuning card, with one tool switched off by an administrator. */
 	private function caps(): DOMXPath {
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
 		$r = $this->registry();
-		return $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all(), false ) );
+		return $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );
 	}
 
-	public function testTheBandCountsConnectionsToolsAndReadOnly(): void {
-		$all  = $this->registry()->all();
-		$html = $this->call( 'hero_html', array( array( 'hash' => 'h1' ) ), $all, false );
+	public function testTheBandCountsConnectionsToolsAndTheMode(): void {
+		$all = $this->registry()->all();
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
+		$html = $this->call( 'hero_html', array( array( 'hash' => 'h1' ) ), $all );
 
 		self::assertStringContainsString( '<b>1</b> connection<', $html, 'One connection, singular.' );
-		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools on', $html );
-		self::assertStringContainsString( 'Read-only off', $html );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools can run in Read', $html, 'In Read: switched on and reading.' );
+		self::assertStringContainsString( 'Mode: Read', $html );
+		self::assertStringNotContainsString( 'ab-dot--warn', $html );
 
-		$on = $this->call( 'hero_html', array(), $all, true );
-		self::assertStringContainsString( '<b>0</b> connections', $on );
-		self::assertStringContainsString( 'Read-only on', $on );
+		update_option( 'ab_mcp_tool_state', array() );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools can run in Read', $this->call( 'hero_html', array(), $all ), 'A writing tool switched on does not run in Read.' );
+
+		update_option( 'ab_mcp_tool_state', array( 'wp_delete_post' => false ) );
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		$full = $this->call( 'hero_html', array(), $all );
+		self::assertStringContainsString( '<b>2</b> of <b>3</b> tools on', $full );
+		self::assertStringContainsString( '<b>0</b> connections', $full );
+		self::assertStringContainsString( 'Mode: Full', $full );
+		self::assertStringContainsString( 'ab-dot--warn', $full );
 	}
 
 	public function testTheBandOffersFourAssistantsWithClaudeFirst(): void {
-		$x = $this->xpath( $this->call( 'hero_html', array(), $this->registry()->all(), false ) );
+		$x = $this->xpath( $this->call( 'hero_html', array(), $this->registry()->all() ) );
 
 		$buttons = $x->query( '//button[contains(@class, "ab-client")]' );
 		$clients = array();
@@ -113,7 +126,8 @@ final class AdminPageTest extends TestCase {
 			$tools
 		);
 		self::assertSame( 'wp_list_posts,wp_delete_post,wp_seo_get', $x->query( '//form[@id="ab-caps"]//input[@name="all_tools"]' )->item( 0 )->getAttribute( 'value' ) );
-		self::assertSame( 1, $x->query( '//form[@id="ab-caps"]//input[@type="checkbox"][@name="read_only"]' )->length, 'Read-only mode is saved with the capabilities.' );
+		self::assertSame( 0, $x->query( '//input[@name="read_only"]' )->length, 'The read-only switch gave way to the site mode.' );
+		self::assertSame( 0, $x->query( '//*[contains(@class, "ab-profile")]' )->length, 'No profiles any more.' );
 		foreach ( array( 'ab-all-toggle', 'ab-group-toggle' ) as $class ) {
 			foreach ( $x->query( '//input[contains(@class, "' . $class . '")]' ) as $in ) {
 				self::assertFalse( $in->hasAttribute( 'name' ), $class . ' posts nothing itself.' );
@@ -164,7 +178,7 @@ final class AdminPageTest extends TestCase {
 			}
 		);
 		$r    = $this->registry();
-		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all(), false );
+		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all() );
 
 		$at = array();
 		foreach ( array( 'id="ab-connect"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
@@ -174,7 +188,29 @@ final class AdminPageTest extends TestCase {
 		}
 		$sorted = $at;
 		sort( $sorted );
-		self::assertSame( $sorted, $at, 'Connect, capabilities, connections, add-on boxes, log.' );
+		self::assertSame( $sorted, $at, 'Connect, fine-tuning, connections, add-on boxes, log.' );
+	}
+
+	public function testTheFineTuningIsFoldedAndSaysSo(): void {
+		$x    = $this->caps();
+		$card = $x->query( '//details[@id="ab-fine"]' )->item( 0 );
+
+		self::assertNotNull( $card, 'The switches sit in a card of their own.' );
+		self::assertFalse( $card->hasAttribute( 'open' ), 'Folded until an administrator opens it.' );
+		self::assertSame( 'Fine-tuning (for advanced users)', trim( $x->query( './summary//*[contains(@class, "ab-eyebrow")]', $card )->item( 0 )->textContent ) );
+		self::assertSame( 1, $x->query( './/form[@id="ab-caps"]', $card )->length, 'The form is inside the folded card.' );
+		self::assertStringContainsString( 'Every tool is on until you switch it off here.', $card->textContent );
+		self::assertStringContainsString( 'in Read every tool that writes and every tool marked Mighty is refused', $card->textContent );
+	}
+
+	public function testANewSiteHasEveryToolSwitchedOn(): void {
+		$r = $this->registry();
+		$x = $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );
+
+		foreach ( $x->query( '//input[@name="enabled_tools[]"]' ) as $in ) {
+			self::assertTrue( $in->hasAttribute( 'checked' ), $in->getAttribute( 'value' ) . ' is on, the Mighty one included.' );
+		}
+		self::assertSame( '3', trim( $x->query( '//*[contains(@class, "ab-on-count")]' )->item( 0 )->textContent ) );
 	}
 
 	public function testEveryFormOnThePageIsSignedForItsHandler(): void {
@@ -190,14 +226,167 @@ final class AdminPageTest extends TestCase {
 		}
 		self::assertSame(
 			array(
-				'ab_mcp_connector_auth'  => 'nonce-ab_mcp_connector_auth',
-				'ab_mcp_oauth_settings'  => 'nonce-ab_mcp_oauth_settings',
-				'ab_mcp_audit_clear'     => 'nonce-ab_mcp_audit_clear',
+				'ab_mcp_connector_auth'    => 'nonce-ab_mcp_connector_auth',
+				'ab_mcp_oauth_settings'    => 'nonce-ab_mcp_oauth_settings',
+				'ab_mcp_protocol_settings' => 'nonce-ab_mcp_protocol_settings',
+				'ab_mcp_audit_clear'       => 'nonce-ab_mcp_audit_clear',
 			),
 			$forms
 		);
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="connector_url_auth_enabled"]' )->length );
 		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="oauth_enabled"]' )->length );
+		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="modern_protocol"]' )->length );
+	}
+
+	public function testTheProtocolSwitchShowsTheStoredSetting(): void {
+		$checked = function (): bool {
+			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
+			$box = $x->query( '//input[@name="modern_protocol"]' )->item( 0 );
+			self::assertNotNull( $box );
+			return $box->hasAttribute( 'checked' );
+		};
+
+		self::assertTrue( $checked(), 'On by default.' );
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		self::assertFalse( $checked() );
+	}
+
+	public function testTheProtocolSwitchPromisesOnlyWhatTheSiteKeeps(): void {
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		$x    = $this->xpath( $this->call( 'render_connections_card', array() ) );
+		$desc = $x->query( '//input[@name="modern_protocol"]/following-sibling::span//span[@class="description"]' )->item( 0 );
+		self::assertNotNull( $desc );
+
+		// Switched off, initialize still carries protocol_versions in the site
+		// _meta (the hub reads it), a field releases before 4.4 did not send.
+		// So the text may promise the older revisions, not the old answer.
+		$m    = new ReflectionMethod( AB_MCP_REST_Controller::class, 'initialize' );
+		$init = $m->invoke( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ), array( 'protocolVersion' => '2025-06-18' ) );
+		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18' ), $init['_meta'][ AB_MCP_REST_Controller::SITE_META_KEY ]['protocol_versions'] );
+		self::assertStringNotContainsString( 'exactly as before', $desc->textContent );
+		self::assertStringContainsString( 'older revisions only', $desc->textContent );
+	}
+
+	/**
+	 * Post a settings form to its handler as an administrator. The form's
+	 * own nonce is added unless the post brings one.
+	 *
+	 * @param array<string,string> $post
+	 * @return string How the request ended: 'redirect', 'die' or 'no exit'.
+	 */
+	private function submit( string $handler, string $action, array $post ): string {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_POST                  = $post + array( '_wpnonce' => 'nonce-' . $action );
+		$_REQUEST               = $_POST;
+		try {
+			( new AB_MCP_Admin() )->$handler();
+		} catch ( \AbTestExit $exit ) {
+			return $exit->kind;
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+		return 'no exit';
+	}
+
+	public function testSavingTheProtocolSwitchStoresIt(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post );
+
+		self::assertSame( 'redirect', $save( array() ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'An unticked box is not posted: off.' );
+
+		self::assertSame( 'redirect', $save( array( 'modern_protocol' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ) );
+	}
+
+	/**
+	 * @return array<string,array{0:array<string,string>}>
+	 */
+	public static function foreignNonces(): array {
+		return array(
+			'no nonce'                => array( array( '_wpnonce' => '' ) ),
+			'the nonce of another form' => array( array( '_wpnonce' => 'nonce-ab_mcp_oauth_settings' ) ),
+		);
+	}
+
+	/**
+	 * @param array<string,string> $post
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'foreignNonces' )]
+	public function testTheProtocolSwitchIsNotSavedWithoutItsNonce( array $post ): void {
+		self::assertSame( 'die', $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged: a page elsewhere cannot switch the revision off for the admin.' );
+	}
+
+	public function testOnlyAnAdministratorCanSaveTheProtocolSwitch(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		$_POST                  = array();
+
+		try {
+			( new AB_MCP_Admin() )->handle_protocol_settings();
+			self::fail( 'The guard did not stop the request.' );
+		} catch ( \AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged.' );
+	}
+
+	public function testTheMetadataDocumentSwitchShowsTheStoredSetting(): void {
+		$checked = function (): bool {
+			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
+			$box = $x->query( '//form[.//input[@name="action"][@value="ab_mcp_oauth_settings"]]//input[@name="oauth_cimd"]' )->item( 0 );
+			self::assertNotNull( $box, 'In the OAuth form, next to the OAuth switch.' );
+			return $box->hasAttribute( 'checked' );
+		};
+
+		self::assertTrue( $checked(), 'On by default.' );
+		\AB_MCP_Settings::set( 'oauth_cimd', false );
+		self::assertFalse( $checked() );
+	}
+
+	public function testSavingTheOAuthFormStoresBothSwitches(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', $post );
+
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'An unticked box is not posted: off.' );
+		self::assertFalse( \AB_MCP_OAuth::cimd_enabled() );
+
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ) );
+		self::assertTrue( \AB_MCP_OAuth::cimd_enabled() );
+	}
+
+	public function testTheOAuthFormIsNotSavedWithoutItsNonce(): void {
+		self::assertSame( 'die', $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', array( '_wpnonce' => 'nonce-ab_mcp_protocol_settings' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Unchanged.' );
+	}
+
+	public function testTheMetadataDocumentSwitchSaysWhenAFilterDecides(): void {
+		$card = fn(): string => $this->call( 'render_connections_card', array() );
+
+		self::assertStringNotContainsString( 'ab_mcp_oauth_cimd filter', $card() );
+
+		add_filter( 'ab_mcp_oauth_cimd', '__return_false' );
+		self::assertStringContainsString( 'right now apps with a metadata document are not accepted', $card() );
+	}
+
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testTheMetadataDocumentSwitchSaysWhenTheSiteBlocksRequests(): void {
+		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'render_connections_card', array() ) );
+
+		define( 'WP_HTTP_BLOCK_EXTERNAL', true );
+		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'render_connections_card', array() ), 'The note names the way to use it anyway.' );
+	}
+
+	public function testTheProtocolSwitchSaysWhenAFilterDecides(): void {
+		$note = fn(): string => $this->call( 'render_connections_card', array() );
+
+		self::assertStringNotContainsString( 'ab_mcp_modern_protocol filter', $note(), 'Without a filter the switch alone decides.' );
+
+		add_filter( 'ab_mcp_modern_protocol', '__return_false' );
+		self::assertStringContainsString( 'right now the revision is not answered', $note(), 'The admin learns why saving the switch changes nothing.' );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {

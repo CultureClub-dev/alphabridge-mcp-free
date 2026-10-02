@@ -7,8 +7,16 @@
  *   - description (string)  What the tool does (shown to the AI client).
  *   - inputSchema (array)   JSON Schema object describing arguments.
  *   - capability  (string)  Required WordPress capability, or null.
- *   - dangerous   (bool)    Requires Safe-Mode allow-listing.
+ *   - dangerous   (bool)    Powerful: marked «Mighty» on the settings page.
+ *   - mighty_since (string) Only on a tool that was not Mighty before the
+ *                 site mode (an ordinary tool then, or none at all): the
+ *                 version that marked it. Its switch then reads like any
+ *                 other on a site updated from before the mode, where a
+ *                 Mighty reader without a saved switch stays off in Full
+ *                 (AB_MCP_Settings::is_tool_enabled()).
  *   - callback    (callable) function( array $args ): array|string|WP_Error.
+ *   - group, group_label (string) The functional group; stamped from
+ *                 set_current_group() unless the definition names one.
  *
  * @package AlphaBridge_MCP
  */
@@ -35,6 +43,19 @@ class AB_MCP_Tool_Registry {
 		'wp_wc_add_',
 	);
 
+	/**
+	 * Tools a "content" token may run whatever capability they are registered
+	 * with: a decision per tool, on top of the capability rule in
+	 * scope_allows(), which stays the general test.
+	 *
+	 * wp_update_builder_element (Pro) is the tool for the texts of pages built
+	 * with a page builder. A site handed over to a client who keeps those
+	 * texts up to date gets a content token, and this is the tool the client
+	 * needs. Its fields are typed and checked (text, heading, filtered HTML,
+	 * link, image); layout, styles and code of the page are not among them,
+	 * so naming it here gives a content token no reach into those.
+	 */
+	private const CONTENT_TOOLS = array( 'wp_update_builder_element' );
 
 	/**
 	 * Registered tools keyed by name.
@@ -128,8 +149,8 @@ class AB_MCP_Tool_Registry {
 	 * Does this tool change or destroy something that is already there?
 	 *
 	 * This is the MCP `destructiveHint`, and it is NOT the same question as the
-	 * `dangerous` flag next to it. `dangerous` decides whether a tool is off
-	 * until an admin switches it on; it marks tools worth a second thought.
+	 * `dangerous` flag next to it. `dangerous` marks tools worth a second
+	 * thought («Mighty» on the settings page).
 	 * `destructiveHint` tells the client whether a call overwrites existing
 	 * state, and clients use it to decide whether to ask the user first.
 	 *
@@ -168,10 +189,11 @@ class AB_MCP_Tool_Registry {
 	/**
 	 * Central read-only classification. A definition may force the flag with
 	 * 'readonly' => true|false; otherwise the (stable, snake_case) tool name
-	 * decides. Drives the MCP readOnlyHint annotation, the global read-only mode
-	 * AND the "read" token scope, so keep this list in sync when new tools are
-	 * added — a new writing tool that is missed here would be wrongly allowed for
-	 * read-scoped tokens. Unknown names default to "not read-only" (fail-closed).
+	 * decides. Drives the MCP readOnlyHint annotation, the site mode Read
+	 * (AB_MCP_Site_Mode) AND the "read" token scope, so keep this list in sync
+	 * when new tools are added — a new writing tool that is missed here would
+	 * be wrongly allowed in Read and for read-scoped tokens. Unknown names
+	 * default to "not read-only" (fail-closed).
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
@@ -205,6 +227,20 @@ class AB_MCP_Tool_Registry {
 	}
 
 	/**
+	 * Is a tool marked Mighty? Its definition says so with 'dangerous'. Besides
+	 * the mark on the settings page this decides what the site mode Read
+	 * leaves closed: a Mighty tool does not run there even when it only reads
+	 * (AB_MCP_Site_Mode::runs_in_read()), because the reading ones read code,
+	 * files, the database, logs or credentials. Mark such a reader so.
+	 *
+	 * @param array $def Tool definition.
+	 * @return bool
+	 */
+	public static function is_mighty( array $def ) {
+		return ! empty( $def['dangerous'] );
+	}
+
+	/**
 	 * Capabilities that count as "content work" — the everyday editorial powers.
 	 * Deliberately an allow-list: a tool whose capability is not in here (an
 	 * administrative one such as manage_options or install_plugins, or none at
@@ -235,15 +271,38 @@ class AB_MCP_Tool_Registry {
 	}
 
 	/**
-	 * The scopes a token can carry, narrowest first.
+	 * The scopes a token can carry, narrowest first, each with one sentence
+	 * on what a connection with it may do and what not. The consent page shows
+	 * the sentence under the name from scope_labels().
 	 *
-	 * @return array Slug => human label.
+	 * The content sentence names what a content token changes: the tools it
+	 * runs need a capability from content_capabilities() or a name in
+	 * CONTENT_TOOLS, and among those are the delete tools and the ones for
+	 * terms and comments. Theme and plugin files, options and the database
+	 * need capabilities outside that list, hence the second half. It makes no
+	 * promise about code in content: for an account with unfiltered_html
+	 * WordPress stores markup as it is, scripts included, whatever the scope.
+	 *
+	 * @return array Slug => sentence.
 	 */
 	public static function scopes() {
 		return array(
-			'read'    => __( 'Read only — can look at everything the user may see, changes nothing.', 'alphabridge-mcp' ),
-			'content' => __( 'Content — read, plus writing posts, pages, media, terms and comments.', 'alphabridge-mcp' ),
-			'full'    => __( 'Full — everything the mapped user is allowed to do, including administrative tools.', 'alphabridge-mcp' ),
+			'read'    => __( 'Look at everything this account may see; change nothing.', 'alphabridge-mcp' ),
+			'content' => __( 'Read, and change or delete posts, pages, media, terms and comments; no theme or plugin files and no site settings.', 'alphabridge-mcp' ),
+			'full'    => __( 'Everything this account may do with the tools switched on here, settings and administration included.', 'alphabridge-mcp' ),
+		);
+	}
+
+	/**
+	 * Short names of the scopes, slug => name.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function scope_labels() {
+		return array(
+			'read'    => __( 'Read only', 'alphabridge-mcp' ),
+			'content' => __( 'Content', 'alphabridge-mcp' ),
+			'full'    => __( 'Full', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -255,9 +314,9 @@ class AB_MCP_Tool_Registry {
 	 * before scopes existed keep working exactly as before.
 	 *
 	 * Both narrower scopes are fail-closed: "read" reuses the same read
-	 * classification the global read-only mode uses (an unrecognised tool counts
+	 * classification the site mode Read uses (an unrecognised tool counts
 	 * as writing), and "content" additionally needs the tool's capability to be
-	 * an explicitly content-level one.
+	 * an explicitly content-level one, or the tool to be named in CONTENT_TOOLS.
 	 *
 	 * @param string $scope Token scope.
 	 * @param string $name  Tool name.
@@ -276,6 +335,9 @@ class AB_MCP_Tool_Registry {
 			return false;
 		}
 		if ( 'content' === $scope ) {
+			if ( in_array( (string) $name, self::CONTENT_TOOLS, true ) ) {
+				return true;
+			}
 			$cap = isset( $def['capability'] ) ? (string) $def['capability'] : '';
 			return '' !== $cap && in_array( $cap, self::content_capabilities(), true );
 		}
@@ -335,6 +397,16 @@ class AB_MCP_Tool_Registry {
 	}
 
 	/**
+	 * The group a tool belongs to.
+	 *
+	 * @param array $def Tool definition.
+	 * @return string
+	 */
+	public static function group_of( array $def ) {
+		return isset( $def['group'] ) && '' !== $def['group'] ? (string) $def['group'] : 'other';
+	}
+
+	/**
 	 * Aggregate tools into their functional groups, in first-seen order.
 	 * A group is flagged "mighty" when it holds at least one dangerous tool.
 	 *
@@ -343,7 +415,7 @@ class AB_MCP_Tool_Registry {
 	public function groups() {
 		$groups = array();
 		foreach ( $this->tools as $name => $def ) {
-			$slug = isset( $def['group'] ) && '' !== $def['group'] ? $def['group'] : 'other';
+			$slug = self::group_of( $def );
 			if ( ! isset( $groups[ $slug ] ) ) {
 				$groups[ $slug ] = array(
 					'label'  => isset( $def['group_label'] ) && '' !== $def['group_label'] ? $def['group_label'] : $slug,
@@ -354,7 +426,7 @@ class AB_MCP_Tool_Registry {
 			}
 			$groups[ $slug ]['tools'][] = $name;
 			$groups[ $slug ]['count']++;
-			if ( ! empty( $def['dangerous'] ) ) {
+			if ( self::is_mighty( $def ) ) {
 				$groups[ $slug ]['mighty'] = true;
 			}
 		}

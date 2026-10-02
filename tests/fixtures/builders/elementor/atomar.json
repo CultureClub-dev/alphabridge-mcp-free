@@ -1,0 +1,9 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/ergebnis-3-atomar-beaver-ersetzen.json (Elementor 4.3.3, WordPress 7.1.2, measured 30.09.2026): atomar_data (raw _elementor_data), atomar_edit_mode, atomar_post_content. _elementor_version was stored too (atomar_meta_schluessel) but its value was not recorded, so it is missing here.",
+ "measured": true,
+ "meta": {
+  "_elementor_data": "[{\"id\":\"f00d001\",\"elType\":\"e-flexbox\",\"elements\":[{\"id\":\"f00d002\",\"elType\":\"widget\",\"settings\":{\"tag\":{\"$$type\":\"string\",\"value\":\"h1\"},\"title\":{\"$$type\":\"escaped-html\",\"value\":\"Willkommen bei Alpine Bikes\"}},\"elements\":[],\"widgetType\":\"e-heading\",\"version\":\"0.0\"},{\"id\":\"f00d003\",\"elType\":\"widget\",\"settings\":{\"paragraph\":{\"$$type\":\"escaped-html\",\"value\":\"\\u00d6ffnungszeiten: Mo\\u2013Fr 9\\u201318 Uhr\"}},\"elements\":[],\"widgetType\":\"e-paragraph\",\"version\":\"0.0\"},{\"id\":\"f00d004\",\"elType\":\"widget\",\"settings\":{\"text\":{\"$$type\":\"escaped-html\",\"value\":\"Jetzt reservieren\"}},\"elements\":[],\"widgetType\":\"e-button\",\"version\":\"0.0\"}],\"isInner\":false,\"version\":\"0.0\"}]",
+  "_elementor_edit_mode": "builder"
+ },
+ "content": "<h1 data-interaction-id=\"f00d002\">Willkommen bei Alpine Bikes</h1>\n\t\t\t\t\t<p data-interaction-id=\"f00d003\">Öffnungszeiten: Mo–Fr 9–18 Uhr</p>\n\t\t\t\t\t<button data-interaction-id=\"f00d004\">\n\tJetzt reservieren\n</button>"
+}

@@ -17,6 +17,19 @@ class AB_MCP_Settings {
 	const OPT_TOOLSTATE = 'ab_mcp_tool_state';
 
 	/**
+	 * Key in OPT_OPTIONS: true while the notice about the update to the site
+	 * mode is due (see AB_MCP_Admin::mode_notice()).
+	 */
+	const KEY_MODE_NOTICE = 'mode_notice';
+
+	/**
+	 * Key in OPT_OPTIONS: true while OPT_TOOLSTATE still holds switches
+	 * saved before the site mode existed, on a site updated from such a
+	 * version (see is_tool_enabled()). Saving the switches clears it.
+	 */
+	const KEY_LEGACY_SWITCHES = 'tool_state_legacy';
+
+	/**
 	 * Default options. These are fixed product defaults; the abuse-protection
 	 * limits and the always-on behaviours are intentionally not exposed in the
 	 * admin UI (owners can still override them via the documented filters).
@@ -27,22 +40,54 @@ class AB_MCP_Settings {
 		return array(
 			'rate_limit_per_min'         => 120,
 			'audit_enabled'              => true,
-			'read_only'                  => false,
+			// Read or Full, see AB_MCP_Site_Mode. Read unless an
+			// administrator confirmed Full; it replaces the read-only
+			// switch of earlier versions.
+			'site_mode'                  => 'read',
 			// Token-in-URL authentication is OFF by default. Header auth
 			// (Authorization / X-Api-Key) is always available; putting the token in
 			// the connector URL path is a convenience an admin must opt into, because
 			// URLs leak more easily (referrers, history, logs, shoulder-surfing).
 			'connector_url_auth_enabled' => false,
+			// MCP revision 2026-07-28 next to the older ones. On: clients of
+			// either generation are served. See
+			// AB_MCP_REST_Controller::modern_enabled().
+			'modern_protocol'            => true,
+			// OAuth clients that identify themselves with a client metadata
+			// document (an https URL as client_id). See
+			// AB_MCP_OAuth::cimd_enabled(), which also honours
+			// WP_HTTP_BLOCK_EXTERNAL and a filter.
+			'oauth_cimd'                 => true,
 		);
 	}
 
 	/**
-	 * Ensure the default options and the (empty) token store exist.
+	 * Ensure the default options and the (empty) token store exist, and bring
+	 * the options of an earlier version up to date.
+	 *
+	 * A site whose options exist but carry no site mode was installed before
+	 * the mode existed. It starts in Read like a new one, whatever its
+	 * read-only switch said; the switch itself is dropped, and the
+	 * administrators see a notice once (KEY_MODE_NOTICE). Its tool switches
+	 * stay, read by the rule for switches saved before (KEY_LEGACY_SWITCHES):
+	 * in Full, powerful tools that only read keep what they had, so the
+	 * update lets assistants read nothing there they could not read before.
 	 */
 	public static function install_defaults() {
-		$existing = get_option( self::OPT_OPTIONS, array() );
-		if ( ! is_array( $existing ) ) {
-			$existing = array();
+		$stored   = get_option( self::OPT_OPTIONS, false );
+		$existing = is_array( $stored ) ? $stored : array();
+		// An earlier version wrote its options on activation, and on a site of
+		// a network where it ran without being activated there, at the latest
+		// with the first connection or saved switch.
+		$upgrade = is_array( $stored )
+			? ! empty( $stored ) && ! array_key_exists( 'site_mode', $stored )
+			: false !== get_option( self::OPT_TOKENS ) || false !== get_option( self::OPT_TOOLSTATE );
+
+		if ( $upgrade ) {
+			unset( $existing['read_only'] );
+			$existing['site_mode']                 = 'read';
+			$existing[ self::KEY_MODE_NOTICE ]     = true;
+			$existing[ self::KEY_LEGACY_SWITCHES ] = true;
 		}
 		update_option( self::OPT_OPTIONS, wp_parse_args( $existing, self::defaults() ) );
 
@@ -62,6 +107,23 @@ class AB_MCP_Settings {
 		}
 
 		self::rename_tool_state_keys();
+	}
+
+	/**
+	 * Run install_defaults() where an update left it undone.
+	 *
+	 * WordPress runs the activation hook on activation only, not when a
+	 * plugin is updated in place, so the plugin checks on every load whether
+	 * its options know the site mode. That costs one read of an option that
+	 * is loaded anyway; it writes only the one time it finds them out of date
+	 * or missing (a core bundled by an add-on is never activated itself).
+	 */
+	public static function maybe_upgrade() {
+		$stored = get_option( self::OPT_OPTIONS, false );
+		if ( is_array( $stored ) && array_key_exists( 'site_mode', $stored ) ) {
+			return;
+		}
+		self::install_defaults();
 	}
 
 	/**
@@ -99,8 +161,9 @@ class AB_MCP_Settings {
 	 * kind of regression nobody reports, because it looks like it was always
 	 * that way.
 	 *
-	 * Runs on every load and costs one option read. A new name already present
-	 * wins: it is the more recent decision.
+	 * Runs with install_defaults(): on activation, and through
+	 * maybe_upgrade() once on the update that brought the site mode. A new
+	 * name already present wins: it is the more recent decision.
 	 */
 	private static function rename_tool_state_keys() {
 		$state = get_option( self::OPT_TOOLSTATE );
@@ -128,8 +191,9 @@ class AB_MCP_Settings {
 	/* -------------------------------------------------------------- Tool state */
 
 	/**
-	 * Per-tool enable overrides: tool name => bool. A tool NOT present here uses
-	 * its default (non-dangerous tools default on, dangerous/"mighty" default off).
+	 * Per-tool enable overrides: tool name => bool. A tool NOT present here is
+	 * on, except on a site updated from before the site mode (see
+	 * is_tool_enabled()).
 	 *
 	 * @return array<string,bool>
 	 */
@@ -139,7 +203,9 @@ class AB_MCP_Settings {
 	}
 
 	/**
-	 * Persist the full per-tool override map.
+	 * Persist the full per-tool override map. What is written here follows
+	 * the current rule, so the rule for switches saved before the site mode
+	 * existed no longer applies.
 	 *
 	 * @param array $state Map of tool name => bool.
 	 */
@@ -149,22 +215,54 @@ class AB_MCP_Settings {
 			$clean[ (string) $name ] = (bool) $on;
 		}
 		update_option( self::OPT_TOOLSTATE, $clean );
+		if ( self::get( self::KEY_LEGACY_SWITCHES, false ) ) {
+			self::set( self::KEY_LEGACY_SWITCHES, false );
+		}
 	}
 
 	/**
-	 * Is a tool enabled (exposed via MCP + REST)? Resolves the admin override,
-	 * else the default: benign tools on, dangerous ("mighty") tools off.
+	 * Is a tool switched on (exposed via MCP + REST)? Every tool is on until
+	 * an administrator switches it off under Fine-tuning. Whether it may run
+	 * is a separate question, answered by the site mode (AB_MCP_Site_Mode):
+	 * in Read every writing tool and every Mighty one is refused, switched on
+	 * or not, so a switch decides only in Full.
+	 *
+	 * Switches saved before the site mode existed held the powerful
+	 * ("dangerous") tools off by default, saved or not, and saving the form
+	 * wrote that off for every one of them. Until the switches are saved
+	 * again, those of a site updated from such a version are read by two
+	 * rules, which matter in Full only:
+	 *
+	 * - A powerful tool that writes counts as on, whatever was stored: such an
+	 *   off records the old default, not a decision, and Full, which an
+	 *   administrator confirmed, is the mode that opens writing.
+	 * - A powerful tool that only reads keeps what it had, a stored value or
+	 *   the old default, off. Full opens writing, not reading code, files, the
+	 *   database, logs or credentials that the site kept closed before, and
+	 *   the settings page showed such a tool as off.
+	 *
+	 * A tool marked Mighty only since the site mode ('mighty_since', see
+	 * AB_MCP_Tool_Registry) had no such default: it was an ordinary tool
+	 * then, on unless switched off, or did not exist. Without a stored value
+	 * it is on, like every tool. A switched-off tool that was on by default
+	 * stays off either way.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
 	 * @return bool
 	 */
 	public static function is_tool_enabled( $name, $def ) {
-		$state = self::get_tool_state();
-		if ( array_key_exists( $name, $state ) ) {
-			return (bool) $state[ $name ];
+		$name   = (string) $name;
+		$def    = is_array( $def ) ? $def : array();
+		$state  = self::get_tool_state();
+		$legacy = AB_MCP_Tool_Registry::is_mighty( $def ) && self::get( self::KEY_LEGACY_SWITCHES, false );
+		if ( ! array_key_exists( $name, $state ) ) {
+			return ! ( $legacy && AB_MCP_Tool_Registry::is_read_only( $name, $def ) && empty( $def['mighty_since'] ) );
 		}
-		return empty( $def['dangerous'] );
+		if ( $state[ $name ] ) {
+			return true;
+		}
+		return $legacy && ! AB_MCP_Tool_Registry::is_read_only( $name, $def );
 	}
 
 	/**

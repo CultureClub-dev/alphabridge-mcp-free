@@ -191,10 +191,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$id  = self::i( $a, 'id' );
 		$att = get_post( $id );
 		if ( ! $att || 'attachment' !== $att->post_type ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'read_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this attachment.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot read this attachment. Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'id'       => $id,
@@ -223,17 +223,17 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		// reject because the caller may not edit the target post.
 		$post_id = self::i( $a, 'post_id', 0 );
 		if ( $post_id > 0 && ( ! get_post( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post: it does not exist, or your account may not edit it. Leave post_id out to add the file to the media library alone, or pass a post your account may edit.', 'alphabridge-mcp' ) );
 		}
 		$url = esc_url_raw( self::s( $a, 'url' ) );
 		if ( ! $url || ! preg_match( '#^https?://#i', $url ) ) {
-			return new WP_Error( 'ab_mcp_bad_url', __( 'Only http(s) URLs are allowed.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_url', __( 'Only http(s) URLs are allowed. Pass the file\'s public http:// or https:// address, or send its content with wp_upload_media.', 'alphabridge-mcp' ) );
 		}
 		// SSRF guard: reject loopback / private / link-local hosts (blocks cloud
 		// metadata endpoints and internal services). wp_http_validate_url() is
 		// WordPress core's own check for safe outbound request targets.
 		if ( ! wp_http_validate_url( $url ) ) {
-			return new WP_Error( 'ab_mcp_blocked_url', __( 'This URL points to a private or disallowed host and was blocked.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_blocked_url', __( 'This URL points to a private or disallowed host and was blocked: WordPress downloads only from public hosts. Put the file on a public address, or send its content with wp_upload_media.', 'alphabridge-mcp' ) );
 		}
 
 		// Fetch with wp_safe_remote_get: it sets reject_unsafe_urls, so EVERY redirect
@@ -258,7 +258,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 				'ab_mcp_fetch_failed',
 				sprintf(
 					/* translators: %d: HTTP status code */
-					__( 'Download failed (HTTP %d).', 'alphabridge-mcp' ),
+					__( 'Download failed (HTTP %d). Check that the URL opens the file itself, without a login, or send the content with wp_upload_media.', 'alphabridge-mcp' ),
 					$http_code
 				)
 			);
@@ -266,10 +266,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 
 		$body = wp_remote_retrieve_body( $response );
 		if ( '' === $body ) {
-			return new WP_Error( 'ab_mcp_empty', __( 'The URL returned no content.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_empty', __( 'The URL returned no content. Check that it opens the file itself, or send the content with wp_upload_media.', 'alphabridge-mcp' ) );
 		}
 		if ( strlen( $body ) > $max_bytes ) {
-			return new WP_Error( 'ab_mcp_too_large', __( 'The remote file exceeds the allowed size.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_too_large', __( 'The remote file exceeds the allowed size (20 MB unless the site sets another limit with the ab_mcp_upload_max_bytes filter). Use a smaller file, or ask the site administrator to raise the limit.', 'alphabridge-mcp' ) );
 		}
 
 		// Reject clearly dangerous content types outright (HTML/SVG/scripts).
@@ -277,7 +277,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$ctype = preg_replace( '/;.*$/', '', $ctype );
 		$deny  = array( 'text/html', 'application/xhtml+xml', 'image/svg+xml', 'application/xml', 'text/xml', 'application/javascript', 'text/javascript' );
 		if ( in_array( $ctype, $deny, true ) ) {
-			return new WP_Error( 'ab_mcp_bad_type', __( 'The server returned a disallowed content type (e.g. HTML or SVG).', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_type', __( 'The server returned a disallowed content type (e.g. HTML or SVG); often the URL opens a page about the file rather than the file. Use the direct address of a JPEG, PNG, GIF, WebP or PDF file.', 'alphabridge-mcp' ) );
 		}
 
 		// Resolve a filename and require an allow-listed image/PDF extension.
@@ -299,7 +299,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			if ( isset( $ctype_ext[ $ctype ] ) ) {
 				$name .= '.' . $ctype_ext[ $ctype ];
 			} else {
-				return new WP_Error( 'ab_mcp_bad_type', __( 'Only JPEG, PNG, GIF, WebP and PDF files can be sideloaded from a URL.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_bad_type', __( 'Only JPEG, PNG, GIF, WebP and PDF files can be sideloaded from a URL: neither the address nor the server named one of these types. Use an address ending in .jpg, .jpeg, .png, .gif, .webp or .pdf, or convert the file to one of these formats.', 'alphabridge-mcp' ) );
 			}
 		}
 
@@ -309,11 +309,11 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 
 		$tmp = wp_tempnam( $name );
 		if ( ! $tmp ) {
-			return new WP_Error( 'ab_mcp_tmp', __( 'Could not create a temporary file.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_tmp', __( 'Could not create a temporary file, so nothing was uploaded; the server\'s temporary folder is likely not writable. The site administrator or host can fix that (WordPress uses WP_TEMP_DIR or the system\'s temporary folder).', 'alphabridge-mcp' ) );
 		}
 		if ( false === file_put_contents( $tmp, $body ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 			wp_delete_file( $tmp );
-			return new WP_Error( 'ab_mcp_write_failed', __( 'Could not write the downloaded file.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_write_failed', __( 'Could not write the downloaded file, so nothing was uploaded; the server\'s temporary folder is likely full or not writable. The site administrator or host can fix that.', 'alphabridge-mcp' ) );
 		}
 
 		$file_array = array(
@@ -355,17 +355,17 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		// would reject because the caller may not edit the target post.
 		$post_id = self::i( $a, 'post_id', 0 );
 		if ( $post_id > 0 && ( ! get_post( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'You cannot attach media to that post: it does not exist, or your account may not edit it. Leave post_id out to add the file to the media library alone, or pass a post your account may edit.', 'alphabridge-mcp' ) );
 		}
 
 		$name = sanitize_file_name( self::s( $a, 'filename' ) );
 		if ( '' === $name ) {
-			return new WP_Error( 'ab_mcp_bad_name', __( 'A valid filename is required.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_name', __( 'A valid filename is required: pass a name with its extension, such as "photo.jpg".', 'alphabridge-mcp' ) );
 		}
 		$allowed = array( 'jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf' );
 		$ext     = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
 		if ( ! in_array( $ext, $allowed, true ) ) {
-			return new WP_Error( 'ab_mcp_bad_type', __( 'Only JPEG, PNG, GIF, WebP and PDF files can be uploaded.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_type', __( 'Only JPEG, PNG, GIF, WebP and PDF files can be uploaded: the filename must end in .jpg, .jpeg, .png, .gif, .webp or .pdf. Convert the file to one of these formats.', 'alphabridge-mcp' ) );
 		}
 
 		$b64 = self::s( $a, 'content' );
@@ -375,10 +375,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		}
 		$bytes = base64_decode( $b64, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 		if ( false === $bytes || '' === $bytes ) {
-			return new WP_Error( 'ab_mcp_bad_content', __( 'Content is not valid base64.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_content', __( 'Content is not valid base64. Pass the file\'s bytes base64-encoded (a data: URI prefix is allowed), or upload it from a public address with wp_upload_media_from_url.', 'alphabridge-mcp' ) );
 		}
 		if ( strlen( $bytes ) > (int) apply_filters( 'ab_mcp_upload_max_bytes', 20 * MB_IN_BYTES ) ) {
-			return new WP_Error( 'ab_mcp_too_large', __( 'The file exceeds the allowed size.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_too_large', __( 'The file exceeds the allowed size (20 MB unless the site sets another limit with the ab_mcp_upload_max_bytes filter). Use a smaller file, or ask the site administrator to raise the limit.', 'alphabridge-mcp' ) );
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -387,11 +387,11 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 
 		$tmp = wp_tempnam( $name );
 		if ( ! $tmp ) {
-			return new WP_Error( 'ab_mcp_tmp', __( 'Could not create a temporary file.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_tmp', __( 'Could not create a temporary file, so nothing was uploaded; the server\'s temporary folder is likely not writable. The site administrator or host can fix that (WordPress uses WP_TEMP_DIR or the system\'s temporary folder).', 'alphabridge-mcp' ) );
 		}
 		if ( false === file_put_contents( $tmp, $bytes ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 			wp_delete_file( $tmp );
-			return new WP_Error( 'ab_mcp_write_failed', __( 'Could not write the file.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_write_failed', __( 'Could not write the file, so nothing was uploaded; the server\'s temporary folder is likely full or not writable. The site administrator or host can fix that.', 'alphabridge-mcp' ) );
 		}
 
 		$file_array = array(
@@ -423,10 +423,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$id  = self::i( $a, 'id' );
 		$att = get_post( $id );
 		if ( ! $att || 'attachment' !== $att->post_type ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this attachment.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot edit this attachment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$update = array( 'ID' => $id );
 		if ( array_key_exists( 'title', $a ) ) {
@@ -446,7 +446,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 				return $refused;
 			}
 			if ( ! wp_update_post( wp_slash( $update ) ) ) {
-				return new WP_Error( 'ab_mcp_update_failed', __( 'The attachment could not be saved.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the attachment, so its title and caption are unchanged; a plugin may have stopped the save. Check it with wp_get_media and try again, or edit it in wp-admin under Media.', 'alphabridge-mcp' ) );
 			}
 		}
 		if ( array_key_exists( 'alt', $a ) ) {
@@ -467,14 +467,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 	public static function delete_media( $a ) {
 		$id = self::i( $a, 'id' );
 		if ( ! get_post( $id ) ) {
-			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_not_found', __( 'Attachment not found: no file in the media library has this id. Look it up with wp_list_media.', 'alphabridge-mcp' ) );
 		}
 		if ( ! current_user_can( 'delete_post', $id ) ) {
-			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this attachment.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		// wp_delete_attachment() also says false for an id that is not a file
+		// (a post or a page), which the check above lets through.
 		$res = wp_delete_attachment( $id, true );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted' => true,

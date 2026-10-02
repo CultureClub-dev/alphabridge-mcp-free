@@ -35,7 +35,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_widgets',
 			array(
-				'description' => 'List widgets and their settings, optionally filtered to one sidebar.',
+				'description' => 'List widgets and their settings, optionally filtered to one sidebar. A setting whose key looks like a credential (an API key, token, secret or password) is left out and named in hidden_keys.',
 				'capability'  => 'edit_theme_options',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -81,6 +81,38 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 			return array( $m[1], (int) $m[2] );
 		}
 		return array( '', 0 );
+	}
+
+	/**
+	 * A widget's settings as wp_get_widgets shows them: every value whose key
+	 * looks like a credential (is_sensitive_meta_key(), the guard of the meta
+	 * tools) is left out, at any depth, and its path goes to $hidden.
+	 *
+	 * Widgets of other plugins keep API keys and tokens in their settings (a
+	 * feed widget its consumer secret, for example), and this reader runs in
+	 * the mode Read and on a read token. Left out rather than replaced by a
+	 * marker: a marker sent back in an update would overwrite the stored
+	 * value, a missing key leaves it as it is.
+	 *
+	 * @param mixed    $settings The stored settings of one widget, or a part of them.
+	 * @param string[] $hidden   Paths of the values left out, e.g. "api_key" or "feed/secret".
+	 * @param string   $path     Path of $settings itself, '' at the top.
+	 * @return mixed
+	 */
+	protected static function without_credentials( $settings, array &$hidden, $path = '' ) {
+		if ( ! is_array( $settings ) ) {
+			return $settings;
+		}
+		$out = array();
+		foreach ( $settings as $key => $value ) {
+			$at = '' === $path ? (string) $key : $path . '/' . $key;
+			if ( self::is_sensitive_meta_key( (string) $key ) ) {
+				$hidden[] = $at;
+				continue;
+			}
+			$out[ $key ] = self::without_credentials( $value, $hidden, $at );
+		}
+		return $out;
 	}
 
 	/* --------------------------------------------------------------- reads */
@@ -133,8 +165,9 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 				$loc[ $wid ] = $sb;
 			}
 		}
-		$out = array();
-		$ids = is_array( $wp_registered_widgets ) ? array_keys( $wp_registered_widgets ) : array();
+		$out    = array();
+		$hidden = false;
+		$ids    = is_array( $wp_registered_widgets ) ? array_keys( $wp_registered_widgets ) : array();
 		foreach ( $ids as $wid ) {
 			$sidebar = isset( $loc[ $wid ] ) ? $loc[ $wid ] : '';
 			if ( '' !== $want && $sidebar !== $want ) {
@@ -149,16 +182,26 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 				}
 			}
 			$info  = $wp_registered_widgets[ $wid ];
-			$out[] = array(
+			$left  = array();
+			$entry = array(
 				'id'       => $wid,
 				'id_base'  => $base,
 				'number'   => $num,
 				'name'     => isset( $info['name'] ) ? $info['name'] : $wid,
 				'sidebar'  => $sidebar,
-				'settings' => $settings,
+				'settings' => self::without_credentials( $settings, $left ),
 			);
+			if ( $left ) {
+				$entry['hidden_keys'] = $left;
+				$hidden               = true;
+			}
+			$out[] = $entry;
 		}
-		return array( 'widgets' => $out );
+		$res = array( 'widgets' => $out );
+		if ( $hidden ) {
+			$res['note'] = __( 'Settings whose key looks like a credential (an API key, token, secret or password) are not shown; hidden_keys names them per widget. They stay stored unchanged and are managed in the widget\'s own form in wp-admin under Appearance › Widgets.', 'alphabridge-mcp' );
+		}
+		return $res;
 	}
 
 	/* --------------------------------------------------------------- writes */

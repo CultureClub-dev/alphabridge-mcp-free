@@ -1,0 +1,9 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/ergebnis-2-atomar-schema-beaver-quelle.json (Elementor 4.3.3, measured 30.09.2026): atomic_default, the default settings of e-heading, e-paragraph, e-button and e-image exactly as measured. The page around them (ids d00000x, an e-flexbox as in ergebnis-3) is NOT measured; it only holds the measured values.",
+ "measured": false,
+ "meta": {
+  "_elementor_data": "[{\"id\":\"d000000\",\"elType\":\"e-flexbox\",\"elements\":[{\"id\":\"d000001\",\"elType\":\"widget\",\"settings\":{\"title\":{\"$$type\":\"escaped-html\",\"value\":\"This is a title\"},\"tag\":{\"$$type\":\"string\",\"value\":\"h2\"},\"link\":{\"$$type\":\"link\",\"value\":[]}},\"elements\":[],\"widgetType\":\"e-heading\",\"version\":\"0.0\"},{\"id\":\"d000002\",\"elType\":\"widget\",\"settings\":{\"paragraph\":{\"$$type\":\"escaped-html\",\"value\":\"Type your paragraph here\"}},\"elements\":[],\"widgetType\":\"e-paragraph\",\"version\":\"0.0\"},{\"id\":\"d000003\",\"elType\":\"widget\",\"settings\":{\"text\":{\"$$type\":\"escaped-html\",\"value\":\"Click here\"},\"link\":{\"$$type\":\"link\",\"value\":[]}},\"elements\":[],\"widgetType\":\"e-button\",\"version\":\"0.0\"},{\"id\":\"d000004\",\"elType\":\"widget\",\"settings\":{\"image\":{\"$$type\":\"image\",\"value\":[]}},\"elements\":[],\"widgetType\":\"e-image\",\"version\":\"0.0\"}],\"isInner\":false,\"version\":\"0.0\"}]",
+  "_elementor_edit_mode": "builder"
+ },
+ "content": ""
+}
