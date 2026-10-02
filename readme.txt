@@ -1,4 +1,4 @@
-=== AlphaBridge MCP – Connect Claude and ChatGPT to WordPress: MCP server with permissions per connection and audit log ===
+=== AlphaBridge MCP – Connect Claude & ChatGPT to WordPress ===
 Contributors: cultureclub
 Tags: claude, chatgpt, mcp, mcp-server, ai
 Requires at least: 6.5
@@ -8,7 +8,7 @@ Stable tag: 4.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect Claude and ChatGPT to your WordPress site through a native MCP server: rights per connection, audit log, up to 10 sites in one chat.
+Free MCP server for WordPress: Claude and ChatGPT read your site and write once one switch turns on full power. Up to 10 sites in one chat.
 
 == Description ==
 
