@@ -156,9 +156,9 @@ A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do mor
 - change texts, links and images on pages of many page builders;
 - run the abilities other plugins offer, and say so when such a run reports success on a post
   but nothing was saved;
-- edit plugin and theme files and the PHP snippets of Code Snippets or WPCode, with test
-  requests after each change to active PHP code and the previous version put back automatically
-  when the site hits a fatal error;
+- edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
+- test the site after each change to active PHP code, and put the previous version back
+  automatically when the site hits a fatal error;
 - use tool groups for the database, users, menus, WooCommerce, SEO writes, install/update,
   migration and multisite;
 - undo many of the changes made through it (undo points expire after 7 days by default,
