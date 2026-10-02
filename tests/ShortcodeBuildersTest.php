@@ -371,10 +371,26 @@ final class ShortcodeBuildersTest extends TestCase {
 		self::assertSame( array( 's0', 's1', 's1.1', 's1.1.0', 's1.1.1' ), array_column( $out, 'id' ), 'White space and &nbsp; are no element.' );
 		self::assertSame( '#text', $out[0]['type'] );
 		self::assertSame( 'Intro <b>vor</b> der Reihe', self::field( $out[0], 'text' ) );
-		self::assertSame( AB_MCP_Block_Reader::NOTE_UNVERIFIED, $out[0]['note'] );
+		self::assertSame( self::VENDOR, $out[0]['note'], 'Where text runs stand follows from the profile, which is not measured.' );
 		self::assertSame( array( '#text', 's1.1' ), array( $out[3]['type'], $out[3]['parent'] ) );
 		self::assertSame( 'Lose im Text', self::field( $out[3], 'text' ) );
 		self::assertSame( 'vc_column_text', $out[4]['type'] );
+	}
+
+	public function testNotesSayHowAnElementWasReadNotWhetherItCanBeChanged(): void {
+		// A writer changes what a profile entry describes and the text runs
+		// between the shortcodes, with the warning that the profile is not measured;
+		// only an element no entry describes is never written. So only that
+		// one may be called read only.
+		$out  = $this->read( 'wpbakery', "Intro\n[vc_row][vc_column]" . self::WPB_HEADING . self::THE7 . '[/vc_column][/vc_row]' );
+		$type = array_column( $out, null, 'type' );
+		foreach ( array( '#text', 'vc_custom_heading' ) as $written ) {
+			self::assertSame( self::VENDOR, $type[ $written ]['note'], $written );
+			self::assertStringNotContainsString( 'read only', $type[ $written ]['note'], $written );
+			self::assertStringContainsString( AB_MCP_Block_Reader::NOTE_UNMEASURED, $type[ $written ]['note'], $written . ': the outline tool counts it as unmeasured by this.' );
+		}
+		self::assertSame( AB_MCP_Block_Reader::NOTE_UNVERIFIED, $type['dt_highlight']['note'] );
+		self::assertStringContainsString( 'read only', $type['dt_highlight']['note'], 'Not described by the profile: nothing writes it.' );
 	}
 
 	public function testShortcodesOfOtherPluginsCountWhenTheSiteRegistersThem(): void {

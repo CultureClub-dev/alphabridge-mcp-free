@@ -222,6 +222,7 @@ final class ElementProfileTest extends TestCase {
 		self::assertArrayNotHasKey( 'note', $one['element'] );
 		$two = $this->read( $p, 't', array( 'a' => 'A', 'b' => 'B' ) );
 		self::assertSame( AB_MCP_Block_Reader::NOTE_UNMEASURED, $two['element']['note'] );
+		self::assertStringNotContainsString( 'read only', $two['element']['note'], 'Whether a field can be changed is write_via\'s answer, not the note\'s.' );
 
 		$data = (object) array( 'list' => array( (object) array( 'deep' => array( 'x' => 'X' ) ) ), 'n' => null );
 		self::assertSame( 'X', AB_MCP_Builder_Element_Profile::value_at( $data, 'list.0.deep.x' ) );

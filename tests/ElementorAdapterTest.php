@@ -406,6 +406,7 @@ final class ElementorAdapterTest extends TestCase {
 		self::assertSame( array( 'testimonial_content', 'testimonial_image', 'testimonial_name', 'testimonial_job' ), array_keys( $els['aa00006']['fields'] ) );
 		foreach ( array( 'aa00002', 'aa00003', 'aa00004', 'aa00005', 'aa00006' ) as $id ) {
 			self::assertSame( AB_MCP_Block_Reader::NOTE_UNMEASURED, $els[ $id ]['note'], $id );
+			self::assertStringNotContainsString( 'read only', $els[ $id ]['note'], $id . ': a writer changes these fields (with a warning); the note speaks of the profile only.' );
 		}
 		self::assertArrayNotHasKey( 'note', $els['aa00001'] );
 

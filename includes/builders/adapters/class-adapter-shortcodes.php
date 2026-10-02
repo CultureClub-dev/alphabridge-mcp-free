@@ -63,7 +63,8 @@
  *   assumes the same shortcodes are registered, so a writer compares the
  *   element's type before it changes anything.
  * - A listed element: its fields; children are listed in turn. Text that a
- *   container holds directly is listed as an element "#text".
+ *   container holds directly is listed as an element "#text", with the
+ *   profile's note while the profile is not measured.
  * - A content field whose content holds shortcodes reads the text around
  *   them and says so; the shortcodes are listed as its children.
  * - Elements of the builder that no entry describes, and enclosing
@@ -88,9 +89,10 @@ class AB_MCP_Builder_Adapter_Shortcodes extends AB_MCP_Builder_Adapter {
 	/**
 	 * Note on elements read with an unmeasured profile entry. It begins with
 	 * the block reader's note, so the outline tool counts these elements the
-	 * same way.
+	 * same way, and like that note it says nothing about changing them: a
+	 * writer may change what the profile describes.
 	 */
-	const NOTE_VENDOR = 'profile not measured, read only: profile from vendor documentation, not yet measured on a live install';
+	const NOTE_VENDOR = 'profile not measured: profile from vendor documentation, not yet measured on a live install';
 
 	/** Attribute codecs a profile may name. */
 	const CODECS = array( '', 'wpbakery', 'divi4' );
@@ -357,7 +359,10 @@ class AB_MCP_Builder_Adapter_Shortcodes extends AB_MCP_Builder_Adapter {
 							),
 						),
 					),
-					array( AB_MCP_Block_Reader::NOTE_UNVERIFIED ),
+					// A text run is page text a writer may change, so it does not
+					// get the note of undescribed tags ("read only"); it is read
+					// with the builder's profile and carries that profile's note.
+					$this->profile['verified'] ? array() : array( self::NOTE_VENDOR ),
 					$ctx
 				);
 				continue;

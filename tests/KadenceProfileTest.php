@@ -61,7 +61,20 @@ final class KadenceProfileTest extends TestCase {
 		self::assertStringEndsWith( '/-->', $content );
 		$btn = $this->one( 'singlebtn' );
 		self::assertSame( '19290_62d41f-67', $btn['id'] );
-		self::assertSame( array( 'text' => array( 'kind' => 'text', 'value' => 'Call To Action' ) ), $btn['fields'], 'The measured button has no link yet.' );
+		self::assertSame(
+			array(
+				'text' => array(
+					'kind'  => 'text',
+					'value' => 'Call To Action',
+				),
+				'url'  => array(
+					'kind'  => 'url',
+					'value' => '',
+				),
+			),
+			$btn['fields'],
+			'The measured button has no link yet: listed empty, because the attribute link is where one goes (singlebtn-link below).'
+		);
 
 		$linked = $this->one( 'singlebtn-link' );
 		self::assertSame( array( 'kind' => 'url', 'value' => 'https://example.org/neu-K2' ), $linked['fields']['url'], 'Measured: the link set in the attribute is the visible link.' );
@@ -103,6 +116,11 @@ final class KadenceProfileTest extends TestCase {
 		self::assertSame( 3, $by['19290_62d41f-67']['depth'] );
 		self::assertSame( 'Secondary Button', $by['19290_cf0060-c1']['fields']['text']['value'] );
 		self::assertSame( 'Add a short &amp; sweet headline', $by['19290_fd242c-2a']['fields']['text']['value'], 'Rich text stays HTML, as the vendor saved it.' );
+		foreach ( $e as $element ) {
+			if ( 'kadence/singlebtn' === $element['type'] ) {
+				self::assertSame( array( 'kind' => 'url', 'value' => '' ), $element['fields']['url'], $element['id'] . ': no button of the vendor page has a link; each lists an empty one.' );
+			}
+		}
 
 		// Blocks outside the measured list are read by the general reader and say so.
 		self::assertSame( AB_MCP_Block_Reader::NOTE_UNVERIFIED, $by['19290_440975-de']['note'] );

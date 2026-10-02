@@ -42,10 +42,12 @@ return array(
 		),
 
 		// button/block.json: text = rich-text "a,button", url = attribute href of "a". Measured: both only in the markup.
+		// An <a> without href (Twenty Twenty-Five patterns) is a button without a link yet: url is listed
+		// empty, since the href of that <a> is where block.json reads it. A <button> has no <a>, so no url.
 		'core/button'     => array(
 			'fields' => array(
 				'text' => array( 'kind' => 'text', 'from' => 'html_text', 'selector' => 'a,button' ),
-				'url'  => array( 'kind' => 'url', 'from' => 'html_attr', 'selector' => 'a', 'attr' => 'href' ),
+				'url'  => array( 'kind' => 'url', 'from' => 'html_attr', 'selector' => 'a', 'attr' => 'href', 'empty_ok' => true ),
 			),
 		),
 		'core/buttons'    => array( 'container' => true ),
