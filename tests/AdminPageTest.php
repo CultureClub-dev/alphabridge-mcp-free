@@ -16,6 +16,7 @@ namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
 use AB_MCP_Admin;
+use AB_MCP_REST_Controller;
 use AB_MCP_Tool_Registry;
 use DOMDocument;
 use DOMXPath;
@@ -213,6 +214,22 @@ final class AdminPageTest extends TestCase {
 		self::assertTrue( $checked(), 'On by default.' );
 		\AB_MCP_Settings::set( 'modern_protocol', false );
 		self::assertFalse( $checked() );
+	}
+
+	public function testTheProtocolSwitchPromisesOnlyWhatTheSiteKeeps(): void {
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		$x    = $this->xpath( $this->call( 'render_connections_card', array() ) );
+		$desc = $x->query( '//input[@name="modern_protocol"]/following-sibling::span//span[@class="description"]' )->item( 0 );
+		self::assertNotNull( $desc );
+
+		// Switched off, initialize still carries protocol_versions in the site
+		// _meta (the hub reads it), a field releases before 4.4 did not send.
+		// So the text may promise the older revisions, not the old answer.
+		$m    = new ReflectionMethod( AB_MCP_REST_Controller::class, 'initialize' );
+		$init = $m->invoke( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ), array( 'protocolVersion' => '2025-06-18' ) );
+		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18' ), $init['_meta'][ AB_MCP_REST_Controller::SITE_META_KEY ]['protocol_versions'] );
+		self::assertStringNotContainsString( 'exactly as before', $desc->textContent );
+		self::assertStringContainsString( 'older revisions only', $desc->textContent );
 	}
 
 	/**
