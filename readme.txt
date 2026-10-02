@@ -1,4 +1,4 @@
-=== AlphaBridge MCP – Connect Claude & ChatGPT to WordPress ===
+=== AlphaBridge MCP – Connect Claude and ChatGPT to WordPress ===
 Contributors: cultureclub
 Tags: claude, chatgpt, mcp, mcp-server, ai
 Requires at least: 6.5
