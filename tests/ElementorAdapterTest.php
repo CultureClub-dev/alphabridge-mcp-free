@@ -435,6 +435,7 @@ final class ElementorAdapterTest extends TestCase {
 		self::assertTrue( $els['ab00002']['locked'] );
 		self::assertSame( 'unknown element type', $els['ab00002']['reason'] );
 		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_NOT_LOADED, $els['ab00002']['note'] );
+		self::assertStringContainsString( 'with Elementor active, read the page again', $els['ab00002']['note'], 'The note names the way.' );
 		self::assertArrayNotHasKey( 'fields', $els['ab00002'] );
 		self::assertSame( 'Still read', $els['ab00003']['fields']['title']['value'] );
 		self::assertStringNotContainsString( 'Hello', $this->flat( $els ), 'Without its controls nothing of an unknown widget is read.' );
@@ -1066,7 +1067,9 @@ final class ElementorAdapterTest extends TestCase {
 		self::assertTrue( $els['f00d001']['locked'] );
 		self::assertSame( 'unknown element type', $els['f00d001']['reason'] );
 		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_ATOMIC_EDITOR_OFF, $els['f00d001']['note'] );
-		self::assertStringContainsString( 'Elementor › Settings › Features', $els['f00d001']['note'] );
+		// Elementor's own settings tab, not the Features tab, where the feature is hidden.
+		self::assertStringContainsString( 'Elementor › Settings › Atomic Editor', $els['f00d001']['note'] );
+		self::assertStringNotContainsString( 'Features', $els['f00d001']['note'] );
 		self::assertStringNotContainsString( 'plugin', $els['f00d001']['note'] );
 		self::assertArrayNotHasKey( 'f00d002', $els, 'Children of a locked element are not listed.' );
 		// A V3 widget on the same page keeps the plugin as its way.
@@ -1085,7 +1088,36 @@ final class ElementorAdapterTest extends TestCase {
 		$els = $this->atomicPageWithEditorOff( 132, null );
 		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED_ATOMIC, $els['f00d001']['note'] );
 		self::assertStringContainsString( 'Atomic Editor is off', $els['f00d001']['note'] );
+		self::assertStringContainsString( 'Elementor › Settings › Atomic Editor', $els['f00d001']['note'] );
+		self::assertStringNotContainsString( 'Features', $els['f00d001']['note'] );
 		self::assertStringContainsString( 'plugin that provides it is inactive', $els['f00d001']['note'] );
+	}
+
+	public function testAnUnregisteredContainerNamesTheContainerSwitchNotAPlugin(): void {
+		// Elementor registers its container only while the Container feature is on.
+		$this->loadElementor( array( 'heading' => self::headingType() ) );
+		$post = $this->elementorPage(
+			133,
+			array(
+				self::container( 'c0de001', array( self::widget( 'c0de002', 'heading', array( 'title' => 'Inside' ) ) ) ),
+				self::container( 'c0de003', array(), 'acme-row' ),
+			)
+		);
+		$els = $this->byId( $this->outline( $post ) );
+		self::assertSame( 'unknown element type', $els['c0de001']['reason'] );
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_CONTAINER_OFF, $els['c0de001']['note'] );
+		self::assertStringContainsString( 'Elementor › Settings › Features (Container)', $els['c0de001']['note'] );
+		self::assertStringNotContainsString( 'plugin', $els['c0de001']['note'] );
+		self::assertArrayNotHasKey( 'c0de002', $els, 'Children of a locked element are not listed.' );
+		// Any other unregistered element keeps the plugin as its way.
+		self::assertSame( AB_MCP_Builder_Adapter_Elementor::NOTE_UNREGISTERED, $els['c0de003']['note'] );
+	}
+
+	public function testTheChangelogNamesTheSameSwitchesAsTheNotes(): void {
+		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
+		self::assertStringContainsString( 'while Elementor\'s Atomic Editor is off, the switch under Elementor › Settings › Atomic Editor', $readme );
+		self::assertStringContainsString( 'while Elementor\'s Container feature is off, the switch under Elementor › Settings › Features', $readme );
+		self::assertStringNotContainsString( 'Atomic Editor is off, the switch under Elementor › Settings › Features', $readme );
 	}
 
 	public function testWithElementorLoadedButUnableToListControlsTheTableTakesOver(): void {
@@ -1111,6 +1143,7 @@ final class ElementorAdapterTest extends TestCase {
 		self::assertSame( 'From the table', $els['be00001']['fields']['title']['value'] );
 		self::assertSame( 'unknown element type', $els['be00002']['reason'] );
 		self::assertStringContainsString( 'could not list the controls', $els['be00002']['note'] );
+		self::assertStringContainsString( 'change it in the Elementor editor', $els['be00002']['note'], 'The note names the way.' );
 	}
 
 	/* ---------------------------------------------- the tools around it */

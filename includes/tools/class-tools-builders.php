@@ -148,7 +148,7 @@ class AB_MCP_Tools_Builders extends AB_MCP_Tools_Base {
 			}
 		} else {
 			/* translators: %1$s, %2$s: page builder name */
-			$notes[] = sprintf( __( 'No reader for %1$s on this site yet, so its elements are not listed. copies says where the page is stored, and write_via which tools change it with a visible effect; otherwise change it in the %2$s editor in wp-admin.', 'alphabridge-mcp' ), $name, $name );
+			$notes[] = sprintf( __( 'No reader for %1$s on this site yet, so its elements are not listed. copies says where the page is stored, and write_via which tools change it with a visible effect; otherwise change it in the %2$s editor.', 'alphabridge-mcp' ), $name, $name );
 		}
 
 		$unverified = 0;

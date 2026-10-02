@@ -1228,7 +1228,7 @@ class AB_MCP_Admin {
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, database, users, menus', 'alphabridge-mcp' ),
 			__( 'WooCommerce, SEO editing, installs and updates', 'alphabridge-mcp' ),
-			__( 'Undo points for 7 days, adjustable from 1 to 30', 'alphabridge-mcp' ),
+			__( 'Undo points that expire after 7 days, adjustable from 1 to 30', 'alphabridge-mcp' ),
 			__( 'Search and replace with preview', 'alphabridge-mcp' ),
 		);
 

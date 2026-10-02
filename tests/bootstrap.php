@@ -83,6 +83,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_comments_untrashed'] = array();
 	$GLOBALS['ab_test_trashed']       = array();
 	$GLOBALS['ab_test_trash_refused'] = false;
+	$GLOBALS['ab_test_delete_refused'] = false;
 	$GLOBALS['ab_test_deleted']       = array();
 	$GLOBALS['ab_test_now']        = null;
 	$GLOBALS['ab_test_core_delay'] = 0;
@@ -779,11 +780,11 @@ function wp_trash_post( $post_id = 0 ) {
 	return $post;
 }
 
-/** Deletes for good (only called with force here), and notes the call. */
+/** Deletes for good (only called with force here), and notes the call; false where a pre_delete_post filter said no. */
 function wp_delete_post( $post_id = 0, $force_delete = false ) {
 	$GLOBALS['ab_test_deleted'][] = array( (int) $post_id, (bool) $force_delete );
 	$post = get_post( (int) $post_id );
-	if ( ! $post ) {
+	if ( ! $post || ! empty( $GLOBALS['ab_test_delete_refused'] ) ) {
 		return false;
 	}
 	unset( $GLOBALS['ab_test_posts'][ (int) $post_id ] );

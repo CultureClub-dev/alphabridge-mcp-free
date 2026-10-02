@@ -308,6 +308,12 @@ final class DuplicatePostMetaTest extends TestCase {
 		self::assertSame( array( 'not json' ), self::copied( $out )['_elementor_data'] );
 		self::assertArrayNotHasKey( 'elementor_ids_renewed', $out );
 		self::assertStringContainsString( 'not valid JSON', implode( ' ', $out['notes'] ) );
+		// So the readmes promise new ids only where the layout can be read.
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			$text = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . $file ) );
+			self::assertStringContainsString( 'Elementor elements get new ids where the layout can be read', $text, $file );
+			self::assertStringNotContainsString( 'never one of the original', $text, $file );
+		}
 	}
 
 	/* -------------------------------------------------------------- left behind */

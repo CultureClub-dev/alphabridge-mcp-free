@@ -139,19 +139,30 @@ final class ProBoxTest extends TestCase {
 	}
 
 	/**
-	 * Pro keeps an undo point for 7 days by default, adjustable from 1 to 30
-	 * (AB_MCP_Pro_Undo::TTL_DAYS_DEFAULT, _MIN, _MAX, integration/pro-4.6).
-	 * The box and the readme say so, and not the former 24 hours.
+	 * An undo point in Pro expires after 7 days by default, adjustable from 1
+	 * to 30 (AB_MCP_Pro_Undo::TTL_DAYS_DEFAULT, _MIN, _MAX, integration/pro-4.6).
+	 * The box and the readme say so, and not the former 24 hours; "expire
+	 * after", not "kept for", as Pro also keeps only the newest points.
 	 */
 	public function testTheUndoWindowIsTheOneProKeeps(): void {
 		$html   = $this->box();
 		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
 
-		self::assertStringContainsString( 'Undo points for 7 days, adjustable from 1 to 30', $html );
-		self::assertStringContainsString( 'undo points are kept for 7 days by default, adjustable from 1 to 30 days', $readme );
+		self::assertStringContainsString( 'Undo points that expire after 7 days, adjustable from 1 to 30', $html );
+		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $readme );
 		foreach ( array( 'box' => $html, 'readme.txt' => $readme ) as $where => $text ) {
 			self::assertDoesNotMatchRegularExpression( '/undo[^.]*24 hours/i', $text, $where );
+			self::assertStringNotContainsString( 'kept for 7 days', $text, $where );
 		}
+	}
+
+	/** Site Deploy comes with the Agency plan (Pro: class-tools-deploy.php), in both readmes. */
+	public function testTheReadmesGiveSiteDeployToTheAgencyPlan(): void {
+		$readme = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . 'readme.txt' ) );
+		$github = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . 'README.md' ) );
+		self::assertStringContainsString( 'The Agency plan adds Site Deploy', $readme );
+		self::assertStringContainsString( 'Its Agency plan adds Site Deploy', $github );
+		self::assertStringNotContainsString( 'one-step site deployment', $github );
 	}
 
 	public function testTheStylesheetLoadsOnThisScreenOnly(): void {

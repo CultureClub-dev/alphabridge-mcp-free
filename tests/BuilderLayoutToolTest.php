@@ -133,6 +133,8 @@ final class BuilderLayoutToolTest extends TestCase {
 		self::assertFalse( $out['verified'] );
 		self::assertSame( array( 'wp_update_post' ), $out['write_via'], 'Storage A: wp_update_post changes the shortcodes the site renders.' );
 		self::assertStringContainsString( 'No reader for WPBakery Page Builder', implode( ' ', $out['notes'] ) );
+		// The way: write_via, else the builder's own editor (where it runs is not checked).
+		self::assertStringContainsString( 'write_via which tools change it with a visible effect; otherwise change it in the WPBakery Page Builder editor.', implode( ' ', $out['notes'] ) );
 		self::assertSame( array( array( 'loc' => 'post_content', 'shown' => true, 'role' => 'source' ) ), $out['copies'], 'The CSS key is never listed.' );
 	}
 

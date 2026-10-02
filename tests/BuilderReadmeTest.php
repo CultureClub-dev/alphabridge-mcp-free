@@ -181,4 +181,20 @@ final class BuilderReadmeTest extends TestCase {
 			self::assertDoesNotMatchRegularExpression( '/\bPro\b|premium|upgrade|purchase|licen[cs]e/i', $text );
 		}
 	}
+
+	/**
+	 * Otter Blocks and CoBlocks have no profile; the general block reader
+	 * reads them. Wherever a readme names them as read, it says so.
+	 */
+	public function testOtterAndCoBlocksAreReadAsPlainBlocksWhereverTheyAreNamed(): void {
+		foreach ( self::FILES as $file ) {
+			$text  = (string) preg_replace( '/\s+/', ' ', $this->text( $file ) );
+			$named = substr_count( $text, 'Otter Blocks and CoBlocks' );
+			self::assertGreaterThan( 0, $named, $file );
+			self::assertSame( $named, substr_count( $text, 'Otter Blocks and CoBlocks (both as plain blocks)' ), $file );
+		}
+		foreach ( array( 'otter', 'coblocks' ) as $id ) {
+			self::assertSame( array(), glob( dirname( __DIR__ ) . '/includes/builders/profiles/*' . $id . '*' ), 'A profile for ' . $id . ' makes the qualifier wrong.' );
+		}
+	}
 }

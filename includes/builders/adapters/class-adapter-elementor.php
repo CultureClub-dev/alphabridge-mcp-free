@@ -132,15 +132,30 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 	/**
 	 * Note on an atomic (V4) element while Elementor's Atomic Editor is off:
 	 * Elementor registers no atomic element then, so the plugin note would
-	 * point the wrong way. The Atomic Editor is one of Elementor's features
-	 * [SVN elementor@4.3.3 modules/mcp/utils/mcp-v4-gate.php:34-36], listed
-	 * on the Features tab of Elementor's settings [SVN elementor@4.3.3
-	 * core/experiments/manager.php:499-501].
+	 * point the wrong way. The switch is not on the Features tab: the feature
+	 * is hidden there [SVN elementor@4.3.3 modules/atomic-widgets/module.php:
+	 * 240-246 'hidden' => true; core/experiments/manager.php:460-466], and
+	 * Elementor gives it a settings tab of its own, "Atomic Editor"
+	 * [SVN elementor@4.3.3 modules/atomic-opt-in/opt-in-page.php:88-90],
+	 * the path its own refusal names [SVN elementor@4.3.3
+	 * modules/mcp/utils/mcp-v4-gate.php:56].
 	 */
-	const NOTE_ATOMIC_EDITOR_OFF = 'Elementor\'s Atomic Editor is off, so Elementor does not show this element or anything inside it, and saving the page in Elementor removes it; switch it on under Elementor › Settings › Features (Atomic Editor), then read the page again';
+	const NOTE_ATOMIC_EDITOR_OFF = 'Elementor\'s Atomic Editor is off, so Elementor does not show this element or anything inside it, and saving the page in Elementor removes it; switch it on under Elementor › Settings › Atomic Editor, then read the page again';
 
 	/** Note on an unregistered atomic element where Elementor cannot say whether its Atomic Editor is on. */
-	const NOTE_UNREGISTERED_ATOMIC = 'not registered on this site, for example because Elementor\'s Atomic Editor is off (switch it on under Elementor › Settings › Features) or because the plugin that provides it is inactive: Elementor does not show it, and saving the page in Elementor removes it';
+	const NOTE_UNREGISTERED_ATOMIC = 'not registered on this site, for example because Elementor\'s Atomic Editor is off (switch it on under Elementor › Settings › Atomic Editor) or because the plugin that provides it is inactive: Elementor does not show it, and saving the page in Elementor removes it';
+
+	/**
+	 * Note on a container Elementor has not registered: Elementor registers
+	 * its Container element only while its Container feature is on
+	 * [SVN elementor@4.3.3 includes/managers/elements.php:272-274], which is
+	 * off by default on sites installed before 3.16 [SVN elementor@4.3.3
+	 * core/experiments/manager.php:353-377] and is listed on the Features tab
+	 * (not hidden; the tab: manager.php:460-466, :499-501). Section and
+	 * column are always registered (elements.php:264-268), so only the
+	 * container needs this way.
+	 */
+	const NOTE_CONTAINER_OFF = 'not registered on this site, for example because Elementor\'s Container feature is off: Elementor does not show it or anything inside it, and saving the page in Elementor removes it; switch it on under Elementor › Settings › Features (Container), then read the page again, and until then do not save this page in the Elementor editor';
 
 	/**
 	 * The widget table: fields where Elementor is not loaded (and the kind of
@@ -663,7 +678,7 @@ class AB_MCP_Builder_Adapter_Elementor extends AB_MCP_Builder_Adapter {
 				// page is saved [SVN elementor@4.3.3 core/base/document.php:1929-1941, :1074-1115].
 				return array(
 					'locked' => 'widget' === $el_type ? 'unregistered widget' : 'unknown element type',
-					'note'   => $atomic ? self::unregistered_atomic_note() : self::NOTE_UNREGISTERED,
+					'note'   => $atomic ? self::unregistered_atomic_note() : ( 'container' === $el_type ? self::NOTE_CONTAINER_OFF : self::NOTE_UNREGISTERED ),
 				);
 			}
 			if ( $atomic ) {

@@ -516,9 +516,12 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! get_comment( $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
 		}
+		// Nothing promised about what is left: deleting for good, WordPress
+		// moves replies up and removes the comment's meta before its row;
+		// trashing a note, it says false when a reply stays out of the trash.
 		$res = wp_delete_comment( $id, self::b( $a, 'force', false ) );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the comment, so it is unchanged; a plugin may have stopped it. Check it with wp_get_comment and try again.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the comment; a plugin may have stopped it. Check it with wp_get_comment and try again.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted'    => true,

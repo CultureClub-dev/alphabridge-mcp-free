@@ -324,9 +324,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 			// Deliberately strict read rule: exposing a key over MCP requires the
 			// key's edit capability, which honours auth_callback rules that other
-			// plugins registered via register_meta().
+			// plugins registered via register_meta(). WordPress first maps it to
+			// edit_post on the post itself (wp-includes/capabilities.php, case
+			// 'edit_post_meta'), while this tool lets in accounts that may only
+			// read the post: that, not a plugin, is the usual reason.
 			if ( ! current_user_can( 'edit_post_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: that takes the right to edit the post itself (an author may read a colleague\'s published post, but not edit it), and the plugin that registered the key can restrict it further. Connect with an account that may edit the post and the key, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'id'    => $id,
@@ -1111,7 +1114,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			wp_trash_post( $id );
 			$after = get_post( $id );
 			if ( ! $after || 'trash' !== (string) $after->post_status ) {
-				return new WP_Error( 'ab_mcp_trash_failed', __( 'The post could not be moved to the trash and is unchanged; a plugin may keep it out (WordPress asks the pre_trash_post filter first). Ask the site administrator, or delete it for good with force=true, which cannot be undone.', 'alphabridge-mcp' ) );
+				// Nothing promised about the post's state: the old trash notes
+				// are gone by now, and WordPress adds its own before the status
+				// write that failed.
+				return new WP_Error( 'ab_mcp_trash_failed', __( 'The post could not be moved to the trash; a plugin may keep it out (WordPress asks the pre_trash_post filter first). Check it with wp_get_post, then ask the site administrator, or delete it for good with force=true, which cannot be undone.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'deleted'   => true,
@@ -1119,9 +1125,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				'id'        => $id,
 			);
 		}
+		// Nothing promised about what is left: wp_delete_post() removes terms,
+		// revisions, comments and custom fields before the post's own row, and
+		// says false when only that last step fails.
 		$res = wp_delete_post( $id, true );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the post, so it is unchanged; a plugin may have stopped it. Check it with wp_get_post, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the post; a plugin may have stopped it. Check it with wp_get_post, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted'   => true,

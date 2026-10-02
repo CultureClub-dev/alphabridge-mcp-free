@@ -472,9 +472,11 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'delete_post', $id ) ) {
 			return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		// wp_delete_attachment() also says false for an id that is not a file
+		// (a post or a page), which the check above lets through.
 		$res = wp_delete_attachment( $id, true );
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the file; a plugin may have stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'deleted' => true,

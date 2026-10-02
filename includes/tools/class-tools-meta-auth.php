@@ -172,8 +172,12 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
+			// WordPress first maps it to edit_term on the term itself (case
+			// 'edit_term_meta', then 'edit_term' in wp-includes/capabilities.php),
+			// while this tool lets in accounts that may only assign terms: that,
+			// not a plugin, is the usual reason.
 			if ( ! current_user_can( 'edit_term_meta', $id, $key ) ) {
-				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_forbidden', __( 'Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator.', 'alphabridge-mcp' ) );
 			}
 			return array(
 				'term_id' => $id,
@@ -199,17 +203,19 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 	/* --------------------------------------------------------------- app passwords */
 
 	/**
-	 * Guard: application passwords available + editable.
+	 * Guard: application passwords available + editable. Its texts name no
+	 * single action: the Pro add-on runs the same guard before creating and
+	 * revoking application passwords.
 	 *
 	 * @param int $user_id User id.
 	 * @return true|WP_Error
 	 */
 	protected static function app_pw_guard( $user_id ) {
 		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
-			return new WP_Error( 'ab_mcp_no_app_pw', __( 'Application passwords require WordPress 5.6 or later; update WordPress to list them.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_no_app_pw', __( 'Application passwords require WordPress 5.6 or later; update WordPress to use them.', 'alphabridge-mcp' ) );
 		}
 		if ( function_exists( 'wp_is_application_passwords_available' ) && ! wp_is_application_passwords_available() ) {
-			return new WP_Error( 'ab_mcp_app_pw_off', __( 'Application passwords are disabled on this site, so there are none to list: WordPress offers them only over HTTPS or in a local environment, and a plugin can switch them off with the wp_is_application_passwords_available filter.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_app_pw_off', __( 'Application passwords are disabled on this site: WordPress offers them only over HTTPS or in a local environment, and a plugin can switch them off with the wp_is_application_passwords_available filter.', 'alphabridge-mcp' ) );
 		}
 		if ( ! get_user_by( 'id', $user_id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
