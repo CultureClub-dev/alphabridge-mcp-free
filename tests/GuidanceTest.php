@@ -156,6 +156,17 @@ final class GuidanceTest extends TestCase {
 		self::assertNoPromotion( $text );
 	}
 
+	public function testOnAGermanSiteTheAnswerForAToolOfProReadsGermanThroughout(): void {
+		$GLOBALS['ab_test_translations'] = array(
+			'The tool "%s" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.' => 'Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.',
+			'The tool "%s" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.' => 'Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.',
+			'The editions of AlphaBridge MCP and their tools are described here: %s' => 'Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: %s',
+		);
+
+		self::assertSame( 'Das Werkzeug „wp_db_query“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist. Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: https://alphabridge-mcp.com/docs', AB_MCP_Guidance::unavailable_tool( 'wp_db_query' )->get_error_message() );
+		self::assertSame( 'Das Werkzeug „wp_deploy_push_zip“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist. Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: https://alphabridge-mcp.com/docs', AB_MCP_Guidance::unavailable_tool( 'wp_deploy_push_zip' )->get_error_message() );
+	}
+
 	public function testAnyOtherNameStaysUnknown(): void {
 		$text = self::call( self::free_registry(), 'wp_frobnicate' )['content'][0]['text'];
 
