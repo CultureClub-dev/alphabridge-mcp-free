@@ -42,9 +42,18 @@ directory. It is the same code WordPress.org ships.
   Builder, SiteOrigin Page Builder and Enfold — `wp_update_post` refuses a change to the content
   while the builder is active, because it would not show, and says how to change the page
   instead.
+
+  `wp_get_post` names the builder a post was made with (`built_with`), `wp_list_posts` filters
+  by it, and `wp_duplicate_post` copies a page with its custom fields and builder data
+  (Elementor elements get new ids; builder data only for accounts with `unfiltered_html`).
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
-  your own login-protected site. Header authentication (`Authorization` / `X-Api-Key`) for
-  clients without a Connect button.
+  your own login-protected site and offers Read only, Content and Full access, each described in
+  one sentence. Apps register with the site (RFC 7591) or identify themselves with a client
+  metadata document (CIMD), which the site fetches only once a logged-in user who may approve
+  connections opens the consent screen; that can be switched off. Header authentication
+  (`Authorization` / `X-Api-Key`) for clients without a Connect button.
+- **Answers that name the way** — a refused or failed call says what did not work, why, and
+  what does: the tool that finds an id, the right it takes, the switch, the accepted values.
 - **Free means free** — no license keys, no registration, no usage limits, no locked features.
 
 ## Security model
@@ -117,8 +126,9 @@ Then activate it and open *Settings → AlphaBridge MCP* to create a connection.
 ## Paid add-on
 
 A separate commercial add-on, **AlphaBridge MCP Pro**, adds tool groups for the database, users,
-plugin and theme files, WooCommerce, SEO writes, install/update, migration, multisite — and
-one-step site deployment over FTP/SFTP. It is entirely optional: this free plugin is complete on
+plugin and theme files, WooCommerce, SEO writes, install/update, migration, multisite, an undo
+for changes made through it (undo points are kept for 7 days by default, adjustable from 1 to 30
+days) — and one-step site deployment over FTP/SFTP. It is entirely optional: this free plugin is complete on
 its own and stays fully functional without it. Its source is not part of this repository.
 Details at https://alphabridge-mcp.com.
 
