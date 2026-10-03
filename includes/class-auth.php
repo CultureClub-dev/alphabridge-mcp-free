@@ -55,8 +55,12 @@ class AB_MCP_Auth {
 		// the admin has explicitly enabled connector-URL authentication; header auth
 		// is always available and is the default. Tokens in URLs leak more easily
 		// (referrers, proxy/access logs, browser history), so this is opt-in.
+		// Read from the route's own path parameter only: get_param() would also
+		// take ?token= from the query string or a "token" field in the body,
+		// which are never accepted.
 		if ( AB_MCP_Settings::get( 'connector_url_auth_enabled', false ) ) {
-			$path_token = $request->get_param( 'token' );
+			$url_params = $request->get_url_params();
+			$path_token = isset( $url_params['token'] ) ? $url_params['token'] : '';
 			if ( is_string( $path_token ) && '' !== $path_token ) {
 				return trim( $path_token );
 			}

@@ -1250,6 +1250,8 @@ class WP_REST_Request {
 	private $method = 'POST';
 	/** @var array<string,string> */
 	private $url_params = array();
+	/** @var array<string,mixed> */
+	private $query_params = array();
 
 	/** Upper case, as WP_REST_Request::set_method() stores it. */
 	public function set_method( string $method ): void {
@@ -1263,6 +1265,16 @@ class WP_REST_Request {
 	/** @param array<string,string> $params */
 	public function set_url_params( array $params ): void {
 		$this->url_params = $params;
+	}
+
+	/** @return array<string,string> */
+	public function get_url_params(): array {
+		return $this->url_params;
+	}
+
+	/** @param array<string,mixed> $params */
+	public function set_query_params( array $params ): void {
+		$this->query_params = $params;
 	}
 
 	public function set_route( string $route ): void {
@@ -1298,7 +1310,8 @@ class WP_REST_Request {
 	}
 
 	public function get_param( $key ) {
-		return $this->body[ $key ] ?? $this->url_params[ $key ] ?? null;
+		// WP_REST_Request::get_parameter_order(): POST, GET, URL (JSON left out).
+		return $this->body[ $key ] ?? $this->query_params[ $key ] ?? $this->url_params[ $key ] ?? null;
 	}
 }
 

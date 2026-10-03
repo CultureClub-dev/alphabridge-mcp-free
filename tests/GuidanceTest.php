@@ -236,10 +236,11 @@ final class GuidanceTest extends TestCase {
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, the texts of page-builder pages, installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it; the editions are described at https://alphabridge-mcp.com/docs', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
+		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it; the editions are described at https://alphabridge-mcp.com/docs', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
 		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );
+		self::assertNotNull( self::free_registry()->get( 'wp_get_builder_layout' ), 'Reading builder pages is a tool of this plugin, so the paragraph names only changing them.' );
 
 		$r = self::free_registry();
 		$r->register( 'wp_undo', array( 'capability' => 'manage_options' ) );
