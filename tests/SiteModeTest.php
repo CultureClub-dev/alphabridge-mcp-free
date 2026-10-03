@@ -1362,7 +1362,7 @@ final class SiteModeTest extends TestCase {
 		self::assertStringNotContainsString( 'such as `wp_get_user_meta`', $readme, 'It reads profile fields, not code, files, the database, logs or credentials.' );
 		self::assertStringNotContainsString( 'read, list and search, and every tool', $readme, 'No longer «Read reads everything».' );
 		$intro = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
-		self::assertStringContainsString( 'and so is every reading tool that needs write access because it reads code, files, the database, logs or credentials', $intro );
+		self::assertStringContainsString( 'and so is every reading tool noted «only with write access» under Fine-tuning: in this plugin that is the reader of user profile fields', $intro );
 		self::assertStringContainsString( 'The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection', $intro );
 		self::assertStringNotContainsString( 'the mode Read', $intro, 'The description says write access, not Read or Full.' );
 		self::assertStringNotContainsString( 'Mighty', $intro );
@@ -1395,6 +1395,48 @@ final class SiteModeTest extends TestCase {
 			self::assertMatchesRegularExpression( '/every tool (is )?on; each connection keeps its access level/', $text, $file );
 			self::assertStringNotContainsString( 'every tool is on, for every connection', $text, $file );
 		}
+	}
+
+	/**
+	 * The readmes describe this plugin: its only reader that waits for write
+	 * access is wp_get_user_meta, which reads profile fields. Readers of code,
+	 * files, the database or logs come with AlphaBridge MCP Pro, not here.
+	 */
+	public function testTheReadmesNameTheReadersThatWaitForWriteAccess(): void {
+		$r = new AB_MCP_Tool_Registry();
+		foreach ( get_declared_classes() as $class ) {
+			if ( 0 === strpos( $class, 'AB_MCP_Tools_' ) && ! ( new \ReflectionClass( $class ) )->isAbstract() && method_exists( $class, 'register' ) ) {
+				$class::register( $r );
+			}
+		}
+		$waiting = array();
+		foreach ( $r->all() as $name => $def ) {
+			if ( AB_MCP_Tool_Registry::is_read_only( (string) $name, $def ) && ! AB_MCP_Site_Mode::runs_in_read( (string) $name, $def ) ) {
+				$waiting[] = $name;
+			}
+		}
+		self::assertGreaterThan( 35, count( $r->all() ) );
+		self::assertSame( array( 'wp_get_user_meta' ), $waiting, 'A new reader that waits for write access needs its own words in the readmes.' );
+
+		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		$intro  = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
+		self::assertStringNotContainsString( 'logs or credentials', $intro, 'Free has no reader of code, files, the database, logs or credentials.' );
+		self::assertStringContainsString( 'To let them create, change and delete, and read user profile fields, switch on «Write access for AI assistants»', $intro );
+		self::assertStringContainsString( 'and every reading tool noted «only with write access» (in this plugin the reader of user profile fields), is refused until', $intro );
+		$md = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( dirname( __DIR__ ) . '/README.md' ) );
+		self::assertStringContainsString( 'and so is every reading tool noted *only with write access* (in this plugin the reader of user profile fields)', $md );
+		self::assertStringNotContainsString( 'because it reads code, files, the database, logs or credentials', $md );
+	}
+
+	/**
+	 * Claude asks for the site's address, and the settings page has a button
+	 * to copy it; what there is not to copy is the endpoint or a token.
+	 */
+	public function testTheReadmeSaysWhatToCopyWhenConnectingFromClaude(): void {
+		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		self::assertStringContainsString( "Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy", $readme );
+		self::assertStringNotContainsString( 'no address or token to copy', $readme );
+		self::assertStringContainsString( "this site's address to copy", $readme, 'Screenshot 1.' );
 	}
 
 	public function testTheNoticesAfterSwitching(): void {

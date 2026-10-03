@@ -75,8 +75,8 @@ Handing an AI access to a site should feel safe, so control comes first:
 - **Write access off out of the box.** A new site, and every site after updating from a version
   before 4.4.0, starts with *write access off*: assistants can read content, media, terms,
   comments, settings and the structure of the site. Every tool that creates, changes or deletes is
-  refused, and so is every reading tool that needs write access because it reads code, files, the
-  database, logs or credentials, with an answer that says why and leads to the switch. The main
+  refused, and so is every reading tool noted *only with write access* (in this plugin the reader
+  of user profile fields), with an answer that says why and leads to the switch. The main
   switch *Write access for AI assistants* at the top of Settings → AlphaBridge MCP holds for every
   connection (Claude, ChatGPT, Cursor and all others); an administrator switches it on after
   confirming, with a ticked box, that changes take effect immediately, that it is at the site
