@@ -31,7 +31,7 @@ Before switching on, an administrator ticks a box: changes take effect immediate
 * Every connection acts as a real WordPress user, and every tool checks the matching WordPress capability. What that user may not do, the AI cannot do.
 * Scoped connections: hand out a read-only or content-only key with an optional expiry instead of full access. Rotate a connection's secret in one click.
 * Fine-tuning: every tool is on, and switching write access on switches every tool on again. Switch single tools or whole groups off, and they vanish from the MCP surface until write access is switched on the next time. Each tool says whether it reads or writes.
-* Every refusal leads somewhere: when write access is off, the connection's access level or the account's role does not reach, a tool is switched off, or a tool belongs to the separate AlphaBridge MCP Pro, the answer names the reason, the steps and a direct link, for the assistant to pass on.
+* Every refusal leads somewhere: when write access is off, the connection's access level or the account's role does not reach, or a tool is switched off, the answer names the reason, the steps and a direct link, for the assistant to pass on. A tool that belongs to the separate AlphaBridge MCP Pro is named as such, with the page that describes the editions.
 * An audit log records every tool call, and a fixed rate limit stops abusive request bursts.
 
 **Connected in two minutes**
