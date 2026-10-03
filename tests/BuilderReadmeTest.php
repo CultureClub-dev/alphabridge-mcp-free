@@ -159,6 +159,14 @@ final class BuilderReadmeTest extends TestCase {
 			self::assertSame( 1, preg_match( '/(\d+) structured tools/', $this->text( $file ), $m ), $file );
 			self::assertSame( $count, (int) $m[1], $file . ' states the number of tools the plugin registers.' );
 		}
+		// Widgets and site settings are only read: no tool for them writes.
+		foreach ( array_unique( $names ) as $name ) {
+			if ( preg_match( '/widget|sidebar|setting/', $name ) ) {
+				self::assertMatchesRegularExpression( '/^wp_(get|list)_/', $name, $name . ' writes; the readmes say widgets and settings are read.' );
+			}
+		}
+		self::assertStringContainsString( 'It reads widgets, site settings', $this->text( 'readme.txt' ) );
+		self::assertStringContainsString( 'read widgets, site settings', (string) preg_replace( '/\s+/', ' ', $this->text( 'README.md' ) ) );
 	}
 
 	public function testTheBuilderTextsDoNotAdvertise(): void {

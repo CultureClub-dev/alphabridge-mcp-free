@@ -147,12 +147,24 @@ final class ProBoxTest extends TestCase {
 	public function testTheUndoWindowIsTheOneProKeeps(): void {
 		$html   = $this->box();
 		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
+		// README.md wraps its lines.
+		$github = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . 'README.md' ) );
 
 		self::assertStringContainsString( 'Undo points that expire after 7 days, adjustable from 1 to 30', $html );
 		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $readme );
-		foreach ( array( 'box' => $html, 'readme.txt' => $readme ) as $where => $text ) {
+		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $github );
+		foreach ( array( 'box' => $html, 'readme.txt' => $readme, 'README.md' => $github ) as $where => $text ) {
 			self::assertDoesNotMatchRegularExpression( '/undo[^.]*24 hours/i', $text, $where );
 			self::assertStringNotContainsString( 'kept for 7 days', $text, $where );
+		}
+	}
+
+	/** Both readmes offer the trial the box offers: as many days, no card. */
+	public function testTheReadmesOfferTheTrialOfTheBox(): void {
+		self::assertSame( 1, preg_match( '/Try Pro free for (\d+) days/', $this->box(), $days ) );
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			$text = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . $file ) );
+			self::assertStringContainsString( 'Pro can be tried free for ' . $days[1] . ' days, no card needed', $text, $file );
 		}
 	}
 

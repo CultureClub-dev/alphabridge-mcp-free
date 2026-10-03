@@ -3,10 +3,15 @@
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/alphabridge-mcp-com)
 
 **Your WordPress site, managed in conversation.** AlphaBridge MCP turns a WordPress site into a
-native [Model Context Protocol](https://modelcontextprotocol.io) server. Claude and other MCP
-clients connect over one authenticated HTTPS endpoint and manage content, media, taxonomies,
-comments, widgets and site settings — through structured tools that check WordPress capabilities
-on every single call.
+native [Model Context Protocol](https://modelcontextprotocol.io) server. Claude, ChatGPT and other
+MCP clients connect over one authenticated HTTPS endpoint. They write and edit posts, pages,
+media, categories and tags, reply to and moderate comments, and read widgets, site settings and
+the outline of pages built with blocks or a common page builder. Every tool checks WordPress
+capabilities on every single call.
+
+The site only reads until an administrator turns on one switch for write access. Then every tool
+is on; each connection keeps its access level (full, content only or read only). Switching it
+off takes one click.
 
 This repository holds the **source of the free plugin**, published on the WordPress.org plugin
 directory. It is the same code WordPress.org ships.
@@ -70,8 +75,8 @@ Handing an AI access to a site should feel safe, so control comes first:
 - **Write access off out of the box.** A new site, and every site after updating from a version
   before 4.4.0, starts with *write access off*: assistants can read content, media, terms,
   comments, settings and the structure of the site. Every tool that creates, changes or deletes is
-  refused, and so is every reading tool that needs write access because it reads code, files, the
-  database, logs or credentials, with an answer that says why and leads to the switch. The main
+  refused, and so is every reading tool noted *only with write access* (in this plugin the reader
+  of user profile fields), with an answer that says why and leads to the switch. The main
   switch *Write access for AI assistants* at the top of Settings → AlphaBridge MCP holds for every
   connection (Claude, ChatGPT, Cursor and all others); an administrator switches it on after
   confirming, with a ticked box, that changes take effect immediately, that it is at the site
@@ -147,13 +152,26 @@ Then activate it and open *Settings → AlphaBridge MCP* to create a connection.
 
 ## Paid add-on
 
-A separate commercial add-on, **AlphaBridge MCP Pro**, adds tool groups for the database, users,
-plugin and theme files, WooCommerce, SEO writes, install/update, migration, multisite, and an undo
-for changes made through it (undo points expire after 7 days by default, adjustable from 1 to 30
-days). Its Agency plan adds Site Deploy: files, themes and whole builds published onto your own
-hosting over SFTP. Both are entirely optional: this free plugin is complete on its own and stays
-fully functional without them. Their source is not part of this repository.
-Details at https://alphabridge-mcp.com.
+A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do more:
+
+- change texts, links and images on pages of many page builders;
+- run the abilities other plugins offer, and say so when such a run reports success on a post
+  but nothing was saved;
+- edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
+- check the site with test requests after saving active PHP code, and put the previous
+  version back automatically when one of them ends with a fatal error;
+- use tool groups for the database, users, menus, WooCommerce, SEO writes, install/update,
+  migration and multisite;
+- undo many of the changes made through it (undo points expire after 7 days by default,
+  adjustable from 1 to 30 days).
+
+Its Agency plan adds Site Deploy for agencies and developers: files, themes and whole builds
+published over SFTP onto the server the site runs on; ZIP deploys can run atomically, with
+rollback when the swap fails.
+
+Pro can be tried free for 7 days, no card needed. Both are entirely optional: this free plugin is
+complete on its own and stays fully functional without them. Their source is not part of this
+repository. Details at https://alphabridge-mcp.com.
 
 ## Contributing & support
 
