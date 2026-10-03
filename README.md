@@ -10,7 +10,8 @@ the outline of pages built with blocks or a common page builder. Every tool chec
 capabilities on every single call.
 
 The site only reads until an administrator turns on one switch for write access. Then every tool
-is on, for every connection. Switching it off takes one click.
+is on; each connection keeps its access level (full, content only or read only). Switching it
+off takes one click.
 
 This repository holds the **source of the free plugin**, published on the WordPress.org plugin
 directory. It is the same code WordPress.org ships.

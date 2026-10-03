@@ -1371,6 +1371,32 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= 4\.5\.0 =\n/', $readme ) );
 	}
 
+	/**
+	 * The head of readme.txt is what the plugin directory shows first: the
+	 * name, and the short description, cut at 150 characters. An «&» in the
+	 * name comes out as «&amp;».
+	 */
+	public function testTheReadmeHeadFitsTheDirectory(): void {
+		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		self::assertSame( 1, preg_match( '/^=== (.+) ===\n/', $readme, $name ) );
+		self::assertStringNotContainsString( '&', $name[1] );
+		self::assertSame( 1, preg_match( '/\nLicense URI: [^\n]+\n\n([^\n]+)\n\n== Description ==\n/', $readme, $short ) );
+		self::assertLessThanOrEqual( 150, mb_strlen( html_entity_decode( trim( $short[1] ), ENT_QUOTES ) ) );
+	}
+
+	/**
+	 * The switch turns the tools on; each connection keeps its access level
+	 * (AB_MCP_Security::authorize() checks the level after the switch), as the
+	 * settings page says once write access is on.
+	 */
+	public function testTheReadmesSayEachConnectionKeepsItsAccessLevel(): void {
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			$text = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) );
+			self::assertMatchesRegularExpression( '/every tool (is )?on; each connection keeps its access level/', $text, $file );
+			self::assertStringNotContainsString( 'every tool is on, for every connection', $text, $file );
+		}
+	}
+
 	public function testTheNoticesAfterSwitching(): void {
 		foreach ( array( 'mode_full' => 'notice-success', 'mode_read' => 'notice-success', 'mode_unconfirmed' => 'notice-error', 'mode_stale' => 'notice-error', 'mode_unknown' => 'notice-error', 'mode_notice_dismissed' => 'notice-success' ) as $key => $class ) {
 			$_GET = array( 'ab_notice' => $key );

@@ -24,7 +24,7 @@ Tell Claude what you want done — "draft a post from these notes, add last week
 
 Out of the box AlphaBridge MCP only reads: write access for AI assistants is off. Assistants can read content, media, terms, comments, settings and the structure of the site. Every tool that creates, changes or deletes is refused, and so is every reading tool that needs write access because it reads code, files, the database, logs or credentials. The answer says why, what the person can do and links straight to the switch.
 
-The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection — Claude, ChatGPT, Cursor and all others. Switching write access on switches every tool on. Switching it off takes one click.
+The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection — Claude, ChatGPT, Cursor and all others. Switching write access on switches every tool on; each connection keeps its access level (Full, Content or Read only). Switching it off takes one click.
 
 Before switching on, an administrator ticks a box: changes take effect immediately, it is at the site owner's own risk, and a current backup exists. The account, the time, the version of that notice and its wording are recorded.
 
