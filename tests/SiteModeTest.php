@@ -1368,7 +1368,7 @@ final class SiteModeTest extends TestCase {
 		self::assertStringNotContainsString( 'Mighty', $intro );
 		self::assertSame( 1, preg_match( '/^Stable tag: ([0-9.]+)$/m', $readme, $tag ) );
 		self::assertTrue( version_compare( $tag[1], '4.4.0', '>=' ) && version_compare( $tag[1], (string) ( preg_match( '/^ \* Version:\s+([0-9.]+)/m', (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php' ), $v ) ? $v[1] : '0' ), '<=' ), 'The stable tag moves with the release, not with the code: it names a published version and is never ahead of the code.' );
-		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= 4\.5\.0 =\n/', $readme ) );
+		self::assertSame( 1, preg_match( '/\n== Changelog ==\n\n= 4\.5\.1 =\n(?:[^\n]+\n)+\n= 4\.5\.0 =\n/', $readme ) );
 	}
 
 	/**
