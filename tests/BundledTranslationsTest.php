@@ -218,8 +218,8 @@ final class BundledTranslationsTest extends TestCase {
 		foreach ( self::REQUIRED as $key ) {
 			self::assertArrayHasKey( $key, $mo, $locale . ': ' . $key );
 			self::assertNotSame( '', $mo[ $key ] );
-			preg_match_all( '/%(\d\$)?s/', $key, $want );
-			preg_match_all( '/%(\d\$)?s/', $mo[ $key ], $have );
+			preg_match_all( '/%(\d\$)?[sd]/', $key, $want );
+			preg_match_all( '/%(\d\$)?[sd]/', $mo[ $key ], $have );
 			self::assertSame( $want[0], $have[0], $locale . ' keeps the placeholders of: ' . $key );
 		}
 		self::assertSame( 'Schreibrechte aus (nur lesen)', $mo["site mode\x04Write access off (read only)"] );
