@@ -38,6 +38,9 @@ msgctxt "tool badge with a number"
 msgid "%d write"
 msgstr "%d schreibend"
 
+msgid "(opens in a new tab)"
+msgstr "(öffnet in einem neuen Tab)"
+
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
@@ -89,12 +92,24 @@ msgstr "Ebenfalls ausgeschaltet, gerade nicht angeboten (bleibt gespeichert):"
 msgid "Applies to every connection: Claude, ChatGPT, Cursor and all others."
 msgstr "Gilt für jede Verbindung: Claude, ChatGPT, Cursor und alle anderen."
 
+msgid "Assistant"
+msgstr "Assistent"
+
 msgctxt "tool group"
 msgid "Blueprint (site structure)"
 msgstr "Blueprint (Aufbau der Website)"
 
 msgid "Cancel"
 msgstr "Abbrechen"
+
+msgid "Claude Code, scripts"
+msgstr "Claude Code, Skripte"
+
+msgid "Code editor"
+msgstr "Code-Editor"
+
+msgid "Connect your AI assistant"
+msgstr "KI-Assistenten verbinden"
 
 msgid "Connection created."
 msgstr "Verbindung angelegt."
@@ -125,6 +140,9 @@ msgstr "Direkter Link: %s"
 msgid "Dismiss"
 msgstr "Ausblenden"
 
+msgid "Don’t show again"
+msgstr "Nicht mehr zeigen"
+
 msgid "Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs."
 msgstr "Jedes Werkzeug ist an, bis du es hier ausschaltest. Ausgeschaltete Werkzeuge sieht kein KI-Assistent. Schreibende Werkzeuge laufen nur mit Schreibrechten an, ebenso lesende mit dem Vermerk „erst mit Schreibrechten“: Sie lesen Code, Dateien, die Datenbank oder Protokolle."
 
@@ -144,6 +162,10 @@ msgstr "Feineinstellung"
 #, php-format
 msgid "Full description of %s"
 msgstr "Ganze Beschreibung von %s"
+
+#, php-format
+msgid "In use for %1$d days, at least %2$d successful calls. What do you think of it?"
+msgstr "Seit %1$d Tagen im Einsatz, mindestens %2$d erfolgreiche Aufrufe. Wie ist dein Eindruck?"
 
 msgid "Install & Update"
 msgstr "Installieren & Aktualisieren"
@@ -257,6 +279,9 @@ msgstr "Plugins bieten ihre Aktionen KI-Assistenten als Fähigkeiten an (WordPre
 msgctxt "main group of tools"
 msgid "Plugins, themes & code"
 msgstr "Plugins, Themes & Code"
+
+msgid "Plus, Pro, Business"
+msgstr "Plus, Pro, Business"
 
 msgid "Posts & Pages"
 msgstr "Beiträge & Seiten"
@@ -419,6 +444,10 @@ msgstr "Gleich, welche Zugriffsstufe du wählst: Der Schalter für Schreibrechte
 msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now."
 msgstr "Gleich, welche Zugriffsstufe du wählst: Der Schalter für Schreibrechte auf dieser Website entscheidet, ob KI-Assistenten schreiben dürfen; gerade ist er an."
 
+#, php-format
+msgid "Which one do you want to connect to “%s”?"
+msgstr "Welchen möchtest du mit „%s“ verbinden?"
+
 msgid "Widgets"
 msgstr "Widgets"
 
@@ -437,6 +466,9 @@ msgstr "Mit Pro liest sie auch Benutzer."
 
 msgid "With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side."
 msgstr "Mit Schreibrechten arbeiten deine KI-Assistenten direkt auf deiner Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit."
+
+msgid "Write a review"
+msgstr "Bewertung schreiben"
 
 msgid "Write access for AI assistants"
 msgstr "Schreibrechte für KI-Assistenten"
@@ -486,6 +518,9 @@ msgstr "Die Schreibrechte wurden nicht eingeschaltet: Setze das Häkchen unter d
 msgctxt "tool badge"
 msgid "Writes"
 msgstr "Schreibend"
+
+msgid "claude.ai, Desktop, iPhone"
+msgstr "claude.ai, Desktop, iPhone"
 
 msgctxt "tool note"
 msgid "deletes"

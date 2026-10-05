@@ -140,6 +140,7 @@ The plugin itself initiates no other outbound requests.
 == Changelog ==
 
 = 4.5.2 =
+* **The request for a review is a short strip at the foot of the coloured header** of Settings → AlphaBridge MCP instead of a WordPress notice. As before it appears only there, once the site has used the plugin for at least 14 days and made at least 50 successful tool calls, names exactly these figures and asks everyone the same way. «Write a review» now counts as an answer: the strip does not come back afterwards, as after «Don't show again». Its texts, and «(opens in a new tab)» for screen readers, come in German with the plugin, and so do the texts of the header around it that were still English on German sites («Connect your AI assistant», the question below it and the hints on the assistant buttons).
 * **A «Settings» link in the plugin list.** The plugin's row under Plugins now starts with «Settings», which opens Settings → AlphaBridge MCP, as WordPress plugins usually do. It shows only to users who may open that page, and it comes in German with the plugin (de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal).
 
 = 4.5.1 =

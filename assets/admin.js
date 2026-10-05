@@ -219,6 +219,17 @@
 		} );
 	}() );
 
+	/* ---- The review request in the header: its link opens the review form in
+	 * a new tab, and admin-post records the answer there. This tab drops the
+	 * strip at once instead of showing it until the next load. ---- */
+	document.addEventListener( 'click', function ( e ) {
+		var go = e.target.closest ? e.target.closest( '.ab-review__go' ) : null;
+		var strip = go ? go.closest( '.ab-review' ) : null;
+		if ( strip ) {
+			strip.hidden = true;
+		}
+	} );
+
 	/* ---- Folded places on this page: a main group of the fine-tuning or a
 	 * tool group in it (a button with aria-expanded each), or a details
 	 * element. ---- */

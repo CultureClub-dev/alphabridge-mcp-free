@@ -83,6 +83,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_protocol_settings', array( $this, 'handle_protocol_settings' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
+		add_action( 'admin_post_ab_mcp_review_go', array( $this, 'handle_review_go' ) );
 		// Creating or rotating a token reveals a secret. That is done over
 		// authenticated admin-ajax so the plaintext is returned once, directly to
 		// the admin's own browser, and is never written to the database — not even
@@ -584,6 +585,20 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * «Write a review»: the question counts as answered, then the browser goes
+	 * on to the review form on WordPress.org. Recorded here and not by
+	 * JavaScript, so it holds wherever the link is followed. The address is
+	 * this plugin's fixed review form, never one from the request.
+	 */
+	public function handle_review_go() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_review_go' );
+		AB_MCP_Review_Notice::dismiss();
+		wp_redirect( AB_MCP_Review_Notice::REVIEW_URL ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- a fixed address on wordpress.org, not from the request.
+		exit;
+	}
+
+	/**
 	 * Redirect back with a notice code.
 	 *
 	 * @param string $notice Notice key.
@@ -630,9 +645,6 @@ class AB_MCP_Admin {
 		// Without the marker admin notices land after the first heading.
 		echo '<hr class="wp-header-end">';
 		$this->notice();
-		// The one-time review request: only here, only once the site has really
-		// used the plugin, and never again after «don't ask again».
-		echo AB_MCP_Review_Notice::render(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped parts.
 
 		echo $this->hero_html( $tokens, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside hero_html().
 
@@ -753,7 +765,12 @@ class AB_MCP_Admin {
 			$html .= '<span class="ab-mark ab-mark--' . esc_attr( $key ) . '" aria-hidden="true">' . esc_html( $c['mark'] ) . '</span>';
 			$html .= '<span>' . esc_html( $c['name'] ) . '<small>' . esc_html( $c['hint'] ) . '</small></span></button>';
 		}
-		$html .= '</div></div>';
+		$html .= '</div>';
+		// The one-time review request at the foot of the header: only here, only
+		// once the site has really used the plugin, and never again once it is
+		// answered (AB_MCP_Review_Notice).
+		$html .= AB_MCP_Review_Notice::render();
+		$html .= '</div>';
 
 		return $html;
 	}
