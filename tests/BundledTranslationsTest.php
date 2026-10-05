@@ -49,6 +49,8 @@ final class BundledTranslationsTest extends TestCase {
 
 	/** The texts that must read in German wherever a German locale is set. */
 	const REQUIRED = array(
+		// The link in the plugin list (since 4.5.2).
+		'Settings',
 		'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.',
 		'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.',
 		'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.',
