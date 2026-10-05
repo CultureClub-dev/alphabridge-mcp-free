@@ -139,6 +139,9 @@ The plugin itself initiates no other outbound requests.
 
 == Changelog ==
 
+= 4.5.2 =
+* **A «Settings» link in the plugin list.** The plugin's row under Plugins now starts with «Settings», which opens Settings → AlphaBridge MCP, as WordPress plugins usually do. It shows only to users who may open that page, and it comes in German with the plugin (de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal).
+
 = 4.5.1 =
 * **The answer to a tool of AlphaBridge MCP Pro, and the paragraph about Pro in the server instructions, state facts only.** A call of a tool that belongs to the separate AlphaBridge MCP Pro or its Agency plan is answered with the edition it belongs to and the page that describes the editions and their tools (https://alphabridge-mcp.com/docs). The steps to install Pro, the request to the assistant to point the person to Pro and the link to the prices are gone: ChatGPT's app directory allows saying that a feature is missing, not promoting an upgrade. The server instructions of a site without Pro list what is not on the site and name the same page. No tool, permission or setting changed.
 * **The description says which reading tool waits for write access.** It said that with write access off assistants could not read code, files, the database, logs or credentials; this plugin has no tool for any of these. Its only reading tool that waits for write access reads user profile fields (`wp_get_user_meta`). The description, the installation steps and the FAQ now say so. The description also says that each connection keeps its access level (Full, Content or Read only) when write access is on.

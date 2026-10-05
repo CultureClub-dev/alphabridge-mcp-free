@@ -71,6 +71,7 @@ class AB_MCP_Admin {
 	public function __construct( $registry = null ) {
 		$this->registry = $registry instanceof AB_MCP_Tool_Registry ? $registry : null;
 		add_action( 'admin_menu', array( $this, 'menu' ) );
+		add_filter( 'plugin_action_links_' . AB_MCP_BASENAME, array( $this, 'action_links' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_ab_mcp_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_post_ab_mcp_site_mode', array( $this, 'handle_site_mode' ) );
@@ -103,6 +104,26 @@ class AB_MCP_Admin {
 			'alphabridge-mcp',
 			array( $this, 'render' )
 		);
+	}
+
+	/**
+	 * The «Settings» link in this plugin's row of the plugin list, first in
+	 * the row as WordPress plugins usually put it, so the page is one click
+	 * away right after activation. Only for those who may open the page; the
+	 * others would land on WordPress's «not allowed».
+	 *
+	 * Bundled in Pro, this file is not a plugin of its own and the filter
+	 * never fires; Pro puts the link into its own row.
+	 *
+	 * @param array $links The row's links.
+	 * @return array
+	 */
+	public function action_links( $links ) {
+		if ( ! is_array( $links ) || ! current_user_can( 'manage_options' ) ) {
+			return $links;
+		}
+		$settings = '<a href="' . esc_url( AB_MCP_Guidance::settings_url() ) . '">' . esc_html__( 'Settings', 'alphabridge-mcp' ) . '</a>';
+		return array( 'settings' => $settings ) + $links;
 	}
 
 	/**

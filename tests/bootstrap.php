@@ -1600,6 +1600,7 @@ define( 'AB_MCP_MAX_BATCH', 25 );
 define( 'AB_MCP_PATH', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_DIR', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
+define( 'AB_MCP_BASENAME', 'alphabridge-mcp/alphabridge-mcp.php' );
 
 /* --------------------------------------------------------- classes to test */
 

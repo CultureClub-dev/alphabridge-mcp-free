@@ -5,8 +5,8 @@
 # This file is distributed under the same license as the AlphaBridge MCP plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: AlphaBridge MCP 4.5.1\n"
-"PO-Revision-Date: 2026-10-03 10:52+0200\n"
+"Project-Id-Version: AlphaBridge MCP 4.5.2\n"
+"PO-Revision-Date: 2026-10-05 23:30+0200\n"
 "Last-Translator: AlphaBridge MCP\n"
 "Language-Team: German\n"
 "Language: de_CH\n"
@@ -294,6 +294,9 @@ msgstr "Suche & Massenaktionen"
 msgctxt "tool group"
 msgid "Search and bulk actions"
 msgstr "Suche und Massenaktionen"
+
+msgid "Settings"
+msgstr "Einstellungen"
 
 msgctxt "tool group"
 msgid "Settings and options"
