@@ -56,6 +56,14 @@ final class BundledTranslationsTest extends TestCase {
 		'Write a review',
 		'Don’t show again',
 		'(opens in a new tab)',
+		// The header of the settings page, around that request (since 4.5.2).
+		'Connect your AI assistant',
+		'Which one do you want to connect to “%s”?',
+		'Assistant',
+		'claude.ai, Desktop, iPhone',
+		'Plus, Pro, Business',
+		'Code editor',
+		'Claude Code, scripts',
 		'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.',
 		'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.',
 		'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.',
@@ -217,6 +225,7 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertSame( 'Schreibrechte aus (nur lesen)', $mo["site mode\x04Write access off (read only)"] );
 		self::assertSame( 'Schreibrechte an (volle Leistung)', $mo["site mode\x04Write access on (full power)"] );
 		self::assertSame( 'Schreibrechte für KI-Assistenten', $mo['Write access for AI assistants'] );
+		self::assertSame( 'KI-Assistenten verbinden', $mo['Connect your AI assistant'] );
 		self::assertSame( array_keys( self::mo( self::file( 'de_DE', 'mo' ) ) ), array_keys( $mo ), 'Every locale translates the same texts.' );
 	}
 

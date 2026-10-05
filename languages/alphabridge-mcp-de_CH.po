@@ -92,12 +92,24 @@ msgstr "Ebenfalls ausgeschaltet, gerade nicht angeboten (bleibt gespeichert):"
 msgid "Applies to every connection: Claude, ChatGPT, Cursor and all others."
 msgstr "Gilt für jede Verbindung: Claude, ChatGPT, Cursor und alle anderen."
 
+msgid "Assistant"
+msgstr "Assistent"
+
 msgctxt "tool group"
 msgid "Blueprint (site structure)"
 msgstr "Blueprint (Aufbau der Website)"
 
 msgid "Cancel"
 msgstr "Abbrechen"
+
+msgid "Claude Code, scripts"
+msgstr "Claude Code, Skripte"
+
+msgid "Code editor"
+msgstr "Code-Editor"
+
+msgid "Connect your AI assistant"
+msgstr "KI-Assistenten verbinden"
 
 msgid "Connection created."
 msgstr "Verbindung angelegt."
@@ -268,6 +280,9 @@ msgctxt "main group of tools"
 msgid "Plugins, themes & code"
 msgstr "Plugins, Themes & Code"
 
+msgid "Plus, Pro, Business"
+msgstr "Plus, Pro, Business"
+
 msgid "Posts & Pages"
 msgstr "Beiträge & Seiten"
 
@@ -429,6 +444,10 @@ msgstr "Gleich, welche Zugriffsstufe Sie wählen: Der Schalter für Schreibrecht
 msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now."
 msgstr "Gleich, welche Zugriffsstufe Sie wählen: Der Schalter für Schreibrechte auf dieser Website entscheidet, ob KI-Assistenten schreiben dürfen; gerade ist er an."
 
+#, php-format
+msgid "Which one do you want to connect to “%s”?"
+msgstr "Welchen möchten Sie mit «%s» verbinden?"
+
 msgid "Widgets"
 msgstr "Widgets"
 
@@ -499,6 +518,9 @@ msgstr "Die Schreibrechte wurden nicht eingeschaltet: Setzen Sie das Häkchen un
 msgctxt "tool badge"
 msgid "Writes"
 msgstr "Schreibend"
+
+msgid "claude.ai, Desktop, iPhone"
+msgstr "claude.ai, Desktop, iPhone"
 
 msgctxt "tool note"
 msgid "deletes"
