@@ -2,11 +2,19 @@
 /**
  * The one-time request for a review on WordPress.org.
  *
- * It appears on the plugin's own settings page only, and only once a site has
- * really used the plugin: at least MIN_DAYS after the first counted tool call
- * and after at least MIN_CALLS successful calls. «Don't ask again» is final and
- * survives updates, because the state lives in its own option, not among the
- * settings that an update rewrites.
+ * It is a strip at the foot of the coloured header on the plugin's own
+ * settings page, and only there (WordPress.org guideline 11), and only once a
+ * site has really used the plugin: at least MIN_DAYS after the first counted
+ * tool call and after at least MIN_CALLS successful calls. It names exactly
+ * that, the days since the first call and «at least MIN_CALLS calls», which
+ * are the only figures this class keeps.
+ *
+ * «Write a review» goes through admin-post (ab_mcp_review_go): the click
+ * records the question as answered and then sends the browser on to the
+ * review form, so the strip does not come back, with or without JavaScript.
+ * «Don't show again» records the same. Both are final and survive updates,
+ * because the state lives in its own option, not among the settings that an
+ * update rewrites.
  *
  * The counter stops once MIN_CALLS successful calls are stored, so counting is
  * a small, bounded cost rather than a write per call, and once dismissed the
@@ -14,9 +22,10 @@
  * that the counter never writes: a counting request that is still in flight
  * while the admin clicks «don't ask again» cannot write a stale «not
  * dismissed» over it.
- * Nothing is sent anywhere: the notice is a link to the review form on
+ * Nothing is sent anywhere: the strip is a link to the review form on
  * WordPress.org and a link that records the dismissal on this site. It asks
- * everyone the same way — there is no «are you happy?» fork in front of it.
+ * everyone the same way — there is no «are you happy?» fork in front of it,
+ * no reward and no pre-selected rating (WordPress.org guideline 9).
  *
  * @package AlphaBridge_MCP
  */
@@ -109,20 +118,31 @@ class AB_MCP_Review_Notice {
 	}
 
 	/**
-	 * The notice for the settings page, or '' while it is not due.
+	 * The strip for the foot of the settings page's header, or '' while it is
+	 * not due. Not a WordPress notice («notice» class): WordPress would move
+	 * that out of the header to the marker below it.
 	 *
 	 * @param int|null $now Unix timestamp; null means the current time.
 	 * @return string HTML built from escaped parts.
 	 */
 	public static function render( $now = null ) {
-		$now = null === $now ? time() : (int) $now;
-		if ( ! self::is_due( self::state(), $now ) ) {
+		$now   = null === $now ? time() : (int) $now;
+		$state = self::state();
+		if ( ! self::is_due( $state, $now ) ) {
 			return '';
 		}
+		$days    = (int) floor( ( $now - $state['first_call'] ) / DAY_IN_SECONDS );
+		$go      = wp_nonce_url( admin_url( 'admin-post.php?action=ab_mcp_review_go' ), 'ab_mcp_review_go' );
 		$dismiss = wp_nonce_url( admin_url( 'admin-post.php?action=ab_mcp_review_dismiss' ), 'ab_mcp_review_dismiss' );
-		return '<div class="notice notice-info"><p>'
-			. esc_html__( 'This site has been working with AlphaBridge MCP for a while now. A review on WordPress.org — whatever your verdict — helps other people decide whether it fits them.', 'alphabridge-mcp' )
-			. '</p><p><a class="button button-primary" href="' . esc_url( self::REVIEW_URL ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Write a review', 'alphabridge-mcp' ) . '</a> '
-			. '<a class="button" href="' . esc_url( $dismiss ) . '">' . esc_html__( 'Don’t ask again', 'alphabridge-mcp' ) . '</a></p></div>';
+		return '<div class="ab-review"><p class="ab-review__text">' . esc_html(
+			sprintf(
+				/* translators: 1: days since the first tool call (14 or more), 2: successful calls at least (50). */
+				__( 'In use for %1$d days, at least %2$d successful calls. What do you think of it?', 'alphabridge-mcp' ),
+				$days,
+				self::MIN_CALLS
+			)
+		) . '</p>'
+			. '<a class="ab-review__go" href="' . esc_url( $go ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Write a review', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a>'
+			. '<a class="ab-review__off" href="' . esc_url( $dismiss ) . '">' . esc_html__( 'Don’t show again', 'alphabridge-mcp' ) . '</a></div>';
 	}
 }

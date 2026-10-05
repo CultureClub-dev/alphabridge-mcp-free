@@ -1,6 +1,7 @@
 <?php
 /**
- * Der einmalige Bewertungshinweis.
+ * Der einmalige Bewertungshinweis, eine Leiste am Fuss des farbigen Kopfs der
+ * Einstellungsseite (Variante C, Entscheid Thomas 05.10.2026).
  *
  * Er soll erst erscheinen, wenn eine Site das Plugin wirklich benutzt hat, und
  * nach «Nicht mehr fragen» nie wieder — auch nicht nach einem Update. Jede
@@ -16,8 +17,13 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
+use AB_MCP_Admin;
 use AB_MCP_Review_Notice;
 use AB_MCP_Settings;
+use AbTestExit;
+use DOMDocument;
+use DOMXPath;
+use ReflectionMethod;
 
 final class ReviewNoticeTest extends TestCase {
 
@@ -149,14 +155,91 @@ final class ReviewNoticeTest extends TestCase {
 		$this->assertSame( '', AB_MCP_Review_Notice::render( $this->frist_um() ), 'mit zu wenigen Aufrufen nichts' );
 	}
 
-	public function test_render_links_to_the_review_form_and_to_the_dismissal(): void {
+	public function test_render_is_a_strip_in_the_header_not_a_wordpress_notice(): void {
 		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
 		$html = AB_MCP_Review_Notice::render( $this->frist_um() );
 
-		$this->assertStringContainsString( 'https://wordpress.org/support/plugin/alphabridge-mcp/reviews/#new-post', $html );
-		$this->assertStringContainsString( 'action=ab_mcp_review_dismiss', $html );
-		$this->assertStringContainsString( '_wpnonce=', $html, 'die Absage ist eine Zustandsänderung und trägt einen Nonce' );
+		$this->assertStringStartsWith( '<div class="ab-review">', $html );
+		// WordPress verschiebt alles mit der Klasse «notice» unter die Marke
+		// wp-header-end, also aus dem Kopf heraus.
+		$this->assertDoesNotMatchRegularExpression( '/class="[^"]*\bnotice\b/', $html );
 		$this->assertStringNotContainsString( 'is-dismissible', $html, 'der Schliessknopf von WordPress merkt sich nichts' );
+	}
+
+	public function test_render_names_the_days_and_the_calls_it_counted(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
+		$this->assertStringContainsString( 'In use for 14 days, at least 50 successful calls. What do you think of it?', AB_MCP_Review_Notice::render( $this->frist_um() ) );
+		$this->assertStringContainsString( 'In use for 18 days,', AB_MCP_Review_Notice::render( $this->frist_um() + 4 * self::DAY + 3600 ), 'angebrochene Tage zählen nicht' );
+	}
+
+	public function test_render_leads_through_admin_post_to_the_review_form_and_to_the_dismissal(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
+		$x     = $this->xpath( AB_MCP_Review_Notice::render( $this->frist_um() ) );
+		$go    = $x->query( '//a[contains(@class,"ab-review__go")]' )->item( 0 );
+		$off   = $x->query( '//a[contains(@class,"ab-review__off")]' )->item( 0 );
+
+		$this->assertNotNull( $go );
+		$this->assertStringContainsString( 'admin-post.php?action=ab_mcp_review_go', $go->getAttribute( 'href' ), 'der Klick wird hier vermerkt, dann geht es weiter' );
+		$this->assertStringContainsString( '_wpnonce=', $go->getAttribute( 'href' ) );
+		$this->assertSame( '_blank', $go->getAttribute( 'target' ) );
+		$this->assertStringContainsString( 'noopener', $go->getAttribute( 'rel' ) );
+		$this->assertStringContainsString( '(opens in a new tab)', $go->textContent, 'für Screenreader' );
+		$this->assertNotNull( $off );
+		$this->assertStringContainsString( 'action=ab_mcp_review_dismiss', $off->getAttribute( 'href' ) );
+		$this->assertStringContainsString( '_wpnonce=', $off->getAttribute( 'href' ), 'die Absage ist eine Zustandsänderung und trägt einen Nonce' );
+		$this->assertSame( 'Don’t show again', trim( $off->textContent ) );
+	}
+
+	public function test_write_a_review_records_the_answer_and_sends_on_to_the_form(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
+		$exit = $this->go( 'nonce-ab_mcp_review_go', true );
+
+		$this->assertSame( 'redirect', $exit->kind, $exit->detail );
+		$this->assertSame( 'https://wordpress.org/support/plugin/alphabridge-mcp/reviews/#new-post', $exit->detail );
+		$this->assertTrue( AB_MCP_Review_Notice::state()['dismissed'] );
+		$this->assertSame( '', AB_MCP_Review_Notice::render( $this->frist_um() ), 'die Leiste kommt danach nicht wieder' );
+	}
+
+	public function test_write_a_review_needs_the_nonce_and_the_right_to_the_page(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
+		$this->assertSame( 'die', $this->go( 'nonce-other', true )->kind, 'ohne gültigen Nonce' );
+		$this->assertSame( 'die', $this->go( 'nonce-ab_mcp_review_go', false )->kind, 'ohne manage_options' );
+		$this->assertFalse( AB_MCP_Review_Notice::state()['dismissed'] );
+	}
+
+	public function test_the_strip_stands_at_the_foot_of_the_header(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, array( 'first_call' => time() - 20 * self::DAY, 'calls' => AB_MCP_Review_Notice::MIN_CALLS ) );
+		$x = $this->xpath( $this->hero() );
+		$this->assertSame( 1, $x->query( '//div[contains(@class,"ab-hero")]/div[@class="ab-review"]' )->length, 'im Kopf' );
+		$this->assertSame( 0, $x->query( '//div[contains(@class,"ab-hero")]/div[@class="ab-review"]/following-sibling::*' )->length, 'als letztes Element des Kopfs' );
+
+		AB_MCP_Review_Notice::dismiss();
+		$this->assertSame( 0, $this->xpath( $this->hero() )->query( '//div[@class="ab-review"]' )->length, 'nach der Antwort nicht mehr' );
+	}
+
+	/** Follow «Write a review» as an administrator, or as someone without the page. */
+	private function go( string $nonce, bool $may ): AbTestExit {
+		$GLOBALS['ab_test_current_user'] = 3;
+		$GLOBALS['ab_test_can']          = static fn( string $cap ): bool => $may && 'manage_options' === $cap;
+		$_GET                            = array( '_wpnonce' => $nonce );
+		$_REQUEST                        = $_GET;
+		try {
+			( new AB_MCP_Admin() )->handle_review_go();
+		} catch ( AbTestExit $exit ) {
+			return $exit;
+		}
+		self::fail( 'handle_review_go ended without a redirect or a refusal.' );
+	}
+
+	private function hero(): string {
+		$m = new ReflectionMethod( AB_MCP_Admin::class, 'hero_html' );
+		return (string) $m->invoke( new AB_MCP_Admin(), array(), array() );
+	}
+
+	private function xpath( string $html ): DOMXPath {
+		$doc = new DOMDocument();
+		$doc->loadHTML( '<!doctype html><meta charset="utf-8"><body>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		return new DOMXPath( $doc );
 	}
 
 	public function test_state_tolerates_garbage_in_the_option(): void {

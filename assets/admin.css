@@ -613,6 +613,62 @@
 	font-size: 14px;
 }
 
+/* The one-time review request at the foot of the header (AB_MCP_Review_Notice).
+ * White text over 12% white on the header gradient keeps at least 5.2:1. */
+.ab-mcp .ab-review {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 14px;
+	align-items: center;
+	margin: 18px 0 0;
+	padding: 8px 10px 8px 14px;
+	border: 1px solid rgba(255, 255, 255, .24);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, .12);
+	color: #fff;
+	font-size: 13px;
+}
+
+.ab-mcp .ab-review__text {
+	flex: 1 1 260px;
+	min-width: 0;
+	margin: 0;
+	color: #fff;
+}
+
+.ab-mcp .ab-review__go {
+	padding: 5px 12px;
+	border-radius: 8px;
+	background: #fff;
+	color: var(--ab-acc-dark);
+	font-weight: 700;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.ab-mcp .ab-review__go:hover {
+	background: #eef2ff;
+	color: var(--ab-acc-dark);
+}
+
+.ab-mcp .ab-review__off {
+	color: #fff;
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+
+.ab-mcp .ab-review__off:hover {
+	color: #fff;
+}
+
+.ab-mcp .ab-review a:focus-visible {
+	outline: 2px solid #fff;
+	outline-offset: 2px;
+	box-shadow: none;
+}
+
 .ab-mcp .ab-clients {
 	position: relative;
 	z-index: 1;

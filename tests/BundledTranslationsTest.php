@@ -51,6 +51,11 @@ final class BundledTranslationsTest extends TestCase {
 	const REQUIRED = array(
 		// The link in the plugin list (since 4.5.2).
 		'Settings',
+		// The review request in the header (since 4.5.2).
+		'In use for %1$d days, at least %2$d successful calls. What do you think of it?',
+		'Write a review',
+		'Don’t show again',
+		'(opens in a new tab)',
 		'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.',
 		'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.',
 		'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.',
