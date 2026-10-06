@@ -1754,13 +1754,23 @@ class AB_MCP_Admin {
 		if ( empty( $log ) ) {
 			echo '<tr><td colspan="3"><em>' . esc_html__( 'No entries yet.', 'alphabridge-mcp' ) . '</em></td></tr>';
 		}
+		// The stored status stays the word in code; the table shows it in the
+		// site's language. A status this list does not know is shown as stored.
+		$statuses = array(
+			'ok'     => _x( 'ok', 'status of a tool call in the log', 'alphabridge-mcp' ),
+			'denied' => _x( 'denied', 'status of a tool call in the log', 'alphabridge-mcp' ),
+			'error'  => _x( 'error', 'status of a tool call in the log', 'alphabridge-mcp' ),
+		);
+		/* translators: date and time of a log entry, with seconds; a format of PHP's date(). */
+		$format = _x( 'Y-m-d H:i:s', 'date and time format with seconds', 'alphabridge-mcp' );
 		foreach ( $log as $row ) {
 			$dot = 'ok' === $row['status'] ? 'ab-dot' : ( 'denied' === $row['status'] ? 'ab-dot ab-dot--warn' : 'ab-dot ab-dot--bad' );
 			// ts is time(), a UTC timestamp. wp_date() shows it in the site's
 			// timezone, like every other date in WordPress. date_i18n() reads its
 			// argument as a timestamp already shifted to local time and printed
 			// the UTC clock instead.
-			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $row['status'] ) . '</td></tr>';
+			$status = isset( $statuses[ $row['status'] ] ) ? $statuses[ $row['status'] ] : $row['status'];
+			echo '<tr><td>' . esc_html( wp_date( $format, (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $status ) . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-log__clear">';

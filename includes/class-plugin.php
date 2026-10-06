@@ -70,12 +70,11 @@ final class AB_MCP_Plugin {
 	 * language pack from translate.wordpress.org.
 	 *
 	 * WordPress loads a plugin's language pack by itself, when the plugin
-	 * first translates a string. The files in languages/ carry the texts of
-	 * the switch for write access (the notice and the box an administrator
-	 * confirms before switching it on, the refusals while it is off and the
-	 * way they name) and of the fine-tuning of the tool switches, so that
-	 * they read in German from the release that introduced them on. Asking
-	 * WordPress for the
+	 * first translates a string. The files in languages/ carry every text of
+	 * the plugin a person reads (the settings page, the consent screen, the
+	 * refusals and errors an assistant passes on, the description in the
+	 * plugin list), so that a German site reads them in German from the
+	 * release that brings them. Asking WordPress for the
 	 * domain first lets it load the language pack where there is one; the
 	 * bundled file is added after it and so only answers what the pack does
 	 * not have yet. Where there is no pack, the bundled file is all there is.
