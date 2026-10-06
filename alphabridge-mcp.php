@@ -3,7 +3,7 @@
  * Plugin Name:       AlphaBridge MCP
  * Plugin URI:        https://www.alphabridge-mcp.com
  * Description:       Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches.
- * Version:           4.5.2
+ * Version:           4.5.3
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            AlphaBridge
@@ -28,7 +28,7 @@ if ( defined( 'AB_MCP_VERSION' ) || class_exists( 'AB_MCP_Plugin', false ) ) {
 	return;
 }
 
-define( 'AB_MCP_VERSION', '4.5.2' );
+define( 'AB_MCP_VERSION', '4.5.3' );
 define( 'AB_MCP_FILE', __FILE__ );
 define( 'AB_MCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AB_MCP_URL', plugin_dir_url( __FILE__ ) );

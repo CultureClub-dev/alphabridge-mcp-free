@@ -8,8 +8,8 @@
 # This file is distributed under the same license as the AlphaBridge MCP plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: AlphaBridge MCP 4.5.1\n"
-"PO-Revision-Date: 2026-10-02 20:00+0200\n"
+"Project-Id-Version: AlphaBridge MCP 4.5.3\n"
+"PO-Revision-Date: 2026-10-06 14:00+0200\n"
 "Last-Translator: AlphaBridge MCP\n"
 "Language-Team: German\n"
 "Language: de_CH\n"
@@ -189,8 +189,8 @@ msgid "Abilities of other plugins"
 msgstr "Fähigkeiten anderer Plugins"
 
 #, php-format
-msgid "Abuse protection active (fixed): %d requests/min."
-msgstr "Missbrauchsschutz aktiv (fest eingestellt): %d Anfragen/Min."
+msgid "Abuse protection active: %d requests/min."
+msgstr "Missbrauchsschutz aktiv: %d Anfragen/Min."
 
 msgid "Accept apps with a metadata document."
 msgstr "Apps mit einem Metadaten-Dokument zulassen."
@@ -375,8 +375,8 @@ msgstr "Claude fragt nach der Adresse Ihrer Website."
 msgid "Claude.ai connects via a URL that embeds the token in its path. This is currently switched off, so no connector URL is offered yet."
 msgstr "Claude.ai verbindet sich über eine URL, die das Token in ihrem Pfad enthält. Das ist gerade ausgeschaltet, darum wird noch keine Konnektor-URL angeboten."
 
-msgid "Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file."
-msgstr "Claude.ai: Öffnen Sie «Connectors», legen Sie einen benutzerdefinierten Konnektor an und fügen Sie die Konnektor-URL ein. Cursor / Claude Code: Fügen Sie die Konfiguration in Ihre MCP-Einstellungsdatei ein."
+msgid "Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Claude Code: run the command in your project folder. Cursor: paste the config into ~/.cursor/mcp.json."
+msgstr "Claude.ai: Öffnen Sie «Connectors», legen Sie einen benutzerdefinierten Konnektor an und fügen Sie die Konnektor-URL ein. Claude Code: Führen Sie den Befehl in Ihrem Projektordner aus. Cursor: Fügen Sie die Konfiguration in ~/.cursor/mcp.json ein."
 
 msgctxt "tool label"
 msgid "Clear caches"
@@ -410,8 +410,8 @@ msgctxt "tool label"
 msgid "Compare a blueprint with this site"
 msgstr "Blueprint mit dieser Website vergleichen"
 
-msgid "Config for Cursor / Claude Code"
-msgstr "Konfiguration für Cursor / Claude Code"
+msgid "Config for Cursor"
+msgstr "Konfiguration für Cursor"
 
 msgid "Connect"
 msgstr "Verbinden"
@@ -2183,3 +2183,9 @@ msgstr "Einstellungen"
 #, php-format
 msgid "The editions of AlphaBridge MCP and their tools are described here: %s"
 msgstr "Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: %s"
+
+msgid "Command for Claude Code"
+msgstr "Befehl für Claude Code"
+
+msgid "(run it in your project folder)"
+msgstr "(im Projektordner ausführen)"
