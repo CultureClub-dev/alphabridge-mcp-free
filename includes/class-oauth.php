@@ -267,7 +267,11 @@ class AB_MCP_OAuth {
 
 		$clean_uris = self::clean_redirect_uris( isset( $body['redirect_uris'] ) ? $body['redirect_uris'] : null );
 		if ( isset( $clean_uris['error'] ) ) {
-			return $clean_uris;
+			// The app reads this answer, not a person: the standard's English.
+			return array(
+				'error'             => $clean_uris['error'],
+				'error_description' => $clean_uris['error_description'],
+			);
 		}
 
 		$name = isset( $body['client_name'] ) ? sanitize_text_field( (string) $body['client_name'] ) : '';
@@ -328,8 +332,13 @@ class AB_MCP_OAuth {
 	 * http on a loopback host, which native and development clients use by
 	 * spec), without a fragment, at most 2000 characters.
 	 *
+	 * The answer to a registration keeps error and error_description as the
+	 * OAuth standards word them, in English (RFC 6749 allows only ASCII
+	 * there); 'problem' says the same in the site's language for the consent
+	 * screen, where a person reads it (cimd_validate()).
+	 *
 	 * @param mixed $uris redirect_uris as the client sent them.
-	 * @return array The addresses as a list, or array( 'error' => …, 'error_description' => … ).
+	 * @return array The addresses as a list, or array( 'error' => …, 'error_description' => …, 'problem' => … ).
 	 */
 	private static function clean_redirect_uris( $uris ) {
 		$uris = is_array( $uris ) ? $uris : array();
@@ -337,12 +346,14 @@ class AB_MCP_OAuth {
 			return array(
 				'error'             => 'invalid_client_metadata',
 				'error_description' => 'redirect_uris is required.',
+				'problem'           => __( 'redirect_uris is required.', 'alphabridge-mcp' ),
 			);
 		}
 		if ( count( $uris ) > 20 ) {
 			return array(
 				'error'             => 'invalid_client_metadata',
 				'error_description' => 'Too many redirect_uris.',
+				'problem'           => __( 'Too many redirect_uris.', 'alphabridge-mcp' ),
 			);
 		}
 
@@ -364,6 +375,7 @@ class AB_MCP_OAuth {
 				return array(
 					'error'             => 'invalid_redirect_uri',
 					'error_description' => 'redirect_uris must be https (or http on localhost) without fragments.',
+					'problem'           => __( 'redirect_uris must be https (or http on localhost) without fragments.', 'alphabridge-mcp' ),
 				);
 			}
 			$clean_uris[] = $uri;
@@ -514,21 +526,21 @@ class AB_MCP_OAuth {
 	 */
 	private static function cimd_url_problem( $url ) {
 		if ( strlen( $url ) > 2000 || 1 === preg_match( '/[\x00-\x20\x7F]/', $url ) ) {
-			return 'the address is too long or contains spaces or control characters';
+			return __( 'the address is too long or contains spaces or control characters', 'alphabridge-mcp' );
 		}
 		$parts = wp_parse_url( $url );
 		if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) || 'https' !== $parts['scheme'] ) {
-			return 'the address is not a valid https URL';
+			return __( 'the address is not a valid https URL', 'alphabridge-mcp' );
 		}
 		if ( isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['fragment'] ) ) {
-			return 'the address must not contain a user name, a password or a fragment';
+			return __( 'the address must not contain a user name, a password or a fragment', 'alphabridge-mcp' );
 		}
 		$path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
 		if ( '' === $path || '/' === $path ) {
-			return 'the address has no path; a client id names a document, for example https://app.example/client.json';
+			return __( 'the address has no path; a client id names a document, for example https://app.example/client.json', 'alphabridge-mcp' );
 		}
 		if ( 1 === preg_match( '#(^|/)\.{1,2}(/|$)#', $path ) ) {
-			return 'the address contains "." or ".." path segments';
+			return __( 'the address contains "." or ".." path segments', 'alphabridge-mcp' );
 		}
 		return null;
 	}
@@ -583,19 +595,22 @@ class AB_MCP_OAuth {
 		);
 		remove_action( 'http_api_curl', $pin );
 		if ( is_wp_error( $response ) ) {
-			return self::cimd_error( $url, 'it could not be loaded (' . $response->get_error_message() . ')' );
+			/* translators: %s: the error WordPress reports for the request. */
+			return self::cimd_error( $url, sprintf( __( 'it could not be loaded (%s)', 'alphabridge-mcp' ), $response->get_error_message() ) );
 		}
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		if ( 200 !== $code ) {
-			return self::cimd_error( $url, 'it answered HTTP ' . $code . ' instead of 200 (redirects are not followed)' );
+			/* translators: %d: HTTP status code the server answered with. */
+			return self::cimd_error( $url, sprintf( __( 'it answered HTTP %d instead of 200 (redirects are not followed)', 'alphabridge-mcp' ), $code ) );
 		}
 		$body = (string) wp_remote_retrieve_body( $response );
 		if ( strlen( $body ) > self::CIMD_MAX_BYTES ) {
-			return self::cimd_error( $url, 'it is larger than ' . self::CIMD_MAX_BYTES . ' bytes' );
+			/* translators: %d: the largest size a metadata document may have, in bytes. */
+			return self::cimd_error( $url, sprintf( __( 'it is larger than %d bytes', 'alphabridge-mcp' ), self::CIMD_MAX_BYTES ) );
 		}
 		$doc = json_decode( $body, true );
 		if ( ! is_array( $doc ) ) {
-			return self::cimd_error( $url, 'it is not a JSON object' );
+			return self::cimd_error( $url, __( 'it is not a JSON object', 'alphabridge-mcp' ) );
 		}
 
 		$client = self::cimd_validate( $url, $doc );
@@ -621,29 +636,30 @@ class AB_MCP_OAuth {
 		// Exact string comparison, as the draft requires: the document
 		// vouches for this very URL, not for a variant of it.
 		if ( ! isset( $doc['client_id'] ) || ! is_string( $doc['client_id'] ) || $doc['client_id'] !== $url ) {
-			return self::cimd_error( $url, 'its client_id does not match its own address' );
+			return self::cimd_error( $url, __( 'its client_id does not match its own address', 'alphabridge-mcp' ) );
 		}
 		if ( array_key_exists( 'client_secret', $doc ) || array_key_exists( 'client_secret_expires_at', $doc ) ) {
-			return self::cimd_error( $url, 'it contains a client secret, which a public document must never carry' );
+			return self::cimd_error( $url, __( 'it contains a client secret, which a public document must never carry', 'alphabridge-mcp' ) );
 		}
 		if ( isset( $doc['token_endpoint_auth_method'] ) && 'none' !== $doc['token_endpoint_auth_method'] ) {
-			return self::cimd_error( $url, 'it asks for client authentication at the token endpoint; this site serves public clients ("none") only' );
+			return self::cimd_error( $url, __( 'it asks for client authentication at the token endpoint; this site serves public clients ("none") only', 'alphabridge-mcp' ) );
 		}
 		if ( isset( $doc['grant_types'] ) && ( ! is_array( $doc['grant_types'] ) || ! in_array( 'authorization_code', $doc['grant_types'], true ) ) ) {
-			return self::cimd_error( $url, 'its grant_types do not include authorization_code' );
+			return self::cimd_error( $url, __( 'its grant_types do not include authorization_code', 'alphabridge-mcp' ) );
 		}
 		if ( isset( $doc['response_types'] ) && ( ! is_array( $doc['response_types'] ) || ! in_array( 'code', $doc['response_types'], true ) ) ) {
-			return self::cimd_error( $url, 'its response_types do not include code' );
+			return self::cimd_error( $url, __( 'its response_types do not include code', 'alphabridge-mcp' ) );
 		}
 
 		$uris = self::clean_redirect_uris( isset( $doc['redirect_uris'] ) ? $doc['redirect_uris'] : null );
 		if ( isset( $uris['error'] ) ) {
-			return self::cimd_error( $url, 'its redirect_uris are missing or invalid (' . $uris['error_description'] . ')' );
+			/* translators: %s: what is wrong with the redirect addresses. */
+			return self::cimd_error( $url, sprintf( __( 'its redirect_uris are missing or invalid (%s)', 'alphabridge-mcp' ), $uris['problem'] ) );
 		}
 
 		$name = isset( $doc['client_name'] ) && is_string( $doc['client_name'] ) ? substr( sanitize_text_field( $doc['client_name'] ), 0, 80 ) : '';
 		if ( '' === $name ) {
-			return self::cimd_error( $url, 'it has no client_name' );
+			return self::cimd_error( $url, __( 'it has no client_name', 'alphabridge-mcp' ) );
 		}
 
 		return array(
@@ -667,7 +683,7 @@ class AB_MCP_OAuth {
 	private static function cimd_host_addresses( $host ) {
 		$host = strtolower( trim( (string) $host, '[]' ) );
 		if ( '' === $host || 'localhost' === $host || '.localhost' === substr( $host, -10 ) ) {
-			return 'its host is this machine';
+			return __( 'its host is this machine', 'alphabridge-mcp' );
 		}
 
 		/**
@@ -685,12 +701,12 @@ class AB_MCP_OAuth {
 			$addresses = false !== filter_var( $host, FILTER_VALIDATE_IP ) ? array( $host ) : self::resolve_host( $host );
 		}
 		if ( ! is_array( $addresses ) || empty( $addresses ) ) {
-			return 'its host name could not be resolved';
+			return __( 'its host name could not be resolved', 'alphabridge-mcp' );
 		}
 		$checked = array();
 		foreach ( $addresses as $address ) {
 			if ( ! self::is_public_ip( (string) $address ) ) {
-				return 'its host resolves to an address that is not public; documents are fetched only from public addresses';
+				return __( 'its host resolves to an address that is not public; documents are fetched only from public addresses', 'alphabridge-mcp' );
 			}
 			$checked[] = (string) $address;
 		}
@@ -859,7 +875,7 @@ class AB_MCP_OAuth {
 		return new WP_Error(
 			'ab_mcp_cimd',
 			sprintf(
-				/* translators: 1: host name, 2: what is wrong (English, technical). */
+				/* translators: 1: host name, 2: what is wrong with the document, a clause starting in lower case. */
 				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off "Accept apps with a metadata document" under Settings → AlphaBridge MCP → Your connections → "Connect from Claude (OAuth, advanced)"; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
 				'' !== $host ? $host : substr( $url, 0, 200 ),
 				$problem
@@ -1735,7 +1751,7 @@ class AB_MCP_OAuth {
 			sprintf(
 				/* translators: %s: destination host name the user is redirected to */
 				__( 'On approval you are sent to <b>%s</b>. Only continue if you recognise it as the app you are connecting.', 'alphabridge-mcp' ),
-				esc_html( '' === $dest_host ? '(unknown)' : $dest_host )
+				esc_html( '' === $dest_host ? __( '(unknown)', 'alphabridge-mcp' ) : $dest_host )
 			),
 			array( 'b' => array() )
 		);

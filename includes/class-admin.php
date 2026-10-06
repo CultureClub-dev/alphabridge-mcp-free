@@ -995,10 +995,17 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Bearer token', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(URL + token entered separately)', 'alphabridge-mcp' ) . '</span></p>';
 		$html .= '<div class="ab-field"><input type="text" readonly value="" class="ab-select ab-reveal-token" aria-label="' . esc_attr__( 'Bearer token', 'alphabridge-mcp' ) . '"><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-token">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
 
-		// 3) Ready-made config for Cursor / Claude Code (header authentication).
-		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '</strong></p>';
-		$html .= '<div class="ab-field ab-field--top"><textarea readonly rows="9" class="ab-reveal-json ab-select" aria-label="' . esc_attr__( 'Config for Cursor / Claude Code', 'alphabridge-mcp' ) . '"></textarea><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-json">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
-		$html .= '<p class="ab-note">' . esc_html__( 'Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Cursor / Claude Code: paste the config into your MCP settings file.', 'alphabridge-mcp' ) . '</p>';
+		// 3) Claude Code: one command that adds the server over HTTP with the
+		// token in the Authorization header, as the guide on the website shows.
+		// The config of 4) does not suit it: Claude Code fills ${AUTH} from the
+		// shell, not from the config's env, and /mcp then reports AUTH missing.
+		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Command for Claude Code', 'alphabridge-mcp' ) . '</strong> <span class="description">' . esc_html__( '(run it in your project folder)', 'alphabridge-mcp' ) . '</span></p>';
+		$html .= '<div class="ab-field"><input type="text" readonly value="" class="ab-select ab-reveal-cli" aria-label="' . esc_attr__( 'Command for Claude Code', 'alphabridge-mcp' ) . '"><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-cli">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+
+		// 4) Ready-made config for Cursor (header authentication through mcp-remote).
+		$html .= '<p class="ab-reveal__label"><strong>' . esc_html__( 'Config for Cursor', 'alphabridge-mcp' ) . '</strong></p>';
+		$html .= '<div class="ab-field ab-field--top"><textarea readonly rows="9" class="ab-reveal-json ab-select" aria-label="' . esc_attr__( 'Config for Cursor', 'alphabridge-mcp' ) . '"></textarea><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-reveal-json">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+		$html .= '<p class="ab-note">' . esc_html__( 'Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Claude Code: run the command in your project folder. Cursor: paste the config into ~/.cursor/mcp.json.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '</div>';
 
 		return $html;
@@ -1580,7 +1587,7 @@ class AB_MCP_Admin {
 		$html .= '<div class="ab-savebar"><button type="submit" form="ab-caps" class="ab-btn">' . esc_html__( 'Save changes', 'alphabridge-mcp' ) . '</button>';
 		$html .= '<span class="ab-savebar__text" data-dirty="' . esc_attr__( 'Unsaved changes — save to apply them.', 'alphabridge-mcp' ) . '">' . esc_html__( 'New connections see the change at once. An assistant that is already connected may load the tool list again only when you connect it again.', 'alphabridge-mcp' ) . '</span></div>';
 		/* translators: %d: requests per minute. */
-		$html .= '<p class="ab-note">' . esc_html( sprintf( __( 'Abuse protection active (fixed): %d requests/min.', 'alphabridge-mcp' ), (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) ) ) . '</p>';
+		$html .= '<p class="ab-note">' . esc_html( sprintf( __( 'Abuse protection active: %d requests/min.', 'alphabridge-mcp' ), (int) AB_MCP_Settings::get( 'rate_limit_per_min', 120 ) ) ) . '</p>';
 		$html .= '</section>';
 
 		return $html;
@@ -1754,13 +1761,23 @@ class AB_MCP_Admin {
 		if ( empty( $log ) ) {
 			echo '<tr><td colspan="3"><em>' . esc_html__( 'No entries yet.', 'alphabridge-mcp' ) . '</em></td></tr>';
 		}
+		// The stored status stays the word in code; the table shows it in the
+		// site's language. A status this list does not know is shown as stored.
+		$statuses = array(
+			'ok'     => _x( 'ok', 'status of a tool call in the log', 'alphabridge-mcp' ),
+			'denied' => _x( 'denied', 'status of a tool call in the log', 'alphabridge-mcp' ),
+			'error'  => _x( 'error', 'status of a tool call in the log', 'alphabridge-mcp' ),
+		);
+		/* translators: date and time of a log entry, with seconds; a format of PHP's date(). */
+		$format = _x( 'Y-m-d H:i:s', 'date and time format with seconds', 'alphabridge-mcp' );
 		foreach ( $log as $row ) {
 			$dot = 'ok' === $row['status'] ? 'ab-dot' : ( 'denied' === $row['status'] ? 'ab-dot ab-dot--warn' : 'ab-dot ab-dot--bad' );
 			// ts is time(), a UTC timestamp. wp_date() shows it in the site's
 			// timezone, like every other date in WordPress. date_i18n() reads its
 			// argument as a timestamp already shifted to local time and printed
 			// the UTC clock instead.
-			echo '<tr><td>' . esc_html( wp_date( 'Y-m-d H:i:s', (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $row['status'] ) . '</td></tr>';
+			$status = isset( $statuses[ $row['status'] ] ) ? $statuses[ $row['status'] ] : $row['status'];
+			echo '<tr><td>' . esc_html( wp_date( $format, (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $status ) . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-log__clear">';

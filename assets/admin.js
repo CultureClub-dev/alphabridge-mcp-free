@@ -611,9 +611,13 @@
 			hideConnectorUrl();
 		}
 
-		// Ready-made config for Cursor / Claude Code (header authentication, which
-		// always works regardless of the connector-URL setting). Single quotes so
-		// the literal ${AUTH} is not treated as a template placeholder.
+		// Claude Code: one command, the server over HTTP with the token in the
+		// Authorization header (header authentication works regardless of the
+		// connector-URL setting).
+		setVal( '.ab-reveal-cli', 'claude mcp add --transport http alphabridge ' + endpoint + ' --header "Authorization: Bearer ' + token + '"' );
+
+		// Ready-made config for Cursor, through mcp-remote. Single quotes so the
+		// literal ${AUTH} is not treated as a template placeholder.
 		var json =
 			'{\n' +
 			'  "mcpServers": {\n' +

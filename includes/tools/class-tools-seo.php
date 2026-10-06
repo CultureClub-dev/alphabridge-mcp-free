@@ -101,7 +101,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		return array(
 			'provider'  => $p,
 			'writable'  => in_array( $p, array( 'yoast', 'rankmath' ), true ),
-			'note'      => 'aioseo' === $p ? 'AIOSEO stores SEO data in a custom table; writing is not supported by this tool. Its fields are edited in AIOSEO\'s panel in the post editor.' : '',
+			'note'      => 'aioseo' === $p ? __( 'AIOSEO stores SEO data in a custom table; writing is not supported by this tool. Its fields are edited in AIOSEO\'s panel in the post editor.', 'alphabridge-mcp' ) : '',
 		);
 	}
 

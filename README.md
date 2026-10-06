@@ -129,7 +129,7 @@ Handing an AI access to a site should feel safe, so control comes first:
   the post meta of page builders, each builder's keys together or not at all. Credential-shaped
   keys, the original's editing state, the meta of a revision,
   builder caches and other plugins' protected keys are not copied.
-- **Audit log** of every tool call, plus a fixed rate limit against request bursts.
+- **Audit log** of the latest 200 tool calls, plus a rate limit of 120 requests a minute against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html
 
