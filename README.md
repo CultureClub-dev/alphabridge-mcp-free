@@ -32,13 +32,13 @@ directory. It is the same code WordPress.org ships.
 - **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page
   order, with their visible text, link and image fields; elements that cannot be read safely,
   such as code, forms or unknown elements, are listed as locked, with the reason and without
-  their content. As of 1 October 2026:
+  their content.
   - Read: WordPress blocks, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd,
     GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Otter Blocks and CoBlocks
     (both as plain blocks), WPBakery Page Builder, Divi 4, Avada (Fusion Builder), Flatsome (UX
     Builder) and Enfold (Avia Layout Builder).
-  - Read from the vendors' documentation and code, not yet checked on a live installation (the
-    answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
+  - Read according to the vendors' documentation: WPBakery Page Builder, Divi 4, Avada, Flatsome
+    and Enfold.
   - Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone,
     Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual
     Composer Website Builder, Divi 5 and Etch.
