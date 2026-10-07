@@ -146,4 +146,20 @@ final class AffiliateInviteTest extends TestCase {
 		self::assertStringNotContainsString( 'class="postbox ab-pro"', $html );
 		self::assertStringStartsWith( '<div class="ab-side"><div class="ab-invite">', $html );
 	}
+
+	/**
+	 * The readme answers the question in its FAQ with the same facts as the line:
+	 * the commission, that the programme is open to everyone, the page to apply
+	 * on, and that this free plugin earns none and needs no membership.
+	 */
+	public function testTheReadmeFaqNamesTheProgrammeWithTheSameFacts(): void {
+		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
+		self::assertSame( 1, preg_match( '/^= Is there an affiliate programme\? =\n(.+)$/m', $readme, $m ), 'FAQ entry missing.' );
+		$answer = $m[1];
+		self::assertStringContainsString( '60% of every Pro and Agency sale you refer, renewals included', $answer );
+		self::assertStringContainsString( 'open to everyone, worldwide', $answer );
+		self::assertStringContainsString( 'https://alphabridge-mcp.com/affiliates', $answer );
+		self::assertStringContainsString( 'This free plugin itself earns none', $answer );
+		self::assertLessThan( strpos( $readme, '== Screenshots ==' ), strpos( $readme, '= Is there an affiliate programme? =' ), 'The entry belongs to the FAQ.' );
+	}
 }
