@@ -14,10 +14,10 @@
  * false version is not a cosmetic slip: it invites an overwrite without a
  * prompt.
  *
- * Since 7 October 2026 two adding tools count as destructive as well:
- * wp_create_post can publish, and wp_reply_comment answers a person in public.
- * Neither can be taken back once it is out, which OpenAI's review counts as
- * destructive even when it happens only in one mode or as a side effect.
+ * Since 7 October 2026 the adding tools that can publish count as destructive
+ * as well: creating a post, replying to a comment, uploading media. What is
+ * published cannot be taken back once it is out, which OpenAI's review counts
+ * as destructive even when it happens only in one mode or as a side effect.
  *
  * @package AlphaBridge_MCP
  */
@@ -43,18 +43,18 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_comment',
 	);
 
-	/** Tools that only ever add something new. */
+	/** Tools that only ever add something new, and keep it inside the site. */
 	private const ADDS_ONLY = array(
 		'wp_create_term',
 		'wp_duplicate_post',
-		'wp_upload_media',
-		'wp_upload_media_from_url',
 	);
 
-	/** Tools that add, but whose addition cannot be taken back once it is out. */
-	private const IRREVERSIBLE_ADDS = array(
+	/** Tools that add, but publish what they add, which cannot be taken back. */
+	private const PUBLISHING_ADDS = array(
 		'wp_create_post',
 		'wp_reply_comment',
+		'wp_upload_media',
+		'wp_upload_media_from_url',
 	);
 
 	public function test_overwriting_tools_are_destructive(): void {
@@ -75,11 +75,11 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 	}
 
-	public function test_adding_what_cannot_be_taken_back_is_destructive(): void {
-		foreach ( self::IRREVERSIBLE_ADDS as $name ) {
+	public function test_adding_what_is_published_is_destructive(): void {
+		foreach ( self::PUBLISHING_ADDS as $name ) {
 			$this->assertTrue(
 				AB_MCP_Tool_Registry::is_destructive( $name, array() ),
-				"$name only adds, but what it adds is out for good, so destructiveHint: true"
+				"$name only adds, but what it publishes is out for good, so destructiveHint: true"
 			);
 		}
 	}
@@ -196,10 +196,10 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 		$this->assertSame( array(), $unclassified );
 
-		// And the split is the measured one: 8 overwrite, 2 add for good, 4 only add.
+		// And the split is the measured one: 8 overwrite, 4 add and publish, 2 only add.
 		$destructive = array_values( array_filter( $writing, static fn( $n ) => AB_MCP_Tool_Registry::is_destructive( $n, array() ) ) );
 		sort( $destructive );
-		$expected = array_merge( self::OVERWRITES, self::IRREVERSIBLE_ADDS );
+		$expected = array_merge( self::OVERWRITES, self::PUBLISHING_ADDS );
 		sort( $expected );
 		$this->assertSame( $expected, $destructive, 'the set of overwriting tools changed — check the new tool' );
 	}

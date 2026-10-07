@@ -6,8 +6,9 @@
  * other servers: downloads, installs, updates and Site Deploy. OpenAI's review
  * (developers.openai.com/plugins/deploy/app-review) also names write tools
  * that "publish content" or "post to public platforms". A site is a bounded
- * system, but what it publishes is public, so the six tools that can make
- * content public now report true. Reading and drafts stay inside the site.
+ * system, but what it publishes is public, so the eight tools that can make
+ * content public now report true. Reading, drafts, new terms and deleting
+ * stay inside the site.
  *
  * @package AlphaBridge_MCP
  */
@@ -28,7 +29,9 @@ final class OpenWorldClassificationTest extends TestCase {
 		'wp_reply_comment',
 		'wp_moderate_comment',
 		'wp_upload_media',
+		'wp_upload_media_from_url',
 		'wp_update_media',
+		'wp_update_term',
 	);
 
 	/** Tools that talk to other servers, open world as before. */
@@ -39,14 +42,13 @@ final class OpenWorldClassificationTest extends TestCase {
 		'wp_deploy_push_zip',
 	);
 
-	/** Tools that stay inside the site: reading, drafts, terms, removal. */
+	/** Tools that stay inside the site: reading, drafts, new terms, removal. */
 	private const INSIDE = array(
 		'wp_list_posts',
 		'wp_get_post',
 		'wp_search',
 		'wp_duplicate_post',
 		'wp_create_term',
-		'wp_update_term',
 		'wp_delete_post',
 		'wp_delete_comment',
 	);
@@ -63,6 +65,13 @@ final class OpenWorldClassificationTest extends TestCase {
 	public function test_networked_tools_stay_open_world(): void {
 		foreach ( self::NETWORKED as $name ) {
 			$this->assertTrue( AB_MCP_Tool_Registry::is_open_world( $name, array() ), "$name reaches another server" );
+		}
+	}
+
+	public function test_publishing_tools_are_destructive_too(): void {
+		// What is published cannot be taken back once it is out.
+		foreach ( self::PUBLISHING as $name ) {
+			$this->assertTrue( AB_MCP_Tool_Registry::is_destructive( $name, array() ), "$name publishes" );
 		}
 	}
 
@@ -91,7 +100,7 @@ final class OpenWorldClassificationTest extends TestCase {
 		// And no other tool of this plugin is counted as publishing or networked.
 		$open = array_values( array_filter( $names, static fn( $n ) => AB_MCP_Tool_Registry::is_open_world( $n, array() ) ) );
 		sort( $open );
-		$expected = array_merge( self::PUBLISHING, array( 'wp_upload_media_from_url' ) );
+		$expected = self::PUBLISHING;
 		sort( $expected );
 		$this->assertSame( $expected, $open, 'the set of open-world tools changed — check the new tool' );
 	}
