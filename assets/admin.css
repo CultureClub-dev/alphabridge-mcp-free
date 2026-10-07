@@ -329,7 +329,8 @@
 	position: absolute;
 	right: 32px;
 	z-index: 30;
-	width: 470px;
+	/* Wide enough for «Cancel» and «Agree and switch on write access» on one line. */
+	width: 520px;
 	max-width: calc(100% - 32px);
 	box-shadow: 0 12px 32px rgba(29, 35, 39, .22);
 }
@@ -370,6 +371,25 @@
 	height: 20px;
 	margin: 0;
 	accent-color: #4b36c4;
+}
+
+/* The link to the Terms of Use sits right under their box, aligned with its
+ * text (box 20px plus gap 10px); the dialog's gap is pulled in so the two
+ * read as one. */
+.ab-mcp .ab-mode__terms-link {
+	margin: -8px 0 0 30px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #50575e;
+}
+
+.ab-mcp .ab-mode__terms-link a {
+	color: #4b36c4;
+}
+
+.ab-mcp .ab-mode__terms-note {
+	display: block;
+	margin-top: 2px;
 }
 
 .ab-mcp .ab-mode__actions {

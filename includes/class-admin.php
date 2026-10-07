@@ -76,6 +76,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_post_ab_mcp_site_mode', array( $this, 'handle_site_mode' ) );
 		add_action( 'admin_post_ab_mcp_mode_notice', array( $this, 'handle_mode_notice_dismiss' ) );
+		add_action( 'admin_post_ab_mcp_terms_notice', array( $this, 'handle_terms_notice_dismiss' ) );
 		add_action( 'admin_notices', array( $this, 'mode_notice' ) );
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
@@ -189,10 +190,11 @@ class AB_MCP_Admin {
 	/**
 	 * Switch write access on or off (AB_MCP_Site_Mode).
 	 *
-	 * On only with the box under the notice ticked, and only for the notice
-	 * in force: a form loaded under an earlier version of the notice, or
-	 * showing another wording of it (a language pack changed since, or
-	 * another language), is refused, so the record never names a text the
+	 * On only with the first box under the notice ticked, the second too
+	 * where AB_MCP_Site_Mode::terms_required() asks for the agreement to the
+	 * Terms of Use, and only for the notice in force: a form loaded under an
+	 * earlier version of the notice, or showing another wording of it
+	 * (another language), is refused, so the record never names a text the
 	 * administrator did not have on the screen. Off needs no box; it only
 	 * takes away. Switching on switches every tool on
 	 * (AB_MCP_Site_Mode::switch_to_full()); the connections and their access
@@ -223,8 +225,48 @@ class AB_MCP_Admin {
 		if ( '1' !== $confirmed ) {
 			$this->redirect( 'mode_unconfirmed' );
 		}
-		AB_MCP_Site_Mode::switch_to_full( get_current_user_id(), AB_MCP_Site_Mode::SOURCE_FORM );
+		$terms = isset( $_POST['agree_terms'] ) ? sanitize_text_field( wp_unslash( $_POST['agree_terms'] ) ) : '';
+		if ( '1' !== $terms && AB_MCP_Site_Mode::terms_required() ) {
+			$this->redirect( 'mode_terms' );
+		}
+		AB_MCP_Site_Mode::switch_to_full( get_current_user_id(), AB_MCP_Site_Mode::SOURCE_FORM, '1' === $terms );
 		$this->redirect( 'mode_full' );
+	}
+
+	/**
+	 * «Dismiss» on the notice that write access is on without an agreement
+	 * to the Terms of Use: remembered for this version of the terms.
+	 */
+	public function handle_terms_notice_dismiss() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_terms_notice' );
+		AB_MCP_Settings::set( AB_MCP_Settings::KEY_TERMS_NOTICE, AB_MCP_Site_Mode::TERMS_VERSION );
+		$this->redirect( 'terms_notice_dismissed' );
+	}
+
+	/**
+	 * The notice on this page while write access is on without an agreement
+	 * to the Terms of Use where one is needed (AB_MCP_Site_Mode::terms_pending()):
+	 * switched on before the plugin asked for it, or by code. It says that
+	 * the agreement is asked for the next time write access is switched on,
+	 * and write access stays on until then (decision 07.10.2026: a notice,
+	 * no pause). Shown on this page only, until an administrator dismisses
+	 * it for this version of the terms. A form, so that dismissing works
+	 * without JavaScript.
+	 *
+	 * @return string HTML, escaped; '' when there is nothing to say.
+	 */
+	private function terms_notice_html() {
+		if ( ! AB_MCP_Site_Mode::terms_pending() || AB_MCP_Site_Mode::TERMS_VERSION === AB_MCP_Settings::get( AB_MCP_Settings::KEY_TERMS_NOTICE, '' ) ) {
+			return '';
+		}
+		$html  = '<div class="notice notice-info ab-terms-notice"><p><strong>' . esc_html__( 'New: Terms of Use for write access.', 'alphabridge-mcp' ) . '</strong> ';
+		$html .= esc_html__( 'Whoever switches on write access now agrees to the Terms of Use. On this site write access was switched on before that and stays on; an administrator agrees the next time it is switched on.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p class="ab-mode-notice__actions">';
+		$html .= '<a class="button" href="' . esc_url( AB_MCP_Site_Mode::terms_url() ) . '" target="_blank" rel="noopener">' . esc_html__( 'Read the Terms of Use', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a> ';
+		$html .= wp_nonce_field( 'ab_mcp_terms_notice', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_terms_notice"><button type="submit" class="button">' . esc_html__( 'Dismiss', 'alphabridge-mcp' ) . '</button></p></form></div>';
+		return $html;
 	}
 
 	/**
@@ -306,13 +348,16 @@ class AB_MCP_Admin {
 	 * when and by whom it was confirmed.
 	 *
 	 * The switch is a button with role switch. Off, it submits the form that
-	 * switches on, and that form asks for the box under the notice: with
-	 * JavaScript the notice, the box, «Switch on» and «Cancel» open as a small
-	 * window at the switch (admin.js); without it they stand in the card as a
-	 * plain form, and the browser asks for the box (required) before it
-	 * sends. handle_site_mode() refuses the switch without the box all the
-	 * same. On, the switch submits the form that switches off: one click, no
-	 * question.
+	 * switches on, and that form asks for the boxes under the notice: the
+	 * first agrees to how write access works, the second to the Terms of Use,
+	 * with a link to them; without a paid licence both are required, with
+	 * one the second is offered (AB_MCP_Site_Mode::terms_required()). With
+	 * JavaScript the notice, the boxes, the button and «Cancel» open as a
+	 * small window at the switch (admin.js); without it they stand in the
+	 * card as a plain form, and the browser asks for the required boxes
+	 * before it sends. handle_site_mode() refuses the switch without them all
+	 * the same. On, the switch submits the form that switches off: one click,
+	 * no question.
 	 *
 	 * Two boxes say what each state means. The one for «off» says what
 	 * assistants read; an add-on whose tools read more there adds one
@@ -356,7 +401,14 @@ class AB_MCP_Admin {
 			$html .= '<h3 class="ab-mode__dialog-title" id="ab-mode-confirm-title" tabindex="-1">' . esc_html__( 'Switch on write access?', 'alphabridge-mcp' ) . '</h3>';
 			$html .= '<p class="ab-mode__warning" id="ab-mode-warning">' . esc_html( AB_MCP_Site_Mode::notice_text() ) . '</p>';
 			$html .= '<label class="ab-mode__confirm"><input type="checkbox" name="confirm_full" value="1" required><span>' . esc_html( AB_MCP_Site_Mode::checkbox_text() ) . '</span></label>';
-			$html .= '<p class="ab-mode__actions"><button type="button" class="ab-btn ab-btn--ghost ab-mode__cancel" hidden>' . esc_html__( 'Cancel', 'alphabridge-mcp' ) . '</button><button type="submit" class="ab-btn ab-mode__go">' . esc_html__( 'Switch on', 'alphabridge-mcp' ) . '</button></p>';
+			$required = AB_MCP_Site_Mode::terms_required();
+			$html    .= '<label class="ab-mode__confirm ab-mode__terms"><input type="checkbox" name="agree_terms" value="1"' . ( $required ? ' required' : '' ) . '><span>' . esc_html( AB_MCP_Site_Mode::terms_text() ) . '</span></label>';
+			$html    .= '<p class="ab-mode__terms-link"><a href="' . esc_url( AB_MCP_Site_Mode::terms_url() ) . '" target="_blank" rel="noopener">' . esc_html__( 'Read the Terms of Use', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a>';
+			if ( ! $required ) {
+				$html .= ' <span class="ab-mode__terms-note">' . esc_html__( 'Optional with your licence: the terms already apply from your purchase.', 'alphabridge-mcp' ) . '</span>';
+			}
+			$html .= '</p>';
+			$html .= '<p class="ab-mode__actions"><button type="button" class="ab-btn ab-btn--ghost ab-mode__cancel" hidden>' . esc_html__( 'Cancel', 'alphabridge-mcp' ) . '</button><button type="submit" class="ab-btn ab-mode__go">' . esc_html__( 'Agree and switch on write access', 'alphabridge-mcp' ) . '</button></p>';
 			$html .= '</div>';
 		}
 		$html .= '</form>';
@@ -642,6 +694,7 @@ class AB_MCP_Admin {
 		if ( AB_MCP_Settings::get( AB_MCP_Settings::KEY_MODE_NOTICE, false ) ) {
 			echo $this->mode_notice_html( false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_notice_html().
 		}
+		echo $this->terms_notice_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside terms_notice_html().
 		// Without the marker admin notices land after the first heading.
 		echo '<hr class="wp-header-end">';
 		$this->notice();
@@ -2028,13 +2081,15 @@ class AB_MCP_Admin {
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
 			'audit_cleared' => array( 'success', __( 'Log cleared.', 'alphabridge-mcp' ) ),
 			'review_dismissed' => array( 'success', __( 'Noted — the plugin will not ask for a review again.', 'alphabridge-mcp' ) ),
-			'mode_full'        => array( 'success', __( 'Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. Your confirmation is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time.', 'alphabridge-mcp' ) ),
+			'mode_full'        => array( 'success', __( 'Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. What you agreed to is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time.', 'alphabridge-mcp' ) ),
 			'mode_already_full' => array( 'success', __( 'Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off.', 'alphabridge-mcp' ) ),
 			'mode_read'        => array( 'success', __( 'Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused.', 'alphabridge-mcp' ) ),
 			'mode_unconfirmed' => array( 'error', __( 'Write access was not switched on: tick the box under the notice to confirm it, then switch again.', 'alphabridge-mcp' ) ),
+			'mode_terms'       => array( 'error', __( 'Write access was not switched on: tick the box to agree to the Terms of Use, then switch again.', 'alphabridge-mcp' ) ),
 			'mode_stale'       => array( 'error', __( 'Write access was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again.', 'alphabridge-mcp' ) ),
 			'mode_unknown'     => array( 'error', __( 'Unknown setting; nothing was changed. Use the switch at the top of this page.', 'alphabridge-mcp' ) ),
 			'mode_notice_dismissed' => array( 'success', __( 'Noted. Whether AI assistants may write on this site is shown at the top of this page.', 'alphabridge-mcp' ) ),
+			'terms_notice_dismissed' => array( 'success', __( 'Noted. The agreement to the Terms of Use is asked for the next time write access is switched on.', 'alphabridge-mcp' ) ),
 		);
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );

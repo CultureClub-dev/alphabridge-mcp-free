@@ -1471,9 +1471,6 @@ msgctxt "tool label"
 msgid "Switch a snippet on or off"
 msgstr "Snippet ein- oder ausschalten"
 
-msgid "Switch on"
-msgstr "Einschalten"
-
 msgid "Switch on write access?"
 msgstr "Schreibrechte einschalten?"
 
@@ -1729,9 +1726,6 @@ msgstr "Das Werkzeug hat keinen Handler, darum lief nichts. Der Fehler liegt bei
 msgid "Try Pro free for 7 days"
 msgstr "Pro 7 Tage kostenlos testen"
 
-msgid "Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup."
-msgstr "Verstanden: Änderungen wirken sofort, ich schalte Schreiben auf eigenes Risiko ein und habe ein aktuelles Backup."
-
 msgctxt "main group of tools"
 msgid "Undo"
 msgstr "Undo"
@@ -1846,9 +1840,6 @@ msgstr "Mit Pro liest sie auch Benutzer sowie Produkte, Bestellungen, Kunden und
 msgid "With Pro they also read users."
 msgstr "Mit Pro liest sie auch Benutzer."
 
-msgid "With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side."
-msgstr "Mit Schreibrechten arbeiten deine KI-Assistenten direkt auf deiner Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit."
-
 msgid "Without the hub: add a custom connector"
 msgstr "Ohne Hub: benutzerdefinierten Konnektor hinzufügen"
 
@@ -1918,9 +1909,6 @@ msgstr "Die Schreibrechte sind aus, darum läuft keine Fähigkeit; schalte sie o
 
 msgid "Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused."
 msgstr "Die Schreibrechte sind aus. KI-Assistenten lesen jetzt nur: Inhalte, Medien, Begriffe, Kommentare, Einstellungen und den Aufbau der Website; jedes Werkzeug, das erstellt, ändert oder löscht, und jedes lesende Werkzeug mit dem Vermerk «erst mit Schreibrechten» wird abgelehnt."
-
-msgid "Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. Your confirmation is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time."
-msgstr "Die Schreibrechte sind an. KI-Assistenten können jetzt mit jedem Werkzeug erstellen, ändern und löschen, und jedes Werkzeug ist eingeschaltet; einzelne Werkzeuge kannst du unter Feineinstellung ausschalten. Deine Bestätigung ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du die Schreibrechte jederzeit ausschalten."
 
 msgid "Write access is on; no confirmation on this page is recorded for it."
 msgstr "Die Schreibrechte sind an; auf dieser Seite ist dafür keine Bestätigung festgehalten."
@@ -2189,3 +2177,27 @@ msgstr "Befehl für Claude Code"
 
 msgid "(run it in your project folder)"
 msgstr "(im Projektordner ausführen)"
+
+msgid "Agree and switch on write access"
+msgstr "Zustimmen und Schreibrechte einschalten"
+
+msgid "Read the Terms of Use"
+msgstr "Nutzungsbedingungen lesen"
+
+msgid "Optional with your licence: the terms already apply from your purchase."
+msgstr "Mit deiner Lizenz freiwillig: Die Bedingungen gelten bereits aus deinem Kauf."
+
+msgid "Write access was not switched on: tick the box to agree to the Terms of Use, then switch again."
+msgstr "Die Schreibrechte wurden nicht eingeschaltet: Setze das Häkchen, mit dem du den Nutzungsbedingungen zustimmst, und schalte dann erneut ein."
+
+msgid "New: Terms of Use for write access."
+msgstr "Neu: Nutzungsbedingungen für die Schreibrechte."
+
+msgid "Whoever switches on write access now agrees to the Terms of Use. On this site write access was switched on before that and stays on; an administrator agrees the next time it is switched on."
+msgstr "Wer die Schreibrechte einschaltet, stimmt jetzt den Nutzungsbedingungen zu. Auf dieser Website wurden die Schreibrechte vorher eingeschaltet und bleiben eingeschaltet; ein Administrator stimmt beim nächsten Einschalten zu."
+
+msgid "Noted. The agreement to the Terms of Use is asked for the next time write access is switched on."
+msgstr "Notiert. Die Zustimmung zu den Nutzungsbedingungen wird beim nächsten Einschalten der Schreibrechte eingeholt."
+
+msgid "Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. What you agreed to is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time."
+msgstr "Die Schreibrechte sind an. KI-Assistenten können jetzt mit jedem Werkzeug erstellen, ändern und löschen, und jedes Werkzeug ist eingeschaltet; einzelne Werkzeuge kannst du unter Feineinstellung ausschalten. Wozu du zugestimmt hast, ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du die Schreibrechte jederzeit ausschalten."

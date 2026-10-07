@@ -88,6 +88,7 @@ final class WriteAccessSwitchTest extends TestCase {
 			'notice_version' => AB_MCP_Site_Mode::NOTICE_VERSION,
 			'notice_hash'    => AB_MCP_Site_Mode::notice_hash(),
 			'confirm_full'   => '1',
+			'agree_terms'    => '1',
 		);
 	}
 
@@ -331,20 +332,35 @@ final class WriteAccessSwitchTest extends TestCase {
 		self::assertFalse( AB_MCP_Site_Mode::is_full() );
 
 		$post['notice_hash'] = AB_MCP_Site_Mode::notice_hash();
-		self::assertSame( 'mode_stale', self::notice_of( $this->post( 'handle_site_mode', $post ) ), 'Version 1 with the wording of version 2 is refused too.' );
+		self::assertSame( 'mode_stale', self::notice_of( $this->post( 'handle_site_mode', $post ) ), 'Version 1 with the wording of version 3 is refused too.' );
 		self::assertFalse( AB_MCP_Site_Mode::is_full() );
+	}
+
+	public function testAFormOfTheSecondNoticeIsRefused(): void {
+		// A page loaded before the update to 4.6.0 shows notice 2 with one box
+		// and no agreement to the Terms of Use.
+		$post                   = self::on_post();
+		$post['notice_version'] = '2';
+		$post['notice_hash']    = '9d40c270e3b9d177b5288343d51db17690e5d39ee3baf2620e7c5051d9f083e6';
+		unset( $post['agree_terms'] );
+
+		self::assertSame( 'mode_stale', self::notice_of( $this->post( 'handle_site_mode', $post ) ) );
+		self::assertFalse( AB_MCP_Site_Mode::is_full() );
+		self::assertNull( AB_MCP_Site_Mode::confirmation() );
 	}
 
 	public function testTheFormShowsAndSendsTheNoticeInForce(): void {
 		$x = $this->card();
 
-		self::assertSame( '2', $x->query( '//form[@id="ab-mode-form"]//input[@name="notice_version"]' )->item( 0 )->getAttribute( 'value' ) );
+		self::assertSame( '3', $x->query( '//form[@id="ab-mode-form"]//input[@name="notice_version"]' )->item( 0 )->getAttribute( 'value' ) );
 		self::assertSame( AB_MCP_Site_Mode::notice_hash(), $x->query( '//form[@id="ab-mode-form"]//input[@name="notice_hash"]' )->item( 0 )->getAttribute( 'value' ) );
 		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( '//*[@id="ab-mode-warning"]' )->item( 0 )->textContent ) );
 		self::assertStringContainsString( 'Changes take effect immediately', AB_MCP_Site_Mode::notice_text() );
 		self::assertStringContainsString( 'not everything can be undone', AB_MCP_Site_Mode::notice_text() );
 		self::assertStringContainsString( 'at your own risk', AB_MCP_Site_Mode::notice_text() );
 		self::assertStringContainsString( 'backup', AB_MCP_Site_Mode::checkbox_text() );
+		self::assertStringContainsString( 'Your statutory rights and the liability rules of the Terms of Use remain unaffected.', AB_MCP_Site_Mode::notice_text() );
+		self::assertSame( AB_MCP_Site_Mode::terms_text(), trim( $x->query( '//form[@id="ab-mode-form"]//input[@name="agree_terms"]' )->item( 0 )->parentNode->textContent ) );
 	}
 
 	public function testSwitchingOffNeedsNoBoxAndOneClick(): void {
