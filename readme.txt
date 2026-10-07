@@ -120,7 +120,7 @@ No. Every feature in this plugin works without payment, registration or license 
 No. It contacts no external service on its own. Outbound requests happen only when you explicitly ask a tool to fetch a file from a URL you provide, and when an app you are connecting identifies itself with the address of its client metadata document and you, logged in, open its consent screen (see External services).
 
 = Is there an affiliate programme? =
-Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, monthly in US dollars via PayPal. It is open worldwide to anyone over 18 outside countries under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
+Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
 
 == Screenshots ==
 
