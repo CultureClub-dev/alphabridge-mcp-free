@@ -641,8 +641,9 @@ class AB_MCP_OAuth {
 		if ( array_key_exists( 'client_secret', $doc ) || array_key_exists( 'client_secret_expires_at', $doc ) ) {
 			return self::cimd_error( $url, __( 'it contains a client secret, which a public document must never carry', 'alphabridge-mcp' ) );
 		}
-		if ( isset( $doc['token_endpoint_auth_method'] ) && 'none' !== $doc['token_endpoint_auth_method'] ) {
-			return self::cimd_error( $url, __( 'it asks for client authentication at the token endpoint; this site serves public clients ("none") only', 'alphabridge-mcp' ) );
+		$auth = self::cimd_auth_problem( $doc );
+		if ( '' !== $auth ) {
+			return self::cimd_error( $url, $auth );
 		}
 		if ( isset( $doc['grant_types'] ) && ( ! is_array( $doc['grant_types'] ) || ! in_array( 'authorization_code', $doc['grant_types'], true ) ) ) {
 			return self::cimd_error( $url, __( 'its grant_types do not include authorization_code', 'alphabridge-mcp' ) );
@@ -667,6 +668,50 @@ class AB_MCP_OAuth {
 			'redirect_uris' => $uris,
 			'cimd'          => true,
 		);
+	}
+
+	/**
+	 * Whether a document lets this site treat the app as a public client.
+	 *
+	 * This site authenticates no client at the token endpoint ("none", PKCE
+	 * required). A document may name its preferred method in
+	 * token_endpoint_auth_method and list every method it can use in
+	 * token_endpoint_auth_methods_supported. ChatGPT, for one, prefers
+	 * private_key_jwt and lists "none" as well. The rules follow the
+	 * negotiation of the authorization server library behind the AlphaBridge
+	 * hub (@cloudflare/workers-oauth-provider 0.10.3), with "none" as the only
+	 * method this site accepts:
+	 *  - a shared client secret is never accepted, it cannot be kept in a
+	 *    public document;
+	 *  - the list, where given, must be a list of strings and contain the
+	 *    preferred method;
+	 *  - without a list, the preferred method alone counts, and without
+	 *    either field the client is public.
+	 *
+	 * @param array $doc Decoded document.
+	 * @return string The problem, or '' when "none" is on offer.
+	 */
+	private static function cimd_auth_problem( array $doc ) {
+		$public_only = __( 'it asks for client authentication at the token endpoint; this site serves public clients ("none") only', 'alphabridge-mcp' );
+		$method      = array_key_exists( 'token_endpoint_auth_method', $doc ) ? $doc['token_endpoint_auth_method'] : null;
+		if ( null !== $method && ! is_string( $method ) ) {
+			return $public_only;
+		}
+
+		$offered = null === $method ? array( 'none' ) : array( $method );
+		if ( array_key_exists( 'token_endpoint_auth_methods_supported', $doc ) ) {
+			$list = $doc['token_endpoint_auth_methods_supported'];
+			if ( ! is_array( $list ) || array_values( $list ) !== $list || count( array_filter( $list, 'is_string' ) ) !== count( $list )
+				|| ( null !== $method && ! in_array( $method, $list, true ) ) ) {
+				return __( 'its token_endpoint_auth_methods_supported is not a list of methods that contains its token_endpoint_auth_method', 'alphabridge-mcp' );
+			}
+			$offered = $list;
+		}
+
+		if ( in_array( $method, array( 'client_secret_basic', 'client_secret_post', 'client_secret_jwt' ), true ) || ! in_array( 'none', $offered, true ) ) {
+			return $public_only;
+		}
+		return '';
 	}
 
 	/**

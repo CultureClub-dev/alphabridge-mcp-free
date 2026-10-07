@@ -494,6 +494,15 @@ final class CimdTest extends TestCase {
 			'secret expiry'              => array( static function ( array &$d ): void { $d['client_secret_expires_at'] = 0; }, 'client secret' ),
 			'shared secret auth'         => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = 'client_secret_basic'; }, 'public clients' ),
 			'private key auth'           => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = 'private_key_jwt'; }, 'public clients' ),
+			'private key, no none'       => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = 'private_key_jwt'; $d['token_endpoint_auth_methods_supported'] = array( 'private_key_jwt' ); }, 'public clients' ),
+			'only methods, no none'      => array( static function ( array &$d ): void { unset( $d['token_endpoint_auth_method'] ); $d['token_endpoint_auth_methods_supported'] = array( 'private_key_jwt', 'tls_client_auth' ); }, 'public clients' ),
+			'empty methods list'         => array( static function ( array &$d ): void { unset( $d['token_endpoint_auth_method'] ); $d['token_endpoint_auth_methods_supported'] = array(); }, 'public clients' ),
+			'secret even with none'      => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = 'client_secret_post'; $d['token_endpoint_auth_methods_supported'] = array( 'none', 'client_secret_post' ); }, 'public clients' ),
+			'method outside its list'    => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = 'none'; $d['token_endpoint_auth_methods_supported'] = array( 'private_key_jwt' ); }, 'token_endpoint_auth_methods_supported' ),
+			'methods not a list'         => array( static function ( array &$d ): void { $d['token_endpoint_auth_methods_supported'] = 'none'; }, 'token_endpoint_auth_methods_supported' ),
+			'methods with a non-string'  => array( static function ( array &$d ): void { $d['token_endpoint_auth_methods_supported'] = array( 'none', 7 ); }, 'token_endpoint_auth_methods_supported' ),
+			'methods as an object'       => array( static function ( array &$d ): void { $d['token_endpoint_auth_methods_supported'] = array( 'a' => 'none' ); }, 'token_endpoint_auth_methods_supported' ),
+			'method not a string'        => array( static function ( array &$d ): void { $d['token_endpoint_auth_method'] = array( 'none' ); }, 'public clients' ),
 			'no authorization_code'      => array( static function ( array &$d ): void { $d['grant_types'] = array( 'client_credentials' ); }, 'grant_types' ),
 			'no code response'           => array( static function ( array &$d ): void { $d['response_types'] = array( 'token' ); }, 'response_types' ),
 			'no redirect_uris'           => array( static function ( array &$d ): void { unset( $d['redirect_uris'] ); }, 'redirect_uris' ),
@@ -512,6 +521,60 @@ final class CimdTest extends TestCase {
 		self::assertStringContainsString( $reason, $message );
 		self::assertStringContainsString( 'app.example', $message, 'The refusal names where the document lives.' );
 		self::assertArrayNotHasKey( self::key(), $GLOBALS['ab_test_transients'], 'A refused document is not cached.' );
+	}
+
+	/**
+	 * ChatGPT's own document (https://chatgpt.com/oauth/client.json, as served
+	 * on 07.10.2026): it prefers private_key_jwt but lists "none" among the
+	 * methods it supports. This site serves public clients only, so it takes
+	 * "none" from that list, as the authorization server library behind the
+	 * AlphaBridge hub does (CIMD negotiation in @cloudflare/workers-oauth-provider
+	 * 0.10.3). Reported on wordpress.org on 03.10.2026: before this, ChatGPT
+	 * could not connect directly while documents were accepted.
+	 */
+	public function testChatGptsDocumentIsAcceptedAsAPublicClient(): void {
+		$this->doc = array(
+			'client_id'                             => self::URL,
+			'client_uri'                            => 'https://app.example/',
+			'redirect_uris'                         => array( self::REDIRECT ),
+			'token_endpoint_auth_method'            => 'private_key_jwt',
+			'token_endpoint_auth_methods_supported' => array( 'none', 'private_key_jwt' ),
+			'grant_types'                           => array( 'authorization_code', 'refresh_token' ),
+			'response_types'                        => array( 'code' ),
+			'client_name'                           => 'ChatGPT',
+			'logo_uri'                              => 'https://app.example/logo.png',
+			'token_endpoint_auth_signing_alg'       => 'RS256',
+			'jwks_uri'                              => 'https://app.example/jwks.json',
+		);
+
+		$client = $this->resolve();
+		self::assertIsArray( $client, is_wp_error( $client ) ? $client->get_error_message() : '' );
+		self::assertSame( 'ChatGPT', $client['name'] );
+		self::assertSame( array( self::REDIRECT ), $client['redirect_uris'] );
+		self::assertTrue( $client['cimd'] );
+	}
+
+	/**
+	 * A document that gives only the list, with "none" in it, is a public
+	 * client too. One without either field stays as before: public.
+	 *
+	 * @return array<string,array{0:callable}>
+	 */
+	public static function publicDocuments(): array {
+		return array(
+			'list with none, no method' => array( static function ( array &$d ): void { unset( $d['token_endpoint_auth_method'] ); $d['token_endpoint_auth_methods_supported'] = array( 'private_key_jwt', 'none' ); } ),
+			'none in both'              => array( static function ( array &$d ): void { $d['token_endpoint_auth_methods_supported'] = array( 'none' ); } ),
+			'neither field'             => array( static function ( array &$d ): void { unset( $d['token_endpoint_auth_method'] ); } ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'publicDocuments' )]
+	public function testADocumentThatOffersNoneIsAccepted( callable $change ): void {
+		$change( $this->doc );
+
+		$client = $this->resolve();
+		self::assertIsArray( $client, is_wp_error( $client ) ? $client->get_error_message() : '' );
+		self::assertTrue( $client['cimd'] );
 	}
 
 	public function testALoopbackRedirectIsAllowedAsForRegistration(): void {
