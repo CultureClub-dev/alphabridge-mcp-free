@@ -77,10 +77,10 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 == Frequently Asked Questions ==
 
 = Is it really free? =
-Yes. All its tools work without payment, registration or license key. There are no quotas, and it does not expire. You need no API key or AI credits either: AlphaBridge has no AI of its own, and you use Claude or ChatGPT as you do today.
+Yes. All its tools work without payment, registration or license key, and the plugin does not expire. There are no usage quotas, only a limit of 120 requests a minute that protects your server. You need no API key or AI credits either: AlphaBridge has no AI of its own, and you use Claude or ChatGPT as you do today.
 
 = Is it secure? =
-Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so is the reader of user profile fields. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. AlphaBridge reads only a fixed list of common site settings, so the keys other plugins keep in their settings stay out of reach. The latest 200 calls are logged.
+Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so is the reader of user profile fields. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets. The latest 200 calls are logged.
 
 = What if the AI gets something wrong? =
 Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo by chat: one sentence brings back an edited page, a page-builder element, a theme or plugin file or a PHP snippet.
@@ -92,7 +92,7 @@ It reads a page as an outline: its elements in page order, with their visible te
 * Read from the vendors' documentation and code, not yet checked on a live installation (the answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
 * Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5 and Etch.
 
-Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the free plugin leaves that copy alone, because a change there would not show, and says how to change the page instead. With Pro, the AI changes texts, links and images right in the builder, with a preview first.
+Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the free plugin leaves that copy alone while the builder is active, because a change there would not show, and says how to change the page instead. With Pro, the AI changes texts, links and images right in the builder, with a preview first.
 
 = Does it work on shared hosting? =
 Yes. It runs inside WordPress, in plain PHP, over the WordPress REST API. There is nothing else to install on the server. It needs PHP 8.0 or newer, and HTTPS is recommended.
