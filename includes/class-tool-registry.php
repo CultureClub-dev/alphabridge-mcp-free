@@ -46,6 +46,41 @@ class AB_MCP_Tool_Registry {
 	);
 
 	/**
+	 * Tools that add something new, yet cannot take it back once it is out.
+	 * is_destructive() counts them as destructive although their names say
+	 * they only add.
+	 *
+	 * OpenAI's review asks for destructiveHint true on irreversible sends,
+	 * "even in only select modes, through default parameters, or through
+	 * indirect side effects" (developers.openai.com/plugins/deploy/app-review,
+	 * read 7 October 2026):
+	 * - wp_create_post can publish. WordPress then pings other sites and update
+	 *   services, and newsletter plugins mail the subscribers.
+	 * - wp_reply_comment posts a public reply to a person at once; deleting it
+	 *   later does not unsend it.
+	 */
+	private const IRREVERSIBLE_ADDS = array(
+		'wp_create_post',
+		'wp_reply_comment',
+	);
+
+	/**
+	 * Writing tools that can make content public, counted by is_open_world().
+	 * A site is a bounded system, but what it publishes is public, and the same
+	 * review names write tools that "publish content" or "post to public
+	 * platforms" for openWorldHint true. Reading and drafts stay inside the
+	 * site and keep false.
+	 */
+	private const PUBLISHING = array(
+		'wp_create_post',      // Status publish or future.
+		'wp_update_post',      // Can publish, or change what is published.
+		'wp_reply_comment',    // The reply is public at once.
+		'wp_moderate_comment', // Approving makes a comment public.
+		'wp_upload_media',     // The file is public under its address.
+		'wp_update_media',     // Title, caption and alt text are public.
+	);
+
+	/**
 	 * Tools a "content" token may run whatever capability they are registered
 	 * with: a decision per tool, on top of the capability rule in
 	 * scope_allows(), which stays the general test.
@@ -165,7 +200,9 @@ class AB_MCP_Tool_Registry {
 	 * So the default follows the protocol's own: anything that writes is
 	 * destructive unless it demonstrably only adds. Creating, uploading,
 	 * duplicating and replying add; everything else that writes is assumed to
-	 * change. A tool that knows better says so with `destructive`.
+	 * change. Two adding tools are destructive all the same, because what they
+	 * add cannot be taken back once it is out (IRREVERSIBLE_ADDS, 7 October
+	 * 2026). A tool that knows better says so with `destructive`.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
@@ -179,6 +216,9 @@ class AB_MCP_Tool_Registry {
 		// reading tool that answered "destructive" would be nonsense.
 		if ( self::is_read_only( $name, $def ) ) {
 			return false;
+		}
+		if ( in_array( $name, self::IRREVERSIBLE_ADDS, true ) ) {
+			return true;
 		}
 		foreach ( self::ADDITIVE_PREFIXES as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
@@ -349,7 +389,8 @@ class AB_MCP_Tool_Registry {
 
 	/**
 	 * Does a tool interact with systems beyond this WordPress installation
-	 * (remote downloads, FTP/SFTP)? Drives the MCP openWorldHint annotation.
+	 * (remote downloads, FTP/SFTP), or can it make content public (PUBLISHING)?
+	 * Drives the MCP openWorldHint annotation.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
@@ -358,6 +399,9 @@ class AB_MCP_Tool_Registry {
 	public static function is_open_world( $name, array $def ) {
 		unset( $def );
 		if ( 0 === strpos( $name, 'wp_deploy_' ) ) {
+			return true;
+		}
+		if ( in_array( $name, self::PUBLISHING, true ) ) {
 			return true;
 		}
 		$networked = array(

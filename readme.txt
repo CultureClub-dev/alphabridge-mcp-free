@@ -125,6 +125,10 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.2 =
+* **Tools that can publish now say so to AI clients.** Creating and updating posts, replying to and approving comments, uploading media and changing its texts can make content public on your site. These six tools now report `openWorldHint: true`. Reading and drafts stay inside the site and report false as before.
+* **Creating a post and replying to a comment now count as destructive.** What they add cannot be taken back once it is out: a published post pings other sites and may go to newsletter subscribers, and a reply reaches the commenter at once. Both now report `destructiveHint: true`, so an AI client can ask you before it runs them. This follows OpenAI's review rules for tool hints. No setting changed.
+
 = 4.6.1 =
 * **ChatGPT connects directly again while «Accept apps with a metadata document» is on.** ChatGPT identifies itself with a metadata document that prefers the token method private_key_jwt and also lists «none» among the methods it supports. The plugin refused any document whose preferred method was not «none», so ChatGPT could not connect to the site directly. It now takes «none» from that list and treats the app as a public client, with PKCE as before. A document that asks for a shared client secret, or that offers no «none» at all, is still refused, and so is a list that does not contain the document's own preferred method. Reported in the support forum on 3 October 2026, thank you. No setting changed.
 
@@ -300,6 +304,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.2 =
+Tools that can publish now tell AI clients so, and creating a post or replying to a comment counts as destructive, so clients can ask you first. Nothing else changes.
 
 = 4.6.1 =
 ChatGPT can connect to the site directly again while apps with a metadata document are accepted. Nothing else changes.
