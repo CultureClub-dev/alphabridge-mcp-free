@@ -23,6 +23,14 @@ class AB_MCP_Settings {
 	const KEY_MODE_NOTICE = 'mode_notice';
 
 	/**
+	 * Key in OPT_OPTIONS: the version of the Terms of Use
+	 * (AB_MCP_Site_Mode::TERMS_VERSION) whose notice an administrator
+	 * dismissed (see AB_MCP_Admin::terms_notice_html()). A newer version
+	 * shows the notice again.
+	 */
+	const KEY_TERMS_NOTICE = 'terms_notice';
+
+	/**
 	 * Key in OPT_OPTIONS: true while OPT_TOOLSTATE still holds switches
 	 * saved before the site mode existed, on a site updated from such a
 	 * version (see is_tool_enabled()). Saving the switches clears it.

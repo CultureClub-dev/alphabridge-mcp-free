@@ -96,11 +96,14 @@
 	}() );
 
 	/* ---- The main switch for write access. Off, the switch opens a small
-	 * window at it with the notice, the box, «Switch on» and «Cancel»; the
-	 * window keeps the focus inside while open, Escape and Cancel close it
-	 * and give the focus back to the switch. Without this script the same
-	 * fields stand in the card as a plain form. On, the switch submits the
-	 * form that switches off: nothing to add here. ---- */
+	 * window at it with the notice, the two boxes, the button and «Cancel»;
+	 * the button works once the first box is ticked, and the second too
+	 * where it is required (the agreement to the Terms of Use; with a paid
+	 * licence it is offered, not required). The window keeps the focus inside
+	 * while open, Escape and Cancel close it and give the focus back to the
+	 * switch. Without this script the same fields stand in the card as a
+	 * plain form. On, the switch submits the form that switches off: nothing
+	 * to add here. ---- */
 	( function () {
 		var card = document.getElementById( 'ab-mode' );
 		var sw = card ? card.querySelector( '.ab-power' ) : null;
@@ -110,6 +113,7 @@
 			return;
 		}
 		var box = dlg.querySelector( 'input[name="confirm_full"]' );
+		var terms = dlg.querySelector( 'input[name="agree_terms"]' );
 		var go = dlg.querySelector( '.ab-mode__go' );
 		var cancel = dlg.querySelector( '.ab-mode__cancel' );
 		if ( ! box || ! go ) {
@@ -124,7 +128,7 @@
 		}
 
 		function sync() {
-			go.disabled = ! box.checked;
+			go.disabled = ! box.checked || ( !! terms && terms.required && ! terms.checked );
 		}
 
 		// Right under the switch, wherever the card's text made it end up.
@@ -136,6 +140,9 @@
 
 		function open() {
 			box.checked = false;
+			if ( terms ) {
+				terms.checked = false;
+			}
 			sync();
 			dlg.hidden = false;
 			card.classList.add( 'is-confirming' );
@@ -165,6 +172,9 @@
 			}
 		} );
 		box.addEventListener( 'change', sync );
+		if ( terms ) {
+			terms.addEventListener( 'change', sync );
+		}
 		if ( cancel ) {
 			cancel.addEventListener( 'click', function () {
 				close( true );

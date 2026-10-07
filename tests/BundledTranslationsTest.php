@@ -22,8 +22,14 @@
  *   the same placeholders and the same HTML; a text added to the code
  *   without its translation fails here, and a counter-check shows that the
  *   check finds a missing or broken entry.
- * - The notice, the box, both refusals with write access off (a writing
- *   tool, a Mighty reader) and the way they name, the other refusals of the
+ * - The notice and the two boxes before write access goes on are no gettext
+ *   texts: they are declarations, so they come from
+ *   AB_MCP_Site_Mode::wordings() in English and German only, and no
+ *   language pack can change them (ConsentWordingTest). Neither are they
+ *   in the bundled files.
+ * - The button, the link to the Terms of Use and the notices around them,
+ *   both refusals with write access off (a writing tool, a Mighty reader)
+ *   and the way they name, the other refusals of the
  *   policy gate, the answer for a tool of Pro, the notice after the update,
  *   the consent sentences, the main switch with its states and boxes and the
  *   notices after switching are translated everywhere, with their
@@ -74,8 +80,6 @@ final class BundledTranslationsTest extends TestCase {
 		'Plus, Pro, Business',
 		'Code editor',
 		'Claude Code, scripts',
-		'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.',
-		'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.',
 		'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.',
 		'Write access is off on this site, so the tool "%s" did not run: it is one of the reading tools that run only with write access on.',
 		"To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner's own risk, and a current backup is advised.",
@@ -97,7 +101,13 @@ final class BundledTranslationsTest extends TestCase {
 		'On: full power. Connected AI assistants read and write on this site.',
 		'Applies to every connection: Claude, ChatGPT, Cursor and all others.',
 		'Switch on write access?',
-		'Switch on',
+		'Agree and switch on write access',
+		'Read the Terms of Use',
+		'Optional with your licence: the terms already apply from your purchase.',
+		'Write access was not switched on: tick the box to agree to the Terms of Use, then switch again.',
+		'New: Terms of Use for write access.',
+		'Whoever switches on write access now agrees to the Terms of Use. On this site write access was switched on before that and stays on; an administrator agrees the next time it is switched on.',
+		'Noted. The agreement to the Terms of Use is asked for the next time write access is switched on.',
 		'Cancel',
 		'Off: read only',
 		'On: full power',
@@ -469,7 +479,7 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/** The methods of AB_MCP_Admin that draw the fine-tuning. */
-	const FINE_METHODS = array( 'main_groups', 'main_description', 'group_label', 'kind_badge', 'tool_note', 'count_badges', 'addon_text', 'fine_row_html', 'fine_sub_html', 'tool_row_html', 'capabilities_card_html', 'group_status', 'mode_card_html', 'mode_notice_html', 'notice' );
+	const FINE_METHODS = array( 'main_groups', 'main_description', 'group_label', 'kind_badge', 'tool_note', 'count_badges', 'addon_text', 'fine_row_html', 'fine_sub_html', 'tool_row_html', 'capabilities_card_html', 'group_status', 'mode_card_html', 'mode_notice_html', 'terms_notice_html', 'notice' );
 
 	/**
 	 * Every text those methods translate, keyed like mo(): «context\x04text»
@@ -575,13 +585,15 @@ final class BundledTranslationsTest extends TestCase {
 
 	public function testTheTextsInTheCodeAreTheOnesTranslated(): void {
 		$mo = self::mo( self::file( 'de_DE', 'mo' ) );
-		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::way_text(), \AB_MCP_Guidance::handover() ) as $text ) {
+		foreach ( array( AB_MCP_Site_Mode::consent_text(), AB_MCP_Site_Mode::way_text(), \AB_MCP_Guidance::handover() ) as $text ) {
 			self::assertArrayHasKey( $text, $mo );
 		}
-		self::assertSame( 'Mit Schreibrechten arbeiten deine KI-Assistenten direkt auf deiner Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $mo[ AB_MCP_Site_Mode::notice_text() ], 'The wording Thomas approved.' );
-		self::assertSame( 'Verstanden: Änderungen wirken sofort, ich schalte Schreiben auf eigenes Risiko ein und habe ein aktuelles Backup.', $mo[ AB_MCP_Site_Mode::checkbox_text() ] );
-		self::assertSame( 'Mit Schreibrechten arbeiten Ihre KI-Assistenten direkt auf Ihrer Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.', self::mo( self::file( 'de_DE_formal', 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ] );
-		self::assertSame( 'Mit Schreibrechten arbeiten Ihre KI-Assistenten direkt auf Ihrer Live-Website. Änderungen wirken sofort: Sie können Inhalte, Dateien, Einstellungen und Code erstellen, ändern und auch löschen, und nicht alles lässt sich rückgängig machen. Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.', self::mo( self::file( 'de_CH', 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ], 'de_CH addresses the reader as Sie.' );
+		// The notice and the boxes are declarations: never from a translation file.
+		foreach ( array( AB_MCP_Site_Mode::notice_text(), AB_MCP_Site_Mode::checkbox_text(), AB_MCP_Site_Mode::terms_text() ) as $text ) {
+			foreach ( self::LOCALES as $locale ) {
+				self::assertArrayNotHasKey( $text, self::mo( self::file( $locale, 'mo' ) ), $locale );
+			}
+		}
 	}
 
 	/** @return array<string,array{0:string,1:string}> */
@@ -630,9 +642,14 @@ final class BundledTranslationsTest extends TestCase {
 
 	#[DataProvider( 'address' )]
 	public function testFormalLocalesSaySieTheOthersDu( string $locale, bool $formal ): void {
-		$notice = self::mo( self::file( $locale, 'mo' ) )[ AB_MCP_Site_Mode::notice_text() ];
+		// The notice comes from the code (ConsentWordingTest) in the same
+		// address as the bundled file of the locale.
+		$GLOBALS['ab_test_locale'] = $locale;
+		$notice                    = AB_MCP_Site_Mode::notice_text();
 
-		self::assertStringContainsString( $formal ? 'Sie schalten das auf eigenes Risiko ein. Ein aktuelles Backup gibt Ihnen Sicherheit.' : 'Du schaltest das auf eigenes Risiko ein. Ein aktuelles Backup gibt dir Sicherheit.', $notice );
+		self::assertStringContainsString( $formal ? 'Sie schalten das auf eigenes Risiko ein.' : 'Du schaltest das auf eigenes Risiko ein.', $notice );
+		self::assertStringContainsString( $formal ? 'Ein aktuelles Backup gibt Ihnen Sicherheit.' : 'Ein aktuelles Backup gibt dir Sicherheit.', $notice, 'The wording Thomas approved for version 2 stays.' );
+		self::assertDoesNotMatchRegularExpression( $formal ? self::DU : self::SIE, str_replace( self::THEY, '', $notice ), $locale );
 		foreach ( self::mo( self::file( $locale, 'mo' ) ) as $text ) {
 			$text = str_replace( self::THEY, '', $text );
 			self::assertDoesNotMatchRegularExpression( $formal ? self::DU : self::SIE, $text, $locale );

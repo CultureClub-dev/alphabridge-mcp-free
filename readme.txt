@@ -26,7 +26,7 @@ Out of the box AlphaBridge MCP only reads: write access for AI assistants is off
 
 The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection — Claude, ChatGPT, Cursor and all others. Switching write access on switches every tool on; each connection keeps its access level (Full, Content or Read only). Switching it off takes one click.
 
-Before switching on, an administrator ticks a box: changes take effect immediately, it is at the site owner's own risk, and a current backup exists. The account, the time, the version of that notice and its wording are recorded.
+Before switching on, an administrator ticks two boxes under a notice that says it is at the site owner's own risk. With the first they agree that changes take effect immediately and can be destructive, that not everything can be undone and that keeping a current backup is up to them; with the second they agree to the [Terms of Use](https://alphabridge-mcp.com/terms). With a paid licence of Pro or Agency the second box is optional, the terms already apply from the purchase. The account, the time, the version and wording of the notice and of the boxes, and the version of the terms agreed to are recorded on the site and sent nowhere.
 
 * Every connection acts as a real WordPress user, and every tool checks the matching WordPress capability. What that user may not do, the AI cannot do.
 * Scoped connections: hand out a read-only or content-only key with an optional expiry instead of full access. Rotate a connection's secret in one click.
@@ -94,7 +94,7 @@ AlphaBridge is our own product brand for this project. MCP (Model Context Protoc
 2. Activate the plugin.
 3. In Claude, open Connectors, find «AlphaBridge MCP for WordPress» in the directory and connect: enter your site's address and approve on your own site's login-protected consent screen. Done. To connect directly, without the AlphaBridge Connect hub in between, add a custom connector with the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` instead. In ChatGPT: Plugins → Add → Create MCP app with the endpoint and OAuth.
 4. For clients without a Connect button (Cursor, Claude Code, scripts): open **Settings → AlphaBridge MCP**, create a connection manually and copy its token.
-5. The plugin starts with write access off: assistants can read content, media, terms, comments, settings and the structure of the site. To let them create, change and delete, and read user profile fields, switch on «Write access for AI assistants» at the top of **Settings → AlphaBridge MCP**. Changes then take effect immediately and not everything can be undone; you switch it on at your own risk, so make sure you have a current backup.
+5. The plugin starts with write access off: assistants can read content, media, terms, comments, settings and the structure of the site. To let them create, change and delete, and read user profile fields, switch on «Write access for AI assistants» at the top of **Settings → AlphaBridge MCP**. Changes then take effect immediately and not everything can be undone; you switch it on at your own risk, so make sure you have a current backup. Switching it on asks you to agree to the Terms of Use.
 
 == Frequently Asked Questions ==
 
@@ -138,6 +138,13 @@ This plugin makes no automatic outbound requests and sends no telemetry. Two thi
 The plugin itself initiates no other outbound requests.
 
 == Changelog ==
+
+= 4.6.0 =
+* **Switching on write access asks for two boxes, the second for the Terms of Use.** The notice says, as before, that changes take effect immediately, that not everything can be undone and that write access is switched on at the site owner's own risk, and now also that statutory rights and the liability rules of the Terms of Use remain unaffected. With the first box the administrator agrees to how write access works; with the second, to the [Terms of Use](https://alphabridge-mcp.com/terms) of CultureClub Kulturagentur UG (haftungsbeschränkt), version of 7 October 2026, which the dialog links. Neither box is ticked in advance. Without a paid licence both are required; with a valid licence of Pro or Agency the second is optional, because the terms already apply from the purchase. Switching on by code is no agreement to the terms. The button reads «Agree and switch on write access».
+* No box confirms a fact any more («Understood», «I have a current backup»): both say what the administrator agrees to.
+* The notice and the boxes come in English and German only, as the Terms of Use, and from the plugin itself: a language pack does not change them. Other languages read English. The link goes to the German version of the terms on a German site.
+* The record of a switch-on also holds the wording of the second box, the address it linked, whether and to which version of the terms the administrator agreed, and the edition. It stays on the site; nothing is sent anywhere. The notice is version 3; a record of version 1 or 2 stays valid.
+* Where write access was switched on before this version, it stays on. The settings page says once that the agreement to the terms is asked for the next time write access is switched on; «Dismiss» hides it for this version of the terms.
 
 = 4.5.3 =
 * **All visible texts of the plugin come in German on a German site** (de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal): the settings page with its cards, notices, tables, buttons, tooltips and the texts of its script; the consent screen with its access levels and its error pages; the description in the plugin list; the log, whose status and time now follow the language; and the refusals and error messages of the tools that an assistant passes on. The plugin brings these files itself; a language pack from translate.wordpress.org still takes precedence for every text it has.
@@ -304,6 +311,9 @@ The plugin itself initiates no other outbound requests.
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.0 =
+Switching on write access now asks for two boxes: how write access works, and the Terms of Use (optional with a paid licence). Where write access is on already, it stays on.
 
 = 4.5.3 =
 On a German site every text of the plugin a person reads is now German: settings page, consent screen, log, and the refusals an assistant passes on. Claude Code gets a ready-made command. Nothing else changes.

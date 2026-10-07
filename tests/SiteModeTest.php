@@ -23,12 +23,19 @@
  *   on, and add-ons switch their items on through ab_mcp_reset_switches; an
  *   update alone resets nothing, and switching off keeps the switches.
  * - Only an administrator switches, with the form's own nonce; on only with
- *   the box under the notice (version 2) ticked and for the notice in force,
- *   in the wording the form showed. Who, when, which notice in which
- *   wording, which plugin version and how (settings page or code) is
- *   recorded in the option, in the history and in the log; off needs no box
- *   and keeps the record. A confirmation of notice version 1 (4.4.0) stays
- *   valid. «Clear log» leaves the history alone.
+ *   the first box under the notice (version 3) ticked, the second, the
+ *   agreement to the Terms of Use, too where no paid licence is reported,
+ *   and for the notice in force, in the wording the form showed. Who, when,
+ *   which notice in which wording, whether and to which version of the
+ *   terms, which edition, which plugin version and how (settings page or
+ *   code) is recorded in the option, in the history and in the log; code
+ *   never agrees to the terms. Off needs no box and keeps the record. A
+ *   record of notice version 1 (4.4.0) or 2 (4.5.0) stays valid. «Clear
+ *   log» leaves the history alone.
+ * - Write access that is on without an agreement to the terms where one is
+ *   needed stays on; the settings page says once, until dismissed, that the
+ *   agreement is asked for the next time it is switched on (decision
+ *   07.10.2026: a notice, no pause).
  * - A site that was in Full under 4.4.0 and saved no switches since keeps
  *   the rule for switches saved before the modes until write access is
  *   switched on again: a powerful tool that only reads keeps what it had, a
@@ -183,6 +190,7 @@ final class SiteModeTest extends TestCase {
 			'notice_version' => AB_MCP_Site_Mode::NOTICE_VERSION,
 			'notice_hash'    => AB_MCP_Site_Mode::notice_hash(),
 			'confirm_full'   => '1',
+			'agree_terms'    => '1',
 		);
 	}
 
@@ -816,7 +824,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'mode_full', self::notice_of( $exit ) );
 		self::assertTrue( AB_MCP_Site_Mode::is_full() );
 		$record = AB_MCP_Site_Mode::confirmation();
-		self::assertSame( array( 'user_id', 'user_login', 'time', 'notice_version', 'plugin_version', 'locale', 'source', 'notice_hash', 'notice_text', 'checkbox_text' ), array_keys( $record ) );
+		self::assertSame( array( 'user_id', 'user_login', 'time', 'notice_version', 'plugin_version', 'locale', 'source', 'edition', 'terms_agreed', 'terms_version', 'notice_hash', 'notice_text', 'checkbox_text', 'terms_text', 'terms_url' ), array_keys( $record ) );
 		self::assertSame( 3, $record['user_id'] );
 		self::assertSame( 'user3', $record['user_login'] );
 		self::assertGreaterThanOrEqual( $before, $record['time'] );
@@ -827,7 +835,12 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'settings_form', $record['source'], 'Confirmed with the box on the settings page.' );
 		self::assertSame( AB_MCP_Site_Mode::notice_text(), $record['notice_text'], 'The wording on the screen.' );
 		self::assertSame( AB_MCP_Site_Mode::checkbox_text(), $record['checkbox_text'] );
-		self::assertSame( hash( 'sha256', $record['notice_text'] . "\n" . $record['checkbox_text'] ), $record['notice_hash'] );
+		self::assertSame( AB_MCP_Site_Mode::terms_text(), $record['terms_text'] );
+		self::assertSame( 'https://alphabridge-mcp.com/terms', $record['terms_url'], 'The address the link showed.' );
+		self::assertTrue( $record['terms_agreed'] );
+		self::assertSame( AB_MCP_Site_Mode::TERMS_VERSION, $record['terms_version'] );
+		self::assertSame( 'free', $record['edition'] );
+		self::assertSame( hash( 'sha256', $record['notice_text'] . "\n" . $record['checkbox_text'] . "\n" . $record['terms_text'] ), $record['notice_hash'] );
 		self::assertSame( $record, get_option( 'ab_mcp_options' )[ AB_MCP_Site_Mode::KEY_CONFIRMATION ], 'Kept in the option.' );
 
 		$log = self::mode_log();
@@ -835,7 +848,8 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'ok', $log[0]['status'] );
 		self::assertSame( 3, $log[0]['user'] );
 		self::assertStringContainsString( 'Write access (Full) switched on by user3 (user 3) on the settings page', $log[0]['message'] );
-		self::assertStringContainsString( 'notice version ' . AB_MCP_Site_Mode::NOTICE_VERSION . ' confirmed', $log[0]['message'] );
+		self::assertStringContainsString( 'notice version ' . AB_MCP_Site_Mode::NOTICE_VERSION . ' agreed', $log[0]['message'] );
+		self::assertStringContainsString( 'terms of use ' . AB_MCP_Site_Mode::TERMS_VERSION . ' agreed', $log[0]['message'] );
 		self::assertStringContainsString( 'wording sha256 ' . $record['notice_hash'], $log[0]['message'] );
 		self::assertStringContainsString( 'plugin ' . AB_MCP_VERSION, $log[0]['message'] );
 		self::assertLessThanOrEqual( 300, mb_strlen( $log[0]['message'] ), 'The log clips at 300 characters; nothing of it is cut.' );
@@ -851,9 +865,10 @@ final class SiteModeTest extends TestCase {
 		$hashes = array(
 			'1' => 'e63a129b792c19f2ffa0625d200070fa821bd84ba172150a7c24264399a3b310',
 			'2' => '9d40c270e3b9d177b5288343d51db17690e5d39ee3baf2620e7c5051d9f083e6',
+			'3' => '159bf25fdc79e68dcfac40e990dd63441eae65481a8f3a881d46f4e953e60606',
 		);
 
-		self::assertSame( '2', AB_MCP_Site_Mode::NOTICE_VERSION, 'The notice of write access is version 2.' );
+		self::assertSame( '3', AB_MCP_Site_Mode::NOTICE_VERSION, 'The notice of write access is version 3: two boxes, the second for the Terms of Use.' );
 		self::assertArrayHasKey( AB_MCP_Site_Mode::NOTICE_VERSION, $hashes );
 		self::assertSame( $hashes[ AB_MCP_Site_Mode::NOTICE_VERSION ], AB_MCP_Site_Mode::notice_hash() );
 	}
@@ -864,9 +879,11 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'code', $record['source'] );
 		self::assertArrayNotHasKey( 'notice_text', $record, 'Nobody saw a notice.' );
 		self::assertArrayNotHasKey( 'notice_hash', $record );
+		self::assertFalse( $record['terms_agreed'], 'Code never agrees to the Terms of Use.' );
+		self::assertSame( '', $record['terms_version'] );
 		self::assertSame( 'Write access on since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ' · set by code, not confirmed on this page · every connection keeps its access level', AB_MCP_Site_Mode::full_since_text() );
 		$log = self::mode_log();
-		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 2 not confirmed', end( $log )['message'] );
+		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 3 not confirmed; terms of use not agreed', end( $log )['message'] );
 		self::assertStringNotContainsString( ' confirmed,', end( $log )['message'] );
 
 		// Anything but the form's own word is code.
@@ -1036,6 +1053,149 @@ final class SiteModeTest extends TestCase {
 		self::assertTrue( AB_MCP_Site_Mode::is_full() );
 	}
 
+	/* ------------------------------------------ the agreement to the terms */
+
+	/** @return array<string,array{0:array}> */
+	public static function termsNotAgreed(): array {
+		$base = self::full_post();
+		$none = $base;
+		unset( $none['agree_terms'] );
+		return array(
+			'box not sent' => array( $none ),
+			'box empty'    => array( array( 'agree_terms' => '' ) + $base ),
+			'box "on"'     => array( array( 'agree_terms' => 'on' ) + $base ),
+		);
+	}
+
+	#[DataProvider( 'termsNotAgreed' )]
+	public function testWithoutAPaidLicenceFullNeedsTheAgreementToTheTerms( array $post ): void {
+		$exit = $this->post( 'handle_site_mode', $post );
+
+		self::assertSame( 'mode_terms', self::notice_of( $exit ) );
+		self::assertFalse( AB_MCP_Site_Mode::is_full() );
+		self::assertNull( AB_MCP_Site_Mode::confirmation() );
+		self::assertSame( array(), self::mode_log() );
+	}
+
+	#[DataProvider( 'termsNotAgreed' )]
+	public function testWithAPaidLicenceTheTermsBoxIsOfferedNotRequired( array $post ): void {
+		add_filter( 'ab_mcp_site_edition', static fn(): string => 'pro' );
+
+		$exit = $this->post( 'handle_site_mode', $post );
+
+		self::assertSame( 'mode_full', self::notice_of( $exit ), 'A new version of the terms must not lock a paid feature (terms 12.5).' );
+		$record = AB_MCP_Site_Mode::confirmation();
+		self::assertFalse( $record['terms_agreed'] );
+		self::assertSame( '', $record['terms_version'] );
+		self::assertSame( 'pro', $record['edition'] );
+		self::assertSame( AB_MCP_Site_Mode::terms_text(), $record['terms_text'], 'The box was on the screen all the same.' );
+		self::assertStringContainsString( 'terms of use not agreed (pro)', self::mode_log()[0]['message'] );
+		self::assertFalse( AB_MCP_Site_Mode::terms_pending(), 'With a licence nothing is pending.' );
+	}
+
+	public function testWithAPaidLicenceTickingTheBoxAgreesToo(): void {
+		add_filter( 'ab_mcp_site_edition', static fn(): string => 'agency' );
+
+		$record = $this->confirm_full();
+
+		self::assertTrue( $record['terms_agreed'] );
+		self::assertSame( AB_MCP_Site_Mode::TERMS_VERSION, $record['terms_version'] );
+		self::assertSame( 'agency', $record['edition'] );
+	}
+
+	public function testWithAPaidLicenceTheCardOffersTheBoxAndSaysWhy(): void {
+		add_filter( 'ab_mcp_site_edition', static fn(): string => 'pro' );
+		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
+
+		$terms = $x->query( '//input[@name="agree_terms"]' )->item( 0 );
+		self::assertFalse( $terms->hasAttribute( 'required' ) );
+		self::assertSame( 'Optional with your licence: the terms already apply from your purchase.', trim( $x->query( '//*[contains(@class, "ab-mode__terms-note")]' )->item( 0 )->textContent ) );
+	}
+
+	public function testCodeNeverAgreesToTheTerms(): void {
+		$record = AB_MCP_Site_Mode::switch_to_full( 3, AB_MCP_Site_Mode::SOURCE_CODE, true );
+
+		self::assertFalse( $record['terms_agreed'], 'Switching on by code is no agreement (terms 1.7).' );
+		self::assertSame( '', $record['terms_version'] );
+		self::assertFalse( AB_MCP_Site_Mode::terms_agreed() );
+	}
+
+	public function testTheGermanFormLinksTheGermanTerms(): void {
+		$GLOBALS['ab_test_locale'] = 'de_CH';
+		try {
+			$x = $this->xpath( $this->admin( 'mode_card_html' ) );
+			self::assertSame( 'https://alphabridge-mcp.com/terms#de', $x->query( '//p[contains(@class, "ab-mode__terms-link")]/a' )->item( 0 )->getAttribute( 'href' ) );
+			self::assertSame( AB_MCP_Site_Mode::terms_text(), trim( $x->query( '//input[@name="agree_terms"]' )->item( 0 )->parentNode->textContent ) );
+			self::assertStringStartsWith( 'Ich bin mit den Nutzungsbedingungen', AB_MCP_Site_Mode::terms_text() );
+
+			$record = $this->confirm_full();
+			self::assertSame( 'https://alphabridge-mcp.com/terms#de', $record['terms_url'] );
+			self::assertSame( 'de_CH', $record['locale'] );
+		} finally {
+			$GLOBALS['ab_test_locale'] = 'en_US';
+		}
+	}
+
+	/** The notice that the agreement is still to come, on the settings page. */
+	private function terms_notice(): ?\DOMElement {
+		$node = $this->page()->query( '//div[contains(@class, "ab-terms-notice")]' )->item( 0 );
+		return $node instanceof \DOMElement ? $node : null;
+	}
+
+	public function testWriteAccessOnWithoutTheAgreementStaysOnAndThePageSaysSo(): void {
+		// Switched on under notice version 2, before the plugin asked.
+		self::full();
+		AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY_CONFIRMATION, array( 'user_id' => 3, 'time' => time() - 60, 'notice_version' => '2', 'source' => 'settings_form' ) );
+
+		self::assertTrue( AB_MCP_Site_Mode::terms_pending() );
+		$notice = $this->terms_notice();
+		self::assertNotNull( $notice );
+		self::assertStringContainsString( 'New: Terms of Use for write access.', $notice->textContent );
+		self::assertStringContainsString( 'an administrator agrees the next time it is switched on', $notice->textContent );
+		$x = $this->xpath( $notice->ownerDocument->saveHTML( $notice ) );
+		self::assertSame( 'https://alphabridge-mcp.com/terms', $x->query( '//a' )->item( 0 )->getAttribute( 'href' ) );
+		self::assertSame( 'ab_mcp_terms_notice', $x->query( '//input[@name="action"]' )->item( 0 )->getAttribute( 'value' ) );
+		self::assertSame( 'nonce-ab_mcp_terms_notice', $x->query( '//input[@name="_wpnonce"]' )->item( 0 )->getAttribute( 'value' ) );
+		self::assertTrue( AB_MCP_Site_Mode::is_full(), 'No pause: write access stays on.' );
+		self::assertTrue( AB_MCP_Site_Mode::allows( 'wp_update_post', array() ) );
+	}
+
+	public function testTheTermsNoticeKeepsQuietWhereThereIsNothingToAgree(): void {
+		self::assertNull( $this->terms_notice(), 'Write access off: the agreement comes with switching on.' );
+
+		$this->confirm_full();
+		self::assertNull( $this->terms_notice(), 'Agreed when switching on.' );
+
+		$this->post( 'handle_site_mode', array( '_wpnonce' => 'nonce-ab_mcp_site_mode', 'mode' => 'read' ) );
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		add_filter( 'ab_mcp_site_edition', static fn(): string => 'pro' );
+		self::assertNull( $this->terms_notice(), 'With a paid licence the terms apply from the purchase.' );
+	}
+
+	public function testDismissingTheTermsNoticeHoldsForThisVersionOfTheTerms(): void {
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+		self::assertNotNull( $this->terms_notice(), 'Switched on by code: no agreement.' );
+
+		$exit = $this->post( 'handle_terms_notice_dismiss', array( '_wpnonce' => 'nonce-ab_mcp_terms_notice' ) );
+
+		self::assertSame( 'terms_notice_dismissed', self::notice_of( $exit ) );
+		self::assertSame( AB_MCP_Site_Mode::TERMS_VERSION, AB_MCP_Settings::get( AB_MCP_Settings::KEY_TERMS_NOTICE ) );
+		self::assertNull( $this->terms_notice() );
+		self::assertTrue( AB_MCP_Site_Mode::is_full(), 'Dismissing changes nothing else.' );
+
+		// A newer version of the terms shows it again.
+		AB_MCP_Settings::set( AB_MCP_Settings::KEY_TERMS_NOTICE, '2026-01-01' );
+		self::assertNotNull( $this->terms_notice() );
+	}
+
+	public function testDismissingTheTermsNoticeNeedsTheNonceAndAnAdministrator(): void {
+		AB_MCP_Site_Mode::switch_to_full( 3 );
+
+		self::assertSame( 'die', $this->post( 'handle_terms_notice_dismiss', array() )->kind );
+		self::assertSame( 'die', $this->post( 'handle_terms_notice_dismiss', array( '_wpnonce' => 'nonce-ab_mcp_terms_notice' ), static fn(): bool => false )->kind );
+		self::assertSame( '', (string) AB_MCP_Settings::get( AB_MCP_Settings::KEY_TERMS_NOTICE, '' ) );
+	}
+
 	/* ---------------------------------------------------- the page itself */
 
 	public function testTheSwitchIsTheFirstThingOnThePage(): void {
@@ -1062,7 +1222,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( 'nonce-ab_mcp_site_mode', $field( '_wpnonce' )->getAttribute( 'value' ) );
 		self::assertSame( 'ab_mcp_site_mode', $field( 'action' )->getAttribute( 'value' ) );
 		self::assertSame( 'full', $field( 'mode' )->getAttribute( 'value' ) );
-		self::assertSame( '2', $field( 'notice_version' )->getAttribute( 'value' ), 'The form carries the notice in force, version 2.' );
+		self::assertSame( '3', $field( 'notice_version' )->getAttribute( 'value' ), 'The form carries the notice in force, version 3.' );
 		self::assertSame( AB_MCP_Site_Mode::NOTICE_VERSION, $field( 'notice_version' )->getAttribute( 'value' ) );
 
 		$box = $field( 'confirm_full' );
@@ -1071,12 +1231,24 @@ final class SiteModeTest extends TestCase {
 		self::assertFalse( $box->hasAttribute( 'checked' ), 'Not ticked in advance.' );
 		self::assertTrue( $box->hasAttribute( 'required' ), 'Without JavaScript the browser asks for it.' );
 		self::assertSame( AB_MCP_Site_Mode::checkbox_text(), trim( $box->parentNode->textContent ) );
+
+		$terms = $field( 'agree_terms' );
+		self::assertSame( 'checkbox', $terms->getAttribute( 'type' ) );
+		self::assertSame( '1', $terms->getAttribute( 'value' ) );
+		self::assertFalse( $terms->hasAttribute( 'checked' ), 'Not ticked in advance.' );
+		self::assertTrue( $terms->hasAttribute( 'required' ), 'Without a paid licence the browser asks for it too.' );
+		self::assertSame( AB_MCP_Site_Mode::terms_text(), trim( $terms->parentNode->textContent ) );
+		$link = $x->query( './/p[contains(@class, "ab-mode__terms-link")]/a', $form )->item( 0 );
+		self::assertSame( 'https://alphabridge-mcp.com/terms', $link->getAttribute( 'href' ) );
+		self::assertSame( '_blank', $link->getAttribute( 'target' ) );
+		self::assertSame( 'Read the Terms of Use (opens in a new tab)', trim( preg_replace( '/\s+/', ' ', $link->textContent ) ) );
+		self::assertSame( 0, $x->query( './/*[contains(@class, "ab-mode__terms-note")]', $form )->length, 'No note about a licence on a free site.' );
 		$dialog = $x->query( './/*[@id="ab-mode-confirm"]', $form )->item( 0 );
 		self::assertNotNull( $dialog, 'The window the switch opens is the form itself: without JavaScript it stands in the card.' );
 		self::assertFalse( $dialog->hasAttribute( 'hidden' ), 'Visible without JavaScript.' );
 		self::assertSame( 'Switch on write access?', trim( $x->query( './/*[@id="' . $dialog->getAttribute( 'aria-labelledby' ) . '"]' )->item( 0 )->textContent ) );
 		self::assertSame( AB_MCP_Site_Mode::notice_text(), trim( $x->query( './/*[@id="' . $dialog->getAttribute( 'aria-describedby' ) . '"]' )->item( 0 )->textContent ) );
-		self::assertSame( 'Switch on', trim( $x->query( './/button[@type="submit"]', $dialog )->item( 0 )->textContent ) );
+		self::assertSame( 'Agree and switch on write access', trim( $x->query( './/button[@type="submit"]', $dialog )->item( 0 )->textContent ) );
 		$cancel = $x->query( './/button[contains(@class, "ab-mode__cancel")]', $dialog )->item( 0 );
 		self::assertSame( 'Cancel', trim( $cancel->textContent ) );
 		self::assertSame( 'button', $cancel->getAttribute( 'type' ), 'Never submits.' );
@@ -1255,8 +1427,9 @@ final class SiteModeTest extends TestCase {
 	}
 
 	public function testTheNoticeAndTheBoxSayWhatWasDecided(): void {
-		self::assertSame( 'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. A current backup keeps you on the safe side.', AB_MCP_Site_Mode::notice_text() );
-		self::assertSame( 'Understood: changes take effect immediately, I switch on write access at my own risk and I have a current backup.', AB_MCP_Site_Mode::checkbox_text() );
+		self::assertSame( 'With write access, your AI assistants work directly on your live website. Changes take effect immediately: they can create, change and also delete content, files, settings and code, and not everything can be undone. You switch this on at your own risk. Your statutory rights and the liability rules of the Terms of Use remain unaffected. A current backup keeps you on the safe side.', AB_MCP_Site_Mode::notice_text() );
+		self::assertSame( 'I agree: changes take effect immediately and can be destructive, not everything can be undone, and keeping a current backup is up to me.', AB_MCP_Site_Mode::checkbox_text() );
+		self::assertSame( 'I agree to the Terms of Use of CultureClub Kulturagentur UG (haftungsbeschränkt), version of 7 October 2026.', AB_MCP_Site_Mode::terms_text() );
 		self::assertSame( 'Write access off (read only)', AB_MCP_Site_Mode::label( AB_MCP_Site_Mode::READ ) );
 		self::assertSame( 'Write access on (full power)', AB_MCP_Site_Mode::label( AB_MCP_Site_Mode::FULL ) );
 	}
