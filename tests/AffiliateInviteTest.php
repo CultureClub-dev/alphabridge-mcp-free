@@ -169,7 +169,7 @@ final class AffiliateInviteTest extends TestCase {
 		$path = preg_replace( '/\.html$/', '', (string) ( $line['path'] ?? '' ) );
 		self::assertStringContainsString( 'https://' . $host . $path, $answer, 'The FAQ links to the page the line links to.' );
 
-		self::assertStringContainsString( 'open to everyone, worldwide', $answer );
+		self::assertStringContainsString( 'open worldwide to anyone 18 or over', $answer );
 		self::assertStringContainsString( 'This free plugin itself earns none', $answer );
 		self::assertLessThan( strpos( $readme, '== Screenshots ==' ), strpos( $readme, '= Is there an affiliate programme? =' ), 'The entry belongs to the FAQ.' );
 	}
