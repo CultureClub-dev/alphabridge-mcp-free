@@ -14,6 +14,11 @@
  * false version is not a cosmetic slip: it invites an overwrite without a
  * prompt.
  *
+ * Since 7 October 2026 the adding tools that can publish count as destructive
+ * as well: creating a post, replying to a comment, uploading media. What is
+ * published cannot be taken back once it is out, which OpenAI's review counts
+ * as destructive even when it happens only in one mode or as a side effect.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -38,11 +43,15 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_comment',
 	);
 
-	/** Tools that only ever add something new. */
+	/** Tools that only ever add something new, and keep it inside the site. */
 	private const ADDS_ONLY = array(
-		'wp_create_post',
 		'wp_create_term',
 		'wp_duplicate_post',
+	);
+
+	/** Tools that add, but publish what they add, which cannot be taken back. */
+	private const PUBLISHING_ADDS = array(
+		'wp_create_post',
 		'wp_reply_comment',
 		'wp_upload_media',
 		'wp_upload_media_from_url',
@@ -62,6 +71,15 @@ final class DestructiveClassificationTest extends TestCase {
 			$this->assertFalse(
 				AB_MCP_Tool_Registry::is_destructive( $name, array() ),
 				"$name only adds, so destructiveHint: false is the honest answer"
+			);
+		}
+	}
+
+	public function test_adding_what_is_published_is_destructive(): void {
+		foreach ( self::PUBLISHING_ADDS as $name ) {
+			$this->assertTrue(
+				AB_MCP_Tool_Registry::is_destructive( $name, array() ),
+				"$name only adds, but what it publishes is out for good, so destructiveHint: true"
 			);
 		}
 	}
@@ -93,7 +111,7 @@ final class DestructiveClassificationTest extends TestCase {
 			'an explicit declaration wins over the name'
 		);
 		$this->assertTrue(
-			AB_MCP_Tool_Registry::is_destructive( 'wp_create_post', array( 'destructive' => true ) ),
+			AB_MCP_Tool_Registry::is_destructive( 'wp_create_term', array( 'destructive' => true ) ),
 			'and it wins in the other direction too'
 		);
 	}
@@ -114,7 +132,7 @@ final class DestructiveClassificationTest extends TestCase {
 				'readOnlyHint'    => false,
 				'destructiveHint' => true,
 				'idempotentHint'  => false,
-				'openWorldHint'   => false,
+				'openWorldHint'   => true,
 			),
 			AB_MCP_Tool_Registry::annotations( 'wp_update_post', array(), 'Update Post' )
 		);
@@ -122,11 +140,21 @@ final class DestructiveClassificationTest extends TestCase {
 			array(
 				'title'           => 'Create Post',
 				'readOnlyHint'    => false,
+				'destructiveHint' => true,
+				'idempotentHint'  => false,
+				'openWorldHint'   => true,
+			),
+			AB_MCP_Tool_Registry::annotations( 'wp_create_post', array(), 'Create Post' )
+		);
+		$this->assertSame(
+			array(
+				'title'           => 'Duplicate Post',
+				'readOnlyHint'    => false,
 				'destructiveHint' => false,
 				'idempotentHint'  => false,
 				'openWorldHint'   => false,
 			),
-			AB_MCP_Tool_Registry::annotations( 'wp_create_post', array(), 'Create Post' )
+			AB_MCP_Tool_Registry::annotations( 'wp_duplicate_post', array(), 'Duplicate Post' )
 		);
 		$this->assertSame(
 			array(
@@ -168,10 +196,10 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 		$this->assertSame( array(), $unclassified );
 
-		// And the split is the measured one: 8 overwrite, 6 only add.
+		// And the split is the measured one: 8 overwrite, 4 add and publish, 2 only add.
 		$destructive = array_values( array_filter( $writing, static fn( $n ) => AB_MCP_Tool_Registry::is_destructive( $n, array() ) ) );
 		sort( $destructive );
-		$expected = self::OVERWRITES;
+		$expected = array_merge( self::OVERWRITES, self::PUBLISHING_ADDS );
 		sort( $expected );
 		$this->assertSame( $expected, $destructive, 'the set of overwriting tools changed — check the new tool' );
 	}
