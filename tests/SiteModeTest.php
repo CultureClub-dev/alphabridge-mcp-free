@@ -1540,8 +1540,7 @@ final class SiteModeTest extends TestCase {
 		self::assertStringNotContainsString( 'such as `wp_get_user_meta`', $readme, 'It reads profile fields, not code, files, the database, logs or credentials.' );
 		self::assertStringNotContainsString( 'read, list and search, and every tool', $readme, 'No longer «Read reads everything».' );
 		$intro = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
-		self::assertStringContainsString( 'and so is every reading tool noted «only with write access» under Fine-tuning: in this plugin that is the reader of user profile fields', $intro );
-		self::assertStringContainsString( 'The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection', $intro );
+		self::assertStringContainsString( 'One switch, "Write access for AI assistants", lets it create, change and delete.', $intro );
 		self::assertStringNotContainsString( 'the mode Read', $intro, 'The description says write access, not Read or Full.' );
 		self::assertStringNotContainsString( 'Mighty', $intro );
 		self::assertSame( 1, preg_match( '/^Stable tag: ([0-9.]+)$/m', $readme, $tag ) );
@@ -1571,7 +1570,7 @@ final class SiteModeTest extends TestCase {
 	public function testTheReadmesSayEachConnectionKeepsItsAccessLevel(): void {
 		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
 			$text = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) );
-			self::assertMatchesRegularExpression( '/every tool (is )?on; each connection keeps its access level/', $text, $file );
+			self::assertMatchesRegularExpression( '/every tool (is )?on[;.] [Ee]ach connection keeps its access level/', $text, $file );
 			self::assertStringNotContainsString( 'every tool is on, for every connection', $text, $file );
 		}
 	}
@@ -1600,8 +1599,8 @@ final class SiteModeTest extends TestCase {
 		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
 		$intro  = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
 		self::assertStringNotContainsString( 'logs or credentials', $intro, 'Free has no reader of code, files, the database, logs or credentials.' );
-		self::assertStringContainsString( 'To let them create, change and delete, and read user profile fields, switch on «Write access for AI assistants»', $intro );
-		self::assertStringContainsString( 'and every reading tool noted «only with write access» (in this plugin the reader of user profile fields), is refused until', $intro );
+		self::assertStringContainsString( 'To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants"', $intro );
+		self::assertStringContainsString( 'every tool that creates, changes or deletes is refused, and so is the reader of user profile fields', $intro );
 		$md = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( dirname( __DIR__ ) . '/README.md' ) );
 		self::assertStringContainsString( 'and so is every reading tool noted *only with write access* (in this plugin the reader of user profile fields)', $md );
 		self::assertStringNotContainsString( 'because it reads code, files, the database, logs or credentials', $md );

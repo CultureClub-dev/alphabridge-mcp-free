@@ -3,7 +3,7 @@
  * Where a token is accepted. Header authentication always; a token in the
  * connector URL path (/mcp/<token>) only when the admin switched that on; a
  * token in the query string (?token=) or in a "token" body field never — also
- * not with the connector URL switched on (readme.txt, «Is it secure?»).
+ * not with the connector URL switched on.
  *
  * @package AlphaBridge_MCP
  */

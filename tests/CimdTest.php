@@ -121,7 +121,9 @@ final class CimdTest extends TestCase {
 	public function testTheReadmeNamesTheSamePathToTheSwitch(): void {
 		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
 		self::assertSame( 0, substr_count( $readme, 'AlphaBridge MCP → Connect from Claude' ), 'The switch is inside "Your connections".' );
-		self::assertSame( 2, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'External services and the changelog.' );
+		self::assertSame( 1, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'The changelog.' );
+		// External services names the switch by its label on the settings page.
+		self::assertStringContainsString( 'You can switch this off under "Accept apps with a metadata document" in the plugin settings.', $readme );
 	}
 
 	public function testTheFilterHasTheLastWordOverTheSetting(): void {
