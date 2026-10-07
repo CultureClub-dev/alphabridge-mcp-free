@@ -8,116 +8,100 @@ Stable tag: 4.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Free MCP server for WordPress: Claude and ChatGPT read your site and write once one switch turns on full power. Up to 10 sites in one chat.
+Free MCP server for WordPress. Claude and ChatGPT write posts, add images and answer comments on your site. You decide when they may write.
 
 == Description ==
 
-**Claude and ChatGPT on your WordPress site. Read-only until you flip one switch, then full power. Free.**
+**Claude and ChatGPT for WordPress. One switch. Full power. Free.**
 
-AlphaBridge MCP turns your WordPress site into a native **MCP server** (Model Context Protocol). An AI assistant such as Claude — on Claude.ai, in Claude Desktop, Claude Code or Cursor — connects over one authenticated HTTPS endpoint. ChatGPT connects the same way, as an MCP app on the Plus, Pro, Business, Enterprise and Edu plans.
+Tell your AI assistant what you need, in plain words, and it happens on your WordPress site:
 
-The assistant writes and edits posts, pages, media, categories and tags, and replies to and moderates comments. It reads widgets, site settings and the outline of pages built with blocks or a common page builder. Every tool checks WordPress permissions on every single call.
+* "Write a post from these notes and schedule it for Friday."
+* "Approve the new comments and answer the question about opening hours."
+* "Which of my sites have updates waiting?"
 
-Tell Claude what you want done — "draft a post from these notes, add last week's photos, file it under the right categories and schedule it for Friday" — and it happens on your site, not through screen-clicking or raw admin access.
+AlphaBridge MCP turns your site into an MCP server, the open standard AI assistants use to work with other software. Connect Claude or ChatGPT in about two minutes. You need no account with us, no API key and no extra server.
 
-**One switch, full power**
-
-Out of the box AlphaBridge MCP only reads: write access for AI assistants is off. Assistants can read content, media, terms, comments, settings and the structure of the site. Every tool that creates, changes or deletes is refused, and so is every reading tool noted «only with write access» under Fine-tuning: in this plugin that is the reader of user profile fields. The answer says why, what the person can do and links straight to the switch.
-
-The main switch «Write access for AI assistants» at the top of Settings → AlphaBridge MCP holds for every connection — Claude, ChatGPT, Cursor and all others. Switching write access on switches every tool on; each connection keeps its access level (Full, Content or Read only). Switching it off takes one click.
-
-Before switching on, an administrator ticks two boxes under a notice that says it is at the site owner's own risk. With the first they agree that changes take effect immediately and can be destructive, that not everything can be undone and that keeping a current backup is up to them; with the second they agree to the [Terms of Use](https://alphabridge-mcp.com/terms). With a paid licence of Pro or Agency the second box is optional, the terms already apply from the purchase. The account, the time, the version and wording of the notice and of the boxes, and the version of the terms agreed to are recorded on the site and sent nowhere.
-
-* Every connection acts as a real WordPress user, and every tool checks the matching WordPress capability. What that user may not do, the AI cannot do.
-* Scoped connections: hand out a read-only or content-only key with an optional expiry instead of full access. Rotate a connection's secret in one click.
-* Fine-tuning: every tool is on, and switching write access on switches every tool on again. Switch single tools or whole groups off, and they vanish from the MCP surface until write access is switched on the next time. Each tool says whether it reads or writes.
-* Every refusal leads somewhere: when write access is off, the connection's access level or the account's role does not reach, or a tool is switched off, the answer names the reason, the steps and a direct link, for the assistant to pass on. A tool that belongs to the separate AlphaBridge MCP Pro is named as such, with the page that describes the editions.
-* An audit log keeps the latest 200 tool calls, and a rate limit of 120 requests a minute stops abusive request bursts.
-
-**Connected in two minutes**
-
-In Claude, connect «AlphaBridge MCP for WordPress» from the connector directory. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy: it is standard OAuth 2.1 with PKCE, the login is your WordPress login, and you need no account with us. This entry runs through the AlphaBridge Connect hub described below. To connect directly, paste your endpoint URL into Claude as a custom connector instead.
-
-ChatGPT connects the same way: add the endpoint as an MCP app (Plugins → Add → Create MCP app, authentication OAuth) and approve on your site. This was checked on 26 September 2026 with ChatGPT Pro, directly and through the hub. For clients without a Connect button, create a token manually and paste one ready-made config.
-
-The whole way in one minute — install, connect from Claude's directory, approve on your site, give Claude a first task:
+Watch the whole setup in one minute: [Connect Claude to WordPress in five steps](https://www.youtube.com/watch?v=DlMJ9tfrqJg)
 
 https://www.youtube.com/watch?v=DlMJ9tfrqJg
 
-In German: [Claude mit WordPress verbinden](https://www.youtube.com/watch?v=M262gCOc7gM)
+= What the free plugin does =
 
-**AlphaBridge Connect: up to 10 sites in one chat, free**
+* **Write and publish.** Turn notes into posts and pages, add images, set categories and tags, schedule the date.
+* **Look after your site.** Answer and moderate comments, see pending updates and the health of your site.
+* **Read what matters.** It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder. Ask what needs work.
+* **Up to 10 sites in one chat.** The free AlphaBridge Connect hub brings them into the same conversation.
+* **Nothing extra to host.** AlphaBridge runs inside WordPress, in plain PHP, on ordinary hosting.
 
-The entry «AlphaBridge MCP for WordPress» in Claude's connector directory is the hosted hub at connect.alphabridge-mcp.com. You enter your site's address instead of copying the endpoint, and you approve the site on its own login screen. Through the hub, up to 10 sites work from one chat, in every edition including this free plugin: add a site from the chat and keep working in the same conversation. Each site keeps its own rights and its own audit log.
+40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
-The hub is optional and free, and this plugin never contacts it on its own. The hub connects to your site for authorization, connection setup and management, and to forward the tool calls you make through it. It stores the site's access key encrypted and passes content through without storing it. The details are in its privacy notice (https://connect.alphabridge-mcp.com/legal/privacy) and its data processing agreement (https://connect.alphabridge-mcp.com/legal/dpa).
+= Safe by default =
 
-**Nothing extra to host**
+* **Read-only until you switch it on.** Out of the box the AI can only read. One switch, "Write access for AI assistants", lets it create, change and delete. One click turns it off again.
+* **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
+* **Rules per connection.** Give each app full access, content only or read only, with an optional expiry. Switching write access on turns every tool on. Each connection keeps its access level. Single tools or whole groups can be switched off.
+* **A clear log.** The settings page lists the latest 200 tool calls with time and status. A limit of 120 requests a minute stops runaway request bursts.
+* **Answers that help.** When AlphaBridge refuses a request, it says why and what to do next.
 
-Unlike bridge-based solutions, AlphaBridge speaks MCP directly in PHP inside WordPress. With a direct connection there is no Node middleware, no external service and nothing else to run or pay for — it works on ordinary WordPress hosting. The hub above is the one optional exception, and you choose whether to use it.
+= Connect in two minutes =
 
-**Free means free**
+* **Claude:** pick "AlphaBridge MCP for WordPress" in Claude's connector directory and approve on your site. No token to copy.
+* **ChatGPT** on Plus, Pro, Business, Enterprise and Edu: add your site as an MCP app and approve on your site.
+* **Cursor, Claude Code and other MCP clients:** create a connection in the plugin and paste one ready-made config.
 
-Everything in this plugin is fully functional: no license keys, no registration, no plan-based, cumulative or time-based usage limits, no locked features.
+= More with Pro =
 
-**What's inside**
+AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 135 tools on your site:
 
-* Native MCP endpoint (JSON-RPC 2.0 over HTTP POST; protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by side on the same endpoint; the newest one can be switched off) — no external server required.
-* 40 structured tools across content, media, taxonomies, comments, widgets, site settings, site info, SEO reads and search.
-* Bearer-token authentication mapped to a real WordPress user, with per-tool capability checks.
-* Unlimited connections — create one deliberately limited key per client.
+* **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first.
+* **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each change to active PHP code, Pro tests the site and puts the old version back if it stops loading.
+* **Undo.** One sentence brings an edited page or file back. Its undo points expire after 7 days by default, adjustable from 1 to 30 days.
+* **Shop, SEO, menus and users.** Prices, stock and order status in WooCommerce. SEO titles and descriptions in Yoast or Rank Math. Menus and users by chat.
+* **Your other plugins.** Run the abilities your other plugins offer the AI.
 
-**How it compares**
+The Agency plan adds Site Deploy: the AI publishes files, themes and whole builds over SFTP onto the server the site runs on. Agency covers up to 10 sites.
 
-A dated comparison with other WordPress MCP plugins, every cell checked against the vendors' own pages: https://alphabridge-mcp.com/compare.html
+Pro can be tried free for 7 days, no card needed. The free plugin stays complete without it. Editions, guides and a comparison with other WordPress MCP plugins: [alphabridge-mcp.com](https://alphabridge-mcp.com)
 
-**Need more? AlphaBridge MCP Pro and Agency**
-
-A separate commercial add-on, AlphaBridge MCP Pro, lets the assistant do more:
-
-* change texts, links and images on pages of many page builders;
-* run the abilities other plugins offer, and say so when such a run reports success on a post but nothing was saved;
-* edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
-* check the site with test requests after saving active PHP code, and put the previous version back automatically when one of them ends with a fatal error;
-* use tool groups for the database, users, menus, WooCommerce and migration;
-* undo many of the changes made through it (undo points expire after 7 days by default, adjustable from 1 to 30 days).
-
-The Agency plan adds Site Deploy for agencies and developers: files, themes and whole builds published over SFTP onto the server this site runs on. ZIP deploys can run atomically, with rollback when the swap fails.
-
-Pro can be tried free for 7 days, no card needed. Both are entirely optional — this free plugin is complete on its own and stays fully functional without them. Details are on the plugin website.
-
-AlphaBridge is our own product brand for this project. MCP (Model Context Protocol) is an open protocol standard; this plugin is an independent implementation and is not affiliated with or endorsed by the protocol's authors or by any other vendor.
+Claude, ChatGPT and the other names mentioned belong to their respective owners. Naming them does not mean they partner with, sponsor or endorse AlphaBridge.
 
 == Installation ==
 
-1. Upload the `alphabridge-mcp` folder to `/wp-content/plugins/` (or install the ZIP via Plugins → Add New → Upload).
-2. Activate the plugin.
-3. In Claude, open Connectors, find «AlphaBridge MCP for WordPress» in the directory and connect: enter your site's address and approve on your own site's login-protected consent screen. Done. To connect directly, without the AlphaBridge Connect hub in between, add a custom connector with the endpoint `https://your-site.tld/wp-json/alphabridge/v1/mcp` instead. In ChatGPT: Plugins → Add → Create MCP app with the endpoint and OAuth.
-4. For clients without a Connect button (Cursor, Claude Code, scripts): open **Settings → AlphaBridge MCP**, create a connection manually and copy its token.
-5. The plugin starts with write access off: assistants can read content, media, terms, comments, settings and the structure of the site. To let them create, change and delete, and read user profile fields, switch on «Write access for AI assistants» at the top of **Settings → AlphaBridge MCP**. Changes then take effect immediately and not everything can be undone; you switch it on at your own risk, so make sure you have a current backup. Switching it on asks you to agree to the Terms of Use.
+1. In WordPress, go to Plugins → Add New Plugin, search for "AlphaBridge MCP", install and activate it.
+2. Claude: open Connectors, find "AlphaBridge MCP for WordPress" in the directory and connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the hub, add your endpoint as a custom connector instead.
+3. ChatGPT: open Plugins, choose Add, then Create MCP app. Paste your site's endpoint from Settings → AlphaBridge MCP as the server URL, choose OAuth and approve on your site.
+4. Cursor, Claude Code and other clients: under Settings → AlphaBridge MCP, create a connection and copy its ready-made config.
+5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
 
 == Frequently Asked Questions ==
 
-= Is it secure? =
-Every request needs a token bound to a WordPress user; each tool enforces the matching WordPress capability, including object-level checks for the specific post, attachment or taxonomy (non-public taxonomies additionally require that taxonomy's own capability). Out of the box the plugin only reads: every tool that creates, changes or deletes, and every reading tool noted «only with write access» (in this plugin the reader of user profile fields), is refused until an administrator switches on write access at the top of Settings → AlphaBridge MCP, at the site owner's own risk; single tools and whole groups can then be switched off again under «Fine-tuning». The latest 200 calls are logged. Arbitrary option or transient values cannot be read through this plugin at all — only a fixed list of common site settings is exposed, and the settings of registered widgets through wp_get_widgets, without the values whose key the credential guard below refuses. Post, term and user meta is layered-protected: protected ("_"-prefixed) keys, keys flagged by is_protected_meta(), and two kinds of credential-shaped key are refused: keys whose whole name is a credential word, singular or plural (token, secret, password, passphrase, passcode, pwd, otp, credential), and keys containing one of a fixed list of compound credential patterns (api_key, access_token, client_secret, license_key, oauth, _token, _secret, _password, passwd, …). Case and surrounding whitespace are ignored. The list is matched literally, which makes this guard deliberately conservative rather than exhaustive: token_count, password_hint, credential_type, api_version, counters such as maxTokens and camelCase spellings such as accessToken all pass it, and the layers around it do the real work — and every generic post, term and user meta read or write additionally passes WordPress's own per-key meta capability (edit_post_meta / edit_term_meta / edit_user_meta), which honours auth_callback rules that other plugins register via register_meta() (the media and SEO tools read only their own fixed keys). A key you may not edit is not exposed over MCP either. Page-builder data that ends up in the page as markup or code, also where a builder keeps it under a key without "_" (such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post), is written through the meta argument of wp_create_post and wp_update_post only for accounts with the unfiltered_html capability; for any other account the call is refused before anything is written, and the answer names the ways that remain. One read-only tool reaches further, by design: wp_get_builder_layout, for an account that may edit the post, reads the page builder's own stored data of that post, protected ("_"-prefixed) keys included, to recognise the builder and outline the page — and returns only the visible text, link and image fields of its elements, never the raw meta, code, styling or attributes; separate keys that hold a page's own scripts or CSS are not read at all. wp_duplicate_post copies protected keys too, into the new draft only and only for an account that may edit the original: WordPress' own page template, featured image and list of removed hooked blocks, and — for accounts with the unfiltered_html capability, because it holds markup — the post meta of page builders (Elementor, Beaver Builder, SiteOrigin, Themify, Zion, Live Composer, Brizy, Visual Composer, SeedProd, Pagelayer), each builder's keys together or not at all. Credential-shaped keys, the original's editing state (edit lock, former slugs, trash data), the meta of a revision, builder caches and other plugins' protected keys are not copied. Tokens are accepted via the Authorization or X-Api-Key header — header authentication is the default. An admin can optionally enable a connector URL that carries the token in its path (served with Referrer-Policy: no-referrer and Cache-Control: no-store); this is off by default, because a token in a URL leaks more easily. Query-string tokens are never accepted. If you turn the connector URL on, treat it like a password: it contains the token — rotate the connection if the URL is shared, logged or pasted anywhere.
+= Is it really free? =
+Yes. All its tools work without payment, registration or license key. There are no quotas, and it does not expire. You need no API key or AI credits either: AlphaBridge has no AI of its own, and you use Claude or ChatGPT as you do today.
 
-= Does it work on shared hosting? =
-Yes. It is pure PHP and uses the WordPress REST API. PHP 8.0+ and HTTPS are recommended.
+= Is it secure? =
+Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so is the reader of user profile fields. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. AlphaBridge reads only a fixed list of common site settings, so the keys other plugins keep in their settings stay out of reach. The latest 200 calls are logged.
+
+= What if the AI gets something wrong? =
+Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo by chat: one sentence brings back an edited page, a page-builder element, a theme or plugin file or a PHP snippet.
 
 = Which page builders does it read? =
-`wp_get_builder_layout` reads a page as an outline: its elements in page order, with their visible text, link and image fields. Elements that cannot be read safely, such as code, forms or unknown elements, are listed as locked, with the reason and without their content. `wp_get_post` says which builder a page was made with. As of 1 October 2026:
+It reads a page as an outline: its elements in page order, with their visible texts, links and images. Elements it cannot read safely, such as code or forms, are listed as locked, without their content.
 
 * Read: WordPress blocks, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Otter Blocks and CoBlocks (both as plain blocks), WPBakery Page Builder, Divi 4, Avada (Fusion Builder), Flatsome (UX Builder) and Enfold (Avia Layout Builder).
 * Read from the vendors' documentation and code, not yet checked on a live installation (the answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
 * Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5 and Etch.
 
-Where a builder shows its own data and post_content is only a copy — Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold — `wp_update_post` refuses a change to the content while the builder is active, because it would not show, and says how to change the page instead. Called without content, it still changes the title, status, excerpt and the other fields.
+Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the free plugin leaves that copy alone, because a change there would not show, and says how to change the page instead. With Pro, the AI changes texts, links and images right in the builder, with a preview first.
 
-= Is the free plugin limited? =
-No. Every feature in this plugin works without payment, registration or license keys, and there are no plan-based, cumulative or time-based usage limits. A uniform security throttle (120 requests/minute, identical for every user) protects your server from abusive request bursts.
+= Does it work on shared hosting? =
+Yes. It runs inside WordPress, in plain PHP, over the WordPress REST API. There is nothing else to install on the server. It needs PHP 8.0 or newer, and HTTPS is recommended.
 
 = Does the plugin send data anywhere? =
-No. It contacts no external service on its own. Outbound requests happen only when you explicitly ask a tool to fetch a file from a URL you provide, and when an app you are connecting identifies itself with the address of its client metadata document and you, logged in, open its consent screen (see External services).
+No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
+
+= Do I need Pro? =
+Not to get started. The free plugin covers content, media and comments, on as many sites as you like. Take Pro for page-builder texts, code and your shop, with undo for pages and files. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
 Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
@@ -133,12 +117,11 @@ Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, mont
 
 == External services ==
 
-This plugin makes no automatic outbound requests and sends no telemetry. Two things can contact an external address, each only on a deliberate step:
+AlphaBridge MCP sends no telemetry and calls no outside service on its own. Three things reach beyond your site, each only when you start them:
 
-* One tool, on your explicit instruction: when you call `wp_upload_media_from_url` with a URL, the plugin downloads that file from the address you provide (and up to a few safely re-validated redirects; SSRF-guarded, type- and size-checked).
-* Connecting an app through OAuth: an app may identify itself not by registering with your site but by the HTTPS address of its client metadata document (OAuth Client ID Metadata Documents, the registration the MCP specification prefers since 2026-07-28). When such an app sends you to your site's consent screen, and only once you are logged in there with the right to approve connections, the site fetches that one document from the address the app named — a small JSON file with the app's name and return addresses — to check where the approval may be sent (and once more when the app collects its access, if the copy has expired by then). The request comes from your server's address and names only the plugin and its version as user agent; it carries no cookies, no tokens and nothing else about your site or you. The address must be https and resolve only to public network addresses; redirects are not followed; the document may be at most 5 KB, the request waits at most 5 seconds, and the document is kept for at most a day (five minutes unless its server says otherwise). Which apps use this is up to the app makers; the consent screen names the host the document comes from. You can switch it off under Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document» (a developer also with the `ab_mcp_oauth_cimd` filter), and it is off while WordPress blocks outgoing requests (`WP_HTTP_BLOCK_EXTERNAL`); registration then remains the only way to connect.
-
-The plugin itself initiates no other outbound requests.
+* **AlphaBridge Connect, optional.** If you connect through the hub at connect.alphabridge-mcp.com, it calls your site to set up the connection and to pass on the tool calls you make. It keeps your site's access key encrypted and passes content through without storing it. [Terms](https://connect.alphabridge-mcp.com/legal/terms) and [privacy notice](https://connect.alphabridge-mcp.com/legal/privacy).
+* **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under "Accept apps with a metadata document" in the plugin settings.
+* **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
 

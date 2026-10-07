@@ -2,8 +2,9 @@
 /**
  * What the readmes promise about page builders, held against the registry.
  *
- * readme.txt (wordpress.org) and README.md (GitHub) each carry a dated list
- * of the builders the free core reads and of those it only recognises. A
+ * readme.txt (wordpress.org) and README.md (GitHub) each carry a list of
+ * the builders the free core reads and of those it only recognises; only
+ * README.md dates it, as the plugin directory names no test dates. A
  * list written by hand goes stale the day an adapter is added, removed or
  * marked measured, so this test reads both lists and compares them with what
  * AB_MCP_Builders actually registers: every builder that can be recognised
@@ -69,14 +70,13 @@ final class BuilderReadmeTest extends TestCase {
 		return false === $cut ? $name : substr( $name, 0, $cut );
 	}
 
-	public function testTheListIsDated(): void {
-		foreach ( self::FILES as $file ) {
-			self::assertMatchesRegularExpression(
-				'/As of \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}:/',
-				$this->text( $file ),
-				$file . ' says on which day the builder list was true.'
-			);
-		}
+	public function testOnlyTheGithubListIsDated(): void {
+		self::assertMatchesRegularExpression(
+			'/As of \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}:/',
+			$this->text( 'README.md' ),
+			'README.md says on which day the builder list was true.'
+		);
+		self::assertDoesNotMatchRegularExpression( '/As of \d{1,2} \w+ \d{4}/', $this->text( 'readme.txt' ), 'readme.txt names no test date.' );
 	}
 
 	public function testEveryKnownBuilderStandsInTheRightList(): void {
@@ -155,8 +155,12 @@ final class BuilderReadmeTest extends TestCase {
 		}
 		$count = count( array_unique( $names ) );
 		self::assertGreaterThan( 20, $count, 'The count sees the tools.' );
-		foreach ( self::FILES as $file ) {
-			self::assertSame( 1, preg_match( '/(\d+) structured tools/', $this->text( $file ), $m ), $file );
+		$stated = array(
+			'readme.txt' => '/^(\d+) tools\. No license key/m',
+			'README.md'  => '/(\d+) structured tools/',
+		);
+		foreach ( $stated as $file => $pattern ) {
+			self::assertSame( 1, preg_match( $pattern, $this->text( $file ), $m ), $file );
 			self::assertSame( $count, (int) $m[1], $file . ' states the number of tools the plugin registers.' );
 		}
 		// Widgets and site settings are only read: no tool for them writes.
