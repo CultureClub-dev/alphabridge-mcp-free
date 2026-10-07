@@ -148,17 +148,28 @@ final class AffiliateInviteTest extends TestCase {
 	}
 
 	/**
-	 * The readme answers the question in its FAQ with the same facts as the line:
-	 * the commission, that the programme is open to everyone, the page to apply
-	 * on, and that this free plugin earns none and needs no membership.
+	 * The readme answers the question in its FAQ with the same facts as the line
+	 * in the settings: the commission sentence is read from the line itself, so a
+	 * change there (rate, editions, renewals) fails here until the readme follows.
+	 * The link goes to the same programme page, and the answer says that this free
+	 * plugin earns none and needs no membership.
 	 */
 	public function testTheReadmeFaqNamesTheProgrammeWithTheSameFacts(): void {
 		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
 		self::assertSame( 1, preg_match( '/^= Is there an affiliate programme\? =\n(.+)$/m', $readme, $m ), 'FAQ entry missing.' );
 		$answer = $m[1];
-		self::assertStringContainsString( '60% of every Pro and Agency sale you refer, renewals included', $answer );
+
+		$invite = $this->call( 'affiliate_invite_html' );
+		$text   = trim( (string) preg_replace( '/\s+/', ' ', strip_tags( $invite ) ) );
+		self::assertSame( 1, preg_match( '/Earn with AlphaBridge\. (.+?)\. Become an affiliate/', $text, $c ), 'Commission sentence not found in the line.' );
+		self::assertStringContainsString( $c[1], $answer, 'The FAQ must state the commission exactly as the line does.' );
+
+		$line = $this->link( $invite )['url'];
+		$host = preg_replace( '/^www\./', '', (string) ( $line['host'] ?? '' ) );
+		$path = preg_replace( '/\.html$/', '', (string) ( $line['path'] ?? '' ) );
+		self::assertStringContainsString( 'https://' . $host . $path, $answer, 'The FAQ links to the page the line links to.' );
+
 		self::assertStringContainsString( 'open to everyone, worldwide', $answer );
-		self::assertStringContainsString( 'https://alphabridge-mcp.com/affiliates', $answer );
 		self::assertStringContainsString( 'This free plugin itself earns none', $answer );
 		self::assertLessThan( strpos( $readme, '== Screenshots ==' ), strpos( $readme, '= Is there an affiliate programme? =' ), 'The entry belongs to the FAQ.' );
 	}
