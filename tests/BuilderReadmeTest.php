@@ -3,8 +3,8 @@
  * What the readmes promise about page builders, held against the registry.
  *
  * readme.txt (wordpress.org) and README.md (GitHub) each carry a list of
- * the builders the free core reads and of those it only recognises; only
- * README.md dates it, as the plugin directory names no test dates. A
+ * the builders the free core reads and of those it only recognises,
+ * undated: the readmes name no test dates. A
  * list written by hand goes stale the day an adapter is added, removed or
  * marked measured, so this test reads both lists and compares them with what
  * AB_MCP_Builders actually registers: every builder that can be recognised
@@ -70,13 +70,10 @@ final class BuilderReadmeTest extends TestCase {
 		return false === $cut ? $name : substr( $name, 0, $cut );
 	}
 
-	public function testOnlyTheGithubListIsDated(): void {
-		self::assertMatchesRegularExpression(
-			'/As of \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}:/',
-			$this->text( 'README.md' ),
-			'README.md says on which day the builder list was true.'
-		);
-		self::assertDoesNotMatchRegularExpression( '/As of \d{1,2} \w+ \d{4}/', $this->text( 'readme.txt' ), 'readme.txt names no test date.' );
+	public function testTheListsNameNoTestDate(): void {
+		foreach ( self::FILES as $file ) {
+			self::assertDoesNotMatchRegularExpression( '/As of \d{1,2} \w+ \d{4}/', $this->text( $file ), $file . ' names no test date.' );
+		}
 	}
 
 	public function testEveryKnownBuilderStandsInTheRightList(): void {
@@ -117,7 +114,7 @@ final class BuilderReadmeTest extends TestCase {
 		}
 		self::assertNotSame( array(), $unmeasured, 'Some readers follow documentation only; the readmes must say which.' );
 		foreach ( self::FILES as $file ) {
-			$list = $this->item( $this->text( $file ), 'Read from the vendors\' documentation and code, not yet checked on a live installation (the answer says so): ' );
+			$list = $this->item( $this->text( $file ), 'Read according to the vendors\' documentation: ' );
 			foreach ( $unmeasured as $name ) {
 				self::assertTrue( $this->names( $list, $name ), $file . ': the reader of ' . $name . ' is not measured.' );
 			}

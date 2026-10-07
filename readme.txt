@@ -89,7 +89,7 @@ Deleted posts and pages go to the trash by default, and WordPress keeps the revi
 It reads a page as an outline: its elements in page order, with their visible texts, links and images. Elements it cannot read safely, such as code or forms, are listed as locked, without their content.
 
 * Read: WordPress blocks, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Otter Blocks and CoBlocks (both as plain blocks), WPBakery Page Builder, Divi 4, Avada (Fusion Builder), Flatsome (UX Builder) and Enfold (Avia Layout Builder).
-* Read from the vendors' documentation and code, not yet checked on a live installation (the answer says so): WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
+* Read according to the vendors' documentation: WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
 * Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5 and Etch.
 
 Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the free plugin leaves that copy alone while the builder is active, because a change there would not show, and says how to change the page instead. With Pro, the AI changes texts, links and images right in the builder, with a preview first.
