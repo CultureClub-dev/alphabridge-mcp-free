@@ -142,6 +142,9 @@ The plugin itself initiates no other outbound requests.
 
 == Changelog ==
 
+= 4.6.1 =
+* **ChatGPT connects directly again while «Accept apps with a metadata document» is on.** ChatGPT identifies itself with a metadata document that prefers the token method private_key_jwt and also lists «none» among the methods it supports. The plugin refused any document whose preferred method was not «none», so ChatGPT could not connect to the site directly. It now takes «none» from that list and treats the app as a public client, with PKCE as before. A document that asks for a shared client secret, or that offers no «none» at all, is still refused, and so is a list that does not contain the document's own preferred method. Reported in the support forum on 3 October 2026, thank you. No setting changed.
+
 = 4.6.0 =
 * **Switching on write access asks for two boxes, the second for the Terms of Use.** The notice says, as before, that changes take effect immediately, that not everything can be undone and that write access is switched on at the site owner's own risk, and now also that statutory rights and the liability rules of the Terms of Use remain unaffected. With the first box the administrator agrees to how write access works; with the second, to the [Terms of Use](https://alphabridge-mcp.com/terms) of CultureClub Kulturagentur UG (haftungsbeschränkt), version of 7 October 2026, which the dialog links. Neither box is ticked in advance. Without a paid licence both are required; with a valid licence of Pro or Agency the second is optional, because the terms already apply from the purchase. Switching on by code is no agreement to the terms. The button reads «Agree and switch on write access».
 * No box confirms a fact any more («Understood», «I have a current backup»): both say what the administrator agrees to.
@@ -314,6 +317,9 @@ The plugin itself initiates no other outbound requests.
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.1 =
+ChatGPT can connect to the site directly again while apps with a metadata document are accepted. Nothing else changes.
 
 = 4.6.0 =
 Switching on write access now asks for two boxes: how write access works, and the Terms of Use (optional with a paid licence). Where write access is on already, it stays on.

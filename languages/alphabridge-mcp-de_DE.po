@@ -2069,6 +2069,9 @@ msgstr "es antwortete mit HTTP %d statt 200 (Weiterleitungen werden nicht verfol
 msgid "it asks for client authentication at the token endpoint; this site serves public clients (\"none\") only"
 msgstr "es verlangt eine Client-Authentifizierung am Token-Endpunkt; diese Website bedient nur öffentliche Clients („none“)"
 
+msgid "its token_endpoint_auth_methods_supported is not a list of methods that contains its token_endpoint_auth_method"
+msgstr "seine token_endpoint_auth_methods_supported sind keine Liste von Methoden, die seine token_endpoint_auth_method enthält"
+
 msgid "it contains a client secret, which a public document must never carry"
 msgstr "es enthält ein Client-Secret, das ein öffentliches Dokument nie tragen darf"
 
