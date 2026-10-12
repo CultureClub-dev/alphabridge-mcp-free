@@ -64,12 +64,16 @@ final class ConnectorDirectoryTest extends TestCase {
 
 		self::assertStringContainsString( 'href="' . self::DIRECTORY . '"', $claude, 'A direct link into Claude’s directory.' );
 		self::assertStringContainsString( 'value="' . home_url() . '"', $claude, 'The site’s address, ready to copy.' );
-		self::assertStringContainsString( 'AlphaBridge Connect hub', $claude, 'The card says that this way runs through the hub.' );
+		self::assertStringContainsString( 'Through the hub', $claude, 'The way through the hub, named.' );
+		self::assertStringContainsString( 'up to 10 sites', $claude );
 		self::assertStringContainsString( 'https://www.alphabridge-mcp.com/connector.html', $claude, 'The step-by-step guide.' );
+		self::assertStringContainsString( 'Directly', $claude, 'The direct way, in the open.' );
+		self::assertStringContainsString( 'Add custom connector', $claude );
+		self::assertStringNotContainsString( '<details', $claude, 'Nothing folded away.' );
 		self::assertLessThan(
-			strpos( $claude, 'Without the hub' ),
+			strpos( $claude, 'Directly' ),
 			strpos( $claude, self::DIRECTORY ),
-			'The directory comes before the direct way.'
+			'The hub comes before the direct way.'
 		);
 	}
 
@@ -81,7 +85,8 @@ final class ConnectorDirectoryTest extends TestCase {
 			self::assertStringNotContainsString( self::DIRECTORY, $panel, $client );
 			self::assertStringNotContainsString( 'chatgpt.com/plugins', $panel, $client );
 			self::assertStringNotContainsString( 'hub', $panel, $client );
-			self::assertStringContainsString( 'href="#ab-oauth"', $panel, $client . ': the way to the setting.' );
+			self::assertStringContainsString( 'Switch it on below.', $panel, $client . ': the way to the setting.' );
+			self::assertStringContainsString( 'id="ab-oauth-' . $client . '"', $panel, $client . ': the setting, right there.' );
 		}
 		// Claude still has the way from before OAuth: a token in its connector URL.
 		self::assertStringContainsString( 'pick “Other”', $this->html( $this->panel( $x, 'claude' ) ) );

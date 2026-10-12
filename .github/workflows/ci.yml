@@ -108,3 +108,15 @@ jobs:
           const=$(grep -m1 -oE "AB_MCP_VERSION', '[0-9.]+" alphabridge-mcp.php | grep -oE '[0-9.]+')
           echo "header=$header constant=$const"
           [ "$header" = "$const" ]
+
+  js:
+    name: The settings page's JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The choice of assistant and where an address lands, run with the
+      # real assets/admin.js in an in-memory stand-in for the DOM; no
+      # dependencies, Node as the runner ships it.
+      - name: Panels, remembered choice, landing on a block
+        run: node tests/admin-js-test.mjs

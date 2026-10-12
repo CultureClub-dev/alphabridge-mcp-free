@@ -4,7 +4,7 @@ Tags: claude, chatgpt, mcp, mcp-server, ai
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 4.6.3
+Stable tag: 4.6.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,7 +103,7 @@ Some hosts run a firewall that refuses any request with a web address in the app
 1. In the app, remove the connector for this site and add it again. The sign-in now goes through.
 2. If it still fails, add the connector once more, this time with this address instead of your site's: https://connect.alphabridge-mcp.com/mcp. When you click Authenticate, the free AlphaBridge hub asks for your site's address. Enter it and approve on your site as usual.
 
-If the site did not notice the firewall (some let requests from the site's own server pass), switch the direct sign-in off by hand: Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off", then add the connector again.
+If the site did not notice the firewall (some let requests from the site's own server pass), switch the direct sign-in off by hand: Settings → AlphaBridge MCP → ChatGPT → "Switch the direct sign-in off", then add the connector again.
 
 = A proxy has trouble with the newer MCP revision =
 The site answers apps in MCP revision 2026-07-28 and keeps the older revisions for apps that ask for them. If a proxy in front of the site cannot handle the newer one, a developer switches it off with `add_filter( 'ab_mcp_modern_protocol', '__return_false' );` in a small plugin, or by setting `modern_protocol` to false in the option `ab_mcp_options`; the site then answers in the older revisions only.
@@ -123,18 +123,22 @@ Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, mont
 2. The moment you create a connection, the plugin shows what you need once — the Bearer token and a copy-paste config for Cursor / Claude Code, and the connector URL if connector-URL authentication is switched on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
 4. Switch all tools, a group or a single tool; open a group to see its tool groups and what each tool does, whether it reads or writes, or search for one. These switches sit under «Fine-tuning», below the main switch for write access at the top of the page.
-5. How apps connect, on one card: whether apps may sign in with their Connect button, and under it the status line for ChatGPT and Codex — they sign in directly, with the time of the last check, «Check again» and the link to switch the direct sign-in off — then the connector address with the token, off by default. One Save for all.
-6. The same card where the check found a firewall that blocks the direct sign-in: ChatGPT and Codex register with the site instead, and two steps say how to sign in all the same — add the connector in the app again, or connect through the free AlphaBridge hub.
+5. Claude: both ways in side by side — through the hub (one connection, up to 10 sites) or directly with a custom connector — and under them the setting Claude needs: whether apps may sign in with their Connect button.
+6. ChatGPT: its three steps, and under them how ChatGPT signs in, with the status line for ChatGPT and Codex — direct, with the time of the last check and «Check again» — or, where the check found a firewall that blocks the direct sign-in, the two steps that lead to the goal: add the connector in the app again, or connect through the free AlphaBridge hub.
 
 == External services ==
 
 AlphaBridge MCP sends no telemetry and calls no outside service on its own. Three things reach beyond your site, each only when you start them:
 
 * **AlphaBridge Connect, optional.** If you connect through the hub at connect.alphabridge-mcp.com, it calls your site to set up the connection and to pass on the tool calls you make. It keeps your site's access key encrypted and passes content through without storing it. [Terms](https://connect.alphabridge-mcp.com/legal/terms) and [privacy notice](https://connect.alphabridge-mcp.com/legal/privacy).
-* **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under "Sign-in for apps" → "Switch the direct sign-in off" in the plugin settings.
+* **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin's settings page.
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.6.4 =
+* **Everything about connecting sits in one place: the connect card.** The settings moved up from a card of their own at the foot of the page into the panel of the app they concern — the sign-in for apps under Claude and under ChatGPT (there with the status line for ChatGPT and Codex, «Check again» and the link to switch the direct sign-in off), the connector address with the token under Cursor and «Other», next to the token form. Each has its own Save.
+* **Claude: both ways in, side by side, nothing folded away.** «Through the hub» (one connection, up to 10 sites) with its three steps, and «Directly» (this site only) with two: add a custom connector in Claude with this site's address, then sign in here and approve.
 
 = 4.6.3 =
 * **Sign-in works behind firewalls that block app IDs in address form.** Some hosts (Bluehost with Mod_Security) answer «406 Not Acceptable» as soon as an app's ID is a web address, which is how ChatGPT and Codex identify themselves. The site now checks this itself with one request to its own sign-in page and, where the firewall blocks it, stops offering that way, so apps register with the site instead; the ChatGPT panel and the setting say so. The check runs when the settings page opens (again after six hours), on every save of the settings and on «Check again». Reported in the support forum on 12 October 2026, thank you.
@@ -320,6 +324,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.4 =
+The settings for how apps connect moved into the connect card, each under the app it concerns; Claude's two ways in sit side by side, nothing folded away. Nothing else changes.
 
 = 4.6.3 =
 Sign-in from ChatGPT and Codex works behind host firewalls that block app IDs in address form: the site checks this itself and lets apps register instead. The settings for how apps connect sit on one card: two settings and a status line for ChatGPT and Codex. Nothing else changes.
