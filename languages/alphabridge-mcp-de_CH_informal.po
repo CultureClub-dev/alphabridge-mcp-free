@@ -188,9 +188,6 @@ msgstr "Fähigkeiten anderer Plugins"
 msgid "Abuse protection active: %d requests/min."
 msgstr "Missbrauchsschutz aktiv: %d Anfragen/Min."
 
-msgid "Accept apps with a metadata document."
-msgstr "Apps mit einem Metadaten-Dokument zulassen."
-
 msgid "Access"
 msgstr "Zugriff"
 
@@ -380,12 +377,6 @@ msgstr "Auf «Connect» klicken, diese Adresse eingeben"
 
 msgid "Code editor"
 msgstr "Code-Editor"
-
-msgid "Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is answered."
-msgstr "Code auf dieser Website (der Filter ab_mcp_modern_protocol) entscheidet über diese Einstellung; gerade antwortet die Website in dieser Revision."
-
-msgid "Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is not answered."
-msgstr "Code auf dieser Website (der Filter ab_mcp_modern_protocol) entscheidet über diese Einstellung; gerade antwortet die Website nicht in dieser Revision."
 
 msgid "Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted."
 msgstr "Code auf dieser Website (der Filter ab_mcp_oauth_cimd) entscheidet über diese Einstellung; gerade werden Apps mit einem Metadaten-Dokument zugelassen."
@@ -1508,10 +1499,6 @@ msgstr "Dem Konto dieser Verbindung fehlt die Berechtigung «%2$s», die das Wer
 msgid "The app identifies itself with a document on %s; its name above comes from there."
 msgstr "Die App weist sich mit einem Dokument auf %s aus; ihr Name oben stammt von dort."
 
-#, php-format
-msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off \"Accept apps with a metadata document\" under Settings → AlphaBridge MCP → \"Sign-in for apps\"; an app that can register with the site then does that instead."
-msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → «Anmeldung für Apps» die Option «Apps mit einem Metadaten-Dokument zulassen» ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."
-
 msgid "The approval expired. Please try connecting again."
 msgstr "Die Zustimmung ist abgelaufen. Bitte verbinde die App erneut."
 
@@ -2172,57 +2159,14 @@ msgstr "Die Schreibrechte sind an. KI-Assistenten können jetzt mit jedem Werkze
 msgid "%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under “Sign-in for apps”, further down this page."
 msgstr "%s verbindet sich mit der Anmeldung dieser Website und deiner Zustimmung (OAuth), und das ist hier ausgeschaltet. Schalte es unter «Anmeldung für Apps» weiter unten auf dieser Seite ein."
 
-msgid "Your host’s firewall blocks app IDs in address form. Apps register with the site instead. Nothing to do."
-msgstr "Die Firewall deines Hosts blockt App-Kennungen in Adressform. Apps registrieren sich stattdessen bei der Website. Nichts zu tun."
-
 msgid "How apps connect"
 msgstr "Wie sich Apps verbinden"
 
 msgid "Sign-in for apps"
 msgstr "Anmeldung für Apps"
 
-msgid "Let apps sign in with their Connect button."
-msgstr "Apps mit ihrem Knopf «Connect» anmelden lassen."
-
-msgid "On by default. Claude, ChatGPT and other apps connect with their Connect button, and you approve each connection on a sign-in page of this site. Switch it off only if no app should sign in at all."
-msgstr "Ab Werk an. Claude, ChatGPT und andere Apps verbinden sich mit ihrem Knopf «Connect», und du stimmst jeder Verbindung auf einer Anmeldeseite dieser Website zu. Nur ausschalten, wenn sich gar keine App anmelden soll."
-
-msgid "On by default. Some apps (ChatGPT, Codex) name the address of a file about themselves instead of registering with the site. Switch it off if the sign-in ends with “Not Acceptable”, or if this site must not reach other servers."
-msgstr "Ab Werk an. Manche Apps (ChatGPT, Codex) nennen statt einer Registrierung bei der Website die Adresse einer Datei über sich. Ausschalten, wenn die Anmeldung mit «Not Acceptable» endet oder wenn diese Website keine anderen Server erreichen soll."
-
-msgid "Connector URL with token"
-msgstr "Konnektor-URL mit Token"
-
-msgid "Also offer a connector URL that carries the token."
-msgstr "Zusätzlich eine Konnektor-URL anbieten, die den Token enthält."
-
-msgid "Off by default. For apps that have no password field and only take an address. Off because an address with a token in it must be treated like a password."
-msgstr "Ab Werk aus. Für Apps, die kein Passwort-Feld haben und nur eine Adresse annehmen. Aus, weil eine Adresse mit Token wie ein Passwort zu behandeln ist."
-
-msgid "MCP protocol 2026-07-28"
-msgstr "MCP-Protokoll 2026-07-28"
-
-msgid "Answer apps in the MCP revision 2026-07-28."
-msgstr "Apps in der MCP-Revision 2026-07-28 antworten."
-
-msgid "On by default. Apps that speak this revision get it; older apps keep theirs either way. Switch it off only if a proxy in front of the site has trouble with it; the site then answers in the older revisions only."
-msgstr "Ab Werk an. Apps, die diese Revision sprechen, bekommen sie; ältere Apps behalten ihre ohnehin. Nur ausschalten, wenn ein Proxy vor der Website damit Probleme macht; die Website antwortet dann nur in den älteren Revisionen."
-
 msgid "Not checked yet."
 msgstr "Noch nicht geprüft."
-
-msgid "app IDs in address form reach the site."
-msgstr "App-Kennungen in Adressform erreichen die Website."
-
-msgid "the firewall blocks them, see above."
-msgstr "die Firewall blockt sie, siehe oben."
-
-msgid "no clear result; app IDs in address form are offered as before."
-msgstr "kein eindeutiges Ergebnis; App-Kennungen in Adressform werden wie bisher angeboten."
-
-#, php-format
-msgid "Last check %1$s: %2$s"
-msgstr "Letzte Prüfung %1$s: %2$s"
 
 msgid "Check again"
 msgstr "Erneut prüfen"
@@ -2230,5 +2174,56 @@ msgstr "Erneut prüfen"
 msgid "Checked. The finding is shown under “Sign-in for apps”."
 msgstr "Geprüft. Das Ergebnis steht unter «Anmeldung für Apps»."
 
-msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → \"Sign-in for apps\" → \"Accept apps with a metadata document\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
-msgstr "Diese Website lässt keine Apps zu, die sich mit einem Metadaten-Dokument ausweisen (ausgeschaltet unter Einstellungen → AlphaBridge MCP → «Anmeldung für Apps» → «Apps mit einem Metadaten-Dokument zulassen», durch WP_HTTP_BLOCK_EXTERNAL oder durch den Filter ab_mcp_oauth_cimd). Die App kann sich stattdessen bei der Website registrieren."
+msgid "Apps can sign in with their Connect button."
+msgstr "Apps können sich mit ihrem Knopf «Connect» anmelden."
+
+msgid "For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in."
+msgstr "Für Claude, ChatGPT und andere Apps. Du bestätigst jede Verbindung auf dieser Website. Nur ausschalten, wenn sich keine App anmelden soll."
+
+msgid "ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in."
+msgstr "ChatGPT und Codex registrieren sich bei der Website, weil die Firewall deines Hosts die direkte Anmeldung blockt."
+
+msgid "Nothing to do."
+msgstr "Nichts zu tun."
+
+msgid "ChatGPT and Codex sign in without registering first."
+msgstr "ChatGPT und Codex melden sich ohne Registrierung an."
+
+#, php-format
+msgid "Checked %1$s: %2$s"
+msgstr "Geprüft %1$s: %2$s"
+
+msgid "works."
+msgstr "funktioniert."
+
+msgid "no clear result; this stays on."
+msgstr "kein eindeutiges Ergebnis; das bleibt an."
+
+msgid "You switched the direct sign-in off: ChatGPT and Codex register with the site."
+msgstr "Du hast die direkte Anmeldung ausgeschaltet: ChatGPT und Codex registrieren sich bei der Website."
+
+msgid "Switch it on"
+msgstr "Wieder einschalten"
+
+msgid "Switch the direct sign-in off"
+msgstr "Direkte Anmeldung ausschalten"
+
+msgid "Connector address with token"
+msgstr "Konnektor-Adresse mit Token"
+
+msgid "Also offer an address that contains the token."
+msgstr "Zusätzlich eine Adresse anbieten, die den Token enthält."
+
+msgid "For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password."
+msgstr "Für Apps ohne Passwortfeld. Ab Werk aus: Wer diese Adresse sieht, kann die Verbindung nutzen. Behandle sie wie ein Passwort."
+
+msgctxt "date and time of the last check"
+msgid "j M Y, H:i"
+msgstr "d.m.Y, H:i"
+
+msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → \"Sign-in for apps\" → \"Switch the direct sign-in off\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
+msgstr "Diese Website lässt keine Apps zu, die sich mit einem Metadaten-Dokument ausweisen (ausgeschaltet unter Einstellungen → AlphaBridge MCP → «Anmeldung für Apps» → «Direkte Anmeldung ausschalten», durch WP_HTTP_BLOCK_EXTERNAL oder durch den Filter ab_mcp_oauth_cimd). Die App kann sich stattdessen bei der Website registrieren."
+
+#, php-format
+msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → \"Sign-in for apps\"; an app that can register with the site then does that instead."
+msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → «Anmeldung für Apps» die direkte Anmeldung ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."

@@ -113,7 +113,7 @@ final class CimdTest extends TestCase {
 		self::assertArrayHasKey( 'registration_endpoint', AB_MCP_OAuth::metadata() );
 		self::assertStringContainsString( 'register', $this->refusal(), 'The refusal names the way that still works.' );
 		// The switch sits under «Sign-in for apps» on the settings card.
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → "Accept apps with a metadata document"', $this->refusal() );
+		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off"', $this->refusal() );
 		self::assertFalse( AB_MCP_OAuth::get_client( self::URL ) );
 		self::assertSame( 0, $this->fetches() );
 	}
@@ -123,9 +123,9 @@ final class CimdTest extends TestCase {
 		self::assertSame( 0, substr_count( $readme, 'AlphaBridge MCP → Connect from Claude' ), 'The switch is inside "Your connections".' );
 		self::assertSame( 1, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'The changelog of 4.4.0, as it was.' );
 		// The FAQ names the way as the settings page shows it today.
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → untick "Accept apps with a metadata document"', $readme );
+		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off"', $readme );
 		// External services names the switch by its label on the settings page.
-		self::assertStringContainsString( 'You can switch this off under "Accept apps with a metadata document" in the plugin settings.', $readme );
+		self::assertStringContainsString( 'You can switch this off under "Sign-in for apps" → "Switch the direct sign-in off" in the plugin settings.', $readme );
 	}
 
 	public function testTheFilterHasTheLastWordOverTheSetting(): void {
@@ -443,7 +443,7 @@ final class CimdTest extends TestCase {
 
 		$message = $this->refusal();
 		self::assertStringContainsString( 'timed out', $message );
-		self::assertStringContainsString( '"Accept apps with a metadata document"', $message, 'The refusal names the switch that lets such an app connect by registering.' );
+		self::assertStringContainsString( 'switch the direct sign-in off', $message, 'The refusal names the link that lets such an app connect by registering.' );
 		self::assertStringContainsString( 'under Settings → AlphaBridge MCP → "Sign-in for apps"', $message );
 	}
 

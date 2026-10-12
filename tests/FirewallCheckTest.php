@@ -409,7 +409,7 @@ final class FirewallCheckTest extends TestCase {
 		$page = (string) ob_get_clean();
 
 		self::assertSame( 1, self::probes(), 'No finding yet: the page checks.' );
-		self::assertStringContainsString( 'Your host’s firewall blocks app IDs in address form.', $page, 'And shows what it found.' );
+		self::assertStringContainsString( 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in.', $page, 'And shows what it found.' );
 
 		ob_start();
 		( new AB_MCP_Admin( $r ) )->render();
@@ -490,15 +490,16 @@ final class FirewallCheckTest extends TestCase {
 
 	/* ------------------------------------------------------------ notes */
 
-	public function testBlockedPutsTheNoteOnTheChatGPTPanelAndNextToTheSwitch(): void {
+	public function testBlockedPutsTheSameSentenceOnTheChatGPTPanelAndInTheStatusLine(): void {
 		self::keep( 'blocked' );
-		$note = 'Your host’s firewall blocks app IDs in address form. Apps register with the site instead. Nothing to do.';
+		$note = 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in. Nothing to do.';
 
 		self::assertStringContainsString( $note, $this->chatgptPanel() );
 		$x = $this->xpath( $this->call( 'render_settings_card' ) );
-		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-firewall__blocked")]' )->length );
-		self::assertStringContainsString( $note, $x->query( '//section[@id="ab-oauth"]' )->item( 0 )->textContent );
-		self::assertStringContainsString( 'the firewall blocks them, see above.', $x->query( '//section[@id="ab-oauth"]' )->item( 0 )->textContent );
+		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status--blocked")]' )->length );
+		self::assertStringStartsWith( $note, $this->statusLine() );
+		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length, '«Check again» stays.' );
+		self::assertSame( 'off', $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 )->getAttribute( 'value' ), 'And so does the link to switch the direct sign-in off.' );
 	}
 
 	public function testOpenUnknownAndNoFindingCarryNoNote(): void {
@@ -507,24 +508,37 @@ final class FirewallCheckTest extends TestCase {
 			self::keep( $verdict );
 			self::assertStringNotContainsString( 'firewall', $this->chatgptPanel(), (string) $verdict );
 			$x = $this->xpath( $this->call( 'render_settings_card' ) );
-			self::assertSame( 0, $x->query( '//p[contains(@class,"ab-firewall__blocked")]' )->length, (string) $verdict );
-			self::assertStringNotContainsString( 'Nothing to do', $x->query( '//section[@id="ab-oauth"]' )->item( 0 )->textContent, (string) $verdict );
+			self::assertSame( 0, $x->query( '//p[contains(@class,"ab-direct__status--blocked")]' )->length, (string) $verdict );
+			self::assertStringNotContainsString( 'Nothing to do', $this->statusLine(), (string) $verdict );
 		}
 	}
 
-	public function testTheLastCheckIsShownWithWhatItFound(): void {
-		$line = fn(): string => trim( $this->xpath( $this->call( 'render_settings_card' ) )->query( '//p[contains(@class,"ab-firewall__check")]' )->item( 0 )->textContent );
+	public function testWithTheDirectSignInSwitchedOffNothingIsSaidAboutTheFirewall(): void {
+		self::keep( 'blocked' );
+		AB_MCP_Settings::set( 'oauth_cimd', false );
 
-		self::assertStringStartsWith( 'Not checked yet.', $line() );
+		self::assertStringNotContainsString( 'firewall', $this->chatgptPanel() );
+		self::assertSame( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', $this->statusLine() );
+	}
+
+	/** The status line under the switch for the sign-in, as text. */
+	private function statusLine(): string {
+		$status = $this->xpath( $this->call( 'render_settings_card' ) )->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		self::assertNotNull( $status );
+		return trim( preg_replace( '/\s+/', ' ', $status->textContent ) );
+	}
+
+	public function testTheStatusLineSaysWhatTheLastCheckFound(): void {
+		self::assertSame( 'ChatGPT and Codex sign in without registering first. Not checked yet. Check again', $this->statusLine() );
 
 		self::keep( 'unknown' );
-		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: no clear result; app IDs in address form are offered as before\./', $line() );
+		self::assertMatchesRegularExpression( '/^ChatGPT and Codex sign in without registering first\. Checked \d{1,2} [A-Z][a-z]{2} \d{4}, \d\d:\d\d: no clear result; this stays on\. Check again$/', $this->statusLine() );
 
 		self::keep( 'open' );
-		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: app IDs in address form reach the site\./', $line() );
+		self::assertMatchesRegularExpression( '/^ChatGPT and Codex sign in without registering first\. Checked \d{1,2} [A-Z][a-z]{2} \d{4}, \d\d:\d\d: works\. Check again$/', $this->statusLine() );
 
 		self::keep( 'blocked' );
-		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: the firewall blocks them, see above\./', $line() );
+		self::assertSame( 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in. Nothing to do. Check again', $this->statusLine() );
 	}
 
 	public function testTheNoteNeverShowsWhileSignInForAppsIsOff(): void {
@@ -596,7 +610,7 @@ final class FirewallCheckTest extends TestCase {
 
 	/* ---------------------------------------------------- settings card */
 
-	public function testTheThreeSettingsAreVisibleUnderTheirNamesInOneForm(): void {
+	public function testTheTwoSettingsAreVisibleUnderTheirNamesInOneForm(): void {
 		$html = $this->call( 'render_settings_card' );
 		$x    = $this->xpath( $html );
 
@@ -605,34 +619,32 @@ final class FirewallCheckTest extends TestCase {
 		self::assertSame( 1, $x->query( '//form[@id="ab-settings-form"]' )->length );
 		foreach ( array(
 			'ab-oauth'    => 'Sign-in for apps',
-			'ab-url-auth' => 'Connector URL with token',
-			'ab-protocol' => 'MCP protocol 2026-07-28',
+			'ab-url-auth' => 'Connector address with token',
 		) as $id => $title ) {
 			$section = $x->query( '//form[@id="ab-settings-form"]//section[@id="' . $id . '"]' )->item( 0 );
 			self::assertNotNull( $section, $id );
 			self::assertSame( $title, trim( $x->query( './/h3', $section )->item( 0 )->textContent ) );
 		}
+		self::assertSame( 2, $x->query( '//section' )->length, 'No third section: the MCP revision left the page.' );
 		self::assertSame( 1, $x->query( '//form[@id="ab-settings-form"]//button[not(@form)]' )->length, 'One Save.' );
 		self::assertSame( 'Save', trim( $x->query( '//form[@id="ab-settings-form"]//button[not(@form)]' )->item( 0 )->textContent ) );
 		self::assertSame( 'ab-firewall-form', $x->query( '//button[contains(.,"Check again")]' )->item( 0 )->getAttribute( 'form' ) );
+		self::assertSame( 'ab-direct-signin-form', $x->query( '//button[contains(.,"Switch the direct sign-in off")]' )->item( 0 )->getAttribute( 'form' ) );
 	}
 
-	public function testEverySettingSaysWhatItIsForAndWhenToChangeIt(): void {
-		$x = $this->xpath( $this->call( 'render_settings_card' ) );
+	public function testEverySettingSaysWhatItIsFor(): void {
+		$html = $this->call( 'render_settings_card' );
+		$x    = $this->xpath( $html );
 		$text = static fn( string $name ): string => $x->query( '//input[@name="' . $name . '"]/following-sibling::span' )->item( 0 )->textContent;
 
-		self::assertStringContainsString( 'Let apps sign in with their Connect button. On by default. Claude, ChatGPT and other apps connect', $text( 'oauth_enabled' ) );
-		self::assertStringContainsString( 'Switch it off only if no app should sign in at all.', $text( 'oauth_enabled' ) );
-		self::assertStringContainsString( 'Accept apps with a metadata document. On by default. Some apps (ChatGPT, Codex)', $text( 'oauth_cimd' ) );
-		self::assertStringContainsString( 'Switch it off if the sign-in ends with “Not Acceptable”', $text( 'oauth_cimd' ) );
-		self::assertStringContainsString( 'Also offer a connector URL that carries the token. Off by default. For apps that have no password field', $text( 'connector_url_auth_enabled' ) );
-		self::assertStringContainsString( 'treated like a password', $text( 'connector_url_auth_enabled' ) );
-		self::assertStringContainsString( 'Answer apps in the MCP revision 2026-07-28. On by default.', $text( 'modern_protocol' ) );
-		self::assertStringContainsString( 'Switch it off only if a proxy', $text( 'modern_protocol' ) );
-		// No protocol detail that helps nobody on this page.
-		foreach ( array( 'referrer', 'proxy logs', 'X-Api-Key', 'RFC', 'discovers' ) as $jargon ) {
-			self::assertStringNotContainsString( $jargon, $this->call( 'render_settings_card' ), $jargon );
+		self::assertSame( 'Apps can sign in with their Connect button. For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in.', $text( 'oauth_enabled' ) );
+		self::assertSame( 'Also offer an address that contains the token. For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', $text( 'connector_url_auth_enabled' ) );
+		// No protocol detail that helps nobody on this page, and «On by
+		// default» nowhere: only the address with the token says it is off.
+		foreach ( array( 'referrer', 'proxy logs', 'X-Api-Key', 'RFC', 'discovers', '2026-07-28', 'metadata document', 'On by default' ) as $jargon ) {
+			self::assertStringNotContainsString( $jargon, $html, $jargon );
 		}
+		self::assertSame( 1, substr_count( $html, 'Off by default' ) );
 	}
 
 	public function testTheConnectionsCardHoldsTheTableOnly(): void {
@@ -657,7 +669,7 @@ final class FirewallCheckTest extends TestCase {
 
 		self::assertStringContainsString( '= Sign-in ends with “Not Acceptable” or mentions Mod_Security =', $faq );
 		self::assertStringContainsString( 'lets apps register with the site instead', $faq );
-		self::assertStringContainsString( '"Sign-in for apps" → untick "Accept apps with a metadata document", save, and create the connector in the app again', $faq );
+		self::assertStringContainsString( '"Sign-in for apps" → "Switch the direct sign-in off", then create the connector in the app again', $faq );
 		self::assertDoesNotMatchRegularExpression( '/= Sign-in ends[^=]*\d\.\d\.\d/s', $faq, 'No version number in the answer.' );
 	}
 

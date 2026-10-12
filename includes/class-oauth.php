@@ -448,7 +448,7 @@ class AB_MCP_OAuth {
 
 		if ( self::is_cimd_client_id( $client_id ) ) {
 			if ( ! self::cimd_enabled() ) {
-				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → "Sign-in for apps" → "Accept apps with a metadata document", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
 			}
 			return self::cimd_client( $client_id );
 		}
@@ -1089,7 +1089,7 @@ class AB_MCP_OAuth {
 			'ab_mcp_cimd',
 			sprintf(
 				/* translators: 1: host name, 2: what is wrong with the document, a clause starting in lower case. */
-				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off "Accept apps with a metadata document" under Settings → AlphaBridge MCP → "Sign-in for apps"; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
+				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → "Sign-in for apps"; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
 				'' !== $host ? $host : substr( $url, 0, 200 ),
 				$problem
 			)
