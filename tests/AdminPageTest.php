@@ -857,17 +857,19 @@ final class AdminPageTest extends TestCase {
 		return 'no exit';
 	}
 
-	public function testSavingTheCardLeavesTheProtocolSettingAlone(): void {
-		$save = fn( array $post ): string => $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', $post );
+	public function testSavingASettingLeavesTheProtocolSettingAlone(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', array( 'setting' => 'oauth_enabled', 'panel' => 'claude' ) + $post );
 
 		\AB_MCP_Settings::set( 'modern_protocol', false );
 		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ), 'The save went through.' );
 		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'Not on the page: a save does not switch it on.' );
 		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1', 'modern_protocol' => '1' ) ) );
 		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'Nor does a stray field.' );
 
 		\AB_MCP_Settings::set( 'modern_protocol', true );
 		self::assertSame( 'redirect', $save( array() ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ), 'The save went through: unticked is off.' );
 		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'And a save does not switch it off.' );
 	}
 

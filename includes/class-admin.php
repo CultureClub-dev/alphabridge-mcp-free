@@ -1857,7 +1857,8 @@ class AB_MCP_Admin {
 	 * sign-in: they sign in directly (their metadata document) unless the
 	 * host's firewall blocks that, the direct sign-in was switched off by
 	 * the link here, or code decides (the ab_mcp_oauth_cimd filter,
-	 * WP_HTTP_BLOCK_EXTERNAL). One sentence in bold says what is the case,
+	 * WP_HTTP_BLOCK_EXTERNAL; a filter that keeps it on does not lift the
+	 * firewall, so the two steps follow there too). One sentence in bold says what is the case,
 	 * then the last check with what it found and «Check again», then the
 	 * link that switches the direct sign-in off (with the reason one would)
 	 * or on again. Behind a firewall: the two steps to sign in all the
@@ -1883,6 +1884,12 @@ class AB_MCP_Admin {
 		if ( has_filter( 'ab_mcp_oauth_cimd' ) ) {
 			// Code decides, whatever the link says: say so, and what is in force.
 			$html .= '<p class="ab-direct__status">' . esc_html( AB_MCP_OAuth::cimd_enabled() ? __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted.', 'alphabridge-mcp' ) ) . '</p>';
+			if ( AB_MCP_OAuth::cimd_enabled() && null !== $finding && 'blocked' === $finding['verdict'] ) {
+				// The filter keeps the direct sign-in on, the firewall still
+				// blocks it (the discovery metadata leaves it out all the
+				// same, AB_MCP_OAuth::metadata()): the steps stay, as in 4.6.3.
+				$html .= self::firewall_blocked_html() . '<p class="ab-direct__again">' . trim( $again ) . '</p>';
+			}
 		} elseif ( ! $on ) {
 			$html .= '<p class="ab-direct__status"><b>' . esc_html__( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', 'alphabridge-mcp' ) . '</b></p>';
 			$html .= '<p class="ab-direct__switch">' . $link( 'on', __( 'Switch it on', 'alphabridge-mcp' ) ) . '</p>';

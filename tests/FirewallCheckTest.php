@@ -524,6 +524,26 @@ final class FirewallCheckTest extends TestCase {
 		self::assertStringNotContainsString( 'firewall', $this->panelText( 'claude' ), 'Claude is not concerned.' );
 	}
 
+	public function testAFilterThatKeepsTheDirectSignInOnDoesNotLiftTheFirewall(): void {
+		self::keep( 'blocked' );
+		add_filter( 'ab_mcp_oauth_cimd', '__return_true' );
+		$panel = $this->chatgptPanel();
+		$x     = $this->xpath( $panel );
+
+		self::assertStringContainsString( 'the ab_mcp_oauth_cimd filter', $panel, 'Code decides: said.' );
+		self::assertSame( 1, $x->query( '//section[@id="ab-oauth-chatgpt"]//p[contains(@class,"ab-direct__status--blocked")]' )->length, 'The firewall still blocks: the case and the steps, as in 4.6.3.' );
+		self::assertSame( 2, $x->query( '//section[@id="ab-oauth-chatgpt"]//ol[@class="ab-direct__steps"]/li' )->length );
+		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length, '«Check again» stays.' );
+		self::assertSame( 0, $x->query( '//button[@form="ab-direct-signin-form"]' )->length, 'No link: the filter has the last word.' );
+
+		ab_test_reset();
+		self::keep( 'blocked' );
+		add_filter( 'ab_mcp_oauth_cimd', '__return_false' );
+		$x = $this->xpath( $this->chatgptPanel() );
+		self::assertSame( 0, $x->query( '//p[contains(@class,"ab-direct__status--blocked")]' )->length, 'Off by code: apps register anyway, nothing to repair.' );
+		self::assertSame( 0, $x->query( '//button[@form="ab-firewall-form"]' )->length );
+	}
+
 	public function testOpenUnknownAndNoFindingCarryNoNote(): void {
 		foreach ( array( null, 'open', 'unknown' ) as $verdict ) {
 			ab_test_reset();
