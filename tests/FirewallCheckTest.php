@@ -107,9 +107,23 @@ final class FirewallCheckTest extends TestCase {
 	}
 
 	private function chatgptPanel(): string {
+		return $this->panelHtml( 'chatgpt' );
+	}
+
+	/** What a panel says, as text: the button «Check again» names its form
+	 * (ab-firewall-form), which is no word about the firewall. */
+	private function panelText( string $client ): string {
 		$x    = $this->xpath( $this->call( 'connect_card_html' ) );
-		$node = $x->query( '//div[@id="ab-panel-chatgpt"]' )->item( 0 );
-		self::assertNotNull( $node );
+		$node = $x->query( '//div[@id="ab-panel-' . $client . '"]' )->item( 0 );
+		self::assertNotNull( $node, $client );
+		return trim( preg_replace( '/\s+/', ' ', $node->textContent ) );
+	}
+
+	/** One panel of the connect card, as HTML. */
+	private function panelHtml( string $client ): string {
+		$x    = $this->xpath( $this->call( 'connect_card_html' ) );
+		$node = $x->query( '//div[@id="ab-panel-' . $client . '"]' )->item( 0 );
+		self::assertNotNull( $node, $client );
 		return (string) $node->ownerDocument->saveHTML( $node );
 	}
 
@@ -494,29 +508,28 @@ final class FirewallCheckTest extends TestCase {
 
 	/* ------------------------------------------------------------ notes */
 
-	public function testBlockedPutsTheSameSentenceOnTheChatGPTPanelAndInTheStatusLine(): void {
+	public function testBlockedPutsTheSentenceAndTheStepsInTheStatusLineOfTheChatGPTPanel(): void {
 		self::keep( 'blocked' );
 		$steps = '<ol class="ab-direct__steps"><li>' . self::STEP_1 . '</li><li>' . self::STEP_2 . '</li></ol>';
+		$panel = $this->chatgptPanel();
+		$x     = $this->xpath( $panel );
 
-		self::assertStringContainsString( '<b>' . self::BLOCKED . '</b></p>' . $steps, $this->chatgptPanel(), 'The case in bold, then the two steps.' );
-		self::assertStringNotContainsString( 'Nothing to do', $this->chatgptPanel() );
-		$card = $this->call( 'render_settings_card' );
-		$x    = $this->xpath( $card );
-		self::assertStringContainsString( '<b>' . self::BLOCKED . '</b></p>' . $steps, $card, 'The same on the card.' );
-		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status--blocked")]' )->length );
+		self::assertSame( 1, substr_count( $panel, '<b>' . self::BLOCKED . '</b></p>' . $steps ), 'The case in bold, then the two steps: once, in the status line.' );
+		self::assertSame( 1, $x->query( '//section[@id="ab-oauth-chatgpt"]//p[contains(@class,"ab-direct__status--blocked")]' )->length );
 		self::assertSame( self::BLOCKED, $this->statusLine() );
-		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//ol[@class="ab-direct__steps"]/li' )->length - 1, 'Two steps.' );
+		self::assertSame( 2, $x->query( '//section[@id="ab-oauth-chatgpt"]//ol[@class="ab-direct__steps"]/li' )->length, 'Two steps.' );
 		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length, '«Check again» stays.' );
 		self::assertSame( 0, $x->query( '//button[@form="ab-direct-signin-form"]' )->length, 'No link to switch the direct sign-in off: it is already out of the way.' );
-		self::assertStringNotContainsString( 'Nothing to do', $card );
+		self::assertStringNotContainsString( 'Nothing to do', $panel );
+		self::assertStringNotContainsString( 'firewall', $this->panelText( 'claude' ), 'Claude is not concerned.' );
 	}
 
 	public function testOpenUnknownAndNoFindingCarryNoNote(): void {
 		foreach ( array( null, 'open', 'unknown' ) as $verdict ) {
 			ab_test_reset();
 			self::keep( $verdict );
-			self::assertStringNotContainsString( 'firewall', $this->chatgptPanel(), (string) $verdict );
-			$x = $this->xpath( $this->call( 'render_settings_card' ) );
+			self::assertStringNotContainsString( 'firewall', $this->panelText( 'chatgpt' ), (string) $verdict );
+			$x = $this->xpath( $this->call( 'connect_card_html' ) );
 			self::assertSame( 0, $x->query( '//p[contains(@class,"ab-direct__status--blocked")]' )->length, (string) $verdict );
 			self::assertStringNotContainsString( 'firewall', $this->statusLine(), (string) $verdict );
 		}
@@ -526,13 +539,13 @@ final class FirewallCheckTest extends TestCase {
 		self::keep( 'blocked' );
 		AB_MCP_Settings::set( 'oauth_cimd', false );
 
-		self::assertStringNotContainsString( 'firewall', $this->chatgptPanel() );
+		self::assertStringNotContainsString( 'firewall', $this->panelText( 'chatgpt' ) );
 		self::assertSame( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', $this->statusLine() );
 	}
 
 	/** The status line under the switch for the sign-in, as text. */
 	private function statusLine(): string {
-		$status = $this->xpath( $this->call( 'render_settings_card' ) )->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		$status = $this->xpath( $this->call( 'connect_card_html' ) )->query( '//section[@id="ab-oauth-chatgpt"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
 		self::assertNotNull( $status );
 		return trim( preg_replace( '/\s+/', ' ', $status->textContent ) );
 	}
@@ -541,15 +554,15 @@ final class FirewallCheckTest extends TestCase {
 		foreach ( array( null, 'open', 'unknown' ) as $verdict ) {
 			ab_test_reset();
 			self::keep( $verdict );
-			$x    = $this->xpath( $this->call( 'render_settings_card' ) );
-			$hint = $x->query( '//section[@id="ab-oauth"]//p[@class="ab-direct__switch"]' )->item( 0 );
+			$x    = $this->xpath( $this->call( 'connect_card_html' ) );
+			$hint = $x->query( '//section[@id="ab-oauth-chatgpt"]//p[@class="ab-direct__switch"]' )->item( 0 );
 			self::assertNotNull( $hint, (string) $verdict );
 			self::assertSame( 'Switch the direct sign-in off if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers.', trim( preg_replace( '/\s+/', ' ', $hint->textContent ) ), (string) $verdict );
 			self::assertSame( 'off', $x->query( './/button[@form="ab-direct-signin-form"]', $hint )->item( 0 )->getAttribute( 'value' ), (string) $verdict );
 		}
 		self::keep( 'blocked' );
-		$x = $this->xpath( $this->call( 'render_settings_card' ) );
-		self::assertSame( 0, $x->query( '//section[@id="ab-oauth"]//p[@class="ab-direct__switch"]' )->length, 'Blocked: no link.' );
+		$x = $this->xpath( $this->call( 'connect_card_html' ) );
+		self::assertSame( 0, $x->query( '//section[@id="ab-oauth-chatgpt"]//p[@class="ab-direct__switch"]' )->length, 'Blocked: no link.' );
 	}
 
 	public function testTheStatusLineSaysWhatTheLastCheckFound(): void {
@@ -569,8 +582,8 @@ final class FirewallCheckTest extends TestCase {
 		self::keep( 'blocked' );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
 
-		self::assertStringNotContainsString( 'firewall', $this->chatgptPanel(), 'ChatGPT is told to switch sign-in on first.' );
-		self::assertStringContainsString( 'Sign-in for apps', $this->chatgptPanel() );
+		self::assertStringNotContainsString( 'firewall', $this->panelText( 'chatgpt' ), 'ChatGPT is told to switch sign-in on first.' );
+		self::assertStringContainsString( 'How ChatGPT signs in', $this->chatgptPanel(), 'The switch is right there.' );
 	}
 
 	/* ----------------------------------------------------------- button */
@@ -583,7 +596,7 @@ final class FirewallCheckTest extends TestCase {
 
 		self::assertSame( 'redirect', $exit->kind );
 		self::assertStringContainsString( 'ab_notice=checked', $exit->detail );
-		self::assertStringEndsWith( '#ab-oauth', $exit->detail );
+		self::assertStringEndsWith( '#ab-oauth-chatgpt', $exit->detail );
 		self::assertSame( 1, self::probes() );
 		self::assertSame( 'blocked', AB_MCP_OAuth::firewall_check()['verdict'] );
 	}
@@ -629,46 +642,60 @@ final class FirewallCheckTest extends TestCase {
 		} finally {
 			$_GET = array();
 		}
-		self::assertStringContainsString( 'Checked. The finding is shown under “Sign-in for apps”.', $html );
+		self::assertStringContainsString( 'Checked. The finding is shown under “How ChatGPT signs in”.', $html );
 	}
 
 	/* ---------------------------------------------------- settings card */
 
-	public function testTheTwoSettingsAreVisibleUnderTheirNamesInOneForm(): void {
-		$html = $this->call( 'render_settings_card' );
+	public function testEachSettingSitsInThePanelOfItsAppInAFormOfItsOwn(): void {
+		$html = $this->call( 'connect_card_html' );
 		$x    = $this->xpath( $html );
 
-		self::assertStringNotContainsString( '<details', $html, 'Nothing folded away.' );
-		self::assertStringNotContainsString( 'advanced', $html );
-		self::assertSame( 1, $x->query( '//form[@id="ab-settings-form"]' )->length );
+		self::assertStringNotContainsString( 'ab-alt', $html, 'Nothing folded away: the direct way is in the open.' );
+		self::assertSame( 0, $x->query( '//*[@id="ab-settings"]' )->length, 'No settings card of its own.' );
 		foreach ( array(
-			'ab-oauth'    => 'Sign-in for apps',
-			'ab-url-auth' => 'Connector address with token',
-		) as $id => $title ) {
-			$section = $x->query( '//form[@id="ab-settings-form"]//section[@id="' . $id . '"]' )->item( 0 );
+			'ab-oauth-claude'  => array( 'How Claude signs in', 'oauth_enabled', '//div[@id="ab-panel-claude"]' ),
+			'ab-oauth-chatgpt' => array( 'How ChatGPT signs in', 'oauth_enabled', '//div[@id="ab-panel-chatgpt"]' ),
+			'ab-url-auth'      => array( 'Connector address with token', 'connector_url_auth_enabled', '' ),
+		) as $id => list( $title, $setting, $where ) ) {
+			$section = $x->query( $where . '//section[@id="' . $id . '"]' )->item( 0 );
 			self::assertNotNull( $section, $id );
 			self::assertSame( $title, trim( $x->query( './/h3', $section )->item( 0 )->textContent ) );
+			self::assertSame( 1, $x->query( './/form', $section )->length, 'A form of its own.' );
+			self::assertSame( $setting, $x->query( './/form//input[@name="setting"]', $section )->item( 0 )->getAttribute( 'value' ), 'The form names its setting.' );
+			self::assertSame( 1, $x->query( './/form//input[@type="checkbox"][@name="' . $setting . '"]', $section )->length );
+			self::assertSame( 'Save', trim( $x->query( './/form//button[not(@form)]', $section )->item( 0 )->textContent ) );
 		}
-		self::assertSame( 2, $x->query( '//section' )->length, 'No third section: the MCP revision left the page.' );
-		self::assertSame( 1, $x->query( '//form[@id="ab-settings-form"]//button[not(@form)]' )->length, 'One Save.' );
-		self::assertSame( 'Save', trim( $x->query( '//form[@id="ab-settings-form"]//button[not(@form)]' )->item( 0 )->textContent ) );
+		self::assertSame( 'cursor other', $x->query( '//section[@id="ab-url-auth"]' )->item( 0 )->getAttribute( 'data-for' ), 'With the token form: for the clients that connect with a token.' );
+		self::assertSame( 0, $x->query( '//div[contains(@class,"ab-panel")]//section[@id="ab-url-auth"]' )->length, 'Not inside a panel.' );
+		self::assertSame( 3, $x->query( '//section[contains(@class,"ab-setting")]' )->length, 'No fourth: the MCP revision left the page.' );
 		self::assertSame( 'ab-firewall-form', $x->query( '//button[contains(.,"Check again")]' )->item( 0 )->getAttribute( 'form' ) );
 		self::assertSame( 'ab-direct-signin-form', $x->query( '//button[contains(.,"Switch the direct sign-in off")]' )->item( 0 )->getAttribute( 'form' ) );
+		// The status line belongs to ChatGPT alone.
+		self::assertSame( 0, $x->query( '//div[@id="ab-panel-claude"]//*[contains(@class,"ab-direct")]' )->length );
+		self::assertSame( 1, $x->query( '//div[@id="ab-panel-chatgpt"]//div[@class="ab-direct"]' )->length );
 	}
 
 	public function testEverySettingSaysWhatItIsFor(): void {
-		$html = $this->call( 'render_settings_card' );
+		$html = $this->call( 'connect_card_html' );
 		$x    = $this->xpath( $html );
-		$text = static fn( string $name ): string => $x->query( '//input[@name="' . $name . '"]/following-sibling::span' )->item( 0 )->textContent;
+		$text = static function ( string $id ) use ( $x ): string {
+			return trim( preg_replace( '/\s+/', ' ', $x->query( '//section[@id="' . $id . '"]//input[@type="checkbox"]/following-sibling::span' )->item( 0 )->textContent ) );
+		};
 
-		self::assertSame( 'Apps can sign in with their Connect button. For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in.', $text( 'oauth_enabled' ) );
-		self::assertSame( 'Also offer an address that contains the token. For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', $text( 'connector_url_auth_enabled' ) );
-		// No protocol detail that helps nobody on this page, and «On by
+		self::assertSame( 'Claude and other apps can sign in with their Connect button. You approve every connection on this site. Switch off only if no app should sign in.', $text( 'ab-oauth-claude' ) );
+		self::assertSame( 'ChatGPT and other apps can sign in with their Connect button. You approve every connection on this site. Switch off only if no app should sign in.', $text( 'ab-oauth-chatgpt' ) );
+		self::assertSame( 'Also offer an address that contains the token. For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', $text( 'ab-url-auth' ) );
+		// No protocol detail that helps nobody in the settings, and «On by
 		// default» nowhere: only the address with the token says it is off.
-		foreach ( array( 'referrer', 'proxy logs', 'X-Api-Key', 'RFC', 'discovers', '2026-07-28', 'metadata document', 'On by default' ) as $jargon ) {
-			self::assertStringNotContainsString( $jargon, $html, $jargon );
+		$settings = '';
+		foreach ( $x->query( '//section[contains(@class,"ab-setting")]' ) as $section ) {
+			$settings .= (string) $section->ownerDocument->saveHTML( $section );
 		}
-		self::assertSame( 1, substr_count( $html, 'Off by default' ) );
+		foreach ( array( 'referrer', 'proxy logs', 'X-Api-Key', 'RFC', 'discovers', '2026-07-28', 'metadata document', 'On by default' ) as $jargon ) {
+			self::assertStringNotContainsString( $jargon, $settings, $jargon );
+		}
+		self::assertSame( 1, substr_count( $settings, 'Off by default' ) );
 	}
 
 	public function testTheConnectionsCardHoldsTheTableOnly(): void {
@@ -681,10 +708,12 @@ final class FirewallCheckTest extends TestCase {
 
 	public function testTheWayToTheSettingIsNamedAsThePageShowsIt(): void {
 		AB_MCP_Settings::set( 'oauth_enabled', false );
-		$panel = $this->chatgptPanel();
-
-		self::assertStringContainsString( 'Switch it on under “Sign-in for apps”, further down this page.', $panel );
-		self::assertStringContainsString( 'href="#ab-oauth"', $panel );
+		foreach ( array( 'claude' => 'Claude', 'chatgpt' => 'ChatGPT' ) as $client => $name ) {
+			$panel = $this->panelHtml( $client );
+			self::assertStringContainsString( $name . ' connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on below.', $panel, $client );
+			self::assertStringNotContainsString( 'href="#ab-oauth', $panel, 'No link: the switch is right below.' );
+			self::assertLessThan( strpos( $panel, 'id="ab-oauth-' . $client . '"' ), strpos( $panel, 'Switch it on below.' ), 'Below indeed.' );
+		}
 	}
 
 	public function testTheReadmeAnswersNotAcceptable(): void {
@@ -693,7 +722,7 @@ final class FirewallCheckTest extends TestCase {
 
 		self::assertStringContainsString( '= Sign-in ends with “Not Acceptable” or mentions Mod_Security =', $faq );
 		self::assertStringContainsString( "lets ChatGPT and Codex register with the site instead. Then:\n\n1. In the app, remove the connector for this site and add it again. The sign-in now goes through.\n2. If it still fails, add the connector once more, this time with this address instead of your site's: https://connect.alphabridge-mcp.com/mcp. When you click Authenticate, the free AlphaBridge hub asks for your site's address. Enter it and approve on your site as usual.\n", $faq, 'The two steps of the status line.' );
-		self::assertStringContainsString( '"Sign-in for apps" → "Switch the direct sign-in off", then add the connector again', $faq, 'The way by hand, for a site whose check does not notice the firewall.' );
+		self::assertStringContainsString( 'ChatGPT → "Switch the direct sign-in off", then add the connector again', $faq, 'The way by hand, for a site whose check does not notice the firewall.' );
 		self::assertStringNotContainsString( 'othing to do', $readme, 'Nothing works by itself here.' );
 		self::assertDoesNotMatchRegularExpression( '/= Sign-in ends[^=]*\d\.\d\.\d/s', $faq, 'No version number in the answer.' );
 	}

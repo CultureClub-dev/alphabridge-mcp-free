@@ -63,10 +63,11 @@
 		document.querySelectorAll( '.ab-panel' ).forEach( function ( p ) {
 			p.hidden = p.getAttribute( 'data-panel' ) !== client;
 		} );
-		var token = document.querySelector( '.ab-token' );
-		if ( token ) {
-			token.hidden = ( ' ' + ( token.getAttribute( 'data-for' ) || '' ) + ' ' ).indexOf( ' ' + client + ' ' ) === -1;
-		}
+		// The token form and the settings that belong to some assistants
+		// only: each names them in data-for.
+		document.querySelectorAll( '#ab-connect [data-for]' ).forEach( function ( el ) {
+			el.hidden = ( ' ' + ( el.getAttribute( 'data-for' ) || '' ) + ' ' ).indexOf( ' ' + client + ' ' ) === -1;
+		} );
 		if ( remember ) {
 			try {
 				window.localStorage.setItem( CLIENT_KEY, client );
@@ -92,6 +93,16 @@
 		}
 		if ( stored ) {
 			pickClient( stored, false );
+		}
+		// Landing on a block inside a panel (after a save, «Check again» or
+		// the link under the status line): show that panel, whatever was
+		// remembered, so the block the address names is the one on screen.
+		var target = window.location.hash.length > 1 ? document.getElementById( window.location.hash.slice( 1 ) ) : null;
+		var panel  = target && target.closest ? target.closest( '.ab-panel' ) : null;
+		if ( panel ) {
+			pickClient( panel.getAttribute( 'data-panel' ), true );
+		} else if ( target && target.hidden && target.getAttribute( 'data-for' ) ) {
+			pickClient( target.getAttribute( 'data-for' ).split( ' ' )[ 0 ], true );
 		}
 	}() );
 

@@ -764,7 +764,7 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testEveryFormOnThePageIsSignedForItsHandler(): void {
-		$x = $this->xpath( $this->call( 'render_connections_card', array() ) . $this->call( 'render_settings_card' ) . $this->call( 'render_audit' ) );
+		$x = $this->xpath( $this->call( 'connect_card_html' ) . $this->call( 'render_connections_card', array() ) . $this->call( 'render_audit' ) );
 
 		$forms = array();
 		foreach ( $x->query( '//form' ) as $form ) {
@@ -783,15 +783,23 @@ final class AdminPageTest extends TestCase {
 			),
 			$forms
 		);
-		// The two switches sit in the one settings form, under one Save;
-		// the direct sign-in and the MCP revision are no boxes there.
+		// Each setting in a form of its own, in the panel of the app it
+		// concerns: the sign-in under Claude and under ChatGPT, the address
+		// with the token with the token form. One box and one Save each, and
+		// the form names the box it carries; the direct sign-in and the MCP
+		// revision are no boxes anywhere.
 		$settings = '//form[.//input[@name="action"][@value="ab_mcp_connection_settings"]]';
-		foreach ( array( 'oauth_enabled', 'connector_url_auth_enabled' ) as $switch ) {
-			self::assertSame( 1, $x->query( $settings . '//input[@type="checkbox"][@name="' . $switch . '"]' )->length, $switch );
+		self::assertSame( 3, $x->query( $settings )->length );
+		foreach ( $x->query( $settings ) as $form ) {
+			$setting = $x->query( './/input[@name="setting"]', $form )->item( 0 )->getAttribute( 'value' );
+			self::assertSame( 1, $x->query( './/input[@type="checkbox"]', $form )->length, $setting );
+			self::assertSame( $setting, $x->query( './/input[@type="checkbox"]', $form )->item( 0 )->getAttribute( 'name' ) );
+			self::assertSame( 1, $x->query( './/button[not(@form)]', $form )->length, 'One Save.' );
 		}
-		self::assertSame( 2, $x->query( '//input[@type="checkbox"]' )->length, 'No other box on the card.' );
+		self::assertSame( 2, $x->query( $settings . '//input[@name="oauth_enabled"]' )->length, 'Under Claude and under ChatGPT.' );
+		self::assertSame( 1, $x->query( $settings . '//input[@name="connector_url_auth_enabled"]' )->length );
+		self::assertSame( 3, $x->query( '//input[@type="checkbox"]' )->length, 'No other box.' );
 		self::assertSame( 0, $x->query( '//input[@name="oauth_cimd"] | //input[@name="modern_protocol"]' )->length );
-		self::assertSame( 1, $x->query( $settings . '//button[not(@form)]' )->length, 'One Save for the block.' );
 		// «Check again» and the link post forms of their own, not the settings.
 		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length );
 		self::assertSame( 1, $x->query( '//form[@id="ab-firewall-form"]' )->length );
@@ -800,7 +808,7 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testTheProtocolSettingLeftThePageButIsStillRead(): void {
-		$card = $this->call( 'render_settings_card' );
+		$card = $this->call( 'connect_card_html' );
 		self::assertStringNotContainsString( 'modern_protocol', $card );
 		self::assertStringNotContainsString( '2026-07-28', $card );
 
@@ -898,10 +906,10 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testTheDirectSignInShowsTheStoredSettingAsAStatusLineWithALink(): void {
-		$x = $this->xpath( $this->call( 'render_settings_card' ) );
+		$x = $this->xpath( $this->call( 'connect_card_html' ) );
 		self::assertSame( 0, $x->query( '//input[@name="oauth_cimd"]' )->length, 'No box: a status line and a link.' );
-		$status = $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
-		self::assertNotNull( $status, 'Under «Sign-in for apps», under the switch for the sign-in.' );
+		$status = $x->query( '//section[@id="ab-oauth-chatgpt"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		self::assertNotNull( $status, 'Under «How ChatGPT signs in», under the switch for the sign-in.' );
 		self::assertStringStartsWith( 'ChatGPT and Codex sign in without registering first.', trim( $status->textContent ) );
 		$link = $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 );
 		self::assertSame( 'off', $link->getAttribute( 'value' ) );
@@ -909,8 +917,8 @@ final class AdminPageTest extends TestCase {
 		self::assertStringContainsString( 'if a sign-in ends with “Not Acceptable”', $link->parentNode->textContent, 'The link says when one would.' );
 
 		\AB_MCP_Settings::set( 'oauth_cimd', false );
-		$x      = $this->xpath( $this->call( 'render_settings_card' ) );
-		$status = $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		$x      = $this->xpath( $this->call( 'connect_card_html' ) );
+		$status = $x->query( '//section[@id="ab-oauth-chatgpt"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
 		self::assertSame( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', trim( $status->textContent ) );
 		$link = $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 );
 		self::assertSame( 'on', $link->getAttribute( 'value' ) );
@@ -945,7 +953,7 @@ final class AdminPageTest extends TestCase {
 			self::fail( 'No redirect.' );
 		} catch ( \AbTestExit $exit ) {
 			self::assertSame( 'redirect', $exit->kind );
-			self::assertStringEndsWith( '#ab-oauth', $exit->detail );
+			self::assertStringEndsWith( '#ab-oauth-chatgpt', $exit->detail );
 		} finally {
 			$_POST    = array();
 			$_REQUEST = array();
@@ -973,24 +981,55 @@ final class AdminPageTest extends TestCase {
 		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Unchanged.' );
 	}
 
-	public function testSavingTheSettingsFormStoresTheTwoSwitchesAndNothingElse(): void {
+	public function testSavingAFormStoresTheOneSettingItNamesAndNothingElse(): void {
 		$save = fn( array $post ): string => $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', $post );
 
-		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		\AB_MCP_Settings::set( 'connector_url_auth_enabled', true );
+		self::assertSame( 'redirect', $save( array( 'setting' => 'oauth_enabled', 'panel' => 'claude', 'oauth_enabled' => '1' ) ) );
 		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ) );
-		self::assertFalse( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'An unticked box is not posted: off.' );
-		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Not a box on the card: untouched.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'Not in this form: untouched.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Not a box anywhere: untouched.' );
 		self::assertTrue( \AB_MCP_OAuth::cimd_enabled() );
 
-		self::assertSame( 'redirect', $save( array( 'connector_url_auth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
-		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ) );
-		self::assertTrue( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ) );
+		self::assertSame( 'redirect', $save( array( 'setting' => 'oauth_enabled', 'panel' => 'chatgpt', 'connector_url_auth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ), 'An unticked box is not posted: off.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'A stray box of the other setting changes nothing.' );
+
+		self::assertSame( 'redirect', $save( array( 'setting' => 'connector_url_auth_enabled', 'panel' => 'other' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'Unticked: off.' );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ), 'Untouched.' );
+
 		\AB_MCP_Settings::set( 'oauth_cimd', false );
-		self::assertSame( 'redirect', $save( array( 'oauth_cimd' => '1' ) ) );
-		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'A stray field does not switch the direct sign-in on.' );
+		self::assertSame( 'redirect', $save( array( 'setting' => 'oauth_cimd', 'oauth_cimd' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'A form that names something else writes nothing.' );
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ), 'Nor one that names no setting.' );
 		// Every save runs the firewall self-test again: one probe per save.
-		self::assertCount( 3, $GLOBALS['ab_test_http'] );
+		self::assertCount( 5, $GLOBALS['ab_test_http'] );
 		self::assertStringContainsString( 'ab_mcp_oauth=authorize', $GLOBALS['ab_test_http'][0]['url'] );
+	}
+
+	public function testASaveLandsOnTheBlockItCameFrom(): void {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		foreach ( array(
+			array( array( 'setting' => 'oauth_enabled', 'panel' => 'claude', 'oauth_enabled' => '1' ), '#ab-oauth-claude' ),
+			array( array( 'setting' => 'oauth_enabled', 'panel' => 'chatgpt', 'oauth_enabled' => '1' ), '#ab-oauth-chatgpt' ),
+			array( array( 'setting' => 'connector_url_auth_enabled', 'panel' => 'cursor' ), '#ab-url-auth' ),
+			array( array( 'setting' => 'oauth_enabled', 'panel' => 'elsewhere', 'oauth_enabled' => '1' ), 'ab_notice=saved' ),
+		) as list( $post, $end ) ) {
+			$_POST    = $post + array( '_wpnonce' => 'nonce-ab_mcp_connection_settings' );
+			$_REQUEST = $_POST;
+			try {
+				( new AB_MCP_Admin() )->handle_connection_settings();
+				self::fail( 'No redirect.' );
+			} catch ( \AbTestExit $exit ) {
+				self::assertSame( 'redirect', $exit->kind );
+				self::assertStringEndsWith( $end, $exit->detail, $end );
+			} finally {
+				$_POST    = array();
+				$_REQUEST = array();
+			}
+		}
 	}
 
 	public function testTheSettingsFormIsNotSavedWithoutItsNonce(): void {
@@ -1000,7 +1039,7 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testTheMetadataDocumentSwitchSaysWhenAFilterDecides(): void {
-		$card = fn(): string => $this->call( 'render_settings_card' );
+		$card = fn(): string => $this->call( 'connect_card_html' );
 
 		self::assertStringNotContainsString( 'ab_mcp_oauth_cimd filter', $card() );
 
@@ -1011,10 +1050,10 @@ final class AdminPageTest extends TestCase {
 	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 	public function testTheMetadataDocumentSwitchSaysWhenTheSiteBlocksRequests(): void {
-		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'render_settings_card' ) );
+		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'connect_card_html' ) );
 
 		define( 'WP_HTTP_BLOCK_EXTERNAL', true );
-		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'render_settings_card' ), 'The note names the way to use it anyway.' );
+		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'connect_card_html' ), 'The note names the way to use it anyway.' );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {

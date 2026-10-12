@@ -470,7 +470,7 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Save the settings card: one form, one button, two switches.
+	 * Save one of the settings for how apps connect.
 	 *
 	 *  - oauth_enabled: sign-in for apps (Claude's and ChatGPT's Connect
 	 *    button, OAuth). Off = the well-known metadata, consent page and
@@ -478,23 +478,36 @@ class AB_MCP_Admin {
 	 *    (they are ordinary tokens).
 	 *  - connector_url_auth_enabled: a connector address with the token in it.
 	 *
-	 * An unticked box is not posted, so each switch is read as present or
-	 * not. Nothing else is touched: whether ChatGPT and Codex may sign in
-	 * directly (oauth_cimd) is switched by the link under the status line
-	 * (handle_direct_signin()), and the MCP revision 2026-07-28
-	 * (modern_protocol) is no longer on the page — the setting keeps the
-	 * value a site stored, and the ab_mcp_modern_protocol filter stays.
-	 * The firewall self-test runs again with every save: the finding it
-	 * leaves decides whether the discovery metadata offers the direct
-	 * sign-in (AB_MCP_OAuth::metadata()).
+	 * Each setting sits in the panel of the app it concerns, with a form of
+	 * its own that names it (the field «setting»): the sign-in under Claude
+	 * and under ChatGPT, the connector address under Cursor and «Other».
+	 * Only the named setting is written, from its box being posted or not
+	 * (an unticked box is not posted); the same switch shown in another
+	 * panel is in another form and cannot overrule it. Nothing else is
+	 * touched: whether ChatGPT and Codex may sign in directly (oauth_cimd)
+	 * is switched by the link under the status line (handle_direct_signin()),
+	 * and the MCP revision 2026-07-28 (modern_protocol) is no longer on the
+	 * page — the setting keeps the value a site stored, and the
+	 * ab_mcp_modern_protocol filter stays. The firewall self-test runs again
+	 * with every save: the finding it leaves decides whether the discovery
+	 * metadata offers the direct sign-in (AB_MCP_OAuth::metadata()). The
+	 * page then lands on the block that was saved (the field «panel»).
 	 */
 	public function handle_connection_settings() {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_connection_settings' );
-		AB_MCP_Settings::set( 'oauth_enabled', isset( $_POST['oauth_enabled'] ) );
-		AB_MCP_Settings::set( 'connector_url_auth_enabled', isset( $_POST['connector_url_auth_enabled'] ) );
+		$setting = isset( $_POST['setting'] ) ? sanitize_key( wp_unslash( $_POST['setting'] ) ) : '';
+		$panel   = isset( $_POST['panel'] ) ? sanitize_key( wp_unslash( $_POST['panel'] ) ) : '';
+		if ( in_array( $setting, array( 'oauth_enabled', 'connector_url_auth_enabled' ), true ) ) {
+			AB_MCP_Settings::set( $setting, isset( $_POST[ $setting ] ) );
+		}
 		AB_MCP_OAuth::run_firewall_check();
-		$this->redirect( 'saved' );
+		if ( 'connector_url_auth_enabled' === $setting ) {
+			$anchor = 'ab-url-auth';
+		} else {
+			$anchor = in_array( $panel, array( 'claude', 'chatgpt' ), true ) ? 'ab-oauth-' . $panel : '';
+		}
+		$this->redirect( 'saved', $anchor );
 	}
 
 	/**
@@ -510,7 +523,7 @@ class AB_MCP_Admin {
 		if ( 'on' === $choice || 'off' === $choice ) {
 			AB_MCP_Settings::set( 'oauth_cimd', 'on' === $choice );
 		}
-		$this->redirect( 'saved', 'ab-oauth' );
+		$this->redirect( 'saved', 'ab-oauth-chatgpt' );
 	}
 
 	/**
@@ -521,7 +534,7 @@ class AB_MCP_Admin {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_firewall_check' );
 		AB_MCP_OAuth::run_firewall_check();
-		$this->redirect( 'checked', 'ab-oauth' );
+		$this->redirect( 'checked', 'ab-oauth-chatgpt' );
 	}
 
 	/**
@@ -707,7 +720,7 @@ class AB_MCP_Admin {
 		$all      = $registry->all();
 
 		// The firewall self-test, when its finding is missing or old: the
-		// ChatGPT panel and the settings card below read what it leaves.
+		// ChatGPT panel reads what it leaves.
 		AB_MCP_OAuth::firewall_check_if_due();
 
 		echo '<div class="wrap ab-mcp">';
@@ -752,7 +765,6 @@ class AB_MCP_Admin {
 		 */
 		do_action( 'ab_mcp_admin_main_boxes' );
 
-		$this->render_settings_card();
 		$this->render_audit();
 		echo '</div>';
 	}
@@ -915,21 +927,22 @@ class AB_MCP_Admin {
 	/**
 	 * What Claude or ChatGPT needs while this site's OAuth flow is switched off.
 	 * Both connect with this site's login and approval; the directory entry and
-	 * ChatGPT's app cannot work without it, so they are not offered then.
+	 * ChatGPT's app cannot work without it, so they are not offered then. The
+	 * switch follows right below (signin_setting_html()), so no link to it.
 	 *
 	 * @param string $name Claude or ChatGPT.
 	 * @return string HTML, escaped.
 	 */
 	private function oauth_off_html( $name ) {
 		/* translators: %s: Claude or ChatGPT. */
-		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under “Sign-in for apps”, further down this page.', 'alphabridge-mcp' ), $name );
+		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on below.', 'alphabridge-mcp' ), $name );
 		$html = '<div class="ab-callout"><p>' . esc_html( $text ) . '</p>';
 		if ( 'Claude' === $name ) {
 			// The way the page offered before OAuth existed: a token in the
 			// connector URL (connector-URL authentication, off by default).
 			$html .= '<p>' . esc_html__( 'Until then, Claude.ai can connect with a token in its connector URL: pick “Other”, create a connection and switch on the connector URL it offers.', 'alphabridge-mcp' ) . '</p>';
 		}
-		return $html . '<p><a class="ab-more" href="#ab-oauth">' . esc_html__( 'Go to the setting', 'alphabridge-mcp' ) . '</a></p></div>';
+		return $html . '</div>';
 	}
 
 	/**
@@ -951,23 +964,30 @@ class AB_MCP_Admin {
 		$html  = '<div class="ab-card ab-connect" id="ab-connect">';
 		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Connect', 'alphabridge-mcp' ) . '</p>';
 
-		// Claude: the directory entry first, the direct way folded away.
+		// Claude: both ways in, side by side — the directory entry (through
+		// the hub) and the custom connector (directly) — then the sign-in
+		// setting, the one Claude needs.
 		$html .= '<div class="ab-panel" id="ab-panel-claude" data-panel="claude">';
 		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect Claude', 'alphabridge-mcp' ) . '</h2>';
 		if ( $oauth ) {
-			$html .= '<div class="ab-steps">';
+			$html .= '<div class="ab-ways">';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Through the hub', 'alphabridge-mcp' ), __( 'one connection, up to 10 sites', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">';
 			$html .= $this->step( 1, __( 'Open AlphaBridge in Claude’s directory', 'alphabridge-mcp' ), '<p>' . esc_html__( 'The listing “AlphaBridge MCP for WordPress” opens in Claude.', 'alphabridge-mcp' ) . '</p>' . $this->ext_button( 'https://claude.ai/directory/alphabridge', __( 'Open Claude’s directory', 'alphabridge-mcp' ) ) );
 			$html .= $this->step( 2, __( 'Click Connect, enter this address', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Claude asks for your site’s address.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( home_url(), __( 'This site’s address', 'alphabridge-mcp' ), __( 'Copy address', 'alphabridge-mcp' ) ) );
 			$html .= $this->step( 3, __( 'Sign in here and approve', 'alphabridge-mcp' ), '<p>' . esc_html__( 'This site asks you to sign in and to approve. The connection then shows up under Your connections.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div></section>';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Directly', 'alphabridge-mcp' ), __( 'this site only', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">';
+			$html .= $this->step( 1, __( 'Add a custom connector in Claude', 'alphabridge-mcp' ), '<p>' . esc_html__( 'In Claude: Customize → Connectors → Add → Add custom connector. Paste this address.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( $endpoint, __( 'Endpoint URL', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 2, __( 'Sign in here and approve', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Claude sends you to this site; no token to copy. The connection then shows up under Your connections.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div></section>';
 			$html .= '</div>';
 			$html .= '<div class="ab-links">' . $this->ext_link( self::video_url(), __( 'Watch the video', 'alphabridge-mcp' ), '▶' ) . $this->ext_link( $guide, __( 'Step-by-step guide', 'alphabridge-mcp' ), '?' ) . '</div>';
-			$html .= '<p class="ab-note">' . esc_html__( 'This way runs through the AlphaBridge Connect hub — one hub connection reaches up to 10 sites.', 'alphabridge-mcp' ) . '</p>';
-			$html .= '<details class="ab-alt"><summary>' . esc_html__( 'Without the hub: add a custom connector', 'alphabridge-mcp' ) . '</summary>';
-			$html .= '<p>' . esc_html__( 'In Claude: Customize → Connectors → Add → Add custom connector. Paste this endpoint and connect; this site asks for your approval — no token to copy.', 'alphabridge-mcp' ) . '</p>';
-			$html .= $this->copy_field( $endpoint, __( 'Endpoint URL', 'alphabridge-mcp' ) ) . '</details>';
 		} else {
 			$html .= $this->oauth_off_html( 'Claude' );
 		}
+		$html .= $this->signin_setting_html( 'claude' );
 		$html .= '</div>';
 
 		// ChatGPT: an app of its own, pointed at this site's endpoint.
@@ -981,15 +1001,12 @@ class AB_MCP_Admin {
 			$html .= $this->step( 3, __( 'Approve on this site', 'alphabridge-mcp' ), '<p>' . esc_html__( 'ChatGPT opens this site’s consent page in the same tab. Choose the access level and allow.', 'alphabridge-mcp' ) . '</p>' );
 			$html .= '</div>';
 			$html .= '<div class="ab-links">' . $this->ext_link( $guide, __( 'Step-by-step guide', 'alphabridge-mcp' ), '?' ) . '</div>';
-			if ( AB_MCP_OAuth::cimd_enabled() && AB_MCP_OAuth::firewall_blocks_url_client_ids() ) {
-				// ChatGPT would sign in directly (its metadata document); the
-				// site no longer offers that way, so ChatGPT registers
-				// (AB_MCP_OAuth::metadata()). The same words as the status line.
-				$html .= '<div class="ab-note ab-direct__blocked">' . self::firewall_blocked_html() . '</div>';
-			}
 		} else {
 			$html .= $this->oauth_off_html( 'ChatGPT' );
 		}
+		// The sign-in setting with the status line for ChatGPT and Codex:
+		// behind a firewall it carries the two steps (firewall_blocked_html()).
+		$html .= $this->signin_setting_html( 'chatgpt' );
 		$html .= '</div>';
 
 		// Cursor: a token and the ready-made configuration.
@@ -1013,9 +1030,100 @@ class AB_MCP_Admin {
 
 		$html .= $this->token_form_html();
 		$html .= $this->reveal_html();
+		$html .= $this->url_auth_setting_html();
+
+		// The forms behind «Check again» and the link that switches the
+		// direct sign-in (direct_signin_html()); their buttons name them.
+		$post  = esc_url( admin_url( 'admin-post.php' ) );
+		$html .= '<form method="post" action="' . $post . '" id="ab-firewall-form">' . wp_nonce_field( 'ab_mcp_firewall_check', '_wpnonce', true, false ) . '<input type="hidden" name="action" value="ab_mcp_firewall_check"></form>';
+		$html .= '<form method="post" action="' . $post . '" id="ab-direct-signin-form">' . wp_nonce_field( 'ab_mcp_direct_signin', '_wpnonce', true, false ) . '<input type="hidden" name="action" value="ab_mcp_direct_signin"></form>';
 		$html .= '</div>';
 
 		return $html;
+	}
+
+	/**
+	 * The title of one way in (Claude: through the hub, or directly), with
+	 * what sets it apart in small print.
+	 *
+	 * @param string $title Plain text.
+	 * @param string $small Plain text.
+	 * @return string HTML, escaped.
+	 */
+	private function way_title( $title, $small ) {
+		return '<h3 class="ab-way__title">' . esc_html( $title ) . ' <small>' . esc_html( $small ) . '</small></h3>';
+	}
+
+	/**
+	 * The opening of a settings form: one form per setting, in the panel of
+	 * the app it concerns (handle_connection_settings()).
+	 *
+	 * @param string $setting oauth_enabled or connector_url_auth_enabled.
+	 * @param string $panel   The panel the form sits in, for where to land.
+	 * @return string HTML, escaped.
+	 */
+	private function setting_form_open( $setting, $panel ) {
+		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-setting__form">';
+		$html .= wp_nonce_field( 'ab_mcp_connection_settings', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_connection_settings">';
+		$html .= '<input type="hidden" name="setting" value="' . esc_attr( $setting ) . '">';
+		$html .= '<input type="hidden" name="panel" value="' . esc_attr( $panel ) . '">';
+		return $html;
+	}
+
+	/**
+	 * The end of a settings form: its Save.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function setting_form_close() {
+		return '<p class="ab-settings__save"><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p></form>';
+	}
+
+	/**
+	 * The sign-in for apps (oauth_enabled: Claude's and ChatGPT's Connect
+	 * button, OAuth), in the panel of the app it concerns. Off = the
+	 * well-known metadata, consent page and OAuth endpoints all disappear;
+	 * existing connections keep working (they are ordinary tokens). Under
+	 * ChatGPT the status line for ChatGPT and Codex follows
+	 * (direct_signin_html()). The same switch in two panels: each is a form
+	 * of its own, so the hidden one is never posted along.
+	 *
+	 * @param string $client claude or chatgpt.
+	 * @return string HTML, escaped.
+	 */
+	private function signin_setting_html( $client ) {
+		$on   = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
+		$name = 'chatgpt' === $client ? 'ChatGPT' : 'Claude';
+
+		$html  = '<section class="ab-setting" id="ab-oauth-' . esc_attr( $client ) . '">';
+		/* translators: %s: Claude or ChatGPT. */
+		$html .= '<h3 class="ab-setting__title">' . esc_html( sprintf( __( 'How %s signs in', 'alphabridge-mcp' ), $name ) ) . '</h3>';
+		$html .= $this->setting_form_open( 'oauth_enabled', $client );
+		/* translators: %s: Claude or ChatGPT. */
+		$html .= '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $on, true, false ) . '><span>' . esc_html( sprintf( __( '%s and other apps can sign in with their Connect button.', 'alphabridge-mcp' ), $name ) ) . ' <span class="description">' . esc_html__( 'You approve every connection on this site. Switch off only if no app should sign in.', 'alphabridge-mcp' ) . '</span></span></label>';
+		if ( 'chatgpt' === $client && $on ) {
+			// With the sign-in off there is nothing to say about how ChatGPT
+			// signs in: the panel above says to switch it on first.
+			$html .= $this->direct_signin_html();
+		}
+		return $html . $this->setting_form_close() . '</section>';
+	}
+
+	/**
+	 * A connector address with the token in it (connector_url_auth_enabled),
+	 * for apps without a password field: shown with the token form, for
+	 * Cursor and the other clients, the ones that connect with a token.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function url_auth_setting_html() {
+		$on    = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
+		$html  = '<section class="ab-setting" id="ab-url-auth" data-for="cursor other" hidden>';
+		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Connector address with token', 'alphabridge-mcp' ) . '</h3>';
+		$html .= $this->setting_form_open( 'connector_url_auth_enabled', 'other' );
+		$html .= '<label class="ab-check"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $on, true, false ) . '><span>' . esc_html__( 'Also offer an address that contains the token.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
+		return $html . $this->setting_form_close() . '</section>';
 	}
 
 	/**
@@ -1693,8 +1801,8 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The connections card: the table. How apps connect is set on the
-	 * settings card further down (render_settings_card()).
+	 * The connections card: the table. How apps connect is set in the
+	 * connect card above, in the panel of the app it concerns.
 	 *
 	 * @param array $tokens Stored connections.
 	 */
@@ -1709,9 +1817,8 @@ class AB_MCP_Admin {
 
 	/**
 	 * Where the host's firewall blocks the direct sign-in: what is the case
-	 * (in bold on the page) and what to do about it. The status line on the
-	 * settings card and the ChatGPT panel say the same, the readme's FAQ
-	 * too. Nothing works by itself here: the app still holds the connector
+	 * (in bold on the page) and what to do about it. The status line in the
+	 * ChatGPT panel says it, the readme's FAQ too. Nothing works by itself here: the app still holds the connector
 	 * it made for the direct sign-in, so the person adds it again; and the
 	 * hub is the way round a firewall that blocks more than that.
 	 *
@@ -1730,8 +1837,8 @@ class AB_MCP_Admin {
 	/**
 	 * What is the case behind such a firewall, in bold, and the two steps
 	 * to sign in all the same: the connector anew, else through the hub.
-	 * The status line on the settings card and the ChatGPT panel show the
-	 * same fragment; the readme's FAQ says the same.
+	 * The status line in the ChatGPT panel shows it; the readme's FAQ says
+	 * the same.
 	 *
 	 * @return string HTML, escaped.
 	 */
@@ -1744,64 +1851,6 @@ class AB_MCP_Admin {
 		return $html . '</ol>';
 	}
 
-	/**
-	 * The settings card: how apps connect to this site. Two settings, all
-	 * visible, each with one sentence on what it is for, in one form with
-	 * one Save; between them the status line for ChatGPT and Codex.
-	 *
-	 *  - Sign-in for apps (OAuth): on by default; off removes the discovery
-	 *    metadata, the consent page and the OAuth endpoints. Under it the
-	 *    status line (direct_signin_html()): whether ChatGPT and Codex sign
-	 *    in directly or register with the site, the last firewall check,
-	 *    «Check again», and the link that switches the direct sign-in. The
-	 *    button and the link post forms of their own, reached through the
-	 *    form attribute: forms do not nest.
-	 *  - A connector address with the token in it: off by default.
-	 *
-	 * The MCP revision 2026-07-28 is no longer a switch on the page: the
-	 * setting modern_protocol keeps its value, and the filter
-	 * ab_mcp_modern_protocol stays (AB_MCP_REST_Controller::modern_enabled()).
-	 */
-	private function render_settings_card() {
-		$oauth_on  = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
-		$path_auth = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
-		$post      = esc_url( admin_url( 'admin-post.php' ) );
-
-		echo '<div class="ab-card ab-settings" id="ab-settings">';
-		echo '<p class="ab-eyebrow">' . esc_html__( 'Settings', 'alphabridge-mcp' ) . '</p>';
-		echo '<h2 class="ab-card__title">' . esc_html__( 'How apps connect', 'alphabridge-mcp' ) . '</h2>';
-		echo '<form method="post" action="' . $post . '" id="ab-settings-form">';
-		wp_nonce_field( 'ab_mcp_connection_settings' );
-		echo '<input type="hidden" name="action" value="ab_mcp_connection_settings">';
-
-		// Sign-in for apps: Claude's and ChatGPT's Connect button (OAuth).
-		echo '<section class="ab-setting" id="ab-oauth">';
-		echo '<h3 class="ab-setting__title">' . esc_html__( 'Sign-in for apps', 'alphabridge-mcp' ) . '</h3>';
-		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Apps can sign in with their Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in.', 'alphabridge-mcp' ) . '</span></span></label>';
-		echo $this->direct_signin_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside direct_signin_html().
-		echo '</section>';
-
-		// A connector address with the token in it, for apps without a password field.
-		echo '<section class="ab-setting" id="ab-url-auth">';
-		echo '<h3 class="ab-setting__title">' . esc_html__( 'Connector address with token', 'alphabridge-mcp' ) . '</h3>';
-		echo '<label class="ab-check"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $path_auth, true, false ) . '><span>' . esc_html__( 'Also offer an address that contains the token.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
-		echo '</section>';
-
-		echo '<p class="ab-settings__save"><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form>';
-
-		// The forms behind «Check again» and the link that switches the
-		// direct sign-in (direct_signin_html()).
-		echo '<form method="post" action="' . $post . '" id="ab-firewall-form">';
-		wp_nonce_field( 'ab_mcp_firewall_check' );
-		echo '<input type="hidden" name="action" value="ab_mcp_firewall_check">';
-		echo '</form>';
-		echo '<form method="post" action="' . $post . '" id="ab-direct-signin-form">';
-		wp_nonce_field( 'ab_mcp_direct_signin' );
-		echo '<input type="hidden" name="action" value="ab_mcp_direct_signin">';
-		echo '</form>';
-		echo '</div>';
-	}
 
 	/**
 	 * The status line for ChatGPT and Codex under the switch for the
@@ -2220,7 +2269,7 @@ class AB_MCP_Admin {
 		}
 		$map = array(
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
-			'checked'       => array( 'success', __( 'Checked. The finding is shown under “Sign-in for apps”.', 'alphabridge-mcp' ) ),
+			'checked'       => array( 'success', __( 'Checked. The finding is shown under “How ChatGPT signs in”.', 'alphabridge-mcp' ) ),
 			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),
