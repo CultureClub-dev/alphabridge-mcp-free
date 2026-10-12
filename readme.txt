@@ -128,6 +128,11 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.3 =
+* **Sign-in works behind firewalls that block app IDs in address form.** Some hosts (Bluehost with Mod_Security) answer «406 Not Acceptable» as soon as an app's ID is a web address, which is how ChatGPT and Codex identify themselves. The site now checks this itself with one request to its own sign-in page and, where the firewall blocks it, stops offering that way, so apps register with the site instead; the ChatGPT panel and the setting say so. The check runs when the settings page opens (again after six hours), on every save of the settings and on «Check again». Reported in the support forum on 12 October 2026, thank you.
+* **The settings for how apps connect sit on one card, all visible.** «Sign-in for apps», «Connector URL with token» and «MCP protocol 2026-07-28» replace the three folded «advanced» sections; each says in two sentences what it is for and when to change it, with one Save for all. What they do is unchanged.
+* FAQ: «Sign-in ends with “Not Acceptable” or mentions Mod_Security».
+
 = 4.6.2 =
 * **Tools that can publish now say so to AI clients.** Eight tools can make content public on your site: creating and updating posts, replying to and approving comments, uploading media from a file or a web address, changing the texts of media, and renaming categories and tags. All eight now report `openWorldHint: true` and `destructiveHint: true`, because what is published cannot be taken back once it is out: a published post pings other sites and may go to newsletter subscribers, a reply reaches the commenter at once, and an uploaded file can be downloaded by anyone. An AI client can then ask you before it runs them. Reading, drafts, new categories and tags, and deleting stay inside the site as before.
 * This follows OpenAI's review rules for tool hints. No setting changed.
@@ -307,6 +312,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.3 =
+Sign-in from ChatGPT and Codex works behind host firewalls that block app IDs in address form: the site checks this itself and lets apps register instead. The settings for how apps connect sit on one card, all visible. Nothing else changes.
 
 = 4.6.2 =
 Tools that can publish content now tell AI clients so and count as destructive, so clients can ask you first. Nothing else changes.
