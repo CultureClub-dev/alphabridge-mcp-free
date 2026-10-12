@@ -1123,6 +1123,52 @@
 	line-height: 1.55;
 }
 
+/* The settings card: how apps connect — three settings, all visible. */
+.ab-mcp .ab-setting {
+	margin: 16px 0 0;
+	padding: 14px 16px;
+	border: 1px solid var(--ab-line);
+	border-radius: 12px;
+	background: var(--ab-tint);
+}
+
+.ab-mcp .ab-setting__title {
+	margin: 0 0 10px;
+	color: var(--ab-acc-deep);
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.ab-mcp .ab-setting .ab-check + .ab-check {
+	margin-top: 10px;
+}
+
+.ab-mcp .ab-setting .ab-check .description {
+	color: var(--ab-soft);
+}
+
+.ab-mcp .ab-firewall {
+	margin: 10px 0 0 24px;
+}
+
+.ab-mcp .ab-firewall .ab-note {
+	margin: 0 0 6px;
+}
+
+.ab-mcp .ab-firewall__blocked {
+	color: var(--ab-ink);
+	font-weight: 600;
+}
+
+.ab-mcp .ab-firewall__check .ab-btn {
+	margin-left: 6px;
+	vertical-align: middle;
+}
+
+.ab-mcp .ab-settings__save {
+	margin: 16px 0 0;
+}
+
 .ab-mcp .ab-req {
 	display: inline-block;
 	margin: 0 0 12px;

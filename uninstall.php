@@ -25,6 +25,7 @@ $ab_mcp_options = array(
 	'ab_mcp_tool_state',
 	'ab_mcp_audit',
 	'ab_mcp_oauth_clients',
+	'ab_mcp_firewall',
 	'ab_mcp_review',
 	'ab_mcp_review_dismissed',
 	'ab_mcp_mode_history',

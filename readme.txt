@@ -97,6 +97,9 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 = Does it work on shared hosting? =
 Yes. It runs inside WordPress, in plain PHP, over the WordPress REST API. There is nothing else to install on the server. It needs PHP 8.0 or newer, and HTTPS is recommended.
 
+= Sign-in ends with “Not Acceptable” or mentions Mod_Security =
+Some hosts run a firewall that refuses any request with a web address in the app's ID, and some apps (ChatGPT, Codex) identify themselves with exactly such an address. The site checks this itself and, where the firewall blocks it, lets apps register with the site instead: nothing to do. If the sign-in still fails: Settings → AlphaBridge MCP → "Sign-in for apps" → untick "Accept apps with a metadata document", save, and create the connector in the app again.
+
 = Does the plugin send data anywhere? =
 No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
 

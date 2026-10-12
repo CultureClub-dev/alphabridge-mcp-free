@@ -112,8 +112,8 @@ final class CimdTest extends TestCase {
 		self::assertArrayNotHasKey( 'client_id_metadata_document_supported', AB_MCP_OAuth::metadata() );
 		self::assertArrayHasKey( 'registration_endpoint', AB_MCP_OAuth::metadata() );
 		self::assertStringContainsString( 'register', $this->refusal(), 'The refusal names the way that still works.' );
-		// The switch sits inside "Your connections", not on a card of that name.
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → Your connections → "Connect from Claude (OAuth, advanced)" → "Accept apps with a metadata document"', $this->refusal() );
+		// The switch sits under «Sign-in for apps» on the settings card.
+		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → "Accept apps with a metadata document"', $this->refusal() );
 		self::assertFalse( AB_MCP_OAuth::get_client( self::URL ) );
 		self::assertSame( 0, $this->fetches() );
 	}
@@ -121,7 +121,9 @@ final class CimdTest extends TestCase {
 	public function testTheReadmeNamesTheSamePathToTheSwitch(): void {
 		$readme = (string) file_get_contents( AB_MCP_PATH . 'readme.txt' );
 		self::assertSame( 0, substr_count( $readme, 'AlphaBridge MCP → Connect from Claude' ), 'The switch is inside "Your connections".' );
-		self::assertSame( 1, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'The changelog.' );
+		self::assertSame( 1, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'The changelog of 4.4.0, as it was.' );
+		// The FAQ names the way as the settings page shows it today.
+		self::assertStringContainsString( 'Settings → AlphaBridge MCP → "Sign-in for apps" → untick "Accept apps with a metadata document"', $readme );
 		// External services names the switch by its label on the settings page.
 		self::assertStringContainsString( 'You can switch this off under "Accept apps with a metadata document" in the plugin settings.', $readme );
 	}
@@ -442,7 +444,7 @@ final class CimdTest extends TestCase {
 		$message = $this->refusal();
 		self::assertStringContainsString( 'timed out', $message );
 		self::assertStringContainsString( '"Accept apps with a metadata document"', $message, 'The refusal names the switch that lets such an app connect by registering.' );
-		self::assertStringContainsString( 'under Settings → AlphaBridge MCP → Your connections → "Connect from Claude (OAuth, advanced)"', $message );
+		self::assertStringContainsString( 'under Settings → AlphaBridge MCP → "Sign-in for apps"', $message );
 	}
 
 	/**
