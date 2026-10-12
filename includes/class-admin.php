@@ -985,7 +985,7 @@ class AB_MCP_Admin {
 				// ChatGPT would sign in directly (its metadata document); the
 				// site no longer offers that way, so ChatGPT registers
 				// (AB_MCP_OAuth::metadata()). The same words as the status line.
-				$html .= '<p class="ab-note ab-direct__blocked">' . esc_html( self::firewall_blocked_text() . ' ' . __( 'Nothing to do.', 'alphabridge-mcp' ) ) . '</p>';
+				$html .= '<div class="ab-note ab-direct__blocked">' . self::firewall_blocked_html() . '</div>';
 			}
 		} else {
 			$html .= $this->oauth_off_html( 'ChatGPT' );
@@ -1708,14 +1708,40 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The sentence for ChatGPT and Codex where the host's firewall blocks
-	 * the direct sign-in: the status line on the settings card and the
-	 * ChatGPT panel say the same.
+	 * Where the host's firewall blocks the direct sign-in: what is the case
+	 * (in bold on the page) and what to do about it. The status line on the
+	 * settings card and the ChatGPT panel say the same, the readme's FAQ
+	 * too. Nothing works by itself here: the app still holds the connector
+	 * it made for the direct sign-in, so the person adds it again; and the
+	 * hub is the way round a firewall that blocks more than that.
 	 *
 	 * @return string Unescaped text.
 	 */
 	private static function firewall_blocked_text() {
-		return __( 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in.', 'alphabridge-mcp' );
+		return __( 'Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead.', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The hub's endpoint, the second way in behind such a firewall: the
+	 * app connects to the hub, the hub asks for the site's address.
+	 */
+	const HUB_ADDRESS = 'https://connect.alphabridge-mcp.com/mcp';
+
+	/**
+	 * What is the case behind such a firewall, in bold, and the two steps
+	 * to sign in all the same: the connector anew, else through the hub.
+	 * The status line on the settings card and the ChatGPT panel show the
+	 * same fragment; the readme's FAQ says the same.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private static function firewall_blocked_html() {
+		$html  = '<p class="ab-direct__status ab-direct__status--blocked"><b>' . esc_html( self::firewall_blocked_text() ) . '</b></p>';
+		$html .= '<ol class="ab-direct__steps">';
+		$html .= '<li>' . esc_html__( 'In the app, remove the connector for this site and add it again. The sign-in now goes through.', 'alphabridge-mcp' ) . '</li>';
+		/* translators: %s: the hub's address, as code. */
+		$html .= '<li>' . sprintf( esc_html__( 'If it still fails, add the connector once more, this time with this address instead of your site’s: %s. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual.', 'alphabridge-mcp' ), '<code>' . esc_html( self::HUB_ADDRESS ) . '</code>' ) . '</li>';
+		return $html . '</ol>';
 	}
 
 	/**
@@ -1784,7 +1810,10 @@ class AB_MCP_Admin {
 	 * the link here, or code decides (the ab_mcp_oauth_cimd filter,
 	 * WP_HTTP_BLOCK_EXTERNAL). One sentence in bold says what is the case,
 	 * then the last check with what it found and «Check again», then the
-	 * link that switches the direct sign-in off or on again. Nothing is
+	 * link that switches the direct sign-in off (with the reason one would)
+	 * or on again. Behind a firewall: the two steps to sign in all the
+	 * same and «Check again», no link — the direct sign-in is already out
+	 * of the way there. Nothing is
 	 * claimed without a clear answer from the check: the direct sign-in
 	 * then simply stays on.
 	 *
@@ -1795,8 +1824,11 @@ class AB_MCP_Admin {
 		$finding = AB_MCP_OAuth::firewall_check();
 		$again   = ' <button type="submit" form="ab-firewall-form" class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Check again', 'alphabridge-mcp' ) . '</button>';
 		$link    = static function ( $value, $text ) {
-			return '<p class="ab-direct__switch"><button type="submit" form="ab-direct-signin-form" name="direct_signin" value="' . esc_attr( $value ) . '" class="ab-linklike">' . esc_html( $text ) . '</button></p>';
+			return '<button type="submit" form="ab-direct-signin-form" name="direct_signin" value="' . esc_attr( $value ) . '" class="ab-linklike">' . esc_html( $text ) . '</button>';
 		};
+		// The link to switch the direct sign-in off, with the reason one would.
+		/* translators: %s: the link «Switch the direct sign-in off». */
+		$off = '<p class="ab-direct__switch">' . sprintf( esc_html__( '%s if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers.', 'alphabridge-mcp' ), $link( 'off', __( 'Switch the direct sign-in off', 'alphabridge-mcp' ) ) ) . '</p>';
 
 		$html = '<div class="ab-direct" id="ab-direct">';
 		if ( has_filter( 'ab_mcp_oauth_cimd' ) ) {
@@ -1804,12 +1836,13 @@ class AB_MCP_Admin {
 			$html .= '<p class="ab-direct__status">' . esc_html( AB_MCP_OAuth::cimd_enabled() ? __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted.', 'alphabridge-mcp' ) ) . '</p>';
 		} elseif ( ! $on ) {
 			$html .= '<p class="ab-direct__status"><b>' . esc_html__( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', 'alphabridge-mcp' ) . '</b></p>';
-			$html .= $link( 'on', __( 'Switch it on', 'alphabridge-mcp' ) );
+			$html .= '<p class="ab-direct__switch">' . $link( 'on', __( 'Switch it on', 'alphabridge-mcp' ) ) . '</p>';
 		} elseif ( AB_MCP_OAuth::outbound_blocked() ) {
 			$html .= '<p class="ab-direct__status">' . esc_html__( 'This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter.', 'alphabridge-mcp' ) . '</p>';
 		} elseif ( null !== $finding && 'blocked' === $finding['verdict'] ) {
-			$html .= '<p class="ab-direct__status ab-direct__status--blocked"><b>' . esc_html( self::firewall_blocked_text() ) . '</b> ' . esc_html__( 'Nothing to do.', 'alphabridge-mcp' ) . $again . '</p>';
-			$html .= $link( 'off', __( 'Switch the direct sign-in off', 'alphabridge-mcp' ) );
+			// The direct sign-in is already out of the way here: no link to
+			// switch it off, only the steps and the check.
+			$html .= self::firewall_blocked_html() . '<p class="ab-direct__again">' . trim( $again ) . '</p>';
 		} else {
 			$html .= '<p class="ab-direct__status"><b>' . esc_html__( 'ChatGPT and Codex sign in without registering first.', 'alphabridge-mcp' ) . '</b> ';
 			if ( null === $finding ) {
@@ -1819,7 +1852,7 @@ class AB_MCP_Admin {
 				$html .= esc_html( sprintf( __( 'Checked %1$s: %2$s', 'alphabridge-mcp' ), self::check_datetime( $finding['checked'] ), 'open' === $finding['verdict'] ? __( 'works.', 'alphabridge-mcp' ) : __( 'no clear result; this stays on.', 'alphabridge-mcp' ) ) );
 			}
 			$html .= $again . '</p>';
-			$html .= $link( 'off', __( 'Switch the direct sign-in off', 'alphabridge-mcp' ) );
+			$html .= $off;
 		}
 		return $html . '</div>';
 	}

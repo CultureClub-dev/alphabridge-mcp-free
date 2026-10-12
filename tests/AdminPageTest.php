@@ -906,6 +906,7 @@ final class AdminPageTest extends TestCase {
 		$link = $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 );
 		self::assertSame( 'off', $link->getAttribute( 'value' ) );
 		self::assertSame( 'Switch the direct sign-in off', trim( $link->textContent ) );
+		self::assertStringContainsString( 'if a sign-in ends with “Not Acceptable”', $link->parentNode->textContent, 'The link says when one would.' );
 
 		\AB_MCP_Settings::set( 'oauth_cimd', false );
 		$x      = $this->xpath( $this->call( 'render_settings_card' ) );

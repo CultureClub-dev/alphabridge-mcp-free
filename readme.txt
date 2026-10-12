@@ -98,7 +98,12 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 Yes. It runs inside WordPress, in plain PHP, over the WordPress REST API. There is nothing else to install on the server. It needs PHP 8.0 or newer, and HTTPS is recommended.
 
 = Sign-in ends with “Not Acceptable” or mentions Mod_Security =
-Some hosts run a firewall that refuses any request with a web address in the app's ID, and some apps (ChatGPT, Codex) identify themselves with exactly such an address. The site checks this itself and, where the firewall blocks it, lets apps register with the site instead: nothing to do. If the sign-in still fails: Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off", then create the connector in the app again.
+Some hosts run a firewall that refuses any request with a web address in the app's ID, and some apps (ChatGPT, Codex) identify themselves with exactly such an address. The site checks this itself and, where the firewall blocks it, lets ChatGPT and Codex register with the site instead. Then:
+
+1. In the app, remove the connector for this site and add it again. The sign-in now goes through.
+2. If it still fails, add the connector once more, this time with this address instead of your site's: https://connect.alphabridge-mcp.com/mcp. When you click Authenticate, the free AlphaBridge hub asks for your site's address. Enter it and approve on your site as usual.
+
+If the site did not notice the firewall (some let requests from the site's own server pass), switch the direct sign-in off by hand: Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off", then add the connector again.
 
 = A proxy has trouble with the newer MCP revision =
 The site answers apps in MCP revision 2026-07-28 and keeps the older revisions for apps that ask for them. If a proxy in front of the site cannot handle the newer one, a developer switches it off with `add_filter( 'ab_mcp_modern_protocol', '__return_false' );` in a small plugin, or by setting `modern_protocol` to false in the option `ab_mcp_options`; the site then answers in the older revisions only.
@@ -119,7 +124,7 @@ Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, mont
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
 4. Switch all tools, a group or a single tool; open a group to see its tool groups and what each tool does, whether it reads or writes, or search for one. These switches sit under «Fine-tuning», below the main switch for write access at the top of the page.
 5. How apps connect, on one card: whether apps may sign in with their Connect button, and under it the status line for ChatGPT and Codex — they sign in directly, with the time of the last check, «Check again» and the link to switch the direct sign-in off — then the connector address with the token, off by default. One Save for all.
-6. The same card where the check found a firewall that blocks the direct sign-in: the status line says that ChatGPT and Codex register with the site instead and that there is nothing to do; the site no longer offers the direct way to apps, so they sign in all the same.
+6. The same card where the check found a firewall that blocks the direct sign-in: ChatGPT and Codex register with the site instead, and two steps say how to sign in all the same — add the connector in the app again, or connect through the free AlphaBridge hub.
 
 == External services ==
 

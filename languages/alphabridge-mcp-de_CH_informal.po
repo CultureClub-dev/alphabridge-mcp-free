@@ -2180,12 +2180,6 @@ msgstr "Apps können sich mit ihrem Knopf «Connect» anmelden."
 msgid "For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in."
 msgstr "Für Claude, ChatGPT und andere Apps. Du bestätigst jede Verbindung auf dieser Website. Nur ausschalten, wenn sich keine App anmelden soll."
 
-msgid "ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in."
-msgstr "ChatGPT und Codex registrieren sich bei der Website, weil die Firewall deines Hosts die direkte Anmeldung blockt."
-
-msgid "Nothing to do."
-msgstr "Nichts zu tun."
-
 msgid "ChatGPT and Codex sign in without registering first."
 msgstr "ChatGPT und Codex melden sich ohne Registrierung an."
 
@@ -2227,3 +2221,17 @@ msgstr "Diese Website lässt keine Apps zu, die sich mit einem Metadaten-Dokumen
 #, php-format
 msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → \"Sign-in for apps\"; an app that can register with the site then does that instead."
 msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → «Anmeldung für Apps» die direkte Anmeldung ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."
+
+msgid "Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead."
+msgstr "Die Firewall deines Hosts blockt die direkte Anmeldung. ChatGPT und Codex registrieren sich stattdessen bei der Website."
+
+msgid "In the app, remove the connector for this site and add it again. The sign-in now goes through."
+msgstr "Entferne in der App den Konnektor für diese Website und lege ihn neu an. Die Anmeldung geht jetzt durch."
+
+#, php-format
+msgid "If it still fails, add the connector once more, this time with this address instead of your site’s: %s. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual."
+msgstr "Klappt sie weiter nicht, lege den Konnektor noch einmal an, diesmal mit dieser Adresse statt der Adresse deiner Website: %s. Beim Klick auf «Authenticate» fragt der kostenlose AlphaBridge-Hub nach der Adresse deiner Website. Gib sie ein und bestätige wie gewohnt auf deiner Website."
+
+#, php-format
+msgid "%s if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers."
+msgstr "%s, wenn eine Anmeldung mit «Not Acceptable» endet oder diese Website keine anderen Server erreichen darf."

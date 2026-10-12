@@ -28,9 +28,9 @@
  *   way while the setting stays on; dynamic registration stays; an app
  *   that still names a document is resolved as before (the firewall
  *   decides, not the site). Open, unknown and no finding change nothing.
- * - Blocked, the ChatGPT panel and the metadata document switch carry the
- *   note that there is nothing to do; unknown and open carry no note, only
- *   the last check and what it found.
+ * - Blocked, the ChatGPT panel and the status line say so and how to sign
+ *   in all the same (add the connector again, or through the hub); unknown
+ *   and open carry no note, only the last check and what it found.
  * - The three settings are visible, not folded away, under their fixed
  *   names, in one form with one Save, each saying when it is on and when
  *   to change it.
@@ -57,6 +57,10 @@ use WP_Error;
 final class FirewallCheckTest extends TestCase {
 
 	private const DOC_URL  = 'https://app.example/client.json';
+	/** What the page says behind a firewall that blocks the direct sign-in, and the two steps. */
+	private const BLOCKED = 'Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead.';
+	private const STEP_1  = 'In the app, remove the connector for this site and add it again. The sign-in now goes through.';
+	private const STEP_2  = 'If it still fails, add the connector once more, this time with this address instead of your site’s: <code>https://connect.alphabridge-mcp.com/mcp</code>. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual.';
 	private const REDIRECT = 'https://app.example/callback';
 
 	protected function setUp(): void {
@@ -409,7 +413,7 @@ final class FirewallCheckTest extends TestCase {
 		$page = (string) ob_get_clean();
 
 		self::assertSame( 1, self::probes(), 'No finding yet: the page checks.' );
-		self::assertStringContainsString( 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in.', $page, 'And shows what it found.' );
+		self::assertStringContainsString( self::BLOCKED, $page, 'And shows what it found.' );
 
 		ob_start();
 		( new AB_MCP_Admin( $r ) )->render();
@@ -492,14 +496,19 @@ final class FirewallCheckTest extends TestCase {
 
 	public function testBlockedPutsTheSameSentenceOnTheChatGPTPanelAndInTheStatusLine(): void {
 		self::keep( 'blocked' );
-		$note = 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in. Nothing to do.';
+		$steps = '<ol class="ab-direct__steps"><li>' . self::STEP_1 . '</li><li>' . self::STEP_2 . '</li></ol>';
 
-		self::assertStringContainsString( $note, $this->chatgptPanel() );
-		$x = $this->xpath( $this->call( 'render_settings_card' ) );
+		self::assertStringContainsString( '<b>' . self::BLOCKED . '</b></p>' . $steps, $this->chatgptPanel(), 'The case in bold, then the two steps.' );
+		self::assertStringNotContainsString( 'Nothing to do', $this->chatgptPanel() );
+		$card = $this->call( 'render_settings_card' );
+		$x    = $this->xpath( $card );
+		self::assertStringContainsString( '<b>' . self::BLOCKED . '</b></p>' . $steps, $card, 'The same on the card.' );
 		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status--blocked")]' )->length );
-		self::assertStringStartsWith( $note, $this->statusLine() );
+		self::assertSame( self::BLOCKED, $this->statusLine() );
+		self::assertSame( 1, $x->query( '//section[@id="ab-oauth"]//ol[@class="ab-direct__steps"]/li' )->length - 1, 'Two steps.' );
 		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length, '«Check again» stays.' );
-		self::assertSame( 'off', $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 )->getAttribute( 'value' ), 'And so does the link to switch the direct sign-in off.' );
+		self::assertSame( 0, $x->query( '//button[@form="ab-direct-signin-form"]' )->length, 'No link to switch the direct sign-in off: it is already out of the way.' );
+		self::assertStringNotContainsString( 'Nothing to do', $card );
 	}
 
 	public function testOpenUnknownAndNoFindingCarryNoNote(): void {
@@ -509,7 +518,7 @@ final class FirewallCheckTest extends TestCase {
 			self::assertStringNotContainsString( 'firewall', $this->chatgptPanel(), (string) $verdict );
 			$x = $this->xpath( $this->call( 'render_settings_card' ) );
 			self::assertSame( 0, $x->query( '//p[contains(@class,"ab-direct__status--blocked")]' )->length, (string) $verdict );
-			self::assertStringNotContainsString( 'Nothing to do', $this->statusLine(), (string) $verdict );
+			self::assertStringNotContainsString( 'firewall', $this->statusLine(), (string) $verdict );
 		}
 	}
 
@@ -528,6 +537,21 @@ final class FirewallCheckTest extends TestCase {
 		return trim( preg_replace( '/\s+/', ' ', $status->textContent ) );
 	}
 
+	public function testTheLinkToSwitchOffComesWithItsReasonUnlessTheFirewallAlreadyBlocks(): void {
+		foreach ( array( null, 'open', 'unknown' ) as $verdict ) {
+			ab_test_reset();
+			self::keep( $verdict );
+			$x    = $this->xpath( $this->call( 'render_settings_card' ) );
+			$hint = $x->query( '//section[@id="ab-oauth"]//p[@class="ab-direct__switch"]' )->item( 0 );
+			self::assertNotNull( $hint, (string) $verdict );
+			self::assertSame( 'Switch the direct sign-in off if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers.', trim( preg_replace( '/\s+/', ' ', $hint->textContent ) ), (string) $verdict );
+			self::assertSame( 'off', $x->query( './/button[@form="ab-direct-signin-form"]', $hint )->item( 0 )->getAttribute( 'value' ), (string) $verdict );
+		}
+		self::keep( 'blocked' );
+		$x = $this->xpath( $this->call( 'render_settings_card' ) );
+		self::assertSame( 0, $x->query( '//section[@id="ab-oauth"]//p[@class="ab-direct__switch"]' )->length, 'Blocked: no link.' );
+	}
+
 	public function testTheStatusLineSaysWhatTheLastCheckFound(): void {
 		self::assertSame( 'ChatGPT and Codex sign in without registering first. Not checked yet. Check again', $this->statusLine() );
 
@@ -538,7 +562,7 @@ final class FirewallCheckTest extends TestCase {
 		self::assertMatchesRegularExpression( '/^ChatGPT and Codex sign in without registering first\. Checked \d{1,2} [A-Z][a-z]{2} \d{4}, \d\d:\d\d: works\. Check again$/', $this->statusLine() );
 
 		self::keep( 'blocked' );
-		self::assertSame( 'ChatGPT and Codex register with the site, because your host’s firewall blocks the direct sign-in. Nothing to do. Check again', $this->statusLine() );
+		self::assertSame( self::BLOCKED, $this->statusLine(), 'The steps and «Check again» follow in lines of their own.' );
 	}
 
 	public function testTheNoteNeverShowsWhileSignInForAppsIsOff(): void {
@@ -668,8 +692,9 @@ final class FirewallCheckTest extends TestCase {
 		$faq    = substr( $readme, (int) strpos( $readme, '== Frequently Asked Questions ==' ), (int) strpos( $readme, '== Screenshots ==' ) - (int) strpos( $readme, '== Frequently Asked Questions ==' ) );
 
 		self::assertStringContainsString( '= Sign-in ends with “Not Acceptable” or mentions Mod_Security =', $faq );
-		self::assertStringContainsString( 'lets apps register with the site instead', $faq );
-		self::assertStringContainsString( '"Sign-in for apps" → "Switch the direct sign-in off", then create the connector in the app again', $faq );
+		self::assertStringContainsString( "lets ChatGPT and Codex register with the site instead. Then:\n\n1. In the app, remove the connector for this site and add it again. The sign-in now goes through.\n2. If it still fails, add the connector once more, this time with this address instead of your site's: https://connect.alphabridge-mcp.com/mcp. When you click Authenticate, the free AlphaBridge hub asks for your site's address. Enter it and approve on your site as usual.\n", $faq, 'The two steps of the status line.' );
+		self::assertStringContainsString( '"Sign-in for apps" → "Switch the direct sign-in off", then add the connector again', $faq, 'The way by hand, for a site whose check does not notice the firewall.' );
+		self::assertStringNotContainsString( 'othing to do', $readme, 'Nothing works by itself here.' );
 		self::assertDoesNotMatchRegularExpression( '/= Sign-in ends[^=]*\d\.\d\.\d/s', $faq, 'No version number in the answer.' );
 	}
 
