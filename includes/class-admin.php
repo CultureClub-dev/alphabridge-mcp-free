@@ -79,9 +79,9 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_terms_notice', array( $this, 'handle_terms_notice_dismiss' ) );
 		add_action( 'admin_notices', array( $this, 'mode_notice' ) );
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
-		add_action( 'admin_post_ab_mcp_connector_auth', array( $this, 'handle_connector_auth' ) );
-		add_action( 'admin_post_ab_mcp_oauth_settings', array( $this, 'handle_oauth_settings' ) );
-		add_action( 'admin_post_ab_mcp_protocol_settings', array( $this, 'handle_protocol_settings' ) );
+		add_action( 'admin_post_ab_mcp_connection_settings', array( $this, 'handle_connection_settings' ) );
+		add_action( 'admin_post_ab_mcp_firewall_check', array( $this, 'handle_firewall_check' ) );
+		add_action( 'admin_post_ab_mcp_direct_signin', array( $this, 'handle_direct_signin' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
 		add_action( 'admin_post_ab_mcp_review_go', array( $this, 'handle_review_go' ) );
@@ -470,39 +470,58 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Toggle connector-URL (token-in-path) authentication on or off.
+	 * Save the settings card: one form, one button, two switches.
+	 *
+	 *  - oauth_enabled: sign-in for apps (Claude's and ChatGPT's Connect
+	 *    button, OAuth). Off = the well-known metadata, consent page and
+	 *    OAuth endpoints all disappear; existing connections keep working
+	 *    (they are ordinary tokens).
+	 *  - connector_url_auth_enabled: a connector address with the token in it.
+	 *
+	 * An unticked box is not posted, so each switch is read as present or
+	 * not. Nothing else is touched: whether ChatGPT and Codex may sign in
+	 * directly (oauth_cimd) is switched by the link under the status line
+	 * (handle_direct_signin()), and the MCP revision 2026-07-28
+	 * (modern_protocol) is no longer on the page — the setting keeps the
+	 * value a site stored, and the ab_mcp_modern_protocol filter stays.
+	 * The firewall self-test runs again with every save: the finding it
+	 * leaves decides whether the discovery metadata offers the direct
+	 * sign-in (AB_MCP_OAuth::metadata()).
 	 */
-	public function handle_connector_auth() {
+	public function handle_connection_settings() {
 		$this->guard();
-		check_admin_referer( 'ab_mcp_connector_auth' );
-		AB_MCP_Settings::set( 'connector_url_auth_enabled', isset( $_POST['connector_url_auth_enabled'] ) );
-		$this->redirect( 'saved' );
-	}
-
-	/**
-	 * Toggle AlphaBridge Connect (Claude's native Connect button / OAuth) on or
-	 * off. Off = the well-known metadata, consent page and OAuth endpoints all
-	 * disappear; existing connections keep working (they are ordinary tokens).
-	 * The second switch in the same form decides whether apps may identify
-	 * themselves with a client metadata document (AB_MCP_OAuth::cimd_enabled()).
-	 */
-	public function handle_oauth_settings() {
-		$this->guard();
-		check_admin_referer( 'ab_mcp_oauth_settings' );
+		check_admin_referer( 'ab_mcp_connection_settings' );
 		AB_MCP_Settings::set( 'oauth_enabled', isset( $_POST['oauth_enabled'] ) );
-		AB_MCP_Settings::set( 'oauth_cimd', isset( $_POST['oauth_cimd'] ) );
+		AB_MCP_Settings::set( 'connector_url_auth_enabled', isset( $_POST['connector_url_auth_enabled'] ) );
+		AB_MCP_OAuth::run_firewall_check();
 		$this->redirect( 'saved' );
 	}
 
 	/**
-	 * Switch MCP revision 2026-07-28 on or off. Off = the endpoint answers the
-	 * older revisions only; clients that speak both fall back to the older one.
+	 * The link under the status line: switch the direct sign-in of ChatGPT
+	 * and Codex (an app that names its metadata document instead of
+	 * registering, AB_MCP_OAuth::cimd_enabled()) off, or on again. Any
+	 * other value changes nothing.
 	 */
-	public function handle_protocol_settings() {
+	public function handle_direct_signin() {
 		$this->guard();
-		check_admin_referer( 'ab_mcp_protocol_settings' );
-		AB_MCP_Settings::set( 'modern_protocol', isset( $_POST['modern_protocol'] ) );
-		$this->redirect( 'saved' );
+		check_admin_referer( 'ab_mcp_direct_signin' );
+		$choice = isset( $_POST['direct_signin'] ) ? sanitize_key( wp_unslash( $_POST['direct_signin'] ) ) : '';
+		if ( 'on' === $choice || 'off' === $choice ) {
+			AB_MCP_Settings::set( 'oauth_cimd', 'on' === $choice );
+		}
+		$this->redirect( 'saved', 'ab-oauth' );
+	}
+
+	/**
+	 * The button «Check again» under the status line: run the firewall
+	 * self-test now and land on its finding.
+	 */
+	public function handle_firewall_check() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_firewall_check' );
+		AB_MCP_OAuth::run_firewall_check();
+		$this->redirect( 'checked', 'ab-oauth' );
 	}
 
 	/**
@@ -687,6 +706,10 @@ class AB_MCP_Admin {
 		$groups   = $registry->groups();
 		$all      = $registry->all();
 
+		// The firewall self-test, when its finding is missing or old: the
+		// ChatGPT panel and the settings card below read what it leaves.
+		AB_MCP_OAuth::firewall_check_if_due();
+
 		echo '<div class="wrap ab-mcp">';
 		// The main switch comes first, above the marker below: WordPress moves
 		// admin notices right after the marker, so none lands above the switch.
@@ -711,7 +734,7 @@ class AB_MCP_Admin {
 	/**
 	 * The main column, top to bottom: connect the chosen assistant, the
 	 * fine-tuning of the tool switches, the connections, boxes from add-ons,
-	 * the log.
+	 * the settings for how apps connect, the log.
 	 *
 	 * @param array $tokens Stored connections.
 	 * @param array $groups Tool groups from the registry.
@@ -729,6 +752,7 @@ class AB_MCP_Admin {
 		 */
 		do_action( 'ab_mcp_admin_main_boxes' );
 
+		$this->render_settings_card();
 		$this->render_audit();
 		echo '</div>';
 	}
@@ -898,7 +922,7 @@ class AB_MCP_Admin {
 	 */
 	private function oauth_off_html( $name ) {
 		/* translators: %s: Claude or ChatGPT. */
-		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under Your connections → “Connect from Claude (OAuth, advanced)”.', 'alphabridge-mcp' ), $name );
+		$text = sprintf( __( '%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under “Sign-in for apps”, further down this page.', 'alphabridge-mcp' ), $name );
 		$html = '<div class="ab-callout"><p>' . esc_html( $text ) . '</p>';
 		if ( 'Claude' === $name ) {
 			// The way the page offered before OAuth existed: a token in the
@@ -957,6 +981,12 @@ class AB_MCP_Admin {
 			$html .= $this->step( 3, __( 'Approve on this site', 'alphabridge-mcp' ), '<p>' . esc_html__( 'ChatGPT opens this site’s consent page in the same tab. Choose the access level and allow.', 'alphabridge-mcp' ) . '</p>' );
 			$html .= '</div>';
 			$html .= '<div class="ab-links">' . $this->ext_link( $guide, __( 'Step-by-step guide', 'alphabridge-mcp' ), '?' ) . '</div>';
+			if ( AB_MCP_OAuth::cimd_enabled() && AB_MCP_OAuth::firewall_blocks_url_client_ids() ) {
+				// ChatGPT would sign in directly (its metadata document); the
+				// site no longer offers that way, so ChatGPT registers
+				// (AB_MCP_OAuth::metadata()). The same words as the status line.
+				$html .= '<div class="ab-note ab-direct__blocked">' . self::firewall_blocked_html() . '</div>';
+			}
 		} else {
 			$html .= $this->oauth_off_html( 'ChatGPT' );
 		}
@@ -1663,67 +1693,181 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The connections card: the table, then the two advanced settings that
-	 * decide how connections may authenticate.
+	 * The connections card: the table. How apps connect is set on the
+	 * settings card further down (render_settings_card()).
 	 *
 	 * @param array $tokens Stored connections.
 	 */
 	private function render_connections_card( $tokens ) {
-		$path_auth = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
-		$oauth_on  = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
-
 		echo '<div class="ab-card ab-connections" id="ab-connections">';
 		echo '<p class="ab-eyebrow">' . esc_html__( 'Connections', 'alphabridge-mcp' ) . '</p>';
 		echo '<h2 class="ab-card__title">' . esc_html__( 'Your connections', 'alphabridge-mcp' ) . '</h2>';
 		echo '<p class="ab-lead">' . esc_html__( 'Every assistant and client connected to this site.', 'alphabridge-mcp' ) . '</p>';
 		$this->render_connection_table( $tokens );
-
-		// Advanced (collapsed): connector-URL (token-in-path) authentication, opt-in.
-		echo '<details class="ab-alt" id="ab-url-auth"><summary>' . esc_html__( 'Connector-URL authentication (advanced)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'ab_mcp_connector_auth' );
-		echo '<input type="hidden" name="action" value="ab_mcp_connector_auth">';
-		echo '<label class="ab-check"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $path_auth, true, false ) . '><span>' . esc_html__( 'Also offer a connector URL that embeds the token in its path.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'Off by default. Header authentication (Authorization / X-Api-Key) always works. A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
-		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form></details>';
-
-		// Advanced (collapsed): connecting from Claude or ChatGPT (OAuth). On by
-		// default; switching it off removes the discovery metadata, the consent
-		// page and the OAuth endpoints entirely.
-		echo '<details class="ab-alt" id="ab-oauth"><summary>' . esc_html__( 'Connect from Claude (OAuth, advanced)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'ab_mcp_oauth_settings' );
-		echo '<input type="hidden" name="action" value="ab_mcp_oauth_settings">';
-		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Let Claude connect with its native Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working.', 'alphabridge-mcp' ) . '</span></span></label>';
-		$cimd_on = (bool) AB_MCP_Settings::get( 'oauth_cimd', true );
-		echo '<label class="ab-check"><input type="checkbox" name="oauth_cimd" value="1"' . checked( $cimd_on, true, false ) . '><span>' . esc_html__( 'Accept apps with a metadata document.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Such an app names the address of a small file about itself instead of registering with the site; when you open its consent screen, the site loads that file from the app\'s server. Switch this off if this site cannot reach other servers, or should not: apps that can register with the site then do that, as before.', 'alphabridge-mcp' ) . '</span></span></label>';
-		if ( has_filter( 'ab_mcp_oauth_cimd' ) ) {
-			// A filter overrides the switch and the block below. Say so, and
-			// what is in force, so saving that changes nothing is explained.
-			echo '<p class="ab-note">' . esc_html( AB_MCP_OAuth::cimd_enabled() ? __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted.', 'alphabridge-mcp' ) ) . '</p>';
-		} elseif ( $cimd_on && AB_MCP_OAuth::outbound_blocked() ) {
-			echo '<p class="ab-note">' . esc_html__( 'This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter.', 'alphabridge-mcp' ) . '</p>';
-		}
-		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form></details>';
-
-		// Advanced (collapsed): MCP revision 2026-07-28. On by default; off
-		// restores the answers from before that revision.
-		$modern_on = (bool) AB_MCP_Settings::get( 'modern_protocol', true );
-		echo '<details class="ab-alt" id="ab-protocol"><summary>' . esc_html__( 'MCP protocol 2026-07-28 (advanced)', 'alphabridge-mcp' ) . '</summary>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'ab_mcp_protocol_settings' );
-		echo '<input type="hidden" name="action" value="ab_mcp_protocol_settings">';
-		echo '<label class="ab-check"><input type="checkbox" name="modern_protocol" value="1"' . checked( $modern_on, true, false ) . '><span>' . esc_html__( 'Answer clients that speak MCP 2026-07-28.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'On by default. Clients of the newer revision are served in it; clients of the older revisions keep the one they ask for either way. Switch this off only if a client, or a proxy between client and site, has trouble with the newer revision: the site then answers in the older revisions only, and clients that speak both revisions fall back to the older one.', 'alphabridge-mcp' ) . '</span></span></label>';
-		if ( has_filter( 'ab_mcp_modern_protocol' ) ) {
-			// A filter overrides the switch. Say so, and what is in force, so
-			// the admin is not left wondering why saving changes nothing.
-			$effective = AB_MCP_REST_Controller::modern_enabled();
-			echo '<p class="ab-note">' . esc_html( $effective ? __( 'Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is answered.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is not answered.', 'alphabridge-mcp' ) ) . '</p>';
-		}
-		echo '<p><button class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
-		echo '</form></details>';
 		echo '</div>';
+	}
+
+	/**
+	 * Where the host's firewall blocks the direct sign-in: what is the case
+	 * (in bold on the page) and what to do about it. The status line on the
+	 * settings card and the ChatGPT panel say the same, the readme's FAQ
+	 * too. Nothing works by itself here: the app still holds the connector
+	 * it made for the direct sign-in, so the person adds it again; and the
+	 * hub is the way round a firewall that blocks more than that.
+	 *
+	 * @return string Unescaped text.
+	 */
+	private static function firewall_blocked_text() {
+		return __( 'Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead.', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The hub's endpoint, the second way in behind such a firewall: the
+	 * app connects to the hub, the hub asks for the site's address.
+	 */
+	const HUB_ADDRESS = 'https://connect.alphabridge-mcp.com/mcp';
+
+	/**
+	 * What is the case behind such a firewall, in bold, and the two steps
+	 * to sign in all the same: the connector anew, else through the hub.
+	 * The status line on the settings card and the ChatGPT panel show the
+	 * same fragment; the readme's FAQ says the same.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private static function firewall_blocked_html() {
+		$html  = '<p class="ab-direct__status ab-direct__status--blocked"><b>' . esc_html( self::firewall_blocked_text() ) . '</b></p>';
+		$html .= '<ol class="ab-direct__steps">';
+		$html .= '<li>' . esc_html__( 'In the app, remove the connector for this site and add it again. The sign-in now goes through.', 'alphabridge-mcp' ) . '</li>';
+		/* translators: %s: the hub's address, as code. */
+		$html .= '<li>' . sprintf( esc_html__( 'If it still fails, add the connector once more, this time with this address instead of your site’s: %s. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual.', 'alphabridge-mcp' ), '<code>' . esc_html( self::HUB_ADDRESS ) . '</code>' ) . '</li>';
+		return $html . '</ol>';
+	}
+
+	/**
+	 * The settings card: how apps connect to this site. Two settings, all
+	 * visible, each with one sentence on what it is for, in one form with
+	 * one Save; between them the status line for ChatGPT and Codex.
+	 *
+	 *  - Sign-in for apps (OAuth): on by default; off removes the discovery
+	 *    metadata, the consent page and the OAuth endpoints. Under it the
+	 *    status line (direct_signin_html()): whether ChatGPT and Codex sign
+	 *    in directly or register with the site, the last firewall check,
+	 *    «Check again», and the link that switches the direct sign-in. The
+	 *    button and the link post forms of their own, reached through the
+	 *    form attribute: forms do not nest.
+	 *  - A connector address with the token in it: off by default.
+	 *
+	 * The MCP revision 2026-07-28 is no longer a switch on the page: the
+	 * setting modern_protocol keeps its value, and the filter
+	 * ab_mcp_modern_protocol stays (AB_MCP_REST_Controller::modern_enabled()).
+	 */
+	private function render_settings_card() {
+		$oauth_on  = (bool) AB_MCP_Settings::get( 'oauth_enabled', true );
+		$path_auth = (bool) AB_MCP_Settings::get( 'connector_url_auth_enabled', false );
+		$post      = esc_url( admin_url( 'admin-post.php' ) );
+
+		echo '<div class="ab-card ab-settings" id="ab-settings">';
+		echo '<p class="ab-eyebrow">' . esc_html__( 'Settings', 'alphabridge-mcp' ) . '</p>';
+		echo '<h2 class="ab-card__title">' . esc_html__( 'How apps connect', 'alphabridge-mcp' ) . '</h2>';
+		echo '<form method="post" action="' . $post . '" id="ab-settings-form">';
+		wp_nonce_field( 'ab_mcp_connection_settings' );
+		echo '<input type="hidden" name="action" value="ab_mcp_connection_settings">';
+
+		// Sign-in for apps: Claude's and ChatGPT's Connect button (OAuth).
+		echo '<section class="ab-setting" id="ab-oauth">';
+		echo '<h3 class="ab-setting__title">' . esc_html__( 'Sign-in for apps', 'alphabridge-mcp' ) . '</h3>';
+		echo '<label class="ab-check"><input type="checkbox" name="oauth_enabled" value="1"' . checked( $oauth_on, true, false ) . '><span>' . esc_html__( 'Apps can sign in with their Connect button.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo $this->direct_signin_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside direct_signin_html().
+		echo '</section>';
+
+		// A connector address with the token in it, for apps without a password field.
+		echo '<section class="ab-setting" id="ab-url-auth">';
+		echo '<h3 class="ab-setting__title">' . esc_html__( 'Connector address with token', 'alphabridge-mcp' ) . '</h3>';
+		echo '<label class="ab-check"><input type="checkbox" name="connector_url_auth_enabled" value="1"' . checked( $path_auth, true, false ) . '><span>' . esc_html__( 'Also offer an address that contains the token.', 'alphabridge-mcp' ) . ' <span class="description">' . esc_html__( 'For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password.', 'alphabridge-mcp' ) . '</span></span></label>';
+		echo '</section>';
+
+		echo '<p class="ab-settings__save"><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
+		echo '</form>';
+
+		// The forms behind «Check again» and the link that switches the
+		// direct sign-in (direct_signin_html()).
+		echo '<form method="post" action="' . $post . '" id="ab-firewall-form">';
+		wp_nonce_field( 'ab_mcp_firewall_check' );
+		echo '<input type="hidden" name="action" value="ab_mcp_firewall_check">';
+		echo '</form>';
+		echo '<form method="post" action="' . $post . '" id="ab-direct-signin-form">';
+		wp_nonce_field( 'ab_mcp_direct_signin' );
+		echo '<input type="hidden" name="action" value="ab_mcp_direct_signin">';
+		echo '</form>';
+		echo '</div>';
+	}
+
+	/**
+	 * The status line for ChatGPT and Codex under the switch for the
+	 * sign-in: they sign in directly (their metadata document) unless the
+	 * host's firewall blocks that, the direct sign-in was switched off by
+	 * the link here, or code decides (the ab_mcp_oauth_cimd filter,
+	 * WP_HTTP_BLOCK_EXTERNAL). One sentence in bold says what is the case,
+	 * then the last check with what it found and «Check again», then the
+	 * link that switches the direct sign-in off (with the reason one would)
+	 * or on again. Behind a firewall: the two steps to sign in all the
+	 * same and «Check again», no link — the direct sign-in is already out
+	 * of the way there. Nothing is
+	 * claimed without a clear answer from the check: the direct sign-in
+	 * then simply stays on.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function direct_signin_html() {
+		$on      = (bool) AB_MCP_Settings::get( 'oauth_cimd', true );
+		$finding = AB_MCP_OAuth::firewall_check();
+		$again   = ' <button type="submit" form="ab-firewall-form" class="ab-btn ab-btn--ghost ab-btn--sm">' . esc_html__( 'Check again', 'alphabridge-mcp' ) . '</button>';
+		$link    = static function ( $value, $text ) {
+			return '<button type="submit" form="ab-direct-signin-form" name="direct_signin" value="' . esc_attr( $value ) . '" class="ab-linklike">' . esc_html( $text ) . '</button>';
+		};
+		// The link to switch the direct sign-in off, with the reason one would.
+		/* translators: %s: the link «Switch the direct sign-in off». */
+		$off = '<p class="ab-direct__switch">' . sprintf( esc_html__( '%s if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers.', 'alphabridge-mcp' ), $link( 'off', __( 'Switch the direct sign-in off', 'alphabridge-mcp' ) ) ) . '</p>';
+
+		$html = '<div class="ab-direct" id="ab-direct">';
+		if ( has_filter( 'ab_mcp_oauth_cimd' ) ) {
+			// Code decides, whatever the link says: say so, and what is in force.
+			$html .= '<p class="ab-direct__status">' . esc_html( AB_MCP_OAuth::cimd_enabled() ? __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted.', 'alphabridge-mcp' ) : __( 'Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted.', 'alphabridge-mcp' ) ) . '</p>';
+		} elseif ( ! $on ) {
+			$html .= '<p class="ab-direct__status"><b>' . esc_html__( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', 'alphabridge-mcp' ) . '</b></p>';
+			$html .= '<p class="ab-direct__switch">' . $link( 'on', __( 'Switch it on', 'alphabridge-mcp' ) ) . '</p>';
+		} elseif ( AB_MCP_OAuth::outbound_blocked() ) {
+			$html .= '<p class="ab-direct__status">' . esc_html__( 'This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter.', 'alphabridge-mcp' ) . '</p>';
+		} elseif ( null !== $finding && 'blocked' === $finding['verdict'] ) {
+			// The direct sign-in is already out of the way here: no link to
+			// switch it off, only the steps and the check.
+			$html .= self::firewall_blocked_html() . '<p class="ab-direct__again">' . trim( $again ) . '</p>';
+		} else {
+			$html .= '<p class="ab-direct__status"><b>' . esc_html__( 'ChatGPT and Codex sign in without registering first.', 'alphabridge-mcp' ) . '</b> ';
+			if ( null === $finding ) {
+				$html .= esc_html__( 'Not checked yet.', 'alphabridge-mcp' );
+			} else {
+				/* translators: 1: date and time of the last check, 2: what it found. */
+				$html .= esc_html( sprintf( __( 'Checked %1$s: %2$s', 'alphabridge-mcp' ), self::check_datetime( $finding['checked'] ), 'open' === $finding['verdict'] ? __( 'works.', 'alphabridge-mcp' ) : __( 'no clear result; this stays on.', 'alphabridge-mcp' ) ) );
+			}
+			$html .= $again . '</p>';
+			$html .= $off;
+		}
+		return $html . '</div>';
+	}
+
+	/**
+	 * The time of the last check, in the site's time zone: «12 Oct 2026,
+	 * 10:48».
+	 *
+	 * @param int $ts Unix timestamp.
+	 * @return string Unescaped text.
+	 */
+	private static function check_datetime( $ts ) {
+		/* translators: date and time format for PHP date(), for the time of the last firewall check; see https://www.php.net/manual/datetime.format.php */
+		$text = wp_date( _x( 'j M Y, H:i', 'date and time of the last check', 'alphabridge-mcp' ), (int) $ts );
+		return is_string( $text ) ? $text : '—';
 	}
 
 	/**
@@ -2076,6 +2220,7 @@ class AB_MCP_Admin {
 		}
 		$map = array(
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
+			'checked'       => array( 'success', __( 'Checked. The finding is shown under “Sign-in for apps”.', 'alphabridge-mcp' ) ),
 			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),

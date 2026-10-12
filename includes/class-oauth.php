@@ -119,6 +119,39 @@ class AB_MCP_OAuth {
 	const CIMD_MAX_TTL     = DAY_IN_SECONDS;
 
 	/**
+	 * The firewall self-test. Some hosts run a firewall (Bluehost with
+	 * Mod_Security, measured on 12.10.2026) that answers 406 Not Acceptable
+	 * in the site's place as soon as a web address stands in client_id, in
+	 * state or in a query parameter it does not know; addresses in
+	 * redirect_uri, resource and url pass. An app with a metadata document
+	 * sends exactly that (ChatGPT: client_id=https://chatgpt.com/oauth/codex/
+	 * client.json) and never reaches the consent screen, while an app that
+	 * registers has an opaque client id and gets through. Such a firewall
+	 * does not sit in the site's own code, so the site asks itself: one
+	 * request to its own authorization endpoint with an address as client id,
+	 * sent the way a browser would send it. The endpoint marks every answer
+	 * it gives with MARK_HEADER; an answer without the mark came from
+	 * somewhere else (firewall_verdict()).
+	 *
+	 * The finding is kept in an option with its time, not in a transient:
+	 * a transient would vanish after its lifetime (or earlier, under an
+	 * object cache) and the discovery metadata would offer the blocked way
+	 * again until someone opened the settings page. FIREWALL_TTL says how
+	 * old a finding may be before the settings page checks again.
+	 *
+	 * Some firewalls let requests from the site's own server pass; the test
+	 * then finds nothing, and the setting "Accept apps with a metadata
+	 * document" stays the way by hand.
+	 */
+	const FIREWALL_OPTION     = 'ab_mcp_firewall';
+	const FIREWALL_TTL        = 6 * HOUR_IN_SECONDS;
+	const FIREWALL_TIMEOUT    = 5;
+	const FIREWALL_PROBE_ID   = 'https://example.com/client.json';
+	const FIREWALL_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+	const MARK_HEADER         = 'X-AB-MCP';
+	const MARK_AUTHORIZE      = 'authorize';
+
+	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
@@ -234,7 +267,10 @@ class AB_MCP_OAuth {
 			'authorization_response_iss_parameter_supported' => true,
 		);
 		// Dynamic registration stays: clients that only know it keep working.
-		if ( self::cimd_enabled() ) {
+		// Where the host's firewall blocks client ids in address form, the
+		// way is not offered either: a client that saw it would try it first
+		// and fail every time, while registration gets through.
+		if ( self::cimd_enabled() && ! self::firewall_blocks_url_client_ids() ) {
 			$meta['client_id_metadata_document_supported'] = true;
 		}
 		return $meta;
@@ -412,7 +448,7 @@ class AB_MCP_OAuth {
 
 		if ( self::is_cimd_client_id( $client_id ) ) {
 			if ( ! self::cimd_enabled() ) {
-				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → Your connections → "Connect from Claude (OAuth, advanced)" → "Accept apps with a metadata document", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → "Sign-in for apps" → "Switch the direct sign-in off", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
 			}
 			return self::cimd_client( $client_id );
 		}
@@ -463,6 +499,138 @@ class AB_MCP_OAuth {
 	 */
 	public static function outbound_blocked() {
 		return defined( 'WP_HTTP_BLOCK_EXTERNAL' ) && WP_HTTP_BLOCK_EXTERNAL;
+	}
+
+	/* ------------------------------------------------ firewall self-test */
+
+	/**
+	 * What one answer of the site to its own probe says. A table of cases:
+	 *
+	 *  - the mark the authorization endpoint sends is there, whatever the
+	 *    status: 'open' — the request reached the site;
+	 *  - 403 or 406 without the mark: 'blocked' — something in front of the
+	 *    site answered in its place, the way a firewall does;
+	 *  - everything else: 'unknown' — no answer at all (unreachable, timed
+	 *    out), a redirect elsewhere, a 5xx, any page without the mark.
+	 *
+	 * Unknown is never read as blocked: the absence of an answer says
+	 * nothing about a firewall, only that the site did not reach itself.
+	 *
+	 * @param int|null     $status HTTP status of the answer; null without one.
+	 * @param string|array $mark   What the answer carried in MARK_HEADER; '' for nothing.
+	 * @return string 'open', 'blocked' or 'unknown'.
+	 */
+	public static function firewall_verdict( $status, $mark ) {
+		foreach ( (array) $mark as $value ) {
+			if ( is_string( $value ) && self::MARK_AUTHORIZE === trim( $value ) ) {
+				return 'open';
+			}
+		}
+		if ( in_array( (int) $status, array( 403, 406 ), true ) ) {
+			return 'blocked';
+		}
+		return 'unknown';
+	}
+
+	/**
+	 * The probe: this site's own authorization endpoint with an address as
+	 * client id, the redirect address being this site. Without cookies, so
+	 * the endpoint answers with the redirect to the login and never gets
+	 * to load the document at that address.
+	 *
+	 * @return string
+	 */
+	public static function firewall_probe_url() {
+		return home_url( '/?ab_mcp_oauth=authorize&client_id=' . rawurlencode( self::FIREWALL_PROBE_ID ) . '&redirect_uri=' . rawurlencode( home_url( '/' ) ) . '&response_type=code' );
+	}
+
+	/**
+	 * How the probe is sent: like a browser (a firewall may let the site's
+	 * own user agent pass), without following the redirect (the answer with
+	 * the mark is the redirect itself), with the certificate check WordPress
+	 * uses for requests to the site itself, and with the HTTP Basic login
+	 * of the current request where a staging site is behind one.
+	 *
+	 * @return array
+	 */
+	private static function firewall_probe_args() {
+		$headers = array( 'Cache-Control' => 'no-cache' );
+		if ( isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] ) ) {
+			$headers['Authorization'] = 'Basic ' . base64_encode( wp_unslash( $_SERVER['PHP_AUTH_USER'] ) . ':' . wp_unslash( $_SERVER['PHP_AUTH_PW'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- passed on to this site itself, as WordPress's own loopback test does.
+		}
+		return array(
+			'timeout'     => self::FIREWALL_TIMEOUT,
+			'redirection' => 0,
+			/** This filter is documented in wp-includes/class-wp-http-streams.php */
+			'sslverify'   => apply_filters( 'https_local_ssl_verify', false ),
+			'user-agent'  => self::FIREWALL_USER_AGENT,
+			'headers'     => $headers,
+			'cookies'     => array(),
+		);
+	}
+
+	/**
+	 * Send the probe, judge the answer, keep the finding with its time.
+	 *
+	 * @return array{verdict:string,status:int|null,checked:int}
+	 */
+	public static function run_firewall_check() {
+		$response = wp_remote_get( self::firewall_probe_url(), self::firewall_probe_args() );
+		$failed   = is_wp_error( $response );
+		$status   = $failed ? null : (int) wp_remote_retrieve_response_code( $response );
+		$mark     = $failed ? '' : wp_remote_retrieve_header( $response, self::MARK_HEADER );
+		$finding  = array(
+			'verdict' => self::firewall_verdict( $status, $mark ),
+			'status'  => $status,
+			'checked' => time(),
+		);
+		update_option( self::FIREWALL_OPTION, $finding );
+		return $finding;
+	}
+
+	/**
+	 * The kept finding, or null before the first check.
+	 *
+	 * @return array{verdict:string,status:int|null,checked:int}|null
+	 */
+	public static function firewall_check() {
+		$finding = get_option( self::FIREWALL_OPTION );
+		if ( ! is_array( $finding ) || ! isset( $finding['verdict'], $finding['checked'] ) ) {
+			return null;
+		}
+		return array(
+			'verdict' => in_array( $finding['verdict'], array( 'open', 'blocked', 'unknown' ), true ) ? $finding['verdict'] : 'unknown',
+			'status'  => isset( $finding['status'] ) && null !== $finding['status'] ? (int) $finding['status'] : null,
+			'checked' => (int) $finding['checked'],
+		);
+	}
+
+	/**
+	 * The kept finding, checked again first when there is none or it is
+	 * older than FIREWALL_TTL. For the settings page; the discovery
+	 * metadata only reads (firewall_blocks_url_client_ids()), since a
+	 * public request must not make the site send requests.
+	 *
+	 * @return array{verdict:string,status:int|null,checked:int}
+	 */
+	public static function firewall_check_if_due() {
+		$finding = self::firewall_check();
+		if ( null !== $finding && time() - $finding['checked'] < self::FIREWALL_TTL ) {
+			return $finding;
+		}
+		return self::run_firewall_check();
+	}
+
+	/**
+	 * Whether the last check found the host's firewall blocking client ids
+	 * in address form. Only a finding of 'blocked' counts; 'unknown' and
+	 * no finding at all leave everything as it is.
+	 *
+	 * @return bool
+	 */
+	public static function firewall_blocks_url_client_ids() {
+		$finding = self::firewall_check();
+		return null !== $finding && 'blocked' === $finding['verdict'];
 	}
 
 	/**
@@ -921,7 +1089,7 @@ class AB_MCP_OAuth {
 			'ab_mcp_cimd',
 			sprintf(
 				/* translators: 1: host name, 2: what is wrong with the document, a clause starting in lower case. */
-				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off "Accept apps with a metadata document" under Settings → AlphaBridge MCP → Your connections → "Connect from Claude (OAuth, advanced)"; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
+				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → "Sign-in for apps"; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
 				'' !== $host ? $host : substr( $url, 0, 200 ),
 				$problem
 			)
@@ -1508,6 +1676,11 @@ class AB_MCP_OAuth {
 		if ( ! isset( $_GET['ab_mcp_oauth'] ) || 'authorize' !== $_GET['ab_mcp_oauth'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only; the consent POST below is nonce-verified.
 			return;
 		}
+		// Every answer of this endpoint carries the mark the firewall
+		// self-test looks for (firewall_verdict()): the redirect to the
+		// login, the error page, the consent screen. Before anything below
+		// can end the request.
+		self::send_mark();
 		if ( ! self::enabled() ) {
 			self::error_page( __( 'Connecting from Claude is disabled on this site.', 'alphabridge-mcp' ) );
 		}
@@ -1596,6 +1769,27 @@ class AB_MCP_OAuth {
 		}
 
 		self::consent_page( $client, $get, $state, $scopes );
+	}
+
+	/**
+	 * Mark the answer of the authorization endpoint for the firewall
+	 * self-test: the header MARK_HEADER with MARK_AUTHORIZE, sent while
+	 * headers can still go out. The action carries the same line, so that
+	 * a test, or code that watches what the site answers, sees that and
+	 * when the mark was sent: before any body, before the request ends.
+	 */
+	private static function send_mark() {
+		$line = self::MARK_HEADER . ': ' . self::MARK_AUTHORIZE;
+		if ( ! headers_sent() ) {
+			header( $line );
+		}
+		/**
+		 * Fires when the authorization endpoint has marked its answer for
+		 * the firewall self-test, before the answer itself.
+		 *
+		 * @param string $line The header line sent.
+		 */
+		do_action( 'ab_mcp_oauth_mark_sent', $line );
 	}
 
 	/**

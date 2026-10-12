@@ -1473,6 +1473,24 @@ function wp_safe_remote_get( $url, $args = array() ) {
 }
 
 /**
+ * The plain loopback the firewall self-test sends to the site itself
+ * (AB_MCP_OAuth::run_firewall_check()). Recorded and answered like
+ * wp_safe_remote_get(), without the cURL part: nothing about where the
+ * request may go is decided here.
+ */
+function wp_remote_get( $url, $args = array() ) {
+	$GLOBALS['ab_test_http'][] = array(
+		'url'  => (string) $url,
+		'args' => (array) $args,
+	);
+	$answer = $GLOBALS['ab_test_http_answer'];
+	if ( ! is_callable( $answer ) ) {
+		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
+	}
+	return $answer( (string) $url, (array) $args );
+}
+
+/**
  * A response array as the WordPress HTTP API returns it. Header names are
  * looked up without regard to case, as WordPress does.
  *

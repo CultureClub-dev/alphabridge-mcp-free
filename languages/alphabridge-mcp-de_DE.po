@@ -8,8 +8,8 @@
 # This file is distributed under the same license as the AlphaBridge MCP plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: AlphaBridge MCP 4.5.3\n"
-"PO-Revision-Date: 2026-10-06 14:00+0200\n"
+"Project-Id-Version: AlphaBridge MCP 4.6.3\n"
+"PO-Revision-Date: 2026-10-12 12:56+0200\n"
 "Last-Translator: AlphaBridge MCP\n"
 "Language-Team: German\n"
 "Language: de_DE\n"
@@ -106,10 +106,6 @@ msgstr[0] "%s Verbindung"
 msgstr[1] "%s Verbindungen"
 
 #, php-format
-msgid "%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under Your connections → “Connect from Claude (OAuth, advanced)”."
-msgstr "%s verbindet sich mit der Anmeldung dieser Website und deiner Zustimmung (OAuth), und das ist hier ausgeschaltet. Schalte es unter „Deine Verbindungen“ → „Aus Claude verbinden (OAuth, erweitert)“ ein."
-
-#, php-format
 msgid "%s is not active, so the site shows post_content and this change is visible. If it is activated again, it shows its own copy of the page, without this change."
 msgstr "%s ist nicht aktiv, darum zeigt die Website post_content, und diese Änderung ist sichtbar. Wird es wieder aktiviert, zeigt es seine eigene Kopie der Seite, ohne diese Änderung."
 
@@ -192,9 +188,6 @@ msgstr "Fähigkeiten anderer Plugins"
 msgid "Abuse protection active: %d requests/min."
 msgstr "Missbrauchsschutz aktiv: %d Anfragen/Min."
 
-msgid "Accept apps with a metadata document."
-msgstr "Apps mit einem Metadaten-Dokument zulassen."
-
 msgid "Access"
 msgstr "Zugriff"
 
@@ -250,14 +243,8 @@ msgstr "AlphaBridge MCP liest auf dieser Website jetzt nur noch."
 msgid "AlphaBridge MCP on this site"
 msgstr "AlphaBridge MCP auf dieser Website"
 
-msgid "Also offer a connector URL that embeds the token in its path."
-msgstr "Zusätzlich eine Konnektor-URL anbieten, die das Token in ihrem Pfad enthält."
-
 msgid "Also switched off, not offered right now (kept):"
 msgstr "Ebenfalls ausgeschaltet, gerade nicht angeboten (bleibt gespeichert):"
-
-msgid "Answer clients that speak MCP 2026-07-28."
-msgstr "Clients antworten, die MCP 2026-07-28 sprechen."
 
 msgid "Application passwords are disabled on this site: WordPress offers them only over HTTPS or in a local environment, and a plugin can switch them off with the wp_is_application_passwords_available filter."
 msgstr "Anwendungspasswörter sind auf dieser Website deaktiviert: WordPress bietet sie nur über HTTPS oder in einer lokalen Umgebung an, und ein Plugin kann sie mit dem Filter wp_is_application_passwords_available ausschalten."
@@ -391,12 +378,6 @@ msgstr "Auf „Connect“ klicken, diese Adresse eingeben"
 msgid "Code editor"
 msgstr "Code-Editor"
 
-msgid "Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is answered."
-msgstr "Code auf dieser Website (der Filter ab_mcp_modern_protocol) entscheidet über diese Einstellung; gerade antwortet die Website in dieser Revision."
-
-msgid "Code on this site (the ab_mcp_modern_protocol filter) decides this setting; right now the revision is not answered."
-msgstr "Code auf dieser Website (der Filter ab_mcp_modern_protocol) entscheidet über diese Einstellung; gerade antwortet die Website nicht in dieser Revision."
-
 msgid "Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted."
 msgstr "Code auf dieser Website (der Filter ab_mcp_oauth_cimd) entscheidet über diese Einstellung; gerade werden Apps mit einem Metadaten-Dokument zugelassen."
 
@@ -428,9 +409,6 @@ msgstr "Verbindet Claude und andere MCP-Clients direkt und sicher mit WordPress.
 msgid "Connect Cursor"
 msgstr "Cursor verbinden"
 
-msgid "Connect from Claude (OAuth, advanced)"
-msgstr "Aus Claude verbinden (OAuth, erweitert)"
-
 msgid "Connect step by step"
 msgstr "Schritt für Schritt verbinden"
 
@@ -461,9 +439,6 @@ msgstr "Verbindungen"
 
 msgid "Connector URL"
 msgstr "Konnektor-URL"
-
-msgid "Connector-URL authentication (advanced)"
-msgstr "Anmeldung per Konnektor-URL (erweitert)"
 
 msgid "Content"
 msgstr "Inhalte"
@@ -816,9 +791,6 @@ msgstr "Große Uploads in Teilen"
 msgid "Last used"
 msgstr "Zuletzt verwendet"
 
-msgid "Let Claude connect with its native Connect button."
-msgstr "Claude mit seinem eingebauten Knopf „Connect“ verbinden lassen."
-
 msgid "Let Claude run the whole site"
 msgstr "Claude die ganze Website führen lassen"
 
@@ -946,9 +918,6 @@ msgstr "Alles ansehen, was dieses Konto sehen darf; nichts ändern."
 msgid "Looks like a credential and is never copied over MCP. If the copy needs it, set it in wp-admin."
 msgstr "Sieht aus wie Zugangsdaten und wird über MCP nie kopiert. Braucht die Kopie den Wert, ihn in wp-admin setzen."
 
-msgid "MCP protocol 2026-07-28 (advanced)"
-msgstr "MCP-Protokoll 2026-07-28 (erweitert)"
-
 msgid "Media"
 msgstr "Medien"
 
@@ -1039,9 +1008,6 @@ msgctxt "main switch"
 msgid "Off"
 msgstr "Aus"
 
-msgid "Off by default. Header authentication (Authorization / X-Api-Key) always works. A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password."
-msgstr "Ab Werk aus. Die Anmeldung per Header (Authorization / X-Api-Key) funktioniert immer. Ein Token in einer URL gelangt leichter nach außen, über Referrer, Proxy-Protokolle und den Verlauf – behandle die Konnektor-URL wie ein Passwort."
-
 msgid "Off: AI assistants only read. For anything they should change, you flip the switch."
 msgstr "Aus: KI-Assistenten lesen nur. Für alles, was sie ändern sollen, legst du den Schalter um."
 
@@ -1055,15 +1021,6 @@ msgstr "An"
 #, php-format
 msgid "On approval you are sent to <b>%s</b>. Only continue if you recognise it as the app you are connecting."
 msgstr "Nach der Zustimmung wirst du zu <b>%s</b> weitergeleitet. Fahre nur fort, wenn du das als die App erkennst, die du verbindest."
-
-msgid "On by default. Claude discovers this site, you approve on a login-protected consent screen, and the approved connection appears in the list above (revocable any time). Nothing connects without that approval. Switching this off removes the OAuth endpoints; existing connections keep working."
-msgstr "Ab Werk an. Claude findet diese Website, du stimmst auf einer Zustimmungsseite mit Anmeldung zu, und die Verbindung erscheint in der Liste oben (jederzeit widerrufbar). Ohne diese Zustimmung verbindet sich nichts. Ausschalten entfernt die OAuth-Endpunkte; bestehende Verbindungen funktionieren weiter."
-
-msgid "On by default. Clients of the newer revision are served in it; clients of the older revisions keep the one they ask for either way. Switch this off only if a client, or a proxy between client and site, has trouble with the newer revision: the site then answers in the older revisions only, and clients that speak both revisions fall back to the older one."
-msgstr "Ab Werk an. Clients der neueren Revision werden in ihr bedient; Clients der älteren Revisionen behalten in jedem Fall die, nach der sie fragen. Schalte das nur aus, wenn ein Client oder ein Proxy zwischen Client und Website mit der neueren Revision Probleme hat: Die Website antwortet dann nur in den älteren Revisionen, und Clients, die beide Revisionen sprechen, fallen auf die ältere zurück."
-
-msgid "On by default. Such an app names the address of a small file about itself instead of registering with the site; when you open its consent screen, the site loads that file from the app's server. Switch this off if this site cannot reach other servers, or should not: apps that can register with the site then do that, as before."
-msgstr "Ab Werk an. Eine solche App nennt die Adresse einer kleinen Datei über sich, statt sich bei der Website zu registrieren; wenn du ihre Zustimmungsseite öffnest, lädt die Website diese Datei vom Server der App. Schalte das aus, wenn diese Website andere Server nicht erreichen kann oder nicht soll: Apps, die sich bei der Website registrieren können, tun das dann wie bisher."
 
 msgid "On this site, tools that read code, files, the database, logs or credentials and were switched off before the update that brought write access stay off until you switch them on here or switch on write access again."
 msgstr "Auf dieser Website bleiben Werkzeuge, die Code, Dateien, die Datenbank, Protokolle oder Zugangsdaten lesen und vor dem Update mit den Schreibrechten ausgeschaltet waren, aus, bis du sie hier einschaltest oder die Schreibrechte erneut einschaltest."
@@ -1542,10 +1499,6 @@ msgstr "Dem Konto dieser Verbindung fehlt die Berechtigung „%2$s“, die das W
 msgid "The app identifies itself with a document on %s; its name above comes from there."
 msgstr "Die App weist sich mit einem Dokument auf %s aus; ihr Name oben stammt von dort."
 
-#, php-format
-msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch off \"Accept apps with a metadata document\" under Settings → AlphaBridge MCP → Your connections → \"Connect from Claude (OAuth, advanced)\"; an app that can register with the site then does that instead."
-msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → Deine Verbindungen → „Aus Claude verbinden (OAuth, erweitert)“ die Option „Apps mit einem Metadaten-Dokument zulassen“ ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."
-
 msgid "The approval expired. Please try connecting again."
 msgstr "Die Zustimmung ist abgelaufen. Bitte verbinde die App erneut."
 
@@ -1670,9 +1623,6 @@ msgstr "Diese Website bittet dich, dich anzumelden und zuzustimmen. Die Verbindu
 
 msgid "This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter."
 msgstr "Diese Website blockiert Anfragen an andere Server (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), kann diese Dateien also nicht laden und bietet diesen Weg zu verbinden nicht an; Apps, die sich bei der Website registrieren können, tun stattdessen das. Um ihn trotzdem zu nutzen, trage die Hosts der Apps in WP_ACCESSIBLE_HOSTS ein und schalte ihn mit dem Filter ab_mcp_oauth_cimd ein."
-
-msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → Your connections → \"Connect from Claude (OAuth, advanced)\" → \"Accept apps with a metadata document\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
-msgstr "Diese Website lässt keine Apps zu, die sich mit einem Metadaten-Dokument ausweisen (ausgeschaltet unter Einstellungen → AlphaBridge MCP → Deine Verbindungen → „Aus Claude verbinden (OAuth, erweitert)“ → „Apps mit einem Metadaten-Dokument zulassen“, durch WP_HTTP_BLOCK_EXTERNAL oder durch den Filter ab_mcp_oauth_cimd). Die App kann sich stattdessen bei der Website registrieren."
 
 msgid "This site has no trash (EMPTY_TRASH_DAYS is 0): WordPress would delete the post for good. Pass force=true to delete it."
 msgstr "Diese Website hat keinen Papierkorb (EMPTY_TRASH_DAYS ist 0): WordPress würde den Beitrag endgültig löschen. force=true übergeben, um ihn zu löschen."
@@ -2204,3 +2154,84 @@ msgstr "Notiert. Die Zustimmung zu den Nutzungsbedingungen wird beim nächsten E
 
 msgid "Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. What you agreed to is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time."
 msgstr "Die Schreibrechte sind an. KI-Assistenten können jetzt mit jedem Werkzeug erstellen, ändern und löschen, und jedes Werkzeug ist eingeschaltet; einzelne Werkzeuge kannst du unter Feineinstellung ausschalten. Wozu du zugestimmt hast, ist mit deinem Konto, dem Zeitpunkt und der Fassung des Hinweises festgehalten. Oben auf dieser Seite kannst du die Schreibrechte jederzeit ausschalten."
+
+#, php-format
+msgid "%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on under “Sign-in for apps”, further down this page."
+msgstr "%s verbindet sich mit der Anmeldung dieser Website und deiner Zustimmung (OAuth), und das ist hier ausgeschaltet. Schalte es unter „Anmeldung für Apps“ weiter unten auf dieser Seite ein."
+
+msgid "How apps connect"
+msgstr "Wie sich Apps verbinden"
+
+msgid "Sign-in for apps"
+msgstr "Anmeldung für Apps"
+
+msgid "Not checked yet."
+msgstr "Noch nicht geprüft."
+
+msgid "Check again"
+msgstr "Erneut prüfen"
+
+msgid "Checked. The finding is shown under “Sign-in for apps”."
+msgstr "Geprüft. Das Ergebnis steht unter „Anmeldung für Apps“."
+
+msgid "Apps can sign in with their Connect button."
+msgstr "Apps können sich mit ihrem Knopf „Connect“ anmelden."
+
+msgid "For Claude, ChatGPT and other apps. You approve every connection on this site. Switch off only if no app should sign in."
+msgstr "Für Claude, ChatGPT und andere Apps. Du bestätigst jede Verbindung auf dieser Website. Nur ausschalten, wenn sich keine App anmelden soll."
+
+msgid "ChatGPT and Codex sign in without registering first."
+msgstr "ChatGPT und Codex melden sich ohne Registrierung an."
+
+#, php-format
+msgid "Checked %1$s: %2$s"
+msgstr "Geprüft %1$s: %2$s"
+
+msgid "works."
+msgstr "funktioniert."
+
+msgid "no clear result; this stays on."
+msgstr "kein eindeutiges Ergebnis; das bleibt an."
+
+msgid "You switched the direct sign-in off: ChatGPT and Codex register with the site."
+msgstr "Du hast die direkte Anmeldung ausgeschaltet: ChatGPT und Codex registrieren sich bei der Website."
+
+msgid "Switch it on"
+msgstr "Wieder einschalten"
+
+msgid "Switch the direct sign-in off"
+msgstr "Direkte Anmeldung ausschalten"
+
+msgid "Connector address with token"
+msgstr "Konnektor-Adresse mit Token"
+
+msgid "Also offer an address that contains the token."
+msgstr "Zusätzlich eine Adresse anbieten, die den Token enthält."
+
+msgid "For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password."
+msgstr "Für Apps ohne Passwortfeld. Ab Werk aus: Wer diese Adresse sieht, kann die Verbindung nutzen. Behandle sie wie ein Passwort."
+
+msgctxt "date and time of the last check"
+msgid "j M Y, H:i"
+msgstr "d.m.Y, H:i"
+
+msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → \"Sign-in for apps\" → \"Switch the direct sign-in off\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
+msgstr "Diese Website lässt keine Apps zu, die sich mit einem Metadaten-Dokument ausweisen (ausgeschaltet unter Einstellungen → AlphaBridge MCP → „Anmeldung für Apps“ → „Direkte Anmeldung ausschalten“, durch WP_HTTP_BLOCK_EXTERNAL oder durch den Filter ab_mcp_oauth_cimd). Die App kann sich stattdessen bei der Website registrieren."
+
+#, php-format
+msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → \"Sign-in for apps\"; an app that can register with the site then does that instead."
+msgstr "Die App weist sich mit einem Metadaten-Dokument auf %1$s aus, und diese Website kann es nicht verwenden, denn %2$s. Liegt der Fehler beim Dokument, kann der Hersteller der App ihn beheben. Bis dahin, oder wenn diese Website andere Server nicht erreichen kann, kann ein Administrator unter Einstellungen → AlphaBridge MCP → „Anmeldung für Apps“ die direkte Anmeldung ausschalten; eine App, die sich bei der Website registrieren kann, tut dann das."
+
+msgid "Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead."
+msgstr "Die Firewall deines Hosts blockt die direkte Anmeldung. ChatGPT und Codex registrieren sich stattdessen bei der Website."
+
+msgid "In the app, remove the connector for this site and add it again. The sign-in now goes through."
+msgstr "Entferne in der App den Konnektor für diese Website und lege ihn neu an. Die Anmeldung geht jetzt durch."
+
+#, php-format
+msgid "If it still fails, add the connector once more, this time with this address instead of your site’s: %s. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual."
+msgstr "Klappt sie weiter nicht, lege den Konnektor noch einmal an, diesmal mit dieser Adresse statt der Adresse deiner Website: %s. Beim Klick auf „Authenticate“ fragt der kostenlose AlphaBridge-Hub nach der Adresse deiner Website. Gib sie ein und bestätige wie gewohnt auf deiner Website."
+
+#, php-format
+msgid "%s if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers."
+msgstr "%s, wenn eine Anmeldung mit „Not Acceptable“ endet oder diese Website keine anderen Server erreichen darf."

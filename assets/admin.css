@@ -1123,6 +1123,101 @@
 	line-height: 1.55;
 }
 
+/* The settings card: how apps connect — three settings, all visible. */
+.ab-mcp .ab-setting {
+	margin: 16px 0 0;
+	padding: 14px 16px;
+	border: 1px solid var(--ab-line);
+	border-radius: 12px;
+	background: var(--ab-tint);
+}
+
+.ab-mcp .ab-setting__title {
+	margin: 0 0 10px;
+	color: var(--ab-acc-deep);
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.ab-mcp .ab-setting .ab-check + .ab-check {
+	margin-top: 10px;
+}
+
+.ab-mcp .ab-setting .ab-check .description {
+	color: var(--ab-soft);
+}
+
+.ab-mcp .ab-direct {
+	margin: 12px 0 0 24px;
+}
+
+.ab-mcp .ab-direct__status {
+	margin: 0 0 4px;
+	color: var(--ab-soft);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.ab-mcp .ab-direct__status b {
+	color: var(--ab-ink);
+}
+
+.ab-mcp .ab-direct__status .ab-btn {
+	margin-left: 6px;
+	vertical-align: middle;
+}
+
+.ab-mcp .ab-direct__switch,
+.ab-mcp .ab-direct__again {
+	margin: 0 0 4px;
+	color: var(--ab-soft);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.ab-mcp .ab-direct__steps {
+	margin: 2px 0 8px 18px;
+	color: var(--ab-soft);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.ab-mcp .ab-direct__steps li {
+	margin: 0 0 6px;
+}
+
+.ab-mcp .ab-direct__steps code {
+	font-size: 12px;
+}
+
+.ab-mcp .ab-direct__blocked .ab-direct__steps {
+	margin-left: 18px;
+}
+
+.ab-mcp .ab-direct__blocked {
+	color: var(--ab-ink);
+}
+
+.ab-mcp .ab-linklike {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--ab-acc-deep);
+	font: inherit;
+	font-size: 12px;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.ab-mcp .ab-linklike:hover,
+.ab-mcp .ab-linklike:focus {
+	color: var(--ab-acc-dark);
+}
+
+.ab-mcp .ab-settings__save {
+	margin: 16px 0 0;
+}
+
 .ab-mcp .ab-req {
 	display: inline-block;
 	margin: 0 0 12px;

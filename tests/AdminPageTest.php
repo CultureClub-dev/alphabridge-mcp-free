@@ -764,7 +764,7 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testEveryFormOnThePageIsSignedForItsHandler(): void {
-		$x = $this->xpath( $this->call( 'render_connections_card', array() ) . $this->call( 'render_audit' ) );
+		$x = $this->xpath( $this->call( 'render_connections_card', array() ) . $this->call( 'render_settings_card' ) . $this->call( 'render_audit' ) );
 
 		$forms = array();
 		foreach ( $x->query( '//form' ) as $form ) {
@@ -776,45 +776,55 @@ final class AdminPageTest extends TestCase {
 		}
 		self::assertSame(
 			array(
-				'ab_mcp_connector_auth'    => 'nonce-ab_mcp_connector_auth',
-				'ab_mcp_oauth_settings'    => 'nonce-ab_mcp_oauth_settings',
-				'ab_mcp_protocol_settings' => 'nonce-ab_mcp_protocol_settings',
-				'ab_mcp_audit_clear'       => 'nonce-ab_mcp_audit_clear',
+				'ab_mcp_connection_settings' => 'nonce-ab_mcp_connection_settings',
+				'ab_mcp_firewall_check'      => 'nonce-ab_mcp_firewall_check',
+				'ab_mcp_direct_signin'       => 'nonce-ab_mcp_direct_signin',
+				'ab_mcp_audit_clear'         => 'nonce-ab_mcp_audit_clear',
 			),
 			$forms
 		);
-		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="connector_url_auth_enabled"]' )->length );
-		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="oauth_enabled"]' )->length );
-		self::assertSame( 1, $x->query( '//form//input[@type="checkbox"][@name="modern_protocol"]' )->length );
+		// The two switches sit in the one settings form, under one Save;
+		// the direct sign-in and the MCP revision are no boxes there.
+		$settings = '//form[.//input[@name="action"][@value="ab_mcp_connection_settings"]]';
+		foreach ( array( 'oauth_enabled', 'connector_url_auth_enabled' ) as $switch ) {
+			self::assertSame( 1, $x->query( $settings . '//input[@type="checkbox"][@name="' . $switch . '"]' )->length, $switch );
+		}
+		self::assertSame( 2, $x->query( '//input[@type="checkbox"]' )->length, 'No other box on the card.' );
+		self::assertSame( 0, $x->query( '//input[@name="oauth_cimd"] | //input[@name="modern_protocol"]' )->length );
+		self::assertSame( 1, $x->query( $settings . '//button[not(@form)]' )->length, 'One Save for the block.' );
+		// «Check again» and the link post forms of their own, not the settings.
+		self::assertSame( 1, $x->query( '//button[@form="ab-firewall-form"]' )->length );
+		self::assertSame( 1, $x->query( '//form[@id="ab-firewall-form"]' )->length );
+		self::assertSame( 1, $x->query( '//button[@form="ab-direct-signin-form"][@name="direct_signin"]' )->length );
+		self::assertSame( 1, $x->query( '//form[@id="ab-direct-signin-form"]' )->length );
 	}
 
-	public function testTheProtocolSwitchShowsTheStoredSetting(): void {
-		$checked = function (): bool {
-			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
-			$box = $x->query( '//input[@name="modern_protocol"]' )->item( 0 );
-			self::assertNotNull( $box );
-			return $box->hasAttribute( 'checked' );
-		};
+	public function testTheProtocolSettingLeftThePageButIsStillRead(): void {
+		$card = $this->call( 'render_settings_card' );
+		self::assertStringNotContainsString( 'modern_protocol', $card );
+		self::assertStringNotContainsString( '2026-07-28', $card );
 
-		self::assertTrue( $checked(), 'On by default.' );
+		self::assertTrue( AB_MCP_REST_Controller::modern_enabled(), 'On by default.' );
 		\AB_MCP_Settings::set( 'modern_protocol', false );
-		self::assertFalse( $checked() );
+		self::assertFalse( AB_MCP_REST_Controller::modern_enabled(), 'A site that switched it off keeps that.' );
+		add_filter( 'ab_mcp_modern_protocol', '__return_true' );
+		self::assertTrue( AB_MCP_REST_Controller::modern_enabled(), 'The filter has the last word.' );
 	}
 
-	public function testTheProtocolSwitchPromisesOnlyWhatTheSiteKeeps(): void {
-		\AB_MCP_Settings::set( 'modern_protocol', false );
-		$x    = $this->xpath( $this->call( 'render_connections_card', array() ) );
-		$desc = $x->query( '//input[@name="modern_protocol"]/following-sibling::span//span[@class="description"]' )->item( 0 );
-		self::assertNotNull( $desc );
+	public function testTheReadmePromisesOnlyWhatTheSiteKeepsWhenTheRevisionIsOff(): void {
+		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
+		self::assertStringContainsString( '= A proxy has trouble with the newer MCP revision =', $readme );
+		self::assertStringContainsString( "add_filter( 'ab_mcp_modern_protocol', '__return_false' );", $readme );
+		self::assertStringContainsString( 'the site then answers in the older revisions only', $readme );
+		self::assertStringNotContainsString( 'exactly as before', $readme );
 
 		// Switched off, initialize still carries protocol_versions in the site
 		// _meta (the hub reads it), a field releases before 4.4 did not send.
 		// So the text may promise the older revisions, not the old answer.
+		\AB_MCP_Settings::set( 'modern_protocol', false );
 		$m    = new ReflectionMethod( AB_MCP_REST_Controller::class, 'initialize' );
 		$init = $m->invoke( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ), array( 'protocolVersion' => '2025-06-18' ) );
 		self::assertSame( array( '2024-11-05', '2025-03-26', '2025-06-18' ), $init['_meta'][ AB_MCP_REST_Controller::SITE_META_KEY ]['protocol_versions'] );
-		self::assertStringNotContainsString( 'exactly as before', $desc->textContent );
-		self::assertStringContainsString( 'older revisions only', $desc->textContent );
 	}
 
 	/**
@@ -839,14 +849,18 @@ final class AdminPageTest extends TestCase {
 		return 'no exit';
 	}
 
-	public function testSavingTheProtocolSwitchStoresIt(): void {
-		$save = fn( array $post ): string => $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post );
+	public function testSavingTheCardLeavesTheProtocolSettingAlone(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', $post );
 
+		\AB_MCP_Settings::set( 'modern_protocol', false );
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'Not on the page: a save does not switch it on.' );
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1', 'modern_protocol' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'Nor does a stray field.' );
+
+		\AB_MCP_Settings::set( 'modern_protocol', true );
 		self::assertSame( 'redirect', $save( array() ) );
-		self::assertFalse( \AB_MCP_Settings::get( 'modern_protocol' ), 'An unticked box is not posted: off.' );
-
-		self::assertSame( 'redirect', $save( array( 'modern_protocol' => '1' ) ) );
-		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'And a save does not switch it off.' );
 	}
 
 	/**
@@ -855,7 +869,7 @@ final class AdminPageTest extends TestCase {
 	public static function foreignNonces(): array {
 		return array(
 			'no nonce'                => array( array( '_wpnonce' => '' ) ),
-			'the nonce of another form' => array( array( '_wpnonce' => 'nonce-ab_mcp_oauth_settings' ) ),
+			'the nonce of another form' => array( array( '_wpnonce' => 'nonce-ab_mcp_firewall_check' ) ),
 		);
 	}
 
@@ -863,57 +877,130 @@ final class AdminPageTest extends TestCase {
 	 * @param array<string,string> $post
 	 */
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'foreignNonces' )]
-	public function testTheProtocolSwitchIsNotSavedWithoutItsNonce( array $post ): void {
-		self::assertSame( 'die', $this->submit( 'handle_protocol_settings', 'ab_mcp_protocol_settings', $post ) );
-		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged: a page elsewhere cannot switch the revision off for the admin.' );
+	public function testTheCardIsNotSavedWithoutItsNonce( array $post ): void {
+		\AB_MCP_Settings::set( 'connector_url_auth_enabled', true );
+		self::assertSame( 'die', $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', $post ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'Unchanged: a page elsewhere cannot switch anything for the admin.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled', true ), 'Unchanged.' );
 	}
 
-	public function testOnlyAnAdministratorCanSaveTheProtocolSwitch(): void {
+	public function testOnlyAnAdministratorCanSaveTheCard(): void {
 		$GLOBALS['ab_test_can'] = static fn(): bool => false;
 		$_POST                  = array();
 
 		try {
-			( new AB_MCP_Admin() )->handle_protocol_settings();
+			( new AB_MCP_Admin() )->handle_connection_settings();
 			self::fail( 'The guard did not stop the request.' );
 		} catch ( \AbTestExit $exit ) {
 			self::assertSame( 'die', $exit->kind );
 		}
-		self::assertTrue( \AB_MCP_Settings::get( 'modern_protocol' ), 'Unchanged.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled', true ), 'Unchanged.' );
 	}
 
-	public function testTheMetadataDocumentSwitchShowsTheStoredSetting(): void {
-		$checked = function (): bool {
-			$x   = $this->xpath( $this->call( 'render_connections_card', array() ) );
-			$box = $x->query( '//form[.//input[@name="action"][@value="ab_mcp_oauth_settings"]]//input[@name="oauth_cimd"]' )->item( 0 );
-			self::assertNotNull( $box, 'In the OAuth form, next to the OAuth switch.' );
-			return $box->hasAttribute( 'checked' );
-		};
+	public function testTheDirectSignInShowsTheStoredSettingAsAStatusLineWithALink(): void {
+		$x = $this->xpath( $this->call( 'render_settings_card' ) );
+		self::assertSame( 0, $x->query( '//input[@name="oauth_cimd"]' )->length, 'No box: a status line and a link.' );
+		$status = $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		self::assertNotNull( $status, 'Under «Sign-in for apps», under the switch for the sign-in.' );
+		self::assertStringStartsWith( 'ChatGPT and Codex sign in without registering first.', trim( $status->textContent ) );
+		$link = $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 );
+		self::assertSame( 'off', $link->getAttribute( 'value' ) );
+		self::assertSame( 'Switch the direct sign-in off', trim( $link->textContent ) );
+		self::assertStringContainsString( 'if a sign-in ends with “Not Acceptable”', $link->parentNode->textContent, 'The link says when one would.' );
 
-		self::assertTrue( $checked(), 'On by default.' );
 		\AB_MCP_Settings::set( 'oauth_cimd', false );
-		self::assertFalse( $checked() );
+		$x      = $this->xpath( $this->call( 'render_settings_card' ) );
+		$status = $x->query( '//section[@id="ab-oauth"]//p[contains(@class,"ab-direct__status")]' )->item( 0 );
+		self::assertSame( 'You switched the direct sign-in off: ChatGPT and Codex register with the site.', trim( $status->textContent ) );
+		$link = $x->query( '//button[@form="ab-direct-signin-form"]' )->item( 0 );
+		self::assertSame( 'on', $link->getAttribute( 'value' ) );
+		self::assertSame( 'Switch it on', trim( $link->textContent ) );
+		self::assertSame( 0, $x->query( '//button[@form="ab-firewall-form"]' )->length, 'Nothing to check while it is off.' );
 	}
 
-	public function testSavingTheOAuthFormStoresBothSwitches(): void {
-		$save = fn( array $post ): string => $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', $post );
+	public function testTheLinkSwitchesTheDirectSignInOffAndOnAgain(): void {
+		$click = fn( array $post ): string => $this->submit( 'handle_direct_signin', 'ab_mcp_direct_signin', $post );
 
-		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
-		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ) );
-		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'An unticked box is not posted: off.' );
+		self::assertSame( 'redirect', $click( array( 'direct_signin' => 'off' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ) );
 		self::assertFalse( \AB_MCP_OAuth::cimd_enabled() );
 
-		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
+		self::assertSame( 'redirect', $click( array( 'direct_signin' => 'on' ) ) );
 		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ) );
 		self::assertTrue( \AB_MCP_OAuth::cimd_enabled() );
+
+		self::assertSame( 'redirect', $click( array( 'direct_signin' => 'maybe' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Anything else changes nothing.' );
+		self::assertSame( 'redirect', $click( array() ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ) );
+		self::assertCount( 0, $GLOBALS['ab_test_http'], 'The link does not probe.' );
 	}
 
-	public function testTheOAuthFormIsNotSavedWithoutItsNonce(): void {
-		self::assertSame( 'die', $this->submit( 'handle_oauth_settings', 'ab_mcp_oauth_settings', array( '_wpnonce' => 'nonce-ab_mcp_protocol_settings' ) ) );
+	public function testTheLinkLandsOnTheStatusLine(): void {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_POST                  = array( 'direct_signin' => 'off', '_wpnonce' => 'nonce-ab_mcp_direct_signin' );
+		$_REQUEST = $_POST;
+		try {
+			( new AB_MCP_Admin() )->handle_direct_signin();
+			self::fail( 'No redirect.' );
+		} catch ( \AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+			self::assertStringEndsWith( '#ab-oauth', $exit->detail );
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
+	}
+
+	public function testTheLinkNeedsItsOwnNonceAndAnAdministrator(): void {
+		foreach ( array( array( '_wpnonce' => '' ), array( '_wpnonce' => 'nonce-ab_mcp_connection_settings' ), array( '_wpnonce' => 'nonce-ab_mcp_firewall_check' ) ) as $post ) {
+			self::assertSame( 'die', $this->submit( 'handle_direct_signin', 'ab_mcp_direct_signin', array( 'direct_signin' => 'off' ) + $post ) );
+			self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Unchanged.' );
+		}
+
+		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		$_POST                  = array( 'direct_signin' => 'off', '_wpnonce' => 'nonce-ab_mcp_direct_signin' );
+		$_REQUEST               = $_POST;
+		try {
+			( new AB_MCP_Admin() )->handle_direct_signin();
+			self::fail( 'The guard did not stop the request.' );
+		} catch ( \AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		} finally {
+			$_POST    = array();
+			$_REQUEST = array();
+		}
 		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Unchanged.' );
 	}
 
+	public function testSavingTheSettingsFormStoresTheTwoSwitchesAndNothingElse(): void {
+		$save = fn( array $post ): string => $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', $post );
+
+		self::assertSame( 'redirect', $save( array( 'oauth_enabled' => '1' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled' ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ), 'An unticked box is not posted: off.' );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_cimd' ), 'Not a box on the card: untouched.' );
+		self::assertTrue( \AB_MCP_OAuth::cimd_enabled() );
+
+		self::assertSame( 'redirect', $save( array( 'connector_url_auth_enabled' => '1', 'oauth_cimd' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_enabled' ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'connector_url_auth_enabled' ) );
+		\AB_MCP_Settings::set( 'oauth_cimd', false );
+		self::assertSame( 'redirect', $save( array( 'oauth_cimd' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Settings::get( 'oauth_cimd' ), 'A stray field does not switch the direct sign-in on.' );
+		// Every save runs the firewall self-test again: one probe per save.
+		self::assertCount( 3, $GLOBALS['ab_test_http'] );
+		self::assertStringContainsString( 'ab_mcp_oauth=authorize', $GLOBALS['ab_test_http'][0]['url'] );
+	}
+
+	public function testTheSettingsFormIsNotSavedWithoutItsNonce(): void {
+		self::assertSame( 'die', $this->submit( 'handle_connection_settings', 'ab_mcp_connection_settings', array( '_wpnonce' => 'nonce-ab_mcp_firewall_check' ) ) );
+		self::assertTrue( \AB_MCP_Settings::get( 'oauth_enabled', true ), 'Unchanged.' );
+		self::assertCount( 0, $GLOBALS['ab_test_http'], 'No probe either.' );
+	}
+
 	public function testTheMetadataDocumentSwitchSaysWhenAFilterDecides(): void {
-		$card = fn(): string => $this->call( 'render_connections_card', array() );
+		$card = fn(): string => $this->call( 'render_settings_card' );
 
 		self::assertStringNotContainsString( 'ab_mcp_oauth_cimd filter', $card() );
 
@@ -924,19 +1011,10 @@ final class AdminPageTest extends TestCase {
 	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 	public function testTheMetadataDocumentSwitchSaysWhenTheSiteBlocksRequests(): void {
-		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'render_connections_card', array() ) );
+		self::assertStringNotContainsString( 'WP_HTTP_BLOCK_EXTERNAL', $this->call( 'render_settings_card' ) );
 
 		define( 'WP_HTTP_BLOCK_EXTERNAL', true );
-		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'render_connections_card', array() ), 'The note names the way to use it anyway.' );
-	}
-
-	public function testTheProtocolSwitchSaysWhenAFilterDecides(): void {
-		$note = fn(): string => $this->call( 'render_connections_card', array() );
-
-		self::assertStringNotContainsString( 'ab_mcp_modern_protocol filter', $note(), 'Without a filter the switch alone decides.' );
-
-		add_filter( 'ab_mcp_modern_protocol', '__return_false' );
-		self::assertStringContainsString( 'right now the revision is not answered', $note(), 'The admin learns why saving the switch changes nothing.' );
+		self::assertStringContainsString( 'WP_ACCESSIBLE_HOSTS', $this->call( 'render_settings_card' ), 'The note names the way to use it anyway.' );
 	}
 
 	public function testTheSideColumnOrdersProBoxAddOnsGuides(): void {
