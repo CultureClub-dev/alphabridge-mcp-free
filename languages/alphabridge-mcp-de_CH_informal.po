@@ -2217,8 +2217,8 @@ msgstr "App-Kennungen in Adressform erreichen die Website."
 msgid "the firewall blocks them, see above."
 msgstr "die Firewall blockt sie, siehe oben."
 
-msgid "not checked, the site cannot reach itself."
-msgstr "nicht geprüft, die Website erreicht sich selbst nicht."
+msgid "no clear result; app IDs in address form are offered as before."
+msgstr "kein eindeutiges Ergebnis; App-Kennungen in Adressform werden wie bisher angeboten."
 
 #, php-format
 msgid "Last check %1$s: %2$s"

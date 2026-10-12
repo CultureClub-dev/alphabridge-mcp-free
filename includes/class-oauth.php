@@ -1680,7 +1680,7 @@ class AB_MCP_OAuth {
 		// self-test looks for (firewall_verdict()): the redirect to the
 		// login, the error page, the consent screen. Before anything below
 		// can end the request.
-		header( self::MARK_HEADER . ': ' . self::MARK_AUTHORIZE );
+		self::send_mark();
 		if ( ! self::enabled() ) {
 			self::error_page( __( 'Connecting from Claude is disabled on this site.', 'alphabridge-mcp' ) );
 		}
@@ -1769,6 +1769,27 @@ class AB_MCP_OAuth {
 		}
 
 		self::consent_page( $client, $get, $state, $scopes );
+	}
+
+	/**
+	 * Mark the answer of the authorization endpoint for the firewall
+	 * self-test: the header MARK_HEADER with MARK_AUTHORIZE, sent while
+	 * headers can still go out. The action carries the same line, so that
+	 * a test, or code that watches what the site answers, sees that and
+	 * when the mark was sent: before any body, before the request ends.
+	 */
+	private static function send_mark() {
+		$line = self::MARK_HEADER . ': ' . self::MARK_AUTHORIZE;
+		if ( ! headers_sent() ) {
+			header( $line );
+		}
+		/**
+		 * Fires when the authorization endpoint has marked its answer for
+		 * the firewall self-test, before the answer itself.
+		 *
+		 * @param string $line The header line sent.
+		 */
+		do_action( 'ab_mcp_oauth_mark_sent', $line );
 	}
 
 	/**

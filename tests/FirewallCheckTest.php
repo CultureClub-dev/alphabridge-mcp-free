@@ -165,6 +165,92 @@ final class FirewallCheckTest extends TestCase {
 		}
 	}
 
+	/* -------------------------------------------------------------- mark */
+
+	/**
+	 * Run the authorization endpoint with these query parameters, as the
+	 * probe or a visitor would; returns how it ended.
+	 *
+	 * @param array<string,string> $params
+	 */
+	private function authorize( array $params ): AbTestExit {
+		$_GET                      = array_merge( array( 'ab_mcp_oauth' => 'authorize' ), $params );
+		$_REQUEST                  = $_GET;
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		try {
+			AB_MCP_OAuth::handle_authorize();
+		} catch ( AbTestExit $exit ) {
+			return $exit;
+		} finally {
+			$_GET     = array();
+			$_REQUEST = array();
+			unset( $_SERVER['REQUEST_METHOD'] );
+		}
+		self::fail( 'handle_authorize() ended without redirect, login or error.' );
+	}
+
+	/**
+	 * @return array<string,array{0:array<string,string>,1:string}>
+	 */
+	public static function answersOfTheEndpoint(): array {
+		return array(
+			'the probe: an address as client id, nobody logged in' => array( array( 'client_id' => AB_MCP_OAuth::FIREWALL_PROBE_ID, 'redirect_uri' => 'https://example.test/', 'response_type' => 'code' ), 'login' ),
+			'an error: no client id at all'                        => array( array(), 'die' ),
+			'an error: an unknown registered client'               => array( array( 'client_id' => 'abc_unknown', 'redirect_uri' => 'https://example.test/' ), 'die' ),
+		);
+	}
+
+	/** @param array<string,string> $params */
+	#[DataProvider( 'answersOfTheEndpoint' )]
+	public function testTheEndpointMarksItsAnswerBeforeTheAnswerBegins( array $params, string $ending ): void {
+		$marks = &$this->marksRef();
+
+		$exit = $this->authorize( $params );
+
+		self::assertSame( $ending, $exit->kind );
+		self::assertSame( array( array( 'line' => 'X-AB-MCP: authorize', 'body' => 0 ) ), $marks, 'One mark, the header line, before any body.' );
+	}
+
+	public function testTheMarkIsSentWithSignInForAppsOffToo(): void {
+		AB_MCP_Settings::set( 'oauth_enabled', false );
+		$marks = &$this->marksRef();
+
+		$exit = $this->authorize( array( 'client_id' => AB_MCP_OAuth::FIREWALL_PROBE_ID ) );
+
+		self::assertSame( 'die', $exit->kind, 'The error page: sign-in for apps is off.' );
+		self::assertCount( 1, $marks, 'The firewall test is about the firewall, not about the setting.' );
+	}
+
+	public function testOtherRequestsCarryNoMark(): void {
+		$marks = &$this->marksRef();
+
+		$_GET = array( 'p' => '1' );
+		AB_MCP_OAuth::handle_authorize();
+		$_GET = array();
+
+		self::assertSame( array(), $marks );
+	}
+
+	/**
+	 * Every mark the endpoint sends from now on, with how much of the
+	 * answer's body had gone out by then (the test's output buffer).
+	 *
+	 * @return array<int,array{line:string,body:int}>
+	 */
+	private function &marksRef(): array {
+		$marks = array();
+		add_action(
+			'ab_mcp_oauth_mark_sent',
+			static function ( string $line ) use ( &$marks ): void {
+				$marks[] = array(
+					'line' => $line,
+					'body' => (int) ob_get_length(),
+				);
+			}
+		);
+		return $marks;
+	}
+
 	/* ------------------------------------------------------------- probe */
 
 	public function testTheProbeIsTheSitesOwnAuthorizeEndpointWithAnAddressAsClientId(): void {
@@ -432,7 +518,7 @@ final class FirewallCheckTest extends TestCase {
 		self::assertStringStartsWith( 'Not checked yet.', $line() );
 
 		self::keep( 'unknown' );
-		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: not checked, the site cannot reach itself\./', $line() );
+		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: no clear result; app IDs in address form are offered as before\./', $line() );
 
 		self::keep( 'open' );
 		self::assertMatchesRegularExpression( '/^Last check \d{4}-\d\d-\d\d \d\d:\d\d: app IDs in address form reach the site\./', $line() );

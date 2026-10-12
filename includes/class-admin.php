@@ -1774,9 +1774,9 @@ class AB_MCP_Admin {
 	/**
 	 * The finding of the firewall self-test next to the metadata document
 	 * switch: the note where the firewall blocks, the last check with what
-	 * it found, and the button to check again. Where the site could not
-	 * reach itself nothing is claimed: no note, only that nothing was
-	 * checked.
+	 * it found, and the button to check again. Without a clear answer
+	 * (unreachable, a redirect elsewhere, a page without the mark) nothing
+	 * is claimed: no note, only that the way is offered as before.
 	 *
 	 * @return string HTML, escaped.
 	 */
@@ -1793,7 +1793,7 @@ class AB_MCP_Admin {
 			$found = array(
 				'open'    => __( 'app IDs in address form reach the site.', 'alphabridge-mcp' ),
 				'blocked' => __( 'the firewall blocks them, see above.', 'alphabridge-mcp' ),
-				'unknown' => __( 'not checked, the site cannot reach itself.', 'alphabridge-mcp' ),
+				'unknown' => __( 'no clear result; app IDs in address form are offered as before.', 'alphabridge-mcp' ),
 			);
 			/* translators: 1: date and time of the last check, 2: what it found. */
 			$html .= esc_html( sprintf( __( 'Last check %1$s: %2$s', 'alphabridge-mcp' ), self::site_datetime( $finding['checked'] ), $found[ $finding['verdict'] ] ) );

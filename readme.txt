@@ -115,8 +115,8 @@ Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, mont
 2. The moment you create a connection, the plugin shows what you need once — the Bearer token and a copy-paste config for Cursor / Claude Code, and the connector URL if connector-URL authentication is switched on — with a reminder to save it, because the token is shown in full only once.
 3. Optional advanced settings for a connection: a label, the WordPress user it acts as, full, content-only or read-only access, and an optional expiry in days.
 4. Switch all tools, a group or a single tool; open a group to see its tool groups and what each tool does, whether it reads or writes, or search for one. These switches sit under «Fine-tuning», below the main switch for write access at the top of the page.
-5. Connect from Claude is on by default: Claude discovers the site, you approve on a login-protected consent screen, and the approved connection appears in the list, revocable any time. Switching it off removes the OAuth endpoints. A second box lets apps identify themselves with a metadata document instead of registering.
-6. Connector-URL authentication is off by default, because a token in a URL leaks more easily than one in a header; the setting explains the trade-off before you switch it on.
+5. How apps connect, all on one card: sign-in for apps with their Connect button, apps with a metadata document, a connector URL with the token, and the MCP revision — each with what it is for and when to change it, one Save for all. Next to the metadata document switch, the last firewall check and «Check again».
+6. The same card where the check found a firewall that blocks app IDs in address form: the note says that apps register with the site instead and that there is nothing to do; the site no longer offers the metadata document way, so ChatGPT and Codex sign in all the same.
 
 == External services ==
 
