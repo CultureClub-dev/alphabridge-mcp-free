@@ -104,4 +104,14 @@ final class OpenWorldClassificationTest extends TestCase {
 		sort( $expected );
 		$this->assertSame( $expected, $open, 'the set of open-world tools changed — check the new tool' );
 	}
+
+	/**
+	 * wp_bulk_update_status belongs to AlphaBridge MCP Pro but is classified
+	 * here, in the shared registry: it can publish many posts at once, so it
+	 * counts as publishing like wp_create_post (OpenAI review finding, 16.10.2026).
+	 */
+	public function test_pro_bulk_status_change_is_open_world(): void {
+		$this->assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_bulk_update_status', array() ) );
+		$this->assertTrue( AB_MCP_Tool_Registry::is_destructive( 'wp_bulk_update_status', array() ) );
+	}
 }
