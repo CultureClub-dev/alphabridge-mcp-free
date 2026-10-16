@@ -136,6 +136,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.5 =
+* **Bulk status changes are marked as reaching beyond the site.** `wp_bulk_update_status` (AlphaBridge MCP Pro) can publish many posts at once, so its openWorldHint is now true, like `wp_create_post` and `wp_update_post`. Assistants that ask before such steps now ask here too.
+
 = 4.6.4 =
 * **Everything about connecting sits in one place: the connect card.** The settings moved up from a card of their own at the foot of the page into the panel of the app they concern — the sign-in for apps under Claude and under ChatGPT (there with the status line for ChatGPT and Codex, «Check again» and the link to switch the direct sign-in off), the connector address with the token under Cursor and «Other», next to the token form. Each has its own Save.
 * **Claude: both ways in, side by side, nothing folded away.** «Through the hub» (one connection, up to 10 sites) with its three steps, and «Directly» (this site only) with two: add a custom connector in Claude with this site's address, then sign in here and approve.
@@ -324,6 +327,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.5 =
+The Pro tool for bulk status changes is now marked as able to publish, like the other publishing tools. Nothing else changes.
 
 = 4.6.4 =
 The settings for how apps connect moved into the connect card, each under the app it concerns; Claude's two ways in sit side by side, nothing folded away. Nothing else changes.
