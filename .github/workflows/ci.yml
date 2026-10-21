@@ -85,6 +85,13 @@ jobs:
             tar -tf /tmp/plugin.tar | grep -qx "$required" || { echo "FAIL: $required missing"; exit 1; }
           done
           echo "readme.txt and the plugin file are present"
+          # The bundled translations ship since 4.4.0. An export-ignore on
+          # languages/ would leave the tests in the checkout green and still
+          # strip them from every release, so each tracked file must be inside.
+          for f in $(git ls-files languages); do
+            tar -tf /tmp/plugin.tar | grep -qx "alphabridge-mcp/$f" || { echo "FAIL: $f missing from the archive"; exit 1; }
+          done
+          echo "all $(git ls-files languages | wc -l | tr -d ' ') translation files are in the archive"
 
       # readme.txt is what WordPress.org serves from. Its Stable tag decides
       # which version users get, so it must never quietly drift ahead of a
