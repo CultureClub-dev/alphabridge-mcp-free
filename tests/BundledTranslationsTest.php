@@ -1,14 +1,17 @@
 <?php
 /**
- * The German translations bundled in languages/.
+ * The translations bundled in languages/.
  *
- * WordPress has no language pack of this plugin yet, and a German site must
- * read every text of the plugin a person sees in German from the release
- * that brings it: the settings page, the consent screen, the notices, the
- * refusals and errors an assistant passes on, and the description in the
- * plugin list. So the plugin ships its texts for de_DE, de_DE_formal,
- * de_AT, de_CH and de_CH_informal, and loads them behind a language pack
- * from translate.wordpress.org, which wins for every string it has. Tool
+ * WordPress has no language pack of this plugin yet, and a site in one of
+ * its languages must read every text of the plugin a person sees in that
+ * language from the release that brings it: the settings page, the consent
+ * screen, the notices, the refusals and errors an assistant passes on, and
+ * the description in the plugin list. So the plugin ships its texts for
+ * de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal, fr_FR, it_IT, es_ES and
+ * pt_PT (the languages of alphabridge-mcp.com), and loads them behind a
+ * language pack from translate.wordpress.org, which wins for every string
+ * it has. A locale without a file of its own reads the main file of its
+ * language (fr_CA reads fr_FR, pt_BR pt_PT). Tool
  * and parameter descriptions and the server instructions are written for
  * the assistant; they are not in gettext calls and stay English.
  *
@@ -40,7 +43,13 @@
  *   for add-ons) is translated too: a text added there without its
  *   translation fails here.
  * - A translation is not the English text itself, except for the few
- *   names and words German uses as they are (SAME_AS_ENGLISH).
+ *   names and words every language uses as they are (SAME_AS_ENGLISH) and
+ *   the words a language writes like English (SAME_AS_ENGLISH_IN: French
+ *   «Actions», Italian «Media»).
+ * - The approved German wordings are pinned in German; in the other
+ *   languages the words the product site quotes (the main switch) and the
+ *   words of the switch, measured to fit it, are pinned. French says vous,
+ *   Spanish tú, Italian tu, Portuguese the polite third person.
  * - de_AT reads like de_DE. Swiss German writes ss, never ß, and «» for
  *   quotes; de_DE_formal and de_CH address the reader as Sie, the others
  *   as du, and the check for that also finds a capitalised Du or Dein.
@@ -61,7 +70,7 @@ use AB_MCP_Site_Mode;
 
 final class BundledTranslationsTest extends TestCase {
 
-	const LOCALES = array( 'de_DE', 'de_DE_formal', 'de_AT', 'de_CH', 'de_CH_informal' );
+	const LOCALES = array( 'de_DE', 'de_DE_formal', 'de_AT', 'de_CH', 'de_CH_informal', 'fr_FR', 'it_IT', 'es_ES', 'pt_PT' );
 
 	/** The texts that must read in German wherever a German locale is set. */
 	const REQUIRED = array(
@@ -322,6 +331,12 @@ final class BundledTranslationsTest extends TestCase {
 		'claude.ai, Desktop, iPhone',
 	);
 
+	/** Words a language writes like English, beyond SAME_AS_ENGLISH. */
+	const SAME_AS_ENGLISH_IN = array(
+		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides' ),
+		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media" ),
+	);
+
 	/**
 	 * What is wrong with the translations of $texts in $mo: a text without
 	 * a translation, an empty one, one that is the English text itself
@@ -332,8 +347,9 @@ final class BundledTranslationsTest extends TestCase {
 	 * @param array<string,string> $mo    Entries (mo()).
 	 * @return array<int,string> One line per problem; empty when all is well.
 	 */
-	private static function gaps( array $texts, array $mo ): array {
-		$out = array();
+	private static function gaps( array $texts, array $mo, string $language = 'de' ): array {
+		$out  = array();
+		$same = array_merge( self::SAME_AS_ENGLISH, self::SAME_AS_ENGLISH_IN[ $language ] ?? array() );
 		foreach ( $texts as $key => $where ) {
 			if ( ! isset( $mo[ $key ] ) || '' === str_replace( "\0", '', $mo[ $key ] ) ) {
 				$out[] = 'untranslated (' . $where . '): ' . $key;
@@ -343,7 +359,7 @@ final class BundledTranslationsTest extends TestCase {
 			$forms = explode( "\0", $text );
 			foreach ( explode( "\0", $mo[ $key ] ) as $n => $translated ) {
 				$source = $forms[ min( $n, count( $forms ) - 1 ) ];
-				if ( $translated === $source && ! in_array( $key, self::SAME_AS_ENGLISH, true ) ) {
+				if ( $translated === $source && ! in_array( $key, $same, true ) ) {
 					$out[] = 'the English text (' . $where . '): ' . $key;
 				}
 				preg_match_all( '/%(?:\d+\$)?[sd]/', $source, $want );
@@ -371,7 +387,12 @@ final class BundledTranslationsTest extends TestCase {
 	#[DataProvider( 'locales' )]
 	public function testEveryTextTheCodeTranslatesIsTranslated( string $locale ): void {
 		$texts = self::gettext_texts();
-		self::assertSame( array(), self::gaps( $texts, self::mo( self::file( $locale, 'mo' ) ) ), $locale );
+		self::assertSame( array(), self::gaps( $texts, self::mo( self::file( $locale, 'mo' ) ), self::language( $locale ) ), $locale );
+	}
+
+	/** The language of a locale: de for de_CH_informal. */
+	private static function language( string $locale ): string {
+		return substr( $locale, 0, 2 );
 	}
 
 	public function testTheCheckFindsEveryGettextCallAndWhatIsMissing(): void {
@@ -421,12 +442,21 @@ final class BundledTranslationsTest extends TestCase {
 	public function testThePluginListShowsTheDescriptionTranslated( string $locale ): void {
 		$mo = self::mo( self::file( $locale, 'mo' ) );
 		self::assertArrayHasKey( self::description(), $mo );
-		self::assertStringStartsWith( 'Verbindet Claude und andere MCP-Clients', $mo[ self::description() ] );
+		self::assertStringStartsWith( self::DESCRIPTION_START[ self::language( $locale ) ], $mo[ self::description() ] );
 		// An inactive plugin's description is translated from the folder the
 		// header names: WordPress loads the domain from there for the list.
 		$head = (string) file_get_contents( dirname( __DIR__ ) . '/alphabridge-mcp.php', false, null, 0, 8192 );
 		self::assertMatchesRegularExpression( '/^ \* Domain Path: +\/languages$/m', $head );
 	}
+
+	/** How the description in the plugin list starts, per language. */
+	const DESCRIPTION_START = array(
+		'de' => 'Verbindet Claude und andere MCP-Clients',
+		'fr' => 'Connectez Claude et d',
+		'it' => 'Collega Claude e altri client MCP',
+		'es' => 'Conecta Claude y otros clientes MCP',
+		'pt' => 'Ligue o Claude e outros clientes MCP',
+	);
 
 	/** @return array<string,array{0:string}> */
 	public static function locales(): array {
@@ -471,11 +501,67 @@ final class BundledTranslationsTest extends TestCase {
 			preg_match_all( '/%(\d\$)?[sd]/', $mo[ $key ], $have );
 			self::assertSame( $want[0], $have[0], $locale . ' keeps the placeholders of: ' . $key );
 		}
-		self::assertSame( 'Schreibrechte aus (nur lesen)', $mo["site mode\x04Write access off (read only)"] );
-		self::assertSame( 'Schreibrechte an (volle Leistung)', $mo["site mode\x04Write access on (full power)"] );
-		self::assertSame( 'Schreibrechte für KI-Assistenten', $mo['Write access for AI assistants'] );
-		self::assertSame( 'KI-Assistenten verbinden', $mo['Connect your AI assistant'] );
 		self::assertSame( array_keys( self::mo( self::file( 'de_DE', 'mo' ) ) ), array_keys( $mo ), 'Every locale translates the same texts.' );
+		$language = self::language( $locale );
+		if ( 'de' === $language ) {
+			self::assertSame( 'Schreibrechte aus (nur lesen)', $mo["site mode\x04Write access off (read only)"] );
+			self::assertSame( 'Schreibrechte an (volle Leistung)', $mo["site mode\x04Write access on (full power)"] );
+			self::assertSame( 'Schreibrechte für KI-Assistenten', $mo['Write access for AI assistants'] );
+			self::assertSame( 'KI-Assistenten verbinden', $mo['Connect your AI assistant'] );
+			return;
+		}
+		foreach ( self::PINNED[ $language ] as $key => $text ) {
+			self::assertSame( $text, $mo[ $key ], $locale . ': ' . str_replace( "\x04", ' | ', $key ) );
+		}
+	}
+
+	/**
+	 * Words pinned in the other languages. The main switch is quoted by the
+	 * product site (alphabridge-mcp.com) as it is here. The words in the
+	 * switch were measured in the browser at its size (15px, bold, uppercase):
+	 * beside the knob there is room for about 98px (On) and 102px (Off);
+	 * «Disattivato» took 114px and «Desligado» 100px, so every language says
+	 * active / inactive, and the boxes beside the switch start with the same
+	 * word. Fine-tuning is named by the site and the connection service.
+	 */
+	const PINNED = array(
+		'fr' => array(
+			'Write access for AI assistants' => 'Accès en écriture pour les assistants IA',
+			"main switch\x04On"              => 'Actif',
+			"main switch\x04Off"             => 'Inactif',
+			'Fine-tuning'                    => 'Réglage fin',
+		),
+		'it' => array(
+			'Write access for AI assistants' => 'Accesso in scrittura per gli assistenti IA',
+			"main switch\x04On"              => 'Attivo',
+			"main switch\x04Off"             => 'Inattivo',
+			'Fine-tuning'                    => 'Regolazione fine',
+		),
+		'es' => array(
+			'Write access for AI assistants' => 'Acceso de escritura para asistentes de IA',
+			"main switch\x04On"              => 'Activo',
+			"main switch\x04Off"             => 'Inactivo',
+			'Fine-tuning'                    => 'Ajuste fino',
+		),
+		'pt' => array(
+			'Write access for AI assistants' => 'Acesso de escrita para assistentes de IA',
+			"main switch\x04On"              => 'Ativo',
+			"main switch\x04Off"             => 'Inativo',
+			'Fine-tuning'                    => 'Ajuste fino',
+		),
+	);
+
+	#[DataProvider( 'locales' )]
+	public function testTheBoxesBesideTheSwitchStartWithItsWords( string $locale ): void {
+		$mo = self::mo( self::file( $locale, 'mo' ) );
+		$on  = $mo["main switch\x04On"];
+		$off = $mo["main switch\x04Off"];
+		foreach ( array( 'On: full power', 'On: full power. Connected AI assistants read and write on this site.' ) as $key ) {
+			self::assertStringStartsWith( $on, $mo[ $key ], $locale . ': ' . $key );
+		}
+		foreach ( array( 'Off: read only' ) as $key ) {
+			self::assertStringStartsWith( $off, $mo[ $key ], $locale . ': ' . $key );
+		}
 	}
 
 	/** The methods of AB_MCP_Admin that draw the fine-tuning. */
@@ -523,6 +609,9 @@ final class BundledTranslationsTest extends TestCase {
 			preg_match_all( '/%(\d\$)?[sd]/', $mo[ $key ], $have );
 			self::assertSame( $want[0], $have[0], $locale . ' keeps the placeholders of: ' . $key );
 		}
+		if ( 'de' !== self::language( $locale ) ) {
+			return;
+		}
 		self::assertSame( 'Lesend', $mo["tool badge\x04Reads"] );
 		self::assertSame( 'Schreibend', $mo["tool badge\x04Writes"] );
 		self::assertSame( '%d lesend', $mo["tool badge with a number\x04%d read"] );
@@ -550,6 +639,9 @@ final class BundledTranslationsTest extends TestCase {
 		foreach ( $names as $tool => $label ) {
 			self::assertArrayHasKey( "tool label\x04" . $label, $mo, $locale . ': ' . $tool );
 			self::assertNotSame( '', $mo[ "tool label\x04" . $label ] );
+		}
+		if ( 'de' !== self::language( $locale ) ) {
+			return;
 		}
 		$ss = 0 === strpos( $locale, 'de_CH' );
 		// The names of the approved draft of the fine-tuning.
@@ -670,6 +762,37 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertDoesNotMatchRegularExpression( self::SIE, 'die Werkzeuge, die sie lesen, und ihre Felder' );
 	}
 
+	/**
+	 * The address of the other languages, as their WordPress uses it: French
+	 * vous, Italian tu, Spanish tú, Portuguese (Portugal) the polite third
+	 * person. Each line: the form that must not appear, the form that shows
+	 * the check reads that language at all.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string}>
+	 */
+	public static function addressOfTheOtherLanguages(): array {
+		return array(
+			'fr_FR' => array( 'fr_FR', '/\b(tu|toi|ton|ta|tes|tien|tienne)\b/iu', '/\bvous\b/iu' ),
+			'it_IT' => array( 'it_IT', '/\b(Lei|Suo|Sua|Suoi|Sue)\b/u', '/\b(tu|tuo|tua|tuoi|tue|ti)\b/iu' ),
+			'es_ES' => array( 'es_ES', '/\b(usted|ustedes)\b/iu', '/\b(tu|tus|te|ti)\b/iu' ),
+			'pt_PT' => array( 'pt_PT', '/\b(tu|teu|tua|teus|tuas|você|vocês|contigo)\b/iu', '/\b(o seu|a sua|os seus|as suas)\b/iu' ),
+		);
+	}
+
+	#[DataProvider( 'addressOfTheOtherLanguages' )]
+	public function testTheOtherLanguagesAddressTheReaderAsTheirWordPressDoes( string $locale, string $wrong, string $right ): void {
+		$right_found = 0;
+		foreach ( self::mo( self::file( $locale, 'mo' ) ) as $key => $text ) {
+			foreach ( explode( "\0", $text ) as $form ) {
+				self::assertDoesNotMatchRegularExpression( $wrong, $form, $locale . ': ' . str_replace( "\x04", ' | ', $key ) );
+				$right_found += preg_match( $right, $form );
+			}
+		}
+		self::assertGreaterThan( 15, $right_found, $locale . ': the check finds the address it expects' );
+		// The check finds the wrong form.
+		self::assertMatchesRegularExpression( $wrong, 'fr_FR' === $locale ? 'Choisis ton site' : ( 'it_IT' === $locale ? 'Lei può scegliere' : ( 'es_ES' === $locale ? 'Usted puede elegir' : 'Tu podes escolher' ) ) );
+	}
+
 	public function testAustrianGermanReadsLikeGermanGerman(): void {
 		$at = self::mo( self::file( 'de_AT', 'mo' ) );
 		$de = self::mo( self::file( 'de_DE', 'mo' ) );
@@ -698,11 +821,62 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertTrue( \AB_MCP_Plugin::load_bundled_translations( 'de_AT' ) );
 		self::assertSame( AB_MCP_DIR . 'languages/alphabridge-mcp-de_AT.mo', $GLOBALS['ab_test_i18n'][1][2] );
 
-		// Nothing bundled for this locale: nothing is loaded, the pack decides.
+		// Nothing bundled for this language: nothing is loaded, the pack decides.
 		$GLOBALS['ab_test_i18n']   = array();
-		$GLOBALS['ab_test_locale'] = 'fr_FR';
+		$GLOBALS['ab_test_locale'] = 'nl_NL';
 		self::assertFalse( \AB_MCP_Plugin::load_bundled_translations() );
 		self::assertSame( array(), $GLOBALS['ab_test_i18n'] );
+	}
+
+	/**
+	 * A locale without a file of its own reads the main file of its language;
+	 * a locale with its own file reads that one, and a string that is no
+	 * locale reads nothing (it goes into a path).
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public static function fallbacks(): array {
+		return array(
+			'own file, French'           => array( 'fr_FR', 'fr_FR' ),
+			'Canadian French'            => array( 'fr_CA', 'fr_FR' ),
+			'Belgian French'             => array( 'fr_BE', 'fr_FR' ),
+			'own file, Italian'          => array( 'it_IT', 'it_IT' ),
+			'own file, Spanish'          => array( 'es_ES', 'es_ES' ),
+			'Mexican Spanish'            => array( 'es_MX', 'es_ES' ),
+			'own file, Portuguese'       => array( 'pt_PT', 'pt_PT' ),
+			'Portuguese, new spelling'   => array( 'pt_PT_ao90', 'pt_PT' ),
+			'Brazilian Portuguese'       => array( 'pt_BR', 'pt_PT' ),
+			'own file, Swiss German'     => array( 'de_CH_informal', 'de_CH_informal' ),
+			'German without its own'     => array( 'de_LU', 'de_DE' ),
+			'language code only'         => array( 'fr', 'fr_FR' ),
+			'no bundled language'        => array( 'nl_NL', '' ),
+			'no locale: a path'          => array( '../fr_FR', '' ),
+			'no locale: capital letters' => array( 'FR_fr', '' ),
+		);
+	}
+
+	#[DataProvider( 'fallbacks' )]
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testALocaleWithoutItsOwnFileReadsTheMainFileOfItsLanguage( string $locale, string $expected ): void {
+		require_once dirname( __DIR__ ) . '/includes/class-plugin.php';
+		$GLOBALS['ab_test_i18n'] = array();
+
+		$loaded = \AB_MCP_Plugin::load_bundled_translations( $locale );
+
+		if ( '' === $expected ) {
+			self::assertFalse( $loaded );
+			self::assertSame( array(), $GLOBALS['ab_test_i18n'] );
+			return;
+		}
+		self::assertTrue( $loaded );
+		self::assertSame(
+			array(
+				array( 'pack', 'alphabridge-mcp' ),
+				array( 'file', 'alphabridge-mcp', AB_MCP_DIR . 'languages/alphabridge-mcp-' . $expected . '.mo', $locale ),
+			),
+			$GLOBALS['ab_test_i18n']
+		);
 	}
 
 	public function testThePluginLoadsThemAndAgainAfterASwitchOfLocale(): void {

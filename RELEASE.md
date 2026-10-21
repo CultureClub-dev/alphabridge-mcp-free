@@ -67,7 +67,8 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
    `RELEASE_COMMIT` it builds without that comparison and says so; `${R:?…}`
    stops the step instead of falling back to it when `$R` is empty. The last
    line must read «ZIP gleich git archive …» and count the files in
-   `languages/` (ten on 21.10.2026: .po and .mo for five German locales): the
+   `languages/` (eighteen since 4.6.7: .po and .mo for de_DE, de_DE_formal,
+   de_AT, de_CH, de_CH_informal, fr_FR, it_IT, es_ES and pt_PT): the
    plugin ships its bundled translations there since 4.4.0
    (`tests/BundledTranslationsTest.php`). Until 21.10.2026 `build.sh` left
    `languages/` out of the ZIP.

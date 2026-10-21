@@ -80,7 +80,11 @@ final class AB_MCP_Plugin {
 	 * not have yet. Where there is no pack, the bundled file is all there is.
 	 *
 	 * Runs on init, when the plugin boots: translations must not load before.
-	 * Bundled are de_DE, de_DE_formal, de_AT, de_CH and de_CH_informal.
+	 * Bundled are de_DE, de_DE_formal, de_AT, de_CH, de_CH_informal, fr_FR,
+	 * it_IT, es_ES and pt_PT. A locale without a file of its own reads the
+	 * main file of its language (BUNDLED_FALLBACK): fr_CA and fr_BE read
+	 * fr_FR, es_MX es_ES, pt_BR pt_PT. Without that a Canadian or Mexican
+	 * site would read English although its language is there.
 	 *
 	 * @param string $locale Locale to load; the current one when empty (the
 	 *                       change_locale action passes the new one).
@@ -88,12 +92,48 @@ final class AB_MCP_Plugin {
 	 */
 	public static function load_bundled_translations( $locale = '' ) {
 		$locale = is_string( $locale ) && '' !== $locale ? $locale : determine_locale();
-		$file   = AB_MCP_DIR . 'languages/alphabridge-mcp-' . $locale . '.mo';
-		if ( ! is_readable( $file ) ) {
+		$file   = self::bundled_file( $locale );
+		if ( '' === $file ) {
 			return false;
 		}
 		get_translations_for_domain( 'alphabridge-mcp' );
 		return (bool) load_textdomain( 'alphabridge-mcp', $file, $locale );
+	}
+
+	/**
+	 * The main locale of each language with bundled files: it answers for a
+	 * locale of that language that has no file of its own.
+	 */
+	const BUNDLED_FALLBACK = array(
+		'de' => 'de_DE',
+		'fr' => 'fr_FR',
+		'it' => 'it_IT',
+		'es' => 'es_ES',
+		'pt' => 'pt_PT',
+	);
+
+	/**
+	 * The bundled .mo for a locale: its own file, else the main file of its
+	 * language, else '' (nothing bundled). The locale goes into a path, so
+	 * only the form WordPress uses for locales is accepted (de_CH_informal,
+	 * pt_PT_ao90, fr).
+	 *
+	 * @param string $locale Locale.
+	 * @return string Path of a readable file, or ''.
+	 */
+	private static function bundled_file( $locale ) {
+		if ( ! preg_match( '/^([a-z]{2,3})(?:_[A-Za-z0-9]+)*$/', $locale, $parts ) ) {
+			return '';
+		}
+		$own = AB_MCP_DIR . 'languages/alphabridge-mcp-' . $locale . '.mo';
+		if ( is_readable( $own ) ) {
+			return $own;
+		}
+		if ( ! isset( self::BUNDLED_FALLBACK[ $parts[1] ] ) ) {
+			return '';
+		}
+		$main = AB_MCP_DIR . 'languages/alphabridge-mcp-' . self::BUNDLED_FALLBACK[ $parts[1] ] . '.mo';
+		return is_readable( $main ) ? $main : '';
 	}
 
 	/**
