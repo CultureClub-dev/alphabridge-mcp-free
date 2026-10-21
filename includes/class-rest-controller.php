@@ -338,7 +338,7 @@ class AB_MCP_REST_Controller {
 			// OAuth discovery bridge (RFC 9728): an unauthenticated MCP client is
 			// told where this site's protected-resource metadata lives, so
 			// Claude's native "Connect" flow can start from a plain 401 instead
-			// of dead-ending. Only when AlphaBridge Connect is switched on.
+			// of dead-ending. Only when OAuth sign-in is switched on.
 			if ( 401 === (int) $response->get_status()
 				&& class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() ) {
 				$response->header(

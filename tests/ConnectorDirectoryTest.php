@@ -3,7 +3,7 @@
  * The connect card: one panel per assistant.
  *
  * Claude starts in its connector directory: the entry «AlphaBridge MCP for
- * WordPress» connects through the AlphaBridge Connect hub, and the hub signs in
+ * WordPress» connects through the hub of AlphaBridge MCP, and the hub signs in
  * with this site's own login and consent — the OAuth flow. ChatGPT connects
  * with the same flow, straight to this site. With OAuth switched off neither
  * can work, so neither way is offered then.

@@ -306,7 +306,7 @@ final class BundledTranslationsTest extends TestCase {
 	 */
 	const SAME_AS_ENGLISH = array(
 		"list separator\x04, ",
-		'AlphaBridge Connect',
+		'AlphaBridge MCP',
 		"tool group\x04Export",
 		'Plus, Pro, Business',
 		'SEO',

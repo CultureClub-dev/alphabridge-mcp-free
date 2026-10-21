@@ -46,11 +46,11 @@ file exists so the closing step is never guessed.
 
 - [ ] Tag the commit in this repository with the same version.
 - [ ] If the release changes the site contract (the `_meta` self-description),
-      raise the minimum version in the AlphaBridge Connect hub configuration.
+      raise the minimum version in the hub configuration (connect.alphabridge-mcp.com).
 
 ## Version 4.3.0 specifically
 
-4.3.0 is the first release the AlphaBridge Connect hub can link. Its revoke
+4.3.0 is the first release the hub can link. Its revoke
 endpoint and `_meta` self-description are what the hub requires, so the hub's
 configured minimum version is 4.3.0. Publishing an older version after it would
 strand hub connections.

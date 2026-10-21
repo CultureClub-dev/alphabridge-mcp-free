@@ -55,7 +55,7 @@ final class AB_MCP_Plugin {
 
 		add_action( 'rest_api_init', array( $this, 'register_rest' ) );
 
-		// AlphaBridge Connect: the OAuth surface (well-known metadata, consent
+		// OAuth sign-in: the OAuth surface (well-known metadata, consent
 		// page, register/token endpoints) that lets Claude's native "Connect"
 		// button work against this site.
 		AB_MCP_OAuth::boot();
