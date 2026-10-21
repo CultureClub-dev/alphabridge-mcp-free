@@ -1,0 +1,2245 @@
+# French translations of every text of AlphaBridge MCP that a person reads:
+# the settings page, the consent screen, the notices, the refusals and errors
+# an assistant passes on, and the plugin's description in the plugin list.
+# Tool and parameter descriptions and the server instructions are written for
+# the assistant and stay English.
+# Bundled with the plugin; a language pack from translate.wordpress.org takes
+# precedence for every string it translates (AB_MCP_Plugin::load_bundled_translations()).
+# This file is distributed under the same license as the AlphaBridge MCP plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: AlphaBridge MCP 4.6.7\n"
+"PO-Revision-Date: 2026-10-21 12:00+0200\n"
+"Last-Translator: AlphaBridge MCP\n"
+"Language-Team: French\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Domain: alphabridge-mcp\n"
+
+#, php-format
+msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
+msgstr "« %1$s » tombe au moment où les horloges reculent dans le fuseau horaire du site, cette heure locale existe donc deux fois. WordPress planifie les articles selon l'heure locale et la lirait comme « %2$s ». Choisissez une heure en dehors de cette plage, ou indiquez ce décalage."
+
+#, php-format
+msgid "\"%s\" does not exist in the site's timezone: the clocks skip over it. Choose another time."
+msgstr "« %s » n'existe pas dans le fuseau horaire du site : les horloges sautent cette heure. Choisissez une autre heure."
+
+#, php-format
+msgid "\"%s\" exceeds the 8 MB size limit (send less per call; a large file is fetched from a public address with wp_upload_media_from_url)"
+msgstr "« %s » dépasse la limite de 8 Mo (envoyez moins par appel ; un gros fichier se récupère depuis une adresse publique avec wp_upload_media_from_url)"
+
+#, php-format
+msgid "\"%s\" falls outside the years WordPress can store (1 to 9999). Choose a date within them."
+msgstr "« %s » se situe en dehors des années que WordPress peut enregistrer (1 à 9999). Choisissez une date dans cet intervalle."
+
+#, php-format
+msgid "\"%s\" has too many items (max 2000; split them across several calls)"
+msgstr "« %s » contient trop d'éléments (2000 au maximum ; répartissez-les sur plusieurs appels)"
+
+#, php-format
+msgid "\"%s\" must be a number"
+msgstr "« %s » doit être un nombre"
+
+#, php-format
+msgid "\"%s\" must be a string"
+msgstr "« %s » doit être une chaîne de caractères"
+
+#, php-format
+msgid "\"%s\" must be an array/object"
+msgstr "« %s » doit être un tableau ou un objet"
+
+msgid "$49/year"
+msgstr "$49/an"
+
+msgid "$9/month"
+msgstr "$9/mois"
+
+#, php-format
+msgid "%1$s keeps this page in its own database tables, which this plugin's page builder tools do not read; change it in the %2$s editor."
+msgstr "%1$s conserve cette page dans ses propres tables de base de données, que les outils de constructeurs de pages de cette extension ne lisent pas ; modifiez-la dans l'éditeur de %2$s."
+
+#, php-format
+msgid "%1$s of %2$s on"
+msgstr "%1$s sur %2$s activés"
+
+#, php-format
+msgid "%1$s of %2$s tools can run with write access off"
+msgstr "%1$s outils sur %2$s peuvent s'exécuter avec l'accès en écriture désactivé"
+
+#, php-format
+msgid "%1$s of %2$s tools on"
+msgstr "%1$s outils sur %2$s activés"
+
+#, php-format
+msgid "%1$s wants to connect to %2$s"
+msgstr "%1$s souhaite se connecter à %2$s"
+
+#, php-format
+msgid "%d element was read without a measured profile (see its note); its fields may be incomplete."
+msgid_plural "%d elements were read without a measured profile (see their note); their fields may be incomplete."
+msgstr[0] "%d élément a été lu sans profil mesuré (voir sa note) ; ses champs peuvent être incomplets."
+msgstr[1] "%d éléments ont été lus sans profil mesuré (voir leurs notes) ; leurs champs peuvent être incomplets."
+
+#, php-format
+msgctxt "tool badge with a number"
+msgid "%d read"
+msgstr "%d en lecture"
+
+#, php-format
+msgctxt "tool badge with a number"
+msgid "%d write"
+msgstr "%d en écriture"
+
+#, php-format
+msgid "%s ability off"
+msgid_plural "%s abilities off"
+msgstr[0] "%s capacité désactivée"
+msgstr[1] "%s capacités désactivées"
+
+#, php-format
+msgid "%s connection"
+msgid_plural "%s connections"
+msgstr[0] "%s connexion"
+msgstr[1] "%s connexions"
+
+#, php-format
+msgid "%s is not active, so the site shows post_content and this change is visible. If it is activated again, it shows its own copy of the page, without this change."
+msgstr "%s n'est pas actif, le site affiche donc post_content et cette modification est visible. S'il est réactivé, il affichera sa propre copie de la page, sans cette modification."
+
+#, php-format
+msgid "%s is not active: the site shows post_content. Its own copy of the page stays stored and comes back when it is activated."
+msgstr "%s n'est pas actif : le site affiche post_content. Sa propre copie de la page reste enregistrée et revient dès qu'il est activé."
+
+#, php-format
+msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
+msgstr "%s est défini pour cette page mais n'affiche pas de mise en page propre pour elle, le site affiche donc post_content."
+
+#, php-format
+msgid "%s of every Pro and Agency sale you refer, renewals included."
+msgstr "%s de chaque vente Pro et Agency que vous apportez, renouvellements compris."
+
+msgid "(URL + token entered separately)"
+msgstr "(URL + jeton saisis séparément)"
+
+msgid "(for Claude.ai — token included)"
+msgstr "(pour Claude.ai — jeton inclus)"
+
+msgid "(opens in a new tab)"
+msgstr "(ouvre un nouvel onglet)"
+
+msgid "(unknown)"
+msgstr "(inconnu)"
+
+msgctxt "list separator"
+msgid ", "
+msgstr ", "
+
+msgid "60%"
+msgstr "60 %"
+
+msgid "7 days free"
+msgstr "7 jours gratuits"
+
+msgid "A connection is active. Copy the token above now — it is not shown again."
+msgstr "Une connexion est active. Copiez dès maintenant le jeton ci-dessus — il ne sera plus affiché."
+
+msgid "A file cannot be attached to a revision or to another file. Attach it to the post itself (for a revision, the post it belongs to)."
+msgstr "Un fichier ne peut pas être attaché à une révision ni à un autre fichier. Attachez-le à l'article lui-même (pour une révision, à l'article auquel elle appartient)."
+
+msgid "A plugin keeps this post in the trash (a pre_untrash_post filter refused); nothing was written. Restoring it in wp-admin meets the same filter: ask the site administrator which plugin holds it."
+msgstr "Une extension retient cet article dans la corbeille (un filtre pre_untrash_post a refusé) ; rien n'a été écrit. Le restaurer dans wp-admin se heurte au même filtre : demandez à l'administrateur du site quelle extension le retient."
+
+msgid "A separate plugin. Everything in this free plugin is complete on its own and stays fully functional without it."
+msgstr "Une extension distincte. Tout ce que contient cette extension gratuite est complet en soi et reste pleinement fonctionnel sans elle."
+
+msgid "A token in a URL leaks more easily via referrers, proxy logs and history — treat the connector URL like a password."
+msgstr "Un jeton dans une URL fuit plus facilement par les référents, les journaux de proxy et l'historique — traitez l'URL du connecteur comme un mot de passe."
+
+msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
+msgstr "Un nom de fichier valide est requis : transmettez un nom avec son extension de fichier, comme « photo.jpg »."
+
+msgid "AI assistants read and write: posts, pages, media, terms and comments."
+msgstr "Les assistants IA lisent et écrivent : articles, pages, médias, termes et commentaires."
+
+msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
+msgstr "Les assistants IA lisent et écrivent : articles, pages, extensions, thèmes, code et base de données."
+
+msgid "AI assistants read content, media and settings and advise you."
+msgstr "Les assistants IA lisent les contenus, les médias et les réglages, et vous conseillent."
+
+msgid "AIOSEO detected; it keeps its fields in a table of its own, which this tool does not read. They are shown and edited in AIOSEO's panel in the post editor."
+msgstr "AIOSEO détecté ; il conserve ses champs dans sa propre table, que cet outil ne lit pas. Ils s'affichent et se modifient dans le panneau AIOSEO de l'éditeur d'articles."
+
+msgid "AIOSEO stores SEO data in a custom table; writing is not supported by this tool. Its fields are edited in AIOSEO's panel in the post editor."
+msgstr "AIOSEO stocke les données SEO dans une table personnalisée ; cet outil ne prend pas en charge l'écriture. Ses champs se modifient dans le panneau AIOSEO de l'éditeur d'articles."
+
+msgctxt "main group of tools"
+msgid "Abilities of other plugins"
+msgstr "Capacités d'autres extensions"
+
+msgctxt "tool group"
+msgid "Abilities of other plugins"
+msgstr "Capacités d'autres extensions"
+
+#, php-format
+msgid "Abuse protection active: %d requests/min."
+msgstr "Protection contre les abus active : %d requêtes/min."
+
+msgid "Access"
+msgstr "Accès"
+
+msgid "Access level"
+msgstr "Niveau d'accès"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "Actions that other plugins offer to AI assistants"
+msgstr "Actions que d'autres extensions proposent aux assistants IA"
+
+msgctxt "tool label"
+msgid "Activate a plugin"
+msgstr "Activer une extension"
+
+msgctxt "tool label"
+msgid "Activate a plugin network-wide"
+msgstr "Activer une extension sur tout le réseau"
+
+msgctxt "tool label"
+msgid "Add a menu item"
+msgstr "Ajouter un élément de menu"
+
+msgctxt "tool label"
+msgid "Add a widget"
+msgstr "Ajouter un widget"
+
+msgctxt "tool label"
+msgid "Add media from a URL"
+msgstr "Ajouter un média depuis une URL"
+
+#, php-format
+msgid "All in %s"
+msgstr "Tout dans %s"
+
+msgid "All tools"
+msgstr "Tous les outils"
+
+#, php-format
+msgid "All tools in %s"
+msgstr "Tous les outils de %s"
+
+msgid "Allow"
+msgstr "Autoriser"
+
+msgid "AlphaBridge MCP"
+msgstr "AlphaBridge MCP"
+
+msgid "AlphaBridge MCP now only reads on this site."
+msgstr "AlphaBridge MCP ne fait désormais plus que lire sur ce site."
+
+msgid "AlphaBridge MCP on this site"
+msgstr "AlphaBridge MCP sur ce site"
+
+msgid "Also switched off, not offered right now (kept):"
+msgstr "Également désactivées, non proposées pour le moment (conservées) :"
+
+msgid "Application passwords are disabled on this site: WordPress offers them only over HTTPS or in a local environment, and a plugin can switch them off with the wp_is_application_passwords_available filter."
+msgstr "Les mots de passe d'application sont désactivés sur ce site : WordPress ne les propose qu'en HTTPS ou dans un environnement local, et une extension peut les désactiver avec le filtre wp_is_application_passwords_available."
+
+msgid "Application passwords require WordPress 5.6 or later; update WordPress to use them."
+msgstr "Les mots de passe d'application nécessitent WordPress 5.6 ou plus récent ; mettez à jour WordPress pour les utiliser."
+
+msgid "Applies to every connection: Claude, ChatGPT, Cursor and all others."
+msgstr "S'applique à chaque connexion : Claude, ChatGPT, Cursor et toutes les autres."
+
+msgctxt "tool label"
+msgid "Apply a blueprint"
+msgstr "Appliquer un blueprint"
+
+msgid "Approve on this site"
+msgstr "Valider sur ce site"
+
+#, php-format
+msgid "Approving as: %s — the connection can do at most what this account can do."
+msgstr "Validation en tant que : %s — la connexion peut faire au plus ce que ce compte peut faire."
+
+msgid "Assistant"
+msgstr "Assistant"
+
+msgid "Attachment not found: no file in the media library has this id. Look it up with wp_list_media."
+msgstr "Fichier joint introuvable : aucun fichier de la médiathèque n'a cet ID. Recherchez-le avec wp_list_media."
+
+msgid "Bearer token"
+msgstr "Jeton Bearer"
+
+msgid "Become an affiliate"
+msgstr "Devenir affilié"
+
+msgid "Belongs to a page builder one of whose keys stays behind (listed under not_allowed or not_storable, with the reason). A builder's keys, its page template included, are copied together or not at all — caches and credential-like keys aside — so the copy is not marked as a builder page without its layout; it has the content field only. Once those keys can be copied, run wp_duplicate_post again."
+msgstr "Appartient à un constructeur de pages dont l'une des clés reste en arrière (listée sous not_allowed ou not_storable, avec la raison). Les clés d'un constructeur, modèle de page compris, sont copiées ensemble ou pas du tout — hormis les caches et les clés qui ressemblent à des identifiants d'accès — afin que la copie ne soit pas marquée comme page de constructeur sans sa mise en page ; elle n'a que le champ de contenu. Dès que ces clés peuvent être copiées, exécutez à nouveau wp_duplicate_post."
+
+msgid "Belongs to the original, not to its content: edit lock, last editor, former addresses, trash data or pending pings."
+msgstr "Appartient à l'original, pas à son contenu : verrou de modification, dernier éditeur, anciennes adresses, données de corbeille ou pings en attente."
+
+msgctxt "tool group"
+msgid "Blueprint (site structure)"
+msgstr "Blueprint (structure du site)"
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgctxt "tool label"
+msgid "Cancel the upload"
+msgstr "Annuler le téléversement"
+
+msgctxt "tool label"
+msgid "Change a page-builder element"
+msgstr "Modifier un élément de constructeur de pages"
+
+msgctxt "tool label"
+msgid "Change a post or page"
+msgstr "Modifier un article ou une page"
+
+msgctxt "tool label"
+msgid "Change a product"
+msgstr "Modifier un produit"
+
+msgctxt "tool label"
+msgid "Change a term"
+msgstr "Modifier un terme"
+
+msgctxt "tool label"
+msgid "Change a user"
+msgstr "Modifier un compte"
+
+msgctxt "tool label"
+msgid "Change a widget"
+msgstr "Modifier un widget"
+
+msgctxt "tool label"
+msgid "Change an order's status"
+msgstr "Changer l'état d'une commande"
+
+#, php-format
+msgid "Change its texts in the %1$s editor in wp-admin: no tool on this site writes the data of %2$s."
+msgstr "Modifiez ses textes dans l'éditeur de %1$s dans wp-admin : aucun outil de ce site n'écrit les données de %2$s."
+
+#, php-format
+msgid "Change its texts with %s."
+msgstr "Modifiez ses textes avec %s."
+
+msgctxt "tool label"
+msgid "Change media details"
+msgstr "Modifier les détails d'un média"
+
+msgctxt "tool label"
+msgid "Change site settings"
+msgstr "Modifier les réglages du site"
+
+msgctxt "tool label"
+msgid "Change the status of many posts"
+msgstr "Changer l'état de nombreux articles"
+
+msgid "ChatGPT opens this site’s consent page in the same tab. Choose the access level and allow."
+msgstr "ChatGPT ouvre la page de consentement de ce site dans le même onglet. Choisissez le niveau d'accès et autorisez."
+
+msgctxt "tool label"
+msgid "Check site health"
+msgstr "Vérifier la santé du site"
+
+msgid "Claude Code, scripts"
+msgstr "Claude Code, scripts"
+
+msgid "Claude Code, scripts and other clients"
+msgstr "Claude Code, scripts et autres clients"
+
+msgid "Claude asks for your site’s address."
+msgstr "Claude demande l'adresse de votre site."
+
+msgid "Claude.ai connects via a URL that embeds the token in its path. This is currently switched off, so no connector URL is offered yet."
+msgstr "Claude.ai se connecte via une URL qui intègre le jeton dans son chemin. Cette option est actuellement désactivée, aucune URL de connecteur n'est donc encore proposée."
+
+msgid "Claude.ai: open Connectors, add a custom connector and paste the Connector URL. Claude Code: run the command in your project folder. Cursor: paste the config into ~/.cursor/mcp.json."
+msgstr "Claude.ai : ouvrez « Connectors », ajoutez un connecteur personnalisé et collez l'URL du connecteur. Claude Code : exécutez la commande dans le dossier de votre projet. Cursor : collez la configuration dans ~/.cursor/mcp.json."
+
+msgctxt "tool label"
+msgid "Clear caches"
+msgstr "Vider les caches"
+
+msgid "Clear log"
+msgstr "Vider le journal"
+
+msgid "Click Connect, enter this address"
+msgstr "Cliquez sur « Connect », saisissez cette adresse"
+
+msgid "Code editor"
+msgstr "Éditeur de code"
+
+msgid "Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are accepted."
+msgstr "Du code sur ce site (le filtre ab_mcp_oauth_cimd) décide de ce réglage ; actuellement, les applications avec un document de métadonnées sont acceptées."
+
+msgid "Code on this site (the ab_mcp_oauth_cimd filter) decides this setting; right now apps with a metadata document are not accepted."
+msgstr "Du code sur ce site (le filtre ab_mcp_oauth_cimd) décide de ce réglage ; actuellement, les applications avec un document de métadonnées ne sont pas acceptées."
+
+msgid "Comment not found: no comment has this id. Look it up with wp_list_comments."
+msgstr "Commentaire introuvable : aucun commentaire n'a cet ID. Recherchez-le avec wp_list_comments."
+
+msgctxt "tool label"
+msgid "Compare a blueprint with this site"
+msgstr "Comparer un blueprint avec ce site"
+
+msgid "Config for Cursor"
+msgstr "Configuration pour Cursor"
+
+msgid "Connect"
+msgstr "Connecter"
+
+msgid "Connect ChatGPT"
+msgstr "Connecter ChatGPT"
+
+msgid "Connect Claude"
+msgstr "Connecter Claude"
+
+msgid "Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches."
+msgstr "Connectez Claude et d'autres clients MCP directement et en toute sécurité à WordPress. Serveur MCP natif en Streamable HTTP avec des interrupteurs par groupe d'outils."
+
+msgid "Connect Cursor"
+msgstr "Connecter Cursor"
+
+msgid "Connect step by step"
+msgstr "Connecter pas à pas"
+
+#, php-format
+msgid "Connect to %s"
+msgstr "Se connecter à %s"
+
+msgid "Connect your AI assistant"
+msgstr "Connecter votre assistant IA"
+
+msgid "Connecting from Claude is disabled on this site."
+msgstr "La connexion depuis Claude est désactivée sur ce site."
+
+msgid "Connection"
+msgstr "Connexion"
+
+msgid "Connection created."
+msgstr "Connexion créée."
+
+msgid "Connection deleted."
+msgstr "Connexion supprimée."
+
+msgid "Connection not found."
+msgstr "Connexion introuvable."
+
+msgid "Connections"
+msgstr "Connexions"
+
+msgid "Connector URL"
+msgstr "URL du connecteur"
+
+msgid "Content"
+msgstr "Contenus"
+
+msgctxt "main group of tools"
+msgid "Content"
+msgstr "Contenus"
+
+msgid "Content is not valid base64. Pass the file's bytes base64-encoded (a data: URI prefix is allowed), or upload it from a public address with wp_upload_media_from_url."
+msgstr "Le contenu n'est pas du base64 valide. Transmettez les octets du fichier encodés en base64 (un préfixe data: URI est autorisé), ou téléversez le fichier depuis une adresse publique avec wp_upload_media_from_url."
+
+msgid "Content only"
+msgstr "Contenu seul"
+
+msgid "Copied"
+msgstr "Copié"
+
+msgid "Copy"
+msgstr "Copier"
+
+msgid "Copy address"
+msgstr "Copier l'adresse"
+
+msgid "Copy the configuration"
+msgstr "Copier la configuration"
+
+msgid "Could not create a temporary file, so nothing was uploaded; the server's temporary folder is likely not writable. The site administrator or host can fix that (WordPress uses WP_TEMP_DIR or the system's temporary folder)."
+msgstr "Impossible de créer un fichier temporaire, rien n'a donc été téléversé ; le dossier temporaire du serveur n'est probablement pas accessible en écriture. L'administrateur du site ou l'hébergeur peut y remédier (WordPress utilise WP_TEMP_DIR ou le dossier temporaire du système)."
+
+msgid "Could not create the connection."
+msgstr "Impossible de créer la connexion."
+
+msgid "Could not write the downloaded file, so nothing was uploaded; the server's temporary folder is likely full or not writable. The site administrator or host can fix that."
+msgstr "Impossible d'écrire le fichier téléchargé, rien n'a donc été téléversé ; le dossier temporaire du serveur est probablement plein ou non accessible en écriture. L'administrateur du site ou l'hébergeur peut y remédier."
+
+msgid "Could not write the file, so nothing was uploaded; the server's temporary folder is likely full or not writable. The site administrator or host can fix that."
+msgstr "Impossible d'écrire le fichier, rien n'a donc été téléversé ; le dossier temporaire du serveur est probablement plein ou non accessible en écriture. L'administrateur du site ou l'hébergeur peut y remédier."
+
+msgctxt "tool label"
+msgid "Count content"
+msgstr "Compter les contenus"
+
+msgid "Create a connection"
+msgstr "Créer une connexion"
+
+msgctxt "tool label"
+msgid "Create a coupon"
+msgstr "Créer un code promo"
+
+msgctxt "tool label"
+msgid "Create a menu"
+msgstr "Créer un menu"
+
+msgctxt "tool label"
+msgid "Create a post or page"
+msgstr "Créer un article ou une page"
+
+msgctxt "tool label"
+msgid "Create a site in the network"
+msgstr "Créer un site dans le réseau"
+
+msgctxt "tool label"
+msgid "Create a term"
+msgstr "Créer un terme"
+
+msgid "Create a token and send it with every request to this endpoint as “Authorization: Bearer …” — or paste the ready-made configuration."
+msgstr "Créez un jeton et envoyez-le avec chaque requête à ce point d'accès sous la forme « Authorization: Bearer … » — ou collez la configuration toute prête."
+
+msgctxt "tool label"
+msgid "Create a user"
+msgstr "Créer un compte"
+
+msgid "Create an MCP app with this endpoint"
+msgstr "Créer une app MCP avec ce point d'accès"
+
+msgctxt "tool label"
+msgid "Create an application password"
+msgstr "Créer un mot de passe d'application"
+
+msgid "Create connection"
+msgstr "Créer une connexion"
+
+msgctxt "tool label"
+msgid "Create or change a snippet"
+msgstr "Créer ou modifier un extrait de code"
+
+msgctxt "tool group"
+msgid "Cron, transients and site health"
+msgstr "Cron, transients et santé du site"
+
+msgid "Cursor connects with a token. Create one below."
+msgstr "Cursor se connecte avec un jeton. Créez-en un ci-dessous."
+
+msgid "Custom fields, featured image, page template and page builder data were not copied: your account may read the original but not edit it. An account that may edit the original gets them copied too."
+msgstr "Les champs personnalisés, l'image mise en avant, le modèle de page et les données du constructeur de pages n'ont pas été copiés : votre compte peut lire l'original mais pas le modifier. Avec un compte qui peut modifier l'original, ils sont copiés aussi."
+
+msgctxt "tool group"
+msgid "Database"
+msgstr "Base de données"
+
+msgctxt "main group of tools"
+msgid "Database & operations"
+msgstr "Base de données & exploitation"
+
+msgctxt "tool label"
+msgid "Deactivate a plugin"
+msgstr "Désactiver une extension"
+
+msgid "Default: full access for you, no expiry. Choose “Content only” or “Read only” to hand a client a deliberately limited key."
+msgstr "Par défaut : accès complet en votre nom, sans expiration. Choisissez « Contenu seul » ou « Lecture seule » pour remettre à un client une clé volontairement limitée."
+
+msgid "Delete"
+msgstr "Supprimer"
+
+msgctxt "tool label"
+msgid "Delete a comment"
+msgstr "Supprimer un commentaire"
+
+msgctxt "tool label"
+msgid "Delete a plugin"
+msgstr "Supprimer une extension"
+
+msgctxt "tool label"
+msgid "Delete a plugin file"
+msgstr "Supprimer un fichier d'extension"
+
+msgctxt "tool label"
+msgid "Delete a post or page"
+msgstr "Supprimer un article ou une page"
+
+msgctxt "tool label"
+msgid "Delete a snippet"
+msgstr "Supprimer un extrait de code"
+
+msgctxt "tool label"
+msgid "Delete a term"
+msgstr "Supprimer un terme"
+
+msgctxt "tool label"
+msgid "Delete a theme"
+msgstr "Supprimer un thème"
+
+msgctxt "tool label"
+msgid "Delete a theme file"
+msgstr "Supprimer un fichier de thème"
+
+msgctxt "tool label"
+msgid "Delete a transient"
+msgstr "Supprimer un transient"
+
+msgctxt "tool label"
+msgid "Delete a user"
+msgstr "Supprimer un compte"
+
+msgctxt "tool label"
+msgid "Delete an option"
+msgstr "Supprimer une option"
+
+msgctxt "tool label"
+msgid "Delete an uploaded file"
+msgstr "Supprimer un fichier téléversé"
+
+msgid "Delete connection?"
+msgstr "Supprimer la connexion ?"
+
+msgctxt "tool label"
+msgid "Delete expired transients"
+msgstr "Supprimer les transients expirés"
+
+msgctxt "tool label"
+msgid "Delete in the deploy area"
+msgstr "Supprimer dans la zone de déploiement"
+
+msgctxt "tool label"
+msgid "Delete media"
+msgstr "Supprimer un média"
+
+msgid "Derived by the page builder from the layout (a cache, or a count such as Elementor's control usage); the builder works it out again for the copy when the copy is viewed, saved or published."
+msgstr "Dérivé de la mise en page par le constructeur de pages (un cache, ou un décompte comme l'utilisation des contrôles d'Elementor) ; le constructeur le recalcule pour la copie lorsque celle-ci est affichée, enregistrée ou publiée."
+
+msgctxt "tool label"
+msgid "Describe a table"
+msgstr "Décrire une table"
+
+msgctxt "tool label"
+msgid "Detect the SEO plugin"
+msgstr "Détecter l'extension SEO"
+
+#, php-format
+msgid "Direct link: %s"
+msgstr "Lien direct : %s"
+
+msgctxt "tool label"
+msgid "Discard an undo point"
+msgstr "Supprimer un point de restauration"
+
+msgid "Dismiss"
+msgstr "Ignorer"
+
+#, php-format
+msgid "Download failed (HTTP %d). Check that the URL opens the file itself, without a login, or send the content with wp_upload_media."
+msgstr "Échec du téléchargement (HTTP %d). Vérifiez que l'URL ouvre le fichier lui-même, sans authentification, ou envoyez le contenu avec wp_upload_media."
+
+msgctxt "tool label"
+msgid "Duplicate a post or page"
+msgstr "Dupliquer un article ou une page"
+
+msgid "Earn with AlphaBridge."
+msgstr "Gagnez de l'argent avec AlphaBridge."
+
+msgid "Enable and show the connector URL"
+msgstr "Activer et afficher l'URL du connecteur"
+
+msgid "Endpoint URL"
+msgstr "URL du point d'accès"
+
+msgid "Every assistant and client connected to this site."
+msgstr "Chaque assistant et chaque client connecté à ce site."
+
+msgid "Every tool is on until you switch it off here. No AI assistant sees a switched-off tool. Writing tools run only with write access on, and so do the reading ones noted “only with write access”: they read code, files, the database or logs."
+msgstr "Chaque outil est activé jusqu'à ce que vous le désactiviez ici. Aucun assistant IA ne voit un outil désactivé. Les outils d'écriture ne s'exécutent qu'avec l'accès en écriture activé, tout comme les outils de lecture marqués « uniquement avec l'accès en écriture » : ils lisent le code, les fichiers, la base de données ou les journaux."
+
+msgid "Everything this account may do with the tools switched on here, settings and administration included."
+msgstr "Tout ce que ce compte peut faire avec les outils activés ici, réglages et administration compris."
+
+msgid "Expires"
+msgstr "Expire"
+
+msgid "Expires in"
+msgstr "Expire dans"
+
+msgctxt "tool group"
+msgid "Export"
+msgstr "Exportation"
+
+msgctxt "tool label"
+msgid "Export content (WXR)"
+msgstr "Exporter les contenus (WXR)"
+
+msgctxt "tool label"
+msgid "Export the site structure"
+msgstr "Exporter la structure du site"
+
+msgid "Files are added with wp_upload_media or wp_upload_media_from_url; wp_create_post would make an attachment without a file."
+msgstr "Les fichiers s'ajoutent avec wp_upload_media ou wp_upload_media_from_url ; wp_create_post créerait un fichier joint sans fichier."
+
+msgid "Files cannot be duplicated: the copy would have no file, and its title, caption and description would follow the parent's visibility. Upload the file again with wp_upload_media instead."
+msgstr "Les fichiers ne peuvent pas être dupliqués : la copie n'aurait pas de fichier, et son titre, sa légende et sa description suivraient la visibilité du parent. Téléversez plutôt le fichier à nouveau avec wp_upload_media."
+
+msgid "Files have no trash here: WordPress deletes a file for good, together with the file on the server. Delete it with wp_delete_media, or here with force=true."
+msgstr "Les fichiers n'ont pas de corbeille ici : WordPress supprime un fichier définitivement, avec le fichier sur le serveur. Supprimez-le avec wp_delete_media, ou ici avec force=true."
+
+msgid "Find a tool"
+msgstr "Rechercher un outil"
+
+msgid "Find a tool…"
+msgstr "Rechercher un outil…"
+
+msgid "Fine-tuning"
+msgstr "Réglage fin"
+
+msgctxt "tool label"
+msgid "Finish the upload"
+msgstr "Terminer le téléversement"
+
+msgid "Full"
+msgstr "Complet"
+
+#, php-format
+msgid "Full description of %s"
+msgstr "Description complète de %s"
+
+msgid "Give it a name, paste this endpoint as the server URL, choose OAuth and leave the advanced fields empty."
+msgstr "Donnez-lui un nom, collez ce point d'accès comme URL du serveur, choisissez OAuth et laissez vides les champs avancés."
+
+msgid "Guides"
+msgstr "Guides"
+
+msgid "Help"
+msgstr "Aide"
+
+msgid "Holds a PHP object of a class that is not loaded in this request; WordPress cannot store such a value through its meta functions. The plugin that owns the key can set it on the copy."
+msgstr "Contient un objet PHP d'une classe qui n'est pas chargée dans cette requête ; WordPress ne peut pas enregistrer une telle valeur via ses fonctions de métadonnées. L'extension à laquelle appartient la clé peut la définir sur la copie."
+
+#, php-format
+msgid "If the account \"%s\" should be allowed to do this, an administrator can give it a role that allows it under Users."
+msgstr "Si le compte « %s » doit pouvoir le faire, un administrateur peut lui attribuer, sous Comptes, un rôle qui le permet."
+
+msgid "Inactive widgets"
+msgstr "Widgets inactifs"
+
+msgid "Install & Update"
+msgstr "Installation & mise à jour"
+
+msgctxt "tool label"
+msgid "Install a plugin"
+msgstr "Installer une extension"
+
+msgctxt "tool label"
+msgid "Install a plugin from a ZIP"
+msgstr "Installer une extension depuis un ZIP"
+
+msgctxt "tool label"
+msgid "Install a theme"
+msgstr "Installer un thème"
+
+msgctxt "tool label"
+msgid "Install a theme from a ZIP"
+msgstr "Installer un thème depuis un ZIP"
+
+msgctxt "tool group"
+msgid "Install and update"
+msgstr "Installation et mise à jour"
+
+msgid "Insufficient permissions."
+msgstr "Permissions insuffisantes."
+
+#, php-format
+msgid "Invalid arguments: %1$s. Expected schema: %2$s"
+msgstr "Arguments non valides : %1$s. Schéma attendu : %2$s"
+
+msgid "Invalid or missing bearer token. Send the connection's token as \"Authorization: Bearer …\" or connect again; an administrator manages connections under Settings → AlphaBridge MCP."
+msgstr "Jeton Bearer non valide ou manquant. Envoyez le jeton de la connexion sous la forme « Authorization: Bearer … » ou reconnectez-vous ; un administrateur gère les connexions dans Réglages → AlphaBridge MCP."
+
+msgid "Issue a new secret for this connection? The current token stops working immediately."
+msgstr "Émettre un nouveau secret pour cette connexion ? Le jeton actuel cesse immédiatement de fonctionner."
+
+msgid "It appears right after you create the connection, and only then."
+msgstr "Elle apparaît juste après la création de la connexion, et seulement à ce moment-là."
+
+msgid "It will act on this website through the AlphaBridge MCP connection you approve here."
+msgstr "L'application agira sur ce site via la connexion AlphaBridge MCP que vous validez ici."
+
+msgid "Label"
+msgstr "Libellé"
+
+msgid "Label, user, access, expiry (optional)"
+msgstr "Libellé, compte, accès, expiration (facultatif)"
+
+msgctxt "tool group"
+msgid "Large uploads in parts"
+msgstr "Gros téléversements en plusieurs parties"
+
+msgid "Last used"
+msgstr "Dernière utilisation"
+
+msgid "Let Claude run the whole site"
+msgstr "Laissez Claude gérer tout le site"
+
+msgctxt "tool label"
+msgid "List abilities"
+msgstr "Lister les capacités"
+
+msgctxt "tool label"
+msgid "List application passwords"
+msgstr "Lister les mots de passe d'application"
+
+msgctxt "tool label"
+msgid "List comments"
+msgstr "Lister les commentaires"
+
+msgctxt "tool label"
+msgid "List coupons"
+msgstr "Lister les codes promo"
+
+msgctxt "tool label"
+msgid "List cron events"
+msgstr "Lister les événements cron"
+
+msgctxt "tool label"
+msgid "List customers"
+msgstr "Lister les clients"
+
+msgctxt "tool label"
+msgid "List database tables"
+msgstr "Lister les tables de la base de données"
+
+msgctxt "tool label"
+msgid "List media"
+msgstr "Lister les médias"
+
+msgctxt "tool label"
+msgid "List menus"
+msgstr "Lister les menus"
+
+msgctxt "tool label"
+msgid "List orders"
+msgstr "Lister les commandes"
+
+msgctxt "tool label"
+msgid "List plugin files"
+msgstr "Lister les fichiers d'une extension"
+
+msgctxt "tool label"
+msgid "List plugins"
+msgstr "Lister les extensions"
+
+msgctxt "tool label"
+msgid "List post types"
+msgstr "Lister les types de publication"
+
+msgctxt "tool label"
+msgid "List posts and pages"
+msgstr "Lister les articles et les pages"
+
+msgctxt "tool label"
+msgid "List products"
+msgstr "Lister les produits"
+
+msgctxt "tool label"
+msgid "List revisions"
+msgstr "Lister les révisions"
+
+msgctxt "tool label"
+msgid "List snippets"
+msgstr "Lister les extraits de code"
+
+msgctxt "tool label"
+msgid "List taxonomies"
+msgstr "Lister les taxonomies"
+
+msgctxt "tool label"
+msgid "List terms"
+msgstr "Lister les termes"
+
+msgctxt "tool label"
+msgid "List the deploy area"
+msgstr "Lister la zone de déploiement"
+
+msgctxt "tool label"
+msgid "List the sites of the network"
+msgstr "Lister les sites du réseau"
+
+msgctxt "tool label"
+msgid "List theme files"
+msgstr "Lister les fichiers d'un thème"
+
+msgctxt "tool label"
+msgid "List themes"
+msgstr "Lister les thèmes"
+
+msgctxt "tool label"
+msgid "List undo points"
+msgstr "Lister les points de restauration"
+
+msgctxt "tool label"
+msgid "List uploaded files"
+msgstr "Lister les fichiers téléversés"
+
+msgctxt "tool label"
+msgid "List users"
+msgstr "Lister les comptes"
+
+msgctxt "tool label"
+msgid "List widget areas"
+msgstr "Lister les zones de widgets"
+
+msgctxt "tool label"
+msgid "List widgets"
+msgstr "Lister les widgets"
+
+msgid "Log"
+msgstr "Journal"
+
+msgid "Log cleared."
+msgstr "Journal vidé."
+
+msgid "Look at everything this account may see; change nothing."
+msgstr "Voir tout ce que ce compte peut voir ; ne rien modifier."
+
+msgid "Looks like a credential and is never copied over MCP. If the copy needs it, set it in wp-admin."
+msgstr "Ressemble à des identifiants d'accès et n'est jamais copié via MCP. Si la copie en a besoin, définissez-le dans wp-admin."
+
+msgid "Media"
+msgstr "Médias"
+
+msgctxt "tool group"
+msgid "Media"
+msgstr "Médias"
+
+msgid "Meta & App Passwords"
+msgstr "Métadonnées & mots de passe d'application"
+
+msgctxt "tool group"
+msgid "Meta and application passwords"
+msgstr "Métadonnées et mots de passe d'application"
+
+#, php-format
+msgid "Missing required argument(s): %s"
+msgstr "Argument(s) obligatoire(s) manquant(s) : %s"
+
+msgctxt "tool label"
+msgid "Moderate a comment"
+msgstr "Modérer un commentaire"
+
+msgctxt "main group of tools"
+msgid "More tools"
+msgstr "Autres outils"
+
+msgctxt "tool group"
+msgid "Multisite network"
+msgstr "Réseau multisite"
+
+msgid "Needs ChatGPT Plus, Pro, Business, Enterprise or Edu."
+msgstr "Nécessite ChatGPT Plus, Pro, Business, Enterprise ou Edu."
+
+msgid "New connections see the change at once. An assistant that is already connected may load the tool list again only when you connect it again."
+msgstr "Les nouvelles connexions voient la modification immédiatement. Un assistant déjà connecté peut ne recharger la liste des outils que lorsque vous le reconnectez."
+
+msgid "No blocks and no page builder, and post_content is empty. Write the page with wp_update_post."
+msgstr "Ni blocs ni constructeur de pages, et post_content est vide. Écrivez la page avec wp_update_post."
+
+msgid "No blocks and no page builder: post_content is the page, listed as one locked element (classic content). Read and change it with wp_get_post and wp_update_post."
+msgstr "Ni blocs ni constructeur de pages : post_content est la page, listée comme un seul élément verrouillé (classic content). Lisez-la et modifiez-la avec wp_get_post et wp_update_post."
+
+#, php-format
+msgid "No card needed · then %1$s or %2$s · cancel anytime"
+msgstr "Aucune carte bancaire requise · ensuite %1$s ou %2$s · résiliable à tout moment"
+
+msgid "No connections yet — pick your assistant at the top and follow the steps."
+msgstr "Aucune connexion pour l'instant — choisissez votre assistant en haut et suivez les étapes."
+
+msgid "No entries yet."
+msgstr "Aucune entrée pour l'instant."
+
+msgid "No plugin on this site offers abilities yet."
+msgstr "Aucune extension de ce site ne propose encore de capacités."
+
+#, php-format
+msgid "No reader for %1$s on this site yet, so its elements are not listed. copies says where the page is stored, and write_via which tools change it with a visible effect; otherwise change it in the %2$s editor."
+msgstr "Pas encore de lecteur pour %1$s sur ce site, ses éléments ne sont donc pas listés. copies indique où la page est stockée, et write_via quels outils la modifient avec un effet visible ; sinon, modifiez la page dans l'éditeur de %2$s."
+
+#, php-format
+msgid "No such date or time: \"%s\". Give a real day and time of day, as \"Y-m-d H:i:s\" in site time or RFC 3339 with an offset."
+msgstr "Cette date ou cette heure n'existe pas : « %s ». Indiquez un jour et une heure réels, au format « Y-m-d H:i:s » en heure du site ou en RFC 3339 avec un décalage."
+
+msgid "No supported SEO plugin detected: this tool reads the fields of Yoast SEO and Rank Math. With neither active there are no SEO fields to read; the post's title and excerpt are in wp_get_post."
+msgstr "Aucune extension SEO prise en charge détectée : cet outil lit les champs de Yoast SEO et de Rank Math. Si aucune des deux n'est active, il n'y a pas de champs SEO à lire ; le titre et l'extrait de l'article se trouvent dans wp_get_post."
+
+msgid "No tool matches."
+msgstr "Aucun outil ne correspond."
+
+msgid "Note this down now — it is shown in full only once."
+msgstr "Notez-le maintenant — il n'est affiché en entier qu'une seule fois."
+
+msgid "Noted — the plugin will not ask for a review again."
+msgstr "C'est noté — l'extension ne vous demandera plus d'avis."
+
+msgid "Noted. Whether AI assistants may write on this site is shown at the top of this page."
+msgstr "C'est noté. Le haut de cette page indique si les assistants IA peuvent écrire sur ce site."
+
+#, php-format
+msgid "Nothing was written: the meta key \"%s\" holds page-builder data that ends up in the page as markup or code. Writing it takes an account that may store unfiltered HTML (the unfiltered_html capability): on a single site administrators and editors have it, on a multisite network only super admins, and nobody where DISALLOW_UNFILTERED_HTML is set. Connect with such an account, or change the page in the builder's own editor."
+msgstr "Rien n'a été écrit : la clé méta « %s » contient des données de constructeur de pages qui se retrouvent dans la page sous forme de balisage ou de code. Pour l'écrire, il faut un compte autorisé à enregistrer du HTML non filtré (la permission unfiltered_html) : sur un site simple, les administrateurs et les éditeurs l'ont, sur un réseau multisite seuls les super administrateurs, et personne là où DISALLOW_UNFILTERED_HTML est défini. Connectez-vous avec un tel compte, ou modifiez la page dans l'éditeur propre au constructeur."
+
+#, php-format
+msgid "Nothing was written: this page is built with %s, which shows its own data. post_content is only a copy the page does not show, so this change would not appear on the page. Read the page with wp_get_builder_layout."
+msgstr "Rien n'a été écrit : cette page est construite avec %s, qui affiche ses propres données. post_content n'est qu'une copie que la page n'affiche pas, cette modification n'apparaîtrait donc pas sur la page. Lisez la page avec wp_get_builder_layout."
+
+msgctxt "main switch"
+msgid "Off"
+msgstr "Inactif"
+
+msgid "Off: AI assistants only read. For anything they should change, you flip the switch."
+msgstr "Inactif : les assistants IA ne font que lire. Pour tout ce qu'ils doivent modifier, vous actionnez l'interrupteur."
+
+msgid "Off: read only"
+msgstr "Inactif : lecture seule"
+
+msgctxt "main switch"
+msgid "On"
+msgstr "Actif"
+
+#, php-format
+msgid "On approval you are sent to <b>%s</b>. Only continue if you recognise it as the app you are connecting."
+msgstr "Après validation, vous serez redirigé vers <b>%s</b>. Ne continuez que si vous y reconnaissez l'application que vous connectez."
+
+msgid "On this site, tools that read code, files, the database, logs or credentials and were switched off before the update that brought write access stay off until you switch them on here or switch on write access again."
+msgstr "Sur ce site, les outils qui lisent le code, les fichiers, la base de données, les journaux ou des identifiants d'accès et qui étaient désactivés avant la mise à jour ayant introduit l'accès en écriture restent désactivés jusqu'à ce que vous les activiez ici ou que vous réactiviez l'accès en écriture."
+
+msgid "On: full power"
+msgstr "Actif : toute la puissance"
+
+msgid "On: full power. Connected AI assistants read and write on this site."
+msgstr "Actif : toute la puissance. Les assistants IA connectés lisent et écrivent sur ce site."
+
+msgid "Only JPEG, PNG, GIF, WebP and PDF files can be sideloaded from a URL: neither the address nor the server named one of these types. Use an address ending in .jpg, .jpeg, .png, .gif, .webp or .pdf, or convert the file to one of these formats."
+msgstr "Seuls les fichiers JPEG, PNG, GIF, WebP et PDF peuvent être importés depuis une URL : ni l'adresse ni le serveur n'indiquaient l'un de ces types. Utilisez une adresse se terminant par .jpg, .jpeg, .png, .gif, .webp ou .pdf, ou convertissez le fichier dans l'un de ces formats."
+
+msgid "Only JPEG, PNG, GIF, WebP and PDF files can be uploaded: the filename must end in .jpg, .jpeg, .png, .gif, .webp or .pdf. Convert the file to one of these formats."
+msgstr "Seuls les fichiers JPEG, PNG, GIF, WebP et PDF peuvent être téléversés : le nom du fichier doit se terminer par .jpg, .jpeg, .png, .gif, .webp ou .pdf. Convertissez le fichier dans l'un de ces formats."
+
+msgid "Only http(s) URLs are allowed. Pass the file's public http:// or https:// address, or send its content with wp_upload_media."
+msgstr "Seules les URL http(s) sont autorisées. Transmettez l'adresse publique http:// ou https:// du fichier, ou envoyez son contenu avec wp_upload_media."
+
+#, php-format
+msgid "Only standard profile fields are available for user meta: %s. Pass one of them as key, or leave key out to read all of them."
+msgstr "Seuls les champs de profil standard sont disponibles comme métadonnées de compte : %s. Transmettez l'un d'eux comme key, ou omettez key pour les lire tous."
+
+#, php-format
+msgid "Only the first %d elements are listed; raise max_elements (up to 2000) for more."
+msgstr "Seuls les %d premiers éléments sont listés ; augmentez max_elements (jusqu'à 2000) pour en voir plus."
+
+msgid "Open AlphaBridge in Claude’s directory"
+msgstr "Ouvrir AlphaBridge dans le répertoire de Claude"
+
+msgid "Open ChatGPT"
+msgstr "Ouvrir ChatGPT"
+
+msgid "Open ChatGPT’s plugins"
+msgstr "Ouvrir les plugins de ChatGPT"
+
+msgid "Open Claude’s directory"
+msgstr "Ouvrir le répertoire de Claude"
+
+msgid "Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers."
+msgstr "Ouvrez les réglages MCP de Cursor (pour tous les projets : ~/.cursor/mcp.json), collez, enregistrez et rechargez les serveurs."
+
+msgid "Open Settings → AlphaBridge MCP"
+msgstr "Ouvrir Réglages → AlphaBridge MCP"
+
+msgid "Operations (Cron, Transients, Health)"
+msgstr "Exploitation (cron, transients, santé)"
+
+msgctxt "tool label"
+msgid "Optimize database tables"
+msgstr "Optimiser les tables de la base de données"
+
+msgid "Options & Settings"
+msgstr "Options & réglages"
+
+msgid "Origin not allowed: a browser page may call this endpoint only from this site, and a site owner can allow further origins with the ab_mcp_allowed_origins filter. Clients that call from a server send no Origin header."
+msgstr "Origine non autorisée : une page de navigateur ne peut appeler ce point d'accès que depuis ce site, et le propriétaire du site peut autoriser d'autres origines avec le filtre ab_mcp_allowed_origins. Les clients qui appellent depuis un serveur n'envoient pas d'en-tête Origin."
+
+msgid "Other"
+msgstr "Autre"
+
+msgctxt "tool group"
+msgid "Other"
+msgstr "Autres"
+
+msgid "Over 120 tools on this site"
+msgstr "Plus de 120 outils sur ce site"
+
+msgctxt "tool group"
+msgid "PHP snippets (Code Snippets, WPCode)"
+msgstr "Extraits PHP (Code Snippets, WPCode)"
+
+msgid "Page builder data holds markup, which only accounts with the unfiltered_html capability may store (administrators; on a multisite network, super admins). A builder's keys, its page template included, are copied together or not at all, so the copy has the content field only, which for builders that render from post meta holds at most a copy of the text. To copy the layout, run wp_duplicate_post with such an account."
+msgstr "Les données de constructeur de pages contiennent du balisage, que seuls les comptes disposant de la permission unfiltered_html peuvent enregistrer (les administrateurs ; sur un réseau multisite, les super administrateurs). Les clés d'un constructeur, modèle de page compris, sont copiées ensemble ou pas du tout, la copie n'a donc que le champ de contenu, qui, pour les constructeurs dont le rendu se fait à partir des métadonnées d'article, contient au mieux une copie du texte. Pour copier la mise en page, exécutez wp_duplicate_post avec un tel compte."
+
+msgid "Page builder data holds markup, which only accounts with the unfiltered_html capability may store, and this site gives that capability to no account, administrators included: it sets DISALLOW_UNFILTERED_HTML in wp-config.php. A builder's keys, its page template included, are copied together or not at all, so the copy has the content field only, which for builders that render from post meta holds at most a copy of the text. wp_duplicate_post cannot copy the layout on this site; where the page builder offers its own copy or template function in wp-admin, use that."
+msgstr "Les données de constructeur de pages contiennent du balisage, que seuls les comptes disposant de la permission unfiltered_html peuvent enregistrer, et ce site n'accorde cette permission à aucun compte, administrateurs compris : il définit DISALLOW_UNFILTERED_HTML dans wp-config.php. Les clés d'un constructeur, modèle de page compris, sont copiées ensemble ou pas du tout, la copie n'a donc que le champ de contenu, qui, pour les constructeurs dont le rendu se fait à partir des métadonnées d'article, contient au mieux une copie du texte. wp_duplicate_post ne peut pas copier la mise en page sur ce site ; si le constructeur de pages propose sa propre fonction de copie ou de modèle dans wp-admin, utilisez-la."
+
+msgctxt "tool group"
+msgid "Page builders"
+msgstr "Constructeurs de pages"
+
+msgid "Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it."
+msgstr "Transmettez cela aimablement à la personne pour laquelle vous travaillez, avec les étapes et le lien, et réessayez une fois que c'est fait ; ne cherchez pas à le contourner."
+
+msgid "Paste it into Cursor"
+msgstr "Le coller dans Cursor"
+
+msgctxt "tool group"
+msgid "Plugin files and uploads"
+msgstr "Fichiers d'extensions et téléversements"
+
+msgctxt "tool group"
+msgid "Plugins and themes"
+msgstr "Extensions et thèmes"
+
+msgid "Plugins offer their actions to AI assistants as abilities (WordPress Abilities API). With write access on, every ability runs, reading or writing, unless you switch it off here; each one also checks the rights of the connected account."
+msgstr "Les extensions proposent leurs actions aux assistants IA sous forme de capacités (Abilities API de WordPress). Avec l'accès en écriture activé, chaque capacité s'exécute, en lecture comme en écriture, sauf si vous la désactivez ici ; chacune vérifie en outre les droits du compte connecté."
+
+msgctxt "main group of tools"
+msgid "Plugins, themes & code"
+msgstr "Extensions, thèmes & code"
+
+msgid "Plus, Pro, Business"
+msgstr "Plus, Pro, Business"
+
+msgid "Post not found: no post has this id. Look it up with wp_list_posts or wp_search."
+msgstr "Article introuvable : aucun article n'a cet ID. Recherchez-le avec wp_list_posts ou wp_search."
+
+msgid "Posts & Pages"
+msgstr "Articles & pages"
+
+msgctxt "tool group"
+msgid "Posts and pages"
+msgstr "Articles et pages"
+
+msgid "Powered by AlphaBridge MCP — the connection token is stored only as a hash and never shown again."
+msgstr "Fourni par AlphaBridge MCP — le jeton de connexion n'est stocké que sous forme de hachage et n'est plus jamais affiché."
+
+msgctxt "tool label"
+msgid "Preview a deploy"
+msgstr "Prévisualiser un déploiement"
+
+msgid "Products, orders, coupons and customers"
+msgstr "Produits, commandes, codes promo et clients"
+
+msgid "Protected key of another plugin. Copied are page builder data and the keys WordPress keeps for the content itself (page template, featured image, removed hooked blocks); a site can allow further keys with the ab_mcp_duplicate_copy_protected_meta filter."
+msgstr "Clé protégée d'une autre extension. Sont copiées les données de constructeur de pages et les clés que WordPress conserve pour le contenu lui-même (modèle de page, image mise en avant, blocs accrochés retirés) ; un site peut autoriser d'autres clés avec le filtre ab_mcp_duplicate_copy_protected_meta."
+
+#, php-format
+msgid "Rate limit reached (per minute): at most %d tool calls per minute for each account. Wait until the next minute, then continue."
+msgstr "Limite de débit atteinte (par minute) : au maximum %d appels d'outils par minute pour chaque compte. Attendez la minute suivante, puis continuez."
+
+msgid "Read"
+msgstr "Lecture seule"
+
+msgctxt "tool label"
+msgid "Read SEO title and description"
+msgstr "Lire le titre et la description SEO"
+
+msgctxt "tool label"
+msgid "Read a comment"
+msgstr "Lire un commentaire"
+
+msgctxt "tool label"
+msgid "Read a file in the deploy area"
+msgstr "Lire un fichier dans la zone de déploiement"
+
+msgctxt "tool label"
+msgid "Read a media file"
+msgstr "Lire un fichier média"
+
+msgctxt "tool label"
+msgid "Read a menu"
+msgstr "Lire un menu"
+
+msgctxt "tool label"
+msgid "Read a page-builder layout"
+msgstr "Lire la mise en page d'un constructeur de pages"
+
+msgctxt "tool label"
+msgid "Read a plugin file"
+msgstr "Lire un fichier d'extension"
+
+msgctxt "tool label"
+msgid "Read a post or page"
+msgstr "Lire un article ou une page"
+
+msgctxt "tool label"
+msgid "Read a product"
+msgstr "Lire un produit"
+
+msgctxt "tool label"
+msgid "Read a snippet"
+msgstr "Lire un extrait de code"
+
+msgctxt "tool label"
+msgid "Read a term"
+msgstr "Lire un terme"
+
+msgctxt "tool label"
+msgid "Read a theme file"
+msgstr "Lire un fichier de thème"
+
+msgctxt "tool label"
+msgid "Read a user"
+msgstr "Lire un compte"
+
+msgctxt "tool label"
+msgid "Read an order"
+msgstr "Lire une commande"
+
+msgctxt "tool label"
+msgid "Read an uploaded file"
+msgstr "Lire un fichier téléversé"
+
+msgid "Read only"
+msgstr "Lecture seule"
+
+msgctxt "tool label"
+msgid "Read post meta"
+msgstr "Lire les métadonnées d'article"
+
+msgctxt "tool label"
+msgid "Read profile fields"
+msgstr "Lire les champs de profil"
+
+msgctxt "tool label"
+msgid "Read site settings"
+msgstr "Lire les réglages du site"
+
+msgctxt "tool label"
+msgid "Read term meta"
+msgstr "Lire les métadonnées de terme"
+
+msgctxt "tool label"
+msgid "Read the error log"
+msgstr "Lire le journal d'erreurs"
+
+msgid "Read, and change or delete posts, pages, media, terms and comments; no theme or plugin files and no site settings."
+msgstr "Lire, et modifier ou supprimer des articles, pages, médias, termes et commentaires ; ni fichiers de thème ou d'extension, ni réglages du site."
+
+msgctxt "tool badge"
+msgid "Reads"
+msgstr "Lecture"
+
+msgid "Recent tool calls"
+msgstr "Derniers appels d'outils"
+
+msgctxt "tool label"
+msgid "Refresh permalinks"
+msgstr "Actualiser les permaliens"
+
+msgctxt "tool label"
+msgid "Remove a menu item"
+msgstr "Retirer un élément de menu"
+
+msgctxt "tool label"
+msgid "Remove a widget"
+msgstr "Retirer un widget"
+
+msgctxt "tool label"
+msgid "Reply to a comment"
+msgstr "Répondre à un commentaire"
+
+msgctxt "tool label"
+msgid "Restore a revision"
+msgstr "Restaurer une révision"
+
+msgid "Revisions are available only to an account that may edit the post. Connect with such an account, such as an editor or an administrator."
+msgstr "Les révisions ne sont disponibles que pour un compte qui peut modifier l'article. Connectez-vous avec un tel compte, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Revisions are listed per post, and only for an account that may edit that post: pass its id as parent."
+msgstr "Les révisions sont listées par article, et uniquement pour un compte qui peut modifier cet article : transmettez son ID comme parent."
+
+msgid "Revisions cannot be searched; use wp_list_revisions on a post you may edit."
+msgstr "Les révisions ne peuvent pas être recherchées ; utilisez wp_list_revisions sur un article que vous pouvez modifier."
+
+msgctxt "tool label"
+msgid "Revoke an application password"
+msgstr "Révoquer un mot de passe d'application"
+
+msgid "Rotate"
+msgstr "Renouveler"
+
+msgid "Rotate re-issues a connection’s token (the old one stops working at once). Delete removes it."
+msgstr "« Renouveler » émet un nouveau jeton pour une connexion (l'ancien cesse aussitôt de fonctionner). « Supprimer » la retire."
+
+msgctxt "tool label"
+msgid "Run a read-only query"
+msgstr "Exécuter une requête en lecture seule"
+
+msgctxt "tool label"
+msgid "Run an ability"
+msgstr "Exécuter une capacité"
+
+msgid "SEO"
+msgstr "SEO"
+
+msgctxt "tool group"
+msgid "SEO"
+msgstr "SEO"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Save changes"
+msgstr "Enregistrer les modifications"
+
+msgid "Saved."
+msgstr "Enregistré."
+
+msgid "Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect)."
+msgstr "Enregistré. Les clients peuvent mettre en cache la liste des outils qu'ils ont chargée. Si la modification n'apparaît pas dans un client connecté, actualisez sa liste des outils ou reconnectez-le (Claude : dans « Connectors », actualisez la liste des outils de ce connecteur ou déconnectez-le puis reconnectez-le ; Claude Code : /mcp, puis reconnecter)."
+
+msgctxt "tool label"
+msgid "Schedule a cron event"
+msgstr "Planifier un événement cron"
+
+msgid "Search & Bulk Actions"
+msgstr "Recherche & actions groupées"
+
+msgctxt "tool group"
+msgid "Search and bulk actions"
+msgstr "Recherche et actions groupées"
+
+msgctxt "tool label"
+msgid "Search and replace across the site"
+msgstr "Rechercher et remplacer sur tout le site"
+
+msgid "Search and replace with preview"
+msgstr "Rechercher et remplacer avec aperçu"
+
+msgctxt "tool label"
+msgid "Search content"
+msgstr "Rechercher dans les contenus"
+
+msgctxt "tool label"
+msgid "Send a part of the upload"
+msgstr "Envoyer une partie du téléversement"
+
+msgctxt "tool label"
+msgid "Set SEO title and description"
+msgstr "Définir le titre et la description SEO"
+
+msgctxt "tool label"
+msgid "Set a transient"
+msgstr "Définir un transient"
+
+msgctxt "tool label"
+msgid "Set an option"
+msgstr "Définir une option"
+
+msgctxt "tool label"
+msgid "Set post meta"
+msgstr "Définir des métadonnées d'article"
+
+msgctxt "tool label"
+msgid "Set term meta"
+msgstr "Définir des métadonnées de terme"
+
+msgctxt "tool label"
+msgid "Set user meta"
+msgstr "Définir des métadonnées de compte"
+
+msgctxt "tool group"
+msgid "Settings and options"
+msgstr "Réglages et options"
+
+msgid "Settings whose key looks like a credential (an API key, token, secret or password) are not shown; hidden_keys names them per widget. They stay stored unchanged and are managed in the widget's own form in wp-admin under Appearance › Widgets."
+msgstr "Les réglages dont la clé ressemble à des identifiants d'accès (une clé d'API, un jeton, un secret ou un mot de passe) ne sont pas affichés ; hidden_keys les nomme pour chaque widget. Ils restent enregistrés sans modification et se gèrent dans le formulaire propre du widget, dans wp-admin sous Apparence › Widgets."
+
+msgid "Setup guide"
+msgstr "Guide de configuration"
+
+msgid "Setup, every tool and examples."
+msgstr "Configuration, tous les outils et des exemples."
+
+msgctxt "main group of tools"
+msgid "Shop (WooCommerce)"
+msgstr "Boutique (WooCommerce)"
+
+msgctxt "tool label"
+msgid "Show available updates"
+msgstr "Afficher les mises à jour disponibles"
+
+msgctxt "tool label"
+msgid "Show the environment"
+msgstr "Afficher l'environnement"
+
+msgid "Sign in here and approve"
+msgstr "Se connecter ici et valider"
+
+msgid "Sign in to ChatGPT and open the plugins page."
+msgstr "Connectez-vous à ChatGPT et ouvrez la page des plugins."
+
+msgid "Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of Settings → AlphaBridge MCP, at the site owner's own risk."
+msgstr "Depuis cette mise à jour, chaque site démarre avec l'accès en écriture désactivé : les assistants IA peuvent lire les contenus, les médias, les termes, les commentaires, les réglages et la structure du site ; tout outil qui crée, modifie ou supprime est refusé, de même que les outils de lecture marqués « uniquement avec l'accès en écriture » sous « Réglage fin », qui lisent le code, les fichiers, la base de données, les journaux ou des identifiants d'accès. Pour que les assistants IA puissent à nouveau écrire, un administrateur active l'accès en écriture en haut de Réglages → AlphaBridge MCP, aux risques du propriétaire du site."
+
+msgctxt "main group of tools"
+msgid "Site & users"
+msgstr "Site & comptes"
+
+msgctxt "tool group"
+msgid "Site Deploy (FTP/SFTP)"
+msgstr "Site Deploy (FTP/SFTP)"
+
+msgid "Something went wrong. Please reload and try again."
+msgstr "Une erreur s'est produite. Veuillez recharger la page et réessayer."
+
+msgctxt "tool label"
+msgid "Start a large upload"
+msgstr "Commencer un gros téléversement"
+
+msgid "Status"
+msgstr "État"
+
+msgid "Status must be approve, hold, spam or trash."
+msgstr "L'état doit être approve, hold, spam ou trash."
+
+msgid "Step-by-step guide"
+msgstr "Guide pas à pas"
+
+msgctxt "tool label"
+msgid "Switch a snippet on or off"
+msgstr "Activer ou désactiver un extrait de code"
+
+msgid "Switch on write access?"
+msgstr "Activer l'accès en écriture ?"
+
+msgid "Switch single tools on and off"
+msgstr "Activer et désactiver les outils un par un"
+
+msgctxt "tool label"
+msgid "Switch the theme"
+msgstr "Changer de thème"
+
+msgid "Switching on write access switches every tool on; afterwards you can switch single tools off under Fine-tuning."
+msgstr "L'activation de l'accès en écriture active tous les outils ; vous pouvez ensuite désactiver des outils un par un sous « Réglage fin »."
+
+msgid "Switching on write access switches everything here on; what you switch off afterwards stays off until write access is switched on the next time."
+msgstr "L'activation de l'accès en écriture active tout ici ; ce que vous désactivez ensuite reste désactivé jusqu'à la prochaine activation de l'accès en écriture."
+
+msgid "System & Maintenance"
+msgstr "Système & maintenance"
+
+msgctxt "tool group"
+msgid "System and maintenance"
+msgstr "Système et maintenance"
+
+msgid "Take back changes of AI assistants"
+msgstr "Annuler les modifications des assistants IA"
+
+msgid "Taxonomies & Comments"
+msgstr "Taxonomies & commentaires"
+
+msgid "Term not found: no term has this id. Look it up with wp_list_terms."
+msgstr "Terme introuvable : aucun terme n'a cet ID. Recherchez-le avec wp_list_terms."
+
+msgid "Term not found: no term of this taxonomy has this id. Look it up with wp_list_terms."
+msgstr "Terme introuvable : aucun terme de cette taxonomie n'a cet ID. Recherchez-le avec wp_list_terms."
+
+msgctxt "tool group"
+msgid "Terms and comments"
+msgstr "Termes et commentaires"
+
+msgctxt "tool label"
+msgid "Test the deploy connection"
+msgstr "Tester la connexion de déploiement"
+
+msgid "That address is on your own computer, where any program can use it, so the app's name proves nothing here. Only continue if you started this connection yourself just now."
+msgstr "Cette adresse se trouve sur votre propre ordinateur, où n'importe quel programme peut l'utiliser ; le nom de l'application ne prouve donc rien ici. Ne continuez que si vous venez vous-même de lancer cette connexion."
+
+#, php-format
+msgid "The %s data was copied byte for byte; ids inside it were not renewed."
+msgstr "Les données de %s ont été copiées octet par octet ; les ID qu'elles contiennent n'ont pas été renouvelés."
+
+msgid "The Elementor data of the original is not valid JSON; it was copied as it is, element ids unchanged."
+msgstr "Les données Elementor de l'original ne sont pas du JSON valide ; elles ont été copiées telles quelles, avec les ID des éléments inchangés."
+
+#, php-format
+msgid "The Elementor element ids could not be renewed (%s); the layout was copied as it is."
+msgstr "Les ID des éléments Elementor n'ont pas pu être renouvelés (%s) ; la mise en page a été copiée telle quelle."
+
+msgid "The Elementor layout could not be encoded again; it was copied as it is, element ids unchanged."
+msgstr "La mise en page Elementor n'a pas pu être encodée à nouveau ; elle a été copiée telle quelle, avec les ID des éléments inchangés."
+
+msgid "The URL returned no content. Check that it opens the file itself, or send the content with wp_upload_media."
+msgstr "L'URL n'a renvoyé aucun contenu. Vérifiez qu'elle ouvre le fichier lui-même, ou envoyez le contenu avec wp_upload_media."
+
+#, php-format
+msgid "The account of this connection lacks the capability \"%2$s\" that the tool \"%1$s\" needs."
+msgstr "Le compte de cette connexion n'a pas la permission « %2$s » dont l'outil « %1$s » a besoin."
+
+#, php-format
+msgid "The app identifies itself with a document on %s; its name above comes from there."
+msgstr "L'application s'identifie avec un document sur %s ; son nom ci-dessus en provient."
+
+msgid "The approval expired. Please try connecting again."
+msgstr "La validation a expiré. Veuillez réessayer de vous connecter."
+
+msgid "The built_with filter needs the database, which is not available here. List without built_with and read each post's built_with with wp_get_post."
+msgstr "Le filtre built_with a besoin de la base de données, qui n'est pas disponible ici. Listez sans built_with et lisez le built_with de chaque article avec wp_get_post."
+
+#, php-format
+msgid "The change is visible now, but %1$s keeps its own copy of this page and restores it the next time someone saves the page in %2$s, so this change will be lost then. To keep it, make the same change in the %3$s editor."
+msgstr "La modification est visible maintenant, mais %1$s conserve sa propre copie de cette page et la rétablit la prochaine fois que quelqu'un enregistre la page dans %2$s ; cette modification sera alors perdue. Pour la conserver, faites la même modification dans l'éditeur de %3$s."
+
+msgid "The connection could not be started. Please try again."
+msgstr "La connexion n'a pas pu être lancée. Veuillez réessayer."
+
+#, php-format
+msgid "The date %s is ahead: saving would take this published post off the site until then. To schedule it, pass status \"future\" with a \"date\" at least five minutes ahead; to keep it published, pass a \"date\" that is not ahead."
+msgstr "La date %s est dans le futur : l'enregistrement retirerait cet article publié du site jusqu'à cette date. Pour le planifier, transmettez l'état « future » avec une « date » au moins cinq minutes dans le futur ; pour qu'il reste publié, transmettez une « date » qui n'est pas dans le futur."
+
+msgid "The file exceeds the allowed size (20 MB unless the site sets another limit with the ab_mcp_upload_max_bytes filter). Use a smaller file, or ask the site administrator to raise the limit."
+msgstr "Le fichier dépasse la taille autorisée (20 Mo, sauf si le site fixe une autre limite avec le filtre ab_mcp_upload_max_bytes). Utilisez un fichier plus petit, ou demandez à l'administrateur du site de relever la limite."
+
+msgid "The keys in meta_altered_on_write were stored differently from the original, usually by a sanitize filter of another plugin."
+msgstr "Les clés de meta_altered_on_write ont été enregistrées différemment de l'original, généralement par un filtre de nettoyage d'une autre extension."
+
+msgid "The listing “AlphaBridge MCP for WordPress” opens in Claude."
+msgstr "L'entrée « AlphaBridge MCP for WordPress » s'ouvre dans Claude."
+
+#, php-format
+msgid "The original is a revision, so its copy is a revision of the same post, and WordPress writes the custom fields of a revision to that post. None were copied, so the post stays as it is. To copy the page with its custom fields and layout, duplicate the post it belongs to (id %d)."
+msgstr "L'original est une révision, sa copie est donc une révision du même article, et WordPress écrit les champs personnalisés d'une révision dans cet article. Aucun n'a été copié, l'article reste donc tel quel. Pour copier la page avec ses champs personnalisés et sa mise en page, dupliquez l'article auquel elle appartient (ID %d)."
+
+msgid "The original's post_content_filtered (where SeedProd, for one, keeps its layout) was not copied: like page builder data, it needs the right to edit the original and the unfiltered_html capability. Run wp_duplicate_post with such an account to copy it."
+msgstr "Le post_content_filtered de l'original (où SeedProd, par exemple, conserve sa mise en page) n'a pas été copié : comme les données de constructeur de pages, il nécessite le droit de modifier l'original et la permission unfiltered_html. Exécutez wp_duplicate_post avec un tel compte pour le copier."
+
+msgid "The original's post_content_filtered (where SeedProd, for one, keeps its layout) was not copied: like page builder data, it needs the unfiltered_html capability, which this site gives to no account, administrators included (DISALLOW_UNFILTERED_HTML in wp-config.php). Where the page builder offers its own copy or template function in wp-admin, use that."
+msgstr "Le post_content_filtered de l'original (où SeedProd, par exemple, conserve sa mise en page) n'a pas été copié : comme les données de constructeur de pages, il nécessite la permission unfiltered_html, que ce site n'accorde à aucun compte, administrateurs compris (DISALLOW_UNFILTERED_HTML dans wp-config.php). Si le constructeur de pages propose sa propre fonction de copie ou de modèle dans wp-admin, utilisez-la."
+
+msgid "The other fields still change: send the call again without this key. A site owner can take a key off this list with the ab_mcp_builder_markup_meta_keys filter."
+msgstr "Les autres champs restent modifiables : renvoyez l'appel sans cette clé. Le propriétaire du site peut retirer une clé de cette liste avec le filtre ab_mcp_builder_markup_meta_keys."
+
+msgid "The parent must be a post id: pass an integer, 0 for none."
+msgstr "Le parent doit être un ID d'article : transmettez un entier, 0 pour aucun."
+
+msgid "The parent post does not exist. Look it up with wp_list_posts, or pass 0 to attach the file to no post."
+msgstr "L'article parent n'existe pas. Recherchez-le avec wp_list_posts, ou transmettez 0 pour n'attacher le fichier à aucun article."
+
+msgid "The post could not be moved to the trash; a plugin may keep it out (WordPress asks the pre_trash_post filter first). Check it with wp_get_post, then ask the site administrator, or delete it for good with force=true, which cannot be undone."
+msgstr "L'article n'a pas pu être placé dans la corbeille ; une extension l'en empêche peut-être (WordPress consulte d'abord le filtre pre_trash_post). Vérifiez-le avec wp_get_post, puis demandez à l'administrateur du site, ou supprimez-le définitivement avec force=true, ce qui est irréversible."
+
+msgid "The post is already in the trash. Pass force=true to delete it for good."
+msgstr "L'article est déjà dans la corbeille. Transmettez force=true pour le supprimer définitivement."
+
+#, php-format
+msgid "The post would be scheduled for %s, less than five minutes ahead. So close to its date, WordPress would publish it early if it were saved again within the last minute — by a save still running, or by another plugin saving it too. To schedule it, pass a \"date\" at least five minutes ahead; to publish it now, pass status \"publish\" with a \"date\" that is not ahead, such as the current time."
+msgstr "L'article serait planifié pour le %s, moins de cinq minutes dans le futur. Si près de sa date, WordPress le publierait trop tôt s'il était de nouveau enregistré au cours de la dernière minute — par un enregistrement encore en cours, ou par une autre extension qui l'enregistre aussi. Pour le planifier, transmettez une « date » au moins cinq minutes dans le futur ; pour le publier maintenant, transmettez l'état « publish » avec une « date » qui n'est pas dans le futur, comme l'heure actuelle."
+
+msgid "The redirect address is not registered for this client."
+msgstr "L'adresse de redirection n'est pas enregistrée pour ce client."
+
+msgid "The remote file exceeds the allowed size (20 MB unless the site sets another limit with the ab_mcp_upload_max_bytes filter). Use a smaller file, or ask the site administrator to raise the limit."
+msgstr "Le fichier distant dépasse la taille autorisée (20 Mo, sauf si le site fixe une autre limite avec le filtre ab_mcp_upload_max_bytes). Utilisez un fichier plus petit, ou demandez à l'administrateur du site de relever la limite."
+
+msgid "The same app connected again later. Compare “Last used” before you delete this older connection."
+msgstr "La même application s'est reconnectée plus tard. Comparez « Dernière utilisation » avant de supprimer cette ancienne connexion."
+
+msgid "The server returned a disallowed content type (e.g. HTML or SVG); often the URL opens a page about the file rather than the file. Use the direct address of a JPEG, PNG, GIF, WebP or PDF file."
+msgstr "Le serveur a renvoyé un type de contenu non autorisé (p. ex. HTML ou SVG) ; souvent, l'URL ouvre une page consacrée au fichier plutôt que le fichier lui-même. Utilisez l'adresse directe d'un fichier JPEG, PNG, GIF, WebP ou PDF."
+
+msgid "The token is never stored in readable form. Save it somewhere safe (e.g. a password manager). If you lose it, rotate the connection to get a new one."
+msgstr "Le jeton n'est jamais stocké sous forme lisible. Conservez-le en lieu sûr (p. ex. dans un gestionnaire de mots de passe). Si vous le perdez, renouvelez la connexion pour en obtenir un nouveau."
+
+msgid "The token is shown in full only once, right after you create it. Rotate or delete it under Your connections."
+msgstr "Le jeton n'est affiché en entier qu'une seule fois, juste après sa création. Renouvelez-le ou supprimez-le sous « Vos connexions »."
+
+#, php-format
+msgid "The tool \"%s\" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here."
+msgstr "L'outil « %s » n'existe pas sur ce site : il fait partie d'AlphaBridge MCP Pro, une extension distincte qui n'est pas active ici."
+
+#, php-format
+msgid "The tool \"%s\" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here."
+msgstr "L'outil « %s » n'existe pas sur ce site : il fait partie de la formule Agency d'AlphaBridge MCP Pro, une extension distincte qui n'est pas active ici."
+
+#, php-format
+msgid "The tool \"%s\" is switched off in the fine-tuning of AlphaBridge MCP on this site."
+msgstr "L'outil « %s » est désactivé dans le réglage fin d'AlphaBridge MCP sur ce site."
+
+msgid "The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator."
+msgstr "L'outil a échoué avec une erreur interne, il n'a donc peut-être pas terminé. L'erreur elle-même a été consignée dans le journal d'AlphaBridge MCP (l'option ab_mcp_audit), et non dans cette réponse, car elle peut mentionner des chemins du serveur. Vérifiez le résultat avec un outil de lecture avant de rappeler l'outil ; si l'échec persiste, demandez à l'administrateur du site."
+
+msgid "Theme and plugin files, database, users, menus"
+msgstr "Fichiers de thèmes et d'extensions, base de données, comptes, menus"
+
+msgid "This URL points to a private or disallowed host and was blocked: WordPress downloads only from public hosts. Put the file on a public address, or send its content with wp_upload_media."
+msgstr "Cette URL pointe vers un hôte privé ou non autorisé et a été bloquée : WordPress ne télécharge que depuis des hôtes publics. Placez le fichier à une adresse publique, ou envoyez son contenu avec wp_upload_media."
+
+#, php-format
+msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
+msgstr "Cette connexion a le niveau d'accès « %2$s », qui n'inclut pas l'outil « %1$s »."
+
+msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder's layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them."
+msgstr "Cette clé méta est protégée : les clés qui commencent par « _ », que WordPress marque comme protégées ou qui ressemblent à des identifiants d'accès ne sont pas lues par cet outil. Lisez la mise en page d'un constructeur de pages avec wp_get_builder_layout et les champs SEO avec wp_seo_get ; les autres clés protégées relèvent de l'extension à laquelle elles appartiennent."
+
+msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them."
+msgstr "Cette clé méta est protégée : les clés qui commencent par « _ », que WordPress marque comme protégées ou qui ressemblent à des identifiants d'accès ne sont pas lues par cet outil ; elles relèvent de l'extension à laquelle elles appartiennent."
+
+#, php-format
+msgid "This page looks built with %s, which may show its own data rather than post_content, so this change may not be visible. Check the page; to change what it shows, edit it in the builder."
+msgstr "Cette page semble construite avec %s, qui affiche peut-être ses propres données plutôt que post_content ; cette modification n'est donc peut-être pas visible. Vérifiez la page ; pour modifier ce qu'elle affiche, modifiez-la dans le constructeur."
+
+#, php-format
+msgid "This post is dated %s, which is ahead, so WordPress would keep it scheduled instead of publishing it. To publish it now, pass a \"date\" that is not ahead as well, such as the current time; to schedule it, pass status \"future\" with a \"date\" at least five minutes ahead."
+msgstr "Cet article est daté du %s, une date dans le futur : WordPress le garderait donc planifié au lieu de le publier. Pour le publier maintenant, transmettez aussi une « date » qui n'est pas dans le futur, comme l'heure actuelle ; pour le planifier, transmettez l'état « future » avec une « date » au moins cinq minutes dans le futur."
+
+msgid "This post is password-protected. Its text is available over MCP only to an account that may edit the post: connect with such an account."
+msgstr "Cet article est protégé par mot de passe. Son texte n'est disponible via MCP que pour un compte qui peut modifier l'article : connectez-vous avec un tel compte."
+
+#, php-format
+msgid "This post is scheduled, but its date %s is not a minute ahead: saving would publish it now. Pass status \"publish\" to publish it, or a \"date\" at least five minutes ahead to keep it scheduled."
+msgstr "Cet article est planifié, mais sa date %s n'est pas au moins une minute dans le futur : l'enregistrement le publierait maintenant. Transmettez l'état « publish » pour le publier, ou une « date » au moins cinq minutes dans le futur pour qu'il reste planifié."
+
+msgid "This site asks you to sign in and to approve. The connection then shows up under Your connections."
+msgstr "Ce site vous demande de vous connecter et de valider. La connexion apparaît ensuite sous « Vos connexions »."
+
+msgid "This site blocks requests to other servers (WP_HTTP_BLOCK_EXTERNAL in wp-config.php), so it cannot load these files and does not offer this way to connect; apps that can register with the site do that instead. To use it anyway, list the app hosts in WP_ACCESSIBLE_HOSTS and switch it on with the ab_mcp_oauth_cimd filter."
+msgstr "Ce site bloque les requêtes vers d'autres serveurs (WP_HTTP_BLOCK_EXTERNAL dans wp-config.php), il ne peut donc pas charger ces fichiers et ne propose pas ce mode de connexion ; les applications qui peuvent s'enregistrer auprès du site le font à la place. Pour l'utiliser malgré tout, listez les hôtes des applications dans WP_ACCESSIBLE_HOSTS et activez-le avec le filtre ab_mcp_oauth_cimd."
+
+msgid "This site has no trash (EMPTY_TRASH_DAYS is 0): WordPress would delete the post for good. Pass force=true to delete it."
+msgstr "Ce site n'a pas de corbeille (EMPTY_TRASH_DAYS vaut 0) : WordPress supprimerait l'article définitivement. Transmettez force=true pour le supprimer."
+
+#, php-format
+msgid "This site runs WordPress %s. Abilities of other plugins need WordPress 6.9 or newer (Abilities API); update WordPress under Dashboard → Updates to use them."
+msgstr "Ce site fonctionne avec WordPress %s. Les capacités d'autres extensions nécessitent WordPress 6.9 ou plus récent (Abilities API) ; mettez à jour WordPress dans Tableau de bord → Mises à jour pour les utiliser."
+
+msgid "This site’s address"
+msgstr "Adresse de ce site"
+
+msgid "Time"
+msgstr "Date"
+
+msgid "Title, status, excerpt and the other fields still change: call wp_update_post again without content."
+msgstr "Le titre, l'état, l'extrait et les autres champs restent modifiables : appelez à nouveau wp_update_post sans content."
+
+msgid "To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner's own risk, and a current backup is advised."
+msgstr "Pour l'autoriser, un administrateur peut activer l'accès en écriture en haut de Réglages → AlphaBridge MCP et y confirmer l'avertissement ; cela se fait aux risques du propriétaire du site, et une sauvegarde à jour est recommandée."
+
+#, php-format
+msgid "To allow it, an administrator switches \"%s\" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes."
+msgstr "Pour l'autoriser, un administrateur active « %s » dans Réglages → AlphaBridge MCP → Réglage fin et enregistre les modifications."
+
+#, php-format
+msgid "To allow it, ask an administrator to give the account \"%1$s\" a role with the capability \"%2$s\" under Users, or connect the app again with an account that has it, such as an administrator."
+msgstr "Pour l'autoriser, demandez à un administrateur d'attribuer au compte « %1$s », sous Comptes, un rôle disposant de la permission « %2$s », ou reconnectez l'application avec un compte qui l'a, par exemple un administrateur."
+
+#, php-format
+msgid "To allow it, connect the app again and choose the access level \"%s\" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP."
+msgstr "Pour l'autoriser, reconnectez l'application et choisissez le niveau d'accès « %s » sur l'écran de consentement, ou demandez à un administrateur de créer une connexion avec ce niveau d'accès dans Réglages → AlphaBridge MCP."
+
+msgid "Token"
+msgstr "Jeton"
+
+msgid "Too many redirect_uris."
+msgstr "Trop de redirect_uris."
+
+msgid "Tool"
+msgstr "Outil"
+
+msgid "Tool calls are always logged."
+msgstr "Les appels d'outils sont toujours consignés dans le journal."
+
+msgid "Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator."
+msgstr "L'outil n'a pas de gestionnaire, rien ne s'est donc exécuté. L'extension qui l'a enregistré est en cause ; signalez-le à l'administrateur du site."
+
+msgid "Try Pro free for 7 days"
+msgstr "Essayer Pro gratuitement pendant 7 jours"
+
+msgctxt "main group of tools"
+msgid "Undo"
+msgstr "Annulation"
+
+msgctxt "tool group"
+msgid "Undo"
+msgstr "Annulation"
+
+msgctxt "tool label"
+msgid "Undo a change"
+msgstr "Annuler une modification"
+
+msgid "Undo points that expire after 7 days, adjustable from 1 to 30"
+msgstr "Points de restauration qui expirent après 7 jours, réglables de 1 à 30"
+
+#, php-format
+msgid "Unknown built_with value. Use one of: %s."
+msgstr "Valeur de built_with inconnue. Utilisez l'une de celles-ci : %s."
+
+msgid "Unknown client. Ask the connecting app to register again."
+msgstr "Client inconnu. Demandez à l'application qui se connecte de s'enregistrer à nouveau."
+
+msgid "Unknown post type. wp_get_post_types lists the post types of this site; pass one of their names as type."
+msgstr "Type de publication inconnu. wp_get_post_types liste les types de publication de ce site ; transmettez l'un de leurs noms comme type."
+
+msgid "Unknown setting; nothing was changed. Use the switch at the top of this page."
+msgstr "Réglage inconnu ; rien n'a été modifié. Utilisez l'interrupteur en haut de cette page."
+
+msgid "Unknown taxonomy. wp_get_taxonomies lists the taxonomies of this site; pass one of their names as taxonomy."
+msgstr "Taxonomie inconnue. wp_get_taxonomies liste les taxonomies de ce site ; transmettez l'un de leurs noms comme taxonomy."
+
+#, php-format
+msgid "Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call."
+msgstr "Outil inconnu : %s. Aucun outil de ce nom n'est enregistré sur ce site ; tools/list indique les outils que cette connexion peut appeler."
+
+msgctxt "tool label"
+msgid "Unpack a ZIP into the deploy area"
+msgstr "Décompresser un ZIP dans la zone de déploiement"
+
+#, php-format
+msgid "Unreadable date: \"%s\". Use site time as \"Y-m-d H:i:s\" (or \"Y-m-d H:i\", \"Y-m-d\"), or RFC 3339 with an offset, for example \"2026-10-02T09:00:00+02:00\"."
+msgstr "Date illisible : « %s ». Utilisez l'heure du site au format « Y-m-d H:i:s » (ou « Y-m-d H:i », « Y-m-d »), ou RFC 3339 avec un décalage, par exemple « 2026-10-02T09:00:00+02:00 »."
+
+msgid "Unsaved changes — save to apply them."
+msgstr "Modifications non enregistrées — enregistrez-les pour les appliquer."
+
+msgctxt "tool label"
+msgid "Unschedule cron events"
+msgstr "Retirer des événements cron planifiés"
+
+msgid "Unsupported post status. This tool sets draft, pending, publish, private and future; a site owner can allow further statuses with the ab_mcp_allowed_post_statuses filter."
+msgstr "État d'article non pris en charge. Cet outil définit draft, pending, publish, private et future ; le propriétaire du site peut autoriser d'autres états avec le filtre ab_mcp_allowed_post_statuses."
+
+msgid "Until then, Claude.ai can connect with a token in its connector URL: pick “Other”, create a connection and switch on the connector URL it offers."
+msgstr "D'ici là, Claude.ai peut se connecter avec un jeton dans son URL de connecteur : choisissez « Autre », créez une connexion et activez l'URL de connecteur proposée."
+
+msgctxt "tool label"
+msgid "Update WordPress"
+msgstr "Mettre à jour WordPress"
+
+msgctxt "tool label"
+msgid "Update a plugin"
+msgstr "Mettre à jour une extension"
+
+msgctxt "tool label"
+msgid "Update a theme"
+msgstr "Mettre à jour un thème"
+
+msgctxt "tool label"
+msgid "Upload media"
+msgstr "Téléverser des médias"
+
+msgid "User"
+msgstr "Compte"
+
+msgid "User not found: no user has this id. The authors' ids are in the answers of wp_list_posts and wp_get_post."
+msgstr "Compte introuvable : aucun compte n'a cet ID. Les ID des auteurs figurent dans les réponses de wp_list_posts et wp_get_post."
+
+msgctxt "tool group"
+msgid "Users and menus"
+msgstr "Comptes et menus"
+
+msgid "Watch the video"
+msgstr "Regarder la vidéo"
+
+msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP."
+msgstr "Quel que soit le niveau d'accès que vous choisissez, c'est l'interrupteur d'accès en écriture de ce site qui décide si les assistants IA peuvent écrire ; il est actuellement désactivé, la connexion ne fait donc que lire jusqu'à ce qu'un administrateur l'active en haut de Réglages → AlphaBridge MCP."
+
+msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now."
+msgstr "Quel que soit le niveau d'accès que vous choisissez, c'est l'interrupteur d'accès en écriture de ce site qui décide si les assistants IA peuvent écrire ; il est actuellement activé."
+
+#, php-format
+msgid "Which one do you want to connect to “%s”?"
+msgstr "Lequel voulez-vous connecter à « %s » ?"
+
+msgid "Widgets"
+msgstr "Widgets"
+
+msgctxt "tool group"
+msgid "Widgets"
+msgstr "Widgets"
+
+msgid "Widgets not placed in any active sidebar."
+msgstr "Widgets qui ne sont placés dans aucune barre latérale active."
+
+msgid "With Pro they also read the shop's products, orders, customers and coupons."
+msgstr "Avec Pro, ils lisent aussi les produits, commandes, clients et codes promo de la boutique."
+
+msgid "With Pro they also read users and the shop's products, orders, customers and coupons."
+msgstr "Avec Pro, ils lisent aussi les comptes ainsi que les produits, commandes, clients et codes promo de la boutique."
+
+msgid "With Pro they also read users."
+msgstr "Avec Pro, ils lisent aussi les comptes."
+
+msgid "WooCommerce, SEO editing, installs and updates"
+msgstr "WooCommerce, modification SEO, installations et mises à jour"
+
+msgid "WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing."
+msgstr "WordPress ne l'a pas supprimé : l'ID n'est pas un fichier de la médiathèque (recherchez-le avec wp_list_media), ou une extension l'en a empêché. Vérifiez-le avec wp_get_media, et demandez à l'administrateur du site si l'échec persiste."
+
+msgid "WordPress did not delete the comment; a plugin may have stopped it. Check it with wp_get_comment and try again."
+msgstr "WordPress n'a pas supprimé le commentaire ; une extension l'en a peut-être empêché. Vérifiez-le avec wp_get_comment et réessayez."
+
+msgid "WordPress did not delete the post; a plugin may have stopped it. Check it with wp_get_post, and ask the site administrator if it keeps failing."
+msgstr "WordPress n'a pas supprimé l'article ; une extension l'en a peut-être empêché. Vérifiez-le avec wp_get_post, et demandez à l'administrateur du site si l'échec persiste."
+
+msgid "WordPress did not delete the term: no term of this taxonomy has this id, or it is the taxonomy's default term (such as the default category), which WordPress keeps. Check the id with wp_list_terms; a default category can be deleted once another one is the default (Settings → Writing in wp-admin)."
+msgstr "WordPress n'a pas supprimé le terme : aucun terme de cette taxonomie n'a cet ID, ou il s'agit du terme par défaut de la taxonomie (comme la catégorie par défaut), que WordPress conserve. Vérifiez l'ID avec wp_list_terms ; une catégorie par défaut peut être supprimée dès qu'une autre est définie par défaut (Réglages → Écriture dans wp-admin)."
+
+msgid "WordPress did not save the attachment, so its title and caption are unchanged; a plugin may have stopped the save. Check it with wp_get_media and try again, or edit it in wp-admin under Media."
+msgstr "WordPress n'a pas enregistré le fichier joint, son titre et sa légende sont donc inchangés ; une extension a peut-être empêché l'enregistrement. Vérifiez-le avec wp_get_media et réessayez, ou modifiez-le dans wp-admin sous Médias."
+
+msgid "WordPress did not save the comment, so nothing was written. Try again; if it keeps failing, ask the site administrator to check the database."
+msgstr "WordPress n'a pas enregistré le commentaire, rien n'a donc été écrit. Réessayez ; si l'échec persiste, demandez à l'administrateur du site de vérifier la base de données."
+
+msgid "WordPress did not save the post, so nothing was written; a plugin may have stopped the save. Check the post with wp_get_post, then try again, or save it in wp-admin, where WordPress shows its own reason."
+msgstr "WordPress n'a pas enregistré l'article, rien n'a donc été écrit ; une extension a peut-être empêché l'enregistrement. Vérifiez l'article avec wp_get_post, puis réessayez, ou enregistrez-le dans wp-admin, où WordPress affiche sa propre raison."
+
+#, php-format
+msgid "WordPress schedules a post only for a date ahead of the save. Dated %s, this post would be published now. Pass a \"date\" at least five minutes ahead to schedule it."
+msgstr "WordPress ne planifie un article que pour une date postérieure à l'enregistrement. Daté du %s, cet article serait publié maintenant. Transmettez une « date » au moins cinq minutes dans le futur pour le planifier."
+
+msgid "Working…"
+msgstr "En cours…"
+
+msgctxt "tool label"
+msgid "Write a file to the deploy area"
+msgstr "Écrire un fichier dans la zone de déploiement"
+
+msgctxt "tool label"
+msgid "Write a file to the uploads"
+msgstr "Écrire un fichier dans les téléversements"
+
+msgctxt "tool label"
+msgid "Write a plugin file"
+msgstr "Écrire un fichier d'extension"
+
+msgid "Write a review"
+msgstr "Rédiger un avis"
+
+msgctxt "tool label"
+msgid "Write a theme file"
+msgstr "Écrire un fichier de thème"
+
+msgid "Write access for AI assistants"
+msgstr "Accès en écriture pour les assistants IA"
+
+#, php-format
+msgid "Write access is off on this site, so the tool \"%s\" did not run: it changes the site, and with write access off AI assistants only read."
+msgstr "L'accès en écriture est désactivé sur ce site, l'outil « %s » ne s'est donc pas exécuté : il modifie le site, et avec l'accès en écriture désactivé, les assistants IA ne font que lire."
+
+#, php-format
+msgid "Write access is off on this site, so the tool \"%s\" did not run: it is one of the reading tools that run only with write access on."
+msgstr "L'accès en écriture est désactivé sur ce site, l'outil « %s » ne s'est donc pas exécuté : il fait partie des outils de lecture qui ne s'exécutent qu'avec l'accès en écriture activé."
+
+msgid "Write access is off, so no ability runs; switch it on at the top of this page."
+msgstr "L'accès en écriture est désactivé, aucune capacité ne s'exécute donc ; activez-le en haut de cette page."
+
+msgid "Write access is off. AI assistants only read now: content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes, and every reading tool noted “only with write access”, is refused."
+msgstr "L'accès en écriture est désactivé. Les assistants IA ne font plus que lire : contenus, médias, termes, commentaires, réglages et structure du site ; tout outil qui crée, modifie ou supprime, ainsi que tout outil de lecture marqué « uniquement avec l'accès en écriture », est refusé."
+
+msgid "Write access is on; no confirmation on this page is recorded for it."
+msgstr "L'accès en écriture est activé ; aucune confirmation n'a été enregistrée pour cela sur cette page."
+
+msgctxt "site mode"
+msgid "Write access off (read only)"
+msgstr "Accès en écriture désactivé (lecture seule)"
+
+msgctxt "site mode"
+msgid "Write access on (full power)"
+msgstr "Accès en écriture activé (toute la puissance)"
+
+#, php-format
+msgid "Write access on since %1$s · confirmed by %2$s · every connection keeps its access level"
+msgstr "Accès en écriture activé depuis le %1$s · confirmé par %2$s · chaque connexion conserve son niveau d'accès"
+
+#, php-format
+msgid "Write access on since %s · set by code, not confirmed on this page · every connection keeps its access level"
+msgstr "Accès en écriture activé depuis le %s · défini par du code, non confirmé sur cette page · chaque connexion conserve son niveau d'accès"
+
+msgid "Write access was already on; nothing was changed. What you switched off under Fine-tuning stays off."
+msgstr "L'accès en écriture était déjà activé ; rien n'a été modifié. Ce que vous avez désactivé sous « Réglage fin » reste désactivé."
+
+msgid "Write access was not switched on: the notice has changed since this page was loaded. Read it again, tick the box and switch again."
+msgstr "L'accès en écriture n'a pas été activé : l'avertissement a changé depuis le chargement de cette page. Relisez-le, cochez la case et activez à nouveau."
+
+msgid "Write access was not switched on: tick the box under the notice to confirm it, then switch again."
+msgstr "L'accès en écriture n'a pas été activé : cochez la case sous l'avertissement pour le confirmer, puis activez à nouveau."
+
+msgctxt "tool label"
+msgid "Write database rows"
+msgstr "Écrire des lignes dans la base de données"
+
+msgctxt "tool badge"
+msgid "Writes"
+msgstr "Écriture"
+
+msgctxt "date and time format"
+msgid "Y-m-d H:i"
+msgstr "d/m/Y H:i"
+
+msgctxt "date and time format with seconds"
+msgid "Y-m-d H:i:s"
+msgstr "d/m/Y H:i:s"
+
+msgid "You can revoke this connection at any time under Settings → AlphaBridge MCP."
+msgstr "Vous pouvez révoquer cette connexion à tout moment dans Réglages → AlphaBridge MCP."
+
+msgid "You cannot attach media to that post: it does not exist, or your account may not edit it. Leave post_id out to add the file to the media library alone, or pass a post your account may edit."
+msgstr "Vous ne pouvez pas attacher de média à cet article : il n'existe pas, ou votre compte ne peut pas le modifier. Omettez post_id pour ajouter le fichier seulement à la médiathèque, ou transmettez un article que votre compte peut modifier."
+
+msgid "You cannot attach media to that post: your account may not edit it. Choose a post your account may edit, or ask someone who may edit that post."
+msgstr "Vous ne pouvez pas attacher de média à cet article : votre compte ne peut pas le modifier. Choisissez un article que votre compte peut modifier, ou demandez à quelqu'un qui peut modifier cet article."
+
+msgid "You cannot create a connection for that user."
+msgstr "Vous ne pouvez pas créer de connexion pour ce compte."
+
+msgid "You cannot publish: after this save the file would take its visibility from a parent it did not follow before (WordPress stores it as \"inherit\", or gives it \"inherit\" on the way out of the trash; where a loop runs through the file, any save leaves it without a parent) — public wherever that parent is published, and everywhere without one. Ask someone who can publish."
+msgstr "Vous ne pouvez pas publier : après cet enregistrement, le fichier prendrait sa visibilité d'un parent qu'il ne suivait pas auparavant (WordPress l'enregistre comme « inherit », ou lui donne « inherit » à la sortie de la corbeille ; là où une boucle passe par le fichier, tout enregistrement le laisse sans parent) — public partout où ce parent est publié, et partout s'il n'a pas de parent. Demandez à quelqu'un qui peut publier."
+
+msgid "You cannot publish: this status needs the right to publish. For a file, \"draft\" and \"pending\" do not help: WordPress stores them as \"inherit\", so the file follows its parent. Ask someone who can publish."
+msgstr "Vous ne pouvez pas publier : cet état nécessite le droit de publier. Pour un fichier, « draft » et « pending » n'aident pas : WordPress les enregistre comme « inherit », le fichier suit donc son parent. Demandez à quelqu'un qui peut publier."
+
+msgid "You cannot publish; use status \"draft\" or \"pending\", and someone who may publish can then publish it."
+msgstr "Vous ne pouvez pas publier ; utilisez l'état « draft » ou « pending », et quelqu'un qui peut publier pourra ensuite le publier."
+
+msgid "You cannot rotate a connection that belongs to that user."
+msgstr "Vous ne pouvez pas renouveler une connexion qui appartient à ce compte."
+
+msgid "Your account cannot access this meta key: WordPress says it may not edit it, usually because the plugin that registered the key restricts it. Connect with an account that may edit it, such as an administrator."
+msgstr "Votre compte ne peut pas accéder à cette clé méta : WordPress indique qu'il ne peut pas la modifier, généralement parce que l'extension qui a enregistré la clé la restreint. Connectez-vous avec un compte qui peut la modifier, par exemple celui d'un administrateur."
+
+msgid "Your account cannot access this meta key: that takes the right to edit the post itself (an author may read a colleague's published post, but not edit it), and the plugin that registered the key can restrict it further. Connect with an account that may edit the post and the key, such as an administrator."
+msgstr "Votre compte ne peut pas accéder à cette clé méta : cela nécessite le droit de modifier l'article lui-même (un auteur peut lire l'article publié d'un collègue, mais pas le modifier), et l'extension qui a enregistré la clé peut la restreindre davantage. Connectez-vous avec un compte qui peut modifier l'article et la clé, par exemple celui d'un administrateur."
+
+msgid "Your account cannot access this meta key: that takes the right to edit the term itself (for categories and tags, the manage_categories capability, which editors and administrators have), and the plugin that registered the key can restrict it further. Connect with an account that may edit the term and the key, such as an administrator."
+msgstr "Votre compte ne peut pas accéder à cette clé méta : cela nécessite le droit de modifier le terme lui-même (pour les catégories et les étiquettes, la permission manage_categories, dont disposent les éditeurs et les administrateurs), et l'extension qui a enregistré la clé peut la restreindre davantage. Connectez-vous avec un compte qui peut modifier le terme et la clé, par exemple celui d'un administrateur."
+
+msgid "Your account cannot create entries of this post type. Connect with an account whose role may create them, or ask an administrator for that right."
+msgstr "Votre compte ne peut pas créer d'éléments de ce type de publication. Connectez-vous avec un compte dont le rôle permet d'en créer, ou demandez ce droit à un administrateur."
+
+msgid "Your account cannot delete this attachment. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas supprimer ce fichier joint. Connectez-vous avec un compte qui peut le supprimer, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot delete this specific post. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas supprimer cet article précis. Connectez-vous avec un compte qui peut le supprimer, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot edit this attachment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas modifier ce fichier joint. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot edit this post, so its revisions are not available. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas modifier cet article, ses révisions ne sont donc pas disponibles. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot edit this post. The outline reads the page builder's stored data and is for accounts that may edit the post; wp_get_post shows the post to accounts that may read it."
+msgstr "Votre compte ne peut pas modifier cet article. Le plan lit les données enregistrées du constructeur de pages et s'adresse aux comptes qui peuvent modifier l'article ; wp_get_post affiche l'article aux comptes qui peuvent le lire."
+
+msgid "Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas modifier cet article précis. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas gérer les termes de cette taxonomie. Connectez-vous avec un compte qui le peut, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot read terms of this taxonomy: it is not public, and reading it takes the right to assign its terms. Connect with an account that has it, such as an administrator."
+msgstr "Votre compte ne peut pas lire les termes de cette taxonomie : elle n'est pas publique, et sa lecture nécessite le droit d'attribuer ses termes. Connectez-vous avec un compte qui a ce droit, par exemple celui d'un administrateur."
+
+msgid "Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas lire les métadonnées des termes de cette taxonomie : cela nécessite le droit d'attribuer ses termes. Connectez-vous avec un compte qui a ce droit, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot read this attachment. Connect with an account that may read it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas lire ce fichier joint. Connectez-vous avec un compte qui peut le lire, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot read this specific post (a private post or another author's draft, for example). Connect with an account that may read it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas lire cet article précis (un article privé ou le brouillon d'un autre auteur, par exemple). Connectez-vous avec un compte qui peut le lire, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot read this user's meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account."
+msgstr "Votre compte ne peut pas lire les métadonnées de ce compte : cela nécessite le droit de modifier ce compte, droit que chacun a pour son propre profil et que les administrateurs ont pour les autres comptes (sur un réseau multisite, les super administrateurs). Connectez-vous avec un tel compte."
+
+msgid "Your account cannot view this user's application passwords: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account."
+msgstr "Votre compte ne peut pas voir les mots de passe d'application de ce compte : cela nécessite le droit de modifier ce compte, droit que chacun a pour son propre profil et que les administrateurs ont pour les autres comptes (sur un réseau multisite, les super administrateurs). Connectez-vous avec un tel compte."
+
+msgid "Your account is not allowed to approve connections on this site. Ask an administrator."
+msgstr "Votre compte n'est pas autorisé à valider des connexions sur ce site. Demandez à un administrateur."
+
+msgid "Your account may not edit this key: edit_post_meta says no, usually because the plugin that registered the key restricts it. An account that may edit it can set it on the copy."
+msgstr "Votre compte ne peut pas modifier cette clé : edit_post_meta le refuse, généralement parce que l'extension qui a enregistré la clé la restreint. Un compte qui peut la modifier peut la définir sur la copie."
+
+msgid "Your connections"
+msgstr "Vos connexions"
+
+msgid "claude.ai, Desktop, iPhone"
+msgstr "claude.ai, Desktop, iPhone"
+
+msgid "days (0 = never)"
+msgstr "jours (0 = jamais)"
+
+msgctxt "tool note"
+msgid "deletes"
+msgstr "supprime"
+
+msgctxt "status of a tool call in the log"
+msgid "denied"
+msgstr "refusé"
+
+msgid "e.g. Cursor on my laptop"
+msgstr "p. ex. Cursor sur mon ordinateur portable"
+
+msgctxt "status of a tool call in the log"
+msgid "error"
+msgstr "échec"
+
+msgid "expired"
+msgstr "expirée"
+
+#, php-format
+msgid "it answered HTTP %d instead of 200 (redirects are not followed)"
+msgstr "il a répondu HTTP %d au lieu de 200 (les redirections ne sont pas suivies)"
+
+msgid "it asks for client authentication at the token endpoint; this site serves public clients (\"none\") only"
+msgstr "il exige une authentification du client au point d'accès du jeton ; ce site ne sert que des clients publics (« none »)"
+
+msgid "its token_endpoint_auth_methods_supported is not a list of methods that contains its token_endpoint_auth_method"
+msgstr "son token_endpoint_auth_methods_supported n'est pas une liste de méthodes contenant son token_endpoint_auth_method"
+
+msgid "it contains a client secret, which a public document must never carry"
+msgstr "il contient un secret client, ce qu'un document public ne doit jamais contenir"
+
+#, php-format
+msgid "it could not be loaded (%s)"
+msgstr "il n'a pas pu être chargé (%s)"
+
+msgid "it has no client_name"
+msgstr "il n'a pas de client_name"
+
+#, php-format
+msgid "it is larger than %d bytes"
+msgstr "il dépasse %d octets"
+
+msgid "it is not a JSON object"
+msgstr "ce n'est pas un objet JSON"
+
+msgid "its client_id does not match its own address"
+msgstr "son client_id ne correspond pas à sa propre adresse"
+
+msgid "its grant_types do not include authorization_code"
+msgstr "ses grant_types n'incluent pas authorization_code"
+
+msgid "its host is this machine"
+msgstr "son hôte est cette machine"
+
+msgid "its host name could not be resolved"
+msgstr "son nom d'hôte n'a pas pu être résolu"
+
+msgid "its host resolves to an address that is not public; documents are fetched only from public addresses"
+msgstr "son hôte se résout en une adresse qui n'est pas publique ; les documents ne sont récupérés que depuis des adresses publiques"
+
+#, php-format
+msgid "its redirect_uris are missing or invalid (%s)"
+msgstr "ses redirect_uris sont absents ou non valides (%s)"
+
+msgid "its response_types do not include code"
+msgstr "ses response_types n'incluent pas code"
+
+#, php-format
+msgid "missing required \"%s\""
+msgstr "argument obligatoire « %s » manquant"
+
+msgid "never"
+msgstr "jamais"
+
+msgid "no arguments"
+msgstr "aucun argument"
+
+msgctxt "status of a tool call in the log"
+msgid "ok"
+msgstr "exécuté"
+
+msgctxt "tool note"
+msgid "only with write access"
+msgstr "uniquement avec l'accès en écriture"
+
+#, php-format
+msgid "post_content is only a copy: %s shows its own data, so a change to content does not appear on the page. Read the page with wp_get_builder_layout."
+msgstr "post_content n'est qu'une copie : %s affiche ses propres données, une modification de content n'apparaît donc pas sur la page. Lisez la page avec wp_get_builder_layout."
+
+#, php-format
+msgid "post_content is what the site shows, but %1$s keeps its own copy of the page and restores it the next time the page is saved in %2$s. Read the page with wp_get_builder_layout."
+msgstr "post_content est ce que le site affiche, mais %1$s conserve sa propre copie de la page et la rétablit la prochaine fois que la page est enregistrée dans %2$s. Lisez la page avec wp_get_builder_layout."
+
+msgid "redirect_uris is required."
+msgstr "redirect_uris est obligatoire."
+
+msgid "redirect_uris must be https (or http on localhost) without fragments."
+msgstr "redirect_uris doit être en https (ou http sur localhost), sans fragment."
+
+msgid "the address contains \".\" or \"..\" path segments"
+msgstr "l'adresse contient des segments de chemin « . » ou « .. »"
+
+msgid "the address has no path; a client id names a document, for example https://app.example/client.json"
+msgstr "l'adresse n'a pas de chemin ; un identifiant client désigne un document, par exemple https://app.example/client.json"
+
+msgid "the address is not a valid https URL"
+msgstr "l'adresse n'est pas une URL https valide"
+
+msgid "the address is too long or contains spaces or control characters"
+msgstr "l'adresse est trop longue ou contient des espaces ou des caractères de contrôle"
+
+msgid "the address must not contain a user name, a password or a fragment"
+msgstr "l'adresse ne doit contenir ni nom d'utilisateur, ni mot de passe, ni fragment"
+
+msgid "✓ Connection created."
+msgstr "✓ Connexion créée."
+
+msgid "Don’t show again"
+msgstr "Ne plus afficher"
+
+#, php-format
+msgid "In use for %1$d days, at least %2$d successful calls. What do you think of it?"
+msgstr "En service depuis %1$d jours, au moins %2$d appels réussis. Qu'en pensez-vous ?"
+
+msgid "Settings"
+msgstr "Réglages"
+
+#, php-format
+msgid "The editions of AlphaBridge MCP and their tools are described here: %s"
+msgstr "Les éditions d'AlphaBridge MCP et leurs outils sont décrites ici : %s"
+
+msgid "Command for Claude Code"
+msgstr "Commande pour Claude Code"
+
+msgid "(run it in your project folder)"
+msgstr "(à exécuter dans le dossier de votre projet)"
+
+msgid "Agree and switch on write access"
+msgstr "Accepter et activer l'accès en écriture"
+
+msgid "Read the Terms of Use"
+msgstr "Lire les conditions d'utilisation"
+
+msgid "Optional with your licence: the terms already apply from your purchase."
+msgstr "Facultatif avec votre licence : les conditions s'appliquent déjà du fait de votre achat."
+
+msgid "Write access was not switched on: tick the box to agree to the Terms of Use, then switch again."
+msgstr "L'accès en écriture n'a pas été activé : cochez la case pour accepter les conditions d'utilisation, puis activez à nouveau."
+
+msgid "New: Terms of Use for write access."
+msgstr "Nouveau : conditions d'utilisation pour l'accès en écriture."
+
+msgid "Whoever switches on write access now agrees to the Terms of Use. On this site write access was switched on before that and stays on; an administrator agrees the next time it is switched on."
+msgstr "Désormais, quiconque active l'accès en écriture accepte les conditions d'utilisation. Sur ce site, l'accès en écriture a été activé avant cela et reste activé ; un administrateur les acceptera lors de la prochaine activation."
+
+msgid "Noted. The agreement to the Terms of Use is asked for the next time write access is switched on."
+msgstr "C'est noté. L'acceptation des conditions d'utilisation sera demandée lors de la prochaine activation de l'accès en écriture."
+
+msgid "Write access is on. AI assistants can now create, change and delete through every tool, and every tool is switched on; you can switch single tools off under Fine-tuning. What you agreed to is recorded with your account, the time and the version of the notice. You can switch write access off at the top of this page at any time."
+msgstr "L'accès en écriture est activé. Les assistants IA peuvent désormais créer, modifier et supprimer avec chaque outil, et tous les outils sont activés ; vous pouvez désactiver des outils un par un sous « Réglage fin ». Ce que vous avez accepté est enregistré avec votre compte, la date et l'heure, et la version de l'avertissement. Vous pouvez désactiver l'accès en écriture à tout moment en haut de cette page."
+
+msgid "Not checked yet."
+msgstr "Pas encore vérifié."
+
+msgid "Check again"
+msgstr "Vérifier à nouveau"
+
+msgid "ChatGPT and Codex sign in without registering first."
+msgstr "ChatGPT et Codex se connectent sans s'enregistrer au préalable."
+
+#, php-format
+msgid "Checked %1$s: %2$s"
+msgstr "Vérifié le %1$s : %2$s"
+
+msgid "works."
+msgstr "fonctionne."
+
+msgid "no clear result; this stays on."
+msgstr "aucun résultat clair ; cela reste activé."
+
+msgid "You switched the direct sign-in off: ChatGPT and Codex register with the site."
+msgstr "Vous avez désactivé la connexion directe : ChatGPT et Codex s'enregistrent auprès du site."
+
+msgid "Switch it on"
+msgstr "Réactiver"
+
+msgid "Switch the direct sign-in off"
+msgstr "Désactiver la connexion directe"
+
+msgid "Connector address with token"
+msgstr "Adresse du connecteur avec jeton"
+
+msgid "Also offer an address that contains the token."
+msgstr "Proposer aussi une adresse qui contient le jeton."
+
+msgid "For apps without a password field. Off by default: anyone who sees this address can use the connection, so treat it like a password."
+msgstr "Pour les applications sans champ de mot de passe. Désactivé par défaut : quiconque voit cette adresse peut utiliser la connexion, traitez-la donc comme un mot de passe."
+
+msgctxt "date and time of the last check"
+msgid "j M Y, H:i"
+msgstr "j M Y à H:i"
+
+msgid "Your host’s firewall blocks the direct sign-in. ChatGPT and Codex register with the site instead."
+msgstr "Le pare-feu de votre hébergeur bloque la connexion directe. ChatGPT et Codex s'enregistrent donc auprès du site à la place."
+
+msgid "In the app, remove the connector for this site and add it again. The sign-in now goes through."
+msgstr "Dans l'application, supprimez le connecteur de ce site et ajoutez-le à nouveau. La connexion passe maintenant."
+
+#, php-format
+msgid "If it still fails, add the connector once more, this time with this address instead of your site’s: %s. When you click Authenticate, the free AlphaBridge hub asks for your site’s address. Enter it and approve on your site as usual."
+msgstr "Si cela échoue encore, ajoutez le connecteur une nouvelle fois, cette fois avec cette adresse au lieu de celle de votre site : %s. Quand vous cliquez sur « Authenticate », le hub AlphaBridge gratuit demande l'adresse de votre site. Saisissez-la et validez sur votre site comme d'habitude."
+
+#, php-format
+msgid "%s if a sign-in ends with “Not Acceptable”, or if this site must not contact other servers."
+msgstr "%s si une connexion se termine par « Not Acceptable », ou si ce site ne doit pas contacter d'autres serveurs."
+
+#, php-format
+msgid "%s connects with this site’s login and your approval (OAuth), and that is switched off here. Switch it on below."
+msgstr "%s se connecte via la page de connexion de ce site et votre validation (OAuth), et cela est désactivé ici. Activez-le ci-dessous."
+
+msgid "Through the hub"
+msgstr "Via le hub"
+
+msgid "one connection, up to 10 sites"
+msgstr "une connexion, jusqu'à 10 sites"
+
+msgid "Directly"
+msgstr "Directement"
+
+msgid "this site only"
+msgstr "ce site uniquement"
+
+msgid "Add a custom connector in Claude"
+msgstr "Ajouter un connecteur personnalisé dans Claude"
+
+msgid "In Claude: Customize → Connectors → Add → Add custom connector. Paste this address."
+msgstr "Dans Claude : « Customize → Connectors → Add → Add custom connector ». Collez cette adresse."
+
+msgid "Claude sends you to this site; no token to copy. The connection then shows up under Your connections."
+msgstr "Claude vous envoie sur ce site ; aucun jeton à copier. La connexion apparaît ensuite sous « Vos connexions »."
+
+#, php-format
+msgid "How %s signs in"
+msgstr "Comment %s se connecte"
+
+#, php-format
+msgid "%s and other apps can sign in with their Connect button."
+msgstr "%s et d'autres applications peuvent se connecter avec leur bouton « Connect »."
+
+msgid "You approve every connection on this site. Switch off only if no app should sign in."
+msgstr "Vous validez chaque connexion sur ce site. Ne désactivez que si aucune application ne doit se connecter."
+
+msgid "Checked. The finding is shown under “How ChatGPT signs in”."
+msgstr "Vérifié. Le résultat s'affiche sous « Comment ChatGPT se connecte »."
+
+msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → ChatGPT → \"Switch the direct sign-in off\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
+msgstr "Ce site n'accepte pas les applications qui s'identifient avec un document de métadonnées (désactivé dans Réglages → AlphaBridge MCP → ChatGPT → « Désactiver la connexion directe », par WP_HTTP_BLOCK_EXTERNAL ou par le filtre ab_mcp_oauth_cimd). L'application peut s'enregistrer auprès du site à la place."
+
+#, php-format
+msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → ChatGPT; an app that can register with the site then does that instead."
+msgstr "L'application s'identifie avec un document de métadonnées sur %1$s, et ce site ne peut pas l'utiliser : %2$s. Si le document est en cause, l'éditeur de l'application peut le corriger. D'ici là, ou si ce site ne peut pas joindre d'autres serveurs, un administrateur peut désactiver la connexion directe dans Réglages → AlphaBridge MCP → ChatGPT ; une application capable de s'enregistrer auprès du site le fait alors à la place."

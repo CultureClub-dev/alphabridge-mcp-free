@@ -33,6 +33,7 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 * **Read what matters.** It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder. Ask what needs work.
 * **Up to 10 sites in one chat.** The free connection service of AlphaBridge MCP brings them into the same conversation.
 * **Nothing extra to host.** AlphaBridge runs inside WordPress, in plain PHP, on ordinary hosting.
+* **In your language.** Settings, sign-in and messages in English, German, French, Italian, Spanish and Portuguese.
 
 40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
@@ -135,6 +136,10 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.6.7 =
+* **French, Italian, Spanish and Portuguese.** Everything of the plugin a person reads now comes in these languages too, as it does in German: the settings page with its cards, switch, fine-tuning and notices, the consent screen with its access levels and error pages, the description in the plugin list, the log, and the refusals and error messages an assistant passes on. The plugin brings the files itself (fr_FR, it_IT, es_ES, pt_PT); a language pack from translate.wordpress.org still takes precedence for every text it has. The notice and the boxes before write access goes on stay in English and German, as the Terms of Use.
+* **A site in another variant of a language reads that language.** A locale without a file of its own reads the main file of its language: fr_CA and fr_BE read French, es_MX and the other Spanish locales Spanish, pt_BR and pt_PT_ao90 Portuguese. Until now they read English.
 
 = 4.6.6 =
 * **The connection service is named by what it is.** The readme calls the free service at connect.alphabridge-mcp.com the connection service of AlphaBridge MCP, and the error page of the sign-in is titled AlphaBridge MCP. A connection made through the service keeps its label in the connections list, also once the service's own pages carry a new name.
@@ -330,6 +335,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.7 =
+The plugin now speaks French, Italian, Spanish and Portuguese, as it speaks German: settings, sign-in and messages. Other variants of these languages read them too. Nothing else changes.
 
 = 4.6.6 =
 Wording: the free connection service is called by what it is. The connections list keeps recognising connections made through it after its pages are renamed. Nothing else changes.
