@@ -110,6 +110,22 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
 - [ ] If the release changes the site contract (the `_meta` self-description),
       raise the minimum version in the hub configuration (connect.alphabridge-mcp.com).
 
+## Readme only
+
+A change to `readme.txt` alone (a link, a sentence, `Tested up to`) needs no
+new version: WordPress.org shows the readme of the stable tag. Merge it like
+any change, then copy the readme of `origin/main` into SVN trunk and into the
+tag `Stable tag` names. `svn diff` must show only the intended change; if
+`main` already carries an unreleased version (a new changelog entry), do not
+copy it into the tag, release instead.
+
+    git -C "$FREE_REPO" fetch && git -C "$FREE_REPO" show origin/main:readme.txt > /tmp/alphabridge-readme.txt
+    cd "$SVN" && svn update
+    STABLE=$(grep -m1 -oE '^Stable tag: *[0-9.]+' /tmp/alphabridge-readme.txt | grep -oE '[0-9.]+')
+    cp /tmp/alphabridge-readme.txt trunk/readme.txt && cp /tmp/alphabridge-readme.txt "tags/${STABLE:?stable tag missing}/readme.txt"
+    svn diff trunk/readme.txt "tags/$STABLE/readme.txt"
+    svn ci trunk/readme.txt "tags/$STABLE/readme.txt" -m "Readme update"
+
 ## Version 4.3.0 specifically
 
 4.3.0 is the first release the hub can link. Its revoke
