@@ -316,25 +316,24 @@ final class BundledTranslationsTest extends TestCase {
 	const SAME_AS_ENGLISH = array(
 		"list separator\x04, ",
 		'AlphaBridge MCP',
-		"tool group\x04Export",
 		'Plus, Pro, Business',
 		'SEO',
 		"tool group\x04SEO",
-		"main group of tools\x04Shop (WooCommerce)",
 		"tool group\x04Site Deploy (FTP/SFTP)",
-		'Status',
-		'Token',
-		"main group of tools\x04Undo",
-		"tool group\x04Undo",
-		'Widgets',
-		"tool group\x04Widgets",
 		'claude.ai, Desktop, iPhone',
 	);
 
-	/** Words a language writes like English, beyond SAME_AS_ENGLISH. */
+	/**
+	 * Words a language writes like English, beyond SAME_AS_ENGLISH. Kept per
+	 * language: an exception of one language must not let another language
+	 * fall back to English (French «Statut» turned «Status» again stays red).
+	 */
 	const SAME_AS_ENGLISH_IN = array(
-		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides' ),
-		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media" ),
+		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets" ),
+		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets" ),
+		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token' ),
+		'es' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
+		'pt' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
 	);
 
 	/**
@@ -436,6 +435,50 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertCount( 5, self::gaps( $texts, $broken ) );
 		// A name German keeps as it is passes.
 		self::assertSame( 'Token', $mo['Token'] );
+	}
+
+	public function testAnExceptionOfOneLanguageDoesNotHoldForAnother(): void {
+		$texts = self::gettext_texts();
+		$fr    = self::mo( self::file( 'fr_FR', 'mo' ) );
+		self::assertSame( array(), self::gaps( $texts, $fr, 'fr' ) );
+		// German keeps Status, Undo and Export; French back in English is a gap.
+		$fr['Status']                          = 'Status';
+		$fr["main group of tools\x04Undo"]     = 'Undo';
+		$fr["tool group\x04Export"]            = 'Export';
+		$gaps = implode( "\n", self::gaps( $texts, $fr, 'fr' ) );
+		self::assertStringContainsString( '): Status', $gaps );
+		self::assertStringContainsString( "): main group of tools\x04Undo", $gaps );
+		self::assertStringContainsString( "): tool group\x04Export", $gaps );
+		// Italian writes Widget; Widgets, which French keeps, is a gap there.
+		$it            = self::mo( self::file( 'it_IT', 'mo' ) );
+		$it['Widgets'] = 'Widgets';
+		self::assertStringContainsString( '): Widgets', implode( "\n", self::gaps( $texts, $it, 'it' ) ) );
+	}
+
+	/** Language and plural rule of each catalogue, as its header must state them. */
+	const HEADERS = array(
+		'de_DE'          => 'nplurals=2; plural=(n != 1);',
+		'de_DE_formal'   => 'nplurals=2; plural=(n != 1);',
+		'de_AT'          => 'nplurals=2; plural=(n != 1);',
+		'de_CH'          => 'nplurals=2; plural=(n != 1);',
+		'de_CH_informal' => 'nplurals=2; plural=(n != 1);',
+		'fr_FR'          => 'nplurals=2; plural=(n > 1);',
+		'it_IT'          => 'nplurals=2; plural=(n != 1);',
+		'es_ES'          => 'nplurals=2; plural=(n != 1);',
+		'pt_PT'          => 'nplurals=2; plural=(n != 1);',
+	);
+
+	#[DataProvider( 'locales' )]
+	public function testTheHeaderNamesTheLanguageAndItsPluralRule( string $locale ): void {
+		self::assertArrayHasKey( $locale, self::HEADERS, 'Every bundled locale has its plural rule here.' );
+		$po = (string) file_get_contents( self::file( $locale, 'po' ) );
+		// In the .po each header line ends in the two characters \ and n.
+		self::assertMatchesRegularExpression( '/^"Language: ' . preg_quote( $locale, '/' ) . '\\\\n"$/m', $po );
+		self::assertMatchesRegularExpression( '/^"Plural-Forms: ' . preg_quote( self::HEADERS[ $locale ], '/' ) . '\\\\n"$/m', $po );
+		self::assertMatchesRegularExpression( '/^"Content-Type: text\/plain; charset=UTF-8\\\\n"$/m', $po );
+		// The compiled file carries the same header (msgfmt copies it).
+		$mo = (string) file_get_contents( self::file( $locale, 'mo' ) );
+		self::assertStringContainsString( 'Plural-Forms: ' . self::HEADERS[ $locale ], $mo );
 	}
 
 	#[DataProvider( 'locales' )]
@@ -852,6 +895,9 @@ final class BundledTranslationsTest extends TestCase {
 			'no bundled language'        => array( 'nl_NL', '' ),
 			'no locale: a path'          => array( '../fr_FR', '' ),
 			'no locale: capital letters' => array( 'FR_fr', '' ),
+			'no locale: line feed'       => array( "fr_FR\n", '' ),
+			'no locale: CR LF'           => array( "fr_FR\r\n", '' ),
+			'no locale: NUL'             => array( "fr\0FR", '' ),
 		);
 	}
 

@@ -122,7 +122,7 @@ final class AB_MCP_Plugin {
 	 * @return string Path of a readable file, or ''.
 	 */
 	private static function bundled_file( $locale ) {
-		if ( ! preg_match( '/^([a-z]{2,3})(?:_[A-Za-z0-9]+)*$/', $locale, $parts ) ) {
+		if ( ! preg_match( '/\A([a-z]{2,3})(?:_[A-Za-z0-9]+)*\z/', $locale, $parts ) ) {
 			return '';
 		}
 		$own = AB_MCP_DIR . 'languages/alphabridge-mcp-' . $locale . '.mo';
