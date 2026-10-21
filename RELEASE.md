@@ -38,12 +38,14 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
    archive at all:
 
        git -C "$FREE_REPO" fetch && R=$(git -C "$FREE_REPO" rev-parse origin/main)
-       git -C "$FREE_REPO" log --oneline -1 "$R"
+       VERSION=$(git -C "$FREE_REPO" show "${R}:alphabridge-mcp.php" | grep -m1 -oE '^ \* Version: +[0-9.]+' | grep -oE '[0-9.]+')
+       git -C "$FREE_REPO" log --oneline -1 "$R" && echo "$VERSION"
        git -C "$FREE_REPO" archive -o /tmp/alphabridge-release.tar "$R" \
          && rm -rf "$WPORG/alphabridge-mcp" && mkdir -p "$WPORG/alphabridge-mcp" \
          && tar -xf /tmp/alphabridge-release.tar -C "$WPORG/alphabridge-mcp"
 
-   The commit shown must be the merge of the Stable tag. The archive is written to a file first and only then unpacked, and the old
+   The commit shown must be the merge of the Stable tag, and `$VERSION` the
+   version being released; the later steps use both. The archive is written to a file first and only then unpacked, and the old
    build copy is removed only after `git archive` succeeded: in a pipe the
    shell sees only the exit status of `tar`, so an archive that broke off
    halfway would go unnoticed.
@@ -79,8 +81,8 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
        rsync -a --delete --exclude .svn "$WPORG/alphabridge-mcp/" trunk/
        svn status trunk
        diff -rq -x .svn trunk "$WPORG/alphabridge-mcp"
-       svn ci trunk -m "<version>: …"
-       svn update && svn cp trunk tags/<version> && svn ci tags/<version> -m "Tag <version>"
+       svn ci trunk -m "AlphaBridge MCP ${VERSION:?version missing}"
+       svn update && svn cp trunk "tags/${VERSION:?version missing}" && svn ci "tags/$VERSION" -m "Tag $VERSION"
 
    The first `svn update` matters because the working copy lags when a release
    was made from elsewhere. `svn status trunk` must list only what this release
@@ -90,7 +92,7 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
 5. **Verify what WordPress.org serves:**
 
        curl -s -g 'https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=alphabridge-mcp&request[fields][sections]=0'
-       curl -s -o /tmp/served.zip https://downloads.wordpress.org/plugin/alphabridge-mcp.<version>.zip && unzip -tq /tmp/served.zip
+       curl -s -o /tmp/served.zip "https://downloads.wordpress.org/plugin/alphabridge-mcp.${VERSION:?version missing}.zip" && unzip -tq /tmp/served.zip
        unzip -Z1 /tmp/served.zip | grep -cE '^alphabridge-mcp/languages/.*\.(po|mo)$'
        git -C "$FREE_REPO" ls-tree -r --name-only "$R" languages | grep -cE '\.(po|mo)$'
 
@@ -104,7 +106,7 @@ repository (any checkout or worktree), `WPORG` holds the build copy and
 ## After
 
 - [ ] Tag the commit in this repository with the same version:
-      `git -C "$FREE_REPO" tag -a v<version> -m "AlphaBridge MCP <version>" "$R" && git -C "$FREE_REPO" push origin v<version>`.
+      `git -C "$FREE_REPO" tag -a "v${VERSION:?version missing}" -m "AlphaBridge MCP $VERSION" "$R" && git -C "$FREE_REPO" push origin "v$VERSION"`.
 - [ ] If the release changes the site contract (the `_meta` self-description),
       raise the minimum version in the hub configuration (connect.alphabridge-mcp.com).
 
