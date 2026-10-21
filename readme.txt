@@ -46,7 +46,7 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 
 = Connect in two minutes =
 
-* **Claude:** pick "AlphaBridge MCP for WordPress" in Claude's connector directory and approve on your site. No token to copy.
+* **Claude:** open [AlphaBridge MCP for WordPress in Claude's connector directory](https://claude.ai/directory/alphabridge), click Connect and approve on your site. No token to copy.
 * **ChatGPT** on Plus, Pro, Business, Enterprise and Edu: add your site as an MCP app and approve on your site.
 * **Cursor, Claude Code and other MCP clients:** create a connection in the plugin and paste one ready-made config.
 
@@ -69,7 +69,7 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 == Installation ==
 
 1. In WordPress, go to Plugins → Add New Plugin, search for "AlphaBridge MCP", install and activate it.
-2. Claude: open Connectors, find "AlphaBridge MCP for WordPress" in the directory and connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the hub, add your endpoint as a custom connector instead.
+2. Claude: open [AlphaBridge MCP for WordPress in Claude's directory](https://claude.ai/directory/alphabridge) and click Connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the hub, add your endpoint as a custom connector instead.
 3. ChatGPT: open Plugins, choose Add, then Create MCP app. Paste your site's endpoint from Settings → AlphaBridge MCP as the server URL, choose OAuth and approve on your site.
 4. Cursor, Claude Code and other clients: under Settings → AlphaBridge MCP, create a connection and copy its ready-made config.
 5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
