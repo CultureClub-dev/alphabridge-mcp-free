@@ -1,6 +1,6 @@
 <?php
 /**
- * AlphaBridge Connect — a minimal OAuth 2.1 authorization server for this
+ * OAuth sign-in — a minimal OAuth 2.1 authorization server for this
  * site's own MCP endpoint, so MCP clients (Claude.ai, Claude Desktop, …) can
  * connect with their native "Connect" button: the user is sent to THIS site's
  * normal WordPress login, approves on a consent screen, and the client receives
@@ -85,20 +85,28 @@ class AB_MCP_OAuth {
 	const CLIENT_PREFIX = 'abc_';
 
 	/**
-	 * Client name the AlphaBridge Connect hub registers itself under (RFC 7591
-	 * `client_name`). Connections created by it are labelled with this name
-	 * alone, so a site owner sees at a glance that the connection came through
-	 * the hub rather than from a client that talks to this site directly.
+	 * Client names the hub of AlphaBridge MCP (connect.alphabridge-mcp.com)
+	 * registers itself under (RFC 7591 `client_name`): the name it has used so
+	 * far, and the one it takes when its own pages are renamed. AlphaBridge
+	 * Connect is from 21.10.2026 the name of a separate product line, the hub
+	 * belongs to AlphaBridge MCP. Connections created by the hub are labelled
+	 * with the name it registered under, alone, so a site owner sees at a
+	 * glance that the connection came through the hub rather than from a client
+	 * that talks to this site directly.
 	 *
 	 * The name is SELF-ASSERTED. Dynamic client registration lets any client pick
-	 * any name, so this label says "this client called itself AlphaBridge Connect",
-	 * not "this is verified to be AlphaBridge Connect". That is true of every
-	 * client name in the list, and the label grants nothing — it is a reading aid.
-	 * A client that connects with a metadata document (CIMD) instead is tied to
-	 * the domain that serves the document, and the consent screen names that
-	 * domain; the name inside the document is still whatever that domain says.
+	 * any name, so this label says "this client called itself AlphaBridge MCP Hub",
+	 * not "this is verified to be the hub". That is true of every client name in
+	 * the list, and the label grants nothing — it is a reading aid. A client that
+	 * connects with a metadata document (CIMD) instead is tied to the domain that
+	 * serves the document, and the consent screen names that domain; the name
+	 * inside the document is still whatever that domain says.
+	 *
+	 * The old name leaves this list before the platform AlphaBridge Connect
+	 * connects to sites itself, so that its connections are not labelled as the
+	 * hub's.
 	 */
-	const CONNECT_CLIENT_NAME = 'AlphaBridge Connect';
+	const HUB_CLIENT_NAMES = array( 'AlphaBridge Connect', 'AlphaBridge MCP Hub' );
 
 	/**
 	 * Limits for fetching a client metadata document. 5 KB is the maximum the
@@ -1627,12 +1635,13 @@ class AB_MCP_OAuth {
 	 * true for all of them and reads the same in every language; the label is
 	 * stored as it is, it is not translated later.
 	 *
-	 * A connection made through the AlphaBridge Connect hub is labelled with the
-	 * hub's name alone: the site owner should see at a glance that it came
-	 * through the hub. A registration without a name is stored as "MCP client"
-	 * (register_client()), so an empty name only reaches this helper for a client
-	 * record that has none; it then reads "OAuth" alone rather than a dangling
-	 * separator.
+	 * A connection made through the hub of AlphaBridge MCP is labelled with the
+	 * name the hub registered under (HUB_CLIENT_NAMES), alone: the site owner
+	 * should see at a glance that it came through the hub, and under the name
+	 * the consent screen showed. A registration without a name is stored as
+	 * "MCP client" (register_client()), so an empty name only reaches this
+	 * helper for a client record that has none; it then reads "OAuth" alone
+	 * rather than a dangling separator.
 	 *
 	 * @param string $client_name RFC 7591 `client_name` of the registered client.
 	 * @return string
@@ -1640,8 +1649,10 @@ class AB_MCP_OAuth {
 	public static function connection_label( $client_name ) {
 		$client_name = trim( (string) $client_name );
 
-		if ( 0 === strcasecmp( $client_name, self::CONNECT_CLIENT_NAME ) ) {
-			return self::CONNECT_CLIENT_NAME;
+		foreach ( self::HUB_CLIENT_NAMES as $hub_name ) {
+			if ( 0 === strcasecmp( $client_name, $hub_name ) ) {
+				return $hub_name;
+			}
 		}
 
 		if ( '' === $client_name ) {
@@ -1840,7 +1851,7 @@ class AB_MCP_OAuth {
 		status_header( 400 );
 		nocache_headers();
 		self::send_frame_deny();
-		wp_die( esc_html( $message ), esc_html__( 'AlphaBridge Connect', 'alphabridge-mcp' ), array( 'response' => 400 ) );
+		wp_die( esc_html( $message ), esc_html__( 'AlphaBridge MCP', 'alphabridge-mcp' ), array( 'response' => 400 ) );
 	}
 
 	/**

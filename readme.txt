@@ -31,7 +31,7 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 * **Write and publish.** Turn notes into posts and pages, add images, set categories and tags, schedule the date.
 * **Look after your site.** Answer and moderate comments, see pending updates and the health of your site.
 * **Read what matters.** It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder. Ask what needs work.
-* **Up to 10 sites in one chat.** The free AlphaBridge Connect hub brings them into the same conversation.
+* **Up to 10 sites in one chat.** The free connection service of AlphaBridge MCP brings them into the same conversation.
 * **Nothing extra to host.** AlphaBridge runs inside WordPress, in plain PHP, on ordinary hosting.
 
 40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
@@ -130,11 +130,14 @@ Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, mont
 
 AlphaBridge MCP sends no telemetry and calls no outside service on its own. Three things reach beyond your site, each only when you start them:
 
-* **AlphaBridge Connect, optional.** If you connect through the hub at connect.alphabridge-mcp.com, it calls your site to set up the connection and to pass on the tool calls you make. It keeps your site's access key encrypted and passes content through without storing it. [Terms](https://connect.alphabridge-mcp.com/legal/terms) and [privacy notice](https://connect.alphabridge-mcp.com/legal/privacy).
+* **The connection service, optional.** If you connect through the hub at connect.alphabridge-mcp.com, the free connection service of AlphaBridge MCP, it calls your site to set up the connection and to pass on the tool calls you make. It keeps your site's access key encrypted and passes content through without storing it. [Terms](https://connect.alphabridge-mcp.com/legal/terms) and [privacy notice](https://connect.alphabridge-mcp.com/legal/privacy).
 * **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin's settings page.
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.6.6 =
+* **The connection service is named by what it is.** The readme calls the free service at connect.alphabridge-mcp.com the connection service of AlphaBridge MCP, and the error page of the sign-in is titled AlphaBridge MCP. A connection made through the service keeps its label in the connections list, also once the service's own pages carry a new name.
 
 = 4.6.5 =
 * **Bulk status changes are marked as reaching beyond the site.** `wp_bulk_update_status` (AlphaBridge MCP Pro) can publish many posts at once, so its openWorldHint is now true, like `wp_create_post` and `wp_update_post`. Assistants that ask before such steps now ask here too.
@@ -327,6 +330,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.6 =
+Wording: the free connection service is called by what it is. The connections list keeps recognising connections made through it after its pages are renamed. Nothing else changes.
 
 = 4.6.5 =
 The Pro tool for bulk status changes is now marked as able to publish, like the other publishing tools. Nothing else changes.

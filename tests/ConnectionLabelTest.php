@@ -14,20 +14,44 @@ use AB_MCP_OAuth;
 
 final class ConnectionLabelTest extends TestCase {
 
-	public function testTheHubIsLabelledWithItsNameAlone(): void {
+	/**
+	 * The name the hub registers under today, and the one it takes when its
+	 * own pages are renamed (21.10.2026: AlphaBridge Connect becomes a separate
+	 * product line, the hub belongs to AlphaBridge MCP).
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public static function hubNames(): array {
+		return array(
+			'today'          => array( 'AlphaBridge Connect' ),
+			'after renaming' => array( 'AlphaBridge MCP Hub' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'hubNames' )]
+	public function testTheHubIsLabelledWithItsNameAlone( string $name ): void {
 		self::assertSame(
-			'AlphaBridge Connect',
-			AB_MCP_OAuth::connection_label( 'AlphaBridge Connect' ),
+			$name,
+			AB_MCP_OAuth::connection_label( $name ),
 			'No "· OAuth" suffix: the site owner should see at a glance that it came through the hub.'
 		);
 	}
 
-	public function testSurroundingWhitespaceDoesNotHideTheHub(): void {
-		self::assertSame( 'AlphaBridge Connect', AB_MCP_OAuth::connection_label( '  AlphaBridge Connect ' ) );
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'hubNames' )]
+	public function testSurroundingWhitespaceDoesNotHideTheHub( string $name ): void {
+		self::assertSame( $name, AB_MCP_OAuth::connection_label( '  ' . $name . ' ' ) );
 	}
 
-	public function testTheComparisonIgnoresCase(): void {
-		self::assertSame( 'AlphaBridge Connect', AB_MCP_OAuth::connection_label( 'alphabridge connect' ) );
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'hubNames' )]
+	public function testTheComparisonIgnoresCase( string $name ): void {
+		self::assertSame( $name, AB_MCP_OAuth::connection_label( strtolower( $name ) ) );
+	}
+
+	public function testTheHubKeepsTheNameItRegisteredUnder(): void {
+		// The label repeats what the consent screen showed; it does not rename
+		// a connection the site owner approved under the old name.
+		self::assertSame( 'AlphaBridge Connect', AB_MCP_OAuth::connection_label( 'AlphaBridge Connect' ) );
+		self::assertSame( 'AlphaBridge MCP Hub', AB_MCP_OAuth::connection_label( 'AlphaBridge MCP Hub' ) );
 	}
 
 	public function testEveryOtherClientGetsItsNameAndOAuth(): void {
@@ -46,6 +70,7 @@ final class ConnectionLabelTest extends TestCase {
 		return array(
 			'ChatGPT'             => array( 'ChatGPT', 'ChatGPT · OAuth' ),
 			'AlphaBridge Connect' => array( 'AlphaBridge Connect', 'AlphaBridge Connect' ),
+			'AlphaBridge MCP Hub' => array( 'AlphaBridge MCP Hub', 'AlphaBridge MCP Hub' ),
 		);
 	}
 
@@ -87,6 +112,12 @@ final class ConnectionLabelTest extends TestCase {
 			'AlphaBridge Connector · OAuth',
 			AB_MCP_OAuth::connection_label( 'AlphaBridge Connector' ),
 			'Only the exact name counts; a similar one must stay distinguishable.'
+		);
+		self::assertSame( 'AlphaBridge Hub · OAuth', AB_MCP_OAuth::connection_label( 'AlphaBridge Hub' ) );
+		self::assertSame(
+			'AlphaBridge MCP · OAuth',
+			AB_MCP_OAuth::connection_label( 'AlphaBridge MCP' ),
+			'The name of the plugin is not the name of the hub.'
 		);
 	}
 
