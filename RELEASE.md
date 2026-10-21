@@ -17,11 +17,15 @@ file exists so the closing step is never guessed.
 ## Release
 
 Run the steps in **one shell session**: they share `$R` and the paths below.
-The paths are those of the release machine; adjust them once, here:
+The command blocks carry no comments, so they paste into zsh as well as bash
+(zsh without `INTERACTIVE_COMMENTS` runs `#` as a command). The paths are those
+of the release machine; adjust them once, here — `FREE_REPO` is this
+repository (any checkout or worktree), `WPORG` holds the build copy and
+`build.sh` (local, not on GitHub), `SVN` is the WordPress.org SVN working copy:
 
-    FREE_REPO=~/Entwicklung/alphabridge-mcp-free     # this repository (any checkout or worktree)
-    WPORG=~/Entwicklung/alphabridge/wporg-4.0.0      # build copy and build.sh (local, not on GitHub)
-    SVN=~/Entwicklung/alphabridge/svn-wporg          # WordPress.org SVN working copy
+    FREE_REPO=~/Entwicklung/alphabridge-mcp-free
+    WPORG=~/Entwicklung/alphabridge/wporg-4.0.0
+    SVN=~/Entwicklung/alphabridge/svn-wporg
 
 1. **Bump `Stable tag` in `readme.txt` to the new version.** Nothing reaches users
    until this line sits in the WordPress.org SVN (step 4).
@@ -34,12 +38,12 @@ The paths are those of the release machine; adjust them once, here:
    archive at all:
 
        git -C "$FREE_REPO" fetch && R=$(git -C "$FREE_REPO" rev-parse origin/main)
-       git -C "$FREE_REPO" log --oneline -1 "$R"        # must be the Stable tag merge
+       git -C "$FREE_REPO" log --oneline -1 "$R"
        git -C "$FREE_REPO" archive -o /tmp/alphabridge-release.tar "$R" \
          && rm -rf "$WPORG/alphabridge-mcp" && mkdir -p "$WPORG/alphabridge-mcp" \
          && tar -xf /tmp/alphabridge-release.tar -C "$WPORG/alphabridge-mcp"
 
-   The archive is written to a file first and only then unpacked, and the old
+   The commit shown must be the merge of the Stable tag. The archive is written to a file first and only then unpacked, and the old
    build copy is removed only after `git archive` succeeded: in a pipe the
    shell sees only the exit status of `tar`, so an archive that broke off
    halfway would go unnoticed.
@@ -71,25 +75,29 @@ The paths are those of the release machine; adjust them once, here:
    the translations from WordPress.org:
 
        cd "$SVN"
-       svn update                                          # the working copy lags when a release was made elsewhere
+       svn update
        rsync -a --delete --exclude .svn "$WPORG/alphabridge-mcp/" trunk/
-       svn status trunk                                    # only what this release changes; svn add the ?, svn rm the !
-       diff -rq -x .svn trunk "$WPORG/alphabridge-mcp"     # must print nothing
+       svn status trunk
+       diff -rq -x .svn trunk "$WPORG/alphabridge-mcp"
        svn ci trunk -m "<version>: …"
        svn update && svn cp trunk tags/<version> && svn ci tags/<version> -m "Tag <version>"
 
-   `svn update` before `svn cp`: a working copy with mixed revisions makes the
-   tag commit fail.
+   The first `svn update` matters because the working copy lags when a release
+   was made from elsewhere. `svn status trunk` must list only what this release
+   changes (`svn add` the `?`, `svn rm` the `!`), and `diff -rq` must print
+   nothing. `svn update` again before `svn cp`: a working copy with mixed
+   revisions makes the tag commit fail.
 5. **Verify what WordPress.org serves:**
 
        curl -s -g 'https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=alphabridge-mcp&request[fields][sections]=0'
        curl -s -o /tmp/served.zip https://downloads.wordpress.org/plugin/alphabridge-mcp.<version>.zip && unzip -tq /tmp/served.zip
        unzip -Z1 /tmp/served.zip | grep -cE '^alphabridge-mcp/languages/.*\.(po|mo)$'
-       git -C "$FREE_REPO" ls-tree -r --name-only "$R" languages | grep -cE '\.(po|mo)$'   # both counts equal
+       git -C "$FREE_REPO" ls-tree -r --name-only "$R" languages | grep -cE '\.(po|mo)$'
 
    The API must report the new version (`-g`, or curl reads `request[slug]` as
-   a glob and the answer is empty), the served ZIP must be intact, and it must
-   carry every translation file of the release commit. Right after the tag the
+   a glob and the answer is empty), the served ZIP must be intact, and the two
+   counts must be equal: it carries every translation file of the release
+   commit. Right after the tag the
    download can answer with nine bytes «Not found» while WordPress.org builds
    the archive; try again a minute later.
 
