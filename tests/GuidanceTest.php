@@ -229,7 +229,7 @@ final class GuidanceTest extends TestCase {
 
 	/* ----------------------------------------------- the instructions */
 
-	public function testWithoutProTheInstructionsSayWhatIsMissingAndWhereTheEditionsAre(): void {
+	public function testWithoutProTheInstructionsSayWhatIsMissing(): void {
 		$m         = new ReflectionMethod( AB_MCP_REST_Controller::class, 'instructions' );
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 

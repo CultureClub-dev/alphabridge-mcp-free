@@ -151,7 +151,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **The connection service is named by what it is.** The readme calls the free service at connect.alphabridge-mcp.com the connection service of AlphaBridge MCP, and the error page of the sign-in is titled AlphaBridge MCP. A connection made through the service keeps its label in the connections list, also once the service's own pages carry a new name.
 
 = 4.6.5 =
-* **Bulk status changes are marked as reaching beyond the site.** `wp_bulk_update_status` (AlphaBridge MCP Pro) can publish many posts at once, so its openWorldHint is now true, like `wp_create_post` and `wp_update_post`. Assistants that ask before such steps now ask here too.
+* **Bulk status changes are marked as reaching beyond the site.** `wp_bulk_update_status` (AlphaBridge MCP Pro) can publish many posts at once, so its openWorldHint is now true, like `wp_create_post` and `wp_update_post`. A client that asks before such steps can now ask here too.
 
 = 4.6.4 =
 * **Everything about connecting sits in one place: the connect card.** The settings moved up from a card of their own at the foot of the page into the panel of the app they concern — the sign-in for apps under Claude and under ChatGPT (there with the status line for ChatGPT and Codex, «Check again» and the link to switch the direct sign-in off), the connector address with the token under Cursor and «Other», next to the token form. Each has its own Save.
