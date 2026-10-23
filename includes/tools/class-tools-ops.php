@@ -25,7 +25,7 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_health',
 			array(
-				'description' => 'Site health summary: PHP/WordPress versions, HTTPS, debug, memory, object cache, and pending updates.',
+				'description' => 'Get a short health summary: PHP version and whether it is 7.4 or newer, WordPress version, HTTPS, WP_DEBUG, WP_MEMORY_LIMIT, persistent object cache, multisite, whether file changes are disabled (DISALLOW_FILE_MODS), and the counts of pending updates from WordPress\' last update check. Needs manage_options. Read-only; takes no arguments, runs none of the Site Health tests of wp-admin and makes no remote request. wp_get_update_status names the pending updates; wp_site_info lists versions, theme and plugins.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'site_health' ),
 			)
@@ -34,7 +34,7 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_dashboard_counts',
 			array(
-				'description' => 'Content at a glance: posts by type/status, users by role, comments and media counts.',
+				'description' => 'Get content counts of this site (on a multisite network: the current site): for each post type shown in wp-admin, its published, draft, pending, private and trashed entries (scheduled ones are not counted); users in total and per role; comments approved, moderated (pending), spam and trash; and the number of media files. Needs manage_options. Read-only; takes no arguments. The entries themselves are listed by wp_list_posts, wp_list_comments and wp_list_media.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'dashboard_counts' ),
 			)

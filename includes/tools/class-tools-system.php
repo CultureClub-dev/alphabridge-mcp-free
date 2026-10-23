@@ -24,7 +24,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_info',
 			array(
-				'description' => 'Environment overview: WordPress/PHP/MySQL versions, active theme, plugin counts, URLs, multisite, memory, HTTPS.',
+				'description' => 'Get an overview of the technical environment: WordPress, PHP and MySQL versions, site and home URL, HTTPS, multisite, locale, the active theme\'s name and version, the number of installed and active plugins, WP_MEMORY_LIMIT, the maximum upload size, this plugin\'s MCP endpoint and version, and the number of connections in use. Needs manage_options. Read-only; takes no arguments. wp_site_health adds debug mode, object cache and pending updates; wp_get_site_settings returns title, email, timezone and other settings.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'site_info' ),
 			)
@@ -33,7 +33,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_types',
 			array(
-				'description' => 'List registered post types.',
+				'description' => 'List every post type registered on the site, built-in and custom, internal ones such as revision and nav_menu_item included. Returns post_types: [{name, label, public}]; name is the value the post tools take as type, public is WordPress\' public flag of the type. Needs edit_posts. Read-only; takes no arguments. Taxonomies are listed by wp_get_taxonomies.',
 				'capability'  => 'edit_posts',
 				'callback'    => array( __CLASS__, 'post_types' ),
 			)
@@ -42,7 +42,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_taxonomies',
 			array(
-				'description' => 'List registered taxonomies.',
+				'description' => 'List the taxonomies registered on the site, the built-in category and post_tag included. Returns taxonomies: [{name, label, objects}]; name is the value the term tools take as taxonomy (their terms are listed by wp_list_terms), objects names the post types the taxonomy applies to. A non-public taxonomy appears only for an account that may assign its terms. Needs edit_posts. Read-only; takes no arguments. Post types are listed by wp_get_post_types.',
 				'capability'  => 'edit_posts',
 				'callback'    => array( __CLASS__, 'taxonomies' ),
 			)

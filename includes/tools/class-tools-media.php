@@ -24,15 +24,15 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_media',
 			array(
-				'description' => 'List media library attachments with pagination.',
+				'description' => 'List files in the media library (attachments), newest first, or by relevance when search is given. Returns items: [{id, title, mime, url, date}] and pagination {total, total_pages}. Only files with the usual status "inherit" are listed, so files set to private are not, and only those the account may read. No match gives an empty list. Needs upload_files. Read-only; wp_get_media returns one file with its sizes, alt text and caption.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
-						'search'   => array( 'type' => 'string' ),
-						'mime'     => array( 'type' => 'string', 'description' => 'e.g. image, image/png, application/pdf.' ),
-						'per_page' => array( 'type' => 'integer', 'description' => 'Max 100. Default 20.' ),
-						'page'     => array( 'type' => 'integer' ),
+						'search'   => array( 'type' => 'string', 'description' => 'Search text, matched against title, caption and description.' ),
+						'mime'     => array( 'type' => 'string', 'description' => 'MIME type or its main part, e.g. "image", "image/png" or "application/pdf". Default: all types.' ),
+						'per_page' => array( 'type' => 'integer', 'description' => 'Files per page, 1–100; other values are clamped. Default 20.', 'default' => 20 ),
+						'page'     => array( 'type' => 'integer', 'description' => 'Page number, starting at 1. Default 1.', 'default' => 1 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'list_media' ),
@@ -42,12 +42,12 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_media',
 			array(
-				'description' => 'Get a single attachment with URL, sizes, alt text and metadata.',
+				'description' => 'Get one file of the media library (attachment) by id. Returns {id, title, mime, url, alt, caption, metadata}; metadata is WordPress\' attachment metadata (for an image: width, height, file and the generated sizes). The caption of a password-protected file is empty for an account that may not edit it. An id that is not a media file (a post, say) returns a not-found error. Needs the right to read the file. Read-only.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
-					'properties' => array( 'id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'id' => array( 'type' => 'integer', 'description' => 'Attachment id, as wp_list_media returns it.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'get_media' ),
 			)
@@ -56,16 +56,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media_from_url',
 			array(
-				'description' => 'Download a file from a public http(s) URL and add it to the media library. Your site fetches the file itself through WordPress\' safe-URL check (private and internal hosts are refused unless WordPress itself allows them, such as the site\'s own host; checked on every redirect): at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must say JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are rejected, and WordPress then checks the file itself as for any upload. No third-party API is involved.',
+				'description' => 'Download a file from a public http(s) URL and add it to the media library. Your site fetches the file itself through WordPress\' safe-URL check (private and internal hosts are refused unless WordPress itself allows them, such as the site\'s own host; checked on every redirect): at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must say JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are rejected, and WordPress then checks the file itself as for any upload. No third-party API is involved. Returns {uploaded: true, id, url}.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'url' ),
 					'properties' => array(
 						'url'      => array( 'type' => 'string', 'description' => 'Public http(s) URL of the file. Your site downloads it; nothing is sent anywhere else.' ),
-						'title'    => array( 'type' => 'string' ),
-						'alt'      => array( 'type' => 'string' ),
-						'post_id'  => array( 'type' => 'integer', 'description' => 'Attach to this post id.' ),
+						'title'    => array( 'type' => 'string', 'description' => 'Title of the new attachment.' ),
+						'alt'      => array( 'type' => 'string', 'description' => 'Alternative text for an image, stored as plain text.' ),
+						'post_id'  => array( 'type' => 'integer', 'description' => 'Id of a post to attach the file to; needs the right to edit that post. Default: attached to no post.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'upload_from_url' ),
@@ -75,17 +75,17 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media',
 			array(
-				'description' => 'Upload a local image or PDF to the media library from base64-encoded content.',
+				'description' => 'Upload a JPEG, PNG, GIF, WebP or PDF file sent as base64 content and add it to the media library. WordPress checks the file as for any upload and creates the image sizes; the file is public under its URL afterwards. Up to 20 MB unless the site sets another limit. Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when the file is attached to it. A file already on the web is added with wp_upload_media_from_url.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'filename', 'content' ),
 					'properties' => array(
 						'filename' => array( 'type' => 'string', 'description' => 'File name with extension, e.g. "photo.jpg".' ),
-						'content'  => array( 'type' => 'string', 'description' => 'Base64-encoded file bytes (JPEG, PNG, GIF, WebP or PDF).' ),
-						'title'    => array( 'type' => 'string' ),
-						'alt'      => array( 'type' => 'string' ),
-						'post_id'  => array( 'type' => 'integer', 'description' => 'Attach to this post id.' ),
+						'content'  => array( 'type' => 'string', 'description' => 'Base64-encoded file bytes (JPEG, PNG, GIF, WebP or PDF); a data: URI prefix is accepted.' ),
+						'title'    => array( 'type' => 'string', 'description' => 'Title of the new attachment.' ),
+						'alt'      => array( 'type' => 'string', 'description' => 'Alternative text for an image, stored as plain text.' ),
+						'post_id'  => array( 'type' => 'integer', 'description' => 'Id of a post to attach the file to; needs the right to edit that post. Default: attached to no post.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'upload_base64' ),
@@ -95,16 +95,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_media',
 			array(
-				'description' => 'Update an attachment title, caption and alt text.',
+				'description' => 'Change the title, caption or alt text of one file in the media library (attachment); the file itself stays as it is. Only the fields passed change. Alt text is stored as plain text. Returns {updated: true, id}; an id that is not a media file returns a not-found error. Needs the right to edit that file. Title, caption and alt text can be public wherever the file is shown.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'      => array( 'type' => 'integer' ),
-						'title'   => array( 'type' => 'string' ),
-						'caption' => array( 'type' => 'string' ),
-						'alt'     => array( 'type' => 'string' ),
+						'id'      => array( 'type' => 'integer', 'description' => 'Attachment id, as wp_list_media returns it.' ),
+						'title'   => array( 'type' => 'string', 'description' => 'New title. Omit to keep it.' ),
+						'caption' => array( 'type' => 'string', 'description' => 'New caption; an empty string clears it. Omit to keep it.' ),
+						'alt'     => array( 'type' => 'string', 'description' => 'New alternative text for an image; an empty string clears it. Omit to keep it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_media' ),
@@ -114,13 +114,13 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_media',
 			array(
-				'description' => 'Delete an attachment from the media library.',
+				'description' => 'Delete one file of the media library (attachment) for good: its entry, its metadata and the file with all its image sizes on the server; the media library has no trash here. It is removed as featured image wherever it was one; posts that embed or link it keep pointing to a URL that no longer exists. Needs the right to delete that file. Returns {deleted: true, id}; an id that no longer exists returns a not-found error. Posts and pages are deleted with wp_delete_post.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
-					'properties' => array( 'id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'id' => array( 'type' => 'integer', 'description' => 'Attachment id of the file to delete.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'delete_media' ),
 			)

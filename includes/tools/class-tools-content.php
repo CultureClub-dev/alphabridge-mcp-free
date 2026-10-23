@@ -48,26 +48,28 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_posts',
 			array(
-				'description' => 'List or search posts/pages/any post type with filters and pagination.',
+				'description' => 'List posts, pages or entries of any post type, with filters, sorting and pagination. Returns items: [{id, type, status, title, slug, link, date, modified, author, parent, excerpt, menu_order}] and pagination {page, per_page, total, total_pages}; content is not included (wp_get_post returns it). Only entries the account may read are listed; no match gives an empty list. Needs edit_posts. Read-only. wp_search runs one keyword search across all post types, without paging.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
 						'type'     => array(
 							'type'        => 'string',
-							'description' => 'Post type (post, page, any, or a custom type). Default "post".',
+							'description' => 'Post type (post, page, any, or a custom type as wp_get_post_types lists it). Default "post". Revisions are listed only with parent set to a post the account may edit.',
+							'default'     => 'post',
 						),
 						'status'   => array(
 							'type'        => 'string',
-							'description' => 'Post status (publish, draft, pending, private, any). Default "any".',
+							'description' => 'Post status (publish, draft, pending, private, future, trash, or any: every status except trash and auto-draft). Default "any".',
+							'default'     => 'any',
 						),
-						'search'   => array( 'type' => 'string', 'description' => 'Keyword search.' ),
-						'author'   => array( 'type' => 'integer', 'description' => 'Author user id.' ),
-						'parent'   => array( 'type' => 'integer', 'description' => 'Parent post id.' ),
-						'per_page' => array( 'type' => 'integer', 'description' => 'Items per page (max 100). Default 20.' ),
-						'page'     => array( 'type' => 'integer', 'description' => 'Page number. Default 1.' ),
-						'orderby'  => array( 'type' => 'string', 'description' => 'date, title, modified, menu_order, ID.' ),
-						'order'    => array( 'type' => 'string', 'description' => 'ASC or DESC. Default DESC.' ),
+						'search'   => array( 'type' => 'string', 'description' => 'Keyword search in title, excerpt and content.' ),
+						'author'   => array( 'type' => 'integer', 'description' => 'Only entries by this author user id.' ),
+						'parent'   => array( 'type' => 'integer', 'description' => 'Only children of this post id; 0 for top-level entries only.' ),
+						'per_page' => array( 'type' => 'integer', 'description' => 'Items per page, 1–100; other values are clamped. Default 20.', 'default' => 20 ),
+						'page'     => array( 'type' => 'integer', 'description' => 'Page number, starting at 1. Default 1.', 'default' => 1 ),
+						'orderby'  => array( 'type' => 'string', 'description' => 'Sort field: date, title, modified, menu_order or ID. Default "date".', 'default' => 'date' ),
+						'order'    => array( 'type' => 'string', 'description' => 'ASC or DESC; any other value counts as DESC. Default "DESC".', 'default' => 'DESC' ),
 						'built_with' => array( 'type' => 'string', 'description' => 'Only posts built with this page builder: a builder id as wp_get_post names it in built_with (e.g. "elementor", "kadence", "wpbakery"), "any" for every known builder, or "none" for posts without one. Matched by the builder\'s markers (meta keys, content patterns); each listed item then names the builder found on it.' ),
 					),
 				),
@@ -78,14 +80,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post',
 			array(
-				'description' => 'Get a single post/page including raw content, meta and terms. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so.',
+				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so. Needs the right to read the post; a password-protected one needs the right to edit it. An unknown id returns a not-found error. Read-only.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'           => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'include_meta' => array( 'type' => 'boolean', 'description' => 'Include post meta. Default true.' ),
+						'id'           => array( 'type' => 'integer', 'description' => 'Post id, as wp_list_posts or wp_search return it.' ),
+						'include_meta' => array( 'type' => 'boolean', 'description' => 'Include the public custom fields the account may edit (keys starting with "_" and credential-like keys are left out). Default true.', 'default' => true ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post' ),
@@ -95,22 +97,22 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_post',
 			array(
-				'description' => 'Create a post, page or custom post type entry (title, content, status, terms, meta).',
+				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published post is public at once. Needs the right to create entries of the type. Every argument is optional, and each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
-						'type'    => array( 'type' => 'string', 'description' => 'Post type. Default "post".' ),
-						'title'   => array( 'type' => 'string', 'description' => 'Title.' ),
+						'type'    => array( 'type' => 'string', 'description' => 'Post type, as wp_get_post_types lists it. Default "post".', 'default' => 'post' ),
+						'title'   => array( 'type' => 'string', 'description' => 'Title. Default empty.' ),
 						'content' => array( 'type' => 'string', 'description' => 'Content (HTML or block markup).' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. Default "draft". "future" needs a date at least five minutes ahead; "publish" with such a date schedules the post, as in WordPress.' ),
-						'excerpt' => array( 'type' => 'string' ),
-						'slug'    => array( 'type' => 'string' ),
-						'author'  => array( 'type' => 'integer' ),
-						'parent'  => array( 'type' => 'integer' ),
+						'excerpt' => array( 'type' => 'string', 'description' => 'Excerpt. Default empty.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title.' ),
+						'author'  => array( 'type' => 'integer', 'description' => 'Author user id. Applied only for an account that may edit others\' entries of this type; otherwise, and by default, the connected user is the author.' ),
+						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; taxonomies the account may not assign are skipped.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'create_post' ),
@@ -127,16 +129,16 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'      => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'title'   => array( 'type' => 'string' ),
-						'content' => array( 'type' => 'string' ),
+						'title'   => array( 'type' => 'string', 'description' => 'New title. Omit to keep it.' ),
+						'content' => array( 'type' => 'string', 'description' => 'New content (HTML or block markup); it replaces the whole post_content. Omit to keep it.' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. "future" needs a date at least five minutes ahead.' ),
-						'excerpt' => array( 'type' => 'string' ),
-						'slug'    => array( 'type' => 'string' ),
-						'author'  => array( 'type' => 'integer' ),
-						'parent'  => array( 'type' => 'integer' ),
+						'excerpt' => array( 'type' => 'string', 'description' => 'New excerpt. Omit to keep it.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'New URL slug; it changes the permalink. Omit to keep it.' ),
+						'author'  => array( 'type' => 'integer', 'description' => 'New author user id. Applied only for an account that may edit others\' entries of this type; otherwise left as it is.' ),
+						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. Omit to keep it.' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_post' ),
@@ -146,14 +148,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_post',
 			array(
-				'description' => 'Delete a post: into the trash by default, for good with force=true. Files are deleted with wp_delete_media (or force=true): the media library has no trash unless a site turns it on.',
+				'description' => 'Delete a post: into the trash by default, for good with force=true. Files are deleted with wp_delete_media (or force=true): the media library has no trash unless a site turns it on. A post already in the trash, or any post on a site without a trash, is refused without force=true. Deleting for good also removes its revisions, comments, custom fields and term assignments. Returns {deleted: true, permanent, id}.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'    => array( 'type' => 'integer' ),
+						'id'    => array( 'type' => 'integer', 'description' => 'Id of the post, page or entry to delete.' ),
 						'force' => array( 'type' => 'boolean', 'description' => 'Permanently delete instead of trashing.' ),
 					),
 				),
@@ -164,12 +166,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_revisions',
 			array(
-				'description' => 'List revisions of a post.',
+				'description' => 'List the stored revisions of one post or page, newest first. Returns revisions: [{revision_id, date, author}]; date is when the revision was saved (RFC 3339, site time), author a user id. The list is empty when the post has no revisions or revisions are turned off for it. A revision\'s content is returned by wp_get_post with its revision_id. Needs the right to edit the post. Read-only.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
-					'properties' => array( 'id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'id' => array( 'type' => 'integer', 'description' => 'Id of the post or page whose revisions are listed.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'list_revisions' ),
 			)
@@ -178,12 +180,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_duplicate_post',
 			array(
-				'description' => 'Duplicate a post or page as a new draft: title, content, excerpt, parent, menu order and terms, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Elementor element ids are renewed, so copy and original do not share them. Page builder data holds markup and is copied only for accounts with the unfiltered_html capability. A builder\'s keys, its page template included, are copied together or not at all. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and the meta of a revision, which WordPress would write to the post the revision belongs to. The response lists the copied keys and the skipped ones with the reason, and names the builder the original is built with.',
+				'description' => 'Duplicate a post or page as a new draft: title, content, excerpt, parent, menu order and terms, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Elementor element ids are renewed, so copy and original do not share them. Page builder data holds markup and is copied only for accounts with the unfiltered_html capability. A builder\'s keys, its page template included, are copied together or not at all. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and the meta of a revision, which WordPress would write to the post the revision belongs to. The response lists the copied keys and the skipped ones with the reason, and names the builder the original is built with. The original stays unchanged.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
-					'properties' => array( 'id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'id' => array( 'type' => 'integer', 'description' => 'Id of the post or page to copy.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'duplicate_post' ),
 			)
@@ -192,14 +194,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Get post meta: one key, or all public meta for a post.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} or {id, meta: {key: value}}; a key with several values gives a list. An unknown post id returns a not-found error. Read-only. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'  => array( 'type' => 'integer' ),
-						'key' => array( 'type' => 'string', 'description' => 'Optional single meta key.' ),
+						'id'  => array( 'type' => 'integer', 'description' => 'Post id.' ),
+						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the post does not have returns an empty value.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post_meta_tool' ),
