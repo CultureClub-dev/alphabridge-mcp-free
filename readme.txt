@@ -137,6 +137,12 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.8 =
+* **Every tool explains itself to AI assistants.** Each description says what the tool is for, when it fits, what it changes along the way and what a repeated call does, and every parameter is described (105 of 105, before 42). The texts state facts and give the assistant no instructions, as the directories of OpenAI and Anthropic ask.
+* **Readable tool titles.** AI clients show «Change a post or page» instead of «Update Post»: each tool's title is its short English name from the fine-tuning, whatever the language of the site.
+* **A tool of another edition is named without a link.** When an assistant asks for a tool of AlphaBridge MCP Pro or its Agency plan, the answer and the server instructions say which edition has it; they no longer link the page about the editions.
+* For add-ons: a tool definition can state `open_world` itself, as it can state `destructive`.
+
 = 4.6.7 =
 * **French, Italian, Spanish and Portuguese.** Everything of the plugin a person reads now comes in these languages too, as it does in German: the settings page with its cards, switch, fine-tuning and notices, the consent screen with its access levels and error pages, the description in the plugin list, the log, and the refusals and error messages an assistant passes on. The plugin brings the files itself (fr_FR, it_IT, es_ES, pt_PT); a language pack from translate.wordpress.org still takes precedence for every text it has. The notice and the boxes before write access goes on stay in English and German, as the Terms of Use.
 * **A site in another variant of a language reads that language.** A locale without a file of its own reads the main file of its language: fr_CA and fr_BE read French, es_MX and the other Spanish locales Spanish, pt_BR and pt_PT_ao90 Portuguese. Until now they read English.
@@ -335,6 +341,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.8 =
+Clearer tool descriptions and titles for AI assistants; every parameter described. No setting changes.
 
 = 4.6.7 =
 The plugin now speaks French, Italian, Spanish and Portuguese, as it speaks German: settings, sign-in and messages. Other variants of these languages read them too. Nothing else changes.
