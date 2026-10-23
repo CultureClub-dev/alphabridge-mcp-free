@@ -97,7 +97,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_post',
 			array(
-				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published entry of a public post type is public at once. Needs the right to create entries of the type. No argument is required, but WordPress refuses an entry with empty title, content and excerpt for types that support all three, such as posts (empty_content). Each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
+				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published entry shows on the site at once where its post type is publicly viewable. Needs the right to create entries of the type. No argument is required, but WordPress refuses an entry with empty title, content and excerpt for types that support all three, such as posts (empty_content). Each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -107,7 +107,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'content' => array( 'type' => 'string', 'description' => 'Content (HTML or block markup).' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. Default "draft". "future" needs a date at least five minutes ahead; "publish" with such a date schedules the post, as in WordPress.' ),
 						'excerpt' => array( 'type' => 'string', 'description' => 'Excerpt. Default empty.' ),
-						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title when the entry is published; drafts and pending entries keep none until then.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title, except for drafts and pending entries, which keep none until a save with another status (publish, private or future).' ),
 						'author'  => array( 'type' => 'integer', 'description' => 'Author user id. Applied only for an account that may edit others\' entries of this type; otherwise, and by default, the connected user is the author.' ),
 						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
@@ -122,7 +122,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post',
 			array(
-				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a change to content is refused there, with the way to make it, while title, status, excerpt and the other fields still change. wp_get_builder_layout returns the outline of such pages.',
+				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a call that changes content is refused there before anything is written, with the way to make it; a call without content still changes title, status, excerpt and the other fields. wp_get_builder_layout returns the outline of such pages.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',

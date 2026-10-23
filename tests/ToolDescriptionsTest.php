@@ -134,21 +134,24 @@ final class ToolDescriptionsTest extends TestCase {
 	}
 
 	public function testTheModerationEnumIsWhatTheHandlerAccepts(): void {
-		$status = $this->tools()['wp_moderate_comment']['inputSchema']['properties']['status'];
+		// The handler is asked about every candidate, independently of the
+		// schema; the values it takes have to be exactly the enum. A value
+		// left out of the enum, or one added that the handler refuses, fails.
+		$enum = $this->tools()['wp_moderate_comment']['inputSchema']['properties']['status']['enum'];
 		$GLOBALS['ab_test_comments'][5] = (object) array( 'comment_ID' => 5 );
 
-		foreach ( $status['enum'] as $value ) {
+		$candidates = array( 'approve', 'hold', 'spam', 'trash', 'approved', 'unapproved', 'pending', 'unspam', 'untrash', 'delete', 'all', 'publish', '1', '0', '' );
+		$accepted   = array();
+		foreach ( $candidates as $value ) {
 			$out = AB_MCP_Tools_Taxonomy_Comments::moderate_comment( array( 'comment_id' => 5, 'status' => $value ) );
-			self::assertIsArray( $out, $value . ' is in the enum, so the handler takes it' );
-			self::assertSame( $value, $out['status'] );
+			if ( is_array( $out ) ) {
+				$accepted[] = $value;
+				self::assertSame( $value, $out['status'] );
+			} else {
+				self::assertSame( 'ab_mcp_bad_status', $out->get_error_code(), $value );
+			}
 		}
-		self::assertCount( count( $status['enum'] ), $GLOBALS['ab_test_moderated'] );
-
-		foreach ( array( 'approved', 'unapproved', 'pending', 'delete', 'all', '' ) as $value ) {
-			$out = AB_MCP_Tools_Taxonomy_Comments::moderate_comment( array( 'comment_id' => 5, 'status' => $value ) );
-			self::assertInstanceOf( \WP_Error::class, $out, $value . ' is not in the enum, so the handler refuses it' );
-			self::assertSame( 'ab_mcp_bad_status', $out->get_error_code() );
-		}
-		self::assertCount( count( $status['enum'] ), $GLOBALS['ab_test_moderated'], 'a refused status changes nothing' );
+		self::assertEqualsCanonicalizing( $accepted, $enum );
+		self::assertCount( count( $accepted ), $GLOBALS['ab_test_moderated'], 'a refused status changes nothing' );
 	}
 }

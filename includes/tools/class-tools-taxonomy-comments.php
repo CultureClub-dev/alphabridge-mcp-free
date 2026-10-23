@@ -125,7 +125,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
