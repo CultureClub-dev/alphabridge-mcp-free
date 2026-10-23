@@ -14,14 +14,13 @@
  * only refusals the assistant corrects in its own call stay plain.
  *
  * A tool of AlphaBridge MCP Pro or its Agency plan is not on a free site.
- * Its name is answered with the edition it belongs to and the page that
- * describes the editions instead of «Unknown tool», from a fixed list of
- * names (the Pro add-on's tests compare it with what Pro registers); the
- * add-on can answer for an inactive licence or a plan without the tool. A
- * site without Pro's tools tells the assistant in its instructions what is
- * not on it and where the editions are described. Both are facts only: no
- * steps to install, no request to point the person to Pro, no link to
- * prices or the checkout — ChatGPT's directory reviews these texts and
+ * Its name is answered with the edition it belongs to instead of «Unknown
+ * tool», from a fixed list of names (the Pro add-on's tests compare it with
+ * what Pro registers); the add-on can answer for an inactive licence or a
+ * plan without the tool. A site without Pro's tools tells the assistant in
+ * its instructions what is not on it. Both are facts only: no steps to
+ * install, no request to point the person to Pro, no link to the editions,
+ * to prices or to the checkout — ChatGPT's directory reviews these texts and
  * forbids promoting upgrades. Nothing of Pro is in this plugin and nothing
  * here is locked: no Pro tool is registered or listed.
  *
