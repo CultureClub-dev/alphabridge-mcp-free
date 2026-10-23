@@ -12,13 +12,13 @@
  *
  * A tool that is not on this site because it belongs to AlphaBridge MCP Pro
  * or its Agency plan is answered differently: a call of one of those names
- * is answered with the edition it belongs to and the page that describes
- * the editions (unavailable_tool()) instead of «Unknown tool», and the
- * server instructions of a site without Pro say the same
- * (instructions_paragraph()). Facts only, no steps and no request to pass
- * anything on: assistant platforms review these texts, and ChatGPT's
- * directory allows saying that a feature is missing and linking to a page
- * about the editions, but not promoting an upgrade or linking to a purchase.
+ * is answered with the edition it belongs to (unavailable_tool()) instead
+ * of «Unknown tool», and the server instructions of a site without Pro say
+ * the same (instructions_paragraph()). Facts only, no steps, no link and no
+ * request to pass anything on: assistant platforms review these texts, and
+ * ChatGPT's directory allows saying that a feature needs another edition,
+ * but not promoting an upgrade; its review remarked on the link to the page
+ * about the editions these texts carried until October 2026.
  * The names are a fixed list (PRO_TOOLS, AGENCY_TOOLS); no code of Pro is in
  * this plugin and nothing here is locked. A test in the Pro add-on compares
  * the list with what Pro registers.
@@ -36,7 +36,8 @@ class AB_MCP_Guidance {
 	/**
 	 * Where the editions of AlphaBridge MCP are described, with the tools of
 	 * each: the tool reference of the website, which has no buttons to the
-	 * checkout. The name stays for the Pro add-on, which reads it.
+	 * checkout. No text for an assistant links it any more (October 2026);
+	 * the constant stays for add-ons that read it.
 	 */
 	const PRICING_URL = 'https://alphabridge-mcp.com/docs';
 
@@ -279,8 +280,8 @@ class AB_MCP_Guidance {
 	 * The answer to a call of a tool this site does not have because it
 	 * belongs to AlphaBridge MCP Pro or its Agency plan, or null for any
 	 * other name. The caller asks only for a name that is not registered.
-	 * Which edition it belongs to, and where the editions are described; no
-	 * steps to install anything (see the head of this class).
+	 * Which edition it belongs to; no link and no steps to install anything
+	 * (see the head of this class).
 	 *
 	 * @param string $name Tool name.
 	 * @return WP_Error|null Code ab_mcp_needs_pro.
@@ -295,9 +296,7 @@ class AB_MCP_Guidance {
 			? __( 'The tool "%s" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.', 'alphabridge-mcp' )
 			/* translators: %s: tool name */
 			: __( 'The tool "%s" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.', 'alphabridge-mcp' );
-		$message = sprintf( $reason, (string) $name ) . ' '
-			/* translators: %s: address of the page that describes the editions. */
-			. sprintf( __( 'The editions of AlphaBridge MCP and their tools are described here: %s', 'alphabridge-mcp' ), self::PRICING_URL );
+		$message = sprintf( $reason, (string) $name );
 		/**
 		 * The answer to a call of a tool of AlphaBridge MCP Pro or its Agency
 		 * plan that is not registered on this site. The Pro add-on answers
@@ -317,8 +316,8 @@ class AB_MCP_Guidance {
 
 	/**
 	 * The paragraph of the server instructions on a site without the tools
-	 * of AlphaBridge MCP Pro: what is not on this site and where the editions
-	 * are described, so an assistant asked for one of those things can say so
+	 * of AlphaBridge MCP Pro: what is not on this site, so an assistant asked
+	 * for one of those things can say so
 	 * instead of trying the impossible or failing without a word. Facts only,
 	 * no request to point the person to Pro (see the head of this class);
 	 * written for the assistant, in the language of the rest of the
@@ -327,6 +326,6 @@ class AB_MCP_Guidance {
 	 * @return string
 	 */
 	public static function instructions_paragraph() {
-		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it; the editions are described at ' . self::PRICING_URL;
+		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
 	}
 }

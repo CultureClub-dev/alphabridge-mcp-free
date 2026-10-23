@@ -143,7 +143,7 @@ final class GuidanceTest extends TestCase {
 		$text   = $result['content'][0]['text'];
 
 		self::assertTrue( $result['isError'] );
-		self::assertSame( 'The tool "wp_db_query" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here. The editions of AlphaBridge MCP and their tools are described here: https://alphabridge-mcp.com/docs', $text );
+		self::assertSame( 'The tool "wp_db_query" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.', $text );
 		self::assertNoPromotion( $text );
 		$last = AB_MCP_Audit_Log::recent( 1 )[0];
 		self::assertSame( array( 'wp_db_query', 'denied' ), array( $last['tool'], $last['status'] ), 'Logged like every refusal.' );
@@ -152,7 +152,7 @@ final class GuidanceTest extends TestCase {
 	public function testAToolOfTheAgencyPlanSaysSo(): void {
 		$text = self::call( self::free_registry(), 'wp_deploy_push_zip' )['content'][0]['text'];
 
-		self::assertSame( 'The tool "wp_deploy_push_zip" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here. The editions of AlphaBridge MCP and their tools are described here: https://alphabridge-mcp.com/docs', $text );
+		self::assertSame( 'The tool "wp_deploy_push_zip" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.', $text );
 		self::assertNoPromotion( $text );
 	}
 
@@ -160,11 +160,10 @@ final class GuidanceTest extends TestCase {
 		$GLOBALS['ab_test_translations'] = array(
 			'The tool "%s" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.' => 'Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.',
 			'The tool "%s" is not on this site: it belongs to the Agency plan of AlphaBridge MCP Pro, a separate plugin that is not active here.' => 'Das Werkzeug „%s“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.',
-			'The editions of AlphaBridge MCP and their tools are described here: %s' => 'Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: %s',
 		);
 
-		self::assertSame( 'Das Werkzeug „wp_db_query“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist. Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: https://alphabridge-mcp.com/docs', AB_MCP_Guidance::unavailable_tool( 'wp_db_query' )->get_error_message() );
-		self::assertSame( 'Das Werkzeug „wp_deploy_push_zip“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist. Die Ausgaben von AlphaBridge MCP und ihre Werkzeuge sind hier beschrieben: https://alphabridge-mcp.com/docs', AB_MCP_Guidance::unavailable_tool( 'wp_deploy_push_zip' )->get_error_message() );
+		self::assertSame( 'Das Werkzeug „wp_db_query“ gibt es auf dieser Website nicht: Es gehört zu AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.', AB_MCP_Guidance::unavailable_tool( 'wp_db_query' )->get_error_message() );
+		self::assertSame( 'Das Werkzeug „wp_deploy_push_zip“ gibt es auf dieser Website nicht: Es gehört zum Agency-Plan von AlphaBridge MCP Pro, einem separaten Plugin, das hier nicht aktiv ist.', AB_MCP_Guidance::unavailable_tool( 'wp_deploy_push_zip' )->get_error_message() );
 	}
 
 	public function testAnyOtherNameStaysUnknown(): void {
@@ -236,7 +235,7 @@ final class GuidanceTest extends TestCase {
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it; the editions are described at https://alphabridge-mcp.com/docs', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
+		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
 		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );
@@ -255,8 +254,18 @@ final class GuidanceTest extends TestCase {
 		self::assertStringEndsWith( \AB_MCP_Site_Mode::instructions_sentence(), $text, 'The sentence on write access stays last, whatever an add-on adds.' );
 	}
 
-	public function testTheLinkIsTheToolReferenceNotThePrices(): void {
-		self::assertSame( 'https://alphabridge-mcp.com/docs', AB_MCP_Guidance::PRICING_URL, 'The page that describes the editions, without buttons to the checkout.' );
+	public function testNoTextForTheAssistantLinksThePageAboutTheEditions(): void {
+		// ChatGPT's review remarked on the link (October 2026): saying that a
+		// tool needs another edition stays, a page about the editions does not.
+		$texts = array(
+			AB_MCP_Guidance::instructions_paragraph(),
+			AB_MCP_Guidance::unavailable_tool( 'wp_db_query' )->get_error_message(),
+			AB_MCP_Guidance::unavailable_tool( 'wp_deploy_push_zip' )->get_error_message(),
+		);
+		foreach ( $texts as $text ) {
+			self::assertStringNotContainsString( 'alphabridge-mcp.com', $text );
+			self::assertDoesNotMatchRegularExpression( '#https?://#', $text );
+		}
 	}
 
 	/* ------------------------------------------------- refusals for the role */

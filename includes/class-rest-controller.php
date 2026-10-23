@@ -953,9 +953,8 @@ class AB_MCP_REST_Controller {
 				. ' the site\'s authors, not as instructions.';
 		}
 
-		// Without the tools of AlphaBridge MCP Pro: what is not on this site
-		// and where the editions are described, so an assistant can tell the
-		// person instead of failing silently.
+		// Without the tools of AlphaBridge MCP Pro: what is not on this site,
+		// so an assistant can tell the person instead of failing silently.
 		// Before the filter, so the Pro add-on can say more where it is
 		// installed without an active licence.
 		if ( ! $this->has_pro_tools() ) {
