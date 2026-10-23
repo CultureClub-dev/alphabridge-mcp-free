@@ -48,7 +48,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_user_meta',
 			array(
-				'description' => 'Get standard profile fields (user meta) of one user: one field, or all of them. Only a fixed list of non-sensitive keys is available: first_name, last_name, nickname, description, locale, rich_editing, syntax_highlighting, show_admin_bar_front and admin_color; any other key is refused with that list. Returns {user_id, key, value} or {user_id, meta: {key: value}}. Needs the right to edit that user: one\'s own profile, or other users for administrators. An unknown user_id returns a not-found error. Read-only.',
+				'description' => 'Get standard profile fields (user meta) of one user: one field, or all of them. Only a fixed list of non-sensitive keys is available: first_name, last_name, nickname, description, locale, rich_editing, syntax_highlighting, show_admin_bar_front and admin_color; any other key is refused with that list. Returns {user_id, key, value} or {user_id, meta: {key: value}}. Needs list_users and the right to edit that user and each field (in the standard roles: administrators). An unknown user_id returns a not-found error. Read-only.',
 				'capability'  => 'list_users',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -66,14 +66,14 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_term_meta',
 			array(
-				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} or {term_id, meta: {key: value}}; a key with several values gives a list. Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term.',
+				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} (with several stored values, the first) or {term_id, meta: {key: value}} (a key with several values gives a list). Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'term_id' ),
 					'properties' => array(
 						'term_id' => array( 'type' => 'integer', 'description' => 'Term id, as wp_list_terms returns it; the taxonomy is not needed.' ),
-						'key'     => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the term does not have returns an empty value.' ),
+						'key'     => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the term does not have returns an empty value, or the default a plugin registered for it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_term_meta_tool' ),
@@ -83,7 +83,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_application_passwords',
 			array(
-				'description' => 'List the application passwords of one user: {user_id, passwords: [{uuid, name, created, last_used}]}, dates in ISO 8601 UTC, last_used null when never used; the password itself is not returned. An empty list means the user has none. Needs the right to edit that user: one\'s own profile, or other users for administrators. Where WordPress does not offer application passwords (it needs HTTPS or a local environment), an error says so. Read-only.',
+				'description' => 'List the application passwords of one user: {user_id, passwords: [{uuid, name, created, last_used}]}, dates in ISO 8601 UTC, last_used null when never used; the password itself is not returned. An empty list means the user has none. Needs list_users and the right to edit that user (in the standard roles: administrators). Where WordPress does not offer application passwords (it needs HTTPS or a local environment), an error says so. Read-only.',
 				'capability'  => 'list_users',
 				'inputSchema' => array(
 					'type'       => 'object',

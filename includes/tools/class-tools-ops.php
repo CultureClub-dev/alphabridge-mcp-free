@@ -34,7 +34,7 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_dashboard_counts',
 			array(
-				'description' => 'Get content counts of this site (on a multisite network: the current site): for each post type shown in wp-admin, its published, draft, pending, private and trashed entries (scheduled ones are not counted); users in total and per role; comments approved, moderated (pending), spam and trash; and the number of media files. Needs manage_options. Read-only; takes no arguments. The entries themselves are listed by wp_list_posts, wp_list_comments and wp_list_media.',
+				'description' => 'Get content counts of this site (on a multisite network: the current site): for each post type shown in wp-admin, its published, draft, pending, private and trashed entries (scheduled ones are not counted); users in total and per role; comments approved, moderated (pending), spam and trash; and the number of media files with the usual status inherit (private files are not counted). Needs manage_options. Read-only; takes no arguments. The entries themselves are listed by wp_list_posts, wp_list_comments and wp_list_media.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'dashboard_counts' ),
 			)

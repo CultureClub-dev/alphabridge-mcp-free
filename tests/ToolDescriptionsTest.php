@@ -6,9 +6,14 @@
  * (Glama's Tool Definition Quality Score, 23.10.2026: "Update a term." with
  * six bare parameters scored 1.8 of 5). Anthropic's directory rules add a
  * second condition: a description states what a tool does, it does not give
- * the model orders. So every parameter of every tool carries a description,
- * and no description tells the model what it must do or which tool to call
- * instead. A neighbouring tool may be named as a plain statement.
+ * the model orders. A neighbouring tool may be named as a plain statement
+ * ("wp_get_comment returns one comment"), not as a command ("Read it with
+ * wp_get_comment").
+ *
+ * These are structural smoke tests: every parameter carries a description,
+ * no description is little more than the tool's name, no text reads as an
+ * order to the model, and the one enum agrees with its handler. Whether a
+ * sentence is true is checked by reading the handler, not here.
  *
  * @package AlphaBridge_MCP
  */
@@ -18,9 +23,25 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Tool_Registry;
+use AB_MCP_Tools_Taxonomy_Comments;
 use PHPUnit\Framework\TestCase;
 
 final class ToolDescriptionsTest extends TestCase {
+
+	/**
+	 * Orders to the model: a fixed phrase, or a sentence that opens with a
+	 * verb in the imperative and sends the model to a tool ("Read such pages
+	 * with wp_get_builder_layout", "Use wp_x instead").
+	 */
+	private const ORDERS = array(
+		'/\b(you must|you should|always call|never call|first call|call wp_[a-z_]+ first|use this instead|instead of this tool)\b/i',
+		'/(?:^|[.;:!?]\s+)(?:Read|Use|Call|Run|Try|Check|Look|Fetch|Get|List|Pass|Send|See)\b[^.;:]*?\b(?:with|via|using|through)\s+wp_[a-z_]+/',
+		'/(?:^|[.;:!?]\s+)(?:Use|Call|Run|Try|See)\s+wp_[a-z_]+/',
+	);
+
+	protected function setUp(): void {
+		ab_test_reset();
+	}
 
 	/**
 	 * Every tool this plugin registers, with its definition.
@@ -40,14 +61,39 @@ final class ToolDescriptionsTest extends TestCase {
 		return $r->all();
 	}
 
+	/**
+	 * The description and every parameter description of a tool.
+	 *
+	 * @param array $def Tool definition.
+	 * @return string[]
+	 */
+	private function texts( array $def ): array {
+		$texts = array( (string) $def['description'] );
+		foreach ( (array) ( $def['inputSchema']['properties'] ?? array() ) as $prop ) {
+			$texts[] = (string) ( $prop['description'] ?? '' );
+		}
+		return $texts;
+	}
+
 	public function testThereAreToolsToCheck(): void {
 		self::assertGreaterThan( 30, count( $this->tools() ) );
 	}
 
-	public function testEveryToolSaysWhatItDoesInMoreThanItsName(): void {
+	public function testNoDescriptionIsLittleMoreThanTheName(): void {
+		// "Update a term." restates wp_update_term: after the words of the
+		// name and a few small ones, nothing is left. A dozen further words is
+		// a floor, not a measure of quality.
+		$small = array( 'a', 'an', 'the', 'of', 'to', 'in', 'on', 'for', 'and', 'or', 'by', 'with', 'one', 'single' );
 		foreach ( $this->tools() as $name => $def ) {
-			$text = (string) $def['description'];
-			self::assertGreaterThanOrEqual( 150, strlen( $text ), $name . ': a description that only restates the name' );
+			$skip  = array_merge( $small, explode( '_', (string) $name ) );
+			$words = preg_split( '/[^a-z0-9]+/', strtolower( (string) $def['description'] ), -1, PREG_SPLIT_NO_EMPTY );
+			$rest  = array_filter(
+				$words,
+				static function ( $w ) use ( $skip ) {
+					return ! in_array( $w, $skip, true ) && ! in_array( rtrim( $w, 's' ), $skip, true );
+				}
+			);
+			self::assertGreaterThanOrEqual( 12, count( $rest ), $name . ': the description says little beyond the name' );
 		}
 	}
 
@@ -61,22 +107,48 @@ final class ToolDescriptionsTest extends TestCase {
 	}
 
 	public function testNoDescriptionGivesTheModelOrders(): void {
-		$orders = '/\b(you must|you should|always call|never call|first call|call [a-z_]+ first|use this instead|use wp_[a-z_]+ instead|instead of this tool)\b/i';
 		foreach ( $this->tools() as $name => $def ) {
-			$texts = array( (string) $def['description'] );
-			foreach ( (array) ( $def['inputSchema']['properties'] ?? array() ) as $prop ) {
-				$texts[] = (string) ( $prop['description'] ?? '' );
-			}
-			foreach ( $texts as $text ) {
-				self::assertDoesNotMatchRegularExpression( $orders, $text, $name );
+			foreach ( $this->texts( $def ) as $text ) {
+				foreach ( self::ORDERS as $pattern ) {
+					self::assertDoesNotMatchRegularExpression( $pattern, $text, $name );
+				}
 			}
 		}
 	}
 
-	public function testAnEnumNamesOnlyValuesTheHandlerAccepts(): void {
-		// wp_moderate_comment refuses any other status, so the enum promises
-		// nothing the handler does not hold to.
+	public function testTheOrderPatternsCatchWhatTheyAreFor(): void {
+		$caught = static function ( string $text ): bool {
+			foreach ( self::ORDERS as $pattern ) {
+				if ( preg_match( $pattern, $text ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		self::assertTrue( $caught( 'Update a post. Read such pages with wp_get_builder_layout.' ) );
+		self::assertTrue( $caught( 'Use wp_delete_media instead.' ) );
+		self::assertTrue( $caught( 'You must call wp_site_info first.' ) );
+		self::assertFalse( $caught( 'Update a post. wp_get_builder_layout returns the outline of such pages.' ) );
+		self::assertFalse( $caught( 'Files are deleted with wp_delete_media.' ) );
+		self::assertFalse( $caught( 'Read-only; wp_get_term returns one term.' ) );
+	}
+
+	public function testTheModerationEnumIsWhatTheHandlerAccepts(): void {
 		$status = $this->tools()['wp_moderate_comment']['inputSchema']['properties']['status'];
-		self::assertSame( array( 'approve', 'hold', 'spam', 'trash' ), $status['enum'] );
+		$GLOBALS['ab_test_comments'][5] = (object) array( 'comment_ID' => 5 );
+
+		foreach ( $status['enum'] as $value ) {
+			$out = AB_MCP_Tools_Taxonomy_Comments::moderate_comment( array( 'comment_id' => 5, 'status' => $value ) );
+			self::assertIsArray( $out, $value . ' is in the enum, so the handler takes it' );
+			self::assertSame( $value, $out['status'] );
+		}
+		self::assertCount( count( $status['enum'] ), $GLOBALS['ab_test_moderated'] );
+
+		foreach ( array( 'approved', 'unapproved', 'pending', 'delete', 'all', '' ) as $value ) {
+			$out = AB_MCP_Tools_Taxonomy_Comments::moderate_comment( array( 'comment_id' => 5, 'status' => $value ) );
+			self::assertInstanceOf( \WP_Error::class, $out, $value . ' is not in the enum, so the handler refuses it' );
+			self::assertSame( 'ab_mcp_bad_status', $out->get_error_code() );
+		}
+		self::assertCount( count( $status['enum'] ), $GLOBALS['ab_test_moderated'], 'a refused status changes nothing' );
 	}
 }

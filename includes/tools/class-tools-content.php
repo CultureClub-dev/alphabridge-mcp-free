@@ -48,7 +48,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_posts',
 			array(
-				'description' => 'List posts, pages or entries of any post type, with filters, sorting and pagination. Returns items: [{id, type, status, title, slug, link, date, modified, author, parent, excerpt, menu_order}] and pagination {page, per_page, total, total_pages}; content is not included (wp_get_post returns it). Only entries the account may read are listed; no match gives an empty list. Needs edit_posts. Read-only. wp_search runs one keyword search across all post types, without paging.',
+				'description' => 'List posts, pages or entries of any post type, with filters, sorting and pagination. Returns items: [{id, type, status, title, slug, link, date, modified, author, parent, excerpt, menu_order}] and pagination {page, per_page, total, total_pages}; content is not included (wp_get_post returns it). Only entries the account may read are listed; no match gives an empty list. Needs edit_posts. Read-only. wp_search runs one keyword search across all searchable post types, without paging.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -60,7 +60,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						),
 						'status'   => array(
 							'type'        => 'string',
-							'description' => 'Post status (publish, draft, pending, private, future, trash, or any: every status except trash and auto-draft). Default "any".',
+							'description' => 'Post status (publish, draft, pending, private, future, trash, or any: every status except trash, auto-draft and others registered as excluded from search). Default "any".',
 							'default'     => 'any',
 						),
 						'search'   => array( 'type' => 'string', 'description' => 'Keyword search in title, excerpt and content.' ),
@@ -69,7 +69,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'per_page' => array( 'type' => 'integer', 'description' => 'Items per page, 1–100; other values are clamped. Default 20.', 'default' => 20 ),
 						'page'     => array( 'type' => 'integer', 'description' => 'Page number, starting at 1. Default 1.', 'default' => 1 ),
 						'orderby'  => array( 'type' => 'string', 'description' => 'Sort field: date, title, modified, menu_order or ID. Default "date".', 'default' => 'date' ),
-						'order'    => array( 'type' => 'string', 'description' => 'ASC or DESC; any other value counts as DESC. Default "DESC".', 'default' => 'DESC' ),
+						'order'    => array( 'type' => 'string', 'description' => 'ASC (in any letter case) or DESC; any other value counts as DESC. Default "DESC".', 'default' => 'DESC' ),
 						'built_with' => array( 'type' => 'string', 'description' => 'Only posts built with this page builder: a builder id as wp_get_post names it in built_with (e.g. "elementor", "kadence", "wpbakery"), "any" for every known builder, or "none" for posts without one. Matched by the builder\'s markers (meta keys, content patterns); each listed item then names the builder found on it.' ),
 					),
 				),
@@ -97,7 +97,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_post',
 			array(
-				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published post is public at once. Needs the right to create entries of the type. Every argument is optional, and each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
+				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published entry of a public post type is public at once. Needs the right to create entries of the type. No argument is required, but WordPress refuses an entry with empty title, content and excerpt for types that support all three, such as posts (empty_content). Each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -107,7 +107,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'content' => array( 'type' => 'string', 'description' => 'Content (HTML or block markup).' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. Default "draft". "future" needs a date at least five minutes ahead; "publish" with such a date schedules the post, as in WordPress.' ),
 						'excerpt' => array( 'type' => 'string', 'description' => 'Excerpt. Default empty.' ),
-						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title when the entry is published; drafts and pending entries keep none until then.' ),
 						'author'  => array( 'type' => 'integer', 'description' => 'Author user id. Applied only for an account that may edit others\' entries of this type; otherwise, and by default, the connected user is the author.' ),
 						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
@@ -122,7 +122,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post',
 			array(
-				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a change to content is refused there, with the way to make it, while title, status, excerpt and the other fields still change. Read such pages with wp_get_builder_layout.',
+				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a change to content is refused there, with the way to make it, while title, status, excerpt and the other fields still change. wp_get_builder_layout returns the outline of such pages.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -133,7 +133,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'content' => array( 'type' => 'string', 'description' => 'New content (HTML or block markup); it replaces the whole post_content. Omit to keep it.' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. "future" needs a date at least five minutes ahead.' ),
 						'excerpt' => array( 'type' => 'string', 'description' => 'New excerpt. Omit to keep it.' ),
-						'slug'    => array( 'type' => 'string', 'description' => 'New URL slug; it changes the permalink. Omit to keep it.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'New URL slug; it changes the permalink where the permalink structure uses slugs. Omit to keep it.' ),
 						'author'  => array( 'type' => 'integer', 'description' => 'New author user id. Applied only for an account that may edit others\' entries of this type; otherwise left as it is.' ),
 						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. Omit to keep it.' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
@@ -194,14 +194,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} or {id, meta: {key: value}}; a key with several values gives a list. An unknown post id returns a not-found error. Read-only. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'  => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the post does not have returns an empty value.' ),
+						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the post does not have returns an empty value, or the default a plugin registered for it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post_meta_tool' ),

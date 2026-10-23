@@ -66,6 +66,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_filters']    = array();
 	$GLOBALS['ab_test_users']      = array();
 	$GLOBALS['ab_test_comments']   = array();
+	$GLOBALS['ab_test_moderated']  = array();
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
 	$GLOBALS['ab_test_updated']    = array();
@@ -822,6 +823,22 @@ function get_comments( $args = array() ) {
 
 function wp_get_comment_status( $id ) {
 	return 'approved';
+}
+
+/** @var array[] $ab_test_moderated [comment id, status] per moderation call. */
+$GLOBALS['ab_test_moderated'] = array();
+
+function wp_set_comment_status( $id, $status ) {
+	$GLOBALS['ab_test_moderated'][] = array( (int) $id, (string) $status );
+	return true;
+}
+
+function wp_spam_comment( $id ) {
+	return wp_set_comment_status( $id, 'spam' );
+}
+
+function wp_trash_comment( $id ) {
+	return wp_set_comment_status( $id, 'trash' );
 }
 
 function wp_get_post_revisions( $post_id ) {

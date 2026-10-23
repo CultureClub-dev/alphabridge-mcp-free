@@ -75,7 +75,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media',
 			array(
-				'description' => 'Upload a JPEG, PNG, GIF, WebP or PDF file sent as base64 content and add it to the media library. WordPress checks the file as for any upload and creates the image sizes; the file is public under its URL afterwards. Up to 20 MB unless the site sets another limit. Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when the file is attached to it. A file already on the web is added with wp_upload_media_from_url.',
+				'description' => 'Upload a JPEG, PNG, GIF, WebP or PDF file sent as base64 content and add it to the media library. WordPress checks the file as for any upload and creates the image sizes; the file is public under its URL afterwards. The base64 text is limited to 8 MB, so the file to about 6 MB (less where the site sets a lower limit). Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when the file is attached to it. A file already on the web is added with wp_upload_media_from_url.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -114,7 +114,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_media',
 			array(
-				'description' => 'Delete one file of the media library (attachment) for good: its entry, its metadata and the file with all its image sizes on the server; the media library has no trash here. It is removed as featured image wherever it was one; posts that embed or link it keep pointing to a URL that no longer exists. Needs the right to delete that file. Returns {deleted: true, id}; an id that no longer exists returns a not-found error. Posts and pages are deleted with wp_delete_post.',
+				'description' => 'Delete one file of the media library (attachment) for good: its entry and metadata are removed, and WordPress deletes the file and its image sizes on the server (a file the server does not let it delete stays, without an error). The media library has no trash here. It is removed as featured image wherever it was one; posts that embed or link it keep its old URL. Needs the right to delete that file. Returns {deleted: true, id}; an id that no longer exists returns a not-found error. Posts and pages are deleted with wp_delete_post.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(

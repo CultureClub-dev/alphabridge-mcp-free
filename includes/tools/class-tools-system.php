@@ -24,7 +24,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_info',
 			array(
-				'description' => 'Get an overview of the technical environment: WordPress, PHP and MySQL versions, site and home URL, HTTPS, multisite, locale, the active theme\'s name and version, the number of installed and active plugins, WP_MEMORY_LIMIT, the maximum upload size, this plugin\'s MCP endpoint and version, and the number of connections in use. Needs manage_options. Read-only; takes no arguments. wp_site_health adds debug mode, object cache and pending updates; wp_get_site_settings returns title, email, timezone and other settings.',
+				'description' => 'Get an overview of the technical environment: WordPress, PHP and MySQL versions, site and home URL, HTTPS, multisite, locale, the active theme\'s name and version, the number of installed plugins and of plugins active on this site (network-activated ones are not counted), WP_MEMORY_LIMIT, the maximum upload size, this plugin\'s MCP endpoint and version, and the number of connections in use. Needs manage_options. Read-only; takes no arguments. wp_site_health adds debug mode, object cache and pending updates; wp_get_site_settings returns title, email, timezone and other settings.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'site_info' ),
 			)

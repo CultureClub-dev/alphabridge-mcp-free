@@ -34,7 +34,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 					'properties' => array(
 						'taxonomy' => array( 'type' => 'string', 'description' => 'Taxonomy name, e.g. "category", "post_tag" or a custom one, as wp_get_taxonomies lists it. An unknown taxonomy is refused.' ),
 						'search'   => array( 'type' => 'string', 'description' => 'Only terms whose name or slug contains this text.' ),
-						'hide_empty' => array( 'type' => 'boolean', 'description' => 'true leaves out terms assigned to nothing. Default false.', 'default' => false ),
+						'hide_empty' => array( 'type' => 'boolean', 'description' => 'true leaves out terms whose count is 0; in a hierarchical taxonomy a parent stays when a descendant is not empty. Default false.', 'default' => false ),
 						'per_page' => array( 'type' => 'integer', 'description' => 'Maximum number of terms, 1–500; other values are clamped. Default 100.', 'default' => 100 ),
 					),
 				),
@@ -65,7 +65,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term',
 			array(
-				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories). A new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
+				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories). Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -74,7 +74,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 						'term_id'     => array( 'type' => 'integer', 'description' => 'Id of the term to change, as wp_list_terms or wp_get_term return it.' ),
 						'taxonomy'    => array( 'type' => 'string', 'description' => 'Taxonomy the term belongs to, e.g. "category" or "post_tag".' ),
 						'name'        => array( 'type' => 'string', 'description' => 'New display name. Omit to keep it; an empty name is refused.' ),
-						'slug'        => array( 'type' => 'string', 'description' => 'New URL slug. Omit to keep it; an empty string derives it from the name. A slug another term of the taxonomy uses is refused, unless parent changes in the same call (WordPress then makes it unique).' ),
+						'slug'        => array( 'type' => 'string', 'description' => 'New URL slug. Omit to keep it; an empty string derives it from the name, made unique if taken. A slug another term of the taxonomy uses is refused, unless parent changes in the same call (WordPress then makes it unique).' ),
 						'description' => array( 'type' => 'string', 'description' => 'New description; an empty string clears it. Omit to keep it.' ),
 						'parent'      => array( 'type' => 'integer', 'description' => 'Id of the new parent term; 0 moves the term to the top level. A parent that does not exist is refused. Omit to keep it.' ),
 					),
@@ -125,7 +125,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set the moderation status of one comment: approve publishes it, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}. Needs moderate_comments. Approving makes the comment public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -146,7 +146,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Add a comment to a post as the connected user: a reply to an existing comment (parent), or a new top-level comment. It is saved as approved, so it is public at once, under the user\'s display name and email. HTML is filtered to what post content allows. Whether comments are open on the post is not checked. Returns {created: true, comment_id}. Needs moderate_comments.',
+				'description' => 'Add a comment to a post as the connected user: a reply to an existing comment (parent), or a new top-level comment. It is saved as approved, so it shows at once wherever the post\'s comments are public, under the user\'s display name and email address. HTML is filtered to what post content allows. Whether comments are open on the post is not checked. Returns {created: true, comment_id}. Needs moderate_comments.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
