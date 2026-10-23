@@ -36,7 +36,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 * The meta field of wp_create_post and wp_update_post, shared with an
 	 * edition that registers the tools again, so both describe the same rule.
 	 */
-	const META_DESCRIPTION = 'Key/value meta to set. Page-builder data (keys such as panels_data, dslc_code or pagelayer-data; filter ab_mcp_builder_markup_meta_keys) takes the unfiltered_html capability, which on a multisite network only a super admin has; without it the call is refused before anything is written.';
+	const META_DESCRIPTION = 'Key/value custom fields to set. Keys are stored as sanitize_key() writes them (lower case; letters, digits, _ and -). Keys starting with "_", protected or credential-like keys and keys the account may not edit are skipped without an error. Page-builder data (keys such as panels_data, dslc_code or pagelayer-data; filter ab_mcp_builder_markup_meta_keys) takes the unfiltered_html capability, which on a multisite network only a super admin has; without it the call is refused before anything is written.';
 
 	/**
 	 * Register tools.
@@ -80,14 +80,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post',
 			array(
-				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so. Needs the right to read the post; a password-protected one needs the right to edit it. An unknown id returns a not-found error. Read-only.',
+				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so, and wp_get_builder_layout returns the page\'s elements. A revision_id from wp_list_revisions returns that revision. Needs edit_posts and the right to read the post; a password-protected post or a revision needs the right to edit it (for a revision: its post). An unknown id returns a not-found error. Read-only.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'           => array( 'type' => 'integer', 'description' => 'Post id, as wp_list_posts or wp_search return it.' ),
-						'include_meta' => array( 'type' => 'boolean', 'description' => 'Include the public custom fields the account may edit (keys starting with "_" and credential-like keys are left out). Default true.', 'default' => true ),
+						'include_meta' => array( 'type' => 'boolean', 'description' => 'true includes the public custom fields the account may edit (keys starting with "_" and credential-like keys are left out). Default true.', 'default' => true ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post' ),
@@ -97,7 +97,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_post',
 			array(
-				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields. Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts, id and link included). Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published entry shows on the site at once where its post type is publicly viewable. Needs the right to create entries of the type. No argument is required, but WordPress refuses an entry with empty title, content and excerpt for types that support all three, such as posts (empty_content). Each call makes a new entry; existing ones are changed with wp_update_post. Files are added with wp_upload_media.',
+				'description' => 'Create a post, page or entry of a custom post type with title, content, status, excerpt, terms and custom fields; each call creates a new entry, so a repeated call makes a second one. Saved as a draft unless status says otherwise; publish, private and future need the right to publish, and a published entry shows on the site at once where its post type is publicly viewable. WordPress refuses an entry with empty title, content and excerpt for types that support all three, such as posts (empty_content). Returns {created: true, post} with the new entry\'s summary (the fields of wp_list_posts). Needs the right to create entries of the type. Existing entries are changed with wp_update_post, files are added with wp_upload_media.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -107,12 +107,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'content' => array( 'type' => 'string', 'description' => 'Content (HTML or block markup).' ),
 						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. Default "draft". "future" needs a date at least five minutes ahead; "publish" with such a date schedules the post, as in WordPress.' ),
 						'excerpt' => array( 'type' => 'string', 'description' => 'Excerpt. Default empty.' ),
-						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title, except for drafts and pending entries, which keep none until a save with another status (publish, private or future).' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'URL slug. Default: WordPress derives it from the title, except for drafts and pending entries, which keep none until a save with another status (publish, private or future). Once the entry is no longer a draft or pending, WordPress adds a numeric suffix to a slug already in use.' ),
 						'author'  => array( 'type' => 'integer', 'description' => 'Author user id. Applied only for an account that may edit others\' entries of this type; otherwise, and by default, the connected user is the author.' ),
 						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; taxonomies the account may not assign are skipped.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'create_post' ),
@@ -122,23 +122,23 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post',
 			array(
-				'description' => 'Update an existing post/page. Only provided fields change. On a page whose page builder shows its own data, post_content is only a copy: a call that changes content is refused there before anything is written, with the way to make it; a call without content still changes title, status, excerpt and the other fields. wp_get_builder_layout returns the outline of such pages.',
+				'description' => 'Update an existing post, page or entry of any post type; only the fields passed change. Returns {updated: true, post} with the entry\'s summary (the fields of wp_list_posts), plus builder_note where the new content shows but the page builder may replace it later. Needs the right to edit the entry; moving it to publish, private or future needs the right to publish. Changes to a published entry show on the site at once; a status change can publish an entry or take it off the site, and giving a trashed entry a status takes it out of the trash. On a page whose page builder shows its own data, post_content is only a copy: a call with content is refused there before anything is written, with the way to make the change; a call without content still changes the other fields. wp_get_builder_layout returns the outline of such pages.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'      => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'title'   => array( 'type' => 'string', 'description' => 'New title. Omit to keep it.' ),
-						'content' => array( 'type' => 'string', 'description' => 'New content (HTML or block markup); it replaces the whole post_content. Omit to keep it.' ),
-						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. "future" needs a date at least five minutes ahead.' ),
-						'excerpt' => array( 'type' => 'string', 'description' => 'New excerpt. Omit to keep it.' ),
-						'slug'    => array( 'type' => 'string', 'description' => 'New URL slug; it changes the permalink where the permalink structure uses slugs. Omit to keep it.' ),
+						'title'   => array( 'type' => 'string', 'description' => 'New title. When omitted, it stays as it is.' ),
+						'content' => array( 'type' => 'string', 'description' => 'New content (HTML or block markup); it replaces the whole post_content. When omitted, it stays as it is.' ),
+						'status'  => array( 'type' => 'string', 'description' => 'draft, publish, pending, private, future. "future" needs a date at least five minutes ahead. When omitted, the status stays; on a trashed entry any of these takes it out of the trash.' ),
+						'excerpt' => array( 'type' => 'string', 'description' => 'New excerpt. When omitted, it stays as it is.' ),
+						'slug'    => array( 'type' => 'string', 'description' => 'New URL slug; it changes the permalink where the permalink structure uses slugs. When omitted, it stays as it is.' ),
 						'author'  => array( 'type' => 'integer', 'description' => 'New author user id. Applied only for an account that may edit others\' entries of this type; otherwise left as it is.' ),
-						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. Omit to keep it.' ),
+						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. When omitted, it stays as it is.' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_post' ),
@@ -148,7 +148,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_post',
 			array(
-				'description' => 'Delete a post: into the trash by default, for good with force=true. Files are deleted with wp_delete_media (or force=true): the media library has no trash unless a site turns it on. A post already in the trash, or any post on a site without a trash, is refused without force=true. Deleting for good also removes its revisions, comments, custom fields and term assignments. Returns {deleted: true, permanent, id}.',
+				'description' => 'Delete a post, page or entry of any post type: into the trash by default, for good with force=true. Trashing also hides its comments; a trashed entry comes back when wp_update_post gives it a status. An entry already in the trash, a media file, and any entry on a site without a trash are refused without force=true, so a repeated call does not delete for good by itself. Deleting for good also removes its revisions, comments, custom fields and term assignments and cannot be undone. Needs the right to delete the entry. Returns {deleted: true, permanent, id}; an unknown id returns a not-found error. Media files are deleted with wp_delete_media.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -156,7 +156,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'    => array( 'type' => 'integer', 'description' => 'Id of the post, page or entry to delete.' ),
-						'force' => array( 'type' => 'boolean', 'description' => 'Permanently delete instead of trashing.' ),
+						'force' => array( 'type' => 'boolean', 'description' => 'true deletes for good instead of trashing. Default false.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'delete_post' ),
@@ -180,7 +180,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_duplicate_post',
 			array(
-				'description' => 'Duplicate a post or page as a new draft: title, content, excerpt, parent, menu order and terms, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Elementor element ids are renewed, so copy and original do not share them. Page builder data holds markup and is copied only for accounts with the unfiltered_html capability. A builder\'s keys, its page template included, are copied together or not at all. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and the meta of a revision, which WordPress would write to the post the revision belongs to. The response lists the copied keys and the skipped ones with the reason, and names the builder the original is built with. The original stays unchanged.',
+				'description' => 'Copy an existing post or page into a new draft, as a starting point for a new page; the original stays unchanged and each call creates another copy. The draft gets the title with " (Copy)" appended, the content, excerpt, parent, menu order and the terms of taxonomies the account may assign, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Page builder data holds markup and is copied only with the unfiltered_html capability; a builder\'s keys, its page template included, are copied together or not at all; Elementor element ids are renewed. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and a revision\'s meta. Media files cannot be duplicated, and a password-protected post only by an account that may edit it. Returns {duplicated: true, new_id}, the copied and skipped keys (with reasons) and the original\'s builder. Needs the right to read the original and to create entries of its type.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -201,7 +201,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'  => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the post does not have returns an empty value, or the default a plugin registered for it.' ),
+						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. When omitted, all public keys are read. A key the post does not have returns an empty value, or the default a plugin registered for it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post_meta_tool' ),

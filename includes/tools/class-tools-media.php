@@ -56,7 +56,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media_from_url',
 			array(
-				'description' => 'Download a file from a public http(s) URL and add it to the media library. Your site fetches the file itself through WordPress\' safe-URL check (private and internal hosts are refused unless WordPress itself allows them, such as the site\'s own host; checked on every redirect): at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must say JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are rejected, and WordPress then checks the file itself as for any upload. No third-party API is involved. Returns {uploaded: true, id, url}.',
+				'description' => 'Download a file from a public http(s) URL and add it to the media library; the file is public under its new URL afterwards, and each call adds a new file. The site fetches the file itself through WordPress\' safe-URL check, repeated on every redirect: private and internal hosts are refused unless WordPress allows them (such as the site\'s own host); at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must name JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are refused, and WordPress then checks the file as for any upload. No third-party API is involved. Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when given. File content at hand is uploaded as base64 with wp_upload_media.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -75,7 +75,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media',
 			array(
-				'description' => 'Upload a JPEG, PNG, GIF, WebP or PDF file sent as base64 content and add it to the media library. WordPress checks the file as for any upload and creates the image sizes; the file is public under its URL afterwards. The base64 text is limited to 8 MB, so the file to about 6 MB (less where the site sets a lower limit). Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when the file is attached to it. A file already on the web is added with wp_upload_media_from_url.',
+				'description' => 'Upload a JPEG, PNG, GIF, WebP or PDF file sent as base64 content and add it to the media library. WordPress checks the file as for any upload and creates the image sizes; the file is public under its URL afterwards, and each call adds a new file. The base64 text is limited to 8 MB, so the file to about 6 MB (less where the site sets a lower limit). Returns {uploaded: true, id, url}. Needs upload_files, and the right to edit post_id when the file is attached to it. A file already on the web is added with wp_upload_media_from_url.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -95,16 +95,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_media',
 			array(
-				'description' => 'Change the title, caption or alt text of one file in the media library (attachment); the file itself stays as it is. Only the fields passed change. Alt text is stored as plain text. Returns {updated: true, id}; an id that is not a media file returns a not-found error. Needs the right to edit that file. Title, caption and alt text can be public wherever the file is shown.',
+				'description' => 'Change the title, caption or alt text of one file in the media library (attachment); the file itself stays as it is. Only the fields passed change. Alt text is stored as plain text. Returns {updated: true, id}; an id that is not a media file returns a not-found error. Needs the right to edit that file. Title, caption and alt text can be public wherever the file is shown. A new file is added with wp_upload_media; a file\'s description and parent are changed with wp_update_post.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
 						'id'      => array( 'type' => 'integer', 'description' => 'Attachment id, as wp_list_media returns it.' ),
-						'title'   => array( 'type' => 'string', 'description' => 'New title. Omit to keep it.' ),
-						'caption' => array( 'type' => 'string', 'description' => 'New caption; an empty string clears it. Omit to keep it.' ),
-						'alt'     => array( 'type' => 'string', 'description' => 'New alternative text for an image; an empty string clears it. Omit to keep it.' ),
+						'title'   => array( 'type' => 'string', 'description' => 'New title. When omitted, it stays as it is.' ),
+						'caption' => array( 'type' => 'string', 'description' => 'New caption; an empty string clears it. When omitted, it stays as it is.' ),
+						'alt'     => array( 'type' => 'string', 'description' => 'New alternative text for an image; an empty string clears it. When omitted, it stays as it is.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_media' ),

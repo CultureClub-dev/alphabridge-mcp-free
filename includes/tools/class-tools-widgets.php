@@ -40,7 +40,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
-						'sidebar' => array( 'type' => 'string', 'description' => 'Optional widget area id from wp_list_sidebars, e.g. "sidebar-1" or "wp_inactive_widgets". Omit for all areas.' ),
+						'sidebar' => array( 'type' => 'string', 'description' => 'Optional widget area id from wp_list_sidebars, e.g. "sidebar-1" or "wp_inactive_widgets". When omitted, widgets of all areas are listed.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_widgets' ),

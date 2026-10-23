@@ -39,6 +39,17 @@ final class ToolDescriptionsTest extends TestCase {
 		'/(?:^|[.;:!?]\s+)(?:Use|Call|Run|Try|See)\s+wp_[a-z_]+/',
 	);
 
+	/**
+	 * Orders in a parameter description: "Omit to keep it", or a sentence
+	 * opening with a verb in the imperative ("Pass the id", "Leave it out").
+	 * A parameter is described by what it is and what happens with it:
+	 * "When omitted, it stays as it is", "Default 20".
+	 */
+	private const PARAMETER_ORDERS = array(
+		'/\bomit\b/i',
+		'/(?:^|[.;:!?]\s+)(?:Pass|Use|Call|Set|Send|Leave|Provide|Specify|Give|Include|Return|Cut|List|Enter|Choose|Add|Make|Read|Get|Put|Supply|Avoid|Do|Don\'t|Never|Always|Try|Check|See)\s/',
+	);
+
 	protected function setUp(): void {
 		ab_test_reset();
 	}
@@ -114,6 +125,35 @@ final class ToolDescriptionsTest extends TestCase {
 				}
 			}
 		}
+	}
+
+	public function testNoParameterDescriptionGivesOrders(): void {
+		foreach ( $this->tools() as $name => $def ) {
+			foreach ( (array) ( $def['inputSchema']['properties'] ?? array() ) as $key => $prop ) {
+				foreach ( self::PARAMETER_ORDERS as $pattern ) {
+					self::assertDoesNotMatchRegularExpression( $pattern, (string) ( $prop['description'] ?? '' ), $name . '.' . $key );
+				}
+			}
+		}
+	}
+
+	public function testTheParameterPatternsCatchWhatTheyAreFor(): void {
+		$caught = static function ( string $text ): bool {
+			foreach ( self::PARAMETER_ORDERS as $pattern ) {
+				if ( preg_match( $pattern, $text ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		self::assertTrue( $caught( 'New title. Omit to keep it.' ) );
+		self::assertTrue( $caught( 'Pass the post id.' ) );
+		self::assertTrue( $caught( 'Post id. Leave it out for all posts.' ) );
+		self::assertTrue( $caught( 'Include post meta. Default true.' ) );
+		self::assertFalse( $caught( 'New title. When omitted, it stays as it is.' ) );
+		self::assertFalse( $caught( 'true includes the public custom fields. Default true.' ) );
+		self::assertFalse( $caught( 'Listed per page, 1–100. Default 20.' ) );
+		self::assertFalse( $caught( 'Only entries by this author user id.' ) );
 	}
 
 	public function testTheOrderPatternsCatchWhatTheyAreFor(): void {

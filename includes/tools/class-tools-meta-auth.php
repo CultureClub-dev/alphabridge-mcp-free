@@ -56,7 +56,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 					'required'   => array( 'user_id' ),
 					'properties' => array(
 						'user_id' => array( 'type' => 'integer', 'description' => 'User id; authors\' ids appear in the results of wp_list_posts and wp_get_post.' ),
-						'key'     => array( 'type' => 'string', 'description' => 'One field from the list above. Omit to read all of them.' ),
+						'key'     => array( 'type' => 'string', 'description' => 'One field from the list above. When omitted, all of them are read.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_user_meta_tool' ),
@@ -73,7 +73,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 					'required'   => array( 'term_id' ),
 					'properties' => array(
 						'term_id' => array( 'type' => 'integer', 'description' => 'Term id, as wp_list_terms returns it; the taxonomy is not needed.' ),
-						'key'     => array( 'type' => 'string', 'description' => 'One meta key to read. Omit to read all public keys. A key the term does not have returns an empty value, or the default a plugin registered for it.' ),
+						'key'     => array( 'type' => 'string', 'description' => 'One meta key to read. When omitted, all public keys are read. A key the term does not have returns an empty value, or the default a plugin registered for it.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_term_meta_tool' ),
@@ -83,7 +83,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_application_passwords',
 			array(
-				'description' => 'List the application passwords of one user: {user_id, passwords: [{uuid, name, created, last_used}]}, dates in ISO 8601 UTC, last_used null when never used; the password itself is not returned. An empty list means the user has none. Needs list_users and the right to edit that user (in the standard roles: administrators). Where WordPress does not offer application passwords (it needs HTTPS or a local environment), an error says so. Read-only.',
+				'description' => 'List the application passwords of one user: {user_id, passwords: [{uuid, name, created, last_used}]}, dates in ISO 8601 UTC, last_used null when never used; the password itself is not returned. Suited to reviewing which applications can sign in as that user. An empty list means the user has none. Needs list_users and the right to edit that user (in the standard roles: administrators). Where WordPress does not offer application passwords (it needs HTTPS or a local environment), an error says so. Read-only.',
 				'capability'  => 'list_users',
 				'inputSchema' => array(
 					'type'       => 'object',

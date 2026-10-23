@@ -73,10 +73,10 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 					'properties' => array(
 						'term_id'     => array( 'type' => 'integer', 'description' => 'Id of the term to change, as wp_list_terms or wp_get_term return it.' ),
 						'taxonomy'    => array( 'type' => 'string', 'description' => 'Taxonomy the term belongs to, e.g. "category" or "post_tag".' ),
-						'name'        => array( 'type' => 'string', 'description' => 'New display name. Omit to keep it; an empty name is refused.' ),
-						'slug'        => array( 'type' => 'string', 'description' => 'New URL slug. Omit to keep it; an empty string derives it from the name, made unique if taken. A slug another term of the taxonomy uses is refused, unless parent changes in the same call (WordPress then makes it unique).' ),
-						'description' => array( 'type' => 'string', 'description' => 'New description; an empty string clears it. Omit to keep it.' ),
-						'parent'      => array( 'type' => 'integer', 'description' => 'Id of the new parent term; 0 moves the term to the top level. A parent that does not exist is refused. Omit to keep it.' ),
+						'name'        => array( 'type' => 'string', 'description' => 'New display name. When omitted, it stays as it is; an empty name is refused.' ),
+						'slug'        => array( 'type' => 'string', 'description' => 'New URL slug. When omitted, it stays as it is; an empty string derives it from the name, made unique if taken. A slug another term of the taxonomy uses is refused, unless parent changes in the same call (WordPress then makes it unique).' ),
+						'description' => array( 'type' => 'string', 'description' => 'New description; an empty string clears it. When omitted, it stays as it is.' ),
+						'parent'      => array( 'type' => 'integer', 'description' => 'Id of the new parent term; 0 moves the term to the top level. A parent that does not exist is refused. When omitted, it stays as it is.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_term' ),
@@ -146,7 +146,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Add a comment to a post as the connected user: a reply to an existing comment (parent), or a new top-level comment. It is saved as approved, so it shows at once wherever the post\'s comments are public, under the user\'s display name and email address. HTML is filtered to what post content allows. Whether comments are open on the post is not checked. Returns {created: true, comment_id}. Needs moderate_comments.',
+				'description' => 'Add a comment to a post as the connected user: a reply to an existing comment (parent) or a new top-level comment; each call adds a new comment, so a repeated call posts it twice. It is saved as approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored. It is saved directly, so WordPress sends none of its new-comment emails. HTML is filtered to what post content allows. Whether comments are open on the post, and whether parent exists and belongs to that post, is not checked. Returns {created: true, comment_id}. Needs moderate_comments. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -154,7 +154,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 					'properties' => array(
 						'post_id'   => array( 'type' => 'integer', 'description' => 'Id of the post the comment belongs to; for a reply, the post of the parent comment. A post that does not exist is refused.' ),
 						'content'   => array( 'type' => 'string', 'description' => 'Comment text; HTML is filtered to what post content allows.' ),
-						'parent'    => array( 'type' => 'integer', 'description' => 'Id of the comment this replies to. Default 0: a top-level comment.', 'default' => 0 ),
+						'parent'    => array( 'type' => 'integer', 'description' => 'Id of the comment this replies to; not checked to exist or to belong to post_id. Default 0: a top-level comment.', 'default' => 0 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'reply_comment' ),
@@ -164,7 +164,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_comment',
 			array(
-				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments. Approve, hold, spam and trash as statuses are set with wp_moderate_comment.',
+				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments.',
 				'capability'  => 'moderate_comments',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -199,7 +199,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_comment',
 			array(
-				'description' => 'Get one comment by id. Returns {comment_id, post_id, author, content, status, date, parent}: author is the display name (no email), status is "approved", "unapproved", "spam" or "trash", date is RFC 3339 in site time, parent is 0 for a top-level comment. An unknown comment_id returns a not-found error. Needs moderate_comments. Read-only; wp_list_comments lists several comments with filters.',
+				'description' => 'Get one comment by id. Returns {comment_id, post_id, author, content, status, date, parent}: author is the commenter\'s name as stored (no email), status is "approved", "unapproved", "spam" or "trash", date is RFC 3339 in site time, parent is 0 for a top-level comment. An unknown comment_id returns a not-found error. Needs moderate_comments. Read-only; wp_list_comments lists several comments with filters.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
