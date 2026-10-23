@@ -125,7 +125,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. Trashing a top-level note (comment_type note) also trashes its reply notes, and setting the note to approve or hold later does not bring those back. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -164,7 +164,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_comment',
 			array(
-				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments.',
+				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments.',
 				'capability'  => 'moderate_comments',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -199,7 +199,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_comment',
 			array(
-				'description' => 'Get one comment by id. Returns {comment_id, post_id, author, content, status, date, parent}: author is the commenter\'s name as stored (no email), status is "approved", "unapproved", "spam" or "trash", date is RFC 3339 in site time, parent is 0 for a top-level comment. An unknown comment_id returns a not-found error. Needs moderate_comments. Read-only; wp_list_comments lists several comments with filters.',
+				'description' => 'Get one comment by id. Returns {comment_id, post_id, author, content, status, date, parent}: author is the commenter\'s name as stored (no email), status is "approved", "unapproved", "spam", "trash", or false for a comment hidden because its post is in the trash (stored as post-trashed), date is RFC 3339 in site time, parent is 0 for a top-level comment. An unknown comment_id returns a not-found error. Needs moderate_comments. Read-only; wp_list_comments lists several comments with filters.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
