@@ -106,6 +106,22 @@ final class OpenWorldClassificationTest extends TestCase {
 	}
 
 	/**
+	 * A definition states the hint itself with 'open_world', as the Pro tools
+	 * do for mails to customers, downloads from a named address and content
+	 * they publish (annotation review, 23 October 2026). The flag wins over
+	 * the name in both directions; null leaves the name to decide.
+	 */
+	public function test_a_tool_may_state_it_itself(): void {
+		$this->assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_x_sends_mail', array( 'open_world' => true ) ) );
+		$this->assertFalse( AB_MCP_Tool_Registry::is_open_world( 'wp_x_sends_mail', array() ), 'without the flag the unknown name stays inside' );
+		$this->assertFalse( AB_MCP_Tool_Registry::is_open_world( 'wp_create_post', array( 'open_world' => false ) ) );
+		$this->assertFalse( AB_MCP_Tool_Registry::is_open_world( 'wp_deploy_list', array( 'open_world' => false ) ) );
+		$this->assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_create_post', array( 'open_world' => null ) ) );
+		$annotations = AB_MCP_Tool_Registry::annotations( 'wp_x_sends_mail', array( 'open_world' => true ), 'X' );
+		$this->assertTrue( $annotations['openWorldHint'], 'the flag reaches the annotation a client receives' );
+	}
+
+	/**
 	 * wp_bulk_update_status belongs to AlphaBridge MCP Pro but is classified
 	 * here, in the shared registry: it can publish many posts at once, so it
 	 * counts as publishing like wp_create_post (OpenAI review finding, 16.10.2026).

@@ -1172,23 +1172,15 @@ class AB_MCP_REST_Controller {
 	}
 
 	/**
-	 * Human title for a tool (from the definition, else derived from the name).
+	 * Human title for a tool: the definition's own, else the English short
+	 * name of the fine-tuning (AB_MCP_Tool_Labels), else derived from the name.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Definition.
 	 * @return string
 	 */
 	private function tool_title( $name, $def ) {
-		if ( ! empty( $def['title'] ) && $def['title'] !== $name ) {
-			return (string) $def['title'];
-		}
-		$t = $name;
-		if ( 0 === strpos( $t, 'wp_' ) ) {
-			$t = substr( $t, 3 );
-		} elseif ( 0 === strpos( $t, 'wc_' ) ) {
-			$t = 'WC ' . substr( $t, 3 );
-		}
-		return ucwords( str_replace( '_', ' ', $t ) );
+		return AB_MCP_Tool_Labels::title( $name, (array) $def );
 	}
 
 	/**

@@ -59,6 +59,16 @@ class AB_MCP_Tool_Registry {
 	 * other sites and update services, and newsletter plugins mail it to the
 	 * subscribers. So is_destructive() counts them too, the ones that only add
 	 * included. Reading, drafts, new terms and deleting stay inside the site.
+	 *
+	 * Content here means what the site's public reads: posts, pages and
+	 * products with their fields, media, terms, comments, menu items, widgets,
+	 * the site title and tagline. Tools for configuration, code and operation
+	 * (options, plugins, themes and their files, the database, cron,
+	 * transients, user accounts, snippets) can change what the public sees
+	 * only indirectly; they stay openWorldHint false, and destructiveHint
+	 * carries their weight (annotation review, 23 October 2026). A tool that
+	 * is not listed here says so in its definition with 'open_world', as the
+	 * Pro tools do.
 	 */
 	private const PUBLISHING = array(
 		'wp_create_post',           // Status publish or future.
@@ -382,15 +392,23 @@ class AB_MCP_Tool_Registry {
 
 	/**
 	 * Does a tool interact with systems beyond this WordPress installation
-	 * (remote downloads, FTP/SFTP), or can it make content public (PUBLISHING)?
-	 * Drives the MCP openWorldHint annotation.
+	 * (remote downloads, FTP/SFTP), send to people outside the conversation,
+	 * or can it make content public (PUBLISHING)? Drives the MCP
+	 * openWorldHint annotation.
+	 *
+	 * A definition may say so itself with 'open_world' => true|false, as it
+	 * may with 'destructive'. The Pro tools do: a tool that mails customers,
+	 * downloads from an address the caller names or publishes content carries
+	 * the flag where it is defined, so this core need not know their names.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
 	 * @return bool
 	 */
 	public static function is_open_world( $name, array $def ) {
-		unset( $def );
+		if ( isset( $def['open_world'] ) && null !== $def['open_world'] ) {
+			return (bool) $def['open_world'];
+		}
 		if ( 0 === strpos( $name, 'wp_deploy_' ) ) {
 			return true;
 		}

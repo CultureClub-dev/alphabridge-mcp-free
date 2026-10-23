@@ -1085,7 +1085,11 @@ function get_locale() {
  * read from the files themselves (BundledTranslationsTest).
  */
 function _x( $text, $context, $domain = '' ) {
-	return $GLOBALS['ab_test_translations'][ $context . "\x04" . $text ] ?? $text;
+	$translation = $GLOBALS['ab_test_translations'][ $context . "\x04" . $text ] ?? $text;
+	// As translate_with_gettext_context() in WordPress: the general filter,
+	// then the one of the domain.
+	$translation = apply_filters( 'gettext_with_context', $translation, $text, $context, $domain );
+	return apply_filters( "gettext_with_context_{$domain}", $translation, $text, $context, $domain );
 }
 
 function get_user_locale( $user = 0 ) {
