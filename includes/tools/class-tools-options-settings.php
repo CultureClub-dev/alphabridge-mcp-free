@@ -24,7 +24,7 @@ class AB_MCP_Tools_Options_Settings extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_site_settings',
 			array(
-				'description' => 'Get common site settings (title, tagline, url, admin email, timezone, language, posts per page).',
+				'description' => 'Get common site settings: title, tagline, home URL (url), WordPress URL (wp_url), admin email, timezone, language, posts per page, date format and permalink structure. timezone is the named timezone, empty when the site uses a fixed UTC offset; permalink is empty for plain permalinks. Needs manage_options. Read-only; takes no arguments. Versions, theme and plugins are reported by wp_site_info.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'get_site_settings' ),
 			)

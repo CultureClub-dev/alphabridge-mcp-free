@@ -27,7 +27,7 @@ class AB_MCP_Tools_Lifecycle extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_update_status',
 			array(
-				'description' => 'Report available core, plugin and theme updates as of WordPress\'s own last scheduled check (read-only, cached data; triggers no remote request).',
+				'description' => 'Report available core, plugin and theme updates as of WordPress\'s own last scheduled check (read-only, cached data; triggers no remote request). WordPress repeats that check on its own, about twice a day. Returns core {update_available, new_version}, plugins [{plugin, name, new}] and themes [{stylesheet, name, new}]; empty lists mean no update was known at that check. Needs update_core.',
 				'capability'  => 'update_core',
 				'callback'    => array( __CLASS__, 'check_updates' ),
 			)

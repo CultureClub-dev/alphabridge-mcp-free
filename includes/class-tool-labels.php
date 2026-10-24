@@ -11,8 +11,9 @@
  * this list does not know (an add-on of someone else) is named by the filter
  * ab_mcp_tool_label, or else by the first sentence of its description.
  *
- * Only the display: the name in code, the description and everything a client
- * sees stay as they are.
+ * The same names, in English whatever the admin's language (english()), are
+ * the titles a client is sent for the tools (title()); the name in code and
+ * the description stay as they are.
  *
  * @package AlphaBridge_MCP
  */
@@ -66,6 +67,62 @@ class AB_MCP_Tool_Labels {
 		 */
 		$label = apply_filters( 'ab_mcp_tool_label', $label, $name );
 		return is_scalar( $label ) ? trim( (string) $label ) : '';
+	}
+
+	/**
+	 * Every short name in English, the source text, whatever the admin's
+	 * language.
+	 *
+	 * These are the tool titles a client is sent (title and annotations.title
+	 * in tools/list). The client shows them to whoever uses it, next to an
+	 * English description, so they must not follow the language of the admin
+	 * who happens to run the request.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function english() {
+		$key = "\0source";
+		if ( ! isset( self::$cache[ $key ] ) ) {
+			// The last filter on this domain hands back the source text. It is
+			// there only while build() runs, which translates nothing else.
+			$source = static function ( $translation, $text = '' ) {
+				return (string) $text;
+			};
+			add_filter( 'gettext_with_context_alphabridge-mcp', $source, PHP_INT_MAX, 2 );
+			try {
+				self::$cache[ $key ] = self::build();
+			} finally {
+				remove_filter( 'gettext_with_context_alphabridge-mcp', $source, PHP_INT_MAX );
+			}
+		}
+		return self::$cache[ $key ];
+	}
+
+	/**
+	 * The title a client is sent for a tool: the definition's own title, else
+	 * the English short name, else one derived from the tool name
+	 * («wp_foo_bar» → «Foo Bar») for a tool this list does not know.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return string
+	 */
+	public static function title( $name, array $def ) {
+		$name = (string) $name;
+		if ( ! empty( $def['title'] ) && $def['title'] !== $name ) {
+			return (string) $def['title'];
+		}
+		$english = self::english();
+		if ( isset( $english[ $name ] ) && '' !== $english[ $name ] ) {
+			return $english[ $name ];
+		}
+		$t = $name;
+		if ( 0 === strpos( $t, 'wp_' ) ) {
+			$t = substr( $t, 3 );
+		} elseif ( 0 === strpos( $t, 'wc_' ) ) {
+			$t = 'WC ' . substr( $t, 3 );
+		}
+		return ucwords( str_replace( '_', ' ', $t ) );
 	}
 
 	/**

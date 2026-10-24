@@ -66,6 +66,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_filters']    = array();
 	$GLOBALS['ab_test_users']      = array();
 	$GLOBALS['ab_test_comments']   = array();
+	$GLOBALS['ab_test_moderated']  = array();
 	$GLOBALS['ab_test_revisions']  = array();
 	$GLOBALS['ab_test_inserted']   = array();
 	$GLOBALS['ab_test_updated']    = array();
@@ -824,6 +825,22 @@ function wp_get_comment_status( $id ) {
 	return 'approved';
 }
 
+/** @var array[] $ab_test_moderated [comment id, status] per moderation call. */
+$GLOBALS['ab_test_moderated'] = array();
+
+function wp_set_comment_status( $id, $status ) {
+	$GLOBALS['ab_test_moderated'][] = array( (int) $id, (string) $status );
+	return true;
+}
+
+function wp_spam_comment( $id ) {
+	return wp_set_comment_status( $id, 'spam' );
+}
+
+function wp_trash_comment( $id ) {
+	return wp_set_comment_status( $id, 'trash' );
+}
+
 function wp_get_post_revisions( $post_id ) {
 	return $GLOBALS['ab_test_revisions'][ (int) $post_id ] ?? array();
 }
@@ -1068,7 +1085,11 @@ function get_locale() {
  * read from the files themselves (BundledTranslationsTest).
  */
 function _x( $text, $context, $domain = '' ) {
-	return $GLOBALS['ab_test_translations'][ $context . "\x04" . $text ] ?? $text;
+	$translation = $GLOBALS['ab_test_translations'][ $context . "\x04" . $text ] ?? $text;
+	// As translate_with_gettext_context() in WordPress: the general filter,
+	// then the one of the domain.
+	$translation = apply_filters( 'gettext_with_context', $translation, $text, $context, $domain );
+	return apply_filters( "gettext_with_context_{$domain}", $translation, $text, $context, $domain );
 }
 
 function get_user_locale( $user = 0 ) {
@@ -1496,6 +1517,16 @@ function wp_remote_get( $url, $args = array() ) {
  *
  * @param array<string,string> $headers
  */
+if ( ! defined( 'MB_IN_BYTES' ) ) {
+	define( 'MB_IN_BYTES', 1024 * 1024 );
+}
+
+/** As in WordPress, in short: loopback and private hosts are refused. */
+function wp_http_validate_url( $url ) {
+	$host = (string) parse_url( (string) $url, PHP_URL_HOST );
+	return ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) ? false : $url;
+}
+
 function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
 	return array(
 		'response' => array(

@@ -26,7 +26,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_sidebars',
 			array(
-				'description' => "List the theme's registered sidebars (widget areas) with their widget counts.",
+				'description' => "List the widget areas (sidebars) the active theme registers: [{id, name, description, widget_count}], followed by an entry wp_inactive_widgets for widgets placed in no area. A theme that registers no widget areas, as most block themes, yields only that entry. Needs edit_theme_options. Read-only; takes no arguments. The widgets in an area and their settings come from wp_get_widgets.",
 				'capability'  => 'edit_theme_options',
 				'callback'    => array( __CLASS__, 'list_sidebars' ),
 			)
@@ -35,12 +35,12 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_widgets',
 			array(
-				'description' => 'List widgets and their settings, optionally filtered to one sidebar. A setting whose key looks like a credential (an API key, token, secret or password) is left out and named in hidden_keys.',
+				'description' => 'List the site\'s widgets with their settings: by default those of all widget areas, inactive widgets included; with sidebar, only those of one area. Returns widgets: [{id, id_base, number, name, sidebar, settings}]; id is e.g. "text-2", sidebar the area id (empty when the widget is in none). A setting whose key looks like a credential (an API key, token, secret or password) is left out and named in hidden_keys. Needs edit_theme_options. Read-only; wp_list_sidebars lists the areas themselves.',
 				'capability'  => 'edit_theme_options',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
-						'sidebar' => array( 'type' => 'string', 'description' => 'Optional sidebar id, e.g. "sidebar-1" or "wp_inactive_widgets".' ),
+						'sidebar' => array( 'type' => 'string', 'description' => 'Optional widget area id from wp_list_sidebars, e.g. "sidebar-1" or "wp_inactive_widgets". When omitted, widgets of all areas are listed.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_widgets' ),

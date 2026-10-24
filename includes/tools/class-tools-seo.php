@@ -69,7 +69,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_seo_detect',
 			array(
-				'description' => 'Detect the active SEO plugin (Yoast, Rank Math, AIOSEO or none).',
+				'description' => 'Detect the active SEO plugin: Yoast SEO, Rank Math or All in One SEO, checked in that order, the first found counting. Returns {provider: "yoast", "rankmath", "aioseo" or "none", writable, note}; writable is true for Yoast and Rank Math, which keep their fields as post meta, and false for AIOSEO, whose own table is not written (note says so). Needs edit_posts. Read-only; takes no arguments. The fields of one post come from wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'callback'    => array( __CLASS__, 'detect' ),
 			)
@@ -78,12 +78,12 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_seo_get',
 			array(
-				'description' => 'Get the SEO title, meta description and focus keyword for a post.',
+				'description' => 'Get the SEO title, meta description and focus keyword of one post as Yoast SEO or Rank Math store them. Returns {post_id, provider, title, description, focus_keyword}; a field never set is empty. With AIOSEO or no supported SEO plugin the fields are absent and note says why. Needs the right to edit the post; an unknown post_id returns a not-found error. Read-only; wp_seo_detect reports the active plugin alone.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'post_id' ),
-					'properties' => array( 'post_id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'post_id' => array( 'type' => 'integer', 'description' => 'Id of the post or page whose SEO fields are read.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'get_seo' ),
 			)

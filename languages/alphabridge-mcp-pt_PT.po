@@ -2109,10 +2109,6 @@ msgstr "Em utilização há %1$d dias, pelo menos %2$d chamadas bem-sucedidas. Q
 msgid "Settings"
 msgstr "Definições"
 
-#, php-format
-msgid "The editions of AlphaBridge MCP and their tools are described here: %s"
-msgstr "As edições do AlphaBridge MCP e as respetivas ferramentas estão descritas aqui: %s"
-
 msgid "Command for Claude Code"
 msgstr "Comando para o Claude Code"
 

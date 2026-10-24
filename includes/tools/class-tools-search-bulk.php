@@ -24,15 +24,15 @@ class AB_MCP_Tools_Search_Bulk extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_search',
 			array(
-				'description' => 'Full-text search across content (title + body) for any post type.',
+				'description' => 'Search posts, pages and other entries for words in title, excerpt and content, across all searchable post types or one, ordered by relevance. Every status but trash, auto-draft and others registered as excluded from search is searched (drafts and private entries included); only entries the account may read are returned. Returns {query, total, results}; results are summaries as in wp_list_posts (no content), up to per_page, without further pages. Needs edit_posts. Read-only. wp_list_posts also takes search, with filters and paging.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'query' ),
 					'properties' => array(
-						'query'    => array( 'type' => 'string' ),
-						'type'     => array( 'type' => 'string', 'description' => 'Post type or "any". Default any.' ),
-						'per_page' => array( 'type' => 'integer' ),
+						'query'    => array( 'type' => 'string', 'description' => 'Words to search for.' ),
+						'type'     => array( 'type' => 'string', 'description' => 'Post type, or "any" for every post type not excluded from search. Default any. Revisions are not searched.', 'default' => 'any' ),
+						'per_page' => array( 'type' => 'integer', 'description' => 'Maximum number of results, 1–100; other values are clamped. Default 20.', 'default' => 20 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'search' ),

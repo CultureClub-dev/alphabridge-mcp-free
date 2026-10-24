@@ -26,16 +26,16 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_terms',
 			array(
-				'description' => 'List terms of a taxonomy (categories, tags, custom).',
+				'description' => 'List the terms of one taxonomy (categories, tags or a custom taxonomy), ordered by name. Returns terms: [{term_id, name, slug, count, parent}]; count is the number of objects WordPress counts for the term, parent is 0 at the top level. Only the first per_page matches are returned; there are no further pages. Terms of a non-public taxonomy need the right to assign them. Read-only; wp_get_term returns one term with its description.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'taxonomy' ),
 					'properties' => array(
-						'taxonomy' => array( 'type' => 'string', 'description' => 'e.g. category, post_tag.' ),
-						'search'   => array( 'type' => 'string' ),
-						'hide_empty' => array( 'type' => 'boolean' ),
-						'per_page' => array( 'type' => 'integer' ),
+						'taxonomy' => array( 'type' => 'string', 'description' => 'Taxonomy name, e.g. "category", "post_tag" or a custom one, as wp_get_taxonomies lists it. An unknown taxonomy is refused.' ),
+						'search'   => array( 'type' => 'string', 'description' => 'Only terms whose name or slug contains this text.' ),
+						'hide_empty' => array( 'type' => 'boolean', 'description' => 'true leaves out terms whose count is 0; in a hierarchical taxonomy a parent stays when a descendant is not empty. Default false.', 'default' => false ),
+						'per_page' => array( 'type' => 'integer', 'description' => 'Maximum number of terms, 1–500; other values are clamped. Default 100.', 'default' => 100 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'list_terms' ),
@@ -45,17 +45,17 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_term',
 			array(
-				'description' => 'Create a term in a taxonomy.',
+				'description' => 'Create a new term (category, tag or custom taxonomy term) in a taxonomy. Returns {created: true, term_id}. Needs the taxonomy\'s right to manage terms (for categories and tags: manage_categories). WordPress refuses a parent that does not exist and, without a distinct slug, a name the taxonomy already has (in a hierarchical taxonomy: under the same parent). Existing terms are changed with wp_update_term.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'taxonomy', 'name' ),
 					'properties' => array(
-						'taxonomy'    => array( 'type' => 'string' ),
-						'name'        => array( 'type' => 'string' ),
-						'slug'        => array( 'type' => 'string' ),
-						'description' => array( 'type' => 'string' ),
-						'parent'      => array( 'type' => 'integer' ),
+						'taxonomy'    => array( 'type' => 'string', 'description' => 'Taxonomy name, e.g. "category" or "post_tag", as wp_get_taxonomies lists it. An unknown taxonomy is refused.' ),
+						'name'        => array( 'type' => 'string', 'description' => 'Display name of the new term.' ),
+						'slug'        => array( 'type' => 'string', 'description' => 'URL slug. Default: derived from the name. WordPress adds a suffix when the slug is taken.' ),
+						'description' => array( 'type' => 'string', 'description' => 'Term description. Default empty.' ),
+						'parent'      => array( 'type' => 'integer', 'description' => 'Id of the parent term in the same taxonomy, for hierarchical taxonomies such as categories. Default 0: top level.', 'default' => 0 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'create_term' ),
@@ -65,18 +65,18 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term',
 			array(
-				'description' => 'Update a term.',
+				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories). Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'term_id', 'taxonomy' ),
 					'properties' => array(
-						'term_id'     => array( 'type' => 'integer' ),
-						'taxonomy'    => array( 'type' => 'string' ),
-						'name'        => array( 'type' => 'string' ),
-						'slug'        => array( 'type' => 'string' ),
-						'description' => array( 'type' => 'string' ),
-						'parent'      => array( 'type' => 'integer' ),
+						'term_id'     => array( 'type' => 'integer', 'description' => 'Id of the term to change, as wp_list_terms or wp_get_term return it.' ),
+						'taxonomy'    => array( 'type' => 'string', 'description' => 'Taxonomy the term belongs to, e.g. "category" or "post_tag".' ),
+						'name'        => array( 'type' => 'string', 'description' => 'New display name. When omitted, it stays as it is; an empty name is refused.' ),
+						'slug'        => array( 'type' => 'string', 'description' => 'New URL slug. When omitted, it stays as it is; an empty string derives it from the name, made unique if taken. A slug another term of the taxonomy uses is refused, unless parent changes in the same call (WordPress then makes it unique).' ),
+						'description' => array( 'type' => 'string', 'description' => 'New description; an empty string clears it. When omitted, it stays as it is.' ),
+						'parent'      => array( 'type' => 'integer', 'description' => 'Id of the new parent term; 0 moves the term to the top level. A parent that does not exist is refused. When omitted, it stays as it is.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_term' ),
@@ -86,15 +86,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_term',
 			array(
-				'description' => 'Delete a term from a taxonomy.',
+				'description' => 'Delete a term from a taxonomy for good; terms have no trash. Posts lose the term (a post left without a category gets the default category), child terms move up to the deleted term\'s parent, and the term\'s meta is removed. The taxonomy\'s default term, such as the default category, is not deleted; it and an unknown term_id return an error. Needs the taxonomy\'s right to delete terms. Returns {deleted: true}.',
 				'capability'  => 'manage_categories',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'term_id', 'taxonomy' ),
 					'properties' => array(
-						'term_id'  => array( 'type' => 'integer' ),
-						'taxonomy' => array( 'type' => 'string' ),
+						'term_id'  => array( 'type' => 'integer', 'description' => 'Id of the term to delete.' ),
+						'taxonomy' => array( 'type' => 'string', 'description' => 'Taxonomy the term belongs to, e.g. "category" or "post_tag".' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'delete_term' ),
@@ -106,16 +106,16 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_comments',
 			array(
-				'description' => 'List comments with status and post filters.',
+				'description' => 'List comments, newest first, optionally filtered by status, post and search text. Returns comments: [{comment_id, post_id, author, content, status, date}]; status is "approved", "unapproved", "spam" or "trash", date is RFC 3339 in site time. Paged with per_page and page; no total count is returned, and a page past the end is empty. Needs moderate_comments. Read-only; wp_get_comment returns one comment with its parent.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'properties' => array(
-						'status'   => array( 'type' => 'string', 'description' => 'approve, hold, spam, trash, all.' ),
-						'post_id'  => array( 'type' => 'integer' ),
-						'search'   => array( 'type' => 'string' ),
-						'per_page' => array( 'type' => 'integer' ),
-						'page'     => array( 'type' => 'integer' ),
+						'status'   => array( 'type' => 'string', 'description' => 'approve (approved), hold (pending), spam, trash or all. Default "all", which covers approved and pending comments, not spam or trash; any other value counts as all.', 'default' => 'all' ),
+						'post_id'  => array( 'type' => 'integer', 'description' => 'Only comments on this post id. Default 0: comments on all posts.', 'default' => 0 ),
+						'search'   => array( 'type' => 'string', 'description' => 'Text matched against the comment content and the author\'s name, email, URL and IP.' ),
+						'per_page' => array( 'type' => 'integer', 'description' => 'Comments per page, 1–100; other values are clamped. Default 20.', 'default' => 20 ),
+						'page'     => array( 'type' => 'integer', 'description' => 'Page number, starting at 1. Default 1.', 'default' => 1 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'list_comments' ),
@@ -125,14 +125,18 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set a comment status: approve, hold, spam or trash.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. Trashing a top-level note (comment_type note) also trashes its reply notes, and setting the note to approve or hold later does not bring those back. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'comment_id', 'status' ),
 					'properties' => array(
-						'comment_id' => array( 'type' => 'integer' ),
-						'status'     => array( 'type' => 'string', 'description' => 'approve, hold, spam, trash.' ),
+						'comment_id' => array( 'type' => 'integer', 'description' => 'Id of the comment, as wp_list_comments returns it.' ),
+						'status'     => array(
+							'type'        => 'string',
+							'enum'        => array( 'approve', 'hold', 'spam', 'trash' ),
+							'description' => 'New status: approve, hold (pending), spam or trash. Other values are refused.',
+						),
 					),
 				),
 				'callback'    => array( __CLASS__, 'moderate_comment' ),
@@ -142,15 +146,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Reply to a comment (or comment on a post) as the current user.',
+				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}. Needs moderate_comments. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'post_id', 'content' ),
 					'properties' => array(
-						'post_id'   => array( 'type' => 'integer' ),
-						'content'   => array( 'type' => 'string' ),
-						'parent'    => array( 'type' => 'integer', 'description' => 'Parent comment id.' ),
+						'post_id'   => array( 'type' => 'integer', 'description' => 'Id of the post the comment belongs to; for a reply, the post of the parent comment. A post that does not exist is refused.' ),
+						'content'   => array( 'type' => 'string', 'description' => 'Comment text; HTML is filtered to what post content allows.' ),
+						'parent'    => array( 'type' => 'integer', 'description' => 'Id of the comment this replies to; not checked to exist or to belong to post_id. Default 0: a top-level comment.', 'default' => 0 ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'reply_comment' ),
@@ -160,15 +164,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_comment',
 			array(
-				'description' => 'Delete a comment (trash by default, force to remove permanently).',
+				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments.',
 				'capability'  => 'moderate_comments',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'comment_id' ),
 					'properties' => array(
-						'comment_id' => array( 'type' => 'integer' ),
-						'force'      => array( 'type' => 'boolean' ),
+						'comment_id' => array( 'type' => 'integer', 'description' => 'Id of the comment to delete.' ),
+						'force'      => array( 'type' => 'boolean', 'description' => 'true deletes the comment for good instead of moving it to the trash. Default false.', 'default' => false ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'delete_comment' ),
@@ -178,14 +182,14 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_term',
 			array(
-				'description' => 'Get a single term by id and taxonomy.',
+				'description' => 'Get one term by id and taxonomy. Returns {term_id, name, slug, taxonomy, description, count, parent}; count is the number of objects WordPress counts for the term, parent is 0 at the top level. Terms of a non-public taxonomy need the right to assign them. A term that does not exist in that taxonomy returns a not-found error. A term known only by name or slug is found with wp_list_terms (search); the term\'s custom meta comes from wp_get_term_meta.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'term_id', 'taxonomy' ),
 					'properties' => array(
-						'term_id'  => array( 'type' => 'integer' ),
-						'taxonomy' => array( 'type' => 'string' ),
+						'term_id'  => array( 'type' => 'integer', 'description' => 'Term id, as wp_list_terms returns it.' ),
+						'taxonomy' => array( 'type' => 'string', 'description' => 'Taxonomy the term belongs to, e.g. "category" or "post_tag".' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_term_tool' ),
@@ -195,12 +199,12 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_comment',
 			array(
-				'description' => 'Get a single comment by id.',
+				'description' => 'Get one comment by id. Returns {comment_id, post_id, author, content, status, date, parent}: author is the commenter\'s name as stored (no email), status is "approved", "unapproved", "spam", "trash", or false for a comment hidden because its post is in the trash (stored as post-trashed), date is RFC 3339 in site time, parent is 0 for a top-level comment. An unknown comment_id returns a not-found error. Needs moderate_comments. Read-only; wp_list_comments lists several comments with filters.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'comment_id' ),
-					'properties' => array( 'comment_id' => array( 'type' => 'integer' ) ),
+					'properties' => array( 'comment_id' => array( 'type' => 'integer', 'description' => 'Comment id, as wp_list_comments returns it.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'get_comment_tool' ),
 			)
