@@ -141,6 +141,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **Every tool explains itself to AI assistants.** Each description says what the tool is for, when it fits, what it changes along the way and what a repeated call does, and every parameter is described (105 of 105, before 42). The texts state facts and give the assistant no instructions, as the directories of OpenAI and Anthropic ask.
 * **Readable tool titles.** AI clients show «Change a post or page» instead of «Update Post»: each tool's title is its short English name from the fine-tuning, whatever the language of the site.
 * **A tool of another edition is named without a link.** When an assistant asks for a tool of AlphaBridge MCP Pro or its Agency plan, the answer and the server instructions say which edition has it; they no longer link the page about the editions.
+* **A file from a URL over the size limit is refused.** `wp_upload_media_from_url` could store a file larger than the limit (20 MB by default) cut off at the limit and report it uploaded; such a file is now refused with an error.
 * For add-ons: a tool definition can state `open_world` itself, as it can state `destructive`.
 
 = 4.6.7 =

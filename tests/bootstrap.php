@@ -1517,6 +1517,16 @@ function wp_remote_get( $url, $args = array() ) {
  *
  * @param array<string,string> $headers
  */
+if ( ! defined( 'MB_IN_BYTES' ) ) {
+	define( 'MB_IN_BYTES', 1024 * 1024 );
+}
+
+/** As in WordPress, in short: loopback and private hosts are refused. */
+function wp_http_validate_url( $url ) {
+	$host = (string) parse_url( (string) $url, PHP_URL_HOST );
+	return ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) ? false : $url;
+}
+
 function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
 	return array(
 		'response' => array(

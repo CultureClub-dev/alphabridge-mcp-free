@@ -241,12 +241,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		// this, which would let an allowed URL redirect to an internal address).
 		$max_bytes = (int) apply_filters( 'ab_mcp_upload_max_bytes', 20 * MB_IN_BYTES );
 
+		// One byte more than allowed: the transport cuts the body off at its
+		// limit, so a file cut at exactly the maximum would look like one that
+		// fits and be stored broken. With the extra byte, an oversized file
+		// arrives longer than the maximum and is refused below.
 		$response = wp_safe_remote_get(
 			$url,
 			array(
 				'timeout'             => 20,
 				'redirection'         => 3,
-				'limit_response_size' => $max_bytes,
+				'limit_response_size' => $max_bytes + 1,
 			)
 		);
 		if ( is_wp_error( $response ) ) {
