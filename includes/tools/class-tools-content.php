@@ -166,7 +166,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_list_revisions',
 			array(
-				'description' => 'List the stored revisions of one post or page, newest first. Returns revisions: [{revision_id, date, author}]; date is when the revision was saved (RFC 3339, site time), author a user id. The list is empty when the post has no revisions or revisions are turned off for it. A revision\'s content is returned by wp_get_post with its revision_id. Needs the right to edit the post. Read-only.',
+				'description' => 'List the stored revisions of one post or page, newest first. Returns revisions: [{revision_id, date, author}]; date is when the revision was saved (RFC 3339, site time), author a user id. The list is empty when the post has no revisions or revisions are turned off for it. A revision\'s content is returned by wp_get_post with its revision_id. Needs the right to edit the post.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',

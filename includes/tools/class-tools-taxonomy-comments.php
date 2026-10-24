@@ -146,7 +146,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Add a comment to a post as the connected user: a reply to an existing comment (parent) or a new top-level comment; each call adds a new comment, so a repeated call posts it twice. It is saved as approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored. It is saved directly, so WordPress sends none of its new-comment emails. HTML is filtered to what post content allows. Whether comments are open on the post, and whether parent exists and belongs to that post, is not checked. Returns {created: true, comment_id}. Needs moderate_comments. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
+				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}. Needs moderate_comments. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -182,7 +182,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_term',
 			array(
-				'description' => 'Get one term by id and taxonomy. Returns {term_id, name, slug, taxonomy, description, count, parent}; count is the number of objects WordPress counts for the term, parent is 0 at the top level. Terms of a non-public taxonomy need the right to assign them. A term that does not exist in that taxonomy returns a not-found error. Read-only; the term\'s custom meta comes from wp_get_term_meta.',
+				'description' => 'Get one term by id and taxonomy. Returns {term_id, name, slug, taxonomy, description, count, parent}; count is the number of objects WordPress counts for the term, parent is 0 at the top level. Terms of a non-public taxonomy need the right to assign them. A term that does not exist in that taxonomy returns a not-found error. A term known only by name or slug is found with wp_list_terms (search); the term\'s custom meta comes from wp_get_term_meta.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',

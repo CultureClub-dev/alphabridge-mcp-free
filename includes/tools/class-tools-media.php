@@ -42,7 +42,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_media',
 			array(
-				'description' => 'Get one file of the media library (attachment) by id. Returns {id, title, mime, url, alt, caption, metadata}; metadata is WordPress\' attachment metadata (for an image: width, height, file and the generated sizes). The caption of a password-protected file is empty for an account that may not edit it. An id that is not a media file (a post, say) returns a not-found error. Needs the right to read the file. Read-only.',
+				'description' => 'Get one file of the media library (attachment) by id. Returns {id, title, mime, url, alt, caption, metadata}; metadata is WordPress\' attachment metadata (for an image: width, height, file and the generated sizes). The caption of a password-protected file is empty for an account that may not edit it. An id that is not a media file (a post, say) returns a not-found error: posts and pages are read by wp_get_post, and wp_list_media lists the media with their ids. Needs the right to read the file.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
