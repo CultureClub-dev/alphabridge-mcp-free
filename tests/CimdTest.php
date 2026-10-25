@@ -512,6 +512,8 @@ final class CimdTest extends TestCase {
 			'no redirect_uris'           => array( static function ( array &$d ): void { unset( $d['redirect_uris'] ); }, 'redirect_uris' ),
 			'plain http redirect'        => array( static function ( array &$d ): void { $d['redirect_uris'] = array( 'http://app.example/cb' ); }, 'redirect_uris' ),
 			'redirect with fragment'     => array( static function ( array &$d ): void { $d['redirect_uris'] = array( 'https://app.example/cb#x' ); }, 'redirect_uris' ),
+			'redirect read differently'  => array( static function ( array &$d ): void { $d['redirect_uris'] = array( 'https://attacker.example\\@claude.ai/cb' ); }, 'redirect_uris' ),
+			'redirect with a user name'  => array( static function ( array &$d ): void { $d['redirect_uris'] = array( 'https://user@app.example/cb' ); }, 'redirect_uris' ),
 			'no client_name'             => array( static function ( array &$d ): void { unset( $d['client_name'] ); }, 'client_name' ),
 			'empty client_name'          => array( static function ( array &$d ): void { $d['client_name'] = '<b></b>'; }, 'client_name' ),
 		);

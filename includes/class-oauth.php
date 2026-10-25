@@ -374,7 +374,8 @@ class AB_MCP_OAuth {
 	 * The redirect addresses a client may use, checked the same way for a
 	 * registration and for a metadata document: at most 20, each https (or
 	 * http on a loopback host, which native and development clients use by
-	 * spec), without a fragment, at most 2000 characters.
+	 * spec), in the strict form redirect_host() reads, so without a fragment
+	 * and at most 2000 characters.
 	 *
 	 * The answer to a registration keeps error and error_description as the
 	 * OAuth standards word them, in English (RFC 6749 allows only ASCII
@@ -403,19 +404,7 @@ class AB_MCP_OAuth {
 
 		$clean_uris = array();
 		foreach ( $uris as $uri ) {
-			$uri   = is_string( $uri ) ? $uri : '';
-			$parts = wp_parse_url( $uri );
-			$valid = is_array( $parts )
-				&& isset( $parts['scheme'], $parts['host'] )
-				&& ! isset( $parts['fragment'] )
-				&& strlen( $uri ) <= 2000
-				&& (
-					'https' === strtolower( $parts['scheme'] )
-					// Loopback redirects stay http by spec (native/dev clients).
-					|| ( 'http' === strtolower( $parts['scheme'] )
-						&& in_array( strtolower( $parts['host'] ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) )
-				);
-			if ( ! $valid ) {
+			if ( ! is_string( $uri ) || ! self::redirect_uri_acceptable( $uri ) ) {
 				return array(
 					'error'             => 'invalid_redirect_uri',
 					'error_description' => 'redirect_uris must be https (or http on localhost) without fragments.',
@@ -425,6 +414,97 @@ class AB_MCP_OAuth {
 			$clean_uris[] = $uri;
 		}
 		return $clean_uris;
+	}
+
+	/**
+	 * Whether a client may be sent to this redirect address: in the strict
+	 * form redirect_host() reads, https, or http on a loopback host.
+	 *
+	 * @param string $uri Redirect address.
+	 * @return bool
+	 */
+	public static function redirect_uri_acceptable( $uri ) {
+		$uri  = (string) $uri;
+		$host = self::redirect_host( $uri );
+		if ( null === $host ) {
+			return false;
+		}
+		if ( 'https://' === strtolower( substr( $uri, 0, 8 ) ) ) {
+			return true;
+		}
+		// Loopback redirects stay http by spec (native/dev clients).
+		return self::is_loopback_host( $host );
+	}
+
+	/**
+	 * The host of a redirect address as a BROWSER reads it, or null when the
+	 * address is not built strictly enough to say so for certain.
+	 *
+	 * wp_parse_url() and browsers read some strings differently. A browser
+	 * decodes %2E in a host to a dot and turns letters of other alphabets
+	 * into punycode: of https://claude.ai%2Eattacker.example/cb
+	 * wp_parse_url() reads the host claude.ai%2Eattacker.example while the
+	 * browser goes to claude.ai.attacker.example, and claude.ai spelt with a
+	 * Cyrillic letter es (U+0441) for the c leads to xn--laude-0ye.ai. Of
+	 * https://attacker.example\@claude.ai/cb PHP makes the host claude.ai, a
+	 * browser attacker.example; that one only lands at claude.ai because
+	 * wp_redirect() happens to strip the backslash. Hence only one form, in
+	 * which both see the same: scheme, ASCII host (or an IPv6 address in
+	 * brackets, written as the browser writes it), port, path and query; no
+	 * user name, backslash, space, control character or fragment.
+	 *
+	 * @param string $uri Redirect address.
+	 * @return string|null Lower-case host ("[::1]" with its brackets), or null.
+	 */
+	public static function redirect_host( $uri ) {
+		$uri = (string) $uri;
+		if ( strlen( $uri ) > 2000 || 1 === preg_match( '/[\x00-\x20\x7F\\\\]/', $uri ) ) {
+			return null;
+		}
+		$match = array();
+		if ( 1 !== preg_match( '~^https?://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(?::([0-9]{1,5}))?(?:[/?][^#]*)?\z~i', $uri, $match ) ) {
+			return null;
+		}
+		// A port above 65535 is no address to a browser; wp_parse_url()
+		// refused it before, the pattern alone does not.
+		if ( isset( $match[2] ) && '' !== $match[2] && (int) $match[2] > 65535 ) {
+			return null;
+		}
+		$host = strtolower( $match[1] );
+		// An IPv6 address only as the browser writes it (shortest form, no
+		// dotted IPv4 part), so that the screen shows the same and [::1] is
+		// known as this computer: [0:0:0:0:0:0:0:1] is [::1] to a browser,
+		// [abcd] no address at all.
+		if ( '[' === $host[0] ) {
+			$ip     = substr( $host, 1, -1 );
+			$packed = inet_pton( $ip );
+			if ( false === $packed || false !== strpos( $ip, '.' ) || inet_ntop( $packed ) !== $ip ) {
+				return null;
+			}
+			return $host;
+		}
+		// A host whose last label is a number is an IPv4 address to a browser
+		// (URL standard, "ends in a number"), decimal or 0x, and the browser
+		// then also reads octal, hex and short forms: 0177.0.0.1 and 127.0x1
+		// are 127.0.0.1. So that the screen shows where the browser goes, only
+		// the usual four numbers up to 255 without leading zeros count then.
+		// Domains like 0x123.example or 1password.com do not end in a number.
+		$labels = explode( '.', $host );
+		if ( 1 === preg_match( '/^(?:[0-9]+|0x[0-9a-f]*)$/', (string) end( $labels ) )
+			&& 1 !== preg_match( '/^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/', $host ) ) {
+			return null;
+		}
+		return $host;
+	}
+
+	/**
+	 * Whether a host (as redirect_host() returns it) is this computer.
+	 *
+	 * @param string $host Host.
+	 * @return bool
+	 */
+	private static function is_loopback_host( $host ) {
+		return in_array( strtolower( (string) $host ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true );
 	}
 
 	/**
@@ -1721,7 +1801,10 @@ class AB_MCP_OAuth {
 		}
 
 		$redirect = isset( $get['redirect_uri'] ) ? (string) $get['redirect_uri'] : '';
-		if ( ! in_array( $redirect, (array) $client['redirect_uris'], true ) ) {
+		// Registered exactly AND acceptable today: an address stored before the
+		// strict form (registered with 4.6.8 or earlier, or a cached metadata
+		// document) does not get through.
+		if ( ! in_array( $redirect, (array) $client['redirect_uris'], true ) || ! self::redirect_uri_acceptable( $redirect ) ) {
 			// Unregistered target: error PAGE — never redirect to it.
 			self::error_page( __( 'The redirect address is not registered for this client.', 'alphabridge-mcp' ) );
 		}
@@ -1947,8 +2030,9 @@ class AB_MCP_OAuth {
 
 		// The destination host of the (already exact-match-validated) redirect_uri.
 		// Shown prominently so the approver can see WHERE the authorization goes —
-		// the client name alone is attacker-chosen and not trustworthy.
-		$dest_host = (string) wp_parse_url( (string) $get['redirect_uri'], PHP_URL_HOST );
+		// the client name alone is attacker-chosen and not trustworthy. Read as
+		// the browser reads it (redirect_host()), not as wp_parse_url() does.
+		$dest_host = (string) self::redirect_host( (string) $get['redirect_uri'] );
 
 		$default_scope = self::default_scope( $scopes );
 
@@ -2007,7 +2091,7 @@ class AB_MCP_OAuth {
 		);
 		?>
 	</div>
-	<?php if ( in_array( strtolower( $dest_host ), array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) ) : ?>
+	<?php if ( self::is_loopback_host( $dest_host ) ) : ?>
 		<div class="dest"><?php esc_html_e( 'That address is on your own computer, where any program can use it, so the app\'s name proves nothing here. Only continue if you started this connection yourself just now.', 'alphabridge-mcp' ); ?></div>
 	<?php endif; ?>
 	<?php if ( ! empty( $client['cimd'] ) ) : ?>
