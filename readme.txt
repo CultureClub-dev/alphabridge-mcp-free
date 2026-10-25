@@ -137,6 +137,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.9 =
+* **Security: the consent screen names the host the browser really goes to.** An app registering with the site could give a redirect address that PHP and a browser read differently, for example with a percent sign or a letter of another alphabet in the host, a backslash or a user name; the consent screen could then name a host the browser would not go to. Redirect addresses now count only in a strict form (https, or http on this computer; a plain ASCII host or IPv6 address, port, path and query; no user name, backslash, spaces, control characters or fragment), from a registration and from a metadata document alike. The consent screen reads the host the same way, and an address stored by an earlier version is checked again before it is used. The addresses of Claude, ChatGPT, the connection service and local development tools are not affected.
+
 = 4.6.8 =
 * **Every tool explains itself to AI assistants.** Each description says what the tool is for, when it fits, what it changes along the way and what a repeated call does, and every parameter is described (105 of 105, before 42). The texts state facts and give the assistant no instructions, as the directories of OpenAI and Anthropic ask.
 * **Readable tool titles.** AI clients show «Change a post or page» instead of «Update Post»: each tool's title is its short English name from the fine-tuning, whatever the language of the site.
@@ -342,6 +345,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.9 =
+Security fix for the sign-in of apps: redirect addresses count only in a strict form, and the consent screen names the host the browser goes to. Update recommended. No setting changes.
 
 = 4.6.8 =
 Clearer tool descriptions and titles for AI assistants; every parameter described. No setting changes.
