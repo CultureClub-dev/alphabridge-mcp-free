@@ -440,18 +440,18 @@ class AB_MCP_OAuth {
 	 * The host of a redirect address as a BROWSER reads it, or null when the
 	 * address is not built strictly enough to say so for certain.
 	 *
-	 * wp_parse_url() and browsers read the same string differently. Of
+	 * wp_parse_url() and browsers read some strings differently. A browser
+	 * decodes %2E in a host to a dot and turns letters of other alphabets
+	 * into punycode: of https://claude.ai%2Eattacker.example/cb
+	 * wp_parse_url() reads the host claude.ai%2Eattacker.example while the
+	 * browser goes to claude.ai.attacker.example, and claude.ai spelt with a
+	 * Cyrillic letter es (U+0441) for the c leads to xn--laude-0ye.ai. Of
 	 * https://attacker.example\@claude.ai/cb PHP makes the host claude.ai, a
-	 * browser treats the backslash as a slash and goes to attacker.example
-	 * (wp_redirect() happens to strip the backslash, but the consent screen
-	 * showed the wrong host all the same). A browser also decodes %2E in a
-	 * host to a dot and turns non-ASCII letters into punycode, so
-	 * claude.ai%2Eattacker.example, and claude.ai spelt with a Cyrillic
-	 * letter es (U+0441) for the c, lead elsewhere than the consent screen
-	 * suggested. Hence only one form, in
-	 * which both see the same: scheme, ASCII host (or IPv6 in brackets),
-	 * port, path and query; no user name, backslash, space, control
-	 * character or fragment.
+	 * browser attacker.example; that one only lands at claude.ai because
+	 * wp_redirect() happens to strip the backslash. Hence only one form, in
+	 * which both see the same: scheme, ASCII host (or an IPv6 address in
+	 * brackets, written as the browser writes it), port, path and query; no
+	 * user name, backslash, space, control character or fragment.
 	 *
 	 * @param string $uri Redirect address.
 	 * @return string|null Lower-case host ("[::1]" with its brackets), or null.
@@ -471,18 +471,28 @@ class AB_MCP_OAuth {
 			return null;
 		}
 		$host = strtolower( $match[1] );
+		// An IPv6 address only as the browser writes it (shortest form, no
+		// dotted IPv4 part), so that the screen shows the same and [::1] is
+		// known as this computer: [0:0:0:0:0:0:0:1] is [::1] to a browser,
+		// [abcd] no address at all.
+		if ( '[' === $host[0] ) {
+			$ip     = substr( $host, 1, -1 );
+			$packed = inet_pton( $ip );
+			if ( false === $packed || false !== strpos( $ip, '.' ) || inet_ntop( $packed ) !== $ip ) {
+				return null;
+			}
+			return $host;
+		}
 		// A host whose last label is a number is an IPv4 address to a browser
 		// (URL standard, "ends in a number"), decimal or 0x, and the browser
 		// then also reads octal, hex and short forms: 0177.0.0.1 and 127.0x1
 		// are 127.0.0.1. So that the screen shows where the browser goes, only
 		// the usual four numbers up to 255 without leading zeros count then.
 		// Domains like 0x123.example or 1password.com do not end in a number.
-		if ( '[' !== $host[0] ) {
-			$labels = explode( '.', $host );
-			if ( 1 === preg_match( '/^(?:[0-9]+|0x[0-9a-f]*)$/', (string) end( $labels ) )
-				&& 1 !== preg_match( '/^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/', $host ) ) {
-				return null;
-			}
+		$labels = explode( '.', $host );
+		if ( 1 === preg_match( '/^(?:[0-9]+|0x[0-9a-f]*)$/', (string) end( $labels ) )
+			&& 1 !== preg_match( '/^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/', $host ) ) {
+			return null;
 		}
 		return $host;
 	}

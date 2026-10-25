@@ -4,13 +4,16 @@
  * screen names for them.
  *
  * wp_parse_url() and a browser read some strings differently: of
- * https://attacker.example\@claude.ai/cb PHP makes the host claude.ai, a
- * browser attacker.example. The consent screen named the host PHP read, so
- * an administrator could approve "claude.ai" for a code that went elsewhere.
- * Only one strict form counts now, in which both read the same; the screen
- * reads the host through the same check, and an address stored before that
- * check is refused when it is used. The addresses the real apps register
- * stay accepted.
+ * https://claude.ai%2Eattacker.example/cb PHP reads the host
+ * claude.ai%2Eattacker.example, a browser goes to claude.ai.attacker.example,
+ * and a Cyrillic letter in place of a Latin one looks the same on the
+ * consent screen and leads elsewhere. The consent screen named the host PHP
+ * read. Only one strict form counts now, in which both read the same; the
+ * screen reads the host through the same check, and an address stored
+ * before that check is refused when it is used. A backslash is refused too,
+ * although wp_redirect() happens to strip it, and so is a user name: no app
+ * needs one, and claude.ai@attacker.example reads to a person like
+ * claude.ai. The addresses the real apps register stay accepted.
  *
  * @package AlphaBridge_MCP
  */
@@ -49,6 +52,8 @@ final class RedirectAddressTest extends TestCase {
 		return array(
 			'Claude'                   => array( 'https://claude.ai/api/mcp/auth_callback' ),
 			'ChatGPT'                  => array( 'https://chatgpt.com/connector_platform_oauth_redirect' ),
+			// The callback id is ChatGPT's own per connector; any id of this form.
+			'ChatGPT, per connector'   => array( 'https://chatgpt.com/connector/oauth/0123abcdEF_-xyz' ),
 			'AlphaBridge Connect'      => array( 'https://connect.alphabridge-mcp.com/link/callback' ),
 			'MCP Inspector'            => array( 'http://localhost:6274/oauth/callback' ),
 			'MCP Inspector, debug'     => array( 'http://localhost:6274/oauth/callback/debug' ),
@@ -60,6 +65,7 @@ final class RedirectAddressTest extends TestCase {
 			'with a query'             => array( 'https://app.example/cb?x=1&y=2' ),
 			'host only'                => array( 'https://app.example' ),
 			'usual IPv4'               => array( 'https://10.0.0.1/cb' ),
+			'IPv6 as a browser writes' => array( 'https://[2001:db8::1]/cb' ),
 			// Not IPv4: what decides is the last label (URL standard, "ends in a number").
 			'domain starting 0x'       => array( 'https://0x123.example/cb' ),
 			'domain starting 0x7f'     => array( 'https://0x7f.example.com/cb' ),
@@ -120,6 +126,12 @@ final class RedirectAddressTest extends TestCase {
 			'IPv4 hex'                      => array( 'https://0x7f.0.0.1/cb' ),
 			'IPv4 part above 255'           => array( 'https://256.1.1.1/cb' ),
 			'IPv4 mixed hex'                => array( 'https://127.0x1/cb' ),
+			// A browser writes [0:0:0:0:0:0:0:1] as [::1] and opens no [abcd].
+			'IPv6 written out'              => array( 'https://[0:0:0:0:0:0:0:1]:8443/cb' ),
+			'IPv6 loopback written out'     => array( 'http://[0:0:0:0:0:0:0:1]/cb' ),
+			'IPv6 with leading zeros'       => array( 'https://[2001:0db8::1]/cb' ),
+			'IPv6 with an IPv4 part'        => array( 'https://[::ffff:127.0.0.1]/cb' ),
+			'not an IPv6 address'           => array( 'https://[abcd]/cb' ),
 		);
 	}
 
@@ -141,6 +153,7 @@ final class RedirectAddressTest extends TestCase {
 		self::assertSame( 'chatgpt.com', AB_MCP_OAuth::redirect_host( 'https://ChatGPT.com/connector_platform_oauth_redirect' ) );
 		self::assertSame( 'localhost', AB_MCP_OAuth::redirect_host( 'http://LOCALHOST:6274/cb?x=1' ) );
 		self::assertSame( '[::1]', AB_MCP_OAuth::redirect_host( 'http://[::1]:8080/cb' ) );
+		self::assertSame( '[2001:db8::1]', AB_MCP_OAuth::redirect_host( 'https://[2001:DB8::1]/cb' ), 'In lower case, as the browser writes it.' );
 		self::assertNull( AB_MCP_OAuth::redirect_host( 'https://attacker.example\\@claude.ai/cb' ), 'wp_parse_url() reads claude.ai, a browser attacker.example.' );
 		self::assertNull( AB_MCP_OAuth::redirect_host( 'https://user@claude.ai/cb' ) );
 	}
