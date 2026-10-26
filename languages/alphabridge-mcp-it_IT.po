@@ -19,6 +19,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: alphabridge-mcp\n"
 
+msgid "As an affiliate you profit from every Pro and Agency purchase made through your link."
+msgstr "Come affiliato guadagni su ogni acquisto di Pro e Agency fatto tramite il tuo link."
+
+msgid "Recommend AlphaBridge and profit."
+msgstr "Consiglia AlphaBridge e guadagnaci."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "“%1$s” cade nel periodo in cui, nel fuso orario del sito, gli orologi vengono spostati indietro, quindi quest'ora locale esiste due volte. WordPress programma gli articoli in base all'ora locale e la leggerebbe come “%2$s”. Scegli un orario al di fuori di quell'intervallo oppure indica anche quello scostamento."
@@ -117,10 +123,6 @@ msgstr "%s non è attivo: il sito mostra post_content. La sua copia della pagina
 msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
 msgstr "%s è impostato per questa pagina, ma non mostra per essa una struttura propria, quindi il sito mostra post_content."
 
-#, php-format
-msgid "%s of every Pro and Agency sale you refer, renewals included."
-msgstr "%s di ogni vendita di Pro e Agency che porti, rinnovi compresi."
-
 msgid "(URL + token entered separately)"
 msgstr "(URL e token inseriti separatamente)"
 
@@ -136,9 +138,6 @@ msgstr "(sconosciuto)"
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
-
-msgid "60%"
-msgstr "60 %"
 
 msgid "7 days free"
 msgstr "7 giorni gratis"
@@ -645,9 +644,6 @@ msgstr "Download non riuscito (HTTP %d). Verifica che l'URL apra il file stesso,
 msgctxt "tool label"
 msgid "Duplicate a post or page"
 msgstr "Duplica un articolo o una pagina"
-
-msgid "Earn with AlphaBridge."
-msgstr "Guadagna con AlphaBridge."
 
 msgid "Enable and show the connector URL"
 msgstr "Attiva e mostra l'URL del connettore"

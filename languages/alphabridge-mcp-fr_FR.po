@@ -19,6 +19,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "X-Domain: alphabridge-mcp\n"
 
+msgid "As an affiliate you profit from every Pro and Agency purchase made through your link."
+msgstr "En tant qu'affilié, vous profitez de chaque achat Pro et Agency effectué via votre lien."
+
+msgid "Recommend AlphaBridge and profit."
+msgstr "Recommandez AlphaBridge et profitez-en."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "« %1$s » tombe au moment où les horloges reculent dans le fuseau horaire du site, cette heure locale existe donc deux fois. WordPress planifie les articles selon l'heure locale et la lirait comme « %2$s ». Choisissez une heure en dehors de cette plage, ou indiquez ce décalage."
@@ -117,10 +123,6 @@ msgstr "%s n'est pas actif : le site affiche post_content. Sa propre copie de l
 msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
 msgstr "%s est défini pour cette page mais n'affiche pas de mise en page propre pour elle, le site affiche donc post_content."
 
-#, php-format
-msgid "%s of every Pro and Agency sale you refer, renewals included."
-msgstr "%s de chaque vente Pro et Agency que vous apportez, renouvellements compris."
-
 msgid "(URL + token entered separately)"
 msgstr "(URL + jeton saisis séparément)"
 
@@ -136,9 +138,6 @@ msgstr "(inconnu)"
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
-
-msgid "60%"
-msgstr "60 %"
 
 msgid "7 days free"
 msgstr "7 jours gratuits"
@@ -645,9 +644,6 @@ msgstr "Échec du téléchargement (HTTP %d). Vérifiez que l'URL ouvre le fichi
 msgctxt "tool label"
 msgid "Duplicate a post or page"
 msgstr "Dupliquer un article ou une page"
-
-msgid "Earn with AlphaBridge."
-msgstr "Gagnez de l'argent avec AlphaBridge."
 
 msgid "Enable and show the connector URL"
 msgstr "Activer et afficher l'URL du connecteur"
