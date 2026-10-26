@@ -8,7 +8,7 @@ Stable tag: 4.6.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Run all WordPress from Claude and ChatGPT: posts, media, comments, SEO, updates. Free, no account. Pro adds WooCommerce, Elementor and undo.
+Run all WordPress from Claude and ChatGPT: posts, media, comments, SEO, update checks. Free, no account. Pro adds WooCommerce, Elementor and undo.
 
 == Description ==
 
@@ -16,7 +16,7 @@ Run all WordPress from Claude and ChatGPT: posts, media, comments, SEO, updates.
 
 Say it in plain words, the AI does it on your site. Free, no account, no API key, connected in two minutes.
 
-* **Free:** posts and pages · images · categories and tags · comments · SEO check · updates and site health · reads Elementor and 15 more page builders · up to 10 sites in one chat
+* **Free:** posts and pages · images · categories and tags · comments · SEO check · pending updates and site health · reads Elementor and 15 more page builders · up to 10 sites in one chat
 * **Pro:** Elementor and page builder texts · WooCommerce · Yoast and Rank Math · theme and plugin files · PHP snippets · undo for pages and files
 * **Agency:** everything in Pro on up to 10 sites · Site Deploy over SFTP
 
