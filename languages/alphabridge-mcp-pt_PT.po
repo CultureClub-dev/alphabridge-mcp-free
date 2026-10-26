@@ -19,6 +19,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: alphabridge-mcp\n"
 
+msgid "As an affiliate you profit from every Pro and Agency purchase made through your link."
+msgstr "Como afiliado, ganha com cada compra do Pro e do Agency feita através da sua ligação."
+
+msgid "Recommend AlphaBridge and profit."
+msgstr "Recomende o AlphaBridge e ganhe com isso."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "«%1$s» cai no período em que os relógios são atrasados no fuso horário do site, por isso esta hora local ocorre duas vezes. O WordPress agenda os artigos pela hora local e iria lê-la como «%2$s». Escolha uma hora fora desse intervalo ou indique esse desvio horário."
@@ -117,10 +123,6 @@ msgstr "%s não está ativo: o site mostra o post_content. A sua própria cópia
 msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
 msgstr "%s está definido para esta página, mas não mostra um layout próprio para ela, por isso o site mostra o post_content."
 
-#, php-format
-msgid "%s of every Pro and Agency sale you refer, renewals included."
-msgstr "%s de cada venda do Pro e do Agency que recomendar, renovações incluídas."
-
 msgid "(URL + token entered separately)"
 msgstr "(URL e token introduzidos em separado)"
 
@@ -136,9 +138,6 @@ msgstr "(desconhecido)"
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
-
-msgid "60%"
-msgstr "60 %"
 
 msgid "7 days free"
 msgstr "7 dias grátis"
@@ -645,9 +644,6 @@ msgstr "O descarregamento falhou (HTTP %d). Verifique se o URL abre o próprio f
 msgctxt "tool label"
 msgid "Duplicate a post or page"
 msgstr "Duplicar um artigo ou uma página"
-
-msgid "Earn with AlphaBridge."
-msgstr "Ganhe com o AlphaBridge."
 
 msgid "Enable and show the connector URL"
 msgstr "Ativar e mostrar o URL do conector"

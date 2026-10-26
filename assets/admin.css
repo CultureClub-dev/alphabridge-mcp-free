@@ -2424,7 +2424,7 @@
 	background: var(--ab-tint);
 }
 
-.ab-mcp .ab-invite__pct {
+.ab-mcp .ab-invite__icon {
 	display: inline-flex;
 	flex: none;
 	align-items: center;
@@ -2434,8 +2434,6 @@
 	border-radius: 12px;
 	background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
 	color: #fff;
-	font-size: 13px;
-	font-weight: 800;
 }
 
 .ab-mcp .ab-invite p {
@@ -2450,7 +2448,7 @@
 }
 
 @media (forced-colors: active) {
-	.ab-mcp .ab-invite__pct {
+	.ab-mcp .ab-invite__icon {
 		border: 1px solid CanvasText;
 	}
 }

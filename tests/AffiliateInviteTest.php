@@ -61,15 +61,15 @@ final class AffiliateInviteTest extends TestCase {
 		$html = $this->call( 'affiliate_invite_html' );
 
 		self::assertStringContainsString( 'class="ab-invite"', $html );
-		self::assertStringContainsString( '<strong>Earn with AlphaBridge.</strong>', $html );
-		self::assertStringContainsString( '60% of every Pro and Agency sale you refer, renewals included.', $html );
+		self::assertStringContainsString( '<strong>Recommend AlphaBridge and profit.</strong>', $html );
+		self::assertStringContainsString( 'As an affiliate you profit from every Pro and Agency purchase made through your link.', $html );
 		self::assertSame( 'Become an affiliate', $this->link( $html )['text'] );
 	}
 
 	public function testTheCommissionIsNamedAsComingFromProAndAgencyOnly(): void {
 		$text = trim( (string) preg_replace( '/\s+/', ' ', strip_tags( $this->call( 'affiliate_invite_html' ) ) ) );
 
-		self::assertStringContainsString( 'Pro and Agency sale', $text );
+		self::assertStringContainsString( 'Pro and Agency purchase', $text );
 		self::assertStringNotContainsString( 'free plugin', $text, 'The free plugin earns no commission; the line must not suggest it.' );
 	}
 
@@ -86,11 +86,24 @@ final class AffiliateInviteTest extends TestCase {
 		self::assertStringContainsString( '(opens in a new tab)', $this->call( 'affiliate_invite_html' ) );
 	}
 
-	public function testTheBadgeIsDecorationAndTheSentenceCarriesTheNumber(): void {
+	/**
+	 * Decision of 26.10.2026: the line invites, it does not hold the rate under
+	 * every customer's nose. No percentage, no amount, in no bundled language;
+	 * the icon is decoration and hidden from screen readers.
+	 */
+	public function testTheLineNamesNoRate(): void {
 		$html = $this->call( 'affiliate_invite_html' );
 
-		self::assertMatchesRegularExpression( '/<span class="ab-invite__pct" aria-hidden="true">60%<\/span>/', $html );
-		self::assertMatchesRegularExpression( '/<p>.*60% of every/s', $html, 'Screen readers get the commission from the sentence.' );
+		self::assertMatchesRegularExpression( '/<span class="ab-invite__icon"><svg class="ab-ico ab-ico--gift"[^>]*aria-hidden="true"/', $html );
+		self::assertDoesNotMatchRegularExpression( '/\d\s*%|%|\$\s*\d|\bpercent\b/i', strip_tags( $html ), 'The line names a rate.' );
+
+		foreach ( glob( AB_MCP_PATH . 'languages/alphabridge-mcp-*.po' ) as $po ) {
+			$source = (string) file_get_contents( $po );
+			foreach ( array( 'Recommend AlphaBridge and profit.', 'As an affiliate you profit from every Pro and Agency purchase made through your link.' ) as $msgid ) {
+				self::assertSame( 1, preg_match( '/^msgid "' . preg_quote( $msgid, '/' ) . '"\nmsgstr "(.+)"$/m', $source, $m ), basename( $po ) . ': not translated: ' . $msgid );
+				self::assertDoesNotMatchRegularExpression( '/\d|%|\$/', $m[1], basename( $po ) . ': the translation names a rate.' );
+			}
+		}
 	}
 
 	public function testAnOlderProAffiliateBoxKeepsTheLineAway(): void {
@@ -149,8 +162,9 @@ final class AffiliateInviteTest extends TestCase {
 
 	/**
 	 * The readme answers the question in its FAQ with the same facts as the line
-	 * in the settings: the commission sentence is read from the line itself, so a
-	 * change there (rate, editions, renewals) fails here until the readme follows.
+	 * in the settings: the sentence is read from the line itself, so a change
+	 * there (editions, wording) fails here until the readme follows. Neither names
+	 * a rate; that stands on the programme's page.
 	 * The link goes to the same programme page, and the answer says that this free
 	 * plugin earns none and needs no membership.
 	 */
@@ -161,8 +175,9 @@ final class AffiliateInviteTest extends TestCase {
 
 		$invite = $this->call( 'affiliate_invite_html' );
 		$text   = trim( (string) preg_replace( '/\s+/', ' ', strip_tags( $invite ) ) );
-		self::assertSame( 1, preg_match( '/Earn with AlphaBridge\. (.+?)\. Become an affiliate/', $text, $c ), 'Commission sentence not found in the line.' );
-		self::assertStringContainsString( $c[1], $answer, 'The FAQ must state the commission exactly as the line does.' );
+		self::assertSame( 1, preg_match( '/Recommend AlphaBridge and profit\. (.+?)\. Become an affiliate/', $text, $c ), 'The sentence about the programme not found in the line.' );
+		self::assertStringContainsString( $c[1], $answer, 'The FAQ must say what the line says.' );
+		self::assertDoesNotMatchRegularExpression( '/\d\s*%/', $answer, 'Like the line, the FAQ names no rate.' );
 
 		$line = $this->link( $invite )['url'];
 		$host = preg_replace( '/^www\./', '', (string) ( $line['host'] ?? '' ) );

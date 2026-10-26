@@ -19,6 +19,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: alphabridge-mcp\n"
 
+msgid "As an affiliate you profit from every Pro and Agency purchase made through your link."
+msgstr "Als Affiliate profitieren Sie von jedem Pro- und Agency-Kauf über Ihren Link."
+
+msgid "Recommend AlphaBridge and profit."
+msgstr "Weiterempfehlen und profitieren."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "«%1$s» fällt in die Zeit, in der in der Zeitzone der Website die Uhren zurückgestellt werden, diese Ortszeit gibt es also zweimal. WordPress plant Beiträge nach Ortszeit und würde sie als «%2$s» lesen. Eine Zeit ausserhalb dieser Spanne wählen oder diesen Versatz mit angeben."
@@ -117,10 +123,6 @@ msgstr "%s ist nicht aktiv: Die Website zeigt post_content. Seine eigene Kopie d
 msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
 msgstr "%s ist für diese Seite eingestellt, zeigt für sie aber keinen eigenen Aufbau, darum zeigt die Website post_content."
 
-#, php-format
-msgid "%s of every Pro and Agency sale you refer, renewals included."
-msgstr "%s von jedem Pro- und Agency-Verkauf, den Sie vermitteln, Verlängerungen inklusive."
-
 msgid "(URL + token entered separately)"
 msgstr "(URL und Token getrennt eingegeben)"
 
@@ -136,9 +138,6 @@ msgstr "(unbekannt)"
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
-
-msgid "60%"
-msgstr "60 %"
 
 msgid "7 days free"
 msgstr "7 Tage kostenlos"
@@ -645,9 +644,6 @@ msgstr "Download fehlgeschlagen (HTTP %d). Prüfen, ob die URL die Datei selbst 
 msgctxt "tool label"
 msgid "Duplicate a post or page"
 msgstr "Beitrag oder Seite duplizieren"
-
-msgid "Earn with AlphaBridge."
-msgstr "Mit AlphaBridge verdienen."
 
 msgid "Enable and show the connector URL"
 msgstr "Konnektor-URL einschalten und anzeigen"

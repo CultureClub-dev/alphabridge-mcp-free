@@ -19,6 +19,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: alphabridge-mcp\n"
 
+msgid "As an affiliate you profit from every Pro and Agency purchase made through your link."
+msgstr "Como afiliado, ganas con cada compra de Pro y Agency hecha a través de tu enlace."
+
+msgid "Recommend AlphaBridge and profit."
+msgstr "Recomienda AlphaBridge y sal ganando."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "«%1$s» cae en el intervalo en que, en la zona horaria del sitio, se atrasan los relojes, así que esa hora local se da dos veces. WordPress programa las entradas según la hora local y la interpretaría como «%2$s». Elige una hora fuera de ese intervalo o indica ese desfase."
@@ -117,10 +123,6 @@ msgstr "%s no está activo: el sitio muestra post_content. Su propia copia de la
 msgid "%s is set for this page but shows no layout of its own for it, so the site shows post_content."
 msgstr "%s está asignado a esta página, pero no muestra ningún diseño propio para ella, así que el sitio muestra post_content."
 
-#, php-format
-msgid "%s of every Pro and Agency sale you refer, renewals included."
-msgstr "El %s de cada venta de Pro y Agency que recomiendes, renovaciones incluidas."
-
 msgid "(URL + token entered separately)"
 msgstr "(URL y token por separado)"
 
@@ -136,9 +138,6 @@ msgstr "(desconocido)"
 msgctxt "list separator"
 msgid ", "
 msgstr ", "
-
-msgid "60%"
-msgstr "60 %"
 
 msgid "7 days free"
 msgstr "7 días gratis"
@@ -645,9 +644,6 @@ msgstr "La descarga ha fallado (HTTP %d). Comprueba que la URL abre el propio ar
 msgctxt "tool label"
 msgid "Duplicate a post or page"
 msgstr "Duplicar una entrada o página"
-
-msgid "Earn with AlphaBridge."
-msgstr "Gana con AlphaBridge."
 
 msgid "Enable and show the connector URL"
 msgstr "Activar y mostrar la URL del conector"

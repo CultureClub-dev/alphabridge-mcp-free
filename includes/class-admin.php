@@ -323,7 +323,7 @@ class AB_MCP_Admin {
 	 * A small icon, drawn here so nothing loads from outside. Always beside
 	 * a word that says the same, so it is hidden from screen readers.
 	 *
-	 * @param string $name power, eye, pen, bolt or chevron.
+	 * @param string $name power, eye, pen, bolt, chevron or gift.
 	 * @param int    $size Width and height in pixels.
 	 * @return string SVG.
 	 */
@@ -334,6 +334,7 @@ class AB_MCP_Admin {
 			'pen'     => '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
 			'bolt'    => '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
 			'chevron' => '<path d="M9 6l6 6-6 6"/>',
+			'gift'    => '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
 		);
 		if ( ! isset( $paths[ $name ] ) ) {
 			return '';
@@ -2067,9 +2068,10 @@ class AB_MCP_Admin {
 	 * address has no query and so no tracking. The commission is paid on Pro and
 	 * Agency sales, never on this free plugin, and the line says so.
 	 *
-	 * The 60% is the programme's commission as set at Freemius on 29.09.2026
-	 * (renewals included, lifetime commission on). This plugin cannot ask
-	 * Freemius; a change of the terms needs a new release of this line.
+	 * The line names no rate (decision of 26.10.2026: the commission is not held
+	 * under every customer's nose). It says that one can become an affiliate and
+	 * profit from a recommendation; the rate and the terms stand on the
+	 * programme's page. So a change of the terms at Freemius needs no release.
 	 *
 	 * Where the Pro add-on reads the site's own affiliate state from Freemius,
 	 * its box in the side column (figures, invitation or pending application)
@@ -2095,14 +2097,10 @@ class AB_MCP_Admin {
 			return '';
 		}
 
-		/* translators: the commission of the AlphaBridge affiliate programme; keep the number. */
-		$pct = __( '60%', 'alphabridge-mcp' );
-
 		$html  = '<div class="ab-invite">';
-		$html .= '<span class="ab-invite__pct" aria-hidden="true">' . esc_html( $pct ) . '</span>';
-		$html .= '<p><strong>' . esc_html__( 'Earn with AlphaBridge.', 'alphabridge-mcp' ) . '</strong> ';
-		/* translators: %s: the commission, e.g. 60% */
-		$html .= esc_html( sprintf( __( '%s of every Pro and Agency sale you refer, renewals included.', 'alphabridge-mcp' ), $pct ) );
+		$html .= '<span class="ab-invite__icon">' . self::icon( 'gift', 20 ) . '</span>';
+		$html .= '<p><strong>' . esc_html__( 'Recommend AlphaBridge and profit.', 'alphabridge-mcp' ) . '</strong> ';
+		$html .= esc_html__( 'As an affiliate you profit from every Pro and Agency purchase made through your link.', 'alphabridge-mcp' );
 		$html .= ' <a class="ab-more" href="' . esc_url( 'https://www.alphabridge-mcp.com/affiliates.html' ) . '" target="_blank" rel="noopener">' . esc_html__( 'Become an affiliate', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a></p>';
 		$html .= '</div>';
 

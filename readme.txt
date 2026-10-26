@@ -1,6 +1,6 @@
-=== AlphaBridge MCP – Connect Claude and ChatGPT to WordPress ===
+=== AlphaBridge MCP – Claude and ChatGPT for WordPress, SEO and Shop ===
 Contributors: cultureclub
-Tags: claude, chatgpt, mcp, mcp-server, ai
+Tags: claude, chatgpt, mcp, seo, ai
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.0
@@ -8,34 +8,33 @@ Stable tag: 4.6.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Free MCP server for WordPress. Claude and ChatGPT write posts, add images and answer comments on your site. You decide when they may write.
+Run all WordPress from Claude and ChatGPT: posts, media, comments, SEO, update checks. Free, no account. Pro adds WooCommerce, Elementor and undo.
 
 == Description ==
 
-**Claude and ChatGPT for WordPress. One switch. Full power. Free.**
+**Run all WordPress from Claude and ChatGPT: posts, SEO and shop.**
 
-Tell your AI assistant what you need, in plain words, and it happens on your WordPress site:
+Say it in plain words, the AI does it on your site. Free, no account, no API key, connected in two minutes.
+
+* **Free:** posts and pages · images · categories and tags · comments · SEO check · pending updates and site health · reads Elementor and 15 more page builders · up to 10 sites in one chat
+* **Pro:** Elementor and page builder texts · WooCommerce · Yoast and Rank Math · theme and plugin files · PHP snippets · undo for pages and files
+* **Agency:** everything in Pro on up to 10 sites · Site Deploy over SFTP
+
+AlphaBridge MCP turns your site into an MCP server, the open standard AI assistants use to work with other software. It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder.
+
+40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+
+Try it:
 
 * "Write a post from these notes and schedule it for Friday."
-* "Approve the new comments and answer the question about opening hours."
-* "Which of my sites have updates waiting?"
+* "Which posts have no meta description?"
+* "Set the city bike to 690 and the stock to 12." (Pro)
 
-AlphaBridge MCP turns your site into an MCP server, the open standard AI assistants use to work with other software. Connect Claude or ChatGPT in about two minutes. You need no account with us, no API key and no extra server.
+Works with Claude, ChatGPT, Claude Code, Cursor and other MCP clients. Safe by default: the AI only reads until you switch on write access.
 
 Watch the whole setup in one minute: [Connect Claude to WordPress in five steps](https://www.youtube.com/watch?v=DlMJ9tfrqJg)
 
 https://www.youtube.com/watch?v=DlMJ9tfrqJg
-
-= What the free plugin does =
-
-* **Write and publish.** Turn notes into posts and pages, add images, set categories and tags, schedule the date.
-* **Look after your site.** Answer and moderate comments, see pending updates and the health of your site.
-* **Read what matters.** It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder. Ask what needs work.
-* **Up to 10 sites in one chat.** The free connection service of AlphaBridge MCP brings them into the same conversation.
-* **Nothing extra to host.** AlphaBridge runs inside WordPress, in plain PHP, on ordinary hosting.
-* **In your language.** Settings, sign-in and messages in English, German, French, Italian, Spanish and Portuguese.
-
-40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Safe by default =
 
@@ -116,7 +115,7 @@ No. It sends no telemetry and contacts no outside service on its own. The three 
 Not to get started. The free plugin covers content, media and comments, on as many sites as you like. Take Pro for page-builder texts, code and your shop, with undo for pages and files. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
-Yes. It pays 60% of every Pro and Agency sale you refer, renewals included, monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
+Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
 
 == Screenshots ==
 
@@ -136,6 +135,10 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.6.10 =
+* **A clearer listing on WordPress.org.** The title, the short description and the start of the description name at a glance what the plugin does: «Claude and ChatGPT for WordPress, SEO and Shop», with three lines for Free, Pro and Agency. The tags are claude, chatgpt, mcp, seo and ai.
+* **The invitation to the affiliate programme names no rate.** The line in the side column of the settings page now reads «Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link.», with a gift icon in place of the percentage, in every bundled language. The rate and the full terms stand on the programme's page on alphabridge-mcp.com, which the line links to; the FAQ answers the same way. No tool or setting changed.
 
 = 4.6.9 =
 * **Security: the consent screen names the host the browser really goes to.** An app registering with the site could give a redirect address that PHP and a browser read differently, for example with a percent sign or a letter of another alphabet in the host; the consent screen could then name a host the browser would not go to. Redirect addresses now count only in a strict form (https, or http on this computer; a plain ASCII host or an IPv6 address as browsers write it, port, path and query; no user name, backslash, spaces, control characters or fragment), from a registration and from a metadata document alike. The consent screen reads the host the same way, and an address stored by an earlier version is checked again before it is used. The addresses of Claude, ChatGPT, the connection service and local development tools are not affected.
@@ -226,7 +229,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * For add-ons: the builder interface is versioned by the constant `AB_MCP_BUILDER_API` (1), with the filters `ab_mcp_builder_adapters`, `ab_mcp_builder_signatures`, `ab_mcp_builder_block_profiles`, `ab_mcp_builder_write_via` and `ab_mcp_builder_content_update_guard`. `AB_MCP_Site_Mode` says which mode a site is in (`get()`, `is_full()`, `allows()`), and the action `ab_mcp_site_mode_changed` fires when an administrator switches. A connection with Content access may run an add-on's `wp_update_builder_element`.
 
 = 4.3.11 =
-* **An invitation to the affiliate programme, on the settings page.** One line in the side column, below the box about AlphaBridge MCP Pro: the commission — 60% of every Pro and Agency sale you refer, renewals included — and a link to the programme's page on alphabridge-mcp.com, which has the full terms and says how to apply. The link opens in a new tab and carries no tracking. The commission comes from sales of the separately sold Pro and Agency editions; this free plugin itself earns none. Where the Pro add-on shows your own affiliate figures, it takes the line's place. No tool or setting changed.
+* **An invitation to the affiliate programme, on the settings page.** One line in the side column, below the box about AlphaBridge MCP Pro: a commission on every Pro and Agency sale you refer, renewals included, and a link to the programme's page on alphabridge-mcp.com, which has the full terms and says how to apply. The link opens in a new tab and carries no tracking. The commission comes from sales of the separately sold Pro and Agency editions; this free plugin itself earns none. Where the Pro add-on shows your own affiliate figures, it takes the line's place. No tool or setting changed.
 * For add-ons: the filter `ab_mcp_affiliate_invite` decides whether the line shows.
 
 = 4.3.10 =
@@ -345,6 +348,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.10 =
+The invitation to the affiliate programme on the settings page names no rate. No setting changes.
 
 = 4.6.9 =
 Security fix for the sign-in of apps: redirect addresses count only in a strict form, and the consent screen names the host the browser goes to. Update recommended. No setting changes.
