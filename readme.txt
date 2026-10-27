@@ -139,6 +139,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.11 =
+* **A tool error names its kind, in a short code.** When a tool reports an error, the answer carries the header `X-AlphaBridge-Error` with a code such as `tool:ab_mcp_bad_status`, `params:rest_invalid_param`, `auth:ab_mcp_read_mode`, `unknown_tool` or `internal`: where the call stopped, and the error's own identifier, never its text. A code that is not a plain identifier, such as one another plugin made from a sentence or an address, is passed on as `tool:other`. The first error of a request counts, also in a batch and for a request a tool answers inside another. The hosted connection service counts these codes, so a tool that keeps failing shows up there; the answer to the AI is unchanged, and nothing is sent anywhere.
+
 = 4.6.10 =
 * **A clearer listing on WordPress.org.** The title, the short description and the start of the description name at a glance what the plugin does: «Claude and ChatGPT for WordPress, SEO and Shop», with three lines for Free, Pro and Agency. The tags are claude, chatgpt, mcp, seo and ai.
 * **The invitation to the affiliate programme names no rate.** The line in the side column of the settings page now reads «Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link.», with a gift icon in place of the percentage, in every bundled language. The rate and the full terms stand on the programme's page on alphabridge-mcp.com, which the line links to; the FAQ answers the same way. No tool or setting changed.
@@ -351,6 +354,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.11 =
+A tool error names its kind in a short code in the answer's header, never its text. No setting changes.
 
 = 4.6.10 =
 The invitation to the affiliate programme on the settings page names no rate. No setting changes.
