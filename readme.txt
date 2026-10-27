@@ -117,6 +117,9 @@ Not to get started. The free plugin covers content, media and comments, on as ma
 = Is there an affiliate programme? =
 Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
 
+= How can I help? =
+A short review on WordPress.org helps other site owners find the plugin: [write a review](https://wordpress.org/support/plugin/alphabridge-mcp/reviews/#new-post). Questions and problems are best placed in the [support forum](https://wordpress.org/support/plugin/alphabridge-mcp/).
+
 == Screenshots ==
 
 1. At the top, the main switch for write access, off until you turn it on. Below it, pick your assistant — Claude, ChatGPT, Cursor or another client — and follow its steps: for Claude a direct link into its connector directory, this site's address to copy, the video and the guide. A token is created only where one is needed.
