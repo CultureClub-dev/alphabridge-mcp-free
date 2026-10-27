@@ -1405,7 +1405,7 @@ class AB_MCP_REST_Controller {
 			return (string) $kind;
 		}
 		$code = (string) $code;
-		return $kind . ':' . ( 1 === preg_match( '/^[a-z][a-z0-9_]{0,47}$/', $code ) ? $code : 'other' );
+		return $kind . ':' . ( 1 === preg_match( '/\A[a-z][a-z0-9_]{0,47}\z/', $code ) ? $code : 'other' );
 	}
 
 	/**

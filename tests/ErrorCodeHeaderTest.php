@@ -139,7 +139,8 @@ final class ErrorCodeHeaderTest extends TestCase {
 		self::assertSame( 'unknown_tool', AB_MCP_REST_Controller::error_code( 'unknown_tool' ) );
 		// Whoever raised the error wrote the code: text, a mail address, upper
 		// case or a number are not cleaned up and passed on, they are left out.
-		foreach ( array( 'Download denied for anna@example.org', 'anna@example.org', 'AB_MCP_BAD_STATUS', 'a b', 'rest.x', 404, '', str_repeat( 'x', 49 ) ) as $foreign ) {
+		// "\n" at the end: PCRE's $ would let a closing line break through.
+		foreach ( array( 'Download denied for anna@example.org', 'anna@example.org', 'AB_MCP_BAD_STATUS', 'a b', 'rest.x', 404, '', str_repeat( 'x', 49 ), "ab_failure\n" ) as $foreign ) {
 			self::assertSame( 'tool:other', AB_MCP_REST_Controller::error_code( 'tool', $foreign ), (string) $foreign );
 		}
 	}
