@@ -133,12 +133,58 @@ final class ErrorCodeHeaderTest extends TestCase {
 		self::assertSame( 'tool:ab_mcp_bad_status', $this->header( $response ) );
 	}
 
-	public function testTheCodeIsShortLowerCaseAndBeginsWithALetter(): void {
-		self::assertSame( 'tool:ab_mcp_bad_status', AB_MCP_REST_Controller::error_code( 'tool:AB_MCP_BAD_STATUS' ) );
-		self::assertSame( 'tool:a_b', AB_MCP_REST_Controller::error_code( 'tool:a b' ) );
-		self::assertSame( 64, strlen( AB_MCP_REST_Controller::error_code( 'tool:' . str_repeat( 'x', 100 ) ) ) );
-		self::assertSame( '', AB_MCP_REST_Controller::error_code( 'Über' ) );
-		self::assertSame( '', AB_MCP_REST_Controller::error_code( '' ) );
-		self::assertSame( '', AB_MCP_REST_Controller::error_code( ':tool' ) );
+	public function testAWpErrorCodeIsPassedOnOnlyAsTheIdentifierItIsMeantToBe(): void {
+		self::assertSame( 'tool:ab_mcp_bad_status', AB_MCP_REST_Controller::error_code( 'tool', 'ab_mcp_bad_status' ) );
+		self::assertSame( 'params:rest_invalid_param', AB_MCP_REST_Controller::error_code( 'params', 'rest_invalid_param' ) );
+		self::assertSame( 'unknown_tool', AB_MCP_REST_Controller::error_code( 'unknown_tool' ) );
+		// Whoever raised the error wrote the code: text, a mail address, upper
+		// case or a number are not cleaned up and passed on, they are left out.
+		foreach ( array( 'Download denied for anna@example.org', 'anna@example.org', 'AB_MCP_BAD_STATUS', 'a b', 'rest.x', 404, '', str_repeat( 'x', 49 ) ) as $foreign ) {
+			self::assertSame( 'tool:other', AB_MCP_REST_Controller::error_code( 'tool', $foreign ), (string) $foreign );
+		}
+	}
+
+	public function testAForeignErrorCodeWithTextReachesNoHeader(): void {
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'content', 'Posts & Pages' );
+		$r->register(
+			'wp_get_download',
+			array(
+				'description' => 'Pass on what an HTTP filter answered.',
+				'callback'    => static fn() => new WP_Error( 'Download denied for anna@example.org', 'Download denied.' ),
+			)
+		);
+		$request = new WP_REST_Request();
+		$request->set_json_params( $this->call( 'wp_get_download' ) );
+		$response = ( new AB_MCP_REST_Controller( $r ) )->handle( $request );
+
+		self::assertSame( 'tool:other', $this->header( $response ) );
+	}
+
+	public function testARequestAToolAnswersInsideAnotherKeepsBothCodesApart(): void {
+		$controller = null;
+		$inner      = null;
+		$r          = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'content', 'Posts & Pages' );
+		$r->register(
+			'wp_get_nested',
+			array(
+				'description' => 'Answer an MCP request of its own through the same controller.',
+				'callback'    => static function () use ( &$controller, &$inner ): array {
+					$request = new WP_REST_Request();
+					$request->set_json_params( array( 'jsonrpc' => '2.0', 'id' => 9, 'method' => 'ping' ) );
+					$inner = $controller->handle( $request );
+					return array( 'ok' => true );
+				},
+			)
+		);
+		$controller = new AB_MCP_REST_Controller( $r );
+		$request    = new WP_REST_Request();
+		$request->set_json_params( array( $this->call( 'wp_no_such_tool', array(), 1 ), $this->call( 'wp_get_nested', array(), 2 ) ) );
+
+		$outer = $controller->handle( $request );
+
+		self::assertSame( 'unknown_tool', $this->header( $outer ), 'The outer batch keeps its first error.' );
+		self::assertNull( $this->header( $inner ), 'The inner ping went well and carries no code.' );
 	}
 }

@@ -457,6 +457,25 @@ class AB_MCP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function handle( $request ) {
+		// Each request gets its own error code: a tool that answers an MCP
+		// request of its own through this controller must neither take the
+		// outer one's code nor leave its own behind.
+		$outer                 = $this->tool_error_code;
+		$this->tool_error_code = '';
+		try {
+			return $this->handle_request( $request );
+		} finally {
+			$this->tool_error_code = $outer;
+		}
+	}
+
+	/**
+	 * The request, as handle() runs it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	private function handle_request( $request ) {
 		$body = $request->get_json_params();
 
 		// The generation is a property of the request, not of a session: one
@@ -1252,27 +1271,27 @@ class AB_MCP_REST_Controller {
 			$needs = AB_MCP_Guidance::unavailable_tool( $name );
 			if ( null !== $needs ) {
 				AB_MCP_Audit_Log::record( $name, $args, 'denied', $needs->get_error_message() );
-				return $this->result( $id, $this->tool_error( $needs->get_error_message(), 'needs:' . $needs->get_error_code() ) );
+				return $this->result( $id, $this->tool_error( $needs->get_error_message(), self::error_code( 'needs', $needs->get_error_code() ) ) );
 			}
 			/* translators: %s: tool name */
-			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.', 'alphabridge-mcp' ), $name ), 'unknown_tool' ) );
+			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.', 'alphabridge-mcp' ), $name ), self::error_code( 'unknown_tool' ) ) );
 		}
 
 		$authorized = AB_MCP_Security::authorize( $name, $def );
 		if ( is_wp_error( $authorized ) ) {
 			AB_MCP_Audit_Log::record( $name, $args, 'denied', $authorized->get_error_message() );
-			return $this->result( $id, $this->tool_error( $authorized->get_error_message(), 'auth:' . $authorized->get_error_code() ) );
+			return $this->result( $id, $this->tool_error( $authorized->get_error_message(), self::error_code( 'auth', $authorized->get_error_code() ) ) );
 		}
 
 		// Central argument validation (required fields, declared types, size caps).
 		$valid = AB_MCP_Security::validate_args( $def, $args );
 		if ( is_wp_error( $valid ) ) {
 			AB_MCP_Audit_Log::record( $name, $args, 'denied', $valid->get_error_message() );
-			return $this->result( $id, $this->tool_error( $valid->get_error_message(), 'params:' . $valid->get_error_code() ) );
+			return $this->result( $id, $this->tool_error( $valid->get_error_message(), self::error_code( 'params', $valid->get_error_code() ) ) );
 		}
 
 		if ( ! is_callable( $def['callback'] ) ) {
-			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ), 'no_handler' ) );
+			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ), self::error_code( 'no_handler' ) ) );
 		}
 
 		self::load_admin_translations();
@@ -1283,12 +1302,12 @@ class AB_MCP_REST_Controller {
 			// The real exception text (which can name file paths, SQL or internal
 			// state) goes to the audit log only; the client gets a generic message.
 			AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage() );
-			return $this->result( $id, $this->tool_error( __( 'The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), 'internal' ) );
+			return $this->result( $id, $this->tool_error( __( 'The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), self::error_code( 'internal' ) ) );
 		}
 
 		if ( is_wp_error( $result ) ) {
 			AB_MCP_Audit_Log::record( $name, $args, 'error', $result->get_error_message() );
-			return $this->result( $id, $this->tool_error( $result->get_error_message(), 'tool:' . $result->get_error_code() ) );
+			return $this->result( $id, $this->tool_error( $result->get_error_message(), self::error_code( 'tool', $result->get_error_code() ) ) );
 		}
 
 		AB_MCP_Audit_Log::record( $name, $args, 'ok', null );
@@ -1369,28 +1388,37 @@ class AB_MCP_REST_Controller {
 	private $tool_error_code = '';
 
 	/**
-	 * A code as ERROR_CODE_HEADER carries it: lower case, letters, digits and
-	 * «_ . : -», beginning with a letter, at most 64 characters; '' otherwise.
+	 * A code as ERROR_CODE_HEADER carries it: the kind, and after a colon the
+	 * WP_Error code where one belongs to it. A WP_Error code is taken only as
+	 * the identifier codes are meant to be, lower case letters, digits and
+	 * underscores, at most 48 characters; anything else becomes «other». A
+	 * code is written by whoever raised the error, a plugin or a hook among
+	 * them, and one of them may put text into it, a mail address too: cleaning
+	 * it up would only change its shape, so it is not passed on at all.
 	 *
-	 * @param string $code Code, such as «tool:» and a WP_Error code.
+	 * @param string      $kind Kind: tool, params, auth, needs, unknown_tool, no_handler, internal.
+	 * @param string|null $code The WP_Error code, or null for a kind that has none.
 	 * @return string
 	 */
-	public static function error_code( $code ) {
-		$code = substr( (string) preg_replace( '/[^a-z0-9_.:-]/', '_', strtolower( (string) $code ) ), 0, 64 );
-		return 1 === preg_match( '/^[a-z]/', $code ) ? $code : '';
+	public static function error_code( $kind, $code = null ) {
+		if ( null === $code ) {
+			return (string) $kind;
+		}
+		$code = (string) $code;
+		return $kind . ':' . ( 1 === preg_match( '/^[a-z][a-z0-9_]{0,47}$/', $code ) ? $code : 'other' );
 	}
 
 	/**
 	 * Build an error tool result (MCP convention: result with isError true).
 	 *
 	 * @param string $message Message.
-	 * @param string $code    Why, for ERROR_CODE_HEADER (see there).
+	 * @param string $code    Why, for ERROR_CODE_HEADER, as error_code() builds it.
 	 * @return array
 	 */
 	private function tool_error( $message, $code = '' ) {
 		// The first error of the request names the code: a batch answers once.
 		if ( '' === $this->tool_error_code && '' !== $code ) {
-			$this->tool_error_code = self::error_code( $code );
+			$this->tool_error_code = $code;
 		}
 		return array(
 			'content' => array(
