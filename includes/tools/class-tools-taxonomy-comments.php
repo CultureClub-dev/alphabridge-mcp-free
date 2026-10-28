@@ -356,6 +356,9 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $tax_obj->cap->edit_terms ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		if ( $id <= 0 ) {
+			return self::no_such_term();
+		}
 		// And the right to edit this one term, as wp-admin asks it (term.php,
 		// edit-tags.php): edit_term goes through map_meta_cap, where a site can
 		// withhold single terms from an account that may edit the others. An
@@ -402,14 +405,23 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $tax_obj->cap->delete_terms ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
-		// And the right to delete this one term, as wp-admin asks it:
-		// delete_term goes through map_meta_cap like edit_term above. For the
-		// taxonomy's default term WordPress answers do_not_allow there; that
-		// one goes on to wp_delete_term(), which keeps it, and the refusal
-		// below says why and where the default is changed.
-		$id   = self::i( $a, 'term_id' );
+		// A number below 1 names no term, but WordPress would look it up as
+		// its absolute value (term_exists()), past the check below.
+		$id = self::i( $a, 'term_id' );
+		if ( $id <= 0 ) {
+			return self::no_such_term();
+		}
+		// The taxonomy's default term is kept, as wp-admin keeps it: there
+		// map_meta_cap answers do_not_allow for delete_term, while
+		// wp_delete_term() itself spares only some defaults (the default
+		// category, a taxonomy's registered default term).
 		$term = self::term_of( $id, $tax );
-		if ( $term && ! self::is_default_term( $term ) && ! current_user_can( 'delete_term', $id ) ) {
+		if ( $term && self::is_default_term( $term ) ) {
+			return self::not_deleted();
+		}
+		// And the right to delete this one term, as wp-admin asks it:
+		// delete_term goes through map_meta_cap like edit_term above.
+		if ( $term && ! current_user_can( 'delete_term', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot delete this specific term. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$res = wp_delete_term( $id, $tax );
@@ -417,9 +429,28 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return $res;
 		}
 		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the term: no term of this taxonomy has this id, or it is the taxonomy\'s default term (such as the default category), which WordPress keeps. Check the id with wp_list_terms; a default category can be deleted once another one is the default (Settings → Writing in wp-admin).', 'alphabridge-mcp' ) );
+			return self::not_deleted();
 		}
 		return array( 'deleted' => true );
+	}
+
+	/**
+	 * The answer for a term id that names no term.
+	 *
+	 * @return WP_Error
+	 */
+	private static function no_such_term() {
+		return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The answer when a term stays: no term of this taxonomy has the id, or
+	 * it is the taxonomy's default term.
+	 *
+	 * @return WP_Error
+	 */
+	private static function not_deleted() {
+		return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the term: no term of this taxonomy has this id, or it is the taxonomy\'s default term (such as the default category), which WordPress keeps. Check the id with wp_list_terms; a default category can be deleted once another one is the default (Settings → Writing in wp-admin).', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -435,10 +466,10 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 	}
 
 	/**
-	 * Whether WordPress treats the term as its taxonomy's default, the one it
-	 * never deletes: the same two options map_meta_cap() reads for
-	 * delete_term (default_category for categories, default_term_{taxonomy}
-	 * for a taxonomy registered with a default term).
+	 * Whether wp-admin treats the term as its taxonomy's default, the one no
+	 * account may delete: the same two options map_meta_cap() reads for
+	 * delete_term (default_{taxonomy}, such as default_category, and
+	 * default_term_{taxonomy}).
 	 *
 	 * @param object $term Term.
 	 * @return bool

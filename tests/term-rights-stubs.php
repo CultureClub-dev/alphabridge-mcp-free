@@ -17,13 +17,27 @@ require_once __DIR__ . '/answer-way-stubs.php';
 $GLOBALS['ab_test_term_writes'] = array();
 
 if ( ! function_exists( 'wp_update_term' ) ) {
-	/** Notes the change and answers as WordPress does for a term it changed. */
+	/**
+	 * As WordPress: an id of no term of this taxonomy is refused with
+	 * invalid_term and nothing is written; otherwise notes the change.
+	 */
 	function wp_update_term( $term_id, $taxonomy, $args = array() ) {
+		$term = $GLOBALS['ab_test_way']['terms'][ (int) $term_id ] ?? null;
+		if ( ! $term || (string) $taxonomy !== $term->taxonomy ) {
+			return new WP_Error( 'invalid_term', 'Empty Term.' );
+		}
 		$GLOBALS['ab_test_term_writes'][] = array( 'update', (int) $term_id, (string) $taxonomy );
 		return array(
 			'term_id'          => (int) $term_id,
 			'term_taxonomy_id' => (int) $term_id,
 		);
+	}
+}
+
+if ( ! function_exists( 'wp_get_object_terms' ) ) {
+	/** The term ids the test gave a post in a taxonomy ($GLOBALS['ab_test_way']['object_terms']). */
+	function wp_get_object_terms( $object_ids, $taxonomies, $args = array() ) {
+		return $GLOBALS['ab_test_way']['object_terms'][ (int) $object_ids ][ (string) $taxonomies ] ?? array();
 	}
 }
 

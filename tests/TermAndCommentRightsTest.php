@@ -10,8 +10,9 @@
  *
  * Each case withholds exactly one right for exactly one id, and checks
  * that the tool refuses that object and writes nothing, and that it works
- * for the next one. The default term goes on to WordPress, which keeps it,
- * so its answer keeps naming the default term instead of a missing right.
+ * for the next one. A default term is kept as wp-admin keeps it, with the
+ * answer that names the default term instead of a missing right; a term id
+ * below 1, which WordPress would read as its absolute value, names no term.
  *
  * @package AlphaBridge_MCP
  */
@@ -87,15 +88,33 @@ final class TermAndCommentRightsTest extends TestCase {
 
 	public function testAnIdOfNoTermOfTheTaxonomyIsLeftToWordPress(): void {
 		// edit_term answers no for an unknown id, as map_meta_cap does
-		// (do_not_allow); the answer must not blame a missing right.
+		// (do_not_allow); the answer must not blame a missing right, but
+		// pass on WordPress's own refusal.
 		$GLOBALS['ab_test_can'] = static fn( string $asked ): bool => 'edit_term' !== $asked;
 		$res = AB_MCP_Tools_Taxonomy_Comments::update_term( array( 'taxonomy' => 'category', 'term_id' => 99, 'name' => 'Neu' ) );
-		self::assertIsArray( $res );
+		self::assertSame( 'invalid_term', $res->get_error_code() );
 
-		// Nor for a term of another taxonomy: wp_update_term() refuses it.
+		// Nor for a term of another taxonomy.
 		$GLOBALS['ab_test_way']['terms'][5] = (object) array( 'term_id' => 5, 'taxonomy' => 'post_tag' );
 		$res = AB_MCP_Tools_Taxonomy_Comments::update_term( array( 'taxonomy' => 'category', 'term_id' => 5, 'name' => 'Neu' ) );
-		self::assertIsArray( $res );
+		self::assertSame( 'invalid_term', $res->get_error_code() );
+		self::assertSame( array(), $GLOBALS['ab_test_term_writes'] );
+	}
+
+	public function testANumberBelowOneNamesNoTerm(): void {
+		// WordPress would look -3 up as term 3 (term_exists()), past the
+		// right withheld for it.
+		self::withhold( 'delete_term', 3 );
+		$GLOBALS['ab_test_way']['term_deleted'] = true;
+		foreach ( array( 'update_term', 'delete_term' ) as $tool ) {
+			$res = AB_MCP_Tools_Taxonomy_Comments::$tool( array( 'taxonomy' => 'category', 'term_id' => -3, 'name' => 'Neu' ) );
+			self::assertSame( 'ab_mcp_not_found', $res->get_error_code(), $tool );
+		}
+
+		self::withhold( 'assign_term', 3 );
+		$apply = new ReflectionMethod( AB_MCP_Tools_Content::class, 'apply_meta_and_terms' );
+		$apply->invoke( null, 10, array( 'terms' => array( 'category' => array( -3, 4 ) ) ) );
+		self::assertSame( array( array( 'set', 10, 'category', array( 4 ) ) ), $GLOBALS['ab_test_term_writes'] );
 	}
 
 	public function testATermWithheldFromTheAccountIsNotDeleted(): void {
@@ -113,10 +132,26 @@ final class TermAndCommentRightsTest extends TestCase {
 		// category; WordPress keeps it, and the answer says where it changes.
 		$GLOBALS['ab_test_options']['default_category'] = 3;
 		self::withhold( 'delete_term', 3 );
-		$GLOBALS['ab_test_way']['term_deleted'] = false;
+		$GLOBALS['ab_test_way']['term_deleted'] = true; // Not reached: it would answer deleted.
 		$res = AB_MCP_Tools_Taxonomy_Comments::delete_term( array( 'taxonomy' => 'category', 'term_id' => 3 ) );
 		self::assertSame( 'ab_mcp_delete_failed', $res->get_error_code() );
 		self::assertStringContainsString( 'Settings → Writing', (string) $res->get_error_message() );
+	}
+
+	public function testEveryDefaultTermIsKeptAsInWpAdmin(): void {
+		// wp_delete_term() spares only the default category and registered
+		// default terms; the default link category it would delete, while
+		// wp-admin keeps it (map_meta_cap: do_not_allow).
+		$GLOBALS['ab_test_way']['taxonomies']['link_category'] = (object) array(
+			'name' => 'link_category',
+			'cap'  => (object) array( 'delete_terms' => 'manage_links' ),
+		);
+		$GLOBALS['ab_test_way']['terms'][6]              = (object) array( 'term_id' => 6, 'taxonomy' => 'link_category' );
+		$GLOBALS['ab_test_options']['default_link_category'] = 6;
+		$GLOBALS['ab_test_can']                          = static fn(): bool => true;
+		$GLOBALS['ab_test_way']['term_deleted']          = true;
+		$res = AB_MCP_Tools_Taxonomy_Comments::delete_term( array( 'taxonomy' => 'link_category', 'term_id' => 6 ) );
+		self::assertSame( 'ab_mcp_delete_failed', $res->get_error_code() );
 	}
 
 	public function testATermWithheldFromTheAccountIsNotAssigned(): void {
@@ -131,6 +166,24 @@ final class TermAndCommentRightsTest extends TestCase {
 		// An id of no term is passed on: WordPress passes over it.
 		$apply->invoke( null, 10, array( 'terms' => array( 'category' => array( 4, 99 ) ) ) );
 		self::assertSame( array( array( 'set', 10, 'category', array( 4, 99 ) ) ), $GLOBALS['ab_test_term_writes'] );
+	}
+
+	public function testATermOfAnotherTaxonomyDoesNotBlockTheList(): void {
+		// Tag 5 is withheld, but in a list of categories it names no
+		// category: WordPress passes over it, as the REST API does.
+		$GLOBALS['ab_test_way']['terms'][5] = (object) array( 'term_id' => 5, 'taxonomy' => 'post_tag' );
+		self::withhold( 'assign_term', 5 );
+		$apply = new ReflectionMethod( AB_MCP_Tools_Content::class, 'apply_meta_and_terms' );
+		$apply->invoke( null, 10, array( 'terms' => array( 'category' => array( 4, 5 ) ) ) );
+		self::assertSame( array( array( 'set', 10, 'category', array( 4, 5 ) ) ), $GLOBALS['ab_test_term_writes'] );
+	}
+
+	public function testACopyGetsTheTermsTheAccountMayAssign(): void {
+		$GLOBALS['ab_test_way']['object_terms'][20]['category'] = array( 3, 4 );
+		self::withhold( 'assign_term', 3 );
+		$copy = new ReflectionMethod( AB_MCP_Tools_Content::class, 'copy_terms' );
+		$copy->invoke( null, 20, 21, array( 'category' ) );
+		self::assertSame( array( array( 'set', 21, 'category', array( 4 ) ) ), $GLOBALS['ab_test_term_writes'] );
 	}
 
 	/* --------------------------------------------------------------- comments */
