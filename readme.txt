@@ -119,7 +119,7 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 135 tools on your site:
 
 * **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first.
-* **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each change to active PHP code, Pro tests the site and puts the old version back if it stops loading.
+* **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
 * **Undo.** One sentence brings an edited page or file back. Its undo points expire after 7 days by default, adjustable from 1 to 30 days.
 * **Shop, SEO, menus and users.** Prices, stock and order status in WooCommerce. SEO titles and descriptions in Yoast or Rank Math. Menus and users by chat.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
