@@ -25,6 +25,21 @@ msgstr "En tant qu'affilié, vous profitez de chaque achat Pro et Agency effectu
 msgid "Recommend AlphaBridge and profit."
 msgstr "Recommandez AlphaBridge et profitez-en."
 
+msgid "Your account cannot delete this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas supprimer ce commentaire précis. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot delete this specific term. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas supprimer ce terme précis. Connectez-vous avec un compte qui peut le supprimer, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot edit this specific term. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas modifier ce terme précis. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot moderate this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas modérer ce commentaire précis. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
+msgid "Your account cannot reply under this specific post: a reply from here takes the right to edit the post, as in wp-admin. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Votre compte ne peut pas répondre sous cet article précis : depuis ici, une réponse demande le droit de modifier l'article, comme dans wp-admin. Connectez-vous avec un compte qui peut le modifier, par exemple celui d'un éditeur ou d'un administrateur."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "« %1$s » tombe au moment où les horloges reculent dans le fuseau horaire du site, cette heure locale existe donc deux fois. WordPress planifie les articles selon l'heure locale et la lirait comme « %2$s ». Choisissez une heure en dehors de cette plage, ou indiquez ce décalage."

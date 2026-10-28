@@ -112,7 +112,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; a taxonomy whose list holds a term the account may not assign (assign_term) is skipped; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'create_post' ),
@@ -138,7 +138,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. When omitted, it stays as it is.' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; a taxonomy whose list holds a term the account may not assign (assign_term) keeps its terms; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_post' ),
@@ -180,7 +180,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_duplicate_post',
 			array(
-				'description' => 'Copy an existing post or page into a new draft, as a starting point for a new page; the original stays unchanged and each call creates another copy. The draft gets the title with " (Copy)" appended, the content, excerpt, parent, menu order and the terms of taxonomies the account may assign, and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Page builder data holds markup and is copied only with the unfiltered_html capability; a builder\'s keys, its page template included, are copied together or not at all; Elementor element ids are renewed. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and a revision\'s meta. Media files cannot be duplicated, and a password-protected post only by an account that may edit it. Returns {duplicated: true, new_id}, the copied and skipped keys (with reasons) and the original\'s builder. Needs the right to read the original and to create entries of its type.',
+				'description' => 'Copy an existing post or page into a new draft, as a starting point for a new page; the original stays unchanged and each call creates another copy. The draft gets the title with " (Copy)" appended, the content, excerpt, parent, menu order and the terms of taxonomies the account may assign (of those, the terms it may assign one by one, assign_term), and, for an account that may edit the original, its custom fields, featured image, page template and page builder layout, so a page built with Elementor, Beaver Builder, SiteOrigin or another builder that stores its layout in post meta stays a builder page. Page builder data holds markup and is copied only with the unfiltered_html capability; a builder\'s keys, its page template included, are copied together or not at all; Elementor element ids are renewed. Never copied: credential-like keys, the original\'s editing state (edit lock, last editor, former slugs, trash data), caches the builder rebuilds, protected keys of other plugins, and a revision\'s meta. Media files cannot be duplicated, and a password-protected post only by an account that may edit it. Returns {duplicated: true, new_id}, the copied and skipped keys (with reasons) and the original\'s builder. Needs the right to read the original and to create entries of its type.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -272,16 +272,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
-		foreach ( get_object_taxonomies( $src->post_type ) as $tax ) {
-			$tax_obj = get_taxonomy( $tax );
-			if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
-				continue; // Skip taxonomies this user may not assign.
-			}
-			$terms = wp_get_object_terms( $src->ID, $tax, array( 'fields' => 'ids' ) );
-			if ( ! is_wp_error( $terms ) ) {
-				wp_set_object_terms( $id, $terms, $tax, false );
-			}
-		}
+		self::copy_terms( (int) $src->ID, (int) $id, get_object_taxonomies( $src->post_type ) );
 		// Custom fields, builder layout, page template and featured image. The
 		// read right above is enough for the copy of the post itself, as
 		// before; the meta needs the right to edit the original
@@ -1244,7 +1235,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			$ids = array();
 			foreach ( $list as $t ) {
 				if ( is_numeric( $t ) ) {
-					$ids[] = (int) $t;
+					// A number below 1 names no term, but WordPress would look
+					// it up as its absolute value (term_exists()), past the
+					// check below.
+					if ( (int) $t > 0 ) {
+						$ids[] = (int) $t;
+					}
 				} else {
 					$term = term_exists( $t, $tax );
 					if ( ! $term ) {
@@ -1260,8 +1256,62 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					}
 				}
 			}
+			// The list replaces the post's terms of this taxonomy, so it is
+			// written whole or not at all: without a refused term it would
+			// take away a term the post has and the account did not ask to
+			// remove. Passed over like a taxonomy the account may not assign.
+			if ( self::refused_terms( $ids, $tax ) ) {
+				continue;
+			}
 			wp_set_object_terms( $id, $ids, $tax, false );
 		}
+	}
+
+	/**
+	 * Give a copy the terms of its original, in the taxonomies the account
+	 * may assign, and of those only the terms it may assign one by one: the
+	 * copy starts without terms, so leaving one out takes nothing away.
+	 *
+	 * @param int      $src_id     Original post.
+	 * @param int      $id         Copy.
+	 * @param string[] $taxonomies Taxonomies of the post type.
+	 * @return void
+	 */
+	private static function copy_terms( $src_id, $id, $taxonomies ) {
+		foreach ( $taxonomies as $tax ) {
+			$tax_obj = get_taxonomy( $tax );
+			if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
+				continue; // Skip taxonomies this user may not assign.
+			}
+			$terms = wp_get_object_terms( $src_id, $tax, array( 'fields' => 'ids' ) );
+			if ( ! is_wp_error( $terms ) ) {
+				$terms = array_map( 'intval', (array) $terms );
+				wp_set_object_terms( $id, array_values( array_diff( $terms, self::refused_terms( $terms, $tax ) ) ), $tax, false );
+			}
+		}
+	}
+
+	/**
+	 * The terms of a list the account may not assign one by one. The block
+	 * editor saves through the REST API, which asks assign_term for every
+	 * term of the taxonomy it is given (WP_REST_Posts_Controller), not only
+	 * assign_terms for the taxonomy; map_meta_cap lets a site withhold single
+	 * terms there. An id of no term of this taxonomy is not refused here:
+	 * wp_set_object_terms() passes over a number that names none.
+	 *
+	 * @param array  $ids Term ids.
+	 * @param string $tax Taxonomy name.
+	 * @return int[]
+	 */
+	private static function refused_terms( $ids, $tax ) {
+		$out = array();
+		foreach ( (array) $ids as $tid ) {
+			$term = get_term( (int) $tid, $tax );
+			if ( $term && ! is_wp_error( $term ) && $tax === $term->taxonomy && ! current_user_can( 'assign_term', (int) $tid ) ) {
+				$out[] = (int) $tid;
+			}
+		}
+		return $out;
 	}
 
 	/**

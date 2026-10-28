@@ -25,6 +25,21 @@ msgstr "Como afiliado, ganas con cada compra de Pro y Agency hecha a través de 
 msgid "Recommend AlphaBridge and profit."
 msgstr "Recomienda AlphaBridge y sal ganando."
 
+msgid "Your account cannot delete this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "La cuenta de esta conexión no puede borrar este comentario en concreto. Conecta la app con una cuenta que pueda editarlo, como la de un editor o un administrador."
+
+msgid "Your account cannot delete this specific term. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "La cuenta de esta conexión no puede borrar este término en concreto. Conecta la app con una cuenta que pueda borrarlo, como la de un editor o un administrador."
+
+msgid "Your account cannot edit this specific term. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "La cuenta de esta conexión no puede editar este término en concreto. Conecta la app con una cuenta que pueda editarlo, como la de un editor o un administrador."
+
+msgid "Your account cannot moderate this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "La cuenta de esta conexión no puede moderar este comentario en concreto. Conecta la app con una cuenta que pueda editarlo, como la de un editor o un administrador."
+
+msgid "Your account cannot reply under this specific post: a reply from here takes the right to edit the post, as in wp-admin. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "La cuenta de esta conexión no puede responder bajo esta entrada en concreto: desde aquí, una respuesta requiere el permiso de editar la entrada, como en wp-admin. Conecta la app con una cuenta que pueda editarla, como la de un editor o un administrador."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "«%1$s» cae en el intervalo en que, en la zona horaria del sitio, se atrasan los relojes, así que esa hora local se da dos veces. WordPress programa las entradas según la hora local y la interpretaría como «%2$s». Elige una hora fuera de ese intervalo o indica ese desfase."
