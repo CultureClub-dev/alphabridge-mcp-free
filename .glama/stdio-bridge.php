@@ -136,25 +136,39 @@ if ( ! $ready ) {
 $protocol = '';
 $session  = '';
 
-while ( true ) {
-	// Wait for input in one-second steps, so a signal is handled and a web
-	// server that stopped is noticed instead of a read that never returns.
-	$read   = array( STDIN );
-	$write  = null;
-	$except = null;
-	$ready  = @stream_select( $read, $write, $except, 1 );
-	if ( ! $ready ) {
-		$status = proc_get_status( $server );
-		if ( ! $status['running'] ) {
-			ab_bridge_fail( 'the PHP web server stopped with exit code ' . $status['exitcode'] );
+// stdin is read without blocking, into a buffer that is cut at line ends: a
+// part of a line never stalls the bridge.
+stream_set_blocking( STDIN, false );
+$buffer = '';
+$open   = true;
+
+while ( $open || false !== strpos( $buffer, "\n" ) ) {
+	if ( false === strpos( $buffer, "\n" ) ) {
+		// Wait for input in one-second steps, so a signal is handled and a
+		// web server that stopped is noticed.
+		$read   = array( STDIN );
+		$write  = null;
+		$except = null;
+		$ready  = @stream_select( $read, $write, $except, 1 );
+		if ( ! $ready ) {
+			$status = proc_get_status( $server );
+			if ( ! $status['running'] ) {
+				ab_bridge_fail( 'the PHP web server stopped with exit code ' . $status['exitcode'] );
+			}
+			continue;
 		}
+		$chunk = fread( STDIN, 65536 );
+		if ( false === $chunk || ( '' === $chunk && feof( STDIN ) ) ) {
+			$open    = false; // stdin closed: the client is done.
+			$buffer .= "\n";  // A last line without a line end still counts.
+			continue;
+		}
+		$buffer .= $chunk;
 		continue;
 	}
-	$line = fgets( STDIN );
-	if ( false === $line ) {
-		break; // stdin closed: the client is done.
-	}
-	$line = trim( $line );
+	$end    = strpos( $buffer, "\n" );
+	$line   = trim( substr( $buffer, 0, $end ) );
+	$buffer = (string) substr( $buffer, $end + 1 );
 	if ( '' === $line ) {
 		continue;
 	}
@@ -165,7 +179,7 @@ while ( true ) {
 	$ids      = array();
 	foreach ( $is_batch ? $message : array( $message ) as $item ) {
 		if ( is_array( $item ) && array_key_exists( 'id', $item ) && isset( $item['method'] ) ) {
-			$ids[] = $item['id'];
+			$ids[ json_encode( $item['id'] ) ] = $item['id'];
 		}
 	}
 
@@ -205,28 +219,24 @@ while ( true ) {
 		continue; // Only notifications: nothing goes to stdout.
 	}
 
+	// Take only answers to ids that were asked, each once.
 	$decoded = is_string( $body ) ? json_decode( $body ) : null;
-	$answers = array();
-	if ( $is_batch && is_array( $decoded ) ) {
-		foreach ( $decoded as $item ) {
-			if ( ab_bridge_is_answer( $item ) ) {
-				$answers[] = $item;
-			}
+	$found   = array();
+	foreach ( is_array( $decoded ) ? $decoded : array( $decoded ) as $item ) {
+		if ( ! ab_bridge_is_answer( $item ) ) {
+			continue;
 		}
-	} elseif ( ! $is_batch && ab_bridge_is_answer( $decoded ) ) {
-		$answers[] = $decoded;
+		$key = json_encode( $item->id );
+		if ( isset( $ids[ $key ] ) && ! isset( $found[ $key ] ) ) {
+			$found[ $key ] = $item;
+		}
 	}
 
-	// Every request id gets an answer, from WordPress or as an error.
-	$answered = array();
-	foreach ( $answers as $answer ) {
-		$answered[] = json_encode( $answer->id );
-	}
-	$reason = '' !== $failed ? 'No answer from the local WordPress: ' . $failed : 'The local WordPress did not answer in JSON-RPC.';
-	foreach ( $ids as $id ) {
-		if ( ! in_array( json_encode( $id ), $answered, true ) ) {
-			$answers[] = ab_bridge_error( $id, $reason );
-		}
+	// Every request id gets an answer, from WordPress or as an error, in the order asked.
+	$reason  = '' !== $failed ? 'No answer from the local WordPress: ' . $failed : 'The local WordPress did not answer in JSON-RPC.';
+	$answers = array();
+	foreach ( $ids as $key => $id ) {
+		$answers[] = isset( $found[ $key ] ) ? $found[ $key ] : ab_bridge_error( $id, $reason );
 	}
 
 	foreach ( $answers as $answer ) {
