@@ -299,8 +299,17 @@ function site_url( $path = '' ) {
 	return 'https://example.test' . $path;
 }
 
+/**
+ * As WordPress for the part the tools rely on: a URL whose scheme is not in
+ * wp_allowed_protocols() (javascript:, data:, …) comes back empty; any other,
+ * relative ones included, as it was.
+ */
 function esc_url_raw( $url ) {
-	return (string) $url;
+	$url = (string) $url;
+	if ( preg_match( '/^([a-z][a-z0-9+.\-]*):/i', $url, $m ) && ! in_array( strtolower( $m[1] ), array( 'http', 'https', 'ftp', 'ftps', 'mailto', 'news', 'irc', 'irc6', 'ircs', 'gopher', 'nntp', 'feed', 'telnet', 'mms', 'rtsp', 'sms', 'svn', 'tel', 'fax', 'xmpp', 'webcal', 'urn' ), true ) ) {
+		return '';
+	}
+	return $url;
 }
 
 function wp_set_current_user( $id ) {

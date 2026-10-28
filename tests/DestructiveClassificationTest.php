@@ -41,12 +41,14 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_media',
 		'wp_delete_term',
 		'wp_delete_comment',
+		'wp_delete_menu_item',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */
 	private const ADDS_ONLY = array(
 		'wp_create_term',
 		'wp_duplicate_post',
+		'wp_create_menu',
 	);
 
 	/** Tools that add, but publish what they add, which cannot be taken back. */
@@ -55,6 +57,7 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_reply_comment',
 		'wp_upload_media',
 		'wp_upload_media_from_url',
+		'wp_add_menu_item',
 	);
 
 	public function test_overwriting_tools_are_destructive(): void {
@@ -196,7 +199,7 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 		$this->assertSame( array(), $unclassified );
 
-		// And the split is the measured one: 8 overwrite, 4 add and publish, 2 only add.
+		// And the split is the measured one: 9 overwrite, 5 add and publish, 3 only add.
 		$destructive = array_values( array_filter( $writing, static fn( $n ) => AB_MCP_Tool_Registry::is_destructive( $n, array() ) ) );
 		sort( $destructive );
 		$expected = array_merge( self::OVERWRITES, self::PUBLISHING_ADDS );

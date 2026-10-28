@@ -374,7 +374,7 @@ final class SiteModeTest extends TestCase {
 		}
 		self::assertGreaterThan( 10, $writers );
 		self::assertGreaterThan( 10, $readers );
-		self::assertSame( array( 'wp_get_user_meta' ), $mighty, 'The Mighty reader of this plugin.' );
+		self::assertSame( array( 'wp_get_user_meta', 'wp_get_error_log' ), $mighty, 'The Mighty readers of this plugin.' );
 	}
 
 	public function testTheRefusalNamesWhoSwitchesWhereAndTheRisk(): void {
@@ -1295,7 +1295,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame(
 			array(
 				'Off: read only | AI assistants read content, media and settings and advise you.',
-				'On: full power | AI assistants read and write: posts, pages, media, terms and comments.',
+				'On: full power | AI assistants read and write: posts, pages, media, terms, comments and menus.',
 			),
 			$boxes,
 			'The free plugin names only what its own tools write.'
@@ -1307,6 +1307,20 @@ final class SiteModeTest extends TestCase {
 		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
 		self::assertSame( 'On: full power. Connected AI assistants read and write on this site.', trim( $x->query( '//*[contains(@class, "ab-mode__status")]' )->item( 0 )->textContent ) );
 		self::assertStringContainsString( 'ab-mode--full', $x->query( '//section[@id="ab-mode"]' )->item( 0 )->getAttribute( 'class' ), 'The deep violet card.' );
+	}
+
+	public function testTheOffBoxNamesTheReadersOfAccountsAndTheShop(): void {
+		// Since 4.7.0 the core reads user accounts and, with WooCommerce, the
+		// shop with write access off; the box names them while they run.
+		AB_MCP_Settings::install_defaults();
+		require_once dirname( __DIR__ ) . '/includes/tools/class-tools-menus-users.php';
+		$r = new AB_MCP_Tool_Registry();
+		self::assertSame( '', AB_MCP_Admin::reads_also( $r ), 'No reader, no sentence.' );
+		\AB_MCP_Tools_Menus_Users::register( $r );
+		self::assertSame( 'They also read user accounts.', AB_MCP_Admin::reads_also( $r ) );
+		update_option( AB_MCP_Settings::OPT_TOOLSTATE, array( 'wp_list_users' => false, 'wp_get_user' => false ) );
+		self::assertSame( '', AB_MCP_Admin::reads_also( $r ), 'Both switched off, nothing to name.' );
+		self::assertSame( '', AB_MCP_Admin::reads_also( null ) );
 	}
 
 	public function testWithProTheOnBoxNamesWhatProWrites(): void {
@@ -1576,9 +1590,10 @@ final class SiteModeTest extends TestCase {
 	}
 
 	/**
-	 * The readmes describe this plugin: its only reader that waits for write
-	 * access is wp_get_user_meta, which reads profile fields. Readers of code,
-	 * files, the database or logs come with AlphaBridge MCP Pro, not here.
+	 * The readmes describe this plugin: its readers that wait for write access
+	 * are wp_get_user_meta, which reads profile fields, and since 4.7.0
+	 * wp_get_error_log. Readers of code, files and the database come with
+	 * AlphaBridge MCP Pro, not here.
 	 */
 	public function testTheReadmesNameTheReadersThatWaitForWriteAccess(): void {
 		$r = new AB_MCP_Tool_Registry();
@@ -1594,15 +1609,15 @@ final class SiteModeTest extends TestCase {
 			}
 		}
 		self::assertGreaterThan( 35, count( $r->all() ) );
-		self::assertSame( array( 'wp_get_user_meta' ), $waiting, 'A new reader that waits for write access needs its own words in the readmes.' );
+		self::assertSame( array( 'wp_get_user_meta', 'wp_get_error_log' ), $waiting, 'A new reader that waits for write access needs its own words in the readmes.' );
 
 		$readme = (string) file_get_contents( dirname( __DIR__ ) . '/readme.txt' );
 		$intro  = substr( $readme, 0, (int) strpos( $readme, '== Changelog ==' ) );
 		self::assertStringNotContainsString( 'logs or credentials', $intro, 'Free has no reader of code, files, the database, logs or credentials.' );
-		self::assertStringContainsString( 'To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants"', $intro );
-		self::assertStringContainsString( 'every tool that creates, changes or deletes is refused, and so is the reader of user profile fields', $intro );
+		self::assertStringContainsString( 'To let them create, change and delete, and read user profile fields and the error log, switch on "Write access for AI assistants"', $intro );
+		self::assertStringContainsString( 'every tool that creates, changes or deletes is refused, and so are the readers of user profile fields and of the error log', $intro );
 		$md = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( dirname( __DIR__ ) . '/README.md' ) );
-		self::assertStringContainsString( 'and so is every reading tool noted *only with write access* (in this plugin the reader of user profile fields)', $md );
+		self::assertStringContainsString( 'and so is every reading tool noted *only with write access* (in this plugin the readers of user profile fields and of the error log)', $md );
 		self::assertStringNotContainsString( 'because it reads code, files, the database, logs or credentials', $md );
 	}
 

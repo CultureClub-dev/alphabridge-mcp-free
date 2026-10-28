@@ -27,8 +27,9 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **40 structured tools** across content, media, taxonomies, comments, widgets, site settings,
-  site info, SEO reads and search.
+- **57 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+  settings, site info, users, plugins and themes, cron and the error log, SEO reads, WooCommerce
+  reads and search.
 - **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page
   order, with their visible text, link and image fields; elements that cannot be read safely,
   such as code, forms or unknown elements, are listed as locked, with the reason and without
@@ -75,8 +76,8 @@ Handing an AI access to a site should feel safe, so control comes first:
 - **Write access off out of the box.** A new site, and every site after updating from a version
   before 4.4.0, starts with *write access off*: assistants can read content, media, terms,
   comments, settings and the structure of the site. Every tool that creates, changes or deletes is
-  refused, and so is every reading tool noted *only with write access* (in this plugin the reader
-  of user profile fields), with an answer that says why and leads to the switch. The main
+  refused, and so is every reading tool noted *only with write access* (in this plugin the readers
+  of user profile fields and of the error log), with an answer that says why and leads to the switch. The main
   switch *Write access for AI assistants* at the top of Settings → AlphaBridge MCP holds for every
   connection (Claude, ChatGPT, Cursor and all others); an administrator switches it on after
   confirming, with a ticked box, that changes take effect immediately, that it is at the site
@@ -160,8 +161,8 @@ A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do mor
 - edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
 - check the site with test requests after saving active PHP code, and put the previous
   version back automatically when one of them ends with a fatal error;
-- use tool groups for the database, users, menus, WooCommerce, SEO writes, install/update,
-  migration and multisite;
+- use tool groups for the database, user accounts, changes in WooCommerce, SEO writes,
+  install/update, migration and multisite;
 - undo many of the changes made through it (undo points expire after 7 days by default,
   adjustable from 1 to 30 days).
 

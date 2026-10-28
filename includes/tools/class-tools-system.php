@@ -48,6 +48,35 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 			)
 		);
 
+		// Free since 4.7.0, before in AlphaBridge MCP Pro only; Pro's copy of
+		// the two names (AB_MCP_Tools_System_Pro) registers over these.
+		$r->register(
+			'wp_get_cron',
+			array(
+				'description' => 'List the WP-Cron events scheduled on this site, soonest first: per event hook, next_run (UTC, ISO 8601) and schedule (the recurrence name, or false for a single event). Read-only; hook arguments are not included. count is the total number of events, events holds at most the first 200. Useful to check whether a job runs and when. Requires manage_options.',
+				'capability'  => 'manage_options',
+				'callback'    => array( __CLASS__, 'cron' ),
+			)
+		);
+
+		$r->register(
+			'wp_get_error_log',
+			array(
+				'description' => 'Return the last lines of wp-content/debug.log, where WordPress writes PHP errors, warnings and notices when WP_DEBUG_LOG is on, for diagnosing failures. Read-only; returns available, lines (the count returned) and log (the lines as one text). Without a readable file there it answers available=false with a message, not an error; a log written to another path is not read. The log can hold file paths, queries and data plugins wrote into it. Requires manage_options and runs only with write access on.',
+				'capability'  => 'manage_options',
+				// Mighty: a log holds paths, queries and whatever plugins wrote
+				// into it, which the site mode Read keeps closed until Full.
+				'dangerous'   => true,
+				// Mighty since 4.6.0 in Pro, an ordinary tool before: a switch saved
+				// before the site mode reads as for one (AB_MCP_Settings::is_tool_enabled()).
+				'mighty_since' => '4.6.0',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array( 'lines' => array( 'type' => 'integer', 'description' => 'How many trailing lines to return, 1 to 500 (values outside are clamped). Default 100.' ) ),
+				),
+				'callback'    => array( __CLASS__, 'error_log' ),
+			)
+		);
 	}
 
 	/**
@@ -125,4 +154,54 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		return array( 'taxonomies' => $out );
 	}
 
+	/**
+	 * Cron events.
+	 *
+	 * @return array
+	 */
+	public static function cron() {
+		$crons = _get_cron_array();
+		$out   = array();
+		if ( is_array( $crons ) ) {
+			foreach ( $crons as $timestamp => $hooks ) {
+				foreach ( $hooks as $hook => $events ) {
+					foreach ( $events as $event ) {
+						$out[] = array(
+							'hook'     => $hook,
+							'next_run' => gmdate( 'c', $timestamp ),
+							'schedule' => isset( $event['schedule'] ) ? $event['schedule'] : 'once',
+						);
+					}
+				}
+			}
+		}
+		return array(
+			'count'  => count( $out ),
+			'events' => array_slice( $out, 0, 200 ),
+		);
+	}
+
+	/**
+	 * Debug log tail.
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function error_log( $a ) {
+		$log = WP_CONTENT_DIR . '/debug.log';
+		if ( ! is_readable( $log ) ) {
+			return array(
+				'available' => false,
+				'message'   => __( 'No readable debug.log. Enable WP_DEBUG_LOG to capture errors.', 'alphabridge-mcp' ),
+			);
+		}
+		$lines = self::clamp( self::i( $a, 'lines', 100 ), 1, 500 );
+		$data  = file( $log, FILE_IGNORE_NEW_LINES ); // phpcs:ignore
+		$tail  = is_array( $data ) ? array_slice( $data, -$lines ) : array();
+		return array(
+			'available' => true,
+			'lines'     => count( $tail ),
+			'log'       => implode( "\n", $tail ),
+		);
+	}
 }

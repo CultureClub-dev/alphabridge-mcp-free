@@ -32,6 +32,7 @@ final class OpenWorldClassificationTest extends TestCase {
 		'wp_upload_media_from_url',
 		'wp_update_media',
 		'wp_update_term',
+		'wp_add_menu_item',
 	);
 
 	/** Tools that talk to other servers, open world as before. */

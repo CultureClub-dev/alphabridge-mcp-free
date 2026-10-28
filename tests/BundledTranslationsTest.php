@@ -320,6 +320,7 @@ final class BundledTranslationsTest extends TestCase {
 		"tool group\x04SEO",
 		"tool group\x04Site Deploy (FTP/SFTP)",
 		'claude.ai, Desktop, iPhone',
+		'WooCommerce',
 	);
 
 	/**
@@ -328,7 +329,7 @@ final class BundledTranslationsTest extends TestCase {
 	 * fall back to English (French «Statut» turned «Status» again stays red).
 	 */
 	const SAME_AS_ENGLISH_IN = array(
-		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets" ),
+		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets", 'Plugins & Themes' ),
 		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets" ),
 		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token' ),
 		'es' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
@@ -607,7 +608,7 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	/** The methods of AB_MCP_Admin that draw the fine-tuning. */
-	const FINE_METHODS = array( 'main_groups', 'main_description', 'group_label', 'kind_badge', 'tool_note', 'count_badges', 'addon_text', 'fine_row_html', 'fine_sub_html', 'tool_row_html', 'capabilities_card_html', 'group_status', 'mode_card_html', 'mode_notice_html', 'terms_notice_html', 'notice' );
+	const FINE_METHODS = array( 'main_groups', 'main_description', 'group_label', 'kind_badge', 'tool_note', 'count_badges', 'addon_text', 'reads_also', 'fine_row_html', 'fine_sub_html', 'tool_row_html', 'capabilities_card_html', 'group_status', 'mode_card_html', 'mode_notice_html', 'terms_notice_html', 'notice' );
 
 	/**
 	 * Every text those methods translate, keyed like mo(): «context\x04text»
@@ -641,7 +642,7 @@ final class BundledTranslationsTest extends TestCase {
 		self::assertGreaterThan( 50, count( $texts ), 'The scan finds the texts.' );
 		self::assertContains( "tool badge\x04Reads", $texts );
 		self::assertContains( 'Save changes', $texts );
-		self::assertContains( 'With Pro they also read users.', $texts, 'The texts the core keeps for add-ons.' );
+		self::assertContains( 'They also read user accounts.', $texts, 'What the box «Off: read only» adds.' );
 
 		$mo = self::mo( self::file( $locale, 'mo' ) );
 		foreach ( $texts as $key ) {

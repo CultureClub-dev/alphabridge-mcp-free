@@ -208,10 +208,10 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 95, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan.' );
+		self::assertCount( 78, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0 and run here.' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
-		foreach ( array( 'wp_undo', 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_wc_list_orders' ) as $name ) {
+		foreach ( array( 'wp_undo', 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_wc_update_product', 'wp_create_user' ) as $name ) {
 			self::assertContains( $name, $pro );
 		}
 	}
@@ -234,7 +234,7 @@ final class GuidanceTest extends TestCase {
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, users and menus, WooCommerce, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
+		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, creating, changing and deleting user accounts, changing prices, stock, order status and coupons in WooCommerce (reading the shop is on this site), changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
 		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );

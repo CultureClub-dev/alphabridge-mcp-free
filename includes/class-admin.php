@@ -415,6 +415,10 @@ class AB_MCP_Admin {
 		$html .= '</form>';
 
 		$reads = __( 'AI assistants read content, media and settings and advise you.', 'alphabridge-mcp' );
+		$own   = self::reads_also( $this->registry() );
+		if ( '' !== $own ) {
+			$reads .= ' ' . $own;
+		}
 		/**
 		 * What the tools of an add-on read with write access off beyond the
 		 * box «Off: read only», as one sentence, or '' for nothing. Escaped
@@ -431,7 +435,7 @@ class AB_MCP_Admin {
 		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
 		$writes  = in_array( $edition, array( 'pro', 'agency' ), true )
 			? __( 'AI assistants read and write: posts, pages, plugins, themes, code and the database.', 'alphabridge-mcp' )
-			: __( 'AI assistants read and write: posts, pages, media, terms and comments.', 'alphabridge-mcp' );
+			: __( 'AI assistants read and write: posts, pages, media, terms, comments and menus.', 'alphabridge-mcp' );
 
 		$html .= '<div class="ab-mode__boxes">';
 		$html .= '<div class="ab-mode__box ab-mode__box--off' . ( $full ? '' : ' is-current' ) . '">' . self::icon( 'eye', 22 ) . '<p><strong>' . esc_html__( 'Off: read only', 'alphabridge-mcp' ) . '</strong><span class="ab-mode__reads">' . esc_html( $reads ) . '</span></p></div>';
@@ -1466,6 +1470,42 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * What the box «Off: read only» adds about personal data and orders:
+	 * user accounts and, while WooCommerce is active, the shop's products,
+	 * orders, customers and coupons are read with write access off. An owner
+	 * relying on the switch would not expect that, so the box names them, as
+	 * long as those readers run (registered, switched on, running in Read).
+	 * Pro said this itself until 4.7.0; since then these readers are tools of
+	 * this plugin.
+	 *
+	 * @param AB_MCP_Tool_Registry|null $registry The tools of this site.
+	 * @return string One sentence, or '' for nothing.
+	 */
+	public static function reads_also( $registry ) {
+		if ( ! $registry instanceof AB_MCP_Tool_Registry ) {
+			return '';
+		}
+		$runs  = static function ( array $names ) use ( $registry ) {
+			foreach ( $names as $name ) {
+				$def = $registry->get( $name );
+				if ( is_array( $def ) && AB_MCP_Site_Mode::runs_in_read( $name, $def ) && AB_MCP_Settings::is_tool_enabled( $name, $def ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		$users = $runs( array( 'wp_list_users', 'wp_get_user' ) );
+		$shop  = class_exists( 'WooCommerce' ) && $runs( array( 'wp_wc_list_orders', 'wp_wc_get_order', 'wp_wc_list_customers', 'wp_wc_list_products', 'wp_wc_get_product', 'wp_wc_list_coupons' ) );
+		if ( $users && $shop ) {
+			return __( 'They also read user accounts and the shop\'s products, orders, customers and coupons.', 'alphabridge-mcp' );
+		}
+		if ( $users ) {
+			return __( 'They also read user accounts.', 'alphabridge-mcp' );
+		}
+		return $shop ? __( 'They also read the shop\'s products, orders, customers and coupons.', 'alphabridge-mcp' ) : '';
+	}
+
+	/**
 	 * Texts an add-on shows on this page, in the core's languages: the Pro
 	 * add-on ships no translations.
 	 *
@@ -1483,11 +1523,11 @@ class AB_MCP_Admin {
 	public static function addon_text( $key ) {
 		switch ( (string) $key ) {
 			case 'reads_also_users':
-				return __( 'With Pro they also read users.', 'alphabridge-mcp' );
 			case 'reads_also_shop':
-				return __( 'With Pro they also read the shop\'s products, orders, customers and coupons.', 'alphabridge-mcp' );
 			case 'reads_also_users_shop':
-				return __( 'With Pro they also read users and the shop\'s products, orders, customers and coupons.', 'alphabridge-mcp' );
+				// Since 4.7.0 these readers are tools of this plugin, and the
+				// box names them itself (reads_also()); Pro adds nothing then.
+				return '';
 			case 'abilities_lead':
 				return __( 'Plugins offer their actions to AI assistants as abilities (WordPress Abilities API). With write access on, every ability runs, reading or writing, unless you switch it off here; each one also checks the rights of the connected account.', 'alphabridge-mcp' );
 			case 'abilities_write_off':
@@ -2169,8 +2209,8 @@ class AB_MCP_Admin {
 		};
 		$items    = array(
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
-			__( 'Theme and plugin files, database, users, menus', 'alphabridge-mcp' ),
-			__( 'WooCommerce, SEO editing, installs and updates', 'alphabridge-mcp' ),
+			__( 'Theme and plugin files, database, user accounts', 'alphabridge-mcp' ),
+			__( 'WooCommerce and SEO editing, installs and updates', 'alphabridge-mcp' ),
 			__( 'Undo points that expire after 7 days, adjustable from 1 to 30', 'alphabridge-mcp' ),
 			__( 'Search and replace with preview', 'alphabridge-mcp' ),
 		);

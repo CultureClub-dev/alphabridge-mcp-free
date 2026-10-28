@@ -175,8 +175,8 @@ msgstr "Um token num URL fica exposto mais facilmente através de referrers, reg
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "É necessário um nome de ficheiro válido: indique um nome com a respetiva extensão, como «photo.jpg»."
 
-msgid "AI assistants read and write: posts, pages, media, terms and comments."
-msgstr "Os assistentes de IA leem e escrevem: artigos, páginas, multimédia, termos e comentários."
+msgid "AI assistants read and write: posts, pages, media, terms, comments and menus."
+msgstr "Os assistentes de IA leem e escrevem: artigos, páginas, multimédia, termos, comentários e menus."
 
 msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
 msgstr "Os assistentes de IA leem e escrevem: artigos, páginas, plugins, temas, código e a base de dados."
@@ -1592,8 +1592,8 @@ msgstr "A ferramenta «%s» está desligada no «Ajuste fino» do AlphaBridge MC
 msgid "The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator."
 msgstr "A ferramenta falhou com um erro interno, por isso pode não ter terminado. O erro em si foi para o registo do AlphaBridge MCP (a opção ab_mcp_audit), e não para esta resposta, porque pode indicar caminhos do servidor. Verifique o resultado com uma ferramenta de leitura antes de a chamar novamente; se continuar a falhar, pergunte ao administrador do site."
 
-msgid "Theme and plugin files, database, users, menus"
-msgstr "Ficheiros de temas e plugins, base de dados, utilizadores, menus"
+msgid "Theme and plugin files, database, user accounts"
+msgstr "Ficheiros de temas e plugins, base de dados, contas de utilizador"
 
 msgid "This URL points to a private or disallowed host and was blocked: WordPress downloads only from public hosts. Put the file on a public address, or send its content with wp_upload_media."
 msgstr "Este URL aponta para um anfitrião privado ou não permitido e foi bloqueado: o WordPress só descarrega de anfitriões públicos. Coloque o ficheiro num endereço público ou envie o conteúdo com wp_upload_media."
@@ -1783,17 +1783,8 @@ msgstr "Widgets"
 msgid "Widgets not placed in any active sidebar."
 msgstr "Widgets que não estão colocados em nenhuma barra lateral ativa."
 
-msgid "With Pro they also read the shop's products, orders, customers and coupons."
-msgstr "Com o Pro, também leem os produtos, as encomendas, os clientes e os cupões da loja."
-
-msgid "With Pro they also read users and the shop's products, orders, customers and coupons."
-msgstr "Com o Pro, também leem os utilizadores e os produtos, as encomendas, os clientes e os cupões da loja."
-
-msgid "With Pro they also read users."
-msgstr "Com o Pro, também leem os utilizadores."
-
-msgid "WooCommerce, SEO editing, installs and updates"
-msgstr "WooCommerce, edição de SEO, instalações e atualizações"
+msgid "WooCommerce and SEO editing, installs and updates"
+msgstr "Edição de WooCommerce e SEO, instalações e atualizações"
 
 msgid "WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing."
 msgstr "O WordPress não o eliminou: o id não é um ficheiro da biblioteca multimédia (procure-o com wp_list_media) ou um plugin impediu-o. Verifique-o com wp_get_media e pergunte ao administrador do site se continuar a falhar."
@@ -2250,3 +2241,55 @@ msgstr "Este site não aceita aplicações que se identificam com um documento d
 #, php-format
 msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → ChatGPT; an app that can register with the site then does that instead."
 msgstr "A aplicação identifica-se com um documento de metadados em %1$s, e este site não o pode usar: %2$s. Se o problema estiver no documento, o criador da aplicação pode corrigi-lo. Até lá, ou se este site não conseguir contactar outros servidores, um administrador pode desligar o início de sessão direto em «Definições → AlphaBridge MCP → ChatGPT»; uma aplicação que se consiga registar no site faz isso em alternativa."
+
+# Free since 4.7.0: menus, reading users, plugins, themes, cron and the error log, WooCommerce read only.
+msgid "Users & Menus"
+msgstr "Utilizadores e menus"
+
+msgid "Plugins & Themes"
+msgstr "Plugins e temas"
+
+msgid "WooCommerce"
+msgstr "WooCommerce"
+
+msgid "User not found. wp_list_users shows the users and their ids."
+msgstr "Utilizador não encontrado. wp_list_users mostra os utilizadores e os seus ID."
+
+msgid "Menu not found. wp_list_menus shows the menus."
+msgstr "Menu não encontrado. wp_list_menus mostra os menus."
+
+msgid "Your account cannot add items to this specific menu. Ask someone who may edit it, or an administrator."
+msgstr "A sua conta não pode adicionar itens a este menu em concreto. Peça a alguém que o possa editar, ou a um administrador."
+
+msgid "That link uses a scheme WordPress does not allow in menus, so the item would have no URL at all. Use a scheme WordPress allows, such as https, mailto or tel, or a relative link."
+msgstr "Esta ligação usa um esquema que o WordPress não permite nos menus, pelo que o item não teria qualquer URL. Use um esquema que o WordPress permita, como https, mailto ou tel, ou uma ligação relativa."
+
+msgid "Your account cannot delete this specific menu item. Ask someone who may edit the menu, or an administrator."
+msgstr "A sua conta não pode eliminar este item de menu em concreto. Peça a alguém que possa editar o menu, ou a um administrador."
+
+msgid "Menu item not found or delete failed. wp_get_menu shows the items of a menu with their ids."
+msgstr "Item de menu não encontrado ou a eliminação falhou. wp_get_menu mostra os itens de um menu com os seus ID."
+
+msgid "WooCommerce is not active on this site. Ask an administrator to activate it under Plugins in the WordPress dashboard, or to install it there first."
+msgstr "O WooCommerce não está ativo neste site. Peça a um administrador que o ative em Plugins, no painel do WordPress, ou que o instale lá primeiro."
+
+msgid "Order not found. wp_wc_list_orders lists the orders."
+msgstr "Encomenda não encontrada. wp_wc_list_orders lista as encomendas."
+
+msgid "Unknown order status \"%1$s\". This shop knows: %2$s."
+msgstr "Estado de encomenda desconhecido «%1$s». Esta loja conhece: %2$s."
+
+msgid "Product not found. wp_wc_list_products lists the products."
+msgstr "Produto não encontrado. wp_wc_list_products lista os produtos."
+
+msgid "No readable debug.log. Enable WP_DEBUG_LOG to capture errors."
+msgstr "Nenhum debug.log legível. Ative WP_DEBUG_LOG para registar os erros."
+
+msgid "They also read user accounts."
+msgstr "Também leem as contas de utilizador."
+
+msgid "They also read the shop's products, orders, customers and coupons."
+msgstr "Também leem os produtos, as encomendas, os clientes e os cupões da loja."
+
+msgid "They also read user accounts and the shop's products, orders, customers and coupons."
+msgstr "Também leem as contas de utilizador e os produtos, as encomendas, os clientes e os cupões da loja."

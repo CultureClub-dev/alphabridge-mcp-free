@@ -161,6 +161,9 @@ final class AB_MCP_Plugin {
 			'seo',
 			'meta-auth',
 			'ops',
+			'menus-users',
+			'plugins-themes-list',
+			'shop',
 		);
 
 		foreach ( $files as $file ) {
@@ -187,6 +190,11 @@ final class AB_MCP_Plugin {
 			'AB_MCP_Tools_Seo'               => array( 'seo', __( 'SEO', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Meta_Auth'         => array( 'meta-auth', __( 'Meta & App Passwords', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Ops'               => array( 'ops', __( 'Operations (Cron, Transients, Health)', 'alphabridge-mcp' ) ),
+			// Free since 4.7.0, before in Pro only; same slugs and names as Pro's
+			// groups, so Pro's further tools of these areas join them.
+			'AB_MCP_Tools_Menus_Users'         => array( 'users', __( 'Users & Menus', 'alphabridge-mcp' ) ),
+			'AB_MCP_Tools_Plugins_Themes_List' => array( 'plugins-themes', __( 'Plugins & Themes', 'alphabridge-mcp' ) ),
+			'AB_MCP_Tools_Shop'                => array( 'woocommerce', __( 'WooCommerce', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {
