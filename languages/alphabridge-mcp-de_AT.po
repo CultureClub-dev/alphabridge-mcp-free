@@ -175,8 +175,8 @@ msgstr "Ein Token in einer URL gelangt leichter nach außen, über Referrer, Pro
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "Ein gültiger Dateiname ist nötig: einen Namen mit Endung übergeben, etwa „photo.jpg“."
 
-msgid "AI assistants read and write: posts, pages, media, terms and comments."
-msgstr "Die KI liest und schreibt: Beiträge, Seiten, Medien, Begriffe und Kommentare."
+msgid "AI assistants read and write: posts, pages, media, terms, comments and menus."
+msgstr "Die KI liest und schreibt: Beiträge, Seiten, Medien, Begriffe, Kommentare und Menüs."
 
 msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
 msgstr "Die KI liest und schreibt: Beiträge, Seiten, Plugins, Themes, Code und Datenbank."
@@ -1783,15 +1783,6 @@ msgstr "Widgets"
 msgid "Widgets not placed in any active sidebar."
 msgstr "Widgets, die in keiner aktiven Seitenleiste platziert sind."
 
-msgid "With Pro they also read the shop's products, orders, customers and coupons."
-msgstr "Mit Pro liest sie auch Produkte, Bestellungen, Kunden und Gutscheine des Shops."
-
-msgid "With Pro they also read users and the shop's products, orders, customers and coupons."
-msgstr "Mit Pro liest sie auch Benutzer sowie Produkte, Bestellungen, Kunden und Gutscheine des Shops."
-
-msgid "With Pro they also read users."
-msgstr "Mit Pro liest sie auch Benutzer."
-
 msgid "WooCommerce and SEO editing, installs and updates"
 msgstr "WooCommerce- und SEO-Bearbeitung, Installationen und Updates"
 
@@ -2293,3 +2284,12 @@ msgstr "Produkt nicht gefunden. wp_wc_list_products listet die Produkte auf."
 
 msgid "No readable debug.log. Enable WP_DEBUG_LOG to capture errors."
 msgstr "Kein lesbares debug.log. WP_DEBUG_LOG einschalten, damit Fehler erfasst werden."
+
+msgid "They also read user accounts."
+msgstr "Dazu liest sie Benutzerkonten."
+
+msgid "They also read the shop's products, orders, customers and coupons."
+msgstr "Dazu liest sie Produkte, Bestellungen, Kunden und Gutscheine des Shops."
+
+msgid "They also read user accounts and the shop's products, orders, customers and coupons."
+msgstr "Dazu liest sie Benutzerkonten sowie Produkte, Bestellungen, Kunden und Gutscheine des Shops."

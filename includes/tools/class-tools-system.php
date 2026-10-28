@@ -53,7 +53,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_cron',
 			array(
-				'description' => 'List the WP-Cron events scheduled on this site, soonest first: per event hook, next_run (UTC, ISO 8601) and schedule (the recurrence name, or "once" for a single event). Read-only; hook arguments are not included. count is the total number of events, events holds at most the first 200. Useful to check whether a job runs and when. Requires manage_options.',
+				'description' => 'List the WP-Cron events scheduled on this site, soonest first: per event hook, next_run (UTC, ISO 8601) and schedule (the recurrence name, or false for a single event). Read-only; hook arguments are not included. count is the total number of events, events holds at most the first 200. Useful to check whether a job runs and when. Requires manage_options.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'cron' ),
 			)

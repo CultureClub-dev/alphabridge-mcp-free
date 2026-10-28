@@ -259,12 +259,14 @@ final class FreeSinceFourSevenTest extends TestCase {
 	public function testCronEventsCarryTheirScheduleOrOnce(): void {
 		$GLOBALS['ab_test_cron'] = array(
 			1790000000 => array( 'wp_version_check' => array( 'k1' => array( 'schedule' => 'twicedaily' ) ) ),
-			1790000600 => array( 'my_job' => array( 'k2' => array() ) ),
+			1790000600 => array( 'my_job' => array( 'k2' => array( 'schedule' => false ) ) ),
+			1790000900 => array( 'old_job' => array( 'k3' => array() ) ),
 		);
 		$res = AB_MCP_Tools_System::cron();
-		self::assertSame( 2, $res['count'] );
+		self::assertSame( 3, $res['count'] );
 		self::assertSame( array( 'hook' => 'wp_version_check', 'next_run' => gmdate( 'c', 1790000000 ), 'schedule' => 'twicedaily' ), $res['events'][0] );
-		self::assertSame( 'once', $res['events'][1]['schedule'], 'As the description says.' );
+		self::assertFalse( $res['events'][1]['schedule'], 'A single event, as WordPress stores it and the description says.' );
+		self::assertSame( 'once', $res['events'][2]['schedule'], 'An event without the key at all.' );
 
 		$many = array();
 		for ( $i = 0; $i < 230; $i++ ) {

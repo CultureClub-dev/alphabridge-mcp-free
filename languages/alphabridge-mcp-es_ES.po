@@ -175,8 +175,8 @@ msgstr "Un token en una URL se filtra con más facilidad a través de referrers,
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "Se necesita un nombre de archivo válido: indica un nombre con su extensión, como «photo.jpg»."
 
-msgid "AI assistants read and write: posts, pages, media, terms and comments."
-msgstr "Los asistentes de IA leen y escriben: entradas, páginas, medios, términos y comentarios."
+msgid "AI assistants read and write: posts, pages, media, terms, comments and menus."
+msgstr "Los asistentes de IA leen y escriben: entradas, páginas, medios, términos, comentarios y menús."
 
 msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
 msgstr "Los asistentes de IA leen y escriben: entradas, páginas, plugins, temas, código y la base de datos."
@@ -1783,15 +1783,6 @@ msgstr "Widgets"
 msgid "Widgets not placed in any active sidebar."
 msgstr "Widgets que no están en ninguna barra lateral activa."
 
-msgid "With Pro they also read the shop's products, orders, customers and coupons."
-msgstr "Con Pro también leen los productos, pedidos, clientes y cupones de la tienda."
-
-msgid "With Pro they also read users and the shop's products, orders, customers and coupons."
-msgstr "Con Pro también leen los usuarios y los productos, pedidos, clientes y cupones de la tienda."
-
-msgid "With Pro they also read users."
-msgstr "Con Pro también leen los usuarios."
-
 msgid "WooCommerce and SEO editing, installs and updates"
 msgstr "Edición de WooCommerce y SEO, instalaciones y actualizaciones"
 
@@ -2293,3 +2284,12 @@ msgstr "Producto no encontrado. wp_wc_list_products lista los productos."
 
 msgid "No readable debug.log. Enable WP_DEBUG_LOG to capture errors."
 msgstr "No hay ningún debug.log legible. Activa WP_DEBUG_LOG para registrar los errores."
+
+msgid "They also read user accounts."
+msgstr "También leen las cuentas de usuario."
+
+msgid "They also read the shop's products, orders, customers and coupons."
+msgstr "También leen los productos, pedidos, clientes y cupones de la tienda."
+
+msgid "They also read user accounts and the shop's products, orders, customers and coupons."
+msgstr "También leen las cuentas de usuario y los productos, pedidos, clientes y cupones de la tienda."

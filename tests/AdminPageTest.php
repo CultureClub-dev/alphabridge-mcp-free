@@ -619,11 +619,13 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testTheCoreHasTheTextsAnAddOnShowsHere(): void {
-		self::assertSame( 'With Pro they also read users.', AB_MCP_Admin::addon_text( 'reads_also_users' ) );
+		foreach ( array( 'reads_also_users', 'reads_also_shop', 'reads_also_users_shop' ) as $key ) {
+			self::assertSame( '', AB_MCP_Admin::addon_text( $key ), $key . ': since 4.7.0 the core names these readers itself, Pro adds nothing.' );
+		}
 		self::assertStringContainsString( 'With write access on, every ability runs, reading or writing, unless you switch it off here', AB_MCP_Admin::addon_text( 'abilities_lead' ) );
 		self::assertStringContainsString( 'WordPress 6.9', AB_MCP_Admin::addon_text( 'abilities_need_wp' ) );
 		self::assertStringContainsString( '%s', AB_MCP_Admin::addon_text( 'abilities_need_wp' ), 'The version goes in.' );
-		foreach ( array( 'reads_also_shop', 'reads_also_users_shop', 'abilities_write_off', 'abilities_none', 'abilities_kept_off' ) as $key ) {
+		foreach ( array( 'abilities_write_off', 'abilities_none', 'abilities_kept_off' ) as $key ) {
 			self::assertNotSame( '', AB_MCP_Admin::addon_text( $key ), $key );
 		}
 		self::assertSame( '', AB_MCP_Admin::addon_text( 'no such text' ) );

@@ -1295,7 +1295,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame(
 			array(
 				'Off: read only | AI assistants read content, media and settings and advise you.',
-				'On: full power | AI assistants read and write: posts, pages, media, terms and comments.',
+				'On: full power | AI assistants read and write: posts, pages, media, terms, comments and menus.',
 			),
 			$boxes,
 			'The free plugin names only what its own tools write.'
@@ -1307,6 +1307,20 @@ final class SiteModeTest extends TestCase {
 		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
 		self::assertSame( 'On: full power. Connected AI assistants read and write on this site.', trim( $x->query( '//*[contains(@class, "ab-mode__status")]' )->item( 0 )->textContent ) );
 		self::assertStringContainsString( 'ab-mode--full', $x->query( '//section[@id="ab-mode"]' )->item( 0 )->getAttribute( 'class' ), 'The deep violet card.' );
+	}
+
+	public function testTheOffBoxNamesTheReadersOfAccountsAndTheShop(): void {
+		// Since 4.7.0 the core reads user accounts and, with WooCommerce, the
+		// shop with write access off; the box names them while they run.
+		AB_MCP_Settings::install_defaults();
+		require_once dirname( __DIR__ ) . '/includes/tools/class-tools-menus-users.php';
+		$r = new AB_MCP_Tool_Registry();
+		self::assertSame( '', AB_MCP_Admin::reads_also( $r ), 'No reader, no sentence.' );
+		\AB_MCP_Tools_Menus_Users::register( $r );
+		self::assertSame( 'They also read user accounts.', AB_MCP_Admin::reads_also( $r ) );
+		update_option( AB_MCP_Settings::OPT_TOOLSTATE, array( 'wp_list_users' => false, 'wp_get_user' => false ) );
+		self::assertSame( '', AB_MCP_Admin::reads_also( $r ), 'Both switched off, nothing to name.' );
+		self::assertSame( '', AB_MCP_Admin::reads_also( null ) );
 	}
 
 	public function testWithProTheOnBoxNamesWhatProWrites(): void {
