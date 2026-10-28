@@ -142,9 +142,9 @@ class AB_MCP_Settings {
 	const RENAMED_TOOLS = array(
 		'seo_detect' => 'wp_seo_detect',
 		'seo_get'    => 'wp_seo_get',
-		// A Pro tool. The map lives here because the Pro plugin embeds this
-		// file, and one place for the whole family beats two that drift apart.
-		// A free installation simply never holds that key.
+		// A Pro tool when the names changed, free since 4.8.0. The map lives
+		// here because the Pro plugin embeds this file, and one place for the
+		// whole family beats two that drift apart.
 		'seo_set'    => 'wp_seo_set',
 		// The WooCommerce tools, also Pro. Same rule, same reason.
 		'wc_create_coupon'       => 'wp_wc_create_coupon',

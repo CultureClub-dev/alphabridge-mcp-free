@@ -99,7 +99,6 @@ class AB_MCP_Guidance {
 		'wp_save_php_snippet',
 		'wp_schedule_cron',
 		'wp_search_replace',
-		'wp_seo_set',
 		'wp_set_transient',
 		'wp_toggle_php_snippet',
 		'wp_undo',

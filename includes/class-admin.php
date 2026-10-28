@@ -435,7 +435,7 @@ class AB_MCP_Admin {
 		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
 		$writes  = in_array( $edition, array( 'pro', 'agency' ), true )
 			? __( 'AI assistants read and write: posts, pages, plugins, themes, code and the database.', 'alphabridge-mcp' )
-			: __( 'AI assistants read and write: posts, pages, media, terms, comments and menus.', 'alphabridge-mcp' );
+			: __( 'AI assistants read and write: posts, pages, media, terms, comments, menus and SEO fields.', 'alphabridge-mcp' );
 
 		$html .= '<div class="ab-mode__boxes">';
 		$html .= '<div class="ab-mode__box ab-mode__box--off' . ( $full ? '' : ' is-current' ) . '">' . self::icon( 'eye', 22 ) . '<p><strong>' . esc_html__( 'Off: read only', 'alphabridge-mcp' ) . '</strong><span class="ab-mode__reads">' . esc_html( $reads ) . '</span></p></div>';
@@ -2210,7 +2210,7 @@ class AB_MCP_Admin {
 		$items    = array(
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, database, user accounts', 'alphabridge-mcp' ),
-			__( 'WooCommerce and SEO editing, installs and updates', 'alphabridge-mcp' ),
+			__( 'WooCommerce editing, installs and updates', 'alphabridge-mcp' ),
 			__( 'Undo points that expire after 7 days, adjustable from 1 to 30', 'alphabridge-mcp' ),
 			__( 'Search and replace with preview', 'alphabridge-mcp' ),
 		);

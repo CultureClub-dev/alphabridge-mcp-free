@@ -160,6 +160,12 @@ final class ConsentScopesTest extends TestCase {
 		foreach ( $r->all() as $name => $def ) {
 			if ( AB_MCP_Tool_Registry::scope_allows( 'content', $name, $def ) && ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
 				$writers[] = $name;
+				if ( 'wp_seo_set' === $name ) {
+					// Free since 4.8.0. It writes fields of one post (its post meta),
+					// which «change posts, pages» covers, as it covers the custom
+					// fields wp_update_post writes.
+					continue;
+				}
 				self::assertMatchesRegularExpression( '/_(post|media|term|comment)(_|$)/', $name, 'A content token changes only posts, pages, media, terms and comments.' );
 			}
 		}
