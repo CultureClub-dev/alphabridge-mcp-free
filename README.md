@@ -5,8 +5,8 @@
 **Your WordPress site, managed in conversation.** AlphaBridge MCP turns a WordPress site into a
 native [Model Context Protocol](https://modelcontextprotocol.io) server. Claude, ChatGPT and other
 MCP clients connect over one authenticated HTTPS endpoint. They write and edit posts, pages,
-media, categories and tags, reply to and moderate comments, and read widgets, site settings and
-the outline of pages built with blocks or a common page builder. Every tool checks WordPress
+media, categories and tags, reply to and moderate comments, set SEO titles and descriptions, and
+read widgets, site settings and the outline of pages built with blocks or a common page builder. Every tool checks WordPress
 capabilities on every single call.
 
 The site only reads until an administrator turns on one switch for write access. Then every tool
@@ -27,8 +27,8 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **57 structured tools** across content, media, taxonomies, comments, widgets, menus, site
-  settings, site info, users, plugins and themes, cron and the error log, SEO reads, WooCommerce
+- **58 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+  settings, site info, users, plugins and themes, cron and the error log, SEO fields, WooCommerce
   reads and search.
 - **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page
   order, with their visible text, link and image fields; elements that cannot be read safely,
@@ -161,7 +161,7 @@ A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do mor
 - edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
 - check the site with test requests after saving active PHP code, and put the previous
   version back automatically when one of them ends with a fatal error;
-- use tool groups for the database, user accounts, changes in WooCommerce, SEO writes,
+- use tool groups for the database, user accounts, changes in WooCommerce,
   install/update, migration and multisite;
 - undo many of the changes made through it (undo points expire after 7 days by default,
   adjustable from 1 to 30 days).
@@ -187,5 +187,4 @@ requests may be applied by hand rather than merged directly.
 
 GPL-2.0-or-later — see [LICENSE](LICENSE).
 
-A product of [CultureClub Kulturagentur UG (haftungsbeschränkt)](https://cultureclub.dev),
-developed in Switzerland.
+A product of [CultureClub Kulturagentur UG (haftungsbeschränkt)](https://cultureclub.dev).

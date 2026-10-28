@@ -175,8 +175,8 @@ msgstr "Un token in un URL trapela più facilmente tramite referrer, log dei pro
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "Serve un nome di file valido: passa un nome con la sua estensione, ad esempio “photo.jpg”."
 
-msgid "AI assistants read and write: posts, pages, media, terms, comments and menus."
-msgstr "Gli assistenti IA leggono e scrivono: articoli, pagine, media, termini, commenti e menu."
+msgid "AI assistants read and write: posts, pages, media, terms, comments, menus and SEO fields."
+msgstr "Gli assistenti IA leggono e scrivono: articoli, pagine, media, termini, commenti, menu e campi SEO."
 
 msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
 msgstr "Gli assistenti IA leggono e scrivono: articoli, pagine, plugin, temi, codice e database."
@@ -989,6 +989,9 @@ msgstr "Questa data o quest'ora non esiste: “%s”. Indica un giorno e un'ora 
 msgid "No supported SEO plugin detected: this tool reads the fields of Yoast SEO and Rank Math. With neither active there are no SEO fields to read; the post's title and excerpt are in wp_get_post."
 msgstr "Nessun plugin SEO supportato rilevato: questo strumento legge i campi di Yoast SEO e Rank Math. Se nessuno dei due è attivo, non ci sono campi SEO da leggere; titolo e riassunto dell'articolo si trovano in wp_get_post."
 
+msgid "No supported SEO plugin detected: this tool writes the fields of Yoast SEO and Rank Math. With neither active there are no SEO fields to write; an administrator can install one of them under Plugins. The post's own title and excerpt are changed with wp_update_post."
+msgstr "Nessun plugin SEO supportato rilevato: questo strumento scrive i campi di Yoast SEO e Rank Math. Se nessuno dei due è attivo, non ci sono campi SEO da scrivere; un amministratore può installarne uno in Plugin. Titolo e riassunto dell'articolo si modificano con wp_update_post."
+
 msgid "No tool matches."
 msgstr "Nessuno strumento corrisponde."
 
@@ -1783,8 +1786,8 @@ msgstr "Widget"
 msgid "Widgets not placed in any active sidebar."
 msgstr "Widget non inseriti in alcuna sidebar attiva."
 
-msgid "WooCommerce and SEO editing, installs and updates"
-msgstr "Modifica di WooCommerce e SEO, installazioni e aggiornamenti"
+msgid "WooCommerce editing, installs and updates"
+msgstr "Modifica di WooCommerce, installazioni e aggiornamenti"
 
 msgid "WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing."
 msgstr "WordPress non l'ha eliminato: l'id non corrisponde a un file della libreria media (cercalo con wp_list_media), oppure un plugin l'ha impedito. Controllalo con wp_get_media e, se continua a non riuscire, chiedi all'amministratore del sito."
@@ -1974,6 +1977,10 @@ msgstr "Il tuo account non è autorizzato ad approvare connessioni su questo sit
 
 msgid "Your account may not edit this key: edit_post_meta says no, usually because the plugin that registered the key restricts it. An account that may edit it can set it on the copy."
 msgstr "Il tuo account non può modificare questa chiave: edit_post_meta lo nega, di solito perché il plugin che ha registrato la chiave la limita. Un account che può modificarla può impostarla sulla copia."
+
+#, php-format
+msgid "Your account may not edit the SEO field %s of this post: edit_post_meta says no, usually because the SEO plugin restricts it. Connect with an account that may edit it, such as an administrator."
+msgstr "Il tuo account non può modificare il campo SEO %s di questo articolo: edit_post_meta lo nega, di solito perché il plugin SEO lo limita. Collegati con un account che può modificarlo, ad esempio quello di un amministratore."
 
 msgid "Your connections"
 msgstr "Le tue connessioni"

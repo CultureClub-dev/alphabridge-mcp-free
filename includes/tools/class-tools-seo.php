@@ -5,6 +5,9 @@
  * Rank Math (post meta); AIOSEO is detected but stores data in a custom table, so
  * writes to it are reported as unsupported rather than done unreliably.
  *
+ * wp_seo_set came with AlphaBridge MCP Pro only until 4.8.0. Pro registers its
+ * copy of the name over this one where it is active, as with wp_get_post.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -89,6 +92,26 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 			)
 		);
 
+		$r->register(
+			'wp_seo_set',
+			array(
+				'description' => 'Set the SEO title, meta description and/or focus keyword of a post in the active SEO plugin\'s own fields: Yoast SEO, otherwise Rank Math (Yoast wins when both are active). Only the fields given are written, each overwriting the stored value; tags and line breaks are stripped. Returns updated, provider and changed (the fields written). With neither active the call is refused, also where All in One SEO is the SEO plugin; an unknown post is a not-found error. wp_seo_get reads the values. Needs edit_posts and the right to edit the post and each SEO field. No undo point is recorded.',
+				'open_world'  => true, // SEO title and description show in search results.
+				'capability'  => 'edit_posts',
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'post_id' ),
+					'properties' => array(
+						'post_id'       => array( 'type' => 'integer', 'description' => 'Id of the post, page or other entry.' ),
+						'title'         => array( 'type' => 'string', 'description' => 'SEO title (the title tag the SEO plugin outputs), not the post title. Omitted: unchanged; an empty string stores an empty value.' ),
+						'description'   => array( 'type' => 'string', 'description' => 'Meta description. Omitted: unchanged; an empty string stores an empty value.' ),
+						'focus_keyword' => array( 'type' => 'string', 'description' => 'Focus keyword (keyphrase) the SEO plugin analyses the post for. Omitted: unchanged.' ),
+					),
+				),
+				'callback'    => array( __CLASS__, 'set_seo' ),
+			)
+		);
 	}
 
 	/**
@@ -141,4 +164,69 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		return $out;
 	}
 
+	/**
+	 * Set SEO fields.
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function set_seo( $a ) {
+		$id = self::i( $a, 'post_id' );
+		if ( ! get_post( $id ) ) {
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+		}
+		$provider = self::provider();
+		$keys     = self::keys( $provider );
+		if ( ! $keys ) {
+			return new WP_Error(
+				'ab_mcp_seo_unsupported',
+				'aioseo' === $provider
+					? __( 'AIOSEO stores SEO data in a custom table; writing is not supported by this tool. Its fields are edited in AIOSEO\'s panel in the post editor.', 'alphabridge-mcp' )
+					: __( 'No supported SEO plugin detected: this tool writes the fields of Yoast SEO and Rank Math. With neither active there are no SEO fields to write; an administrator can install one of them under Plugins. The post\'s own title and excerpt are changed with wp_update_post.', 'alphabridge-mcp' )
+			);
+		}
+
+		// Per-key capability. edit_post above is not enough: update_post_meta()
+		// does not consult map_meta_cap, so a register_meta() auth_callback on an
+		// SEO key would never be asked. Yoast's keys are "_"-prefixed (protected
+		// meta), which makes the explicit check the only thing standing between a
+		// caller and a key an auth_callback means to refuse.
+		$fields = array(
+			'title'         => $keys['title'],
+			'description'   => $keys['description'],
+			'focus_keyword' => $keys['focus'],
+		);
+		foreach ( $fields as $arg => $meta_key ) {
+			if ( array_key_exists( $arg, $a ) && ! current_user_can( 'edit_post_meta', $id, $meta_key ) ) {
+				return AB_MCP_Guidance::role_refusal(
+					sprintf(
+						/* translators: %s: meta key of the SEO field. */
+						__( 'Your account may not edit the SEO field %s of this post: edit_post_meta says no, usually because the SEO plugin restricts it. Connect with an account that may edit it, such as an administrator.', 'alphabridge-mcp' ),
+						$meta_key
+					),
+					array( 'code' => 'ab_mcp_forbidden_meta' )
+				);
+			}
+		}
+
+		$changed = array();
+		foreach ( $fields as $arg => $meta_key ) {
+			if ( ! array_key_exists( $arg, $a ) ) {
+				continue;
+			}
+			// update_metadata() unslashes the value, so a backslash in a title
+			// would be lost without wp_slash().
+			update_post_meta( $id, $meta_key, wp_slash( sanitize_text_field( self::s( $a, $arg ) ) ) );
+			$changed[] = $arg;
+		}
+
+		return array(
+			'updated'  => true,
+			'provider' => $provider,
+			'changed'  => $changed,
+		);
+	}
 }

@@ -256,7 +256,9 @@ function wp_parse_args( $args, $defaults = array() ) {
 }
 
 function sanitize_text_field( $text ) {
-	return trim( strip_tags( (string) $text ) );
+	// As core's _sanitize_text_fields() without $keep_newlines: tags go, and
+	// line breaks, tabs and runs of spaces become one space.
+	return trim( (string) preg_replace( '/[\r\n\t ]+/', ' ', strip_tags( (string) $text ) ) );
 }
 
 function esc_html( $text ) {

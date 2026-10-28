@@ -978,7 +978,7 @@ class AB_MCP_REST_Controller {
 
 		$instructions = 'Control this WordPress site through AlphaBridge MCP. ' . $counts .
 			' Tools cover content, media, taxonomies, comments, widgets, site settings, site info, ' .
-			'SEO reads and search. ' .
+			'SEO fields and search. ' .
 			'Working effectively: prefer the specific list/get tools over broad queries, and read a resource ' .
 			'before overwriting it. The admin can switch single tools and whole tool groups off.';
 
