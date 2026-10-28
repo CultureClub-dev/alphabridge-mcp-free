@@ -112,7 +112,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'parent'  => array( 'type' => 'integer', 'description' => 'Parent post id, for hierarchical types such as pages. Default 0: none.', 'default' => 0 ),
 						'date'    => array( 'type' => 'string', 'description' => 'Publish date. Site time as "Y-m-d H:i:s" (or "Y-m-d H:i", "Y-m-d"), or RFC 3339 with an offset, the form of the dates this plugin returns, e.g. "2026-10-02T09:00:00+02:00". Times that do not exist in the site\'s timezone (clocks skip them) are refused, as is a time where the clocks go back that WordPress would read as the other of the two.' ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"category":["News"]}. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; a term the account may not assign (assign_term) is left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'create_post' ),
@@ -138,7 +138,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 						'parent'  => array( 'type' => 'integer', 'description' => 'New parent post id; 0 for none. When omitted, it stays as it is.' ),
 						'date'    => array( 'type' => 'string', 'description' => self::UPDATE_DATE_DESCRIPTION ),
 						'meta'    => array( 'type' => 'object', 'description' => self::META_DESCRIPTION ),
-						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
+						'terms'   => array( 'type' => 'object', 'description' => 'Taxonomy => array of term ids or names, e.g. {"post_tag":["News"]}. Replaces the post\'s terms in each taxonomy given; other taxonomies keep theirs. A name that does not exist yet is created where the account may manage the taxonomy\'s terms, else left out; a taxonomy whose list holds a term the account may not assign (assign_term) keeps its terms; unknown taxonomies and taxonomies the account may not assign are skipped without an error.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'update_post' ),
@@ -279,7 +279,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 			$terms = wp_get_object_terms( $src->ID, $tax, array( 'fields' => 'ids' ) );
 			if ( ! is_wp_error( $terms ) ) {
-				wp_set_object_terms( $id, $terms, $tax, false );
+				// The copy starts without terms: it gets those the account
+				// may assign.
+				wp_set_object_terms( $id, array_values( array_diff( $terms, self::refused_terms( $terms ) ) ), $tax, false );
 			}
 		}
 		// Custom fields, builder layout, page template and featured image. The
@@ -1260,8 +1262,37 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					}
 				}
 			}
+			// The list replaces the post's terms of this taxonomy, so it is
+			// written whole or not at all: without a refused term it would
+			// take away a term the post has and the account did not ask to
+			// remove. Passed over like a taxonomy the account may not assign.
+			if ( self::refused_terms( $ids ) ) {
+				continue;
+			}
 			wp_set_object_terms( $id, $ids, $tax, false );
 		}
+	}
+
+	/**
+	 * The terms of a list the account may not assign one by one. The block
+	 * editor saves through the REST API, which asks assign_term for every
+	 * term it is given (WP_REST_Posts_Controller), not only assign_terms for
+	 * the taxonomy; map_meta_cap lets a site withhold single terms there. An
+	 * id of no term is not refused here: wp_set_object_terms() passes over
+	 * a number that names no term.
+	 *
+	 * @param array $ids Term ids.
+	 * @return int[]
+	 */
+	private static function refused_terms( $ids ) {
+		$out = array();
+		foreach ( (array) $ids as $tid ) {
+			$term = get_term( (int) $tid );
+			if ( $term && ! is_wp_error( $term ) && ! current_user_can( 'assign_term', (int) $tid ) ) {
+				$out[] = (int) $tid;
+			}
+		}
+		return $out;
 	}
 
 	/**

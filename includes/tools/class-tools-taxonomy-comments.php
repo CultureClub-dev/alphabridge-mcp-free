@@ -65,7 +65,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term',
 			array(
-				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories). Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
+				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories) and the right to edit this term (edit_term), which a site can withhold for single terms. Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -86,7 +86,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_term',
 			array(
-				'description' => 'Delete a term from a taxonomy for good; terms have no trash. Posts lose the term (a post left without a category gets the default category), child terms move up to the deleted term\'s parent, and the term\'s meta is removed. The taxonomy\'s default term, such as the default category, is not deleted; it and an unknown term_id return an error. Needs the taxonomy\'s right to delete terms. Returns {deleted: true}.',
+				'description' => 'Delete a term from a taxonomy for good; terms have no trash. Posts lose the term (a post left without a category gets the default category), child terms move up to the deleted term\'s parent, and the term\'s meta is removed. The taxonomy\'s default term, such as the default category, is not deleted; it and an unknown term_id return an error. Needs the taxonomy\'s right to delete terms and the right to delete this term (delete_term), which a site can withhold for single terms. Returns {deleted: true}.',
 				'capability'  => 'manage_categories',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -125,7 +125,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. Trashing a top-level note (comment_type note) also trashes its reply notes, and setting the note to approve or hold later does not bring those back. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments and the right to edit this comment (edit_comment), which follows the right to edit its post. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. Trashing a top-level note (comment_type note) also trashes its reply notes, and setting the note to approve or hold later does not bring those back. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -146,7 +146,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}. Needs moderate_comments. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
+				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}. Needs moderate_comments and the right to edit the post (edit_post), as a reply from the comments screen in wp-admin. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -164,7 +164,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_comment',
 			array(
-				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments.',
+				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments and the right to edit this comment (edit_comment).',
 				'capability'  => 'moderate_comments',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -356,6 +356,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $tax_obj->cap->edit_terms ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		// And the right to edit this one term, as wp-admin asks it (term.php,
+		// edit-tags.php): edit_term goes through map_meta_cap, where a site can
+		// withhold single terms from an account that may edit the others. An
+		// id of no term of this taxonomy is left to wp_update_term(), which
+		// refuses it and writes nothing.
+		$term = self::term_of( $id, $tax );
+		if ( $term && ! current_user_can( 'edit_term', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this specific term. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+		}
 		$fields = array();
 		foreach ( array( 'name', 'slug', 'description' ) as $k ) {
 			if ( array_key_exists( $k, $a ) ) {
@@ -393,7 +402,17 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( $tax_obj->cap->delete_terms ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot manage terms of this taxonomy. Connect with an account that may, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
-		$res = wp_delete_term( self::i( $a, 'term_id' ), $tax );
+		// And the right to delete this one term, as wp-admin asks it:
+		// delete_term goes through map_meta_cap like edit_term above. For the
+		// taxonomy's default term WordPress answers do_not_allow there; that
+		// one goes on to wp_delete_term(), which keeps it, and the refusal
+		// below says why and where the default is changed.
+		$id   = self::i( $a, 'term_id' );
+		$term = self::term_of( $id, $tax );
+		if ( $term && ! self::is_default_term( $term ) && ! current_user_can( 'delete_term', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot delete this specific term. Connect with an account that may delete it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+		}
+		$res = wp_delete_term( $id, $tax );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
@@ -401,6 +420,33 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the term: no term of this taxonomy has this id, or it is the taxonomy\'s default term (such as the default category), which WordPress keeps. Check the id with wp_list_terms; a default category can be deleted once another one is the default (Settings → Writing in wp-admin).', 'alphabridge-mcp' ) );
 		}
 		return array( 'deleted' => true );
+	}
+
+	/**
+	 * The term with this id, if it belongs to this taxonomy.
+	 *
+	 * @param int    $id  Term id.
+	 * @param string $tax Taxonomy name.
+	 * @return object|null
+	 */
+	private static function term_of( $id, $tax ) {
+		$term = $id > 0 ? get_term( $id, $tax ) : null;
+		return ( $term && ! is_wp_error( $term ) && $tax === $term->taxonomy ) ? $term : null;
+	}
+
+	/**
+	 * Whether WordPress treats the term as its taxonomy's default, the one it
+	 * never deletes: the same two options map_meta_cap() reads for
+	 * delete_term (default_category for categories, default_term_{taxonomy}
+	 * for a taxonomy registered with a default term).
+	 *
+	 * @param object $term Term.
+	 * @return bool
+	 */
+	private static function is_default_term( $term ) {
+		$id = (int) $term->term_id;
+		return (int) get_option( 'default_' . $term->taxonomy ) === $id
+			|| (int) get_option( 'default_term_' . $term->taxonomy ) === $id;
 	}
 
 	/* --------------------------------------------------------------- comments */
@@ -458,6 +504,13 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! get_comment( $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
 		}
+		// moderate_comments, which the tool is registered with, is the right
+		// for comments as a whole; wp-admin approves, holds, marks spam and
+		// trashes one only with edit_comment for it, which map_meta_cap ties
+		// to the right to edit its post.
+		if ( ! current_user_can( 'edit_comment', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot moderate this specific comment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
+		}
 
 		if ( 'spam' === $status ) {
 			wp_spam_comment( $id );
@@ -486,6 +539,11 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$post_id = self::i( $a, 'post_id' );
 		if ( ! get_post( $post_id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
+		}
+		// The reply is saved approved, as a reply from the comments screen in
+		// wp-admin, which takes the right to edit the post it goes under.
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot reply under this specific post: a reply from here takes the right to edit the post, as in wp-admin. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$user = wp_get_current_user();
 		// wp_insert_comment() unslashes the whole array it is given.
@@ -519,6 +577,11 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$id = self::i( $a, 'comment_id' );
 		if ( ! get_comment( $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Comment not found: no comment has this id. Look it up with wp_list_comments.', 'alphabridge-mcp' ) );
+		}
+		// As moderate_comment() above: wp-admin deletes one comment only with
+		// edit_comment for it.
+		if ( ! current_user_can( 'edit_comment', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot delete this specific comment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// Nothing promised about what is left: deleting for good, WordPress
 		// moves replies up and removes the comment's meta before its row;

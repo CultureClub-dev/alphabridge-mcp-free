@@ -179,6 +179,8 @@ final class ToolDescriptionsTest extends TestCase {
 		// left out of the enum, or one added that the handler refuses, fails.
 		$enum = $this->tools()['wp_moderate_comment']['inputSchema']['properties']['status']['enum'];
 		$GLOBALS['ab_test_comments'][5] = (object) array( 'comment_ID' => 5 );
+		// The account may edit the comment: the rights are TermAndCommentRightsTest's.
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
 
 		$candidates = array( 'approve', 'hold', 'spam', 'trash', 'approved', 'unapproved', 'pending', 'unspam', 'untrash', 'delete', 'all', 'publish', '1', '0', '' );
 		$accepted   = array();

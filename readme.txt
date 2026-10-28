@@ -139,6 +139,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.6.12 =
+* **Security: the right to the one term and the one comment.** Changing or deleting a term now also needs the right to that very term (`edit_term`, `delete_term`), as in wp-admin, not only the taxonomy's right. Assigning terms to a post asks `assign_term` for every term, as the block editor does; where a term is refused, that taxonomy keeps the post's terms. Moderating or deleting a comment needs the right to edit it (`edit_comment`), replying under a post the right to edit the post (`edit_post`), as on the comments screen. A site that withholds single terms, comments or posts from an account through `map_meta_cap` is now followed by these tools too. The default term goes on to WordPress, which keeps it, and the answer still says where the default is changed.
+
 = 4.6.11 =
 * **A tool error names its kind, in a short code.** When a tool reports an error, the answer carries the header `X-AlphaBridge-Error` with a code such as `tool:ab_mcp_bad_status`, `params:ab_mcp_invalid_args`, `auth:ab_mcp_read_mode`, `unknown_tool` or `internal`: where the call stopped, and the error's own identifier, never its text. A code that is not a plain identifier, such as one another plugin made from a sentence or an address, is passed on as `tool:other`. The first error of a request counts, also in a batch and for a request a tool answers inside another. The hosted connection service counts these codes, so a tool that keeps failing shows up there; the answer to the AI is unchanged, and the plugin makes no request of its own: the code travels only in the header of the answer to whoever called the tool.
 
@@ -354,6 +357,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.6.12 =
+Term and comment tools check the right to the one term or comment, as wp-admin does. No setting changes.
 
 = 4.6.11 =
 A tool error names its kind in a short code in the answer's header, never its text. No setting changes.

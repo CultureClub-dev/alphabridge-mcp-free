@@ -25,6 +25,21 @@ msgstr "Als Affiliate profitierst du von jedem Pro- und Agency-Kauf über deinen
 msgid "Recommend AlphaBridge and profit."
 msgstr "Weiterempfehlen und profitieren."
 
+msgid "Your account cannot delete this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Kommentar nicht löschen. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot delete this specific term. Connect with an account that may delete it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Begriff nicht löschen. Dafür die App mit einem Konto verbinden, das ihn löschen darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot edit this specific term. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Begriff nicht bearbeiten. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot moderate this specific comment. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf genau diesen Kommentar nicht moderieren. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
+msgid "Your account cannot reply under this specific post: a reply from here takes the right to edit the post, as in wp-admin. Connect with an account that may edit it, such as an editor or an administrator."
+msgstr "Das Konto dieser Verbindung darf unter genau diesem Beitrag nicht antworten: Eine Antwort von hier aus setzt wie in wp-admin das Recht voraus, den Beitrag zu bearbeiten. Dafür die App mit einem Konto verbinden, das ihn bearbeiten darf, etwa dem eines Redakteurs oder Administrators."
+
 #, php-format
 msgid "\"%1$s\" falls where the clocks go back in the site's timezone, so its local time occurs twice. WordPress schedules posts by local time and would read it as \"%2$s\". Choose a time outside that stretch, or give that offset."
 msgstr "«%1$s» fällt in die Zeit, in der in der Zeitzone der Website die Uhren zurückgestellt werden, diese Ortszeit gibt es also zweimal. WordPress plant Beiträge nach Ortszeit und würde sie als «%2$s» lesen. Eine Zeit ausserhalb dieser Spanne wählen oder diesen Versatz mit angeben."
