@@ -12,4 +12,5 @@
 /README.md        export-ignore
 /SECURITY.md      export-ignore
 /glama.json       export-ignore
+/.glama           export-ignore
 /RELEASE.md       export-ignore
