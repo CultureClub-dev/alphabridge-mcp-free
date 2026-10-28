@@ -80,6 +80,7 @@ class AB_MCP_Tool_Registry {
 		'wp_update_media',          // Title, caption and alt text are public.
 		'wp_update_term',           // Names and descriptions of terms in use are public.
 		'wp_bulk_update_status',    // Pro: can publish many posts at once.
+		'wp_add_menu_item',         // A published item in an assigned menu is public at once.
 	);
 
 	/**

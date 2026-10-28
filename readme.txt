@@ -14,7 +14,7 @@ Connect Claude, ChatGPT and other AI agents to WordPress. Free MCP server for po
 
 **Connect Claude, ChatGPT and other AI agents to WordPress with a free WordPress MCP server. Say it in plain words, and the AI does it on your site.**
 
-AlphaBridge MCP lets the Claude or ChatGPT you already use work directly on your WordPress site: write and schedule posts, upload images, answer comments, check SEO fields, pending updates and site health. No account, no API key, no credits, connected in about two minutes. Rated A by Glama, with the highest score of all WordPress MCP servers with 40 or more tools.
+AlphaBridge MCP lets the Claude or ChatGPT you already use work directly on your WordPress site: write and schedule posts, upload images, answer comments, edit menus, check SEO fields, read your WooCommerce orders, pending updates and site health. No account, no API key, no credits, connected in about two minutes. Rated A by Glama, with the highest score of all WordPress MCP servers with 40 or more tools.
 
 Try it:
 
@@ -35,7 +35,7 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It reads widgets, site settings, SEO fields and pages built with blocks or a common page builder.
 
-40 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+57 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
@@ -84,6 +84,10 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 * **SEO check.** Read the SEO title, meta description and focus keyword that Yoast SEO or Rank Math keep for each post, and find what is missing.
 * **Updates and site health.** See which plugins, themes and WordPress versions wait for an update, and how the site is doing.
 * **Page builders.** Read the pages of supported builders as an outline: the elements in page order, with their texts, links and images.
+* **Menus.** Read the navigation menus, create a menu, and add or remove its items.
+* **Shop.** Read WooCommerce orders, products, coupons and customers.
+* **Users, plugins and themes.** List the user accounts and read one with its roles; see which plugins and themes are installed and active.
+* **Cron and error log.** See the scheduled WP-Cron events, and with write access on read the latest lines of debug.log.
 * **Widgets and settings.** Read the widgets, the sidebars and the common site settings.
 * **Site audits.** Ask for a check of all posts: thin content, missing meta descriptions, images without alt text. The AI works through the list with you.
 * **Many sites.** Bring up to 10 sites into one chat and work on whichever you name.
@@ -121,7 +125,7 @@ AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the
 * **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first.
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
 * **Undo.** One sentence brings an edited page or file back. Its undo points expire after 7 days by default, adjustable from 1 to 30 days.
-* **Shop, SEO, menus and users.** Prices, stock and order status in WooCommerce. SEO titles and descriptions in Yoast or Rank Math. Menus and users by chat.
+* **Shop, SEO and users.** Prices, stock, order status and coupons in WooCommerce. SEO titles and descriptions in Yoast or Rank Math. Create, change and delete user accounts.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
 
 The Agency plan adds Site Deploy: the AI publishes files, themes and whole builds over SFTP onto the server the site runs on. Agency covers up to 10 sites.
@@ -136,7 +140,7 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 2. Claude: open [AlphaBridge MCP for WordPress in Claude's directory](https://claude.ai/directory/alphabridge) and click Connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the connection service, add your endpoint as a custom connector instead.
 3. ChatGPT: open Plugins, choose Add, then add a custom MCP server. Paste your site's MCP address from Settings → AlphaBridge MCP as the server URL, choose OAuth and approve on your site.
 4. Cursor, Claude Code and other clients: under Settings → AlphaBridge MCP, create a connection. Cursor gets a ready-made config and Claude Code a ready-made command.
-5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
+5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields and the error log, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
 
 == Frequently Asked Questions ==
 
@@ -144,7 +148,7 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 Yes. All its tools work without payment, registration or license key, and the plugin does not expire. There are no usage quotas, only a limit of 120 requests a minute that protects your server. You need no API key or AI credits either: AlphaBridge has no AI of its own, and you use Claude or ChatGPT as you do today.
 
 = Is it secure? =
-Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so is the reader of user profile fields. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets. The latest 200 calls are logged.
+Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so are the readers of user profile fields and of the error log. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets. The latest 200 calls are logged.
 
 = What if the AI gets something wrong? =
 Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo by chat: one sentence brings back an edited page, a page-builder element, a theme or plugin file or a PHP snippet.
@@ -156,7 +160,7 @@ Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwar
 No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
 
 = Does it work with WooCommerce, Elementor, Yoast and Rank Math? =
-The free plugin reads Elementor pages and the pages of many other page builders, and the SEO fields of Yoast SEO and Rank Math. Pro changes texts, links and images in the builder, writes SEO titles, meta descriptions and focus keywords, and works in WooCommerce: prices, stock, order status, customers and coupons.
+The free plugin reads Elementor pages and the pages of many other page builders, the SEO fields of Yoast SEO and Rank Math, and the orders, products, coupons and customers of WooCommerce. Pro changes texts, links and images in the builder, writes SEO titles, meta descriptions and focus keywords, and works in WooCommerce: prices, stock, order status, customers and coupons.
 
 = Can I limit what the AI may do? =
 Yes. Each connection gets full access, content only or read only and acts as the WordPress user you choose. A connection you create in the plugin can also get an expiry. Single tools or whole groups can be switched off, and the main switch turns all writing off with one click.
@@ -185,7 +189,7 @@ The site answers apps in MCP revision 2026-07-28 and keeps the older revisions f
 No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
 
 = Do I need Pro? =
-Not to get started. The free plugin covers content, media and comments, on as many sites as you like. Take Pro for page-builder texts, code and your shop, with undo for pages and files. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
+Not to get started. The free plugin covers content, media, comments and menus and reads your shop, on as many sites as you like. Take Pro for page-builder texts, code and changes in your shop, with undo for pages and files. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
 Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
@@ -211,6 +215,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.7.0 =
+* **17 more tools in the free plugin, 57 in all.** Menus: list them, read one with its items, create one, add and remove items (`wp_list_menus`, `wp_get_menu`, `wp_create_menu`, `wp_add_menu_item`, `wp_delete_menu_item`). WooCommerce, read only: orders, one order, products, one product, coupons and customers (`wp_wc_list_orders`, `wp_wc_get_order`, `wp_wc_list_products`, `wp_wc_get_product`, `wp_wc_list_coupons`, `wp_wc_list_customers`). User accounts, read only (`wp_list_users`, `wp_get_user`), the installed plugins and themes (`wp_list_plugins`, `wp_list_themes`), the scheduled WP-Cron events (`wp_get_cron`) and the last lines of debug.log (`wp_get_error_log`, only with write access on, like the reader of user profile fields). Until now they came with AlphaBridge MCP Pro only; they work as they did there, with the same rights checks, and their messages come in the plugin's languages. Changing prices, stock and order status, creating coupons and creating, changing or deleting user accounts stay in Pro.
 
 = 4.6.12 =
 * **Security: the right to the one term and the one comment.** Changing or deleting a term now also needs the right to that very term (`edit_term`, `delete_term`), as in wp-admin, not only the taxonomy's right. Assigning terms to a post asks `assign_term` for every term, as the block editor does: where a term is refused, that taxonomy keeps the post's terms (a new post gets none from the list), and a duplicated post gets the terms of the original the account may assign. Moderating or deleting a comment needs the right to edit it (`edit_comment`), replying under a post the right to edit the post (`edit_post`), as on the comments screen. A site that withholds single terms, comments or posts from an account through `map_meta_cap` is now followed by these tools too. A taxonomy's default term is kept, as in wp-admin, and the answer says where the default is changed. A term id below 1 is refused as naming no term.
@@ -430,6 +437,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.7.0 =
+17 more free tools: menus, WooCommerce read only, users, plugins and themes, cron and the error log. No setting changes.
 
 = 4.6.12 =
 Term and comment tools check the right to the one term or comment, as wp-admin does. No setting changes.

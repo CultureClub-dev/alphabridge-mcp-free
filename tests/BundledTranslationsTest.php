@@ -320,6 +320,7 @@ final class BundledTranslationsTest extends TestCase {
 		"tool group\x04SEO",
 		"tool group\x04Site Deploy (FTP/SFTP)",
 		'claude.ai, Desktop, iPhone',
+		'WooCommerce',
 	);
 
 	/**
@@ -328,7 +329,7 @@ final class BundledTranslationsTest extends TestCase {
 	 * fall back to English (French «Statut» turned «Status» again stays red).
 	 */
 	const SAME_AS_ENGLISH_IN = array(
-		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets" ),
+		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets", 'Plugins & Themes' ),
 		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets" ),
 		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token' ),
 		'es' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
