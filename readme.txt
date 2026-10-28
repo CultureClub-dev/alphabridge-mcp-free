@@ -40,7 +40,7 @@ You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no serv
 = Why AlphaBridge MCP =
 
 * **Free and complete.** Every free tool works without payment, registration or license key, and the plugin does not expire. No usage quotas and no credits: you use Claude or ChatGPT as you do today.
-* **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory and approve on your own site. Nothing to copy.
+* **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory, enter your site's address and approve on your own site.
 * **It reads until you allow more.** Out of the box the AI only reads. One switch lets it write, one click turns writing off again.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
 * **Reads Elementor and 15 more page builders.** Their pages come back as an outline: the elements in page order, with their texts, links and images.
@@ -59,7 +59,7 @@ You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no serv
 2. Open [AlphaBridge MCP for WordPress in Claude's connector directory](https://claude.ai/directory/alphabridge) and click Connect.
 3. Enter your site's address and approve on your own site's login-protected consent screen.
 
-There is nothing to copy. Claude then works on your site in the browser, in the desktop app and on the phone. To connect without the connection service, add your site's MCP address as a custom connector instead.
+Claude asks only for your site's address. It then works on your site in the browser, in the desktop app and on the phone. To connect without the connection service, add your site's MCP address as a custom connector instead.
 
 = Connect ChatGPT to WordPress =
 
@@ -133,7 +133,7 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 == Installation ==
 
 1. In WordPress, go to Plugins → Add New Plugin, search for "AlphaBridge MCP", install and activate it.
-2. Claude: open [AlphaBridge MCP for WordPress in Claude's directory](https://claude.ai/directory/alphabridge) and click Connect. Enter your site's address and approve on your own site's login-protected consent screen. There is nothing to copy. To connect without the connection service, add your site's MCP address as a custom connector instead.
+2. Claude: open [AlphaBridge MCP for WordPress in Claude's directory](https://claude.ai/directory/alphabridge) and click Connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the connection service, add your endpoint as a custom connector instead.
 3. ChatGPT: open Plugins, choose Add, then add a custom MCP server. Paste your site's MCP address from Settings → AlphaBridge MCP as the server URL, choose OAuth and approve on your site.
 4. Cursor, Claude Code and other clients: under Settings → AlphaBridge MCP, create a connection. Cursor gets a ready-made config and Claude Code a ready-made command.
 5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
@@ -153,7 +153,7 @@ Deleted posts and pages go to the trash by default, and WordPress keeps the revi
 Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwards, Claude Code, Cursor, Codex, VS Code, Windsurf and any other client that speaks MCP. Claude connects from its connector directory, ChatGPT as a plugin with OAuth, the others with OAuth or a connection you create in the plugin.
 
 = Do I need the WordPress MCP Adapter? =
-No. AlphaBridge has its own MCP endpoint and its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
+No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
 
 = Does it work with WooCommerce, Elementor, Yoast and Rank Math? =
 The free plugin reads Elementor pages and the pages of many other page builders, and the SEO fields of Yoast SEO and Rank Math. Pro changes texts, links and images in the builder, writes SEO titles, meta descriptions and focus keywords, and works in WooCommerce: prices, stock, order status, customers and coupons.
