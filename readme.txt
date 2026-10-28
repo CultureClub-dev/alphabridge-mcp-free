@@ -217,7 +217,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 == Changelog ==
 
 = 4.8.0 =
-* **SEO fields in the free plugin, 58 tools in all.** `wp_seo_set` sets the SEO title, meta description and focus keyword of a post in Yoast SEO or Rank Math: only the fields given, tags and line breaks stripped, with the right to edit the post and each of its SEO fields. Until now it came with AlphaBridge MCP Pro only. A backslash in a value is stored as written. With All in One SEO or without a supported SEO plugin the call is refused, and the answer says why and what to do.
+* **SEO fields in the free plugin, 58 tools in all.** `wp_seo_set` sets the SEO title, meta description and focus keyword of a post in Yoast SEO or Rank Math: only the fields given, tags and line breaks stripped, with the right to edit the post and each of its SEO fields. Until now it came with AlphaBridge MCP Pro only. A backslash in a value is stored as written, and so are the variables the SEO plugin fills in, such as %%category%% or %date%. With All in One SEO or without a supported SEO plugin the call is refused, and the answer says why and what to do.
 * **Wording: the hub.** The free service at connect.alphabridge-mcp.com that links your sites to Claude and ChatGPT is called the hub, explained where the readme first names it.
 
 = 4.7.0 =

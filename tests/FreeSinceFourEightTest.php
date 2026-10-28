@@ -8,8 +8,9 @@
  * changes hands: it is registered here with Pro's capability and flags, it
  * writes only the fields given, it asks for the right to the post and to
  * each SEO field before writing anything, and it refuses where neither
- * Yoast SEO nor Rank Math keeps the fields. One thing it does better than
- * Pro's copy did: a value goes to WordPress slashed, so a backslash stays.
+ * Yoast SEO nor Rank Math keeps the fields. Two things it does better than
+ * Pro's copy did: a value goes to WordPress slashed, so a backslash stays,
+ * and the variables of the SEO plugin (%%category%%) stay as written.
  *
  * The SEO plugin is told by its constant, which cannot be taken back in a
  * process, so the tests that need one run in a process of their own.
@@ -121,6 +122,19 @@ final class FreeSinceFourEightTest extends TestCase {
 		$empty = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 12, 'title' => '' ) );
 		self::assertSame( array( 'title' ), $empty['changed'] );
 		self::assertSame( '', self::stored( self::YOAST['title'] ), 'An empty string stores an empty value.' );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheVariablesOfTheSeoPluginStay(): void {
+		define( 'WPSEO_VERSION', '26.0' );
+		AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 12, 'title' => '%%title%% %%sep%% %%category%% %%date%%', 'description' => '%category% %date% <script>x()</script>%%excerpt%%' ) );
+		self::assertSame( '%%title%% %%sep%% %%category%% %%date%%', self::stored( self::YOAST['title'] ), 'sanitize_text_field() would make %%category%% into %tegory%%.' );
+		self::assertSame( '%category% %date% %%excerpt%%', self::stored( self::YOAST['description'] ), 'A script goes with its content.' );
+
+		AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 12, 'title' => "Budget <50 CHF, 100%AB and x<3 \u{E000}", 'description' => 'Save 25% <em>today</em>' ) );
+		self::assertSame( 'Budget &lt;50 CHF, 100%AB and x&lt;3', self::stored( self::YOAST['title'] ), 'A lone < is kept as &lt;, as sanitize_text_field() keeps it; a stray placeholder character is not turned into %.' );
+		self::assertSame( 'Save 25% today', self::stored( self::YOAST['description'] ) );
 	}
 
 	#[RunInSeparateProcess]

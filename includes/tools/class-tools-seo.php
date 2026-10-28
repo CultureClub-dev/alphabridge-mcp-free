@@ -165,6 +165,24 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * An SEO field cleaned as sanitize_text_field() cleans it (tags and line
+	 * breaks out, a lone < kept as &lt;), with every percent sign kept.
+	 * sanitize_text_field() also removes a % followed by two hex digits, which
+	 * breaks the variables Yoast SEO and Rank Math fill in a title or
+	 * description: %%category%% would become %tegory%%. So the percent signs
+	 * wait in a character of the private use area, taken out of the value
+	 * first, and come back afterwards. The SEO plugin's own sanitising runs
+	 * on top (update_post_meta()).
+	 *
+	 * @param string $value Value as given.
+	 * @return string
+	 */
+	protected static function seo_text( $value ) {
+		$kept = "\u{E000}";
+		return str_replace( $kept, '%', sanitize_text_field( str_replace( array( $kept, '%' ), array( '', $kept ), (string) $value ) ) );
+	}
+
+	/**
 	 * Set SEO fields.
 	 *
 	 * @param array $a Args.
@@ -219,7 +237,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 			}
 			// update_metadata() unslashes the value, so a backslash in a title
 			// would be lost without wp_slash().
-			update_post_meta( $id, $meta_key, wp_slash( sanitize_text_field( self::s( $a, $arg ) ) ) );
+			update_post_meta( $id, $meta_key, wp_slash( self::seo_text( self::s( $a, $arg ) ) ) );
 			$changed[] = $arg;
 		}
 

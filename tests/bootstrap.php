@@ -256,9 +256,26 @@ function wp_parse_args( $args, $defaults = array() ) {
 }
 
 function sanitize_text_field( $text ) {
-	// As core's _sanitize_text_fields() without $keep_newlines: tags go, and
-	// line breaks, tabs and runs of spaces become one space.
-	return trim( (string) preg_replace( '/[\r\n\t ]+/', ' ', strip_tags( (string) $text ) ) );
+	// As core's _sanitize_text_fields() without $keep_newlines: a < that
+	// starts no tag becomes &lt; (wp_pre_kses_less_than()), tags go, line
+	// breaks, tabs and runs of spaces become one space, and every % followed
+	// by two hex digits (a percent-encoded octet) is removed.
+	$filtered = (string) $text;
+	if ( false !== strpos( $filtered, '<' ) ) {
+		$filtered = (string) preg_replace_callback(
+			'%<[^>]*?((?=<)|>|$)%',
+			static fn( array $m ): string => false === strpos( $m[0], '>' ) ? esc_html( $m[0] ) : $m[0],
+			$filtered
+		);
+		$filtered = str_replace( "<\n", "&lt;\n", wp_strip_all_tags( $filtered ) );
+	}
+	$filtered = trim( (string) preg_replace( '/[\r\n\t ]+/', ' ', $filtered ) );
+	$found    = false;
+	while ( preg_match( '/%[a-f0-9]{2}/i', $filtered, $match ) ) {
+		$filtered = str_replace( $match[0], '', $filtered );
+		$found    = true;
+	}
+	return $found ? trim( (string) preg_replace( '/ +/', ' ', $filtered ) ) : $filtered;
 }
 
 function esc_html( $text ) {
@@ -568,8 +585,14 @@ function get_the_excerpt( $post ) {
 	return '' !== (string) $post->post_excerpt ? (string) $post->post_excerpt : substr( (string) $post->post_content, 0, 55 );
 }
 
-function wp_strip_all_tags( $text ) {
-	return strip_tags( (string) $text );
+function wp_strip_all_tags( $text, $remove_breaks = false ) {
+	// As core: script and style go with their content, then every tag;
+	// $remove_breaks turns line breaks, tabs and runs of spaces into one space.
+	$text = strip_tags( (string) preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', (string) $text ) );
+	if ( $remove_breaks ) {
+		$text = (string) preg_replace( '/[\r\n\t ]+/', ' ', $text );
+	}
+	return trim( $text );
 }
 
 /* ---------------------------------------------------- themes, network */
