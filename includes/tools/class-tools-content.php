@@ -752,6 +752,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			// plugin wrote it too — and which write was ours cannot be told
 			// apart. No token rather than a wrong one, and the answer says why.
 			$res['undo_note'] = __( 'No undo point: the post was written more than once during this call (another plugin updated it as well), so the previous values could not be told apart.', 'alphabridge-mcp' );
+		} elseif ( ! empty( $before ) && ! self::pro_undo_takes_post_fields() ) {
+			// AlphaBridge MCP Pro 4.5.3 to 4.5.5 registers its own wp_undo over
+			// this plugin's, and leaves this wp_update_post in place; its undo
+			// knows no undo point of wp_update_post, so a token would be one
+			// that neither wp_undo nor wp_undo_discard could use there.
+			$res['undo_note'] = __( 'No undo point: AlphaBridge MCP Pro on this site is older than 4.5.6, and its wp_undo cannot reverse a change of wp_update_post. With Pro 4.5.6 or newer this change gets an undo point.', 'alphabridge-mcp' );
 		} elseif ( ! empty( $before ) ) {
 			$data = array(
 				'id'     => $id,
@@ -776,6 +782,22 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			);
 		}
 		return $res;
+	}
+
+	/**
+	 * Can the wp_undo that runs on this site reverse an undo point of
+	 * wp_update_post? Yes, unless AlphaBridge MCP Pro is loaded with a restore
+	 * that does not know the tool (Pro before 4.5.6; it then also registers
+	 * its own wp_undo over this plugin's).
+	 *
+	 * @return bool
+	 */
+	private static function pro_undo_takes_post_fields() {
+		if ( ! class_exists( 'AB_MCP_Pro_Undo_Restore' ) || ! method_exists( 'AB_MCP_Pro_Undo_Restore', 'policy' ) ) {
+			return true;
+		}
+		$policy = AB_MCP_Pro_Undo_Restore::policy();
+		return is_array( $policy ) && isset( $policy['wp_update_post'] );
 	}
 
 	/**
