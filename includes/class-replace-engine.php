@@ -751,10 +751,10 @@ class AB_MCP_Replace_Engine {
 	 * where a match is in the plain form it goes in as typed and can break
 	 * the JSON or change its meaning, and which form each match took is not
 	 * known here — so it stays out also where every match was in an escaped
-	 * form that would have taken it safely. A result that is no longer JSON
-	 * is never written. Such a value stays as it is and is counted in
-	 * skipped_unchecked_values. In regex mode the replacement is a pattern,
-	 * so only the second check applies.
+	 * form that would have taken it safely. A result that is no longer a
+	 * JSON object or array is never written. Such a value stays as it is
+	 * and is counted in skipped_unchecked_values. In regex mode the
+	 * replacement is a pattern, so only the second check applies.
 	 *
 	 * @param string $s     The JSON text.
 	 * @param int    $count Occurrence counter (by reference).
