@@ -748,6 +748,12 @@ foreach ( $check_files as $f ) {
 	foreach ( $m as $hit ) {
 		list( , $cls, $fn ) = $hit;
 		if ( ! isset( $declared[ $cls ] ) ) {
+			// A class of Pro, asked only where it is loaded: the free code
+			// checks class_exists() and method_exists() first (wp_update_post
+			// asks Pro's restore whether it knows the tool).
+			if ( 0 === strpos( $cls, 'AB_MCP_Pro_' ) && false !== strpos( $code, "class_exists( '$cls' )" ) && false !== strpos( $code, "method_exists( '$cls', '$fn' )" ) ) {
+				continue;
+			}
 			$bad[] = basename( $f ) . ": unbekannte Klasse $cls";
 			continue;
 		}

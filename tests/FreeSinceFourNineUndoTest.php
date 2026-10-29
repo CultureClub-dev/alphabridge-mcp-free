@@ -274,6 +274,33 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( array(), $GLOBALS['ab_test_filters']['pre_post_update'] ?? array(), 'No snapshot hook either.' );
 	}
 
+	/**
+	 * Pro 4.5.3 to 4.5.5 registers its own wp_undo over this plugin's and
+	 * leaves wp_update_post in place; its restore knows no point of
+	 * wp_update_post. A token would be one its wp_undo and wp_undo_discard
+	 * refuse, so none is recorded, and the answer says why.
+	 */
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testUnderAProWhoseUndoDoesNotKnowWpUpdatePostNoPointIsRecorded(): void {
+		eval( 'class AB_MCP_Pro_Undo_Restore { public static function policy() { return array( "wp_bulk_update_status" => array( "kind" => "post_status", "cap" => "edit_others_posts" ) ); } }' );
+		$res = AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'title' => 'New title' ) );
+		self::assertIsArray( $res );
+		self::assertSame( 'New title', get_post( 5 )->post_title, 'The write happens.' );
+		self::assertNull( $res['undo'] );
+		self::assertStringContainsString( 'older than 4.5.6', (string) $res['undo_note'] );
+		self::assertSame( array(), self::stored() );
+	}
+
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testUnderAProWhoseUndoKnowsWpUpdatePostThePointIsRecorded(): void {
+		eval( 'class AB_MCP_Pro_Undo_Restore { public static function policy() { return array( "wp_update_post" => array( "kind" => "post_fields", "cap" => "edit_posts" ) ); } }' );
+		$res = AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'title' => 'New title' ) );
+		self::assertTrue( AB_MCP_Undo::valid_token( (string) $res['undo'] ) );
+		self::assertArrayNotHasKey( 'undo_note', $res );
+	}
+
 	/* ----------------------------------------------- wp_update_site_settings */
 
 	private static function settings(): void {
