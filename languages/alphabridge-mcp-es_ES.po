@@ -175,9 +175,6 @@ msgstr "Un token en una URL se filtra con más facilidad a través de referrers,
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "Se necesita un nombre de archivo válido: indica un nombre con su extensión, como «photo.jpg»."
 
-msgid "AI assistants read and write: posts, pages, media, terms, comments, menus and SEO fields."
-msgstr "Los asistentes de IA leen y escriben: entradas, páginas, medios, términos, comentarios, menús y campos SEO."
-
 msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
 msgstr "Los asistentes de IA leen y escriben: entradas, páginas, plugins, temas, código y la base de datos."
 
@@ -1595,9 +1592,6 @@ msgstr "La herramienta «%s» está desactivada en «Ajuste fino» de AlphaBridg
 msgid "The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator."
 msgstr "La herramienta ha fallado con un error interno, así que puede que no haya terminado. El error en sí se ha guardado en el registro de AlphaBridge MCP (la opción ab_mcp_audit), no en esta respuesta, porque puede nombrar rutas del servidor. Comprueba el resultado con una herramienta de lectura antes de volver a llamarla; si sigue fallando, pregunta al administrador del sitio."
 
-msgid "Theme and plugin files, database, user accounts"
-msgstr "Archivos de temas y plugins, base de datos, cuentas de usuario"
-
 msgid "This URL points to a private or disallowed host and was blocked: WordPress downloads only from public hosts. Put the file on a public address, or send its content with wp_upload_media."
 msgstr "Esta URL apunta a un host privado o no permitido y se ha bloqueado: WordPress solo descarga desde hosts públicos. Pon el archivo en una dirección pública o envía su contenido con wp_upload_media."
 
@@ -1693,9 +1687,6 @@ msgctxt "tool label"
 msgid "Undo a change"
 msgstr "Deshacer un cambio"
 
-msgid "Undo points that expire after 7 days, adjustable from 1 to 30"
-msgstr "Puntos de restauración que caducan a los 7 días, ajustable de 1 a 30"
-
 #, php-format
 msgid "Unknown built_with value. Use one of: %s."
 msgstr "Valor de built_with desconocido. Usa uno de estos: %s."
@@ -1785,9 +1776,6 @@ msgstr "Widgets"
 
 msgid "Widgets not placed in any active sidebar."
 msgstr "Widgets que no están en ninguna barra lateral activa."
-
-msgid "WooCommerce editing, installs and updates"
-msgstr "Edición de WooCommerce, instalaciones y actualizaciones"
 
 msgid "WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing."
 msgstr "WordPress no lo ha borrado: el ID no es un archivo de la biblioteca de medios (búscalo con wp_list_media) o un plugin lo ha impedido. Compruébalo con wp_get_media y pregunta al administrador del sitio si sigue fallando."
@@ -2304,3 +2292,457 @@ msgstr "También leen los productos, pedidos, clientes y cupones de la tienda."
 
 msgid "They also read user accounts and the shop's products, orders, customers and coupons."
 msgstr "También leen las cuentas de usuario y los productos, pedidos, clientes y cupones de la tienda."
+
+msgid "AI assistants read and write: posts, pages, media, terms, comments, menus, widgets, users, site settings, the shop and SEO fields."
+msgstr "Los asistentes de IA leen y escriben: entradas, páginas, medios, términos, comentarios, menús, widgets, usuarios, ajustes del sitio, la tienda y campos SEO."
+
+msgid "Theme and plugin files, PHP snippets, database"
+msgstr "Archivos de temas y plugins, fragmentos PHP, base de datos"
+
+msgid "Page-builder texts, installs and updates"
+msgstr "Textos de constructores de páginas, instalaciones y actualizaciones"
+
+msgid "Undo for files and page builders, adjustable from 1 to 30 days"
+msgstr "Deshacer para archivos y constructores de páginas, ajustable de 1 a 30 días"
+
+#, php-format
+msgid "On this network %1$s can only empty the page cache of every site at once, and allows that only with the right \"%2$s\", which this account lacks. A network admin can do it with wp_clear_cache."
+msgstr "En esta red, %1$s solo puede vaciar la caché de páginas de todos los sitios a la vez, y solo lo permite con el permiso «%2$s», que esta cuenta no tiene. Un administrador de la red puede hacerlo con wp_clear_cache."
+
+msgid "No undo point: the post was written more than once during this call (another plugin updated it as well), so the previous values could not be told apart."
+msgstr "Sin punto de restauración: la entrada se ha escrito más de una vez durante esta llamada (otro plugin también la ha actualizado), así que no se han podido distinguir los valores anteriores."
+
+msgid "No undo point: AlphaBridge MCP Pro on this site is older than 4.5.6, and its wp_undo cannot reverse a change of wp_update_post. With Pro 4.5.6 or newer this change gets an undo point."
+msgstr "Sin punto de restauración: la versión de AlphaBridge MCP Pro de este sitio es anterior a la 4.5.6, y su wp_undo no puede revertir un cambio de wp_update_post. Con Pro 4.5.6 o posterior, este cambio recibe un punto de restauración."
+
+msgid "Revision not found. wp_list_revisions lists the revisions of a post."
+msgstr "Revisión no encontrada. wp_list_revisions lista las revisiones de una entrada."
+
+msgid "You are not allowed to edit the post this revision belongs to. Ask someone who may edit it, or an administrator."
+msgstr "La cuenta de esta conexión no puede editar la entrada a la que pertenece esta revisión. Pídeselo a alguien que pueda editarla o a un administrador."
+
+msgid "Restore failed (invalid revision id?). wp_list_revisions lists the revisions of the post."
+msgstr "No se ha podido restaurar (¿ID de revisión no válido?). wp_list_revisions lista las revisiones de la entrada."
+
+msgid "Post not found. wp_list_posts or wp_search finds its id."
+msgstr "Entrada no encontrada. wp_list_posts o wp_search encuentran su ID."
+
+msgid "You are not allowed to edit this post. Ask someone who may edit it, or an administrator."
+msgstr "La cuenta de esta conexión no puede editar esta entrada. Pídeselo a alguien que pueda editarla o a un administrador."
+
+msgid "Protected meta keys are not allowed. Keys starting with \"_\" belong to WordPress or a plugin and are changed through the plugin that owns them."
+msgstr "No se permiten claves meta protegidas. Las claves que empiezan por «_» pertenecen a WordPress o a un plugin y se cambian a través del plugin al que pertenecen."
+
+msgid "You are not allowed to edit this meta key. A plugin's rule for this key decides; ask an administrator."
+msgstr "La cuenta de esta conexión no puede editar esta clave meta. Lo decide una regla de un plugin para esta clave; pregunta a un administrador."
+
+msgid "Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them."
+msgstr "El valor meta debe ser un valor simple o una lista de valores simples. Indica texto, un número, true o false, o una lista de ellos."
+
+msgid "Another role change or user deletion through AlphaBridge is running on this site right now; nothing was changed. Wait a moment, then send the call again."
+msgstr "Ahora mismo se está realizando en este sitio otro cambio de rol o borrado de usuario mediante AlphaBridge; no se ha cambiado nada. Espera un momento y vuelve a enviar la llamada."
+
+msgid "The database server granted no lock to keep role changes and user deletions apart, so nothing was changed. Send the call again; if this keeps happening, ask the host to check the database connection and its support for named locks (GET_LOCK)."
+msgstr "El servidor de la base de datos no ha concedido ningún bloqueo para mantener separados los cambios de rol y los borrados de usuarios, así que no se ha cambiado nada. Vuelve a enviar la llamada; si sigue ocurriendo, pide al hosting que revise la conexión con la base de datos y su compatibilidad con los bloqueos con nombre (GET_LOCK)."
+
+msgid "The lock that keeps role changes and user deletions apart was no longer held when the change was due (the database connection may have been renewed), so nothing was changed. Send the call again; if this keeps happening, ask the host to check the database connection."
+msgstr "El bloqueo que mantiene separados los cambios de rol y los borrados de usuarios ya no estaba activo cuando tocaba aplicar el cambio (puede que se haya renovado la conexión con la base de datos), así que no se ha cambiado nada. Vuelve a enviar la llamada; si sigue ocurriendo, pide al hosting que revise la conexión con la base de datos."
+
+msgid "The account was removed, but code that runs after a deletion (a plugin's hook) failed; what that code should have done may be missing."
+msgstr "La cuenta se ha eliminado, pero ha fallado código que se ejecuta después de un borrado (el hook de un plugin); puede que falte lo que ese código debería haber hecho."
+
+msgid "Delete failed: the administrator role could not be taken from the account first (a plugin keeps it, or failed while it was taken), so nothing was deleted and the account keeps the role. Check which plugin acts on role changes, then try again."
+msgstr "No se ha podido borrar: no se ha podido quitar antes a la cuenta el rol de administrador (un plugin lo retiene o ha fallado mientras se quitaba), así que no se ha borrado nada y la cuenta conserva el rol. Comprueba qué plugin actúa sobre los cambios de rol y vuelve a intentarlo."
+
+msgid "Delete failed, and the administrator role taken from the account before deleting it could not be given back: the account still exists, without the administrator role. Give it back under Users in wp-admin."
+msgstr "No se ha podido borrar, y no se ha podido devolver a la cuenta el rol de administrador que se le quitó antes de borrarla: la cuenta sigue existiendo, sin el rol de administrador. Devuélveselo en wp-admin, en Usuarios."
+
+msgid "Delete failed. The administrator role taken from the account before deleting it has been given back. Try again, or delete the account under Users in wp-admin."
+msgstr "No se ha podido borrar. Se ha devuelto a la cuenta el rol de administrador que se le quitó antes de borrarla. Vuelve a intentarlo o borra la cuenta en wp-admin, en Usuarios."
+
+msgid "Unknown role. WordPress' own roles are administrator, editor, author, contributor and subscriber; plugins may add more. Choose one of these, or one a plugin added."
+msgstr "Rol desconocido. Los roles propios de WordPress son administrator, editor, author, contributor y subscriber; los plugins pueden añadir más. Elige uno de ellos o uno que haya añadido un plugin."
+
+msgid "Only a network super admin may assign the administrator role on multisite. Connect with a super admin's account."
+msgstr "En una red multisitio, solo un superadministrador de la red puede asignar el rol de administrador. Conecta la app con la cuenta de un superadministrador."
+
+msgid "A super admin of the network can assign it, or make this account a super admin under Network Admin → Users."
+msgstr "Un superadministrador de la red puede asignarlo o convertir esta cuenta en superadministrador en Administrador de la red → Usuarios."
+
+msgid "This role is not editable in this context. WordPress or a plugin (filter editable_roles) keeps it out of reach for your account; ask an administrator."
+msgstr "Este rol no se puede editar en este contexto. WordPress o un plugin (filtro editable_roles) lo deja fuera del alcance de la cuenta de esta conexión; pregunta a un administrador."
+
+msgid "You are not allowed to assign the administrator role. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede asignar el rol de administrador. Pregunta a un administrador."
+
+msgid "You are not allowed to assign a role with more capabilities than your own. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede asignar un rol con más capacidades que las suyas. Pregunta a un administrador."
+
+msgid "Invalid email. Give an address such as name@example.com."
+msgstr "Correo electrónico no válido. Indica una dirección como name@example.com."
+
+msgid "Assigning a role requires the promote_users capability. Leave role out to create the user as a subscriber, or ask an administrator."
+msgstr "Para asignar un rol hace falta la capacidad promote_users. Omite role para crear el usuario como subscriber, o pregunta a un administrador."
+
+msgid "You are not allowed to edit this user. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede editar a este usuario. Pregunta a un administrador."
+
+msgid "You are not allowed to change user roles. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede cambiar roles de usuario. Pregunta a un administrador."
+
+msgid "Refusing to demote the last administrator account. Make another account administrator first (wp_update_user with role administrator)."
+msgstr "No se rebaja el rol de la última cuenta de administrador. Convierte antes otra cuenta en administrador (wp_update_user con el rol administrator)."
+
+msgid "The role was not changed: the lock that keeps role changes and user deletions apart was no longer held when it was due (the database connection may have been renewed). The account was saved before that, with the other fields of this call. Send the call again with the role; if this keeps happening, ask the host to check the database connection."
+msgstr "No se ha cambiado el rol: el bloqueo que mantiene separados los cambios de rol y los borrados de usuarios ya no estaba activo cuando tocaba aplicarlo (puede que se haya renovado la conexión con la base de datos). Antes de eso, la cuenta se guardó con los demás campos de esta llamada. Vuelve a enviar la llamada con el rol; si sigue ocurriendo, pide al hosting que revise la conexión con la base de datos."
+
+msgid "You are not allowed to delete this user. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede borrar a este usuario. Pregunta a un administrador."
+
+msgid "reassign_to has to name another existing user of this site, or be left out; nothing was deleted. wp_list_users shows the users and their ids."
+msgstr "reassign_to debe indicar otro usuario existente de este sitio, o bien omitirse; no se ha borrado nada. wp_list_users muestra los usuarios y sus ID."
+
+msgid "Refusing to delete the last administrator account. Make another account administrator first (wp_update_user with role administrator)."
+msgstr "No se borra la última cuenta de administrador. Convierte antes otra cuenta en administrador (wp_update_user con el rol administrator)."
+
+msgid "Delete failed. Try again, or delete the account under Users in wp-admin."
+msgstr "No se ha podido borrar. Vuelve a intentarlo o borra la cuenta en wp-admin, en Usuarios."
+
+msgid "Your account cannot edit this user. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede editar a este usuario. Pregunta a un administrador."
+
+msgid "This user meta key is protected (privilege/auth). Role and password change with wp_update_user."
+msgstr "Esta clave meta de usuario está protegida (permisos/autenticación). El rol y la contraseña se cambian con wp_update_user."
+
+msgid "This user meta key cannot be edited (protected by an auth callback). The plugin that registered the key decides who may change it; use that plugin's screen to change it."
+msgstr "Esta clave meta de usuario no se puede editar (está protegida por un callback de autorización). Quién puede cambiarla lo decide el plugin que registró la clave; cámbiala en la pantalla de ese plugin."
+
+msgid "Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest)."
+msgstr "El valor debe ser un valor simple o una lista de valores simples. Indica texto, un número, true, false, null o una lista de ellos (las listas pueden anidarse)."
+
+msgid "Term not found. wp_list_terms shows the terms and their ids."
+msgstr "Término no encontrado. wp_list_terms muestra los términos y sus ID."
+
+msgid "Protected meta keys are not allowed. Keys starting with \"_\" belong to WordPress or to the plugin that owns them and are changed through them."
+msgstr "No se permiten claves meta protegidas. Las claves que empiezan por «_» pertenecen a WordPress o al plugin propietario, y se cambian a través de ellos."
+
+msgid "Your account cannot edit meta for this term. Ask an administrator."
+msgstr "La cuenta de esta conexión no puede editar los metadatos de este término. Pregunta a un administrador."
+
+msgid "None of the settings changed — a filter or the database rejected the writes. Change them in wp-admin under Settings › General and Settings › Reading, or check which plugin filters these options."
+msgstr "No ha cambiado ninguno de los ajustes: un filtro o la base de datos ha rechazado la escritura. Cámbialos en wp-admin, en Ajustes → Generales y Ajustes → Lectura, o comprueba qué plugin filtra estas opciones."
+
+msgid "Invalid status: publish, draft, pending, private or trash."
+msgstr "Estado no válido: publish, draft, pending, private o trash."
+
+msgid "This site has no trash (EMPTY_TRASH_DAYS is 0): WordPress would delete the posts for good. Nothing was changed. Use the status draft or private instead, or ask an administrator to set EMPTY_TRASH_DAYS above 0 in wp-config.php."
+msgstr "Este sitio no tiene papelera (EMPTY_TRASH_DAYS es 0): WordPress borraría las entradas definitivamente. No se ha cambiado nada. Usa en su lugar el estado draft o private, o pide a un administrador que ponga EMPTY_TRASH_DAYS por encima de 0 en wp-config.php."
+
+msgid "Your account cannot edit this specific order. Ask someone who may edit it, such as a shop manager, or an administrator."
+msgstr "La cuenta de esta conexión no puede editar este pedido en concreto. Pídeselo a alguien que pueda editarlo, como un gestor de la tienda, o a un administrador."
+
+msgid "WooCommerce did not save this status change. Check the order with wp_wc_get_order, then try again."
+msgstr "WooCommerce no ha guardado este cambio de estado. Comprueba el pedido con wp_wc_get_order y vuelve a intentarlo."
+
+msgid "Your account cannot edit this specific product. Ask someone who may edit it, such as a shop manager, or an administrator."
+msgstr "La cuenta de esta conexión no puede editar este producto en concreto. Pídeselo a alguien que pueda editarlo, como un gestor de la tienda, o a un administrador."
+
+#, php-format
+msgid "%1$s must be a plain number of at least 0, written with \".\" or this shop's decimal separator \"%2$s\" and nothing else (no grouping, no exponent), at most 15 digits before the separator and %3$d after it, or empty to clear it. Use a value such as 12.50."
+msgstr "%1$s debe ser un número simple de 0 o más, escrito con «.» o con el separador decimal de esta tienda, «%2$s», y nada más (sin separador de miles ni exponente), con 15 cifras como máximo antes del separador y %3$d después, o estar vacío para borrarlo. Usa un valor como 12.50."
+
+#, php-format
+msgid "Unknown product status. This site knows: %s. Choose one of these."
+msgstr "Estado de producto desconocido. Este sitio conoce: %s. Elige uno de ellos."
+
+msgid "This price is not a plain number this shop writes. Use a value such as 12.50."
+msgstr "Este precio no es un número simple tal como lo escribe esta tienda. Usa un valor como 12.50."
+
+msgid "WooCommerce did not save this product. Check it with wp_wc_get_product, then try again."
+msgstr "WooCommerce no ha guardado este producto. Compruébalo con wp_wc_get_product y vuelve a intentarlo."
+
+msgid "A coupon needs a code. Choose one that is not in use yet; wp_wc_list_coupons lists the codes taken."
+msgstr "Un cupón necesita un código. Elige uno que aún no esté en uso; wp_wc_list_coupons lista los códigos ya usados."
+
+msgid "This code would not survive WooCommerce's own normalisation a second time, so it could never be looked up; choose a plain code."
+msgstr "Este código no superaría una segunda vez la normalización propia de WooCommerce, así que nunca se podría buscar; elige un código simple."
+
+msgid "A coupon code cannot contain a backslash: WooCommerce would store it without, as a different code. Choose a code without one."
+msgstr "Un código de cupón no puede contener una barra invertida: WooCommerce lo guardaría sin ella, como otro código. Elige un código sin barra invertida."
+
+msgid "A coupon with this code already exists. Choose another code; wp_wc_list_coupons lists the codes."
+msgstr "Ya existe un cupón con este código. Elige otro código; wp_wc_list_coupons lista los códigos."
+
+#, php-format
+msgid "The coupon amount must be a plain number of at least 0, written with \".\" or this shop's decimal separator \"%1$s\" and nothing else (no grouping, no exponent), at most 15 digits before the separator and %2$d after it. Use a value such as 10 or 12.50."
+msgstr "El importe del cupón debe ser un número simple de 0 o más, escrito con «.» o con el separador decimal de esta tienda, «%1$s», y nada más (sin separador de miles ni exponente), con 15 cifras como máximo antes del separador y %2$d después. Usa un valor como 10 o 12.50."
+
+#, php-format
+msgid "Unknown discount type. This shop knows: %s. Choose one of these."
+msgstr "Tipo de descuento desconocido. Esta tienda conoce: %s. Elige uno de ellos."
+
+msgid "The expiry date must be a real date in YYYY-MM-DD form. Use a date such as 2026-12-31; without expires the coupon does not expire."
+msgstr "La fecha de caducidad debe ser una fecha real con el formato AAAA-MM-DD. Usa una fecha como 2026-12-31; sin expires, el cupón no caduca."
+
+msgid "WooCommerce did not save this coupon. wp_wc_list_coupons shows whether it exists; if not, try again."
+msgstr "WooCommerce no ha guardado este cupón. wp_wc_list_coupons muestra si existe; si no, vuelve a intentarlo."
+
+msgid "Undo is switched off on this site, so no snapshots are being kept. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se guardan instantáneas. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+
+msgid "No undo points. They are created by destructive tools and expire automatically."
+msgstr "No hay puntos de restauración. Los crean las herramientas destructivas y caducan automáticamente."
+
+msgid "Pass a token to wp_undo with dry_run=true to see what a restore would do."
+msgstr "Indica a wp_undo un token con dry_run=true para ver qué haría una restauración."
+
+msgid "Which undo point? Pass a token from wp_undo_list."
+msgstr "¿Qué punto de restauración? Indica un token de wp_undo_list."
+
+msgid "Nothing was changed. Call wp_undo again without dry_run to apply this."
+msgstr "No se ha cambiado nada. Vuelve a llamar a wp_undo sin dry_run para aplicarlo."
+
+msgid "Restored in full, but the undo point could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again."
+msgstr "Restaurado por completo, pero no se ha podido eliminar el punto de restauración. Queda bloqueado durante dos minutos: descártalo con wp_undo_discard y NO vuelvas a deshacer este cambio."
+
+msgid "Restored. This undo point has been used up."
+msgstr "Restaurado. Este punto de restauración ya se ha usado."
+
+msgid "Partially restored. The undo point was kept so you can retry the rest."
+msgstr "Restaurado en parte. Se ha conservado el punto de restauración para que puedas reintentar el resto."
+
+msgid "Some undo points were kept: they came from tools this token may not act on. Use a wider-scoped token to discard those too."
+msgstr "Se han conservado algunos puntos de restauración: proceden de herramientas sobre las que este token no puede actuar. Usa un token con un alcance más amplio para descartarlos también."
+
+msgid "Pass a token, or all=true to discard every undo point of yours."
+msgstr "Indica un token, o all=true para descartar todos los puntos de restauración de esta cuenta."
+
+msgid "This widget type is not currently registered, so its settings cannot be safely sanitised and were not written. Activate the plugin or theme that provides it, then try again."
+msgstr "Este tipo de widget no está registrado ahora mismo, así que sus ajustes no se pueden limpiar de forma segura y no se han escrito. Activa el plugin o el tema que lo proporciona y vuelve a intentarlo."
+
+#, php-format
+msgid "The widget could not sanitise these settings (%s); nothing was saved. Most often a field it keeps as text was sent as a list or an object: wp_get_widgets shows the settings it holds now; send them in that form."
+msgstr "El widget no ha podido limpiar estos ajustes (%s); no se ha guardado nada. Lo más habitual es que un campo que guarda como texto se haya enviado como lista u objeto: wp_get_widgets muestra los ajustes que tiene ahora; envíalos en esa forma."
+
+msgid "The widget rejected these settings; nothing was saved. wp_get_widgets shows the settings it holds now; send them in that form."
+msgstr "El widget ha rechazado estos ajustes; no se ha guardado nada. wp_get_widgets muestra los ajustes que tiene ahora; envíalos en esa forma."
+
+#, php-format
+msgid "settings.%s: the widget keeps a text there, and a list or an object was sent. Send it as text, as wp_get_widgets shows it; nothing was saved."
+msgstr "settings.%s: el widget guarda ahí un texto, y se ha enviado una lista o un objeto. Envíalo como texto, tal como lo muestra wp_get_widgets; no se ha guardado nada."
+
+#, php-format
+msgid "settings.%1$s is nested deeper than the widget keeps it (lists go at most %2$d deep here, with text, numbers, true, false or null at the bottom). The widgets screen sends no deeper data for this field; nothing was saved. wp_get_widgets shows the settings it holds now."
+msgstr "settings.%1$s está anidado a más profundidad de la que guarda el widget (aquí las listas tienen como máximo %2$d niveles, con texto, números, true, false o null en el nivel más bajo). La pantalla de widgets no envía datos más profundos para este campo; no se ha guardado nada. wp_get_widgets muestra los ajustes que tiene ahora."
+
+#, php-format
+msgid "The option %s was not written by the widgets of WordPress, so it is not changed here; nothing was changed. wp_get_widgets lists the widgets and their ids."
+msgstr "La opción %s no la han escrito los widgets de WordPress, así que aquí no se cambia; no se ha cambiado nada. wp_get_widgets lista los widgets y sus ID."
+
+msgid "Invalid widget id (expected \"base-number\", e.g. \"text-2\"). wp_get_widgets lists the widgets and their ids."
+msgstr "ID de widget no válido (se espera «base-number», p. ej., «text-2»). wp_get_widgets lista los widgets y sus ID."
+
+msgid "Widget instance not found. wp_get_widgets lists the widgets and their ids."
+msgstr "Instancia de widget no encontrada. wp_get_widgets lista los widgets y sus ID."
+
+msgid "The widget settings were not stored — a filter or the database rejected the write. Use Appearance › Widgets in wp-admin to change the widget."
+msgstr "No se han guardado los ajustes del widget: un filtro o la base de datos ha rechazado la escritura. Cambia el widget en wp-admin, en Apariencia → Widgets."
+
+msgid "A widget id_base is required. Pass the widget type, e.g. \"text\" or \"search\"."
+msgstr "Hace falta el id_base del widget. Indica el tipo de widget, p. ej., «text» o «search»."
+
+#, php-format
+msgid "Unknown widget type \"%1$s\". Use one of the available types: %2$s"
+msgstr "Tipo de widget desconocido: «%1$s». Usa uno de los tipos disponibles: %2$s"
+
+msgid "Target sidebar not found. wp_list_sidebars lists the sidebars."
+msgstr "Barra lateral de destino no encontrada. wp_list_sidebars lista las barras laterales."
+
+msgid "The widget settings were not stored, so it was not added to the sidebar. Use Appearance › Widgets in wp-admin to add it."
+msgstr "No se han guardado los ajustes del widget, así que no se ha añadido a la barra lateral. Añádelo en wp-admin, en Apariencia → Widgets."
+
+msgid "The widget settings are still stored — a filter or the database prevented the removal. Use Appearance › Widgets in wp-admin to remove the widget."
+msgstr "Los ajustes del widget siguen guardados: un filtro o la base de datos ha impedido quitarlos. Quita el widget en wp-admin, en Apariencia → Widgets."
+
+msgid "Widget not found. wp_get_widgets lists the widgets and their ids."
+msgstr "Widget no encontrado. wp_get_widgets lista los widgets y sus ID."
+
+#, php-format
+msgid "Undoing this needs the same permission as the original action (%s), and the account of this connection lacks it."
+msgstr "Para deshacerlo hace falta el mismo permiso que para la acción original (%s), y la cuenta de esta conexión no lo tiene."
+
+msgid "To allow it, ask an administrator to give the account a role with that permission under Users, or connect the app again with an account that has it."
+msgstr "Para permitirlo, pide a un administrador que asigne en Usuarios a la cuenta un rol con ese permiso, o vuelve a conectar la app con una cuenta que lo tenga."
+
+#, php-format
+msgid "This connection has the access level \"%1$s\"; an undo point of \"%2$s\" is reversed or discarded only with the access level \"%3$s\", as the tool itself runs only with it."
+msgstr "Esta conexión tiene el nivel de acceso «%1$s»; un punto de restauración de «%2$s» solo se revierte o se descarta con el nivel de acceso «%3$s», ya que la propia herramienta solo se ejecuta con él."
+
+#, php-format
+msgid "To allow it, run the undo on a connection whose access level includes that tool (\"%s\" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under Settings › AlphaBridge MCP."
+msgstr "Para permitirlo, deshaz el cambio desde una conexión cuyo nivel de acceso incluya esa herramienta («%s» incluye todas las herramientas): vuelve a conectar la app y elige ese nivel en la pantalla de consentimiento, o pide a un administrador que cree una conexión así en Ajustes → AlphaBridge MCP."
+
+#, php-format
+msgid "This connection has the access level \"%1$s\", which does not include \"%2$s\", the tool this undo point came from."
+msgstr "Esta conexión tiene el nivel de acceso «%1$s», que no incluye «%2$s», la herramienta de la que procede este punto de restauración."
+
+#, php-format
+msgid "This undo point came from \"%s\", a tool of AlphaBridge MCP Pro, which is not active here. It is reversed or discarded where Pro runs; here it expires on its own within the undo window, and wp_undo_list shows when."
+msgstr "Este punto de restauración procede de «%s», una herramienta de AlphaBridge MCP Pro, que aquí no está activo. Se revierte o se descarta donde se ejecuta Pro; aquí caduca por sí solo dentro del plazo de deshacer, y wp_undo_list muestra cuándo."
+
+msgid "This undo point came from a tool that cannot be reversed. It expires on its own within the undo window, and wp_undo_list shows when."
+msgstr "Este punto de restauración procede de una herramienta que no se puede deshacer. Caduca por sí solo dentro del plazo de deshacer, y wp_undo_list muestra cuándo."
+
+msgid "The undo point does not match the tool it claims to come from. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "El punto de restauración no coincide con la herramienta de la que dice proceder. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Tipo de punto de restauración desconocido. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot is not readable. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea no se puede leer. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot carries a note in a form this tool does not write. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea contiene una nota en un formato que esta herramienta no escribe. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot carries a status in a form WordPress would rewrite. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea contiene un estado en un formato que WordPress reescribiría. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot is empty. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea está vacía. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot names an option without a name. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea indica una opción sin nombre. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot does not name a post. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea no indica ninguna entrada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot carries a field this tool cannot restore. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea contiene un campo que esta herramienta no puede restaurar. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The snapshot carries a value in a form this field does not take. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea contiene un valor en un formato que este campo no admite. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The post no longer exists; nothing was restored. wp_undo_discard removes this undo point."
+msgstr "La entrada ya no existe; no se ha restaurado nada. wp_undo_discard elimina este punto de restauración."
+
+#, php-format
+msgid "The post changed after the undo was planned, and the restore can no longer be written as planned (%s); nothing was restored. The undo point stays: wp_undo with dry_run=true shows what it would restore now, and wp_undo runs it again."
+msgstr "La entrada ha cambiado después de que se planificara deshacer el cambio, y la restauración ya no se puede escribir según lo previsto (%s); no se ha restaurado nada. El punto de restauración se mantiene: wp_undo con dry_run=true muestra qué restauraría ahora, y wp_undo lo vuelve a ejecutar."
+
+msgid "The post could not be moved to the trash; nothing was restored. Try again, or move it in wp-admin."
+msgstr "No se ha podido mover la entrada a la papelera; no se ha restaurado nada. Vuelve a intentarlo o muévela en wp-admin."
+
+msgid "The post could not be taken out of the trash; nothing was restored. Try again, or restore it from the trash in wp-admin."
+msgstr "No se ha podido sacar la entrada de la papelera; no se ha restaurado nada. Vuelve a intentarlo o restáurala desde la papelera en wp-admin."
+
+#, php-format
+msgid "The post was taken out of the trash as \"%1$s\", but WordPress would not store the rest of the restore as planned (%2$s); nothing else was written. Check the post with wp_get_post and set the rest with wp_update_post."
+msgstr "La entrada se ha sacado de la papelera como «%1$s», pero WordPress no guardaría el resto de la restauración según lo previsto (%2$s); no se ha escrito nada más. Comprueba la entrada con wp_get_post y define el resto con wp_update_post."
+
+msgid "WordPress did not save the post; nothing was restored for it. Try again; wp_get_post shows how it is now."
+msgstr "WordPress no ha guardado la entrada; no se ha restaurado nada en ella. Vuelve a intentarlo; wp_get_post muestra cómo está ahora."
+
+#, php-format
+msgid "The post was written, but the site stored something else for: %s. Check the post with wp_get_post; a plugin may rewrite these fields on save."
+msgstr "La entrada se ha escrito, pero el sitio ha guardado otra cosa en: %s. Comprueba la entrada con wp_get_post; puede que un plugin reescriba estos campos al guardar."
+
+msgid "The setting was missing and could not be added again. Try again; wp_get_site_settings shows what the site holds now."
+msgstr "El ajuste faltaba y no se ha podido volver a añadir. Vuelve a intentarlo; wp_get_site_settings muestra lo que tiene ahora el sitio."
+
+msgid "The setting was written back, but the site stored something else; a plugin may filter it. wp_get_site_settings shows what it holds now."
+msgstr "El ajuste se ha vuelto a escribir, pero el sitio ha guardado otra cosa; puede que un plugin lo filtre. wp_get_site_settings muestra lo que contiene ahora."
+
+msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning, unless the ab_mcp_undo_enabled filter turns it off in code."
+msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino, salvo que el filtro ab_mcp_undo_enabled lo desactive por código."
+
+msgid "Recording is paused while an undo is applied, so the undo itself gets no undo point. To reverse an undo, use the tool of the original change again."
+msgstr "Mientras se deshace un cambio, se pausa el registro de puntos de restauración, así que deshacer no genera ningún punto de restauración propio. Para revertir lo que se ha deshecho, vuelve a usar la herramienta del cambio original."
+
+msgid "There was no snapshot to keep for this action, so no undo point was recorded. Check the result of the change before relying on an undo."
+msgstr "Para esta acción no había ninguna instantánea que guardar, así que no se ha registrado ningún punto de restauración. Comprueba el resultado del cambio antes de contar con poder deshacerlo."
+
+#, php-format
+msgid "The snapshot file could not be written (%s), so no undo point was recorded. Check that the uploads folder is writable and has free space."
+msgstr "No se ha podido escribir el archivo de la instantánea (%s), así que no se ha registrado ningún punto de restauración. Comprueba que se puede escribir en la carpeta uploads y que tiene espacio libre."
+
+msgid "The undo index could not be updated (it was busy, or the database did not keep the write), so no undo point was recorded. If this keeps happening, check the database error log."
+msgstr "No se ha podido actualizar el índice de puntos de restauración (estaba ocupado o la base de datos no ha conservado la escritura), así que no se ha registrado ningún punto de restauración. Si sigue ocurriendo, revisa el registro de errores de la base de datos."
+
+msgid "The snapshot file was gone before the undo point was committed, so no undo point was recorded. Check that no other plugin or job empties the ab-mcp-undo folder in the uploads folder."
+msgstr "El archivo de la instantánea había desaparecido antes de confirmar el punto de restauración, así que no se ha registrado ningún punto de restauración. Comprueba que ningún otro plugin ni ninguna tarea vacíe la carpeta ab-mcp-undo dentro de la carpeta uploads."
+
+#, php-format
+msgid "The previous state is %1$s before compression, over the %2$s an undo point may hold uncompressed, so no undo point was recorded. An administrator can raise the limit with the ab_mcp_undo_raw_max filter; changes in smaller steps stay undoable."
+msgstr "El estado anterior ocupa %1$s antes de comprimirlo, más de los %2$s que un punto de restauración puede contener sin comprimir, así que no se ha registrado ningún punto de restauración. Un administrador puede subir el límite con el filtro ab_mcp_undo_raw_max; los cambios en pasos más pequeños se pueden seguir deshaciendo."
+
+#, php-format
+msgid "The snapshot takes %1$s, more than the whole undo store may hold (%2$s), so no undo point was recorded. An administrator can raise the limit with the ab_mcp_undo_max_total_bytes filter."
+msgstr "La instantánea ocupa %1$s, más de lo que puede contener todo el almacén de puntos de restauración (%2$s), así que no se ha registrado ningún punto de restauración. Un administrador puede subir el límite con el filtro ab_mcp_undo_max_total_bytes."
+
+#, php-format
+msgid "The snapshot takes %1$s as stored, over the %2$s limit per undo point, so no undo point was recorded. An administrator can raise the limit with the ab_mcp_undo_snapshot_max filter; changes in smaller steps stay undoable."
+msgstr "La instantánea ocupa %1$s tal como se guarda, más del límite de %2$s por punto de restauración, así que no se ha registrado ningún punto de restauración. Un administrador puede subir el límite con el filtro ab_mcp_undo_snapshot_max; los cambios en pasos más pequeños se pueden seguir deshaciendo."
+
+msgid "The previous state holds a value an undo point cannot store safely (only text, numbers and lists of them), so no undo point was recorded. Check the result of the change before relying on an undo."
+msgstr "El estado anterior contiene un valor que un punto de restauración no puede guardar de forma segura (solo texto, números y listas de ellos), así que no se ha registrado ningún punto de restauración. Comprueba el resultado del cambio antes de contar con poder deshacerlo."
+
+msgid "The previous state could not be encoded for an undo point (a value that is not valid text, for example), so no undo point was recorded. Check the result of the change before relying on an undo."
+msgstr "No se ha podido codificar el estado anterior para un punto de restauración (por ejemplo, un valor que no es texto válido), así que no se ha registrado ningún punto de restauración. Comprueba el resultado del cambio antes de contar con poder deshacerlo."
+
+msgid "The undo index is busy; try again in a moment."
+msgstr "El índice de puntos de restauración está ocupado; vuelve a intentarlo en un momento."
+
+msgid "That is not a valid undo token. wp_undo_list shows your undo points and their tokens."
+msgstr "Ese no es un token de deshacer válido. wp_undo_list muestra los puntos de restauración de esta cuenta y sus tokens."
+
+msgid "This undo point has expired. Undo points are kept for up to 7 days (with AlphaBridge MCP Pro for the window set under Settings › AlphaBridge MCP); this change can no longer be undone with it. An earlier version of a post can still come back with wp_restore_revision."
+msgstr "Este punto de restauración ha caducado. Los puntos de restauración se conservan hasta 7 días (con AlphaBridge MCP Pro, durante el plazo definido en Ajustes → AlphaBridge MCP); este cambio ya no se puede deshacer con él. Una versión anterior de una entrada aún se puede recuperar con wp_restore_revision."
+
+msgid "The stored snapshot could not be read back. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "No se ha podido volver a leer la instantánea guardada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "A part of the stored snapshot could not be read back. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "No se ha podido volver a leer una parte de la instantánea guardada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "No undo point with that token for your account. wp_undo_list shows yours; an undo point belongs to the account that made the change."
+msgstr "La cuenta de esta conexión no tiene ningún punto de restauración con ese token. wp_undo_list muestra los suyos; un punto de restauración pertenece a la cuenta que hizo el cambio."
+
+msgid "This undo point is already being restored by another request. Wait a moment, then check with wp_undo_list whether it is still there."
+msgstr "Otra petición ya está restaurando este punto de restauración. Espera un momento y comprueba con wp_undo_list si sigue ahí."
+
+msgid "This undo point was taken over by another request; nothing was changed here. Check with wp_undo_list whether it is still there."
+msgstr "Otra petición se ha hecho cargo de este punto de restauración; aquí no se ha cambiado nada. Comprueba con wp_undo_list si sigue ahí."
+
+msgid "This undo point is being restored right now; try again in a moment."
+msgstr "Este punto de restauración se está restaurando ahora mismo; vuelve a intentarlo en un momento."
+
+msgid "The uploads directory is not available. The uploads folder must exist and be writable; the host can check it."
+msgstr "El directorio de uploads no está disponible. La carpeta uploads debe existir y permitir la escritura; el hosting puede comprobarlo."
+
+msgid "Could not create the undo directory. The uploads folder must be writable; the host can check it."
+msgstr "No se ha podido crear la carpeta de los puntos de restauración. La carpeta uploads debe permitir la escritura; el hosting puede comprobarlo."
+
+msgid "Could not store the undo snapshot. The uploads folder must be writable and have free space; the host can check it."
+msgstr "No se ha podido guardar la instantánea para deshacer el cambio. La carpeta uploads debe permitir la escritura y tener espacio libre; el hosting puede comprobarlo."
+
+msgid "The undo snapshot reference is invalid. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La referencia a la instantánea no es válida. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The undo snapshot file is missing. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Falta el archivo de la instantánea. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The undo snapshot file has an implausible size. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "El archivo de la instantánea tiene un tamaño inverosímil. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "Could not read the undo snapshot. Try again; if it keeps failing, wp_undo_discard removes this undo point."
+msgstr "No se ha podido leer la instantánea. Vuelve a intentarlo; si sigue fallando, wp_undo_discard elimina este punto de restauración."
+
+msgid "The undo snapshot is larger than any snapshot this plugin writes. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea es más grande que cualquier instantánea que escriba este plugin. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The undo snapshot failed its integrity check. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea no ha superado la comprobación de integridad. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "Undo"
+msgstr "Deshacer"
