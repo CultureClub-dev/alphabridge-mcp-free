@@ -43,6 +43,15 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_comment',
 		'wp_delete_menu_item',
 		'wp_seo_set', // Free since 4.8.0: overwrites the stored SEO fields.
+		// Free since 4.9.0.
+		'wp_bulk_update_status',
+		'wp_restore_revision',
+		'wp_update_post_meta',
+		'wp_update_site_settings',
+		'wp_clear_cache',
+		'wp_flush_rewrite_rules',
+		'wp_undo',
+		'wp_undo_discard',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

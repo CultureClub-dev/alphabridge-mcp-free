@@ -164,6 +164,7 @@ final class AB_MCP_Plugin {
 			'menus-users',
 			'plugins-themes-list',
 			'shop',
+			'undo-core',
 		);
 
 		foreach ( $files as $file ) {
@@ -195,6 +196,8 @@ final class AB_MCP_Plugin {
 			'AB_MCP_Tools_Menus_Users'         => array( 'users', __( 'Users & Menus', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Plugins_Themes_List' => array( 'plugins-themes', __( 'Plugins & Themes', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Shop'                => array( 'woocommerce', __( 'WooCommerce', 'alphabridge-mcp' ) ),
+			// Free since 4.9.0, the group as in Pro.
+			'AB_MCP_Tools_Undo_Core'           => array( 'undo', __( 'Undo', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {

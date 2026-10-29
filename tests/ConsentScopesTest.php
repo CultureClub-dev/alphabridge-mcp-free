@@ -166,6 +166,22 @@ final class ConsentScopesTest extends TestCase {
 					// fields wp_update_post writes.
 					continue;
 				}
+				if ( in_array( $name, array( 'wp_restore_revision', 'wp_bulk_update_status' ), true ) ) {
+					// Free since 4.9.0: an earlier version of one post, the status
+					// of many. Both change posts and pages.
+					continue;
+				}
+				if ( in_array( $name, array( 'wp_undo', 'wp_undo_discard' ), true ) ) {
+					// Free since 4.9.0, open to every token on purpose, so each one
+					// sees its own undo points. A point is reversed or thrown away
+					// only where the token may run the tool it came from
+					// (AB_MCP_Undo_Restore::may_touch()): for a content token the
+					// posts of wp_update_post and wp_bulk_update_status, never the
+					// site settings.
+					self::assertTrue( AB_MCP_Tool_Registry::scope_allows( 'content', 'wp_update_post', (array) $r->get( 'wp_update_post' ) ) );
+					self::assertFalse( AB_MCP_Tool_Registry::scope_allows( 'content', 'wp_update_site_settings', (array) $r->get( 'wp_update_site_settings' ) ) );
+					continue;
+				}
 				self::assertMatchesRegularExpression( '/_(post|media|term|comment)(_|$)/', $name, 'A content token changes only posts, pages, media, terms and comments.' );
 			}
 		}

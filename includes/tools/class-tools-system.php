@@ -77,6 +77,27 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 				'callback'    => array( __CLASS__, 'error_log' ),
 			)
 		);
+
+		// Free since 4.9.0, before in Pro only; Pro registers its own over them.
+		$r->register(
+			'wp_clear_cache',
+			array(
+				'description' => 'Flush the WordPress object cache, OPcache if available, and the whole page cache of the supported caching plugins present (LiteSpeed Cache, WP Super Cache, W3 Total Cache, WP Fastest Cache, SiteGround Speed Optimizer, Breeze, Nginx Helper, WP Rocket, Cache Enabler, WP-Optimize, Hummingbird). Suited to making a change visible that a cache still serves in its old form; expired transients are removed by wp_cleanup_transients. page_cache_purged lists the ones asked to purge; a cache none of them drives (host, CDN) is not reached. On a multisite network a plugin that can only empty every site at once runs only for a user who holds the network right that plugin asks for; page_cache_skipped names it and why. Returns object_cache_flushed, opcache_reset and page_cache_purged, plus page_cache_failed and page_cache_skipped where a purge failed or was left out. Only cached copies go: pages and queries are built afresh on their next request, so the site can answer slower for a short while. Requires manage_options; no undo point is recorded.',
+				'capability'  => 'manage_options',
+				'dangerous'   => true,
+				'callback'    => array( __CLASS__, 'clear_cache' ),
+			)
+		);
+
+		$r->register(
+			'wp_flush_rewrite_rules',
+			array(
+				'description' => 'Regenerate the permalink (rewrite) rules stored in the database; it helps when posts, custom post types or taxonomies answer 404 after a structural change. A soft flush: the .htaccess file is not rewritten, and the permalink structure itself stays as set (Settings › Permalinks). Returns flushed=true. Requires manage_options.',
+				'capability'  => 'manage_options',
+				'dangerous'   => true,
+				'callback'    => array( __CLASS__, 'flush_rewrite' ),
+			)
+		);
 	}
 
 	/**
@@ -203,5 +224,43 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 			'lines'     => count( $tail ),
 			'log'       => implode( "\n", $tail ),
 		);
+	}
+
+	/**
+	 * Clear caches.
+	 *
+	 * @return array
+	 */
+	public static function clear_cache() {
+		wp_cache_flush();
+		$opcache = false;
+		if ( function_exists( 'opcache_reset' ) ) {
+			$opcache = @opcache_reset();
+		}
+		// The object cache alone leaves every cached page as it was, and a
+		// page is what a visitor sees.
+		$pages = AB_MCP_Page_Cache::purge_site();
+		$out   = array(
+			'object_cache_flushed' => true,
+			'opcache_reset'        => (bool) $opcache,
+			'page_cache_purged'    => $pages['purged'],
+		);
+		if ( ! empty( $pages['failed'] ) ) {
+			$out['page_cache_failed'] = $pages['failed'];
+		}
+		if ( ! empty( $pages['skipped'] ) ) {
+			$out['page_cache_skipped'] = $pages['skipped'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Flush rewrite rules.
+	 *
+	 * @return array
+	 */
+	public static function flush_rewrite() {
+		flush_rewrite_rules( false );
+		return array( 'flushed' => true );
 	}
 }
