@@ -74,14 +74,15 @@ if ( ! function_exists( 'wp_set_sidebars_widgets' ) ) {
 
 if ( ! function_exists( 'update_user_meta' ) ) {
 	function update_user_meta( $user_id, $meta_key, $meta_value, $prev_value = '' ) {
-		$GLOBALS['ab_test_meta_writes'][] = array( 'user', (int) $user_id, (string) $meta_key, $meta_value );
+		// As update_metadata(): what is stored is unslashed.
+		$GLOBALS['ab_test_meta_writes'][] = array( 'user', (int) $user_id, (string) $meta_key, ab_test_unslash_deep( $meta_value ) );
 		return true;
 	}
 }
 
 if ( ! function_exists( 'update_term_meta' ) ) {
 	function update_term_meta( $term_id, $meta_key, $meta_value, $prev_value = '' ) {
-		$GLOBALS['ab_test_meta_writes'][] = array( 'term', (int) $term_id, (string) $meta_key, $meta_value );
+		$GLOBALS['ab_test_meta_writes'][] = array( 'term', (int) $term_id, (string) $meta_key, ab_test_unslash_deep( $meta_value ) );
 		return true;
 	}
 }

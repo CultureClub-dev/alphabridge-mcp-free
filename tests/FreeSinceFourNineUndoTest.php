@@ -464,6 +464,22 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( array( 'admin_email' => 'alt@example.test' ), AB_MCP_Undo::claim( (string) $first['undo'] )['data'], 'With its snapshot.' );
 	}
 
+	/**
+	 * Codex (GitHub) 29.10.2026: a restore attaches a file to its old parent
+	 * only where the account may edit that post now, as wp_update_post asks.
+	 */
+	public function testARestoreAttachesAFileOnlyToAPostTheAccountMayEditNow(): void {
+		ab_test_add_post( 6, array( 'post_status' => 'publish' ) );
+		ab_test_add_post( 30, array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_parent' => 5, 'post_title' => 'Bild' ) );
+		$res = AB_MCP_Tools_Content::update_post( array( 'id' => 30, 'parent' => 6 ) );
+		self::assertSame( 6, (int) get_post( 30 )->post_parent );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args = array() ): bool => ! ( 'edit_post' === $cap && array( 5 ) === array_map( 'intval', $args ) );
+		$dry                    = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'], 'dry_run' => true ) );
+		self::assertSame( array( array( 'ref' => '30:post_parent', 'reason' => 'forbidden' ) ), $dry['blocked'] );
+		AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		self::assertSame( 6, (int) get_post( 30 )->post_parent, 'Not moved to a post the account may no longer edit.' );
+	}
+
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'tagline' => 'Tag neu' ) );

@@ -690,6 +690,10 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertSame( array( 'updated' => true, 'term_id' => 8, 'key' => 'color' ), $r );
 		self::assertSame( array( array( 'term', 8, 'color', '#c00' ) ), $GLOBALS['ab_test_meta_writes'] );
 		self::assertSame( array( array( 'edit_term_meta', array( 8, 'color' ) ) ), $asked );
+
+		// Codex (GitHub) 29.10.2026: backslashes are stored as sent, nested too.
+		AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'path', 'value' => array( 'p' => 'C:\\dir\\x', 're' => array( '\\d+' ) ) ) );
+		self::assertSame( array( 'p' => 'C:\\dir\\x', 're' => array( '\\d+' ) ), $GLOBALS['ab_test_meta_writes'][1][3] );
 	}
 
 	public function testTermMetaIsRefusedWithoutWritingAnything(): void {

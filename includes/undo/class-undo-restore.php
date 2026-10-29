@@ -882,7 +882,7 @@ class AB_MCP_Undo_Restore {
 		// WordPress stores, none where a loop runs through the file: a save
 		// that would still move the file to another parent is not written.
 		$status_after = isset( $fields['post_status'] ) ? (string) $fields['post_status'] : (string) $post->post_status;
-		if ( isset( $fields['post_parent'] ) && ! AB_MCP_Post_Status::may_change_parent( $id, $status_after, (int) $fields['post_parent'] ) ) {
+		if ( isset( $fields['post_parent'] ) && ( ! AB_MCP_Post_Status::may_change_parent( $id, $status_after, (int) $fields['post_parent'] ) || ! self::may_attach_to( $post, (int) $fields['post_parent'] ) ) ) {
 			unset( $fields['post_parent'] );
 			$blocked[] = array( 'ref' => $id . ':post_parent', 'reason' => 'forbidden' );
 		}
@@ -955,6 +955,26 @@ class AB_MCP_Undo_Restore {
 	}
 
 	/**
+	 * May a restore attach this file to that parent again? A file shows in
+	 * its parent's gallery and attached media: as wp_update_post asks,
+	 * another post as its parent needs the right to edit that post, and is
+	 * neither a revision nor a file. Asked of the account as it is now, so an
+	 * old snapshot does not reach a post it may no longer edit.
+	 *
+	 * @param WP_Post $post   The post as it is now.
+	 * @param int     $parent Parent the restore would give it.
+	 * @return bool
+	 */
+	private static function may_attach_to( $post, $parent ) {
+		$parent = (int) $parent;
+		if ( 'attachment' !== $post->post_type || $parent <= 0 || (int) $post->post_parent === $parent ) {
+			return true;
+		}
+		$target = get_post( $parent );
+		return $target && ! in_array( $target->post_type, array( 'revision', 'attachment' ), true ) && current_user_can( 'edit_post', $parent );
+	}
+
+	/**
 	 * @param array $item Item.
 	 * @return true|WP_Error
 	 */
@@ -983,6 +1003,9 @@ class AB_MCP_Undo_Restore {
 		// one it keeps, none where a loop runs through it. With a status,
 		// status_refusal() has asked this already; without one, only this does.
 		if ( '' === $why && ! AB_MCP_Post_Status::may_change_parent( $id, '' !== $status ? $status : (string) $basis->post_status, $parent ) ) {
+			$why = 'forbidden';
+		}
+		if ( '' === $why && null !== $parent && ! self::may_attach_to( $basis, $parent ) ) {
 			$why = 'forbidden';
 		}
 		if ( '' === $why ) {

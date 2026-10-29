@@ -309,7 +309,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		update_user_meta( $id, $key, $value );
+		// update_metadata() unslashes what it stores: slashed here, a
+		// backslash in a path, a pattern or JSON is stored as sent.
+		update_user_meta( $id, $key, wp_slash( $value ) );
 		return array(
 			'updated' => true,
 			'user_id' => $id,
@@ -395,7 +397,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		update_term_meta( $id, $key, $value );
+		// update_metadata() unslashes what it stores: slashed here, a
+		// backslash in a path, a pattern or JSON is stored as sent.
+		update_term_meta( $id, $key, wp_slash( $value ) );
 		return array(
 			'updated' => true,
 			'term_id' => $id,
