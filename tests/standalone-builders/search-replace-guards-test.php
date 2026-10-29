@@ -1301,6 +1301,11 @@ $pq = query_with( 'post_excerpt FROM wp_posts' );
 $mq = query_with( 'p.post_parent FROM wp_postmeta pm' );
 ok( is_array( $r ) && array( 8, 12 ) === $r['flags']['post_ids'] && false !== strpos( $pq, 'AND ID IN (%d,%d)' ) && false !== strpos( $mq, 'AND pm.post_id IN (%d,%d)' ), 'post_ids keeps the posts and postmeta scans to the posts it names, in SQL (an id named twice counts once)' );
 ok( array() === array_diff( array_unique( array_merge( array_column( $r['tables']['posts']['samples'], 'id' ), array_column( $r['tables']['postmeta']['samples'], 'post_id' ) ) ), array( 8, 12 ) ), 'and no row of another post is in the preview' );
+reset_log();
+$all  = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'posts' ) ) );
+reset_log();
+$only = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'posts' ), 'post_ids' => array( 99 ) ) );
+ok( in_array( 8, array_column( $all['tables']['posts']['samples'], 'id' ), true ) && 0 === $only['tables']['posts']['matched'] && array() === $only['tables']['posts']['samples'], 'post 8, which the scan otherwise changes, is left out when post_ids does not name it — also where the database would hand the row over anyway (the check per row, behind the SQL filter)' );
 foreach ( array( array(), array( 0 ), array( -3 ), array( 'x' ), array( 1.5 ), 'not a list', array( array( 1 ) ), range( 1, 501 ) ) as $bad ) {
 	$e = $SR( array( 'search' => 'foo', 'post_ids' => $bad ) );
 	ok( is_wp_error( $e ) && 'ab_mcp_bad_post_ids' === $e->get_error_code(), 'post_ids refused: ' . json_encode( $bad ) );
