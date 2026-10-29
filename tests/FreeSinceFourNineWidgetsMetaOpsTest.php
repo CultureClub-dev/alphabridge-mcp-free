@@ -629,8 +629,9 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 	/** A $wpdb that answers get_col() from a list and notes every statement. */
 	private static function wpdb( array $col ): object {
 		return new class( $col ) {
-			public $prefix  = 'wp_';
-			public $options = 'wp_options';
+			public $prefix      = 'wp_';
+			public $base_prefix = 'wp_';
+			public $options     = 'wp_options';
 			public $queries = array();
 			public $col;
 
@@ -655,6 +656,10 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 				$this->queries[] = $sql;
 				return true;
 			}
+
+			public function tables( $scope = 'all', $prefix = true ) {
+				return array( 'users' => 'wp_users', 'usermeta' => 'wp_usermeta', 'blogs' => 'wp_blogs', 'site' => 'wp_site', 'sitemeta' => 'wp_sitemeta' );
+			}
 		};
 	}
 
@@ -672,6 +677,34 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			$GLOBALS['wpdb']->queries,
 			'The prefix as a LIKE pattern, its "_" escaped; a name only of letters, digits and "_"; one that is left empty is skipped.'
 		);
+	}
+
+	/**
+	 * Codex 29.10.2026: on a network's main site the prefix pattern also
+	 * matched the other sites' tables and the shared ones. Without the
+	 * network's right only this site's tables are optimized.
+	 */
+	public function testOnANetworksMainSiteOnlyItsOwnTablesAreOptimizedWithoutTheNetworkRight(): void {
+		$GLOBALS['ab_test_multisite'] = true;
+		try {
+			$db              = self::wpdb( array( 'wp_posts', 'wp_options', 'wp_users', 'wp_usermeta', 'wp_2_posts', 'wp_15_options', 'wp_shop_orders' ) );
+			$db->base_prefix = 'wp_';
+			$GLOBALS['wpdb'] = $db;
+			$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'manage_network_options' !== $cap;
+			$r = AB_MCP_Tools_Ops::db_optimize();
+			self::assertSame( array( 'wp_posts', 'wp_options', 'wp_shop_orders' ), $r['tables'], 'Not wp_users, wp_usermeta, wp_2_posts or wp_15_options.' );
+
+			$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+			$db->queries = array();
+			self::assertCount( 7, AB_MCP_Tools_Ops::db_optimize()['tables'], 'With the network right, all of them, as before.' );
+
+			$db->prefix = 'wp_2_';
+			$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'manage_network_options' !== $cap;
+			$db->col = array( 'wp_2_posts', 'wp_2_options' );
+			self::assertSame( array( 'wp_2_posts', 'wp_2_options' ), AB_MCP_Tools_Ops::db_optimize()['tables'], 'Another site: its prefix already narrows the list.' );
+		} finally {
+			$GLOBALS['ab_test_multisite'] = false;
+		}
 	}
 
 	public function testOnlyExpiredTransientsAreDeletedThroughWordPress(): void {

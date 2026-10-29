@@ -153,6 +153,22 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		global $wpdb;
 		$like   = $wpdb->esc_like( $wpdb->prefix ) . '%';
 		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the table list as the database has it now; nothing to cache.
+		// On a network the main site's prefix is the base prefix, so the
+		// pattern also matches every other site's tables (wp_2_posts) and the
+		// shared ones (wp_users). Those are the network's: without its right
+		// only this site's own tables are optimized.
+		if ( is_multisite() && ! current_user_can( 'manage_network_options' ) && (string) $wpdb->prefix === (string) $wpdb->base_prefix ) {
+			$global = array_values( (array) $wpdb->tables( 'global', true ) );
+			$other  = '/^' . preg_quote( (string) $wpdb->base_prefix, '/' ) . '[0-9]+_/';
+			$tables = array_values(
+				array_filter(
+					(array) $tables,
+					static function ( $t ) use ( $global, $other ) {
+						return ! in_array( (string) $t, $global, true ) && ! preg_match( $other, (string) $t );
+					}
+				)
+			);
+		}
 		$done   = array();
 		foreach ( (array) $tables as $t ) {
 			$safe = preg_replace( '/[^A-Za-z0-9_]/', '', $t );
