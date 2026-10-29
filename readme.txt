@@ -34,18 +34,18 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 
 MCP, the Model Context Protocol, is the open standard AI assistants use to work with other software. An MCP server offers tools that an assistant can call. AlphaBridge MCP turns your WordPress site into such a server. Claude, ChatGPT, Claude Code, Cursor and other MCP clients see its tools, and when you ask for something, the assistant picks the right tool and runs it on your site, with the rights of your WordPress user.
 
-You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, reads pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
+You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-80 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+82 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
 * **Free and complete.** Every free tool works without payment, registration or license key, and the plugin does not expire. No usage quotas and no credits: you use Claude or ChatGPT as you do today.
 * **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory, enter your site's address and approve on your own site.
 * **It reads until you allow more.** Out of the box the AI only reads. One switch lets it write, one click turns writing off again.
-* **Undo included.** Edits of posts and pages, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. One sentence brings back what was there before.
+* **Undo included.** Edits of posts and pages, page-builder elements, status changes in bulk, the site settings and the options a search and replace changed leave an undo point that expires after 7 days. One sentence brings back what was there before.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
-* **Reads Elementor and 15 more page builders.** Their pages come back as an outline: the elements in page order, with their texts, links and images.
+* **Edits Elementor and 14 more page builders.** The AI changes texts, links and images right in the builder, with a preview first and an undo point.
 * **Up to 10 sites in one chat.** The free hub, the service of AlphaBridge MCP that links your sites to Claude and ChatGPT, brings up to 10 WordPress sites into one chat, in every edition.
 * **Runs on shared hosting.** Plain PHP over the WordPress REST API, with nothing else to install on the server.
 
@@ -80,13 +80,14 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 = What your AI can do with the free plugin =
 
 * **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, set their custom fields and bring back an earlier revision. Publish, unpublish or trash up to 500 at once. Search the whole site.
-* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous values back. Custom fields and terms are not part of it.
+* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, page-builder elements, status changes in bulk, changes of the site settings and the option rows a search and replace changed leave an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous values back. Custom fields and terms are not part of it.
 * **Media.** Add JPEG, PNG, GIF, WebP and PDF files from the chat or from a web address. Change titles, captions and alt texts, and delete files.
 * **Categories and tags.** Create, rename and delete the terms of any taxonomy.
 * **Comments.** Read, approve, answer and delete comments, and move spam out of the way.
 * **SEO.** Read and set the SEO title, meta description and focus keyword that Yoast SEO or Rank Math keep for each post, and find what is missing.
 * **Updates and site health.** See which plugins, themes and WordPress versions wait for an update, and how the site is doing.
-* **Page builders.** Read the pages of supported builders as an outline: the elements in page order, with their texts, links and images.
+* **Page builders.** Read the pages of supported builders as an outline, and change the text, link or image of one element right in the builder, with a preview first and an undo point.
+* **Search and replace.** Replace a text across posts, custom fields, options and terms, safe for serialized and JSON data: a dry run first, then apply. On page-builder pages only the fields the builder's writer may change are touched (`scope` text); matches in code or other locked places are counted in `locked_matches`. `post_ids` keeps a run to the posts you name, `expected_count` writes only if the preview still fits, and changed options get an undo point.
 * **Menus.** Read the navigation menus, create a menu, and add or remove its items.
 * **Shop.** Read WooCommerce orders, products, coupons and customers. Change prices, sale prices, stock and order status, and create coupons.
 * **Users.** Create, change and delete user accounts and give them roles, within the rights of your own account; the last administrator always stays. Set user and term meta.
@@ -104,7 +105,7 @@ It reads a page as an outline: its elements in page order, with their visible te
 * Read according to the vendors' documentation: WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
 * Recognised, not read: Brizy, Themify Builder, Zion Builder, Live Composer, Cornerstone, Thrive Architect, Bricks, Breakdance, Oxygen 6, Oxygen Classic, BeTheme (BeBuilder), Visual Composer Website Builder, Divi 5 and Etch.
 
-Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the free plugin leaves that copy alone while the builder is active, because a change there would not show, and says how to change the page instead. With Pro, the AI changes texts, links and images right in the builder, with a preview first.
+Where a builder shows its own data and the WordPress content is only a copy, as with Elementor, Beaver Builder, SiteOrigin Page Builder and Enfold, the plugin leaves that copy alone while the builder is active, because a change there would not show, and says how to change the page instead. The AI changes texts, links and images right in the builder, with a preview first and an undo point, on pages of the WordPress blocks, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold.
 
 = You stay in control =
 
@@ -126,9 +127,8 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 
 AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 135 tools on your site:
 
-* **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first. [Watch it in under a minute](https://youtu.be/9ivK3WyQiEo).
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
-* **Undo for page builders, files and code.** Page-builder elements, theme and plugin files, PHP snippets, options and theme switches come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
+* **Undo for files and code.** Theme and plugin files, PHP snippets, options and theme switches come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
 * **Plugins, themes and WordPress itself.** Install, update, activate and delete plugins and themes, and update WordPress. Test requests check the site before and after an update or a switch-on, and a version that breaks it is put back in the same call.
 * **Database and options.** Query the database, change rows of plugin tables with structured statements, and write options, with guards for what must stay protected.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
@@ -153,10 +153,10 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 Yes. All its tools work without payment, registration or license key, and the plugin does not expire. There are no usage quotas, only a limit of 120 requests a minute that protects your server. You need no API key or AI credits either: AlphaBridge has no AI of its own, and you use Claude or ChatGPT as you do today.
 
 = Is it secure? =
-Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so are the readers of user profile fields and of the error log. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets. The latest 200 calls are logged.
+Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so are the readers of user profile fields and of the error log. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets; search and replace names only the options it would change, and never touches protected ones. The latest 200 calls are logged.
 
 = What if the AI gets something wrong? =
-Ask it to undo. Edits of posts and pages, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days, and one sentence brings the previous state back. Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo points for page-builder elements, theme and plugin files, PHP snippets and options, and lets you set how long they last, from 1 to 30 days.
+Ask it to undo. Edits of posts and pages, page-builder elements, status changes in bulk, the site settings and the options a search and replace changed leave an undo point that expires after 7 days, and one sentence brings the previous state back. Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo points for theme and plugin files, PHP snippets and options, and lets you set how long they last, from 1 to 30 days.
 
 = Which AI apps work with it? =
 Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwards, Claude Code, Cursor, Codex, VS Code, Windsurf and any other client that speaks MCP. Claude connects from its connector directory, ChatGPT as a plugin with OAuth, the others with OAuth or a connection you create in the plugin.
@@ -165,7 +165,7 @@ Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwar
 No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
 
 = Does it work with WooCommerce, Elementor, Yoast and Rank Math? =
-Yes. The free plugin reads Elementor pages and the pages of many other page builders, reads and sets the SEO title, meta description and focus keyword of Yoast SEO and Rank Math, reads the orders, products, coupons and customers of WooCommerce, and changes prices, stock and order status and creates coupons. Pro changes texts, links and images right in the page builder.
+Yes. The free plugin reads Elementor pages and the pages of many other page builders and changes their texts, links and images, reads and sets the SEO title, meta description and focus keyword of Yoast SEO and Rank Math, reads the orders, products, coupons and customers of WooCommerce, and changes prices, stock and order status and creates coupons.
 
 = Can I limit what the AI may do? =
 Yes. Each connection gets full access, content only or read only and acts as the WordPress user you choose. A connection you create in the plugin can also get an expiry. Single tools or whole groups can be switched off, and the main switch turns all writing off with one click.
@@ -194,7 +194,7 @@ The site answers apps in MCP revision 2026-07-28 and keeps the older revisions f
 No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
 
 = Do I need Pro? =
-Not to get started. The free plugin covers content, media, comments, menus, widgets, users and your shop, with undo, on as many sites as you like. Take Pro for page-builder texts, code with a safety net, installing and updating plugins and themes, and undo that also covers files, adjustable up to 30 days. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
+Not to get started. The free plugin covers content, page-builder texts, search and replace, media, comments, menus, widgets, users and your shop, with undo, on as many sites as you like. Take Pro for code with a safety net, installing and updating plugins and themes, and undo that also covers files, adjustable up to 30 days. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
 Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
@@ -220,6 +220,15 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.10.0 =
+* **Page-builder texts and search and replace in the free plugin, 82 tools in all.** `wp_update_builder_element` and `wp_search_replace` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages.
+* **`wp_update_builder_element`** changes the text, link or image of one element on pages of the WordPress blocks, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold. It previews by default; applied, it records an undo point first, saves through the builder and reads the page back.
+* **`wp_search_replace`** replaces across posts, postmeta, options and terms, safe for serialized and JSON values, with a dry run per table first. On page-builder pages (`scope` text) only the fields the builder's writer may change are touched, and matches in locked places are counted in `locked_matches`; `scope` raw replaces the stored data as text.
+* **New: `post_ids` and `expected_count`.** `post_ids` keeps a replace to the posts it names; with `expected_count`, apply=true writes only when the call still finds as many matching rows as its dry run did.
+* **New: undo for option rows.** The option rows a replace changes get an undo point of their own (`options_undo_token`), recorded before the first of them is written.
+* **Undo for page-builder pages.** `wp_undo` puts every stored copy of a page back byte for byte and leaves a page changed since as it is, unless `force=true`.
+* Protected options (the site address, active plugins and theme, roles and registration, the mail server, keys, AlphaBridge's own settings) stay out of every replace.
 
 = 4.9.0 =
 * **22 more tools in the free plugin, 80 in all, undo included.** Until now they came with AlphaBridge MCP Pro only; they work as they did there, with the same rights checks, and their messages come in the plugin's languages. `wp_update_user_meta` and `wp_update_term_meta` keep the backslashes in a value.
@@ -459,6 +468,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.10.0 =
+Page-builder texts and search and replace are free now, 82 tools in all, with undo for page-builder pages and options, post_ids and expected_count. No setting changes.
 
 = 4.9.0 =
 22 more free tools, 80 in all: undo for posts and settings, user accounts, WooCommerce prices, stock and orders, widgets, site settings and maintenance. No setting changes.
