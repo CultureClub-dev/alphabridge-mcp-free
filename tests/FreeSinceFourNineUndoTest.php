@@ -396,6 +396,11 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 	public function testARetryAfterAPartialUndoPutsBackOnlyTheRest(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		// A point made an hour ago: the rest keeps its expiry, not a new one.
+		$index                  = self::stored();
+		$index[0]['created_at'] = time() - 3600;
+		$index[0]['expires_at'] = time() - 3600 + AB_MCP_Undo::ttl();
+		update_option( AB_MCP_Undo::OPTION, $index );
 		$old = AB_MCP_Undo::claim( (string) $res['undo'] )['entry'];
 		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
 		$first = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
