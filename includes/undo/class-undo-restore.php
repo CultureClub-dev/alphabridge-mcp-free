@@ -1048,6 +1048,9 @@ class AB_MCP_Undo_Restore {
 				// now, so that row is asked the same questions once more.
 				$basis = self::fresh_post( $id );
 				$why   = $basis ? self::status_refusal( $id, $basis, $status, $parent, $protected ) : 'gone';
+				if ( '' === $why && null !== $parent && ! self::may_attach_to( $basis, $parent ) ) {
+					$why = 'forbidden';
+				}
 				if ( '' === $why ) {
 					$why = self::date_status_fit( $basis, $status, empty( $pair ) ? null : $pair );
 				}

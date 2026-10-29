@@ -786,6 +786,23 @@ ab_table_post( 5 )->post_status = 'trash';
 $res = AB_Test_Restore_Write::write_item( $plan['items'][0] );
 ok( 1 === $plan['restorable'] && 'ab_mcp_undo_post_changed' === ab_code( $res ) && false !== strpos( $res->get_error_message(), '(attachment_parent)' ) && array() === $GLOBALS['ab_seq'], 'parent: the check before the write asks it too — a file trashed after the plan is not taken out with a new parent' );
 
+/* ================================================== a file goes back only to a post the account may edit now (Codex 29.10.2026) */
+reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = false;
+ab_post( 8, array( 'post_status' => 'publish' ) );
+ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_parent' => 7 ) );
+$plan = AB_MCP_Undo_Restore::plan( $entry, array( 'id' => 5, 'fields' => array( 'post_parent' => 8 ) ) );
+ok( ! is_wp_error( $plan ) && 0 === $plan['restorable'] && array( array( 'ref' => '5:post_parent', 'reason' => 'forbidden' ) ) === $plan['blocked'], 'parent: a file is not attached to a post the account may no longer edit' );
+reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = true;
+ab_post( 8, array( 'post_status' => 'publish' ) );
+ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'trash', 'post_parent' => 7 ) );
+$plan = AB_MCP_Undo_Restore::plan( $entry, array( 'id' => 5, 'fields' => array( 'post_status' => 'private', 'post_parent' => 8 ) ) );
+$GLOBALS['ab_untrash_then'] = function () { $GLOBALS['ab_caps']['edit_post:8'] = false; };
+$res = AB_Test_Restore_Write::write_item( $plan['items'][0] );
+$GLOBALS['ab_untrash_then'] = null;
+ok( 1 === $plan['restorable'] && is_wp_error( $res ) && 7 === (int) ab_table_post( 5 )->post_parent, 'parent: ... and once more after the file came out of the trash' );
+
 /* ================================================== a file left to its parent needs the right to publish */
 reset_all();
 $GLOBALS['ab_caps']['publish_posts'] = false;
