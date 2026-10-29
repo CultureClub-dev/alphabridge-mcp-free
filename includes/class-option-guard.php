@@ -105,7 +105,7 @@ class AB_MCP_Option_Guard {
 	 */
 	public static function option_write_refused( $name ) {
 		if ( self::too_long_for_column( $name ) ) {
-			return new WP_Error( 'ab_mcp_option_name_too_long', __( 'The option name is longer than WordPress can store. An option name holds at most 191 characters.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_option_name_too_long', __( 'The option name is longer than WordPress can store. An option name holds at most 191 characters. Use a shorter name.', 'alphabridge-mcp' ) );
 		}
 		if ( self::has_invisible_chars( $name ) ) {
 			return new WP_Error( 'ab_mcp_option_name_invalid', __( 'The option name contains characters that cannot be compared reliably. Leave out control and format characters (such as zero-width spaces).', 'alphabridge-mcp' ) );
@@ -579,7 +579,7 @@ class AB_MCP_Option_Guard {
 		// which the UNIQUE KEY treats as the siteurl row, so add_option's
 		// ON DUPLICATE KEY UPDATE overwrites it.
 		if ( self::too_long_for_column( $name ) ) {
-			return new WP_Error( 'ab_mcp_option_name_too_long', __( 'The option name is longer than WordPress can store, so nothing was changed. An option name holds at most 191 characters.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_option_name_too_long', __( 'The option name is longer than WordPress can store, so nothing was changed. An option name holds at most 191 characters. Use a shorter name.', 'alphabridge-mcp' ) );
 		}
 		// Same reasoning, different mechanism: a character the comparison order
 		// SKIPS ENTIRELY. In UCA a control or format character weighs nothing —

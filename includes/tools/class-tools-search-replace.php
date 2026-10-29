@@ -729,7 +729,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 					'ab_mcp_bad_after',
 					sprintf(
 						/* translators: %s: list of keys */
-						__( 'after must be the next object of a previous call: keys among %s, each a whole number of 0 or more.', 'alphabridge-mcp' ),
+						__( 'after must be the next object of a previous call: keys among %s, each a whole number of 0 or more. Pass next from the previous answer as it is, or leave after out to start over.', 'alphabridge-mcp' ),
 						implode( ', ', self::SCAN_KEYS )
 					)
 				);
@@ -740,7 +740,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		if ( ! in_array( $scope, self::SCOPES, true ) ) {
 			return new WP_Error(
 				'ab_mcp_bad_scope',
-				__( 'scope must be "text" (the default: on page-builder pages only the texts, links and images their writer may change) or "raw" (the stored data as text, page code included, with an undo point; page-builder data needs an account that may post unfiltered HTML).', 'alphabridge-mcp' )
+				__( 'scope must be "text" (the default: on page-builder pages only the texts, links and images their writer may change) or "raw" (the stored data as text, page code included, with an undo point; page-builder data needs an account that may post unfiltered HTML). Pass one of the two, or leave scope out.', 'alphabridge-mcp' )
 			);
 		}
 
@@ -801,7 +801,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			}
 		}
 		if ( empty( $tables ) ) {
-			return new WP_Error( 'ab_mcp_bad_tables', __( 'tables must contain at least one of: posts, postmeta, options, terms.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_tables', __( 'tables must contain at least one of: posts, postmeta, options, terms. Pass at least one of them, or leave tables out for posts and postmeta.', 'alphabridge-mcp' ) );
 		}
 		if ( array() !== $f['post_ids'] && array() !== array_diff( $tables, array( 'posts', 'postmeta' ) ) ) {
 			return new WP_Error( 'ab_mcp_post_ids_tables', __( 'post_ids limits posts and their postmeta, not options or terms. Pass tables ["posts","postmeta"] with post_ids, or leave post_ids out to replace in options and terms.', 'alphabridge-mcp' ) );

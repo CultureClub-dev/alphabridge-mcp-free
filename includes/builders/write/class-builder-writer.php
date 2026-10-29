@@ -508,7 +508,7 @@ abstract class AB_MCP_Builder_Writer {
 	 * @return WP_Error
 	 */
 	protected static function nothing_changed() {
-		return new WP_Error( 'ab_mcp_builder_nothing', __( 'The fields already hold these values; nothing was changed.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_builder_nothing', __( 'The fields already hold these values; nothing was changed. Check them with wp_get_builder_layout.', 'alphabridge-mcp' ) );
 	}
 
 	/* ------------------------------------------------------- the seven */
@@ -695,7 +695,7 @@ abstract class AB_MCP_Builder_Writer {
 			// often: wp_search_replace counts those matches (locked_matches).
 			return new WP_Error(
 				'ab_mcp_builder_nothing',
-				__( 'There is nothing to change on this page.', 'alphabridge-mcp' ),
+				__( 'There is nothing to change on this page. Check its fields with wp_get_builder_layout.', 'alphabridge-mcp' ),
 				array(
 					'locked_matches' => self::locked_count( $change ),
 					'left'           => self::left_reasons( $change ),
@@ -704,7 +704,7 @@ abstract class AB_MCP_Builder_Writer {
 		}
 		foreach ( $change['changes'] as $c ) {
 			if ( ! is_array( $c ) ) {
-				return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over. Change it in the page builder\'s editor.', 'alphabridge-mcp' ) );
 			}
 			$ok = AB_MCP_Builder_Fields::validate_change( $c );
 			if ( is_wp_error( $ok ) ) {
@@ -846,7 +846,7 @@ abstract class AB_MCP_Builder_Writer {
 		}
 		return new WP_Error(
 			'ab_mcp_builder_undo_failed',
-			$token->get_error_message() . ' ' . __( 'Without an undo point nothing was written.', 'alphabridge-mcp' ),
+			$token->get_error_message() . ' ' . __( 'Without an undo point nothing was written. Try again once the cause above is fixed.', 'alphabridge-mcp' ),
 			array( 'cause' => $token->get_error_code() )
 		);
 	}

@@ -700,7 +700,7 @@ class AB_MCP_Undo_Builder {
 			return true; // Gone already: published or dropped in the editor.
 		}
 		if ( ! self::is_autosave( $post ) ) {
-			return new WP_Error( 'ab_mcp_undo_not_a_draft', __( 'The post this undo point would delete is no autosave revision; nothing was deleted.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_not_a_draft', __( 'The post this undo point would delete is no autosave revision; nothing was deleted. Check it with wp_get_post; wp_undo_discard removes this undo point.', 'alphabridge-mcp' ) );
 		}
 		if ( empty( $planned['force'] ) && array() !== self::created_changes( $item ) ) {
 			return new WP_Error( 'ab_mcp_undo_post_changed', __( 'The draft was changed after the undo was planned; it was not deleted. Pass force=true to delete it with the newer change.', 'alphabridge-mcp' ) );
@@ -711,7 +711,7 @@ class AB_MCP_Undo_Builder {
 		wp_cache_delete( $id, 'posts' );
 		if ( get_post( $id ) ) {
 			/* translators: %d: revision id */
-			return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( __( 'WordPress did not delete the draft (autosave revision #%d).', 'alphabridge-mcp' ), $id ) );
+			return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( __( 'WordPress did not delete the draft (autosave revision #%d). Try again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), $id ) );
 		}
 		return true;
 	}
@@ -771,7 +771,7 @@ class AB_MCP_Undo_Builder {
 			if ( 'post_content' === $loc || 'post_content_filtered' === $loc ) {
 				$done = $wpdb->update( $wpdb->posts, array( $loc => (string) $state['value'] ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				if ( false === $done ) {
-					return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: column */ __( 'The database did not take back %s.', 'alphabridge-mcp' ), $loc ) );
+					return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: column */ __( 'The database did not take back %s. Try again; wp_get_builder_layout shows how the page is now.', 'alphabridge-mcp' ), $loc ) );
 				}
 				continue;
 			}
@@ -779,7 +779,7 @@ class AB_MCP_Undo_Builder {
 			$now = self::meta_rows( $id, $key );
 			if ( empty( $state['existed'] ) ) {
 				if ( array() !== $now && false === $wpdb->delete( $wpdb->postmeta, array( 'post_id' => $id, 'meta_key' => $key ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: meta key */ __( 'The database did not remove %s again.', 'alphabridge-mcp' ), $key ) );
+					return new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: meta key */ __( 'The database did not remove %s again. Try again; wp_get_builder_layout shows how the page is now.', 'alphabridge-mcp' ), $key ) );
 				}
 				continue;
 			}
@@ -804,7 +804,7 @@ class AB_MCP_Undo_Builder {
 				'ab_mcp_undo_post_mismatch',
 				sprintf(
 					/* translators: %s: comma-separated stored copies */
-					__( 'The page was written back, but the database holds something else for: %s.', 'alphabridge-mcp' ),
+					__( 'The page was written back, but the database holds something else for: %s. Check the page with wp_get_builder_layout.', 'alphabridge-mcp' ),
 					implode( ', ', $off )
 				)
 			);
@@ -1000,7 +1000,7 @@ class AB_MCP_Undo_Builder {
 				break;
 			}
 		}
-		$failed = new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: meta key */ __( 'The database did not take back %s.', 'alphabridge-mcp' ), $key ) );
+		$failed = new WP_Error( 'ab_mcp_undo_write_failed', sprintf( /* translators: %s: meta key */ __( 'The database did not take back %s. Try again; wp_get_builder_layout shows how the page is now.', 'alphabridge-mcp' ), $key ) );
 		if ( $own ) {
 			foreach ( $rows as $row ) {
 				$mid = (int) $row['meta_id'];

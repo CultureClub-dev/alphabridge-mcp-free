@@ -415,6 +415,8 @@ final class AnswerWayTest extends TestCase {
 						$compose = true;
 					}
 				}
+				// A literal of white space only joins parts; it is no text.
+				$strings = array_values( array_filter( $strings, static fn( string $s ): bool => '' === $s || '' !== trim( $s ) ) );
 				// A message built from a variable has no second literal.
 				if ( count( $strings ) < 2 || ! preg_match( '/\s/', $strings[1] ) ) {
 					continue;
@@ -437,7 +439,7 @@ final class AnswerWayTest extends TestCase {
 	 * The ways a message can name: a tool or a filter by name, an account to
 	 * connect with, a settings path, a parameter value, or a step to take.
 	 */
-	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns)/';
+	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b)/';
 
 	/**
 	 * Messages whose way is what they list, or that report rather than refuse.
@@ -448,6 +450,45 @@ final class AnswerWayTest extends TestCase {
 		'ab_mcp_bad_status'         => 'names the statuses it accepts',
 		'ab_mcp_elementor_not_json' => 'a note on a copy that was made, not a refusal',
 		'ab_mcp_elementor_ids'      => 'a note on a copy that was made, not a refusal',
+	);
+
+	/**
+	 * Literals that are never a message of their own: the reason a page-builder
+	 * writer gives for a failed save or read-back, which
+	 * AB_MCP_Builder_Writer::failed() always ends with the way (try again, the
+	 * editor, wp_undo with the token); wrappers and lower-case reasons that go
+	 * into a note; and frames whose way is the message they wrap. Free since
+	 * 4.10.0, with the writers.
+	 */
+	private const REASON_ONLY = array(
+		'After the save %s did not hold what was written.',
+		'After the save Beaver Builder\'s draft did not hold the same elements as before.',
+		'After the save the page had %2$d elements instead of %1$d (missing: %3$s).',
+		'After the save these fields do not show their new value: %s.',
+		'After the save these fields of Beaver Builder\'s draft do not show their new value: %s.',
+		'Beaver Builder did not return the processed settings.',
+		'Beaver Builder returned no layout for this page.',
+		'Elementor (%1$s) did not make the change: %2$s',
+		'Elementor reported the change as saved, but its draft of this page cannot be found.',
+		'Elementor\'s draft of this page was gone after the save.',
+		'Note on this element: %s',
+		'Nothing was written to read back.',
+		'Post %1$d: not written, because its undo point could not be recorded: %2$s %3$s',
+		'SiteOrigin\'s layout-update ability did not store the layout: %s',
+		'The change carries no text to store.',
+		'The page builder did not confirm the save.',
+		'The page builder failed while saving (%s).',
+		'The page builder\'s layout field was not stored as written.',
+		'The post was gone after the save.',
+		'The read-back gave no answer.',
+		'This call wrote nothing.',
+		'This is an atomic (V4) Elementor element. AlphaBridge changes those only through Elementor\'s own ability elementor/manage-elements; there is no other way for it, so the element is read only here.',
+		'WordPress did not save Pagelayer\'s copy of the page (pagelayer-data).',
+		'WordPress did not save the page.',
+		'WordPress did not store the SiteOrigin layout.',
+		'WordPress stored the page differently from what was written.',
+		'the field would not read as the replacement predicts',
+		'the replacement would empty a text that stands between other elements',
 	);
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {
@@ -468,6 +509,10 @@ final class AnswerWayTest extends TestCase {
 
 	#[DataProvider( 'ownMessages' )]
 	public function testEveryOwnRefusalNamesAWay( string $code, string $message ): void {
+		if ( in_array( $message, self::REASON_ONLY, true ) ) {
+			self::assertNotSame( '', $message );
+			return;
+		}
 		if ( isset( self::WAY_IS_THE_LIST[ $code ] ) ) {
 			self::assertNotSame( '', $message );
 			return;

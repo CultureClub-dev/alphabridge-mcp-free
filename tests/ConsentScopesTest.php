@@ -166,6 +166,12 @@ final class ConsentScopesTest extends TestCase {
 					// fields wp_update_post writes.
 					continue;
 				}
+				if ( 'wp_update_builder_element' === $name ) {
+					// Free since 4.10.0, before in Pro: the texts, links and images
+					// of a page built with a page builder, named for content
+					// tokens on purpose (AB_MCP_Tool_Registry::CONTENT_TOOLS).
+					continue;
+				}
 				if ( in_array( $name, array( 'wp_restore_revision', 'wp_bulk_update_status' ), true ) ) {
 					// Free since 4.9.0: an earlier version of one post, the status
 					// of many. Both change posts and pages.

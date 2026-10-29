@@ -482,7 +482,7 @@ class AB_MCP_Builder_Writer_Elementor extends AB_MCP_Builder_Writer {
 			return $can;
 		}
 		if ( '' === (string) $search ) {
-			return new WP_Error( 'ab_mcp_builder_no_search', __( 'The text to find is empty.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_no_search', __( 'The text to find is empty. Pass the text to find as search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! class_exists( 'AB_MCP_Replace_Engine' ) ) {
 			require_once dirname( __DIR__, 3 ) . '/class-replace-engine.php';
@@ -571,7 +571,7 @@ class AB_MCP_Builder_Writer_Elementor extends AB_MCP_Builder_Writer {
 		if ( array() === $changes ) {
 			return new WP_Error(
 				'ab_mcp_builder_nothing',
-				__( 'No text, heading, HTML or link field of this page that AlphaBridge writes contains the text.', 'alphabridge-mcp' ) . ( array() !== $notes ? ' ' . implode( ' ', $notes ) : '' ),
+				__( 'No text, heading, HTML or link field of this page that AlphaBridge writes contains the text. Check its fields with wp_get_builder_layout.', 'alphabridge-mcp' ) . ( array() !== $notes ? ' ' . implode( ' ', $notes ) : '' ),
 				array(
 					'locked_matches' => $locked,
 					'left'           => $left,

@@ -309,7 +309,7 @@ class AB_MCP_Builder_Writer_Shortcodes extends AB_MCP_Builder_Writer {
 		$search  = (string) $search;
 		$replace = (string) $replace;
 		if ( '' === $search || $search === $replace ) {
-			return new WP_Error( 'ab_mcp_builder_nothing', __( 'There is nothing to replace: the search text is empty or the same as the replacement.', 'alphabridge-mcp' ), array( 'locked_matches' => 0 ) );
+			return new WP_Error( 'ab_mcp_builder_nothing', __( 'There is nothing to replace: the search text is empty or the same as the replacement. Pass a search text that differs from replace.', 'alphabridge-mcp' ), array( 'locked_matches' => 0 ) );
 		}
 		if ( ! empty( $opts['regex'] ) ) {
 			return new WP_Error(

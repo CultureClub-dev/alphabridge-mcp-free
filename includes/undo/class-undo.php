@@ -394,7 +394,7 @@ class AB_MCP_Undo {
 			$entry['after'] = $rec['after'];
 			if ( ! self::valid_entry( $entry ) ) {
 				self::payload_delete( $file );
-				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 			}
 		}
 
@@ -619,7 +619,7 @@ class AB_MCP_Undo {
 			);
 		}
 		if ( '' === (string) $kind || null === $data ) {
-			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There is no snapshot to keep for this action.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There is no snapshot to keep for this action. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 		}
 		$prepared = self::prepare( $kind, $data );
 		return is_wp_error( $prepared ) ? $prepared : true;
@@ -649,7 +649,7 @@ class AB_MCP_Undo {
 		if ( self::$suspended ) {
 			return new WP_Error(
 				'ab_mcp_undo_disabled',
-				__( 'Recording is paused while an undo is applied, so the undo itself gets no undo point.', 'alphabridge-mcp' ),
+				__( 'Recording is paused while an undo is applied, so the undo itself gets no undo point. To reverse an undo, use the tool of the original change again.', 'alphabridge-mcp' ),
 				array( 'reason' => 'suspended' )
 			);
 		}
@@ -659,17 +659,17 @@ class AB_MCP_Undo {
 		$kind = isset( $rec['kind'] ) ? (string) $rec['kind'] : '';
 		$data = isset( $rec['data'] ) ? $rec['data'] : null;
 		if ( '' === $kind || null === $data ) {
-			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There was no snapshot to keep for this action, so no undo point was recorded.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There was no snapshot to keep for this action, so no undo point was recorded. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 		}
 		if ( ! in_array( $kind, self::PART_KINDS, true ) ) {
-			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'Undo points of this kind do not take parts.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'Undo points of this kind do not take parts. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
 		}
 		$entry = self::find_owned( $token );
 		if ( is_wp_error( $entry ) ) {
 			return $entry;
 		}
 		if ( $entry['kind'] !== $kind ) {
-			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'The part is of another kind than the undo point it should join.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'The part is of another kind than the undo point it should join. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
 		}
 		$parts = isset( $entry['parts'] ) && is_array( $entry['parts'] ) ? $entry['parts'] : array();
 		if ( count( $parts ) >= self::MAX_PARTS ) {
@@ -731,7 +731,7 @@ class AB_MCP_Undo {
 					}
 					$busy = isset( $e['applying'] ) ? (int) $e['applying'] : 0;
 					if ( $busy && ( time() - $busy ) < self::APPLY_TIMEOUT ) {
-						$result = new WP_Error( 'ab_mcp_undo_in_progress', __( 'This undo point is being restored right now, so nothing can be added to it.', 'alphabridge-mcp' ) );
+						$result = new WP_Error( 'ab_mcp_undo_in_progress', __( 'This undo point is being restored right now, so nothing can be added to it. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
 						return;
 					}
 					$parts                  = isset( $e['parts'] ) && is_array( $e['parts'] ) ? $e['parts'] : array();
@@ -743,7 +743,7 @@ class AB_MCP_Undo {
 					self::write_index( $index );
 					// Landed only when the stored index names the part.
 					wp_cache_delete( self::OPTION, 'options' );
-					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated, so this part of the undo point was not recorded.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
+					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated, so this part of the undo point was not recorded. If this keeps happening, check the database error log.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
 					foreach ( self::read_index() as $e2 ) {
 						if ( $e2['token'] === $token && isset( $e2['parts'] ) && in_array( $part['payload'], self::part_payloads( $e2['parts'] ), true ) ) {
 							$result = true;
@@ -756,7 +756,7 @@ class AB_MCP_Undo {
 		if ( true !== $result || ! $locked ) {
 			self::payload_delete( $part['payload'] );
 			if ( ! $locked ) {
-				return new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index was busy, so this part of the undo point was not recorded.', 'alphabridge-mcp' ), array( 'reason' => 'busy' ) );
+				return new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index was busy, so this part of the undo point was not recorded. Try again in a moment.', 'alphabridge-mcp' ), array( 'reason' => 'busy' ) );
 			}
 		}
 		return $result;
@@ -781,12 +781,12 @@ class AB_MCP_Undo {
 		$clean   = array();
 		foreach ( $hashes as $loc => $sha ) {
 			if ( ! is_string( $loc ) || '' === $loc || strlen( $loc ) > 255 || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}$/', $sha ) ) {
-				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 			}
 			$clean[ $loc ] = $sha;
 		}
 		if ( $post_id <= 0 || array() === $clean ) {
-			return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 		}
 		$uid    = (int) get_current_user_id();
 		$result = new WP_Error( 'ab_mcp_undo_not_found', __( 'No undo point with that token for your account. wp_undo_list shows yours; an undo point belongs to the account that made the change.', 'alphabridge-mcp' ) );
@@ -805,7 +805,7 @@ class AB_MCP_Undo {
 					$index[ $i ]['after']        = $after;
 					self::write_index( $index );
 					wp_cache_delete( self::OPTION, 'options' );
-					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated with the state after the change.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
+					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated with the state after the change. If this keeps happening, check the database error log.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
 					foreach ( self::read_index() as $e2 ) {
 						if ( $e2['token'] === $token && isset( $e2['after'][ (string) $post_id ] ) && $e2['after'][ (string) $post_id ] === $clean ) {
 							$result = true;

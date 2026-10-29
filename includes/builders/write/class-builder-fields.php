@@ -136,12 +136,12 @@ final class AB_MCP_Builder_Fields {
 		}
 		if ( ! is_string( $value ) && ! is_int( $value ) && ! is_float( $value ) ) {
 			/* translators: %s: field name */
-			return new WP_Error( 'ab_mcp_builder_field_value', sprintf( __( 'The value for %s must be text.', 'alphabridge-mcp' ), $name ) );
+			return new WP_Error( 'ab_mcp_builder_field_value', sprintf( __( 'The value for %s must be text. Pass it as a string.', 'alphabridge-mcp' ), $name ) );
 		}
 		$value = (string) $value;
 		if ( strlen( $value ) > self::MAX_BYTES || 1 !== preg_match( '//u', $value ) ) {
 			/* translators: 1: field name, 2: size limit */
-			return new WP_Error( 'ab_mcp_builder_field_value', sprintf( __( 'The value for %1$s must be valid UTF-8 text of at most %2$s.', 'alphabridge-mcp' ), $name, size_format( self::MAX_BYTES ) ) );
+			return new WP_Error( 'ab_mcp_builder_field_value', sprintf( __( 'The value for %1$s must be valid UTF-8 text of at most %2$s. Pass UTF-8 text within that size.', 'alphabridge-mcp' ), $name, size_format( self::MAX_BYTES ) ) );
 		}
 		if ( 1 === preg_match( '~[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]~', $value ) ) {
 			/* translators: %s: field name */
@@ -197,11 +197,11 @@ final class AB_MCP_Builder_Fields {
 	public static function validate_change( array $change, $checked = false ) {
 		foreach ( array( 'element', 'field', 'kind' ) as $key ) {
 			if ( ! isset( $change[ $key ] ) || ! is_string( $change[ $key ] ) || '' === $change[ $key ] ) {
-				return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change names no element, field or kind.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change names no element, field or kind. Change it in the page builder\'s editor.', 'alphabridge-mcp' ) );
 			}
 		}
 		if ( ! array_key_exists( 'after', $change ) || ! array_key_exists( 'before', $change ) ) {
-			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change carries no value before or after.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change carries no value before or after. Change it in the page builder\'s editor.', 'alphabridge-mcp' ) );
 		}
 		if ( ! $checked ) {
 			$again = self::check( $change['kind'], 'image' === $change['kind'] ? $change['after'] : (string) $change['after'], isset( $change['type'] ) ? (string) $change['type'] : '', $change['field'], $change['before'] );
@@ -214,7 +214,7 @@ final class AB_MCP_Builder_Fields {
 				return new WP_Error(
 					'ab_mcp_builder_bad_change',
 					/* translators: %s: field name */
-					sprintf( __( 'The new value for %s is not in the form its kind is stored in.', 'alphabridge-mcp' ), $change['field'] )
+					sprintf( __( 'The new value for %s is not in the form its kind is stored in. Read the element with wp_get_builder_layout and pass the value in the form its field takes, or change it in the page builder\'s editor.', 'alphabridge-mcp' ), $change['field'] )
 				);
 			}
 		}
@@ -379,7 +379,7 @@ final class AB_MCP_Builder_Fields {
 				'ab_mcp_builder_url',
 				sprintf(
 					/* translators: %s: field name */
-					__( 'The link for %s must start with http://, https://, mailto: or tel:, or be a relative link starting with /, # or ?. Other schemes (javascript:, data: and the like) are refused.', 'alphabridge-mcp' ),
+					__( 'The link for %s must start with http://, https://, mailto: or tel:, or be a relative link starting with /, # or ?. Other schemes (javascript:, data: and the like) are refused. Pass a link in one of these forms.', 'alphabridge-mcp' ),
 					$name
 				)
 			);

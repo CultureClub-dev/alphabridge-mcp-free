@@ -205,7 +205,7 @@ final class AB_MCP_Builder_Writer_Blocks extends AB_MCP_Builder_Writer {
 		$search  = (string) $search;
 		$replace = (string) $replace;
 		if ( '' === $search ) {
-			return new WP_Error( 'ab_mcp_builder_no_search', __( 'There is no text to search for.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_no_search', __( 'There is no text to search for. Pass the text to find as search.', 'alphabridge-mcp' ) );
 		}
 		if ( ! empty( $opts['regex'] ) ) {
 			return new WP_Error( 'ab_mcp_builder_regex', __( 'A regular expression is not applied to the fields of a block page: it could match the markup around them. Search for the text itself, or run wp_search_replace with scope: raw.', 'alphabridge-mcp' ) );
@@ -306,7 +306,7 @@ final class AB_MCP_Builder_Writer_Blocks extends AB_MCP_Builder_Writer {
 			return $ok;
 		}
 		if ( ! isset( $change['blocks']['content'] ) || ! is_string( $change['blocks']['content'] ) ) {
-			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over. Change it in the block editor.', 'alphabridge-mcp' ) );
 		}
 		return self::save_filter_guard( $change['blocks']['content'] );
 	}
@@ -323,7 +323,7 @@ final class AB_MCP_Builder_Writer_Blocks extends AB_MCP_Builder_Writer {
 	protected function write( $post, array $change, array $opts ) {
 		$plan = isset( $change['blocks'] ) && is_array( $change['blocks'] ) ? $change['blocks'] : array();
 		if ( ! isset( $plan['base'], $plan['content'] ) ) {
-			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_bad_change', __( 'A change is not in the form a writer hands over. Change it in the block editor.', 'alphabridge-mcp' ) );
 		}
 		// The page as stored now, not as execute() read it: somebody may have
 		// saved it while the undo point was being recorded.
@@ -985,7 +985,7 @@ final class AB_MCP_Builder_Writer_Blocks extends AB_MCP_Builder_Writer {
 		$old     = (string) $post->post_content;
 		$content = serialize_blocks( $after );
 		if ( $content === $old ) {
-			return new WP_Error( 'ab_mcp_builder_unchanged', __( 'The element already shows these values; there is nothing to change.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_builder_unchanged', __( 'The element already shows these values; there is nothing to change. Check them with wp_get_builder_layout.', 'alphabridge-mcp' ) );
 		}
 		$check = $this->dry_readback( $old, $content, $changes );
 		if ( is_wp_error( $check ) ) {
@@ -1106,7 +1106,7 @@ final class AB_MCP_Builder_Writer_Blocks extends AB_MCP_Builder_Writer {
 		}
 		return new WP_Error(
 			'ab_mcp_builder_kses_page',
-			__( 'Your account cannot post unfiltered HTML, so WordPress filters the whole page when it saves it — and on this page that would change more than this field: it would remove or rewrite markup such as icons, inline styles, image sets or code. Nothing was changed. An administrator of a single site (on a network, a super admin) can make this change; the field itself is checked the same way for every account.', 'alphabridge-mcp' )
+			__( 'Your account cannot post unfiltered HTML, so WordPress filters the whole page when it saves it — and on this page that would change more than this field: it would remove or rewrite markup such as icons, inline styles, image sets or code. Nothing was changed. Ask an administrator of a single site (on a network, a super admin) to make this change; the field itself is checked the same way for every account.', 'alphabridge-mcp' )
 		);
 	}
 
