@@ -2508,8 +2508,6 @@ msgstr "Vollständig wiederhergestellt, aber der Undo-Punkt liess sich nicht ent
 msgid "Restored. This undo point has been used up."
 msgstr "Wiederhergestellt. Dieser Undo-Punkt ist verbraucht."
 
-msgid "Partially restored. The undo point was kept so you can retry the rest."
-msgstr "Teilweise wiederhergestellt. Der Undo-Punkt wurde behalten, damit sich der Rest erneut versuchen lässt."
 
 msgid "Some undo points were kept: they came from tools this token may not act on. Use a wider-scoped token to discard those too."
 msgstr "Einige Undo-Punkte wurden behalten: Diese stammen von Werkzeugen, für die dieses Token nicht handeln darf. Ein Token mit weiterem Geltungsbereich verwenden, um auch diese zu verwerfen."
@@ -2758,3 +2756,16 @@ msgstr "Das Widget wurde nicht hinzugefügt: Die Liste der Widgets je Seitenleis
 
 msgid "The widget was not removed: the list of widgets per sidebar was not stored (a filter or the database rejected the write); its settings were left as they are. Use Appearance › Widgets in wp-admin to remove it."
 msgstr "Das Widget wurde nicht entfernt: Die Liste der Widgets je Seitenleiste wurde nicht gespeichert (ein Filter oder die Datenbank hat das Schreiben abgelehnt); seine Einstellungen blieben, wie sie sind. Es in wp-admin unter Design → Widgets entfernen."
+
+#, php-format
+msgid "Partially restored, but what did not come back could not be kept as an undo point of its own (%s). This undo point was kept: running it again would also put back what came back now, over any change since. Discard it with wp_undo_discard unless nothing has changed since."
+msgstr "Teilweise wiederhergestellt, aber der nicht wiederhergestellte Rest liess sich nicht als eigener Undo-Punkt speichern (%s). Dieser Undo-Punkt wurde behalten: Erneut ausgeführt, würde er auch das bereits Wiederhergestellte nochmals setzen und Änderungen seither überschreiben. Mit wp_undo_discard verwerfen, ausser seither hat sich nichts geändert."
+
+msgid "Partially restored, but this undo point could not be replaced by one with what did not come back. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again: it would also put back what came back now."
+msgstr "Teilweise wiederhergestellt, aber dieser Undo-Punkt liess sich nicht durch einen mit dem Rest ersetzen. Er bleibt zwei Minuten gesperrt – mit wp_undo_discard verwerfen und dieses Undo NICHT erneut ausführen: Es würde auch das bereits Wiederhergestellte nochmals setzen."
+
+msgid "Partially restored. This undo point has been used up; what did not come back is kept as a new one: pass rest_token to wp_undo once the cause is fixed."
+msgstr "Teilweise wiederhergestellt. Dieser Undo-Punkt ist verbraucht; der Rest liegt in einem neuen: rest_token an wp_undo übergeben, sobald die Ursache behoben ist."
+
+msgid "Nothing was restored. The undo point was kept so you can retry once the cause is fixed."
+msgstr "Nichts wurde wiederhergestellt. Der Undo-Punkt wurde behalten, damit sich das Undo nach Behebung der Ursache erneut versuchen lässt."

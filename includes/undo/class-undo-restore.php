@@ -206,45 +206,84 @@ class AB_MCP_Undo_Restore {
 
 		switch ( $p['kind'] ) {
 			case 'post_status':
-				return self::without_done( self::plan_post_status( $tool, $data ), $entry );
+				return self::plan_post_status( $tool, $data );
 			case 'site_settings':
-				return self::without_done( self::plan_site_settings( $tool, $data ), $entry );
+				return self::plan_site_settings( $tool, $data );
 			case 'post_fields':
-				return self::without_done( self::plan_post_fields( $tool, $data ), $entry );
+				return self::plan_post_fields( $tool, $data );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}
 
 	/**
-	 * A plan without the items an earlier, partial restore of the same point
-	 * already put back (AB_MCP_Undo::finish_apply(), "done"): retrying the
-	 * rest must not write those again, over whatever changed them since. They
-	 * are named under "already".
+	 * What a partial restore left: the snapshot of the point with only what
+	 * did not come back, for a new undo point that replaces this one (the
+	 * undo tool records it and uses this one up). A retry then puts back only
+	 * the rest, never again what came back the first time and may have been
+	 * changed since. Null where nothing is left or nothing came back.
 	 *
-	 * @param array|WP_Error $plan  Plan of the kind.
-	 * @param array          $entry Index entry.
-	 * @return array|WP_Error
+	 * Per kind, by the refs of apply(): post_status keeps the posts that did
+	 * not come back; site_settings the settings; post_fields, one post, the
+	 * fields a plan blocked one by one ("<id>:post_status"; a date both of
+	 * its columns), or all of them where the post did not come back at all.
+	 *
+	 * @param array $entry Index entry.
+	 * @param mixed $data  Decoded snapshot of the point.
+	 * @param array $res   Result of apply().
+	 * @return mixed|null The rest, in the form of the kind's snapshot.
 	 */
-	private static function without_done( $plan, array $entry ) {
-		if ( is_wp_error( $plan ) || empty( $entry['done'] ) || ! is_array( $entry['done'] ) ) {
-			return $plan;
-		}
-		$done    = array_map( 'strval', $entry['done'] );
-		$items   = array();
-		$already = array();
-		foreach ( $plan['items'] as $item ) {
-			if ( in_array( (string) $item['ref'], $done, true ) ) {
-				$already[] = $item['ref'];
-				continue;
+	public static function remaining( array $entry, $data, array $res ) {
+		$restored = isset( $res['restored'] ) ? array_map( 'strval', (array) $res['restored'] ) : array();
+		$open     = array();
+		foreach ( array_merge( (array) ( $res['blocked'] ?? array() ), (array) ( $res['failed'] ?? array() ) ) as $o ) {
+			if ( is_array( $o ) && isset( $o['ref'] ) ) {
+				$open[] = (string) $o['ref'];
 			}
-			$items[] = $item;
 		}
-		$plan['items']      = $items;
-		$plan['restorable'] = count( $items );
-		if ( $already ) {
-			$plan['already'] = $already;
+		if ( array() === $restored || array() === $open || ! is_array( $data ) ) {
+			return null;
 		}
-		return $plan;
+		switch ( isset( $entry['kind'] ) ? (string) $entry['kind'] : '' ) {
+			case 'post_status':
+				$rest = array_values(
+					array_filter(
+						$data,
+						static function ( $pair ) use ( $restored ) {
+							return is_array( $pair ) && isset( $pair[0] ) && ! in_array( (string) (int) $pair[0], $restored, true );
+						}
+					)
+				);
+				return array() !== $rest ? $rest : null;
+			case 'site_settings':
+				$rest = array_diff_key( $data, array_flip( $restored ) );
+				return array() !== $rest ? $rest : null;
+			case 'post_fields':
+				if ( ! isset( $data['id'], $data['fields'] ) || ! is_array( $data['fields'] ) ) {
+					return null;
+				}
+				$id = (string) (int) $data['id'];
+				if ( ! in_array( $id, $restored, true ) ) {
+					return $data;
+				}
+				$keep = array();
+				foreach ( $open as $ref ) {
+					if ( 0 === strpos( $ref, $id . ':' ) ) {
+						$col    = substr( $ref, strlen( $id ) + 1 );
+						$keep[] = $col;
+						if ( 'post_date' === $col ) {
+							$keep[] = 'post_date_gmt';
+						}
+					}
+				}
+				$fields = array_intersect_key( $data['fields'], array_flip( $keep ) );
+				if ( array() === $fields ) {
+					return null;
+				}
+				$rest           = $data;
+				$rest['fields'] = $fields;
+				return $rest;
+		}
+		return null;
 	}
 
 	/**
@@ -292,9 +331,6 @@ class AB_MCP_Undo_Restore {
 			'kind'     => $plan['kind'],
 			'tool'     => $plan['tool'],
 		);
-		if ( ! empty( $plan['already'] ) ) {
-			$out['already_restored'] = $plan['already'];
-		}
 		return $out;
 	}
 

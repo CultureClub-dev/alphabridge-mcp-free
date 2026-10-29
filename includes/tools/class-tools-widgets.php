@@ -456,11 +456,10 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	 * them from their sidebars for good. So the map is read as stored
 	 * (sidebars_map()), as the widgets screen edits it, and written here.
 	 *
-	 * Read back afterwards: update_option() cannot tell "failed" from
-	 * "already so", and a filter can turn the write down.
+	 * Whether it stored, the callers ask for their own widget
+	 * (sidebars_holding()).
 	 *
 	 * @param array $map Sidebar map.
-	 * @return bool Whether the stored map is the one written.
 	 */
 	private static function store_sidebar_map( array $map ) {
 		global $_wp_sidebars_widgets;
@@ -472,7 +471,24 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 			$map['array_version'] = 3;
 		}
 		update_option( 'sidebars_widgets', $map );
-		return self::sidebars_map() == $map; // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual -- the same lists; a stored number may come back as a string.
+	}
+
+	/**
+	 * The sidebars the stored map names this widget in. Asked after a write
+	 * of the map, which update_option() does not confirm and a filter can
+	 * turn down or change elsewhere: what counts is where this one widget is.
+	 *
+	 * @param string $id Widget id.
+	 * @return string[] Sidebar ids.
+	 */
+	private static function sidebars_holding( $id ) {
+		$in = array();
+		foreach ( self::sidebars_map() as $sb => $ids ) {
+			if ( 'array_version' !== $sb && is_array( $ids ) && in_array( $id, $ids, true ) ) {
+				$in[] = (string) $sb;
+			}
+		}
+		return $in;
 	}
 
 	/**
@@ -681,7 +697,8 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		}
 		$pos = isset( $a['position'] ) ? max( 0, (int) $a['position'] ) : count( $map[ $sidebar ] );
 		array_splice( $map[ $sidebar ], $pos, 0, $wid );
-		if ( ! self::store_sidebar_map( $map ) ) {
+		self::store_sidebar_map( $map );
+		if ( ! in_array( (string) $sidebar, self::sidebars_holding( $wid ), true ) ) {
 			// Its settings without a place in a sidebar would be a widget
 			// nobody sees and nobody lists: they are taken back.
 			unset( $opt[ $num ] );
@@ -729,7 +746,10 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		}
 		// Written only when something left the map — a write that changes
 		// nothing still persists whatever the read returned.
-		if ( $removed && ! self::store_sidebar_map( $map ) ) {
+		if ( $removed ) {
+			self::store_sidebar_map( $map );
+		}
+		if ( $removed && array() !== self::sidebars_holding( $id ) ) {
 			// Its settings stay: a sidebar entry without them would be broken.
 			return new WP_Error( 'ab_mcp_write_failed', __( 'The widget was not removed: the list of widgets per sidebar was not stored (a filter or the database rejected the write); its settings were left as they are. Use Appearance › Widgets in wp-admin to remove it.', 'alphabridge-mcp' ) );
 		}

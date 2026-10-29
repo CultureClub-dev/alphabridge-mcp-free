@@ -400,6 +400,24 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
 		}
 		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ), 'Without the filter as before.' );
+
+		// Codex 29.10.2026: a filter that stores the map but changes another
+		// sidebar as well. What counts is where this widget is.
+		add_filter(
+			'pre_update_option_sidebars_widgets',
+			static function ( $value ) {
+				$value['wp_inactive_widgets'][] = 'other-1';
+				return $value;
+			}
+		);
+		try {
+			$r = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+			self::assertIsArray( $r, 'The widget is in its sidebar: added.' );
+			self::assertArrayHasKey( (int) substr( $r['id'], 5 ), get_option( 'widget_text' ), 'Its settings stay.' );
+			self::assertSame( array( 'deleted' => true, 'id' => $r['id'] ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => $r['id'] ) ), 'And it goes again: no sidebar names it.' );
+		} finally {
+			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
+		}
 	}
 
 	/* ---------------------------------------------------- delete a widget */

@@ -2508,8 +2508,6 @@ msgstr "Totalmente reposto, mas não foi possível remover o ponto de restauro. 
 msgid "Restored. This undo point has been used up."
 msgstr "Reposto. Este ponto de restauro já foi utilizado."
 
-msgid "Partially restored. The undo point was kept so you can retry the rest."
-msgstr "Reposto parcialmente. O ponto de restauro foi mantido para que possa tentar novamente repor o resto."
 
 msgid "Some undo points were kept: they came from tools this token may not act on. Use a wider-scoped token to discard those too."
 msgstr "Alguns pontos de restauro foram mantidos: vêm de ferramentas sobre as quais este token não pode agir. Use um token com um âmbito mais amplo para os descartar também."
@@ -2758,3 +2756,16 @@ msgstr "O widget não foi adicionado: a lista de widgets por barra lateral não 
 
 msgid "The widget was not removed: the list of widgets per sidebar was not stored (a filter or the database rejected the write); its settings were left as they are. Use Appearance › Widgets in wp-admin to remove it."
 msgstr "O widget não foi removido: a lista de widgets por barra lateral não foi guardada (um filtro ou a base de dados recusou a escrita); as suas definições ficaram como estavam. Use Apresentação › Widgets no wp-admin para o remover."
+
+#, php-format
+msgid "Partially restored, but what did not come back could not be kept as an undo point of its own (%s). This undo point was kept: running it again would also put back what came back now, over any change since. Discard it with wp_undo_discard unless nothing has changed since."
+msgstr "Reposto parcialmente, mas o que não foi reposto não pôde ser guardado num ponto de restauro próprio (%s). Este ponto de restauro foi mantido: se o executar novamente, também reporia o que acabou de ser reposto, por cima de qualquer alteração posterior. Descarte-o com wp_undo_discard, a menos que nada tenha mudado desde então."
+
+msgid "Partially restored, but this undo point could not be replaced by one with what did not come back. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again: it would also put back what came back now."
+msgstr "Reposto parcialmente, mas não foi possível substituir este ponto de restauro por um com o resto. Fica bloqueado durante dois minutos — descarte-o com wp_undo_discard e NÃO execute esta anulação novamente: também reporia o que acabou de ser reposto."
+
+msgid "Partially restored. This undo point has been used up; what did not come back is kept as a new one: pass rest_token to wp_undo once the cause is fixed."
+msgstr "Reposto parcialmente. Este ponto de restauro já foi utilizado; o resto fica guardado num novo: passe rest_token a wp_undo assim que a causa estiver corrigida."
+
+msgid "Nothing was restored. The undo point was kept so you can retry once the cause is fixed."
+msgstr "Nada foi reposto. O ponto de restauro foi mantido para que possa tentar novamente assim que a causa estiver corrigida."

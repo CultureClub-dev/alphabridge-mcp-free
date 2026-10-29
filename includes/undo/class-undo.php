@@ -368,7 +368,9 @@ class AB_MCP_Undo {
 			'stored'     => $stored,
 			'user'       => (int) get_current_user_id(),
 			'created_at' => $now,
-			'expires_at' => $now + self::ttl(),
+			// A point that holds the rest of another (a partial undo) keeps
+			// that one's expiry: narrowing does not lengthen the window.
+			'expires_at' => isset( $rec['expires_at'] ) && (int) $rec['expires_at'] > $now ? min( $now + self::ttl(), (int) $rec['expires_at'] ) : $now + self::ttl(),
 			'payload'    => $file,
 			'sha256'     => $sha,
 			'inline'     => $inline,
@@ -750,22 +752,15 @@ class AB_MCP_Undo {
 	 * restore overran the 120s window and another request legitimately took the
 	 * point over, the first holder's late call touches nothing and says so.
 	 *
-	 * A partial restore names what it did put back ($done): the point keeps
-	 * those refs under "done", and the next restore of it leaves them out
-	 * (AB_MCP_Undo_Restore::plan()). Without that, retrying the rest wrote the
-	 * restored items back once more, over whatever had changed them since.
-	 *
-	 * @param string   $token   Token.
-	 * @param string   $nonce   The value begin_apply() returned.
-	 * @param bool     $consume Remove the point (true) or just release it.
-	 * @param string[] $done    On a release: the refs this restore put back.
+	 * @param string $token   Token.
+	 * @param string $nonce   The value begin_apply() returned.
+	 * @param bool   $consume Remove the point (true) or just release it.
 	 * @return true|WP_Error true only when the requested outcome is STORED.
 	 */
-	public static function finish_apply( $token, $nonce, $consume, $done = array() ) {
+	public static function finish_apply( $token, $nonce, $consume ) {
 		$result = true;
-		$done   = array_values( array_map( 'strval', array_filter( (array) $done, 'is_scalar' ) ) );
 		$locked = self::with_lock(
-			function () use ( $token, $nonce, $consume, $done, &$result ) {
+			function () use ( $token, $nonce, $consume, &$result ) {
 				$index = self::read_index();
 				$found = null;
 				foreach ( $index as $i => $e ) {
@@ -791,10 +786,6 @@ class AB_MCP_Undo {
 					unset( $index[ $found ] );
 				} else {
 					unset( $index[ $found ]['applying'], $index[ $found ]['applying_by'] );
-					if ( array() !== $done ) {
-						$before                  = isset( $e['done'] ) && is_array( $e['done'] ) ? $e['done'] : array();
-						$index[ $found ]['done'] = array_values( array_unique( array_merge( $before, $done ) ) );
-					}
 				}
 				self::write_index( array_values( $index ) );
 				// Trust only what is stored: a consumption that did not stick
@@ -804,8 +795,7 @@ class AB_MCP_Undo {
 					if ( $e2['token'] !== $token ) {
 						continue;
 					}
-					$missing = array_diff( $done, isset( $e2['done'] ) && is_array( $e2['done'] ) ? $e2['done'] : array() );
-					if ( $consume || isset( $e2['applying_by'] ) || array() !== $missing ) {
+					if ( $consume || isset( $e2['applying_by'] ) ) {
 						$result = new WP_Error( 'ab_mcp_undo_busy', __( 'The undo index is busy; try again in a moment.', 'alphabridge-mcp' ) );
 					}
 					return;
@@ -1320,18 +1310,6 @@ class AB_MCP_Undo {
 					|| ! preg_match( '/^[0-9a-f]{64}$/', (string) $part['sha256'] )
 					|| ( ! is_int( $part['bytes'] ) && ! ctype_digit( (string) $part['bytes'] ) )
 					|| ( ! is_int( $part['stored'] ) && ! ctype_digit( (string) $part['stored'] ) ) ) {
-					return false;
-				}
-			}
-		}
-		// What a partial restore already put back (finish_apply()): refs as
-		// strings, a bulk change at most 500 of them.
-		if ( array_key_exists( 'done', $e ) ) {
-			if ( ! is_array( $e['done'] ) || count( $e['done'] ) > 1000 ) {
-				return false;
-			}
-			foreach ( $e['done'] as $ref ) {
-				if ( ! is_string( $ref ) || strlen( $ref ) > 255 ) {
 					return false;
 				}
 			}

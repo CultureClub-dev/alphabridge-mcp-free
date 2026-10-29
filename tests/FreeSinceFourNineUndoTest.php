@@ -383,36 +383,147 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( 'Aus dem Punkt', get_option( 'blogname' ) );
 		self::assertSame( 'https://example.test', get_option( 'siteurl' ), 'Only the five options the tool writes come back.' );
 		self::assertFalse( get_option( 'default_role' ) );
-		self::assertFalse( $out['consumed'], 'A partial undo keeps its token.' );
+		self::assertTrue( $out['consumed'], 'The point is used up …' );
+		self::assertSame( array( 'siteurl' => 'https://evil.test', 'default_role' => 'administrator' ), AB_MCP_Undo::claim( (string) $out['rest_token'] )['data'], '… and only what did not come back is kept.' );
 	}
 
 	/**
 	 * Codex 29.10.2026: a retry after a partial undo wrote the settings that
-	 * had come back the first time once more, over a later change. The point
-	 * now notes them as done, and the retry puts back only the rest.
+	 * had come back the first time once more, over a later change. Decision
+	 * Thomas 29.10.2026: the point is narrowed — a partial undo uses it up and
+	 * keeps only what did not come back in a new one, with the old expiry.
 	 */
 	public function testARetryAfterAPartialUndoPutsBackOnlyTheRest(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$old = AB_MCP_Undo::claim( (string) $res['undo'] )['entry'];
 		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
 		$first = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
 		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
 		self::assertSame( array( 'blogname' ), $first['restored'] );
 		self::assertSame( 'blogdescription', $first['failed'][0]['ref'] );
-		self::assertFalse( $first['consumed'], 'The point stays for the rest.' );
+		self::assertTrue( $first['consumed'] );
 		self::assertSame( 'Titel alt', get_option( 'blogname' ) );
+		self::assertInstanceOf( \WP_Error::class, AB_MCP_Undo::claim( (string) $res['undo'] ), 'The old point is gone.' );
+		self::assertStringContainsString( 'rest_token', $first['note'] );
+
+		$rest = AB_MCP_Undo::claim( (string) $first['rest_token'] );
+		self::assertSame( array( 'blogdescription' => 'Tag alt' ), $rest['data'] );
+		self::assertSame( 'wp_update_site_settings', $rest['entry']['tool'] );
+		self::assertSame( 'manage_options', $rest['entry']['cap'] );
+		self::assertSame( $old['summary'], $rest['entry']['summary'] );
+		self::assertSame( 1, $rest['entry']['items'] );
+		self::assertSame( $old['expires_at'], $rest['entry']['expires_at'], 'Narrowing does not lengthen the window.' );
+		self::assertCount( 1, self::stored() );
 
 		update_option( 'blogname', 'Später geändert' );
-		$dry = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'], 'dry_run' => true ) );
+		$dry = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $first['rest_token'], 'dry_run' => true ) );
 		self::assertSame( 1, $dry['would_undo'] );
-		self::assertSame( array( 'blogname' ), $dry['already_restored'] );
+		self::assertSame( array(), $dry['blocked'] );
 
-		$second = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		$second = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $first['rest_token'] ) );
 		self::assertSame( array( 'blogdescription' ), $second['restored'] );
-		self::assertSame( array( 'blogname' ), $second['already_restored'] );
 		self::assertTrue( $second['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $second );
 		self::assertSame( 'Tag alt', get_option( 'blogdescription' ) );
 		self::assertSame( 'Später geändert', get_option( 'blogname' ), 'The later change stays.' );
+		self::assertCount( 0, self::stored() );
+	}
+
+	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {
+		self::settings();
+		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'tagline' => 'Tag neu' ) );
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		self::assertSame( array(), $out['restored'] );
+		self::assertFalse( $out['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $out );
+		self::assertSame( 'Nothing was restored. The undo point was kept so you can retry once the cause is fixed.', $out['note'] );
+		self::assertSame( array( 'blogdescription' => 'Tag alt' ), AB_MCP_Undo::claim( (string) $res['undo'] )['data'], 'Same token, same snapshot, released.' );
+		self::assertTrue( AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) )['consumed'] );
+		self::assertSame( 'Tag alt', get_option( 'blogdescription' ) );
+	}
+
+	public function testAPartialUndoOfPostFieldsKeepsOnlyTheFieldsLeftOut(): void {
+		$res = AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'title' => 'New title', 'status' => 'draft' ) );
+		self::assertSame( 'draft', get_post( 5 )->post_status );
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'publish_posts' !== $cap;
+		$out                    = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		self::assertSame( 'Old title', get_post( 5 )->post_title );
+		self::assertSame( 'draft', get_post( 5 )->post_status );
+		self::assertSame( '5:post_status', $out['blocked'][0]['ref'] );
+		self::assertTrue( $out['consumed'] );
+		$rest = AB_MCP_Undo::claim( (string) $out['rest_token'] );
+		self::assertSame( array( 'post_status' => 'publish' ), $rest['data']['fields'], 'The title that came back is not in it.' );
+		self::assertSame( 5, $rest['data']['id'] );
+
+		wp_update_post( array( 'ID' => 5, 'post_title' => 'Later title' ) );
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		$again                  = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $out['rest_token'] ) );
+		self::assertTrue( $again['consumed'] );
+		self::assertSame( 'publish', get_post( 5 )->post_status );
+		self::assertSame( 'Later title', get_post( 5 )->post_title, 'The later change stays.' );
+	}
+
+	public function testAPartialBulkUndoKeepsOnlyThePostsLeftOut(): void {
+		ab_test_add_post( 6, array( 'post_status' => 'publish' ) );
+		$res = AB_MCP_Tools_Search_Bulk::bulk_update_status( array( 'ids' => array( 5, 6 ), 'status' => 'draft' ) );
+		self::assertSame( 2, $res['updated'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args = array() ): bool => ! ( 'edit_post' === $cap && array( 6 ) === array_map( 'intval', $args ) );
+		$out                    = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		self::assertSame( 1, $out['undone'] );
+		self::assertSame( 'publish', get_post( 5 )->post_status );
+		self::assertSame( 'draft', get_post( 6 )->post_status );
+		self::assertTrue( $out['consumed'] );
+		self::assertSame( array( array( 6, 'publish' ) ), AB_MCP_Undo::claim( (string) $out['rest_token'] )['data'] );
+		self::assertSame( 1, AB_MCP_Undo::claim( (string) $out['rest_token'] )['entry']['items'] );
+	}
+
+	public function testWhenTheRestCannotBeKeptTheOldPointStaysWithAWarning(): void {
+		self::settings();
+		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		add_filter(
+			'pre_update_option_blogdescription',
+			static function ( $value, $old ) {
+				// The rest point is recorded after the restore; undo is off by then.
+				add_filter( 'ab_mcp_undo_enabled', '__return_false' );
+				return $old;
+			},
+			10,
+			2
+		);
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'], $GLOBALS['ab_test_filters']['ab_mcp_undo_enabled'] );
+		self::assertSame( array( 'blogname' ), $out['restored'] );
+		self::assertFalse( $out['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $out );
+		self::assertArrayNotHasKey( 'note', $out );
+		self::assertStringContainsString( 'could not be kept as an undo point of its own', $out['warning'] );
+		self::assertStringContainsString( 'wp_undo_discard', $out['warning'] );
+		$kept = AB_MCP_Undo::claim( (string) $res['undo'] );
+		self::assertSame( array( 'blogname' => 'Titel alt', 'blogdescription' => 'Tag alt' ), $kept['data'] );
+		self::assertArrayNotHasKey( 'applying', $kept['entry'], 'Released, so it can be discarded.' );
+		self::assertSame( 1, AB_MCP_Tools_Undo_Core::undo_discard( array( 'token' => (string) $res['undo'] ) )['discarded'] );
+	}
+
+	public function testWhenTheOldPointCannotBeTakenOutTheRestIsDropped(): void {
+		self::settings();
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$token = (string) $res['undo'];
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		// The index refuses every write that takes the old point out.
+		$has = static fn( $index ): bool => in_array( $token, array_column( (array) $index, 'token' ), true );
+		add_filter( 'pre_update_option_' . AB_MCP_Undo::OPTION, static fn( $value, $old ) => $has( $old ) && ! $has( $value ) ? $old : $value, 10, 2 );
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'], $GLOBALS['ab_test_filters'][ 'pre_update_option_' . AB_MCP_Undo::OPTION ] );
+		self::assertSame( array( 'blogname' ), $out['restored'] );
+		self::assertFalse( $out['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $out );
+		self::assertStringContainsString( 'could not be replaced', $out['warning'] );
+		self::assertStringContainsString( 'do NOT run this undo again', $out['warning'] );
+		self::assertSame( array( $token ), array_column( self::stored(), 'token' ), 'The rest point is gone again; the old one stays, blocked.' );
+		self::assertInstanceOf( \WP_Error::class, AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) ) );
 	}
 
 	public function testAContentTokenCannotUndoSiteSettings(): void {

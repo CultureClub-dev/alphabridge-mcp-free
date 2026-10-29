@@ -50,7 +50,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_undo',
 			array(
-				'description' => 'Reverse one earlier change using its undo token (from the "undo" field of the original result, or from wp_undo_list): the fields of a post changed with wp_update_post, the statuses wp_bulk_update_status set, or the site settings changed with wp_update_site_settings. dry_run=true shows exactly what would be restored and what refused, without changing anything; wp_undo_discard drops a point without restoring it. Undoing needs the same permission as the original action, and each item is re-checked against the CURRENT state, so a post this account may no longer edit is reported as blocked rather than restored. A fully successful undo consumes the token; a partial one keeps it, so a later call can retry the rest. Afterwards the page caches of the supported caching plugins are asked to purge the restored posts, and after an undo of site settings every page of this site; page_cache_purged lists them, page_cache_skipped names a cache left out on a multisite network and why.',
+				'description' => 'Reverse one earlier change using its undo token (from the "undo" field of the original result, or from wp_undo_list): the fields of a post changed with wp_update_post, the statuses wp_bulk_update_status set, or the site settings changed with wp_update_site_settings. dry_run=true shows exactly what would be restored and what refused, without changing anything; wp_undo_discard drops a point without restoring it. Undoing needs the same permission as the original action, and each item is re-checked against the CURRENT state, so a post this account may no longer edit is reported as blocked rather than restored. A fully successful undo consumes the token. A partial one consumes it too and returns rest_token, a new undo point with only what did not come back, so a later call retries just that; where nothing came back, the token is kept. Afterwards the page caches of the supported caching plugins are asked to purge the restored posts, and after an undo of site settings every page of this site; page_cache_purged lists them, page_cache_skipped names a cache left out on a multisite network and why.',
 				'open_world'  => true, // restores published content and settings.
 				'capability'  => 'read',
 				'inputSchema' => array(
@@ -174,15 +174,14 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 				return $plan;
 			}
 			return array(
-				'dry_run'          => true,
-				'token'            => $token,
-				'tool'             => $plan['tool'],
-				'kind'             => $plan['kind'],
-				'summary'          => $claim['entry']['summary'],
-				'would_undo'       => $plan['restorable'],
-				'blocked'          => $plan['blocked'],
-				'already_restored' => isset( $plan['already'] ) ? $plan['already'] : array(),
-				'note'             => __( 'Nothing was changed. Call wp_undo again without dry_run to apply this.', 'alphabridge-mcp' ),
+				'dry_run'    => true,
+				'token'      => $token,
+				'tool'       => $plan['tool'],
+				'kind'       => $plan['kind'],
+				'summary'    => $claim['entry']['summary'],
+				'would_undo' => $plan['restorable'],
+				'blocked'    => $plan['blocked'],
+				'note'       => __( 'Nothing was changed. Call wp_undo again without dry_run to apply this.', 'alphabridge-mcp' ),
 			);
 		}
 
@@ -209,15 +208,47 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 			return $res;
 		}
 
-		// Consumption rule: the token is used up only when the restore was
-		// complete. If anything was blocked or failed, the point stays so the
-		// operator can fix the cause and run the same undo again. Consumption
-		// and release are ONE nonce-checked operation in the store, so a second
-		// holder can never be raced here.
-		$complete = empty( $res['blocked'] ) && empty( $res['failed'] );
-		// A partial restore notes what it put back, so a retry does only the rest.
-		$fin = AB_MCP_Undo::finish_apply( $token, $nonce, $complete, $complete ? array() : (array) $res['restored'] );
-		if ( $complete && is_wp_error( $fin ) ) {
+		// Consumption rule: a complete restore uses the token up. A partial
+		// one puts what did not come back into a new undo point, which
+		// replaces this one: a retry then puts back only that, never again
+		// what came back and may have been changed since. Where nothing came
+		// back the point stays as it was, so the operator can fix the cause
+		// and run the same undo again. Consumption and release are ONE
+		// nonce-checked operation in the store, so a second holder can never
+		// be raced here; a request that read this point before is refused
+		// once it is used up.
+		$complete   = empty( $res['blocked'] ) && empty( $res['failed'] );
+		$consume    = $complete;
+		$rest_token = null;
+		if ( ! $complete ) {
+			$rest = AB_MCP_Undo_Restore::remaining( $claim['entry'], $claim['data'], $res );
+			if ( null !== $rest ) {
+				$e    = $claim['entry'];
+				$made = AB_MCP_Undo::record_result(
+					array(
+						'tool'       => (string) $e['tool'],
+						'cap'        => (string) $e['cap'],
+						'kind'       => (string) $e['kind'],
+						'summary'    => (string) $e['summary'],
+						'items'      => isset( $rest['fields'] ) ? 1 : count( (array) $rest ),
+						'data'       => $rest,
+						'expires_at' => (int) $e['expires_at'],
+					)
+				);
+				if ( is_wp_error( $made ) ) {
+					$res['warning'] = sprintf(
+						/* translators: %s: why the rest could not be kept */
+						__( 'Partially restored, but what did not come back could not be kept as an undo point of its own (%s). This undo point was kept: running it again would also put back what came back now, over any change since. Discard it with wp_undo_discard unless nothing has changed since.', 'alphabridge-mcp' ),
+						$made->get_error_message()
+					);
+				} else {
+					$rest_token = (string) $made;
+					$consume    = true;
+				}
+			}
+		}
+		$fin = AB_MCP_Undo::finish_apply( $token, $nonce, $consume );
+		if ( $consume && is_wp_error( $fin ) ) {
 			// The restore has HAPPENED — only the bookkeeping failed. Try once
 			// more; if the point still cannot be taken out, the reservation is
 			// deliberately NOT released: it keeps the point blocked for the
@@ -228,8 +259,17 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 				// The two-minute promise below counts from NOW, not from a
 				// begin_apply() that a long restore may have left far behind.
 				AB_MCP_Undo::extend_apply( $token, $nonce );
-				$complete       = false;
-				$res['warning'] = __( 'Restored in full, but the undo point could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again.', 'alphabridge-mcp' );
+				if ( null !== $rest_token ) {
+					// The old point stays; a second one with the rest would
+					// double it.
+					AB_MCP_Undo::discard( $rest_token );
+					$rest_token     = null;
+					$res['warning'] = __( 'Partially restored, but this undo point could not be replaced by one with what did not come back. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again: it would also put back what came back now.', 'alphabridge-mcp' );
+				} else {
+					$res['warning'] = __( 'Restored in full, but the undo point could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again.', 'alphabridge-mcp' );
+				}
+				$complete = false;
+				$consume  = false;
 			}
 		}
 
@@ -238,11 +278,18 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		$res = array_merge( $res, AB_MCP_Undo_Restore::after_restore( $res ) );
 
 		$res['token']    = $token;
-		$res['consumed'] = $complete;
+		$res['consumed'] = $consume;
+		if ( null !== $rest_token ) {
+			$res['rest_token'] = $rest_token;
+		}
 		if ( empty( $res['warning'] ) ) {
-			$res['note'] = $complete
-				? __( 'Restored. This undo point has been used up.', 'alphabridge-mcp' )
-				: __( 'Partially restored. The undo point was kept so you can retry the rest.', 'alphabridge-mcp' );
+			if ( $complete ) {
+				$res['note'] = __( 'Restored. This undo point has been used up.', 'alphabridge-mcp' );
+			} elseif ( null !== $rest_token ) {
+				$res['note'] = __( 'Partially restored. This undo point has been used up; what did not come back is kept as a new one: pass rest_token to wp_undo once the cause is fixed.', 'alphabridge-mcp' );
+			} else {
+				$res['note'] = __( 'Nothing was restored. The undo point was kept so you can retry once the cause is fixed.', 'alphabridge-mcp' );
+			}
 		}
 
 		return $res;
