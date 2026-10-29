@@ -260,11 +260,8 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 				// begin_apply() that a long restore may have left far behind.
 				AB_MCP_Undo::extend_apply( $token, $nonce );
 				if ( null !== $rest_token ) {
-					// The old point stays; a second one with the rest would
-					// double it.
-					AB_MCP_Undo::discard( $rest_token );
-					$rest_token     = null;
-					$res['warning'] = __( 'Partially restored, but this undo point could not be replaced by one with what did not come back. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again: it would also put back what came back now.', 'alphabridge-mcp' );
+					// The rest point is right; the old one is what has to go.
+					$res['warning'] = __( 'Partially restored. What did not come back is kept as a new undo point (rest_token), but this one could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run it again: it would also put back what came back now.', 'alphabridge-mcp' );
 				} else {
 					$res['warning'] = __( 'Restored in full, but the undo point could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again.', 'alphabridge-mcp' );
 				}

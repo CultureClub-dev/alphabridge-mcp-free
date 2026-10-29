@@ -547,7 +547,7 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( 1, AB_MCP_Tools_Undo_Core::undo_discard( array( 'token' => (string) $res['undo'] ) )['discarded'] );
 	}
 
-	public function testWhenTheOldPointCannotBeTakenOutTheRestIsDropped(): void {
+	public function testWhenTheOldPointCannotBeTakenOutTheRestIsKeptAndTheOldOneFlagged(): void {
 		self::settings();
 		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
 		$token = (string) $res['undo'];
@@ -559,11 +559,43 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'], $GLOBALS['ab_test_filters'][ 'pre_update_option_' . AB_MCP_Undo::OPTION ] );
 		self::assertSame( array( 'blogname' ), $out['restored'] );
 		self::assertFalse( $out['consumed'] );
+		self::assertStringContainsString( 'this one could not be removed', $out['warning'] );
+		self::assertStringContainsString( 'do NOT run it again', $out['warning'] );
+		self::assertSame( array( 'blogdescription' => 'Tag alt' ), AB_MCP_Undo::claim( (string) $out['rest_token'] )['data'], 'The rest is kept and named.' );
+		self::assertSame( array( $token, $out['rest_token'] ), array_column( self::stored(), 'token' ) );
+		self::assertInstanceOf( \WP_Error::class, AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) ), 'The old one stays blocked.' );
+	}
+
+	public function testAWindowThatHasPassedGivesNoRestPoint(): void {
+		self::settings();
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$token = (string) $res['undo'];
+		// The window ends right now: the claim still holds (it ends after
+		// this second), and the restore finishes in the next second.
+		for ( $t = time(); time() === $t; ) {
+			usleep( 20000 );
+		}
+		$index                  = self::stored();
+		$index[0]['expires_at'] = time();
+		update_option( AB_MCP_Undo::OPTION, $index );
+		add_filter(
+			'pre_update_option_blogdescription',
+			static function ( $value, $old ) {
+				for ( $t = time(); time() === $t; ) {
+					usleep( 20000 );
+				}
+				return $old;
+			},
+			10,
+			2
+		);
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		self::assertSame( array( 'blogname' ), $out['restored'] );
 		self::assertArrayNotHasKey( 'rest_token', $out );
-		self::assertStringContainsString( 'could not be replaced', $out['warning'] );
-		self::assertStringContainsString( 'do NOT run this undo again', $out['warning'] );
-		self::assertSame( array( $token ), array_column( self::stored(), 'token' ), 'The rest point is gone again; the old one stays, blocked.' );
-		self::assertInstanceOf( \WP_Error::class, AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) ) );
+		self::assertStringContainsString( 'has already passed', $out['warning'] );
+		self::assertSame( array( $token ), array_column( self::stored(), 'token' ), 'No new point with a new window.' );
+		self::assertSame( 'ab_mcp_undo_expired', AB_MCP_Undo::record_result( array( 'tool' => 'wp_update_site_settings', 'cap' => 'manage_options', 'kind' => 'site_settings', 'data' => array( 'blogname' => 'X' ), 'expires_at' => time() - 1 ) )->get_error_code() );
 	}
 
 	public function testAContentTokenCannotUndoSiteSettings(): void {

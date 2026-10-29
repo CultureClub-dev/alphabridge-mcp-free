@@ -698,11 +698,27 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$pos = isset( $a['position'] ) ? max( 0, (int) $a['position'] ) : count( $map[ $sidebar ] );
 		array_splice( $map[ $sidebar ], $pos, 0, $wid );
 		self::store_sidebar_map( $map );
-		if ( ! in_array( (string) $sidebar, self::sidebars_holding( $wid ), true ) ) {
+		$held = self::sidebars_holding( $wid );
+		if ( ! in_array( (string) $sidebar, $held, true ) ) {
+			if ( array() !== $held ) {
+				// Placed, but elsewhere: its settings stay with it.
+				return new WP_Error(
+					'ab_mcp_write_failed',
+					sprintf(
+						/* translators: %s: the sidebars that hold the widget */
+						__( 'The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it.', 'alphabridge-mcp' ),
+						implode( ', ', $held )
+					)
+				);
+			}
 			// Its settings without a place in a sidebar would be a widget
-			// nobody sees and nobody lists: they are taken back.
-			unset( $opt[ $num ] );
-			update_option( 'widget_' . $base, $opt );
+			// nobody sees and nobody lists: they are taken back — read
+			// afresh, so a change to another widget since stays.
+			$now = get_option( 'widget_' . $base );
+			if ( is_array( $now ) ) {
+				unset( $now[ $num ] );
+				update_option( 'widget_' . $base, $now );
+			}
 			return new WP_Error( 'ab_mcp_write_failed', __( 'The widget was not added: the list of widgets per sidebar was not stored (a filter or the database rejected the write), and its settings were taken back. Use Appearance › Widgets in wp-admin to add it.', 'alphabridge-mcp' ) );
 		}
 

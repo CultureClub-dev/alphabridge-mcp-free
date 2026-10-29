@@ -299,7 +299,7 @@ class AB_MCP_Undo {
 	 * not updated (ab_mcp_undo_index_failed). One null for all of them left a
 	 * caller unable to tell "undo is off" from "the disk is full".
 	 *
-	 * @param array $rec { tool, cap, kind, summary, items, data }.
+	 * @param array $rec { tool, cap, kind, summary, items, data, expires_at? }.
 	 * @return string|WP_Error
 	 */
 	public static function record_result( array $rec ) {
@@ -316,6 +316,19 @@ class AB_MCP_Undo {
 				__( 'Recording is paused while an undo is applied, so the undo itself gets no undo point. To reverse an undo, use the tool of the original change again.', 'alphabridge-mcp' ),
 				array( 'reason' => 'suspended' )
 			);
+		}
+		// A point that holds the rest of another (a partial undo) keeps that
+		// one's expiry: narrowing never lengthens the window, and a window
+		// that has passed gives no point at all.
+		$expires = time() + self::ttl();
+		if ( isset( $rec['expires_at'] ) ) {
+			$expires = min( $expires, (int) $rec['expires_at'] );
+			if ( $expires <= time() ) {
+				return new WP_Error(
+					'ab_mcp_undo_expired',
+					__( 'The undo window of this undo point has already passed, so no undo point was recorded. Check the result of the change before relying on an undo.', 'alphabridge-mcp' )
+				);
+			}
 		}
 		$kind = isset( $rec['kind'] ) ? (string) $rec['kind'] : '';
 		$data = isset( $rec['data'] ) ? $rec['data'] : null;
@@ -368,9 +381,7 @@ class AB_MCP_Undo {
 			'stored'     => $stored,
 			'user'       => (int) get_current_user_id(),
 			'created_at' => $now,
-			// A point that holds the rest of another (a partial undo) keeps
-			// that one's expiry: narrowing does not lengthen the window.
-			'expires_at' => isset( $rec['expires_at'] ) && (int) $rec['expires_at'] > $now ? min( $now + self::ttl(), (int) $rec['expires_at'] ) : $now + self::ttl(),
+			'expires_at' => $expires,
 			'payload'    => $file,
 			'sha256'     => $sha,
 			'inline'     => $inline,

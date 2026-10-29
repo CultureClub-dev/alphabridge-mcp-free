@@ -2761,11 +2761,18 @@ msgstr "No se ha quitado el widget: la lista de widgets por barra lateral no se 
 msgid "Partially restored, but what did not come back could not be kept as an undo point of its own (%s). This undo point was kept: running it again would also put back what came back now, over any change since. Discard it with wp_undo_discard unless nothing has changed since."
 msgstr "Restaurado en parte, pero lo que no se restauró no se ha podido guardar como un punto de restauración propio (%s). Se ha conservado este punto de restauración: si lo vuelves a ejecutar, también restauraría lo que acaba de restaurarse, por encima de cualquier cambio posterior. Descártalo con wp_undo_discard, salvo que no haya cambiado nada desde entonces."
 
-msgid "Partially restored, but this undo point could not be replaced by one with what did not come back. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run this undo again: it would also put back what came back now."
-msgstr "Restaurado en parte, pero no se ha podido sustituir este punto de restauración por uno con el resto. Queda bloqueado durante dos minutos: descártalo con wp_undo_discard y NO vuelvas a deshacer este cambio, ya que también restauraría lo que acaba de restaurarse."
-
 msgid "Partially restored. This undo point has been used up; what did not come back is kept as a new one: pass rest_token to wp_undo once the cause is fixed."
 msgstr "Restaurado en parte. Este punto de restauración ya se ha usado; el resto se guarda en uno nuevo: pasa rest_token a wp_undo cuando hayas corregido la causa."
 
 msgid "Nothing was restored. The undo point was kept so you can retry once the cause is fixed."
 msgstr "No se ha restaurado nada. Se ha conservado el punto de restauración para que puedas reintentarlo cuando hayas corregido la causa."
+
+msgid "Partially restored. What did not come back is kept as a new undo point (rest_token), but this one could not be removed. It stays blocked for two minutes — discard it with wp_undo_discard, and do NOT run it again: it would also put back what came back now."
+msgstr "Restaurado en parte. El resto se guarda en un nuevo punto de restauración (rest_token), pero no se ha podido eliminar este. Queda bloqueado durante dos minutos: descártalo con wp_undo_discard y NO lo vuelvas a ejecutar, ya que también restauraría lo que acaba de restaurarse."
+
+msgid "The undo window of this undo point has already passed, so no undo point was recorded. Check the result of the change before relying on an undo."
+msgstr "El plazo para deshacer de este punto de restauración ya ha vencido, así que no se ha registrado ningún punto de restauración. Comprueba el resultado del cambio antes de contar con poder deshacerlo."
+
+#, php-format
+msgid "The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it."
+msgstr "El widget se ha guardado, pero no en la barra lateral pedida: un filtro lo ha puesto en %s. Usa Apariencia → Widgets en wp-admin para moverlo."

@@ -418,6 +418,52 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		} finally {
 			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
 		}
+
+		// Codex 29.10.2026 (2): a filter that puts the new widget in another
+		// sidebar. It is placed, so its settings stay, and the answer says
+		// where it went.
+		add_filter(
+			'pre_update_option_sidebars_widgets',
+			static function ( $value, $old ) {
+				$new                  = array_values( array_diff( $value['sidebar-1'], (array) ( $old['sidebar-1'] ?? array() ) ) );
+				$value['sidebar-1']   = array_values( array_diff( $value['sidebar-1'], $new ) );
+				$value['wp_inactive_widgets'] = array_merge( (array) ( $value['wp_inactive_widgets'] ?? array() ), $new );
+				return $value;
+			},
+			10,
+			2
+		);
+		try {
+			$keys = array_keys( get_option( 'widget_text' ) );
+			$r    = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+			self::assertSame( 'ab_mcp_write_failed', self::code( $r ) );
+			self::assertStringContainsString( 'a filter put it in wp_inactive_widgets', $r->get_error_message() );
+			self::assertCount( count( $keys ) + 1, get_option( 'widget_text' ), 'No widget id without its settings.' );
+		} finally {
+			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
+		}
+
+		// Codex 29.10.2026 (3): taking the settings back removes only this
+		// widget's, read afresh — another widget's change since stays.
+		add_filter(
+			'pre_update_option_sidebars_widgets',
+			static function ( $value, $old ) {
+				$o             = get_option( 'widget_text' );
+				$o[9]['title'] = 'changed meanwhile';
+				update_option( 'widget_text', $o );
+				return $old;
+			},
+			10,
+			2
+		);
+		try {
+			$r = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+			self::assertStringContainsString( 'settings were taken back', $r->get_error_message() );
+			self::assertSame( 'changed meanwhile', get_option( 'widget_text' )[9]['title'] );
+			self::assertArrayNotHasKey( 11, get_option( 'widget_text' ) );
+		} finally {
+			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
+		}
 	}
 
 	/* ---------------------------------------------------- delete a widget */
