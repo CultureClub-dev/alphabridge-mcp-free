@@ -435,6 +435,22 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertCount( 0, self::stored() );
 	}
 
+	public function testARestPointKeepsAWindowShortenedSince(): void {
+		self::settings();
+		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		// Made 12 hours ago under 7 days; the window is 1 day now.
+		$index                  = self::stored();
+		$index[0]['created_at'] = time() - 12 * 3600;
+		$index[0]['expires_at'] = time() - 12 * 3600 + 7 * 86400;
+		update_option( AB_MCP_Undo::OPTION, $index );
+		update_option( AB_MCP_Undo::TTL_OPTION, 1 );
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		$rest = AB_MCP_Undo::claim( (string) $out['rest_token'] );
+		self::assertLessThanOrEqual( time() + 12 * 3600, $rest['entry']['expires_at'], 'Not a fresh day: the 12 hours the point had left.' );
+	}
+
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'tagline' => 'Tag neu' ) );

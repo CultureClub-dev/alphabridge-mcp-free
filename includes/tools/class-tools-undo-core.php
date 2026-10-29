@@ -232,7 +232,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 						'summary'    => (string) $e['summary'],
 						'items'      => isset( $rest['fields'] ) ? 1 : count( (array) $rest ),
 						'data'       => $rest,
-						'expires_at' => (int) $e['expires_at'],
+						'expires_at' => AB_MCP_Undo::expires_of( $e ),
 					)
 				);
 				if ( is_wp_error( $made ) ) {
