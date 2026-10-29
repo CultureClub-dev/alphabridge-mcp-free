@@ -52,7 +52,8 @@ function get_post_status( $id ) { $p = get_post( $id ); if ( ! $p ) { return fal
 class AB_MCP_Undo {
 	public static function record( array $e ) { $GLOBALS['t_undo'][] = $e; return 'undo-token'; }
 	public static function option_snapshot( $n ) { return array( 'name' => $n, 'value' => 'foo', 'autoload' => 'yes', 'existed' => true ); }
-	public static function record_result( array $r ) { $r['writes_before'] = count( $GLOBALS['t_opt'] ); $GLOBALS['t_undo_rows'][] = $r; return isset( $GLOBALS['t_undo_fail'] ) ? new WP_Error( $GLOBALS['t_undo_fail'], 'no room' ) : 'undo_opt'; }
+	public static function record_result( array $r ) { $r['writes_before'] = count( $GLOBALS['t_opt'] ); $GLOBALS['t_undo_rows'][] = $r; if ( isset( $GLOBALS['t_undo_fail'] ) ) { return new WP_Error( $GLOBALS['t_undo_fail'], 'no room' ); } if ( isset( $GLOBALS['t_undo_fail_next'] ) && count( $GLOBALS['t_undo_rows'] ) > 1 ) { return new WP_Error( $GLOBALS['t_undo_fail_next'], 'no room' ); } return 1 === count( $GLOBALS['t_undo_rows'] ) ? 'undo_opt' : 'undo_opt' . count( $GLOBALS['t_undo_rows'] ); }
+	public static function discard( $t ) { $GLOBALS['t_undo_discarded'][] = $t; return true; }
 }
 function get_current_user_id() { return 7; }
 function registered_meta_key_exists( $type, $key, $subtype = '' ) { return false; }
@@ -135,7 +136,7 @@ function update_metadata_by_mid( $type, $mid, $value ) { $GLOBALS['t_meta'][] = 
 // Like core: it unslashes what it is given, sanitises once, and picks the row
 // by the previous value.
 function update_term_meta( $term_id, $key, $value, $prev = '' ) { $GLOBALS['t_term_meta'][] = array( (int) $term_id, (string) $key, wp_unslash( $value ), wp_unslash( $prev ) ); return true; }
-function update_option( $name, $value ) { $GLOBALS['t_opt'][] = array( $name, $value ); return true; }
+function update_option( $name, $value ) { $GLOBALS['t_opt'][] = array( $name, $value ); if ( isset( $GLOBALS['t_opt_hook'][ $name ] ) ) { $GLOBALS['t_opt_now'] = $GLOBALS['t_opt_hook'][ $name ]; } return true; }
 function wp_update_post( $data, $wp_error = false ) {
 	$GLOBALS['t_post'][]          = $data;
 	$GLOBALS['t_post_wp_error'][] = $wp_error;
@@ -346,7 +347,7 @@ class AB_Test_WPDB {
 	public function get_var( $q ) {
 		$this->queries[] = $q;
 		// Free 4.10: the value of an option row read again before it is written.
-		if ( false !== strpos( $q, 'SELECT option_value FROM wp_options WHERE option_id = %d' ) ) { $last = end( $this->prepares ); $oid = is_array( $last ) ? (int) $last[2][0] : 0; if ( isset( $GLOBALS['t_opt_now'] ) ) { return is_array( $GLOBALS['t_opt_now'] ) ? ( $GLOBALS['t_opt_now'][ $oid ] ?? 'foo' ) : $GLOBALS['t_opt_now']; } return 'foo'; }
+		if ( false !== strpos( $q, 'SELECT option_value FROM wp_options WHERE option_id = %d' ) ) { $last = end( $this->prepares ); $oid = is_array( $last ) ? (int) $last[2][0] : 0; if ( isset( $GLOBALS['t_opt_second'] ) ) { $GLOBALS['t_opt_second'][ $oid ] = ( $GLOBALS['t_opt_second'][ $oid ] ?? 0 ) + 1; return $GLOBALS['t_opt_second'][ $oid ] > 1 ? 'changed' : 'foo'; } if ( isset( $GLOBALS['t_opt_now'] ) ) { return is_array( $GLOBALS['t_opt_now'] ) ? ( $GLOBALS['t_opt_now'][ $oid ] ?? 'foo' ) : $GLOBALS['t_opt_now']; } return 'foo'; }
 		// The read-back of a column just written: raw, as the scan read it.
 		foreach ( array( 'SELECT name FROM wp_terms WHERE term_id = %d' => 'name', 'SELECT slug FROM wp_terms WHERE term_id = %d' => 'slug' ) as $needle => $field ) {
 			if ( false !== strpos( $q, $needle ) ) {
@@ -1293,6 +1294,34 @@ $r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'opti
 $u = $GLOBALS['t_undo_rows'];
 ok( array( array( 'WPLANG', 'bar' ) ) === $GLOBALS['t_opt'] && 1 === count( $u ) && array( 'WPLANG' ) === array_column( $u[0]['data'], 'name' ), 'a row changed meanwhile is neither written nor in the undo point: an undo must not write back over a change this call did not make' );
 unset( $GLOBALS['t_opt_now'] );
+// A write earlier in the loop changes a later row (a hook on updated_option):
+// blogdescription (id 3) is written first, then WPLANG (id 13) reads changed.
+reset_log();
+$GLOBALS['t_undo_rows']      = array();
+$GLOBALS['t_undo_discarded'] = array();
+$GLOBALS['t_opt_hook']       = array( 'blogdescription' => array( 13 => 'changed by a hook' ) );
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+$u = $GLOBALS['t_undo_rows'];
+ok( array( array( 'blogdescription', 'bar' ) ) === $GLOBALS['t_opt'] && 1 === $r['tables']['options']['changed'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), '"WPLANG" changed while this call ran' ), 'a row a write before it changed is read again right before its own write and left as it is' );
+ok( 2 === count( $u ) && array( 'blogdescription', 'WPLANG' ) === array_column( $u[0]['data'], 'name' ) && array( 'blogdescription' ) === array_column( $u[1]['data'], 'name' ) && array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && 'undo_opt2' === $r['options_undo_token'], 'the undo point is narrowed to the row written: a new point replaces the first, which is removed, and the answer names the new one' );
+// Narrowing fails: the first point stays, and the answer says what its undo would also reset.
+reset_log();
+$GLOBALS['t_undo_rows']      = array();
+$GLOBALS['t_undo_discarded'] = array();
+$GLOBALS['t_undo_fail_next'] = 'ab_mcp_undo_write_failed';
+unset( $GLOBALS['t_opt_now'] );
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( 'undo_opt' === $r['options_undo_token'] && array() === $GLOBALS['t_undo_discarded'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'also holds option rows that were not written' ), 'where the narrowed point cannot be recorded, the first stays and the answer names what its undo would also reset' );
+unset( $GLOBALS['t_undo_fail_next'] );
+// No row written at all: the point is removed and the answer names none.
+reset_log();
+$GLOBALS['t_undo_rows']      = array();
+$GLOBALS['t_undo_discarded'] = array();
+$GLOBALS['t_opt_hook']       = array();
+$GLOBALS['t_opt_second']     = array(); // every row reads changed the second time
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( array() === $GLOBALS['t_opt'] && 1 === count( $GLOBALS['t_undo_rows'] ) && array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && null === $r['options_undo_token'], 'where no row is written in the end, its undo point is removed and the answer names none' );
+unset( $GLOBALS['t_opt_now'], $GLOBALS['t_opt_hook'], $GLOBALS['t_opt_second'] );
 
 echo "post_ids and expected_count (Free 4.10.0)\n";
 reset_log();
