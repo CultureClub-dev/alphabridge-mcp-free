@@ -268,6 +268,7 @@ class AB_MCP_Tool_Registry {
 			'wp_network_list_sites',
 			'wp_seo_detect',
 			'wp_seo_get',
+			'wp_undo_list',
 		);
 		return in_array( $name, $reads, true );
 	}

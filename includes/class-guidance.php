@@ -46,21 +46,18 @@ class AB_MCP_Guidance {
 	 * as Pro 4.6.0 registers them. Names Pro registers again over a tool of this
 	 * plugin (wp_get_post, wp_update_post and others) are not here: they run
 	 * on every site. Since 4.7.0 that includes the menus, the reading of users,
-	 * plugins, themes, cron and the error log, and WooCommerce read only.
+	 * plugins, themes, cron and the error log, and WooCommerce read only;
+	 * since 4.9.0 undo, user accounts, widgets, the site settings, the status
+	 * of many posts, revisions, post, user and term meta, changing WooCommerce,
+	 * the caches, the rewrite rules and the database and transient clean-up.
 	 */
 	const PRO_TOOLS = array(
 		'wp_activate_plugin',
 		'wp_activate_theme',
-		'wp_add_widget',
 		'wp_blueprint_diff',
 		'wp_blueprint_export',
-		'wp_bulk_update_status',
-		'wp_cleanup_transients',
-		'wp_clear_cache',
 		'wp_create_application_password',
-		'wp_create_user',
 		'wp_db_execute',
-		'wp_db_optimize',
 		'wp_db_query',
 		'wp_db_schema',
 		'wp_db_tables',
@@ -73,10 +70,7 @@ class AB_MCP_Guidance {
 		'wp_delete_theme_file',
 		'wp_delete_transient',
 		'wp_delete_upload_file',
-		'wp_delete_user',
-		'wp_delete_widget',
 		'wp_export_content',
-		'wp_flush_rewrite_rules',
 		'wp_get_php_snippet',
 		'wp_install_plugin',
 		'wp_install_plugin_zip',
@@ -93,7 +87,6 @@ class AB_MCP_Guidance {
 		'wp_read_plugin_file',
 		'wp_read_theme_file',
 		'wp_read_upload_file',
-		'wp_restore_revision',
 		'wp_revoke_application_password',
 		'wp_run_ability',
 		'wp_save_php_snippet',
@@ -101,28 +94,16 @@ class AB_MCP_Guidance {
 		'wp_search_replace',
 		'wp_set_transient',
 		'wp_toggle_php_snippet',
-		'wp_undo',
-		'wp_undo_discard',
-		'wp_undo_list',
 		'wp_unschedule_cron',
 		'wp_update_builder_element',
 		'wp_update_core',
 		'wp_update_option',
 		'wp_update_plugin',
-		'wp_update_post_meta',
-		'wp_update_site_settings',
-		'wp_update_term_meta',
 		'wp_update_theme',
-		'wp_update_user',
-		'wp_update_user_meta',
-		'wp_update_widget',
 		'wp_upload_abort',
 		'wp_upload_append',
 		'wp_upload_begin',
 		'wp_upload_commit',
-		'wp_wc_create_coupon',
-		'wp_wc_update_order_status',
-		'wp_wc_update_product',
 		'wp_write_plugin_file',
 		'wp_write_theme_file',
 		'wp_write_upload_file',
@@ -309,6 +290,6 @@ class AB_MCP_Guidance {
 	 * @return string
 	 */
 	public static function instructions_paragraph() {
-		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, the database, creating, changing and deleting user accounts, changing prices, stock, order status and coupons in WooCommerce (reading the shop is on this site), changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, undo, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
+		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
 	}
 }

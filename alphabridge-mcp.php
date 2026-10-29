@@ -3,7 +3,7 @@
  * Plugin Name:       AlphaBridge MCP
  * Plugin URI:        https://www.alphabridge-mcp.com
  * Description:       Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches.
- * Version:           4.8.1
+ * Version:           4.9.0
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            AlphaBridge
@@ -28,7 +28,7 @@ if ( defined( 'AB_MCP_VERSION' ) || class_exists( 'AB_MCP_Plugin', false ) ) {
 	return;
 }
 
-define( 'AB_MCP_VERSION', '4.8.1' );
+define( 'AB_MCP_VERSION', '4.9.0' );
 define( 'AB_MCP_FILE', __FILE__ );
 define( 'AB_MCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AB_MCP_URL', plugin_dir_url( __FILE__ ) );
@@ -58,6 +58,12 @@ require_once AB_MCP_DIR . 'includes/class-site-mode.php';
 require_once AB_MCP_DIR . 'includes/class-guidance.php';
 require_once AB_MCP_DIR . 'includes/class-security.php';
 require_once AB_MCP_DIR . 'includes/class-audit-log.php';
+// Undo (free since 4.9.0, before in Pro only): the store, its restore, and
+// the post rules and page caches both of them use.
+require_once AB_MCP_DIR . 'includes/class-page-cache.php';
+require_once AB_MCP_DIR . 'includes/class-post-status.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo-restore.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';

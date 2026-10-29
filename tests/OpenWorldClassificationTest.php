@@ -33,6 +33,7 @@ final class OpenWorldClassificationTest extends TestCase {
 		'wp_update_media',
 		'wp_update_term',
 		'wp_add_menu_item',
+		'wp_bulk_update_status', // Free since 4.9.0.
 	);
 
 	/** Tools that talk to other servers, open world as before. */
@@ -123,9 +124,9 @@ final class OpenWorldClassificationTest extends TestCase {
 	}
 
 	/**
-	 * wp_bulk_update_status belongs to AlphaBridge MCP Pro but is classified
-	 * here, in the shared registry: it can publish many posts at once, so it
-	 * counts as publishing like wp_create_post (OpenAI review finding, 16.10.2026).
+	 * wp_bulk_update_status (Pro only until 4.9.0) is classified here, in the
+	 * shared registry: it can publish many posts at once, so it counts as
+	 * publishing like wp_create_post (OpenAI review finding, 16.10.2026).
 	 */
 	public function test_pro_bulk_status_change_is_open_world(): void {
 		$this->assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_bulk_update_status', array() ) );

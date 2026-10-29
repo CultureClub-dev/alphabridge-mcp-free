@@ -127,6 +127,13 @@ function get_option( $name, $default = false ) {
 }
 
 function update_option( $name, $value ) {
+	// As WordPress: pre_update_option_{$option} and pre_update_option decide
+	// what is stored — another value, or the old one for a write a site
+	// refuses. Nothing here hooks them unless a test does (the read-back of
+	// wp_update_site_settings, since 4.9.0).
+	$old   = array_key_exists( $name, $GLOBALS['ab_test_options'] ) ? $GLOBALS['ab_test_options'][ $name ] : false;
+	$value = apply_filters( 'pre_update_option_' . $name, $value, $old, $name );
+	$value = apply_filters( 'pre_update_option', $value, $name, $old );
 	$GLOBALS['ab_test_options'][ $name ] = $value;
 	// Counted so a test can prove that a request which changes nothing also
 	// writes nothing. On a real site every write is a database round trip.
@@ -1665,7 +1672,7 @@ function register_rest_route( $route_namespace, $route, $args = array(), $overri
 
 /** No persistent object cache: counters live in transients, as on most sites. */
 function wp_using_ext_object_cache( $using = null ) {
-	return false;
+	return ! empty( $GLOBALS['ab_test_ext_object_cache'] );
 }
 
 /* ------------------------------------------------------- plugin constants */

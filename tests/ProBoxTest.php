@@ -140,9 +140,10 @@ final class ProBoxTest extends TestCase {
 
 	/**
 	 * An undo point in Pro expires after 7 days by default, adjustable from 1
-	 * to 30 (AB_MCP_Pro_Undo::TTL_DAYS_DEFAULT, _MIN, _MAX, integration/pro-4.6).
-	 * The box and the readme say so, and not the former 24 hours; "expire
-	 * after", not "kept for", as Pro also keeps only the newest points.
+	 * to 30 (AB_MCP_Pro_Undo::TTL_DAYS_DEFAULT, _MIN, _MAX, integration/pro-4.6);
+	 * in this plugin, since 4.9.0, after 7 days. The box and the readme say
+	 * so, and not the former 24 hours; "expire after", not "kept for", as the
+	 * store also keeps only the newest points.
 	 */
 	public function testTheUndoWindowIsTheOneProKeeps(): void {
 		$html   = $this->box();
@@ -150,7 +151,8 @@ final class ProBoxTest extends TestCase {
 		// README.md wraps its lines.
 		$github = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . 'README.md' ) );
 
-		self::assertStringContainsString( 'Undo points that expire after 7 days, adjustable from 1 to 30', $html );
+		self::assertStringContainsString( 'Undo for files and page builders, adjustable from 1 to 30 days', $html );
+		self::assertStringContainsString( 'undo point that expires after 7 days', $readme, 'The free undo, since 4.9.0.' );
 		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $readme );
 		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $github );
 		foreach ( array( 'box' => $html, 'readme.txt' => $readme, 'README.md' => $github ) as $where => $text ) {

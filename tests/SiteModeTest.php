@@ -1295,7 +1295,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame(
 			array(
 				'Off: read only | AI assistants read content, media and settings and advise you.',
-				'On: full power | AI assistants read and write: posts, pages, media, terms, comments, menus and SEO fields.',
+				'On: full power | AI assistants read and write: posts, pages, media, terms, comments, menus, widgets, users, site settings, the shop and SEO fields.',
 			),
 			$boxes,
 			'The free plugin names only what its own tools write.'

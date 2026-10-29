@@ -14,7 +14,7 @@ Connect Claude, ChatGPT and other AI agents to WordPress. Free MCP server for po
 
 **Connect Claude, ChatGPT and other AI agents to WordPress with a free WordPress MCP server. Say it in plain words, and the AI does it on your site.**
 
-AlphaBridge MCP lets the Claude or ChatGPT you already use work directly on your WordPress site: write and schedule posts, upload images, answer comments, edit menus, check and fix SEO fields, read your WooCommerce orders, pending updates and site health. No account, no API key, no credits, connected in about two minutes. Rated A by Glama, with the highest score of all WordPress MCP servers with 40 or more tools.
+AlphaBridge MCP lets the Claude or ChatGPT you already use work directly on your WordPress site: write and schedule posts, upload images, answer comments, edit menus and widgets, check and fix SEO fields, change prices and stock in WooCommerce, manage user accounts, read pending updates and site health, and undo a change with one sentence. No account, no API key, no credits, connected in about two minutes. Rated A by Glama, with the highest score of all WordPress MCP servers with 40 or more tools.
 
 Try it:
 
@@ -24,6 +24,7 @@ Try it:
 * "Add alt texts to the images in the media library that have none."
 * "Which of my sites have updates waiting?"
 * "Show me the texts and buttons on the home page, in page order."
+* "Put the About page back the way it was before your last change."
 
 Watch the whole setup in one minute: [Connect Claude to WordPress in five steps](https://www.youtube.com/watch?v=DlMJ9tfrqJg). Or click Live Preview on this page and look around the plugin on a test site.
 
@@ -33,15 +34,16 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 
 MCP, the Model Context Protocol, is the open standard AI assistants use to work with other software. An MCP server offers tools that an assistant can call. AlphaBridge MCP turns your WordPress site into such a server. Claude, ChatGPT, Claude Code, Cursor and other MCP clients see its tools, and when you ask for something, the assistant picks the right tool and runs it on your site, with the rights of your WordPress user.
 
-You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It reads widgets, site settings and pages built with blocks or a common page builder, and it works in the SEO fields of Yoast SEO and Rank Math.
+You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, reads pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-58 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+80 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
 * **Free and complete.** Every free tool works without payment, registration or license key, and the plugin does not expire. No usage quotas and no credits: you use Claude or ChatGPT as you do today.
 * **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory, enter your site's address and approve on your own site.
 * **It reads until you allow more.** Out of the box the AI only reads. One switch lets it write, one click turns writing off again.
+* **Undo included.** Edits of posts and pages, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. One sentence brings back what was there before.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
 * **Reads Elementor and 15 more page builders.** Their pages come back as an outline: the elements in page order, with their texts, links and images.
 * **Up to 10 sites in one chat.** The free hub, the service of AlphaBridge MCP that links your sites to Claude and ChatGPT, brings up to 10 WordPress sites into one chat, in every edition.
@@ -77,7 +79,8 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 
 = What your AI can do with the free plugin =
 
-* **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, and read their custom fields and earlier revisions. Search the whole site.
+* **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, set their custom fields and bring back an earlier revision. Publish, unpublish or trash up to 500 at once. Search the whole site.
+* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous values back. Custom fields and terms are not part of it.
 * **Media.** Add JPEG, PNG, GIF, WebP and PDF files from the chat or from a web address. Change titles, captions and alt texts, and delete files.
 * **Categories and tags.** Create, rename and delete the terms of any taxonomy.
 * **Comments.** Read, approve, answer and delete comments, and move spam out of the way.
@@ -85,10 +88,11 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 * **Updates and site health.** See which plugins, themes and WordPress versions wait for an update, and how the site is doing.
 * **Page builders.** Read the pages of supported builders as an outline: the elements in page order, with their texts, links and images.
 * **Menus.** Read the navigation menus, create a menu, and add or remove its items.
-* **Shop.** Read WooCommerce orders, products, coupons and customers.
-* **Users, plugins and themes.** List the user accounts and read one with its roles; see which plugins and themes are installed and active.
-* **Cron and error log.** See the scheduled WP-Cron events, and with write access on read the latest lines of debug.log.
-* **Widgets and settings.** Read the widgets, the sidebars and the common site settings.
+* **Shop.** Read WooCommerce orders, products, coupons and customers. Change prices, sale prices, stock and order status, and create coupons.
+* **Users.** Create, change and delete user accounts and give them roles, within the rights of your own account; the last administrator always stays. Set user and term meta.
+* **Plugins and themes.** See which plugins and themes are installed and active.
+* **Maintenance.** Clear the object cache and the page cache of common caching plugins, refresh the permalinks, optimise the database tables and remove expired transients. See the scheduled WP-Cron events, and with write access on read the latest lines of debug.log.
+* **Widgets and settings.** Add, change and remove widgets, and set the site title, tagline, admin email, timezone and posts per page.
 * **Site audits.** Ask for a check of all posts: thin content, missing meta descriptions, images without alt text. The AI works through the list with you.
 * **Many sites.** Bring up to 10 sites into one chat and work on whichever you name.
 
@@ -124,8 +128,9 @@ AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the
 
 * **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first. [Watch it in under a minute](https://youtu.be/9ivK3WyQiEo).
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
-* **Undo.** One sentence brings an edited page or file back. Its undo points expire after 7 days by default, adjustable from 1 to 30 days.
-* **Shop and users.** Prices, stock, order status and coupons in WooCommerce. Create, change and delete user accounts.
+* **Undo for page builders, files and code.** Page-builder elements, theme and plugin files, PHP snippets, options and theme switches come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
+* **Plugins, themes and WordPress itself.** Install, update, activate and delete plugins and themes, and update WordPress. Test requests check the site before and after an update or a switch-on, and a version that breaks it is put back in the same call.
+* **Database and options.** Query the database, change rows of plugin tables with structured statements, and write options, with guards for what must stay protected.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
 
 The Agency plan adds Site Deploy: the AI publishes files, themes and whole builds over SFTP onto the server the site runs on. Agency covers up to 10 sites.
@@ -151,7 +156,7 @@ Yes. All its tools work without payment, registration or license key, and the pl
 Yes, and it starts read-only. Until an administrator switches on write access, every tool that creates, changes or deletes is refused, and so are the readers of user profile fields and of the error log. Each connection acts as a real WordPress user: what that user may not do, the AI cannot do. It cannot read arbitrary site options, only a fixed list of common settings and the settings of the site's widgets. The latest 200 calls are logged.
 
 = What if the AI gets something wrong? =
-Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo by chat: one sentence brings back an edited page, a page-builder element, a theme or plugin file or a PHP snippet.
+Ask it to undo. Edits of posts and pages, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days, and one sentence brings the previous state back. Deleted posts and pages go to the trash by default, and WordPress keeps the revisions of edited posts as usual. Write access switches off again with one click. Keep a current backup all the same. Pro adds undo points for page-builder elements, theme and plugin files, PHP snippets and options, and lets you set how long they last, from 1 to 30 days.
 
 = Which AI apps work with it? =
 Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwards, Claude Code, Cursor, Codex, VS Code, Windsurf and any other client that speaks MCP. Claude connects from its connector directory, ChatGPT as a plugin with OAuth, the others with OAuth or a connection you create in the plugin.
@@ -160,7 +165,7 @@ Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwar
 No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
 
 = Does it work with WooCommerce, Elementor, Yoast and Rank Math? =
-The free plugin reads Elementor pages and the pages of many other page builders, reads and sets the SEO title, meta description and focus keyword of Yoast SEO and Rank Math, and reads the orders, products, coupons and customers of WooCommerce. Pro changes texts, links and images in the builder and works in WooCommerce: prices, stock, order status, customers and coupons.
+Yes. The free plugin reads Elementor pages and the pages of many other page builders, reads and sets the SEO title, meta description and focus keyword of Yoast SEO and Rank Math, reads the orders, products, coupons and customers of WooCommerce, and changes prices, stock and order status and creates coupons. Pro changes texts, links and images right in the page builder.
 
 = Can I limit what the AI may do? =
 Yes. Each connection gets full access, content only or read only and acts as the WordPress user you choose. A connection you create in the plugin can also get an expiry. Single tools or whole groups can be switched off, and the main switch turns all writing off with one click.
@@ -189,7 +194,7 @@ The site answers apps in MCP revision 2026-07-28 and keeps the older revisions f
 No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
 
 = Do I need Pro? =
-Not to get started. The free plugin covers content, media, comments and menus and reads your shop, on as many sites as you like. Take Pro for page-builder texts, code and changes in your shop, with undo for pages and files. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
+Not to get started. The free plugin covers content, media, comments, menus, widgets, users and your shop, with undo, on as many sites as you like. Take Pro for page-builder texts, code with a safety net, installing and updating plugins and themes, and undo that also covers files, adjustable up to 30 days. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
 Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
@@ -215,6 +220,16 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.9.0 =
+* **22 more tools in the free plugin, 80 in all, undo included.** Until now they came with AlphaBridge MCP Pro only; they work as they did there, with the same rights checks, and their messages come in the plugin's languages. `wp_update_user_meta` and `wp_update_term_meta` keep the backslashes in a value.
+* **Undo.** `wp_update_post` (the post fields it changes, not custom fields or terms), `wp_bulk_update_status` and `wp_update_site_settings` keep an undo point with the previous values; `wp_undo_list` lists your own points, `wp_undo` puts one back (with `dry_run=true` it only shows what it would do), `wp_undo_discard` throws one away. If only part comes back, the undo point is replaced by one with just the rest (`rest_token`, same expiry), so trying again never writes back what already came back. Putting back a file's former parent needs the right to edit that post now. Undo points expire after 7 days; the newest 50 and 100 MB at most are kept, as copies in a protected folder in the uploads. A restore asks again for the right to the post or the setting, as the original change did. Undo points that Pro recorded on this site stay where they are: Pro reverses them, and without Pro they expire.
+* **Posts.** Bring back an earlier revision (`wp_restore_revision`), set one custom field (`wp_update_post_meta`; page-builder data takes the unfiltered_html capability), and publish, unpublish or trash up to 500 posts at once (`wp_bulk_update_status`).
+* **Users.** Create, change and delete user accounts (`wp_create_user`, `wp_update_user`, `wp_delete_user`), within the roles your own account may give; the last administrator cannot be deleted or demoted. Set user and term meta (`wp_update_user_meta`, `wp_update_term_meta`).
+* **WooCommerce.** Change the price, sale price, stock and status of a product, the status of an order, and create coupons (`wp_wc_update_product`, `wp_wc_update_order_status`, `wp_wc_create_coupon`), with the right to the one product or order.
+* **Widgets and settings.** Add, change and remove widgets (`wp_add_widget`, `wp_update_widget`, `wp_delete_widget`); set the site title, tagline, admin email, timezone and posts per page (`wp_update_site_settings`), each read back.
+* **Maintenance.** Clear the object cache, OPcache and the page cache of supported caching plugins (`wp_clear_cache`), refresh the rewrite rules (`wp_flush_rewrite_rules`), optimise the site's database tables (`wp_db_optimize`) and remove expired transients (`wp_cleanup_transients`).
+* All of them write only with write access on, as every writing tool does. Deleting the plugin also removes the undo points, unless AlphaBridge MCP Pro is still installed.
 
 = 4.8.1 =
 * **The request for a review comes sooner and where administrators look.** It appears once the plugin has been in use for 3 days with at least 25 successful tool calls (before: 14 days and 50 calls), as before as a strip in the header of Settings → AlphaBridge MCP and now also as a notice on the Dashboard and the Plugins screen, for administrators only. One answer ends it everywhere: «Write a review» or «Don’t show again». It never comes back, also not after an update, and nothing is sent anywhere.
@@ -444,6 +459,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.9.0 =
+22 more free tools, 80 in all: undo for posts and settings, user accounts, WooCommerce prices, stock and orders, widgets, site settings and maintenance. No setting changes.
 
 = 4.8.1 =
 The one-time request for a review appears after 3 days and 25 successful calls, now also on the Dashboard and the Plugins screen until answered or dismissed. No setting changes.

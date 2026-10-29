@@ -26,6 +26,8 @@ use AB_MCP_OAuth;
 use AB_MCP_Review_Notice;
 use AB_MCP_Settings;
 
+require_once __DIR__ . '/uninstall-stubs.php';
+
 final class UninstallTest extends TestCase {
 
 	private const PRO_FILE = '/alphabridge-mcp-pro/alphabridge-mcp-pro.php';
@@ -40,7 +42,7 @@ final class UninstallTest extends TestCase {
 		// Every class the plugin ships, not only the ones the bootstrap needs:
 		// an option declared in a class no other test loads must count too.
 		$root = dirname( __DIR__ );
-		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ) ) as $file ) {
+		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ) ) as $file ) {
 			require_once $file;
 		}
 	}
@@ -127,6 +129,54 @@ final class UninstallTest extends TestCase {
 			self::assertFalse( self::stored( $name ), $name . ' is still in the database after uninstall' );
 		}
 		self::assertSame( 'Not ours', get_option( 'blogname' ), 'only the plugin\'s own rows go' );
+	}
+
+	public function testTheUndoSnapshotsGoWithTheRest(): void {
+		// Free since 4.9.0: copies of posts and settings, in the uploads.
+		$base = sys_get_temp_dir() . '/ab-mcp-uninstall-uploads-' . getmypid();
+		$dir  = $base . '/ab-mcp-undo';
+		$GLOBALS['ab_test_upload_basedir'] = $base;
+		try {
+			foreach ( array( false, true ) as $pro ) {
+				if ( ! is_dir( $dir ) ) {
+					mkdir( $dir, 0777, true );
+				}
+				file_put_contents( $dir . '/index.php', '<?php' );
+				file_put_contents( $dir . '/.htaccess', 'Require all denied' );
+				file_put_contents( $dir . '/' . str_repeat( 'a', 40 ) . '.bin', 'snapshot' );
+				file_put_contents( $base . '/photo.jpg', 'not ours' );
+				if ( $pro ) {
+					mkdir( dirname( WP_PLUGIN_DIR . self::PRO_FILE ), 0777, true );
+					file_put_contents( WP_PLUGIN_DIR . self::PRO_FILE, '<?php' );
+				}
+
+				$this->runUninstall();
+
+				if ( $pro ) {
+					self::assertFileExists( $dir . '/' . str_repeat( 'a', 40 ) . '.bin', 'Pro shares the store and keeps it.' );
+				} else {
+					self::assertDirectoryDoesNotExist( $dir, 'The folder goes with its snapshots, index.php and .htaccess.' );
+				}
+				self::assertFileExists( $base . '/photo.jpg', 'Only the undo folder goes.' );
+				$this->removeProFile();
+			}
+		} finally {
+			unset( $GLOBALS['ab_test_upload_basedir'] );
+			foreach ( (array) glob( $dir . '/{,.}*', GLOB_BRACE ) as $f ) {
+				if ( is_file( $f ) ) {
+					unlink( $f );
+				}
+			}
+			if ( is_dir( $dir ) ) {
+				rmdir( $dir );
+			}
+			if ( is_file( $base . '/photo.jpg' ) ) {
+				unlink( $base . '/photo.jpg' );
+			}
+			if ( is_dir( $base ) ) {
+				rmdir( $base );
+			}
+		}
 	}
 
 	public function testTheRegisteredAppsGoWithTheRest(): void {

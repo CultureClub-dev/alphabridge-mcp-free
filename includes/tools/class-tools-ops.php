@@ -40,6 +40,29 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 			)
 		);
 
+		// The two maintenance tools came with AlphaBridge MCP Pro only until
+		// 4.9.0. Pro registers its own copy of these names over them; the
+		// definitions here are Pro's, without its tier. Scheduling cron
+		// events and setting or deleting single transients stay in Pro.
+		$r->register(
+			'wp_db_optimize',
+			array(
+				'description' => 'Run OPTIMIZE TABLE on every database table whose name starts with this site\'s table prefix, to reclaim unused space and defragment. Returns optimized (the count) and tables (the names). On large tables it can take a while and, depending on the storage engine, lock them meanwhile; there is no dry run. Requires manage_options.',
+				'capability'  => 'manage_options',
+				'dangerous'   => true,
+				'callback'    => array( __CLASS__, 'db_optimize' ),
+			)
+		);
+
+		$r->register(
+			'wp_cleanup_transients',
+			array(
+				'description' => 'Delete the expired transients: every transient whose _transient_timeout_ row in the options table has passed is deleted through WordPress (value and timeout). Transients not yet expired and site transients (_site_transient_) are left alone. Returns deleted, the number of expired transients found and handed to WordPress for deletion. With a persistent object cache WordPress deletes in the cache only, so the old option rows can remain. Requires manage_options.',
+				'capability'  => 'manage_options',
+				'dangerous'   => true,
+				'callback'    => array( __CLASS__, 'cleanup_transients' ),
+			)
+		);
 	}
 
 	/* --------------------------------------------------------------- cron */
@@ -115,4 +138,80 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 
 	/* --------------------------------------------------------------- database */
 
+	/*
+	 * db_optimize() and cleanup_transients() are AlphaBridge MCP Pro's code,
+	 * free since 4.9.0. AB_MCP_Tools_Ops_Pro of every Pro release since 4.5.3
+	 * extends this class and declares both, with the same signatures.
+	 */
+
+	/**
+	 * Optimize database tables (only this install's prefixed tables).
+	 *
+	 * @return array
+	 */
+	public static function db_optimize() {
+		global $wpdb;
+		$like   = $wpdb->esc_like( $wpdb->prefix ) . '%';
+		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the table list as the database has it now; nothing to cache.
+		// On a network the main site's prefix is the base prefix, so the
+		// pattern also matches every other site's tables (wp_2_posts) and the
+		// shared ones (wp_users). Those are the network's: without its right
+		// only this site's own tables are optimized.
+		if ( is_multisite() && ! current_user_can( 'manage_network_options' ) && (string) $wpdb->prefix === (string) $wpdb->base_prefix ) {
+			$global = array_values( (array) $wpdb->tables( 'global', true ) );
+			$other  = '/^' . preg_quote( (string) $wpdb->base_prefix, '/' ) . '[0-9]+_/';
+			$tables = array_values(
+				array_filter(
+					(array) $tables,
+					static function ( $t ) use ( $global, $other ) {
+						return ! in_array( (string) $t, $global, true ) && ! preg_match( $other, (string) $t );
+					}
+				)
+			);
+		}
+		$done   = array();
+		foreach ( (array) $tables as $t ) {
+			$safe = preg_replace( '/[^A-Za-z0-9_]/', '', $t );
+			if ( '' === $safe ) {
+				continue;
+			}
+			$wpdb->query( "OPTIMIZE TABLE `$safe`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- a table name cannot be a placeholder; it is reduced to A-Z, a-z, 0-9 and _ above.
+			$done[] = $safe;
+		}
+		return array(
+			'optimized' => count( $done ),
+			'tables'    => $done,
+		);
+	}
+
+	/* --------------------------------------------------------------- transients */
+
+	/**
+	 * Delete expired transients from the options table.
+	 *
+	 * @return array
+	 */
+	public static function cleanup_transients() {
+		global $wpdb;
+		$now     = time();
+		$like    = $wpdb->esc_like( '_transient_timeout_' ) . '%';
+		$expired = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value < %d", $like, $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the timeout rows as stored; no API lists them.
+		$count   = 0;
+		foreach ( (array) $expired as $opt ) {
+			$name = substr( $opt, strlen( '_transient_timeout_' ) );
+			if ( '' !== $name ) {
+				// With a persistent object cache, delete_transient() deletes
+				// the cache entry only: a fresh one by that name would go and
+				// the expired rows would stay. The rows go where they are.
+				if ( wp_using_ext_object_cache() ) {
+					delete_option( '_transient_' . $name );
+					delete_option( '_transient_timeout_' . $name );
+				} else {
+					delete_transient( $name );
+				}
+				++$count;
+			}
+		}
+		return array( 'deleted' => $count );
+	}
 }

@@ -122,7 +122,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post',
 			array(
-				'description' => 'Update an existing post, page or entry of any post type; only the fields passed change. Returns {updated: true, post} with the entry\'s summary (the fields of wp_list_posts), plus builder_note where the new content shows but the page builder may replace it later. Needs the right to edit the entry; moving it to publish, private or future needs the right to publish. Changes to a published entry show on the site at once; a status change can publish an entry or take it off the site, and giving a trashed entry a status takes it out of the trash. For a revision id, WordPress stores custom fields (meta) on the post the revision belongs to. On a page whose page builder shows its own data, post_content is only a copy: a call with content is refused there before anything is written, with the way to make the change; a call without content still changes the other fields. wp_get_builder_layout returns the outline of such pages.',
+				'description' => 'Update an existing post, page or entry of any post type; only the fields passed change. Returns {updated: true, post} with the entry\'s summary (the fields of wp_list_posts), plus builder_note where the new content shows but the page builder may replace it later, and undo. Needs the right to edit the entry; moving it to publish, private or future needs the right to publish. Changes to a published entry show on the site at once; a status change can publish an entry or take it off the site, and giving a trashed entry a status takes it out of the trash. For a revision id, WordPress stores custom fields (meta) on the post the revision belongs to. On a page whose page builder shows its own data, post_content is only a copy: a call with content is refused there before anything is written, with the way to make the change; a call without content still changes the other fields. wp_get_builder_layout returns the outline of such pages. An undo point keeps the previous values of the fields the call changes (title, content, excerpt, status, slug, parent, author, date; with the status also the date, since publishing an undated draft dates it), read just before the write; meta and terms are not part of it. The answer adds undo, the token for wp_undo (null when no snapshot could be taken).',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -177,6 +177,23 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			)
 		);
 
+		// Free since 4.9.0, before in Pro only; Pro registers its own over it.
+		$r->register(
+			'wp_restore_revision',
+			array(
+				'description' => 'Restore a post to one of its revisions: WordPress copies the revision\'s title, content and excerpt, and meta a plugin registered as revisioned, back onto the post; a new revision can result where revisions are on and the content differs. Terms and status stay as they are. Returns restored and post_id. Needs edit_posts and the right to edit that post; an unknown revision id is a not-found error. No AlphaBridge undo point is recorded; the replaced version normally remains in the post\'s revision list (wp_list_revisions).',
+				'open_world'  => true, // replaces the title and content of a post that may be published.
+				'capability'  => 'edit_posts',
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'revision_id' ),
+					'properties' => array( 'revision_id' => array( 'type' => 'integer', 'description' => 'Revision id, as wp_list_revisions returns it; the post it belongs to follows from the revision.' ) ),
+				),
+				'callback'    => array( __CLASS__, 'restore_revision' ),
+			)
+		);
+
 		$r->register(
 			'wp_duplicate_post',
 			array(
@@ -205,6 +222,27 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post_meta_tool' ),
+			)
+		);
+
+		// Free since 4.9.0, before in Pro only; Pro registers its own over it.
+		$r->register(
+			'wp_update_post_meta',
+			array(
+				'description' => 'Create or overwrite one meta value of a post: every stored value of the key is replaced, so a repeated call leaves the same state. Takes id, key and value (any JSON value; an array or object is stored as a serialized array); the key is stored lower-cased (sanitize_key). Refused: keys starting with "_", credential-like keys and keys the account may not edit. Page-builder data — keys such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post (filter ab_mcp_builder_markup_meta_keys) — takes the unfiltered_html capability, which on a multisite network only a super admin has. The value is stored as given, backslashes included (\\u0026 in block JSON stays \\u0026). Returns updated, id and key; an unknown post is a not-found error. Needs edit_posts and the right to edit the post; no undo point is recorded. wp_get_post_meta reads the value; wp_update_post sets several keys through its meta field.',
+				'open_world'  => true, // post fields, page-builder data included, are shown on the page.
+				'capability'  => 'edit_posts',
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'id', 'key' ),
+					'properties' => array(
+						'id'    => array( 'type' => 'integer', 'description' => 'Post id.' ),
+						'key'   => array( 'type' => 'string', 'description' => 'Meta key; stored lower-cased (sanitize_key).' ),
+						'value' => array( 'description' => 'Any JSON value; an array or object is stored serialized. Omitted: an empty string.' ),
+					),
+				),
+				'callback'    => array( __CLASS__, 'update_post_meta_tool' ),
 			)
 		);
 
@@ -609,12 +647,166 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	}
 
 	/**
-	 * Update post.
+	 * wp_update_post with an undo point (free since 4.9.0, before in Pro
+	 * only). The snapshot is taken INSIDE the write — on pre_post_update, the
+	 * action wp_insert_post() fires right before its UPDATE query — from an
+	 * uncached read, and recorded only after the write succeeded. So what the
+	 * undo restores is what this call overwrote: a change someone else made a
+	 * moment earlier lands in the snapshot instead of being lost. (A true
+	 * version condition does not exist in WordPress; the gap that remains is
+	 * the one inside wp_insert_post() itself.) The snapshot holds the fields
+	 * the call names — with a date or a status both date columns, since an
+	 * undated draft is dated when it is published or scheduled — because what
+	 * the call did not touch needs no restoring and a small snapshot stays
+	 * inline in the index.
+	 *
+	 * Pro's AB_MCP_Tools_Content_Pro::update_post() takes its own snapshot
+	 * and calls this one as parent::update_post(); a second undo point for
+	 * the same change would follow. So a call from a subclass writes without
+	 * one, and the subclass records it.
 	 *
 	 * @param array $a Args.
 	 * @return array|WP_Error
 	 */
 	public static function update_post( $a ) {
+		if ( __CLASS__ !== static::class || ! class_exists( 'AB_MCP_Undo' ) ) {
+			return self::write_post( $a );
+		}
+		$id    = self::i( $a, 'id' );
+		$map   = array(
+			'title'   => 'post_title',
+			'content' => 'post_content',
+			'status'  => 'post_status',
+			'excerpt' => 'post_excerpt',
+			'slug'    => 'post_name',
+			'parent'  => 'post_parent',
+			'author'  => 'post_author',
+		);
+		$asked = array();
+		foreach ( $map as $in => $col ) {
+			if ( array_key_exists( $in, $a ) ) {
+				$asked[] = $col;
+			}
+		}
+		// The date is two columns. It changes when the call gives one, and it
+		// can change with the status: an undated draft that is published or
+		// scheduled is dated. Both columns go into the snapshot then, so an
+		// undo also puts back a draft's missing date.
+		if ( array_key_exists( 'date', $a ) || array_key_exists( 'status', $a ) ) {
+			$asked[] = 'post_date';
+			$asked[] = 'post_date_gmt';
+		}
+		$before    = null;
+		$pw_before = '';
+		$calls     = 0;
+		$busy      = false;
+		$hook      = static function ( $post_id ) use ( $id, $asked, &$before, &$pw_before, &$calls, &$busy ) {
+			if ( (int) $post_id !== $id || empty( $asked ) ) {
+				return;
+			}
+			// Every UPDATE of this post counts, a re-entrant one included: two
+			// of them mean ours cannot be told apart from the other one.
+			++$calls;
+			if ( $busy || null !== $before ) {
+				return;
+			}
+			$busy = true;
+			// Straight from the table — not through the object cache, which
+			// may be stale or suspended, and not through any filter: this is
+			// the row the UPDATE is about to replace. (No clean_post_cache()
+			// here: it fires hooks of its own, and a hook that writes the post
+			// would land back in this closure before any UPDATE ran.)
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the row as stored, right before the UPDATE.
+			$row = $wpdb->get_row(
+				$wpdb->prepare( "SELECT post_title, post_content, post_excerpt, post_status, post_name, post_parent, post_author, post_date, post_date_gmt, post_password FROM {$wpdb->posts} WHERE ID = %d", $id ),
+				ARRAY_A
+			);
+			if ( is_array( $row ) ) {
+				// Read, never kept: only whether the post has one counts.
+				$pw_before = isset( $row['post_password'] ) ? (string) $row['post_password'] : '';
+				$before    = array();
+				foreach ( $asked as $col ) {
+					$before[ $col ] = in_array( $col, array( 'post_parent', 'post_author' ), true )
+						? (int) $row[ $col ]
+						: (string) $row[ $col ];
+				}
+			}
+			$busy = false;
+		};
+		// Last in the order, so the snapshot sits right before the UPDATE, after
+		// every other pre_post_update hook has had its say.
+		add_action( 'pre_post_update', $hook, PHP_INT_MAX, 1 );
+		try {
+			$res = self::write_post( $a );
+		} finally {
+			remove_action( 'pre_post_update', $hook, PHP_INT_MAX );
+		}
+		if ( is_wp_error( $res ) || ! is_array( $res ) ) {
+			return $res;
+		}
+
+		$res['undo'] = null;
+		if ( $calls > 1 ) {
+			// The post was UPDATEd more than once inside this one call — another
+			// plugin wrote it too — and which write was ours cannot be told
+			// apart. No token rather than a wrong one, and the answer says why.
+			$res['undo_note'] = __( 'No undo point: the post was written more than once during this call (another plugin updated it as well), so the previous values could not be told apart.', 'alphabridge-mcp' );
+		} elseif ( ! empty( $before ) && ! self::pro_undo_takes_post_fields() ) {
+			// AlphaBridge MCP Pro 4.5.3 to 4.5.5 registers its own wp_undo over
+			// this plugin's, and leaves this wp_update_post in place; its undo
+			// knows no undo point of wp_update_post, so a token would be one
+			// that neither wp_undo nor wp_undo_discard could use there.
+			$res['undo_note'] = __( 'No undo point: AlphaBridge MCP Pro on this site is older than 4.5.6, and its wp_undo cannot reverse a change of wp_update_post. With Pro 4.5.6 or newer this change gets an undo point.', 'alphabridge-mcp' );
+		} elseif ( ! empty( $before ) ) {
+			$data = array(
+				'id'     => $id,
+				'fields' => $before,
+			);
+			// The undo point keeps no password, but notes that the post had
+			// one: WordPress drops the password of a post it saves as private,
+			// in this call or a later one, and the undo then puts back no
+			// status that could show the post without its protection.
+			if ( isset( $before['post_status'] ) && '' !== $pw_before ) {
+				$data['password_protected'] = true;
+			}
+			$res['undo'] = AB_MCP_Undo::record(
+				array(
+					'tool'    => 'wp_update_post',
+					'cap'     => 'edit_posts',
+					'kind'    => 'post_fields',
+					'summary' => sprintf( '#%d: %s', $id, implode( ', ', array_keys( $before ) ) ),
+					'items'   => 1,
+					'data'    => $data,
+				)
+			);
+		}
+		return $res;
+	}
+
+	/**
+	 * Can the wp_undo that runs on this site reverse an undo point of
+	 * wp_update_post? Yes, unless AlphaBridge MCP Pro is loaded with a restore
+	 * that does not know the tool (Pro before 4.5.6; it then also registers
+	 * its own wp_undo over this plugin's).
+	 *
+	 * @return bool
+	 */
+	private static function pro_undo_takes_post_fields() {
+		if ( ! class_exists( 'AB_MCP_Pro_Undo_Restore' ) || ! method_exists( 'AB_MCP_Pro_Undo_Restore', 'policy' ) ) {
+			return true;
+		}
+		$policy = AB_MCP_Pro_Undo_Restore::policy();
+		return is_array( $policy ) && isset( $policy['wp_update_post'] );
+	}
+
+	/**
+	 * Update post: the write of wp_update_post, without the undo point.
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	private static function write_post( $a ) {
 		$need = self::need( $a, array( 'id' ) );
 		if ( is_wp_error( $need ) ) {
 			return $need;
@@ -1165,6 +1357,86 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			);
 		}
 		return array( 'revisions' => $out );
+	}
+
+	/**
+	 * Restore revision (wp_restore_revision; free since 4.9.0, before in Pro
+	 * only).
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function restore_revision( $a ) {
+		$need = self::need( $a, array( 'revision_id' ) );
+		if ( is_wp_error( $need ) ) {
+			return $need;
+		}
+		$rev_id   = self::i( $a, 'revision_id' );
+		$revision = wp_get_post_revision( $rev_id );
+		if ( ! $revision ) {
+			return new WP_Error( 'ab_mcp_not_found', __( 'Revision not found. wp_list_revisions lists the revisions of a post.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'edit_post', $revision->post_parent ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'You are not allowed to edit the post this revision belongs to. Ask someone who may edit it, or an administrator.', 'alphabridge-mcp' ) );
+		}
+		$restored = wp_restore_post_revision( $rev_id );
+		if ( ! $restored ) {
+			return new WP_Error( 'ab_mcp_restore_failed', __( 'Restore failed (invalid revision id?). wp_list_revisions lists the revisions of the post.', 'alphabridge-mcp' ) );
+		}
+		return array(
+			'restored' => true,
+			'post_id'  => (int) $restored,
+		);
+	}
+
+	/**
+	 * Update post meta (wp_update_post_meta; free since 4.9.0, before in Pro
+	 * only). Page-builder data is judged by its key, as for the "meta" field
+	 * of wp_update_post (AB_MCP_Builders::markup_meta_refusal()).
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function update_post_meta_tool( $a ) {
+		$need = self::need( $a, array( 'id', 'key' ) );
+		if ( is_wp_error( $need ) ) {
+			return $need;
+		}
+		$id   = self::i( $a, 'id' );
+		$post = get_post( $id );
+		if ( ! $post ) {
+			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found. wp_list_posts or wp_search finds its id.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'You are not allowed to edit this post. Ask someone who may edit it, or an administrator.', 'alphabridge-mcp' ) );
+		}
+		$key = sanitize_key( self::s( $a, 'key' ) );
+		if ( '_' === substr( $key, 0, 1 ) || self::is_sensitive_meta_key( $key ) ) {
+			return new WP_Error( 'ab_mcp_protected_meta', __( 'Protected meta keys are not allowed. Keys starting with "_" belong to WordPress or a plugin and are changed through the plugin that owns them.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'edit_post_meta', $id, $key ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'You are not allowed to edit this meta key. A plugin\'s rule for this key decides; ask an administrator.', 'alphabridge-mcp' ), array( 'code' => 'ab_mcp_forbidden_meta' ) );
+		}
+		// Page-builder data is judged by its key, not its value: safe_value()
+		// lets arrays of any depth through, and a JSON object arrives as one,
+		// so nested builder data would pass any test on the value's shape.
+		$refused = AB_MCP_Builders::markup_meta_refusal( $key, $post );
+		if ( null !== $refused ) {
+			return $refused;
+		}
+		$value = isset( $a['value'] ) ? $a['value'] : '';
+		if ( ! self::safe_value( $value ) ) {
+			return new WP_Error( 'ab_mcp_bad_value', __( 'Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them.', 'alphabridge-mcp' ) );
+		}
+		// update_metadata() unslashes the value it is given. Without wp_slash()
+		// "\u0026" in block or builder JSON is stored as "u0026" and the JSON
+		// breaks; wp_slash() walks into arrays, so nested values keep theirs.
+		update_post_meta( $id, $key, wp_slash( $value ) );
+		return array(
+			'updated' => true,
+			'id'      => $id,
+			'key'     => $key,
+		);
 	}
 
 	/* --------------------------------------------------------------- internal */

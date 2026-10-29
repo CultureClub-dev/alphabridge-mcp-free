@@ -93,6 +93,70 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				'callback'    => array( __CLASS__, 'list_app_passwords' ),
 			)
 		);
+
+		// The two meta writers came with AlphaBridge MCP Pro only until 4.9.0.
+		// Pro registers its own copy of these names over them; the definitions
+		// here are Pro's, without its tier. Creating and revoking application
+		// passwords stays in Pro.
+		$r->register(
+			'wp_update_user_meta',
+			array(
+				'description' => 'Create or overwrite one user meta value (all stored values of the key are replaced). Refused: keys starting with "_", role and capability keys of any site (…capabilities, …user_level), session_tokens, default_password_nonce, use_ssl and credential-like keys; role and password are changed by wp_update_user. Needs edit_users, the right to edit this user and to edit this key; an unknown user is a not-found error. WordPress strips backslashes from the value. Returns updated, user_id and key. No undo point is recorded; wp_get_user_meta reads the value.',
+				'capability'  => 'edit_users',
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'user_id', 'key' ),
+					'properties' => array(
+						'user_id' => array( 'type' => 'integer', 'description' => 'User id, as wp_list_users returns it.' ),
+						'key'     => array( 'type' => 'string', 'description' => 'Meta key; stored lower-cased with characters other than a-z, 0-9, "_" and "-" removed (sanitize_key).' ),
+						'value'   => array( 'description' => 'Scalar or array of scalars (arrays may nest); an array is stored serialized. Omitted: an empty string.' ),
+					),
+				),
+				'callback'    => array( __CLASS__, 'update_user_meta_tool' ),
+			)
+		);
+
+		$r->register(
+			'wp_update_term_meta',
+			array(
+				'description' => 'Create or overwrite one meta value of a term (category, tag or any taxonomy); all stored values of the key are replaced. Keys starting with "_" and credential-like keys are refused. Needs manage_categories and the right to edit this term\'s meta. WordPress strips backslashes from the value. Returns updated, term_id and key; an unknown term is a not-found error. No undo point is recorded; the term\'s name, slug and description change with wp_update_term.',
+				'open_world'  => true, // term fields, as wp_update_term changes the term itself.
+				'capability'  => 'manage_categories',
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'term_id', 'key' ),
+					'properties' => array(
+						'term_id' => array( 'type' => 'integer', 'description' => 'Term id, as wp_list_terms returns it.' ),
+						'key'     => array( 'type' => 'string', 'description' => 'Meta key; stored lower-cased with characters other than a-z, 0-9, "_" and "-" removed (sanitize_key).' ),
+						'value'   => array( 'description' => 'Scalar or array of scalars (arrays may nest); an array is stored serialized. Omitted: an empty string.' ),
+					),
+				),
+				'callback'    => array( __CLASS__, 'update_term_meta_tool' ),
+			)
+		);
+	}
+
+	/**
+	 * Only scalars or (nested) arrays of scalars; no objects.
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function safe_value( $value ) {
+		if ( is_scalar( $value ) || null === $value ) {
+			return true;
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $v ) {
+				if ( ! self::safe_value( $v ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/* --------------------------------------------------------------- user meta */
@@ -148,6 +212,113 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		);
 	}
 
+	/**
+	 * Does this user meta key carry privileges, authentication state or a
+	 * stored credential? Writing to any of these over MCP is refused outright,
+	 * independently of what the calling user may edit: the roles and
+	 * capabilities array is a privilege-escalation path, the session and
+	 * password-reset keys are an account-takeover path.
+	 *
+	 * The key arrives sanitised by sanitize_key(), so it is already lowercase
+	 * and free of separators other than "-" and "_".
+	 *
+	 * AB_MCP_Tools_Meta_Auth_Pro of every Pro release since 4.5.3 declares
+	 * this method with the same signature; Pro's tool runs its own.
+	 *
+	 * @param string $key User meta key.
+	 * @return bool
+	 */
+	protected static function protected_user_meta( $key ) {
+		global $wpdb;
+
+		$key = strtolower( trim( (string) $key ) );
+		if ( '' === $key ) {
+			return true;
+		}
+
+		// Underscore-prefixed keys are WordPress's convention for meta that is
+		// not meant to be edited through a generic field editor, and plugins put
+		// authentication state there — the official Two Factor plugin stores its
+		// TOTP secret and backup codes as _two_factor_*. The post and term write
+		// tools already refuse these; the user tool must not be the exception.
+		if ( '_' === substr( $key, 0, 1 ) ) {
+			return true;
+		}
+
+		// Roles and capabilities are stored per site as
+		// {base_prefix}{blog_id}_capabilities — and without the id on the first
+		// site of a network. Matching only the CURRENT site's prefix would let a
+		// write set roles on another site of the network, so every site's key is
+		// refused. The base prefix is not necessarily "wp_".
+		$base = '';
+		if ( isset( $wpdb->base_prefix ) ) {
+			$base = strtolower( (string) $wpdb->base_prefix );
+		} elseif ( isset( $wpdb->prefix ) ) {
+			// No base prefix available: derive it by dropping a trailing blog id,
+			// so that wp_3_ still protects wp_capabilities and wp_2_capabilities.
+			$base = (string) preg_replace( '/[0-9]+_$/', '', strtolower( (string) $wpdb->prefix ) );
+		}
+		if ( '' === $base ) {
+			$base = 'wp_';
+		}
+		if ( preg_match( '/^' . preg_quote( $base, '/' ) . '(?:[0-9]+_)?(?:capabilities|user_level)$/', $key ) ) {
+			return true;
+		}
+
+		// Authentication state, regardless of table prefix. use_ssl is included
+		// deliberately: it is a security preference (force SSL for this user's
+		// admin), so it should not be flipped through an automated tool.
+		$fixed = array(
+			'session_tokens',
+			'_application_passwords',
+			'default_password_nonce',
+			'use_ssl',
+		);
+		if ( in_array( $key, $fixed, true ) ) {
+			return true;
+		}
+
+		// The credential-shaped keys the meta readers refuse as well.
+		return self::is_sensitive_meta_key( $key );
+	}
+
+	/**
+	 * Update user meta.
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function update_user_meta_tool( $a ) {
+		$id = self::i( $a, 'user_id' );
+		if ( ! get_user_by( 'id', $id ) ) {
+			return new WP_Error( 'ab_mcp_not_found', __( 'User not found. wp_list_users shows the users and their ids.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'edit_user', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this user. Ask an administrator.', 'alphabridge-mcp' ) );
+		}
+		$key = sanitize_key( self::s( $a, 'key' ) );
+		if ( self::protected_user_meta( $key ) ) {
+			return new WP_Error( 'ab_mcp_protected_meta', __( 'This user meta key is protected (privilege/auth). Role and password change with wp_update_user.', 'alphabridge-mcp' ) );
+		}
+		// Per-key meta capability: honours is_protected_meta() and any registered
+		// auth_user_meta_{$key} callback, not just the object-level edit_user check.
+		if ( ! current_user_can( 'edit_user_meta', $id, $key ) ) {
+			return new WP_Error( 'ab_mcp_protected_meta', __( 'This user meta key cannot be edited (protected by an auth callback). The plugin that registered the key decides who may change it; use that plugin\'s screen to change it.', 'alphabridge-mcp' ) );
+		}
+		$value = isset( $a['value'] ) ? $a['value'] : '';
+		if ( ! self::safe_value( $value ) ) {
+			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
+		}
+		// update_metadata() unslashes what it stores: slashed here, a
+		// backslash in a path, a pattern or JSON is stored as sent.
+		update_user_meta( $id, $key, wp_slash( $value ) );
+		return array(
+			'updated' => true,
+			'user_id' => $id,
+			'key'     => $key,
+		);
+	}
+
 	/* --------------------------------------------------------------- term meta */
 
 	/**
@@ -197,6 +368,42 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		return array(
 			'term_id' => $id,
 			'meta'    => $flat,
+		);
+	}
+
+	/**
+	 * Update term meta.
+	 *
+	 * @param array $a Args.
+	 * @return array|WP_Error
+	 */
+	public static function update_term_meta_tool( $a ) {
+		$id   = self::i( $a, 'term_id' );
+		$term = get_term( $id );
+		if ( ! $term || is_wp_error( $term ) ) {
+			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found. wp_list_terms shows the terms and their ids.', 'alphabridge-mcp' ) );
+		}
+		$key = sanitize_key( self::s( $a, 'key' ) );
+		if ( '_' === substr( $key, 0, 1 ) || self::is_sensitive_meta_key( $key ) ) {
+			return new WP_Error( 'ab_mcp_protected_meta', __( 'Protected meta keys are not allowed. Keys starting with "_" belong to WordPress or to the plugin that owns them and are changed through them.', 'alphabridge-mcp' ) );
+		}
+		// Per-key meta capability: honours any registered auth_term_meta_{$key}
+		// callback and the taxonomy's term-editing rights, not just the coarse
+		// manage_categories gate.
+		if ( ! current_user_can( 'edit_term_meta', $id, $key ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit meta for this term. Ask an administrator.', 'alphabridge-mcp' ) );
+		}
+		$value = isset( $a['value'] ) ? $a['value'] : '';
+		if ( ! self::safe_value( $value ) ) {
+			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
+		}
+		// update_metadata() unslashes what it stores: slashed here, a
+		// backslash in a path, a pattern or JSON is stored as sent.
+		update_term_meta( $id, $key, wp_slash( $value ) );
+		return array(
+			'updated' => true,
+			'term_id' => $id,
+			'key'     => $key,
 		);
 	}
 
