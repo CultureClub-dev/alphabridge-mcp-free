@@ -2776,3 +2776,6 @@ msgstr "La fenêtre d'annulation de ce point de restauration est déjà passée,
 #, php-format
 msgid "The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it."
 msgstr "Le widget a été enregistré, mais pas dans la barre latérale demandée : un filtre l'a placé dans %s. Utilisez Apparence › Widgets dans wp-admin pour le déplacer."
+
+msgid "This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again."
+msgstr "Cette annulation a duré plus de deux minutes, et une autre requête a repris le point de restauration entre-temps ; ce qui n'était pas encore restauré a été laissé à cette requête. Vérifiez le résultat et wp_undo_list avant de relancer quoi que ce soit."

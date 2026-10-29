@@ -503,6 +503,57 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( 6, (int) get_post( 30 )->post_parent );
 	}
 
+	/**
+	 * Codex (GitHub) 29.10.2026: a restore that outlives its reservation
+	 * writes nothing more once another request has taken the point over.
+	 */
+	public function testARestoreStopsWritingOnceAnotherRequestTookThePointOver(): void {
+		self::settings();
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$token = (string) $res['undo'];
+		$other = null;
+		add_filter(
+			'pre_update_option_blogname',
+			static function ( $value ) use ( $token, &$other ) {
+				// While the first item is written, the reservation runs out
+				// and a retry takes the point over.
+				$index = get_option( AB_MCP_Undo::OPTION );
+				foreach ( $index as $i => $e ) {
+					if ( $e['token'] === $token ) {
+						$index[ $i ]['applying'] = time() - AB_MCP_Undo::APPLY_TIMEOUT - 1;
+					}
+				}
+				update_option( AB_MCP_Undo::OPTION, $index );
+				$other = AB_MCP_Undo::begin_apply( $token );
+				return $value;
+			}
+		);
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogname'] );
+		self::assertIsString( $other, 'The retry holds the point now.' );
+		self::assertSame( array( 'blogname' ), $out['restored'] );
+		self::assertSame( 'Tag neu', get_option( 'blogdescription' ), 'Nothing written after the point was taken over.' );
+		self::assertTrue( $out['taken_over'] );
+		self::assertFalse( $out['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $out );
+		self::assertStringContainsString( 'another request took the undo point over', $out['warning'] );
+		self::assertSame( array( $token ), array_column( self::stored(), 'token' ), 'The point stays with the request that holds it.' );
+		self::assertTrue( AB_MCP_Undo::hold_apply( $token, (string) $other ) );
+	}
+
+	public function testALongRestoreRenewsItsReservation(): void {
+		self::settings();
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu' ) );
+		$token = (string) $res['undo'];
+		$nonce = (string) AB_MCP_Undo::begin_apply( $token );
+		$index                  = self::stored();
+		$index[0]['applying']   = time() - 100;
+		update_option( AB_MCP_Undo::OPTION, $index );
+		self::assertTrue( AB_MCP_Undo::hold_apply( $token, $nonce ) );
+		self::assertGreaterThanOrEqual( time() - 1, self::stored()[0]['applying'], 'Renewed, so no retry may take it over.' );
+		self::assertFalse( AB_MCP_Undo::hold_apply( $token, 'fremd' ) );
+	}
+
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'tagline' => 'Tag neu' ) );

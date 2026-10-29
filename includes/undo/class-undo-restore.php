@@ -306,9 +306,17 @@ class AB_MCP_Undo_Restore {
 
 		// A restore must not create an undo point of its own: it would double the
 		// stored snapshots and make the semantics ("undo the undo") confusing.
+		$hold = isset( $opts['hold'] ) && is_callable( $opts['hold'] ) ? $opts['hold'] : null;
+		$lost = false;
 		AB_MCP_Undo::suspend();
 		try {
 			foreach ( $plan['items'] as $item ) {
+				// The reservation first: a restore that outlived it writes
+				// nothing more once another request has the point.
+				if ( null !== $hold && ! call_user_func( $hold ) ) {
+					$lost = true;
+					break;
+				}
 				$res = self::apply_item( $plan['kind'], $item );
 				if ( is_wp_error( $res ) ) {
 					$failed[] = array(
@@ -331,6 +339,9 @@ class AB_MCP_Undo_Restore {
 			'kind'     => $plan['kind'],
 			'tool'     => $plan['tool'],
 		);
+		if ( $lost ) {
+			$out['taken_over'] = true;
+		}
 		return $out;
 	}
 

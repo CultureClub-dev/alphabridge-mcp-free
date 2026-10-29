@@ -2776,3 +2776,6 @@ msgstr "El plazo para deshacer de este punto de restauración ya ha vencido, as�
 #, php-format
 msgid "The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it."
 msgstr "El widget se ha guardado, pero no en la barra lateral pedida: un filtro lo ha puesto en %s. Usa Apariencia → Widgets en wp-admin para moverlo."
+
+msgid "This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again."
+msgstr "Esta acción de deshacer tardó más de dos minutos y, mientras tanto, otra solicitud tomó el punto de restauración; lo que aún no se había restaurado quedó en manos de esa solicitud. Comprueba el resultado y wp_undo_list antes de volver a ejecutar nada."

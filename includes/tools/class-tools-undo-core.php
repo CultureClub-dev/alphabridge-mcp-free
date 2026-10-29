@@ -193,7 +193,10 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $reserved ) ) {
 			return $reserved;
 		}
-		$nonce = (string) $reserved;
+		$nonce        = (string) $reserved;
+		$opts['hold'] = static function () use ( $token, $nonce ) {
+			return AB_MCP_Undo::hold_apply( $token, $nonce );
+		};
 
 		try {
 			$res = AB_MCP_Undo_Restore::apply( $claim['entry'], $claim['data'], $opts );
@@ -205,6 +208,15 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		}
 		if ( is_wp_error( $res ) ) {
 			AB_MCP_Undo::end_apply( $token, $nonce );
+			return $res;
+		}
+		if ( ! empty( $res['taken_over'] ) ) {
+			// Another request holds the point now and decides its fate:
+			// no rest point here, nothing consumed or released.
+			$res             = array_merge( $res, AB_MCP_Undo_Restore::after_restore( $res ) );
+			$res['token']    = $token;
+			$res['consumed'] = false;
+			$res['warning']  = __( 'This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again.', 'alphabridge-mcp' );
 			return $res;
 		}
 

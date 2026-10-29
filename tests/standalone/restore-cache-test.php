@@ -278,6 +278,7 @@ class AB_MCP_Undo {
 		return self::$finish_fails ? new WP_Error( 'ab_test_store', 'store broke' ) : true;
 	}
 	public static function extend_apply( $token, $nonce ) {}
+	public static function hold_apply( $token, $nonce ) { return true; }
 	// The row of a WordPress option is there (the settings of the tool always are).
 	public static function option_autoload( $name ) { return array_key_exists( $name, $GLOBALS['ab_opts'] ) ? 'yes' : null; }
 }

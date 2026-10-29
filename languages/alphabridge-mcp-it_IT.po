@@ -2776,3 +2776,6 @@ msgstr "La finestra di annullamento di questo punto di ripristino è già scadut
 #, php-format
 msgid "The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it."
 msgstr "Il widget è stato salvato, ma non nella sidebar richiesta: un filtro l'ha messo in %s. Usa Aspetto → Widget in wp-admin per spostarlo."
+
+msgid "This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again."
+msgstr "Questo annullamento è durato più di due minuti e nel frattempo un'altra richiesta ha preso in carico il punto di ripristino; ciò che non era ancora stato ripristinato è stato lasciato a quella richiesta. Controlla il risultato e wp_undo_list prima di eseguire di nuovo qualcosa."

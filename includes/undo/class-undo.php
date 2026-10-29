@@ -848,6 +848,49 @@ class AB_MCP_Undo {
 	}
 
 	/**
+	 * Does this holder still have its reservation? Renewed once half the
+	 * window has passed. A restore asks before each item: one that outlives
+	 * the window must not write on once another request has taken the point
+	 * over (a retry after a client's timeout, say).
+	 *
+	 * @param string $token Token.
+	 * @param string $nonce The value begin_apply() returned.
+	 * @return bool
+	 */
+	public static function hold_apply( $token, $nonce ) {
+		$mine = static function ( $e ) use ( $token, $nonce ) {
+			return $e['token'] === $token && isset( $e['applying_by'] ) && hash_equals( (string) $e['applying_by'], (string) $nonce );
+		};
+		wp_cache_delete( self::OPTION, 'options' );
+		foreach ( self::read_index() as $e ) {
+			if ( ! $mine( $e ) ) {
+				continue;
+			}
+			if ( time() - (int) $e['applying'] < (int) ( self::APPLY_TIMEOUT / 2 ) ) {
+				return true;
+			}
+			$held   = false;
+			$locked = self::with_lock(
+				function () use ( $mine, &$held ) {
+					$index = self::read_index();
+					foreach ( $index as $i => $x ) {
+						if ( $mine( $x ) ) {
+							$index[ $i ]['applying'] = time();
+							self::write_index( $index );
+							$held = true;
+							return;
+						}
+					}
+				}
+			);
+			// Busy: still this holder's as read a moment ago; renewed at
+			// the next item.
+			return $held || ! $locked;
+		}
+		return false;
+	}
+
+	/**
 	 * Renew a held reservation so its 120s window counts from NOW. Used after a
 	 * long restore whose consumption failed: the promise "the point stays
 	 * blocked for two minutes" has to hold from the moment it is made, not

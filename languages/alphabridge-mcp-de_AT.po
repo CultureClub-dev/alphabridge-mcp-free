@@ -2776,3 +2776,6 @@ msgstr "Das Undo-Fenster dieses Undo-Punkts ist bereits abgelaufen, darum wurde 
 #, php-format
 msgid "The widget was stored, but not in the sidebar asked for: a filter put it in %s. Use Appearance › Widgets in wp-admin to move it."
 msgstr "Das Widget wurde gespeichert, aber nicht in der gewünschten Seitenleiste: Ein Filter hat es nach %s gelegt. Es in wp-admin unter Design → Widgets verschieben."
+
+msgid "This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again."
+msgstr "Dieses Undo dauerte länger als zwei Minuten, und eine andere Anfrage hat den Undo-Punkt inzwischen übernommen; was bis dahin nicht wiederhergestellt war, blieb dieser Anfrage überlassen. Vor einem erneuten Versuch das Ergebnis und wp_undo_list prüfen."
