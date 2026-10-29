@@ -746,11 +746,13 @@ class AB_MCP_Replace_Engine {
 	/**
 	 * Valid JSON that the encoder would not write back byte for byte (spacing,
 	 * unescaped slashes or Unicode): replaced as text, so it keeps its form,
-	 * but kept only where the result is the document the structural replace
-	 * gives. A replacement with a quote, a backslash or a line break, or a
+	 * but kept only where the result is still the same structure and every
+	 * value in it either stayed or became what the structural replace makes
+	 * of it. A replacement with a quote, a backslash or a line break, or a
 	 * search across the structure, would otherwise break the JSON or change
 	 * more than its texts; such a value stays as it is and is counted in
-	 * skipped_unchecked_values.
+	 * skipped_unchecked_values. A value the text replacement does not reach
+	 * (a differently escaped copy) stays as before.
 	 *
 	 * @param string $s       The JSON text.
 	 * @param mixed  $decoded json_decode() of it (object or array).
@@ -767,19 +769,65 @@ class AB_MCP_Replace_Engine {
 		}
 		if ( $layers < self::MAX_LAYERS ) {
 			// The structural result only to compare with: what it counts and
-			// skips is not this value's answer, the text replacement's is.
+			// skips is not this value's answer, the text replacement's is. It
+			// rewrites the objects it walks, so the original is decoded anew.
 			$kept = array( $this->skipped_corrupt, $this->skipped_object_values, $this->skipped_unchecked_values );
 			$n    = 0;
 			$want = $this->apply_value( $decoded, $n, $depth + 1, $layers + 1 );
 			list( $this->skipped_corrupt, $this->skipped_object_values, $this->skipped_unchecked_values ) = $kept;
-			// serialize(), not ==: loose comparison takes "1" and "01" for equal.
-			if ( serialize( json_decode( $flat ) ) === serialize( $want ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Comparing two decoded values exactly.
+			$got = json_decode( $flat );
+			if ( ( is_object( $got ) || is_array( $got ) ) && $this->leaves_match( $got, json_decode( $s ), $want ) ) {
 				return $flat;
 			}
 		}
 		$count = $before;
 		$this->skipped_unchecked_values++;
 		return $s;
+	}
+
+	/**
+	 * Same structure in all three, every value of $got either the one of
+	 * $orig or the one of $want (strictly: "1" is not "01"), and every key
+	 * either the original or what the text replacement makes of it (an
+	 * address as a key, moved with the site).
+	 *
+	 * @param mixed $got  Decoded text replacement.
+	 * @param mixed $orig Decoded original.
+	 * @param mixed $want Structural replacement of the original.
+	 * @return bool
+	 */
+	private function leaves_match( $got, $orig, $want ) {
+		$objects = (int) is_object( $got ) + (int) is_object( $orig ) + (int) is_object( $want );
+		if ( 0 !== $objects ) {
+			if ( 3 !== $objects ) {
+				return false;
+			}
+			$got  = get_object_vars( $got );
+			$orig = get_object_vars( $orig );
+			$want = get_object_vars( $want );
+		} elseif ( is_array( $got ) || is_array( $orig ) || is_array( $want ) ) {
+			if ( ! is_array( $got ) || ! is_array( $orig ) || ! is_array( $want ) ) {
+				return false;
+			}
+		} else {
+			return $got === $orig || $got === $want;
+		}
+		if ( count( $got ) !== count( $orig ) || array_keys( $orig ) !== array_keys( $want ) ) {
+			return false;
+		}
+		$keys = array_keys( $got );
+		$i    = 0;
+		foreach ( $orig as $k => $v ) {
+			$g = $keys[ $i++ ];
+			$n = 0;
+			if ( (string) $g !== (string) $k && (string) $g !== $this->replace_string( (string) $k, $n ) ) {
+				return false;
+			}
+			if ( ! $this->leaves_match( $got[ $g ], $v, $want[ $k ] ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

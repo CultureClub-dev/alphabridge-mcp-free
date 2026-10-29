@@ -366,6 +366,16 @@ if ( 'forms' === $scenario ) {
 	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a search across the structure changes no structure: left as it is' );
 	list( $out, $n, $sk ) = $jt( '{"title":"Old"}', 'Old', '"New"' );
 	ok( '{"title":"\\"New\\""}' === $out && 1 === $n && 0 === $sk, 'F11 JSON the encoder writes byte for byte is still walked as structure: the quotes are escaped' );
+	list( $out, $n, $sk ) = $jt( '{ "url": "https://old.example/x", "other": "https:\\/\\/old.example/x" }', 'https://old.example/x', 'https://new.example/x' );
+	ok( '{ "url": "https://new.example/x", "other": "https:\\/\\/old.example/x" }' === $out && 1 === $n && 0 === $sk, 'F11 mixed escaping: the address the text replacement reaches is replaced, the differently escaped copy stays as before (Codex)' );
+	list( $out, $n, $sk ) = $jt( '{ "t": "Old" }', 'Old', 'a\\nb' );
+	ok( '{ "t": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement with a backslash that would still parse, as a line break, is not what the structural replace makes of it: left as it is' );
+	list( $out, $n, $sk ) = $jt( '{ "https://old.example/a": "https://old.example/b", "t": 1 }', 'https://old.example', 'https://new.example' );
+	ok( '{ "https://new.example/a": "https://new.example/b", "t": 1 }' === $out && 2 === $n && 0 === $sk, 'F11 an address as a key moves with the site, as before' );
+	list( $out, $n, $sk ) = $jt( '{ "Old": "x", "t": "y" }', 'Old', 'y", "z' );
+	ok( '{ "Old": "x", "t": "y" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement that would split a key into more structure: left as it is' );
+	list( $out, $n, $sk ) = $jt( '{ "Old": 1 }', 'Old', 'x\\"y' );
+	ok( '{ "Old": 1 }' === $out && 0 === $n && 1 === $sk, 'F11 a key the text replacement turns into another key than the replacement (an escaped quote read as a quote): left as it is' );
 	$e   = new AB_MCP_Replace_Engine( 'Old', '"New"' );
 	$n   = 0;
 	$e->apply_value( array( '{ "a": "Old", "b": "O:8:\\"stdClass\\":0:{}" }', 'x' ), $n );
