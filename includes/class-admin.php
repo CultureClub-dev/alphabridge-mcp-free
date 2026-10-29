@@ -78,6 +78,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_mode_notice', array( $this, 'handle_mode_notice_dismiss' ) );
 		add_action( 'admin_post_ab_mcp_terms_notice', array( $this, 'handle_terms_notice_dismiss' ) );
 		add_action( 'admin_notices', array( $this, 'mode_notice' ) );
+		add_action( 'admin_notices', array( $this, 'review_notice' ) );
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connection_settings', array( $this, 'handle_connection_settings' ) );
 		add_action( 'admin_post_ab_mcp_firewall_check', array( $this, 'handle_firewall_check' ) );
@@ -295,6 +296,27 @@ class AB_MCP_Admin {
 			return;
 		}
 		echo $this->mode_notice_html( true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_notice_html().
+	}
+
+	/**
+	 * The request for a review on the Dashboard and the Plugins screen, for
+	 * those who may open the plugin's page, once it is due
+	 * (AB_MCP_Review_Notice). The plugin's own page shows it as a strip in its
+	 * header instead.
+	 */
+	public function review_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		global $pagenow;
+		$screens = array(
+			'index.php'   => 'dashboard',
+			'plugins.php' => 'plugins',
+		);
+		if ( ! is_string( $pagenow ) || ! isset( $screens[ $pagenow ] ) ) {
+			return;
+		}
+		echo AB_MCP_Review_Notice::render_notice( $screens[ $pagenow ] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside render_notice().
 	}
 
 	/**
@@ -665,11 +687,24 @@ class AB_MCP_Admin {
 
 	/**
 	 * «Don't ask again» on the review notice. Final — see AB_MCP_Review_Notice.
+	 * From the Dashboard or the Plugins screen the browser goes back there;
+	 * the target is one of these two fixed screens, never an address from the
+	 * request.
 	 */
 	public function handle_review_dismiss() {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_review_dismiss' );
 		AB_MCP_Review_Notice::dismiss();
+		$back = array(
+			'dashboard' => 'index.php',
+			'plugins'   => 'plugins.php',
+		);
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- checked above by check_admin_referer().
+		$from = isset( $_GET['from'] ) ? sanitize_key( wp_unslash( $_GET['from'] ) ) : '';
+		if ( isset( $back[ $from ] ) ) {
+			wp_safe_redirect( admin_url( $back[ $from ] ) );
+			exit;
+		}
 		$this->redirect( 'review_dismissed' );
 	}
 

@@ -3,11 +3,14 @@
  * The one-time request for a review on WordPress.org.
  *
  * It is a strip at the foot of the coloured header on the plugin's own
- * settings page, and only there (WordPress.org guideline 11), and only once a
- * site has really used the plugin: at least MIN_DAYS after the first counted
- * tool call and after at least MIN_CALLS successful calls. It names exactly
- * that, the days since the first call and «at least MIN_CALLS calls», which
- * are the only figures this class keeps.
+ * settings page and, as a WordPress notice, on the Dashboard and the Plugins
+ * screen (render_notice()), for administrators only, and only once a site has
+ * really used the plugin: at least MIN_DAYS after the first counted tool call
+ * and after at least MIN_CALLS successful calls. It names exactly that, the
+ * days since the first call and «at least MIN_CALLS calls», which are the only
+ * figures this class keeps. One answer anywhere, «Write a review» or «Don't
+ * show again», ends it everywhere (WordPress.org guideline 11: notices outside
+ * the plugin's own page must be dismissible).
  *
  * «Write a review» goes through admin-post (ab_mcp_review_go): the click
  * records the question as answered and then sends the browser on to the
@@ -39,8 +42,8 @@ class AB_MCP_Review_Notice {
 
 	const OPTION           = 'ab_mcp_review';
 	const OPTION_DISMISSED = 'ab_mcp_review_dismissed';
-	const MIN_DAYS   = 14;
-	const MIN_CALLS  = 50;
+	const MIN_DAYS   = 3;
+	const MIN_CALLS  = 25;
 	const REVIEW_URL = 'https://wordpress.org/support/plugin/alphabridge-mcp/reviews/#new-post';
 
 	/**
@@ -136,7 +139,7 @@ class AB_MCP_Review_Notice {
 		$dismiss = wp_nonce_url( admin_url( 'admin-post.php?action=ab_mcp_review_dismiss' ), 'ab_mcp_review_dismiss' );
 		return '<div class="ab-review"><p class="ab-review__text">' . esc_html(
 			sprintf(
-				/* translators: 1: days since the first tool call (14 or more), 2: successful calls at least (50). */
+				/* translators: 1: days since the first tool call (3 or more), 2: successful calls at least (25). */
 				__( 'In use for %1$d days, at least %2$d successful calls. What do you think of it?', 'alphabridge-mcp' ),
 				$days,
 				self::MIN_CALLS
@@ -144,5 +147,37 @@ class AB_MCP_Review_Notice {
 		) . '</p>'
 			. '<a class="ab-review__go" href="' . esc_url( $go ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Write a review', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a>'
 			. '<a class="ab-review__off" href="' . esc_url( $dismiss ) . '">' . esc_html__( 'Don’t show again', 'alphabridge-mcp' ) . '</a></div>';
+	}
+
+	/**
+	 * The same question as a WordPress notice for the Dashboard and the
+	 * Plugins screen, or '' while it is not due. No «×»: WordPress's own close
+	 * button only hides a notice until the next page, and the question would
+	 * come back. «Don't show again» is the dismissal and holds; it brings the
+	 * browser back to the screen it came from ($from).
+	 *
+	 * @param string   $from Screen it stands on: 'dashboard' or 'plugins'.
+	 * @param int|null $now  Unix timestamp; null means the current time.
+	 * @return string HTML built from escaped parts.
+	 */
+	public static function render_notice( $from, $now = null ) {
+		$now   = null === $now ? time() : (int) $now;
+		$state = self::state();
+		if ( ! in_array( $from, array( 'dashboard', 'plugins' ), true ) || ! self::is_due( $state, $now ) ) {
+			return '';
+		}
+		$days    = (int) floor( ( $now - $state['first_call'] ) / DAY_IN_SECONDS );
+		$go      = wp_nonce_url( admin_url( 'admin-post.php?action=ab_mcp_review_go' ), 'ab_mcp_review_go' );
+		$dismiss = wp_nonce_url( admin_url( 'admin-post.php?action=ab_mcp_review_dismiss&from=' . $from ), 'ab_mcp_review_dismiss' );
+		return '<div class="notice notice-info ab-review-notice"><p>' . esc_html(
+			sprintf(
+				/* translators: 1: days since the first tool call (3 or more), 2: successful calls at least (25). */
+				__( 'AlphaBridge MCP has been in use on this site for %1$d days, with at least %2$d successful calls. What do you think of it? A short review on WordPress.org helps other site owners find it.', 'alphabridge-mcp' ),
+				$days,
+				self::MIN_CALLS
+			)
+		) . '</p><p>'
+			. '<a class="button button-primary" href="' . esc_url( $go ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Write a review', 'alphabridge-mcp' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'alphabridge-mcp' ) . '</span></a> '
+			. '<a class="button" href="' . esc_url( $dismiss ) . '">' . esc_html__( 'Don’t show again', 'alphabridge-mcp' ) . '</a></p></div>';
 	}
 }

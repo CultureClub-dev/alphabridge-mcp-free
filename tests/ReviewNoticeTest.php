@@ -76,11 +76,12 @@ final class ReviewNoticeTest extends TestCase {
 		}
 	}
 
-	public function test_the_thresholds_are_fourteen_days_and_fifty_calls(): void {
+	public function test_the_thresholds_are_three_days_and_twentyfive_calls(): void {
 		// Die Zahlen stehen im Plan; die übrigen Tests rechnen mit den
 		// Konstanten und würden eine leisere Schwelle nicht bemerken.
-		$this->assertSame( 14, AB_MCP_Review_Notice::MIN_DAYS );
-		$this->assertSame( 50, AB_MCP_Review_Notice::MIN_CALLS );
+		// Entscheid Thomas 29.10.2026: früher fragen (vorher 14 Tage, 50 Aufrufe).
+		$this->assertSame( 3, AB_MCP_Review_Notice::MIN_DAYS );
+		$this->assertSame( 25, AB_MCP_Review_Notice::MIN_CALLS );
 	}
 
 	public function test_the_first_call_starts_the_clock_and_the_counter(): void {
@@ -168,8 +169,8 @@ final class ReviewNoticeTest extends TestCase {
 
 	public function test_render_names_the_days_and_the_calls_it_counted(): void {
 		update_option( AB_MCP_Review_Notice::OPTION, $this->reif() );
-		$this->assertStringContainsString( 'In use for 14 days, at least 50 successful calls. What do you think of it?', AB_MCP_Review_Notice::render( $this->frist_um() ) );
-		$this->assertStringContainsString( 'In use for 18 days,', AB_MCP_Review_Notice::render( $this->frist_um() + 4 * self::DAY + 3600 ), 'angebrochene Tage zählen nicht' );
+		$this->assertStringContainsString( 'In use for 3 days, at least 25 successful calls. What do you think of it?', AB_MCP_Review_Notice::render( $this->frist_um() ) );
+		$this->assertStringContainsString( 'In use for ' . ( AB_MCP_Review_Notice::MIN_DAYS + 4 ) . ' days,', AB_MCP_Review_Notice::render( $this->frist_um() + 4 * self::DAY + 3600 ), 'angebrochene Tage zählen nicht' );
 	}
 
 	public function test_render_leads_through_admin_post_to_the_review_form_and_to_the_dismissal(): void {
@@ -258,18 +259,133 @@ final class ReviewNoticeTest extends TestCase {
 
 		$this->assertStringContainsString( 'AB_MCP_Review_Notice::render()', $admin, 'gezeigt auf der eigenen Seite' );
 		$this->assertStringContainsString( 'AB_MCP_Review_Notice::count_call()', $rest, 'gezählt bei jedem gelungenen Aufruf' );
-		// Die Bitte um eine Bewertung hängt sich nicht in jede Admin-Seite. Der
-		// einzige Haken an admin_notices ist der Hinweis nach dem Update auf
-		// den Site-Modus (AB_MCP_Admin::mode_notice()): abweisbar und weg,
-		// sobald jemand den Modus umschaltet.
+		// Zwei Haken an admin_notices, beide in class-admin.php: der Hinweis
+		// nach dem Update auf den Site-Modus (mode_notice()) und die Bitte um
+		// eine Bewertung (review_notice()), die selbst nur auf dem Dashboard
+		// und der Plugin-Seite etwas ausgibt (eigene Tests unten).
 		foreach ( glob( $root . '/includes/*.php' ) as $datei ) {
 			$inhalt = (string) file_get_contents( $datei );
 			if ( 'class-admin.php' === basename( $datei ) ) {
-				$this->assertSame( 1, substr_count( $inhalt, 'admin_notices' ), 'nur ein Haken' );
+				$this->assertSame( 2, substr_count( $inhalt, "add_action( 'admin_notices'" ), 'genau zwei Haken' );
 				$this->assertStringContainsString( "add_action( 'admin_notices', array( \$this, 'mode_notice' ) );", $inhalt );
+				$this->assertStringContainsString( "add_action( 'admin_notices', array( \$this, 'review_notice' ) );", $inhalt );
 				continue;
 			}
 			$this->assertStringNotContainsString( 'admin_notices', $inhalt, basename( $datei ) . ' hängt sich nicht in jede Admin-Seite' );
+		}
+	}
+
+	/** Der Hinweis, wie review_notice() ihn auf einer Admin-Seite ausgibt. */
+	private function notice_on( string $pagenow, bool $admin = true ): string {
+		$GLOBALS['pagenow']     = $pagenow;
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => $admin && 'manage_options' === $cap;
+		ob_start();
+		( new AB_MCP_Admin() )->review_notice();
+		return (string) ob_get_clean();
+	}
+
+	private function faellig(): void {
+		update_option( AB_MCP_Review_Notice::OPTION, array( 'first_call' => time() - 5 * self::DAY, 'calls' => AB_MCP_Review_Notice::MIN_CALLS ) );
+	}
+
+	public function test_the_notice_shows_on_the_dashboard_and_the_plugins_screen(): void {
+		$this->faellig();
+		foreach ( array( 'index.php', 'plugins.php' ) as $seite ) {
+			$x = $this->xpath( $this->notice_on( $seite ) );
+			$this->assertSame( 1, $x->query( '//div[contains(@class,"notice-info") and contains(@class,"ab-review-notice")]' )->length, $seite );
+		}
+	}
+
+	public function test_the_notice_shows_nowhere_else(): void {
+		$this->faellig();
+		foreach ( array( 'options-general.php', 'edit.php', 'post.php', 'upload.php', 'tools.php', '' ) as $seite ) {
+			$this->assertSame( '', $this->notice_on( $seite ), $seite . ': nur Dashboard und Plugin-Seite' );
+		}
+	}
+
+	public function test_the_notice_is_for_administrators_only(): void {
+		$this->faellig();
+		$this->assertSame( '', $this->notice_on( 'index.php', false ), 'ohne manage_options' );
+	}
+
+	public function test_the_notice_waits_for_the_thresholds_and_ends_with_the_answer(): void {
+		$this->assertSame( '', $this->notice_on( 'index.php' ), 'nicht vor dem ersten Aufruf' );
+		update_option( AB_MCP_Review_Notice::OPTION, array( 'first_call' => time() - 5 * self::DAY, 'calls' => AB_MCP_Review_Notice::MIN_CALLS - 1 ) );
+		$this->assertSame( '', $this->notice_on( 'index.php' ), 'ein Aufruf zu wenig' );
+		update_option( AB_MCP_Review_Notice::OPTION, array( 'first_call' => time() - 2 * self::DAY, 'calls' => AB_MCP_Review_Notice::MIN_CALLS ) );
+		$this->assertSame( '', $this->notice_on( 'index.php' ), 'zu früh' );
+		$this->faellig();
+		$this->assertNotSame( '', $this->notice_on( 'index.php' ) );
+		AB_MCP_Review_Notice::dismiss();
+		$this->assertSame( '', $this->notice_on( 'index.php' ), 'nach der Antwort nirgends mehr' );
+		$this->assertSame( '', $this->notice_on( 'plugins.php' ) );
+	}
+
+	public function test_the_notice_has_no_close_button_that_would_bring_it_back(): void {
+		$this->faellig();
+		$html = $this->notice_on( 'index.php' );
+		$this->assertStringNotContainsString( 'is-dismissible', $html, 'das ×  von WordPress verbirgt nur bis zur nächsten Seite' );
+	}
+
+	public function test_the_notice_names_the_plugin_the_days_and_the_calls(): void {
+		$this->faellig();
+		$text = (string) $this->xpath( $this->notice_on( 'plugins.php' ) )->query( '//p' )->item( 0 )->textContent;
+		$this->assertSame( 'AlphaBridge MCP has been in use on this site for 5 days, with at least 25 successful calls. What do you think of it? A short review on WordPress.org helps other site owners find it.', $text );
+	}
+
+	public function test_the_notice_links_to_the_review_and_to_the_dismissal_with_its_screen(): void {
+		$this->faellig();
+		foreach ( array( 'index.php' => 'dashboard', 'plugins.php' => 'plugins' ) as $seite => $from ) {
+			$x   = $this->xpath( $this->notice_on( $seite ) );
+			$go  = $x->query( '//a[contains(@href,"action=ab_mcp_review_go")]' )->item( 0 );
+			$off = $x->query( '//a[contains(@href,"action=ab_mcp_review_dismiss")]' )->item( 0 );
+			$this->assertNotNull( $go, $seite );
+			$this->assertSame( '_blank', $go->getAttribute( 'target' ) );
+			$this->assertStringContainsString( '_wpnonce=', $go->getAttribute( 'href' ) );
+			$this->assertNotNull( $off, $seite );
+			$this->assertStringContainsString( 'from=' . $from, $off->getAttribute( 'href' ) );
+			$this->assertStringContainsString( '_wpnonce=', $off->getAttribute( 'href' ) );
+			$this->assertSame( 'Don’t show again', trim( $off->textContent ) );
+		}
+	}
+
+	public function test_render_notice_refuses_an_unknown_screen(): void {
+		$this->faellig();
+		$this->assertSame( '', AB_MCP_Review_Notice::render_notice( 'settings' ) );
+		$this->assertSame( '', AB_MCP_Review_Notice::render_notice( 'https://evil.example/' ) );
+	}
+
+	/** «Don't show again» mit einem from-Wert, als Administrator. */
+	private function dismiss_from( string $from ): AbTestExit {
+		$GLOBALS['ab_test_current_user'] = 3;
+		$GLOBALS['ab_test_can']          = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$_GET                            = array( '_wpnonce' => 'nonce-ab_mcp_review_dismiss', 'from' => $from );
+		$_REQUEST                        = $_GET;
+		try {
+			( new AB_MCP_Admin() )->handle_review_dismiss();
+		} catch ( AbTestExit $exit ) {
+			return $exit;
+		}
+		self::fail( 'handle_review_dismiss ended without a redirect or a refusal.' );
+	}
+
+	public function test_dismissing_returns_to_the_screen_it_came_from(): void {
+		$this->faellig();
+		$exit = $this->dismiss_from( 'dashboard' );
+		$this->assertSame( 'redirect', $exit->kind );
+		$this->assertSame( 'https://example.test/wp-admin/index.php', $exit->detail );
+		$this->assertTrue( AB_MCP_Review_Notice::state()['dismissed'] );
+
+		$this->assertSame( 'https://example.test/wp-admin/plugins.php', $this->dismiss_from( 'plugins' )->detail );
+	}
+
+	public function test_dismissing_never_follows_an_address_from_the_request(): void {
+		$this->faellig();
+		foreach ( array( 'https://evil.example/', '//evil.example', 'index.php', '' ) as $from ) {
+			$exit = $this->dismiss_from( $from );
+			$this->assertSame( 'redirect', $exit->kind, $from );
+			$this->assertStringContainsString( 'page=alphabridge-mcp', $exit->detail, $from . ': zurück auf die eigene Seite' );
+			$this->assertStringNotContainsString( 'evil', $exit->detail );
 		}
 	}
 }

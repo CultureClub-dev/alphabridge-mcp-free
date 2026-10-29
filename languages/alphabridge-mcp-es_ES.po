@@ -2115,6 +2115,10 @@ msgstr "No volver a mostrar"
 msgid "In use for %1$d days, at least %2$d successful calls. What do you think of it?"
 msgstr "En uso desde hace %1$d días, con al menos %2$d llamadas correctas. ¿Qué te parece?"
 
+#, php-format
+msgid "AlphaBridge MCP has been in use on this site for %1$d days, with at least %2$d successful calls. What do you think of it? A short review on WordPress.org helps other site owners find it."
+msgstr "AlphaBridge MCP lleva %1$d días en uso en este sitio, con al menos %2$d llamadas correctas. ¿Qué te parece? Una breve reseña en WordPress.org ayuda a otros propietarios de sitios a encontrarlo."
+
 msgid "Settings"
 msgstr "Ajustes"
 

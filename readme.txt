@@ -216,6 +216,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 == Changelog ==
 
+= 4.8.1 =
+* **The request for a review comes sooner and where administrators look.** It appears once the plugin has been in use for 3 days with at least 25 successful tool calls (before: 14 days and 50 calls), as before as a strip in the header of Settings → AlphaBridge MCP and now also as a notice on the Dashboard and the Plugins screen, for administrators only. One answer ends it everywhere: «Write a review» or «Don’t show again». It never comes back, also not after an update, and nothing is sent anywhere.
+
 = 4.8.0 =
 * **SEO fields in the free plugin, 58 tools in all.** `wp_seo_set` sets the SEO title, meta description and focus keyword of a post in Yoast SEO or Rank Math: only the fields given, tags and line breaks stripped, with the right to edit the post and each of its SEO fields. Until now it came with AlphaBridge MCP Pro only. A backslash in a value is stored as written, and so are the variables the SEO plugin fills in, such as %%category%% or %date%. With All in One SEO or without a supported SEO plugin the call is refused, and the answer says why and what to do.
 * **Wording: the hub.** The free service at connect.alphabridge-mcp.com that links your sites to Claude and ChatGPT is called the hub, explained where the readme first names it.
@@ -441,6 +444,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.8.1 =
+The one-time request for a review appears after 3 days and 25 successful calls, now also on the Dashboard and the Plugins screen until answered or dismissed. No setting changes.
 
 = 4.8.0 =
 Set the SEO title, meta description and focus keyword of Yoast SEO and Rank Math with the free plugin (wp_seo_set, 58 tools). No setting changes.
