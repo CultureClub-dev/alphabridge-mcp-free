@@ -299,7 +299,7 @@ class AB_MCP_Undo {
 	 * not updated (ab_mcp_undo_index_failed). One null for all of them left a
 	 * caller unable to tell "undo is off" from "the disk is full".
 	 *
-	 * @param array $rec { tool, cap, kind, summary, items, data, expires_at?, created_at?, replaces? }.
+	 * @param array $rec { tool, cap, kind, summary, items, data, expires_at?, created_at?, replaces?, after? }.
 	 * @return string|WP_Error
 	 */
 	public static function record_result( array $rec ) {
@@ -388,6 +388,15 @@ class AB_MCP_Undo {
 			'sha256'     => $sha,
 			'inline'     => $inline,
 		);
+		// The rest of a page-builder point keeps the state its pages were
+		// left in (set_after()), so a later change is still refused.
+		if ( isset( $rec['after'] ) && is_array( $rec['after'] ) && array() !== $rec['after'] ) {
+			$entry['after'] = $rec['after'];
+			if ( ! self::valid_entry( $entry ) ) {
+				self::payload_delete( $file );
+				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
+			}
+		}
 
 		// The payload file is on disk before the index knows about it. If the
 		// index write does not happen — lock contention, a database error, or
@@ -522,8 +531,6 @@ class AB_MCP_Undo {
 	 * page's raw copies as a part of its own, so the size limit applies per
 	 * part and not to the sum: 25 Elementor pages of 30–100 KB each would
 	 * otherwise be one point "too large" exactly where a way back matters.
-	 * Pro adds the parts (its page-builder undo); this store reads, lists and
-	 * removes points that have them, as they share the index.
 	 */
 	const PART_KINDS = array( 'builder_data' );
 
@@ -593,6 +600,227 @@ class AB_MCP_Undo {
 			'stored'     => $stored,
 		);
 	}
+	/**
+	 * Would this snapshot fit an undo point? The same answers record_result()
+	 * gives — switched off, nothing to keep, not storable, too large — without
+	 * storing anything, so a preview can say beforehand that applying will
+	 * need allow_without_undo.
+	 *
+	 * @param string $kind Undo kind.
+	 * @param mixed  $data Snapshot.
+	 * @return true|WP_Error
+	 */
+	public static function check_size( $kind, $data ) {
+		if ( ! self::enabled() ) {
+			return new WP_Error(
+				'ab_mcp_undo_disabled',
+				__( 'Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' ),
+				array( 'reason' => 'switched_off' )
+			);
+		}
+		if ( '' === (string) $kind || null === $data ) {
+			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There is no snapshot to keep for this action. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
+		}
+		$prepared = self::prepare( $kind, $data );
+		return is_wp_error( $prepared ) ? $prepared : true;
+	}
+
+	/**
+	 * Add a part to an undo point of the current user: another snapshot of
+	 * the same kind under the same token, measured on its own against the
+	 * per-point limit. wp_undo restores all parts of a token together.
+	 *
+	 * The answers are record_result()'s, plus ab_mcp_undo_not_found (no such
+	 * point of this user), ab_mcp_undo_in_progress (it is being restored right
+	 * now) and ab_mcp_undo_kind_mismatch (another kind, or a kind without parts).
+	 *
+	 * @param string $token Token returned by record_result().
+	 * @param array  $rec   { kind, summary?, items, data }.
+	 * @return true|WP_Error
+	 */
+	public static function append_part( $token, array $rec ) {
+		if ( ! self::enabled() ) {
+			return new WP_Error(
+				'ab_mcp_undo_disabled',
+				__( 'Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' ),
+				array( 'reason' => 'switched_off' )
+			);
+		}
+		if ( self::$suspended ) {
+			return new WP_Error(
+				'ab_mcp_undo_disabled',
+				__( 'Recording is paused while an undo is applied, so the undo itself gets no undo point. To reverse an undo, use the tool of the original change again.', 'alphabridge-mcp' ),
+				array( 'reason' => 'suspended' )
+			);
+		}
+		if ( ! self::valid_token( $token ) ) {
+			return new WP_Error( 'ab_mcp_undo_bad_token', __( 'That is not a valid undo token. wp_undo_list shows your undo points and their tokens.', 'alphabridge-mcp' ) );
+		}
+		$kind = isset( $rec['kind'] ) ? (string) $rec['kind'] : '';
+		$data = isset( $rec['data'] ) ? $rec['data'] : null;
+		if ( '' === $kind || null === $data ) {
+			return new WP_Error( 'ab_mcp_undo_no_data', __( 'There was no snapshot to keep for this action, so no undo point was recorded. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
+		}
+		if ( ! in_array( $kind, self::PART_KINDS, true ) ) {
+			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'Undo points of this kind do not take parts. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
+		}
+		$entry = self::find_owned( $token );
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		if ( $entry['kind'] !== $kind ) {
+			return new WP_Error( 'ab_mcp_undo_kind_mismatch', __( 'The part is of another kind than the undo point it should join. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
+		}
+		$parts = isset( $entry['parts'] ) && is_array( $entry['parts'] ) ? $entry['parts'] : array();
+		if ( count( $parts ) >= self::MAX_PARTS ) {
+			return new WP_Error(
+				'ab_mcp_undo_too_large',
+				sprintf(
+					/* translators: %d: most parts one undo point may have. */
+					__( 'This undo point already has %d parts, the most one point may have, so no further part was recorded. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ),
+					self::MAX_PARTS
+				),
+				array(
+					'bytes'    => count( $parts ) + 1,
+					'limit'    => self::MAX_PARTS,
+					'measured' => 'parts',
+				)
+			);
+		}
+		$prepared = self::prepare( $kind, $data );
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+		if ( self::stored_size( $entry ) + $prepared['stored'] > self::max_total_bytes() ) {
+			return self::too_large( self::stored_size( $entry ) + $prepared['stored'], self::max_total_bytes(), 'total' );
+		}
+
+		// The part's file name comes from the token, the part number and the
+		// salt, like the first one's: unguessable, and never the same twice.
+		$n       = count( $parts ) + 1;
+		$written = self::payload_write( $token . '#' . $n . '#' . bin2hex( self::random_bytes( 4 ) ), (string) $prepared['serialized'], (string) $prepared['blob'] );
+		if ( is_wp_error( $written ) ) {
+			return new WP_Error(
+				'ab_mcp_undo_write_failed',
+				sprintf(
+					/* translators: %s: the reason the file could not be written. */
+					__( 'The snapshot file could not be written (%s), so no undo point was recorded. Check that the uploads folder is writable and has free space.', 'alphabridge-mcp' ),
+					$written->get_error_message()
+				),
+				array( 'cause' => $written->get_error_code() )
+			);
+		}
+		$part = array(
+			'payload' => $written['file'],
+			'sha256'  => $written['sha256'],
+			'bytes'   => (int) $prepared['size'],
+			'stored'  => (int) $prepared['stored'],
+		);
+		$items  = isset( $rec['items'] ) ? (int) $rec['items'] : 0;
+		$uid    = (int) get_current_user_id();
+		$result = new WP_Error( 'ab_mcp_undo_not_found', __( 'No undo point with that token for your account. wp_undo_list shows yours; an undo point belongs to the account that made the change.', 'alphabridge-mcp' ) );
+		$locked = self::with_lock(
+			function () use ( $token, $uid, $part, $items, &$result ) {
+				$index = self::read_index();
+				foreach ( $index as $i => $e ) {
+					if ( $e['token'] !== $token ) {
+						continue;
+					}
+					if ( (int) $e['user'] !== $uid ) {
+						return;
+					}
+					$busy = isset( $e['applying'] ) ? (int) $e['applying'] : 0;
+					if ( $busy && ( time() - $busy ) < self::APPLY_TIMEOUT ) {
+						$result = new WP_Error( 'ab_mcp_undo_in_progress', __( 'This undo point is being restored right now, so nothing can be added to it. Change the remaining pages in a separate call; it gets an undo point of its own.', 'alphabridge-mcp' ) );
+						return;
+					}
+					$parts                  = isset( $e['parts'] ) && is_array( $e['parts'] ) ? $e['parts'] : array();
+					$parts[]                = $part;
+					$index[ $i ]['parts']   = $parts;
+					$index[ $i ]['stored']  = self::stored_size( $e ) + $part['stored'];
+					$index[ $i ]['bytes']   = (int) $e['bytes'] + $part['bytes'];
+					$index[ $i ]['items']   = (int) $e['items'] + $items;
+					self::write_index( $index );
+					// Landed only when the stored index names the part.
+					wp_cache_delete( self::OPTION, 'options' );
+					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated, so this part of the undo point was not recorded. If this keeps happening, check the database error log.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
+					foreach ( self::read_index() as $e2 ) {
+						if ( $e2['token'] === $token && isset( $e2['parts'] ) && in_array( $part['payload'], self::part_payloads( $e2['parts'] ), true ) ) {
+							$result = true;
+						}
+					}
+					return;
+				}
+			}
+		);
+		if ( true !== $result || ! $locked ) {
+			self::payload_delete( $part['payload'] );
+			if ( ! $locked ) {
+				return new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index was busy, so this part of the undo point was not recorded. Try again in a moment.', 'alphabridge-mcp' ), array( 'reason' => 'busy' ) );
+			}
+		}
+		return $result;
+	}
+
+	/**
+	 * Keep, with an undo point, the state one post was left in by the change
+	 * it undoes: a sha256 per stored copy, taken right after the write. wp_undo
+	 * compares the copies with it and refuses where somebody has changed the
+	 * page since — restoring would throw that work away — unless force is set.
+	 *
+	 * @param string               $token   Token of the current user's point.
+	 * @param int                  $post_id Post.
+	 * @param array<string,string> $hashes  loc => sha256 (64 hex).
+	 * @return true|WP_Error
+	 */
+	public static function set_after( $token, $post_id, array $hashes ) {
+		if ( ! self::valid_token( $token ) ) {
+			return new WP_Error( 'ab_mcp_undo_bad_token', __( 'That is not a valid undo token. wp_undo_list shows your undo points and their tokens.', 'alphabridge-mcp' ) );
+		}
+		$post_id = (int) $post_id;
+		$clean   = array();
+		foreach ( $hashes as $loc => $sha ) {
+			if ( ! is_string( $loc ) || '' === $loc || strlen( $loc ) > 255 || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}$/', $sha ) ) {
+				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
+			}
+			$clean[ $loc ] = $sha;
+		}
+		if ( $post_id <= 0 || array() === $clean ) {
+			return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
+		}
+		$uid    = (int) get_current_user_id();
+		$result = new WP_Error( 'ab_mcp_undo_not_found', __( 'No undo point with that token for your account. wp_undo_list shows yours; an undo point belongs to the account that made the change.', 'alphabridge-mcp' ) );
+		$locked = self::with_lock(
+			function () use ( $token, $uid, $post_id, $clean, &$result ) {
+				$index = self::read_index();
+				foreach ( $index as $i => $e ) {
+					if ( $e['token'] !== $token ) {
+						continue;
+					}
+					if ( (int) $e['user'] !== $uid ) {
+						return;
+					}
+					$after                       = isset( $e['after'] ) && is_array( $e['after'] ) ? $e['after'] : array();
+					$after[ (string) $post_id ]  = $clean;
+					$index[ $i ]['after']        = $after;
+					self::write_index( $index );
+					wp_cache_delete( self::OPTION, 'options' );
+					$result = new WP_Error( 'ab_mcp_undo_index_failed', __( 'The undo index could not be updated with the state after the change. If this keeps happening, check the database error log.', 'alphabridge-mcp' ), array( 'reason' => 'not_stored' ) );
+					foreach ( self::read_index() as $e2 ) {
+						if ( $e2['token'] === $token && isset( $e2['after'][ (string) $post_id ] ) && $e2['after'][ (string) $post_id ] === $clean ) {
+							$result = true;
+						}
+					}
+					return;
+				}
+			}
+		);
+		if ( ! $locked ) {
+			return new WP_Error( 'ab_mcp_undo_busy', __( 'The undo index is busy; try again in a moment.', 'alphabridge-mcp' ) );
+		}
+		return $result;
+	}
+
 
 	/**
 	 * This user's undo points, newest first. Reading only: points past the undo

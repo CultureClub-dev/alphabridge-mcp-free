@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-kadence.json (Kadence Blocks 3.7.12, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[1].serialisiert — Text (kadence/advancedheading)",
+ "measured": true,
+ "content": "<!-- wp:kadence/advancedheading {\"uniqueID\":\"19290_31cc85-39\",\"color\":\"palette3\",\"fontWeight\":\"inherit\",\"margin\":[\"\",\"\",\"sm\",\"\"],\"markBorder\":\"\",\"markBorderStyles\":[{\"top\":[null,\"\",\"\"],\"right\":[null,\"\",\"\"],\"bottom\":[null,\"\",\"\"],\"left\":[null,\"\",\"\"],\"unit\":\"px\"}],\"colorClass\":\"theme-palette3\",\"htmlTag\":\"p\"} -->\n<p class=\"kt-adv-heading19290_31cc85-39 wp-block-kadence-advancedheading has-theme-palette-3-color has-text-color\" data-kb-block=\"kb-adv-heading19290_31cc85-39\">Use this paragraph section to get your website visitors to know you. Consider writing about you or your organization, the products or services you offer, or why you exist. Keep a consistent communication style.</p>\n<!-- /wp:kadence/advancedheading -->"
+}

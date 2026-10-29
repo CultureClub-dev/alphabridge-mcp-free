@@ -510,7 +510,7 @@ ok( 'ab_mcp_undo_unknown_tool' === ab_code( AB_MCP_Undo_Restore::plan( array( 't
 $GLOBALS['ab_caps']['manage_options'] = true;
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_site_settings', 'kind' => 'option' ), array( 'blogname' => 'x' ) ) ), 'G3 a kind that does not match its tool is refused' );
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_post', 'kind' => 'post_status' ), array( array( 1, 'draft' ) ) ) ), 'G3 also between this plugin\'s own kinds' );
-ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the three tools of this plugin' );
+ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post', 'wp_update_builder_element', 'wp_search_replace' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the five tools of this plugin that record undo points (two of them since 4.10.0)' );
 
 /* ============================== H) post_status: Kaskade pro Objekt (the real AB_MCP_Post_Status) */
 
@@ -690,10 +690,11 @@ ok( AB_MCP_Undo::enabled(), 'M2 and it comes back on' );
 /* ============================== N) what this plugin's store does not do */
 
 $missing = array();
-foreach ( array( 'capture_file', 'capture_file_result', 'record_file', 'record_file_result', 'discard_files_of', 'append_part', 'set_after', 'check_size', 'file_max' ) as $fn ) {
+foreach ( array( 'capture_file', 'capture_file_result', 'record_file', 'record_file_result', 'discard_files_of', 'file_max' ) as $fn ) {
 	if ( method_exists( 'AB_MCP_Undo', $fn ) ) { $missing[] = $fn; }
 }
-ok( array() === $missing, 'N1 no file snapshots and no parts are written here (Pro does that)' . ( $missing ? ' -- found: ' . implode( ', ', $missing ) : '' ) );
+ok( array() === $missing, 'N1 no file snapshots are written here (Pro does that)' . ( $missing ? ' -- found: ' . implode( ', ', $missing ) : '' ) );
+ok( method_exists( 'AB_MCP_Undo', 'append_part' ) && method_exists( 'AB_MCP_Undo', 'set_after' ) && method_exists( 'AB_MCP_Undo', 'check_size' ), 'N1 but the parts and the state after a change of page-builder pages are (since 4.10.0)' );
 ok( 7 === AB_MCP_Undo::TTL_DAYS_MAX && 7 === AB_MCP_Undo::TTL_DAYS_DEFAULT && 1 === AB_MCP_Undo::TTL_DAYS_MIN, 'N2 the window is 1 to 7 days here, 7 by default' );
 
 /* ============================== O) Jeder Klasse::methode()-Verweis muss existieren */
@@ -754,6 +755,11 @@ foreach ( $check_files as $f ) {
 			if ( 0 === strpos( $cls, 'AB_MCP_Pro_' ) && false !== strpos( $code, "class_exists( '$cls' )" ) && false !== strpos( $code, "method_exists( '$cls', '$fn' )" ) ) {
 				continue;
 			}
+			// The page-builder parts (4.10.0): the writers' cache and Pro's
+			// ability broker, asked only where they are loaded.
+			if ( in_array( $cls, array( 'AB_MCP_Builder_Caches', 'AB_MCP_Pro_Ability_Broker' ), true ) && 1 === preg_match( "/class_exists\\( '$cls'(, false)? \\)/", $code ) ) {
+				continue;
+			}
 			$bad[] = basename( $f ) . ": unbekannte Klasse $cls";
 			continue;
 		}
@@ -768,7 +774,7 @@ ok( empty( $bad ), 'O2 every AB_MCP_*::method() reference in the undo code resol
 $pol   = AB_MCP_Undo_Restore::policy();
 $kinds = array();
 foreach ( $pol as $tool => $row ) { $kinds[ $row['kind'] ] = true; }
-ok( 3 === count( $pol ), 'O3 the policy table covers exactly the three tools of this plugin' );
+ok( 5 === count( $pol ), 'O3 the policy table covers exactly the five tools of this plugin' );
 $restore_src = (string) file_get_contents( $GLOBALS['ab_free'] . 'undo/class-undo-restore.php' );
 $missing     = array();
 foreach ( array_keys( $kinds ) as $k ) {
@@ -776,7 +782,7 @@ foreach ( array_keys( $kinds ) as $k ) {
 }
 ok( empty( $missing ), 'O3 and every kind it names has a plan branch and a restore branch' . ( $missing ? ' -- fehlt: ' . implode( ', ', $missing ) : '' ) );
 $guidance_pro = AB_MCP_Guidance::PRO_TOOLS;
-ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of the three is listed as a Pro tool' );
+ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of the five is listed as a Pro tool' );
 
 /* ============================== PRO) Pro-Punkte im gemeinsamen Speicher */
 
@@ -788,9 +794,9 @@ $tp_file = AB_MCP_Undo::record( ab_pro_file_rec( 'inc.php', '<?php // 1.0.0' ) )
 unset( $GLOBALS['ab_filters']['ab_mcp_undo_inline_max'] );
 $tp_opt = AB_MCP_Undo::record( ab_pro_opt_rec( 'my_plugin_setting', 'alt' ) );
 // A page-builder point with two parts, in the shape Pro's append_part() leaves.
-$tp_bld = AB_MCP_Undo::record( array( 'tool' => 'wp_search_replace', 'cap' => 'manage_options', 'kind' => 'builder_data', 'summary' => '3 pages', 'items' => 1, 'data' => array( 'posts' => array( 5 => array( 'meta:_elementor_data' => '[1]' ) ) ) ) );
-$tp_p1  = AB_MCP_Undo::record( array( 'tool' => 'wp_search_replace', 'cap' => 'manage_options', 'kind' => 'builder_data', 'items' => 1, 'data' => array( 'posts' => array( 6 => array( 'meta:_elementor_data' => '[2]' ) ) ) ) );
-$tp_p2  = AB_MCP_Undo::record( array( 'tool' => 'wp_search_replace', 'cap' => 'manage_options', 'kind' => 'builder_data', 'items' => 1, 'data' => array( 'posts' => array( 7 => array( 'meta:_elementor_data' => '[3]' ) ) ) ) );
+$tp_bld = AB_MCP_Undo::record( array( 'tool' => 'wp_run_ability', 'cap' => 'edit_posts', 'kind' => 'builder_data', 'summary' => '3 pages', 'items' => 1, 'data' => array( 'posts' => array( 5 => array( 'meta:_elementor_data' => '[1]' ) ) ) ) );
+$tp_p1  = AB_MCP_Undo::record( array( 'tool' => 'wp_run_ability', 'cap' => 'edit_posts', 'kind' => 'builder_data', 'items' => 1, 'data' => array( 'posts' => array( 6 => array( 'meta:_elementor_data' => '[2]' ) ) ) ) );
+$tp_p2  = AB_MCP_Undo::record( array( 'tool' => 'wp_run_ability', 'cap' => 'edit_posts', 'kind' => 'builder_data', 'items' => 1, 'data' => array( 'posts' => array( 7 => array( 'meta:_elementor_data' => '[3]' ) ) ) ) );
 $parts  = array();
 foreach ( array( $tp_p1, $tp_p2 ) as $pt ) {
 	$pe2     = ab_entry_of( $pt );
@@ -814,7 +820,7 @@ ok( array( $tp_bld, $tp_opt, $tp_file ) === ab_tokens( $lp ), 'PRO1 this plugin 
 $cp = AB_MCP_Undo::claim( $tp_bld );
 ok( ! is_wp_error( $cp ) && 2 === count( $cp['parts'] ) && '[2]' === $cp['parts'][0]['posts'][6]['meta:_elementor_data'] && '[3]' === $cp['parts'][1]['posts'][7]['meta:_elementor_data'], 'PRO2 it reads a point with parts, every part checked' );
 ok( ! is_wp_error( AB_MCP_Undo::claim( $tp_file ) ) && ! is_wp_error( AB_MCP_Undo::claim( $tp_opt ) ), 'PRO2 and the file and option points' );
-foreach ( array( $tp_file => 'wp_write_plugin_file', $tp_opt => 'wp_update_option', $tp_bld => 'wp_search_replace' ) as $tok => $tool ) {
+foreach ( array( $tp_file => 'wp_write_plugin_file', $tp_opt => 'wp_update_option', $tp_bld => 'wp_run_ability' ) as $tok => $tool ) {
 	$cx   = AB_MCP_Undo::claim( $tok );
 	$px   = AB_MCP_Undo_Restore::plan( $cx['entry'], $cx['data'] );
 	ok( 'ab_mcp_undo_needs_pro' === ab_code( $px ), "PRO3 plan refuses the point of $tool with ab_mcp_undo_needs_pro" );
@@ -833,7 +839,7 @@ ok( ! is_wp_error( $da ) && 0 === $da['discarded'] && 3 === ( $da['kept'] ?? nul
 $ul = AB_MCP_Tools_Undo_Core::undo_list( array() );
 $rev = array();
 foreach ( $ul['undo_points'] as $row ) { $rev[ $row['tool'] ] = array( $row['reversible'], isset( $row['reason'] ) && false !== strpos( $row['reason'], 'AlphaBridge MCP Pro' ) ); }
-ok( array( 'wp_search_replace' => array( false, true ), 'wp_update_option' => array( false, true ), 'wp_write_plugin_file' => array( false, true ) ) === $rev, 'PRO6 wp_undo_list shows them as not reversible here, with the reason' );
+ok( array( 'wp_run_ability' => array( false, true ), 'wp_update_option' => array( false, true ), 'wp_write_plugin_file' => array( false, true ) ) === $rev, 'PRO6 wp_undo_list shows them as not reversible here, with the reason' );
 ok( 7.0 === (float) $ul['ttl_days'] && 3 === $ul['count'], 'PRO6 and the window of 7 days' );
 // One of this plugin's own beside them is reversed as usual.
 $GLOBALS['ab_opts']['blogname'] = 'Neu';

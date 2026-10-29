@@ -208,7 +208,7 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 55, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0 and 22 more since 4.9.0, and they run here.' );
+		self::assertCount( 53, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0 and 2 more since 4.10.0, and they run here.' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );
@@ -221,8 +221,11 @@ final class GuidanceTest extends TestCase {
 		foreach ( array( 'wp_create_application_password', 'wp_revoke_application_password', 'wp_schedule_cron', 'wp_unschedule_cron', 'wp_set_transient', 'wp_delete_transient' ) as $name ) {
 			self::assertContains( $name, $pro, $name . ' stays in Pro.' );
 		}
-		foreach ( array( 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_update_option', 'wp_activate_plugin', 'wp_create_application_password' ) as $name ) {
+		foreach ( array( 'wp_run_ability', 'wp_list_abilities', 'wp_db_query', 'wp_read_plugin_file', 'wp_update_option', 'wp_activate_plugin', 'wp_create_application_password' ) as $name ) {
 			self::assertContains( $name, $pro );
+		}
+		foreach ( array( 'wp_update_builder_element', 'wp_search_replace' ) as $name ) {
+			self::assertNotContains( $name, $pro, $name . ' is free since 4.10.0.' );
 		}
 		foreach ( array( 'wp_undo', 'wp_undo_list', 'wp_undo_discard', 'wp_wc_update_product', 'wp_create_user', 'wp_update_site_settings', 'wp_bulk_update_status', 'wp_clear_cache' ) as $name ) {
 			self::assertNotContains( $name, $pro, $name . ' is free since 4.9.0.' );
@@ -247,7 +250,7 @@ final class GuidanceTest extends TestCase {
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
+		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, installing and updating plugins and themes, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
 		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );

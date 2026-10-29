@@ -1,0 +1,16 @@
+{
+ "source": "Measured 01.10.2026: WordPress 7.1.2, PHP 8.3.33, SeedProd Lite 6.20.10 (coming-soon) in WordPress Playground; the page of sp.php step \"code\" (custom-html, shortcode) plus a video block with embed code and a header, and header_scripts as sp.php puts it, saved through SeedProd's ability seedprod/save-page as in the plan measurement. post_content and post_content_filtered as stored in wp_posts, meta as stored. Method: README.md in this folder.",
+ "measured": true,
+ "versions": {
+  "wordpress": "7.1.2",
+  "php": "8.3.33",
+  "seedprod": "6.20.10"
+ },
+ "post_content": "",
+ "post_content_filtered": "{\"page_type\":\"lp\",\"post_title\":\"SeedProd Codeseite\",\"post_name\":\"seedprod-codeseite\",\"post_status\":\"publish\",\"show_header_template\":true,\"show_footer_template\":true,\"no_conflict_mode\":false,\"no_index\":false,\"is_new\":false,\"template_id\":0,\"document\":{\"sections\":[{\"id\":\"sec101\",\"type\":\"section\",\"settings\":{\"bgStyle\":\"s\"},\"rows\":[{\"id\":\"row101\",\"type\":\"row\",\"colType\":\"1-col\",\"settings\":{\"bgStyle\":\"s\"},\"cols\":[{\"id\":\"col101\",\"type\":\"col\",\"settings\":{\"bgStyle\":\"s\"},\"blocks\":[{\"id\":\"blk101\",\"elType\":\"block\",\"type\":\"custom-html\",\"settings\":{\"code\":\"<div class=\\\"mz-roh\\\">Rohes HTML<\\/div><script>window.mzRoh=1;<\\/script>\"}},{\"id\":\"blk102\",\"elType\":\"block\",\"type\":\"shortcode\",\"settings\":{\"shortcode\":\"[caption id=\\\"mz1\\\" width=\\\"100\\\"]Bildunterschrift-MZ[\\/caption]\"}},{\"id\":\"blk103\",\"elType\":\"block\",\"type\":\"video\",\"settings\":{\"code\":\"<iframe src=\\\"https:\\/\\/example.com\\/mz-video\\\"><\\/iframe>\"}},{\"id\":\"blk104\",\"elType\":\"block\",\"type\":\"header\",\"settings\":{\"headerTxt\":\"MZ Ueberschrift auf der Codeseite\",\"tag\":\"h2\"}}]}]}]}],\"settings\":{\"bgStyle\":\"s\",\"bgColor\":\"#FFFFFF\",\"textColor\":\"#333333\",\"headerColor\":\"#111111\",\"buttonColor\":\"#3858E9\",\"textFont\":\"Roboto\",\"textFontVariant\":\"400\"}},\"header_scripts\":\"<script>window.mzKopf=1;<\\/script>\"}",
+ "meta": {
+  "_seedprod_page": "1",
+  "_seedprod_page_template_type": "lp",
+  "_seedprod_page_uuid": "7741349c-319f-43d0-856c-36f0f74dbbdc"
+ }
+}

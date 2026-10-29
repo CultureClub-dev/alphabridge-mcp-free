@@ -669,8 +669,9 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 				'blocked'  => array( array( 'ref' => '5:post_date', 'reason' => 'date_passed' ) ),
 			)
 		);
-		self::assertSame( array( 'post_date' => '2026-09-01 10:00:00', 'post_date_gmt' => '2026-09-01 08:00:00' ), $rest['fields'], 'The date goes back as the pair it was taken as.' );
-		self::assertSame( 5, $rest['id'] );
+		self::assertSame( 1, $rest['items'] );
+		self::assertSame( array( 'post_date' => '2026-09-01 10:00:00', 'post_date_gmt' => '2026-09-01 08:00:00' ), $rest['data']['fields'], 'The date goes back as the pair it was taken as.' );
+		self::assertSame( 5, $rest['data']['id'] );
 	}
 
 	public function testARestPointNeverOutlivesTheUndoWindow(): void {

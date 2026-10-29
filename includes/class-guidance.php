@@ -91,11 +91,9 @@ class AB_MCP_Guidance {
 		'wp_run_ability',
 		'wp_save_php_snippet',
 		'wp_schedule_cron',
-		'wp_search_replace',
 		'wp_set_transient',
 		'wp_toggle_php_snippet',
 		'wp_unschedule_cron',
-		'wp_update_builder_element',
 		'wp_update_core',
 		'wp_update_option',
 		'wp_update_plugin',
@@ -290,6 +288,6 @@ class AB_MCP_Guidance {
 	 * @return string
 	 */
 	public static function instructions_paragraph() {
-		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, changing the texts, links and images of page-builder elements (reading them is on this site), installing and updating plugins and themes, search and replace with preview, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
+		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, installing and updating plugins and themes, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
 	}
 }

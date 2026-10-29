@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-core.json (WordPress 7.1.2, measured 30.09.2026), analyse.ziele[2].serialisiert — Button",
+ "measured": true,
+ "content": "<!-- wp:button {\"width\":100,\"className\":\"is-style-fill\"} -->\n\t\t\t\t\t\t\t\t\t<div class=\"wp-block-button has-custom-width wp-block-button__width-100 is-style-fill\">\n\t\t\t\t\t\t\t\t\t\t<a class=\"wp-block-button__link wp-element-button\" href=\"#\">\n\t\t\t\t\t\t\t\t\t\t\tAmazon\t\t\t\t\t\t\t\t\t\t</a>\n\t\t\t\t\t\t\t\t\t</div>\n\t\t\t\t\t\t\t\t\t<!-- /wp:button -->"
+}

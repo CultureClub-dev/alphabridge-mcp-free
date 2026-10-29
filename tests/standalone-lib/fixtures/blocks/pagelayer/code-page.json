@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/seedprod-pagelayer/web/pl.php, step «code» ($inhalt), stored unchanged by wp_insert_post (out/pl-7-code.json: post_content_gespeichert true; Pagelayer 2.2.2, WordPress 7.1.2, measured 30.09.2026). README g): the raw HTML and its script reached the page, the shortcode ran, ele_css landed in <style>",
+ "measured": true,
+ "content": "<!-- wp:pagelayer/pl_row {\"pagelayer-id\":\"mzr001\"} -->\n<!-- wp:pagelayer/pl_col {\"pagelayer-id\":\"mzc001\"} -->\n<!-- wp:pagelayer/pl_embed {\"pagelayer-id\":\"mze001\"} -->\n<div class=\"mz-roh\">Rohes HTML</div><script>window.mzRoh=1;</script>\n<!-- /wp:pagelayer/pl_embed -->\n<!-- wp:pagelayer/pl_shortcodes {\"pagelayer-id\":\"mzs001\"} -->\n[caption id=\"mz1\" width=\"100\"]Bildunterschrift-MZ[/caption]\n<!-- /wp:pagelayer/pl_shortcodes -->\n<!-- wp:pagelayer/pl_heading {\"pagelayer-id\":\"mzh001\",\"ele_css\":\"{{element}} h2 { color: rgb(1, 2, 3); }\"} -->\n<h2>Code-Test</h2>\n<!-- /wp:pagelayer/pl_heading -->\n<!-- /wp:pagelayer/pl_col -->\n<!-- /wp:pagelayer/pl_row -->"
+}

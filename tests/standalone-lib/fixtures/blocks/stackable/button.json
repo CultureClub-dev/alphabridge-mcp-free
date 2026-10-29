@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-stackable.json (Stackable 3.20.2, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[2].serialisiert — Button (stackable/button)",
+ "measured": true,
+ "content": "<!-- wp:stackable/button {\"uniqueId\":\"8f3cb19\"} -->\n<div class=\"wp-block-stackable-button stk-block-button stk-block stk-8f3cb19\" data-block-id=\"8f3cb19\"><a class=\"stk-link stk-button stk--hover-effect-darken\" href=\"\"><span class=\"stk-button__inner-text\">ewqdwq</span></a></div>\n<!-- /wp:stackable/button -->"
+}

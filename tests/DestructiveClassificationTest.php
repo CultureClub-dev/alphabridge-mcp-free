@@ -62,6 +62,9 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_user',
 		'wp_wc_update_order_status',
 		'wp_wc_update_product',
+		// Free since 4.10.0.
+		'wp_update_builder_element',
+		'wp_search_replace',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

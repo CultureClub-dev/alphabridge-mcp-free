@@ -507,7 +507,7 @@ if ( 'none' === $set ) {
 	remove_all_actions( 'purge_post_cache' );
 }
 
-/* ============================== F) after a restore: the three kinds of this plugin */
+/* ============================== F) after a restore: the kinds of this plugin */
 
 $scopes  = AB_MCP_Undo_Restore::page_cache_scope();
 $missing = array();
@@ -517,7 +517,15 @@ foreach ( AB_MCP_Undo_Restore::policy() as $tool => $row ) {
 	}
 }
 ok( array() === $missing, 'F1 every undo kind says which pages it leaves stale' . ( $missing ? ' — missing: ' . implode( ', ', array_unique( $missing ) ) : '' ) );
-ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site' ) === $scopes, 'F1 posts for the post kinds, the whole site for the settings' );
+foreach ( AB_MCP_Undo_Restore::policy() as $tool => $row ) {
+	foreach ( isset( $row['also'] ) ? (array) $row['also'] : array() as $also ) {
+		if ( ! isset( $scopes[ $also ] ) ) {
+			$missing[] = $also;
+		}
+	}
+}
+ok( array() === $missing, 'F1 and every kind a tool records besides its own' );
+ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site', 'builder_data' => 'post', 'option_rows' => 'site' ) === $scopes, 'F1 posts for the post kinds and the page-builder pages (4.10.0), the whole site for the settings and the option rows of a replace (4.10.0)' );
 
 reset_all();
 $out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'post_fields', 'tool' => 'wp_update_post', 'restored' => array( 5 ), 'failed' => array(), 'blocked' => array() ) );
@@ -549,7 +557,13 @@ ok( array( array( 'site_settings', array(), 'wp_update_site_settings' ) ) === ab
 reset_all();
 $out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'site_settings', 'tool' => 'wp_update_site_settings', 'restored' => array(), 'failed' => array( array( 'ref' => 'blogname', 'reason' => 'x' ) ), 'blocked' => array() ) );
 ok( $expected === $out['page_cache_purged'] && site_purged_by_all( $present, 0 ), 'F10 a settings restore that failed still purges: the write may have run' );
-foreach ( array( 'option' => 'wp_update_option', 'theme' => 'wp_activate_theme', 'file' => 'wp_write_theme_file', 'builder_data' => 'wp_search_replace', 'something_new' => 'wp_x' ) as $kind => $tool ) {
+reset_all();
+$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'builder_data', 'tool' => 'wp_search_replace', 'restored' => array( 5, 6 ), 'failed' => array(), 'blocked' => array() ) );
+ok( $expected === $out['page_cache_purged'] && posts_purged_by_all( array( 5, 6 ), $present ) && array( 5, 6 ) === ab_cleaned(), 'F10a builder_data (4.10.0): the pages written back are purged, no more' );
+reset_all();
+$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'option_rows', 'tool' => 'wp_search_replace', 'restored' => array( 'blogdescription' ), 'failed' => array(), 'blocked' => array() ) );
+ok( $expected === $out['page_cache_purged'] && site_purged_by_all( $present, 0 ) && array() === ab_cleaned(), 'F10b option_rows (4.10.0): the whole site is purged' );
+foreach ( array( 'option' => 'wp_update_option', 'theme' => 'wp_activate_theme', 'file' => 'wp_write_theme_file', 'something_new' => 'wp_x' ) as $kind => $tool ) {
 	reset_all();
 	$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => $kind, 'tool' => $tool, 'restored' => array( '5' ), 'failed' => array(), 'blocked' => array() ) );
 	ok( $expected === $out['page_cache_purged'] && site_purged_by_all( $present, 0 ) && array() === ab_cleaned(), "F11 $kind (not a kind of this plugin): the whole site is purged rather than nothing" );

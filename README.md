@@ -28,10 +28,11 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **80 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+- **82 structured tools** across content, media, taxonomies, comments, widgets, menus, site
   settings, site info, users, plugins and themes, cron and the error log, SEO fields, WooCommerce,
-  maintenance, search and bulk status changes.
-- **Undo** — `wp_update_post`, `wp_bulk_update_status` and `wp_update_site_settings` leave an
+  maintenance, page builders, search and replace and bulk status changes.
+- **Undo** — `wp_update_post`, `wp_bulk_update_status`, `wp_update_site_settings`,
+  `wp_update_builder_element` and `wp_search_replace` (page-builder pages and option rows) leave an
   undo point with the previous values that expires after 7 days; `wp_undo_list`, `wp_undo` (with a dry run) and
   `wp_undo_discard` work on the account's own points, and a restore checks the rights of the
   original change again.
@@ -54,10 +55,22 @@ directory. It is the same code WordPress.org ships.
   while the builder is active, because it would not show, and says how to change the page
   instead.
 
+  `wp_update_builder_element` changes the text, link or image of one element right in the
+  builder (WordPress blocks, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer,
+  Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, WPBakery Page Builder, Divi 4,
+  Avada, Flatsome and Enfold), with a preview by default, an undo point before the write and a
+  read-back after it.
+
   `wp_get_post` names the builder a post was made with (`built_with`), `wp_list_posts` filters
   by it, and `wp_duplicate_post` copies a page with its custom fields and builder data
   (Elementor elements get new ids where the layout can be read, otherwise it is copied unchanged
   and the answer says so; builder data only for accounts with `unfiltered_html`).
+- **Search and replace** — `wp_search_replace` over posts, postmeta, options and terms, safe for
+  serialized and JSON values, with a dry run per table; on page-builder pages (`scope` text) only
+  through the builder's writer, with matches in locked places counted in `locked_matches`.
+  `post_ids` keeps a run to the posts it names, `expected_count` writes only when the dry run still
+  fits, protected options are never touched, and changed option rows get an undo point of their
+  own (`options_undo_token`).
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

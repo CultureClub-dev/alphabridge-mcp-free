@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb2.json (GenerateBlocks 2.4.1, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[3].serialisiert — Bild (generateblocks/media)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/media {\"uniqueId\":\"48cac4fb\",\"tagName\":\"img\",\"styles\":{\"height\":\"auto\",\"maxWidth\":\"100%\",\"objectFit\":\"cover\",\"width\":\"240px\"},\"css\":\".gb-media-48cac4fb{height:auto;max-width:100%;object-fit:cover;width:240px}\",\"htmlAttributes\":{\"src\":\"https://patterns.generatepress.com/wp-content/uploads/2024/10/placeholder800x-768x768.png\",\"title\":\"placeholder800x\"},\"mediaId\":4934} -->\n<img class=\"gb-media-48cac4fb\" src=\"https://patterns.generatepress.com/wp-content/uploads/2024/10/placeholder800x-768x768.png\" title=\"placeholder800x\"/>\n<!-- /wp:generateblocks/media -->"
+}

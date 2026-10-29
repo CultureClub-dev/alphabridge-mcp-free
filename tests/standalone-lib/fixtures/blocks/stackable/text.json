@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-stackable.json (Stackable 3.20.2, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[1].serialisiert — Text (stackable/text)",
+ "measured": true,
+ "content": "<!-- wp:stackable/text {\"uniqueId\":\"86365db\"} -->\n<div class=\"wp-block-stackable-text stk-block-text stk-block stk-86365db\" data-block-id=\"86365db\"><p class=\"stk-block-text__text\">So you wanna see what Stackable is all about? Well this whole page is created using Stackable blocks only! Click on any block and below so see how Stackable blocks can make your life better.</p></div>\n<!-- /wp:stackable/text -->"
+}

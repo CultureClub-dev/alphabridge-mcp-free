@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb2.json (GenerateBlocks 2.4.1, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[0].serialisiert — Überschrift (generateblocks/text)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/text {\"uniqueId\":\"2ddee60a\",\"tagName\":\"h2\",\"styles\":{\"marginBottom\":\"0.5rem\"},\"css\":\".gb-text-2ddee60a{margin-bottom:0.5rem}\"} -->\n<h2 class=\"gb-text gb-text-2ddee60a\">Take some action</h2>\n<!-- /wp:generateblocks/text -->"
+}
