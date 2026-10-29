@@ -485,6 +485,41 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( 1, AB_MCP_Undo::claim( (string) $out['rest_token'] )['entry']['items'] );
 	}
 
+	public function testTheRestOfPostFieldsKeepsTheDatePairTogether(): void {
+		$data = array(
+			'id'     => 5,
+			'fields' => array(
+				'post_title'    => 'Old title',
+				'post_date'     => '2026-09-01 10:00:00',
+				'post_date_gmt' => '2026-09-01 08:00:00',
+			),
+		);
+		$rest = \AB_MCP_Undo_Restore::remaining(
+			array( 'kind' => 'post_fields' ),
+			$data,
+			array(
+				'restored' => array( '5' ),
+				'blocked'  => array( array( 'ref' => '5:post_date', 'reason' => 'date_passed' ) ),
+			)
+		);
+		self::assertSame( array( 'post_date' => '2026-09-01 10:00:00', 'post_date_gmt' => '2026-09-01 08:00:00' ), $rest['fields'], 'The date goes back as the pair it was taken as.' );
+		self::assertSame( 5, $rest['id'] );
+	}
+
+	public function testARestPointNeverOutlivesTheUndoWindow(): void {
+		$token = AB_MCP_Undo::record_result(
+			array(
+				'tool'       => 'wp_update_site_settings',
+				'cap'        => 'manage_options',
+				'kind'       => 'site_settings',
+				'data'       => array( 'blogname' => 'X' ),
+				'expires_at' => time() + 10 * AB_MCP_Undo::ttl(),
+			)
+		);
+		$e = AB_MCP_Undo::claim( (string) $token )['entry'];
+		self::assertLessThanOrEqual( $e['created_at'] + AB_MCP_Undo::ttl(), $e['expires_at'] );
+	}
+
 	public function testWhenTheRestCannotBeKeptTheOldPointStaysWithAWarning(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
