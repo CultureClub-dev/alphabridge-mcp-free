@@ -53,7 +53,7 @@ class AB_MCP_Undo {
 	public static function record( array $e ) { $GLOBALS['t_undo'][] = $e; return 'undo-token'; }
 	public static function option_snapshot( $n ) { return array( 'name' => $n, 'value' => 'foo', 'autoload' => 'yes', 'existed' => true ); }
 	public static function record_result( array $r ) { $r['writes_before'] = count( $GLOBALS['t_opt'] ); $GLOBALS['t_undo_rows'][] = $r; if ( isset( $GLOBALS['t_undo_fail'] ) ) { return new WP_Error( $GLOBALS['t_undo_fail'], 'no room' ); } if ( isset( $GLOBALS['t_undo_fail_next'] ) && count( $GLOBALS['t_undo_rows'] ) > 1 ) { return new WP_Error( $GLOBALS['t_undo_fail_next'], 'no room' ); } return 1 === count( $GLOBALS['t_undo_rows'] ) ? 'undo_opt' : 'undo_opt' . count( $GLOBALS['t_undo_rows'] ); }
-	public static function discard( $t ) { $GLOBALS['t_undo_discarded'][] = $t; return true; }
+	public static function discard( $t ) { $GLOBALS['t_undo_discarded'][] = $t; return isset( $GLOBALS['t_discard_fail'] ) ? new WP_Error( $GLOBALS['t_discard_fail'], 'busy' ) : true; }
 }
 function get_current_user_id() { return 7; }
 function registered_meta_key_exists( $type, $key, $subtype = '' ) { return false; }
@@ -1303,16 +1303,33 @@ $GLOBALS['t_opt_hook']       = array( 'blogdescription' => array( 13 => 'changed
 $r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
 $u = $GLOBALS['t_undo_rows'];
 ok( array( array( 'blogdescription', 'bar' ) ) === $GLOBALS['t_opt'] && 1 === $r['tables']['options']['changed'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), '"WPLANG" changed while this call ran' ), 'a row a write before it changed is read again right before its own write and left as it is' );
-ok( 2 === count( $u ) && array( 'blogdescription', 'WPLANG' ) === array_column( $u[0]['data'], 'name' ) && array( 'blogdescription' ) === array_column( $u[1]['data'], 'name' ) && array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && 'undo_opt2' === $r['options_undo_token'], 'the undo point is narrowed to the row written: a new point replaces the first, which is removed, and the answer names the new one' );
-// Narrowing fails: the first point stays, and the answer says what its undo would also reset.
+ok( 2 === count( $u ) && array( 'blogdescription', 'WPLANG' ) === array_column( $u[0]['data'], 'name' ) && array( 'blogdescription' ) === array_column( $u[1]['data'], 'name' ) && 'undo_opt' === ( $u[1]['replaces'] ?? null ) && array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && 'undo_opt2' === $r['options_undo_token'], 'the undo point is narrowed to the row written: a new point takes the place of the first (replaces, so it pushes out no other point), the first is removed, and the answer names the new one' );
+// Narrowing fails: the first point goes all the same — no undo point is
+// safer than one that would reset the row this call left alone.
 reset_log();
 $GLOBALS['t_undo_rows']      = array();
 $GLOBALS['t_undo_discarded'] = array();
 $GLOBALS['t_undo_fail_next'] = 'ab_mcp_undo_write_failed';
 unset( $GLOBALS['t_opt_now'] );
 $r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
-ok( 'undo_opt' === $r['options_undo_token'] && array() === $GLOBALS['t_undo_discarded'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'also holds option rows that were not written' ), 'where the narrowed point cannot be recorded, the first stays and the answer names what its undo would also reset' );
+ok( null === $r['options_undo_token'] && array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'have no undo point' ), 'where the narrowed point cannot be recorded, the first is removed as well, and the answer says the rows written have no undo point' );
 unset( $GLOBALS['t_undo_fail_next'] );
+// The first point cannot be removed (busy twice): the answer says not to use it.
+reset_log();
+$GLOBALS['t_undo_rows']      = array();
+$GLOBALS['t_undo_discarded'] = array();
+$GLOBALS['t_discard_fail']   = 'ab_mcp_undo_busy';
+unset( $GLOBALS['t_opt_now'] );
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( 'undo_opt2' === $r['options_undo_token'] && array( 'undo_opt', 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'do not use it with wp_undo' ), 'a first point that stays busy is tried twice, and the answer says to remove it and not to use it' );
+$GLOBALS['t_discard_fail'] = 'ab_mcp_undo_not_found';
+reset_log();
+$GLOBALS['t_undo_rows']      = array();
+$GLOBALS['t_undo_discarded'] = array();
+unset( $GLOBALS['t_opt_now'] );
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( array( 'undo_opt' ) === $GLOBALS['t_undo_discarded'] && false === strpos( implode( ' ', $r['tables']['options']['notes'] ), 'do not use it with wp_undo' ), 'a first point already gone needs no second try and no warning' );
+unset( $GLOBALS['t_discard_fail'] );
 // No row written at all: the point is removed and the answer names none.
 reset_log();
 $GLOBALS['t_undo_rows']      = array();

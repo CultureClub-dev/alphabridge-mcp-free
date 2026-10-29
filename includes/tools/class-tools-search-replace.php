@@ -2863,41 +2863,45 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	/**
 	 * Narrow the undo point of the option rows to the rows that were written,
 	 * where one changed between the point and its write and was left alone:
-	 * the undo must not write back over that change. The narrowed point
-	 * replaces the first; where it cannot be recorded, the first stays and the
-	 * answer names what its undo would also reset.
+	 * the undo must not write back over that change. The narrowed point takes
+	 * the place of the first (replaces: it pushes out no other point), which
+	 * is then removed. Where the narrowed point cannot be recorded, the first
+	 * is removed all the same: no undo point is safer than one that would
+	 * reset a row this call did not write.
 	 *
 	 * @param string $token Token of the point recorded before the writes.
 	 * @param array  $kept  Snapshots of the rows written, by name.
 	 * @param array  $res   Table result (by reference).
 	 */
 	private static function narrow_options_point( $token, array $kept, array &$res ) {
-		if ( array() === $kept ) {
-			if ( ! is_wp_error( AB_MCP_Undo::discard( $token ) ) ) {
-				self::$run['options_token'] = null;
-				return;
+		$new = null;
+		if ( array() !== $kept ) {
+			$names = array_keys( $kept );
+			$new   = AB_MCP_Undo::record_result(
+				array(
+					'tool'     => 'wp_search_replace',
+					'cap'      => 'manage_options',
+					'kind'     => 'option_rows',
+					'summary'  => sprintf( '%d options: %s', count( $names ), implode( ', ', array_slice( $names, 0, 5 ) ) . ( count( $names ) > 5 ? ', …' : '' ) ),
+					'items'    => count( $names ),
+					'data'     => array_values( $kept ),
+					'replaces' => $token,
+				)
+			);
+			if ( is_wp_error( $new ) ) {
+				self::add_note( $res, 'The option rows written have no undo point: one row changed during this call and was left alone, and the undo point could not be narrowed to the rows written (' . $new->get_error_message() . '). Check the rows written before you rely on them.' );
+				$new = null;
 			}
-			self::add_note( $res, 'No option row was written, but its undo point ' . $token . ' could not be removed. wp_undo_discard removes it; do not use it with wp_undo.' );
-			return;
-		}
-		$names = array_keys( $kept );
-		$new   = AB_MCP_Undo::record_result(
-			array(
-				'tool'    => 'wp_search_replace',
-				'cap'     => 'manage_options',
-				'kind'    => 'option_rows',
-				'summary' => sprintf( '%d options: %s', count( $names ), implode( ', ', array_slice( $names, 0, 5 ) ) . ( count( $names ) > 5 ? ', …' : '' ) ),
-				'items'   => count( $names ),
-				'data'    => array_values( $kept ),
-			)
-		);
-		if ( is_wp_error( $new ) ) {
-			self::add_note( $res, 'The undo point ' . $token . ' also holds option rows that were not written: wp_undo would set them back to their value before this call as well. Where they should keep their present value, remove the point with wp_undo_discard instead of using it.' );
-			return;
 		}
 		self::$run['options_token'] = $new;
-		if ( is_wp_error( AB_MCP_Undo::discard( $token ) ) ) {
-			self::add_note( $res, 'The undo point of the rows written is ' . $new . '; the earlier point ' . $token . ' also holds rows that were not written. wp_undo_discard removes it; do not use it with wp_undo.' );
+		// Twice, as wp_undo does: a busy index is the one failure a moment
+		// cures. A point already gone needs no removing.
+		$gone = static function () use ( $token ) {
+			$d = AB_MCP_Undo::discard( $token );
+			return ! is_wp_error( $d ) || 'ab_mcp_undo_not_found' === $d->get_error_code();
+		};
+		if ( ! $gone() && ! $gone() ) {
+			self::add_note( $res, 'The undo point ' . $token . ' also holds option rows that were not written, and could not be removed. Remove it with wp_undo_discard; do not use it with wp_undo.' );
 		}
 	}
 
