@@ -34,7 +34,7 @@ https://www.youtube.com/watch?v=DlMJ9tfrqJg
 
 MCP, the Model Context Protocol, is the open standard AI assistants use to work with other software. An MCP server offers tools that an assistant can call. AlphaBridge MCP turns your WordPress site into such a server. Claude, ChatGPT, Claude Code, Cursor and other MCP clients see its tools, and when you ask for something, the assistant picks the right tool and runs it on your site, with the rights of your WordPress user.
 
-You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It reads widgets, site settings and pages built with blocks or a common page builder, and it works in the SEO fields of Yoast SEO and Rank Math.
+You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, reads pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
 80 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 

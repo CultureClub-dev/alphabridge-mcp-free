@@ -160,14 +160,14 @@ final class BuilderReadmeTest extends TestCase {
 			self::assertSame( 1, preg_match( $pattern, $this->text( $file ), $m ), $file );
 			self::assertSame( $count, (int) $m[1], $file . ' states the number of tools the plugin registers.' );
 		}
-		// Widgets and site settings are only read: no tool for them writes.
-		foreach ( array_unique( $names ) as $name ) {
-			if ( preg_match( '/widget|sidebar|setting/', $name ) ) {
-				self::assertMatchesRegularExpression( '/^wp_(get|list)_/', $name, $name . ' writes; the readmes say widgets and settings are read.' );
-			}
+		// Since 4.9.0 widgets and the site settings are also written, and the
+		// readmes say so (before, they said both were only read).
+		foreach ( array( 'wp_add_widget', 'wp_update_widget', 'wp_delete_widget', 'wp_update_site_settings' ) as $name ) {
+			self::assertContains( $name, $names );
 		}
-		self::assertStringContainsString( 'It reads widgets, site settings', $this->text( 'readme.txt' ) );
-		self::assertStringContainsString( 'read widgets, site settings', (string) preg_replace( '/\s+/', ' ', $this->text( 'README.md' ) ) );
+		self::assertStringContainsString( 'It manages widgets and site settings', $this->text( 'readme.txt' ) );
+		self::assertStringContainsString( 'Add, change and remove widgets, and set the site title', $this->text( 'readme.txt' ) );
+		self::assertStringContainsString( 'manage user accounts, widgets and site settings', (string) preg_replace( '/\s+/', ' ', $this->text( 'README.md' ) ) );
 	}
 
 	public function testTheBuilderTextsDoNotAdvertise(): void {
