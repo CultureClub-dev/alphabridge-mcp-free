@@ -567,6 +567,12 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 					)
 				);
 			}
+			// A status that takes the product live takes the right to publish
+			// products, as wp-admin and the REST API ask it: the right to edit
+			// a product lets an account keep it a draft, not publish it.
+			if ( in_array( $status_given, array( 'publish', 'private', 'future' ), true ) && ! self::may_publish( 'product', 'publish_products' ) ) {
+				return AB_MCP_Guidance::role_refusal( __( 'Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator.', 'alphabridge-mcp' ) );
+			}
 		}
 		foreach ( array(
 			'regular_price' => 'set_regular_price',
@@ -639,6 +645,21 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * May the account publish entries of this post type: the type's own
+	 * publish capability (publish_products, publish_shop_coupons where
+	 * WooCommerce maps them), the given name where the type is not registered.
+	 *
+	 * @param string $type     Post type.
+	 * @param string $fallback Capability when the type is unknown.
+	 * @return bool
+	 */
+	private static function may_publish( $type, $fallback ) {
+		$pto = get_post_type_object( $type );
+		$cap = ( $pto && isset( $pto->cap->publish_posts ) ) ? (string) $pto->cap->publish_posts : (string) $fallback;
+		return current_user_can( $cap );
+	}
+
+	/**
 	 * Create coupon.
 	 *
 	 * @param array $a Args.
@@ -648,6 +669,12 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 		$g = self::wc_ready();
 		if ( is_wp_error( $g ) ) {
 			return $g;
+		}
+		// The coupon is published at once, so it takes the right to publish
+		// coupons, as WooCommerce's REST API asks it for a new one
+		// (wc_rest_check_post_permissions()): manage_woocommerce alone is not it.
+		if ( ! self::may_publish( 'shop_coupon', 'publish_shop_coupons' ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator.', 'alphabridge-mcp' ) );
 		}
 		// Everything is checked before the coupon exists: an unknown discount
 		// type used to throw inside WooCommerce (a generic "internal error" for

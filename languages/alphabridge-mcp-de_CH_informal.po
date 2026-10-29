@@ -2746,3 +2746,9 @@ msgstr "Der gespeicherte Stand hat die Integritätsprüfung nicht bestanden. Die
 
 msgid "Undo"
 msgstr "Undo"
+
+msgid "Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator."
+msgstr "Das Konto dieser Verbindung darf keine Produkte veröffentlichen, darum wurde dieser Status nicht gesetzt und nichts geändert. status weglassen, um die übrigen Felder zu ändern, oder jemanden fragen, der Produkte veröffentlichen darf, etwa einen Shop-Manager oder einen Administrator."
+
+msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
+msgstr "Das Konto dieser Verbindung darf keine Gutscheine veröffentlichen, darum wurde kein Gutschein angelegt. Jemanden fragen, der Gutscheine veröffentlichen darf, etwa einen Shop-Manager oder einen Administrator."

@@ -2746,3 +2746,9 @@ msgstr "O instantâneo de anulação não passou na verificação de integridade
 
 msgid "Undo"
 msgstr "Anular"
+
+msgid "Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator."
+msgstr "A sua conta não pode publicar produtos, por isso este estado não foi definido e nada foi alterado. Omita status para alterar os outros campos, ou peça a alguém que possa publicar produtos, como um gestor de loja, ou a um administrador."
+
+msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
+msgstr "A sua conta não pode publicar cupões, por isso nenhum cupão foi criado. Peça a alguém que possa publicar cupões, como um gestor de loja, ou a um administrador."

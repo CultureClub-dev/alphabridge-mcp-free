@@ -2746,3 +2746,9 @@ msgstr "L'instantané de restauration a échoué au contrôle d'intégrité. Ce 
 
 msgid "Undo"
 msgstr "Annulation"
+
+msgid "Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator."
+msgstr "Votre compte ne peut pas publier de produits : ce statut n'a donc pas été appliqué et rien n'a été modifié. Omettez status pour modifier les autres champs, ou demandez à quelqu'un qui peut publier des produits, comme un gestionnaire de boutique, ou à un administrateur."
+
+msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
+msgstr "Votre compte ne peut pas publier de codes promo : aucun code promo n'a donc été créé. Demandez à quelqu'un qui peut publier des codes promo, comme un gestionnaire de boutique, ou à un administrateur."

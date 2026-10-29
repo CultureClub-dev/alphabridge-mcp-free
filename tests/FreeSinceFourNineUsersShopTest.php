@@ -832,6 +832,34 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 		self::assertTrue( $GLOBALS['ab_test_wc_product']->set['saved'] );
 	}
 
+	/**
+	 * Codex 29.10.2026: a role with manage_woocommerce and the right to edit a
+	 * product, but without the right to publish, published it with
+	 * status=publish, and created coupons that work at once. Both take the
+	 * publish capability of their type now, as wp-admin and WooCommerce ask it.
+	 */
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testPublishingAProductOrACouponTakesThePublishRight(): void {
+		self::woo();
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => ! in_array( $cap, array( 'publish_products', 'publish_shop_coupons' ), true );
+		foreach ( array( 'publish', 'private', 'future' ) as $status ) {
+			$res = AB_MCP_Tools_Shop::update_product( array( 'id' => 7, 'status' => $status, 'regular_price' => '12.50' ) );
+			self::assertSame( 'ab_mcp_forbidden', self::code( $res ), $status );
+			self::assertStringContainsString( 'cannot publish products', $res->get_error_message() );
+		}
+		self::assertSame( array(), $GLOBALS['ab_test_wc_product']->set, 'No setter ran, nothing was saved.' );
+		self::assertSame( 'ok', self::code( AB_MCP_Tools_Shop::update_product( array( 'id' => 7, 'status' => 'draft' ) ) ), 'A draft needs no right to publish.' );
+		self::assertSame( 'ok', self::code( AB_MCP_Tools_Shop::update_product( array( 'id' => 7, 'regular_price' => '9' ) ) ), 'Nor a change without status.' );
+
+		$res = AB_MCP_Tools_Shop::create_coupon( array( 'code' => 'save100', 'amount' => '100', 'discount_type' => 'percent' ) );
+		self::assertSame( 'ab_mcp_forbidden', self::code( $res ) );
+		self::assertStringContainsString( 'cannot publish coupons', $res->get_error_message() );
+
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		self::assertSame( 'ok', self::code( AB_MCP_Tools_Shop::update_product( array( 'id' => 7, 'status' => 'publish' ) ) ) );
+	}
+
 	#[RunInSeparateProcess]
 	#[PreserveGlobalState( false )]
 	public function testAProductIsCheckedWholeBeforeAnythingIsWritten(): void {

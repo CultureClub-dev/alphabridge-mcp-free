@@ -2746,3 +2746,9 @@ msgstr "La instantánea no ha superado la comprobación de integridad. Este punt
 
 msgid "Undo"
 msgstr "Deshacer"
+
+msgid "Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator."
+msgstr "La cuenta de esta conexión no puede publicar productos, así que este estado no se ha aplicado y no se ha cambiado nada. Omite status para cambiar los demás campos, o pídeselo a alguien que pueda publicar productos, como un gestor de la tienda, o a un administrador."
+
+msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
+msgstr "La cuenta de esta conexión no puede publicar cupones, así que no se ha creado ningún cupón. Pídeselo a alguien que pueda publicar cupones, como un gestor de la tienda, o a un administrador."

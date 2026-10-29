@@ -43,7 +43,7 @@ You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no serv
 * **Free and complete.** Every free tool works without payment, registration or license key, and the plugin does not expire. No usage quotas and no credits: you use Claude or ChatGPT as you do today.
 * **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory, enter your site's address and approve on your own site.
 * **It reads until you allow more.** Out of the box the AI only reads. One switch lets it write, one click turns writing off again.
-* **Undo included.** Edits of posts and pages, status changes and the site settings leave an undo point that expires after 7 days. One sentence brings back what was there before.
+* **Undo included.** Edits of posts and pages, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. One sentence brings back what was there before.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
 * **Reads Elementor and 15 more page builders.** Their pages come back as an outline: the elements in page order, with their texts, links and images.
 * **Up to 10 sites in one chat.** The free hub, the service of AlphaBridge MCP that links your sites to Claude and ChatGPT, brings up to 10 WordPress sites into one chat, in every edition.
@@ -80,7 +80,7 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 = What your AI can do with the free plugin =
 
 * **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, set their custom fields and bring back an earlier revision. Publish, unpublish or trash up to 500 at once. Search the whole site.
-* **Undo.** Every edit of a post, every status change in bulk and every change of the site settings leaves an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous state back.
+* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, status changes in bulk and changes of the site settings leave an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous values back. Custom fields and terms are not part of it.
 * **Media.** Add JPEG, PNG, GIF, WebP and PDF files from the chat or from a web address. Change titles, captions and alt texts, and delete files.
 * **Categories and tags.** Create, rename and delete the terms of any taxonomy.
 * **Comments.** Read, approve, answer and delete comments, and move spam out of the way.
@@ -128,7 +128,7 @@ AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the
 
 * **Page builders.** Change texts, links and images on pages of Elementor and many other page builders, with a preview first. [Watch it in under a minute](https://youtu.be/9ivK3WyQiEo).
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
-* **Undo for everything Pro changes.** Page-builder elements, theme and plugin files, PHP snippets and options come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
+* **Undo for page builders, files and code.** Page-builder elements, theme and plugin files, PHP snippets, options and theme switches come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
 * **Plugins, themes and WordPress itself.** Install, update, activate and delete plugins and themes, and update WordPress. Test requests check the site before and after an update or a switch-on, and a version that breaks it is put back in the same call.
 * **Database and options.** Query the database, change rows of plugin tables with structured statements, and write options, with guards for what must stay protected.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
@@ -223,7 +223,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 = 4.9.0 =
 * **22 more tools in the free plugin, 80 in all, undo included.** Until now they came with AlphaBridge MCP Pro only; they work as they did there, with the same rights checks, and their messages come in the plugin's languages.
-* **Undo.** `wp_update_post`, `wp_bulk_update_status` and `wp_update_site_settings` keep an undo point with the previous values; `wp_undo_list` lists your own points, `wp_undo` puts one back (with `dry_run=true` it only shows what it would do), `wp_undo_discard` throws one away. Undo points expire after 7 days; the newest 50 and 100 MB at most are kept, as copies in a protected folder in the uploads. A restore asks again for the right to the post or the setting, as the original change did. Undo points that Pro recorded on this site stay where they are: Pro reverses them, and without Pro they expire.
+* **Undo.** `wp_update_post` (the post fields it changes, not custom fields or terms), `wp_bulk_update_status` and `wp_update_site_settings` keep an undo point with the previous values; `wp_undo_list` lists your own points, `wp_undo` puts one back (with `dry_run=true` it only shows what it would do), `wp_undo_discard` throws one away. Undo points expire after 7 days; the newest 50 and 100 MB at most are kept, as copies in a protected folder in the uploads. A restore asks again for the right to the post or the setting, as the original change did. Undo points that Pro recorded on this site stay where they are: Pro reverses them, and without Pro they expire.
 * **Posts.** Bring back an earlier revision (`wp_restore_revision`), set one custom field (`wp_update_post_meta`; page-builder data takes the unfiltered_html capability), and publish, unpublish or trash up to 500 posts at once (`wp_bulk_update_status`).
 * **Users.** Create, change and delete user accounts (`wp_create_user`, `wp_update_user`, `wp_delete_user`), within the roles your own account may give; the last administrator cannot be deleted or demoted. Set user and term meta (`wp_update_user_meta`, `wp_update_term_meta`).
 * **WooCommerce.** Change the price, sale price, stock and status of a product, the status of an order, and create coupons (`wp_wc_update_product`, `wp_wc_update_order_status`, `wp_wc_create_coupon`), with the right to the one product or order.

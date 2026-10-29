@@ -2746,3 +2746,9 @@ msgstr "L'istantanea di annullamento non ha superato il controllo di integrità.
 
 msgid "Undo"
 msgstr "Annullamento"
+
+msgid "Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator."
+msgstr "Il tuo account non può pubblicare prodotti, quindi questo stato non è stato impostato e non è stato modificato nulla. Ometti status per modificare gli altri campi, oppure chiedi a chi può pubblicare prodotti, come un gestore del negozio, o a un amministratore."
+
+msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
+msgstr "Il tuo account non può pubblicare coupon, quindi non è stato creato alcun coupon. Chiedi a chi può pubblicare coupon, come un gestore del negozio, o a un amministratore."
