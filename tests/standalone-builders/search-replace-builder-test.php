@@ -348,8 +348,8 @@ if ( 'forms' === $scenario ) {
 	ok( 2 === $n && '<p>C &amp; D</p>' === $d[0]['settings']['editor'] && 'C & D' === $d[0]['settings']['title'] && json_encode( $d ) === $out, 'F10 in a JSON document the HTML of an editor field and a plain title are both found and rewritten in their form; the document re-encodes byte-exact' );
 
 	// F11. Valid JSON the encoder would not write back byte for byte (Free 4.10.0, GitHub Codex on #101).
-	$jt = static function ( $doc, $search, $replace ) {
-		$e   = new AB_MCP_Replace_Engine( $search, $replace );
+	$jt = static function ( $doc, $search, $replace, $regex = false ) {
+		$e   = new AB_MCP_Replace_Engine( $search, $replace, false, $regex );
 		$n   = 0;
 		$out = $e->apply_value( $doc, $n );
 		return array( $out, $n, $e->skipped_unchecked_values );
@@ -358,28 +358,28 @@ if ( 'forms' === $scenario ) {
 	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement with quotes in spaced JSON would break it: left as it is, counted in skipped_unchecked_values, no occurrence' );
 	list( $out, $n, $sk ) = $jt( "{\n  \"path\": \"Old\"\n}", 'Old', 'C:\\dir' );
 	ok( "{\n  \"path\": \"Old\"\n}" === $out && 0 === $n && 1 === $sk, 'F11 a replacement with a backslash likewise' );
+	list( $out, $n, $sk ) = $jt( '{ "t": "Old" }', 'Old', 'a\\nb' );
+	ok( '{ "t": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 also where the result would still parse, with a line break in place of the backslash and n typed' );
 	list( $out, $n, $sk ) = $jt( '{ "title": "Old", "url": "https://a.example/x" }', 'https://a.example', 'https://b.example' );
 	ok( '{ "title": "Old", "url": "https://b.example/x" }' === $out && 1 === $n && 0 === $sk, 'F11 an address in spaced JSON with unescaped slashes is replaced and the JSON keeps its form' );
 	list( $out, $n, $sk ) = $jt( '{"t":"Grüsse Old"}', 'Old', 'Neu & mehr' );
 	ok( '{"t":"Grüsse Neu & mehr"}' === $out && 1 === $n && 0 === $sk, 'F11 JSON with unescaped Unicode keeps it, and a plain replacement goes in' );
-	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', '"title": "Old"', '"title": "New", "admin": true' );
-	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a search across the structure changes no structure: left as it is' );
-	list( $out, $n, $sk ) = $jt( '{"title":"Old"}', 'Old', '"New"' );
-	ok( '{"title":"\\"New\\""}' === $out && 1 === $n && 0 === $sk, 'F11 JSON the encoder writes byte for byte is still walked as structure: the quotes are escaped' );
 	list( $out, $n, $sk ) = $jt( '{ "url": "https://old.example/x", "other": "https:\\/\\/old.example/x" }', 'https://old.example/x', 'https://new.example/x' );
-	ok( '{ "url": "https://new.example/x", "other": "https:\\/\\/old.example/x" }' === $out && 1 === $n && 0 === $sk, 'F11 mixed escaping: the address the text replacement reaches is replaced, the differently escaped copy stays as before (Codex)' );
-	list( $out, $n, $sk ) = $jt( '{ "t": "Old" }', 'Old', 'a\\nb' );
-	ok( '{ "t": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement with a backslash that would still parse, as a line break, is not what the structural replace makes of it: left as it is' );
+	ok( '{ "url": "https://new.example/x", "other": "https:\\/\\/old.example/x" }' === $out && 1 === $n && 0 === $sk, 'F11 mixed escaping: the address the text replacement reaches is replaced, as before (Codex)' );
+	list( $out, $n, $sk ) = $jt( '{ "text": "Old \\u004fld" }', 'Old', 'New' );
+	ok( '{ "text": "New \\u004fld" }' === $out && 1 === $n && 0 === $sk, 'F11 mixed escaping within one string: as before (Codex)' );
 	list( $out, $n, $sk ) = $jt( '{ "https://old.example/a": "https://old.example/b", "t": 1 }', 'https://old.example', 'https://new.example' );
 	ok( '{ "https://new.example/a": "https://new.example/b", "t": 1 }' === $out && 2 === $n && 0 === $sk, 'F11 an address as a key moves with the site, as before' );
-	list( $out, $n, $sk ) = $jt( '{ "Old": "x", "t": "y" }', 'Old', 'y", "z' );
-	ok( '{ "Old": "x", "t": "y" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement that would split a key into more structure: left as it is' );
-	list( $out, $n, $sk ) = $jt( '{ "Old": 1 }', 'Old', 'x\\"y' );
-	ok( '{ "Old": 1 }' === $out && 0 === $n && 1 === $sk, 'F11 a key the text replacement turns into another key than the replacement (an escaped quote read as a quote): left as it is' );
-	$e   = new AB_MCP_Replace_Engine( 'Old', '"New"' );
-	$n   = 0;
-	$e->apply_value( array( '{ "a": "Old", "b": "O:8:\\"stdClass\\":0:{}" }', 'x' ), $n );
-	ok( 1 === $e->skipped_unchecked_values && 0 === $e->skipped_object_values, 'F11 the structural walk made only for comparing adds nothing to the counts' );
+	list( $out, $n, $sk ) = $jt( '{ "a": "x", "b": "y" }', 'x", "b', 'z' );
+	ok( '{ "a": "x", "b": "y" }' === $out && 0 === $n && 1 === $sk, 'F11 a search across the structure whose result is no longer JSON: left as it is' );
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', 'Old', '"New"', true );
+	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 regex mode: a result that is no longer JSON is not written either' );
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', 'O(l)d', 'N$1d', true );
+	ok( '{ "title": "Nld" }' === $out && 1 === $n && 0 === $sk, 'F11 regex mode: a result that is still JSON is written' );
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', 'O(l)d', 'N\\1d', true );
+	ok( '{ "title": "Nld" }' === $out && 1 === $n && 0 === $sk, 'F11 regex mode: the replacement is a pattern, so a backslash reference in it is no reason to refuse' );
+	list( $out, $n, $sk ) = $jt( '{"title":"Old"}', 'Old', '"New"' );
+	ok( '{"title":"\"New\""}' === $out && 1 === $n && 0 === $sk, 'F11 JSON the encoder writes byte for byte is still walked as structure: the quotes are escaped' );
 
 	ab_result( 'SEARCH-REPLACE-BUILDER (forms)-CHECKS' );
 }
