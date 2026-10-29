@@ -552,6 +552,44 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertTrue( AB_MCP_Undo::hold_apply( $token, $nonce ) );
 		self::assertGreaterThanOrEqual( time() - 1, self::stored()[0]['applying'], 'Renewed, so no retry may take it over.' );
 		self::assertFalse( AB_MCP_Undo::hold_apply( $token, 'fremd' ) );
+
+		// The index lock busy: the renewal cannot be stored. Still this
+		// holder's while the reservation runs; not once it has run out.
+		update_option( AB_MCP_Undo::LOCK, (string) time() );
+		$index                = self::stored();
+		$index[0]['applying'] = time() - 100;
+		update_option( AB_MCP_Undo::OPTION, $index );
+		self::assertTrue( AB_MCP_Undo::hold_apply( $token, $nonce ), 'Nobody may take it before 120 seconds.' );
+		$index[0]['applying'] = time() - AB_MCP_Undo::APPLY_TIMEOUT - 1;
+		update_option( AB_MCP_Undo::OPTION, $index );
+		self::assertFalse( AB_MCP_Undo::hold_apply( $token, $nonce ), 'Run out and not renewed: no more writing.' );
+		delete_option( AB_MCP_Undo::LOCK );
+	}
+
+	public function testATakeoverDuringTheLastItemLeavesTheBookkeepingToTheNewHolder(): void {
+		self::settings();
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$token = (string) $res['undo'];
+		add_filter(
+			'pre_update_option_blogdescription',
+			static function ( $value ) use ( $token ) {
+				$index = get_option( AB_MCP_Undo::OPTION );
+				foreach ( $index as $i => $e ) {
+					if ( $e['token'] === $token ) {
+						$index[ $i ]['applying'] = time() - AB_MCP_Undo::APPLY_TIMEOUT - 1;
+					}
+				}
+				update_option( AB_MCP_Undo::OPTION, $index );
+				AB_MCP_Undo::begin_apply( $token );
+				return $value;
+			}
+		);
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		self::assertTrue( $out['taken_over'] );
+		self::assertFalse( $out['consumed'] );
+		self::assertArrayNotHasKey( 'rest_token', $out );
+		self::assertSame( array( $token ), array_column( self::stored(), 'token' ) );
 	}
 
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {

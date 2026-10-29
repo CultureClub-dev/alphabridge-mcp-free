@@ -872,6 +872,9 @@ class AB_MCP_Undo {
 			$held   = false;
 			$locked = self::with_lock(
 				function () use ( $mine, &$held ) {
+					// Read afresh under the lock: the copy read above may
+					// be older than a takeover that came in between.
+					wp_cache_delete( self::OPTION, 'options' );
 					$index = self::read_index();
 					foreach ( $index as $i => $x ) {
 						if ( $mine( $x ) ) {
@@ -883,9 +886,9 @@ class AB_MCP_Undo {
 					}
 				}
 			);
-			// Busy: still this holder's as read a moment ago; renewed at
-			// the next item.
-			return $held || ! $locked;
+			// Busy: still this holder's only while the reservation read a
+			// moment ago has not run out — before that, nobody may take it.
+			return $held || ( ! $locked && time() - (int) $e['applying'] < self::APPLY_TIMEOUT );
 		}
 		return false;
 	}

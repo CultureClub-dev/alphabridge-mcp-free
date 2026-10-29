@@ -330,6 +330,11 @@ class AB_MCP_Undo_Restore {
 		} finally {
 			AB_MCP_Undo::resume();
 		}
+		// And once more after the last item, which may itself have outlived
+		// the reservation: the bookkeeping is then left to the new holder.
+		if ( ! $lost && null !== $hold && array() !== $plan['items'] && ! call_user_func( $hold ) ) {
+			$lost = true;
+		}
 
 		$out = array(
 			'undone'   => count( $restored ),
