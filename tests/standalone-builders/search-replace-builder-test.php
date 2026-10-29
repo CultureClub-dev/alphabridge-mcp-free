@@ -378,6 +378,8 @@ if ( 'forms' === $scenario ) {
 	ok( '{ "title": "Nld" }' === $out && 1 === $n && 0 === $sk, 'F11 regex mode: a result that is still JSON is written' );
 	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', 'O(l)d', 'N\\1d', true );
 	ok( '{ "title": "Nld" }' === $out && 1 === $n && 0 === $sk, 'F11 regex mode: the replacement is a pattern, so a backslash reference in it is no reason to refuse' );
+	list( $out, $n, $sk ) = $jt( '{ "text": "Gr\\u00fcsse" }', 'Grüsse', 'Hello "friend"' );
+	ok( '{ "text": "Gr\\u00fcsse" }' === $out && 0 === $n && 1 === $sk, 'F11 a quote stays out also where the match was in an escaped form that would take it: left as it is and counted, never broken (Codex)' );
 	list( $out, $n, $sk ) = $jt( '{"title":"Old"}', 'Old', '"New"' );
 	ok( '{"title":"\"New\""}' === $out && 1 === $n && 0 === $sk, 'F11 JSON the encoder writes byte for byte is still walked as structure: the quotes are escaped' );
 

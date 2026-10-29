@@ -746,10 +746,13 @@ class AB_MCP_Replace_Engine {
 	/**
 	 * Valid JSON that the encoder would not write back byte for byte (spacing,
 	 * unescaped slashes or Unicode): replaced as text, so it keeps its form,
-	 * as before. A replacement that does not fit inside a JSON string as it
-	 * is (a quote, a backslash or a control character) would break the JSON
-	 * or change its meaning, and a result that is no longer JSON is never
-	 * written; such a value stays as it is and is counted in
+	 * as before. A replacement that does not fit inside a JSON string as
+	 * typed (a quote, a backslash or a control character) is not put in:
+	 * where a match is in the plain form it goes in as typed and can break
+	 * the JSON or change its meaning, and which form each match took is not
+	 * known here — so it stays out also where every match was in an escaped
+	 * form that would have taken it safely. A result that is no longer JSON
+	 * is never written. Such a value stays as it is and is counted in
 	 * skipped_unchecked_values. In regex mode the replacement is a pattern,
 	 * so only the second check applies.
 	 *
