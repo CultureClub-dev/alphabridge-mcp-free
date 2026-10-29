@@ -215,6 +215,9 @@ final class GuidanceTest extends TestCase {
 		foreach ( array( 'wp_update_widget', 'wp_add_widget', 'wp_delete_widget', 'wp_update_user_meta', 'wp_update_term_meta', 'wp_db_optimize', 'wp_cleanup_transients' ) as $name ) {
 			self::assertNotContains( $name, $pro, $name . ' is free since 4.9.0.' );
 		}
+		foreach ( array( 'wp_create_user', 'wp_update_user', 'wp_delete_user', 'wp_wc_update_order_status', 'wp_wc_update_product', 'wp_wc_create_coupon' ) as $name ) {
+			self::assertNotContains( $name, $pro, $name . ' is free since 4.9.0.' );
+		}
 		foreach ( array( 'wp_create_application_password', 'wp_revoke_application_password', 'wp_schedule_cron', 'wp_unschedule_cron', 'wp_set_transient', 'wp_delete_transient' ) as $name ) {
 			self::assertContains( $name, $pro, $name . ' stays in Pro.' );
 		}
