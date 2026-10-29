@@ -5,9 +5,10 @@
 **Your WordPress site, managed in conversation.** AlphaBridge MCP turns a WordPress site into a
 native [Model Context Protocol](https://modelcontextprotocol.io) server. Claude, ChatGPT and other
 MCP clients connect over one authenticated HTTPS endpoint. They write and edit posts, pages,
-media, categories and tags, reply to and moderate comments, set SEO titles and descriptions, and
-read widgets, site settings and the outline of pages built with blocks or a common page builder. Every tool checks WordPress
-capabilities on every single call.
+media, categories and tags, reply to and moderate comments, set SEO titles and descriptions,
+manage user accounts, widgets and site settings, change prices, stock and orders in WooCommerce,
+read the outline of pages built with blocks or a common page builder, and undo a change with one
+sentence. Every tool checks WordPress capabilities on every single call.
 
 The site only reads until an administrator turns on one switch for write access. Then every tool
 is on; each connection keeps its access level (full, content only or read only). Switching it
@@ -27,9 +28,13 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **58 structured tools** across content, media, taxonomies, comments, widgets, menus, site
-  settings, site info, users, plugins and themes, cron and the error log, SEO fields, WooCommerce
-  reads and search.
+- **80 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+  settings, site info, users, plugins and themes, cron and the error log, SEO fields, WooCommerce,
+  maintenance, search and bulk status changes.
+- **Undo** — `wp_update_post`, `wp_bulk_update_status` and `wp_update_site_settings` leave an
+  undo point with the previous values that expires after 7 days; `wp_undo_list`, `wp_undo` (with a dry run) and
+  `wp_undo_discard` work on the account's own points, and a restore checks the rights of the
+  original change again.
 - **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page
   order, with their visible text, link and image fields; elements that cannot be read safely,
   such as code, forms or unknown elements, are listed as locked, with the reason and without
@@ -161,10 +166,9 @@ A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do mor
 - edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
 - check the site with test requests after saving active PHP code, and put the previous
   version back automatically when one of them ends with a fatal error;
-- use tool groups for the database, user accounts, changes in WooCommerce,
-  install/update, migration and multisite;
-- undo many of the changes made through it (undo points expire after 7 days by default,
-  adjustable from 1 to 30 days).
+- use tool groups for the database, options, install/update, migration and multisite;
+- undo its own changes too (page-builder elements, files, PHP snippets, options); undo points
+  expire after 7 days by default, adjustable from 1 to 30 days.
 
 Its Agency plan adds Site Deploy for agencies and developers: files, themes and whole builds
 published over SFTP onto the server the site runs on; ZIP deploys can run atomically, with
