@@ -212,6 +212,12 @@ final class GuidanceTest extends TestCase {
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );
+		foreach ( array( 'wp_update_widget', 'wp_add_widget', 'wp_delete_widget', 'wp_update_user_meta', 'wp_update_term_meta', 'wp_db_optimize', 'wp_cleanup_transients' ) as $name ) {
+			self::assertNotContains( $name, $pro, $name . ' is free since 4.9.0.' );
+		}
+		foreach ( array( 'wp_create_application_password', 'wp_revoke_application_password', 'wp_schedule_cron', 'wp_unschedule_cron', 'wp_set_transient', 'wp_delete_transient' ) as $name ) {
+			self::assertContains( $name, $pro, $name . ' stays in Pro.' );
+		}
 		foreach ( array( 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_update_option', 'wp_activate_plugin', 'wp_create_application_password' ) as $name ) {
 			self::assertContains( $name, $pro );
 		}

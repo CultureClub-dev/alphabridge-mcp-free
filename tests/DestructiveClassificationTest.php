@@ -52,6 +52,12 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_flush_rewrite_rules',
 		'wp_undo',
 		'wp_undo_discard',
+		'wp_update_widget',
+		'wp_delete_widget',
+		'wp_update_user_meta',
+		'wp_update_term_meta',
+		'wp_db_optimize',
+		'wp_cleanup_transients',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */
@@ -209,7 +215,9 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 		$this->assertSame( array(), $unclassified );
 
-		// And the split is the measured one: 10 overwrite, 5 add and publish, 3 only add.
+		// And the split is the measured one: 16 overwrite, 5 add and publish, 3 only add.
+		// wp_add_widget adds by its name and says it publishes in its definition
+		// (FreeSinceFourNineWidgetsMetaOpsTest); this count goes by the name alone.
 		$destructive = array_values( array_filter( $writing, static fn( $n ) => AB_MCP_Tool_Registry::is_destructive( $n, array() ) ) );
 		sort( $destructive );
 		$expected = array_merge( self::OVERWRITES, self::PUBLISHING_ADDS );
