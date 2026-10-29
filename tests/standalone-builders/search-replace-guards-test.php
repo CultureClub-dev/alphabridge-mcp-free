@@ -346,7 +346,7 @@ class AB_Test_WPDB {
 	public function get_var( $q ) {
 		$this->queries[] = $q;
 		// Free 4.10: the value of an option row read again before it is written.
-		if ( false !== strpos( $q, 'SELECT option_value FROM wp_options WHERE option_id = %d' ) ) { return isset( $GLOBALS['t_opt_now'] ) ? $GLOBALS['t_opt_now'] : 'foo'; }
+		if ( false !== strpos( $q, 'SELECT option_value FROM wp_options WHERE option_id = %d' ) ) { $last = end( $this->prepares ); $oid = is_array( $last ) ? (int) $last[2][0] : 0; if ( isset( $GLOBALS['t_opt_now'] ) ) { return is_array( $GLOBALS['t_opt_now'] ) ? ( $GLOBALS['t_opt_now'][ $oid ] ?? 'foo' ) : $GLOBALS['t_opt_now']; } return 'foo'; }
 		// The read-back of a column just written: raw, as the scan read it.
 		foreach ( array( 'SELECT name FROM wp_terms WHERE term_id = %d' => 'name', 'SELECT slug FROM wp_terms WHERE term_id = %d' => 'slug' ) as $needle => $field ) {
 			if ( false !== strpos( $q, $needle ) ) {
@@ -1286,6 +1286,12 @@ reset_log();
 $GLOBALS['t_opt_now'] = 'changed meanwhile';
 $r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
 ok( array() === $GLOBALS['t_opt'] && 0 === $r['tables']['options']['changed'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'changed while this call ran' ), 'a row whose stored value changed after the scan read it is left as it is' );
+reset_log();
+$GLOBALS['t_undo_rows'] = array();
+$GLOBALS['t_opt_now']   = array( 3 => 'changed meanwhile' ); // only blogdescription (option_id 3)
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+$u = $GLOBALS['t_undo_rows'];
+ok( array( array( 'WPLANG', 'bar' ) ) === $GLOBALS['t_opt'] && 1 === count( $u ) && array( 'WPLANG' ) === array_column( $u[0]['data'], 'name' ), 'a row changed meanwhile is neither written nor in the undo point: an undo must not write back over a change this call did not make' );
 unset( $GLOBALS['t_opt_now'] );
 
 echo "post_ids and expected_count (Free 4.10.0)\n";

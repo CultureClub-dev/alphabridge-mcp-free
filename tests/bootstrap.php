@@ -52,6 +52,7 @@ $GLOBALS['ab_test_core_delay'] = 0;
  */
 function ab_test_reset(): void {
 	$GLOBALS['ab_test_current_user'] = 0;
+	$GLOBALS['ab_test_autoload']     = array();
 	$GLOBALS['ab_test_translations'] = array();
 	$GLOBALS['ab_test_can']          = null;
 	$GLOBALS['ab_test_multisite']    = false;

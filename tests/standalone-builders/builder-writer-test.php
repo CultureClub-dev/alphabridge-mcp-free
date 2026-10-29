@@ -58,8 +58,8 @@ if ( 'noapi' === $scenario ) {
 	$ok( false !== strpos( $text, '4.3.11' ) && false !== strpos( $text, '4.4.0' ) && false !== strpos( $text, 'Every other tool works as before' ), 'N6 the settings screen names the core, the version needed and that nothing else changes' );
 	$ok( '' === ab_mcp_pro_builders_notice_text( 1, '4.4.0' ), 'N7 and says nothing on a core with the contract' );
 	$main = (string) file_get_contents( AB_MCP_PRO_DIR . 'alphabridge-mcp-pro.php' );
-	$ok( 1 === preg_match( "~if \( ab_mcp_pro_load_builders\(\) \) \{\s*\\\$map\['class-tools-builders-pro.php'\] = array\( 'AB_MCP_Tools_Builder_Write', 'builders', __\( 'Page builders'~", $main ), 'N8 the tool group is registered only when the writers loaded' );
-	$ok( 1 === preg_match( "~define\( 'AB_MCP_PRO_REQUIRES_FREE', '4\.9\.0' \)~", $main ), 'N9 Pro names free 4.9.0 (which reads page builders since 4.4.0) as the core it is built against' );
+	$ok( 1 === preg_match( "~if \( ab_mcp_pro_load_builders\(\) && ! ab_mcp_pro_core_at_least\( '4\.10\.0' \) \) \{\s*\\\$map\['class-tools-builders-pro.php'\] = array\( 'AB_MCP_Tools_Builder_Write', 'builders', __\( 'Page builders'~", $main ), 'N8 the tool group is registered only when the writers loaded, and only on a core older than 4.10.0 (from it on the tool is the core\'s)' );
+	$ok( 1 === preg_match( "~define\( 'AB_MCP_PRO_REQUIRES_FREE', '4\.10\.0' \)~", $main ), 'N9 Pro names free 4.10.0 (which writes page builders itself) as the core it is built against' );
 	// The notice on the settings screen: for administrators of a licensed site.
 	$GLOBALS['can']      = true;
 	$GLOBALS['licensed'] = true;

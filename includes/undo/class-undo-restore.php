@@ -619,8 +619,10 @@ class AB_MCP_Undo_Restore {
 				continue;
 			}
 			$items[] = array(
-				'ref'   => $row['name'],
-				'value' => $row['value'],
+				'ref'      => $row['name'],
+				'value'    => $row['value'],
+				// For a row gone since: added again with its old flag.
+				'autoload' => isset( $row['autoload'] ) ? AB_MCP_Undo::normalize_autoload( $row['autoload'] ) : null,
 			);
 		}
 		return array(
@@ -1459,7 +1461,12 @@ class AB_MCP_Undo_Restore {
 	protected static function restore_option_row( array $item ) {
 		$name = (string) $item['ref'];
 		if ( null === AB_MCP_Undo::option_autoload( $name ) ) {
-			add_option( $name, $item['value'] );
+			$flag = isset( $item['autoload'] ) ? (string) $item['autoload'] : '';
+			if ( 'yes' === $flag || 'no' === $flag ) {
+				add_option( $name, $item['value'], '', $flag );
+			} else {
+				add_option( $name, $item['value'] );
+			}
 			if ( null !== AB_MCP_Undo::option_autoload( $name ) && self::option_value_matches( $name, $item['value'] ) ) {
 				return true;
 			}

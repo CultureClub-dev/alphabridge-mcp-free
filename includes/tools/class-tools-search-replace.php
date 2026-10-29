@@ -2771,11 +2771,12 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 
 	/**
 	 * Write the option rows a replace found, after their undo point: one point
-	 * (kind option_rows) with the old value of every row, recorded before the
-	 * first row is written. Without it nothing is written, unless undo is
-	 * switched off on the site or allow_without_undo lets a point over the
-	 * size limit go. A row whose stored value changed since the scan read it
-	 * is left as it is.
+	 * (kind option_rows) with the old value of every row about to be written,
+	 * recorded before the first of them is. Without it nothing is written,
+	 * unless undo is switched off on the site or allow_without_undo lets a
+	 * point over the size limit go. A row whose stored value changed since the
+	 * scan read it is left as it is, and is not in the point either: an undo
+	 * must not write back over a change this call did not make.
 	 *
 	 * @param array $collect Rows: name, id, raw (the stored value read), new.
 	 * @param array $f       Flags.
@@ -2785,6 +2786,13 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		global $wpdb;
 		$snaps = array();
 		foreach ( $collect as $c ) {
+			// Still the value the scan read? Otherwise somebody changed it in
+			// between, and the replacement was made on the old value.
+			$now = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_id = %d", $c['id'] ) ); // phpcs:ignore WordPress.DB
+			if ( null === $now || (string) $now !== $c['raw'] ) {
+				self::add_note( $res, 'The option "' . $c['name'] . '" changed while this call ran; it was not written. Run the call again.' );
+				continue;
+			}
 			$snap = AB_MCP_Undo::option_snapshot( $c['name'] );
 			if ( ! is_array( $snap ) || empty( $snap['existed'] ) || $snap['name'] !== $c['name'] ) {
 				self::add_note( $res, 'The option "' . $c['name'] . '" could not be read for its undo point; it was not written. Try again.' );
@@ -2828,15 +2836,9 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			if ( ! isset( $snaps[ $c['name'] ] ) ) {
 				continue;
 			}
-			// Still the value the scan read? Otherwise somebody changed it in
-			// between, and the replacement was made on the old value.
-			$now = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_id = %d", $c['id'] ) ); // phpcs:ignore WordPress.DB
-			if ( null === $now || (string) $now !== $c['raw'] ) {
-				self::add_note( $res, 'The option "' . $c['name'] . '" changed while this call ran; it was not written. Run the call again.' );
-				continue;
-			}
 			// update_option() re-serializes, keeps the autoload flag and
-			// maintains the options cache.
+			// maintains the options cache. A row it refuses keeps its value,
+			// so its old value in the undo point writes back what is there.
 			if ( update_option( $c['name'], $c['new'] ) ) {
 				$res['changed']++;
 			} else {

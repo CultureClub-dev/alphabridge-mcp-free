@@ -195,8 +195,18 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $reserved ) ) {
 			return $reserved;
 		}
-		$nonce        = (string) $reserved;
-		$opts['hold'] = static function () use ( $token, $nonce ) {
+		$nonce = (string) $reserved;
+		// Read the point again now that it is reserved: a replace still
+		// running under this token may have added a part since the first
+		// read, and appending is refused from the reservation on. Restoring
+		// the first read would use the token up with that part unrestored.
+		$claim = AB_MCP_Undo::claim( $token );
+		if ( is_wp_error( $claim ) ) {
+			AB_MCP_Undo::end_apply( $token, $nonce );
+			return $claim;
+		}
+		$opts['parts'] = isset( $claim['parts'] ) ? (array) $claim['parts'] : array();
+		$opts['hold']  = static function () use ( $token, $nonce ) {
 			return AB_MCP_Undo::hold_apply( $token, $nonce );
 		};
 

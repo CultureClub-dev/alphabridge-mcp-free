@@ -28,7 +28,8 @@ if ( ! function_exists( 'add_option' ) ) {
 		if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
 			return false;
 		}
-		$GLOBALS['ab_test_options'][ $name ] = $value;
+		$GLOBALS['ab_test_options'][ $name ]  = $value;
+		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
 		return true;
 	}
 }
@@ -239,7 +240,8 @@ class AbTestUndoWpdb {
 		if ( preg_match( "/FROM wp_options WHERE option_name = '(.*)' LIMIT 1$/", (string) $query, $m ) ) {
 			$name = stripslashes( $m[1] );
 			if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
-				$this->last_result = array( (object) array( 'option_name' => $name, 'autoload' => 'yes' ) );
+				$flag              = $GLOBALS['ab_test_autoload'][ $name ] ?? 'yes';
+				$this->last_result = array( (object) array( 'option_name' => $name, 'autoload' => is_string( $flag ) ? $flag : 'yes' ) );
 			}
 		}
 		return count( $this->last_result );

@@ -127,6 +127,34 @@ final class FreeSinceFourTenTest extends TestCase {
 		self::assertSame( 'ab_mcp_undo_not_found', AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) )->get_error_code() );
 	}
 
+	public function testAnOptionGoneSinceComesBackWithItsAutoloadFlag(): void {
+		$token = self::option_point(
+			array(
+				array( 'name' => 'my_plugin_cache', 'value' => 'old', 'autoload' => 'no', 'existed' => true ),
+				array( 'name' => 'my_plugin_label', 'value' => 'old label', 'autoload' => 'yes', 'existed' => true ),
+			)
+		);
+		// Both rows were deleted after the replace changed them.
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $token ) );
+		self::assertSame( 2, $out['undone'] );
+		self::assertSame( 'old', get_option( 'my_plugin_cache' ) );
+		self::assertSame( 'no', $GLOBALS['ab_test_autoload']['my_plugin_cache'], 'A row that was not autoloaded is not autoloaded on every request after the undo.' );
+		self::assertSame( 'yes', $GLOBALS['ab_test_autoload']['my_plugin_label'] );
+	}
+
+	public function testTheUndoReadsThePointAgainOnceItIsReserved(): void {
+		// A replace still running under the token may append a part after the
+		// first read; the restore uses what is stored once nobody can append.
+		$src   = (string) file_get_contents( __DIR__ . '/../includes/tools/class-tools-undo-core.php' );
+		$begin = strpos( $src, '$reserved = AB_MCP_Undo::begin_apply( $token );' );
+		$again = strpos( $src, '$claim = AB_MCP_Undo::claim( $token );', (int) $begin );
+		$apply = strpos( $src, 'AB_MCP_Undo_Restore::apply( $claim[\'entry\'], $claim[\'data\'], $opts )' );
+		self::assertNotFalse( $begin );
+		self::assertNotFalse( $again, 'The point is read again after begin_apply().' );
+		self::assertGreaterThan( $again, $apply, 'And the restore uses that second read.' );
+		self::assertStringContainsString( "\$opts['parts'] = isset( \$claim['parts'] )", substr( $src, (int) $again, (int) $apply - (int) $again ), 'With the parts of the second read.' );
+	}
+
 	public function testAnOptionProtectedNowIsBlockedAndTheRestKeepsAPoint(): void {
 		update_option( 'blogdescription', 'new tagline' );
 		update_option( 'siteurl', 'https://new.example' );
