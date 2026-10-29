@@ -452,6 +452,24 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertLessThanOrEqual( time() + 12 * 3600, $rest['entry']['expires_at'], 'Not a fresh day: the 12 hours the point had left.' );
 	}
 
+	/**
+	 * Codex (GitHub) 29.10.2026: the rest takes the place of the old point,
+	 * so the bounds still drop the oldest snapshot first.
+	 */
+	public function testARestPointKeepsThePlaceOfItsPointInTheStore(): void {
+		self::settings();
+		add_filter( 'ab_mcp_undo_max_entries', static fn(): int => 2 );
+		$a = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		$b = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'admin_email' => 'neu@example.test' ) );
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $a['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		self::assertSame( array( (string) $out['rest_token'], (string) $b['undo'] ), array_column( self::stored(), 'token' ), 'The rest where A was, before B.' );
+		$c = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'posts_per_page' => 7 ) );
+		unset( $GLOBALS['ab_test_filters']['ab_mcp_undo_max_entries'] );
+		self::assertSame( array( (string) $b['undo'], (string) $c['undo'] ), array_column( self::stored(), 'token' ), 'The oldest snapshot goes first, not B.' );
+	}
+
 	public function testARestPointPushesNoOtherPointOutOfAFullStore(): void {
 		self::settings();
 		add_filter( 'ab_mcp_undo_max_entries', static fn(): int => 2 );
@@ -713,6 +731,10 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		$cache = AB_MCP_Tools_System::clear_cache();
 		self::assertTrue( $cache['object_cache_flushed'] );
 		self::assertSame( array(), $cache['page_cache_purged'] );
+		// Codex (GitHub) 29.10.2026: a flush the cache backend refused is no success.
+		$GLOBALS['ab_test_cache_flush_result'] = false;
+		self::assertFalse( AB_MCP_Tools_System::clear_cache()['object_cache_flushed'] );
+		unset( $GLOBALS['ab_test_cache_flush_result'] );
 		self::assertSame( array( 'flushed' => true ), AB_MCP_Tools_System::flush_rewrite() );
 		self::assertSame( array( false ), $GLOBALS['ab_test_rewrite_flushed'] ?? null, 'A soft flush: .htaccess stays as it is.' );
 		unset( $GLOBALS['ab_test_rewrite_flushed'] );

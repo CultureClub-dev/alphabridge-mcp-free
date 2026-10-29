@@ -1672,7 +1672,7 @@ function register_rest_route( $route_namespace, $route, $args = array(), $overri
 
 /** No persistent object cache: counters live in transients, as on most sites. */
 function wp_using_ext_object_cache( $using = null ) {
-	return false;
+	return ! empty( $GLOBALS['ab_test_ext_object_cache'] );
 }
 
 /* ------------------------------------------------------- plugin constants */

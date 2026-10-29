@@ -813,4 +813,25 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertGreaterThanOrEqual( $before, $args[1] );
 		self::assertLessThanOrEqual( time(), $args[1], 'Expired: the timeout is before now.' );
 	}
+
+	/**
+	 * Codex (GitHub) 29.10.2026: with a persistent object cache,
+	 * delete_transient() deletes the cache entry only. The expired rows go
+	 * from the table, a fresh entry by that name stays.
+	 */
+	public function testWithAPersistentObjectCacheTheExpiredRowsGoFromTheTable(): void {
+		update_option( '_transient_old_a', 'alt' );
+		update_option( '_transient_timeout_old_a', 1 );
+		set_transient( 'old_a', 'frisch im Cache' );
+		$GLOBALS['ab_test_ext_object_cache'] = true;
+		$GLOBALS['wpdb']                     = self::wpdb( array( '_transient_timeout_old_a' ) );
+		try {
+			self::assertSame( array( 'deleted' => 1 ), AB_MCP_Tools_Ops::cleanup_transients() );
+		} finally {
+			unset( $GLOBALS['ab_test_ext_object_cache'] );
+		}
+		self::assertFalse( get_option( '_transient_old_a' ) );
+		self::assertFalse( get_option( '_transient_timeout_old_a' ) );
+		self::assertSame( 'frisch im Cache', get_transient( 'old_a' ) );
+	}
 }

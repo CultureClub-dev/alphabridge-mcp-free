@@ -399,32 +399,38 @@ class AB_MCP_Undo {
 		$replaces = isset( $rec['replaces'] ) ? (string) $rec['replaces'] : '';
 		$locked   = self::with_lock(
 			function () use ( $entry, $replaces, &$landed ) {
-				$index   = self::read_index();
-				$index[] = $entry;
+				$index = self::read_index();
+				// The rest of a partial undo takes the place of the point it
+				// replaces: the bounds go oldest first by position, and the
+				// rest is as old as that point's snapshot. The replaced point
+				// does not count against them, so it never pushes out a point
+				// of anybody else; it stays right in front of its rest until
+				// wp_undo consumes it.
+				$old = array();
+				foreach ( $index as $i => $e ) {
+					if ( '' !== $replaces && $e['token'] === $replaces ) {
+						$old         = array( $e );
+						$index[ $i ] = $entry;
+						break;
+					}
+				}
+				if ( array() === $old ) {
+					$index[] = $entry;
+				}
 				// Expire and cap in the same critical section. The files of
 				// the points this drops go only once the shorter index is
 				// stored: if the write fails, the old index still lists them,
 				// and a point it lists must keep its snapshot.
-				// The point this one replaces (the rest of a partial undo)
-				// goes right after: it does not count against the bounds, so
-				// it never pushes out a point of anybody else.
-				$old = array();
-				foreach ( $index as $e ) {
-					if ( '' !== $replaces && $e['token'] === $replaces ) {
-						$old[] = $e;
+				$sel  = self::select_live( $index );
+				$live = array();
+				foreach ( $sel['live'] as $e ) {
+					if ( array() !== $old && $e['token'] === $entry['token'] ) {
+						$live = array_merge( $live, $old );
+						$old  = array();
 					}
+					$live[] = $e;
 				}
-				$sel = self::select_live(
-					array_values(
-						array_filter(
-							$index,
-							static function ( $e ) use ( $replaces ) {
-								return '' === $replaces || $e['token'] !== $replaces;
-							}
-						)
-					)
-				);
-				$sel['live'] = array_merge( $old, $sel['live'] );
+				$sel['live'] = array_merge( $old, $live );
 				self::write_index( $sel['live'] );
 				// Confirm against what is actually STORED, not the local array:
 				// update_option can fail (a database error, a dropped

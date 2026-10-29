@@ -60,7 +60,7 @@ if ( ! function_exists( 'wp_cache_delete' ) ) {
 if ( ! function_exists( 'wp_cache_flush' ) ) {
 	function wp_cache_flush() {
 		$GLOBALS['ab_test_cache_flushed'] = ( $GLOBALS['ab_test_cache_flushed'] ?? 0 ) + 1;
-		return true;
+		return $GLOBALS['ab_test_cache_flush_result'] ?? true;
 	}
 }
 

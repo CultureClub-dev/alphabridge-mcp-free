@@ -232,7 +232,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 	 * @return array
 	 */
 	public static function clear_cache() {
-		wp_cache_flush();
+		$object  = wp_cache_flush();
 		$opcache = false;
 		if ( function_exists( 'opcache_reset' ) ) {
 			$opcache = @opcache_reset();
@@ -241,7 +241,8 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		// page is what a visitor sees.
 		$pages = AB_MCP_Page_Cache::purge_site();
 		$out   = array(
-			'object_cache_flushed' => true,
+			// What the cache backend answered: a flush it refused is no success.
+			'object_cache_flushed' => (bool) $object,
 			'opcache_reset'        => (bool) $opcache,
 			'page_cache_purged'    => $pages['purged'],
 		);

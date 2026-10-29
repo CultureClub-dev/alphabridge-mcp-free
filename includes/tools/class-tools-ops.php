@@ -200,7 +200,15 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		foreach ( (array) $expired as $opt ) {
 			$name = substr( $opt, strlen( '_transient_timeout_' ) );
 			if ( '' !== $name ) {
-				delete_transient( $name );
+				// With a persistent object cache, delete_transient() deletes
+				// the cache entry only: a fresh one by that name would go and
+				// the expired rows would stay. The rows go where they are.
+				if ( wp_using_ext_object_cache() ) {
+					delete_option( '_transient_' . $name );
+					delete_option( '_transient_timeout_' . $name );
+				} else {
+					delete_transient( $name );
+				}
 				++$count;
 			}
 		}
