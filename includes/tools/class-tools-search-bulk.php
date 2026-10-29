@@ -15,6 +15,21 @@ require_once __DIR__ . '/class-tools-base.php';
 class AB_MCP_Tools_Search_Bulk extends AB_MCP_Tools_Base {
 
 	/**
+	 * Seconds wp_bulk_update_status may spend before it begins no further
+	 * post (the first is always handled, one begun is finished); the ids it
+	 * did not reach are answered in "remaining". AlphaBridge Connect stops
+	 * waiting for a site after 120 seconds and Cloudflare answers a request
+	 * whose origin has not answered in 125 with its own 524, so the answer,
+	 * undo token included, has to be on its way well before (Pro, where this
+	 * came from, measured up to 22 seconds for a single post on a slow site).
+	 * Pro's AB_MCP_Tools_Search_Bulk_Pro declares both again, the same.
+	 */
+	const STATUS_BUDGET = 60;
+
+	/** The clock of the budget; a callable returning seconds, null for microtime(). Set by tests only. */
+	public static $clock = null;
+
+	/**
 	 * Register tools.
 	 *
 	 * @param AB_MCP_Tool_Registry $r Registry.
