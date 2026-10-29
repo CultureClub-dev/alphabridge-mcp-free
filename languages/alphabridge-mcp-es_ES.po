@@ -2779,3 +2779,578 @@ msgstr "El widget se ha guardado, pero no en la barra lateral pedida: un filtro 
 
 msgid "This undo took longer than two minutes, and another request took the undo point over meanwhile; what had not been restored by then was left to that request. Check the result and wp_undo_list before running anything again."
 msgstr "Esta acción de deshacer tardó más de dos minutos y, mientras tanto, otra solicitud tomó el punto de restauración; lo que aún no se había restaurado quedó en manos de esa solicitud. Comprueba el resultado y wp_undo_list antes de volver a ejecutar nada."
+
+#, php-format
+msgid "the attributes of the block %s"
+msgstr "los atributos del bloque %s"
+
+#, php-format
+msgid "a %s tag"
+msgstr "una etiqueta %s"
+
+msgid "an HTML comment"
+msgstr "un comentario HTML"
+
+msgid "text"
+msgstr "texto"
+
+msgid "The option name is longer than WordPress can store. An option name holds at most 191 characters. Use a shorter name."
+msgstr "El nombre de la opción es más largo de lo que WordPress puede guardar. Un nombre de opción tiene como máximo 191 caracteres. Usa un nombre más corto."
+
+msgid "The option name contains characters that cannot be compared reliably. Leave out control and format characters (such as zero-width spaces)."
+msgstr "El nombre de la opción contiene caracteres que no se pueden comparar de forma fiable. Omite los caracteres de control y de formato (como los espacios de ancho cero)."
+
+msgid "This option is protected and cannot be changed via MCP. An administrator changes it in wp-admin, where WordPress or its plugin offers it."
+msgstr "Esta opción está protegida y no se puede cambiar mediante MCP. Un administrador la cambia en wp-admin, donde la ofrece WordPress o su plugin."
+
+msgid "The option name is longer than WordPress can store, so nothing was changed. An option name holds at most 191 characters. Use a shorter name."
+msgstr "El nombre de la opción es más largo de lo que WordPress puede guardar, así que no se ha cambiado nada. Un nombre de opción tiene como máximo 191 caracteres. Usa un nombre más corto."
+
+msgid "The option name contains characters that cannot be compared reliably, so nothing was changed. Leave out control and format characters (such as zero-width spaces)."
+msgstr "El nombre de la opción contiene caracteres que no se pueden comparar de forma fiable, así que no se ha cambiado nada. Omite los caracteres de control y de formato (como los espacios de ancho cero)."
+
+msgid "The option could not be looked up, so nothing was changed. Try again; if it keeps failing, the database error log names the cause."
+msgstr "No se ha podido consultar la opción, así que no se ha cambiado nada. Vuelve a intentarlo; si sigue fallando, el registro de errores de la base de datos indica la causa."
+
+msgid "The option name could not be settled, so nothing was changed. Try again; if it keeps failing, the database error log names the cause."
+msgstr "No se ha podido fijar el nombre de la opción, así que no se ha cambiado nada. Vuelve a intentarlo; si sigue fallando, el registro de errores de la base de datos indica la causa."
+
+#, php-format
+msgid "Invalid regex pattern: %s Pass the pattern in PCRE syntax without delimiters, or leave regex out to search for the text itself."
+msgstr "Patrón regex no válido: %s Indica el patrón en sintaxis PCRE sin delimitadores, u omite regex para buscar el propio texto."
+
+msgid "fields must be an object of field name and new value, e.g. {\"title\": \"New heading\"}, with the names wp_get_builder_layout lists for this element."
+msgstr "fields debe ser un objeto de nombre de campo y nuevo valor, p. ej. {\"title\": \"Nuevo encabezado\"}, con los nombres que wp_get_builder_layout enumera para este elemento."
+
+#, php-format
+msgid "This is a revision; revisions are not changed. Change post %d itself, or restore the revision with wp_restore_revision first."
+msgstr "Esto es una revisión; las revisiones no se cambian. Cambia la propia entrada %d, o restaura antes la revisión con wp_restore_revision."
+
+msgid "Your account cannot edit this post, so it cannot change its elements either. Ask someone who may edit it, or an administrator."
+msgstr "La cuenta de esta conexión no puede editar esta entrada, así que tampoco puede cambiar sus elementos. Pregunta a alguien que pueda editarla, o a un administrador."
+
+msgid "Missing required argument: search (non-empty string). Schema: search* (string), replace (string, default \"\"), tables (array of posts|postmeta|options|terms), type (string), scope (\"text\" or \"raw\", default \"text\"), apply (boolean), limit (integer 1–2000), after (object: the next of a previous call), exclude_revisions (boolean), case_insensitive (boolean), regex (boolean), allow_without_undo (boolean), stop_at_undo_cap (boolean), post_ids (array of integers), expected_count (integer)."
+msgstr "Falta el argumento obligatorio: search (cadena no vacía). Esquema: search* (cadena), replace (cadena, por defecto \"\"), tables (array de posts|postmeta|options|terms), type (cadena), scope (\"text\" o \"raw\", por defecto \"text\"), apply (booleano), limit (entero 1–2000), after (objeto: el next de una llamada anterior), exclude_revisions (booleano), case_insensitive (booleano), regex (booleano), allow_without_undo (booleano), stop_at_undo_cap (booleano), post_ids (array de enteros), expected_count (entero)."
+
+#, php-format
+msgid "after must be the next object of a previous call: keys among %s, each a whole number of 0 or more. Pass next from the previous answer as it is, or leave after out to start over."
+msgstr "after debe ser el objeto next de una llamada anterior: claves entre %s, cada una un número entero de 0 o más. Indica el next de la respuesta anterior tal cual, u omite after para empezar de nuevo."
+
+msgid "scope must be \"text\" (the default: on page-builder pages only the texts, links and images their writer may change) or \"raw\" (the stored data as text, page code included, with an undo point; page-builder data needs an account that may post unfiltered HTML). Pass one of the two, or leave scope out."
+msgstr "scope debe ser \"text\" (el valor por defecto: en las páginas de constructores solo los textos, enlaces e imágenes que su módulo de escritura puede cambiar) o \"raw\" (los datos guardados como texto, código de la página incluido, con un punto de restauración; los datos de constructores de páginas requieren una cuenta que pueda guardar HTML sin filtrar). Indica uno de los dos, u omite scope."
+
+#, php-format
+msgid "post_ids must be a list of 1 to %d post ids (whole numbers of 1 or more). Pass the ids of the posts to change, or leave post_ids out to scan every post."
+msgstr "post_ids debe ser una lista de 1 a %d ID de entradas (números enteros de 1 o más). Indica los ID de las entradas que quieres cambiar, u omite post_ids para escanear todas las entradas."
+
+msgid "expected_count must be a whole number of 0 or more: totals.matched of the dry run. Run the call without apply first and pass that number."
+msgstr "expected_count debe ser un número entero de 0 o más: el totals.matched de la simulación. Ejecuta primero la llamada sin apply e indica ese número."
+
+msgid "tables must contain at least one of: posts, postmeta, options, terms. Pass at least one of them, or leave tables out for posts and postmeta."
+msgstr "tables debe contener al menos uno de: posts, postmeta, options, terms. Indica al menos uno, u omite tables para posts y postmeta."
+
+msgid "post_ids limits posts and their postmeta, not options or terms. Pass tables [\"posts\",\"postmeta\"] with post_ids, or leave post_ids out to replace in options and terms."
+msgstr "post_ids limita las entradas y sus postmeta, no options ni terms. Indica tables [\"posts\",\"postmeta\"] con post_ids, u omite post_ids para reemplazar en options y terms."
+
+#, php-format
+msgid "The post type \"%s\" is internal to WordPress and is not rewritten by this tool. Leave type out, or name a content type (wp_get_post_types lists them)."
+msgstr "El tipo de contenido «%s» es interno de WordPress y esta herramienta no lo reescribe. Omite type, o indica un tipo de contenido (wp_get_post_types los enumera)."
+
+#, php-format
+msgid "This call finds %1$d matching rows now, not the %2$d of expected_count, so nothing was changed. Run it without apply to see the current preview, check it, and pass its totals.matched as expected_count."
+msgstr "Esta llamada encuentra ahora %1$d filas coincidentes, no las %2$d de expected_count, así que no se ha cambiado nada. Ejecútala sin apply para ver la vista previa actual, revísala e indica su totals.matched como expected_count."
+
+msgid "Changes written via the WordPress APIs (serialization regenerated, caches invalidated, post revisions created)."
+msgstr "Cambios escritos mediante las API de WordPress (serialización regenerada, cachés invalidadas, revisiones de entradas creadas)."
+
+msgid "Dry-run only. Review the per-table preview, then set apply=true."
+msgstr "Solo simulación. Revisa la vista previa por tabla y luego establece apply=true."
+
+#, php-format
+msgid "%d match is in a locked place of a page-builder page (code, HTML, CSS, a shortcode, a form, a placeholder, a global part or the page's own code) and was left as it is. To replace it as stored text too, run again with scope: raw (page-builder data then needs an account that may post unfiltered HTML)."
+msgid_plural "%d matches are in locked places of page-builder pages (code, HTML, CSS, shortcodes, forms, placeholders, global parts or the page's own code) and were left as they are. To replace them as stored text too, run again with scope: raw (page-builder data then needs an account that may post unfiltered HTML)."
+msgstr[0] "%d coincidencia está en un lugar bloqueado de una página de constructor (código, HTML, CSS, un shortcode, un formulario, un marcador de posición, un elemento global o el código propio de la página) y se ha dejado como estaba. Para reemplazarla también como texto guardado, vuelve a ejecutar con scope: raw (los datos de constructores de páginas requieren entonces una cuenta que pueda guardar HTML sin filtrar)."
+msgstr[1] "%d coincidencias están en lugares bloqueados de páginas de constructores (código, HTML, CSS, shortcodes, formularios, marcadores de posición, elementos globales o el código propio de la página) y se han dejado como estaban. Para reemplazarlas también como texto guardado, vuelve a ejecutar con scope: raw (los datos de constructores de páginas requieren entonces una cuenta que pueda guardar HTML sin filtrar)."
+
+msgid "These pages are built with a page builder that no writer of this version writes (or not this page, for the reason given): their stored data is replaced as text, the way this tool always did, without the field rules of a writer. On a page of storage A2 the page builder restores its own copy the next time the page is saved in it. Check the pages after applying."
+msgstr "Estas páginas están creadas con un constructor de páginas que ningún módulo de escritura de esta versión escribe (o no esta página, por el motivo indicado): sus datos guardados se reemplazan como texto, como esta herramienta siempre ha hecho, sin las reglas de campo de un módulo de escritura. En una página con almacenamiento A2, el constructor de páginas restaura su propia copia la próxima vez que la página se guarde en él. Comprueba las páginas después de aplicar."
+
+msgid "undo_token takes back the page-builder pages in undo_pages: their page-builder data, its copies, post_content and what the page builder's save touches besides (Elementor's page settings). The titles, excerpts, other posts, other meta and terms this call changed are not in it (option rows have their own undo point, options_undo_token, where one was recorded); wp_undo leaves them as they are."
+msgstr "undo_token revierte las páginas de constructor de undo_pages: sus datos de constructor de páginas, sus copias, post_content y lo que el guardado del constructor de páginas toque además (los ajustes de página de Elementor). Los títulos, extractos, otras entradas, otros metadatos y términos que ha cambiado esta llamada no están incluidos (las filas de opciones tienen su propio punto de restauración, options_undo_token, donde se ha registrado uno); wp_undo los deja como están."
+
+msgid "scope raw: stored data is replaced as text, page-builder data and page code included, past the field rules of the page builders — except a copy a page builder keeps in post_content_filtered (SeedProd), which no scan reads. For a page built with a page builder the undo point holds its builder data and post_content; titles, excerpts and terms are not in it, and option rows have their own undo point (options_undo_token)."
+msgstr "scope raw: los datos guardados se reemplazan como texto, datos de constructores de páginas y código de la página incluidos, saltándose las reglas de campo de los constructores de páginas, salvo una copia que un constructor de páginas guarda en post_content_filtered (SeedProd), que ningún escaneo lee. Para una página creada con un constructor de páginas, el punto de restauración contiene sus datos de constructor y post_content; los títulos, extractos y términos no están incluidos, y las filas de opciones tienen su propio punto de restauración (options_undo_token)."
+
+#, php-format
+msgid "On these pages scope raw would replace post_content only: %1$s keeps its own copy of the page, which its editor loads and no scan reads, and writes it back over post_content the next time the page is saved in its editor (an editor open at that moment does so at its next save): posts %2$s. scope text changes both copies through the page builder's writer where the text stands in its fields."
+msgstr "En estas páginas, scope raw solo reemplazaría post_content: %1$s guarda su propia copia de la página, que su editor carga y ningún escaneo lee, y la vuelve a escribir sobre post_content la próxima vez que la página se guarde en su editor (un editor abierto en ese momento lo hace en su próximo guardado): entradas %2$s. scope text cambia ambas copias mediante el módulo de escritura del constructor de páginas, donde el texto está en sus campos."
+
+#, php-format
+msgid "On these pages scope raw replaced post_content only: %1$s keeps its own copy of the page, which its editor loads and no scan reads, and writes it back over post_content the next time the page is saved in its editor (an editor open now does so at its next save): posts %2$s. scope text changes both copies through the page builder's writer where the text stands in its fields."
+msgstr "En estas páginas, scope raw solo ha reemplazado post_content: %1$s guarda su propia copia de la página, que su editor carga y ningún escaneo lee, y la vuelve a escribir sobre post_content la próxima vez que la página se guarde en su editor (un editor abierto ahora lo hace en su próximo guardado): entradas %2$s. scope text cambia ambas copias mediante el módulo de escritura del constructor de páginas, donde el texto está en sus campos."
+
+#, php-format
+msgid "One call keeps undo points for up to %1$d page-builder pages it changes outside a writer. %2$d more would be written without one, as scope text always wrote them: posts %3$s. To give each of them an undo point, run with stop_at_undo_cap=true: the scans then stop before the first such page, and next continues there."
+msgstr "Una llamada guarda puntos de restauración para hasta %1$d páginas de constructor que cambia fuera de un módulo de escritura. Otras %2$d se escribirían sin él, como scope text siempre las ha escrito: entradas %3$s. Para dar a cada una un punto de restauración, ejecuta con stop_at_undo_cap=true: los escaneos se detienen entonces antes de la primera de esas páginas, y next continúa ahí."
+
+#, php-format
+msgid "One call keeps undo points for up to %1$d page-builder pages it changes outside a writer. %2$d more were written without one, as scope text always wrote them, and wp_undo does not take them back: posts %3$s. To keep an undo point for every such page, run with stop_at_undo_cap=true: the scans then stop before the first page beyond them, and next continues there."
+msgstr "Una llamada guarda puntos de restauración para hasta %1$d páginas de constructor que cambia fuera de un módulo de escritura. Otras %2$d se han escrito sin él, como scope text siempre las ha escrito, y wp_undo no las revierte: entradas %3$s. Para guardar un punto de restauración para cada una de esas páginas, ejecuta con stop_at_undo_cap=true: los escaneos se detienen entonces antes de la primera página que supere ese límite, y next continúa ahí."
+
+#, php-format
+msgid "Changed without an undo point (page code a page builder locks, or a key the undo point did not foresee): %s."
+msgstr "Cambiado sin punto de restauración (código de página que un constructor de páginas bloquea, o una clave que el punto de restauración no había previsto): %s."
+
+#, php-format
+msgid "The page-builder writer failed on post %1$d (%2$s); the builders scan stopped there and continues behind it with next. The pages changed before it are in applied_so_far; %3$s"
+msgstr "El módulo de escritura del constructor de páginas ha fallado en la entrada %1$d (%2$s); el escaneo de constructores se ha detenido ahí y continúa a partir de ella con next. Las páginas cambiadas antes están en applied_so_far; %3$s"
+
+#, php-format
+msgid "wp_undo with undo token %s puts them back."
+msgstr "wp_undo con el token de deshacer %s las revierte."
+
+msgid "this call has no undo token to name; if the writer recorded an undo point for the failed page before it stopped, wp_undo_list shows it. Check that page with wp_get_builder_layout."
+msgstr "esta llamada no tiene ningún token de deshacer que indicar; si el módulo de escritura registró un punto de restauración para la página fallida antes de detenerse, wp_undo_list lo muestra. Comprueba esa página con wp_get_builder_layout."
+
+msgid "Row limit reached; pass next back as after to continue behind the last row handled, or raise limit."
+msgstr "Se ha alcanzado el límite de filas; devuelve next como after para continuar tras la última fila procesada, o aumenta limit."
+
+#, php-format
+msgid "This call's budget of %d ids per scan is used up; pass next back as after to continue where it stopped."
+msgstr "Se ha agotado el presupuesto de esta llamada de %d ID por escaneo; devuelve next como after para continuar donde se detuvo."
+
+msgid "Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que estos cambios no tienen vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+
+#, php-format
+msgid "Post %1$d was written without an undo point, as allow_without_undo asked: %2$s"
+msgstr "La entrada %1$d se ha escrito sin punto de restauración, como pedía allow_without_undo: %2$s"
+
+#, php-format
+msgid "Post %1$d: not written, because its undo point could not be recorded: %2$s %3$s"
+msgstr "Entrada %1$d: no se ha escrito, porque no se ha podido registrar su punto de restauración: %2$s %3$s"
+
+msgid "To write it without a way back, call again with allow_without_undo=true."
+msgstr "Para escribirla sin vuelta atrás, vuelve a llamar con allow_without_undo=true."
+
+msgid "Nothing was written to this post."
+msgstr "No se ha escrito nada en esta entrada."
+
+#, php-format
+msgid "The undo point does not know the state post %d was left in, so wp_undo will ask for force=true for it."
+msgstr "El punto de restauración no conoce el estado en que quedó la entrada %d, así que wp_undo pedirá force=true para ella."
+
+#, php-format
+msgid "Every page-builder page this call changes gets an undo point, and one call takes at most %d of them; this scan stopped before the next one. Pass next back as after to continue."
+msgstr "Cada página de constructor que cambia esta llamada recibe un punto de restauración, y una llamada registra como máximo %d; este escaneo se ha detenido antes de la siguiente. Devuelve next como after para continuar."
+
+#, php-format
+msgid "Post %1$d was written without an undo point, because none could be recorded: %2$s"
+msgstr "La entrada %1$d se ha escrito sin punto de restauración, porque no se ha podido registrar ninguno: %2$s"
+
+#, php-format
+msgid "This call handled %d page-builder pages through their writer, the most one call does; pass next back as after to continue."
+msgstr "Esta llamada ha procesado %d páginas de constructor mediante su módulo de escritura, el máximo para una llamada; devuelve next como after para continuar."
+
+#, php-format
+msgid "Post %1$d: %2$s"
+msgstr "Entrada %1$d: %2$s"
+
+msgid "builders: pages built with a page builder that a writer of this version writes. Only the texts, links and images the writer may change were replaced, with the field rules of wp_update_builder_element; matches in locked places, and on a page the writer refused as a whole, are counted in locked_matches. occurrences counts changed fields here."
+msgstr "builders: páginas creadas con un constructor de páginas que un módulo de escritura de esta versión escribe. Solo se han reemplazado los textos, enlaces e imágenes que el módulo de escritura puede cambiar, con las reglas de campo de wp_update_builder_element; las coincidencias en lugares bloqueados, y en una página que el módulo de escritura ha rechazado por completo, se cuentan en locked_matches. Aquí occurrences cuenta los campos cambiados."
+
+msgid "as_text: on these pages the site shows post_content, and its page builder keeps a second copy; the writer found the text in none of the fields of that copy, so it was replaced in post_content as text, the way this tool always did (builder_pages_without_writer). The page builder writes its own copy over it the next time the page is saved in it."
+msgstr "as_text: en estas páginas el sitio muestra post_content, y su constructor de páginas guarda una segunda copia; el módulo de escritura no ha encontrado el texto en ninguno de los campos de esa copia, así que se ha reemplazado en post_content como texto, como esta herramienta siempre ha hecho (builder_pages_without_writer). El constructor de páginas escribe su propia copia encima la próxima vez que la página se guarde en él."
+
+#, php-format
+msgid "%s: its writer found the text in none of the fields it changes; post_content, which the site shows, was replaced as text"
+msgstr "%s: su módulo de escritura no ha encontrado el texto en ninguno de los campos que cambia; post_content, que muestra el sitio, se ha reemplazado como texto"
+
+msgid "copy_only: post_content of these page-builder pages is only a copy the page does not show, so it was left out here; the page builder's writer replaces their texts (table builders) and keeps the copy in step where the builder does."
+msgstr "copy_only: el post_content de estas páginas de constructor es solo una copia que la página no muestra, así que aquí se ha omitido; el módulo de escritura del constructor de páginas reemplaza sus textos (tabla builders) y mantiene la copia al día donde lo hace el constructor."
+
+msgid "left_to_writer: post_content of these pages is one of two copies their page builder keeps together; the page builder's writer replaces the text in both where it can, and table builders names what it left and why."
+msgstr "left_to_writer: el post_content de estas páginas es una de las dos copias que su constructor de páginas mantiene juntas; el módulo de escritura del constructor de páginas reemplaza el texto en ambas donde puede, y la tabla builders indica lo que ha dejado y por qué."
+
+#, php-format
+msgid "Post %1$d: not written. For your account WordPress filters every field of a post it saves (kses), also the ones this replacement leaves alone, and it would store %2$s in %3$s differently, beyond the replaced text. An account that may post unfiltered HTML (on a network: a super admin) can run this replacement, or change the post in its editor."
+msgstr "Entrada %1$d: no se ha escrito. Para la cuenta de esta conexión, WordPress filtra cada campo de una entrada que guarda (kses), también los que este reemplazo no toca, y guardaría %2$s en %3$s de otra forma, más allá del texto reemplazado. Una cuenta que pueda guardar HTML sin filtrar (en una red, un superadministrador) puede ejecutar este reemplazo, o cambiar la entrada en su editor."
+
+#, php-format
+msgid "Post %d: WordPress did not save it. WordPress refuses a post whose title, content and excerpt would all be empty, a plugin can refuse a save (filter wp_insert_post_empty_content), and the database can refuse the write; wp_get_post shows the post as it is."
+msgstr "Entrada %d: WordPress no la ha guardado. WordPress rechaza una entrada cuyo título, contenido y extracto quedarían todos vacíos, un plugin puede rechazar un guardado (filtro wp_insert_post_empty_content) y la base de datos puede rechazar la escritura; wp_get_post muestra la entrada tal como está."
+
+msgid "Meta keys that look like credentials are never scanned."
+msgstr "Las claves meta que parecen credenciales nunca se escanean."
+
+msgid "Widget options (widget_*, the option of every registered widget, sidebars_widgets) are never scanned; the widget tools are the way in. Protected options are never touched."
+msgstr "Las opciones de widgets (widget_*, la opción de cada widget registrado, sidebars_widgets) nunca se escanean; para ellas están las herramientas de widgets. Las opciones protegidas nunca se tocan."
+
+#, php-format
+msgid "The option rows were not written: their undo point could not be recorded (%s). Try again; allow_without_undo=true writes them without a way back where the undo point is only too large."
+msgstr "Las filas de opciones no se han escrito: no se ha podido registrar su punto de restauración (%s). Vuelve a intentarlo; si el punto de restauración solo es demasiado grande, allow_without_undo=true las escribe sin vuelta atrás."
+
+msgid "Undo is switched off on this site: the option rows were written without an undo point."
+msgstr "Deshacer está desactivado en este sitio: las filas de opciones se han escrito sin punto de restauración."
+
+msgid "The option rows were written without an undo point, as allow_without_undo asked: it would have been over the size limit."
+msgstr "Las filas de opciones se han escrito sin punto de restauración, como pedía allow_without_undo: habría superado el límite de tamaño."
+
+msgid "No slug is ever asked to change (permalinks), and a term that has no slug is passed over rather than given one; a WordPress filter that changes a slug along with a name is listed in slug_changes. Names and descriptions are written through wp_update_term(). limit applies to each of the three scans (names, descriptions, termmeta). Internal taxonomies (wp_theme, wp_template_part_area, post_format) and credential-like termmeta keys are never scanned."
+msgstr "Nunca se pide cambiar un slug (enlaces permanentes), y un término sin slug se omite en lugar de recibir uno; un filtro de WordPress que cambia un slug junto con un nombre aparece en slug_changes. Los nombres y las descripciones se escriben mediante wp_update_term(). limit se aplica a cada uno de los tres escaneos (nombres, descripciones, termmeta). Las taxonomías internas (wp_theme, wp_template_part_area, post_format) y las claves termmeta que parecen credenciales nunca se escanean."
+
+msgid "The post this undo point would delete is no autosave revision; nothing was deleted. Check it with wp_get_post; wp_undo_discard removes this undo point."
+msgstr "La entrada que este punto de restauración borraría no es una revisión de guardado automático; no se ha borrado nada. Compruébala con wp_get_post; wp_undo_discard elimina este punto de restauración."
+
+msgid "The draft was changed after the undo was planned; it was not deleted. Pass force=true to delete it with the newer change."
+msgstr "El borrador se ha cambiado después de planificar el deshacer; no se ha borrado. Indica force=true para borrarlo junto con el cambio más reciente."
+
+#, php-format
+msgid "WordPress did not delete the draft (autosave revision #%d). Try again; if it keeps failing, ask the site administrator."
+msgstr "WordPress no ha borrado el borrador (revisión de guardado automático #%d). Vuelve a intentarlo; si sigue fallando, pregunta al administrador del sitio."
+
+msgid "The page was changed after the undo was planned; nothing was restored. Read it with wp_get_builder_layout, and pass force=true to put the old state back over the newer change."
+msgstr "La página se ha cambiado después de planificar el deshacer; no se ha restaurado nada. Léela con wp_get_builder_layout e indica force=true para volver a poner el estado anterior sobre el cambio más reciente."
+
+#, php-format
+msgid "The database did not take back %s. Try again; wp_get_builder_layout shows how the page is now."
+msgstr "La base de datos no ha revertido %s. Vuelve a intentarlo; wp_get_builder_layout muestra cómo está ahora la página."
+
+#, php-format
+msgid "The database did not remove %s again. Try again; wp_get_builder_layout shows how the page is now."
+msgstr "La base de datos no ha vuelto a quitar %s. Vuelve a intentarlo; wp_get_builder_layout muestra cómo está ahora la página."
+
+#, php-format
+msgid "The page was written back, but the database holds something else for: %s. Check the page with wp_get_builder_layout."
+msgstr "La página se ha vuelto a escribir, pero la base de datos contiene otra cosa para: %s. Comprueba la página con wp_get_builder_layout."
+
+#, php-format
+msgid "Yoast SEO keeps the SEO fields of this post in a table of its own (its indexable), which the page shows to visitors and search engines; it could not be brought in step with the restored values (%s). Until the post is saved once, in the editor or with wp_update_post, visitors and search engines may still get the values this undo took back."
+msgstr "Yoast SEO guarda los campos SEO de esta entrada en una tabla propia (su indexable), que la página muestra a los visitantes y a los buscadores; no se ha podido sincronizar con los valores restaurados (%s). Hasta que la entrada se guarde una vez, en el editor o con wp_update_post, los visitantes y los buscadores pueden seguir recibiendo los valores que este deshacer ha revertido."
+
+#, php-format
+msgid "WooCommerce marks a product that is out of stock with a term of its own (outofstock in product_visibility), by which the shop hides it where \"Hide out of stock items\" is on; it could not be brought in step with the restored stock status (%s). Until the product is saved once in WooCommerce, the shop may show or hide it as before this undo."
+msgstr "WooCommerce marca un producto sin existencias con un término propio (outofstock en product_visibility), con el que la tienda lo oculta donde «Ocultar artículos sin existencias» está activado; no se ha podido sincronizar con el estado de inventario restaurado (%s). Hasta que el producto se guarde una vez en WooCommerce, la tienda puede mostrarlo u ocultarlo como antes de este deshacer."
+
+#, php-format
+msgid "WooCommerce keeps the price and stock of this product in its lookup table too, which the shop's filters and sorting read; it could not be brought in step with the restored values (%s). Until the product is saved once in WooCommerce, filters and sorting may still use the values this undo took back."
+msgstr "WooCommerce guarda también el precio y las existencias de este producto en su tabla de búsqueda (lookup), que leen los filtros y la ordenación de la tienda; no se ha podido sincronizar con los valores restaurados (%s). Hasta que el producto se guarde una vez en WooCommerce, los filtros y la ordenación pueden seguir usando los valores que este deshacer ha revertido."
+
+msgid "its indexable watcher is not available"
+msgstr "su observador de indexables no está disponible"
+
+msgid "this WooCommerce has no refresh_product_lookup_table(), which WooCommerce 10.8 brought"
+msgstr "esta versión de WooCommerce no tiene refresh_product_lookup_table(), que llegó con WooCommerce 10.8"
+
+msgid "the term was not written"
+msgstr "el término no se ha escrito"
+
+#, php-format
+msgid "%s was restored over its meta key: a row it was in no longer exists and its id is taken by another row, so the values are back in their order under other ids."
+msgstr "%s se ha restaurado mediante su clave meta: una fila en la que estaba ya no existe y su ID lo ocupa otra fila, así que los valores han vuelto en su orden con otros ID."
+
+msgid "The snapshot of the page is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "La instantánea de la página no tiene una forma que esta herramienta escriba; no se ha restaurado nada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The option was missing and could not be added again. Try again; if it keeps failing, check the option in wp-admin, where its plugin offers it."
+msgstr "La opción faltaba y no se ha podido volver a añadir. Vuelve a intentarlo; si sigue fallando, comprueba la opción en wp-admin, donde la ofrece su plugin."
+
+msgid "The option was written back, but the site stored something else; a plugin may filter it. Check the option in wp-admin, where its plugin offers it."
+msgstr "La opción se ha vuelto a escribir, pero el sitio ha guardado otra cosa; puede que un plugin la filtre. Comprueba la opción en wp-admin, donde la ofrece su plugin."
+
+msgid "The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo."
+msgstr "El estado después del cambio no tiene una forma que guarde un punto de restauración. Comprueba el resultado del cambio antes de confiar en deshacerlo."
+
+msgid "Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se registraría ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+
+msgid "There is no snapshot to keep for this action. Check the result of the change before relying on an undo."
+msgstr "No hay ninguna instantánea que guardar para esta acción. Comprueba el resultado del cambio antes de confiar en deshacerlo."
+
+msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+
+msgid "Undo points of this kind do not take parts. Change the remaining pages in a separate call; it gets an undo point of its own."
+msgstr "Los puntos de restauración de este tipo no admiten partes. Cambia las páginas restantes en una llamada aparte; esta recibe su propio punto de restauración."
+
+msgid "The part is of another kind than the undo point it should join. Change the remaining pages in a separate call; it gets an undo point of its own."
+msgstr "La parte es de otro tipo que el punto de restauración al que debería unirse. Cambia las páginas restantes en una llamada aparte; esta recibe su propio punto de restauración."
+
+#, php-format
+msgid "This undo point already has %d parts, the most one point may have, so no further part was recorded. Change the remaining pages in a separate call; it gets an undo point of its own."
+msgstr "Este punto de restauración ya tiene %d partes, el máximo que puede tener un punto, así que no se ha registrado ninguna parte más. Cambia las páginas restantes en una llamada aparte; esta recibe su propio punto de restauración."
+
+msgid "This undo point is being restored right now, so nothing can be added to it. Change the remaining pages in a separate call; it gets an undo point of its own."
+msgstr "Este punto de restauración se está restaurando ahora mismo, así que no se le puede añadir nada. Cambia las páginas restantes en una llamada aparte; esta recibe su propio punto de restauración."
+
+msgid "The undo index could not be updated, so this part of the undo point was not recorded. If this keeps happening, check the database error log."
+msgstr "No se ha podido actualizar el índice de deshacer, así que esta parte del punto de restauración no se ha registrado. Si vuelve a ocurrir, comprueba el registro de errores de la base de datos."
+
+msgid "The undo index was busy, so this part of the undo point was not recorded. Try again in a moment."
+msgstr "El índice de deshacer estaba ocupado, así que esta parte del punto de restauración no se ha registrado. Vuelve a intentarlo en un momento."
+
+msgid "The undo index could not be updated with the state after the change. If this keeps happening, check the database error log."
+msgstr "No se ha podido actualizar el índice de deshacer con el estado después del cambio. Si vuelve a ocurrir, comprueba el registro de errores de la base de datos."
+
+msgid "No fields to change. Pass fields as an object of field name and new value, with the names wp_get_builder_layout lists for this element."
+msgstr "No hay campos que cambiar. Indica fields como un objeto de nombre de campo y nuevo valor, con los nombres que wp_get_builder_layout enumera para este elemento."
+
+#, php-format
+msgid "The field %s is named twice (once by its name, once by its kind). Name it once."
+msgstr "El campo %s se indica dos veces (una por su nombre y otra por su tipo). Indícalo una sola vez."
+
+#, php-format
+msgid "The field %s has no kind this tool writes. Change it in the page builder's editor."
+msgstr "El campo %s no tiene un tipo que esta herramienta escriba. Cámbialo en el editor del constructor de páginas."
+
+#, php-format
+msgid "The value for %s must be text. Pass it as a string."
+msgstr "El valor de %s debe ser texto. Indícalo como cadena."
+
+#, php-format
+msgid "The value for %1$s must be valid UTF-8 text of at most %2$s. Pass UTF-8 text within that size."
+msgstr "El valor de %1$s debe ser texto UTF-8 válido de como máximo %2$s. Indica texto UTF-8 dentro de ese tamaño."
+
+#, php-format
+msgid "The value for %s contains control characters. Send it without them; line breaks and tabs may stay."
+msgstr "El valor de %s contiene caracteres de control. Envíalo sin ellos; los saltos de línea y los tabuladores pueden quedarse."
+
+#, php-format
+msgid "The field %s takes plain text only, without HTML tags: headings and button labels are shown as text. Send the words without markup."
+msgstr "El campo %s solo admite texto sin formato, sin etiquetas HTML: los encabezados y los textos de los botones se muestran como texto. Envía las palabras sin marcado."
+
+#, php-format
+msgid "The value for %s holds markup that post content does not allow (scripts, styles, event attributes, frames or links that run code), and WordPress would store it differently. Nothing was changed. Send it without that markup; to place such code, edit the element in the page builder's editor in wp-admin."
+msgstr "El valor de %s contiene marcado que el contenido de las entradas no permite (scripts, estilos, atributos de eventos, marcos o enlaces que ejecutan código), y WordPress lo guardaría de otra forma. No se ha cambiado nada. Envíalo sin ese marcado; para colocar ese tipo de código, edita el elemento en el editor del constructor de páginas en wp-admin."
+
+msgid "A change names no element, field or kind. Change it in the page builder's editor."
+msgstr "Un cambio no indica ningún elemento, campo ni tipo. Hazlo en el editor del constructor de páginas."
+
+msgid "A change carries no value before or after. Change it in the page builder's editor."
+msgstr "Un cambio no contiene ningún valor anterior ni posterior. Hazlo en el editor del constructor de páginas."
+
+#, php-format
+msgid "The new value for %s is not in the form its kind is stored in. Read the element with wp_get_builder_layout and pass the value in the form its field takes, or change it in the page builder's editor."
+msgstr "El nuevo valor de %s no tiene la forma en que se guarda su tipo. Lee el elemento con wp_get_builder_layout e indica el valor en la forma que admite su campo, o cámbialo en el editor del constructor de páginas."
+
+#, php-format
+msgid "The field %s is longer than the outline shows, and this page builder's writer did not read it in full, so its placeholders cannot be checked. Nothing was changed; change this field in the page builder's editor."
+msgstr "El campo %s es más largo de lo que muestra la estructura, y el módulo de escritura de este constructor de páginas no lo ha leído entero, así que sus marcadores de posición no se pueden comprobar. No se ha cambiado nada; cambia este campo en el editor del constructor de páginas."
+
+#, php-format
+msgid "The field %1$s has placeholders the page builder fills in when the page is shown (%2$s); a change must keep them as they are and add none (asked: %3$s). Nothing was changed. Keep the placeholders in the new text, or change them in the page builder's editor."
+msgstr "El campo %1$s tiene marcadores de posición que el constructor de páginas rellena al mostrar la página (%2$s); un cambio debe dejarlos tal cual y no añadir ninguno (pedido: %3$s). No se ha cambiado nada. Mantén los marcadores de posición en el nuevo texto, o cámbialos en el editor del constructor de páginas."
+
+#, php-format
+msgid "This element has more than one %1$s field (%2$s). Name the field instead of its kind."
+msgstr "Este elemento tiene más de un campo de tipo %1$s (%2$s). Indica el campo en lugar de su tipo."
+
+#, php-format
+msgid "This element has no writable field %1$s. Its fields: %2$s. Fields with dynamic values, code or settings are not listed and cannot be changed here; change those in the page builder's editor."
+msgstr "Este elemento no tiene ningún campo editable %1$s. Sus campos: %2$s. Los campos con valores dinámicos, código o ajustes no se enumeran y no se pueden cambiar aquí; cámbialos en el editor del constructor de páginas."
+
+#, php-format
+msgid "Note on this element: %s"
+msgstr "Nota sobre este elemento: %s"
+
+#, php-format
+msgid "The link for %s contains characters a link must not carry here (white space, quotes, angle or square brackets, back-ticks or backslashes). Encode them, e.g. a space as %%20."
+msgstr "El enlace de %s contiene caracteres que un enlace no puede llevar aquí (espacios en blanco, comillas, corchetes angulares o cuadrados, acentos graves o barras invertidas). Codifícalos, p. ej. un espacio como %%20."
+
+#, php-format
+msgid "The link for %s must start with http://, https://, mailto: or tel:, or be a relative link starting with /, # or ?. Other schemes (javascript:, data: and the like) are refused. Pass a link in one of these forms."
+msgstr "El enlace de %s debe empezar por http://, https://, mailto: o tel:, o ser un enlace relativo que empiece por /, # o ?. Se rechazan otros esquemas (javascript:, data: y similares). Indica un enlace en una de estas formas."
+
+#, php-format
+msgid "The value for %s must be the id of an image in the media library (an integer). Upload an image with wp_upload_media to get one."
+msgstr "El valor de %s debe ser el ID de una imagen de la biblioteca de medios (un número entero). Sube una imagen con wp_upload_media para obtener uno."
+
+#, php-format
+msgid "Attachment %d is not an image in the media library. wp_list_media lists the images; upload one with wp_upload_media."
+msgstr "El adjunto %d no es una imagen de la biblioteca de medios. wp_list_media enumera las imágenes; sube una con wp_upload_media."
+
+#, php-format
+msgid "Your account may not use image %d: it cannot read it. Pick an image your account may read (wp_list_media lists them), or ask someone who may read this one."
+msgstr "La cuenta de esta conexión no puede usar la imagen %d: no puede leerla. Elige una imagen que esa cuenta pueda leer (wp_list_media las enumera), o pregunta a alguien que pueda leer esta."
+
+msgid "Name the text to replace."
+msgstr "Indica el texto que quieres reemplazar."
+
+msgid "The reader of this page builder is not loaded on this site. Change the page in its editor in wp-admin."
+msgstr "El lector de este constructor de páginas no está cargado en este sitio. Cambia la página en su editor en wp-admin."
+
+#, php-format
+msgid "A regular expression is not applied to the fields of a %s page: in a field that holds markup it could match more than the text. Search for the text itself, or run wp_search_replace with scope: raw."
+msgstr "Una expresión regular no se aplica a los campos de una página creada con %s: en un campo que contiene marcado podría coincidir con más que el texto. Busca el propio texto, o ejecuta wp_search_replace con scope: raw."
+
+#, php-format
+msgid "Left %1$s as it is: %2$s"
+msgstr "%1$s se ha dejado como estaba: %2$s"
+
+#, php-format
+msgid "The stored settings of element %1$s have no field %2$s (any more). Nothing was changed. Read the page again with wp_get_builder_layout."
+msgstr "Los ajustes guardados del elemento %1$s no tienen (ya) el campo %2$s. No se ha cambiado nada. Vuelve a leer la página con wp_get_builder_layout."
+
+#, php-format
+msgid "After the save the page had %2$d elements instead of %1$d (missing: %3$s)."
+msgstr "Después de guardar, la página tenía %2$d elementos en lugar de %1$d (faltan: %3$s)."
+
+#, php-format
+msgid "After the save these fields do not show their new value: %s."
+msgstr "Después de guardar, estos campos no muestran su nuevo valor: %s."
+
+#, php-format
+msgid "This page has no element %s. Read it again with wp_get_builder_layout and take the id from there; ids that are positions in the page (b0.2, s1, e0.1 …) change whenever the page changes."
+msgstr "Esta página no tiene ningún elemento %s. Vuelve a leerla con wp_get_builder_layout y toma el ID de ahí; los ID que son posiciones en la página (b0.2, s1, e0.1 …) cambian cada vez que cambia la página."
+
+#, php-format
+msgid "More than one element of this page has the id %s, so it does not say which one to change. Change it in the page builder's editor."
+msgstr "Más de un elemento de esta página tiene el ID %s, así que no indica cuál cambiar. Cámbialo en el editor del constructor de páginas."
+
+#, php-format
+msgid "It is a global part (%s): changing that post changes every page that shows it."
+msgstr "Es un elemento global (%s): cambiar esa entrada cambia cada página que la muestra."
+
+#, php-format
+msgid "Element %1$s is locked (unregistered widget): its type %2$s is not registered on this site, usually because the plugin that provides it is inactive. Activate that plugin, then read the page again with wp_get_builder_layout. Until then leave the page unsaved in the %3$s editor: a page builder may drop an element whose type it does not know when it saves."
+msgstr "El elemento %1$s está bloqueado (widget no registrado): su tipo %2$s no está registrado en este sitio, normalmente porque el plugin que lo proporciona está inactivo. Activa ese plugin y luego vuelve a leer la página con wp_get_builder_layout. Hasta entonces, no guardes la página en el editor de %3$s: un constructor de páginas puede descartar al guardar un elemento cuyo tipo no conoce."
+
+#, php-format
+msgid "Element %1$s is locked (unknown element type): AlphaBridge does not know the type %2$s, so it leaves the element as it is. If it comes from a plugin that is inactive on this site, activate that plugin and read the page again with wp_get_builder_layout; otherwise change the element in the %3$s editor in wp-admin."
+msgstr "El elemento %1$s está bloqueado (tipo de elemento desconocido): AlphaBridge no conoce el tipo %2$s, así que deja el elemento como está. Si proviene de un plugin inactivo en este sitio, activa ese plugin y vuelve a leer la página con wp_get_builder_layout; si no, cambia el elemento en el editor de %3$s en wp-admin."
+
+#, php-format
+msgid "Element %1$s is locked (%2$s): AlphaBridge does not change code, HTML, shortcodes, forms, dynamic values or global parts. Change it in the %3$s editor in wp-admin."
+msgstr "El elemento %1$s está bloqueado (%2$s): AlphaBridge no cambia código, HTML, shortcodes, formularios, valores dinámicos ni elementos globales. Cámbialo en el editor de %3$s en wp-admin."
+
+msgid "The fields already hold these values; nothing was changed. Check them with wp_get_builder_layout."
+msgstr "Los campos ya contienen estos valores; no se ha cambiado nada. Compruébalos con wp_get_builder_layout."
+
+#, php-format
+msgid "profile not yet measured: how AlphaBridge writes %s pages has not been checked on a real installation yet. Check the page after the change."
+msgstr "perfil aún no medido: todavía no se ha comprobado en una instalación real cómo escribe AlphaBridge las páginas creadas con %s. Comprueba la página después del cambio."
+
+msgid "The page was saved by someone else while this change was being prepared, and their version is kept. Read it again with wp_get_builder_layout and repeat the change."
+msgstr "Otra persona ha guardado la página mientras se preparaba este cambio, y se conserva su versión. Vuelve a leerla con wp_get_builder_layout y repite el cambio."
+
+msgid "The undo point does not know the state this change left, so wp_undo will ask for force=true."
+msgstr "El punto de restauración no conoce el estado en que ha dejado la página este cambio, así que wp_undo pedirá force=true."
+
+#, php-format
+msgid "%s keeps no draft of its own that publish=false could write into. Leave publish out to change the page as it is shown, or make the change as a draft in the page builder's editor."
+msgstr "%s no guarda un borrador propio en el que publish=false pueda escribir. Omite publish para cambiar la página tal como se muestra, o haz el cambio como borrador en el editor del constructor de páginas."
+
+msgid "There is nothing to change on this page. Check its fields with wp_get_builder_layout."
+msgstr "No hay nada que cambiar en esta página. Comprueba sus campos con wp_get_builder_layout."
+
+msgid "A change is not in the form a writer hands over. Change it in the page builder's editor."
+msgstr "Un cambio no tiene la forma que entrega un módulo de escritura. Hazlo en el editor del constructor de páginas."
+
+msgid "This is a global part (a template or a part shown on many pages): the change appears everywhere it is used."
+msgstr "Es un elemento global (una plantilla o una parte que se muestra en muchas páginas): el cambio aparece en todos los lugares donde se usa."
+
+msgid "The page has changed since it was read: layout_hash does not match. Nothing was written. Read it again with wp_get_builder_layout and use the new element ids and layout_hash."
+msgstr "La página ha cambiado desde que se leyó: layout_hash no coincide. No se ha escrito nada. Vuelve a leerla con wp_get_builder_layout y usa los nuevos ID de elementos y el nuevo layout_hash."
+
+#, php-format
+msgid "Element %s is addressed by its position in the page, which holds only for the page as it was read. Pass the layout_hash from wp_get_builder_layout (or from this preview) with apply=true."
+msgstr "El elemento %s se indica por su posición en la página, que solo vale para la página tal como se leyó. Indica el layout_hash de wp_get_builder_layout (o de esta vista previa) con apply=true."
+
+#, php-format
+msgid "User #%d has this page open in an editor right now. Nothing was written: their editor holds the page as it was and would overwrite this change when they save. Try again once they have closed it, or ask them to."
+msgstr "El usuario #%d tiene esta página abierta en un editor ahora mismo. No se ha escrito nada: su editor contiene la página tal como estaba y sobrescribiría este cambio al guardar. Vuelve a intentarlo cuando lo haya cerrado, o pídele que lo cierre."
+
+#, php-format
+msgid "Your own account has this page open in an editor (active %d seconds ago). Reload that editor before saving there, or it overwrites this change."
+msgstr "La propia cuenta de esta conexión tiene esta página abierta en un editor (activo hace %d segundos). Recarga ese editor antes de guardar en él, o sobrescribirá este cambio."
+
+#, php-format
+msgid "This page was open in an editor %d minutes ago. An editor that is still open holds the page as it was and overwrites this change when it saves; reload it first."
+msgstr "Esta página estaba abierta en un editor hace %d minutos. Un editor que siga abierto contiene la página tal como estaba y sobrescribe este cambio al guardar; recárgalo primero."
+
+msgid "Undo is switched off on this site, so this change has no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que este cambio no tiene vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+
+msgid "Written without an undo point, as allow_without_undo asked: the page's stored data is larger than an undo point may hold. This change has no way back through wp_undo."
+msgstr "Escrito sin punto de restauración, como pedía allow_without_undo: los datos guardados de la página superan lo que puede contener un punto de restauración. Este cambio no tiene vuelta atrás mediante wp_undo."
+
+msgid "Nothing was written. To write without a way back, call again with allow_without_undo=true."
+msgstr "No se ha escrito nada. Para escribir sin vuelta atrás, vuelve a llamar con allow_without_undo=true."
+
+msgid "Without an undo point nothing was written. Try again once the cause above is fixed."
+msgstr "Sin punto de restauración no se ha escrito nada. Vuelve a intentarlo cuando se haya corregido la causa indicada arriba."
+
+#, php-format
+msgid "The page builder failed while saving (%s)."
+msgstr "El constructor de páginas ha fallado al guardar (%s)."
+
+msgid "The page builder did not confirm the save."
+msgstr "El constructor de páginas no ha confirmado el guardado."
+
+msgid "The post was gone after the save."
+msgstr "La entrada había desaparecido después de guardar."
+
+msgid "The read-back gave no answer."
+msgstr "La relectura no ha dado ninguna respuesta."
+
+msgid "Undo is switched off on this site: applying this change would leave no way back."
+msgstr "Deshacer está desactivado en este sitio: aplicar este cambio no dejaría vuelta atrás."
+
+msgid "Applying will need allow_without_undo=true and will have no way back."
+msgstr "Aplicarlo requerirá allow_without_undo=true y no tendrá vuelta atrás."
+
+msgid "Applying will be refused while no undo point can be recorded."
+msgstr "Aplicarlo se rechazará mientras no se pueda registrar ningún punto de restauración."
+
+msgid "Preview only, nothing was written. Call again with apply=true and this layout_hash to save."
+msgstr "Solo vista previa, no se ha escrito nada. Vuelve a llamar con apply=true y este layout_hash para guardar."
+
+msgid "The page is unchanged. Try again; if it fails the same way, change it in the page builder's editor."
+msgstr "La página no ha cambiado. Vuelve a intentarlo; si falla de la misma forma, cámbiala en el editor del constructor de páginas."
+
+msgid "The page was not put back: it changed again after this save, and putting it back would undo that change too. Check it with wp_get_builder_layout; wp_undo with the undo token can restore it (force=true over the newer change)."
+msgstr "La página no se ha restablecido: ha vuelto a cambiar después de este guardado, y restablecerla desharía también ese cambio. Compruébala con wp_get_builder_layout; wp_undo con el token de deshacer puede restaurarla (force=true sobre el cambio más reciente)."
+
+msgid "The page was put back as it was before; nothing changed. Try again; if it fails the same way, change it in the page builder's editor."
+msgstr "La página se ha restablecido como estaba antes; no ha cambiado nada. Vuelve a intentarlo; si falla de la misma forma, cámbiala en el editor del constructor de páginas."
+
+msgid "Putting the page back failed as well. Restore it with wp_undo and the undo token, then check it with wp_get_builder_layout."
+msgstr "Restablecer la página también ha fallado. Restáurala con wp_undo y el token de deshacer, y luego compruébala con wp_get_builder_layout."
+
+msgid "This call wrote nothing."
+msgstr "Esta llamada no ha escrito nada."
+
+msgid "This change has no undo point."
+msgstr "Este cambio no tiene punto de restauración."
+
+#, php-format
+msgid "Undo token: %s."
+msgstr "Token de deshacer: %s."
+
+msgid "this page builder"
+msgstr "este constructor de páginas"
+
+#, php-format
+msgid "AlphaBridge recognises %s on this page but has no reader for it yet, so its elements have no ids to address."
+msgstr "AlphaBridge reconoce %s en esta página, pero aún no tiene un lector para él, así que sus elementos no tienen ID con los que indicarlos."
+
+#, php-format
+msgid "AlphaBridge reads %s pages (wp_get_builder_layout) but has no writer for them in this version, so it does not change their elements."
+msgstr "AlphaBridge lee las páginas creadas con %s (wp_get_builder_layout), pero en esta versión no tiene un módulo de escritura para ellas, así que no cambia sus elementos."
+
+msgid "This page shows post_content, so wp_update_post changes it: read it with wp_get_post, change the text in content and keep the block markup as it is."
+msgstr "Esta página muestra post_content, así que wp_update_post la cambia: léela con wp_get_post, cambia el texto en content y deja el marcado de bloques como está."
+
+#, php-format
+msgid "wp_update_post changes what the page shows now, but %s restores its own copy the next time the page is saved there; for a lasting change use its editor in wp-admin."
+msgstr "wp_update_post cambia lo que muestra ahora la página, pero %s restaura su propia copia la próxima vez que la página se guarde allí; para un cambio duradero, usa su editor en wp-admin."
+
+#, php-format
+msgid "Change it in the %s editor in wp-admin."
+msgstr "Cámbiala en el editor de %s en wp-admin."
+
+msgid "A text that appears on many pages can also be replaced with wp_search_replace (run it as a dry run first)."
+msgstr "Un texto que aparece en muchas páginas también se puede reemplazar con wp_search_replace (ejecútalo primero como simulación)."
+
+msgid "Page builders"
+msgstr "Constructores de páginas"
