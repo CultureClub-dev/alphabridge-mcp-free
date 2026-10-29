@@ -208,11 +208,14 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 77, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0 and wp_seo_set since 4.8.0, and they run here.' );
+		self::assertCount( 71, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0 and six more since 4.9.0, and they run here.' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );
-		foreach ( array( 'wp_undo', 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_wc_update_product', 'wp_create_user' ) as $name ) {
+		foreach ( array( 'wp_create_user', 'wp_update_user', 'wp_delete_user', 'wp_wc_update_order_status', 'wp_wc_update_product', 'wp_wc_create_coupon' ) as $name ) {
+			self::assertNotContains( $name, $pro, $name . ' is free since 4.9.0.' );
+		}
+		foreach ( array( 'wp_undo', 'wp_run_ability', 'wp_list_abilities', 'wp_update_builder_element', 'wp_search_replace', 'wp_db_query', 'wp_read_plugin_file', 'wp_update_user_meta' ) as $name ) {
 			self::assertContains( $name, $pro );
 		}
 	}

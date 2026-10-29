@@ -43,6 +43,11 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_delete_comment',
 		'wp_delete_menu_item',
 		'wp_seo_set', // Free since 4.8.0: overwrites the stored SEO fields.
+		// Free since 4.9.0: change or remove an account, an order's status, a product.
+		'wp_update_user',
+		'wp_delete_user',
+		'wp_wc_update_order_status',
+		'wp_wc_update_product',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */
@@ -50,6 +55,8 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_create_term',
 		'wp_duplicate_post',
 		'wp_create_menu',
+		'wp_create_user',      // Free since 4.9.0.
+		'wp_wc_create_coupon', // Free since 4.9.0.
 	);
 
 	/** Tools that add, but publish what they add, which cannot be taken back. */
@@ -200,7 +207,7 @@ final class DestructiveClassificationTest extends TestCase {
 		}
 		$this->assertSame( array(), $unclassified );
 
-		// And the split is the measured one: 10 overwrite, 5 add and publish, 3 only add.
+		// And the split is the measured one: 14 overwrite, 5 add and publish, 5 only add.
 		$destructive = array_values( array_filter( $writing, static fn( $n ) => AB_MCP_Tool_Registry::is_destructive( $n, array() ) ) );
 		sort( $destructive );
 		$expected = array_merge( self::OVERWRITES, self::PUBLISHING_ADDS );
