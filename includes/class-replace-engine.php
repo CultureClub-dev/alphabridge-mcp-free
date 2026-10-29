@@ -723,7 +723,10 @@ class AB_MCP_Replace_Engine {
 		$t = ltrim( $s );
 		if ( strlen( $t ) > 1 && ( '{' === $t[0] || '[' === $t[0] ) ) {
 			$decoded = json_decode( $s );
-			if ( ( is_object( $decoded ) || is_array( $decoded ) ) && json_encode( $decoded ) === $s ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Byte-exact round-trip check requires plain json_encode.
+			if ( ( is_object( $decoded ) || is_array( $decoded ) ) && json_encode( $decoded ) !== $s ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Byte-exact round-trip check requires plain json_encode.
+				return $this->replace_json_text( $s, $decoded, $count, $depth, $layers );
+			}
+			if ( is_object( $decoded ) || is_array( $decoded ) ) {
 				// At the layer limit it is decoded only to tell JSON from text
 				// that merely starts like it (that text is still replaced
 				// below); the decoded copy is dropped here, not walked.
@@ -738,6 +741,45 @@ class AB_MCP_Replace_Engine {
 		}
 
 		return $this->replace_string( $s, $count );
+	}
+
+	/**
+	 * Valid JSON that the encoder would not write back byte for byte (spacing,
+	 * unescaped slashes or Unicode): replaced as text, so it keeps its form,
+	 * but kept only where the result is the document the structural replace
+	 * gives. A replacement with a quote, a backslash or a line break, or a
+	 * search across the structure, would otherwise break the JSON or change
+	 * more than its texts; such a value stays as it is and is counted in
+	 * skipped_unchecked_values.
+	 *
+	 * @param string $s       The JSON text.
+	 * @param mixed  $decoded json_decode() of it (object or array).
+	 * @param int    $count   Occurrence counter (by reference).
+	 * @param int    $depth   Recursion depth.
+	 * @param int    $layers  Strings already unpacked above this one.
+	 * @return string
+	 */
+	private function replace_json_text( $s, $decoded, &$count, $depth, $layers ) {
+		$before = $count;
+		$flat   = $this->replace_string( $s, $count );
+		if ( $count === $before ) {
+			return $s;
+		}
+		if ( $layers < self::MAX_LAYERS ) {
+			// The structural result only to compare with: what it counts and
+			// skips is not this value's answer, the text replacement's is.
+			$kept = array( $this->skipped_corrupt, $this->skipped_object_values, $this->skipped_unchecked_values );
+			$n    = 0;
+			$want = $this->apply_value( $decoded, $n, $depth + 1, $layers + 1 );
+			list( $this->skipped_corrupt, $this->skipped_object_values, $this->skipped_unchecked_values ) = $kept;
+			// serialize(), not ==: loose comparison takes "1" and "01" for equal.
+			if ( serialize( json_decode( $flat ) ) === serialize( $want ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Comparing two decoded values exactly.
+				return $flat;
+			}
+		}
+		$count = $before;
+		$this->skipped_unchecked_values++;
+		return $s;
 	}
 
 	/**

@@ -347,6 +347,30 @@ if ( 'forms' === $scenario ) {
 	$d   = json_decode( $out, true );
 	ok( 2 === $n && '<p>C &amp; D</p>' === $d[0]['settings']['editor'] && 'C & D' === $d[0]['settings']['title'] && json_encode( $d ) === $out, 'F10 in a JSON document the HTML of an editor field and a plain title are both found and rewritten in their form; the document re-encodes byte-exact' );
 
+	// F11. Valid JSON the encoder would not write back byte for byte (Free 4.10.0, GitHub Codex on #101).
+	$jt = static function ( $doc, $search, $replace ) {
+		$e   = new AB_MCP_Replace_Engine( $search, $replace );
+		$n   = 0;
+		$out = $e->apply_value( $doc, $n );
+		return array( $out, $n, $e->skipped_unchecked_values );
+	};
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', 'Old', '"New"' );
+	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a replacement with quotes in spaced JSON would break it: left as it is, counted in skipped_unchecked_values, no occurrence' );
+	list( $out, $n, $sk ) = $jt( "{\n  \"path\": \"Old\"\n}", 'Old', 'C:\\dir' );
+	ok( "{\n  \"path\": \"Old\"\n}" === $out && 0 === $n && 1 === $sk, 'F11 a replacement with a backslash likewise' );
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old", "url": "https://a.example/x" }', 'https://a.example', 'https://b.example' );
+	ok( '{ "title": "Old", "url": "https://b.example/x" }' === $out && 1 === $n && 0 === $sk, 'F11 an address in spaced JSON with unescaped slashes is replaced and the JSON keeps its form' );
+	list( $out, $n, $sk ) = $jt( '{"t":"Grüsse Old"}', 'Old', 'Neu & mehr' );
+	ok( '{"t":"Grüsse Neu & mehr"}' === $out && 1 === $n && 0 === $sk, 'F11 JSON with unescaped Unicode keeps it, and a plain replacement goes in' );
+	list( $out, $n, $sk ) = $jt( '{ "title": "Old" }', '"title": "Old"', '"title": "New", "admin": true' );
+	ok( '{ "title": "Old" }' === $out && 0 === $n && 1 === $sk, 'F11 a search across the structure changes no structure: left as it is' );
+	list( $out, $n, $sk ) = $jt( '{"title":"Old"}', 'Old', '"New"' );
+	ok( '{"title":"\\"New\\""}' === $out && 1 === $n && 0 === $sk, 'F11 JSON the encoder writes byte for byte is still walked as structure: the quotes are escaped' );
+	$e   = new AB_MCP_Replace_Engine( 'Old', '"New"' );
+	$n   = 0;
+	$e->apply_value( array( '{ "a": "Old", "b": "O:8:\\"stdClass\\":0:{}" }', 'x' ), $n );
+	ok( 1 === $e->skipped_unchecked_values && 0 === $e->skipped_object_values, 'F11 the structural walk made only for comparing adds nothing to the counts' );
+
 	ab_result( 'SEARCH-REPLACE-BUILDER (forms)-CHECKS' );
 }
 
