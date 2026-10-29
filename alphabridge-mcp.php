@@ -61,6 +61,8 @@ require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 // Undo (free since 4.9.0, before in Pro only): the store, its restore, and
 // the post rules and page caches both of them use.
 require_once AB_MCP_DIR . 'includes/class-page-cache.php';
+// The guard on option names, which the restore of option rows asks again (4.10.0).
+require_once AB_MCP_DIR . 'includes/class-option-guard.php';
 require_once AB_MCP_DIR . 'includes/class-post-status.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-restore.php';

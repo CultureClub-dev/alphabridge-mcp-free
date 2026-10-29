@@ -39,6 +39,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	 * data runs to 100 KB a page (plan review S4: 25 pages, with a cursor).
 	 */
 	const BUILDER_POSTS = 25;
+	/** Posts one call may name in post_ids. */
+	const POST_IDS_MAX = 500;
 	const SAMPLE_CHARS  = 300; // Characters of a field value a builder sample shows before and after.
 	const NOTE_CAP    = 10;
 	const SLUG_CAP    = 200;  // Slug changes listed per table; the rest counted in slug_changes_omitted.
@@ -149,7 +151,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_search_replace',
 			array(
-				'description' => 'Search and replace across the site\'s stored data, safe for serialized and JSON values; finding text without changing it is wp_search, one post is changed with wp_update_post. tables: posts (title, content, excerpt), postmeta, options, terms (names, descriptions, termmeta); default posts and postmeta. apply=false (default) is a dry run that returns a per-table preview; apply=true writes. Matching: serialized and JSON values are rewritten losslessly, and the CSS and caches Elementor builds from _elementor_data (element cache with the rendered HTML, Markdown cache) are reset. Plain (non-regex) mode also finds the encoded forms WordPress and page builders store (JSON-escaped such as https:\\/\\/…, block attributes such as &, HTML entities such as &amp;, and HTML inside block attributes), so "A & B" is found where a page stores "A &amp; B", and writes the replacement in the form it found, as JSON inside block attributes. A serialized value holding a PHP object, a Serializable or enum record or a reference is left untouched (skipped_object_values), so no class is restored from stored data. Scope "text" (default): a page-builder page that a writer here writes (write_via in wp_get_builder_layout) changes only through that writer, in the texts, links and images it may change, under the field rules of wp_update_builder_element; its post_content copy is left out (copy_only). Matches in locked places (code, HTML, CSS, shortcodes, forms, placeholders, global parts, page code), and on pages the writer refuses as a whole, stay and are counted in locked_matches; scope "raw" reaches them. Fields a writer leaves are named in notes. A page whose page builder has no writer here, and a text a writer finds in none of its fields where the site shows post_content (SeedProd), are replaced as text (as_text, builder_pages_without_writer); a builder that keeps its own copy writes it over that at its next save. For an account without unfiltered_html, a post that WordPress\'s kses filter would store differently (an SVG, a style or a script dropped, a block attribute changed, in any field it filters) is not written and is named in notes. Scope "raw": the stored data as text everywhere, page-builder data and page code included (page-builder data needs unfiltered_html); a copy in post_content_filtered (SeedProd) is not read, so only post_content changes there until the page builder writes its copy back at its next save, and warnings names such pages. Undo: page-builder pages get undo points under one undo_token (undo_pages lists them). For pages a writer changes it holds their page-builder data and its copies; for pages changed outside a writer and in scope "raw" also post_content and the meta keys the call rewrites on them, except the code fields a page builder locks (custom CSS, for example): an undo leaves those as changed, and warnings names them. Posts without a page builder, titles, excerpts, options and terms are not in it, and the answer says so. Per call, at most 25 pages change through writers (next.builders continues) and at most 25 in scope "raw"; of the pages scope "text" changes outside a writer, up to 25 get an undo point, and the others, or any whose undo point cannot be recorded, are written without one and named in warnings (stop_at_undo_cap, allow_without_undo). Never touched: trash, auto-drafts, revisions (unless exclude_revisions=false), protected options and option names the option guard refuses, transients, the guid column, credential-like meta keys, widget rows, internal post types and taxonomies; rows the account may not read or edit are passed over silently. Protected "_" meta keys are rewritten only for an account with manage_options and only when allow-listed (filter ab_mcp_pro_protected_meta_allowlist), never _wp_attached_file, _wp_attachment_metadata, _thumbnail_id or _wp_page_template; page-builder data (_elementor_data, panels_data, dslc_code, pagelayer-data, brizy, vcv-pageContent, mfn-page-items, tve_updated_post and more; filter ab_mcp_pro_markup_meta_keys) only for an account with unfiltered_html, on multisite a super admin. Writes go through the WordPress APIs (revisions created, serialization regenerated, caches invalidated), term names and descriptions through wp_update_term(). No slug is asked to change: a term shared by several taxonomies or with an empty stored slug is passed over, and slug_changes lists any slug a filter changed along with a name (term, old and new slug; up to 200, the rest in slug_changes_omitted). Paging: at most 5 000 000 ids per scan (10 000 per query, a tenth in regex mode; the terms table has three scans, the page-builder pages one, builders); next records where each scan stopped, and sent back as after it lets the next call continue without reading anything twice. Answer: per-table counts and previews; notes (up to 10 per table, notes_omitted the rest); warnings; skipped_object_values and skipped_unchecked_values (too large or too deep to walk: more than ' . AB_MCP_Replace_Engine::MAX_DEPTH . ' levels or ' . AB_MCP_Replace_Engine::MAX_LAYERS . ' nested serialized or JSON strings) count values, not rows, and the rest of such a row is still rewritten.',
+				'description' => 'Search and replace across the site\'s stored data, safe for serialized and JSON values; finding text without changing it is wp_search, one post is changed with wp_update_post. post_ids limits the call to the posts it names (posts, postmeta and page-builder pages); expected_count makes apply=true write only when the call finds exactly that many matching rows (totals.matched of the dry run), so nothing is written where the site changed since the preview. tables: posts (title, content, excerpt), postmeta, options, terms (names, descriptions, termmeta); default posts and postmeta. apply=false (default) is a dry run that returns a per-table preview; apply=true writes. Matching: serialized and JSON values are rewritten losslessly, and the CSS and caches Elementor builds from _elementor_data (element cache with the rendered HTML, Markdown cache) are reset. Plain (non-regex) mode also finds the encoded forms WordPress and page builders store (JSON-escaped such as https:\\/\\/…, block attributes such as &, HTML entities such as &amp;, and HTML inside block attributes), so "A & B" is found where a page stores "A &amp; B", and writes the replacement in the form it found, as JSON inside block attributes. A serialized value holding a PHP object, a Serializable or enum record or a reference is left untouched (skipped_object_values), so no class is restored from stored data. Scope "text" (default): a page-builder page that a writer here writes (write_via in wp_get_builder_layout) changes only through that writer, in the texts, links and images it may change, under the field rules of wp_update_builder_element; its post_content copy is left out (copy_only). Matches in locked places (code, HTML, CSS, shortcodes, forms, placeholders, global parts, page code), and on pages the writer refuses as a whole, stay and are counted in locked_matches; scope "raw" reaches them. Fields a writer leaves are named in notes. A page whose page builder has no writer here, and a text a writer finds in none of its fields where the site shows post_content (SeedProd), are replaced as text (as_text, builder_pages_without_writer); a builder that keeps its own copy writes it over that at its next save. For an account without unfiltered_html, a post that WordPress\'s kses filter would store differently (an SVG, a style or a script dropped, a block attribute changed, in any field it filters) is not written and is named in notes. Scope "raw": the stored data as text everywhere, page-builder data and page code included (page-builder data needs unfiltered_html); a copy in post_content_filtered (SeedProd) is not read, so only post_content changes there until the page builder writes its copy back at its next save, and warnings names such pages. Undo: page-builder pages get undo points under one undo_token (undo_pages lists them). For pages a writer changes it holds their page-builder data and its copies; for pages changed outside a writer and in scope "raw" also post_content and the meta keys the call rewrites on them, except the code fields a page builder locks (custom CSS, for example): an undo leaves those as changed, and warnings names them. Option rows the call changes get an undo point of their own (options_undo_token), recorded before they are written; posts without a page builder, titles, excerpts and terms are not in any undo point, and the answer says so. Per call, at most 25 pages change through writers (next.builders continues) and at most 25 in scope "raw"; of the pages scope "text" changes outside a writer, up to 25 get an undo point, and the others, or any whose undo point cannot be recorded, are written without one and named in warnings (stop_at_undo_cap, allow_without_undo). Never touched: trash, auto-drafts, revisions (unless exclude_revisions=false), protected options and option names the option guard refuses, transients, the guid column, credential-like meta keys, widget rows, internal post types and taxonomies; rows the account may not read or edit are passed over silently. Protected "_" meta keys are rewritten only for an account with manage_options and only when allow-listed (filter ab_mcp_pro_protected_meta_allowlist), never _wp_attached_file, _wp_attachment_metadata, _thumbnail_id or _wp_page_template; page-builder data (_elementor_data, panels_data, dslc_code, pagelayer-data, brizy, vcv-pageContent, mfn-page-items, tve_updated_post and more; filter ab_mcp_pro_markup_meta_keys) only for an account with unfiltered_html, on multisite a super admin. Writes go through the WordPress APIs (revisions created, serialization regenerated, caches invalidated), term names and descriptions through wp_update_term(). No slug is asked to change: a term shared by several taxonomies or with an empty stored slug is passed over, and slug_changes lists any slug a filter changed along with a name (term, old and new slug; up to 200, the rest in slug_changes_omitted). Paging: at most 5 000 000 ids per scan (10 000 per query, a tenth in regex mode; the terms table has three scans, the page-builder pages one, builders); next records where each scan stopped, and sent back as after it lets the next call continue without reading anything twice. Answer: per-table counts and previews; notes (up to 10 per table, notes_omitted the rest); warnings; skipped_object_values and skipped_unchecked_values (too large or too deep to walk: more than ' . AB_MCP_Replace_Engine::MAX_DEPTH . ' levels or ' . AB_MCP_Replace_Engine::MAX_LAYERS . ' nested serialized or JSON strings) count values, not rows, and the rest of such a row is still rewritten.',
 				'open_world'  => true, // rewrites published posts and their fields by default.
 				'capability'  => 'manage_options',
 				'dangerous'   => true,
@@ -173,6 +175,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 							'description' => 'text (default): page-builder pages that a writer of this version writes are changed only in the texts, links and images their writer may change; matches in locked places are counted in locked_matches; the page-builder pages it changes get an undo point (those changed outside a writer up to 25 per call; warnings names the pages beyond). raw: the stored data as text everywhere, page code included (page-builder data needs unfiltered_html; a copy a page builder keeps in post_content_filtered, as SeedProd does, is not read), with an undo point for every page-builder page.',
 						),
 						'allow_without_undo' => array( 'type' => 'boolean', 'description' => 'true writes a page-builder page whose undo point would be over the size limit, without a way back. Default false: such a page is not written. Any other failure to record the undo point still refuses the page. Applies to scope raw and to the pages a writer changes; in scope text a page changed outside a writer is written as before when its undo point cannot be recorded, and warnings names it.' ),
+						'post_ids'          => array( 'type' => 'array', 'description' => 'Post ids (integers, at most 500): only these posts, their postmeta and, among page-builder pages, only these are scanned and written; a revision counts by its own id. Works with the tables posts and postmeta only. Default: every post the account may edit.' ),
+						'expected_count'    => array( 'type' => 'integer', 'description' => 'With apply=true: the number of matching rows the call must find (totals.matched of the dry run with the same arguments); with another number nothing is written and the answer says what it found. Default: no check.' ),
 						'stop_at_undo_cap'  => array( 'type' => 'boolean', 'description' => 'scope text: one call keeps undo points for up to 25 page-builder pages it changes outside a writer. Default false: the pages beyond them are written without one, as before, and warnings names them. true: the posts and postmeta scans stop before the first such page instead (truncated, with a note); next, sent back as after, continues there, so every page gets an undo point.' ),
 					),
 				),
@@ -702,7 +706,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		if ( '' === $search ) {
 			return new WP_Error(
 				'ab_mcp_missing_arg',
-				__( 'Missing required argument: search (non-empty string). Schema: search* (string), replace (string, default ""), tables (array of posts|postmeta|options|terms), type (string), scope ("text" or "raw", default "text"), apply (boolean), limit (integer 1–2000), after (object: the next of a previous call), exclude_revisions (boolean), case_insensitive (boolean), regex (boolean), allow_without_undo (boolean), stop_at_undo_cap (boolean).', 'alphabridge-mcp' )
+				__( 'Missing required argument: search (non-empty string). Schema: search* (string), replace (string, default ""), tables (array of posts|postmeta|options|terms), type (string), scope ("text" or "raw", default "text"), apply (boolean), limit (integer 1–2000), after (object: the next of a previous call), exclude_revisions (boolean), case_insensitive (boolean), regex (boolean), allow_without_undo (boolean), stop_at_undo_cap (boolean), post_ids (array of integers), expected_count (integer).', 'alphabridge-mcp' )
 			);
 		}
 		$replace = isset( $a['replace'] ) && is_scalar( $a['replace'] ) ? (string) $a['replace'] : '';
@@ -740,6 +744,38 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			);
 		}
 
+		// post_ids: the posts this call may touch, and no other.
+		$post_ids = array();
+		if ( isset( $a['post_ids'] ) ) {
+			$list = is_array( $a['post_ids'] ) ? $a['post_ids'] : null;
+			foreach ( null === $list ? array( false ) : $list as $id ) {
+				$id = is_bool( $id ) || is_array( $id ) ? false : filter_var( $id, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
+				if ( false === $id ) {
+					$list = null;
+					break;
+				}
+				$post_ids[ (int) $id ] = (int) $id;
+			}
+			if ( null === $list || array() === $post_ids || count( $post_ids ) > self::POST_IDS_MAX ) {
+				return new WP_Error(
+					'ab_mcp_bad_post_ids',
+					sprintf(
+						/* translators: %d: most ids one call takes */
+						__( 'post_ids must be a list of 1 to %d post ids (whole numbers of 1 or more). Pass the ids of the posts to change, or leave post_ids out to scan every post.', 'alphabridge-mcp' ),
+						self::POST_IDS_MAX
+					)
+				);
+			}
+			sort( $post_ids );
+		}
+		$expected = null;
+		if ( isset( $a['expected_count'] ) ) {
+			$expected = is_bool( $a['expected_count'] ) || is_array( $a['expected_count'] ) ? false : filter_var( $a['expected_count'], FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 0 ) ) );
+			if ( false === $expected ) {
+				return new WP_Error( 'ab_mcp_bad_expected_count', __( 'expected_count must be a whole number of 0 or more: totals.matched of the dry run. Run the call without apply first and pass that number.', 'alphabridge-mcp' ) );
+			}
+		}
+
 		$f = array(
 			'search'            => $search,
 			'replace'           => $replace,
@@ -753,6 +789,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			'exclude_revisions' => self::b( $a, 'exclude_revisions', true ),
 			'case_insensitive'  => self::b( $a, 'case_insensitive', false ),
 			'regex'             => self::b( $a, 'regex', false ),
+			'post_ids'          => array_values( $post_ids ),
+			'expected_count'    => $expected,
 		);
 		$valid  = array( 'posts', 'postmeta', 'options', 'terms' );
 		$tables = array();
@@ -764,6 +802,9 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		}
 		if ( empty( $tables ) ) {
 			return new WP_Error( 'ab_mcp_bad_tables', __( 'tables must contain at least one of: posts, postmeta, options, terms.', 'alphabridge-mcp' ) );
+		}
+		if ( array() !== $f['post_ids'] && array() !== array_diff( $tables, array( 'posts', 'postmeta' ) ) ) {
+			return new WP_Error( 'ab_mcp_post_ids_tables', __( 'post_ids limits posts and their postmeta, not options or terms. Pass tables ["posts","postmeta"] with post_ids, or leave post_ids out to replace in options and terms.', 'alphabridge-mcp' ) );
 		}
 
 		// type narrows the posts scan only, as the schema says: it is checked
@@ -797,6 +838,39 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			return $engine->error;
 		}
 
+		// expected_count: the same call as a dry run first; with another
+		// number of matching rows nothing is written.
+		if ( $f['apply'] && null !== $f['expected_count'] ) {
+			$probe = $a;
+			unset( $probe['expected_count'] );
+			$probe['apply'] = false;
+			$dry            = self::search_replace( $probe );
+			if ( is_wp_error( $dry ) ) {
+				return $dry;
+			}
+			$found = (int) $dry['totals']['matched'];
+			if ( $found !== (int) $f['expected_count'] ) {
+				$per_table = array();
+				foreach ( (array) $dry['tables'] as $name => $tr ) {
+					$per_table[ $name ] = (int) $tr['matched'];
+				}
+				return new WP_Error(
+					'ab_mcp_expected_count',
+					sprintf(
+						/* translators: 1: rows found now, 2: rows expected */
+						__( 'This call finds %1$d matching rows now, not the %2$d of expected_count, so nothing was changed. Run it without apply to see the current preview, check it, and pass its totals.matched as expected_count.', 'alphabridge-mcp' ),
+						$found,
+						(int) $f['expected_count']
+					),
+					array(
+						'found'    => $found,
+						'expected' => (int) $f['expected_count'],
+						'tables'   => $per_table,
+					)
+				);
+			}
+		}
+
 		// Page builders are known only to a core with the builder contract
 		// (AB_MCP_BUILDER_API); without it every post is replaced as before.
 		$f['builders'] = self::builders_on();
@@ -818,6 +892,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			// Scope text: whether this call wrote anything its undo token does
 			// not hold (an ordinary post, a title, an option, a term, …).
 			'uncovered'      => false,
+			// The undo point of the option rows this call changed.
+			'options_token'  => null,
 			'raw'            => array(
 				'token'   => null,
 				'locs'    => array(),
@@ -943,6 +1019,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 				'exclude_revisions' => $f['exclude_revisions'],
 				'case_insensitive'  => $f['case_insensitive'],
 				'regex'             => $f['regex'],
+				'post_ids'          => $f['post_ids'],
+				'expected_count'    => $f['expected_count'],
 			),
 			'tables'                     => $report,
 			'totals'                     => $totals,
@@ -973,6 +1051,8 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		$token = 'raw' === $f['scope'] ? $run['raw']['token'] : $run['token'];
 		$out['locked_matches'] = (int) $run['locked'];
 		$out['undo_token']     = $token;
+		// The option rows have an undo point of their own (write_options()).
+		$out['options_undo_token'] = $run['options_token'];
 		if ( null !== $token ) {
 			$out['undo_pages'] = self::undo_pages( $f );
 		}
@@ -1001,17 +1081,15 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			$out['builder_pages_without_writer'] = $list;
 			$out['builder_pages_note']           = __( 'These pages are built with a page builder that no writer of this version writes (or not this page, for the reason given): their stored data is replaced as text, the way this tool always did, without the field rules of a writer. On a page of storage A2 the page builder restores its own copy the next time the page is saved in it. Check the pages after applying.', 'alphabridge-mcp' );
 		}
-		$uncovered = $run['uncovered'];
-		foreach ( array( 'options', 'terms' ) as $table ) {
-			$uncovered = $uncovered || ! empty( $out['tables'][ $table ]['changed'] );
-		}
+		$uncovered = $run['uncovered'] || ! empty( $out['tables']['terms']['changed'] )
+			|| ( ! empty( $out['tables']['options']['changed'] ) && null === $run['options_token'] );
 		if ( 'text' === $f['scope'] && null !== $token && ! empty( $f['apply'] ) && $uncovered ) {
 			// The token holds the page-builder pages; a reader of the answer
 			// must not take it for one over the whole call.
-			$warnings[] = __( 'undo_token takes back the page-builder pages in undo_pages: their page-builder data, its copies, post_content and what the page builder\'s save touches besides (Elementor\'s page settings). The titles, excerpts, other posts, other meta, options and terms this call changed are not in it; wp_undo leaves them as they are.', 'alphabridge-mcp' );
+			$warnings[] = __( 'undo_token takes back the page-builder pages in undo_pages: their page-builder data, its copies, post_content and what the page builder\'s save touches besides (Elementor\'s page settings). The titles, excerpts, other posts, other meta and terms this call changed are not in it (option rows have their own undo point, options_undo_token, where one was recorded); wp_undo leaves them as they are.', 'alphabridge-mcp' );
 		}
 		if ( 'raw' === $f['scope'] ) {
-			array_unshift( $warnings, __( 'scope raw: stored data is replaced as text, page-builder data and page code included, past the field rules of the page builders — except a copy a page builder keeps in post_content_filtered (SeedProd), which no scan reads. For a page built with a page builder the undo point holds its builder data and post_content; titles, excerpts, options and terms are not in it.', 'alphabridge-mcp' ) );
+			array_unshift( $warnings, __( 'scope raw: stored data is replaced as text, page-builder data and page code included, past the field rules of the page builders — except a copy a page builder keeps in post_content_filtered (SeedProd), which no scan reads. For a page built with a page builder the undo point holds its builder data and post_content; titles, excerpts and terms are not in it, and option rows have their own undo point (options_undo_token).', 'alphabridge-mcp' ) );
 		}
 		if ( 'raw' === $f['scope'] && array() !== $run['raw']['own_copy'] ) {
 			$ids = array_keys( $run['raw']['own_copy'] );
@@ -1250,6 +1328,24 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	}
 
 	/**
+	 * SQL that keeps a scan to the posts post_ids names; '' without post_ids.
+	 *
+	 * @param string $col  Column of the post id.
+	 * @param array  $f    Flags.
+	 * @param array  $args Prepared-statement arguments (appended, by reference).
+	 * @return string Fragment starting with " AND ", or ''.
+	 */
+	protected static function post_ids_sql( $col, array $f, &$args ) {
+		if ( empty( $f['post_ids'] ) ) {
+			return '';
+		}
+		foreach ( $f['post_ids'] as $id ) {
+			$args[] = (int) $id;
+		}
+		return " AND {$col} IN (" . implode( ',', array_fill( 0, count( $f['post_ids'] ), '%d' ) ) . ')';
+	}
+
+	/**
 	 * The direct reader's rule for a post row, plus the writer's: read_post
 	 * and edit_post, and for a revision edit_post on its parent as well —
 	 * raw_content_allowed() hands a revision's text only to someone who may
@@ -1261,6 +1357,12 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	protected static function post_row_allowed( $row ) {
 		$id   = (int) $row['ID'];
 		$type = (string) $row['post_type'];
+		// post_ids: a post the call does not name is not touched (behind the
+		// SQL filter, for every scan that asks here).
+		$only = isset( self::$run['f']['post_ids'] ) ? (array) self::$run['f']['post_ids'] : array();
+		if ( array() !== $only && ! in_array( $id, $only, true ) ) {
+			return false;
+		}
 		// Defence in depth behind the SQL exclusion: an internal type, or a
 		// revision of one, is never rewritten.
 		if ( self::internal_post_type( $type ) || ( 'revision' === $type && self::internal_post_type( (string) get_post_type( (int) $row['post_parent'] ) ) ) ) {
@@ -1827,6 +1929,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		// Revisions are never written by a writer; internal types never enter.
 		$where = "p.post_status NOT IN ('auto-draft','trash') AND p.post_type <> 'revision'";
 		$where .= self::internal_post_type_sql( 'p.post_type', $args );
+		$where .= self::post_ids_sql( 'p.ID', $f, $args );
 		if ( $f['type_applies'] ) {
 			$where .= ' AND p.post_type = %s';
 			$args[] = $f['type'];
@@ -2138,6 +2241,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			$where .= " AND post_type <> 'revision'";
 		}
 		$where .= self::internal_post_type_sql( 'post_type', $args );
+		$where .= self::post_ids_sql( 'ID', $f, $args );
 		if ( $f['type_applies'] ) {
 			$where .= ' AND post_type = %s';
 			$args[] = $f['type'];
@@ -2439,6 +2543,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		foreach ( self::META_KEYS_WITH_OWN_WRITER as $key ) {
 			$args[] = $key;
 		}
+		$where .= self::post_ids_sql( 'pm.post_id', $f, $args );
 
 		// Page-builder keys (markup or code the builder prints) take the
 		// capability the builder's own save path takes. A protected key that
@@ -2609,7 +2714,10 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			$args[] = $widget_name;
 		}
 
-		$handler = static function ( $row ) use ( $engine, $f, &$res ) {
+		// The rows to change, collected first: their undo point is recorded
+		// before any of them is written (write_options()).
+		$collect = array();
+		$handler = static function ( $row ) use ( $engine, &$res, &$collect ) {
 			$name = (string) $row['option_name'];
 			// A name update_option() would trim is not this row's name: writing
 			// it would land on another row. Such a row is left alone.
@@ -2645,20 +2753,96 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 					'hits'   => $hits,
 				);
 			}
-			if ( $f['apply'] ) {
-				// update_option() re-serializes, keeps the autoload flag and
-				// maintains the options cache.
-				if ( update_option( $name, $new ) ) {
-					$res['changed']++;
-				} else {
-					self::add_note( $res, 'update_option returned false for "' . $name . '" (a sanitize filter may have rejected the value).' );
-				}
-			}
+			$collect[] = array(
+				'name' => $name,
+				'id'   => (int) $row['option_id'],
+				'raw'  => (string) $row['option_value'],
+				'new'  => $new,
+			);
 			return true;
 		};
 
 		self::scan_by_id( "SELECT option_id, option_name, option_value FROM {$wpdb->options}", 'option_id', 'option_id', $where, $args, array( 'option_value' ), $handler, $engine, $f, $res, 'options' );
+		if ( $f['apply'] && array() !== $collect ) {
+			self::write_options( $collect, $f, $res );
+		}
 		return $res;
+	}
+
+	/**
+	 * Write the option rows a replace found, after their undo point: one point
+	 * (kind option_rows) with the old value of every row, recorded before the
+	 * first row is written. Without it nothing is written, unless undo is
+	 * switched off on the site or allow_without_undo lets a point over the
+	 * size limit go. A row whose stored value changed since the scan read it
+	 * is left as it is.
+	 *
+	 * @param array $collect Rows: name, id, raw (the stored value read), new.
+	 * @param array $f       Flags.
+	 * @param array $res     Table result (by reference).
+	 */
+	private static function write_options( array $collect, array $f, array &$res ) {
+		global $wpdb;
+		$snaps = array();
+		foreach ( $collect as $c ) {
+			$snap = AB_MCP_Undo::option_snapshot( $c['name'] );
+			if ( ! is_array( $snap ) || empty( $snap['existed'] ) || $snap['name'] !== $c['name'] ) {
+				self::add_note( $res, 'The option "' . $c['name'] . '" could not be read for its undo point; it was not written. Try again.' );
+				continue;
+			}
+			$snaps[ $c['name'] ] = $snap;
+		}
+		if ( array() === $snaps ) {
+			return;
+		}
+		$names = array_keys( $snaps );
+		$token = AB_MCP_Undo::record_result(
+			array(
+				'tool'    => 'wp_search_replace',
+				'cap'     => 'manage_options',
+				'kind'    => 'option_rows',
+				'summary' => sprintf( '%d options: %s', count( $names ), implode( ', ', array_slice( $names, 0, 5 ) ) . ( count( $names ) > 5 ? ', …' : '' ) ),
+				'items'   => count( $names ),
+				'data'    => array_values( $snaps ),
+			)
+		);
+		if ( is_wp_error( $token ) ) {
+			$code = $token->get_error_code();
+			$off  = 'ab_mcp_undo_disabled' === $code;
+			$size = 'ab_mcp_undo_too_large' === $code && $f['allow_without_undo'];
+			if ( ! $off && ! $size ) {
+				self::$run['warnings'][] = sprintf(
+					/* translators: %s: why the undo point could not be recorded */
+					__( 'The option rows were not written: their undo point could not be recorded (%s). Try again; allow_without_undo=true writes them without a way back where the undo point is only too large.', 'alphabridge-mcp' ),
+					$token->get_error_message()
+				);
+				return;
+			}
+			self::$run['warnings'][] = $off
+				? __( 'Undo is switched off on this site: the option rows were written without an undo point.', 'alphabridge-mcp' )
+				: __( 'The option rows were written without an undo point, as allow_without_undo asked: it would have been over the size limit.', 'alphabridge-mcp' );
+			$token = null;
+		}
+		self::$run['options_token'] = $token;
+		foreach ( $collect as $c ) {
+			if ( ! isset( $snaps[ $c['name'] ] ) ) {
+				continue;
+			}
+			// Still the value the scan read? Otherwise somebody changed it in
+			// between, and the replacement was made on the old value.
+			$now = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_id = %d", $c['id'] ) ); // phpcs:ignore WordPress.DB
+			if ( null === $now || (string) $now !== $c['raw'] ) {
+				self::add_note( $res, 'The option "' . $c['name'] . '" changed while this call ran; it was not written. Run the call again.' );
+				continue;
+			}
+			// update_option() re-serializes, keeps the autoload flag and
+			// maintains the options cache.
+			if ( update_option( $c['name'], $c['new'] ) ) {
+				$res['changed']++;
+			} else {
+				self::add_note( $res, 'update_option returned false for "' . $c['name'] . '" (a sanitize filter may have rejected the value).' );
+			}
+		}
 	}
 
 	/**

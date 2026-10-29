@@ -49,7 +49,11 @@ function get_post_type( $p ) { return isset( $GLOBALS['t_bulk_posts'][ (int) $p 
 function get_post( $id ) { return isset( $GLOBALS['t_bulk_posts'][ (int) $id ] ) ? (object) ( array( 'ID' => (int) $id ) + $GLOBALS['t_bulk_posts'][ (int) $id ] ) : null; }
 // As WordPress resolves it: a file stored as "inherit" without a parent reads as "publish".
 function get_post_status( $id ) { $p = get_post( $id ); if ( ! $p ) { return false; } return ( 'attachment' === $p->post_type && 'inherit' === $p->post_status && 0 === (int) $p->post_parent ) ? 'publish' : $p->post_status; }
-class AB_MCP_Undo { public static function record( array $e ) { $GLOBALS['t_undo'][] = $e; return 'undo-token'; } }
+class AB_MCP_Undo {
+	public static function record( array $e ) { $GLOBALS['t_undo'][] = $e; return 'undo-token'; }
+	public static function option_snapshot( $n ) { return array( 'name' => $n, 'value' => 'foo', 'autoload' => 'yes', 'existed' => true ); }
+	public static function record_result( array $r ) { $r['writes_before'] = count( $GLOBALS['t_opt'] ); $GLOBALS['t_undo_rows'][] = $r; return isset( $GLOBALS['t_undo_fail'] ) ? new WP_Error( $GLOBALS['t_undo_fail'], 'no room' ) : 'undo_opt'; }
+}
 function get_current_user_id() { return 7; }
 function registered_meta_key_exists( $type, $key, $subtype = '' ) { return false; }
 // Like core: a registered sanitize_callback shapes the value before the filter sees it.
@@ -341,6 +345,8 @@ class AB_Test_WPDB {
 	}
 	public function get_var( $q ) {
 		$this->queries[] = $q;
+		// Free 4.10: the value of an option row read again before it is written.
+		if ( false !== strpos( $q, 'SELECT option_value FROM wp_options WHERE option_id = %d' ) ) { return isset( $GLOBALS['t_opt_now'] ) ? $GLOBALS['t_opt_now'] : 'foo'; }
 		// The read-back of a column just written: raw, as the scan read it.
 		foreach ( array( 'SELECT name FROM wp_terms WHERE term_id = %d' => 'name', 'SELECT slug FROM wp_terms WHERE term_id = %d' => 'slug' ) as $needle => $field ) {
 			if ( false !== strpos( $q, $needle ) ) {
@@ -420,7 +426,7 @@ class AB_Test_WPDB {
 				$this->huge_windows[] = array( $lower, $upper );
 				return ( $lower < 9999999 && 9999999 <= $upper ) ? array( array( 'ID' => 9999999, 'post_type' => 'post', 'post_parent' => 0, 'post_content' => 'foo', 'post_title' => '', 'post_excerpt' => '' ) ) : array();
 			}
-			if ( ! empty( $this->served[ $kind ] ) ) { return array(); }
+			if ( ! empty( $this->served[ $kind ] ) && empty( $GLOBALS['t_serve_again'] ) ) { return array(); } // Free 4.10: t_serve_again for the dry run of expected_count
 			$this->served[ $kind ] = true;
 			return $this->rows( $kind );
 		}
@@ -1248,6 +1254,68 @@ $GLOBALS['t_no_manage'] = false;
 // The case for a site without a trash, in a process of its own (see the top).
 exec( 'AB_TEST_NO_TRASH=1 ' . escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( __FILE__ ) . ' 2>&1', $nt_out, $nt_rc );
 ok( 0 === $nt_rc && in_array( 'no-trash: all passed', $nt_out, true ), 'no trash: the case for a site without a trash passes in a process of its own' . ( $nt_rc ? ' — ' . implode( ' | ', array_slice( $nt_out, -4 ) ) : '' ) );
+
+echo "options: an undo point before the first row is written (Free 4.10.0)\n";
+reset_log();
+$GLOBALS['t_undo_rows'] = array();
+$r  = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+$u  = $GLOBALS['t_undo_rows'];
+ok( 1 === count( $u ) && 'option_rows' === $u[0]['kind'] && 'wp_search_replace' === $u[0]['tool'] && 'manage_options' === $u[0]['cap'] && array( 'blogdescription', 'WPLANG' ) === array_column( $u[0]['data'], 'name' ) && 0 === $u[0]['writes_before'], 'one undo point of kind option_rows holds the old value of both rows, and is recorded before the first of them is written' );
+ok( 'undo_opt' === $r['options_undo_token'] && array( array( 'blogdescription', 'bar' ), array( 'WPLANG', 'bar' ) ) === $GLOBALS['t_opt'] && 2 === $r['tables']['options']['changed'], 'the answer names it as options_undo_token, and both rows are written' );
+reset_log();
+$GLOBALS['t_undo_rows'] = array();
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ) ) );
+ok( array() === $GLOBALS['t_undo_rows'] && null === $r['options_undo_token'] && array() === $GLOBALS['t_opt'] && 2 === $r['tables']['options']['matched'], 'a dry run records nothing and writes nothing' );
+reset_log();
+$GLOBALS['t_undo_fail'] = 'ab_mcp_undo_write_failed';
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( array() === $GLOBALS['t_opt'] && 0 === $r['tables']['options']['changed'] && null === $r['options_undo_token'] && false !== strpos( implode( ' ', $r['warnings'] ), 'The option rows were not written' ), 'without its undo point no row is written, and the answer says why and what to do' );
+$GLOBALS['t_undo_fail'] = 'ab_mcp_undo_disabled';
+reset_log();
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( 2 === count( $GLOBALS['t_opt'] ) && null === $r['options_undo_token'] && false !== strpos( implode( ' ', $r['warnings'] ), 'Undo is switched off on this site' ), 'with undo switched off on the site the rows are written, and the answer says there is no undo point' );
+$GLOBALS['t_undo_fail'] = 'ab_mcp_undo_too_large';
+reset_log();
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( array() === $GLOBALS['t_opt'], 'an undo point over the size limit stops the write' );
+reset_log();
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true, 'allow_without_undo' => true ) );
+ok( 2 === count( $GLOBALS['t_opt'] ) && false !== strpos( implode( ' ', $r['warnings'] ), 'as allow_without_undo asked' ), 'unless allow_without_undo lets it go, and then the answer says so' );
+unset( $GLOBALS['t_undo_fail'] );
+reset_log();
+$GLOBALS['t_opt_now'] = 'changed meanwhile';
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true ) );
+ok( array() === $GLOBALS['t_opt'] && 0 === $r['tables']['options']['changed'] && false !== strpos( implode( ' ', $r['tables']['options']['notes'] ), 'changed while this call ran' ), 'a row whose stored value changed after the scan read it is left as it is' );
+unset( $GLOBALS['t_opt_now'] );
+
+echo "post_ids and expected_count (Free 4.10.0)\n";
+reset_log();
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'posts', 'postmeta' ), 'post_ids' => array( 8, '8', 12 ) ) );
+$pq = query_with( 'post_excerpt FROM wp_posts' );
+$mq = query_with( 'p.post_parent FROM wp_postmeta pm' );
+ok( is_array( $r ) && array( 8, 12 ) === $r['flags']['post_ids'] && false !== strpos( $pq, 'AND ID IN (%d,%d)' ) && false !== strpos( $mq, 'AND pm.post_id IN (%d,%d)' ), 'post_ids keeps the posts and postmeta scans to the posts it names, in SQL (an id named twice counts once)' );
+ok( array() === array_diff( array_unique( array_merge( array_column( $r['tables']['posts']['samples'], 'id' ), array_column( $r['tables']['postmeta']['samples'], 'post_id' ) ) ), array( 8, 12 ) ), 'and no row of another post is in the preview' );
+foreach ( array( array(), array( 0 ), array( -3 ), array( 'x' ), array( 1.5 ), 'not a list', array( array( 1 ) ), range( 1, 501 ) ) as $bad ) {
+	$e = $SR( array( 'search' => 'foo', 'post_ids' => $bad ) );
+	ok( is_wp_error( $e ) && 'ab_mcp_bad_post_ids' === $e->get_error_code(), 'post_ids refused: ' . json_encode( $bad ) );
+}
+$e = $SR( array( 'search' => 'foo', 'post_ids' => array( 8 ), 'tables' => array( 'posts', 'options' ) ) );
+ok( is_wp_error( $e ) && 'ab_mcp_post_ids_tables' === $e->get_error_code() && false !== strpos( $e->get_error_message(), 'post_ids' ), 'post_ids with options or terms is refused, with the way' );
+reset_log();
+$dry = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ) ) );
+reset_log();
+$e = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true, 'expected_count' => $dry['totals']['matched'] + 1 ) );
+ok( is_wp_error( $e ) && 'ab_mcp_expected_count' === $e->get_error_code() && array() === $GLOBALS['t_opt'] && false !== strpos( $e->get_error_message(), 'finds ' . $dry['totals']['matched'] . ' matching rows now, not the ' . ( $dry['totals']['matched'] + 1 ) ), 'expected_count that does not fit: nothing written, and the answer names what was found: ' . $e->get_error_message() );
+reset_log();
+$GLOBALS['t_serve_again'] = true; // the dry run inside reads the table once more
+$r = $SR( array( 'search' => 'foo', 'replace' => 'bar', 'tables' => array( 'options' ), 'apply' => true, 'expected_count' => $dry['totals']['matched'] ) );
+unset( $GLOBALS['t_serve_again'] );
+ok( is_array( $r ) && 2 === count( $GLOBALS['t_opt'] ) && $dry['totals']['matched'] === $r['flags']['expected_count'], 'expected_count that fits: written, and echoed in flags' );
+foreach ( array( -1, 'x', 1.5, true, array() ) as $bad ) {
+	$e = $SR( array( 'search' => 'foo', 'expected_count' => $bad, 'apply' => true ) );
+	ok( is_wp_error( $e ) && 'ab_mcp_bad_expected_count' === $e->get_error_code(), 'expected_count refused: ' . json_encode( $bad ) );
+}
+reset_log();
 
 echo $fail ? "FAILED: $fail\n" : "search-replace-guards-test: all passed\n";
 exit( $fail ? 1 : 0 );
