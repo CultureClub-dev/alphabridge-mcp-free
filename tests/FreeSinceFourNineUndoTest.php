@@ -478,6 +478,11 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( array( array( 'ref' => '30:post_parent', 'reason' => 'forbidden' ) ), $dry['blocked'] );
 		AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
 		self::assertSame( 6, (int) get_post( 30 )->post_parent, 'Not moved to a post the account may no longer edit.' );
+		// And asked again right before the write: access lost after the plan.
+		$m = new \ReflectionMethod( \AB_MCP_Undo_Restore::class, 'restore_post_fields' );
+		$w = $m->invoke( null, array( 'ref' => 30, 'fields' => array( 'post_parent' => 5 ) ) );
+		self::assertInstanceOf( \WP_Error::class, $w );
+		self::assertSame( 6, (int) get_post( 30 )->post_parent );
 	}
 
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {
