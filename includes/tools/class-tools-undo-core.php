@@ -174,14 +174,15 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 				return $plan;
 			}
 			return array(
-				'dry_run'     => true,
-				'token'       => $token,
-				'tool'        => $plan['tool'],
-				'kind'        => $plan['kind'],
-				'summary'     => $claim['entry']['summary'],
-				'would_undo'  => $plan['restorable'],
-				'blocked'     => $plan['blocked'],
-				'note'        => __( 'Nothing was changed. Call wp_undo again without dry_run to apply this.', 'alphabridge-mcp' ),
+				'dry_run'          => true,
+				'token'            => $token,
+				'tool'             => $plan['tool'],
+				'kind'             => $plan['kind'],
+				'summary'          => $claim['entry']['summary'],
+				'would_undo'       => $plan['restorable'],
+				'blocked'          => $plan['blocked'],
+				'already_restored' => isset( $plan['already'] ) ? $plan['already'] : array(),
+				'note'             => __( 'Nothing was changed. Call wp_undo again without dry_run to apply this.', 'alphabridge-mcp' ),
 			);
 		}
 
@@ -214,7 +215,8 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		// and release are ONE nonce-checked operation in the store, so a second
 		// holder can never be raced here.
 		$complete = empty( $res['blocked'] ) && empty( $res['failed'] );
-		$fin      = AB_MCP_Undo::finish_apply( $token, $nonce, $complete );
+		// A partial restore notes what it put back, so a retry does only the rest.
+		$fin = AB_MCP_Undo::finish_apply( $token, $nonce, $complete, $complete ? array() : (array) $res['restored'] );
 		if ( $complete && is_wp_error( $fin ) ) {
 			// The restore has HAPPENED — only the bookkeeping failed. Try once
 			// more; if the point still cannot be taken out, the reservation is

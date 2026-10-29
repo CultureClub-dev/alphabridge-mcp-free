@@ -385,9 +385,12 @@ class AB_MCP_Undo {
 			function () use ( $entry, &$landed ) {
 				$index   = self::read_index();
 				$index[] = $entry;
-				// Expire and cap in the same critical section.
-				$index = self::prune( $index );
-				self::write_index( $index );
+				// Expire and cap in the same critical section. The files of
+				// the points this drops go only once the shorter index is
+				// stored: if the write fails, the old index still lists them,
+				// and a point it lists must keep its snapshot.
+				$sel = self::select_live( $index );
+				self::write_index( $sel['live'] );
 				// Confirm against what is actually STORED, not the local array:
 				// update_option can fail (a database error, a dropped
 				// connection), and the local copy would still contain the entry.
@@ -396,6 +399,11 @@ class AB_MCP_Undo {
 					if ( $e['token'] === $entry['token'] ) {
 						$landed = true;
 						break;
+					}
+				}
+				if ( $landed ) {
+					foreach ( $sel['dropped'] as $e ) {
+						self::payload_delete_entry( $e );
 					}
 				}
 			}
@@ -742,15 +750,22 @@ class AB_MCP_Undo {
 	 * restore overran the 120s window and another request legitimately took the
 	 * point over, the first holder's late call touches nothing and says so.
 	 *
-	 * @param string $token   Token.
-	 * @param string $nonce   The value begin_apply() returned.
-	 * @param bool   $consume Remove the point (true) or just release it.
+	 * A partial restore names what it did put back ($done): the point keeps
+	 * those refs under "done", and the next restore of it leaves them out
+	 * (AB_MCP_Undo_Restore::plan()). Without that, retrying the rest wrote the
+	 * restored items back once more, over whatever had changed them since.
+	 *
+	 * @param string   $token   Token.
+	 * @param string   $nonce   The value begin_apply() returned.
+	 * @param bool     $consume Remove the point (true) or just release it.
+	 * @param string[] $done    On a release: the refs this restore put back.
 	 * @return true|WP_Error true only when the requested outcome is STORED.
 	 */
-	public static function finish_apply( $token, $nonce, $consume ) {
+	public static function finish_apply( $token, $nonce, $consume, $done = array() ) {
 		$result = true;
+		$done   = array_values( array_map( 'strval', array_filter( (array) $done, 'is_scalar' ) ) );
 		$locked = self::with_lock(
-			function () use ( $token, $nonce, $consume, &$result ) {
+			function () use ( $token, $nonce, $consume, $done, &$result ) {
 				$index = self::read_index();
 				$found = null;
 				foreach ( $index as $i => $e ) {
@@ -776,6 +791,10 @@ class AB_MCP_Undo {
 					unset( $index[ $found ] );
 				} else {
 					unset( $index[ $found ]['applying'], $index[ $found ]['applying_by'] );
+					if ( array() !== $done ) {
+						$before                  = isset( $e['done'] ) && is_array( $e['done'] ) ? $e['done'] : array();
+						$index[ $found ]['done'] = array_values( array_unique( array_merge( $before, $done ) ) );
+					}
 				}
 				self::write_index( array_values( $index ) );
 				// Trust only what is stored: a consumption that did not stick
@@ -785,7 +804,8 @@ class AB_MCP_Undo {
 					if ( $e2['token'] !== $token ) {
 						continue;
 					}
-					if ( $consume || isset( $e2['applying_by'] ) ) {
+					$missing = array_diff( $done, isset( $e2['done'] ) && is_array( $e2['done'] ) ? $e2['done'] : array() );
+					if ( $consume || isset( $e2['applying_by'] ) || array() !== $missing ) {
 						$result = new WP_Error( 'ab_mcp_undo_busy', __( 'The undo index is busy; try again in a moment.', 'alphabridge-mcp' ) );
 					}
 					return;
@@ -1304,6 +1324,18 @@ class AB_MCP_Undo {
 				}
 			}
 		}
+		// What a partial restore already put back (finish_apply()): refs as
+		// strings, a bulk change at most 500 of them.
+		if ( array_key_exists( 'done', $e ) ) {
+			if ( ! is_array( $e['done'] ) || count( $e['done'] ) > 1000 ) {
+				return false;
+			}
+			foreach ( $e['done'] as $ref ) {
+				if ( ! is_string( $ref ) || strlen( $ref ) > 255 ) {
+					return false;
+				}
+			}
+		}
 		// The state after the change, per post: loc => sha256.
 		if ( array_key_exists( 'after', $e ) ) {
 			if ( ! is_array( $e['after'] ) ) {
@@ -1599,25 +1631,10 @@ class AB_MCP_Undo {
 	}
 
 	/**
-	 * Drop expired entries, cap the ring buffer, then cap the store's total
-	 * size — oldest first in both — deleting the files of everything removed.
-	 *
-	 * @param array $index Index, oldest first.
-	 * @return array
-	 */
-	private static function prune( array $index ) {
-		$sel = self::select_live( $index );
-		foreach ( $sel['dropped'] as $e ) {
-			self::payload_delete_entry( $e );
-		}
-		return $sel['live'];
-	}
-
-	/**
-	 * The rules of prune() without deleting anything: which entries are past
-	 * the undo window or beyond the bounds (count, then total size, oldest
-	 * first in both) and which stay. prune() deletes the dropped ones;
-	 * entries_for() only leaves them out.
+	 * Which entries are past the undo window or beyond the bounds (count,
+	 * then total size, oldest first in both) and which stay, without deleting
+	 * anything. Recording a point deletes the dropped ones once the index
+	 * without them is stored; entries_for() only leaves them out.
 	 *
 	 * @param array $index Index, oldest first.
 	 * @return array{live: array, dropped: array}

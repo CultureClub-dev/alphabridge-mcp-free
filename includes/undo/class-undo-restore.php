@@ -206,13 +206,45 @@ class AB_MCP_Undo_Restore {
 
 		switch ( $p['kind'] ) {
 			case 'post_status':
-				return self::plan_post_status( $tool, $data );
+				return self::without_done( self::plan_post_status( $tool, $data ), $entry );
 			case 'site_settings':
-				return self::plan_site_settings( $tool, $data );
+				return self::without_done( self::plan_site_settings( $tool, $data ), $entry );
 			case 'post_fields':
-				return self::plan_post_fields( $tool, $data );
+				return self::without_done( self::plan_post_fields( $tool, $data ), $entry );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * A plan without the items an earlier, partial restore of the same point
+	 * already put back (AB_MCP_Undo::finish_apply(), "done"): retrying the
+	 * rest must not write those again, over whatever changed them since. They
+	 * are named under "already".
+	 *
+	 * @param array|WP_Error $plan  Plan of the kind.
+	 * @param array          $entry Index entry.
+	 * @return array|WP_Error
+	 */
+	private static function without_done( $plan, array $entry ) {
+		if ( is_wp_error( $plan ) || empty( $entry['done'] ) || ! is_array( $entry['done'] ) ) {
+			return $plan;
+		}
+		$done    = array_map( 'strval', $entry['done'] );
+		$items   = array();
+		$already = array();
+		foreach ( $plan['items'] as $item ) {
+			if ( in_array( (string) $item['ref'], $done, true ) ) {
+				$already[] = $item['ref'];
+				continue;
+			}
+			$items[] = $item;
+		}
+		$plan['items']      = $items;
+		$plan['restorable'] = count( $items );
+		if ( $already ) {
+			$plan['already'] = $already;
+		}
+		return $plan;
 	}
 
 	/**
@@ -260,6 +292,9 @@ class AB_MCP_Undo_Restore {
 			'kind'     => $plan['kind'],
 			'tool'     => $plan['tool'],
 		);
+		if ( ! empty( $plan['already'] ) ) {
+			$out['already_restored'] = $plan['already'];
+		}
 		return $out;
 	}
 

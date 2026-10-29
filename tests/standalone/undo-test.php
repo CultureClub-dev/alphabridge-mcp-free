@@ -1346,6 +1346,25 @@ ok( get_option( AB_MCP_Undo::OPTION, array() ) === $ac_before && 0 === $ac_list[
 ok( false === strpos( $undo_tools_src, 'AB_MCP_Undo::gc()' ), 'AC3 wp_undo_list does not clean up' );
 ok( AB_MCP_Undo::gc() >= 1, 'AC5 gc() still removes the expired point' );
 
+/* ===== AD) Codex 29.10.2026: a failed index write costs no listed point its snapshot */
+
+AB_MCP_Undo::clear_all();
+$GLOBALS['ab_filters']['ab_mcp_undo_inline_max']  = 8;
+$GLOBALS['ab_filters']['ab_mcp_undo_max_entries'] = 1;
+$ad_big  = array( 'blogname' => str_repeat( 'x', 400 ) );
+$ad_keep = AB_MCP_Undo::record( array( 'tool' => 'wp_update_site_settings', 'cap' => 'manage_options', 'kind' => 'site_settings', 'summary' => 'ad1', 'items' => 1, 'data' => $ad_big ) );
+ok( AB_MCP_Undo::valid_token( (string) $ad_keep ) && '' !== (string) ab_entry_of( $ad_keep )['payload'], 'AD1 a point with a snapshot file is recorded' );
+$GLOBALS['ab_optfilter'][ AB_MCP_Undo::OPTION ] = function ( $v, $old ) { return $old; };
+$ad_r = AB_MCP_Undo::record_result( array( 'tool' => 'wp_update_site_settings', 'cap' => 'manage_options', 'kind' => 'site_settings', 'summary' => 'ad2', 'items' => 1, 'data' => $ad_big ) );
+unset( $GLOBALS['ab_optfilter'][ AB_MCP_Undo::OPTION ] );
+ok( is_wp_error( $ad_r ) && 'ab_mcp_undo_index_failed' === $ad_r->get_error_code(), 'AD2 the next point, which would push it out, is refused when the index write fails' );
+$ad_c = AB_MCP_Undo::claim( (string) $ad_keep );
+ok( ! is_wp_error( $ad_c ) && $ad_big === $ad_c['data'], 'AD3 the point the stored index still lists keeps its snapshot and restores' );
+$ad_ok = AB_MCP_Undo::record( array( 'tool' => 'wp_update_site_settings', 'cap' => 'manage_options', 'kind' => 'site_settings', 'summary' => 'ad3', 'items' => 1, 'data' => $ad_big ) );
+ok( AB_MCP_Undo::valid_token( (string) $ad_ok ) && is_wp_error( AB_MCP_Undo::claim( (string) $ad_keep ) ), 'AD4 with the write stored the old point goes, its file with it' );
+unset( $GLOBALS['ab_filters']['ab_mcp_undo_inline_max'], $GLOBALS['ab_filters']['ab_mcp_undo_max_entries'] );
+AB_MCP_Undo::clear_all();
+
 /* ================================================= Result */
 
 printf( "UNDO-TEST: %d passed, %d failed\n", $pass, $fail );

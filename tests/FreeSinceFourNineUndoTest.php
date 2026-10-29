@@ -386,6 +386,35 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertFalse( $out['consumed'], 'A partial undo keeps its token.' );
 	}
 
+	/**
+	 * Codex 29.10.2026: a retry after a partial undo wrote the settings that
+	 * had come back the first time once more, over a later change. The point
+	 * now notes them as done, and the retry puts back only the rest.
+	 */
+	public function testARetryAfterAPartialUndoPutsBackOnlyTheRest(): void {
+		self::settings();
+		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		$first = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
+		self::assertSame( array( 'blogname' ), $first['restored'] );
+		self::assertSame( 'blogdescription', $first['failed'][0]['ref'] );
+		self::assertFalse( $first['consumed'], 'The point stays for the rest.' );
+		self::assertSame( 'Titel alt', get_option( 'blogname' ) );
+
+		update_option( 'blogname', 'Später geändert' );
+		$dry = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'], 'dry_run' => true ) );
+		self::assertSame( 1, $dry['would_undo'] );
+		self::assertSame( array( 'blogname' ), $dry['already_restored'] );
+
+		$second = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		self::assertSame( array( 'blogdescription' ), $second['restored'] );
+		self::assertSame( array( 'blogname' ), $second['already_restored'] );
+		self::assertTrue( $second['consumed'] );
+		self::assertSame( 'Tag alt', get_option( 'blogdescription' ) );
+		self::assertSame( 'Später geändert', get_option( 'blogname' ), 'The later change stays.' );
+	}
+
 	public function testAContentTokenCannotUndoSiteSettings(): void {
 		self::settings();
 		$res = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu' ) );

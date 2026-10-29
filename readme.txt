@@ -8,7 +8,7 @@ Stable tag: 4.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect Claude, ChatGPT and other AI agents to WordPress. Free MCP server with undo, for posts, media, shop and SEO. Up to 10 sites in one chat.
+Connect Claude, ChatGPT and other AI agents to WordPress. Free MCP server for posts, media, comments and SEO. No account, up to 10 sites in one chat.
 
 == Description ==
 

@@ -379,6 +379,29 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertStringContainsString( 'still stored', $r['message'] );
 	}
 
+	/**
+	 * Codex 29.10.2026: a sidebar map a filter turned down was reported as
+	 * done. Now it is read back: adding takes the settings back, deleting
+	 * leaves them, and both say so.
+	 */
+	public function testASidebarMapThatIsNotStoredIsNoSuccess(): void {
+		add_filter( 'pre_update_option_sidebars_widgets', static fn( $value, $old ) => $old, 10, 2 );
+		try {
+			$before = get_option( 'widget_text' );
+			$r      = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+			self::assertSame( 'ab_mcp_write_failed', self::code( $r ) );
+			self::assertStringContainsString( 'settings were taken back', $r->get_error_message() );
+			self::assertSame( $before, get_option( 'widget_text' ), 'No settings without a place in a sidebar.' );
+
+			$r = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) );
+			self::assertSame( 'ab_mcp_write_failed', self::code( $r ) );
+			self::assertArrayHasKey( 9, get_option( 'widget_text' ), 'The settings stay while the sidebar still names the widget.' );
+		} finally {
+			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
+		}
+		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ), 'Without the filter as before.' );
+	}
+
 	/* ---------------------------------------------------- delete a widget */
 
 	public function testADeletedWidgetLeavesItsSidebarAndItsRow(): void {
