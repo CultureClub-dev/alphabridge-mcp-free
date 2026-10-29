@@ -2,7 +2,8 @@
 /**
  * Undo tools: list, apply and discard the undo points that tools record
  * before they change something (wp_update_post, wp_bulk_update_status,
- * wp_update_site_settings).
+ * wp_update_site_settings, and for page-builder pages
+ * wp_update_builder_element and wp_search_replace).
  *
  * The tools here deliberately hold no security logic of their own. Ownership
  * and expiry live in AB_MCP_Undo, and every permission decision lives in
@@ -34,7 +35,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_undo_list',
 			array(
-				'description' => 'List the account\'s own undo points: the snapshots that wp_update_post, wp_bulk_update_status and wp_update_site_settings took before they changed something. Returns undo_points, newest first, each with token, tool, kind, summary, items, bytes, created_at, expires_at and reversible (false, with a reason, where this connection may not act on it), plus count and ttl_days. Only the account\'s own undo points are visible. They expire after the undo window of this site, at most 7 days (the result reports it as ttl_days), and the store keeps a bounded number and size of points (by default the newest 50 and 100 MB in total), dropping the oldest first. Listing changes nothing: points past these limits are left out of the list and removed the next time a point is recorded. wp_undo restores a point; wp_undo_discard drops one. With undo switched off on the site, the answer says so.',
+				'description' => 'List the account\'s own undo points: the snapshots that wp_update_post, wp_bulk_update_status, wp_update_site_settings, wp_update_builder_element and wp_search_replace (page-builder pages) took before they changed something. Returns undo_points, newest first, each with token, tool, kind, summary, items, bytes, created_at, expires_at and reversible (false, with a reason, where this connection may not act on it), plus count and ttl_days. Only the account\'s own undo points are visible. They expire after the undo window of this site, at most 7 days (the result reports it as ttl_days), and the store keeps a bounded number and size of points (by default the newest 50 and 100 MB in total), dropping the oldest first. Listing changes nothing: points past these limits are left out of the list and removed the next time a point is recorded. wp_undo restores a point; wp_undo_discard drops one. With undo switched off on the site, the answer says so.',
 				'capability'  => 'read',
 				'readonly'    => true,
 				'inputSchema' => array(
@@ -50,7 +51,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_undo',
 			array(
-				'description' => 'Reverse one earlier change using its undo token (from the "undo" field of the original result, or from wp_undo_list): the fields of a post changed with wp_update_post, the statuses wp_bulk_update_status set, or the site settings changed with wp_update_site_settings. dry_run=true shows exactly what would be restored and what refused, without changing anything; wp_undo_discard drops a point without restoring it. Undoing needs the same permission as the original action, and each item is re-checked against the CURRENT state, so a post this account may no longer edit is reported as blocked rather than restored. A fully successful undo consumes the token. A partial one consumes it too and returns rest_token, a new undo point with only what did not come back, so a later call retries just that; where nothing came back, the token is kept. Afterwards the page caches of the supported caching plugins are asked to purge the restored posts, and after an undo of site settings every page of this site; page_cache_purged lists them, page_cache_skipped names a cache left out on a multisite network and why.',
+				'description' => 'Reverse one earlier change using its undo token (from the "undo" field of the original result, or from wp_undo_list): the fields of a post changed with wp_update_post, the statuses wp_bulk_update_status set, the site settings changed with wp_update_site_settings, or the page-builder pages wp_update_builder_element and wp_search_replace changed. dry_run=true shows exactly what would be restored and what refused, without changing anything; wp_undo_discard drops a point without restoring it. Undoing needs the same permission as the original action, and each item is re-checked against the CURRENT state, so a post this account may no longer edit is reported as blocked rather than restored. A fully successful undo consumes the token. A partial one consumes it too and returns rest_token, a new undo point with only what did not come back, so a later call retries just that; where nothing came back, the token is kept. Afterwards the page caches of the supported caching plugins are asked to purge the restored posts, and after an undo of site settings every page of this site; page_cache_purged lists them, page_cache_skipped names a cache left out on a multisite network and why.',
 				'open_world'  => true, // restores published content and settings.
 				'capability'  => 'read',
 				'inputSchema' => array(
@@ -58,6 +59,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 					'properties' => array(
 						'token'   => array( 'type' => 'string', 'description' => 'The undo token, e.g. undo_1a2b..., from the undo field of the original result or from wp_undo_list.' ),
 						'dry_run' => array( 'type' => 'boolean', 'description' => 'true returns what the undo would restore and changes nothing. Default false.' ),
+						'force'   => array( 'type' => 'boolean', 'description' => 'Page-builder undo points only: true restores a page even where it was changed after the change being undone, which throws that later change away. Default false: such a page is reported as blocked (changed_since).' ),
 					),
 					'required'   => array( 'token' ),
 				),
@@ -233,22 +235,50 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 		$consume    = $complete;
 		$rest_token = null;
 		if ( ! $complete ) {
-			$rest = AB_MCP_Undo_Restore::remaining( $claim['entry'], $claim['data'], $res );
+			$rest = AB_MCP_Undo_Restore::remaining( $claim['entry'], $claim['data'], $res, $opts['parts'] );
 			if ( null !== $rest ) {
-				$e    = $claim['entry'];
-				$made = AB_MCP_Undo::record_result(
-					array(
-						'tool'       => (string) $e['tool'],
-						'cap'        => (string) $e['cap'],
-						'kind'       => (string) $e['kind'],
-						'summary'    => (string) $e['summary'],
-						'items'      => isset( $rest['fields'] ) ? 1 : count( (array) $rest ),
-						'data'       => $rest,
-						'expires_at' => AB_MCP_Undo::expires_of( $e ),
-						'created_at' => (int) $e['created_at'],
-						'replaces'   => $token,
-					)
+				$e   = $claim['entry'];
+				$rec = array(
+					'tool'       => (string) $e['tool'],
+					'cap'        => (string) $e['cap'],
+					'kind'       => (string) $e['kind'],
+					'summary'    => (string) $e['summary'],
+					'items'      => (int) $rest['items'],
+					'data'       => $rest['data'],
+					'expires_at' => AB_MCP_Undo::expires_of( $e ),
+					'created_at' => (int) $e['created_at'],
+					'replaces'   => $token,
 				);
+				if ( ! empty( $rest['after'] ) ) {
+					$rec['after'] = $rest['after'];
+				}
+				$made = AB_MCP_Undo::record_result( $rec );
+				// The parts of a page-builder point go on as parts: each was
+				// measured on its own when it was recorded.
+				foreach ( ( ! is_wp_error( $made ) && ! empty( $rest['parts'] ) ) ? $rest['parts'] : array() as $part ) {
+					$added = AB_MCP_Undo::append_part(
+						(string) $made,
+						array(
+							'kind'    => (string) $e['kind'],
+							'summary' => (string) $e['summary'],
+							'items'   => count( (array) $part['posts'] ),
+							'data'    => $part,
+						)
+					);
+					if ( is_wp_error( $added ) ) {
+						// A rest without all its parts is no rest: it goes, and
+						// if it cannot (the index busy), the answer names it
+						// so it can be discarded by hand.
+						if ( is_wp_error( AB_MCP_Undo::discard( (string) $made ) ) ) {
+							usleep( 150000 );
+							if ( is_wp_error( AB_MCP_Undo::discard( (string) $made ) ) ) {
+								$res['incomplete_rest_token'] = (string) $made;
+							}
+						}
+						$made = $added;
+						break;
+					}
+				}
 				if ( is_wp_error( $made ) ) {
 					$res['warning'] = sprintf(
 						/* translators: %s: why the rest could not be kept */

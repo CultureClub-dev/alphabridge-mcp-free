@@ -165,6 +165,8 @@ final class AB_MCP_Plugin {
 			'plugins-themes-list',
 			'shop',
 			'undo-core',
+			'builder-write',
+			'search-replace',
 		);
 
 		foreach ( $files as $file ) {
@@ -198,6 +200,9 @@ final class AB_MCP_Plugin {
 			'AB_MCP_Tools_Shop'                => array( 'woocommerce', __( 'WooCommerce', 'alphabridge-mcp' ) ),
 			// Free since 4.9.0, the group as in Pro.
 			'AB_MCP_Tools_Undo_Core'           => array( 'undo', __( 'Undo', 'alphabridge-mcp' ) ),
+			// Free since 4.10.0, the groups as in Pro.
+			'AB_MCP_Tools_Builder_Write'       => array( 'builders', __( 'Page builders', 'alphabridge-mcp' ) ),
+			'AB_MCP_Tools_Search_Replace'      => array( 'search', __( 'Search & Bulk Actions', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {

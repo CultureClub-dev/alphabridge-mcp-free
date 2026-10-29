@@ -57,6 +57,11 @@ class AB_MCP_Undo_Restore {
 			'wp_bulk_update_status'   => array( 'kind' => 'post_status',   'cap' => 'edit_others_posts' ),
 			'wp_update_site_settings' => array( 'kind' => 'site_settings', 'cap' => 'manage_options' ),
 			'wp_update_post'          => array( 'kind' => 'post_fields',   'cap' => 'edit_posts' ),
+			// Page builders (free since 4.10.0): edit_post per post is asked by
+			// the plan, on top of the tool's capability; a point of a raw
+			// replace also needs unfiltered_html (AB_MCP_Undo_Builder::plan()).
+			'wp_update_builder_element' => array( 'kind' => 'builder_data', 'cap' => 'edit_posts' ),
+			'wp_search_replace'         => array( 'kind' => 'builder_data', 'cap' => 'manage_options' ),
 		);
 	}
 
@@ -186,7 +191,8 @@ class AB_MCP_Undo_Restore {
 	 *
 	 * @param array $entry Index entry.
 	 * @param mixed $data  Decoded snapshot.
-	 * @param array $opts  Unused by the kinds here; Pro passes page-builder options.
+	 * @param array $opts  force (bool): restore pages changed since (builder_data);
+	 *                     parts (array): decoded snapshots of the point's parts.
 	 * @return array|WP_Error { tool, kind, items[], blocked[], restorable }
 	 */
 	public static function plan( array $entry, $data, array $opts = array() ) {
@@ -211,28 +217,37 @@ class AB_MCP_Undo_Restore {
 				return self::plan_site_settings( $tool, $data );
 			case 'post_fields':
 				return self::plan_post_fields( $tool, $data );
+			case 'builder_data':
+				if ( ! class_exists( 'AB_MCP_Undo_Builder' ) ) {
+					require_once dirname( __DIR__ ) . '/builders/write/load.php';
+				}
+				return AB_MCP_Undo_Builder::plan(
+					$tool,
+					$data,
+					isset( $opts['parts'] ) && is_array( $opts['parts'] ) ? $opts['parts'] : array(),
+					isset( $entry['after'] ) && is_array( $entry['after'] ) ? $entry['after'] : array(),
+					! empty( $opts['force'] )
+				);
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}
 
 	/**
-	 * What a partial restore left: the snapshot of the point with only what
-	 * did not come back, for a new undo point that replaces this one (the
-	 * undo tool records it and uses this one up). A retry then puts back only
-	 * the rest, never again what came back the first time and may have been
-	 * changed since. Null where nothing is left or nothing came back.
-	 *
-	 * Per kind, by the refs of apply(): post_status keeps the posts that did
-	 * not come back; site_settings the settings; post_fields, one post, the
-	 * fields a plan blocked one by one ("<id>:post_status"; a date both of
-	 * its columns), or all of them where the post did not come back at all.
+	 * What a partial restore left out, as the snapshot of a new undo point:
+	 * the items that were blocked or failed, and of a post whose fields came
+	 * back only in part, the fields left out. null where nothing came back or
+	 * nothing is left. A point of one item (an option, a file, a snippet, a
+	 * theme) is never partly restored. wp_undo records it in place of the
+	 * point it came from, so a retry never writes back what came back already
+	 * — over whatever changed it since.
 	 *
 	 * @param array $entry Index entry.
-	 * @param mixed $data  Decoded snapshot of the point.
+	 * @param mixed $data  Decoded snapshot.
 	 * @param array $res   Result of apply().
-	 * @return mixed|null The rest, in the form of the kind's snapshot.
+	 * @param array $parts Decoded snapshots of the point's parts (builder_data).
+	 * @return array|null { data, items, after?, parts? }
 	 */
-	public static function remaining( array $entry, $data, array $res ) {
+	public static function remaining( array $entry, $data, array $res, array $parts = array() ) {
 		$restored = isset( $res['restored'] ) ? array_map( 'strval', (array) $res['restored'] ) : array();
 		$open     = array();
 		foreach ( array_merge( (array) ( $res['blocked'] ?? array() ), (array) ( $res['failed'] ?? array() ) ) as $o ) {
@@ -253,17 +268,17 @@ class AB_MCP_Undo_Restore {
 						}
 					)
 				);
-				return array() !== $rest ? $rest : null;
+				return array() !== $rest ? array( 'data' => $rest, 'items' => count( $rest ) ) : null;
 			case 'site_settings':
 				$rest = array_diff_key( $data, array_flip( $restored ) );
-				return array() !== $rest ? $rest : null;
+				return array() !== $rest ? array( 'data' => $rest, 'items' => count( $rest ) ) : null;
 			case 'post_fields':
 				if ( ! isset( $data['id'], $data['fields'] ) || ! is_array( $data['fields'] ) ) {
 					return null;
 				}
 				$id = (string) (int) $data['id'];
 				if ( ! in_array( $id, $restored, true ) ) {
-					return $data;
+					return array( 'data' => $data, 'items' => 1 );
 				}
 				$keep = array();
 				foreach ( $open as $ref ) {
@@ -281,7 +296,47 @@ class AB_MCP_Undo_Restore {
 				}
 				$rest           = $data;
 				$rest['fields'] = $fields;
-				return $rest;
+				return array( 'data' => $rest, 'items' => 1 );
+			case 'builder_data':
+				if ( ! class_exists( 'AB_MCP_Undo_Builder' ) ) {
+					return null;
+				}
+				if ( is_wp_error( AB_MCP_Undo_Builder::items_of( $data, $parts ) ) ) {
+					return null;
+				}
+				// Part by part, as the point was stored: each part was
+				// measured against the limits on its own, and the rest of
+				// all of them together might not fit one snapshot.
+				$snaps = array();
+				$after = array();
+				foreach ( array_merge( array( $data ), $parts ) as $snap ) {
+					$keep = array();
+					foreach ( $snap['posts'] as $item ) {
+						$id = (string) (int) $item['id'];
+						if ( in_array( $id, $restored, true ) ) {
+							continue;
+						}
+						$keep[] = $item;
+						if ( isset( $entry['after'][ $id ] ) && is_array( $entry['after'][ $id ] ) ) {
+							$after[ $id ] = $entry['after'][ $id ];
+						}
+					}
+					if ( array() !== $keep ) {
+						$snaps[] = AB_MCP_Undo_Builder::data( (string) $snap['scope'], $keep );
+					}
+				}
+				if ( array() === $snaps ) {
+					return null;
+				}
+				$first = array_shift( $snaps );
+				// The first counts its own pages; each part adds its own when
+				// it is appended (append_part()), as when it was recorded.
+				return array(
+					'data'  => $first,
+					'parts' => $snaps,
+					'items' => count( $first['posts'] ),
+					'after' => $after,
+				);
 		}
 		return null;
 	}
@@ -347,6 +402,12 @@ class AB_MCP_Undo_Restore {
 		if ( $lost ) {
 			$out['taken_over'] = true;
 		}
+		if ( 'builder_data' === $plan['kind'] && class_exists( 'AB_MCP_Undo_Builder' ) ) {
+			$warnings = AB_MCP_Undo_Builder::take_warnings();
+			if ( array() !== $warnings ) {
+				$out['warnings'] = $warnings;
+			}
+		}
 		return $out;
 	}
 
@@ -364,6 +425,8 @@ class AB_MCP_Undo_Restore {
 			// The settings reach every page: the site's name, tagline, the
 			// number of posts on a list.
 			'site_settings' => 'site',
+			// Raw copies of builder pages: the pages of the posts written.
+			'builder_data'  => 'post',
 		);
 	}
 
@@ -416,7 +479,7 @@ class AB_MCP_Undo_Restore {
 			 * this plugin knows have been asked to purge. Hook it to purge a
 			 * cache it does not know, or to log the restore.
 			 *
-			 * @param string $kind     Undo kind: post_status, post_fields, site_settings (Pro fires it for its kinds too).
+			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data (Pro fires it for its kinds too).
 			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts.
 			 * @param string $tool     The tool whose change was undone.
 			 */
@@ -1260,6 +1323,8 @@ class AB_MCP_Undo_Restore {
 				return static::restore_setting( $item );
 			case 'post_fields':
 				return static::restore_post_fields( $item );
+			case 'builder_data':
+				return AB_MCP_Undo_Builder::restore_planned( $item );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}
