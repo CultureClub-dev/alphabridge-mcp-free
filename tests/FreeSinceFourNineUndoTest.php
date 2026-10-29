@@ -564,6 +564,16 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		update_option( AB_MCP_Undo::OPTION, $index );
 		self::assertFalse( AB_MCP_Undo::hold_apply( $token, $nonce ), 'Run out and not renewed: no more writing.' );
 		delete_option( AB_MCP_Undo::LOCK );
+
+		// The renewal is written but not stored: the same rule.
+		add_filter( 'pre_update_option_' . AB_MCP_Undo::OPTION, static fn( $value, $old ) => $old, 10, 2 );
+		$index[0]['applying'] = time() - 100;
+		$GLOBALS['ab_test_options'][ AB_MCP_Undo::OPTION ] = $index;
+		self::assertTrue( AB_MCP_Undo::hold_apply( $token, $nonce ) );
+		$index[0]['applying'] = time() - AB_MCP_Undo::APPLY_TIMEOUT - 1;
+		$GLOBALS['ab_test_options'][ AB_MCP_Undo::OPTION ] = $index;
+		self::assertFalse( AB_MCP_Undo::hold_apply( $token, $nonce ), 'A renewal that did not stick is no renewal.' );
+		unset( $GLOBALS['ab_test_filters'][ 'pre_update_option_' . AB_MCP_Undo::OPTION ] );
 	}
 
 	public function testATakeoverDuringTheLastItemLeavesTheBookkeepingToTheNewHolder(): void {

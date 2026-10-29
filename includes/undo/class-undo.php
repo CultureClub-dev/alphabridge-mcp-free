@@ -878,9 +878,17 @@ class AB_MCP_Undo {
 					$index = self::read_index();
 					foreach ( $index as $i => $x ) {
 						if ( $mine( $x ) ) {
-							$index[ $i ]['applying'] = time();
+							$now                     = time();
+							$index[ $i ]['applying'] = $now;
 							self::write_index( $index );
-							$held = true;
+							// Trust only what is stored: a renewal that did not
+							// stick holds only while the old reservation runs.
+							wp_cache_delete( self::OPTION, 'options' );
+							foreach ( self::read_index() as $y ) {
+								if ( $mine( $y ) ) {
+									$held = (int) $y['applying'] >= $now || time() - (int) $y['applying'] < self::APPLY_TIMEOUT;
+								}
+							}
 							return;
 						}
 					}
