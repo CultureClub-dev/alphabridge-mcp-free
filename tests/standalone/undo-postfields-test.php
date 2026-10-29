@@ -758,6 +758,7 @@ ok( 1 === $plan['restorable'] && 'ab_mcp_undo_post_changed' === ab_code( $res ) 
 
 /* ================================================== a file is not taken out of the trash together with a new parent */
 reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = true; // the parent put back: the account may edit it
 ab_post( 7, array( 'post_status' => 'publish' ) );
 ab_post( 8, array( 'post_status' => 'private' ) );
 ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'trash', 'post_parent' => 7 ) );
@@ -765,14 +766,20 @@ $res  = AB_MCP_Undo_Restore::apply( $entry, array( 'id' => 5, 'fields' => array(
 $refs = is_wp_error( $res ) ? array() : array_column( $res['blocked'], 'reason', 'ref' );
 ok( ! is_wp_error( $res ) && 1 === $res['undone'] && 'attachment_parent' === ( $refs['5:post_status'] ?? '' ) && 'trash' === ab_table_post( 5 )->post_status && 8 === (int) ab_table_post( 5 )->post_parent && ! in_array( 'untrash', $GLOBALS['ab_seq'], true ), 'parent: a file is not taken out of the trash as "inherit" together with a new parent; the parent goes back, the file stays in the trash' );
 reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = true; // the parent put back: the account may edit it
+ab_post( 8, array( 'post_status' => 'private' ) );
 ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'trash', 'post_parent' => 8 ) );
 $res = AB_MCP_Undo_Restore::apply( $entry, array( 'id' => 5, 'fields' => array( 'post_status' => 'inherit', 'post_parent' => 8 ) ) );
 ok( ! is_wp_error( $res ) && 1 === $res['undone'] && array() === $res['blocked'] && 'inherit' === ab_table_post( 5 )->post_status, 'parent: ... with the parent it keeps, it comes out as before' );
 reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = true; // the parent put back: the account may edit it
+ab_post( 8, array( 'post_status' => 'private' ) );
 ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'trash', 'post_parent' => 7 ) );
 $res = AB_MCP_Undo_Restore::apply( $entry, array( 'id' => 5, 'fields' => array( 'post_status' => 'private', 'post_parent' => 8 ) ) );
 ok( ! is_wp_error( $res ) && 1 === $res['undone'] && array() === $res['blocked'] && 'private' === ab_table_post( 5 )->post_status && 8 === (int) ab_table_post( 5 )->post_parent, 'parent: ... and as "private", which nobody sees on the way, it comes out with the new parent' );
 reset_all();
+$GLOBALS['ab_caps']['edit_post:8'] = true; // the parent put back: the account may edit it
+ab_post( 8, array( 'post_status' => 'private' ) );
 ab_post( 5, array( 'post_type' => 'attachment', 'post_status' => 'private', 'post_parent' => 7 ) );
 $plan = AB_MCP_Undo_Restore::plan( $entry, array( 'id' => 5, 'fields' => array( 'post_status' => 'inherit', 'post_parent' => 8 ) ) );
 ab_table_post( 5 )->post_status = 'trash';
