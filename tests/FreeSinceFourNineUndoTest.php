@@ -419,6 +419,7 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( $old['summary'], $rest['entry']['summary'] );
 		self::assertSame( 1, $rest['entry']['items'] );
 		self::assertSame( $old['expires_at'], $rest['entry']['expires_at'], 'Narrowing does not lengthen the window.' );
+		self::assertSame( $old['created_at'], $rest['entry']['created_at'], 'And the snapshot keeps its age, for a window shortened later.' );
 		self::assertCount( 1, self::stored() );
 
 		update_option( 'blogname', 'Später geändert' );
@@ -449,6 +450,18 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'] );
 		$rest = AB_MCP_Undo::claim( (string) $out['rest_token'] );
 		self::assertLessThanOrEqual( time() + 12 * 3600, $rest['entry']['expires_at'], 'Not a fresh day: the 12 hours the point had left.' );
+	}
+
+	public function testARestPointPushesNoOtherPointOutOfAFullStore(): void {
+		self::settings();
+		add_filter( 'ab_mcp_undo_max_entries', static fn(): int => 2 );
+		$first = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'admin_email' => 'neu@example.test' ) );
+		$res   = AB_MCP_Tools_Options_Settings::update_site_settings( array( 'title' => 'Titel neu', 'tagline' => 'Tag neu' ) );
+		add_filter( 'pre_update_option_blogdescription', static fn( $value, $old ) => $old, 10, 2 );
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		unset( $GLOBALS['ab_test_filters']['pre_update_option_blogdescription'], $GLOBALS['ab_test_filters']['ab_mcp_undo_max_entries'] );
+		self::assertSame( array( (string) $first['undo'], (string) $out['rest_token'] ), array_column( self::stored(), 'token' ), 'The other point stays; the rest takes the place of the old one.' );
+		self::assertSame( array( 'admin_email' => 'alt@example.test' ), AB_MCP_Undo::claim( (string) $first['undo'] )['data'], 'With its snapshot.' );
 	}
 
 	public function testAnUndoThatRestoresNothingKeepsItsPoint(): void {

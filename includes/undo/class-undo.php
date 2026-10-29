@@ -299,7 +299,7 @@ class AB_MCP_Undo {
 	 * not updated (ab_mcp_undo_index_failed). One null for all of them left a
 	 * caller unable to tell "undo is off" from "the disk is full".
 	 *
-	 * @param array $rec { tool, cap, kind, summary, items, data, expires_at? }.
+	 * @param array $rec { tool, cap, kind, summary, items, data, expires_at?, created_at?, replaces? }.
 	 * @return string|WP_Error
 	 */
 	public static function record_result( array $rec ) {
@@ -380,7 +380,9 @@ class AB_MCP_Undo {
 			// What the point takes as stored — what the total limit counts.
 			'stored'     => $stored,
 			'user'       => (int) get_current_user_id(),
-			'created_at' => $now,
+			// The rest of a partial undo keeps the age of its snapshot, so a
+			// window shortened later counts from when it was taken.
+			'created_at' => isset( $rec['created_at'] ) && (int) $rec['created_at'] > 0 && (int) $rec['created_at'] <= $now ? (int) $rec['created_at'] : $now,
 			'expires_at' => $expires,
 			'payload'    => $file,
 			'sha256'     => $sha,
@@ -393,16 +395,36 @@ class AB_MCP_Undo {
 		// be an orphan nothing ever deletes, and the token would be a promise
 		// that cannot be kept. So: confirm the entry actually landed, and clean
 		// up if it did not.
-		$landed = false;
-		$locked = self::with_lock(
-			function () use ( $entry, &$landed ) {
+		$landed   = false;
+		$replaces = isset( $rec['replaces'] ) ? (string) $rec['replaces'] : '';
+		$locked   = self::with_lock(
+			function () use ( $entry, $replaces, &$landed ) {
 				$index   = self::read_index();
 				$index[] = $entry;
 				// Expire and cap in the same critical section. The files of
 				// the points this drops go only once the shorter index is
 				// stored: if the write fails, the old index still lists them,
 				// and a point it lists must keep its snapshot.
-				$sel = self::select_live( $index );
+				// The point this one replaces (the rest of a partial undo)
+				// goes right after: it does not count against the bounds, so
+				// it never pushes out a point of anybody else.
+				$old = array();
+				foreach ( $index as $e ) {
+					if ( '' !== $replaces && $e['token'] === $replaces ) {
+						$old[] = $e;
+					}
+				}
+				$sel = self::select_live(
+					array_values(
+						array_filter(
+							$index,
+							static function ( $e ) use ( $replaces ) {
+								return '' === $replaces || $e['token'] !== $replaces;
+							}
+						)
+					)
+				);
+				$sel['live'] = array_merge( $old, $sel['live'] );
 				self::write_index( $sel['live'] );
 				// Confirm against what is actually STORED, not the local array:
 				// update_option can fail (a database error, a dropped
