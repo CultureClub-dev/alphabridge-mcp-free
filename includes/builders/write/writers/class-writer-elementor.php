@@ -485,7 +485,7 @@ class AB_MCP_Builder_Writer_Elementor extends AB_MCP_Builder_Writer {
 			return new WP_Error( 'ab_mcp_builder_no_search', __( 'The text to find is empty.', 'alphabridge-mcp' ) );
 		}
 		if ( ! class_exists( 'AB_MCP_Replace_Engine' ) ) {
-			require_once AB_MCP_DIR . 'includes/class-replace-engine.php';
+			require_once dirname( __DIR__, 3 ) . '/class-replace-engine.php';
 		}
 		$engine = new AB_MCP_Replace_Engine( (string) $search, (string) $replace, ! empty( $opts['case_insensitive'] ), ! empty( $opts['regex'] ) );
 		if ( isset( $engine->error ) && is_wp_error( $engine->error ) ) {

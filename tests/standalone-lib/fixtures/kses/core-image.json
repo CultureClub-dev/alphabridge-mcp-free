@@ -1,0 +1,7 @@
+{
+    "source": "free core tests/fixtures/builders/core/image.json (integration/free-4.4, 23ce9cb), from alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-core.json (WordPress 7.1.2, measured 30.09.2026), analyse.ziele[3].serialisiert — Bild",
+    "kses": "wp_kses( content, 'post' ) of WordPress 7.0.2 (~/.wp-env/wp-env-wporg-4.0.0-f26facd6/WordPress), run without a database with the default pre_kses filters (wp_pre_kses_less_than, wp_pre_kses_block_attributes), blog_charset UTF-8; measured 02.10.2026",
+    "changed": true,
+    "content": "<!-- wp:image {\"lightbox\":{\"enabled\":true},\"id\":8,\"sizeSlug\":\"large\",\"linkDestination\":\"none\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==\" alt=\"\" class=\"wp-image-8\"/></figure>\n<!-- /wp:image -->",
+    "stored": "<!-- wp:image {\"lightbox\":{\"enabled\":true},\"id\":8,\"sizeSlug\":\"large\",\"linkDestination\":\"none\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==\" alt=\"\" class=\"wp-image-8\" /></figure>\n<!-- /wp:image -->"
+}

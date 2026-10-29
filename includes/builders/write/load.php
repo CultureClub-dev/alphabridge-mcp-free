@@ -12,8 +12,10 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/class-builders.php';
 
+if ( ! function_exists( 'ab_mcp_load_builder_writers' ) ) :
 /**
- * Load the writers once. Idempotent.
+ * Load the writers once. Idempotent. A test that runs wp_search_replace
+ * without the page-builder parts declares its own, returning false.
  *
  * @return bool True once loaded.
  */
@@ -35,11 +37,12 @@ function ab_mcp_load_builder_writers() {
 			require_once $file;
 		}
 	}
-	if ( false === has_filter( 'ab_mcp_builder_write_via', array( 'AB_MCP_Builder_Writers', 'write_via' ) ) ) {
+	if ( function_exists( 'has_filter' ) && false === has_filter( 'ab_mcp_builder_write_via', array( 'AB_MCP_Builder_Writers', 'write_via' ) ) ) {
 		add_filter( 'ab_mcp_builder_write_via', array( 'AB_MCP_Builder_Writers', 'write_via' ), 10, 3 );
 	}
 	$loaded = true;
 	return true;
 }
+endif;
 
 ab_mcp_load_builder_writers();

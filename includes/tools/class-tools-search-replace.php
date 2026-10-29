@@ -12,10 +12,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-require_once __DIR__ . '/class-tools-base.php';
+if ( ! class_exists( 'AB_MCP_Tools_Base', false ) ) {
+	require_once __DIR__ . '/class-tools-base.php';
+}
 require_once dirname( __DIR__ ) . '/class-replace-engine.php';
 require_once dirname( __DIR__ ) . '/class-kses-guard.php';
-require_once dirname( __DIR__ ) . '/class-option-guard.php';
+if ( ! class_exists( 'AB_MCP_Option_Guard', false ) ) {
+	require_once dirname( __DIR__ ) . '/class-option-guard.php';
+}
 require_once dirname( __DIR__ ) . '/builders/write/load.php';
 
 /**
@@ -95,6 +99,45 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	 */
 	const SENSITIVE_META_EXACT   = array( 'token', 'tokens', 'secret', 'secrets', 'password', 'passwords', 'passphrase', 'passphrases', 'passcode', 'passcodes', 'pwd', 'pwds', 'otp', 'otps', 'credential', 'credentials' );
 	const SENSITIVE_META_NEEDLES = array( 'api_key', 'apikey', 'api-key', 'api_token', 'api_secret', 'access_key', 'access_token', 'secret_key', 'secret_token', 'private_key', 'client_secret', 'consumer_key', 'consumer_secret', 'refresh_token', 'auth_token', 'bearer_token', 'license_key', 'oauth', '_token', '_secret', '_password', 'passwd', 'smtp_pass' );
+
+	/**
+	 * Option names update_option() writes elsewhere (wp-includes/option.php,
+	 * $deprecated_keys, WordPress 7.0.2). A stored row under the old name is
+	 * read, but a write lands on the successor — over a current setting.
+	 */
+	const DEPRECATED_OPTION_NAMES = array(
+		'blacklist_keys'    => 'disallowed_keys',
+		'comment_whitelist' => 'comment_previously_approved',
+	);
+
+	/**
+	 * Option names sanitize_option() treats by name (its switch cases,
+	 * wp-includes/formatting.php, WordPress 7.0.2). update_option() runs that
+	 * sanitiser for the exact name only: a stored look-alike such as
+	 * "BlogName" is read by get_option('blogname') under the collation, but
+	 * update_option('BlogName') skips the sanitiser blogname gets.
+	 */
+	const SANITIZED_OPTION_NAMES = array(
+		'admin_email', 'banned_email_domains', 'blog_charset', 'blog_public', 'blogdescription', 'blogname', 'category_base',
+		'close_comments_days_old', 'comment_max_links', 'comments_per_page', 'date_format', 'default_category',
+		'default_comment_status', 'default_email_category', 'default_link_category', 'default_ping_status', 'default_role',
+		'disallowed_keys', 'fileupload_maxk', 'gmt_offset', 'home', 'illegal_names', 'large_size_h', 'large_size_w',
+		'limited_email_domains', 'mailserver_login', 'mailserver_pass', 'mailserver_port', 'mailserver_url',
+		'medium_large_size_h', 'medium_large_size_w', 'medium_size_h', 'medium_size_w', 'moderation_keys', 'new_admin_email',
+		'page_for_posts', 'page_on_front', 'permalink_structure', 'ping_sites', 'posts_per_page', 'posts_per_rss',
+		'rss_excerpt_length', 'site_icon', 'siteurl', 'start_of_week', 'tag_base', 'thread_comments_depth', 'thumbnail_size_h',
+		'thumbnail_size_w', 'time_format', 'timezone_string', 'upload_path', 'users_can_register', 'WPLANG',
+	);
+
+	/**
+	 * Hook prefixes WordPress builds from an option's name (wp-includes/option.php):
+	 * every hook under one of them names an option that is treated by name on
+	 * the write or the read path.
+	 */
+	const OPTION_HOOK_PREFIXES = array(
+		'sanitize_option_', 'pre_update_option_', 'update_option_', 'add_option_', 'pre_delete_option_', 'delete_option_',
+		'pre_option_', 'default_option_', 'option_',
+	);
 
 	/**
 	 * Register wp_search_replace.

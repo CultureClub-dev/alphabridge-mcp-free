@@ -437,7 +437,7 @@ abstract class AB_MCP_Builder_Writer {
 	 */
 	protected function text_engine( $search, $replace, array $opts ) {
 		if ( ! class_exists( 'AB_MCP_Replace_Engine', false ) ) {
-			require_once AB_MCP_DIR . 'includes/class-replace-engine.php';
+			require_once dirname( __DIR__, 2 ) . '/class-replace-engine.php';
 		}
 		$ci    = ! empty( $opts['case_insensitive'] );
 		$regex = ! empty( $opts['regex'] );

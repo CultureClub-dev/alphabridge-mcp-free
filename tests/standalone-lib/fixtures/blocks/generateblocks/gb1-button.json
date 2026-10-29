@@ -1,0 +1,5 @@
+{
+ "source": "alphabridge-docs: docs/recherche/2026-09-30-page-builder-messung/bloecke/out/ergebnis-gb1.json (GenerateBlocks 2.4.1, 1.x blocks, WordPress 7.1.2, measured 30.09.2026), analyse.ziele[2].serialisiert — Button (generateblocks/button)",
+ "measured": true,
+ "content": "<!-- wp:generateblocks/button {\"uniqueId\":\"18ce89a0\",\"hasUrl\":true,\"blockVersion\":4,\"display\":\"inline-flex\",\"spacing\":{\"paddingTop\":\"0.5rem\",\"paddingRight\":\"0.75rem\",\"paddingBottom\":\"0.5rem\",\"paddingLeft\":\"\",\"marginTop\":\"1.5rem\"},\"textColor\":\"#000000\",\"textColorHover\":\"#000000\"} -->\n<a class=\"gb-button gb-button-18ce89a0 gb-button-text\" href=\"#\">Read more</a>\n<!-- /wp:generateblocks/button -->"
+}
