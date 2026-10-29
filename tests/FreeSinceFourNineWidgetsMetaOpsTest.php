@@ -405,6 +405,26 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertArrayNotHasKey( 9, get_option( 'widget_text' ) );
 	}
 
+	public function testWithoutProsGuardOnlyARowTheWidgetsWroteIsTouched(): void {
+		// A row of another plugin that is called widget_<something>: no
+		// _multiwidget mark, so neither the sidebar entry nor the row goes.
+		update_option( 'widget_token', array( 2 => array( 'key' => 'secret' ) ) );
+		$r = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'token-2' ) );
+		self::assertSame( 'ab_mcp_blocked', self::code( $r ) );
+		self::assertSame( 'secret', get_option( 'widget_token' )[2]['key'] );
+		self::assertContains( 'token-2', self::map()['sidebar-1'], 'Asked before the map is touched.' );
+		self::assertSame( 0, ab_test_writes( 'sidebars_widgets' ) );
+		update_option( 'widget_token', 'a text' );
+		self::assertSame( 'ab_mcp_blocked', self::code( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'token-2' ) ) ), 'Nor a row that is no list at all.' );
+
+		// The row the widgets wrote goes as before, and so does an entry of
+		// the map whose row is gone.
+		update_option( 'widget_token', array( 2 => array( 'title' => 'w' ), '_multiwidget' => 1 ) );
+		self::assertSame( array( 'deleted' => true, 'id' => 'token-2' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'token-2' ) ) );
+		update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'gone-4' ), 'array_version' => 3 ) );
+		self::assertSame( array( 'deleted' => true, 'id' => 'gone-4' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'gone-4' ) ) );
+	}
+
 	#[RunInSeparateProcess]
 	#[PreserveGlobalState( false )]
 	public function testWithProsOptionGuardAProtectedBaseIsRefusedBeforeAnythingIsTouched(): void {

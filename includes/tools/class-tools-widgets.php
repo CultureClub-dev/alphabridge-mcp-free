@@ -481,9 +481,12 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	 * that it was allowed.
 	 *
 	 * The question is answered by the option guard of AlphaBridge MCP Pro,
-	 * where the option tools are; where it is not loaded, nothing is refused
-	 * here. Writing and adding still need a registered widget type of exactly
-	 * that base (sanitize_widget_settings()).
+	 * where the option tools are. Where it is not loaded, a row that is there
+	 * is touched only when the widgets of WordPress wrote it: WP_Widget marks
+	 * every row it saves with _multiwidget (WP_Widget::save_settings()), and a
+	 * row of another plugin that happens to be called widget_<something>
+	 * carries no such mark. Writing and adding still need a registered widget
+	 * type of exactly that base (sanitize_widget_settings()).
 	 *
 	 * @param string $base Widget base id.
 	 * @return WP_Error|false
@@ -491,6 +494,17 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	private static function widget_option_refused( $base ) {
 		if ( class_exists( 'AB_MCP_Tools_Options_Settings_Pro' ) && method_exists( 'AB_MCP_Tools_Options_Settings_Pro', 'option_write_refused' ) ) {
 			return AB_MCP_Tools_Options_Settings_Pro::option_write_refused( 'widget_' . $base );
+		}
+		$row = get_option( 'widget_' . $base, null );
+		if ( null !== $row && ! ( is_array( $row ) && ! empty( $row['_multiwidget'] ) ) ) {
+			return new WP_Error(
+				'ab_mcp_blocked',
+				sprintf(
+					/* translators: %s: option name */
+					__( 'The option %s was not written by the widgets of WordPress, so it is not changed here; nothing was changed. wp_get_widgets lists the widgets and their ids.', 'alphabridge-mcp' ),
+					'widget_' . $base
+				)
+			);
 		}
 		return false;
 	}

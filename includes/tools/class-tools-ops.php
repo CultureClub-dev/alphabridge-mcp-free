@@ -57,7 +57,7 @@ class AB_MCP_Tools_Ops extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_cleanup_transients',
 			array(
-				'description' => 'Delete the expired transients: every transient whose _transient_timeout_ row in the options table has passed is deleted through WordPress (value and timeout). Transients not yet expired and site transients (_site_transient_) are left alone. Returns deleted, the number of expired transients found and handed to WordPress for deletion. With a persistent object cache WordPress deletes in the cache only, so the old option rows can remain. Requires manage_options. wp_delete_transient removes one by name.',
+				'description' => 'Delete the expired transients: every transient whose _transient_timeout_ row in the options table has passed is deleted through WordPress (value and timeout). Transients not yet expired and site transients (_site_transient_) are left alone. Returns deleted, the number of expired transients found and handed to WordPress for deletion. With a persistent object cache WordPress deletes in the cache only, so the old option rows can remain. Requires manage_options.',
 				'capability'  => 'manage_options',
 				'dangerous'   => true,
 				'callback'    => array( __CLASS__, 'cleanup_transients' ),
