@@ -2752,3 +2752,9 @@ msgstr "Das Konto dieser Verbindung darf keine Produkte veröffentlichen, darum 
 
 msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
 msgstr "Das Konto dieser Verbindung darf keine Gutscheine veröffentlichen, darum wurde kein Gutschein angelegt. Jemanden fragen, der Gutscheine veröffentlichen darf, etwa einen Shop-Manager oder einen Administrator."
+
+msgid "The widget was not added: the list of widgets per sidebar was not stored (a filter or the database rejected the write), and its settings were taken back. Use Appearance › Widgets in wp-admin to add it."
+msgstr "Das Widget wurde nicht hinzugefügt: Die Liste der Widgets je Seitenleiste wurde nicht gespeichert (ein Filter oder die Datenbank hat das Schreiben abgelehnt), und seine Einstellungen wurden zurückgenommen. Es in wp-admin unter Design → Widgets hinzufügen."
+
+msgid "The widget was not removed: the list of widgets per sidebar was not stored (a filter or the database rejected the write); its settings were left as they are. Use Appearance › Widgets in wp-admin to remove it."
+msgstr "Das Widget wurde nicht entfernt: Die Liste der Widgets je Seitenleiste wurde nicht gespeichert (ein Filter oder die Datenbank hat das Schreiben abgelehnt); seine Einstellungen blieben, wie sie sind. Es in wp-admin unter Design → Widgets entfernen."

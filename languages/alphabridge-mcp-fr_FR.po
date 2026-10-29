@@ -2752,3 +2752,9 @@ msgstr "Votre compte ne peut pas publier de produits : ce statut n'a donc pas �
 
 msgid "Your account cannot publish coupons, so no coupon was created. Ask someone who may publish coupons, such as a shop manager, or an administrator."
 msgstr "Votre compte ne peut pas publier de codes promo : aucun code promo n'a donc été créé. Demandez à quelqu'un qui peut publier des codes promo, comme un gestionnaire de boutique, ou à un administrateur."
+
+msgid "The widget was not added: the list of widgets per sidebar was not stored (a filter or the database rejected the write), and its settings were taken back. Use Appearance › Widgets in wp-admin to add it."
+msgstr "Le widget n'a pas été ajouté : la liste des widgets par barre latérale n'a pas été enregistrée (un filtre ou la base de données a refusé l'écriture), et ses réglages ont été retirés. Utilisez Apparence › Widgets dans wp-admin pour l'ajouter."
+
+msgid "The widget was not removed: the list of widgets per sidebar was not stored (a filter or the database rejected the write); its settings were left as they are. Use Appearance › Widgets in wp-admin to remove it."
+msgstr "Le widget n'a pas été supprimé : la liste des widgets par barre latérale n'a pas été enregistrée (un filtre ou la base de données a refusé l'écriture) ; ses réglages sont restés tels quels. Utilisez Apparence › Widgets dans wp-admin pour le supprimer."
