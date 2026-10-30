@@ -1477,24 +1477,24 @@ class AB_MCP_Builder_Writer_Elementor extends AB_MCP_Builder_Writer {
 	}
 
 	/**
-	 * Whether one of Elementor's abilities may not run for AlphaBridge: the
-	 * way to allow it, '' when it may run (found in the review of
-	 * 03.10.2026: before, the writer ran them while they were switched off).
-	 * The broker of the tool wp_run_ability decides: Pro's where Pro is
-	 * loaded (its switches under Fine-tuning, a namespace rule, the filter
-	 * ab_mcp_pro_ability_allowed), else this plugin's (approved under
-	 * Fine-tuning, or the filter ab_mcp_ability_allowed; since 4.12.0).
+	 * Whether an administrator switched one of Elementor's abilities off for
+	 * AlphaBridge (Fine-tuning, a namespace rule, or the filter
+	 * ab_mcp_pro_ability_allowed): the way to switch it on, '' when it may
+	 * run (found in the review of 03.10.2026: before, the writer ran them
+	 * while they were switched off). Only Pro's switches count here: the
+	 * approvals of this plugin (4.12.0) are for wp_run_ability, the general
+	 * runner; this writer uses Elementor's abilities inside its own checked
+	 * change with an undo point, as before.
 	 *
 	 * @param string $name Ability.
 	 * @return string
 	 */
 	private static function switched_off( $name ) {
 		$ability = function_exists( 'wp_get_ability' ) ? wp_get_ability( $name ) : null;
-		$broker  = class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ? 'AB_MCP_Pro_Ability_Broker' : 'AB_MCP_Ability_Broker';
-		if ( null === $ability || ! class_exists( $broker, false ) ) {
+		if ( null === $ability || ! class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ) {
 			return '';
 		}
-		$decision = call_user_func( array( $broker, 'decision' ), $ability );
+		$decision = AB_MCP_Pro_Ability_Broker::decision( $ability );
 		return empty( $decision['allowed'] ) ? (string) $decision['how'] : '';
 	}
 

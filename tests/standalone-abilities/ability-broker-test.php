@@ -769,10 +769,12 @@ $GLOBALS['ab_el_rev'] = 91;
 /* ================= writers: which broker the page-builder writers ask */
 
 // The page-builder writers run Elementor's and SiteOrigin's abilities
-// themselves (wp_update_builder_element), and the undo of a draft a call
-// staged asks wp_run_ability's list of copies (locs_of()). The broker of
-// the tool decides: this plugin's where AlphaBridge MCP Pro is not loaded,
-// Pro's where it is, so Pro's customers keep Pro's switches.
+// themselves (wp_update_builder_element), inside their own checked change
+// with an undo point. Only Pro's switches hold them off, as before 4.12.0:
+// this plugin's approvals are for wp_run_ability, the general runner, and a
+// free site without approvals keeps writing atomic Elementor elements.
+// The undo of a draft a call staged asks wp_run_ability's list of copies
+// (locs_of()): this plugin's broker, or Pro's where Pro is loaded.
 if ( 'writers' === $scenario ) {
 	$reflect = static function ( $class, $method ) {
 		$m = new ReflectionMethod( $class, $method );
@@ -786,18 +788,17 @@ if ( 'writers' === $scenario ) {
 	$cc     = $reflect( 'AB_MCP_Undo_Builder', 'created_changes' );
 	ok( false === class_exists( 'AB_MCP_Pro_Ability_Broker', false ) && null !== AB_MCP_Ability_Broker::get( 'siteorigin-panels/layout-update' ), 'WR0 no Pro here; SiteOrigin\'s ability is registered' );
 
-	// Nothing approved: the writers do not run the abilities.
-	$way = $el_off->invoke( null, 'elementor/manage-elements' );
-	ok( false !== strpos( $way, 'The ability "elementor/manage-elements" is not approved for AlphaBridge' ) && ab_way( $way, 'options-general.php?page=alphabridge-mcp#ab-ability-elementor__manage-elements' ), 'WR1 not approved: the Elementor writer does not change atomic elements, and names the way to approve manage-elements: ' . $way );
-	ok( '' !== $el_off->invoke( null, 'elementor/publish-document' ), 'WR1 nor does it publish through publish-document' );
-	ok( null === $so->invoke( null ), 'WR1 the SiteOrigin writer takes the editor\'s way instead of the ability' );
+	// Nothing approved: the writers use the abilities all the same, as in
+	// 4.10.0 and 4.11.0 (an approval is for wp_run_ability only).
+	ok( '' === $el_off->invoke( null, 'elementor/manage-elements' ) && '' === $el_off->invoke( null, 'elementor/publish-document' ), 'WR1 without Pro and without approval the Elementor writer still changes atomic elements and publishes' );
+	ok( $so->invoke( null ) instanceof WP_Ability, 'WR1 the SiteOrigin writer still uses layout-update' );
+	ok( false === AB_MCP_Ability_Broker::decision( AB_MCP_Ability_Broker::get( 'siteorigin-panels/layout-update' ) )['allowed'], 'WR1 while wp_run_ability may not run it: not approved' );
 
-	// Approved: they do.
+	// Neither an approval nor this plugin's filter changes the writers.
 	AB_MCP_Ability_Broker::set_on( array( 'elementor/*', 'siteorigin-panels/layout-update' ) );
-	ok( '' === $el_off->invoke( null, 'elementor/manage-elements' ) && '' === $el_off->invoke( null, 'elementor/publish-document' ), 'WR2 approved (here by the pattern elementor/*): the Elementor writer may use both' );
-	ok( $so->invoke( null ) instanceof WP_Ability, 'WR2 the SiteOrigin writer uses the approved ability' );
+	ok( '' === $el_off->invoke( null, 'elementor/manage-elements' ) && $so->invoke( null ) instanceof WP_Ability, 'WR2 approved: the same' );
 	add_filter( 'ab_mcp_ability_allowed', static function ( $allowed, $name ) { return 'siteorigin-panels/layout-update' === $name ? false : $allowed; }, 10, 2 );
-	ok( null === $so->invoke( null ), 'WR3 the filter of this plugin holds an approved one off for the writer too' );
+	ok( $so->invoke( null ) instanceof WP_Ability, 'WR3 the filter of this plugin is about wp_run_ability; the writer keeps its way' );
 	remove_all_filters( 'ab_mcp_ability_allowed' );
 
 	// The undo of a staged draft: a meta key the draft got since is found

@@ -301,21 +301,20 @@ class AB_MCP_Builder_Writer_SiteOrigin extends AB_MCP_Builder_Settings_Writer {
 	}
 
 	/**
-	 * SiteOrigin's layout-update ability, where it is registered and may run
-	 * for AlphaBridge (measured 02.10.2026: before, the writer used it while
-	 * it was switched off). The broker of the tool wp_run_ability decides:
-	 * Pro's where Pro is loaded (switched off there), else this plugin's
-	 * (not approved; since 4.12.0). Without it, the editor's way.
+	 * SiteOrigin's layout-update ability, where it is registered and not
+	 * switched off for AlphaBridge (measured 02.10.2026: before, the writer
+	 * used it while it was switched off). Only Pro's switches count: the
+	 * approvals of this plugin (4.12.0) are for wp_run_ability, the general
+	 * runner, not for this writer's own checked change.
 	 *
 	 * @return WP_Ability|null
 	 */
 	private static function ability() {
 		$ability = self::registered();
-		$broker  = class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ? 'AB_MCP_Pro_Ability_Broker' : 'AB_MCP_Ability_Broker';
-		if ( null === $ability || ! class_exists( $broker, false ) ) {
+		if ( null === $ability || ! class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ) {
 			return $ability;
 		}
-		$decision = call_user_func( array( $broker, 'decision' ), $ability );
+		$decision = AB_MCP_Pro_Ability_Broker::decision( $ability );
 		return empty( $decision['allowed'] ) ? null : $ability;
 	}
 
