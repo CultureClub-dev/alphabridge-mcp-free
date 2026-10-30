@@ -159,6 +159,16 @@ class AB_MCP_Tool_Registry {
 			$def['group_label'] = $this->current_group['label'];
 		}
 
+		// The five lifecycle tools without a way back confirm whoever registers
+		// them: an older Pro registers its own copies after the core, without
+		// `confirm`, and must not take the confirmation away.
+		if ( ! array_key_exists( 'confirm', $def ) && class_exists( 'AB_MCP_Lifecycle_Confirm' ) ) {
+			$lifecycle = AB_MCP_Lifecycle_Confirm::definition( $name );
+			if ( array() !== $lifecycle ) {
+				$def['confirm'] = $lifecycle;
+			}
+		}
+
 		// A tool whose effect cannot be undone runs only with the token from
 		// its own preview (AB_MCP_Confirm_Token). The schema and the
 		// description say so to every client.

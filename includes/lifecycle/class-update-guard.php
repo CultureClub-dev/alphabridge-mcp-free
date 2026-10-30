@@ -1849,8 +1849,10 @@ class AB_MCP_Update_Guard {
 	 * Does the hold reach WordPress's automatic updates? They run on the main
 	 * site of a network, and the hold is this plugin's filter
 	 * (AB_MCP_Update_Log, hooked in the main plugin file): this plugin has to
-	 * run there, network-wide or on the main site. In Pro, where this came
-	 * from, the plugin asked about was Pro (AB_MCP_PRO_FILE).
+	 * run there, network-wide or on the main site. Pro hooks the same filter on
+	 * the same shared holds (AB_MCP_Pro_Update_Log), so Pro running there counts
+	 * as well: this plugin on a site of the network and Pro on its main site is
+	 * a network whose automatic updates respect the hold.
 	 *
 	 * @return bool
 	 */
@@ -1858,17 +1860,23 @@ class AB_MCP_Update_Guard {
 		if ( ! function_exists( 'is_multisite' ) || ! is_multisite() ) {
 			return true;
 		}
+		$plugins = array();
 		if ( defined( 'AB_MCP_BASENAME' ) ) {
-			$own = (string) AB_MCP_BASENAME;
+			$plugins[] = (string) AB_MCP_BASENAME;
 		} elseif ( defined( 'AB_MCP_FILE' ) ) {
-			$own = plugin_basename( AB_MCP_FILE );
-		} else {
-			return false;
+			$plugins[] = plugin_basename( AB_MCP_FILE );
 		}
-		if ( function_exists( 'is_plugin_active_for_network' ) && is_plugin_active_for_network( $own ) ) {
-			return true;
+		$plugins[] = defined( 'AB_MCP_PRO_FILE' ) ? plugin_basename( AB_MCP_PRO_FILE ) : 'alphabridge-mcp-pro/alphabridge-mcp-pro.php';
+		$main      = (array) get_blog_option( get_main_site_id(), 'active_plugins', array() );
+		foreach ( array_unique( $plugins ) as $plugin ) {
+			if ( function_exists( 'is_plugin_active_for_network' ) && is_plugin_active_for_network( $plugin ) ) {
+				return true;
+			}
+			if ( in_array( $plugin, $main, true ) ) {
+				return true;
+			}
 		}
-		return in_array( $own, (array) get_blog_option( get_main_site_id(), 'active_plugins', array() ), true );
+		return false;
 	}
 
 	/**

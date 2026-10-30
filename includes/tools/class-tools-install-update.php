@@ -326,7 +326,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		}
 		$slug = sanitize_key( self::s( $a, 'slug' ) );
 		if ( '' === $slug ) {
-			return new WP_Error( 'ab_mcp_bad_slug', __( 'A plugin slug is required. It is the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_slug', __( 'A plugin slug is required: pass the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
 
@@ -336,7 +336,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			// an unknown slug with; the person reads it in the site's language.
 			if ( 'plugins_api_failed' === $api->get_error_code() && 'Plugin not found.' === $api->get_error_message() ) {
 				/* translators: %s: plugin slug */
-				return new WP_Error( 'plugins_api_failed', sprintf( __( 'WordPress.org has no plugin with the slug "%s". The slug is the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ), $slug ) );
+				return new WP_Error( 'plugins_api_failed', sprintf( __( 'WordPress.org has no plugin with the slug "%s". Check the slug: it is the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ), $slug ) );
 			}
 			return $api;
 		}
@@ -633,7 +633,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		}
 		$slug = sanitize_key( self::s( $a, 'slug' ) );
 		if ( '' === $slug ) {
-			return new WP_Error( 'ab_mcp_bad_slug', __( 'A theme slug is required. It is the theme\'s name in its wordpress.org address, e.g. "twentytwentyfive".', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_bad_slug', __( 'A theme slug is required: pass the theme\'s name in its wordpress.org address, e.g. "twentytwentyfive".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
 

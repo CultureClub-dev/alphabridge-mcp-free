@@ -167,8 +167,8 @@ ok( ! is_wp_error( $r ) && true === $r['deactivated'] && false === $r['was_activ
 
 echo "install\n";
 $r = AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'no-such-plugin' ) );
-ok( is_wp_error( $r ) && 'plugins_api_failed' === $r->code && 'WordPress.org has no plugin with the slug "no-such-plugin". The slug is the plugin\'s name in its wordpress.org address, e.g. "akismet".' === $r->message, 'an unknown slug: a sentence of its own' );
-$GLOBALS['t_tr'] = array( 'WordPress.org has no plugin with the slug "%s". The slug is the plugin\'s name in its wordpress.org address, e.g. "akismet".' => 'WordPress.org hat kein Plugin mit dem Slug „%s“.' );
+ok( is_wp_error( $r ) && 'plugins_api_failed' === $r->code && 'WordPress.org has no plugin with the slug "no-such-plugin". Check the slug: it is the plugin\'s name in its wordpress.org address, e.g. "akismet".' === $r->message, 'an unknown slug: a sentence of its own' );
+$GLOBALS['t_tr'] = array( 'WordPress.org has no plugin with the slug "%s". Check the slug: it is the plugin\'s name in its wordpress.org address, e.g. "akismet".' => 'WordPress.org hat kein Plugin mit dem Slug „%s“.' );
 $r = AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'no-such-plugin' ) );
 ok( is_wp_error( $r ) && 'WordPress.org hat kein Plugin mit dem Slug „no-such-plugin“.' === $r->message, 'translated on a German site' );
 $GLOBALS['t_tr'] = array();

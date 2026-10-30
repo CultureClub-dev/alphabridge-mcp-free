@@ -439,7 +439,7 @@ final class AnswerWayTest extends TestCase {
 	 * The ways a message can name: a tool or a filter by name, an account to
 	 * connect with, a settings path, a parameter value, or a step to take.
 	 */
-	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|in wp-admin\b|over SFTP\b|[Cc]all (?:it |this tool )?again\b|[Aa]n administrator (?:with|can)\b|the host can\b|[Ff]ix the error\b|recovery mode\b|[Ss]end the (?:plugin or theme|ZIP)\b)/';
+	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b)/';
 
 	/**
 	 * Messages whose way is what they list, or that report rather than refuse.
@@ -450,9 +450,6 @@ final class AnswerWayTest extends TestCase {
 		'ab_mcp_bad_status'         => 'names the statuses it accepts',
 		'ab_mcp_elementor_not_json' => 'a note on a copy that was made, not a refusal',
 		'ab_mcp_elementor_ids'      => 'a note on a copy that was made, not a refusal',
-		// Free since 4.11.0, with the install tools.
-		'ab_mcp_bad_slug'           => 'names the value to pass, with an example',
-		'plugins_api_failed'        => 'names the value to pass, with an example',
 	);
 
 	/**

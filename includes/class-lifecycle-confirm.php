@@ -167,6 +167,16 @@ final class AB_MCP_Lifecycle_Confirm {
 	 * @return array{key:string,shown:array}
 	 */
 	private static function source( array $a ) {
+		// The order the tool takes them in: a session first, then content, then url.
+		if ( isset( $a['session'] ) && is_scalar( $a['session'] ) && '' !== (string) $a['session'] ) {
+			return array(
+				'key'   => 'session:' . (string) $a['session'],
+				'shown' => array(
+					'kind'    => 'session',
+					'session' => (string) $a['session'],
+				),
+			);
+		}
 		if ( isset( $a['content'] ) && is_string( $a['content'] ) && '' !== $a['content'] ) {
 			$hash = hash( 'sha256', $a['content'] );
 			return array(
@@ -185,15 +195,6 @@ final class AB_MCP_Lifecycle_Confirm {
 					'kind' => 'url',
 					'url'  => $a['url'],
 					'note' => __( 'The package is downloaded when the call runs; the token covers the address, not what the address serves.', 'alphabridge-mcp' ),
-				),
-			);
-		}
-		if ( isset( $a['session'] ) && is_scalar( $a['session'] ) && '' !== (string) $a['session'] ) {
-			return array(
-				'key'   => 'session:' . (string) $a['session'],
-				'shown' => array(
-					'kind'    => 'session',
-					'session' => (string) $a['session'],
 				),
 			);
 		}

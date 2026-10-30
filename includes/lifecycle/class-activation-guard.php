@@ -380,7 +380,7 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 			return is_wp_error( $said ) ? self::not_switched_on( $job, $said ) : new WP_Error(
 				'ab_mcp_activation_failed',
 				/* translators: %s: plugin or theme */
-				sprintf( __( 'Not activated: %s is not active after WordPress was asked to activate it, and WordPress gave no reason. Nothing was changed. Activating it in wp-admin shows what WordPress says there.', 'alphabridge-mcp' ), self::named( $job ) )
+				sprintf( __( 'Not activated: %s is not active after WordPress was asked to activate it, and WordPress gave no reason. Nothing was changed. Activate it in wp-admin under Plugins to see what WordPress says there.', 'alphabridge-mcp' ), self::named( $job ) )
 			);
 		}
 		$out             = static::check_after( $job, $check );
@@ -1096,7 +1096,7 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 			'ab_mcp_activation_switched_off',
 			sprintf(
 				/* translators: %s: plugin or theme */
-				__( 'Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Its reason, if it gave one, is shown in wp-admin.', 'alphabridge-mcp' ),
+				__( 'Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one.', 'alphabridge-mcp' ),
 				self::named( $job )
 			)
 		);

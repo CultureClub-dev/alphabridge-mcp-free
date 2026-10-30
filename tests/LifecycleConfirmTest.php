@@ -170,6 +170,26 @@ namespace AlphaBridge\Tests {
 			self::assertStringContainsString( 'not what the address serves', $u['source']['note'] );
 		}
 
+		public function testTheZipSourceIsTheOneTheToolTakesASessionBeforeContentBeforeUrl(): void {
+			$p = ( self::def( 'wp_install_plugin_zip' )['preview'] )( array( 'session' => 'up-7', 'content' => base64_encode( 'PK' ), 'url' => 'https://example.org/x.zip' ) );
+			self::assertSame( 'session', $p['source']['kind'] );
+			$c = ( self::def( 'wp_install_plugin_zip' )['preview'] )( array( 'content' => base64_encode( 'PK' ), 'url' => 'https://example.org/x.zip' ) );
+			self::assertSame( 'content', $c['source']['kind'] );
+		}
+
+		public function testAnyRegistrationOfTheFiveKeepsTheConfirmationAnOlderProIncluded(): void {
+			$r = new \AB_MCP_Tool_Registry();
+			$r->set_current_group( 'lifecycle', 'Lifecycle' );
+			foreach ( array( 'wp_update_core', 'wp_install_plugin_zip', 'wp_install_theme_zip', 'wp_delete_plugin', 'wp_delete_theme' ) as $tool ) {
+				// As Pro up to 4.10 registers them: no confirm key.
+				$r->register( $tool, array( 'description' => 'Pro copy.', 'callback' => static fn(): string => 'ran' ) );
+				self::assertTrue( \AB_MCP_Confirm_Token::required( $r->get( $tool ) ), $tool );
+				self::assertArrayHasKey( 'confirm_token', (array) $r->get( $tool )['inputSchema']['properties'], $tool );
+			}
+			$r->register( 'wp_install_plugin', array( 'description' => 'Pro copy.', 'callback' => static fn(): string => 'ran' ) );
+			self::assertFalse( \AB_MCP_Confirm_Token::required( $r->get( 'wp_install_plugin' ) ) );
+		}
+
 		public function testTheCoreUpdateIsBoundToTheRunningVersionAndTheOfferAskedForAgain(): void {
 			$def = self::def( 'wp_update_core' );
 
