@@ -1017,6 +1017,12 @@ class AB_MCP_REST_Controller {
 			$instructions .= ' wp_search_replace changes stored data across the site (posts, postmeta, options, terms), safe for serialized and JSON values:'
 				. ' always run it as a dry run first and review the per-table preview before apply=true.';
 		}
+		// The abilities of other plugins (free since 4.12.0), while this
+		// plugin's two tools for them are the registered ones; where Pro
+		// registers its own, it adds its own sentence.
+		if ( class_exists( 'AB_MCP_Ability_Switches', false ) && AB_MCP_Ability_Switches::here( $this->registry ) ) {
+			$instructions .= AB_MCP_Ability_Broker::instructions();
+		}
 
 		// Without the tools of AlphaBridge MCP Pro: what is not on this site,
 		// so an assistant can tell the person instead of failing silently.

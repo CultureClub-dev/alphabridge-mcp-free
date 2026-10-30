@@ -105,6 +105,12 @@ AB_MCP_Probe_State::boot();
 // out-of-date copy once it reaches init.
 require_once AB_MCP_DIR . 'includes/lifecycle/class-theme-switch-state.php';
 AB_MCP_Theme_Switch_State::hook();
+// The abilities of other plugins (free since 4.12.0, before in Pro only):
+// the broker behind wp_list_abilities and wp_run_ability, which the
+// page-builder writers ask too, and its approvals in the fine-tuning.
+require_once AB_MCP_DIR . 'includes/abilities/class-ability-broker.php';
+require_once AB_MCP_DIR . 'includes/abilities/class-ability-switches.php';
+AB_MCP_Ability_Switches::hook();
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

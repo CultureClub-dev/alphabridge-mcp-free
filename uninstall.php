@@ -45,6 +45,9 @@ $ab_mcp_options = array(
 	'ab_mcp_pro_update_running',
 	'ab_mcp_pro_update_replaced',
 	'ab_mcp_pro_code_change.lock',
+	// The abilities of other plugins an administrator approved (free since
+	// 4.12.0, a name of its own: Pro keeps its list of switched-off ones).
+	'ab_mcp_abilities_on',
 );
 
 // The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no

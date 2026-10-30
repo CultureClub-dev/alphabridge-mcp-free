@@ -1830,6 +1830,24 @@
 	line-height: 1.55;
 }
 
+/* The approvals of the abilities of other plugins (AB_MCP_Ability_Switches):
+ * the lead, one folding group per plugin, notes. The Pro add-on draws its own
+ * switches with the same classes and its own stylesheet. */
+.ab-mcp .ab-abilities--fine {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.ab-mcp .ab-abilities--fine .ab-note {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.ab-mcp .ab-abilities--fine .ab-sub__name {
+	overflow-wrap: anywhere;
+}
+
 .ab-mcp .ab-info {
 	position: relative;
 	display: inline-flex;

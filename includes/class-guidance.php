@@ -52,7 +52,9 @@ class AB_MCP_Guidance {
 	 * the caches, the rewrite rules and the database and transient clean-up;
 	 * since 4.10.0 the page-builder writes and search and replace; since
 	 * 4.11.0 installing, updating and deleting plugins and themes, updating
-	 * WordPress core, and switching plugins and themes on and off.
+	 * WordPress core, and switching plugins and themes on and off; since
+	 * 4.12.0 the abilities of other plugins (wp_list_abilities,
+	 * wp_run_ability).
 	 */
 	const PRO_TOOLS = array(
 		'wp_blueprint_diff',
@@ -70,7 +72,6 @@ class AB_MCP_Guidance {
 		'wp_delete_upload_file',
 		'wp_export_content',
 		'wp_get_php_snippet',
-		'wp_list_abilities',
 		'wp_list_php_snippets',
 		'wp_list_plugin_files',
 		'wp_list_theme_files',
@@ -82,7 +83,6 @@ class AB_MCP_Guidance {
 		'wp_read_theme_file',
 		'wp_read_upload_file',
 		'wp_revoke_application_password',
-		'wp_run_ability',
 		'wp_save_php_snippet',
 		'wp_schedule_cron',
 		'wp_set_transient',
@@ -279,6 +279,6 @@ class AB_MCP_Guidance {
 	 * @return string
 	 */
 	public static function instructions_paragraph() {
-		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
+		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, export, multisite, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
 	}
 }

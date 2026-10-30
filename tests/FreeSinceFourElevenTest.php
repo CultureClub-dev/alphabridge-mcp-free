@@ -107,7 +107,7 @@ final class FreeSinceFourElevenTest extends TestCase {
 		}
 	}
 
-	public function testThisPluginNowHas95Tools(): void {
+	public function testThisPluginNowHas98Tools(): void {
 		foreach ( glob( dirname( __DIR__ ) . '/includes/tools/class-tools-*.php' ) as $file ) {
 			require_once $file;
 		}
@@ -117,7 +117,10 @@ final class FreeSinceFourElevenTest extends TestCase {
 				$class::register( $r );
 			}
 		}
-		self::assertCount( 96, $r->all(), '82 until 4.10.0, the twelve and wp_connection_doctor (4.11.0), wp_find_media (4.12.0).' );
+		self::assertCount( 98, $r->all(), '82 until 4.10.0, the twelve and wp_connection_doctor (4.11.0), wp_find_media, wp_list_abilities and wp_run_ability (4.12.0).' );
+		foreach ( array( 'wp_find_media', 'wp_list_abilities', 'wp_run_ability' ) as $name ) {
+			self::assertNotNull( $r->get( $name ), $name );
+		}
 		foreach ( array_keys( self::TOOLS ) as $name ) {
 			self::assertNotNull( $r->get( $name ), $name );
 		}

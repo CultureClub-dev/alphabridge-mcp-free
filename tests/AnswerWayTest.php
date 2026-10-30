@@ -439,7 +439,7 @@ final class AnswerWayTest extends TestCase {
 	 * The ways a message can name: a tool or a filter by name, an account to
 	 * connect with, a settings path, a parameter value, or a step to take.
 	 */
-	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b)/';
+	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|[Rr]un the ability again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b)/';
 
 	/**
 	 * Messages whose way is what they list, or that report rather than refuse.
@@ -501,6 +501,15 @@ final class AnswerWayTest extends TestCase {
 		'the previous version could not be moved back into place (file permissions?)',
 		'%1$s in %2$s on line %3$d',
 		'After %1$s was activated, %2$s — and the activation could NOT be taken back (%3$s), so the site may not answer. %4$s',
+		// Free since 4.12.0, with wp_run_ability: an error the ability itself
+		// reported, passed on in its plugin's words, and what it changed all
+		// the same (the way, wp_undo with the token, follows in the same
+		// message); and the frame of an undo point that could not be
+		// recorded, whose reason before it names the way.
+		'%1$s answered without an error of WordPress, but its result reports one: %2$s',
+		'Nothing in post #%s changed.',
+		'It changed the post all the same (%s).',
+		'Without an undo point nothing ran.',
 	);
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {
