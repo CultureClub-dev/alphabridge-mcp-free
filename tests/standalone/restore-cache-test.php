@@ -286,6 +286,25 @@ class AB_MCP_Tool_Registry {
 	public $defs = array();
 	public function register( $name, $def ) { $this->defs[ $name ] = $def; }
 }
+/* ---- the theme and the theme tool, reduced to what a theme restore asks (free since 4.11.0) ---- */
+$GLOBALS['ab_stylesheet']     = 'new';
+$GLOBALS['ab_switch_refused'] = false;   // true: switch_theme() leaves the theme as it was
+function get_stylesheet() { return $GLOBALS['ab_stylesheet']; }
+function switch_theme( $s ) {
+	if ( empty( $GLOBALS['ab_switch_refused'] ) ) {
+		$GLOBALS['ab_stylesheet'] = $s;
+	}
+}
+class AB_MCP_Tools_Plugins_Themes_Manage {
+	public static function activation_blocker( $slug ) { return array( '' ); }
+	public static function blocker_message( $why ) { return 'blocked'; }
+	// The undo switches as wp_activate_theme does, here without the test
+	// requests: a switch the site refuses is an error.
+	public static function switch_to( $slug, $via = 'wp_activate_theme' ) {
+		switch_theme( $slug );
+		return get_stylesheet() === $slug ? array( 'activated' => true ) : new WP_Error( 'ab_mcp_switch_failed', 'The theme did not become active.' );
+	}
+}
 
 require $GLOBALS['ab_free'] . 'class-guidance.php';
 require $GLOBALS['ab_free'] . 'class-post-status.php';
@@ -639,6 +658,43 @@ try {
 	$threw = $e->getMessage();
 }
 ok( '' === $threw && ! is_wp_error( $res ) && true === $res['consumed'] && array( 'ab_mcp_pro_page_cache_purgers' ) === ( $res['page_cache_failed'] ?? null ), 'G13 a filter that throws: wp_undo still answers, with the filter under page_cache_failed' );
+
+/* The theme (free since 4.11.0), end to end: in Pro's script these were G1 to G10. */
+AB_MCP_Undo::$entry = array( 'tool' => 'wp_activate_theme', 'kind' => 'theme', 'summary' => 'Switched theme' );
+AB_MCP_Undo::$data  = array( 'stylesheet' => 'old', 'template' => 'old' );
+
+reset_all();
+$GLOBALS['ab_stylesheet']     = 'new';
+$GLOBALS['ab_switch_refused'] = false;
+$res = AB_MCP_Tools_Undo_Core::undo( array( 'token' => 'undo_abc', 'dry_run' => true ) );
+ok( ! is_wp_error( $res ) && ! isset( $res['page_cache_purged'] ) && array() === ab_purges() && array() === ab_after_restore_calls() && 'new' === $GLOBALS['ab_stylesheet'], 'GT1 theme: a dry run purges nothing and announces nothing' );
+
+reset_all();
+$res = AB_MCP_Tools_Undo_Core::undo( array( 'token' => 'undo_abc' ) );
+ok( ! is_wp_error( $res ) && 1 === $res['undone'] && 'old' === $GLOBALS['ab_stylesheet'] && true === $res['consumed'], 'GT2 the theme undo itself runs' );
+ok( isset( $res['page_cache_purged'] ) && $expected === $res['page_cache_purged'] && ! isset( $res['page_cache_failed'] ), 'GT3 wp_undo answers with page_cache_purged' );
+ok( site_purged_by_all( $present, 0 ) && array( array( 'theme', array(), 'wp_activate_theme' ) ) === ab_after_restore_calls(), 'GT4 ... after purging the whole site and firing the action' );
+$fin = ab_first( 'finish_apply' );
+ok( $fin >= 0 && $fin < ab_first( 'after_restore' ) && ( empty( $present ) || $fin < ab_first( 'purge' ) ), 'GT5 the caches are asked only after the undo point is settled' );
+
+// A partial undo keeps the token, and what it wrote still counts.
+reset_all();
+$GLOBALS['ab_stylesheet']     = 'new';
+$GLOBALS['ab_switch_refused'] = true;
+$res = AB_MCP_Tools_Undo_Core::undo( array( 'token' => 'undo_abc' ) );
+ok( ! is_wp_error( $res ) && 0 === $res['undone'] && 1 === count( $res['failed'] ) && false === $res['consumed'], 'GT6 a theme switch the site refuses: the undo is partial and keeps its token' );
+ok( isset( $res['page_cache_purged'] ) && $expected === $res['page_cache_purged'] && site_purged_by_all( $present, 0 ) && array( array( 'theme', array(), 'wp_activate_theme' ) ) === ab_after_restore_calls(), 'GT7 ... and still purges the whole site, answers with page_cache_purged and fires the action (a failed item may have written)' );
+$fin = ab_first( 'finish_apply' );
+ok( $fin >= 0 && false === $GLOBALS['ab_log'][ $fin ][1] && $fin < ab_first( 'after_restore' ), 'GT8 ... after the undo point is settled as kept' );
+$GLOBALS['ab_switch_refused'] = false;
+
+// The bookkeeping fails after a full restore: the warning path.
+reset_all();
+$GLOBALS['ab_stylesheet']  = 'new';
+AB_MCP_Undo::$finish_fails = true;
+$res = AB_MCP_Tools_Undo_Core::undo( array( 'token' => 'undo_abc' ) );
+ok( ! is_wp_error( $res ) && 'old' === $GLOBALS['ab_stylesheet'] && ! empty( $res['warning'] ) && false === $res['consumed'], 'GT9 a restore whose undo point cannot be removed answers with the warning' );
+ok( $expected === $res['page_cache_purged'] && site_purged_by_all( $present, 0 ) && 1 === count( ab_after_restore_calls() ), 'GT10 ... and the restored theme is still purged and announced' );
 
 /* ============================== H) wp_clear_cache */
 
