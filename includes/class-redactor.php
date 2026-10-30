@@ -135,19 +135,22 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Fields that hold what people wrote: the text, excerpt and title of a
-	 * post, a revision or a comment, raw and rendered. Their text is not
-	 * decoded (a tutorial with "password": "…" in it would lose its example
-	 * when saved again), and run_tool() does not look for the placeholder in
-	 * them. Keys of an array below such a field are judged as everywhere.
+	 * post, a revision or a comment, raw and rendered, and the caption, alt
+	 * text and description of a file or a term. Their text is not decoded (a
+	 * tutorial with "password": "…" in it would lose its example when saved
+	 * again), and neither run_tool() nor value_back() looks for the
+	 * placeholder in them. Keys of an array below such a field are judged as
+	 * everywhere.
 	 */
-	const CONTENT_FIELDS = array( 'content', 'content_raw', 'post_content', 'post_content_filtered', 'excerpt', 'post_excerpt', 'title', 'post_title', 'comment_content', 'rendered', 'raw' );
+	const CONTENT_FIELDS = array( 'content', 'content_raw', 'post_content', 'post_content_filtered', 'excerpt', 'post_excerpt', 'title', 'post_title', 'comment_content', 'rendered', 'raw', 'caption', 'alt', 'description' );
 
 	/**
 	 * Writing tools of which one part of the answer is another plugin's data,
 	 * and which part: the result of an ability, and the read-back of what a
 	 * writer stored (saved_fields), which holds the credential a value sent
 	 * with [REDACTED] kept (restore_placeholders()). Terms, menus and
-	 * widgets answer with saved_fields too.
+	 * widgets answer with saved_fields too, and wp_update_widget with the
+	 * whole stored instance in settings.
 	 */
 	const PARTS = array(
 		'wp_run_ability'      => array( 'result' ),
@@ -162,7 +165,7 @@ final class AB_MCP_Redactor {
 		'wp_create_menu'      => array( 'saved_fields' ),
 		'wp_add_menu_item'    => array( 'saved_fields' ),
 		'wp_add_widget'       => array( 'saved_fields' ),
-		'wp_update_widget'    => array( 'saved_fields' ),
+		'wp_update_widget'    => array( 'saved_fields', 'settings' ),
 	);
 
 	/**
@@ -328,12 +331,16 @@ final class AB_MCP_Redactor {
 			// A list or a text has no field to add: the REDACTED in place is all it says.
 			return $result;
 		}
-		$result[ self::FIELD ] = array_map( array( __CLASS__, 'pointer' ), $st['found'] );
+		$extra = $st['extra'];
+		$point = static function ( $path ) use ( $extra ) {
+			return self::pointer( $path, $extra );
+		};
+		$result[ self::FIELD ] = array_map( $point, $st['found'] );
 		if ( $st['found_n'] > self::MAX_PATHS ) {
 			$result[ self::FIELD_COUNT ] = $st['found_n'];
 		}
 		if ( $st['unchecked_n'] > 0 ) {
-			$result[ self::FIELD_UNCHECKED ] = array_map( array( __CLASS__, 'pointer' ), $st['unchecked'] );
+			$result[ self::FIELD_UNCHECKED ] = array_map( $point, $st['unchecked'] );
 		}
 		return $result;
 	}
@@ -352,11 +359,13 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
-	 * Where an argument of a writing tool carries the placeholder back: a
-	 * text with [REDACTED] anywhere in it (a value read from an answer, JSON
-	 * or serialized data with it at any level of escaping). A text directly
-	 * under a field people write (CONTENT_FIELDS) is not looked at; an array
-	 * under such a field is, as the reader redacts keys there too.
+	 * Where an argument of a writing tool carries the placeholder back as an
+	 * answer holds it (carries_mark()): a text that is [REDACTED], JSON or
+	 * serialized data with it at any level of escaping, a key read as
+	 * name=[REDACTED]. A text that only mentions it passes, as it did before
+	 * 4.13.0. A text directly under a field people write (CONTENT_FIELDS) is
+	 * not looked at; an array under such a field is, as the reader redacts
+	 * keys there too.
 	 *
 	 * @param mixed $args Arguments.
 	 * @return string|null The JSON pointer of the first such value; null for none.
@@ -377,12 +386,15 @@ final class AB_MCP_Redactor {
 	 */
 	private static function find_mark( $value, array $path, $depth, &$budget ) {
 		if ( is_string( $value ) ) {
-			return false !== strpos( $value, self::MARK ) ? self::pointer( $path ) : null;
+			return self::carries_mark( $value ) ? self::pointer( $path ) : null;
 		}
 		if ( ( ! is_array( $value ) && ! $value instanceof stdClass ) || --$budget < 0 || $depth > self::MAX_DEPTH ) {
 			return null;
 		}
 		foreach ( is_array( $value ) ? $value : get_object_vars( $value ) as $k => $v ) {
+			if ( self::is_masked_key( $k ) ) {
+				return self::pointer( array_merge( $path, array( $k ) ) );
+			}
 			if ( is_string( $v ) && is_string( $k ) && in_array( strtolower( $k ), self::CONTENT_FIELDS, true ) ) {
 				continue;
 			}
@@ -392,6 +404,48 @@ final class AB_MCP_Redactor {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a text carries the placeholder as an answer holds it: the
+	 * whole text, or the end of a string inside JSON or serialized data at
+	 * any level of escaping ("[REDACTED]", \"[REDACTED]\", s:10:"[REDACTED]";,
+	 * a key "token=[REDACTED]" in such data). No answer but the error log's
+	 * holds it any other way, so a text that only mentions it, as a person
+	 * writes it ("Name: [REDACTED]"), does not.
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	public static function carries_mark( $text ) {
+		$text = (string) $text;
+		if ( self::MARK === $text ) {
+			return true;
+		}
+		for ( $at = strpos( $text, self::MARK ); false !== $at; $at = strpos( $text, self::MARK, $at + 1 ) ) {
+			$end = $at + strlen( self::MARK );
+			if ( '"' === substr( $text, $end + strspn( $text, '\\', $end ), 1 ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a key reads as the answer shows a key that holds a
+	 * credential's name=value or name: value (masked()): a credential's
+	 * name, its separator, [REDACTED].
+	 *
+	 * @param string|int $key Key.
+	 * @return bool
+	 */
+	private static function is_masked_key( $key ) {
+		if ( ! is_string( $key ) ) {
+			return false;
+		}
+		$name = strlen( $key ) - strlen( self::MARK );
+		return $name > 0 && self::MARK === substr( $key, $name ) && strcspn( $key, '=:' ) === $name - 1
+			&& self::redacts_key( substr( $key, 0, $name - 1 ), self::extra_keys() );
 	}
 
 	/**
@@ -420,7 +474,8 @@ final class AB_MCP_Redactor {
 	 * so the value written, compared in saved_fields and kept in the undo
 	 * point is the restored one. Compared with the first stored value of the
 	 * key: the one wp_get_post_meta shows for the key, and the one value
-	 * update_*_meta() leaves in every row.
+	 * update_*_meta() leaves in every row. A stored object put back is
+	 * written with slash(), not wp_slash().
 	 *
 	 * @param string $type post, term or user.
 	 * @param int    $id   Object id.
@@ -430,7 +485,7 @@ final class AB_MCP_Redactor {
 	 */
 	public static function value_back( $type, $id, $key, $value ) {
 		if ( is_string( $value ) ) {
-			return false !== strpos( $value, self::MARK ) ? self::refusal( '/value' ) : $value;
+			return self::carries_mark( $value ) ? self::refusal( '/value' ) : $value;
 		}
 		if ( ! is_array( $value ) && ! $value instanceof stdClass ) {
 			return $value;
@@ -443,10 +498,14 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Put the stored values back where a value to be written is exactly
-	 * REDACTED, at the same path in arrays and stdClass objects. $left says
-	 * whether a placeholder is left after that: one without a stored value at
-	 * its path, one inside a text (JSON or serialized data), or a value too
-	 * deep or too large to look through. The writer refuses then.
+	 * REDACTED, at the same path in arrays and stdClass objects, a stored
+	 * object read as the reader shows it (vars()); and the stored key where a
+	 * key reads name=REDACTED, the one stored key the answer showed so. A
+	 * text under a field people write (CONTENT_FIELDS) is taken as sent.
+	 * $left says whether a placeholder is left after that (carries_mark()):
+	 * one without a stored value at its path, a key without its one stored
+	 * key, one inside JSON or serialized data, or a value too deep or too
+	 * large to look through. The writer refuses then.
 	 *
 	 * @param mixed $new    Value to be written.
 	 * @param mixed $stored Value stored now.
@@ -475,7 +534,7 @@ final class AB_MCP_Redactor {
 			if ( self::MARK === $new && $has ) {
 				return $stored;
 			}
-			$left = $left || false !== strpos( $new, self::MARK );
+			$left = $left || self::carries_mark( $new );
 			return $new;
 		}
 		if ( ! is_array( $new ) && ! $new instanceof stdClass ) {
@@ -485,11 +544,22 @@ final class AB_MCP_Redactor {
 			$left = true;
 			return $new;
 		}
-		$vars = $has && $stored instanceof stdClass ? get_object_vars( $stored ) : ( $has && is_array( $stored ) ? $stored : array() );
-		$out  = is_array( $new ) ? $new : clone $new;
+		$vars = $has ? self::vars( $stored ) : array();
+		$out  = is_array( $new ) ? array() : new stdClass();
 		foreach ( is_array( $new ) ? $new : get_object_vars( $new ) as $k => $v ) {
-			$here = array_key_exists( $k, $vars );
-			$back = self::restore( $v, $here, $here ? $vars[ $k ] : null, $depth + 1, $budget, $left );
+			if ( self::is_masked_key( $k ) && ! array_key_exists( $k, $vars ) ) {
+				$key  = self::stored_key( $k, $vars );
+				$left = $left || null === $key;
+				$k    = null === $key ? $k : $key;
+			}
+			if ( is_string( $v ) && is_string( $k ) && in_array( strtolower( $k ), self::CONTENT_FIELDS, true ) ) {
+				// What people wrote, written as sent: placeholder_in() does
+				// not look at it either.
+				$back = $v;
+			} else {
+				$here = array_key_exists( $k, $vars );
+				$back = self::restore( $v, $here, $here ? $vars[ $k ] : null, $depth + 1, $budget, $left );
+			}
 			if ( is_array( $out ) ) {
 				$out[ $k ] = $back;
 			} else {
@@ -500,20 +570,113 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
+	 * What a stored value holds under its keys, as the reader shows it
+	 * (walk()): an array as it is, a stdClass and an object unserialize()
+	 * could not load by their properties, any other object by its JSON form
+	 * (ArrayObject's content, what JsonSerializable answers), its objects
+	 * read as arrays.
+	 *
+	 * @param mixed $stored Stored value.
+	 * @return array
+	 */
+	private static function vars( $stored ) {
+		if ( is_array( $stored ) ) {
+			return $stored;
+		}
+		if ( $stored instanceof stdClass || $stored instanceof __PHP_Incomplete_Class ) {
+			return get_object_vars( $stored );
+		}
+		if ( ! is_object( $stored ) ) {
+			return array();
+		}
+		try {
+			$json = wp_json_encode( $stored );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		$data = is_string( $json ) ? json_decode( $json, true, 512, JSON_BIGINT_AS_STRING ) : null;
+		return is_array( $data ) ? $data : array();
+	}
+
+	/**
+	 * The stored key a key read as name=REDACTED stands for: the one of
+	 * these keys the reader shows so (masked()). Null where none does, or
+	 * more than one (the answer showed them as one).
+	 *
+	 * @param string $key  Key sent.
+	 * @param array  $vars Stored keys and values.
+	 * @return string|null
+	 */
+	private static function stored_key( $key, array $vars ) {
+		$extra = self::extra_keys();
+		$found = null;
+		foreach ( array_keys( $vars ) as $stored ) {
+			if ( self::masked( $stored, $extra ) === $key ) {
+				if ( null !== $found ) {
+					return null;
+				}
+				$found = $stored;
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * A value to be written with update_*_meta(): slashed as wp_slash()
+	 * does, and in the public properties of an object too. value_back() can
+	 * put a stored object back; wp_slash() leaves it as it is, but
+	 * update_metadata() unslashes it (map_deep()), so each backslash in its
+	 * texts would be lost. An object is copied, not changed in place; one
+	 * that cannot be copied is left as it is.
+	 *
+	 * @param mixed $value Value.
+	 * @param int   $depth Nesting so far.
+	 * @return mixed
+	 */
+	public static function slash( $value, $depth = 0 ) {
+		if ( $depth > self::MAX_DEPTH ) {
+			return $value;
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $k => $v ) {
+				$value[ $k ] = self::slash( $v, $depth + 1 );
+			}
+			return $value;
+		}
+		if ( is_object( $value ) && ! $value instanceof __PHP_Incomplete_Class ) {
+			try {
+				$copy = clone $value;
+				foreach ( get_object_vars( $value ) as $k => $v ) {
+					$copy->$k = self::slash( $v, $depth + 1 );
+				}
+				return $copy;
+			} catch ( \Throwable $e ) {
+				return $value;
+			}
+		}
+		return is_string( $value ) ? wp_slash( $value ) : $value;
+	}
+
+	/**
 	 * A path as a JSON pointer (RFC 6901): "/" before each key, "~" and "/"
 	 * in a key as "~0" and "~1". A key that reads like a credential's
-	 * name=value or name: value is cut after the name.
+	 * name=value or name: value is cut after the name, by the same names as
+	 * the key itself (extra_keys() included).
 	 *
-	 * @param array $path Keys.
+	 * @param array      $path  Keys.
+	 * @param array|null $extra extra_keys(); null to ask the filter.
 	 * @return string
 	 */
-	public static function pointer( array $path ) {
+	public static function pointer( array $path, ?array $extra = null ) {
 		$out = '';
 		foreach ( $path as $segment ) {
 			$segment = (string) $segment;
 			$cut     = strcspn( $segment, '=:' );
-			if ( $cut < strlen( $segment ) && self::redacts_key( substr( $segment, 0, $cut ) ) ) {
-				$segment = substr( $segment, 0, $cut + 1 ) . '…';
+			if ( $cut < strlen( $segment ) ) {
+				$extra = null === $extra ? self::extra_keys() : $extra;
+				if ( self::redacts_key( substr( $segment, 0, $cut ), $extra ) ) {
+					$segment = substr( $segment, 0, $cut + 1 ) . '…';
+				}
 			}
 			$out .= '/' . str_replace( array( '~', '/' ), array( '~0', '~1' ), $segment );
 		}
@@ -728,14 +891,31 @@ final class AB_MCP_Redactor {
 	 * @return string|int
 	 */
 	private static function safe_key( $key, array $path, array &$st ) {
-		if ( ! is_string( $key ) ) {
-			return $key;
-		}
-		$cut = strcspn( $key, '=:' );
-		if ( $cut >= strlen( $key ) || '' === trim( substr( $key, $cut + 1 ) ) || ! self::redacts_key( substr( $key, 0, $cut ), $st['extra'] ) ) {
+		$masked = self::masked( $key, $st['extra'] );
+		if ( null === $masked ) {
 			return $key;
 		}
 		self::note( $st, 'found', $path );
+		return $masked;
+	}
+
+	/**
+	 * A key that reads like a credential's name=value or name: value as the
+	 * answer shows it: the name, its separator, REDACTED. Null for any other
+	 * key.
+	 *
+	 * @param string|int $key   Key.
+	 * @param string[]   $extra extra_keys().
+	 * @return string|null
+	 */
+	private static function masked( $key, array $extra ) {
+		if ( ! is_string( $key ) ) {
+			return null;
+		}
+		$cut = strcspn( $key, '=:' );
+		if ( $cut >= strlen( $key ) || '' === trim( substr( $key, $cut + 1 ) ) || ! self::redacts_key( substr( $key, 0, $cut ), $extra ) ) {
+			return null;
+		}
 		return substr( $key, 0, $cut + 1 ) . self::MARK;
 	}
 
@@ -869,29 +1049,56 @@ final class AB_MCP_Redactor {
 	/**
 	 * Every private key in PEM form, whatever name stands before it: from
 	 * -----BEGIN … PRIVATE KEY----- to its -----END …----- line, or to the
-	 * end of the text where none follows.
+	 * end of the text where none follows; and a key whose BEGIN line was cut
+	 * off, as the last lines of a log cut it, from the start of the text to
+	 * its -----END … PRIVATE KEY----- line.
 	 *
 	 * @param string $text Text.
 	 * @param int    $hits Replacements (added to).
 	 * @return string
 	 */
 	private static function pem( $text, &$hits ) {
-		$out = '';
-		$pos = 0;
-		while ( false !== ( $at = strpos( $text, '-----BEGIN ', $pos ) ) ) {
-			$head = strpos( $text, '-----', $at + 11 );
-			if ( false === $head || false === strpos( substr( $text, $at, $head - $at ), 'PRIVATE KEY' ) ) {
-				$out .= substr( $text, $pos, $at + 11 - $pos );
-				$pos  = $at + 11;
-				continue;
-			}
-			$end  = strpos( $text, '-----END ', $head + 5 );
+		$out   = '';
+		$pos   = 0;
+		$end   = self::private_key_line( $text, '-----END ', 0 );
+		$begin = self::private_key_line( $text, '-----BEGIN ', 0 );
+		if ( null !== $end && ( null === $begin || $begin[0] > $end[0] ) ) {
+			$out = self::MARK;
+			$pos = $end[1];
+			++$hits;
+		}
+		while ( null !== ( $head = self::private_key_line( $text, '-----BEGIN ', $pos ) ) ) {
+			$end  = strpos( $text, '-----END ', $head[1] );
 			$stop = false === $end ? false : strpos( $text, '-----', $end + 9 );
-			$out .= substr( $text, $pos, $at - $pos ) . self::MARK;
+			$out .= substr( $text, $pos, $head[0] - $pos ) . self::MARK;
 			$pos  = false === $stop ? strlen( $text ) : $stop + 5;
 			++$hits;
 		}
 		return $out . substr( $text, $pos );
+	}
+
+	/**
+	 * The first -----BEGIN … PRIVATE KEY----- or -----END … PRIVATE
+	 * KEY----- line from an offset on (a certificate's is passed over):
+	 * where it starts and where its closing dashes end.
+	 *
+	 * @param string $text   Text.
+	 * @param string $marker '-----BEGIN ' or '-----END '.
+	 * @param int    $from   Offset.
+	 * @return int[]|null
+	 */
+	private static function private_key_line( $text, $marker, $from ) {
+		while ( false !== ( $at = strpos( $text, $marker, $from ) ) ) {
+			$close = strpos( $text, '-----', $at + strlen( $marker ) );
+			if ( false === $close ) {
+				return null;
+			}
+			if ( false !== strpos( substr( $text, $at, $close - $at ), 'PRIVATE KEY' ) ) {
+				return array( $at, $close + 5 );
+			}
+			$from = $at + strlen( $marker );
+		}
+		return null;
 	}
 
 	/**
@@ -966,14 +1173,18 @@ final class AB_MCP_Redactor {
 		if ( false === $n ) {
 			return null;
 		}
+		// Every token of the line, not only the first.
+		$out = '';
+		$pos = 0;
 		foreach ( $found[0] as $m ) {
 			$from = $m[1] + strlen( $m[0] );
 			$len  = strspn( $line, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/', $from );
-			if ( $len >= 8 ) {
+			if ( $m[1] >= $pos && $len >= 8 ) {
 				++$hits;
-				return substr( $line, 0, $from ) . self::MARK . substr( $line, $from + $len + strspn( $line, '=', $from + $len ) );
+				$out .= substr( $line, $pos, $from - $pos ) . self::MARK;
+				$pos  = $from + $len + strspn( $line, '=', $from + $len );
 			}
 		}
-		return $line;
+		return $out . substr( $line, $pos );
 	}
 }

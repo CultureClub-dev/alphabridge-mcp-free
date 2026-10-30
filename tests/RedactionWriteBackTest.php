@@ -12,10 +12,17 @@
  * - saved_fields in the answer shows api_key as [REDACTED], and the answer
  *   names the path in redacted.
  * - The undo point holds the state before; wp_undo puts it back.
- * - A placeholder without a stored value at its path, and a text with the
- *   placeholder in it, are refused with ab_mcp_redacted_value; nothing is
- *   written.
- * - The same for user meta.
+ * - A placeholder without a stored value at its path, JSON or serialized
+ *   data with the placeholder in it, and a key name=[REDACTED] without the
+ *   one stored key it stands for are refused with ab_mcp_redacted_value;
+ *   nothing is written.
+ * - A key read as name=[REDACTED] gets the stored key back; an object the
+ *   reader showed by its JSON form (ArrayObject) is written back by it; a
+ *   stored object put back keeps the backslashes of its texts.
+ * - Texts people wrote are written as sent: one that only mentions
+ *   [REDACTED], and one under a content field that is exactly [REDACTED].
+ * - The same for user meta; wp_update_widget's answer shows its settings
+ *   redacted, as wp_get_widgets does.
  *
  * The values below are made-up placeholders, not credentials.
  *
@@ -32,6 +39,7 @@ use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Content;
 use AB_MCP_Tools_Meta_Auth;
 use AB_MCP_Tools_Undo_Core;
+use AB_MCP_Tools_Widgets;
 use AB_MCP_Undo;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -44,6 +52,7 @@ require_once __DIR__ . '/../includes/undo/class-undo.php';
 require_once __DIR__ . '/../includes/undo/class-undo-restore.php';
 require_once __DIR__ . '/../includes/tools/class-tools-meta-auth.php';
 require_once __DIR__ . '/../includes/tools/class-tools-undo-core.php';
+require_once __DIR__ . '/../includes/tools/class-tools-widgets.php';
 
 final class RedactionWriteBackTest extends TestCase {
 
@@ -118,8 +127,8 @@ final class RedactionWriteBackTest extends TestCase {
 			array(
 				array( 'api_key' => 'NEW', 'webhook_secret' => self::R ),
 				'{"api_key":"[REDACTED]"}',
-				'my key is [REDACTED]',
-				array( 'api_key' => 'a [REDACTED] b' ),
+				array( 'api_key' => 'NEW', 'config' => '{"token":"[REDACTED]"}' ),
+				array( 'password=' . self::R => 'on' ),
 			) as $i => $value
 		) {
 			$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'settings', 'value' => $value ) );
@@ -140,6 +149,98 @@ final class RedactionWriteBackTest extends TestCase {
 		$out = $this->answer( 'wp_update_media', array( 'updated' => true, 'saved_fields' => (object) array( 'alt' => 'x', 'token' => 'PLACEHOLDER' ) ) );
 		self::assertSame( self::R, $out['saved_fields']->token );
 		self::assertTrue( AB_MCP_Redactor::guards( 'wp_update_post', array() ), 'A post writer is still guarded centrally.' );
+	}
+
+	public function testARestoredObjectKeepsTheBackslashesOfItsTexts(): void {
+		// Codex 4 #1: wp_slash() leaves an object as it is, the unslashing
+		// of update_metadata() (map_deep()) goes into it.
+		$GLOBALS['ab_test_meta'][5]['conn'] = array( serialize( array( 'credentials' => (object) array( 'password' => 'a\\b' ), 'color' => 'red' ) ) );
+		$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'conn' ) ) );
+		self::assertSame( array( 'credentials' => self::R, 'color' => 'red' ), $read['value'] );
+
+		$sent          = $read['value'];
+		$sent['color'] = 'blue';
+		$res           = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'conn', 'value' => $sent ) );
+
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		$stored = get_post_meta( 5, 'conn', true );
+		self::assertSame( 'a\\b', $stored['credentials']->password, 'The backslash stays.' );
+		self::assertSame( 'blue', $stored['color'] );
+		self::assertArrayNotHasKey( 'saved_differs', $res, (string) wp_json_encode( $res ) );
+	}
+
+	public function testAKeyReadWithThePlaceholderGetsTheStoredKeyBack(): void {
+		// Codex 4 #2: a key name=value is read as name=[REDACTED].
+		add_post_meta( 5, 'flags', array( 'password=STORED-PW' => 'enabled', 'color' => 'red' ) );
+		$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'flags' ) ) );
+		self::assertSame( array( 'password=' . self::R => 'enabled', 'color' => 'red' ), $read['value'] );
+
+		$sent          = $read['value'];
+		$sent['color'] = 'blue';
+		$res           = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'flags', 'value' => $sent ) );
+
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'password=STORED-PW' => 'enabled', 'color' => 'blue' ), get_post_meta( 5, 'flags', true ), 'The stored key stays, in its place.' );
+
+		// No stored key it stands for, or more than one: refused.
+		add_post_meta( 5, 'twice', array( 'password=A-ONE' => 'x', 'password=A-TWO' => 'y' ) );
+		$before = $GLOBALS['ab_test_meta'];
+		$res    = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'flags', 'value' => array( 'token=' . self::R => 'on', 'color' => 'red' ) ) );
+		self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'twice', 'value' => array( 'password=' . self::R => 'y' ) ) );
+		self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+		self::assertSame( $before, $GLOBALS['ab_test_meta'], 'Nothing was written.' );
+	}
+
+	public function testAnObjectIsWrittenBackByTheFormTheReaderShows(): void {
+		// Codex 4 #7: the reader shows an ArrayObject by its JSON form.
+		$GLOBALS['ab_test_meta'][5]['box'] = array( serialize( new \ArrayObject( array( 'api_key' => 'STORED-AO', 'color' => 'red' ) ) ) );
+		$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'box' ) ) );
+		self::assertSame( '{"api_key":"[REDACTED]","color":"red"}', wp_json_encode( $read['value'] ) );
+
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'box', 'value' => array( 'api_key' => self::R, 'color' => 'blue' ) ) );
+
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'api_key' => 'STORED-AO', 'color' => 'blue' ), get_post_meta( 5, 'box', true ) );
+	}
+
+	public function testTextsPeopleWroteAreWrittenAsSent(): void {
+		// Codex 4 #8: as on main, a text that mentions the placeholder, and
+		// a text under a field people write that is exactly the placeholder.
+		add_post_meta( 5, 'block', array( 'content' => 'Old text', 'api_key' => 'STORED-B', 'note' => 'old' ) );
+
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'block', 'value' => array( 'content' => 'Name: [REDACTED]', 'api_key' => self::R, 'note' => 'Name: [REDACTED]' ) ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'content' => 'Name: [REDACTED]', 'api_key' => 'STORED-B', 'note' => 'Name: [REDACTED]' ), get_post_meta( 5, 'block', true ) );
+
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'block', 'value' => array( 'content' => self::R, 'api_key' => self::R ) ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'content' => self::R, 'api_key' => 'STORED-B' ), get_post_meta( 5, 'block', true ), 'The text sent, not the one before.' );
+
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'motto', 'value' => 'Name: [REDACTED]' ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( 'Name: [REDACTED]', get_post_meta( 5, 'motto', true ) );
+	}
+
+	public function testTheWidgetWriterAnswersWithTheSettingsRedacted(): void {
+		// Codex 4 #3: wp_update_widget answers with the whole stored instance.
+		$GLOBALS['wp_widget_factory'] = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
+		update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'accessToken' => 'STORED-AT', 'config' => '{"api_key":"STORED-CFG"}' ), '_multiwidget' => 1 ) );
+		try {
+			$res = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => array( 'title' => 'feed 2' ) ) );
+		} finally {
+			unset( $GLOBALS['wp_widget_factory'] );
+		}
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+
+		$out = $this->answer( 'wp_update_widget', $res );
+
+		self::assertStringNotContainsString( 'STORED', (string) wp_json_encode( $out ) );
+		self::assertSame( 'feed 2', $out['settings']['title'] );
+		self::assertSame( self::R, $out['settings']['accessToken'] );
+		self::assertSame( '{"api_key":"[REDACTED]"}', $out['settings']['config'] );
+		self::assertSame( array( '/settings/accessToken', '/settings/config/api_key' ), $out['redacted'] );
+		self::assertSame( 'STORED-AT', get_option( 'widget_text' )[4]['accessToken'], 'Stored as it was.' );
 	}
 
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {

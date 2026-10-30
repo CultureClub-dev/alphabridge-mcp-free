@@ -1479,8 +1479,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				// update_metadata() unslashes the value it is given. Without
 				// wp_slash() "\u0026" in block or builder JSON is stored as
 				// "u0026" and the JSON breaks; wp_slash() walks into arrays,
-				// so nested values keep theirs.
-				update_post_meta( $id, $key, wp_slash( $value ) );
+				// so nested values keep theirs, and slash() into an object
+				// value_back() put back too (since 4.13.0).
+				update_post_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {

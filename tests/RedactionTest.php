@@ -26,7 +26,12 @@
  * - The filter ab_mcp_redact_keys adds keys and cannot take the built-in
  *   ones away.
  * - restore_placeholders() puts the stored value back where a value to be
- *   written is exactly [REDACTED].
+ *   written is exactly [REDACTED], and the stored key where a key reads
+ *   name=[REDACTED].
+ * - A writing tool refuses the placeholder as an answer holds it: the whole
+ *   value, inside JSON or serialized data at any level of escaping, a key
+ *   name=[REDACTED]. A text that only mentions it passes, and so does what
+ *   people write (content, captions, alt texts, descriptions).
  *
  * The cases named «Codex #n» are the counterexamples of the review of
  * 30.10.2026. The values below are made-up placeholders, not credentials.
@@ -42,6 +47,7 @@ use AB_MCP_Redactor;
 use AB_MCP_REST_Controller;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Content;
+use AB_MCP_Tools_System;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -49,6 +55,7 @@ use WP_REST_Request;
 
 require_once dirname( __DIR__ ) . '/includes/tools/class-tools-base.php';
 require_once dirname( __DIR__ ) . '/includes/tools/class-tools-content.php';
+require_once dirname( __DIR__ ) . '/includes/tools/class-tools-system.php';
 
 final class RedactionTest extends TestCase {
 
@@ -653,6 +660,43 @@ final class RedactionTest extends TestCase {
 		self::assertStringContainsString( "[30-Oct-2026] next\n[30-Oct-2026] key [REDACTED]\n-----BEGIN CERTIFICATE-----\nPUBLIC", $text, 'A certificate is public and stays.' );
 	}
 
+	public function testAPrivateKeyCutAtItsStartIsRedactedToItsEnd(): void {
+		// Codex 4 #5: the last lines of the log hold its END line, not its BEGIN.
+		if ( ! defined( 'WP_CONTENT_DIR' ) ) {
+			// As tests/menus-shop-stubs.php defines it.
+			define( 'WP_CONTENT_DIR', sys_get_temp_dir() . '/ab-mcp-test-content-' . getmypid() );
+		}
+		$log  = WP_CONTENT_DIR . '/debug.log';
+		$keep = is_file( $log ) ? file_get_contents( $log ) : null;
+		$made = ! is_dir( WP_CONTENT_DIR ) && mkdir( WP_CONTENT_DIR, 0700, true );
+		file_put_contents( $log, "[30-Oct-2026] key -----BEGIN PRIVATE KEY-----\nPLACEHOLDERAAAA\nPLACEHOLDERBBBB\n-----END PRIVATE KEY-----\n" );
+		try {
+			$two = AB_MCP_Tools_System::error_log( array( 'lines' => 2 ) );
+			file_put_contents( $log, "-----BEGIN RSA PRIVATE KEY-----\nPLACEHOLDERCCCC\nPLACEHOLDERDDDD\n-----END RSA PRIVATE KEY-----\n[30-Oct-2026] next\n" );
+			$three = AB_MCP_Tools_System::error_log( array( 'lines' => 4 ) );
+		} finally {
+			null === $keep ? unlink( $log ) : file_put_contents( $log, $keep );
+			if ( $made ) {
+				rmdir( WP_CONTENT_DIR );
+			}
+		}
+		self::assertSame( "PLACEHOLDERBBBB\n-----END PRIVATE KEY-----", $two['log'], 'The tool cuts before the redactor reads.' );
+
+		$out = $this->read( $two, 'wp_get_error_log' );
+		self::assertSame( self::R, $out['log'] );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+		self::assertSame( self::R . "\n[30-Oct-2026] next", $this->read( $three, 'wp_get_error_log' )['log'] );
+		$public = "PUBLIC\n-----END CERTIFICATE-----\n[30-Oct-2026] next";
+		self::assertSame( $public, $this->read( array( 'log' => $public ), 'wp_get_error_log' )['log'], 'The end of a certificate stays.' );
+	}
+
+	public function testEveryBearerTokenOfALineIsRedacted(): void {
+		// Codex 4 #6.
+		$out = $this->read( array( 'log' => "old Bearer PLACEHOLDER1 new Bearer PLACEHOLDER2 end\nsent bearer PLACEHOLDER3" ), 'wp_get_error_log' );
+
+		self::assertSame( "old Bearer [REDACTED] new Bearer [REDACTED] end\nsent bearer [REDACTED]", $out['log'] );
+	}
+
 	public function testALongValueIsRedactedWithoutThePatternGivingUp(): void {
 		// Codex #3: a value of 10'000 characters.
 		$long = str_repeat( 'x', 10000 );
@@ -822,6 +866,17 @@ final class RedactionTest extends TestCase {
 		self::assertSame( array( '/meta/api_key=…' ), array_values( array_unique( $out['redacted'] ) ) );
 	}
 
+	public function testAKeyThatCarriesAValueUnderAnExtraNameLosesItInThePathToo(): void {
+		// Codex 4 #4: the filter's names cut the path as they cut the key.
+		add_filter( 'ab_mcp_redact_keys', static fn() => array( 'connection' ) );
+
+		$out = $this->read( array( 'meta' => array( 'connection=PLACEHOLDER-C' => 'on', 'color' => 'red' ) ) );
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ) );
+		self::assertSame( array( 'connection=' . self::R => 'on', 'color' => 'red' ), $out['meta'] );
+		self::assertSame( array( '/meta/connection=…' ), $out['redacted'] );
+	}
+
 	public function testPathsAreUnambiguousAndNoFindIsMerged(): void {
 		// Codex #12: a.b/token and a/b/token are two places.
 		$out = $this->read(
@@ -930,7 +985,9 @@ final class RedactionTest extends TestCase {
 				array( array( 'new_secret' => self::R ), array() ),
 				array( array( 'x' => self::R ), 'not an array' ),
 				array( '{"api_key":"[REDACTED]"}', '{"api_key":"STORED"}' ),
-				array( array( 'note' => 'a [REDACTED] word' ), array( 'note' => 'old' ) ),
+				// Codex 4 #2: a key read as name=[REDACTED] without its stored one.
+				array( array( 'token=[REDACTED]' => 'on' ), array( 'color' => 'red' ) ),
+				array( array( 'note' => '{"inner":"{\\"api_key\\":\\"[REDACTED]\\"}"}' ), array( 'note' => 'old' ) ),
 			) as $i => $case
 		) {
 			AB_MCP_Redactor::restore_placeholders( $case[0], $case[1], $left );
@@ -986,7 +1043,11 @@ final class RedactionTest extends TestCase {
 				array( 'meta' => (object) array( 'deep' => array( self::R ) ) ),
 				// Codex 3 #1: JSON in JSON, the placeholder escaped.
 				array( 'value' => json_encode( array( 'config' => json_encode( array( 'password' => self::R ) ) ) ) ),
-				array( 'value' => 'a note that mentions [REDACTED] in passing' ),
+				// Three levels of JSON, and serialized data inside JSON.
+				array( 'value' => json_encode( array( 'a' => json_encode( array( 'b' => json_encode( array( 'token' => self::R ) ) ) ) ) ) ),
+				array( 'value' => json_encode( array( 'cfg' => serialize( array( 'secret' => self::R ) ) ) ) ),
+				// Codex 4 #2: a key read as name=[REDACTED].
+				array( 'value' => array( 'password=' . self::R => 'on' ) ),
 				// Codex 3 #2: an array under a content field is no text people wrote.
 				array( 'value' => array( 'content' => array( 'password' => self::R ), 'color' => 'blue' ) ),
 			) as $i => $args
@@ -1007,6 +1068,10 @@ final class RedactionTest extends TestCase {
 				array( 'title' => self::R ),
 				array( 'value' => array( 'content' => 'a quote: {"password":"[REDACTED]"}' ) ),
 				array( 'value' => array( 'color' => 'red' ) ),
+				// Codex 4 #8: a text that mentions the placeholder, as on main.
+				array( 'value' => 'a note that mentions [REDACTED] in passing' ),
+				array( 'label' => 'Name: [REDACTED]', 'list' => array( 'Bearer [REDACTED]', 'password=[REDACTED] in a sentence' ) ),
+				array( 'value' => array( 'Name:[REDACTED]' => 'a key no answer masks so' ) ),
 			) as $i => $args
 		) {
 			[ $result, $calls ] = $this->write( $args );
@@ -1024,6 +1089,24 @@ final class RedactionTest extends TestCase {
 		self::assertFalse( $result['isError'] );
 		self::assertSame( 1, $calls );
 		self::assertSame( '/a/0', AB_MCP_Redactor::placeholder_in( array( 'a' => array( self::R ) ) ) );
+	}
+
+	public function testCaptionsAltTextsAndDescriptionsPassTheWriteGuard(): void {
+		// Codex 4 #9: what people write about a file or a term, as on main.
+		foreach (
+			array(
+				array( 'id' => 5, 'caption' => 'Name: [REDACTED]' ),
+				array( 'id' => 5, 'caption' => self::R, 'alt' => self::R ),
+				array( 'id' => 5, 'description' => self::R ),
+			) as $i => $args
+		) {
+			[ $result, $calls ] = $this->write( $args, 'wp_update_media' );
+			self::assertFalse( $result['isError'], (string) $i );
+			self::assertSame( 1, $calls );
+		}
+		[ $result, $calls ] = $this->write( array( 'id' => 5, 'label' => self::R ), 'wp_update_media' );
+		self::assertTrue( $result['isError'], 'Another field is guarded as before.' );
+		self::assertSame( 0, $calls );
 	}
 }
 

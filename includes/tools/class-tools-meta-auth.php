@@ -342,8 +342,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			),
 			static function () use ( $id, $key, $value ) {
 				// update_metadata() unslashes what it stores: slashed here, a
-				// backslash in a path, a pattern or JSON is stored as sent.
-				update_user_meta( $id, $key, wp_slash( $value ) );
+				// backslash in a path, a pattern or JSON is stored as sent,
+				// also in an object value_back() put back (since 4.13.0).
+				update_user_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {
@@ -469,8 +470,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			),
 			static function () use ( $id, $key, $value ) {
 				// update_metadata() unslashes what it stores: slashed here, a
-				// backslash in a path, a pattern or JSON is stored as sent.
-				update_term_meta( $id, $key, wp_slash( $value ) );
+				// backslash in a path, a pattern or JSON is stored as sent,
+				// also in an object value_back() put back (since 4.13.0).
+				update_term_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {
