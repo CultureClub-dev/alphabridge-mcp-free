@@ -65,6 +65,10 @@ defined( 'ABSPATH' ) || exit;
  */
 class AB_MCP_Own_Abilities {
 
+	/** Refusals of one account logged per hour at most (denied_log_allowed()). */
+	const DENIED_LOG_PER_HOUR = 20;
+
+
 	/** Key in ab_mcp_options (AB_MCP_Settings): whether the tools are offered. */
 	const SETTING = 'own_abilities';
 
@@ -405,7 +409,8 @@ class AB_MCP_Own_Abilities {
 	 * (AB_MCP_Security::permits()). The Abilities API and the adapter ask
 	 * it before the run, once or twice; the run itself goes through
 	 * AB_MCP_Security::authorize() once and is counted there. A refusal goes
-	 * into the log, as tools/call logs one: the call ends there.
+	 * into the log, as tools/call logs one: the call ends there; at most
+	 * DENIED_LOG_PER_HOUR of them per account and hour (denied_log_allowed()).
 	 *
 	 * @param string $name  Tool name.
 	 * @param mixed  $input The input; the log notes its keys.
@@ -417,9 +422,43 @@ class AB_MCP_Own_Abilities {
 			$def = AB_MCP_Security::permits( $name, $def );
 		}
 		if ( is_wp_error( $def ) ) {
-			AB_MCP_Audit_Log::record( $name, self::args_of( $input ), 'denied', $def->get_error_message(), self::VIA );
+			if ( self::denied_log_allowed() ) {
+				AB_MCP_Audit_Log::record( $name, self::args_of( $input ), 'denied', $def->get_error_message(), self::VIA );
+			}
 			return $def;
 		}
+		return true;
+	}
+
+	/**
+	 * Whether one more refusal of this account is logged. The adapter asks the
+	 * permission callback before the run, which never reaches the rate limit;
+	 * without a bound an account that may do nothing could fill the log with
+	 * refusals and push the earlier entries out (Codex, 30.10.2026). Counted
+	 * per account in a fixed hour from its first logged refusal, at most
+	 * DENIED_LOG_PER_HOUR; a refusal beyond it still refuses, only the log
+	 * line is left out. Not atomic: two requests at the same moment may log
+	 * one or two more, which keeps the log from being flooded all the same.
+	 *
+	 * @param int|null $now Current time (tests).
+	 * @return bool
+	 */
+	public static function denied_log_allowed( $now = null ) {
+		$now   = null === $now ? time() : (int) $now;
+		$key   = 'ab_mcp_own_denied_' . (int) get_current_user_id();
+		$state = get_transient( $key );
+		if ( ! is_array( $state ) || ! isset( $state['since'], $state['n'] ) || $now - (int) $state['since'] >= HOUR_IN_SECONDS ) {
+			$state = array(
+				'since' => $now,
+				'n'     => 0,
+			);
+		}
+		if ( (int) $state['n'] >= self::DENIED_LOG_PER_HOUR ) {
+			return false;
+		}
+		$state['n'] = (int) $state['n'] + 1;
+		// The hour stays the one that began with the first entry.
+		set_transient( $key, $state, max( 1, (int) $state['since'] + HOUR_IN_SECONDS - $now ) );
 		return true;
 	}
 

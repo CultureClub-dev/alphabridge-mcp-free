@@ -573,4 +573,34 @@ ok( $n === count( ab_log() ), 'G9 saving without a change writes nothing to the 
 ab_request();
 ok( array() === ab_own(), 'G10 off again: the next request registers nothing' );
 
+/* ------------------------------------------- F: refusals do not flood the log */
+
+// The adapter asks the permission callback before the run, which never
+// reaches the rate limit: an account that may do nothing must not push the
+// earlier entries out of the log (Codex, 30.10.2026).
+AB_MCP_Settings::set( AB_MCP_Own_Abilities::SETTING, true );
+ab_request();
+ab_subscriber();
+delete_transient( 'ab_mcp_own_denied_' . get_current_user_id() );
+$before = count( ab_log() );
+$mine   = 0;
+for ( $i = 0; $i < 3 * AB_MCP_Own_Abilities::DENIED_LOG_PER_HOUR; $i++ ) {
+	$res  = ab_ability( 'wp_list_posts' )->check_permissions( array( 'search' => 'x' ) );
+	$mine = is_wp_error( $res ) ? $mine + 1 : $mine;
+}
+$logged = count( ab_log() ) - $before;
+ok( 3 * AB_MCP_Own_Abilities::DENIED_LOG_PER_HOUR === $mine && AB_MCP_Own_Abilities::DENIED_LOG_PER_HOUR === $logged, 'F1 every call is refused, but only ' . AB_MCP_Own_Abilities::DENIED_LOG_PER_HOUR . ' refusals of one account are logged per hour (' . $logged . ')' );
+ab_admin();
+$res = ab_ability( 'wp_create_post' )->check_permissions( array( 'title' => 'x' ) );
+ok( is_wp_error( $res ) && 'denied' === ab_last_log()['status'] && 'wp_create_post' === ab_last_log()['tool'], 'F2 another account\'s refusal is still logged' );
+ab_subscriber();
+$key   = 'ab_mcp_own_denied_' . get_current_user_id();
+$state = get_transient( $key );
+ok( is_array( $state ) && false === AB_MCP_Own_Abilities::denied_log_allowed( (int) $state['since'] + HOUR_IN_SECONDS - 1 ), 'F3 a second before the hour that began with the first entry is over: still nothing more' );
+ok( true === AB_MCP_Own_Abilities::denied_log_allowed( (int) $state['since'] + HOUR_IN_SECONDS ), 'F3 from the end of that hour, fixed and not moved by the later entries, refusals are logged again' );
+delete_transient( $key );
+ab_admin();
+AB_MCP_Settings::set( AB_MCP_Own_Abilities::SETTING, false );
+ab_request();
+
 ab_result( 'OWN-ABILITIES (main ' . $wp_api . ')' );
