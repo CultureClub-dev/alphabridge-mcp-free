@@ -337,14 +337,23 @@ final class RedactionTest extends TestCase {
 		self::assertSame( array( 'password' => self::R, 'a' => 'visible', 'b' => 'visible' ), $back );
 	}
 
-	public function testObjectsOfBuiltInClassesStayAsTheyAre(): void {
-		// Codex 2 #9.
-		$date = new \DateTimeImmutable( '2026-10-30T12:00:00+01:00' );
+	public function testOtherObjectsAreJudgedAsTheClientGetsThem(): void {
+		// Codex 2 #9, Codex 3 #3.
+		$date     = new \DateTimeImmutable( '2026-10-30T12:00:00+01:00' );
+		$settings = new \ArrayObject( array( 'password' => 'PLACEHOLDER', 'color' => 'blue' ) );
+		$broken   = new class() {
+			/** @var resource A value JSON has no form for. */
+			public $handle;
+		};
+		$broken->handle = fopen( 'php://memory', 'r' );
 
-		$out = $this->read( array( 'meta' => array( 'date' => $date, 'token' => 'PLACEHOLDER' ) ) );
+		$out = $this->read( array( 'meta' => array( 'date' => $date, 'settings' => $settings, 'broken' => $broken ) ) );
 
-		self::assertSame( $date, $out['meta']['date'] );
 		self::assertSame( json_encode( $date ), json_encode( $out['meta']['date'] ) );
+		self::assertSame( '{"password":"[REDACTED]","color":"blue"}', json_encode( $out['meta']['settings'] ) );
+		self::assertSame( self::R, $out['meta']['broken'] );
+		self::assertSame( array( '/meta/broken' ), $out['redacted_unchecked'] );
+		self::assertSame( array( '/meta/settings/password', '/meta/broken' ), $out['redacted'] );
 	}
 
 	public function testJsonInsideJsonIsFoundAtEveryLevelOfEscaping(): void {
@@ -410,6 +419,9 @@ final class RedactionTest extends TestCase {
 					'APISecret'           => 'x14',
 					'SMTPPassword'        => 'x15',
 					'userPassword'        => 'x16',
+					'pass'                => 'x17',
+					'mailPass'            => 'x18',
+					'db_pass'             => 'x19',
 				),
 			)
 		);
@@ -428,6 +440,10 @@ final class RedactionTest extends TestCase {
 			'showPassword'       => 'yes',
 			'sessionTokenCount'  => 4,
 			'userPasswordHint'   => 'the dog',
+			'bypass'             => 'cache',
+			'passed'             => 3,
+			'compass'            => 'north',
+			'passCount'          => 2,
 			'author'             => 'Anna',
 			'co_author'          => 'Ben',
 			'Co-Author'          => 'Cleo',
@@ -540,11 +556,11 @@ final class RedactionTest extends TestCase {
 
 	public function testTheMetaGuardKeepsItsRule(): void {
 		$guard = new ReflectionMethod( 'AB_MCP_Tools_Base', 'is_sensitive_meta_key' );
-		foreach ( array( 'token', 'Tokens', ' secret ', 'PASSWORD', 'pwd', 'otp', 'credentials', 'my_api_key', 'apikey', 'x-api-key', 'stripe_secret_key', 'oauth_state', 'smtp_password', 'smtp_pass', 'passwd_old', 'license_key' ) as $key ) {
+		foreach ( array( 'pass', 'token', 'Tokens', ' secret ', 'PASSWORD', 'pwd', 'otp', 'credentials', 'my_api_key', 'apikey', 'x-api-key', 'stripe_secret_key', 'oauth_state', 'smtp_password', 'smtp_pass', 'passwd_old', 'license_key' ) as $key ) {
 			self::assertTrue( $guard->invoke( null, $key ), $key );
 		}
 		// As written: the spellings only redaction reads are no refusal.
-		foreach ( array( '', ' ', 'token_count', 'password_hint', 'credential_type', 'tokens2', 'pwd2', 'otpx', 'color', 'author', 'password_protected', 'co_author', 'accessToken', 'client-secret' ) as $key ) {
+		foreach ( array( '', ' ', 'token_count', 'password_hint', 'credential_type', 'tokens2', 'pwd2', 'otpx', 'bypass', 'passed', 'color', 'author', 'password_protected', 'co_author', 'accessToken', 'client-secret' ) as $key ) {
 			self::assertFalse( $guard->invoke( null, $key ), "'$key'" );
 		}
 		require_once dirname( __DIR__ ) . '/includes/tools/class-tools-search-replace.php';
@@ -626,6 +642,17 @@ final class RedactionTest extends TestCase {
 		self::assertStringContainsString( 'next line', $text );
 	}
 
+	public function testAPrivateKeyInTheLogIsRedactedWhole(): void {
+		// Codex 3 #5.
+		$pem = "-----BEGIN PRIVATE KEY-----\nPLACEHOLDERAAAA\nPLACEHOLDERBBBB\n-----END PRIVATE KEY-----";
+		$log = "[30-Oct-2026] private_key=" . $pem . "\n[30-Oct-2026] next\n[30-Oct-2026] key " . str_replace( 'PRIVATE KEY', 'RSA PRIVATE KEY', $pem ) . "\n-----BEGIN CERTIFICATE-----\nPUBLIC\n-----END CERTIFICATE-----\n-----BEGIN EC PRIVATE KEY-----\nPLACEHOLDERCUT";
+
+		$text = $this->read( array( 'log' => $log ), 'wp_get_error_log' )['log'];
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $text );
+		self::assertStringContainsString( "[30-Oct-2026] next\n[30-Oct-2026] key [REDACTED]\n-----BEGIN CERTIFICATE-----\nPUBLIC", $text, 'A certificate is public and stays.' );
+	}
+
 	public function testALongValueIsRedactedWithoutThePatternGivingUp(): void {
 		// Codex #3: a value of 10'000 characters.
 		$long = str_repeat( 'x', 10000 );
@@ -700,6 +727,23 @@ final class RedactionTest extends TestCase {
 		self::assertSame( $comment, $this->read( $comment, 'wp_get_comment' ) );
 		// A key below a content field is still judged by its name.
 		self::assertSame( self::R, $this->read( array( 'content' => array( 'api_key' => 'PLACEHOLDER' ) ), 'wp_get_post' )['content']['api_key'] );
+	}
+
+	public function testABuilderLayoutKeepsItsTextsAndLosesItsKeys(): void {
+		// Codex 3 #6.
+		$layout = array(
+			'builder'  => 'elementor',
+			'elements' => array(
+				array( 'id' => 'a1', 'fields' => array( 'editor' => array( 'value' => '{"password":"example"}' ) ) ),
+				array( 'id' => 'b2', 'settings' => array( 'api_key' => 'PLACEHOLDER', 'list_id' => '42' ) ),
+			),
+		);
+
+		$out = $this->read( $layout, 'wp_get_builder_layout' );
+
+		self::assertSame( '{"password":"example"}', $out['elements'][0]['fields']['editor']['value'] );
+		self::assertSame( array( 'api_key' => self::R, 'list_id' => '42' ), $out['elements'][1]['settings'] );
+		self::assertSame( array( '/elements/1/settings/api_key' ), $out['redacted'] );
 	}
 
 	public function testTheMetaReaderRedactsTheSameJson(): void {
@@ -940,6 +984,11 @@ final class RedactionTest extends TestCase {
 				array( 'value' => '{"api_key":"[REDACTED]"}' ),
 				array( 'value' => 'a:1:{s:7:"api_key";s:10:"[REDACTED]";}' ),
 				array( 'meta' => (object) array( 'deep' => array( self::R ) ) ),
+				// Codex 3 #1: JSON in JSON, the placeholder escaped.
+				array( 'value' => json_encode( array( 'config' => json_encode( array( 'password' => self::R ) ) ) ) ),
+				array( 'value' => 'a note that mentions [REDACTED] in passing' ),
+				// Codex 3 #2: an array under a content field is no text people wrote.
+				array( 'value' => array( 'content' => array( 'password' => self::R ), 'color' => 'blue' ) ),
 			) as $i => $args
 		) {
 			[ $result, $calls ] = $this->write( $args );
@@ -956,7 +1005,7 @@ final class RedactionTest extends TestCase {
 			array(
 				array( 'content' => 'Our values read as [REDACTED] in the answer: {"password":"[REDACTED]"}' ),
 				array( 'title' => self::R ),
-				array( 'value' => 'a note that mentions [REDACTED] in passing' ),
+				array( 'value' => array( 'content' => 'a quote: {"password":"[REDACTED]"}' ) ),
 				array( 'value' => array( 'color' => 'red' ) ),
 			) as $i => $args
 		) {
@@ -965,6 +1014,11 @@ final class RedactionTest extends TestCase {
 			self::assertSame( 1, $calls );
 		}
 		self::assertNull( AB_MCP_Redactor::placeholder_in( array( 'post_content' => self::R, 'x' => array( 'rendered' => self::R ) ) ) );
+		self::assertSame( '/content/0', AB_MCP_Redactor::placeholder_in( array( 'content' => array( self::R ) ) ) );
+		// Codex 3 #7: search and replace takes patterns, not values read back.
+		[ $result, $calls ] = $this->write( array( 'search' => self::R, 'replace' => 'anonymised' ), 'wp_search_replace' );
+		self::assertFalse( $result['isError'] );
+		self::assertSame( 1, $calls );
 		// A reading tool reads: what it is asked with is no write.
 		[ $result, $calls ] = $this->write( array( 'search' => self::R ), 'wp_get_thing' );
 		self::assertFalse( $result['isError'] );

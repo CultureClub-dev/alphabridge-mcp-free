@@ -64,7 +64,7 @@ final class AB_MCP_Redactor {
 	 * matching these as substrings would wrongly refuse token_count,
 	 * password_hint or credential_type. Plurals are listed explicitly.
 	 */
-	const CREDENTIAL_EXACT = array( 'token', 'tokens', 'secret', 'secrets', 'password', 'passwords', 'passphrase', 'passphrases', 'passcode', 'passcodes', 'pwd', 'pwds', 'otp', 'otps', 'credential', 'credentials' );
+	const CREDENTIAL_EXACT = array( 'pass', 'token', 'tokens', 'secret', 'secrets', 'password', 'passwords', 'passphrase', 'passphrases', 'passcode', 'passcodes', 'pwd', 'pwds', 'otp', 'otps', 'credential', 'credentials' );
 
 	/**
 	 * High-precision compound credential patterns, matched anywhere in the
@@ -125,10 +125,13 @@ final class AB_MCP_Redactor {
 	const TEXT_TOOLS = array( 'wp_get_error_log' );
 
 	/**
-	 * Tools that hand out a file or an export as it is stored: their text is
-	 * not decoded, because the answer is how the file gets edited.
+	 * Tools whose texts are not decoded: a file or an export as it is
+	 * stored, the answer being how the file gets edited, and a page-builder
+	 * layout, which comes as a structure already and whose texts are the
+	 * page's content (a text widget with "password": … in it). Keys are
+	 * judged there as everywhere.
 	 */
-	const FILE_TOOLS = array( 'wp_read_theme_file', 'wp_read_plugin_file', 'wp_read_upload_file', 'wp_deploy_read', 'wp_export_content' );
+	const NO_DECODE = array( 'wp_read_theme_file', 'wp_read_plugin_file', 'wp_read_upload_file', 'wp_deploy_read', 'wp_export_content', 'wp_get_builder_layout' );
 
 	/**
 	 * Fields that hold what people wrote: the text, excerpt and title of a
@@ -151,6 +154,13 @@ final class AB_MCP_Redactor {
 	 * through.
 	 */
 	const RESTORES = array();
+
+	/**
+	 * Writing tools whose arguments are search patterns and replacement text
+	 * for content, never a value read back from an answer: replacing a
+	 * "[REDACTED]" that stands in a post is a legitimate call.
+	 */
+	const PATTERN_TOOLS = array( 'wp_search_replace' );
 
 	/** Nesting deeper than this is not judged (fail-closed). */
 	const MAX_DEPTH = 100;
@@ -313,10 +323,24 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
+	 * Whether run_tool() looks for the placeholder in a tool's arguments:
+	 * for every tool that writes, but those that put the stored value back
+	 * themselves (RESTORES) and those that take patterns (PATTERN_TOOLS).
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  The tool's definition.
+	 * @return bool
+	 */
+	public static function guards( $name, array $def ) {
+		return ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) && ! in_array( $name, self::RESTORES, true ) && ! in_array( $name, self::PATTERN_TOOLS, true );
+	}
+
+	/**
 	 * Where an argument of a writing tool carries the placeholder back: a
-	 * value that is exactly REDACTED, or a text with "[REDACTED]" or
-	 * s:10:"[REDACTED]" in it (JSON or serialized data read from an answer).
-	 * Texts people wrote (CONTENT_FIELDS) are not looked at.
+	 * text with [REDACTED] anywhere in it (a value read from an answer, JSON
+	 * or serialized data with it at any level of escaping). A text directly
+	 * under a field people write (CONTENT_FIELDS) is not looked at; an array
+	 * under such a field is, as the reader redacts keys there too.
 	 *
 	 * @param mixed $args Arguments.
 	 * @return string|null The JSON pointer of the first such value; null for none.
@@ -337,15 +361,13 @@ final class AB_MCP_Redactor {
 	 */
 	private static function find_mark( $value, array $path, $depth, &$budget ) {
 		if ( is_string( $value ) ) {
-			// "[REDACTED]" with its quotes: in JSON, and in serialized data (s:10:"[REDACTED]";).
-			$hit = self::MARK === $value || false !== strpos( $value, '"' . self::MARK . '"' );
-			return $hit ? self::pointer( $path ) : null;
+			return false !== strpos( $value, self::MARK ) ? self::pointer( $path ) : null;
 		}
 		if ( ( ! is_array( $value ) && ! $value instanceof stdClass ) || --$budget < 0 || $depth > self::MAX_DEPTH ) {
 			return null;
 		}
 		foreach ( is_array( $value ) ? $value : get_object_vars( $value ) as $k => $v ) {
-			if ( is_string( $k ) && in_array( strtolower( $k ), self::CONTENT_FIELDS, true ) ) {
+			if ( is_string( $v ) && is_string( $k ) && in_array( strtolower( $k ), self::CONTENT_FIELDS, true ) ) {
 				continue;
 			}
 			$hit = self::find_mark( $v, array_merge( $path, array( $k ) ), $depth + 1, $budget );
@@ -456,7 +478,7 @@ final class AB_MCP_Redactor {
 			'keep'        => $split( isset( self::KEEP[ $name ] ) ? self::KEEP[ $name ] : array() ),
 			'skip'        => $split( isset( self::SCHEMAS[ $name ] ) ? self::SCHEMAS[ $name ] : array() ),
 			'text'        => in_array( $name, self::TEXT_TOOLS, true ),
-			'parse'       => ! in_array( $name, self::FILE_TOOLS, true ),
+			'parse'       => ! in_array( $name, self::NO_DECODE, true ),
 			'extra'       => self::extra_keys(),
 			'budget'      => self::BUDGET,
 			'found'       => array(),
@@ -569,17 +591,18 @@ final class AB_MCP_Redactor {
 			}
 			return self::walk( $data, $path, $st, $depth + 1 );
 		}
-		if ( is_object( $value ) ) {
-			// An object of a built-in class (DateTimeImmutable) has a JSON
-			// form of its own and holds no other plugin's settings: as it is.
-			if ( ! $value instanceof stdClass && ! $value instanceof __PHP_Incomplete_Class && ( new ReflectionClass( $value ) )->isInternal() ) {
-				return $value;
-			}
-			// Otherwise as a stdClass, so {} stays {}: the public properties,
-			// which wp_json_encode() writes, and of an object unserialize()
-			// could not load also the private and protected ones ("\0*\0token"),
-			// which serialize() writes back.
+		if ( $value instanceof stdClass || $value instanceof __PHP_Incomplete_Class ) {
+			// As a stdClass, so {} stays {}; of an object unserialize() could
+			// not load with its private and protected properties
+			// ("\0*\0token"), which serialize() writes back.
 			return (object) self::walk_array( get_object_vars( $value ), $path, $st, $depth );
+		}
+		if ( is_object( $value ) ) {
+			// Any other object as the client gets it: its JSON form
+			// (DateTime's date and timezone, ArrayObject's content).
+			$json = wp_json_encode( $value );
+			$data = is_string( $json ) ? json_decode( $json, false, 512, JSON_BIGINT_AS_STRING ) : null;
+			return null === $data && 'null' !== $json ? self::unchecked( $path, $st ) : self::walk( $data, $path, $st, $depth + 1 );
 		}
 		return self::walk_array( $value, $path, $st, $depth );
 	}
@@ -753,7 +776,7 @@ final class AB_MCP_Redactor {
 	 * @return string|null Null where a pattern gave up.
 	 */
 	public static function text( $text, &$hits, array $extra = array() ) {
-		$lines = explode( "\n", (string) $text );
+		$lines = explode( "\n", self::pem( (string) $text, $hits ) );
 		$count = count( $lines );
 		$out   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
@@ -778,6 +801,34 @@ final class AB_MCP_Redactor {
 			$out[] = $new;
 		}
 		return implode( "\n", $out );
+	}
+
+	/**
+	 * Every private key in PEM form, whatever name stands before it: from
+	 * -----BEGIN … PRIVATE KEY----- to its -----END …----- line, or to the
+	 * end of the text where none follows.
+	 *
+	 * @param string $text Text.
+	 * @param int    $hits Replacements (added to).
+	 * @return string
+	 */
+	private static function pem( $text, &$hits ) {
+		$out = '';
+		$pos = 0;
+		while ( false !== ( $at = strpos( $text, '-----BEGIN ', $pos ) ) ) {
+			$head = strpos( $text, '-----', $at + 11 );
+			if ( false === $head || false === strpos( substr( $text, $at, $head - $at ), 'PRIVATE KEY' ) ) {
+				$out .= substr( $text, $pos, $at + 11 - $pos );
+				$pos  = $at + 11;
+				continue;
+			}
+			$end  = strpos( $text, '-----END ', $head + 5 );
+			$stop = false === $end ? false : strpos( $text, '-----', $end + 9 );
+			$out .= substr( $text, $pos, $at - $pos ) . self::MARK;
+			$pos  = false === $stop ? strlen( $text ) : $stop + 5;
+			++$hits;
+		}
+		return $out . substr( $text, $pos );
 	}
 
 	/**
