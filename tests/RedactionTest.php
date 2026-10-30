@@ -567,6 +567,48 @@ final class RedactionTest extends TestCase {
 		self::assertArrayNotHasKey( 'redacted', $out );
 	}
 
+	public function testWhatPeopleWroteStaysByteForByte(): void {
+		$post = array(
+			'id'           => 12,
+			'title'        => '{"token":"title-example"}',
+			'content'      => '{"password":"x"}',
+			'excerpt'      => 'a:1:{s:6:"secret";s:1:"y";}',
+			'post_content' => '<!-- wp:acme/form {"apiKey":"block-attribute"} /-->' . "\n" . 'Set "api_key": "YOUR-KEY" in config.json.',
+			'rendered'     => array( 'raw' => '{"secret":"r"}', 'rendered' => '<p>{"secret":"r"}</p>' ),
+			'meta'         => array( 'config' => '{"password":"x"}' ),
+		);
+
+		$out = $this->read( $post, 'wp_get_post' );
+
+		foreach ( array( 'title', 'content', 'excerpt', 'post_content', 'rendered' ) as $field ) {
+			self::assertSame( $post[ $field ], $out[ $field ], $field );
+		}
+		self::assertSame( '{"password":"[REDACTED]"}', $out['meta']['config'], 'The same JSON in a meta value is redacted.' );
+		self::assertSame( array( '/meta/config/password' ), $out['redacted'] );
+		$comment = array( 'id' => 3, 'comment_content' => 'my config: {"client_secret":"abc"}' );
+		self::assertSame( $comment, $this->read( $comment, 'wp_get_comment' ) );
+		// A key below a content field is still judged by its name.
+		self::assertSame( self::R, $this->read( array( 'content' => array( 'api_key' => 'PLACEHOLDER' ) ), 'wp_get_post' )['content']['api_key'] );
+	}
+
+	public function testTheMetaReaderRedactsTheSameJson(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		ab_test_add_post( 6 );
+		add_post_meta( 6, 'settings_json', '{"password":"x"}' );
+
+		$out = AB_MCP_Redactor::tool_result( 'wp_get_post_meta', array(), AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 6 ) ) );
+
+		self::assertSame( '{"password":"[REDACTED]"}', $out['meta']['settings_json'] );
+	}
+
+	public function testAnExportIsHandedOutAsItIsStored(): void {
+		$export = array( 'format' => 'wxr', 'xml' => '<wp:meta_value><![CDATA[{"api_key":"x"}]]></wp:meta_value>' );
+
+		// Read-only where a definition says so; the free core's registry does not.
+		self::assertSame( $export, AB_MCP_Redactor::tool_result( 'wp_export_content', array( 'readonly' => true ), $export ) );
+		self::assertNotSame( $export, AB_MCP_Redactor::tool_result( 'wp_export_other', array( 'readonly' => true ), $export ) );
+	}
+
 	public function testFreeTextIsSearchedInTheErrorLogOnly(): void {
 		$content = 'Our tutorial: call https://api.example.org/?api_key=YOUR-KEY with Authorization: Bearer YOUR-TOKEN-HERE';
 
@@ -574,10 +616,11 @@ final class RedactionTest extends TestCase {
 	}
 
 	public function testAFileIsHandedOutAsItIsStored(): void {
-		$file = array( 'path' => 'composer.json', 'content' => '{"config":{"github-oauth":{"github.com":"PLACEHOLDER"}}}' );
+		// Under a field name of its own, so the content-field rule does not cover it.
+		$file = array( 'path' => 'composer.json', 'data' => '{"config":{"github-oauth":{"github.com":"PLACEHOLDER"}}}' );
 
 		self::assertSame( $file, $this->read( $file, 'wp_read_plugin_file' ) );
-		self::assertStringNotContainsString( 'PLACEHOLDER', $this->read( $file, 'wp_get_post' )['content'], 'The same text in another reader is searched.' );
+		self::assertStringNotContainsString( 'PLACEHOLDER', $this->read( $file )['data'], 'The same answer of another reader is searched.' );
 	}
 
 	/* ------------------------------------------------------------ answers */

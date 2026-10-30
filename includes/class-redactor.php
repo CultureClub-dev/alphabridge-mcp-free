@@ -132,11 +132,24 @@ final class AB_MCP_Redactor {
 	const TEXT_TOOLS = array( 'wp_get_error_log' );
 
 	/**
-	 * Tools that hand out a file as it is stored: their text is not searched
-	 * for JSON or serialized data, because the answer is how the file gets
-	 * edited, and a value put back as REDACTED would be written back.
+	 * Tools that hand out a file or an export as it is stored: their text is
+	 * not searched for JSON or serialized data, because the answer is how the
+	 * file gets edited, and a value put back as REDACTED would be written
+	 * back.
 	 */
-	const FILE_TOOLS = array( 'wp_read_theme_file', 'wp_read_plugin_file', 'wp_read_upload_file', 'wp_deploy_read' );
+	const FILE_TOOLS = array( 'wp_read_theme_file', 'wp_read_plugin_file', 'wp_read_upload_file', 'wp_deploy_read', 'wp_export_content' );
+
+	/**
+	 * Fields that hold what people wrote: the text, excerpt and title of a
+	 * post, a revision or a comment, raw and rendered. Their text is not
+	 * searched for JSON or serialized data. A reader of a post is how it gets
+	 * edited: a tutorial with "password": "…" in it, read with REDACTED and
+	 * saved again, would lose its example for good, and no undo of the text
+	 * catches that. Block attributes in the text stay too: they are content
+	 * the editor shows anyway. Keys below such a field (an array under
+	 * content) are judged as everywhere else.
+	 */
+	const CONTENT_FIELDS = array( 'content', 'content_raw', 'post_content', 'post_content_filtered', 'excerpt', 'post_excerpt', 'title', 'post_title', 'comment_content', 'rendered', 'raw' );
 
 	/**
 	 * Writing tools of which one part of the answer is another plugin's data,
@@ -633,6 +646,13 @@ final class AB_MCP_Redactor {
 				} else {
 					$out[ $k ] = $item;
 				}
+				continue;
+			}
+			if ( is_string( $key ) && in_array( strtolower( $key ), self::CONTENT_FIELDS, true ) ) {
+				$parse       = $st['parse'];
+				$st['parse'] = false;
+				$out[ $k ]   = self::walk( $item, $p, $st, $depth + 1 );
+				$st['parse'] = $parse;
 				continue;
 			}
 			$out[ $k ] = self::walk( $item, $p, $st, $depth + 1 );
