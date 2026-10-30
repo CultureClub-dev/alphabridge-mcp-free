@@ -117,7 +117,7 @@ final class FreeSinceFourElevenTest extends TestCase {
 				$class::register( $r );
 			}
 		}
-		self::assertCount( 95, $r->all(), '82 until 4.10.0, the twelve, and wp_connection_doctor.' );
+		self::assertCount( 96, $r->all(), '82 until 4.10.0, the twelve and wp_connection_doctor (4.11.0), wp_find_media (4.12.0).' );
 		foreach ( array_keys( self::TOOLS ) as $name ) {
 			self::assertNotNull( $r->get( $name ), $name );
 		}

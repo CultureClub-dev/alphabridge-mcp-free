@@ -28,7 +28,7 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **95 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+- **96 structured tools** across content, media, taxonomies, comments, widgets, menus, site
   settings, site info, users, plugins and themes (install, update, activate, delete), WordPress
   updates, cron and the error log, SEO fields, WooCommerce, maintenance, page builders, search and
   replace, bulk status changes and a connection check.

@@ -36,7 +36,7 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-95 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+96 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
@@ -221,6 +221,11 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.12.0 =
+* **Pictures from the chat go straight into the media library.** In ChatGPT, a picture or PDF you attach is handed to `wp_upload_media` as a file: the site downloads it from its temporary address with the same checks as `wp_upload_media_from_url` (public host on every redirect, 20 MB, image or PDF only). Base64 content works as before.
+* **The same file is not stored twice.** Every file AlphaBridge adds keeps its SHA-256; uploading the same file again names the one that is there (`duplicate: true`) instead of adding a copy, unless `allow_duplicate` is set. `max_size` scales a large JPEG, PNG or WebP down to a longest edge before it is stored.
+* **New: `wp_find_media`** finds files by their SHA-256, by the address of the file or one of its image sizes, by file name or by text. 96 tools in all.
 
 = 4.11.0 =
 * **Installing, updating and activating in the free plugin, 95 tools in all.** `wp_install_plugin`, `wp_install_theme`, `wp_install_plugin_zip`, `wp_install_theme_zip`, `wp_update_plugin`, `wp_update_theme`, `wp_update_core`, `wp_activate_plugin`, `wp_deactivate_plugin`, `wp_activate_theme`, `wp_delete_plugin` and `wp_delete_theme` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages. Test requests check the site before and after an update or a switch-on, and a version or theme that breaks it is put back in the same call.
@@ -478,6 +483,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.12.0 =
+Pictures from the ChatGPT chat go straight into the media library, the same file is not stored twice, and wp_find_media finds a file by its content, address or name. No setting changes.
 
 = 4.11.0 =
 Installing, updating and activating plugins and themes are free now, 95 tools in all, with a connection check. Updating WordPress, ZIP installs and deletes run after a preview with a token. No setting changes.

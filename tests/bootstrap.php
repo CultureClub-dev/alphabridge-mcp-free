@@ -1021,8 +1021,9 @@ function wp_get_attachment_url( $id ) {
 	return 'https://example.test/wp-content/uploads/' . (int) $id . '.jpg';
 }
 
+/** Attachment metadata a test sets in $ab_test_attachment_meta, else none. */
 function wp_get_attachment_metadata( $id ) {
-	return array();
+	return $GLOBALS['ab_test_attachment_meta'][ (int) $id ] ?? array();
 }
 
 /* ---------------------------------------------------------- admin ajax */

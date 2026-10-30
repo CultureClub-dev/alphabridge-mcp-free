@@ -482,9 +482,6 @@ msgstr "Não foi possível criar um ficheiro temporário, por isso nada foi carr
 msgid "Could not create the connection."
 msgstr "Não foi possível criar a ligação."
 
-msgid "Could not write the downloaded file, so nothing was uploaded; the server's temporary folder is likely full or not writable. The site administrator or host can fix that."
-msgstr "Não foi possível escrever o ficheiro descarregado, por isso nada foi carregado; provavelmente, a pasta temporária do servidor está cheia ou não permite escrita. O administrador do site ou o fornecedor de alojamento pode resolver isso."
-
 msgid "Could not write the file, so nothing was uploaded; the server's temporary folder is likely full or not writable. The site administrator or host can fix that."
 msgstr "Não foi possível escrever o ficheiro, por isso nada foi carregado; provavelmente, a pasta temporária do servidor está cheia ou não permite escrita. O administrador do site ou o fornecedor de alojamento pode resolver isso."
 
@@ -4563,3 +4560,34 @@ msgstr "Inicie a autenticação e introduza este endereço"
 
 msgid "In Cursor, open Customize → MCPs and start the sign-in next to alphabridge. The hub asks for your site’s address."
 msgstr "No Cursor, abra «Customize → MCPs» e, junto de alphabridge, inicie a autenticação. O hub pede o endereço do seu site."
+
+msgid "This file is already in the media library (same SHA-256), so nothing new was added; its title, alt text and post stay as they are. wp_update_media changes them; allow_duplicate: true adds a second copy."
+msgstr "Este ficheiro já está na biblioteca multimédia (mesmo SHA-256), por isso nada de novo foi adicionado; o título, o texto alternativo e o artigo ficam como estão. wp_update_media altera-os; allow_duplicate: true adiciona uma segunda cópia."
+
+msgid "max_size was not applied: the server's image editor cannot read this image, so it is stored at its own size. WordPress still scales images above 2560 pixels."
+msgstr "max_size não foi aplicado: o editor de imagens do servidor não consegue ler esta imagem, por isso é guardada no seu próprio tamanho. O WordPress continua a reduzir por si as imagens acima de 2560 píxeis."
+
+msgid "max_size was not applied: the server's image editor could not scale this image, so it is stored at its own size. WordPress still scales images above 2560 pixels."
+msgstr "max_size não foi aplicado: o editor de imagens do servidor não conseguiu reduzir esta imagem, por isso é guardada no seu próprio tamanho. O WordPress continua a reduzir por si as imagens acima de 2560 píxeis."
+
+msgid "Pass either file (a file from the chat) or filename and content (base64), not both."
+msgstr "Indique file (um ficheiro do chat) ou filename e content (base64), não ambos."
+
+msgid "file needs the download_url and the file_id of the file from the chat, as ChatGPT passes them. Pass file as it came, or send the bytes as base64 in content with a filename."
+msgstr "file precisa da download_url e do file_id do ficheiro do chat, tal como o ChatGPT os passa. Passe file tal como chegou, ou envie os bytes em base64 em content com um filename."
+
+msgid "The download_url of the file from the chat is not a public http(s) address, so nothing was downloaded. Pass file as the chat handed it over, or send the bytes as base64 in content with a filename."
+msgstr "A download_url do ficheiro do chat não é um endereço http(s) público, por isso nada foi transferido. Passe file tal como o chat o entregou, ou envie os bytes em base64 em content com um filename."
+
+msgid "Pass at least one of sha256, url, filename or search. wp_list_media lists the whole media library."
+msgstr "Indique pelo menos um de sha256, url, filename ou search. wp_list_media lista toda a biblioteca multimédia."
+
+msgid "sha256 must be 64 hexadecimal characters, as the upload tools return it. Check the value, or search by url, filename or search instead."
+msgstr "sha256 tem de ter 64 caracteres hexadecimais, tal como as ferramentas de carregamento o devolvem. Verifique o valor, ou pesquise por url, filename ou search."
+
+msgctxt "tool label"
+msgid "Find media"
+msgstr "Encontrar multimédia"
+
+msgid "The search stopped after many matches this account may not read, so there may be more files it may read. Narrow it with sha256, url, filename, search or mime."
+msgstr "A pesquisa parou após muitos resultados que esta conta não pode ler, por isso pode haver mais ficheiros que pode ler. Restrinja-a com sha256, url, filename, search ou mime."
