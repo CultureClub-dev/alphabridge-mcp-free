@@ -825,7 +825,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$post = get_post( $id );
 
-		$refused = self::builder_meta_refusal( $a, $post );
+		// Meta of a revision goes to its post (apply_meta_and_terms()):
+		// page-builder keys are judged on that post.
+		$owner   = (int) wp_is_post_revision( $id );
+		$refused = self::builder_meta_refusal( $a, $owner > 0 ? get_post( $owner ) : $post );
 		if ( null !== $refused ) {
 			return $refused;
 		}
@@ -1525,6 +1528,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 */
 	private static function apply_meta_and_terms( $id, $a ) {
 		$meta = self::arr( $a, 'meta', array() );
+		// WordPress stores the meta of a revision on the post it belongs to
+		// (update_post_meta()), so the rights of the keys are that post's: a
+		// key a plugin guards for the post's type is not to be reached
+		// through one of its revisions.
+		$owner = (int) wp_is_post_revision( $id );
+		$owner = $owner > 0 ? $owner : (int) $id;
 		foreach ( $meta as $key => $value ) {
 			// Sanitize first, then screen the key that will actually be stored,
 			// so key normalisation cannot smuggle a protected/credential name past.
@@ -1535,12 +1544,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 			// WordPress meta capability: routes through map_meta_cap and thereby
 			// honours any auth_callback another plugin registered for this key.
-			if ( ! current_user_can( 'edit_post_meta', $id, $clean ) ) {
+			if ( ! current_user_can( 'edit_post_meta', $owner, $clean ) ) {
 				continue;
 			}
 			// update_metadata() unslashes key and value; the key is already
 			// sanitize_key()'d above, the value is not.
-			update_post_meta( $id, $clean, wp_slash( $value ) );
+			update_post_meta( $owner, $clean, wp_slash( $value ) );
 		}
 
 		$terms = self::arr( $a, 'terms', array() );

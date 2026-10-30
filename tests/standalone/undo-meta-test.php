@@ -898,6 +898,42 @@ $GLOBALS['ab_db_down'] = true;
 $res = ab_post_meta( 5, 'obj2', 'x' );
 ok( 'ab_mcp_not_saved' === ab_code( $res ), 'M18 without the rows, the read-back still sees that the same object is nothing new' );
 
+/* ============================== N) Codex 31.10.2026, third round: the rights of every spelling, before the write */
+
+reset_all();
+$mx = ab_add_row( 'term', 8, 'Mixed', 'geschuetzt' );
+$GLOBALS['ab_deny'] = array( 'edit_term_meta:8:Mixed' => true );
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'manipuliert' ) );
+ok( 'ab_mcp_protected_meta' === ab_code( $res ) && array( $mx => 'geschuetzt' ) === ab_rows( 'term', 8, 'Mixed' ) && array() === ab_rows( 'term', 8, 'mixed' ), 'N1 a row "Mixed" the account may not change: a write of "mixed" is refused before anything is written' );
+ok( false !== strpos( ab_msg( $res ), '"Mixed"' ) && false !== strpos( ab_msg( $res ), 'the site administrator' ), 'N2 ... naming the row and the way' );
+$GLOBALS['ab_deny'] = array();
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'neu' ) );
+ok( is_array( $res ) && array( $mx => 'neu' ) === ab_rows( 'term', 8, 'Mixed' ), 'N3 with the right to "Mixed", the write goes ahead as WordPress makes it' );
+
+reset_all();
+$mx = ab_add_row( 'post', 5, 'Mixed', 'geschuetzt' );
+$GLOBALS['ab_deny'] = array( 'edit_post_meta:5:Mixed' => true );
+ok( 'ab_mcp_protected_meta' === ab_code( ab_post_meta( 5, 'mixed', 'x' ) ) && array( $mx => 'geschuetzt' ) === ab_rows( 'post', 5, 'Mixed' ), 'N4 the same for post meta' );
+$GLOBALS['ab_deny'] = array();
+$GLOBALS['ab_protected'] = array();
+$k = ab_add_row( 'post', 5, 'API_KEY_X', 'secret' );
+ok( 'ab_mcp_protected_meta' === ab_code( ab_post_meta( 5, 'api_key_x', 'x' ) ) && array( $k => 'secret' ) === ab_rows( 'post', 5, 'API_KEY_X' ), 'N5 ... and the key rules: a stored spelling the tool refuses is not reached either' );
+
+reset_all();
+$un = ab_add_row( 'user', 5, 'Nickname', 'alt' );
+$GLOBALS['ab_deny'] = array( 'edit_user_meta:5:Nickname' => true );
+$res = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'nickname', 'value' => 'x' ) );
+ok( 'ab_mcp_protected_meta' === ab_code( $res ) && array( $un => 'alt' ) === ab_rows( 'user', 5, 'Nickname' ), 'N6 the same for user meta' );
+
+reset_all();
+$mx = ab_add_row( 'term', 8, 'Mixed', 'geschuetzt' );
+$GLOBALS['ab_deny']    = array( 'edit_term_meta:8:Mixed' => true );
+$GLOBALS['ab_db_down'] = true;
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'neu' ) );
+ok( 'ab_mcp_protected_meta' !== ab_code( $res ) && array( $mx => 'neu' ) === ab_rows( 'term', 8, 'Mixed' ), 'N7 a table that cannot be read: no refusal on a guess, the write goes ahead as before' );
+$GLOBALS['ab_db_down'] = false;
+$GLOBALS['ab_deny']    = array();
+
 /* ============================== L) Pro's own wp_undo (last: the class stays) */
 
 reset_all();

@@ -114,6 +114,34 @@ class AB_MCP_Undo_Meta {
 		$cols   = array_map( 'strval', array_keys( $fwant ) );
 		$on     = class_exists( 'AB_MCP_Undo' ) && AB_MCP_Undo::enabled();
 
+		// update_metadata() writes with WHERE meta_key = …, which the
+		// database compares with a collation: a write of "mixed" changes a
+		// row "Mixed" too. The tool asked the rights of its key; a row
+		// stored under another spelling is asked the same rules before
+		// anything is written (refusal(), as the undo asks them). Where the
+		// table cannot be read, the write goes ahead as it always did.
+		foreach ( $keys as $key ) {
+			$found = self::rows( $type, $id, $key );
+			$other = array();
+			foreach ( null === $found ? array() : $found as $row ) {
+				if ( $row['key'] !== $key ) {
+					$other[] = $row['key'];
+				}
+			}
+			$other = array_values( array_unique( $other ) );
+			if ( array() !== $other && '' !== self::refusal( $tool, array( 'type' => $type, 'id' => $id, 'keys' => array( $key => array() ) ), $other ) ) {
+				return new WP_Error(
+					'ab_mcp_protected_meta',
+					sprintf(
+						/* translators: 1: meta key as stored in another letter case, 2: meta key of the call */
+						__( 'Nothing was written: a row of this key is stored as "%1$s", and a write of "%2$s" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change "%1$s" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator.', 'alphabridge-mcp' ),
+						$other[0],
+						$key
+					)
+				);
+			}
+		}
+
 		// The rows as stored, right before the write. Not taken where undo is
 		// off: nothing would keep them.
 		$snap   = $on ? self::take( $type, $id, $keys, $cols ) : null;

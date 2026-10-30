@@ -4984,3 +4984,6 @@ msgstr "Les métadonnées n'ont pas pu être lues avant la restauration ; rien n
 
 msgid "The meta was changed after the undo was planned; nothing was restored. Pass force=true to put the old value back over the newer change."
 msgstr "Les métadonnées ont été modifiées après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour remettre l'ancienne valeur par-dessus la modification plus récente."
+
+msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
+msgstr "Rien n'a été écrit : une ligne de cette clé est enregistrée sous « %1$s », et une écriture de « %2$s » la modifierait aussi, car la base de données compare les clés sans tenir compte des majuscules et minuscules. Le compte de cette connexion ne peut pas modifier « %1$s » (une extension la protège, ou c'est une clé protégée). Modifiez-la là où son extension le propose, ou demandez à l'administrateur du site."

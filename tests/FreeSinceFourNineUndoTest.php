@@ -880,6 +880,23 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertNotContains( array( 'edit_post', array( 50 ) ), $asked, 'Not the revision\'s rights.' );
 	}
 
+	public function testUpdatePostWithMetaOfARevisionAsksTheRightsOfItsPost(): void {
+		// Codex 31.10.2026: wp_update_post takes a revision id on purpose (its
+		// description says the meta goes to the post); the meta field then
+		// asks the rights of that post and writes there.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		$asked                  = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args = array() ) use ( &$asked ): bool {
+			$asked[] = array( $cap, $args );
+			return ! ( 'edit_post_meta' === $cap && 'locked_field' === ( $args[1] ?? null ) );
+		};
+		AB_MCP_Tools_Content::update_post( array( 'id' => 50, 'meta' => array( 'locked_field' => 'neu', 'farbe' => 'blau' ) ) );
+		self::assertArrayNotHasKey( 'locked_field', $GLOBALS['ab_test_meta'][5] ?? array(), 'A key the post guards is not reached through its revision.' );
+		self::assertSame( array( 'blau' ), $GLOBALS['ab_test_meta'][5]['farbe'] ?? null, 'A key the post allows goes to the post.' );
+		self::assertContains( array( 'edit_post_meta', array( 5, 'farbe' ) ), $asked, 'The rights of the post, not of the revision.' );
+		self::assertNotContains( array( 'edit_post_meta', array( 50, 'farbe' ) ), $asked );
+	}
+
 	public function testPostMetaASanitizeFilterThatRewritesTheValueIsReportedNotHidden(): void {
 		add_filter( 'sanitize_post_meta_farbe', static fn( $v ) => strtoupper( (string) $v ) );
 		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );

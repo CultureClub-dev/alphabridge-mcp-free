@@ -4984,3 +4984,6 @@ msgstr "Non è stato possibile leggere i metadati prima del ripristino; non è s
 
 msgid "The meta was changed after the undo was planned; nothing was restored. Pass force=true to put the old value back over the newer change."
 msgstr "I metadati sono stati modificati dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per rimettere il vecchio valore sopra la modifica più recente."
+
+msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
+msgstr "Non è stato scritto nulla: una riga di questa chiave è salvata come \"%1$s\", e una scrittura di \"%2$s\" la modificherebbe anch'essa, perché il database confronta le chiavi senza distinguere maiuscole e minuscole. L'account di questa connessione non può modificare \"%1$s\" (un plugin la protegge, o è una chiave protetta). Modificala dove il suo plugin lo consente, o chiedi all'amministratore del sito."

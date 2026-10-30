@@ -4984,3 +4984,6 @@ msgstr "Die Meta-Daten liessen sich vor der Wiederherstellung nicht lesen; nicht
 
 msgid "The meta was changed after the undo was planned; nothing was restored. Pass force=true to put the old value back over the newer change."
 msgstr "Die Meta-Daten wurden geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um den alten Wert über die neuere Änderung zu legen."
+
+msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
+msgstr "Nichts wurde geschrieben: Eine Zeile dieses Schlüssels ist als «%1$s» gespeichert, und ein Schreiben von «%2$s» würde sie mitändern, weil die Datenbank Schlüssel ohne Rücksicht auf Gross- und Kleinschreibung vergleicht. Das Konto dieser Verbindung darf «%1$s» nicht ändern (ein Plugin schützt den Schlüssel, oder er ist geschützt). Ihn dort ändern, wo sein Plugin es anbietet, oder den Administrator der Website fragen."
