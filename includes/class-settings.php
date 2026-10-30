@@ -66,6 +66,15 @@ class AB_MCP_Settings {
 			// AB_MCP_OAuth::cimd_enabled(), which also honours
 			// WP_HTTP_BLOCK_EXTERNAL and a filter.
 			'oauth_cimd'                 => true,
+			// AlphaBridge's tools as WordPress abilities, for the MCP
+			// adapter (AB_MCP_Own_Abilities). OFF until an administrator
+			// switches it on under Fine-tuning: the adapter is a second way
+			// in, without an AlphaBridge connection, its token and its access
+			// level; every account that signs in there (an application
+			// password) could use the tools with its WordPress rights. A site
+			// updated from before 4.12.0 has no such key and reads this
+			// default, so the update switches nothing on.
+			'own_abilities'              => false,
 		);
 	}
 

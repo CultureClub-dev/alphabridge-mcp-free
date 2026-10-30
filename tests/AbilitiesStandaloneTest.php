@@ -1,13 +1,17 @@
 <?php
 /**
- * The standalone script under tests/standalone-abilities/: the abilities of
+ * The standalone scripts under tests/standalone-abilities/: the abilities of
  * other plugins (wp_list_abilities, wp_run_ability), their broker, its
- * approvals in the fine-tuning and the code gate, against fixed copies of
- * the Abilities API of WordPress 7.0.2 and 7.1.2.
+ * approvals in the fine-tuning and the code gate; and AlphaBridge's own
+ * tools as abilities for the MCP adapter (own-abilities-test.php, since
+ * 4.12.0, on the shared bootstrap with the real classes); against fixed
+ * copies of the Abilities API of WordPress 7.0.2 and 7.1.2.
  *
- * It comes from AlphaBridge MCP Pro, where these tools were before 4.12.0, a
- * PHP script with its own stand-ins for WordPress (the shared ones in
- * tests/standalone-lib/). So it runs in a process of its own, with the PHP that runs PHPUnit, under a time
+ * The first comes from AlphaBridge MCP Pro, where these tools were before
+ * 4.12.0, a PHP script with its own stand-ins for WordPress (the shared ones
+ * in tests/standalone-lib/); the second defines the functions of the
+ * Abilities API's classes the shared bootstrap lacks. So each runs in a
+ * process of its own, with the PHP that runs PHPUnit, under a time
  * limit, once per scenario, and passes only when it exits with 0, prints no
  * FAIL line, error or warning, ends with its line of success and made at
  * least as many checks as it is known to make.
@@ -42,6 +46,11 @@ final class AbilitiesStandaloneTest extends TestCase {
 			'writers'    => 13,
 			'extra'      => 8,
 			'extra 7.1.2' => 8,
+		),
+		'own-abilities-test.php'  => array(
+			'main'       => 80,
+			'main 7.1.2' => 80,
+			'noapi'      => 4,
 		),
 	);
 

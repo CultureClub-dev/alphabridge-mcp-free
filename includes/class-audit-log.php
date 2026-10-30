@@ -31,8 +31,13 @@ class AB_MCP_Audit_Log {
 	 * @param array       $args    Arguments (not stored verbatim – summarized).
 	 * @param string      $status  ok | error | denied.
 	 * @param string|null $message Optional message.
+	 * @param string      $via     The way the call came in when it is not an
+	 *                             AlphaBridge connection: 'ability' for a
+	 *                             call through the Abilities API (the MCP
+	 *                             adapter, AB_MCP_Own_Abilities). '' for a
+	 *                             connection; the entry then has no 'via'.
 	 */
-	public static function record( $tool, $args, $status, $message = null ) {
+	public static function record( $tool, $args, $status, $message = null, $via = '' ) {
 		if ( ! AB_MCP_Settings::get( 'audit_enabled', true ) ) {
 			return;
 		}
@@ -42,7 +47,7 @@ class AB_MCP_Audit_Log {
 			$log = array();
 		}
 
-		$log[] = array(
+		$entry = array(
 			'ts'      => time(),
 			'user'    => get_current_user_id(),
 			'tool'    => (string) $tool,
@@ -50,6 +55,10 @@ class AB_MCP_Audit_Log {
 			'message' => $message ? self::clip( (string) $message, 300 ) : '',
 			'keys'    => is_array( $args ) ? implode( ',', array_slice( array_keys( $args ), 0, 12 ) ) : '',
 		);
+		if ( '' !== (string) $via ) {
+			$entry['via'] = (string) $via;
+		}
+		$log[] = $entry;
 
 		if ( count( $log ) > self::MAX ) {
 			$log = array_slice( $log, -self::MAX );

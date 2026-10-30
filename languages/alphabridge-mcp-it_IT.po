@@ -4921,3 +4921,27 @@ msgstr "Abilità di altri plugin"
 #, php-format
 msgid "%1$s is annotated read-only by its plugin, but it staged a change in a draft of post #%2$d, the autosave revision #%3$d of your account; publishing that draft brings it live. %4$s"
 msgstr "%1$s è annotata come di sola lettura dal suo plugin, ma ha messo una modifica in una bozza dell'articolo #%2$d, la revisione di salvataggio automatico #%3$d del tuo account; pubblicare quella bozza la porta online. %4$s"
+
+msgid "via the MCP Adapter"
+msgstr "tramite l'adattatore MCP"
+
+msgid "AlphaBridge's tools are not offered as WordPress abilities on this site, so \"%s\" did not run."
+msgstr "Gli strumenti di AlphaBridge non sono offerti come abilità di WordPress su questo sito, quindi “%s” non è stato eseguito."
+
+msgid "To allow it, an administrator switches on \"Offer AlphaBridge's tools as WordPress abilities\" under Settings → AlphaBridge MCP → Fine-tuning and saves the changes."
+msgstr "Per consentirlo, un amministratore attiva “Offri gli strumenti di AlphaBridge come abilità di WordPress” in Impostazioni → AlphaBridge MCP → Regolazione fine e salva le modifiche."
+
+msgid "The tool \"%s\" is not offered as a WordPress ability on this site: it runs only through an AlphaBridge connection, with the checks of its access level."
+msgstr "Lo strumento “%s” non è offerto come abilità di WordPress su questo sito: viene eseguito solo tramite una connessione AlphaBridge, con i controlli del suo livello di accesso."
+
+msgid "Use it through an AlphaBridge connection instead: an administrator connects the app under Settings → AlphaBridge MCP, and tools/list names the tool there."
+msgstr "Usalo invece tramite una connessione AlphaBridge: un amministratore collega l'app in Impostazioni → AlphaBridge MCP, e lì tools/list indica lo strumento."
+
+msgid "Offer AlphaBridge's tools as WordPress abilities, for the MCP Adapter"
+msgstr "Offri gli strumenti di AlphaBridge come abilità di WordPress, per l'adattatore MCP"
+
+msgid "Accounts that sign in to the MCP Adapter, for example with an application password, can then use AlphaBridge's tools with their WordPress rights, without an AlphaBridge connection. Tools that write run only with write access on, switched-off tools stay off, and undo and the tools for the abilities of other plugins are not offered. Off until you switch it on here; switching on write access does not switch it on."
+msgstr "Gli account che accedono all'adattatore MCP, per esempio con una password per le applicazioni, possono allora usare gli strumenti di AlphaBridge con i loro diritti di WordPress, senza una connessione AlphaBridge. Gli strumenti che scrivono vengono eseguiti solo con l'accesso in scrittura attivato, gli strumenti disattivati restano disattivati, e l'annullamento e gli strumenti per le abilità di altri plugin non vengono offerti. Disattivato finché non lo attivi qui; attivare l'accesso in scrittura non lo attiva."
+
+msgid "This site runs WordPress %s. The Abilities API needs WordPress 6.9 or newer; until WordPress is updated under Dashboard → Updates, nothing is offered."
+msgstr "Questo sito usa WordPress %s. L'Abilities API richiede WordPress 6.9 o successivo; finché WordPress non viene aggiornato in Bacheca → Aggiornamenti, non viene offerto nulla."

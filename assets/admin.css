@@ -1848,6 +1848,35 @@
 	overflow-wrap: anywhere;
 }
 
+/* AlphaBridge's tools as WordPress abilities, for the MCP adapter
+ * (AB_MCP_Own_Abilities::fine_html()): one switch below the tool groups,
+ * off by default; the switches for all tools and the groups leave it alone. */
+.ab-mcp .ab-own-abilities {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 18px 0 0;
+	padding: 12px 14px;
+	border: 1px solid #e2e4e7;
+	border-radius: 12px;
+	background: #f6f7f7;
+}
+
+.ab-mcp .ab-own-abilities__row {
+	display: inline-flex;
+	gap: 14px;
+	align-items: center;
+	color: #1d2327;
+	cursor: pointer;
+	font-size: 15px;
+	font-weight: 650;
+}
+
+.ab-mcp .ab-own-abilities .ab-note {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
 .ab-mcp .ab-info {
 	position: relative;
 	display: inline-flex;
@@ -2138,6 +2167,11 @@
 
 .ab-mcp .ab-log__clear {
 	margin: 12px 0 0;
+}
+
+.ab-mcp .ab-log__via {
+	color: #50575e;
+	font-size: 12px;
 }
 
 /* ---------- Side column ---------- */

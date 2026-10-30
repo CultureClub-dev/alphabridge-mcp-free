@@ -123,6 +123,17 @@ Handing an AI access to a site should feel safe, so control comes first:
   access is switched, `ab_mcp_reset_switches` when a switch from off to on switched everything on
   (add-ons switch their own items on there). The fine-tuning takes an add-on's fields into its one form
   (filter `ab_mcp_fine_group_html`, action `ab_mcp_fine_save`).
+- **WordPress abilities for the MCP Adapter — off out of the box.** A switch under Fine-tuning
+  offers the plugin's tools as WordPress abilities (`alphabridge/<tool name with - for _>`) for
+  the WordPress MCP Adapter. The adapter is a second way in, without an AlphaBridge connection, its
+  token and its access level: every account that signs in there (with an application password,
+  for example) can use the tools with its WordPress rights. Each call runs through the same code as
+  `tools/call` (`AB_MCP_REST_Controller::run_tool()`): capability, write access, the tool switches,
+  the confirmation token of the tools without a way back, the rate limit and the log, where it is
+  marked *via the MCP Adapter*. Not offered: undo, `wp_list_abilities` and `wp_run_ability`, Site
+  Deploy, the tools of Pro (also where Pro replaces a tool of this plugin) and any tool without a
+  capability. The abilities set neither `show_in_rest` nor `public`, so the REST routes of the
+  Abilities API do not open them, and `wp_run_ability` never runs them.
 - **Positive allowlists instead of blocklists** — arbitrary options and transients cannot be
   read at all; only a fixed list of common site settings is exposed, and the settings of
   registered widgets through `wp_get_widgets`, without the values whose key the credential guard

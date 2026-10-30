@@ -1318,17 +1318,60 @@ class AB_MCP_REST_Controller {
 			return $this->result( $id, $this->tool_error( sprintf( __( 'Unknown tool: %s. No tool of that name is registered on this site; tools/list names the tools this connection can call.', 'alphabridge-mcp' ), $name ), self::error_code( 'unknown_tool' ) ) );
 		}
 
+		$result = self::run_tool( $name, $def, $args );
+		if ( is_wp_error( $result ) ) {
+			$data = $result->get_error_data();
+			$kind = is_array( $data ) && isset( $data[ self::RUN_KIND ] ) ? (string) $data[ self::RUN_KIND ] : 'tool';
+			return $this->result( $id, $this->tool_error( $result->get_error_message(), self::error_code( $kind, in_array( $kind, array( 'internal', 'no_handler' ), true ) ? null : $result->get_error_code() ) ) );
+		}
+		return $this->result( $id, $this->tool_ok( $result ) );
+	}
+
+	/**
+	 * Key in the data of a WP_Error from run_tool(): the kind of the
+	 * failure, as error_code() takes it (auth, params, tool, internal,
+	 * no_handler).
+	 */
+	const RUN_KIND = 'run_kind';
+
+	/**
+	 * Run one tool with every check tools/call makes, in its order: the
+	 * policy gate (AB_MCP_Security::authorize(): capability, write access,
+	 * the tool's switch, the token's scope, the rate limit), the arguments
+	 * (AB_MCP_Security::validate_args()), the confirmation token of a tool
+	 * without a way back (AB_MCP_Confirm_Token::gate()), the tool itself,
+	 * and an entry in the log for each outcome, with the names of the
+	 * arguments and never their values.
+	 *
+	 * tools/call and AlphaBridge's tools as WordPress abilities
+	 * (AB_MCP_Own_Abilities) both run a tool through here, so the abilities
+	 * cannot skip a check: one path, not a second copy that could drift.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  The tool's definition from the registry.
+	 * @param array  $args Arguments.
+	 * @param string $via  '' for tools/call; 'ability' for a call through
+	 *                     the Abilities API, which the log notes.
+	 * @return mixed The tool's result, or the preview and token of the first
+	 *               call of a tool without a way back; a WP_Error with the
+	 *               message for the caller, its code, and RUN_KIND in its data.
+	 */
+	public static function run_tool( $name, array $def, array $args, $via = '' ) {
+		$fail = static function ( $kind, $code, $message ) {
+			return new WP_Error( $code, (string) $message, array( self::RUN_KIND => $kind ) );
+		};
+
 		$authorized = AB_MCP_Security::authorize( $name, $def );
 		if ( is_wp_error( $authorized ) ) {
-			AB_MCP_Audit_Log::record( $name, $args, 'denied', $authorized->get_error_message() );
-			return $this->result( $id, $this->tool_error( $authorized->get_error_message(), self::error_code( 'auth', $authorized->get_error_code() ) ) );
+			AB_MCP_Audit_Log::record( $name, $args, 'denied', $authorized->get_error_message(), $via );
+			return $fail( 'auth', $authorized->get_error_code(), $authorized->get_error_message() );
 		}
 
 		// Central argument validation (required fields, declared types, size caps).
 		$valid = AB_MCP_Security::validate_args( $def, $args );
 		if ( is_wp_error( $valid ) ) {
-			AB_MCP_Audit_Log::record( $name, $args, 'denied', $valid->get_error_message() );
-			return $this->result( $id, $this->tool_error( $valid->get_error_message(), self::error_code( 'params', $valid->get_error_code() ) ) );
+			AB_MCP_Audit_Log::record( $name, $args, 'denied', $valid->get_error_message(), $via );
+			return $fail( 'params', $valid->get_error_code(), $valid->get_error_message() );
 		}
 
 		if ( AB_MCP_Confirm_Token::required( $def ) ) {
@@ -1336,23 +1379,23 @@ class AB_MCP_REST_Controller {
 				$gate = AB_MCP_Confirm_Token::gate( $name, $def, $args );
 			} catch ( \Throwable $e ) {
 				// As for the tool itself: the text goes to the audit log only.
-				AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage() );
-				return $this->result( $id, $this->tool_error( __( 'The preview of this tool failed with an internal error, so nothing ran. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Try again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), self::error_code( 'internal' ) ) );
+				AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage(), $via );
+				return $fail( 'internal', 'ab_mcp_internal', __( 'The preview of this tool failed with an internal error, so nothing ran. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Try again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ) );
 			}
 			if ( is_wp_error( $gate ) ) {
-				AB_MCP_Audit_Log::record( $name, $args, 'denied', $gate->get_error_message() );
-				return $this->result( $id, $this->tool_error( $gate->get_error_message(), self::error_code( 'tool', $gate->get_error_code() ) ) );
+				AB_MCP_Audit_Log::record( $name, $args, 'denied', $gate->get_error_message(), $via );
+				return $fail( 'tool', $gate->get_error_code(), $gate->get_error_message() );
 			}
 			if ( is_array( $gate ) ) {
 				// The first call: a preview and a token, nothing changed.
-				AB_MCP_Audit_Log::record( $name, $args, 'preview', null );
-				return $this->result( $id, $this->tool_ok( $gate ) );
+				AB_MCP_Audit_Log::record( $name, $args, 'preview', null, $via );
+				return $gate;
 			}
 			$args = AB_MCP_Confirm_Token::without_token( $args );
 		}
 
 		if ( ! is_callable( $def['callback'] ) ) {
-			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ), self::error_code( 'no_handler' ) ) );
+			return $fail( 'no_handler', 'ab_mcp_no_handler', __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ) );
 		}
 
 		self::load_admin_translations();
@@ -1362,18 +1405,18 @@ class AB_MCP_REST_Controller {
 		} catch ( \Throwable $e ) {
 			// The real exception text (which can name file paths, SQL or internal
 			// state) goes to the audit log only; the client gets a generic message.
-			AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage() );
-			return $this->result( $id, $this->tool_error( __( 'The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), self::error_code( 'internal' ) ) );
+			AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage(), $via );
+			return $fail( 'internal', 'ab_mcp_internal', __( 'The tool failed with an internal error, so it may not have finished. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Check the result with a read tool before calling it again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ) );
 		}
 
 		if ( is_wp_error( $result ) ) {
-			AB_MCP_Audit_Log::record( $name, $args, 'error', $result->get_error_message() );
-			return $this->result( $id, $this->tool_error( $result->get_error_message(), self::error_code( 'tool', $result->get_error_code() ) ) );
+			AB_MCP_Audit_Log::record( $name, $args, 'error', $result->get_error_message(), $via );
+			return $fail( 'tool', $result->get_error_code(), $result->get_error_message() );
 		}
 
-		AB_MCP_Audit_Log::record( $name, $args, 'ok', null );
+		AB_MCP_Audit_Log::record( $name, $args, 'ok', null, $via );
 		AB_MCP_Review_Notice::count_call();
-		return $this->result( $id, $this->tool_ok( $result ) );
+		return $result;
 	}
 
 	/**
