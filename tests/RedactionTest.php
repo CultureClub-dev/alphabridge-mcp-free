@@ -35,7 +35,11 @@
  *   (content, captions, alt texts, descriptions, a text widget's text),
  *   unless the reader redacts that key (the filter's names included).
  * - Every rule of the error log reads every line: a Bearer token before a
- *   pair is redacted too.
+ *   pair is redacted too; a value in brackets that a credential's name
+ *   opens (pretty-printed JSON) to its closing bracket, fail-closed to the
+ *   end of the entry.
+ * - The fields of a page-builder element are what people wrote
+ *   (AB_MCP_Redactor::TEXT_ARGS), unless the reader redacts the field.
  *
  * The cases named «Codex #n» are the counterexamples of the review of
  * 30.10.2026. The values below are made-up placeholders, not credentials.
@@ -701,6 +705,40 @@ final class RedactionTest extends TestCase {
 		self::assertSame( "old Bearer [REDACTED] new Bearer [REDACTED] end\nsent bearer [REDACTED]", $out['log'] );
 	}
 
+	public function testAPrettyPrintedValueUnderACredentialsNameIsRedactedToItsEnd(): void {
+		// Codex 6 #2: JSON_PRETTY_PRINT puts the value on the next lines.
+		$flags   = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES;
+		$headers = json_encode( array( 'Authorization' => array( 'Basic PLACEHOLDERB64==' ), 'Accept' => array( 'text/html' ) ), $flags );
+		$body    = json_encode( array( 'auth' => array( 'user' => 'anna', 'nested' => array( 'k' => 'PLACEHOLDER-N' ) ), 'ok' => true ), $flags );
+		$log     = "[30-Oct-2026 10:00:00 UTC] headers " . $headers . "\n[30-Oct-2026 10:00:01 UTC] body " . $body . "\n[30-Oct-2026 10:00:02 UTC] next";
+
+		$out  = $this->read( array( 'log' => $log ), 'wp_get_error_log' );
+		$text = $out['log'];
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $text );
+		self::assertStringContainsString( '"Authorization": [REDACTED]', $text );
+		self::assertStringContainsString( '"Accept": [', $text );
+		self::assertStringContainsString( '"text/html"', $text );
+		self::assertStringContainsString( '"auth": [REDACTED]', $text );
+		self::assertStringContainsString( '"ok": true', $text );
+		self::assertStringContainsString( "\n[30-Oct-2026 10:00:02 UTC] next", $text );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+
+		// Without its end in the log, to the end of the entry: fail-closed.
+		$cut  = "[30-Oct-2026] token " . substr( json_encode( array( 'token' => array( 'a' => 'PLACEHOLDER-C1', 'b' => 'PLACEHOLDER-C2' ) ), $flags ), 0, -8 ) . "\n[30-Oct-2026] after";
+		// Beyond BLOCK_LINES, to the end of the entry though its end follows.
+		$long = "[30-Oct-2026] secret " . json_encode( array( 'secret' => range( 1, 400 ) ), $flags ) . "\nLINE-AFTER-THE-VALUE\n[30-Oct-2026] after";
+		// A bracket inside a string does not close the value.
+		$quoted = "[30-Oct-2026] headers " . json_encode( array( 'Authorization' => array( 'x]', 'Basic PLACEHOLDER-Q' ) ), $flags ) . "\n[30-Oct-2026] after";
+		foreach ( array( $cut, $long, substr( $cut, 0, strrpos( $cut, "\n" ) ), $quoted ) as $i => $case ) {
+			$text = $this->read( array( 'log' => $case ), 'wp_get_error_log' )['log'];
+			self::assertStringNotContainsString( 'PLACEHOLDER', $text, (string) $i );
+			self::assertStringNotContainsString( '399', $text, (string) $i );
+			self::assertStringNotContainsString( 'LINE-AFTER', $text, (string) $i );
+			self::assertSame( 2 === $i ? 0 : 1, substr_count( $text, 'after' ), (string) $i );
+		}
+	}
+
 	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
 		// Codex 5 #5: a Bearer token before a pair, and after it.
 		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );
@@ -1110,6 +1148,37 @@ final class RedactionTest extends TestCase {
 		[ $result, $calls ] = $this->write( array( 'id' => 'text-4', 'settings' => array( 'text' => self::R, 'content' => self::R ) ), 'wp_update_widget' );
 		self::assertFalse( $result['isError'] );
 		self::assertSame( 1, $calls );
+	}
+
+	public function testTheFieldsOfABuilderElementAreWhatPeopleWrote(): void {
+		// Codex 6 #3: wp_get_builder_layout hands its texts out as stored.
+		foreach (
+			array(
+				array( 'id' => 5, 'element_id' => 'e1', 'fields' => array( 'editor' => self::R, 'title' => 'Name: [REDACTED]', 'html' => '{"password":"[REDACTED]"}' ) ),
+				array( 'id' => 5, 'element_id' => 'e1', 'fields' => array( 'items' => array( 'label' => '{"token":"[REDACTED]"}' ) ) ),
+				array( 'id' => 5, 'element_id' => 'e1', 'fields' => '{"editor":"[REDACTED]"}' ),
+			) as $i => $args
+		) {
+			[ $result, $calls ] = $this->write( $args, 'wp_update_builder_element' );
+			self::assertFalse( $result['isError'], (string) $i );
+			self::assertSame( 1, $calls );
+		}
+		// A field the reader redacts, a list below a field (as below a content
+		// field), a key read as name=[REDACTED], another argument, another
+		// tool: guarded as before.
+		foreach (
+			array(
+				array( 'wp_update_builder_element', array( 'id' => 5, 'fields' => array( 'password' => self::R ) ) ),
+				array( 'wp_update_builder_element', array( 'id' => 5, 'fields' => array( 'items' => array( self::R ) ) ) ),
+				array( 'wp_update_builder_element', array( 'id' => 5, 'fields' => array( 'items' => array( 'token=' . self::R => 'x' ) ) ) ),
+				array( 'wp_update_builder_element', array( 'id' => 5, 'element_id' => self::R, 'fields' => array() ) ),
+				array( 'wp_update_thing', array( 'id' => 5, 'fields' => array( 'editor' => self::R ) ) ),
+			) as $i => [ $tool, $args ]
+		) {
+			[ $result, $calls ] = $this->write( $args, $tool );
+			self::assertTrue( $result['isError'], (string) $i );
+			self::assertSame( 0, $calls );
+		}
 	}
 
 	public function testCaptionsAltTextsAndDescriptionsPassTheWriteGuard(): void {

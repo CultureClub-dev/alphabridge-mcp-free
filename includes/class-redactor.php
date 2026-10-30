@@ -172,9 +172,20 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Writing tools that put the stored value back for the placeholder
-	 * themselves (value_back()); run_tool() lets their arguments through.
+	 * themselves: the meta writers (value_back()) and wp_update_widget, from
+	 * the stored instance (restore_placeholders()); run_tool() lets their
+	 * arguments through.
 	 */
-	const RESTORES = array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta' );
+	const RESTORES = array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_widget' );
+
+	/**
+	 * Arguments of a writing tool that map names to texts authors wrote, each
+	 * taken as a field people write (CONTENT_FIELDS) by run_tool(): the
+	 * fields of a page-builder element, which wp_get_builder_layout hands out
+	 * as stored (NO_DECODE). A field the reader redacts is guarded as
+	 * everywhere.
+	 */
+	const TEXT_ARGS = array( 'wp_update_builder_element' => array( 'fields' ) );
 
 	/**
 	 * Writing tools whose arguments are search patterns and replacement text
@@ -192,6 +203,16 @@ final class AB_MCP_Redactor {
 	 * unserialize() builds from R:, never ends without it.
 	 */
 	const BUDGET = 20000;
+
+	/**
+	 * Lines a value in brackets under a credential's name is followed over
+	 * (JSON_PRETTY_PRINT puts it on the next lines); beyond, it is redacted
+	 * to the end of its log entry.
+	 */
+	const BLOCK_LINES = 200;
+
+	/** The first line of a log entry: [30-Oct-2026 10:00:00 UTC] … */
+	const ENTRY = '/^\[\d{1,2}-[A-Za-z]{3}-\d{4}/';
 
 	/** Authentication schemes an Authorization header names before its credential. */
 	const SCHEMES = array( 'bearer', 'basic', 'digest', 'negotiate', 'ntlm', 'token', 'hoba', 'mutual', 'aws4-hmac-sha256' );
@@ -369,14 +390,25 @@ final class AB_MCP_Redactor {
 	 * reader redacts is looked at; a text directly under a field people write
 	 * (is_content_field()) is not, and the texts below such a field are not
 	 * decoded; an array under it is looked at, as the reader redacts keys
-	 * there too.
+	 * there too. The values under a tool's TEXT_ARGS are such fields.
 	 *
-	 * @param mixed $args Arguments.
+	 * @param mixed  $args Arguments.
+	 * @param string $name Tool name.
 	 * @return string|null The JSON pointer of the first such value; null for none.
 	 */
-	public static function placeholder_in( $args ) {
+	public static function placeholder_in( $args, $name = '' ) {
 		$budget = self::BUDGET;
-		return self::find_mark( $args, array(), 0, $budget, self::extra_keys(), true );
+		$extra  = self::extra_keys();
+		foreach ( isset( self::TEXT_ARGS[ $name ] ) && is_array( $args ) ? self::TEXT_ARGS[ $name ] : array() as $arg ) {
+			if ( isset( $args[ $arg ] ) ) {
+				$hit = self::find_mark( $args[ $arg ], array( $arg ), 1, $budget, $extra, false, true );
+				if ( null !== $hit ) {
+					return $hit;
+				}
+				unset( $args[ $arg ] );
+			}
+		}
+		return self::find_mark( $args, array(), 0, $budget, $extra, true );
 	}
 
 	/**
@@ -388,9 +420,10 @@ final class AB_MCP_Redactor {
 	 * @param int      $budget Visits left.
 	 * @param string[] $extra  extra_keys().
 	 * @param bool     $parse  Whether texts here are decoded, as the reader decodes them.
+	 * @param bool     $texts  Whether each key here is a field people write (TEXT_ARGS).
 	 * @return string|null
 	 */
-	private static function find_mark( $value, array $path, $depth, &$budget, array $extra, $parse ) {
+	private static function find_mark( $value, array $path, $depth, &$budget, array $extra, $parse, $texts = false ) {
 		if ( is_string( $value ) ) {
 			return self::marked( $value, $depth, $budget, $extra, $parse ) ? self::pointer( $path, $extra ) : null;
 		}
@@ -401,7 +434,7 @@ final class AB_MCP_Redactor {
 			if ( self::is_masked_key( $k, $extra ) ) {
 				return self::pointer( array_merge( $path, array( $k ) ), $extra );
 			}
-			$content = self::is_content_field( $k, $extra );
+			$content = $texts ? ! self::redacts_key( $k, $extra ) : self::is_content_field( $k, $extra );
 			if ( $content && is_string( $v ) ) {
 				continue;
 			}
@@ -1079,7 +1112,8 @@ final class AB_MCP_Redactor {
 	 *   more lines to the next entry;
 	 * - name=value, name: value or name => value anywhere in a line: from the
 	 *   separator to the end of the line, an Authorization header's scheme
-	 *   (Bearer, Basic, Digest) kept;
+	 *   (Bearer, Basic, Digest) kept; a value whose brackets ([ or {) are
+	 *   still open there on to the line that closes them (bracket_end());
 	 * - a Bearer token anywhere.
 	 *
 	 * @param string   $text  Text.
@@ -1106,13 +1140,74 @@ final class AB_MCP_Redactor {
 				$i     = self::dump_end( $lines, $i, trim( $m[5] ) );
 				continue;
 			}
-			$new = self::line( $line, $hits, $extra );
+			$open = 0;
+			$new  = self::line( $line, $hits, $extra, $open );
 			if ( null === $new ) {
 				return null;
 			}
 			$out[] = $new;
+			if ( $open > 0 ) {
+				$i = self::bracket_end( $lines, $i, $open );
+			}
 		}
 		return implode( "\n", $out );
+	}
+
+	/**
+	 * The last line of a value in brackets that a credential's name opens on
+	 * line $i: the line that closes them, counted in JSON's way (brackets in
+	 * a string do not count). Fail-closed where none does within
+	 * BLOCK_LINES: the line before the next log entry, or the last line.
+	 *
+	 * @param string[] $lines Lines.
+	 * @param int      $i     The line with the name.
+	 * @param int      $open  Brackets open at its end.
+	 * @return int
+	 */
+	private static function bracket_end( array $lines, $i, $open ) {
+		$count = count( $lines );
+		for ( $j = $i + 1; $j < $count; $j++ ) {
+			if ( preg_match( self::ENTRY, $lines[ $j ] ) ) {
+				return $j - 1;
+			}
+			if ( $j - $i <= self::BLOCK_LINES ) {
+				$open += self::brackets( $lines[ $j ] );
+				if ( $open <= 0 ) {
+					return $j;
+				}
+			}
+		}
+		return $count - 1;
+	}
+
+	/**
+	 * Brackets a line opens ([ and {), less those it closes, outside of
+	 * double-quoted strings.
+	 *
+	 * @param string $text Text.
+	 * @return int
+	 */
+	private static function brackets( $text ) {
+		$depth = 0;
+		$in    = false;
+		$len   = strlen( $text );
+		for ( $k = 0; $k < $len; $k++ ) {
+			$c = $text[ $k ];
+			if ( $in ) {
+				if ( '\\' === $c ) {
+					++$k;
+				} elseif ( '"' === $c ) {
+					$in = false;
+				}
+			} elseif ( '"' === $c ) {
+				$in = true;
+			} elseif ( '[' === $c || '{' === $c ) {
+				++$depth;
+			} elseif ( ']' === $c || '}' === $c ) {
+				--$depth;
+			}
+		}
+		return $depth;
 	}
 
 	/**
@@ -1218,9 +1313,10 @@ final class AB_MCP_Redactor {
 	 * @param string   $line  Line.
 	 * @param int      $hits  Replacements (added to).
 	 * @param string[] $extra extra_keys().
+	 * @param int      $open  Set to the brackets the redacted value leaves open.
 	 * @return string|null
 	 */
-	private static function line( $line, &$hits, array $extra ) {
+	private static function line( $line, &$hits, array $extra, &$open = 0 ) {
 		$n = preg_match_all( '/(?<![\w\-$])(["\']?)([A-Za-z_][\w\-]{0,127})\1[ \t]{0,16}(=>|:|=)[ \t]{0,16}/', $line, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
 		if ( false === $n ) {
 			return null;
@@ -1241,6 +1337,7 @@ final class AB_MCP_Redactor {
 			$scheme = preg_match( '/^["\']?([A-Za-z0-9\-]{1,32})[ \t]+\S/', $rest, $s ) && in_array( strtolower( $s[1] ), self::SCHEMES, true ) ? substr( $rest, 0, strlen( $s[0] ) - 1 ) : '';
 			$cut    = $from;
 			$tail   = $scheme . self::MARK . ( "\r" === substr( $line, -1 ) ? "\r" : '' );
+			$open   = self::brackets( $rest );
 			break;
 		}
 		// Every Bearer token in what stays of the line.

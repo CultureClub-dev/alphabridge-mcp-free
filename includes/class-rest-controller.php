@@ -1385,7 +1385,7 @@ class AB_MCP_REST_Controller {
 		// (AB_MCP_Redactor::RESTORES) handle it, tools that take patterns
 		// (wp_search_replace) are not concerned; every other one refuses.
 		if ( AB_MCP_Redactor::guards( $name, $def ) ) {
-			$mark = AB_MCP_Redactor::placeholder_in( $args );
+			$mark = AB_MCP_Redactor::placeholder_in( $args, $name );
 			if ( null !== $mark ) {
 				$refused = AB_MCP_Redactor::refusal( $mark );
 				AB_MCP_Audit_Log::record( $name, $args, 'denied', $refused->get_error_message(), $via );

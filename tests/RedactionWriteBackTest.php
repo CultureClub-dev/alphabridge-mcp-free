@@ -26,7 +26,8 @@
  * - A stored object that cannot be copied to be slashed is not written
  *   back: refused, nothing written, its backslashes kept.
  * - The same for user meta; wp_update_widget's answer shows its settings
- *   redacted, as wp_get_widgets does.
+ *   redacted, as wp_get_widgets does, and wp_update_widget puts the stored
+ *   value back for [REDACTED] and keeps one a nested setting leaves out.
  *
  * The values below are made-up placeholders, not credentials.
  *
@@ -287,6 +288,45 @@ final class RedactionWriteBackTest extends TestCase {
 			self::assertSame( $value, get_post_meta( 5, 'note', true ) );
 		}
 		self::assertNull( AB_MCP_Redactor::placeholder_in( array( 'label' => 'Name: "[REDACTED]"' ) ) );
+	}
+
+	public function testAWidgetReadWithThePlaceholderIsWrittenBackWithTheStoredValue(): void {
+		// Codex 6 #1: wp_get_widgets leaves out what the meta guard names and
+		// redacts the rest; wp_update_widget takes both back as the meta
+		// writers do.
+		$GLOBALS['wp_widget_factory']     = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
+		$GLOBALS['wp_registered_widgets'] = array( 'text-4' => array( 'name' => 'Text' ) );
+		update_option( 'sidebars_widgets', array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-4' ) ) );
+		update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'feed' => array( 'accessToken' => 'STORED-AT', 'count' => 5 ) ), '_multiwidget' => 1 ) );
+		try {
+			$read = $this->answer( 'wp_get_widgets', AB_MCP_Tools_Widgets::get_widgets( array() ) );
+			self::assertSame( array( 'accessToken' => self::R, 'count' => 5 ), $read['widgets'][0]['settings']['feed'] );
+			self::assertFalse( AB_MCP_Redactor::guards( 'wp_update_widget', array() ), 'Left to the writer, as the meta writers are.' );
+
+			$sent                  = $read['widgets'][0]['settings'];
+			$sent['feed']['count'] = 10;
+			$res                   = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => $sent ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array( 'accessToken' => 'STORED-AT', 'count' => 10 ), get_option( 'widget_text' )[4]['feed'], 'The stored token stays.' );
+			self::assertArrayNotHasKey( 'saved_differs', $res, (string) wp_json_encode( $res ) );
+			self::assertStringNotContainsString( 'STORED', (string) wp_json_encode( $this->answer( 'wp_update_widget', $res ) ) );
+
+			// Left out by the client: kept, as for the keys wp_get_widgets leaves out.
+			$res = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => array( 'feed' => array( 'count' => 12 ) ) ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( 'STORED-AT', get_option( 'widget_text' )[4]['feed']['accessToken'] );
+			self::assertSame( 12, get_option( 'widget_text' )[4]['feed']['count'] );
+
+			// Nothing stored there to put back: refused, nothing written.
+			$before = get_option( 'widget_text' );
+			$res    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => array( 'feed' => array( 'apiToken' => self::R, 'count' => 1 ) ) ) );
+			self::assertInstanceOf( \WP_Error::class, $res );
+			self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+			self::assertSame( $before, get_option( 'widget_text' ) );
+			// The undo point of such a write: tests/standalone/undo-terms-widgets-test.php, F25a–d.
+		} finally {
+			unset( $GLOBALS['wp_widget_factory'], $GLOBALS['wp_registered_widgets'] );
+		}
 	}
 
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {

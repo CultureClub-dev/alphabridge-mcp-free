@@ -54,7 +54,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_widget',
 			array(
-				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too. Returns updated, id, the stored settings, saved_fields (the fields sent, as stored afterwards and read again; a credential is compared, not shown, and saved_differs and warning name a field the widget stored otherwise than sent) and undo: the token for wp_undo, which puts the widget type\'s option row back byte for byte, or null with undo_note saying why. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved.',
+				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too; one it shows as [REDACTED] stays as stored when it is left out or sent back as [REDACTED]. Returns updated, id, the stored settings, saved_fields (the fields sent, as stored afterwards and read again; a credential is compared, not shown, and saved_differs and warning name a field the widget stored otherwise than sent) and undo: the token for wp_undo, which puts the widget type\'s option row back byte for byte, or null with undo_note saying why. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved.',
 				'open_world'  => true, // a widget in an active area is public.
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
@@ -521,27 +521,31 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 
 	/**
 	 * Settings sent for an update, with the credential values wp_get_widgets
-	 * left out put back from the stored instance where they are missing inside
-	 * nested settings. The update merges the top level only, where array_merge
-	 * keeps a key that was not sent; a nested array sent back as it was read
-	 * would replace the stored one without them.
+	 * left out or showed as [REDACTED] put back from the stored instance where
+	 * they are missing inside nested settings: every key the reader redacts
+	 * (AB_MCP_Redactor::redacts_key(), which holds the rule of
+	 * is_sensitive_meta_key()). The update merges the top level only, where
+	 * array_merge keeps a key that was not sent; a nested array sent back as
+	 * it was read would replace the stored one without them.
 	 *
-	 * @param array $new    Settings sent, or a nested part of them.
-	 * @param array $old    The stored counterpart.
-	 * @param bool  $nested Whether $new is below the top level.
+	 * @param array      $new    Settings sent, or a nested part of them.
+	 * @param array      $old    The stored counterpart.
+	 * @param bool       $nested Whether $new is below the top level.
+	 * @param array|null $extra  AB_MCP_Redactor::extra_keys(); null to ask the filter.
 	 * @return array
 	 */
-	private static function keep_hidden_credentials( array $new, array $old, $nested = false ) {
+	private static function keep_hidden_credentials( array $new, array $old, $nested = false, ?array $extra = null ) {
+		$extra = null === $extra ? AB_MCP_Redactor::extra_keys() : $extra;
 		if ( $nested ) {
 			foreach ( $old as $key => $value ) {
-				if ( ! array_key_exists( $key, $new ) && self::is_sensitive_meta_key( (string) $key ) ) {
+				if ( ! array_key_exists( $key, $new ) && AB_MCP_Redactor::redacts_key( $key, $extra ) ) {
 					$new[ $key ] = $value;
 				}
 			}
 		}
 		foreach ( $new as $key => $value ) {
 			if ( is_array( $value ) && isset( $old[ $key ] ) && is_array( $old[ $key ] ) ) {
-				$new[ $key ] = self::keep_hidden_credentials( $value, $old[ $key ], true );
+				$new[ $key ] = self::keep_hidden_credentials( $value, $old[ $key ], true, $extra );
 			}
 		}
 		return $new;
@@ -590,6 +594,13 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$shape = self::shape_refusal( $sent, $old );
 		if ( null !== $shape ) {
 			return $shape;
+		}
+		// A value read with [REDACTED] in it gets the stored one of this
+		// instance back, or is refused (since 4.13.0); saved_fields compares
+		// the restored settings.
+		$sent = AB_MCP_Redactor::restore_placeholders( $sent, $old, $left );
+		if ( $left ) {
+			return AB_MCP_Redactor::refusal( '/settings' );
 		}
 		$merged = array_merge( $old, self::keep_hidden_credentials( $sent, $old ) );
 		$clean  = self::sanitize_widget_settings( $base, $num, $merged, $old );
