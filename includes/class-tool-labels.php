@@ -146,6 +146,7 @@ class AB_MCP_Tool_Labels {
 			'wp_update_builder_element'      => _x( 'Change a page-builder element', 'tool label', 'alphabridge-mcp' ),
 			'wp_list_media'                  => _x( 'List media', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_media'                   => _x( 'Read a media file', 'tool label', 'alphabridge-mcp' ),
+			'wp_find_media'                  => _x( 'Find media', 'tool label', 'alphabridge-mcp' ),
 			'wp_upload_media'                => _x( 'Upload media', 'tool label', 'alphabridge-mcp' ),
 			'wp_upload_media_from_url'       => _x( 'Add media from a URL', 'tool label', 'alphabridge-mcp' ),
 			'wp_update_media'                => _x( 'Change media details', 'tool label', 'alphabridge-mcp' ),

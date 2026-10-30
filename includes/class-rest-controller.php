@@ -1223,13 +1223,19 @@ class AB_MCP_REST_Controller {
 				continue;
 			}
 
-			$tools[] = array(
+			$tool = array(
 				'name'        => $name,
 				'title'       => $this->tool_title( $name, $def ),
 				'description' => $def['description'],
 				'inputSchema' => $this->normalize_schema( $def['inputSchema'] ),
 				'annotations' => $this->tool_annotations( $name, $def ),
 			);
+			// Client-specific hints of a tool, e.g. which arguments take a file
+			// from the chat (ChatGPT: openai/fileParams).
+			if ( ! empty( $def['_meta'] ) && is_array( $def['_meta'] ) ) {
+				$tool['_meta'] = $def['_meta'];
+			}
+			$tools[] = $tool;
 		}
 
 		return array( 'tools' => $tools );
