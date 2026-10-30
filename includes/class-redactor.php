@@ -12,31 +12,25 @@
  * itself staying visible. The answer names every place in its field
  * `redacted`, as a JSON pointer (RFC 6901), never with the value.
  *
- * One rule for both: is_credential_key() is the meta guard's rule, kept here
- * so that the guard (AB_MCP_Tools_Base::is_sensitive_meta_key()), the SQL
- * mirror of the search-and-replace scan and this class read one list. The
- * guard matches the name as written; redaction also reads the usual other
- * spellings of it (normalize_key(): accessToken, client-secret, "api key",
- * private PHP properties) and adds a few names of its own and the keys sites
- * add with the filter ab_mcp_redact_keys.
+ * One walk for everything: arrays and objects by their keys; a text that is
+ * a JSON document or serialized data is decoded and walked the same way, and
+ * encoded again only where something in it was redacted (otherwise it stays
+ * byte for byte). Texts people wrote (CONTENT_FIELDS) are not decoded: a post
+ * read with REDACTED in it and saved again would lose its text for good.
+ * Free text (headers, name=value lines, print_r() and var_export() dumps) is
+ * searched in the error log only, line by line.
  *
- * Applied in one place, AB_MCP_REST_Controller::run_tool(), to the result of
- * every tool the registry marks read-only (tools/call and AlphaBridge's own
- * abilities alike, Pro's readers included), and to the part of wp_run_ability's
- * answer that comes from the other plugin. A writing tool's answer is left
- * as it is: wp_create_user names its generated password once, on purpose.
+ * Fail-closed where a value cannot be judged: deeper than MAX_DEPTH, beyond
+ * the node budget, a pattern that gives up, an object that throws. Such a
+ * value reads as REDACTED as a whole and is listed in `redacted_unchecked`.
  *
- * Text is never decoded and encoded again: a JSON document or serialized
- * data inside a value is redacted where it stands, by pattern, so its
- * formatting, its empty objects and its large numbers stay as they were.
- * Free text (headers, name=value pairs, print_r() and var_export() dumps) is
- * searched in the error log only (wp_get_error_log). Never by the look of a
- * value: a long random string is as often an id or a hash.
+ * Applied in AB_MCP_REST_Controller::run_tool() to every tool the registry
+ * marks read-only and to the plugin's part of wp_run_ability's answer; for
+ * every other tool, run_tool() refuses arguments that carry the placeholder
+ * back (placeholder_in()), so it never replaces a stored credential.
  *
- * Fail-closed where a value cannot be judged: a structure too deep or too
- * large for the node budget, a text a pattern gives up on, an object whose
- * jsonSerialize() throws. Such a value reads as REDACTED as a whole, and the
- * answer lists it in `redacted_unchecked` as well.
+ * The meta guard (AB_MCP_Tools_Base::is_sensitive_meta_key()) and the SQL
+ * mirror of the search-and-replace scan read the two lists of this class.
  *
  * @package AlphaBridge_MCP
  */
@@ -74,26 +68,25 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * High-precision compound credential patterns, matched anywhere in the
-	 * key: these virtually never occur in legitimate content meta, so they
-	 * avoid false positives on keys like token_count, email_signature,
-	 * password_hint or credential_type while still catching real API keys
-	 * and tokens.
-	 *
-	 * The meta guard matches them as written. Removing separators would turn
-	 * co_author into "coauthor", which contains "oauth"; normalize_key()
-	 * therefore only splits camelCase and turns dashes and blanks into "_".
+	 * key as written: these virtually never occur in legitimate content meta.
+	 * Removing separators would turn co_author into "coauthor", which
+	 * contains "oauth"; the guard therefore stays literal.
 	 */
 	const CREDENTIAL_NEEDLES = array( 'api_key', 'apikey', 'api-key', 'api_token', 'api_secret', 'access_key', 'access_token', 'secret_key', 'secret_token', 'private_key', 'client_secret', 'consumer_key', 'consumer_secret', 'refresh_token', 'auth_token', 'bearer_token', 'license_key', 'oauth', '_token', '_secret', '_password', 'passwd', 'smtp_pass' );
 
 	/**
-	 * Names redacted on top of the meta rule, as whole keys after
-	 * normalize_key(): the HTTP headers that carry a credential, as a
-	 * plugin's result or a log line may hold them, a bare "auth", and the two
-	 * columns of wp_users that hold a password hash and a reset key, as a
-	 * database row shows them. Not part of the meta guard: refusing a meta key
-	 * of that name is not what these are for.
+	 * Names redacted on top of the meta rule, after normalize_key(): the HTTP
+	 * headers that carry a credential, a bare "auth", and the two columns of
+	 * wp_users that hold a password hash and a reset key. Not part of the
+	 * meta guard.
 	 */
 	const EXTRA_NAMES = array( 'authorization', 'proxy_authorization', 'auth', 'user_pass', 'user_activation_key' );
+
+	/**
+	 * First words of a normalised name that say something ABOUT a credential
+	 * rather than hold one: hasPassword, totalTokens, showPassword.
+	 */
+	const ABOUT = array( 'has', 'is', 'total', 'num', 'count', 'max', 'min', 'use', 'show', 'enable', 'require' );
 
 	/**
 	 * Pairs that hold a name in one field and its value in the other:
@@ -110,8 +103,8 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Places in a reading tool's own answer that hold a JSON schema, not
-	 * data: an ability's input and output schema name a property "password"
-	 * without holding one. Not searched. A path of keys, '*' for any one key.
+	 * data: an ability's schema names a property "password" without holding
+	 * one. Not searched. A path of keys, '*' for any one key.
 	 */
 	const SCHEMAS = array(
 		'wp_list_abilities' => array( 'ability/input_schema', 'ability/output_schema', 'abilities/*/input_schema', 'abilities/*/output_schema' ),
@@ -133,21 +126,16 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Tools that hand out a file or an export as it is stored: their text is
-	 * not searched for JSON or serialized data, because the answer is how the
-	 * file gets edited, and a value put back as REDACTED would be written
-	 * back.
+	 * not decoded, because the answer is how the file gets edited.
 	 */
 	const FILE_TOOLS = array( 'wp_read_theme_file', 'wp_read_plugin_file', 'wp_read_upload_file', 'wp_deploy_read', 'wp_export_content' );
 
 	/**
 	 * Fields that hold what people wrote: the text, excerpt and title of a
 	 * post, a revision or a comment, raw and rendered. Their text is not
-	 * searched for JSON or serialized data. A reader of a post is how it gets
-	 * edited: a tutorial with "password": "…" in it, read with REDACTED and
-	 * saved again, would lose its example for good, and no undo of the text
-	 * catches that. Block attributes in the text stay too: they are content
-	 * the editor shows anyway. Keys below such a field (an array under
-	 * content) are judged as everywhere else.
+	 * decoded (a tutorial with "password": "…" in it would lose its example
+	 * when saved again), and run_tool() does not look for the placeholder in
+	 * them. Keys of an array below such a field are judged as everywhere.
 	 */
 	const CONTENT_FIELDS = array( 'content', 'content_raw', 'post_content', 'post_content_filtered', 'excerpt', 'post_excerpt', 'title', 'post_title', 'comment_content', 'rendered', 'raw' );
 
@@ -157,14 +145,20 @@ final class AB_MCP_Redactor {
 	 */
 	const PARTS = array( 'wp_run_ability' => array( 'result' ) );
 
+	/**
+	 * Writing tools that put the stored value back for the placeholder
+	 * themselves (restore_placeholders()); run_tool() lets their arguments
+	 * through.
+	 */
+	const RESTORES = array();
+
 	/** Nesting deeper than this is not judged (fail-closed). */
 	const MAX_DEPTH = 100;
 
 	/**
-	 * Arrays, objects and serialized items one answer may visit; texts are
-	 * not counted, each is read once. A large page-builder layout comes to a
-	 * few thousand; a cycle of references, as unserialize() builds from R:,
-	 * never ends without it. What lies beyond is not judged (fail-closed).
+	 * Arrays, objects and decoded texts one answer may visit. A large
+	 * page-builder layout comes to a few thousand; a cycle of references, as
+	 * unserialize() builds from R:, never ends without it.
 	 */
 	const BUDGET = 20000;
 
@@ -175,7 +169,7 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Whether a key looks like a stored credential: the rule of the meta
-	 * guard, as written, without the names that only redaction adds.
+	 * guard, as written.
 	 *
 	 * @param string $key Key.
 	 * @return bool
@@ -198,34 +192,15 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * A key in the form redaction compares: without the prefix PHP gives a
-	 * private or protected property ("\0*\0token", "\0Class\0token"),
-	 * without blanks around it (Unicode ones too), camelCase split
-	 * (accessToken → access_token, APIKey → api_key), dashes and blanks as
-	 * "_", in lower case.
+	 * private or protected property, without blanks around it (Unicode ones
+	 * too), camelCase split (accessToken → access_token, APIKey → api_key),
+	 * dashes and blanks as "_", in lower case.
 	 *
 	 * @param string|int $key Key.
 	 * @return string
 	 */
 	public static function normalize_key( $key ) {
-		static $seen = array();
 		$key = (string) $key;
-		if ( isset( $seen[ $key ] ) ) {
-			return $seen[ $key ];
-		}
-		if ( count( $seen ) > 5000 ) {
-			$seen = array();
-		}
-		$seen[ $key ] = self::normalized( $key );
-		return $seen[ $key ];
-	}
-
-	/**
-	 * normalize_key() without its memory.
-	 *
-	 * @param string $key Key.
-	 * @return string
-	 */
-	private static function normalized( $key ) {
 		if ( "\0" === substr( $key, 0, 1 ) ) {
 			$end = strpos( $key, "\0", 1 );
 			$key = false === $end ? substr( $key, 1 ) : substr( $key, $end + 1 );
@@ -233,8 +208,7 @@ final class AB_MCP_Redactor {
 		$trimmed = preg_replace( '/^[\s\p{Z}\x{200B}\x{FEFF}]+|[\s\p{Z}\x{200B}\x{FEFF}]+$/u', '', $key );
 		$key     = is_string( $trimmed ) ? $trimmed : trim( $key );
 		$key     = (string) preg_replace( '/([A-Z]+)([A-Z][a-z])/', '$1_$2', $key );
-		$key     = (string) preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $key );
-		$key     = strtolower( $key );
+		$key     = strtolower( (string) preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $key ) );
 		$joined  = preg_replace( '/[\s\p{Z}\-]+/u', '_', $key );
 		return is_string( $joined ) ? $joined : str_replace( array( '-', ' ' ), '_', $key );
 	}
@@ -248,9 +222,8 @@ final class AB_MCP_Redactor {
 		/**
 		 * Filters the keys whose values the reading tools redact, on top of
 		 * the built-in credential names. Each entry is matched as the whole
-		 * key, in the spellings normalize_key() reads alike: add
-		 * "my_plugin_license" to have it read as [REDACTED] wherever it
-		 * appears. The built-in names cannot be taken out here.
+		 * key, in the spellings normalize_key() reads alike. The built-in
+		 * names cannot be taken out here.
 		 *
 		 * @since 4.13.0
 		 *
@@ -267,7 +240,10 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
-	 * Whether a value under this key is redacted.
+	 * Whether a value under this key is redacted: every key the meta guard
+	 * refuses as written, and in the normalised form a bare credential name
+	 * as the last word (userPassword) or a compound one (accessToken), unless
+	 * the first word says something about it (hasPassword, totalTokens).
 	 *
 	 * @param string|int $key   Key.
 	 * @param string[]   $extra extra_keys().
@@ -277,10 +253,26 @@ final class AB_MCP_Redactor {
 		if ( is_int( $key ) ) {
 			return false;
 		}
-		// As written (the meta guard's reading) and normalised: every key the
-		// guard refuses is redacted too.
+		if ( self::is_credential_key( $key ) ) {
+			return true;
+		}
 		$name = self::normalize_key( $key );
-		return self::is_credential_key( $key ) || self::is_credential_key( $name ) || in_array( $name, self::EXTRA_NAMES, true ) || in_array( $name, $extra, true );
+		if ( in_array( $name, self::EXTRA_NAMES, true ) || in_array( $name, $extra, true ) ) {
+			return true;
+		}
+		$words = explode( '_', $name );
+		if ( in_array( $words[0], self::ABOUT, true ) ) {
+			return false;
+		}
+		if ( in_array( end( $words ), self::CREDENTIAL_EXACT, true ) ) {
+			return true;
+		}
+		foreach ( self::CREDENTIAL_NEEDLES as $needle ) {
+			if ( '_' !== $needle[0] && false !== strpos( $name, $needle ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/* ------------------------------------------------------- entry points */
@@ -288,7 +280,6 @@ final class AB_MCP_Redactor {
 	/**
 	 * A tool's result as its answer carries it: redacted where the tool reads
 	 * (or, for PARTS, in the other plugin's part), with FIELD naming what.
-	 * Anything else is returned as it came.
 	 *
 	 * @param string $name   Tool name.
 	 * @param array  $def    The tool's definition.
@@ -307,48 +298,13 @@ final class AB_MCP_Redactor {
 				}
 			}
 		}
-		return self::with_paths( $result, $st );
-	}
-
-	/**
-	 * Redact one value with the rules every reading tool gets.
-	 *
-	 * @param mixed    $value     Value.
-	 * @param string[] $paths     JSON pointers of what was redacted (appended).
-	 * @param string   $tool      Tool name, for its own rules; '' for none.
-	 * @param string[] $unchecked JSON pointers of what was replaced unjudged (appended).
-	 * @return mixed
-	 */
-	public static function redact( $value, array &$paths, $tool = '', array &$unchecked = array() ) {
-		$st        = self::state( (string) $tool );
-		$value     = self::walk( $value, array(), $st, 0 );
-		$paths     = array_merge( $paths, array_map( array( __CLASS__, 'pointer' ), $st['found'] ) );
-		$unchecked = array_merge( $unchecked, array_map( array( __CLASS__, 'pointer' ), $st['unchecked'] ) );
-		return $value;
-	}
-
-	/**
-	 * The result with FIELD (and FIELD_UNCHECKED) set, where something was
-	 * redacted and the result is an object with keys to add it to. A list or
-	 * a text has none: the REDACTED in place is all it says.
-	 *
-	 * @param mixed $result Result.
-	 * @param array $st     State of the run.
-	 * @return mixed
-	 */
-	private static function with_paths( $result, array $st ) {
 		if ( 0 === $st['found_n'] || ! is_array( $result ) || ( array() !== $result && array_keys( $result ) === range( 0, count( $result ) - 1 ) ) ) {
+			// A list or a text has no field to add: the REDACTED in place is all it says.
 			return $result;
 		}
-		$paths = array_map( array( __CLASS__, 'pointer' ), $st['found'] );
-		$total = $st['found_n'];
-		if ( isset( $result[ self::FIELD ] ) && is_array( $result[ self::FIELD ] ) ) {
-			$paths  = array_merge( array_values( $result[ self::FIELD ] ), $paths );
-			$total += count( $result[ self::FIELD ] );
-		}
-		$result[ self::FIELD ] = array_slice( $paths, 0, self::MAX_PATHS );
-		if ( $total > self::MAX_PATHS ) {
-			$result[ self::FIELD_COUNT ] = $total;
+		$result[ self::FIELD ] = array_map( array( __CLASS__, 'pointer' ), $st['found'] );
+		if ( $st['found_n'] > self::MAX_PATHS ) {
+			$result[ self::FIELD_COUNT ] = $st['found_n'];
 		}
 		if ( $st['unchecked_n'] > 0 ) {
 			$result[ self::FIELD_UNCHECKED ] = array_map( array( __CLASS__, 'pointer' ), $st['unchecked'] );
@@ -357,9 +313,162 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
+	 * Where an argument of a writing tool carries the placeholder back: a
+	 * value that is exactly REDACTED, or a text with "[REDACTED]" or
+	 * s:10:"[REDACTED]" in it (JSON or serialized data read from an answer).
+	 * Texts people wrote (CONTENT_FIELDS) are not looked at.
+	 *
+	 * @param mixed $args Arguments.
+	 * @return string|null The JSON pointer of the first such value; null for none.
+	 */
+	public static function placeholder_in( $args ) {
+		$budget = self::BUDGET;
+		return self::find_mark( $args, array(), 0, $budget );
+	}
+
+	/**
+	 * placeholder_in() one level.
+	 *
+	 * @param mixed $value  Value.
+	 * @param array $path   Its path.
+	 * @param int   $depth  Nesting so far.
+	 * @param int   $budget Visits left.
+	 * @return string|null
+	 */
+	private static function find_mark( $value, array $path, $depth, &$budget ) {
+		if ( is_string( $value ) ) {
+			// "[REDACTED]" with its quotes: in JSON, and in serialized data (s:10:"[REDACTED]";).
+			$hit = self::MARK === $value || false !== strpos( $value, '"' . self::MARK . '"' );
+			return $hit ? self::pointer( $path ) : null;
+		}
+		if ( ( ! is_array( $value ) && ! $value instanceof stdClass ) || --$budget < 0 || $depth > self::MAX_DEPTH ) {
+			return null;
+		}
+		foreach ( is_array( $value ) ? $value : get_object_vars( $value ) as $k => $v ) {
+			if ( is_string( $k ) && in_array( strtolower( $k ), self::CONTENT_FIELDS, true ) ) {
+				continue;
+			}
+			$hit = self::find_mark( $v, array_merge( $path, array( $k ) ), $depth + 1, $budget );
+			if ( null !== $hit ) {
+				return $hit;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Put the stored values back where a value to be written is exactly
+	 * REDACTED, at the same path in arrays and stdClass objects. $left says
+	 * whether a placeholder is left after that: one without a stored value at
+	 * its path, one inside a text (JSON or serialized data), or a value too
+	 * deep or too large to look through. The writer refuses then.
+	 *
+	 * @param mixed $new    Value to be written.
+	 * @param mixed $stored Value stored now.
+	 * @param bool  $left   Set to whether a placeholder is left.
+	 * @return mixed
+	 */
+	public static function restore_placeholders( $new, $stored, &$left = false ) {
+		$left   = false;
+		$budget = self::BUDGET;
+		return self::restore( $new, true, $stored, 0, $budget, $left );
+	}
+
+	/**
+	 * restore_placeholders() one level.
+	 *
+	 * @param mixed $new    Value to be written.
+	 * @param bool  $has    Whether something is stored at this path.
+	 * @param mixed $stored What is stored there.
+	 * @param int   $depth  Nesting so far.
+	 * @param int   $budget Visits left.
+	 * @param bool  $left   Set where a placeholder is left.
+	 * @return mixed
+	 */
+	private static function restore( $new, $has, $stored, $depth, &$budget, &$left ) {
+		if ( is_string( $new ) ) {
+			if ( self::MARK === $new && $has ) {
+				return $stored;
+			}
+			$left = $left || false !== strpos( $new, self::MARK );
+			return $new;
+		}
+		if ( ! is_array( $new ) && ! $new instanceof stdClass ) {
+			return $new;
+		}
+		if ( --$budget < 0 || $depth > self::MAX_DEPTH ) {
+			$left = true;
+			return $new;
+		}
+		$vars = $has && $stored instanceof stdClass ? get_object_vars( $stored ) : ( $has && is_array( $stored ) ? $stored : array() );
+		$out  = is_array( $new ) ? $new : clone $new;
+		foreach ( is_array( $new ) ? $new : get_object_vars( $new ) as $k => $v ) {
+			$here = array_key_exists( $k, $vars );
+			$back = self::restore( $v, $here, $here ? $vars[ $k ] : null, $depth + 1, $budget, $left );
+			if ( is_array( $out ) ) {
+				$out[ $k ] = $back;
+			} else {
+				$out->$k = $back;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A path as a JSON pointer (RFC 6901): "/" before each key, "~" and "/"
+	 * in a key as "~0" and "~1". A key that reads like a credential's
+	 * name=value or name: value is cut after the name.
+	 *
+	 * @param array $path Keys.
+	 * @return string
+	 */
+	public static function pointer( array $path ) {
+		$out = '';
+		foreach ( $path as $segment ) {
+			$segment = (string) $segment;
+			$cut     = strcspn( $segment, '=:' );
+			if ( $cut < strlen( $segment ) && self::redacts_key( substr( $segment, 0, $cut ) ) ) {
+				$segment = substr( $segment, 0, $cut + 1 ) . '…';
+			}
+			$out .= '/' . str_replace( array( '~', '/' ), array( '~0', '~1' ), $segment );
+		}
+		return $out;
+	}
+
+	/* -------------------------------------------------------------- the walk */
+
+	/**
+	 * The state of one run: the rules of the tool, what was found, the budget.
+	 *
+	 * @param string $name Tool name.
+	 * @return array
+	 */
+	private static function state( $name ) {
+		$split = static function ( $paths ) {
+			return array_map(
+				static function ( $p ) {
+					return explode( '/', $p );
+				},
+				$paths
+			);
+		};
+		return array(
+			'keep'        => $split( isset( self::KEEP[ $name ] ) ? self::KEEP[ $name ] : array() ),
+			'skip'        => $split( isset( self::SCHEMAS[ $name ] ) ? self::SCHEMAS[ $name ] : array() ),
+			'text'        => in_array( $name, self::TEXT_TOOLS, true ),
+			'parse'       => ! in_array( $name, self::FILE_TOOLS, true ),
+			'extra'       => self::extra_keys(),
+			'budget'      => self::BUDGET,
+			'found'       => array(),
+			'found_n'     => 0,
+			'unchecked'   => array(),
+			'unchecked_n' => 0,
+		);
+	}
+
+	/**
 	 * Note a path found or replaced unjudged: the first MAX_PATHS are kept,
-	 * the rest only counted, so a large answer cannot fill the memory with
-	 * paths.
+	 * the rest only counted.
 	 *
 	 * @param array  $st   State.
 	 * @param string $list 'found' or 'unchecked'.
@@ -373,136 +482,17 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
-	 * A path as a JSON pointer (RFC 6901): "/" before each key, "~" and "/"
-	 * in a key as "~0" and "~1". A key that itself reads like name=value or
-	 * name: value is cut after the name, so a value never travels in a path.
+	 * Replace a value that cannot be judged with REDACTED, listed as found
+	 * and as unchecked.
 	 *
-	 * @param array $path Keys.
+	 * @param array $path Its path.
+	 * @param array $st   State.
 	 * @return string
 	 */
-	public static function pointer( array $path ) {
-		$out = '';
-		foreach ( $path as $segment ) {
-			$segment = (string) $segment;
-			$cut     = strcspn( $segment, '=:' );
-			if ( $cut < strlen( $segment ) ) {
-				$segment = substr( $segment, 0, $cut + 1 ) . '…';
-			}
-			if ( strlen( $segment ) > 128 ) {
-				$segment = substr( $segment, 0, 128 ) . '…';
-			}
-			$out .= '/' . str_replace( array( '~', '/' ), array( '~0', '~1' ), $segment );
-		}
-		return $out;
-	}
-
-	/**
-	 * Put the stored values back where a value sent for writing is exactly
-	 * REDACTED: an answer read with REDACTED in it and written back unchanged
-	 * keeps the credential instead of storing the placeholder. In arrays and
-	 * stdClass objects, at the same path; where the stored value has nothing
-	 * at that path, the REDACTED stays (the writer decides what to do with it).
-	 *
-	 * @param mixed $new    Value to be written.
-	 * @param mixed $stored Value stored now.
-	 * @return mixed
-	 */
-	public static function restore_placeholders( $new, $stored ) {
-		return self::restore( $new, $stored, 0 );
-	}
-
-	/**
-	 * restore_placeholders() one level.
-	 *
-	 * @param mixed $new    Value to be written.
-	 * @param mixed $stored Value stored now.
-	 * @param int   $depth  Nesting so far.
-	 * @return mixed
-	 */
-	private static function restore( $new, $stored, $depth ) {
-		if ( self::MARK === $new ) {
-			return $stored;
-		}
-		if ( $depth > self::MAX_DEPTH ) {
-			return $new;
-		}
-		if ( is_array( $new ) ) {
-			foreach ( $new as $k => $v ) {
-				if ( self::has_child( $stored, $k ) ) {
-					$new[ $k ] = self::restore( $v, self::child( $stored, $k ), $depth + 1 );
-				}
-			}
-			return $new;
-		}
-		if ( $new instanceof stdClass ) {
-			$copy = clone $new;
-			foreach ( get_object_vars( $new ) as $k => $v ) {
-				if ( self::has_child( $stored, $k ) ) {
-					$copy->$k = self::restore( $v, self::child( $stored, $k ), $depth + 1 );
-				}
-			}
-			return $copy;
-		}
-		return $new;
-	}
-
-	/**
-	 * Whether a stored value has something under this key.
-	 *
-	 * @param mixed      $stored Stored value.
-	 * @param string|int $key    Key.
-	 * @return bool
-	 */
-	private static function has_child( $stored, $key ) {
-		if ( is_array( $stored ) ) {
-			return array_key_exists( $key, $stored );
-		}
-		return $stored instanceof stdClass && array_key_exists( (string) $key, get_object_vars( $stored ) );
-	}
-
-	/**
-	 * The stored value under this key.
-	 *
-	 * @param mixed      $stored Stored value.
-	 * @param string|int $key    Key.
-	 * @return mixed
-	 */
-	private static function child( $stored, $key ) {
-		if ( is_array( $stored ) ) {
-			return $stored[ $key ];
-		}
-		return get_object_vars( $stored )[ (string) $key ];
-	}
-
-	/* ------------------------------------------------------ structured data */
-
-	/**
-	 * The state of one run: the rules of the tool, what was found, the budget.
-	 *
-	 * @param string $name Tool name.
-	 * @return array
-	 */
-	private static function state( $name ) {
-		$split = static function ( $paths ) {
-			$out = array();
-			foreach ( $paths as $path ) {
-				$out[] = explode( '/', $path );
-			}
-			return $out;
-		};
-		return array(
-			'keep'        => $split( isset( self::KEEP[ $name ] ) ? self::KEEP[ $name ] : array() ),
-			'skip'        => $split( isset( self::SCHEMAS[ $name ] ) ? self::SCHEMAS[ $name ] : array() ),
-			'text'        => in_array( $name, self::TEXT_TOOLS, true ),
-			'parse'       => ! in_array( $name, self::FILE_TOOLS, true ),
-			'extra'       => self::extra_keys(),
-			'budget'      => self::BUDGET,
-			'found'       => array(),
-			'found_n'     => 0,
-			'unchecked'   => array(),
-			'unchecked_n' => 0,
-			'error'       => false,
-		);
+	private static function unchecked( array $path, array &$st ) {
+		self::note( $st, 'found', $path );
+		self::note( $st, 'unchecked', $path );
+		return self::MARK;
 	}
 
 	/**
@@ -547,26 +537,8 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
-	 * Replace a value that cannot be judged: a text, an array or an object
-	 * reads as REDACTED, and the path is listed as unchecked. A number,
-	 * true, false or null carries no credential under a key already judged.
-	 *
-	 * @param mixed $value Value.
-	 * @param array $path  Its path.
-	 * @param array $st    State.
-	 * @return mixed
-	 */
-	private static function unchecked( $value, array $path, array &$st ) {
-		if ( ! is_string( $value ) && ! is_array( $value ) && ! is_object( $value ) ) {
-			return $value;
-		}
-		self::note( $st, 'found', $path );
-		self::note( $st, 'unchecked', $path );
-		return self::MARK;
-	}
-
-	/**
-	 * Redact a value: arrays and objects by their keys, text by pattern.
+	 * Redact a value: arrays and objects by their keys, texts decoded where
+	 * they are JSON or serialized data, the error log by its lines.
 	 *
 	 * @param mixed $value Value.
 	 * @param array $path  Its path.
@@ -578,11 +550,14 @@ final class AB_MCP_Redactor {
 		if ( ! is_string( $value ) && ! is_array( $value ) && ! is_object( $value ) ) {
 			return $value;
 		}
-		if ( is_string( $value ) ) {
-			return $depth > self::MAX_DEPTH ? self::unchecked( $value, $path, $st ) : self::walk_text( $value, $path, $st );
+		if ( $depth > self::MAX_DEPTH ) {
+			return self::unchecked( $path, $st );
 		}
-		if ( --$st['budget'] < 0 || $depth > self::MAX_DEPTH ) {
-			return self::unchecked( $value, $path, $st );
+		if ( is_string( $value ) ) {
+			return self::walk_text( $value, $path, $st, $depth );
+		}
+		if ( --$st['budget'] < 0 ) {
+			return self::unchecked( $path, $st );
 		}
 		if ( $value instanceof JsonSerializable ) {
 			// Called once: what it returns takes the object's place, so the
@@ -590,20 +565,21 @@ final class AB_MCP_Redactor {
 			try {
 				$data = $value->jsonSerialize();
 			} catch ( \Throwable $e ) {
-				return self::unchecked( $value, $path, $st );
+				return self::unchecked( $path, $st );
 			}
 			return self::walk( $data, $path, $st, $depth + 1 );
 		}
 		if ( is_object( $value ) ) {
-			// What wp_json_encode() writes of an object: its public
-			// properties. As a stdClass, so {} stays {}.
-			$vars = array();
-			foreach ( get_object_vars( $value ) as $k => $v ) {
-				if ( ! ( is_string( $k ) && "\0" === substr( $k, 0, 1 ) ) ) {
-					$vars[ $k ] = $v;
-				}
+			// An object of a built-in class (DateTimeImmutable) has a JSON
+			// form of its own and holds no other plugin's settings: as it is.
+			if ( ! $value instanceof stdClass && ! $value instanceof __PHP_Incomplete_Class && ( new ReflectionClass( $value ) )->isInternal() ) {
+				return $value;
 			}
-			return (object) self::walk_array( $vars, $path, $st, $depth );
+			// Otherwise as a stdClass, so {} stays {}: the public properties,
+			// which wp_json_encode() writes, and of an object unserialize()
+			// could not load also the private and protected ones ("\0*\0token"),
+			// which serialize() writes back.
+			return (object) self::walk_array( get_object_vars( $value ), $path, $st, $depth );
 		}
 		return self::walk_array( $value, $path, $st, $depth );
 	}
@@ -621,7 +597,7 @@ final class AB_MCP_Redactor {
 		// A pair: the name in one field, the value in the other.
 		foreach ( self::PAIRS as $name_key => $value_key ) {
 			if ( isset( $value[ $name_key ] ) && is_string( $value[ $name_key ] ) && array_key_exists( $value_key, $value )
-				&& self::redacts_key( $value[ $name_key ], $st['extra'] ) && self::holds( $value[ $value_key ] ) && self::MARK !== $value[ $value_key ] ) {
+				&& self::redacts_key( $value[ $name_key ], $st['extra'] ) && self::holds( $value[ $value_key ] ) ) {
 				$p = array_merge( $path, array( $value_key ) );
 				if ( ! self::matches( $p, $st['keep'] ) ) {
 					$value[ $value_key ] = self::MARK;
@@ -632,30 +608,26 @@ final class AB_MCP_Redactor {
 
 		$out = array();
 		foreach ( $value as $key => $item ) {
-			$p = $path;
+			$p   = $path;
 			$p[] = $key;
 			$k   = self::safe_key( $key, $p, $st );
 			if ( self::matches( $p, $st['skip'] ) ) {
 				$out[ $k ] = $item;
-				continue;
-			}
-			if ( ! self::matches( $p, $st['keep'] ) && self::redacts_key( $key, $st['extra'] ) ) {
-				if ( self::holds( $item ) && self::MARK !== $item ) {
-					$out[ $k ]     = self::MARK;
+			} elseif ( ! self::matches( $p, $st['keep'] ) && self::redacts_key( $key, $st['extra'] ) ) {
+				if ( self::holds( $item ) ) {
+					$out[ $k ] = self::MARK;
 					self::note( $st, 'found', $p );
 				} else {
 					$out[ $k ] = $item;
 				}
-				continue;
-			}
-			if ( is_string( $key ) && in_array( strtolower( $key ), self::CONTENT_FIELDS, true ) ) {
+			} elseif ( is_string( $key ) && in_array( strtolower( $key ), self::CONTENT_FIELDS, true ) ) {
 				$parse       = $st['parse'];
 				$st['parse'] = false;
 				$out[ $k ]   = self::walk( $item, $p, $st, $depth + 1 );
 				$st['parse'] = $parse;
-				continue;
+			} else {
+				$out[ $k ] = self::walk( $item, $p, $st, $depth + 1 );
 			}
-			$out[ $k ] = self::walk( $item, $p, $st, $depth + 1 );
 		}
 		return $out;
 	}
@@ -674,712 +646,220 @@ final class AB_MCP_Redactor {
 			return $key;
 		}
 		$cut = strcspn( $key, '=:' );
-		if ( $cut >= strlen( $key ) || $cut > 128 || ! self::redacts_key( substr( $key, 0, $cut ), $st['extra'] ) ) {
-			return $key;
-		}
-		$rest = ltrim( substr( $key, $cut + 1 ) );
-		if ( '' === $rest || self::MARK === $rest ) {
+		if ( $cut >= strlen( $key ) || '' === trim( substr( $key, $cut + 1 ) ) || ! self::redacts_key( substr( $key, 0, $cut ), $st['extra'] ) ) {
 			return $key;
 		}
 		self::note( $st, 'found', $path );
 		return substr( $key, 0, $cut + 1 ) . self::MARK;
 	}
 
-	/* ----------------------------------------------------------------- text */
-
 	/**
-	 * Redact a text: JSON and serialized data in it by pattern, where they
-	 * stand, and in the error log free text too. Fail-closed where a pattern
-	 * gives up.
+	 * Redact a text: the error log by its lines; a JSON document or
+	 * serialized data decoded and walked like any structure, encoded again
+	 * only where something in it was redacted.
 	 *
-	 * @param string $text Text.
-	 * @param array  $path Its path.
-	 * @param array  $st   State.
+	 * @param string $text  Text.
+	 * @param array  $path  Its path.
+	 * @param array  $st    State.
+	 * @param int    $depth Nesting so far.
 	 * @return string
 	 */
-	private static function walk_text( $text, array $path, array &$st ) {
-		if ( $st['parse'] && false !== strpos( $text, '"' ) ) {
-			$st['error'] = false;
-			$new         = self::structured( $text, $path, $st, 0 );
-			if ( null === $new || ! empty( $st['error'] ) ) {
-				return self::unchecked( $text, $path, $st );
-			}
-			$text = $new;
-		}
+	private static function walk_text( $text, array $path, array &$st, $depth ) {
 		if ( $st['text'] ) {
 			$hits = 0;
 			$new  = self::text( $text, $hits, $st['extra'] );
 			if ( null === $new ) {
-				return self::unchecked( $text, $path, $st );
+				return self::unchecked( $path, $st );
 			}
 			if ( $hits > 0 ) {
 				self::note( $st, 'found', $path );
 			}
 			$text = $new;
 		}
-		return $text;
+		if ( ! $st['parse'] ) {
+			return $text;
+		}
+		$kind = self::decode( $text, $data );
+		if ( null === $kind ) {
+			return $text;
+		}
+		if ( 'deep' === $kind || --$st['budget'] < 0 ) {
+			return self::unchecked( $path, $st );
+		}
+		$before = array( $st['found'], $st['found_n'], $st['unchecked'], $st['unchecked_n'] );
+		$found  = $st['found_n'];
+		$new    = self::walk( $data, $path, $st, $depth + 1 );
+		if ( $st['unchecked_n'] > $before[3] ) {
+			// Part of it could not be judged: none of it goes out, and the
+			// answer names the text once, not each place inside it.
+			list( $st['found'], $st['found_n'], $st['unchecked'], $st['unchecked_n'] ) = $before;
+			return self::unchecked( $path, $st );
+		}
+		if ( $st['found_n'] === $found ) {
+			return $text;
+		}
+		$out = 'json' === $kind ? wp_json_encode( $new, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : serialize( $new ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+		return is_string( $out ) ? $out : self::unchecked( $path, $st );
 	}
 
 	/**
-	 * JSON and serialized data inside a text, redacted where they stand. A
-	 * text that is one serialized value is rewritten with correct lengths,
-	 * texts nested in it included; any other text is searched for serialized
-	 * items and JSON members whose name is a credential's.
+	 * Decode a text that is a JSON array or object, or serialized data.
+	 * Objects come back from unserialize() as __PHP_Incomplete_Class: no
+	 * class is loaded, no code runs.
 	 *
-	 * @param string $text  Text.
-	 * @param array  $path  Its path.
-	 * @param array  $st    State; 'error' set where a pattern gave up.
-	 * @param int    $depth Texts nested so far.
-	 * @return string|null Null where a pattern gave up.
+	 * @param string $text Text.
+	 * @param mixed  $data Set to what it holds.
+	 * @return string|null 'json' (an array, an object or a JSON string),
+	 *                     'serialized', 'deep' for JSON nested beyond
+	 *                     MAX_DEPTH, null for a text that is neither.
 	 */
-	private static function structured( $text, array $path, array &$st, $depth ) {
-		if ( preg_match( '/^(?:a|O|s):\d/', $text ) ) {
-			$found = array( $st['found'], $st['found_n'] );
-			$whole = self::ser_value( $text, 0, $path, $st, $depth );
-			if ( null !== $whole && strlen( $text ) === $whole[1] ) {
-				return $whole[0];
+	private static function decode( $text, &$data ) {
+		$trimmed = trim( $text );
+		$first   = substr( $trimmed, 0, 1 );
+		$last    = substr( $trimmed, -1 );
+		if ( ( '{' === $first && '}' === $last ) || ( '[' === $first && ']' === $last ) || ( '"' === $first && '"' === $last && strlen( $trimmed ) > 1 ) ) {
+			$data = json_decode( $trimmed, false, self::MAX_DEPTH, JSON_BIGINT_AS_STRING );
+			if ( JSON_ERROR_DEPTH === json_last_error() ) {
+				return 'deep';
 			}
-			list( $st['found'], $st['found_n'] ) = $found;
+			// A JSON text inside a JSON string ("{\"token\":…}") is a string.
+			return JSON_ERROR_NONE === json_last_error() && ( is_array( $data ) || is_object( $data ) || is_string( $data ) ) ? 'json' : null;
 		}
-		$text = self::ser_scan( $text, $path, $st );
-		if ( null === $text ) {
-			return null;
-		}
-		return self::json_scan( $text, $path, $st );
-	}
-
-	/**
-	 * The nesting level of a JSON quote preceded by this many backslashes:
-	 * 0 for ", 1 for \", 2 for \\\", … (2^level - 1 backslashes); null for
-	 * a count that is no level's.
-	 *
-	 * @param int $backslashes Backslashes.
-	 * @return int|null
-	 */
-	private static function level( $backslashes ) {
-		$n = $backslashes + 1;
-		if ( $n > 128 || 0 !== ( $n & ( $n - 1 ) ) ) {
-			return null;
-		}
-		return (int) round( log( $n, 2 ) );
-	}
-
-	/**
-	 * Whether the quote at $i closes or opens a string of this level: the
-	 * backslashes before it are 2^level - 1 more than a multiple of
-	 * 2^(level + 1).
-	 *
-	 * @param string $s     Text.
-	 * @param int    $i     Offset of a '"'.
-	 * @param int    $level Level.
-	 * @return bool
-	 */
-	private static function quote_of( $s, $i, $level ) {
-		$run = 0;
-		while ( $i - $run - 1 >= 0 && '\\' === $s[ $i - $run - 1 ] ) {
-			++$run;
-		}
-		return ( $run % ( 2 << $level ) ) === ( ( 1 << $level ) - 1 );
-	}
-
-	/**
-	 * Where a JSON value of this level that holds something ends: a string
-	 * that is not empty, a number, an object or array that is not empty.
-	 * Null for true, false, null, "", {}, [] and anything that is no value.
-	 *
-	 * @param string $s     Text.
-	 * @param int    $i     Offset of the value.
-	 * @param int    $level Level of its quotes.
-	 * @return int|null Offset after it.
-	 */
-	private static function json_value_end( $s, $i, $level ) {
-		$len = strlen( $s );
-		$bs  = ( 1 << $level ) - 1;
-		if ( $i >= $len ) {
-			return null;
-		}
-		$c = $s[ $i ];
-		if ( ( 0 === $bs && '"' === $c ) || ( $bs > 0 && str_repeat( '\\', $bs ) . '"' === substr( $s, $i, $bs + 1 ) ) ) {
-			$from = $i + $bs + 1;
-			$j    = $from;
-			while ( false !== ( $q = strpos( $s, '"', $j ) ) ) {
-				if ( self::quote_of( $s, $q, $level ) ) {
-					return ( $q - $bs ) === $from ? null : $q + 1;
-				}
-				$j = $q + 1;
-			}
-			return null;
-		}
-		if ( '{' === $c || '[' === $c ) {
-			$depth = 0;
-			$in    = false;
-			for ( $j = $i; $j < $len; $j++ ) {
-				$ch = $s[ $j ];
-				if ( '"' === $ch ) {
-					if ( self::quote_of( $s, $j, $level ) ) {
-						$in = ! $in;
-					}
-				} elseif ( ! $in && ( '{' === $ch || '[' === $ch ) ) {
-					++$depth;
-				} elseif ( ! $in && ( '}' === $ch || ']' === $ch ) ) {
-					--$depth;
-					if ( 0 === $depth ) {
-						return '' === trim( substr( $s, $i + 1, $j - $i - 1 ) ) ? null : $j + 1;
-					}
-				}
-			}
-			return null;
-		}
-		if ( '-' === $c || ctype_digit( $c ) ) {
-			return $i + strspn( $s, '0123456789+-.eE', $i );
+		if ( preg_match( '/^(?:a:\d+:\{|O:\d+:"|s:\d+:")/', $text ) && ( '}' === $last || ';' === $last ) ) {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize, WordPress.PHP.NoSilencedErrors.Discouraged
+			$data = @unserialize( $text, array( 'allowed_classes' => false ) );
+			return false === $data ? null : 'serialized';
 		}
 		return null;
 	}
 
+	/* ------------------------------------------------------------- the log */
+
 	/**
-	 * JSON members whose name is a credential's, their value replaced by
-	 * "[REDACTED]" where it stands, at any level of escaping (JSON in a JSON
-	 * string: \"token\":\"…\").
+	 * Credentials in the lines of a log replaced with REDACTED, line by line:
 	 *
-	 * @param string $s    Text.
-	 * @param array  $path Its path.
-	 * @param array  $st   State.
-	 * @return string|null Null where the pattern gave up.
-	 */
-	private static function json_scan( $s, array $path, array &$st ) {
-		if ( false === strpos( $s, ':' ) ) {
-			return $s;
-		}
-		$n = preg_match_all( '/(?<!\\\\)(\\\\{0,127})"([^"\\\\\r\n]{1,128})\1"[ \t\r\n]{0,64}:[ \t\r\n]{0,64}/', $s, $hits, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
-		if ( false === $n ) {
-			return null;
-		}
-		$out = '';
-		$pos = 0;
-		foreach ( $hits as $hit ) {
-			if ( $hit[0][1] < $pos ) {
-				continue;
-			}
-			$level = self::level( strlen( $hit[1][0] ) );
-			if ( null === $level || ! self::redacts_key( $hit[2][0], $st['extra'] ) ) {
-				continue;
-			}
-			$from = $hit[0][1] + strlen( $hit[0][0] );
-			$end  = self::json_value_end( $s, $from, $level );
-			if ( null === $end || false !== strpos( substr( $s, $from, $end - $from ), self::MARK ) ) {
-				continue;
-			}
-			$q             = $hit[1][0] . '"';
-			$out          .= substr( $s, $pos, $from - $pos ) . $q . self::MARK . $q;
-			$pos           = $end;
-			self::note( $st, 'found', array_merge( $path, array( $hit[2][0] ) ) );
-		}
-		return $out . substr( $s, $pos );
-	}
-
-	/**
-	 * Where the serialized value at $i ends, without judging it.
-	 *
-	 * @param string $s     Text.
-	 * @param int    $i     Offset.
-	 * @param array  $st    State (budget).
-	 * @param int    $depth Nesting so far.
-	 * @return int|null
-	 */
-	private static function ser_skip( $s, $i, array &$st, $depth ) {
-		if ( --$st['budget'] < 0 || $depth > self::MAX_DEPTH ) {
-			$st['error'] = true;
-			return null;
-		}
-		$t = isset( $s[ $i ] ) ? $s[ $i ] : '';
-		if ( 'N' === $t ) {
-			return ';' === substr( $s, $i + 1, 1 ) ? $i + 2 : null;
-		}
-		if ( in_array( $t, array( 'b', 'i', 'd', 'r', 'R' ), true ) ) {
-			if ( ':' !== substr( $s, $i + 1, 1 ) ) {
-				return null;
-			}
-			$e = strpos( $s, ';', $i + 2 );
-			return ( false === $e || $e - $i > 400 ) ? null : $e + 1;
-		}
-		if ( 's' === $t || 'E' === $t ) {
-			$m = self::ser_head( $s, $i, '/\G[sE]:(\d{1,10}):"/' );
-			if ( null === $m ) {
-				return null;
-			}
-			$end = $i + strlen( $m[0] ) + (int) $m[1];
-			return '";' === substr( $s, $end, 2 ) ? $end + 2 : null;
-		}
-		$open = self::ser_open( $s, $i );
-		if ( null === $open ) {
-			return null;
-		}
-		$j = $open[1];
-		for ( $k = 0; $k < 2 * $open[0]; $k++ ) {
-			$j = self::ser_skip( $s, $j, $st, $depth + 1 );
-			if ( null === $j ) {
-				return null;
-			}
-		}
-		return '}' === substr( $s, $j, 1 ) ? $j + 1 : null;
-	}
-
-	/**
-	 * The head of a serialized item matched at $i.
-	 *
-	 * @param string $s       Text.
-	 * @param int    $i       Offset.
-	 * @param string $pattern Pattern starting with \G.
-	 * @return array|null The matches.
-	 */
-	private static function ser_head( $s, $i, $pattern ) {
-		return 1 === preg_match( $pattern, $s, $m, 0, $i ) ? $m : null;
-	}
-
-	/**
-	 * The opening of a serialized array or object at $i: how many pairs it
-	 * holds and where they start.
-	 *
-	 * @param string $s Text.
-	 * @param int    $i Offset.
-	 * @return array|null array( pairs, offset of the first, head text ).
-	 */
-	private static function ser_open( $s, $i ) {
-		$t = isset( $s[ $i ] ) ? $s[ $i ] : '';
-		if ( 'a' === $t ) {
-			$m = self::ser_head( $s, $i, '/\Ga:(\d{1,9}):\{/' );
-			return null === $m ? null : array( (int) $m[1], $i + strlen( $m[0] ), $m[0] );
-		}
-		if ( 'O' === $t ) {
-			$m = self::ser_head( $s, $i, '/\GO:(\d{1,4}):"/' );
-			if ( null === $m ) {
-				return null;
-			}
-			$after = $i + strlen( $m[0] ) + (int) $m[1];
-			$n     = self::ser_head( $s, $after, '/\G":(\d{1,9}):\{/' );
-			return null === $n ? null : array( (int) $n[1], $after + strlen( $n[0] ), substr( $s, $i, $after - $i ) . $n[0] );
-		}
-		return null;
-	}
-
-	/**
-	 * Whether a serialized value says only whether one is set: N;, b:…;,
-	 * s:0:"";, a:0:{}.
-	 *
-	 * @param string $token The value as serialized.
-	 * @return bool
-	 */
-	private static function ser_holds( $token ) {
-		return ! ( 'N;' === $token || 'b:' === substr( $token, 0, 2 ) || 's:0:"";' === $token || 'a:0:{}' === $token );
-	}
-
-	/**
-	 * The serialized value at $i, redacted: in an array or object the value
-	 * under a credential's key becomes s:10:"[REDACTED]";, a text inside is
-	 * judged as any text and written back with its new length.
-	 *
-	 * @param string $s     Text.
-	 * @param int    $i     Offset.
-	 * @param array  $path  Its path.
-	 * @param array  $st    State.
-	 * @param int    $depth Nesting so far.
-	 * @return array|null array( text, offset after it ), null where it is no
-	 *                    serialized value.
-	 */
-	private static function ser_value( $s, $i, array $path, array &$st, $depth ) {
-		$t = isset( $s[ $i ] ) ? $s[ $i ] : '';
-		if ( 's' === $t ) {
-			if ( --$st['budget'] < 0 ) {
-				$st['error'] = true;
-				return null;
-			}
-			$m = self::ser_head( $s, $i, '/\Gs:(\d{1,10}):"/' );
-			if ( null === $m ) {
-				return null;
-			}
-			$from = $i + strlen( $m[0] );
-			$len  = (int) $m[1];
-			if ( '";' !== substr( $s, $from + $len, 2 ) ) {
-				return null;
-			}
-			$inner = substr( $s, $from, $len );
-			if ( $st['parse'] && false !== strpos( $inner, '"' ) && $depth < self::MAX_DEPTH ) {
-				$new = self::structured( $inner, $path, $st, $depth + 1 );
-				if ( null === $new ) {
-					return null;
-				}
-				$inner = $new;
-			}
-			return array( 's:' . strlen( $inner ) . ':"' . $inner . '";', $from + $len + 2 );
-		}
-		$open = self::ser_open( $s, $i );
-		if ( null === $open ) {
-			$end = self::ser_skip( $s, $i, $st, $depth );
-			return null === $end ? null : array( substr( $s, $i, $end - $i ), $end );
-		}
-		if ( --$st['budget'] < 0 || $depth > self::MAX_DEPTH ) {
-			$st['error'] = true;
-			return null;
-		}
-		$out = $open[2];
-		$j   = $open[1];
-		for ( $k = 0; $k < $open[0]; $k++ ) {
-			$key_end = self::ser_skip( $s, $j, $st, $depth + 1 );
-			if ( null === $key_end ) {
-				return null;
-			}
-			$key_token = substr( $s, $j, $key_end - $j );
-			$name      = 's' === $key_token[0] ? substr( $key_token, strpos( $key_token, '"' ) + 1, -2 ) : (int) substr( $key_token, 2, -1 );
-			$p         = array_merge( $path, array( $name ) );
-			$out      .= $key_token;
-			$j         = $key_end;
-			if ( ! self::matches( $p, $st['keep'] ) && self::redacts_key( $name, $st['extra'] ) ) {
-				$end = self::ser_skip( $s, $j, $st, $depth + 1 );
-				if ( null === $end ) {
-					return null;
-				}
-				$token = substr( $s, $j, $end - $j );
-				if ( self::ser_holds( $token ) && 's:10:"' . self::MARK . '";' !== $token ) {
-					$out          .= 's:10:"' . self::MARK . '";';
-					self::note( $st, 'found', $p );
-				} else {
-					$out .= $token;
-				}
-				$j = $end;
-				continue;
-			}
-			$value = self::ser_value( $s, $j, $p, $st, $depth + 1 );
-			if ( null === $value ) {
-				return null;
-			}
-			$out .= $value[0];
-			$j    = $value[1];
-		}
-		if ( '}' !== substr( $s, $j, 1 ) ) {
-			return null;
-		}
-		return array( $out . '}', $j + 1 );
-	}
-
-	/**
-	 * Serialized items in a text that is not one serialized value as a whole
-	 * (cut short, or text around it): each s:N:"name"; whose name is a
-	 * credential's has the value after it replaced. A length around it may
-	 * no longer fit; the text was not valid serialized data to begin with.
-	 *
-	 * @param string $s    Text.
-	 * @param array  $path Its path.
-	 * @param array  $st   State.
-	 * @return string|null Null where the pattern gave up.
-	 */
-	private static function ser_scan( $s, array $path, array &$st ) {
-		if ( false === strpos( $s, 's:' ) ) {
-			return $s;
-		}
-		$n = preg_match_all( '/s:(\d{1,4}):"/', $s, $hits, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
-		if ( false === $n ) {
-			return null;
-		}
-		$out = '';
-		$pos = 0;
-		foreach ( $hits as $hit ) {
-			$at = $hit[0][1];
-			if ( $at < $pos ) {
-				continue;
-			}
-			$from = $at + strlen( $hit[0][0] );
-			$len  = (int) $hit[1][0];
-			if ( '";' !== substr( $s, $from + $len, 2 ) ) {
-				continue;
-			}
-			$name = substr( $s, $from, $len );
-			if ( ! self::redacts_key( $name, $st['extra'] ) ) {
-				continue;
-			}
-			$vstart = $from + $len + 2;
-			$end    = self::ser_skip( $s, $vstart, $st, 0 );
-			if ( null === $end ) {
-				if ( ! empty( $st['error'] ) ) {
-					return null;
-				}
-				continue;
-			}
-			$token = substr( $s, $vstart, $end - $vstart );
-			if ( ! self::ser_holds( $token ) || 's:10:"' . self::MARK . '";' === $token ) {
-				continue;
-			}
-			$out          .= substr( $s, $pos, $vstart - $pos ) . 's:10:"' . self::MARK . '";';
-			$pos           = $end;
-			self::note( $st, 'found', array_merge( $path, array( $name ) ) );
-		}
-		return $out . substr( $s, $pos );
-	}
-
-	/* ------------------------------------------------------------ free text */
-
-	/**
-	 * Credentials in free text replaced with REDACTED: the value of an
-	 * Authorization header (its scheme stays), a Bearer token, a print_r()
-	 * entry under a credential's name (a nested array to the end of its
-	 * block), and the value of a name=value pair, a name: value, a
-	 * "name": "value" or a 'name' => value pair (a var_export() array to its
-	 * closing bracket) whose name redacts_key() takes for a credential's.
+	 * - a dump entry under a credential's name ([name] =>, [name:Class:private] =>,
+	 *   'name' =>, "name" =>): the value to the end of the line, a nested
+	 *   array or object to its closing parenthesis, a value that goes on over
+	 *   more lines to the next entry;
+	 * - name=value, name: value or name => value anywhere in a line: from the
+	 *   separator to the end of the line, an Authorization header's scheme
+	 *   (Bearer, Basic, Digest) kept;
+	 * - a Bearer token anywhere.
 	 *
 	 * @param string   $text  Text.
 	 * @param int      $hits  Number of replacements (added to).
 	 * @param string[] $extra extra_keys().
-	 * @return string|null Null where a pattern gave up: the caller treats the
-	 *                     text as not judged.
+	 * @return string|null Null where a pattern gave up.
 	 */
 	public static function text( $text, &$hits, array $extra = array() ) {
-		$text = self::headers( (string) $text, $hits );
-		if ( null === $text ) {
-			return null;
-		}
-		$text = self::bearer( $text, $hits );
-		if ( null === $text ) {
-			return null;
-		}
-		$text = self::print_r_blocks( $text, $hits, $extra );
-		if ( null === $text ) {
-			return null;
-		}
-		return self::pairs( $text, $hits, $extra );
-	}
-
-	/**
-	 * A Bearer token anywhere, as curl's verbose output shows it: eight
-	 * characters of a token's alphabet or more after the word.
-	 *
-	 * @param string $text Text.
-	 * @param int    $hits Replacements (added to).
-	 * @return string|null
-	 */
-	private static function bearer( $text, &$hits ) {
-		$n = preg_match_all( '/\bbearer[ \t]{1,16}/i', $text, $found, PREG_OFFSET_CAPTURE );
-		if ( false === $n ) {
-			return null;
-		}
-		$out = '';
-		$pos = 0;
-		foreach ( $found[0] as $m ) {
-			$from = $m[1] + strlen( $m[0] );
-			$len  = strspn( $text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/', $from );
-			if ( $m[1] < $pos || $len < 8 ) {
-				continue;
-			}
-			$len += strspn( $text, '=', $from + $len );
-			$out .= substr( $text, $pos, $from - $pos ) . self::MARK;
-			$pos  = $from + $len;
-			++$hits;
-		}
-		return $out . substr( $text, $pos );
-	}
-
-	/**
-	 * The value of each Authorization or Proxy-Authorization header, after
-	 * its scheme: to the end of the line, to the closing quote where the
-	 * header stands in quotes, to the next & or blank after "=".
-	 *
-	 * @param string $text Text.
-	 * @param int    $hits Replacements (added to).
-	 * @return string|null
-	 */
-	private static function headers( $text, &$hits ) {
-		$n = preg_match_all( '/\b(?:proxy-)?authorization(["\']?)[ \t]{0,16}([:=])[ \t]{0,16}(["\']?)/i', $text, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
-		if ( false === $n ) {
-			return null;
-		}
-		$out = '';
-		$pos = 0;
-		foreach ( $found as $m ) {
-			if ( $m[0][1] < $pos ) {
-				continue;
-			}
-			$from  = $m[0][1] + strlen( $m[0][0] );
-			$quote = '' !== $m[3][0] ? $m[3][0] : $m[1][0];
-			if ( '' !== $m[3][0] ) {
-				$end = self::quoted_end( $text, $from, $quote );
-			} elseif ( '=' === $m[2][0] ) {
-				$end = $from + strcspn( $text, " \t\r\n&\"'", $from );
-			} else {
-				$end = $from + strcspn( $text, "\r\n", $from );
-			}
-			$value  = substr( $text, $from, $end - $from );
-			$scheme = '';
-			if ( preg_match( '/^([A-Za-z0-9\-]{1,32})[ \t]+/', $value, $s ) && in_array( strtolower( $s[1] ), self::SCHEMES, true ) ) {
-				$scheme = $s[0];
-			}
-			$rest = trim( substr( $value, strlen( $scheme ) ) );
-			if ( '' === $rest || self::MARK === $rest || in_array( strtolower( $rest ), self::SCHEMES, true ) ) {
-				continue;
-			}
-			++$hits;
-			$out .= substr( $text, $pos, $from - $pos ) . $scheme . self::MARK;
-			$pos  = $end;
-		}
-		return $out . substr( $text, $pos );
-	}
-
-	/**
-	 * Where a quoted text that starts at $from (after its opening quote)
-	 * ends: at the closing quote, a backslash escaping the next character.
-	 * The end of the text where none follows.
-	 *
-	 * @param string $text  Text.
-	 * @param int    $from  Offset after the opening quote.
-	 * @param string $quote The quote.
-	 * @return int Offset of the closing quote.
-	 */
-	private static function quoted_end( $text, $from, $quote ) {
-		$len = strlen( $text );
-		for ( $j = $from; $j < $len; $j++ ) {
-			if ( '\\' === $text[ $j ] ) {
-				++$j;
-			} elseif ( $quote === $text[ $j ] ) {
-				return $j;
-			}
-		}
-		return $len;
-	}
-
-	/**
-	 * print_r() entries under a credential's name: "[token] => value" loses
-	 * the value to the end of the line, "[token] => Array" and
-	 * "[token] => Foo Object" lose the whole block that follows, to its
-	 * closing parenthesis.
-	 *
-	 * @param string   $text  Text.
-	 * @param int      $hits  Replacements (added to).
-	 * @param string[] $extra extra_keys().
-	 * @return string|null
-	 */
-	private static function print_r_blocks( $text, &$hits, array $extra ) {
-		if ( false === strpos( $text, '=>' ) ) {
-			return $text;
-		}
-		$lines = explode( "\n", $text );
-		$out   = array();
+		$lines = explode( "\n", (string) $text );
 		$count = count( $lines );
+		$out   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$line = $lines[ $i ];
-			$m    = array();
-			$ok   = preg_match( '/^([ \t]*\[([^\]\r\n]{1,128})\][ \t]{0,4}=>[ \t]?)(.*?)(\r?)$/', $line, $m );
-			if ( false === $ok ) {
+			$dump = preg_match( '/^([ \t]*(?:\[([^\]:\r\n]{1,200})(?::[^\]\r\n]{0,200})?\]|\'([^\'\r\n]{1,200})\'|"([^"\r\n]{1,200})")[ \t]*=>[ \t]?)(.*)$/', $line, $m );
+			if ( false === $dump ) {
 				return null;
 			}
-			if ( 1 !== $ok || ! self::redacts_key( $m[2], $extra ) || '' === trim( $m[3] ) || self::MARK === trim( $m[3] ) ) {
-				$out[] = $line;
+			$name = 1 === $dump ? $m[2] . $m[3] . $m[4] : '';
+			// var_export() puts a nested array on the next line: 'token' =>
+			$next = '' === $name || '' !== trim( $m[5] ) || $i + 1 >= $count ? '' : trim( $lines[ $i + 1 ] );
+			if ( '' !== $name && self::redacts_key( $name, $extra ) && ( '' !== trim( $m[5] ) || '(' === substr( $next, -1 ) ) ) {
+				++$hits;
+				$out[] = $m[1] . self::MARK;
+				$i     = self::dump_end( $lines, $i, trim( $m[5] ) );
 				continue;
 			}
-			++$hits;
-			$out[] = $m[1] . self::MARK . $m[4];
-			if ( preg_match( '/^(?:Array|[\w\\\\]{1,200} Object)$/', trim( $m[3] ) ) && $i + 1 < $count && '(' === trim( $lines[ $i + 1 ] ) ) {
-				$depth = 0;
-				for ( $j = $i + 1; $j < $count; $j++ ) {
-					$t = trim( $lines[ $j ] );
-					if ( '(' === $t ) {
-						++$depth;
-					} elseif ( ')' === $t ) {
-						--$depth;
-					}
-					if ( 0 === $depth ) {
-						break;
-					}
-				}
-				$i = $j;
+			$new = self::line( $line, $hits, $extra );
+			if ( null === $new ) {
+				return null;
 			}
+			$out[] = $new;
 		}
 		return implode( "\n", $out );
 	}
 
 	/**
-	 * name=value, name: value, "name": "value" and 'name' => value pairs
-	 * whose name is a credential's lose the value: a quoted one to its
-	 * closing quote, an array (var_export()'s "array (", "(object) array(",
-	 * "[", "{") to its closing bracket, anything else to the next blank or
-	 * separator.
+	 * The last line of a dump entry whose first line is $i: a nested array
+	 * or object to its closing parenthesis (print_r()'s "Array" with "(" on
+	 * the next line, var_export()'s "array (" on this or the next line), a
+	 * value that goes on over more lines to the line before the next entry,
+	 * the end of the block or the next log entry.
 	 *
-	 * @param string   $text  Text.
+	 * @param string[] $lines Lines.
+	 * @param int      $i     First line of the entry.
+	 * @param string   $value Its value on that line, trimmed.
+	 * @return int
+	 */
+	private static function dump_end( array $lines, $i, $value ) {
+		$count = count( $lines );
+		$open  = '(' === substr( $value, -1 ) ? $i : null;
+		if ( '' === $value ) {
+			$open = $i + 1;
+		}
+		if ( null === $open && $i + 1 < $count && ( 'Array' === $value || ' Object' === substr( $value, -7 ) ) ) {
+			$open = '(' === trim( $lines[ $i + 1 ] ) ? $i + 1 : null;
+		}
+		if ( null !== $open ) {
+			$depth = 0;
+			for ( $j = $open; $j < $count; $j++ ) {
+				$t      = trim( $lines[ $j ] );
+				$depth += ( '(' === substr( $t, -1 ) ? 1 : 0 ) - ( ')' === substr( $t, 0, 1 ) ? 1 : 0 );
+				if ( 0 === $depth ) {
+					return $j;
+				}
+			}
+			return $count - 1;
+		}
+		for ( $j = $i + 1; $j < $count; $j++ ) {
+			if ( preg_match( '/^[ \t]*(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[ \t]*\)|^\[\d{1,2}-[A-Za-z]{3}-\d{4}/', $lines[ $j ] ) ) {
+				return $j - 1;
+			}
+		}
+		return $count - 1;
+	}
+
+	/**
+	 * One line: from the separator after a credential's name to the end of
+	 * the line (an Authorization header's scheme kept), and a Bearer token.
+	 *
+	 * @param string   $line  Line.
 	 * @param int      $hits  Replacements (added to).
 	 * @param string[] $extra extra_keys().
 	 * @return string|null
 	 */
-	private static function pairs( $text, &$hits, array $extra ) {
-		$n = preg_match_all( '/(?<![\w\-\[$\\\\])(["\']?)([A-Za-z_][\w\-]{0,127})\1[ \t]{0,16}(=>|:|=)[ \t]{0,16}/', $text, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
+	private static function line( $line, &$hits, array $extra ) {
+		$n = preg_match_all( '/(?<![\w\-$])(["\']?)([A-Za-z_][\w\-]{0,127})\1[ \t]{0,16}(=>|:|=)[ \t]{0,16}/', $line, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
 		if ( false === $n ) {
 			return null;
 		}
-		$out = '';
-		$pos = 0;
 		foreach ( $found as $m ) {
-			if ( $m[0][1] < $pos || ! self::redacts_key( $m[2][0], $extra ) ) {
+			if ( ! self::redacts_key( $m[2][0], $extra ) ) {
 				continue;
 			}
 			$from = $m[0][1] + strlen( $m[0][0] );
-			$c    = substr( $text, $from, 1 );
-			if ( self::MARK === substr( $text, $from, strlen( self::MARK ) ) ) {
+			$rest = rtrim( substr( $line, $from ), "\r" );
+			$bare = trim( $rest, " \t\"'" );
+			if ( '' === $bare || preg_match( '/^(?:true|false|null)$/i', $bare ) || in_array( strtolower( $bare ), self::SCHEMES, true ) ) {
 				continue;
 			}
-			if ( '"' === $c || "'" === $c ) {
-				$end   = self::quoted_end( $text, $from + 1, $c );
-				$value = substr( $text, $from + 1, $end - $from - 1 );
-				if ( '' === $value || false !== strpos( $value, self::MARK ) ) {
-					continue;
-				}
-				$out .= substr( $text, $pos, $from + 1 - $pos ) . self::MARK;
-				$pos  = $end;
-				++$hits;
-				continue;
-			}
-			// var_export() puts a nested array on the next line.
-			$at   = $from + strspn( $text, " \t\r\n", $from );
-			$open = preg_match( '/^(?:\(object\)[ \t]*)?(?:array[ \t\r\n]*\(|\\\\?[\w\\\\]{1,200}::__set_state\(|\[|\{)/i', substr( $text, $at, 300 ), $o );
-			if ( false === $open ) {
-				return null;
-			}
-			if ( 1 === $open ) {
-				$end = self::bracket_end( $text, $at + strlen( $o[0] ) - 1 );
-				if ( null === $end || '' === trim( substr( $text, $at + strlen( $o[0] ), $end - $at - strlen( $o[0] ) - 1 ) ) ) {
-					continue;
-				}
-			} else {
-				$end   = $from + strcspn( $text, " \t\r\n\"'&,;<>()[]{}", $from );
-				$value = substr( $text, $from, $end - $from );
-				if ( '' === $value || preg_match( '/^(?:true|false|null)$/i', $value ) || in_array( strtolower( $value ), self::SCHEMES, true ) ) {
-					continue;
-				}
-			}
-			$out .= substr( $text, $pos, $from - $pos ) . self::MARK;
-			$pos  = $end;
+			$scheme = preg_match( '/^["\']?([A-Za-z0-9\-]{1,32})[ \t]+\S/', $rest, $s ) && in_array( strtolower( $s[1] ), self::SCHEMES, true ) ? substr( $rest, 0, strlen( $s[0] ) - 1 ) : '';
 			++$hits;
+			return substr( $line, 0, $from ) . $scheme . self::MARK . ( "\r" === substr( $line, -1 ) ? "\r" : '' );
 		}
-		return $out . substr( $text, $pos );
-	}
-
-	/**
-	 * Where the bracket opened at $at closes, quoted text skipped.
-	 *
-	 * @param string $text Text.
-	 * @param int    $at   Offset of the opening bracket.
-	 * @return int|null Offset after the closing one; null where it never closes.
-	 */
-	private static function bracket_end( $text, $at ) {
-		$len   = strlen( $text );
-		$depth = 0;
-		for ( $j = $at; $j < $len; $j++ ) {
-			$c = $text[ $j ];
-			if ( '"' === $c || "'" === $c ) {
-				$j = self::quoted_end( $text, $j + 1, $c );
-			} elseif ( '(' === $c || '[' === $c || '{' === $c ) {
-				++$depth;
-			} elseif ( ')' === $c || ']' === $c || '}' === $c ) {
-				--$depth;
-				if ( 0 === $depth ) {
-					return $j + 1;
-				}
+		$n = preg_match_all( '/\bbearer[ \t]{1,16}/i', $line, $found, PREG_OFFSET_CAPTURE );
+		if ( false === $n ) {
+			return null;
+		}
+		foreach ( $found[0] as $m ) {
+			$from = $m[1] + strlen( $m[0] );
+			$len  = strspn( $line, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/', $from );
+			if ( $len >= 8 ) {
+				++$hits;
+				return substr( $line, 0, $from ) . self::MARK . substr( $line, $from + $len + strspn( $line, '=', $from + $len ) );
 			}
 		}
-		return null;
+		return $line;
 	}
 }

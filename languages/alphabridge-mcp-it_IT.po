@@ -4987,3 +4987,7 @@ msgstr "I metadati sono stati modificati dopo che l'annullamento era stato piani
 
 msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
 msgstr "Non è stato scritto nulla: una riga di questa chiave è salvata come \"%1$s\", e una scrittura di \"%2$s\" la modificherebbe anch'essa, perché il database confronta le chiavi senza distinguere maiuscole e minuscole. L'account di questa connessione non può modificare \"%1$s\" (un plugin la protegge, o è una chiave protetta). Modificala dove il suo plugin lo consente, o chiedi all'amministratore del sito."
+
+#, php-format
+msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
+msgstr "L'argomento in %1$s contiene %2$s, il segnaposto che nella risposta di uno strumento di lettura sostituisce una credenziale. Riscritto, sostituirebbe la credenziale salvata, quindi non è stato modificato nulla. Invia il valore reale oppure ometti questo campo, così resta quello salvato."

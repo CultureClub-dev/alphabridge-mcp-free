@@ -4987,3 +4987,7 @@ msgstr "Los metadatos se han cambiado después de planificar el deshacer; no se 
 
 msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
 msgstr "No se ha escrito nada: una fila de esta clave está guardada como \"%1$s\", y escribir \"%2$s\" también la cambiaría, porque la base de datos compara las claves sin distinguir mayúsculas y minúsculas. La cuenta de esta conexión no puede cambiar \"%1$s\" (un plugin la protege, o es una clave protegida). Cámbiala donde su plugin lo ofrece, o pregunta al administrador del sitio."
+
+#, php-format
+msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
+msgstr "El argumento en %1$s contiene %2$s, el marcador que sustituye una credencial en la respuesta de una herramienta de lectura. Si se volviera a escribir, reemplazaría la credencial guardada, así que no se ha cambiado nada. Envía el valor real u omite este campo para que se conserve el guardado."
