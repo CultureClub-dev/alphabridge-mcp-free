@@ -23,7 +23,12 @@
  * ability changed (wp_run_ability), and since 4.13.0 meta: the meta of a
  * post, a term or a user, and the alternative text, title and caption of a
  * file (wp_update_post_meta, wp_update_term_meta, wp_update_user_meta,
- * wp_update_media). The undo points of Pro's tools (options, files, PHP
+ * wp_update_media); also since 4.13.0 term (a term or a menu created, the
+ * fields of a term changed: wp_create_term, wp_create_menu,
+ * wp_update_term), menu_item (wp_add_menu_item) and widget (the option rows
+ * wp_update_widget, wp_add_widget and wp_delete_widget write), planned and
+ * written by AB_MCP_Undo_Terms, AB_MCP_Undo_Menu_Items and
+ * AB_MCP_Undo_Widgets. The undo points of Pro's tools (options, files, PHP
  * snippets) share the store; Pro reverses them with its own wp_undo, this
  * class names them and leaves them alone.
  *
@@ -85,6 +90,16 @@ class AB_MCP_Undo_Restore {
 			'wp_update_term_meta'       => array( 'kind' => 'meta', 'cap' => 'manage_categories' ),
 			'wp_update_user_meta'       => array( 'kind' => 'meta', 'cap' => 'edit_users' ),
 			'wp_update_media'           => array( 'kind' => 'meta', 'cap' => 'upload_files' ),
+			// Terms, menus and widgets (free since 4.13.0), each with the
+			// capability of its tool; the rights to the term, the item or
+			// the widget row are asked by the plan of the kind's class.
+			'wp_create_term'            => array( 'kind' => 'term', 'cap' => 'manage_categories' ),
+			'wp_update_term'            => array( 'kind' => 'term', 'cap' => 'manage_categories' ),
+			'wp_create_menu'            => array( 'kind' => 'term', 'cap' => 'edit_theme_options' ),
+			'wp_add_menu_item'          => array( 'kind' => 'menu_item', 'cap' => 'edit_theme_options' ),
+			'wp_update_widget'          => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
+			'wp_add_widget'             => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
+			'wp_delete_widget'          => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
 		);
 	}
 
@@ -258,6 +273,11 @@ class AB_MCP_Undo_Restore {
 				return self::plan_option_rows( $tool, $data );
 			case 'meta':
 				return self::plan_meta( $tool, $data, ! empty( $opts['force'] ) );
+			case 'term':
+			case 'menu_item':
+			case 'widget':
+				$class = self::object_kinds()[ $kind ];
+				return $class::plan( $tool, $data, ! empty( $opts['force'] ) );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}
@@ -485,7 +505,34 @@ class AB_MCP_Undo_Restore {
 			// author pages): their refs are no post id, and after_restore()
 			// purges every page for them.
 			'meta'          => 'post',
+			// A term or a menu reaches archives and every page that shows a
+			// menu; a widget every page with its sidebar.
+			'term'          => 'site',
+			'menu_item'     => 'site',
+			'widget'        => 'site',
 		);
+	}
+
+	/**
+	 * The kinds of one object written through WordPress (since 4.13.0) and
+	 * the class that plans and writes each, loaded on first use.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function object_kinds() {
+		$kinds = array(
+			'term'      => array( 'AB_MCP_Undo_Terms', 'class-undo-terms.php' ),
+			'menu_item' => array( 'AB_MCP_Undo_Menu_Items', 'class-undo-menu-items.php' ),
+			'widget'    => array( 'AB_MCP_Undo_Widgets', 'class-undo-widgets.php' ),
+		);
+		$out = array();
+		foreach ( $kinds as $kind => $c ) {
+			if ( ! class_exists( $c[0], false ) ) {
+				require_once __DIR__ . '/' . $c[1];
+			}
+			$out[ $kind ] = $c[0];
+		}
+		return $out;
 	}
 
 	/**
@@ -1585,6 +1632,11 @@ class AB_MCP_Undo_Restore {
 				return static::restore_theme( $item );
 			case 'meta':
 				return static::restore_meta( $item );
+			case 'term':
+			case 'menu_item':
+			case 'widget':
+				$class = self::object_kinds()[ $kind ];
+				return $class::restore( $item );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}

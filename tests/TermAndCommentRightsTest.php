@@ -82,7 +82,8 @@ final class TermAndCommentRightsTest extends TestCase {
 		self::assertSame( array(), $GLOBALS['ab_test_term_writes'] );
 
 		$res = AB_MCP_Tools_Taxonomy_Comments::update_term( array( 'taxonomy' => 'category', 'term_id' => 4, 'name' => 'Neu' ) );
-		self::assertSame( array( 'updated' => true, 'term_id' => 4 ), $res );
+		self::assertSame( array( 'updated' => true, 'term_id' => 4 ), array_slice( $res, 0, 2 ) );
+		self::assertSame( array( 'name' => 'Neu' ), (array) $res['saved_fields'], 'Read again after the write (4.13.0).' );
 		self::assertSame( array( array( 'update', 4, 'category' ) ), $GLOBALS['ab_test_term_writes'] );
 	}
 
@@ -124,7 +125,9 @@ final class TermAndCommentRightsTest extends TestCase {
 		self::assertRefused( $res, 'cannot delete this specific term' );
 
 		$res = AB_MCP_Tools_Taxonomy_Comments::delete_term( array( 'taxonomy' => 'category', 'term_id' => 4 ) );
-		self::assertSame( array( 'deleted' => true ), $res );
+		self::assertSame( array( 'deleted' => true, 'undo' => null ), array_slice( $res, 0, 2 ) );
+		self::assertStringStartsWith( 'not undoable: ', $res['undo_note'] );
+		self::assertStringContainsString( 'wp_get_term', $res['undo_note'] );
 	}
 
 	public function testTheDefaultTermStillNamesTheDefaultTerm(): void {

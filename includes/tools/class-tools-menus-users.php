@@ -16,6 +16,8 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-terms.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-menu-items.php';
 
 /**
  * Class AB_MCP_Tools_Menus_Users
@@ -185,7 +187,9 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 			return array(
 				'deleted' => true,
 				'id'      => $id,
-				'warning' => __( 'The account was removed, but code that runs after a deletion (a plugin\'s hook) failed; what that code should have done may be missing.', 'alphabridge-mcp' ),
+				'warning'   => __( 'The account was removed, but code that runs after a deletion (a plugin\'s hook) failed; what that code should have done may be missing.', 'alphabridge-mcp' ),
+				'undo'      => null,
+				'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user' ),
 			);
 		}
 		if ( $user && in_array( 'administrator', (array) $user->roles, true ) ) {
@@ -326,7 +330,7 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_user',
 			array(
-				'description' => 'Delete a user account. With reassign_to, the user\'s posts and links pass to that user; without it, WordPress deletes the user\'s links and entries of post types removed with their author (posts and pages among them; these go to the trash where it is on, the rest is deleted). On multisite the account is only removed from this site, its content handled the same way. Needs delete_users and the right to delete this user; the last administrator is refused. An administrator loses that role first and is deleted after; if the deletion fails, the role is given back and the error says whether that worked; if the account was removed and only a plugin\'s code after it failed, the answer is deleted with a warning. The call is refused (ab_mcp_busy) while another role change or user deletion runs through AlphaBridge; changes made in wp-admin are not part of these checks. Returns deleted and id. The account deletion is permanent; no undo point is recorded.',
+				'description' => 'Delete a user account. With reassign_to, the user\'s posts and links pass to that user; without it, WordPress deletes the user\'s links and entries of post types removed with their author (posts and pages among them; these go to the trash where it is on, the rest is deleted). On multisite the account is only removed from this site, its content handled the same way. Needs delete_users and the right to delete this user; the last administrator is refused. An administrator loses that role first and is deleted after; if the deletion fails, the role is given back and the error says whether that worked; if the account was removed and only a plugin\'s code after it failed, the answer is deleted with a warning. The call is refused (ab_mcp_busy) while another role change or user deletion runs through AlphaBridge; changes made in wp-admin are not part of these checks. Returns deleted and id, and undo: null with undo_note: the account deletion is permanent, so note an account that may be needed again with wp_get_user and wp_get_user_meta first.',
 				'capability'  => 'delete_users',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -369,7 +373,7 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_menu',
 			array(
-				'description' => 'Create an empty navigation menu. Returns created and menu_id. A name another menu already has is refused by WordPress. Items are added by wp_add_menu_item; assigning the menu to a theme location is not part of this tool. Needs edit_theme_options.',
+				'description' => 'Create an empty navigation menu. Returns created, menu_id, saved_fields (the name as stored, read again; saved_differs and warning where WordPress stored something else) and undo: the token for wp_undo, which deletes the menu again while it has no items, no theme location and its name, or null with undo_note saying why. A name another menu already has is refused by WordPress. Items are added by wp_add_menu_item; assigning the menu to a theme location is not part of this tool. Needs edit_theme_options.',
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -384,7 +388,7 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_add_menu_item',
 			array(
-				'description' => 'Add a published item to a navigation menu, at the end: a link to a post, page or entry of another post type when object_id is given, otherwise a custom link to url. Returns added and item_id. Each call adds a new item, also when one with the same target exists. A URL with a scheme WordPress does not allow in menus (javascript:, data:) is refused. Needs edit_theme_options and the right to assign this menu (assign_term), which a site can withhold for single menus. No undo point is recorded; wp_delete_menu_item removes an item.',
+				'description' => 'Add a published item to a navigation menu, at the end: a link to a post, page or entry of another post type when object_id is given, otherwise a custom link to url. Returns added, item_id, saved_fields (title, url and parent as wp_get_menu shows them, read again; saved_differs and warning where WordPress stored something else) and undo: the token for wp_undo, which deletes the item again while it is unchanged and has no sub-items, or null with undo_note saying why. Each call adds a new item, also when one with the same target exists. A URL with a scheme WordPress does not allow in menus (javascript:, data:) is refused. Needs edit_theme_options and the right to assign this menu (assign_term), which a site can withhold for single menus. wp_delete_menu_item removes an item.',
 				'destructive' => true, // what is published cannot be taken back (PUBLISHING in the core).
 				'open_world'  => true, // a published item in an assigned menu is public at once.
 				'capability'  => 'edit_theme_options',
@@ -408,7 +412,7 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_menu_item',
 			array(
-				'description' => 'Remove one item from a navigation menu by its item_id; the linked post or page itself is not touched. Sub-items of the removed item are not removed: they keep it as their parent, and WordPress usually shows them at the menu\'s top level. Returns deleted and item_id. An id that is not a menu item is refused, so a repeated call changes nothing. Needs edit_theme_options and the right to delete this item (delete_post), which a site can withhold for single items. Permanent: the item is deleted, not trashed, and no undo point is recorded.',
+				'description' => 'Remove one item from a navigation menu by its item_id; the linked post or page itself is not touched. Sub-items of the removed item are not removed: they keep it as their parent, and WordPress usually shows them at the menu\'s top level. Returns deleted and item_id. An id that is not a menu item is refused, so a repeated call changes nothing. Needs edit_theme_options and the right to delete this item (delete_post), which a site can withhold for single items. Permanent: the item is deleted, not trashed; the answer carries undo: null with undo_note, so note an item that may be needed again with wp_get_menu first.',
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -851,8 +855,10 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_delete_failed', __( 'Delete failed. Try again, or delete the account under Users in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		return array(
-			'deleted' => true,
-			'id'      => $id,
+			'deleted'   => true,
+			'id'        => $id,
+			'undo'      => null,
+			'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user' ),
 		);
 	}
 
@@ -920,13 +926,26 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		// Slashed, like add_menu_item: wp_create_nav_menu() ends in
 		// wp_insert_term(), which unslashes what it is given. Without this a
 		// name like "C:\Docs" is stored as "C:Docs".
-		$id = wp_create_nav_menu( wp_slash( self::s( $a, 'name' ) ) );
+		list( $id, $made ) = AB_MCP_Undo_Terms::observe(
+			static function () use ( $a ) {
+				return wp_create_nav_menu( wp_slash( self::s( $a, 'name' ) ) );
+			}
+		);
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
-		return array(
-			'created' => true,
-			'menu_id' => (int) $id,
+		// The read-back and an undo point that deletes the menu again
+		// (since 4.13.0): a menu is a term of nav_menu, created through
+		// wp_insert_term() and observed like a term. An item needs no such
+		// watch: wp_update_nav_menu_item() with item id 0 ends in
+		// wp_insert_post(), which inserts a new row every time and never
+		// answers with an existing one.
+		return array_merge(
+			array(
+				'created' => true,
+				'menu_id' => (int) $id,
+			),
+			AB_MCP_Undo_Terms::created( 'wp_create_menu', (int) $id, 'nav_menu', array( 'name' => self::s( $a, 'name' ) ), 'wp_get_menu', sprintf( 'new menu #%d', (int) $id ), $made )
 		);
 	}
 
@@ -983,9 +1002,24 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $item_id ) ) {
 			return $item_id;
 		}
-		return array(
-			'added'   => true,
-			'item_id' => (int) $item_id,
+		// What was sent, as WordPress was asked to store it; the read-back
+		// and an undo point that deletes the item again (since 4.13.0).
+		$asked = array(
+			'title'  => self::s( $a, 'title' ),
+			'parent' => self::i( $a, 'parent', 0 ),
+		);
+		if ( $object_id ) {
+			$asked['object_id'] = $object_id;
+			$asked['object']    = $data['menu-item-object'];
+		} else {
+			$asked['url'] = $clean;
+		}
+		return array_merge(
+			array(
+				'added'   => true,
+				'item_id' => (int) $item_id,
+			),
+			AB_MCP_Undo_Menu_Items::added( (int) $item_id, $asked, sprintf( 'menu item #%d in menu #%d', (int) $item_id, (int) $menu->term_id ) )
 		);
 	}
 
@@ -1007,8 +1041,10 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_delete_failed', __( 'Menu item not found or delete failed. wp_get_menu shows the items of a menu with their ids.', 'alphabridge-mcp' ) );
 		}
 		return array(
-			'deleted' => true,
-			'item_id' => self::i( $a, 'item_id' ),
+			'deleted'   => true,
+			'item_id'   => self::i( $a, 'item_id' ),
+			'undo'      => null,
+			'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_menu_item' ),
 		);
 	}
 }

@@ -195,7 +195,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_media',
 			array(
-				'description' => 'Delete one file of the media library (attachment) for good: its entry and metadata are removed, and WordPress deletes the file and its image sizes on the server (a file the server does not let it delete stays, without an error). The media library has no trash here. It is removed as featured image wherever it was one; posts that embed or link it keep its old URL. Needs the right to delete that file. Returns {deleted: true, id}; an id that no longer exists returns a not-found error. Posts and pages are deleted with wp_delete_post.',
+				'description' => 'Delete one file of the media library (attachment) for good: its entry and metadata are removed, and WordPress deletes the file and its image sizes on the server (a file the server does not let it delete stays, without an error). The media library has no trash here. It is removed as featured image wherever it was one; posts that embed or link it keep its old URL. Needs the right to delete that file. Returns {deleted: true, id} and undo: null with undo_note: the deletion cannot be undone, so keep a copy of a file that may be needed again first. An id that no longer exists returns a not-found error. Posts and pages are deleted with wp_delete_post.',
 				'capability'  => 'delete_posts',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -943,9 +943,14 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		if ( ! $res ) {
 			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete it: the id is not a file in the media library (look it up with wp_list_media), or a plugin stopped it. Check it with wp_get_media, and ask the site administrator if it keeps failing.', 'alphabridge-mcp' ) );
 		}
+		if ( ! class_exists( 'AB_MCP_Undo_Objects', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-objects.php';
+		}
 		return array(
-			'deleted' => true,
-			'id'      => $id,
+			'deleted'   => true,
+			'id'        => $id,
+			'undo'      => null,
+			'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_media' ),
 		);
 	}
 }
