@@ -4917,3 +4917,7 @@ msgstr "Attivate anche queste, al momento non offerte (l'impostazione resta salv
 
 msgid "Abilities of other plugins"
 msgstr "Abilità di altri plugin"
+
+#, php-format
+msgid "%1$s is annotated read-only by its plugin, but it staged a change in a draft of post #%2$d, the autosave revision #%3$d of your account; publishing that draft brings it live. %4$s"
+msgstr "%1$s è annotata come di sola lettura dal suo plugin, ma ha messo una modifica in una bozza dell'articolo #%2$d, la revisione di salvataggio automatico #%3$d del tuo account; pubblicare quella bozza la porta online. %4$s"

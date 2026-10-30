@@ -4917,3 +4917,7 @@ msgstr "Ebenfalls eingeschaltet, gerade nicht angeboten (bleibt gespeichert):"
 
 msgid "Abilities of other plugins"
 msgstr "Fähigkeiten anderer Plugins"
+
+#, php-format
+msgid "%1$s is annotated read-only by its plugin, but it staged a change in a draft of post #%2$d, the autosave revision #%3$d of your account; publishing that draft brings it live. %4$s"
+msgstr "%1$s ist von seinem Plugin als nur lesend gekennzeichnet, hat aber eine Änderung in einem Entwurf von Beitrag #%2$d abgelegt, in der Autosave-Revision #%3$d des Kontos dieser Verbindung. Wird dieser Entwurf veröffentlicht, geht die Änderung live. %4$s"

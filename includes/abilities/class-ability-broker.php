@@ -1844,7 +1844,7 @@ class AB_MCP_Ability_Broker {
 			$input = json_decode( (string) wp_json_encode( $input ), true );
 		}
 		if ( ( ! is_array( $schema ) || array() === $schema ) && ( array() === $input || '' === $input ) ) {
-			return null;
+			$input = null;
 		}
 		$types = is_array( $schema ) && isset( $schema['type'] ) ? (array) $schema['type'] : array();
 		if ( is_string( $input ) && ( in_array( 'object', $types, true ) || in_array( 'array', $types, true ) ) ) {
@@ -1857,6 +1857,42 @@ class AB_MCP_Ability_Broker {
 			}
 		}
 		return $input;
+	}
+
+	/**
+	 * The input as execute() will act on it: the default of the input schema
+	 * where nothing was sent, and on WordPress 7.1 what the filter
+	 * wp_ability_normalize_input makes of it. The posts found in it are the
+	 * ones snapshotted and read back (Codex on #105, 30.10.2026: with a
+	 * default, they were changed without either). execute() gets the input
+	 * as sent and normalizes it once itself, so a filter runs once on each
+	 * way and both see the same post. A filter whose answer depends on how
+	 * often it runs can still aim the two apart; then the read-back finds the
+	 * snapshotted post unchanged and the answer says the call reported
+	 * success without a change there. A filter that throws ends the call as
+	 * an ability that failed inside its plugin, as in call().
+	 *
+	 * @param WP_Ability $ability Ability.
+	 * @param mixed      $input   Input as input_for() read it.
+	 * @return mixed|WP_Error
+	 */
+	private static function as_executed( $ability, $input ) {
+		if ( ! method_exists( $ability, 'normalize_input' ) ) {
+			return $input;
+		}
+		try {
+			return $ability->normalize_input( $input );
+		} catch ( \Throwable $e ) {
+			return new WP_Error(
+				'ab_mcp_ability_threw',
+				sprintf(
+					/* translators: 1: ability name, 2: error class */
+					__( '%1$s failed with an error inside the plugin (%2$s). Check the input against the ability\'s input schema (wp_list_abilities shows it) and call again; if it keeps failing, the cause lies in the plugin, and its author can help.', 'alphabridge-mcp' ),
+					(string) $ability->get_name(),
+					get_class( $e )
+				)
+			);
+		}
 	}
 
 	/**
@@ -1906,7 +1942,11 @@ class AB_MCP_Ability_Broker {
 		$apply    = array_key_exists( 'apply', $a ) ? self::flag( $a['apply'] ) : $readonly;
 		$input    = self::input_for( $ability, array_key_exists( 'input', $a ) ? $a['input'] : null );
 		$override = array_key_exists( 'target_post', $a ) && null !== $a['target_post'] ? $a['target_post'] : null;
-		$named    = self::targets( $input, $ability, $override );
+		$executed = self::as_executed( $ability, $input );
+		if ( is_wp_error( $executed ) ) {
+			return $executed;
+		}
+		$named    = self::targets( $executed, $ability, $override );
 		$targets  = array();
 		foreach ( array_slice( $named, 0, self::MAX_TARGETS ) as $t ) {
 			$targets[] = self::judge( $t );
@@ -2259,17 +2299,32 @@ class AB_MCP_Ability_Broker {
 			$rb         = self::read_back( $state );
 			$readback[] = self::public_readback( $rb );
 			$ids[]      = (int) $rb['post'];
-			if ( $rb['unchanged'] ) {
+			if ( $rb['unchanged'] && null === $rb['draft'] ) {
 				continue;
 			}
-			/* translators: 1: ability name, 2: post id */
-			$warnings[] = sprintf( __( '%1$s is annotated read-only by its plugin, but post #%2$d changed during the call (see readback).', 'alphabridge-mcp' ), (string) $ability->get_name(), (int) $rb['post'] );
-			self::post_warnings( $rb, $state, $warnings );
-			if ( $rb['undoable_changed'] ) {
+			if ( ! $rb['unchanged'] ) {
+				/* translators: 1: ability name, 2: post id */
+				$warnings[] = sprintf( __( '%1$s is annotated read-only by its plugin, but post #%2$d changed during the call (see readback).', 'alphabridge-mcp' ), (string) $ability->get_name(), (int) $rb['post'] );
+				self::post_warnings( $rb, $state, $warnings );
+			}
+			// A draft staged by a "read-only" call is kept as the write
+			// path keeps it: publishing it would otherwise bring an unexpected
+			// change live without a way back (Codex on #105, 30.10.2026).
+			if ( $rb['undoable_changed'] || null !== $rb['draft'] ) {
 				$keep[] = array( $state, $rb );
 			}
 		}
-		$token = array() === $keep ? null : self::keep_point( $ability, $keep, $warnings );
+		$covered = array();
+		$token   = array() === $keep ? null : self::keep_point( $ability, $keep, $warnings, $covered );
+		// Said whether or not an undo point could be kept.
+		foreach ( $keep as $pair ) {
+			if ( null === $pair[1]['draft'] ) {
+				continue;
+			}
+			$id = (int) $pair[1]['post'];
+			/* translators: 1: ability name, 2: post id, 3: revision id, 4: what wp_undo does with it */
+			$warnings[] = sprintf( __( '%1$s is annotated read-only by its plugin, but it staged a change in a draft of post #%2$d, the autosave revision #%3$d of your account; publishing that draft brings it live. %4$s', 'alphabridge-mcp' ), (string) $ability->get_name(), $id, (int) $pair[1]['draft']['revision'], self::draft_undo_text( $pair[1]['draft'], isset( $covered[ $id ] ) ) );
+		}
 		self::log( $ability, $ids, is_wp_error( $result ) ? 'error' : 'ok', 'read-only' . ( array() !== $keep ? ', changed' : '' ) );
 		if ( is_wp_error( $result ) ) {
 			$tail = array() !== $warnings ? ' ' . implode( ' ', $warnings ) : '';
@@ -2308,12 +2363,18 @@ class AB_MCP_Ability_Broker {
 	 * point for every read-only call that changes nothing (a new point can
 	 * push out the oldest).
 	 *
+	 * A draft the call staged goes into the point too (keep_draft()); the
+	 * posts whose draft it covers are set in $covered. A point that ends up
+	 * with nothing it can put back (the live copies unchanged, the draft not
+	 * taken) is dropped again, as on the write path.
+	 *
 	 * @param WP_Ability $ability  Ability.
 	 * @param array      $keep     list of [ before_state(), read_back() ].
 	 * @param array      $warnings Warnings (by reference).
+	 * @param array      $covered  Post ids => true whose draft the point covers (by reference).
 	 * @return string|null Token.
 	 */
-	private static function keep_point( $ability, array $keep, array &$warnings ) {
+	private static function keep_point( $ability, array $keep, array &$warnings, array &$covered = array() ) {
 		$items = array();
 		$ids   = array();
 		foreach ( $keep as $pair ) {
@@ -2326,8 +2387,20 @@ class AB_MCP_Ability_Broker {
 			$warnings[] = sprintf( __( 'No undo point could be kept of the state before the call: %s', 'alphabridge-mcp' ), $rec->get_error_message() );
 			return null;
 		}
+		$copies = false;
 		foreach ( $keep as $pair ) {
 			self::finish_point( (string) $rec, $pair[0], $pair[1], $warnings );
+			if ( $pair[1]['undoable_changed'] ) {
+				$copies = true;
+			}
+			if ( null !== $pair[1]['draft'] && self::keep_draft( (string) $rec, $pair[0], $pair[1], $warnings ) ) {
+				$covered[ (int) $pair[1]['post'] ] = true;
+				$copies                            = true;
+			}
+		}
+		if ( ! $copies ) {
+			AB_MCP_Undo::discard( (string) $rec );
+			return null;
 		}
 		return (string) $rec;
 	}

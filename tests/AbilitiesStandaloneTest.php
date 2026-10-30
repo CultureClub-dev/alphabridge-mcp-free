@@ -40,6 +40,8 @@ final class AbilitiesStandaloneTest extends TestCase {
 			'noapi'      => 7,
 			'scope'      => 16,
 			'writers'    => 13,
+			'extra'      => 8,
+			'extra 7.1.2' => 8,
 		),
 	);
 

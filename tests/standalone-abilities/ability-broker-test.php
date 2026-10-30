@@ -41,7 +41,7 @@
  *           this plugin's broker where Pro is not loaded, and Pro's where it
  *           is (a stand-in with Pro's methods).
  *
- * Run: php tests/standalone-abilities/ability-broker-test.php main|noapi|scope|writers [7.0.2|7.1.2]
+ * Run: php tests/standalone-abilities/ability-broker-test.php main|noapi|scope|writers|extra [7.0.2|7.1.2]
  *      The second argument picks the Abilities API: of WordPress 7.0.2 (the
  *      default) or of 7.1.2, under tests/standalone-lib/support/
  *      abilities-api-7.1.2/, which resolves show_in_rest from its new meta
@@ -49,8 +49,8 @@
  */
 
 $scenario = isset( $argv[1] ) ? $argv[1] : '';
-if ( ! in_array( $scenario, array( 'main', 'noapi', 'scope', 'writers' ), true ) ) {
-	fwrite( STDERR, "Szenario fehlt oder unbekannt: main, noapi, scope oder writers\n" );
+if ( ! in_array( $scenario, array( 'main', 'noapi', 'scope', 'writers', 'extra' ), true ) ) {
+	fwrite( STDERR, "Szenario fehlt oder unbekannt: main, noapi, scope, writers oder extra\n" );
 	exit( 2 );
 }
 $wp_api = isset( $argv[2] ) ? $argv[2] : '7.0.2';
@@ -525,6 +525,30 @@ add_action(
 				return array( 'deleted' => true );
 			},
 		) );
+		// Scenario extra only (the other scenarios count the abilities):
+		// test/set-meta with a default input that names post 30, a call
+		// without input changes post 30 (Codex on #105).
+		if ( 'extra' === $GLOBALS['scenario'] ) {
+		ab_ability( 'test/set-meta-default', array(
+			'input_schema'     => $meta_schema + array( 'default' => array( 'post_id' => 30, 'key' => 'standard', 'value' => 'ja' ) ),
+			'execute_callback' => static function ( $input ) {
+				update_post_meta( (int) $input['post_id'], (string) $input['key'], (string) $input['value'] );
+				return array( 'updated' => true );
+			},
+		) );
+		// test/stage-draft, annotated read-only by its plugin (Codex on #105).
+		ab_ability( 'test/stage-draft-quiet', array(
+			'input_schema'     => $id_schema,
+			'execute_callback' => static function ( $input ) {
+				$id = (int) $input['id'];
+				ab_post( 90, array( 'post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => $id, 'post_name' => $id . '-autosave-v1', 'post_content' => $GLOBALS['db_posts'][ $id ]['post_content'] ) );
+				$GLOBALS['ab_autosaves'][ $id ][ get_current_user_id() ] = 90;
+				ab_meta_add( 90, '_fake_layout', '[1]' );
+				return array( 'read' => true );
+			},
+			'meta'             => array( 'annotations' => array( 'readonly' => true, 'destructive' => false, 'idempotent' => true ) ),
+		) );
+		}
 		// Stages the change in the account's autosave revision (#90), as
 		// Elementor's manage-elements does on a published page.
 		ab_ability( 'test/stage-draft', array(
@@ -765,6 +789,90 @@ class AB_Test_El_Db {
 }
 \Elementor\Plugin::$instance = (object) array( 'db' => new AB_Test_El_Db() );
 $GLOBALS['ab_el_rev'] = 91;
+
+/* =================================== Z) found by Codex on #105 (30.10.2026) */
+
+if ( 'extra' === $scenario ) {
+echo "Z  defaults of the input schema; drafts of a read-only ability\n";
+$prev_on = AB_MCP_Ability_Broker::on_list();
+AB_MCP_Ability_Broker::set_on( array_merge( $prev_on, array( 'test/set-meta-default', 'test/stage-draft-quiet' ) ) );
+$n = ab_points();
+$r = ab_run( array( 'name' => 'test/set-meta-default', 'apply' => true ) );
+ok( is_array( $r ) && 'ja' === get_post_meta( 30, 'standard', true ), 'Z1 a call without input runs the ability with its default: ' . ( is_array( $r ) ? '' : ab_msg( $r ) ) );
+ok( is_array( $r ) && AB_MCP_Undo::valid_token( $r['undo_token'] ) && $n + 1 === ab_points() && isset( $r['readback'][0] ) && 30 === $r['readback'][0]['post'], 'Z1 the post the default names is snapshotted and read back, with an undo point' );
+$p = ab_run( array( 'name' => 'test/set-meta-default', 'apply' => false ) );
+ok( is_array( $p ) && true === $p['dry_run'] && in_array( 30, array_column( $p['targets'], 'id' ), true ), 'Z2 the preview names that post as its target' );
+AB_MCP_Tools_Undo_Core::undo( array( 'token' => $r['undo_token'] ) );
+
+foreach ( array_keys( ab_meta_rows( 90, '_fake_layout' ) ) as $mid ) { unset( $GLOBALS['db_meta'][ $mid ] ); }
+unset( $GLOBALS['db_posts'][90], $GLOBALS['ab_autosaves'][30] );
+$n = ab_points();
+$r = ab_run( array( 'name' => 'test/stage-draft-quiet', 'input' => array( 'id' => 30 ) ) );
+ok( is_array( $r ) && true === $r['readback'][0]['unchanged'] && array( 'revision' => 90, 'change' => 'added' ) === $r['readback'][0]['draft'], 'Z3 the live post is untouched, the draft staged: ' . json_encode( is_array( $r ) ? $r['readback'] : ab_msg( $r ) ) );
+ok( is_array( $r ) && ab_has( $r['warnings'], 'annotated read-only by its plugin, but it staged a change in a draft of post #30, the autosave revision #90' ) && ab_has( $r['warnings'], 'deletes that draft again' ), 'Z3 the answer says so and names the way back' );
+ok( is_array( $r ) && AB_MCP_Undo::valid_token( $r['undo_token'] ) && $n + 1 === ab_points(), 'Z3 an undo point keeps it' );
+$GLOBALS['ab_caps']['edit_post:90'] = true; // WordPress maps edit_post on a revision to its parent (map_meta_cap()).
+$u = AB_MCP_Tools_Undo_Core::undo( array( 'token' => $r['undo_token'] ) );
+ok( is_array( $u ) && ! isset( $GLOBALS['db_posts'][90] ), 'Z4 wp_undo deletes the draft again: ' . json_encode( $u ) );
+
+// Undo switched off: the staged draft is still named, with no way back promised.
+foreach ( array_keys( ab_meta_rows( 90, '_fake_layout' ) ) as $mid ) { unset( $GLOBALS['db_meta'][ $mid ] ); }
+unset( $GLOBALS['db_posts'][90], $GLOBALS['ab_autosaves'][30] );
+$GLOBALS['ab_toolstate']['wp_undo'] = false;
+$n = ab_points();
+$r = ab_run( array( 'name' => 'test/stage-draft-quiet', 'input' => array( 'id' => 30 ) ) );
+unset( $GLOBALS['ab_toolstate']['wp_undo'] );
+ok( is_array( $r ) && null === $r['undo_token'] && $n === ab_points() && ab_has( $r['warnings'], 'it staged a change in a draft of post #30' ) && ab_has( $r['warnings'], 'This call has no undo point for the draft' ), 'Z5 no undo point possible: the draft is still named, and no way back promised (Codex, 30.10.2026): ' . json_encode( is_array( $r ) ? $r['warnings'] : ab_msg( $r ) ) );
+
+// A filter on the input runs once: the snapshot aims at the post execute() changes.
+add_filter( 'wp_ability_normalize_input', static function ( $input ) { if ( is_array( $input ) && isset( $input['post_id'] ) ) { $input['post_id'] = (int) $input['post_id'] + 1; } return $input; } );
+ab_post( 31, array( 'post_type' => 'post', 'post_status' => 'publish', 'post_title' => 'Einunddreissig' ) );
+$GLOBALS['ab_caps']['edit_post:31'] = true;
+$r = ab_run( array( 'name' => 'test/set-meta-default', 'apply' => true ) );
+$changed = 'ja' === get_post_meta( 31, 'standard', true ) ? 31 : ( 'ja' === get_post_meta( 32, 'standard', true ) ? 32 : ( 'ja' === get_post_meta( 30, 'standard', true ) ? 30 : 0 ) );
+ok( is_array( $r ) && isset( $r['readback'][0] ) && $changed === $r['readback'][0]['post'], 'Z6 the post read back is the one the ability changed (' . $changed . '), whatever a filter on the input does: ' . json_encode( is_array( $r ) ? array_column( $r['readback'], 'post' ) : ab_msg( $r ) ) );
+remove_all_filters( 'wp_ability_normalize_input' );
+// A filter that throws (WordPress 7.1 runs it): a failed ability, no uncaught error.
+if ( '7.1.2' === $wp_api ) {
+	add_filter( 'wp_ability_normalize_input', static function () { throw new RuntimeException( 'boom' ); } );
+	$r = ab_run( array( 'name' => 'test/set-meta-default', 'apply' => true ) );
+	remove_all_filters( 'wp_ability_normalize_input' );
+	ok( is_wp_error( $r ) && 'ab_mcp_ability_threw' === $r->get_error_code(), 'Z6b a filter on the input that throws ends as a failed ability (Codex, 30.10.2026): ' . ( is_wp_error( $r ) ? $r->get_error_code() : json_encode( $r ) ) );
+}
+
+// A point that would hold nothing to put back is dropped: the live copy is
+// unchanged and the draft cannot be taken (here a revision that is gone).
+$kp = new ReflectionMethod( 'AB_MCP_Ability_Broker', 'keep_point' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$kp->setAccessible( true );
+}
+$bs = new ReflectionMethod( 'AB_MCP_Ability_Broker', 'before_state' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$bs->setAccessible( true );
+}
+$state = $bs->invoke( null, array( 'id' => 30, 'covered' => true, 'builder' => '', 'locs' => array( 'post_content' ) ) );
+$n     = ab_points();
+$warn  = array();
+$cov   = array();
+$rbm   = new ReflectionMethod( 'AB_MCP_Ability_Broker', 'read_back' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$rbm->setAccessible( true );
+}
+foreach ( array_keys( ab_meta_rows( 90, '_fake_layout' ) ) as $mid ) { unset( $GLOBALS['db_meta'][ $mid ] ); }
+unset( $GLOBALS['db_posts'][90], $GLOBALS['ab_autosaves'][30] );
+ab_post( 90, array( 'post_type' => 'revision', 'post_status' => 'inherit', 'post_parent' => 30, 'post_name' => '30-autosave-v1' ) );
+ab_meta_add( 90, '_fake_layout', str_repeat( 'x', 200000 ) ); // larger than the point may hold
+add_filter( 'ab_mcp_undo_snapshot_max', static function () { return 50000; } );
+add_filter( 'ab_mcp_undo_raw_max', static function () { return 50000; } );
+$rb          = $rbm->invoke( null, $state );
+$rb['draft'] = array( 'revision' => 90, 'change' => 'added' );
+$tok   = $kp->invokeArgs( null, array( wp_get_ability( 'test/stage-draft-quiet' ), array( array( $state, $rb ) ), &$warn, &$cov ) );
+remove_all_filters( 'ab_mcp_undo_snapshot_max' );
+remove_all_filters( 'ab_mcp_undo_raw_max' );
+ok( null === $tok && $n === ab_points() && array() === $cov, 'Z7 nothing it could put back: no undo point is left (Codex, 30.10.2026): ' . json_encode( array( $tok, $warn ) ) );
+AB_MCP_Ability_Broker::set_on( $prev_on );
+	ab_result( 'ABILITY-BROKER (extra)' );
+}
 
 /* ================= writers: which broker the page-builder writers ask */
 
