@@ -211,7 +211,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',

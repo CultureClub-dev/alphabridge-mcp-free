@@ -1745,6 +1745,7 @@ require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
+require_once __DIR__ . '/../includes/class-redactor.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/class-connection-doctor.php';
 // WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
