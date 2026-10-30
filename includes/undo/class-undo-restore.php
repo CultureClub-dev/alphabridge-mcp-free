@@ -17,9 +17,11 @@
  * Free since 4.9.0, before in Pro only (AB_MCP_Pro_Undo_Restore there), for
  * the three kinds of the tools of this plugin: post_fields (wp_update_post),
  * post_status (wp_bulk_update_status) and site_settings
- * (wp_update_site_settings). The undo points of Pro's tools (options, files,
- * PHP snippets, page builders, the theme) share the store; Pro reverses them
- * with its own wp_undo, this class names them and leaves them alone.
+ * (wp_update_site_settings); since 4.10.0 also builder_data and option_rows
+ * (wp_update_builder_element, wp_search_replace), and since 4.11.0 the theme
+ * (wp_activate_theme). The undo points of Pro's tools (options, files, PHP
+ * snippets) share the store; Pro reverses them with its own wp_undo, this
+ * class names them and leaves them alone.
  *
  * @package AlphaBridge_MCP
  */
@@ -57,6 +59,8 @@ class AB_MCP_Undo_Restore {
 			'wp_bulk_update_status'   => array( 'kind' => 'post_status',   'cap' => 'edit_others_posts' ),
 			'wp_update_site_settings' => array( 'kind' => 'site_settings', 'cap' => 'manage_options' ),
 			'wp_update_post'          => array( 'kind' => 'post_fields',   'cap' => 'edit_posts' ),
+			// Free since 4.11.0: switched back the way wp_activate_theme switches.
+			'wp_activate_theme'       => array( 'kind' => 'theme',         'cap' => 'switch_themes' ),
 			// Page builders (free since 4.10.0): edit_post per post is asked by
 			// the plan, on top of the tool's capability; a point of a raw
 			// replace also needs unfiltered_html (AB_MCP_Undo_Builder::plan()).
@@ -219,6 +223,8 @@ class AB_MCP_Undo_Restore {
 				return self::plan_post_status( $tool, $data );
 			case 'site_settings':
 				return self::plan_site_settings( $tool, $data );
+			case 'theme':
+				return self::plan_theme( $tool, $data );
 			case 'post_fields':
 				return self::plan_post_fields( $tool, $data );
 			case 'builder_data':
@@ -374,6 +380,7 @@ class AB_MCP_Undo_Restore {
 
 		$restored = array();
 		$failed   = array();
+		$probes   = array();
 
 		// A restore must not create an undo point of its own: it would double the
 		// stored snapshots and make the semantics ("undo the undo") confusing.
@@ -397,6 +404,11 @@ class AB_MCP_Undo_Restore {
 					continue;
 				}
 				$restored[] = $item['ref'];
+				// A theme switched back: what the test requests afterwards
+				// found, or a warning (see restore_theme()).
+				if ( is_array( $res ) && ( isset( $res['probe'] ) || isset( $res['warning'] ) ) ) {
+					$probes[] = array( 'ref' => $item['ref'] ) + $res;
+				}
 			}
 		} finally {
 			AB_MCP_Undo::resume();
@@ -424,6 +436,9 @@ class AB_MCP_Undo_Restore {
 				$out['warnings'] = $warnings;
 			}
 		}
+		if ( $probes ) {
+			$out['probe'] = $probes;
+		}
 		return $out;
 	}
 
@@ -445,6 +460,8 @@ class AB_MCP_Undo_Restore {
 			'builder_data'  => 'post',
 			// Option rows a replace changed: an option can reach every page.
 			'option_rows'   => 'site',
+			// The theme reaches every page: menus, widgets, layout.
+			'theme'         => 'site',
 		);
 	}
 
@@ -497,7 +514,7 @@ class AB_MCP_Undo_Restore {
 			 * this plugin knows have been asked to purge. Hook it to purge a
 			 * cache it does not know, or to log the restore.
 			 *
-			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows (Pro fires it for its kinds too).
+			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme (Pro fires it for its kinds too).
 			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts.
 			 * @param string $tool     The tool whose change was undone.
 			 */
@@ -927,6 +944,65 @@ class AB_MCP_Undo_Restore {
 			return 'too_close';
 		}
 		return '';
+	}
+
+	/**
+	 * The theme tools, loaded where they are not yet: wp_undo can be reached
+	 * where the tool classes were not loaded in this request. In Pro, where
+	 * this came from, a missing class answered «The theme tools are not
+	 * available on this site»; here they are part of the plugin.
+	 */
+	private static function load_theme_tools() {
+		if ( class_exists( 'AB_MCP_Tools_Plugins_Themes_Manage' ) ) {
+			return;
+		}
+		if ( ! class_exists( 'AB_MCP_Tools_Base' ) ) {
+			require_once dirname( __DIR__ ) . '/tools/class-tools-base.php';
+		}
+		require_once dirname( __DIR__ ) . '/tools/class-tools-plugins-themes-manage.php';
+	}
+
+	/**
+	 * @param string $tool Tool.
+	 * @param mixed  $data Snapshot: { stylesheet, template } of the theme that was active BEFORE the switch.
+	 * @return array|WP_Error
+	 */
+	private static function plan_theme( $tool, $data ) {
+		if ( ! is_array( $data ) || empty( $data['stylesheet'] ) || ! is_string( $data['stylesheet'] ) ) {
+			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The snapshot is not readable. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+		}
+		$slug = $data['stylesheet'];
+		self::load_theme_tools();
+		// The same questions the switch itself asks, shared rather than copied:
+		// is this the name of an installed theme (nested and underscored
+		// directories included), is it whole, may this site use it, does the
+		// site meet its PHP/WordPress requirement. A name that is not even the
+		// shape of a directory is a hand-edited snapshot.
+		$why = AB_MCP_Tools_Plugins_Themes_Manage::activation_blocker( $slug );
+		if ( 'invalid' === $why[0] ) {
+			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+		}
+		$items   = array();
+		$blocked = array();
+		if ( '' !== $why[0] ) {
+			$blocked[] = array(
+				'ref'    => $slug,
+				'reason' => 'not_allowed' === $why[0] ? 'forbidden' : $why[0],
+			);
+		} else {
+			$items[] = array(
+				'ref'  => $slug,
+				'to'   => $slug,
+				'from' => (string) get_stylesheet(),
+			);
+		}
+		return array(
+			'tool'       => $tool,
+			'kind'       => 'theme',
+			'items'      => $items,
+			'blocked'    => $blocked,
+			'restorable' => count( $items ),
+		);
 	}
 
 	/**
@@ -1373,12 +1449,40 @@ class AB_MCP_Undo_Restore {
 	}
 
 	/**
+	 * Switch back to the theme the undo point names, the way wp_activate_theme
+	 * switches (AB_MCP_Tools_Plugins_Themes_Manage::switch_to()): its
+	 * refusals, the lock, test requests before and after, and the theme active
+	 * now back where the site does worse with the previous one. With
+	 * recording suspended, the switch records no undo point of its own.
+	 *
+	 * @param array $item Item.
+	 * @return true|array|WP_Error { probe, warning? } after test requests.
+	 */
+	protected static function restore_theme( array $item ) {
+		$slug = (string) $item['to'];
+		self::load_theme_tools();
+		// Asked again right before the switch, not only when the plan was made:
+		// switch_theme() itself would end the request with wp_die() on an unmet
+		// requirement, and does not check the network's allow list at all.
+		$why = AB_MCP_Tools_Plugins_Themes_Manage::activation_blocker( $slug );
+		if ( '' !== $why[0] ) {
+			return new WP_Error( 'ab_mcp_undo_theme_' . $why[0], AB_MCP_Tools_Plugins_Themes_Manage::blocker_message( $why ) );
+		}
+		$res = AB_MCP_Tools_Plugins_Themes_Manage::switch_to( $slug, 'wp_undo' );
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		$out = array_intersect_key( (array) $res, array_flip( array( 'probe', 'warning' ) ) );
+		return $out ? $out : true;
+	}
+
+	/**
 	 * Dispatch one planned item. Protected so a test can subclass and replace
 	 * the write paths with recording stand-ins.
 	 *
 	 * @param string $kind Kind.
 	 * @param array  $item Planned item.
-	 * @return true|WP_Error
+	 * @return true|array|WP_Error An array only from restore_theme(): done, with the test requests' report.
 	 */
 	protected static function apply_item( $kind, array $item ) {
 		switch ( $kind ) {
@@ -1392,6 +1496,8 @@ class AB_MCP_Undo_Restore {
 				return AB_MCP_Undo_Builder::restore_planned( $item );
 			case 'option_rows':
 				return static::restore_option_row( $item );
+			case 'theme':
+				return static::restore_theme( $item );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}

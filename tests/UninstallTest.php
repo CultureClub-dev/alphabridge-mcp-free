@@ -32,6 +32,13 @@ final class UninstallTest extends TestCase {
 
 	private const PRO_FILE = '/alphabridge-mcp-pro/alphabridge-mcp-pro.php';
 
+	/**
+	 * Constants with an ab_mcp_ name that is no option: the WP-Cron event of
+	 * the update tools (AB_MCP_Update_Log::RESUME, free since 4.11.0), which
+	 * the uninstall clears with wp_clear_scheduled_hook().
+	 */
+	private const NOT_OPTIONS = array( 'ab_mcp_pro_resume_auto_updates' );
+
 	public static function setUpBeforeClass(): void {
 		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 			\define( 'WP_UNINSTALL_PLUGIN', 'alphabridge-mcp/alphabridge-mcp.php' );
@@ -42,7 +49,12 @@ final class UninstallTest extends TestCase {
 		// Every class the plugin ships, not only the ones the bootstrap needs:
 		// an option declared in a class no other test loads must count too.
 		$root = dirname( __DIR__ );
-		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ) ) as $file ) {
+		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ), glob( $root . '/includes/lifecycle/*.php' ) ) as $file ) {
+			// The upgraders extend WordPress's, loaded only with them; they
+			// declare no option.
+			if ( 'class-update-upgraders.php' === basename( $file ) ) {
+				continue;
+			}
 			require_once $file;
 		}
 	}
@@ -69,7 +81,7 @@ final class UninstallTest extends TestCase {
 				continue;
 			}
 			foreach ( ( new ReflectionClass( $class ) )->getConstants() as $value ) {
-				if ( is_string( $value ) && preg_match( '/^ab_mcp_[a-z_]+\z/', $value ) ) {
+				if ( is_string( $value ) && preg_match( '/^ab_mcp_[a-z_]+\z/', $value ) && ! in_array( $value, self::NOT_OPTIONS, true ) ) {
 					$names[] = $value;
 				}
 			}
@@ -225,6 +237,55 @@ final class UninstallTest extends TestCase {
 			self::assertSame( 'Site ' . $site, get_option( 'blogname' ), 'only the plugin\'s own rows go, on site ' . $site );
 			restore_current_blog();
 		}
+	}
+
+	public function testTheStateOfTheUpdateToolsGoesOnEverySiteAndTheNetwork(): void {
+		// Free since 4.11.0: the update log, the holds, the note on the
+		// update lock and the replaced folders are network options on a
+		// network, the lock of code changes an option of the main site, and
+		// the WP-Cron event that switches automatic updates on again is
+		// planned per site. The names are Pro's, as both share them.
+		$GLOBALS['ab_test_multisite']    = true;
+		$GLOBALS['ab_test_sites']        = array( 1, 2 );
+		$GLOBALS['ab_test_cleared_hooks'] = array();
+		$network = array( \AB_MCP_Update_Log::OPTION, \AB_MCP_Update_Log::HOLDS, \AB_MCP_Update_Log::RUNNING, \AB_MCP_Update_Log::REPLACED );
+		foreach ( $network as $name ) {
+			$GLOBALS['ab_test_site_options'][ $name ] = array( 'from' => 'this test' );
+		}
+		$GLOBALS['ab_test_site_options']['auto_update_plugins'] = array( 'akismet/akismet.php' );
+		update_option( \AB_MCP_Change_Lock::OPTION, 1790000000 );
+
+		$this->runUninstall();
+
+		foreach ( $network as $name ) {
+			self::assertArrayNotHasKey( $name, $GLOBALS['ab_test_site_options'], $name );
+		}
+		self::assertSame( array( 'akismet/akismet.php' ), $GLOBALS['ab_test_site_options']['auto_update_plugins'], 'WordPress\'s own list stays.' );
+		self::assertFalse( self::stored( \AB_MCP_Change_Lock::OPTION ) );
+		self::assertSame( array( array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 2 ) ), $GLOBALS['ab_test_cleared_hooks'], 'The event goes on every site.' );
+	}
+
+	public function testAutomaticUpdatesAlphaBridgeSwitchedOffGoBackOnBeforeTheHoldsGo(): void {
+		// A failed update on a network where AlphaBridge does not run on the
+		// main site takes the package off WordPress's list (auto_off); the
+		// hold and the event RESUME would switch it on again. Uninstalled,
+		// both are gone, so the uninstall switches it on (Codex, 30.10.2026).
+		// A package someone had switched off (no auto_off) stays off.
+		$GLOBALS['ab_test_site_options'][ \AB_MCP_Update_Log::HOLDS ] = array(
+			'plugin:bad/bad.php'      => array( 'version' => '2.0', 'auto_off' => true ),
+			'plugin:manual/manual.php' => array( 'version' => '3.0', 'auto_off' => false ),
+			'theme:shaky'             => array( 'version' => '1.1', 'auto_off' => true ),
+			'theme:listed'            => array( 'version' => '1.0', 'auto_off' => true ),
+			'nonsense'                => array( 'auto_off' => true ),
+		);
+		$GLOBALS['ab_test_site_options']['auto_update_plugins'] = array( 'akismet/akismet.php' );
+		$GLOBALS['ab_test_site_options']['auto_update_themes']  = array( 'listed' );
+
+		$this->runUninstall();
+
+		self::assertSame( array( 'akismet/akismet.php', 'bad/bad.php' ), $GLOBALS['ab_test_site_options']['auto_update_plugins'] );
+		self::assertSame( array( 'listed', 'shaky' ), $GLOBALS['ab_test_site_options']['auto_update_themes'], 'Once on the list, not twice.' );
+		self::assertArrayNotHasKey( \AB_MCP_Update_Log::HOLDS, $GLOBALS['ab_test_site_options'] );
 	}
 
 	public function testNothingIsDeletedWhileProIsStillInstalled(): void {

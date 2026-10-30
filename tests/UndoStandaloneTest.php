@@ -34,7 +34,9 @@ final class UndoStandaloneTest extends TestCase {
 	private const MINIMUM = array(
 		'undo-test.php'            => 330,
 		'undo-postfields-test.php' => 170,
-		'restore-cache-test.php'   => 80,
+		'restore-cache-test.php'   => 90,
+		// Free since 4.11.0: the undo of a theme switch.
+		'undo-theme-test.php'      => 40,
 	);
 
 	/** For a script added later, until it is listed above. */

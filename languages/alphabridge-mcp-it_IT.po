@@ -1336,9 +1336,6 @@ msgctxt "tool label"
 msgid "Search and replace across the site"
 msgstr "Cerca e sostituisci in tutto il sito"
 
-msgid "Search and replace with preview"
-msgstr "Cerca e sostituisci con anteprima"
-
 msgctxt "tool label"
 msgid "Search content"
 msgstr "Cerca nei contenuti"
@@ -2298,12 +2295,6 @@ msgstr "Gli assistenti IA leggono e scrivono: articoli, pagine, media, termini, 
 
 msgid "Theme and plugin files, PHP snippets, database"
 msgstr "File di temi e plugin, snippet PHP, database"
-
-msgid "Page-builder texts, installs and updates"
-msgstr "Testi dei page builder, installazioni e aggiornamenti"
-
-msgid "Undo for files and page builders, adjustable from 1 to 30 days"
-msgstr "Annullamento per file e page builder, regolabile da 1 a 30 giorni"
 
 #, php-format
 msgid "On this network %1$s can only empty the page cache of every site at once, and allows that only with the right \"%2$s\", which this account lacks. A network admin can do it with wp_clear_cache."
@@ -3354,3 +3345,1221 @@ msgstr "Un testo che compare su molte pagine si può sostituire anche con wp_sea
 
 msgid "Page builders"
 msgstr "Page builder"
+
+msgid "Passed"
+msgstr "Superato"
+
+msgid "Warning"
+msgstr "Avviso"
+
+msgid "Problem"
+msgstr "Problema"
+
+msgid "Note"
+msgstr "Nota"
+
+msgid "Not checked"
+msgstr "Non verificato"
+
+msgid "Diagnostics"
+msgstr "Diagnostica"
+
+msgid "Connection check"
+msgstr "Verifica della connessione"
+
+msgid "If an app cannot connect, this check looks for the usual causes and says how to fix each one. The site sends a few requests to itself; nothing is changed."
+msgstr "Se un'app non riesce a collegarsi, questa verifica cerca le cause più comuni e indica come risolvere ciascuna. Il sito invia alcune richieste a sé stesso; non viene modificato nulla."
+
+msgid "Not run yet."
+msgstr "Non ancora eseguita."
+
+#, php-format
+msgid "Last run %1$s, %2$s ago."
+msgstr "Ultima esecuzione %1$s, %2$s fa."
+
+msgid "Results of the connection check"
+msgstr "Risultati della verifica della connessione"
+
+msgid "Run check"
+msgstr "Esegui la verifica"
+
+msgid "Options, cron jobs, export and multisite"
+msgstr "Opzioni, cron job, esportazione e multisito"
+
+msgid "Undo also for files and snippets, kept from 1 to 30 days"
+msgstr "Annullamento anche per file e snippet, conservato da 1 a 30 giorni"
+
+msgid "Code changes checked by test requests and taken back on failure"
+msgstr "Modifiche al codice verificate con richieste di prova e annullate in caso di errore"
+
+msgid "Checked. The result is shown under “Connection check”."
+msgstr "Verifica eseguita. Il risultato è indicato in “Verifica della connessione”."
+
+msgid "Confirmation from the preview: a call without it changes nothing and answers with a preview and a confirm_token, and the same arguments with that token run the tool. A token is valid for 10 minutes and only while what it covers is unchanged."
+msgstr "Conferma dall'anteprima: una chiamata senza di essa non modifica nulla e risponde con un'anteprima e un confirm_token, e gli stessi argomenti con quel token eseguono lo strumento. Un token vale 10 minuti e solo finché ciò che copre resta invariato."
+
+msgid "Runs in two steps: a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it. This guards against a call nobody meant; it does not make the change reversible."
+msgstr "Funziona in due passaggi: una chiamata senza confirm_token non modifica nulla e restituisce un'anteprima con un confirm_token, e la stessa chiamata con quel token esegue lo strumento. Questo protegge da una chiamata che nessuno intendeva fare; non rende la modifica reversibile."
+
+msgid "Nothing ran: this tool asks for confirmation but registered no way to check it. The plugin that registered it is at fault; tell the site administrator."
+msgstr "Non è stato eseguito nulla: questo strumento chiede una conferma ma non ha registrato alcun modo per verificarla. La colpa è del plugin che l'ha registrato; avvisa l'amministratore del sito."
+
+msgid "Nothing ran: the arguments hold a value that cannot be written as JSON (a number out of range, for example), so no confirmation can be bound to them. Leave out that value and call again."
+msgstr "Non è stato eseguito nulla: gli argomenti contengono un valore che non si può scrivere come JSON (per esempio un numero fuori intervallo), quindi non è possibile legarvi una conferma. Ometti quel valore e chiama di nuovo."
+
+msgid "Nothing has changed yet. Show this preview to the person; if they want it, call the same tool again with the same arguments and confirm_token. The token expires after 10 minutes or as soon as something it covers changes."
+msgstr "Non è ancora cambiato nulla. Mostra questa anteprima alla persona; se la vuole, chiama di nuovo lo stesso strumento con gli stessi argomenti e il confirm_token. Il token scade dopo 10 minuti o non appena cambia qualcosa di ciò che copre."
+
+msgid "Nothing was changed: the confirm_token is not one this site issued. Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token."
+msgstr "Non è stato modificato nulla: il confirm_token non è stato emesso da questo sito. Ometti confirm_token nella prossima chiamata per ottenere una nuova anteprima, mostrala alla persona, poi conferma con il nuovo token."
+
+msgid "Nothing was changed: the confirm_token has expired (it is valid for 10 minutes). Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token."
+msgstr "Non è stato modificato nulla: il confirm_token è scaduto (vale 10 minuti). Ometti confirm_token nella prossima chiamata per ottenere una nuova anteprima, mostrala alla persona, poi conferma con il nuovo token."
+
+msgid "Nothing was changed: the confirm_token does not match this call. The arguments differ from the preview, it was issued to another connection, or what it covers has changed since. Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token."
+msgstr "Non è stato modificato nulla: il confirm_token non corrisponde a questa chiamata. Gli argomenti sono diversi da quelli dell'anteprima, il token è stato emesso per un'altra connessione, oppure ciò che copre è cambiato nel frattempo. Ometti confirm_token nella prossima chiamata per ottenere una nuova anteprima, mostrala alla persona, poi conferma con il nuovo token."
+
+msgid "Every check sends its requests from this site to itself. A block that applies only to requests from outside — Cloudflare’s bot rules for AI crawlers are the typical case, or a firewall that lets the server’s own address through — does not show up here. If Claude or ChatGPT still cannot connect while these checks pass, look at such rules first."
+msgstr "Ogni controllo invia le sue richieste da questo sito a sé stesso. Un blocco che vale solo per le richieste dall'esterno — le regole di Cloudflare contro i bot per i crawler IA sono il caso tipico, oppure un firewall che lascia passare l'indirizzo del server stesso — qui non compare. Se Claude o ChatGPT non riescono ancora a collegarsi mentre questi controlli vengono superati, guarda prima queste regole."
+
+#, php-format
+msgid "%d check found a problem that stops apps from connecting."
+msgid_plural "%d checks found problems that stop apps from connecting."
+msgstr[0] "%d controllo ha trovato un problema che impedisce alle app di collegarsi."
+msgstr[1] "%d controlli hanno trovato problemi che impediscono alle app di collegarsi."
+
+#, php-format
+msgid "Nothing stops apps from connecting, but %d check has a warning."
+msgid_plural "Nothing stops apps from connecting, but %d checks have a warning."
+msgstr[0] "Nulla impedisce alle app di collegarsi, ma %d controllo ha un avviso."
+msgstr[1] "Nulla impedisce alle app di collegarsi, ma %d controlli hanno un avviso."
+
+msgid "Nothing that these checks can see stops apps from connecting."
+msgstr "Nulla di ciò che questi controlli possono vedere impedisce alle app di collegarsi."
+
+msgid "This request carried your HTTP login to get past it; apps do not have that login, see the MCP endpoint check."
+msgstr "Questa richiesta ha usato la tua autenticazione HTTP per superare la protezione; le app non hanno questa autenticazione, vedi il controllo “Endpoint MCP”."
+
+#, php-format
+msgid "The site could not reach itself at %1$s (%2$s), so this check has no answer; that alone says nothing about whether apps can reach it."
+msgstr "Il sito non è riuscito a raggiungere sé stesso all'indirizzo %1$s (%2$s), quindi questo controllo non ha una risposta; questo da solo non dice nulla sul fatto che le app possano raggiungerlo."
+
+msgid "no answer"
+msgstr "nessuna risposta"
+
+msgid "Check under Tools → Site Health whether WordPress reports a failed loopback request; if it does, ask your host to allow the server to send requests to its own address."
+msgstr "Controlla in Strumenti → Salute del sito se WordPress segnala una richiesta di loopback non riuscita; in tal caso chiedi al tuo hosting di consentire al server di inviare richieste al proprio indirizzo."
+
+msgid "Until it is fixed, connect with a token instead: under Settings → AlphaBridge MCP choose “Other”, create a connection and enter its token in the app (for an app without a field for it, tick “Also offer an address that contains the token.” there and use that address)."
+msgstr "Finché non è risolto, collegati invece con un token: in Impostazioni → AlphaBridge MCP scegli “Altro”, crea una connessione e inserisci il suo token nell'app (per un'app senza un campo apposito, spunta lì “Offri anche un indirizzo che contiene il token.” e usa quell'indirizzo)."
+
+msgid "Under Settings → General make “WordPress Address (URL)” and “Site Address (URL)” the exact address the server answers at — https://, with or without www — and save."
+msgstr "In Impostazioni → Generali imposta “Indirizzo WordPress (URL)” e “Indirizzo sito (URL)” esattamente sull'indirizzo a cui risponde il server — https://, con o senza www — e salva."
+
+msgid "HTTPS"
+msgstr "Connessione HTTPS"
+
+#, php-format
+msgid "The address %s does not use https://, and Claude and ChatGPT connect only to https:// addresses."
+msgstr "L'indirizzo %s non usa https://, e Claude e ChatGPT si collegano solo a indirizzi https://."
+
+msgid "Get a TLS certificate for this domain from your host; many hosting panels offer a free one (Let’s Encrypt)."
+msgstr "Richiedi al tuo hosting un certificato TLS per questo dominio; molti pannelli di hosting ne offrono uno gratuito (Let’s Encrypt)."
+
+msgid "Once the site opens with https:// in the browser, change “WordPress Address (URL)” and “Site Address (URL)” under Settings → General to the https:// address and save."
+msgstr "Quando il sito si apre con https:// nel browser, in Impostazioni → Generali cambia “Indirizzo WordPress (URL)” e “Indirizzo sito (URL)” nell'indirizzo https:// e salva."
+
+msgid "The site and its MCP endpoint use https://."
+msgstr "Il sito e il suo endpoint MCP usano https://."
+
+msgid "Permalinks"
+msgstr "Permalink"
+
+msgid "The permalinks are not set to “Plain”, so the server passes addresses that are no files to WordPress."
+msgstr "I permalink non sono impostati su “Semplice”, quindi il server passa a WordPress gli indirizzi che non corrispondono a un file."
+
+msgid "The permalinks are set to “Plain”, so on many servers the addresses below /.well-known/ that the sign-in needs do not reach WordPress."
+msgstr "I permalink sono impostati su “Semplice”, quindi su molti server gli indirizzi sotto /.well-known/ necessari per l'accesso non arrivano a WordPress."
+
+msgid "Under Settings → Permalinks choose “Post name” and click “Save Changes”."
+msgstr "In Impostazioni → Permalink scegli “Nome articolo” e fai clic su “Salva le modifiche”."
+
+msgid "Run this check again: the check of the sign-in addresses shows whether they reach WordPress now."
+msgstr "Esegui di nuovo questa verifica: il controllo degli indirizzi di accesso mostra se ora arrivano a WordPress."
+
+msgid "MCP endpoint"
+msgstr "Endpoint MCP"
+
+msgid "Find the setting that restricts the REST API to logged-in users in your security or performance plugin (the check “Plugins that restrict the REST API” names the ones it knows), and allow the routes that begin with /alphabridge/v1/ or switch the restriction off."
+msgstr "Nel tuo plugin di sicurezza o di prestazioni trova l'impostazione che limita la REST API agli utenti connessi (il controllo “Plugin che limitano la REST API” indica quelli che conosce), e consenti le route che iniziano con /alphabridge/v1/ oppure disattiva la limitazione."
+
+msgid "The MCP endpoint answers 401 as it should, but without the WWW-Authenticate header that points Claude and ChatGPT to the sign-in, so something between WordPress and the app removes it."
+msgstr "L'endpoint MCP risponde 401 come dovrebbe, ma senza l'header WWW-Authenticate che indirizza Claude e ChatGPT all'accesso, quindi qualcosa tra WordPress e l'app lo rimuove."
+
+#, php-format
+msgid "Ask your host whether a proxy, cache or security rule removes the WWW-Authenticate header from the answers of %s, and to let it through."
+msgstr "Chiedi al tuo hosting se un proxy, una cache o una regola di sicurezza rimuove l'header WWW-Authenticate dalle risposte di %s, e di lasciarlo passare."
+
+msgid "The MCP endpoint answers a request without a token with 401 and the pointer to the sign-in, as it should."
+msgstr "L'endpoint MCP risponde a una richiesta senza token con 401 e con il rimando all'accesso, come dovrebbe."
+
+msgid "The MCP endpoint answers a request without a token with 401, as it should."
+msgstr "L'endpoint MCP risponde a una richiesta senza token con 401, come dovrebbe."
+
+#, php-format
+msgid "Wordfence’s firewall answered in place of the MCP endpoint (status %d)."
+msgstr "Il firewall di Wordfence ha risposto al posto dell'endpoint MCP (stato %d)."
+
+#, php-format
+msgid "In wp-admin open Wordfence → Firewall, find this blocked request to %s among the blocked requests and allowlist it, or add the address to the firewall’s allowlisted URLs."
+msgstr "In wp-admin apri Wordfence → Firewall, trova questa richiesta bloccata verso %s tra le richieste bloccate e aggiungila alla lista di quelle consentite, oppure aggiungi l'indirizzo agli URL consentiti del firewall."
+
+msgid "Run this check again; it passes once Wordfence lets the request through."
+msgstr "Esegui di nuovo questa verifica; il controllo viene superato non appena Wordfence lascia passare la richiesta."
+
+#, php-format
+msgid "Cloudflare answered in place of the MCP endpoint (status %d): a Cloudflare security rule or bot setting blocks the request."
+msgstr "Cloudflare ha risposto al posto dell'endpoint MCP (stato %d): una regola di sicurezza o un'impostazione anti-bot di Cloudflare blocca la richiesta."
+
+#, php-format
+msgid "In the Cloudflare dashboard of this domain, open the security events and look for the blocked request to %s; the event names the rule or setting that blocked it."
+msgstr "Nella dashboard di Cloudflare di questo dominio apri gli eventi di sicurezza e cerca la richiesta bloccata verso %s; l'evento indica la regola o l'impostazione che l'ha bloccata."
+
+#, php-format
+msgid "Change that rule or setting, or add a rule that skips Cloudflare’s security features for addresses that begin with %1$s or %2$s."
+msgstr "Modifica quella regola o impostazione, oppure aggiungi una regola che salta le funzioni di sicurezza di Cloudflare per gli indirizzi che iniziano con %1$s o %2$s."
+
+#, php-format
+msgid "The LiteSpeed web server or its CDN QUIC.cloud answered in place of the MCP endpoint (status %d)."
+msgstr "Il web server LiteSpeed o la sua CDN QUIC.cloud ha risposto al posto dell'endpoint MCP (stato %d)."
+
+#, php-format
+msgid "Ask your host to let POST requests with a JSON body to %s through the server’s firewall rules (ModSecurity on LiteSpeed)."
+msgstr "Chiedi al tuo hosting di lasciar passare attraverso le regole del firewall del server (ModSecurity su LiteSpeed) le richieste POST con un corpo JSON verso %s."
+
+msgid "If the site uses QUIC.cloud’s CDN, check the security settings of this domain in your QUIC.cloud dashboard and allow that address there too."
+msgstr "Se il sito usa la CDN di QUIC.cloud, controlla le impostazioni di sicurezza di questo dominio nella tua dashboard di QUIC.cloud e consenti lì anche quell'indirizzo."
+
+#, php-format
+msgid "The MCP endpoint %s answers 404, so the WordPress REST API does not answer at this address."
+msgstr "L'endpoint MCP %s risponde 404, quindi la REST API di WordPress non risponde a questo indirizzo."
+
+msgid "Under Settings → Permalinks click “Save Changes” once; WordPress then writes its address rules anew."
+msgstr "In Impostazioni → Permalink fai clic una volta su “Salva le modifiche”; WordPress riscrive così le sue regole per gli indirizzi."
+
+msgid "If it still answers 404, ask your host to pass the addresses below /wp-json/ to WordPress’s index.php."
+msgstr "Se risponde ancora 404, chiedi al tuo hosting di passare gli indirizzi sotto /wp-json/ al file index.php di WordPress."
+
+msgid "Something in front of the site answered 406 Not Acceptable in its place, the typical answer of a ModSecurity rule at the host."
+msgstr "Qualcosa davanti al sito ha risposto al suo posto con 406 Not Acceptable, la risposta tipica di una regola ModSecurity dell'hosting."
+
+#, php-format
+msgid "Ask your host to let POST requests with a JSON body to %s through, or to switch off the ModSecurity rule that blocks them for this address; the host’s firewall log names the rule."
+msgstr "Chiedi al tuo hosting di lasciar passare le richieste POST con un corpo JSON verso %s, oppure di disattivare la regola ModSecurity che le blocca per questo indirizzo; il log del firewall dell'hosting indica la regola."
+
+msgid "The server asks for a user name and password (an HTTP login) before WordPress answers, and AI apps cannot get past it."
+msgstr "Il server chiede un nome utente e una password (un'autenticazione HTTP) prima che WordPress risponda, e le app IA non riescono a superarla."
+
+#, php-format
+msgid "In your hosting panel, switch off the password protection of this site, or exempt the addresses that begin with %1$s and %2$s from it."
+msgstr "Nel tuo pannello di hosting disattiva la protezione con password di questo sito, oppure escludi da essa gli indirizzi che iniziano con %1$s e %2$s."
+
+#, php-format
+msgid "WordPress refused the request before it reached the MCP endpoint (status %1$d, %2$s): a plugin or a code snippet restricts the REST API."
+msgstr "WordPress ha rifiutato la richiesta prima che arrivasse all'endpoint MCP (stato %1$d, %2$s): un plugin o uno snippet di codice limita la REST API."
+
+#, php-format
+msgid "Something in front of WordPress answered %d in place of the MCP endpoint: a firewall at the host or a security plugin."
+msgstr "Qualcosa davanti a WordPress ha risposto %d al posto dell'endpoint MCP: un firewall dell'hosting o un plugin di sicurezza."
+
+#, php-format
+msgid "If a security plugin is active, look in its log of blocked requests for the request to %s and allow it."
+msgstr "Se è attivo un plugin di sicurezza, cerca nel suo log delle richieste bloccate la richiesta verso %s e consentila."
+
+#, php-format
+msgid "Otherwise ask your host to let POST requests with a JSON body to %s through their firewall."
+msgstr "Altrimenti chiedi al tuo hosting di lasciar passare attraverso il suo firewall le richieste POST con un corpo JSON verso %s."
+
+#, php-format
+msgid "The MCP endpoint %1$s answers with a redirect (%2$d) to %3$s instead of answering itself."
+msgstr "L'endpoint MCP %1$s risponde con un reindirizzamento (%2$d) verso %3$s invece di rispondere esso stesso."
+
+#, php-format
+msgid "If they already match, check which plugin or server rule sets the redirect, and exempt the addresses that begin with %s from it."
+msgstr "Se coincidono già, controlla quale plugin o regola del server imposta il reindirizzamento ed escludi da esso gli indirizzi che iniziano con %s."
+
+#, php-format
+msgid "The MCP endpoint answers with the server error %d."
+msgstr "L'endpoint MCP risponde con l'errore del server %d."
+
+msgid "Read PHP’s error log for the time of this check: with write access on, the tool wp_get_error_log returns the end of wp-content/debug.log (WordPress writes it when WP_DEBUG_LOG is on in wp-config.php); otherwise your hosting panel shows the server’s error log."
+msgstr "Leggi il log degli errori di PHP all'ora di questa verifica: con l'accesso in scrittura attivo, lo strumento wp_get_error_log restituisce la parte finale di wp-content/debug.log (WordPress lo scrive quando WP_DEBUG_LOG è attivo in wp-config.php); altrimenti il tuo pannello di hosting mostra il log degli errori del server."
+
+msgid "If the log names a plugin or theme, update it or switch it off, then run this check again."
+msgstr "Se il log indica un plugin o un tema, aggiornalo o disattivalo, poi esegui di nuovo questa verifica."
+
+#, php-format
+msgid "The MCP endpoint answered with status %d instead of 401: something between the app and WordPress — a cache, a proxy or a firewall — answered in its place."
+msgstr "L'endpoint MCP ha risposto con lo stato %d invece di 401: qualcosa tra l'app e WordPress — una cache, un proxy o un firewall — ha risposto al suo posto."
+
+#, php-format
+msgid "Ask your host what answers POST requests to %1$s with status %2$d, and to pass them to WordPress."
+msgstr "Chiedi al tuo hosting che cosa risponde con lo stato %2$d alle richieste POST verso %1$s, e di passarle a WordPress."
+
+#, php-format
+msgid "If a caching plugin or a CDN is in use, exclude the addresses that begin with %s from its cache."
+msgstr "Se è in uso un plugin di cache o una CDN, escludi dalla sua cache gli indirizzi che iniziano con %s."
+
+msgid "Authorization header"
+msgstr "Header Authorization"
+
+msgid "This check needs the plugin’s own answer from the MCP endpoint, which the endpoint check did not get; fix that first."
+msgstr "Questo controllo ha bisogno della risposta del plugin stesso dall'endpoint MCP, che il controllo dell'endpoint non ha ottenuto; risolvi prima quello."
+
+msgid "This site is behind an HTTP login, which uses the same header, so this check cannot tell whether a token would arrive."
+msgstr "Questo sito è protetto da un'autenticazione HTTP, che usa lo stesso header, quindi questo controllo non può stabilire se un token arriverebbe."
+
+msgid "The Authorization header reaches WordPress, so tokens sent as “Authorization: Bearer …” arrive."
+msgstr "L'header Authorization arriva a WordPress, quindi i token inviati come “Authorization: Bearer …” arrivano."
+
+msgid "The server removes the Authorization header before WordPress sees it, so Claude, ChatGPT and every app that sends its token there are refused with 401."
+msgstr "Il server rimuove l'header Authorization prima che WordPress lo veda, quindi Claude, ChatGPT e ogni app che invia lì il suo token vengono rifiutati con 401."
+
+msgid "On Apache, add the line CGIPassAuth On to the .htaccess file in the WordPress folder, above the line # BEGIN WordPress. If the server does not accept that line, add these two lines there instead: “RewriteEngine On” and “RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]”."
+msgstr "Su Apache aggiungi la riga CGIPassAuth On al file .htaccess nella cartella di WordPress, sopra la riga # BEGIN WordPress. Se il server non accetta quella riga, aggiungi lì invece queste due righe: “RewriteEngine On” e “RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]”."
+
+msgid "On nginx or any other server, ask your host to pass the Authorization header on to PHP."
+msgstr "Su nginx o su qualsiasi altro server, chiedi al tuo hosting di passare l'header Authorization a PHP."
+
+msgid "Until then, apps that take an address can connect with the token in it: under Settings → AlphaBridge MCP choose “Other”, tick “Also offer an address that contains the token.”, save, and create a connection."
+msgstr "Fino ad allora, le app che accettano un indirizzo possono collegarsi con il token contenuto in esso: in Impostazioni → AlphaBridge MCP scegli “Altro”, spunta “Offri anche un indirizzo che contiene il token.”, salva e crea una connessione."
+
+#, php-format
+msgid "The answer to a request with a token (status %d) did not say whether the header arrived, so this check has no result."
+msgstr "La risposta a una richiesta con token (stato %d) non ha indicato se l'header è arrivato, quindi questo controllo non ha un risultato."
+
+msgid "Run this check again; if it stays without a result, check the MCP endpoint with a token from a terminal or from the app itself."
+msgstr "Esegui di nuovo questa verifica; se resta senza risultato, controlla l'endpoint MCP con un token da un terminale o dall'app stessa."
+
+msgid "Sign-in server description (.well-known)"
+msgstr "Descrizione del server di accesso (.well-known)"
+
+msgid "Resource description (.well-known)"
+msgstr "Descrizione della risorsa (.well-known)"
+
+msgid "The sign-in for apps is off on this site, so there are no sign-in addresses to check; apps connect with a token only."
+msgstr "L'accesso per le app è disattivato su questo sito, quindi non ci sono indirizzi di accesso da controllare; le app si collegano solo con un token."
+
+msgid "To let Claude and ChatGPT connect with their Connect button, tick “Claude and other apps can sign in with their Connect button.” under Settings → AlphaBridge MCP → How Claude signs in, and save."
+msgstr "Per permettere a Claude e ChatGPT di collegarsi con il loro pulsante “Connect”, in Impostazioni → AlphaBridge MCP → Come accede Claude spunta «Claude e altre app possono accedere con il loro pulsante “Connect”.» e salva."
+
+msgid "Ask your host to pass the addresses that begin with /.well-known/oauth- to WordPress’s index.php, as they pass every other address that is no file."
+msgstr "Chiedi al tuo hosting di passare gli indirizzi che iniziano con /.well-known/oauth- al file index.php di WordPress, come fa con ogni altro indirizzo che non corrisponde a un file."
+
+#, php-format
+msgid "The sign-in description at %s answers as it should."
+msgstr "La descrizione di accesso all'indirizzo %s risponde come dovrebbe."
+
+#, php-format
+msgid "The address %1$s answers, but not with this plugin’s sign-in description (%2$s): another plugin or the server answers it."
+msgstr "L'indirizzo %1$s risponde, ma non con la descrizione di accesso di questo plugin (%2$s): risponde un altro plugin o il server."
+
+msgid "If another plugin that offers OAuth or MCP is active, switch it off and run this check again."
+msgstr "Se è attivo un altro plugin che offre OAuth o MCP, disattivalo ed esegui di nuovo questa verifica."
+
+#, php-format
+msgid "The address %s answers 404: the server answers the addresses below /.well-known/ itself instead of passing them to WordPress, so Claude, ChatGPT and the AlphaBridge hub cannot find the sign-in."
+msgstr "L'indirizzo %s risponde 404: il server risponde da sé agli indirizzi sotto /.well-known/ invece di passarli a WordPress, quindi Claude, ChatGPT e l'hub di AlphaBridge non trovano l'accesso."
+
+#, php-format
+msgid "Something in front of the site answered %1$d in place of the sign-in description at %2$s, the way a firewall does."
+msgstr "Qualcosa davanti al sito ha risposto %1$d al posto della descrizione di accesso all'indirizzo %2$s, come fa un firewall."
+
+msgid "Ask your host, or look in your security plugin’s log of blocked requests, why GET requests to the addresses that begin with /.well-known/oauth- are blocked, and allow them."
+msgstr "Chiedi al tuo hosting, oppure cerca nel log delle richieste bloccate del tuo plugin di sicurezza, perché le richieste GET verso gli indirizzi che iniziano con /.well-known/oauth- vengono bloccate, e consentile."
+
+#, php-format
+msgid "The sign-in description at %1$s answers with a redirect (%2$d) to %3$s, which not every app follows."
+msgstr "La descrizione di accesso all'indirizzo %1$s risponde con un reindirizzamento (%2$d) verso %3$s, che non tutte le app seguono."
+
+#, php-format
+msgid "The sign-in description at %1$s answers with status %2$d."
+msgstr "La descrizione di accesso all'indirizzo %1$s risponde con lo stato %2$d."
+
+#, php-format
+msgid "Ask your host what answers this address with status %d, and to pass it to WordPress."
+msgstr "Chiedi al tuo hosting che cosa risponde a questo indirizzo con lo stato %d, e di passarlo a WordPress."
+
+#, php-format
+msgid "larger than %d KB"
+msgstr "più grande di %d KB"
+
+msgid "not JSON"
+msgstr "non è JSON"
+
+msgid "its issuer is not this site"
+msgstr "il suo issuer non è questo sito"
+
+#, php-format
+msgid "%s is missing"
+msgstr "manca %s"
+
+msgid "its resource is not this site’s MCP endpoint"
+msgstr "il suo campo resource non è l'endpoint MCP di questo sito"
+
+msgid "authorization_servers is missing or empty"
+msgstr "authorization_servers manca o è vuoto"
+
+msgid "Firewall and the direct sign-in"
+msgstr "Firewall e accesso diretto"
+
+msgid "The sign-in for apps is off on this site, so the direct sign-in of ChatGPT and Codex is not offered and there is nothing to test."
+msgstr "L'accesso per le app è disattivato su questo sito, quindi l'accesso diretto di ChatGPT e Codex non viene offerto e non c'è nulla da verificare."
+
+msgid "The direct sign-in of ChatGPT and Codex is switched off on this site, so they register with the site and no firewall test is needed."
+msgstr "L'accesso diretto di ChatGPT e Codex è disattivato su questo sito, quindi si registrano presso il sito e non serve alcun test del firewall."
+
+msgid "The host’s firewall lets the direct sign-in of ChatGPT and Codex through."
+msgstr "Il firewall dell'hosting lascia passare l'accesso diretto di ChatGPT e Codex."
+
+#, php-format
+msgid "The firewall test got no clear answer (%s), so nothing changes: the direct sign-in of ChatGPT and Codex stays on."
+msgstr "Il test del firewall non ha ottenuto una risposta chiara (%s), quindi non cambia nulla: l'accesso diretto di ChatGPT e Codex resta attivo."
+
+msgid "Cloudflare"
+msgstr "Rilevamento di Cloudflare"
+
+msgid "The site is behind Cloudflare (its answers carry the cf-ray header); if Claude or ChatGPT cannot connect while the other checks pass, Cloudflare’s bot settings for AI crawlers are the usual cause, and a request from the site to itself cannot see them."
+msgstr "Il sito è dietro Cloudflare (le sue risposte contengono l'header cf-ray); se Claude o ChatGPT non riescono a collegarsi mentre gli altri controlli vengono superati, la causa abituale sono le impostazioni anti-bot di Cloudflare per i crawler IA, e una richiesta del sito a sé stesso non può vederle."
+
+#, php-format
+msgid "In the Cloudflare dashboard of this domain, open the security events and look for blocked or challenged requests to %1$s or to addresses that begin with %2$s at the time an app tried to connect."
+msgstr "Nella dashboard di Cloudflare di questo dominio apri gli eventi di sicurezza e cerca le richieste bloccate o sottoposte a verifica verso %1$s o verso indirizzi che iniziano con %2$s, all'ora in cui un'app ha provato a collegarsi."
+
+#, php-format
+msgid "If you find them, change the bot setting or rule the event names, or add a rule that skips Cloudflare’s security features for addresses that begin with %1$s or %2$s."
+msgstr "Se le trovi, modifica l'impostazione anti-bot o la regola indicata dall'evento, oppure aggiungi una regola che salta le funzioni di sicurezza di Cloudflare per gli indirizzi che iniziano con %1$s o %2$s."
+
+msgid "The site’s answers to itself carry no Cloudflare header; a site whose requests to itself bypass Cloudflare can still be behind it."
+msgstr "Le risposte del sito a sé stesso non contengono alcun header di Cloudflare; un sito le cui richieste a sé stesso aggirano Cloudflare può comunque trovarsi dietro di esso."
+
+msgid "Plugins that restrict the REST API"
+msgstr "Plugin che limitano la REST API"
+
+msgid "None of the plugins this check knows to restrict the REST API is active."
+msgstr "Non è attivo nessuno dei plugin che, per quanto sa questo controllo, limitano la REST API."
+
+#, php-format
+msgid "If the MCP endpoint check fails, open the settings of %s, find the setting that restricts the REST API to logged-in users, and allow the routes that begin with /alphabridge/v1/ or switch that restriction off."
+msgstr "Se il controllo dell'endpoint MCP non viene superato, apri le impostazioni di %s, trova l'impostazione che limita la REST API agli utenti connessi e consenti le route che iniziano con /alphabridge/v1/ oppure disattiva quella limitazione."
+
+#, php-format
+msgid "If the MCP endpoint check fails, deactivate %s under Plugins: it closes the REST API to every request without a login, and apps connect without one."
+msgstr "Se il controllo dell'endpoint MCP non viene superato, disattiva %s in Plugin: chiude la REST API a ogni richiesta senza login, e le app si collegano senza login."
+
+#, php-format
+msgid "Active: %s, which can restrict the REST API for requests without a login."
+msgstr "In uso su questo sito: %s, in grado di limitare la REST API per le richieste senza login."
+
+msgid "Update WordPress itself"
+msgstr "Aggiorna WordPress stesso"
+
+msgid "WordPress offers no update right now, so running it would change nothing."
+msgstr "WordPress al momento non offre alcun aggiornamento, quindi eseguirlo non cambierebbe nulla."
+
+msgid "Replaces the WordPress core files with the new version and updates the database if the new version needs it."
+msgstr "Sostituisce i file del core di WordPress con la nuova versione e aggiorna il database se la nuova versione lo richiede."
+
+msgid "Core updates have no test requests and no automatic rollback here, and undo does not cover them. A backup made first is the way back."
+msgstr "Qui gli aggiornamenti del core non hanno richieste di prova né un ripristino automatico, e l'annullamento non li copre. Per tornare indietro serve un backup fatto prima."
+
+msgid "Install a plugin from a ZIP package"
+msgstr "Installa un plugin da un pacchetto ZIP"
+
+msgid "Install a theme from a ZIP package"
+msgstr "Installa un tema da un pacchetto ZIP"
+
+msgid "Unpacks the package into wp-content/plugins. Its code runs with this site’s rights as soon as it is active."
+msgstr "Estrae il pacchetto in wp-content/plugins. Il suo codice viene eseguito con i diritti di questo sito non appena è attivo."
+
+msgid "Unpacks the package into wp-content/themes. Its code runs with this site’s rights as soon as it is active."
+msgstr "Estrae il pacchetto in wp-content/themes. Il suo codice viene eseguito con i diritti di questo sito non appena è attivo."
+
+msgid "Undo does not cover installs. Deleting the plugin later (wp_delete_plugin) removes its folder and runs its own uninstall routine, if it has one; whatever else its code changed stays."
+msgstr "L'annullamento non copre le installazioni. Eliminare il plugin in seguito (wp_delete_plugin) rimuove la sua cartella ed esegue la sua routine di disinstallazione, se ne ha una; tutto il resto che il suo codice ha modificato rimane."
+
+msgid "Undo does not cover installs. Deleting the theme later (wp_delete_theme) removes its folder; whatever its code changed while active stays."
+msgstr "L'annullamento non copre le installazioni. Eliminare il tema in seguito (wp_delete_theme) rimuove la sua cartella; ciò che il suo codice ha modificato mentre era attivo rimane."
+
+msgid "The package is downloaded when the call runs; the token covers the address, not what the address serves."
+msgstr "Il pacchetto viene scaricato quando la chiamata viene eseguita; il token copre l'indirizzo, non ciò che l'indirizzo fornisce."
+
+msgid "Delete a plugin"
+msgstr "Elimina un plugin"
+
+msgid "No installed plugin has this identifier, so the call would be refused; wp_list_plugins lists the identifiers."
+msgstr "Nessun plugin installato ha questo identificatore, quindi la chiamata verrebbe rifiutata; wp_list_plugins elenca gli identificatori."
+
+msgid "Deactivates the plugin, then deletes its folder with all its files."
+msgstr "Disattiva il plugin, poi elimina la sua cartella con tutti i suoi file."
+
+msgid "Deletes the plugin’s folder with all its files."
+msgstr "Elimina la cartella del plugin con tutti i suoi file."
+
+msgid "Undo does not cover deletes, and the files are gone. WordPress also runs the plugin’s own uninstall routine, if it has one, which may remove its settings and tables. A plugin from wordpress.org comes back with wp_install_plugin, without changes made to its files."
+msgstr "L'annullamento non copre le eliminazioni, e i file spariscono. WordPress esegue anche la routine di disinstallazione del plugin, se ne ha una, che può rimuovere le sue impostazioni e le sue tabelle. Un plugin di wordpress.org si recupera con wp_install_plugin, senza le modifiche fatte ai suoi file."
+
+msgid "Delete a theme"
+msgstr "Elimina un tema"
+
+msgid "No installed theme has this folder name, so the call would be refused; wp_list_themes lists the folder names."
+msgstr "Nessun tema installato ha questo nome di cartella, quindi la chiamata verrebbe rifiutata; wp_list_themes elenca i nomi delle cartelle."
+
+msgid "Deletes the theme’s folder with all its files."
+msgstr "Elimina la cartella del tema con tutti i suoi file."
+
+msgid "This is the active theme or its parent, so the call would be refused; activate another theme first (wp_activate_theme)."
+msgstr "Questo è il tema attivo o il suo tema genitore, quindi la chiamata verrebbe rifiutata; attiva prima un altro tema (wp_activate_theme)."
+
+msgid "Undo does not cover deletes, and the files are gone. A theme from wordpress.org comes back with wp_install_theme, without changes made to its files."
+msgstr "L'annullamento non copre le eliminazioni, e i file spariscono. Un tema di wordpress.org si recupera con wp_install_theme, senza le modifiche fatte ai suoi file."
+
+msgid "The preview of this tool failed with an internal error, so nothing ran. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Try again; if it keeps failing, ask the site administrator."
+msgstr "L'anteprima di questo strumento non è riuscita per un errore interno, quindi non è stato eseguito nulla. L'errore stesso è finito nel log di AlphaBridge MCP (l'opzione ab_mcp_audit), non in questa risposta, perché può indicare percorsi del server. Riprova; se continua a non riuscire, chiedi all'amministratore del sito."
+
+msgctxt "tool label"
+msgid "Check the connection"
+msgstr "Verifica la connessione"
+
+#, php-format
+msgid "Not activated: %s is not active after WordPress was asked to activate it, and WordPress gave no reason. Nothing was changed. Activate it in wp-admin under Plugins to see what WordPress says there."
+msgstr "Non attivato: %s non è attivo dopo che a WordPress è stato chiesto di attivarlo, e WordPress non ha dato alcun motivo. Non è stato modificato nulla. Attivalo in wp-admin in Plugin per vedere che cosa dice WordPress."
+
+#, php-format
+msgid "%1$s in %2$s on line %3$d"
+msgstr "%1$s in %2$s alla riga %3$d"
+
+msgid "the state before the activation did not come back"
+msgstr "lo stato precedente all'attivazione non è stato ripristinato"
+
+#, php-format
+msgid "stylesheet %1$s with template %2$s"
+msgstr "stylesheet %1$s con template %2$s"
+
+#, php-format
+msgid "This call switched back to %s, so WordPress lists the theme the site shows again."
+msgstr "Questa chiamata ha ripristinato %s, quindi WordPress elenca di nuovo il tema che il sito mostra."
+
+#, php-format
+msgid "Switching back to %1$s failed (%2$s): WordPress now lists a theme the site does not show. Switch themes in wp-admin under Appearance › Themes."
+msgstr "Il ripristino di %1$s non è riuscito (%2$s): WordPress ora elenca un tema che il sito non mostra. Cambia tema in wp-admin in Aspetto › Temi."
+
+#, php-format
+msgid "Not active: WordPress stored %1$s as the active theme, but code that runs on every request keeps another one (a filter on stylesheet or template, in an mu-plugin or in the host's own code): the test requests after the switch ran %2$s. %3$s Find that filter in wp-content/mu-plugins, or ask the host why the theme is kept."
+msgstr "Non attivo: WordPress ha salvato %1$s come tema attivo, ma del codice eseguito a ogni richiesta ne mantiene un altro (un filtro su stylesheet o template, in un mu-plugin o nel codice dell'hosting stesso): le richieste di prova dopo il cambio hanno eseguito %2$s. %3$s Trova quel filtro in wp-content/mu-plugins, oppure chiedi all'hosting perché il tema viene mantenuto."
+
+msgid "It was on the list of active plugins before this call, and stays on it, as it was."
+msgstr "Era nell'elenco dei plugin attivi prima di questa chiamata e ci resta, com'era."
+
+msgid "This call took it off the list again, as it was before."
+msgstr "Questa chiamata l'ha tolto di nuovo dall'elenco, com'era prima."
+
+#, php-format
+msgid "Taking it off the list again failed (%s): WordPress lists it as active although the site does not load it. Deactivate it in wp-admin under Plugins."
+msgstr "Toglierlo di nuovo dall'elenco non è riuscito (%s): WordPress lo elenca come attivo anche se il sito non lo carica. Disattivalo in wp-admin in Plugin."
+
+#, php-format
+msgid "Not active: WordPress lists %1$s as active, but code that runs on every request keeps it from loading (a filter on the list of active plugins, in an mu-plugin or in the host's own code): the test requests after the activation did not load it. %2$s Its activation routine ran in this call; what it wrote to the database stays. Find that filter in wp-content/mu-plugins, or ask the host why the plugin is kept off."
+msgstr "Non attivo: WordPress elenca %1$s come attivo, ma del codice eseguito a ogni richiesta ne impedisce il caricamento (un filtro sull'elenco dei plugin attivi, in un mu-plugin o nel codice dell'hosting stesso): le richieste di prova dopo l'attivazione non l'hanno caricato. %2$s La sua routine di attivazione è stata eseguita in questa chiamata; ciò che ha scritto nel database rimane. Trova quel filtro in wp-content/mu-plugins, oppure chiedi all'hosting perché il plugin viene tenuto disattivato."
+
+#, php-format
+msgid "Not checked: the test requests are switched off with the ab_mcp_php_probe_enabled filter; nothing checked that the site still runs with %s active."
+msgstr "Non verificato: le richieste di prova sono disattivate con il filtro ab_mcp_php_probe_enabled; nulla ha verificato che il sito funzioni ancora con %s attivo."
+
+#, php-format
+msgid "Not checked: no test request reached this site before %1$s was activated (%2$s), so it was activated without a test, as wp-admin does. Make sure the site still runs. An administrator can give the test requests the headers an HTTP login or firewall wants with the ab_mcp_php_probe_request_args filter."
+msgstr "Non verificato: nessuna richiesta di prova ha raggiunto questo sito prima che %1$s venisse attivato (%2$s), quindi è stato attivato senza prova, come fa wp-admin. Assicurati che il sito funzioni ancora. Con il filtro ab_mcp_php_probe_request_args un amministratore può fornire alle richieste di prova gli header richiesti da un'autenticazione HTTP o da un firewall."
+
+#, php-format
+msgid "Kept active with a fatal error that was there before: %s. Where that error ends a request, the new code was not checked."
+msgstr "Mantenuto attivo con un errore fatale che c'era già prima: %s. Dove quell'errore interrompe una richiesta, il nuovo codice non è stato verificato."
+
+#, php-format
+msgid "Kept active, but %s: the code after that point was not checked. A login wall or a maintenance mode does that on purpose; if this one does it unasked, deactivate it."
+msgstr "Mantenuto attivo, ma %s: il codice dopo quel punto non è stato verificato. Un muro di login o una modalità di manutenzione lo fanno di proposito; se questo lo fa senza che nessuno l'abbia chiesto, disattivalo."
+
+#, php-format
+msgid "Not compared, as already before the activation: %s."
+msgstr "Non confrontato, come già prima dell'attivazione: %s."
+
+#, php-format
+msgid "Not checked: this call ran out of time before %s could be tested after the activation; make sure the site still runs."
+msgstr "Non verificato: questa chiamata ha esaurito il tempo prima che %s potesse essere provato dopo l'attivazione; assicurati che il sito funzioni ancora."
+
+#, php-format
+msgid "Not kept active: after %1$s was activated, %2$s."
+msgstr "Non mantenuto attivo: dopo che %1$s è stato attivato, %2$s."
+
+#, php-format
+msgid "The previous theme %s is active again: this call switched back to it."
+msgstr "Il tema precedente %s è di nuovo attivo: questa chiamata lo ha riattivato."
+
+msgid "This call deactivated it again, without running its deactivation routine, as WordPress does after a fatal error."
+msgstr "Questa chiamata l'ha di nuovo disattivato, senza eseguire la sua routine di disattivazione, come fa WordPress dopo un errore fatale."
+
+msgid "This call deactivated it network-wide again, without running its deactivation routine, as WordPress does after a fatal error."
+msgstr "Questa chiamata l'ha di nuovo disattivato in tutta la rete, senza eseguire la sua routine di disattivazione, come fa WordPress dopo un errore fatale."
+
+msgid "The test requests pass again."
+msgstr "Le richieste di prova vengono di nuovo superate."
+
+#, php-format
+msgid "With it taken back, the test requests say: %s."
+msgstr "Annullata l'attivazione, le richieste di prova dicono: %s."
+
+msgid "Its files are unchanged on the site (over SFTP, or in the theme file editor of wp-admin where it is switched on)."
+msgstr "I suoi file sono invariati sul sito (via SFTP, oppure nell'editor dei file del tema di wp-admin, dove è attivo)."
+
+msgid "Its files are unchanged on the site (over SFTP, or in the plugin file editor of wp-admin where it is switched on)."
+msgstr "I suoi file sono invariati sul sito (via SFTP, oppure nell'editor dei file del plugin di wp-admin, dove è attivo)."
+
+msgid "Fix the error and activate it again. PHP names the file in which an error surfaces, which can be another file than the one at fault."
+msgstr "Correggi l'errore e attivalo di nuovo. PHP indica il file in cui un errore emerge, che può essere un file diverso da quello responsabile."
+
+msgid "Kept active, it would have cut this connection: it ends requests to AlphaBridge's REST route (/wp-json/alphabridge/v1/) before AlphaBridge checks its token."
+msgstr "Se fosse rimasto attivo, avrebbe interrotto questa connessione: termina le richieste alla route REST di AlphaBridge (/wp-json/alphabridge/v1/) prima che AlphaBridge verifichi il suo token."
+
+msgid "Leave that route out of code that blocks, redirects or ends requests, then activate it again."
+msgstr "Escludi quella route dal codice che blocca, reindirizza o termina le richieste, poi attivalo di nuovo."
+
+msgid "With it active, the site answered without WordPress's test report. Most often its code ends the answer itself before WordPress has finished (fastcgi_finish_request() or litespeed_finish_request(), or exit or die in the shutdown action), fails at the very end of the request, or cuts the page off; an HTTP 502 or 504 means PHP or the web server ended the request, for example after a crash. From outside, a harmless case cannot be told from a harmful one (exit at the end of a request also stops the end-of-request work of other plugins), so it was taken back."
+msgstr "Con esso attivo, il sito ha risposto senza il rapporto di prova di WordPress. Il più delle volte il suo codice termina da sé la risposta prima che WordPress abbia finito (fastcgi_finish_request() o litespeed_finish_request(), oppure exit o die nell'azione shutdown), fallisce proprio alla fine della richiesta, oppure tronca la pagina; un HTTP 502 o 504 significa che PHP o il web server hanno terminato la richiesta, per esempio dopo un crash. Dall'esterno un caso innocuo non si distingue da uno dannoso (exit alla fine di una richiesta interrompe anche il lavoro di fine richiesta di altri plugin), quindi l'attivazione è stata annullata."
+
+msgid "Let WordPress finish every request and move background work to WP-Cron (wp_schedule_single_event()), then activate it again."
+msgstr "Lascia che WordPress completi ogni richiesta e sposta il lavoro in background su WP-Cron (wp_schedule_single_event()), poi attivalo di nuovo."
+
+msgid "A theme that does this on purpose can be switched to in wp-admin under Appearance › Themes."
+msgstr "Un tema che lo fa di proposito può essere attivato in wp-admin in Aspetto › Temi."
+
+msgid "A plugin that does this on purpose can be activated network-wide under Network Admin › Plugins."
+msgstr "Un plugin che lo fa di proposito può essere attivato in tutta la rete in Amministrazione network › Plugin."
+
+msgid "A plugin that does this on purpose can be activated in wp-admin."
+msgstr "Un plugin che lo fa di proposito può essere attivato in wp-admin."
+
+msgid "The test requests then cannot check the pages where it does so."
+msgstr "Le richieste di prova poi non possono verificare le pagine in cui lo fa."
+
+msgid "From then on the test requests cannot check this site: activations and updates go ahead with \"not checked\", and PHP files of active plugins and themes can only be written with allow_without_probe: true."
+msgstr "Da quel momento le richieste di prova non possono verificare questo sito: attivazioni e aggiornamenti procedono con “non verificato”, e i file PHP dei plugin e dei temi attivi possono essere scritti solo con allow_without_probe: true."
+
+msgid "From then on the test requests cannot check this site: activations and updates go ahead with \"not checked\", and PHP files of active plugins and themes can only be written, and PHP snippets saved, with allow_without_probe: true."
+msgstr "Da quel momento le richieste di prova non possono verificare questo sito: attivazioni e aggiornamenti procedono con “non verificato”, e i file PHP dei plugin e dei temi attivi possono essere scritti, e gli snippet PHP salvati, solo con allow_without_probe: true."
+
+msgid "With it active the site no longer answered: its code may hang or end requests before WordPress finishes them."
+msgstr "Con esso attivo il sito non ha più risposto: il suo codice potrebbe bloccarsi o terminare le richieste prima che WordPress le completi."
+
+msgid "If the site is only slow, an administrator can give the test requests more time with the ab_mcp_php_probe_request_args filter (timeout, at most 60 seconds)."
+msgstr "Se il sito è solo lento, un amministratore può dare più tempo alle richieste di prova con il filtro ab_mcp_php_probe_request_args (timeout, al massimo 60 secondi)."
+
+msgid "What its activation routine wrote to the database stays."
+msgstr "Ciò che la sua routine di attivazione ha scritto nel database rimane."
+
+msgid "What the theme wrote to the database while it was active stays."
+msgstr "Ciò che il tema ha scritto nel database mentre era attivo rimane."
+
+msgid "Menu locations, widgets, rewrite rules and the settings of both themes are as they were before the switch; anything else written to the database while it was active, by the theme or by plugins reacting to the switch, stays."
+msgstr "Posizioni dei menu, widget, regole di riscrittura e impostazioni di entrambi i temi sono come prima del cambio; tutto il resto scritto nel database mentre era attivo, dal tema o da plugin che hanno reagito al cambio, rimane."
+
+#, php-format
+msgid "Not everything came back as it was before the switch (%s differ), so menu locations, widgets or permalinks may have changed: look at them under Appearance and Settings › Permalinks. Anything else written to the database while it was active stays."
+msgstr "Non tutto è tornato com'era prima del cambio (differiscono: %s), quindi posizioni dei menu, widget o permalink potrebbero essere cambiati: controllali in Aspetto e in Impostazioni › Permalink. Tutto il resto scritto nel database mentre era attivo rimane."
+
+msgid "Switch themes in wp-admin under Appearance › Themes, or rename the theme's folder over SFTP."
+msgstr "Cambia tema in wp-admin in Aspetto › Temi, oppure rinomina la cartella del tema via SFTP."
+
+msgid "Deactivate it in wp-admin, through WordPress's recovery mode (the link it e-mails to the admin address), or by renaming its folder in wp-content/plugins over SFTP."
+msgstr "Disattivalo in wp-admin, tramite la modalità di recupero di WordPress (il link che invia per e-mail all'indirizzo dell'amministratore), oppure rinominando la sua cartella in wp-content/plugins via SFTP."
+
+#, php-format
+msgid "After %1$s was activated, %2$s — and the activation could NOT be taken back (%3$s), so the site may not answer. %4$s"
+msgstr "Dopo che %1$s è stato attivato, %2$s — e NON è stato possibile annullare l'attivazione (%3$s), quindi il sito potrebbe non rispondere. %4$s"
+
+msgid "over SFTP, or in the theme file editor of wp-admin where it is switched on"
+msgstr "via SFTP, oppure nell'editor dei file del tema di wp-admin, dove è attivo"
+
+msgid "over SFTP, or in the plugin file editor of wp-admin where it is switched on"
+msgstr "via SFTP, oppure nell'editor dei file del plugin di wp-admin, dove è attivo"
+
+#, php-format
+msgid "Not activated: while %1$s was loaded to be activated, PHP stopped with %2$s. It is not active, and the site runs as before. Its files are on the site (%3$s): fix the error and activate it again."
+msgstr "Non attivato: mentre %1$s veniva caricato per essere attivato, PHP si è fermato con %2$s. Non è attivo, e il sito funziona come prima. I suoi file sono sul sito (%3$s): correggi l'errore e attivalo di nuovo."
+
+#, php-format
+msgid "Not activated: WordPress switched to %s only part of the way (a filter on the site kept part of the switch), so the switch was taken back. The previous state is active again, and the site runs as before."
+msgstr "Non attivato: WordPress ha attivato %s solo in parte (un filtro sul sito ha trattenuto parte del cambio), quindi il cambio è stato annullato. Lo stato precedente è di nuovo attivo, e il sito funziona come prima."
+
+#, php-format
+msgid "Not activated: WordPress switched to %1$s only part of the way (a filter on the site kept part of the switch), and the switch could NOT be taken back (%3$s). Active now: %2$s. Switch themes in wp-admin under Appearance › Themes."
+msgstr "Non attivato: WordPress ha attivato %1$s solo in parte (un filtro sul sito ha trattenuto parte del cambio), e NON è stato possibile annullare il cambio (%3$s). Ora è attivo: %2$s. Cambia tema in wp-admin in Aspetto › Temi."
+
+msgid "unknown"
+msgstr "sconosciuto"
+
+#, php-format
+msgid "Not kept active: after %1$s was activated, its own code switched the site on during the test requests (to %2$s). That was taken back: the previous state is active again, and the site runs as before. Its files are unchanged. Check what its code does once it is switched on (the after_switch_theme hook, for a theme), then activate it again."
+msgstr "Non mantenuto attivo: dopo che %1$s è stato attivato, il suo stesso codice ha cambiato il sito durante le richieste di prova (passando a %2$s). Questo è stato annullato: lo stato precedente è di nuovo attivo, e il sito funziona come prima. I suoi file sono invariati. Controlla che cosa fa il suo codice una volta attivato (l'hook after_switch_theme, per un tema), poi attivalo di nuovo."
+
+msgid "something else"
+msgstr "qualcos'altro"
+
+#, php-format
+msgid "Not kept active: after %1$s was activated, its own code switched the site on during the test requests, and that could NOT be taken back (%3$s). Active now: %2$s. Switch themes in wp-admin under Appearance › Themes."
+msgstr "Non mantenuto attivo: dopo che %1$s è stato attivato, il suo stesso codice ha cambiato il sito durante le richieste di prova, e NON è stato possibile annullarlo (%3$s). Ora è attivo: %2$s. Cambia tema in wp-admin in Aspetto › Temi."
+
+#, php-format
+msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme."
+msgstr "Non attivo: %s è stato attivato, ma dopo le richieste di prova non è più attivo. Il suo stesso codice lo ha disattivato mentre il sito lo caricava, il più delle volte perché manca qualcosa di cui ha bisogno (un altro plugin, un'estensione PHP, un'impostazione). Non è stato annullato nulla, e il sito funziona come prima. Controlla il motivo in wp-admin, se ne è indicato uno: in Plugin per un plugin, in Aspetto › Temi per un tema."
+
+#, php-format
+msgid "It is active, but while activating it WordPress or PHP said: %s."
+msgstr "È attivo, ma durante l'attivazione WordPress o PHP hanno detto: %s."
+
+#, php-format
+msgid "Not activated: %1$s was not switched on. This call had already taken %2$d s (the test requests before the activation included), and the activation with one more round of test requests and the reserve for taking it back needs about %3$d s more, past the %4$d s a call may take (clients and web servers stop waiting at 60 s). Nothing was changed. Call it again; if the site answers its test requests slowly, an administrator can look into that."
+msgstr "Non attivato: %1$s non è stato attivato. Questa chiamata aveva già impiegato %2$d s (incluse le richieste di prova prima dell'attivazione), e l'attivazione con un altro giro di richieste di prova e la riserva per annullarla richiede circa altri %3$d s, oltre i %4$d s che una chiamata può durare (client e web server smettono di attendere a 60 s). Non è stato modificato nulla. Richiama lo strumento; se il sito risponde lentamente alle sue richieste di prova, un amministratore può esaminare la cosa."
+
+#, php-format
+msgid "the theme %s"
+msgstr "il tema %s"
+
+#, php-format
+msgid "the plugin %s"
+msgstr "il plugin %s"
+
+#, php-format
+msgid "the plugin %s (network-wide)"
+msgstr "il plugin %s (in tutta la rete)"
+
+#, php-format
+msgid "Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over."
+msgstr "Non avviato: un'altra modifica del codice che questo sito esegue, fatta tramite AlphaBridge (un'attivazione, un deploy, oppure un file PHP o uno snippet scritto o annullato), è in corso da %1$d s. Le modifiche al codice eseguito dal sito avvengono una dopo l'altra, affinché la via del ritorno di una non possa annullare l'altra. Non è stato modificato nulla; chiama di nuovo quando l'altra ha risposto. Se non ce n'è nessuna in corso, una richiesta terminata prima del tempo ha lasciato il blocco; dalle %2$s UTC la chiamata successiva lo rileva."
+
+#, php-format
+msgid "Not started: an update of %s through AlphaBridge is running on this site. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when that update has answered."
+msgstr "Non avviato: su questo sito è in corso un aggiornamento tramite AlphaBridge per %s. Le modifiche al codice eseguito dal sito avvengono una dopo l'altra, affinché la via del ritorno di una non possa annullare l'altra. Non è stato modificato nulla; chiama di nuovo quando quell'aggiornamento ha risposto."
+
+#, php-format
+msgid "%1$s: ok (HTTP %2$d)"
+msgstr "%1$s: in ordine (HTTP %2$d)"
+
+#, php-format
+msgid "%1$s: ok (HTTP %2$d, after a redirect to %3$s)"
+msgstr "%1$s: in ordine (HTTP %2$d, dopo un reindirizzamento a %3$s)"
+
+#, php-format
+msgid "%1$s: a fatal error before WordPress started its test report, in code that loads before the plugins of this site (a must-use plugin, a network-active plugin, a drop-in or wp-config.php); WordPress answered with its page \"There has been a critical error\" without file and line, %2$s"
+msgstr "%1$s: un errore fatale prima che WordPress avviasse il suo rapporto di prova, in codice che si carica prima dei plugin di questo sito (un plugin must-use, un plugin attivo in tutta la rete, un drop-in o wp-config.php); WordPress ha risposto con la sua pagina “Si è verificato un errore critico” senza file né riga, %2$s"
+
+msgid "and this site can read no PHP error log that names them"
+msgstr "e questo sito non può leggere alcun log degli errori PHP che li indichi"
+
+msgid "and the PHP error log of this server has no entry from the test"
+msgstr "e il log degli errori PHP di questo server non ha alcuna voce relativa alla prova"
+
+#, php-format
+msgid "%1$s: fatal error \"%2$s\" in %3$s on line %4$d"
+msgstr "%1$s: errore fatale “%2$s” in %3$s alla riga %4$d"
+
+msgid "(read from the PHP error log: it struck before WordPress started its test report)"
+msgstr "(letto dal log degli errori PHP: si è verificato prima che WordPress avviasse il suo rapporto di prova)"
+
+#, php-format
+msgid "%1$s: did not run through (%2$s)"
+msgstr "%1$s: esecuzione non completata (%2$s)"
+
+#, php-format
+msgid "%1$s: not reached (%2$s)"
+msgstr "%1$s: non raggiungibile (%2$s)"
+
+#, php-format
+msgid "%s: not asked"
+msgstr "%s: nessuna richiesta inviata"
+
+#, php-format
+msgid "%s: not checked, this call ran out of time"
+msgstr "%s: nessuna verifica, questa chiamata ha esaurito il tempo"
+
+msgid "This is a file of AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). The file tools never write or delete these: a broken write would cut the connection needed to repair it. Update AlphaBridge in wp-admin under Plugins, or over SFTP."
+msgstr "Questo è un file di AlphaBridge stesso (AlphaBridge MCP, AlphaBridge MCP Pro o il drop-in del titolare). Gli strumenti per i file non scrivono né eliminano mai questi file: una scrittura non riuscita interromperebbe la connessione necessaria per ripararla. Aggiorna AlphaBridge in wp-admin in Plugin, oppure via SFTP."
+
+msgid "no random test key could be made on this server."
+msgstr "non è stato possibile generare una chiave di prova casuale su questo server."
+
+msgid "the test key could not be stored (set_transient failed)."
+msgstr "non è stato possibile salvare la chiave di prova (set_transient non è riuscito)."
+
+msgid "no session could be opened for the account of this connection, so the dashboard was not asked"
+msgstr "non è stato possibile aprire una sessione per l'account di questa connessione, quindi la bacheca non è stata interpellata"
+
+msgid "not asked: this call had no time left"
+msgstr "nessuna richiesta inviata: questa chiamata non aveva più tempo"
+
+#, php-format
+msgid "answered HTTP %d without the test markers: something in front of WordPress (a page cache, a firewall, an HTTP login) answered, or the request ended before WordPress shut down."
+msgstr "ha risposto HTTP %d senza i marcatori di prova: ha risposto qualcosa davanti a WordPress (una cache di pagina, un firewall, un'autenticazione HTTP), oppure la richiesta è terminata prima della chiusura di WordPress."
+
+msgid "WordPress did not accept the test key."
+msgstr "WordPress non ha accettato la chiave di prova."
+
+msgid "a fatal error whose report could not be read."
+msgstr "un errore fatale il cui rapporto non è stato possibile leggere."
+
+#, php-format
+msgid "answered HTTP %1$d (%2$s) instead of its own 401 to a request without a token: something ends requests before AlphaBridge checks the token, which cuts the connection"
+msgstr "ha risposto HTTP %1$d (%2$s) invece del suo 401 a una richiesta senza token: qualcosa termina le richieste prima che AlphaBridge verifichi il token, e questo interrompe la connessione"
+
+msgid "no error code"
+msgstr "nessun codice di errore"
+
+msgid "the dashboard sent the request to the login page, so its login was not accepted (a security plugin that ties a login to a browser or an IP address, or cookies that do not reach wp-admin)"
+msgstr "la bacheca ha inviato la richiesta alla pagina di login, quindi il suo login non è stato accettato (un plugin di sicurezza che lega un login a un browser o a un indirizzo IP, oppure cookie che non arrivano a wp-admin)"
+
+#, php-format
+msgid "redirected (HTTP %1$d to %2$s), so the code after the redirect did not run"
+msgstr "reindirizzamento (HTTP %1$d verso %2$s), quindi il codice dopo il reindirizzamento non è stato eseguito"
+
+#, php-format
+msgid "answered HTTP %d: the account of this connection was refused before the dashboard ran (wp_die() or a check of its rights or IP address), so make sure wp-admin still opens"
+msgstr "ha risposto HTTP %d: l'account di questa connessione è stato rifiutato prima che la bacheca venisse eseguita (wp_die() o un controllo dei suoi diritti o del suo indirizzo IP), quindi assicurati che wp-admin si apra ancora"
+
+#, php-format
+msgid "answered HTTP %d without a fatal error (wp_die() or a maintenance page), so the page did not run through"
+msgstr "ha risposto HTTP %d senza un errore fatale (wp_die() o una pagina di manutenzione), quindi la pagina non è stata eseguita fino in fondo"
+
+#, php-format
+msgid "the test request failed inside this site, before it was sent or while its answer was read (%s)"
+msgstr "la richiesta di prova non è riuscita all'interno di questo sito, prima dell'invio o durante la lettura della risposta (%s)"
+
+msgid "the home page"
+msgstr "la home page"
+
+msgid "this MCP endpoint"
+msgstr "questo endpoint MCP"
+
+msgid "wp-admin/admin-post.php (admin_init)"
+msgstr "wp-admin/admin-post.php (azione admin_init)"
+
+msgid "the dashboard in wp-admin (logged in)"
+msgstr "la bacheca in wp-admin (con login)"
+
+#, php-format
+msgid "The dashboard answered before the change but was not checked after it: %s. Make sure you can still log in."
+msgstr "La bacheca rispondeva prima della modifica ma non è stata verificata dopo: %s. Assicurati di poter ancora accedere."
+
+#, php-format
+msgid "Not started: an update of %1$s through AlphaBridge has been running for %2$d s on this site. Updates of one site run one after the other: call the next one when this one has answered. After a call that timed out, wait a minute before calling it again: if that update was kept, nothing is offered any more and the answer names its result."
+msgstr "Non avviato: su questo sito è in corso da %2$d s un aggiornamento tramite AlphaBridge per %1$s. Gli aggiornamenti di un sito avvengono uno dopo l'altro: chiama il successivo quando questo ha risposto. Dopo una chiamata andata in timeout, attendi un minuto prima di richiamarla: se quell'aggiornamento è stato mantenuto, non viene più offerto nulla e la risposta indica il suo risultato."
+
+msgid "Not started: another update began on this site a moment ago (through AlphaBridge, or WordPress's own background updates). Nothing was changed; try again when it has finished."
+msgstr "Non avviato: un altro aggiornamento è iniziato su questo sito poco fa (tramite AlphaBridge, oppure con gli aggiornamenti in background di WordPress stesso). Non è stato modificato nulla; riprova quando è terminato."
+
+#, php-format
+msgid "Not started: WordPress's own background updates are running on this site (their lock was taken at %s UTC and expires after 60 minutes). Nothing was changed; try again when they have finished."
+msgstr "Non avviato: su questo sito sono in corso gli aggiornamenti in background di WordPress stesso (il loro blocco è stato preso alle %s UTC e scade dopo 60 minuti). Non è stato modificato nulla; riprova quando sono terminati."
+
+msgid "WordPress's file access is not available."
+msgstr "L'accesso ai file di WordPress non è disponibile."
+
+msgid "WordPress's copy of the previous version is not there."
+msgstr "La copia della versione precedente fatta da WordPress non c'è."
+
+msgid "the new version could not be moved out of the way (file permissions?)"
+msgstr "non è stato possibile spostare da parte la nuova versione (permessi dei file?)"
+
+msgid "the previous version could not be moved back into place, and the new version could not be moved back where it was either, so the folder may be incomplete (file permissions?)"
+msgstr "non è stato possibile rimettere al suo posto la versione precedente, e nemmeno riportare la nuova versione dov'era, quindi la cartella potrebbe essere incompleta (permessi dei file?)"
+
+msgid "the previous version could not be moved back into place (file permissions?)"
+msgstr "non è stato possibile rimettere al suo posto la versione precedente (permessi dei file?)"
+
+#, php-format
+msgid "Not started: %1$s was not updated. This call had already taken %2$d s (the test requests before the update included), and the update with its wait and two more rounds of test requests needs about %3$d s more, past the %4$d s a call may take (clients and web servers stop waiting at 60 s). Nothing was changed. Call it again; if the site answers its test requests slowly, an administrator can look into that."
+msgstr "Non avviato: %1$s non è stato aggiornato. Questa chiamata aveva già impiegato %2$d s (incluse le richieste di prova prima dell'aggiornamento), e l'aggiornamento con la sua attesa e altri due giri di richieste di prova richiede circa altri %3$d s, oltre i %4$d s che una chiamata può durare (client e web server smettono di attendere a 60 s). Non è stato modificato nulla. Richiama lo strumento; se il sito risponde lentamente alle sue richieste di prova, un amministratore può esaminare la cosa."
+
+#, php-format
+msgid "Not updated: WordPress's upgrader stopped for %1$s with: %2$s %3$s Once the cause is fixed, call this tool again."
+msgstr "Non aggiornato: il programma di aggiornamento di WordPress si è fermato per %1$s con: %2$s %3$s Una volta risolta la causa, chiama di nuovo questo strumento."
+
+msgid "no reason given"
+msgstr "nessun motivo indicato"
+
+#, php-format
+msgid "Not updated: %1$s is still at version %2$s on disk after WordPress's upgrader ran (it said: %3$s). Nothing was changed. wp_get_update_status shows the offers WordPress knows of."
+msgstr "Non aggiornato: %1$s è ancora alla versione %2$s sul disco dopo l'esecuzione del programma di aggiornamento di WordPress (ha detto: %3$s). Non è stato modificato nulla. wp_get_update_status mostra gli aggiornamenti offerti che WordPress conosce."
+
+msgid "nothing"
+msgstr "nulla"
+
+#, php-format
+msgid "The update of %1$s stopped with an internal error during the step \"%2$s\"; the error is in AlphaBridge's update log, not in this answer, as it can name server paths. %3$s The maintenance mode is off and the update lock free. Check the site and the plugin list before calling it again."
+msgstr "L'aggiornamento per %1$s si è fermato con un errore interno durante il passaggio “%2$s”; l'errore è nel log degli aggiornamenti di AlphaBridge, non in questa risposta, perché può indicare percorsi del server. %3$s La modalità di manutenzione è disattivata e il blocco degli aggiornamenti è libero. Controlla il sito e l'elenco dei plugin prima di richiamarlo."
+
+#, php-format
+msgid "After %1$s was updated from %2$s to %3$s, %4$s — and the previous version could NOT be put back: %5$s. %6$s The previous version is kept in %7$s (WordPress's weekly clean-up removes that folder); move it back over SFTP, or pause the plugin or theme with WordPress's recovery mode."
+msgstr "Dopo che %1$s è stato aggiornato da %2$s a %3$s, %4$s — e NON è stato possibile ripristinare la versione precedente: %5$s. %6$s La versione precedente è conservata in %7$s (la pulizia settimanale di WordPress rimuove quella cartella); riportala al suo posto via SFTP, oppure metti in pausa il plugin o il tema con la modalità di recupero di WordPress."
+
+msgid "The new version is still on the site."
+msgstr "La nuova versione è ancora sul sito."
+
+msgid "Parts of the new or the previous version may be missing on the site."
+msgstr "Parti della nuova versione o di quella precedente potrebbero mancare sul sito."
+
+msgid "The theme is neither the active theme nor its parent, so its code does not run here and was not test-requested."
+msgstr "Il tema non è né il tema attivo né il suo tema genitore, quindi il suo codice qui non viene eseguito e non è stato sottoposto a richieste di prova."
+
+msgid "The plugin is not active on this site, so it was not test-requested; on a network it may be active on other sites, which were not checked."
+msgstr "Il plugin non è attivo su questo sito, quindi non è stato sottoposto a richieste di prova; in una rete potrebbe essere attivo su altri siti, che non sono stati verificati."
+
+msgid "The plugin is not active, so its code does not run here and was not test-requested."
+msgstr "Il plugin non è attivo, quindi il suo codice qui non viene eseguito e non è stato sottoposto a richieste di prova."
+
+msgid "Not checked: the test requests are switched off with the ab_mcp_php_probe_enabled filter; nothing checked that the site still runs with the new version."
+msgstr "Non verificato: le richieste di prova sono disattivate con il filtro ab_mcp_php_probe_enabled; nulla ha verificato che il sito funzioni ancora con la nuova versione."
+
+#, php-format
+msgid "Not checked: no test request reached this site before the update (%s), so it was updated without a test, as the update button in wp-admin does. Make sure the site still runs. An administrator can give the test requests the headers an HTTP login or firewall wants with the ab_mcp_php_probe_request_args filter."
+msgstr "Non verificato: nessuna richiesta di prova ha raggiunto questo sito prima dell'aggiornamento (%s), quindi è stato aggiornato senza prova, come fa il pulsante di aggiornamento in wp-admin. Assicurati che il sito funzioni ancora. Con il filtro ab_mcp_php_probe_request_args un amministratore può fornire alle richieste di prova gli header richiesti da un'autenticazione HTTP o da un firewall."
+
+#, php-format
+msgid "Kept with a fatal error that was there before the update: %s. Where that error ends a request, the new code was not checked."
+msgstr "Mantenuto con un errore fatale che c'era già prima dell'aggiornamento: %s. Dove quell'errore interrompe una richiesta, il nuovo codice non è stato verificato."
+
+#, php-format
+msgid "Kept, but %s: the code after that point was not checked. A login wall or a maintenance mode does that on purpose; if the new version does it unasked, ask its vendor."
+msgstr "Mantenuto, ma %s: il codice dopo quel punto non è stato verificato. Un muro di login o una modalità di manutenzione lo fanno di proposito; se la nuova versione lo fa senza che nessuno l'abbia chiesto, rivolgiti al suo sviluppatore."
+
+#, php-format
+msgid "Not compared, as already before the update: %s."
+msgstr "Non confrontato, come già prima dell'aggiornamento: %s."
+
+#, php-format
+msgid "Not checked: this call ran out of time before %1$s could be tested (the update itself took %2$d s). The new version was kept without that test, as the update button in wp-admin keeps an update; make sure the site still runs."
+msgstr "Non verificato: questa chiamata ha esaurito il tempo prima che %1$s potesse essere provato (l'aggiornamento stesso ha impiegato %2$d s). La nuova versione è stata mantenuta senza quella prova, come il pulsante di aggiornamento in wp-admin mantiene un aggiornamento; assicurati che il sito funzioni ancora."
+
+#, php-format
+msgid "The package was offered as version %1$s, but the version in its header is %2$s."
+msgstr "Il pacchetto è stato offerto come versione %1$s, ma la versione nella sua intestazione è %2$s."
+
+msgid "The test requests are not conclusive: OPcache runs on this server without checking file times, and this request could not clear it, so they may have run the previous code."
+msgstr "Le richieste di prova non sono conclusive: su questo server OPcache è attivo senza controllare gli orari di modifica dei file, e questa richiesta non ha potuto svuotarlo, quindi potrebbero aver eseguito il codice precedente."
+
+msgid "Before WordPress 6.6 no test request gets through the maintenance mode, so it was held only while the files were copied, and visitors saw the new version while it was tested."
+msgstr "Prima di WordPress 6.6 nessuna richiesta di prova supera la modalità di manutenzione, quindi questa è rimasta attiva solo durante la copia dei file, e i visitatori hanno visto la nuova versione mentre veniva provata."
+
+msgid "WordPress could not switch on its maintenance mode (no write access to .maintenance in the WordPress folder), so visitors saw the new version while it was tested."
+msgstr "WordPress non ha potuto attivare la modalità di manutenzione (nessun accesso in scrittura a .maintenance nella cartella di WordPress), quindi i visitatori hanno visto la nuova versione mentre veniva provata."
+
+#, php-format
+msgid "%1$s had been rolled back on %2$s; it was tried again because it was asked for by name, and kept this time."
+msgstr "La versione %1$s era già stata annullata il %2$s, con ritorno alla versione precedente; è stata riprovata perché richiesta per nome, e questa volta è stata mantenuta."
+
+#, php-format
+msgid "Undo points for single files of the previous version were dropped, as they would write old files into the new version: %s."
+msgstr "I punti di ripristino per singoli file della versione precedente sono stati scartati, perché scriverebbero file vecchi nella nuova versione: %s."
+
+#, php-format
+msgid "AlphaBridge switched the automatic update of %s on again, which it had switched off after a roll-back."
+msgstr "AlphaBridge ha riattivato l'aggiornamento automatico per %s, che aveva disattivato dopo un ritorno alla versione precedente."
+
+#, php-format
+msgid "Not kept: after %1$s was updated from %2$s to %3$s, %4$s."
+msgstr "Non mantenuto: dopo che %1$s è stato aggiornato da %2$s a %3$s, %4$s."
+
+msgid "Kept, it would have cut this connection."
+msgstr "Se fosse stato mantenuto, avrebbe interrotto questa connessione."
+
+#, php-format
+msgid "Version %s is back and still the active theme."
+msgstr "La versione %s è tornata ed è ancora il tema attivo."
+
+#, php-format
+msgid "Version %s is back."
+msgstr "La versione %s è tornata."
+
+#, php-format
+msgid "Version %s is back and active."
+msgstr "La versione %s è tornata ed è attiva."
+
+#, php-format
+msgid "With it back, the test requests say: %s."
+msgstr "Tornata la versione precedente, le richieste di prova dicono: %s."
+
+msgid "Wait for a fixed release, or report the error to the vendor."
+msgstr "Attendi una release corretta, oppure segnala l'errore allo sviluppatore."
+
+msgid "The new version ends requests to AlphaBridge's REST route before AlphaBridge checks its token; report that to its vendor."
+msgstr "La nuova versione termina le richieste alla route REST di AlphaBridge prima che AlphaBridge verifichi il suo token; segnalalo al suo sviluppatore."
+
+#, php-format
+msgid "One exception: an update offered with the mark for automatic installation on every site (wordpress.org sets it for some security releases) can be installed by WordPress's automatic updates even where the automatic update is off, as the list is not read for it; AlphaBridge MCP active on the main site or network-wide holds %s back from that too."
+msgstr "Un'eccezione: un aggiornamento offerto con il contrassegno per l'installazione automatica su ogni sito (wordpress.org lo imposta per alcune release di sicurezza) può essere installato dagli aggiornamenti automatici di WordPress anche dove l'aggiornamento automatico è disattivato, perché per esso l'elenco non viene letto; AlphaBridge MCP attivo sul sito principale o in tutta la rete trattiene anche da questo la versione %s."
+
+#, php-format
+msgid "AlphaBridge has switched the automatic update of %1$s off, so that WordPress does not install %2$s again: it runs its automatic updates on the main site of this network, where AlphaBridge MCP is not active. AlphaBridge switches it on again once a newer version is installed: at once when this tool installs it, otherwise at a check AlphaBridge MCP makes twice a day on this site, and then only for a plain version number (such as 2.0.1, not 2.1-rc1). Calling this tool again tries %2$s again."
+msgstr "AlphaBridge ha disattivato l'aggiornamento automatico per %1$s, affinché WordPress non installi di nuovo la versione %2$s: WordPress esegue i suoi aggiornamenti automatici sul sito principale di questa rete, dove AlphaBridge MCP non è attivo. AlphaBridge lo riattiva non appena viene installata una versione più recente: subito se la installa questo strumento, altrimenti a un controllo che AlphaBridge MCP fa due volte al giorno su questo sito, e in quel caso solo per un numero di versione semplice (come 2.0.1, non 2.1-rc1). Richiamando questo strumento si riprova la versione %2$s."
+
+#, php-format
+msgid "%1$s will not be installed again automatically: the automatic update of %2$s is off."
+msgstr "La versione %1$s non verrà installata di nuovo automaticamente: l'aggiornamento automatico per %2$s è disattivato."
+
+#, php-format
+msgid "WordPress runs its automatic updates on the main site of this network, where AlphaBridge MCP is not active, so they may install %s again: switch the automatic update of this plugin or theme off, or activate AlphaBridge MCP network-wide."
+msgstr "WordPress esegue i suoi aggiornamenti automatici sul sito principale di questa rete, dove AlphaBridge MCP non è attivo, quindi potrebbero installare di nuovo la versione %s: disattiva l'aggiornamento automatico di questo plugin o tema, oppure attiva AlphaBridge MCP in tutta la rete."
+
+#, php-format
+msgid "%s will not be installed again automatically (neither by WordPress's automatic updates); a newer version will, and calling this tool again tries it again."
+msgstr "La versione %s non verrà installata di nuovo automaticamente (nemmeno dagli aggiornamenti automatici di WordPress); una versione più recente sì, e richiamando questo strumento la si riprova."
+
+msgid "With the new version the site answered without WordPress's test report. Most often its code ends the answer itself before WordPress has finished (fastcgi_finish_request() or litespeed_finish_request(), or exit or die in the shutdown action), fails at the very end of the request, or cuts the page off; an HTTP 502 or 504 means PHP or the web server ended the request, for example after a crash. The update stays offered: try again later, or report it to its vendor if it stays so."
+msgstr "Con la nuova versione il sito ha risposto senza il rapporto di prova di WordPress. Il più delle volte il suo codice termina da sé la risposta prima che WordPress abbia finito (fastcgi_finish_request() o litespeed_finish_request(), oppure exit o die nell'azione shutdown), fallisce proprio alla fine della richiesta, oppure tronca la pagina; un HTTP 502 o 504 significa che PHP o il web server hanno terminato la richiesta, per esempio dopo un crash. L'aggiornamento resta disponibile: riprova più tardi, oppure segnalalo al suo sviluppatore se la situazione non cambia."
+
+msgid "The update stays offered: a target that no longer answers can also be the host. If the site is only slow, an administrator can give the test requests more time with the ab_mcp_php_probe_request_args filter (timeout, at most 60 seconds); then try again."
+msgstr "L'aggiornamento resta disponibile: anche l'hosting può essere la causa di una destinazione che non risponde più. Se il sito è solo lento, un amministratore può dare più tempo alle richieste di prova con il filtro ab_mcp_php_probe_request_args (timeout, al massimo 60 secondi); poi riprova."
+
+msgid "Files only: what the new version changed in the database when it loaded stays."
+msgstr "Solo i file: ciò che la nuova versione ha modificato nel database al caricamento rimane."
+
+#, php-format
+msgid "Not updated: WordPress may not write its files directly on this host (file system method \"%2$s\") and no FTP access is set in wp-config.php, so it cannot install %1$s without asking for FTP credentials. Nothing was changed. The host can give the web server write access to wp-content, or an administrator sets FS_METHOD and the FTP constants in wp-config.php."
+msgstr "Non aggiornato: su questo hosting WordPress non può scrivere direttamente i suoi file (metodo del file system “%2$s”) e in wp-config.php non è impostato alcun accesso FTP, quindi non può installare %1$s senza chiedere le credenziali FTP. Non è stato modificato nulla. L'hosting può dare al web server l'accesso in scrittura a wp-content, oppure un amministratore imposta FS_METHOD e le costanti FTP in wp-config.php."
+
+#, php-format
+msgid "No update offered for %1$s; version %2$s is installed. WordPress asks wordpress.org at most every 12 hours (vendors of other plugins answer in the same check); wp_get_update_status shows what it knows of."
+msgstr "Nessun aggiornamento offerto per %1$s; è installata la versione %2$s. WordPress interroga wordpress.org al massimo ogni 12 ore (gli sviluppatori di altri plugin rispondono nello stesso controllo); wp_get_update_status mostra ciò che conosce."
+
+#, php-format
+msgid "Last update through AlphaBridge: %1$s, %2$s (%3$s to %4$s)."
+msgstr "Ultimo aggiornamento tramite AlphaBridge: %1$s, %2$s (da %3$s a %4$s)."
+
+#, php-format
+msgid "WordPress had already moved the previous version aside; it is back (version %s on disk)."
+msgstr "WordPress aveva già spostato da parte la versione precedente; è tornata (versione %s sul disco)."
+
+#, php-format
+msgid "The previous version could not be put back, and the new one could not be moved back where it was either, so parts of the plugin or theme may be missing on the site; the previous version is kept in %s (WordPress's weekly clean-up removes that folder): move it back over SFTP."
+msgstr "Non è stato possibile ripristinare la versione precedente, e nemmeno riportare la nuova dov'era, quindi parti del plugin o del tema potrebbero mancare sul sito; la versione precedente è conservata in %s (la pulizia settimanale di WordPress rimuove quella cartella): riportala al suo posto via SFTP."
+
+#, php-format
+msgid "The previous version could not be put back; version %1$s is on disk, and the previous one is kept in %2$s (WordPress's weekly clean-up removes that folder): move it back over SFTP."
+msgstr "Non è stato possibile ripristinare la versione precedente; sul disco c'è la versione %1$s, e quella precedente è conservata in %2$s (la pulizia settimanale di WordPress rimuove quella cartella): riportala al suo posto via SFTP."
+
+#, php-format
+msgid "Version %s is on disk now."
+msgstr "Ora sul disco c'è la versione %s."
+
+msgid "kept"
+msgstr "mantenuto"
+
+msgid "kept without a test"
+msgstr "mantenuto senza prova"
+
+msgid "rolled back"
+msgstr "annullato, tornato alla versione precedente"
+
+msgid "could not be rolled back"
+msgstr "ritorno alla versione precedente non riuscito"
+
+msgid "not updated"
+msgstr "non aggiornato"
+
+msgid "failed"
+msgstr "non riuscito"
+
+#, php-format
+msgid "the package offered as %1$s (version in its header: %2$s)"
+msgstr "%1$s secondo l'offerta (versione nella sua intestazione: %2$s)"
+
+msgid "There is no undo point: an update is rolled back only within the request that made it."
+msgstr "Non c'è alcun punto di ripristino: un aggiornamento viene riportato alla versione precedente solo all'interno della richiesta che l'ha eseguito."
+
+#, php-format
+msgid "wordpress.org keeps the previous version at %s."
+msgstr "wordpress.org conserva la versione precedente all'indirizzo %s."
+
+msgid "The list of offered updates could not be loaded again from wordpress.org; wp_get_update_status shows it again after WordPress's next check."
+msgstr "Non è stato possibile ricaricare da wordpress.org l'elenco degli aggiornamenti offerti; wp_get_update_status lo mostra di nuovo dopo il prossimo controllo di WordPress."
+
+msgid "Install/update/delete is disabled on this site (DISALLOW_FILE_MODS). An administrator with access to wp-config.php can remove the constant. Until then plugins and themes are managed over SFTP."
+msgstr "Installazione, aggiornamento ed eliminazione sono disattivati su questo sito (DISALLOW_FILE_MODS). Un amministratore con accesso a wp-config.php può rimuovere la costante. Fino ad allora plugin e temi si gestiscono via SFTP."
+
+msgid "Upload sessions come from AlphaBridge MCP Pro, which is not active on this site, so the session cannot be read. Nothing was installed. Pass the ZIP as base64 \"content\" or as a public http or https \"url\" instead."
+msgstr "Le sessioni di upload provengono da AlphaBridge MCP Pro, che non è attivo su questo sito, quindi la sessione non può essere letta. Non è stato installato nulla. Passa invece lo ZIP come “content” in base64 o come “url” pubblico http o https."
+
+msgid "The session file is not a ZIP archive. Upload the ZIP of the plugin or theme as a new session, or pass it as base64 \"content\" or a \"url\"."
+msgstr "Il file della sessione non è un archivio ZIP. Carica lo ZIP del plugin o del tema come nuova sessione, oppure passalo come “content” in base64 o come “url”."
+
+msgid "Could not stage the package. The server's temporary folder is not writable or is full; the host can check it."
+msgstr "Impossibile preparare il pacchetto. La cartella temporanea del server non è scrivibile o è piena; l'hosting può controllarla."
+
+msgid "Content is not valid base64. Send the ZIP base64-encoded, or give the public http or https address of the ZIP as \"url\"."
+msgstr "Il contenuto non è un base64 valido. Invia lo ZIP codificato in base64, oppure indica come “url” l'indirizzo pubblico http o https dello ZIP."
+
+msgid "The package exceeds the allowed size. Use the \"url\" argument for large packages."
+msgstr "Il pacchetto supera la dimensione consentita. Usa l'argomento “url” per i pacchetti grandi."
+
+msgid "The URL is invalid or points to a disallowed host. Give the public http or https address of the ZIP, or pass the ZIP base64-encoded as \"content\"."
+msgstr "L'URL non è valido o punta a un host non consentito. Indica l'indirizzo pubblico http o https dello ZIP, oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "Could not download the package. Check that the address answers with the ZIP, or pass the ZIP base64-encoded as \"content\"."
+msgstr "Impossibile scaricare il pacchetto. Controlla che l'indirizzo risponda con lo ZIP, oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "The package is empty or exceeds the allowed size (30 MB unless an administrator changed it with the ab_mcp_install_max_bytes filter). Check that the address answers with the ZIP; a larger one can be installed in wp-admin."
+msgstr "Il pacchetto è vuoto o supera la dimensione consentita (30 MB, salvo che un amministratore l'abbia cambiata con il filtro ab_mcp_install_max_bytes). Controlla che l'indirizzo risponda con lo ZIP; uno più grande si può installare in wp-admin."
+
+msgid "No package was given. Pass the ZIP as base64 \"content\" or as a public http or https \"url\"."
+msgstr "Nessun pacchetto indicato. Passa lo ZIP come “content” in base64 o come “url” pubblico http o https."
+
+msgid "The package is not a ZIP archive. Send the plugin or theme as a ZIP file."
+msgstr "Il pacchetto non è un archivio ZIP. Invia il plugin o il tema come file ZIP."
+
+msgid "Could not create a temporary file. The server's temporary folder is not writable or is full; the host can check it."
+msgstr "Impossibile creare un file temporaneo. La cartella temporanea del server non è scrivibile o è piena; l'hosting può controllarla."
+
+msgid "Could not write the package. The server's temporary folder is not writable or is full; the host can check it."
+msgstr "Impossibile scrivere il pacchetto. La cartella temporanea del server non è scrivibile o è piena; l'hosting può controllarla."
+
+msgid "A plugin slug is required: pass the plugin's name in its wordpress.org address, e.g. \"akismet\"."
+msgstr "Serve lo slug di un plugin: passa il nome del plugin nel suo indirizzo su wordpress.org, ad es. “akismet”."
+
+#, php-format
+msgid "WordPress.org has no plugin with the slug \"%s\". Check the slug: it is the plugin's name in its wordpress.org address, e.g. \"akismet\"."
+msgstr "WordPress.org non ha alcun plugin con lo slug “%s”. Controlla lo slug: è il nome del plugin nel suo indirizzo su wordpress.org, ad es. “akismet”."
+
+msgid "Install failed, and WordPress gave no reason. wp_list_plugins shows whether the plugin is there; the web server needs write access to wp-content/plugins."
+msgstr "Installazione non riuscita, e WordPress non ha dato alcun motivo. wp_list_plugins mostra se il plugin c'è; il web server ha bisogno dell'accesso in scrittura a wp-content/plugins."
+
+msgid "Install failed, and WordPress gave no reason. wp_list_themes shows whether the theme is there; the web server needs write access to wp-content/themes."
+msgstr "Installazione non riuscita, e WordPress non ha dato alcun motivo. wp_list_themes mostra se il tema c'è; il web server ha bisogno dell'accesso in scrittura a wp-content/themes."
+
+#, php-format
+msgid "The plugin %s was installed."
+msgstr "Il plugin %s è stato installato."
+
+#, php-format
+msgid "The theme %s was installed."
+msgstr "Il tema %s è stato installato."
+
+msgid "plugin must be the exact identifier of an installed plugin, e.g. \"akismet/akismet.php\". wp_list_plugins lists the installed plugins with their identifiers (file)."
+msgstr "plugin deve essere l'identificatore esatto di un plugin installato, ad es. “akismet/akismet.php”. wp_list_plugins elenca i plugin installati con i loro identificatori (file)."
+
+#, php-format
+msgid "Not updated: %s is a plugin of a single file, and for those WordPress keeps no copy of the previous version during an update, so it could not be put back should the new one fail. Nothing was changed. Update it in wp-admin under Plugins."
+msgstr "Non aggiornato: %s è un plugin composto da un solo file, e per questi WordPress non conserva alcuna copia della versione precedente durante un aggiornamento, quindi non potrebbe essere ripristinata se quella nuova non funzionasse. Non è stato modificato nulla. Aggiornalo in wp-admin in Plugin."
+
+msgid "Delete failed. The web server needs write access to the folder; the host can grant it, or delete it over SFTP."
+msgstr "Eliminazione non riuscita. Il web server ha bisogno dell'accesso in scrittura alla cartella; l'hosting può concederlo, oppure eliminala via SFTP."
+
+msgid "A theme slug is required: pass the theme's name in its wordpress.org address, e.g. \"twentytwentyfive\"."
+msgstr "Serve lo slug di un tema: passa il nome del tema nel suo indirizzo su wordpress.org, ad es. “twentytwentyfive”."
+
+msgid "Theme install failed. Check that the slug names a theme on wordpress.org; wp_list_themes shows what is installed."
+msgstr "Installazione del tema non riuscita. Controlla che lo slug indichi un tema su wordpress.org; wp_list_themes mostra ciò che è installato."
+
+msgid "stylesheet must be the exact directory name of an installed theme, as wp_list_themes reports it."
+msgstr "stylesheet deve essere il nome esatto della cartella di un tema installato, come lo riporta wp_list_themes."
+
+msgid "Not updated: this is AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). It is not updated through AlphaBridge, because the update and its roll-back would run on the very code being replaced, and a failure would cut this connection. Nothing was changed. Update it in wp-admin under Plugins."
+msgstr "Non aggiornato: questo è AlphaBridge stesso (AlphaBridge MCP, AlphaBridge MCP Pro o il drop-in del titolare). Non viene aggiornato tramite AlphaBridge, perché l'aggiornamento e il suo ritorno alla versione precedente verrebbero eseguiti proprio dal codice che viene sostituito, e un errore interromperebbe questa connessione. Non è stato modificato nulla. Aggiornalo in wp-admin in Plugin."
+
+msgid "Not deleted: this is AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). It is not deleted through AlphaBridge: that would end this connection or take tools away from it, and its uninstall can remove the connections, the settings and the undo points as well. Nothing was changed. Delete it in wp-admin under Plugins."
+msgstr "Non eliminato: questo è AlphaBridge stesso (AlphaBridge MCP, AlphaBridge MCP Pro o il drop-in del titolare). Non viene eliminato tramite AlphaBridge: chiuderebbe questa connessione o le toglierebbe strumenti, e la sua disinstallazione può rimuovere anche le connessioni, le impostazioni e i punti di ripristino. Non è stato modificato nulla. Eliminalo in wp-admin in Plugin."
+
+#, php-format
+msgid "Not updated: WordPress knows of version %2$s of %1$s, but its offer carries no package to download — with a commercial plugin or theme, usually because its licence is not active on this site. Nothing was changed. Activate the licence in wp-admin, then try again."
+msgstr "Non aggiornato: WordPress conosce la versione %2$s per %1$s, ma la sua offerta non contiene alcun pacchetto da scaricare — con un plugin o un tema commerciale, di solito perché la sua licenza non è attiva su questo sito. Non è stato modificato nulla. Attiva la licenza in wp-admin, poi riprova."
+
+#, php-format
+msgid "installed: %1$s %2$s"
+msgstr "installato: %1$s %2$s"
+
+msgid "WordPress finds no theme in it"
+msgstr "WordPress non vi trova alcun tema"
+
+#, php-format
+msgid "Not installed: the theme folder %1$s exists already (%2$s). Nothing was changed. An installed theme is brought to a newer version with wp_update_theme once WordPress offers the update (wp_get_update_status lists the offers); this tool does not replace an installed theme from a ZIP."
+msgstr "Non installato: la cartella del tema %1$s esiste già (%2$s). Non è stato modificato nulla. Un tema installato viene portato a una versione più recente con wp_update_theme non appena WordPress offre l'aggiornamento (wp_get_update_status elenca gli aggiornamenti offerti); questo strumento non sostituisce un tema installato a partire da uno ZIP."
+
+#, php-format
+msgid "installed: %1$s %2$s, %3$s"
+msgstr "installato: %1$s %2$s, %3$s"
+
+msgid "WordPress finds no plugin in it"
+msgstr "WordPress non vi trova alcun plugin"
+
+#, php-format
+msgid "Not installed: the plugin folder %1$s exists already (%2$s). Nothing was changed. An installed plugin is brought to a newer version with wp_update_plugin once WordPress offers the update (wp_get_update_status lists the offers); this tool does not replace an installed plugin from a ZIP."
+msgstr "Non installato: la cartella del plugin %1$s esiste già (%2$s). Non è stato modificato nulla. Un plugin installato viene portato a una versione più recente con wp_update_plugin non appena WordPress offre l'aggiornamento (wp_get_update_status elenca gli aggiornamenti offerti); questo strumento non sostituisce un plugin installato a partire da uno ZIP."
+
+msgid "Cannot delete the active theme or its parent. Activate another theme first (wp_activate_theme)."
+msgstr "Impossibile eliminare il tema attivo o il suo tema genitore. Attiva prima un altro tema (wp_activate_theme)."
+
+msgid "WordPress is already up to date."
+msgstr "WordPress è già aggiornato."
+
+msgid "Not deactivated: this is AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). It is not deactivated through AlphaBridge: that would end this connection or take tools away from it, and only wp-admin brings them back. Nothing was changed. Deactivate it in wp-admin under Plugins."
+msgstr "Non disattivato: questo è AlphaBridge stesso (AlphaBridge MCP, AlphaBridge MCP Pro o il drop-in del titolare). Non viene disattivato tramite AlphaBridge: chiuderebbe questa connessione o le toglierebbe strumenti, e solo wp-admin li riporta. Non è stato modificato nulla. Disattivalo in wp-admin in Plugin."
+
+msgid "Your account cannot switch themes. It takes the switch_themes capability, which administrators have; connect with such an account."
+msgstr "Il tuo account non può cambiare tema. Serve la capacità switch_themes, che hanno gli amministratori; collegati con un account di questo tipo."
+
+msgid "The theme did not become active. Activate it in wp-admin under Appearance › Themes."
+msgstr "Il tema non è diventato attivo. Attivalo in wp-admin in Aspetto › Temi."
+
+#, php-format
+msgid "No undo point: the previous theme cannot be switched back to (%s)"
+msgstr "Nessun punto di ripristino: non è possibile tornare al tema precedente (%s)"
+
+msgid "A theme is named by its directory as wp_list_themes lists it (for a theme inside a collection: \"collection/theme\")."
+msgstr "Un tema si indica con la sua cartella, come la elenca wp_list_themes (per un tema all'interno di una raccolta: “collection/theme”)."
+
+msgid "Theme not found. wp_list_themes shows the installed themes by their folder name."
+msgstr "Tema non trovato. wp_list_themes mostra i temi installati con il nome della loro cartella."
+
+#, php-format
+msgid "The theme cannot be activated: %s"
+msgstr "Il tema non può essere attivato: %s"
+
+msgid "The network does not allow this theme on this site. A super admin enables it for the site under Network Admin › Themes or Sites."
+msgstr "La rete non consente questo tema su questo sito. Un super amministratore lo abilita per il sito in Amministrazione network › Temi o Siti."
+
+#, php-format
+msgid "This site does not meet the requirements of the theme: %s Update WordPress or PHP to what it needs, or choose another theme."
+msgstr "Questo sito non soddisfa i requisiti del tema: %s Aggiorna WordPress o PHP a ciò che richiede, oppure scegli un altro tema."
+
+msgid "The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "L'istantanea indica un tema non valido. Questo punto di ripristino non può essere usato; wp_undo_discard lo rimuove."
+
+msgid "Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins."
+msgstr "Non attivato: in questo network il plugin si attiva per tutti i siti (la sua intestazione dice “Network: true”), e questo richiede un super amministratore della rete. Non è stato modificato nulla. Chiedi a un super amministratore della rete di attivarlo in Amministrazione network › Plugin."
+
+msgid "Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins."
+msgstr "Non disattivato: il plugin è attivo in tutto il network, quindi disattivarlo lo spegne per tutti i siti, e questo richiede un super amministratore della rete. Non è stato modificato nulla. Chiedi a un super amministratore della rete di disattivarlo in Amministrazione network › Plugin."
+
+msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
+msgstr "Non aggiornato: WordPress non ha potuto raggiungere i propri file; questo hosting chiede un accesso FTP o SSH che una chiamata tramite AlphaBridge non può inserire. Non è stato modificato nulla. Chiedi all'hosting di dare al server web i permessi di scrittura sui file di WordPress, oppure aggiornalo in wp-admin in Bacheca › Aggiornamenti."
+
+msgid "Add AlphaBridge to Cursor"
+msgstr "Aggiungi AlphaBridge a Cursor"
+
+msgid "Cursor opens and asks you to confirm."
+msgstr "Cursor si apre e ti chiede di confermare."
+
+msgid "Add to Cursor"
+msgstr "Aggiungi a Cursor"
+
+msgid "Start the sign-in, enter this address"
+msgstr "Avvia il login e inserisci questo indirizzo"
+
+msgid "In Cursor, open Customize → MCPs and start the sign-in next to alphabridge. The hub asks for your site’s address."
+msgstr "In Cursor, apri “Customize → MCPs” e avvia il login accanto ad alphabridge. L'hub ti chiede l'indirizzo del tuo sito."

@@ -2,10 +2,11 @@
 /**
  * Stand-in WordPress for the update tests (update-flow-test.php,
  * lifecycle-errors-test.php, probe-key-test.php) and the activation tests
- * (activation-guard-test.php): a temporary tree with
- * plugins and themes on a real disk, the REAL tool classes, guard, probe and
- * log of Pro, and stubs that do what core does where the update path meets
- * it:
+ * (activation-guard-test.php) under tests/standalone-lifecycle/: a temporary
+ * tree with plugins and themes on a real disk, the REAL tool classes, guard,
+ * probe and log of this plugin (free since 4.11.0; taken over from Pro's
+ * test/support/ with the class names and paths of this plugin), and stubs
+ * that do what core does where the update path meets it:
  *
  *  - Plugin_Upgrader / Theme_Upgrader::bulk_upgrade() read the offer from the
  *    site transient (an item without one is "up_to_date" and true, as in
@@ -65,8 +66,9 @@ define( 'ABSPATH', "$root/wp/" );
 define( 'WP_CONTENT_DIR', "$root/wp/wp-content" );
 define( 'WP_PLUGIN_DIR', WP_CONTENT_DIR . '/plugins' );
 define( 'WPMU_PLUGIN_DIR', WP_CONTENT_DIR . '/mu-plugins' );
-define( 'AB_MCP_PRO_DIR', WP_PLUGIN_DIR . '/alphabridge-mcp-pro/' );
-define( 'AB_MCP_PRO_FILE', AB_MCP_PRO_DIR . 'alphabridge-mcp-pro.php' );
+define( 'AB_MCP_DIR', WP_PLUGIN_DIR . '/alphabridge-mcp/' );
+define( 'AB_MCP_FILE', AB_MCP_DIR . 'alphabridge-mcp.php' );
+define( 'AB_MCP_BASENAME', 'alphabridge-mcp/alphabridge-mcp.php' );
 define( 'AB_MCP_REST_NAMESPACE', 'alphabridge/v1' );
 define( 'AB_MCP_REST_ROUTE', '/mcp' );
 define( 'KB_IN_BYTES', 1024 );
@@ -74,9 +76,9 @@ define( 'MB_IN_BYTES', 1048576 );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );
 define( 'DAY_IN_SECONDS', 86400 );
-// Pro itself sits in the plugins folder, as on a site.
-mkdir( AB_MCP_PRO_DIR, 0777, true );
-file_put_contents( AB_MCP_PRO_DIR . 'alphabridge-mcp-pro.php', "<?php\n/**\n * Plugin Name: AlphaBridge MCP Pro\n * Version: 4.7.0\n */\n" );
+// This plugin itself sits in the plugins folder, as on a site.
+mkdir( AB_MCP_DIR, 0777, true );
+file_put_contents( AB_MCP_FILE, "<?php\n/**\n * Plugin Name: AlphaBridge MCP\n * Version: 4.11.0\n */\n" );
 
 /* --------------------------------------------------------------- the stubs */
 
@@ -263,12 +265,13 @@ $GLOBALS['ab_multisite'] = ! empty( $GLOBALS['ab_multisite'] );
 $GLOBALS['ab_blog']      = 1;
 function is_multisite() { return $GLOBALS['ab_multisite']; }
 function is_main_site() { return 1 === $GLOBALS['ab_blog']; }
-/* Where Pro runs on a network: network-wide, or on which sites. */
+/* Where this plugin runs on a network: network-wide, or on which sites (the
+ * names come from Pro, where this was Pro). */
 $GLOBALS['ab_pro_network'] = true;
 $GLOBALS['ab_pro_on_main'] = true;
 function plugin_basename( $f ) { return basename( dirname( $f ) ) . '/' . basename( $f ); }
-function is_plugin_active_for_network( $p ) { return ( $GLOBALS['ab_pro_network'] && 'alphabridge-mcp-pro/alphabridge-mcp-pro.php' === $p ) || array_key_exists( $p, (array) get_site_option( 'active_sitewide_plugins', array() ) ); }
-function get_blog_option( $id, $k, $d = false ) { return 'active_plugins' === $k ? ( $GLOBALS['ab_pro_on_main'] ? array( 'alphabridge-mcp-pro/alphabridge-mcp-pro.php' ) : array() ) : $d; }
+function is_plugin_active_for_network( $p ) { return ( $GLOBALS['ab_pro_network'] && AB_MCP_BASENAME === $p ) || array_key_exists( $p, (array) get_site_option( 'active_sitewide_plugins', array() ) ); }
+function get_blog_option( $id, $k, $d = false ) { return 'active_plugins' === $k ? ( $GLOBALS['ab_pro_on_main'] ? array( AB_MCP_BASENAME ) : array() ) : $d; }
 function get_main_site_id() { return 1; }
 function switch_to_blog( $id ) { $GLOBALS['ab_blog_stack'][] = $GLOBALS['ab_blog']; $GLOBALS['ab_blog'] = (int) $id; ab_event( 'switch_to_blog:' . $id ); return true; }
 function restore_current_blog() { $GLOBALS['ab_blog'] = array_pop( $GLOBALS['ab_blog_stack'] ); ab_event( 'restore_current_blog' ); return true; }
@@ -289,7 +292,8 @@ function ab_run_cron( $blog ) {
 
 /* misc */
 function get_current_user_id() { return 1; }
-function current_user_can( $c, ...$a ) { return true; }
+/* Every capability, except those a test takes away in $GLOBALS['ab_denied_caps']. */
+function current_user_can( $c, ...$a ) { return ! in_array( $c, (array) ( $GLOBALS['ab_denied_caps'] ?? array() ), true ); }
 function trailingslashit( $p ) { return rtrim( $p, '/\\' ) . '/'; }
 function untrailingslashit( $p ) { return rtrim( $p, '/\\' ); }
 function wp_normalize_path( $p ) { return str_replace( '\\', '/', (string) $p ); }
@@ -850,9 +854,9 @@ function wp_remote_get( $url, $args = array() ) {
 	}
 	$body = $page . "\n###### wp_scraping_result_start:$k ######\n" . json_encode( null === $error ? true : $error ) . "\n###### wp_scraping_result_end:$k ######\n";
 	// ab-mcp-state=1: what this request loaded, printed at shutdown
-	// (AB_MCP_Pro_Probe_State), through the code that runs everywhere.
+	// (AB_MCP_Probe_State), through the code that runs everywhere.
 	// $GLOBALS['ab_no_state']: the report does not come (a cached page).
-	if ( ! empty( $q[ AB_MCP_Pro_Probe_State::PARAM ] ) && empty( $GLOBALS['ab_no_state'] ) ) {
+	if ( ! empty( $q[ AB_MCP_Probe_State::PARAM ] ) && empty( $GLOBALS['ab_no_state'] ) ) {
 		$GLOBALS['ab_other']      = true;
 		$GLOBALS['ab_target_now'] = $target;
 		try {
@@ -883,7 +887,7 @@ class AB_MCP_Tool_Registry {
 
 /* undo: the guard drops a folder's file undo points after a kept update, and
  * a kept theme switch records one; the real ones are in undo-test.php. */
-class AB_MCP_Pro_Undo {
+class AB_MCP_Undo {
 	public static $dropped  = array();
 	public static $recorded = array();
 	public static function discard_files_of( $jail, $slug ) { self::$dropped[] = array( $jail, $slug ); return array( $slug . '/old.php' ); }
@@ -892,15 +896,14 @@ class AB_MCP_Pro_Undo {
 
 /* --------------------------------------------------------- the real classes */
 
-$pro  = __DIR__ . '/../../alphabridge-mcp-pro/includes/';
-$core = $pro . 'free-core/includes/tools/';
-require_once $core . 'class-tools-base.php';
-require_once $core . 'class-tools-lifecycle.php';
-require_once $pro . 'class-update-log.php';
-require_once $pro . 'tools/class-tools-lifecycle-pro.php';
+$GLOBALS['ab_free'] = dirname( __DIR__, 3 ) . '/includes/';
+require_once $GLOBALS['ab_free'] . 'tools/class-tools-base.php';
+require_once $GLOBALS['ab_free'] . 'lifecycle/class-update-log.php';
+require_once $GLOBALS['ab_free'] . 'class-lifecycle-confirm.php';
+require_once $GLOBALS['ab_free'] . 'tools/class-tools-install-update.php';
 
 /** The guard without the waits, and with a clock the tests set and the waits and timeouts move on. */
-class AB_Test_Update_Guard extends AB_MCP_Pro_Update_Guard {
+class AB_Test_Update_Guard extends AB_MCP_Update_Guard {
 	public static $start = null;
 	protected static function pause( $seconds ) { ab_event( 'pause:' . $seconds ); $GLOBALS['ab_clock'] += $seconds; }
 	protected static function now() { return microtime( true ) + $GLOBALS['ab_clock']; }
@@ -917,9 +920,9 @@ class AB_Test_Update_Guard extends AB_MCP_Pro_Update_Guard {
 	 */
 	public static function pretend_died( array $job ) {
 		WP_Upgrader::create_lock( 'auto_updater' );
-		AB_MCP_Pro_Update_Log::set_running( array( 'type' => $job['type'], 'item' => $job['item'], 'started' => time(), 'nonce' => 'died' ) );
-		require_once __DIR__ . '/../../alphabridge-mcp-pro/includes/tools/class-update-upgraders.php';
-		$up         = new AB_MCP_Pro_Held_Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+		AB_MCP_Update_Log::set_running( array( 'type' => $job['type'], 'item' => $job['item'], 'started' => time(), 'nonce' => 'died' ) );
+		require_once $GLOBALS['ab_free'] . 'lifecycle/class-update-upgraders.php';
+		$up         = new AB_MCP_Held_Plugin_Upgrader( new Automatic_Upgrader_Skin() );
 		self::$live = array( 'nonce' => 'died', 'since' => time(), 'upgrading' => null, 'upgrader' => $up, 'job' => $job, 'version_before' => self::version_of( $job ), 'fp_before' => self::fingerprint( $job, self::folder( $job ) ) );
 		static::hook_shutdown();
 		$up->maintenance_mode( true );
@@ -974,7 +977,7 @@ function ab_reset() {
 		$t = $now;
 	}
 	foreach ( (array) glob( WP_PLUGIN_DIR . '/*', GLOB_ONLYDIR ) as $d ) {
-		if ( 'alphabridge-mcp-pro' !== basename( $d ) ) {
+		if ( 'alphabridge-mcp' !== basename( $d ) ) {
 			ab_rm_any( $d );
 		}
 	}
@@ -1006,14 +1009,14 @@ function ab_reset() {
 	unset( $GLOBALS['ab_filters']['ab_mcp_php_probe_enabled'] );
 	$GLOBALS['ab_everywhere'] = array();
 	$GLOBALS['ab_no_state']   = false;
-	AB_MCP_Pro_Undo::$dropped  = array();
-	AB_MCP_Pro_Undo::$recorded = array();
+	AB_MCP_Undo::$dropped  = array();
+	AB_MCP_Undo::$recorded = array();
 	foreach ( array( 'stylesheet', 'template', 'template_root', 'stylesheet_root', 'current_theme', 'theme_switched', 'active_sitewide_plugins' ) as $o ) { delete_option( $o ); }
 	unset( $GLOBALS['ab_plugin_info'], $GLOBALS['ab_theme_info'] );
 	AB_Test_Update_Guard::$start = null;
-	foreach ( array( 'auto_updater.lock', AB_MCP_Pro_Change_Lock::OPTION, AB_MCP_Pro_Update_Log::RUNNING, AB_MCP_Pro_Update_Log::REPLACED ) as $o ) { delete_option( $o ); }
+	foreach ( array( 'auto_updater.lock', AB_MCP_Change_Lock::OPTION, AB_MCP_Update_Log::RUNNING, AB_MCP_Update_Log::REPLACED ) as $o ) { delete_option( $o ); }
 	// A case that ended inside a holder leaves this request's count behind.
-	$depth = new ReflectionProperty( 'AB_MCP_Pro_Change_Lock', 'depth' );
+	$depth = new ReflectionProperty( 'AB_MCP_Change_Lock', 'depth' );
 	if ( PHP_VERSION_ID < 80100 ) { $depth->setAccessible( true ); }
 	$depth->setValue( null, 0 );
 	@unlink( ABSPATH . '.maintenance' );

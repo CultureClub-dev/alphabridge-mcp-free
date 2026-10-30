@@ -1226,6 +1226,51 @@ class AB_MCP_Undo {
 	}
 
 	/**
+	 * Drop the file undo points of one plugin or theme folder, of every
+	 * account: after an update of that plugin or theme was kept they would
+	 * write a file of the previous version into the new one. A point that is
+	 * being restored right now stays, as with discard().
+	 *
+	 * The points are those of Pro's file tools, in the store this plugin
+	 * shares with Pro; wp_update_plugin and wp_update_theme (free since
+	 * 4.11.0, AB_MCP_Update_Guard) drop them after a kept update, as Pro's
+	 * update guard did.
+	 *
+	 * @param string $jail plugin|theme.
+	 * @param string $slug The folder.
+	 * @return string[] What the dropped points were about ("folder/file").
+	 */
+	public static function discard_files_of( $jail, $slug ) {
+		$tools = ( 'theme' === $jail )
+			? array( 'wp_write_theme_file', 'wp_delete_theme_file' )
+			: array( 'wp_write_plugin_file', 'wp_delete_plugin_file' );
+		$slug  = (string) $slug;
+		$out   = array();
+		if ( '' === $slug ) {
+			return $out;
+		}
+		self::with_lock(
+			function () use ( $tools, $slug, &$out ) {
+				$keep = array();
+				foreach ( self::read_index() as $e ) {
+					$busy = isset( $e['applying'] ) ? (int) $e['applying'] : 0;
+					if ( 'file' === $e['kind'] && in_array( $e['tool'], $tools, true ) && 0 === strpos( (string) $e['summary'], $slug . '/' )
+						&& ! ( $busy && ( time() - $busy ) < self::APPLY_TIMEOUT ) ) {
+						self::payload_delete_entry( $e );
+						$out[] = (string) $e['summary'];
+						continue;
+					}
+					$keep[] = $e;
+				}
+				if ( $out ) {
+					self::write_index( $keep );
+				}
+			}
+		);
+		return $out;
+	}
+
+	/**
 	 * Remove expired points (and their files). Safe to call often.
 	 *
 	 * @return int Number removed.

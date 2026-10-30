@@ -36,16 +36,18 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-82 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+95 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
 * **Free and complete.** Every free tool works without payment, registration or license key, and the plugin does not expire. No usage quotas and no credits: you use Claude or ChatGPT as you do today.
 * **Connect straight from Claude's directory.** In Claude, pick AlphaBridge from its connector directory, enter your site's address and approve on your own site.
 * **It reads until you allow more.** Out of the box the AI only reads. One switch lets it write, one click turns writing off again.
-* **Undo included.** Edits of posts and pages, page-builder elements, status changes in bulk, the site settings and the options a search and replace changed leave an undo point that expires after 7 days. One sentence brings back what was there before.
+* **Undo included.** Edits of posts and pages, page-builder elements, status changes in bulk, the site settings, theme switches and the options a search and replace changed leave an undo point that expires after 7 days. One sentence brings back what was there before.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
 * **Edits Elementor and 14 more page builders.** The AI changes texts, links and images right in the builder, with a preview first and an undo point.
+* **Install and update with a safety net.** Install, update, activate and delete plugins and themes, and update WordPress. Test requests check the site before and after an update or a switch-on, and a version that breaks it is put back in the same call. Updates of WordPress, ZIP installs and deletes run only after a preview the AI shows you first.
+* **A connection check that names the fix.** If an app cannot connect, one click under «Connection check» tests HTTPS, the endpoint, the sign-in addresses, the Authorization header and the firewall, and lists the steps that fix what it finds.
 * **Up to 10 sites in one chat.** The free hub, the service of AlphaBridge MCP that links your sites to Claude and ChatGPT, brings up to 10 WordPress sites into one chat, in every edition.
 * **Runs on shared hosting.** Plain PHP over the WordPress REST API, with nothing else to install on the server.
 
@@ -125,11 +127,10 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 
 = More with Pro =
 
-AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 135 tools on your site:
+AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 136 tools on your site:
 
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
-* **Undo for files and code.** Theme and plugin files, PHP snippets, options and theme switches come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
-* **Plugins, themes and WordPress itself.** Install, update, activate and delete plugins and themes, and update WordPress. Test requests check the site before and after an update or a switch-on, and a version that breaks it is put back in the same call.
+* **Undo for files and code.** Theme and plugin files, PHP snippets and options come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
 * **Database and options.** Query the database, change rows of plugin tables with structured statements, and write options, with guards for what must stay protected.
 * **Your other plugins.** Run the abilities your other plugins offer the AI.
 
@@ -194,7 +195,7 @@ The site answers apps in MCP revision 2026-07-28 and keeps the older revisions f
 No. It sends no telemetry and contacts no outside service on its own. The three cases you start yourself are listed under External services, at the end of the description.
 
 = Do I need Pro? =
-Not to get started. The free plugin covers content, page-builder texts, search and replace, media, comments, menus, widgets, users and your shop, with undo, on as many sites as you like. Take Pro for code with a safety net, installing and updating plugins and themes, and undo that also covers files, adjustable up to 30 days. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
+Not to get started. The free plugin covers content, page-builder texts, search and replace, media, comments, menus, widgets, users, plugins and themes and your shop, with undo, on as many sites as you like. Take Pro for code with a safety net, the database and options, and undo that also covers files and snippets, adjustable up to 30 days. Agency is for client sites: all tools and Site Deploy on up to 10 sites. Pro can be tried free for 7 days, no card needed: [alphabridge-mcp.com](https://alphabridge-mcp.com/#pricing)
 
 = Is there an affiliate programme? =
 Yes. Recommend AlphaBridge and profit. As an affiliate you profit from every Pro and Agency purchase made through your link, renewals included, paid monthly in US dollars via PayPal. It is open worldwide to anyone over 18 who does not live in a country under a US embargo, customer or not: apply on https://alphabridge-mcp.com/affiliates, where you also find the terms, banners and ready-made texts. The commission comes from sales of the separately sold Pro and Agency editions. This free plugin itself earns none, and it works fully without joining.
@@ -220,6 +221,15 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.11.0 =
+* **Installing, updating and activating in the free plugin, 95 tools in all.** `wp_install_plugin`, `wp_install_theme`, `wp_install_plugin_zip`, `wp_install_theme_zip`, `wp_update_plugin`, `wp_update_theme`, `wp_update_core`, `wp_activate_plugin`, `wp_deactivate_plugin`, `wp_activate_theme`, `wp_delete_plugin` and `wp_delete_theme` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages. Test requests check the site before and after an update or a switch-on, and a version or theme that breaks it is put back in the same call.
+* **A preview first for what has no way back.** Updating WordPress itself, installing from a ZIP and deleting a plugin or theme run in two steps: a call without `confirm_token` changes nothing and returns a preview with a token, and only the same call with that token runs it. The token is bound to the arguments, the account, the connection's access level and what the preview showed, and expires after 10 minutes. It guards against a call nobody meant; it does not make the change reversible, and the preview says so.
+* **Undo for theme switches.** A theme switch leaves an undo point; `wp_undo` switches back to the previous theme with the same checks as the switch.
+* **New: the connection check.** `wp_connection_doctor` and the card «Connection check» on the settings page test, from the site to itself, HTTPS, the permalinks, the MCP endpoint, whether the Authorization header reaches WordPress, the two sign-in descriptions under /.well-known/, the firewall, Cloudflare and plugins that restrict the REST API, and list for each finding the steps that fix it. It changes nothing; only the button on the settings page stores its result.
+* **Cursor with one click.** The Cursor panel on the settings page has «Add to Cursor»: Cursor adds AlphaBridge through the free hub, you start the sign-in in Cursor, enter this site's address and approve here, with no token. The way with a token and the ready-made config stays beside it.
+* A 401 of the MCP endpoint now says in the header `X-AB-MCP-Auth` whether a token arrived (`rejected`) or not (`missing`), and nothing more.
+* On a multisite network, switching a plugin on or off for every site takes the network's own right (`manage_network_plugins`), as on WordPress's own screens: a site administrator who may manage plugins gets a refusal with the way to a network administrator. `wp_update_core` reports an update that could not reach the files as failed, and uninstalling puts packages that AlphaBridge took off WordPress's automatic updates after a failed update back on that list.
 
 = 4.10.0 =
 * **Page-builder texts and search and replace in the free plugin, 82 tools in all.** `wp_update_builder_element` and `wp_search_replace` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages.
@@ -468,6 +478,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.11.0 =
+Installing, updating and activating plugins and themes are free now, 95 tools in all, with a connection check. Updating WordPress, ZIP installs and deletes run after a preview with a token. No setting changes.
 
 = 4.10.0 =
 Page-builder texts and search and replace are free now, 82 tools in all, with undo for page-builder pages and options, post_ids and expected_count. No setting changes.

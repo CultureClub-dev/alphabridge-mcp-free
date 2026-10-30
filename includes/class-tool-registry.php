@@ -159,6 +159,26 @@ class AB_MCP_Tool_Registry {
 			$def['group_label'] = $this->current_group['label'];
 		}
 
+		// The five lifecycle tools without a way back confirm whoever registers
+		// them: an older Pro registers its own copies after the core, without
+		// `confirm`, and must not take the confirmation away.
+		if ( ! array_key_exists( 'confirm', $def ) && class_exists( 'AB_MCP_Lifecycle_Confirm' ) ) {
+			$lifecycle = AB_MCP_Lifecycle_Confirm::definition( $name );
+			if ( array() !== $lifecycle ) {
+				$def['confirm'] = $lifecycle;
+			}
+		}
+
+		// A tool whose effect cannot be undone runs only with the token from
+		// its own preview (AB_MCP_Confirm_Token). The schema and the
+		// description say so to every client.
+		if ( class_exists( 'AB_MCP_Confirm_Token' ) && AB_MCP_Confirm_Token::required( $def ) ) {
+			$props = isset( $def['inputSchema']['properties'] ) ? (array) $def['inputSchema']['properties'] : array();
+			$props[ AB_MCP_Confirm_Token::PARAM ] = AB_MCP_Confirm_Token::schema_property();
+			$def['inputSchema']['properties']     = $props;
+			$def['description']                   = trim( $def['description'] . ' ' . AB_MCP_Confirm_Token::description_note() );
+		}
+
 		$this->tools[ $name ] = $def;
 	}
 
@@ -261,6 +281,7 @@ class AB_MCP_Tool_Registry {
 			'wp_db_schema',
 			'wp_site_info',
 			'wp_site_health',
+			'wp_connection_doctor',
 			'wp_dashboard_counts',
 			'wp_deploy_list',
 			'wp_deploy_read',

@@ -167,6 +167,8 @@ final class AB_MCP_Plugin {
 			'undo-core',
 			'builder-write',
 			'search-replace',
+			'install-update',
+			'plugins-themes-manage',
 		);
 
 		foreach ( $files as $file ) {
@@ -203,6 +205,10 @@ final class AB_MCP_Plugin {
 			// Free since 4.10.0, the groups as in Pro.
 			'AB_MCP_Tools_Builder_Write'       => array( 'builders', __( 'Page builders', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Search_Replace'      => array( 'search', __( 'Search & Bulk Actions', 'alphabridge-mcp' ) ),
+			// Free since 4.11.0, the groups as in Pro: installing, updating
+			// and deleting, and switching plugins and themes on and off.
+			'AB_MCP_Tools_Install_Update'        => array( 'lifecycle', __( 'Install & Update', 'alphabridge-mcp' ) ),
+			'AB_MCP_Tools_Plugins_Themes_Manage' => array( 'plugins-themes', __( 'Plugins & Themes', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {

@@ -439,7 +439,7 @@ final class AnswerWayTest extends TestCase {
 	 * The ways a message can name: a tool or a filter by name, an account to
 	 * connect with, a settings path, a parameter value, or a step to take.
 	 */
-	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b)/';
+	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b)/';
 
 	/**
 	 * Messages whose way is what they list, or that report rather than refuse.
@@ -489,6 +489,18 @@ final class AnswerWayTest extends TestCase {
 		'WordPress stored the page differently from what was written.',
 		'the field would not read as the replacement predicts',
 		'the replacement would empty a text that stands between other elements',
+		// Free since 4.11.0, with the update and activation tools: what went
+		// wrong while the previous version was put back, which the message
+		// of the update names with the way (move it back over SFTP); the
+		// error PHP threw, which not_switched_on() wraps with the way; and
+		// a frame whose way is its last part.
+		'WordPress\'s file access is not available.',
+		'WordPress\'s copy of the previous version is not there.',
+		'the new version could not be moved out of the way (file permissions?)',
+		'the previous version could not be moved back into place, and the new version could not be moved back where it was either, so the folder may be incomplete (file permissions?)',
+		'the previous version could not be moved back into place (file permissions?)',
+		'%1$s in %2$s on line %3$d',
+		'After %1$s was activated, %2$s — and the activation could NOT be taken back (%3$s), so the site may not answer. %4$s',
 	);
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {

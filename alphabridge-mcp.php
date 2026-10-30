@@ -3,7 +3,7 @@
  * Plugin Name:       AlphaBridge MCP
  * Plugin URI:        https://www.alphabridge-mcp.com
  * Description:       Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches.
- * Version:           4.10.0
+ * Version:           4.11.0
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            AlphaBridge
@@ -28,7 +28,7 @@ if ( defined( 'AB_MCP_VERSION' ) || class_exists( 'AB_MCP_Plugin', false ) ) {
 	return;
 }
 
-define( 'AB_MCP_VERSION', '4.10.0' );
+define( 'AB_MCP_VERSION', '4.11.0' );
 define( 'AB_MCP_FILE', __FILE__ );
 define( 'AB_MCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AB_MCP_URL', plugin_dir_url( __FILE__ ) );
@@ -57,6 +57,8 @@ require_once AB_MCP_DIR . 'includes/class-settings.php';
 require_once AB_MCP_DIR . 'includes/class-site-mode.php';
 require_once AB_MCP_DIR . 'includes/class-guidance.php';
 require_once AB_MCP_DIR . 'includes/class-security.php';
+require_once AB_MCP_DIR . 'includes/class-confirm-token.php';
+require_once AB_MCP_DIR . 'includes/class-lifecycle-confirm.php';
 require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 // Undo (free since 4.9.0, before in Pro only): the store, its restore, and
 // the post rules and page caches both of them use.
@@ -70,9 +72,39 @@ require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';
 require_once AB_MCP_DIR . 'includes/class-rest-controller.php';
+// The connection check: the settings card and the tool wp_connection_doctor.
+require_once AB_MCP_DIR . 'includes/class-connection-doctor.php';
 // Page builders: recognition and reading; defines AB_MCP_BUILDER_API, which Pro checks.
 require_once AB_MCP_DIR . 'includes/builders/class-builders.php';
 require_once AB_MCP_DIR . 'includes/class-tool-labels.php';
+
+// The update and activation tools (free since 4.11.0, before in Pro only):
+// what runs on every request, not only with the tools, hooked as Pro hooks
+// it. The option, cron and probe names are Pro's, so Free and Pro share them.
+//
+// The log of the update tools and the versions they took back: the hold has
+// to answer WordPress's background updates too. Late, so that a filter
+// switching every automatic update on does not install a version this site
+// already took back.
+require_once AB_MCP_DIR . 'includes/lifecycle/class-update-log.php';
+add_filter( 'auto_update_plugin', array( 'AB_MCP_Update_Log', 'auto_update_plugin' ), 100, 2 );
+add_filter( 'auto_update_theme', array( 'AB_MCP_Update_Log', 'auto_update_theme' ), 100, 2 );
+// On a network whose main site runs without this plugin, a hold took the
+// package off WordPress's list of automatic updates; a WP-Cron event of this
+// site, planned while such a hold is open, puts it back once a newer version
+// is installed.
+add_action( AB_MCP_Update_Log::RESUME, array( 'AB_MCP_Update_Log', 'resume_auto_updates' ), 10, 0 );
+add_action( 'init', array( 'AB_MCP_Update_Log', 'keep_resume_scheduled' ), 20, 0 );
+// A test request of the activation check that asks what it loaded (the
+// plugins and the theme after every filter) gets it printed at shutdown. It
+// does nothing in a request without the test key and the question.
+require_once AB_MCP_DIR . 'includes/lifecycle/class-probe-state.php';
+AB_MCP_Probe_State::boot();
+// A theme switch the test requests took back: a request that loaded its
+// options while it was pending must not map menus and widgets from that
+// out-of-date copy once it reaches init.
+require_once AB_MCP_DIR . 'includes/lifecycle/class-theme-switch-state.php';
+AB_MCP_Theme_Switch_State::hook();
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

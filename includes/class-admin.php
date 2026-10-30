@@ -82,6 +82,7 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_token', array( $this, 'handle_token' ) );
 		add_action( 'admin_post_ab_mcp_connection_settings', array( $this, 'handle_connection_settings' ) );
 		add_action( 'admin_post_ab_mcp_firewall_check', array( $this, 'handle_firewall_check' ) );
+		add_action( 'admin_post_ab_mcp_connection_check', array( $this, 'handle_connection_check' ) );
 		add_action( 'admin_post_ab_mcp_direct_signin', array( $this, 'handle_direct_signin' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
@@ -565,6 +566,19 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * The button «Run check» of the card «Connection check»: run every check
+	 * of AB_MCP_Connection_Doctor now, keep the result and land on the card.
+	 * Only here, behind the nonce and the capability: the page itself never
+	 * sends the requests on load, since they take up to a few seconds each.
+	 */
+	public function handle_connection_check() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_connection_check' );
+		AB_MCP_Connection_Doctor::run_and_store();
+		$this->redirect( 'connection_checked', 'ab-doctor' );
+	}
+
+	/**
 	 * AJAX: create a connection (token) and return the plaintext ONCE.
 	 *
 	 * The secret is sent only in this JSON response, straight to the authenticated
@@ -796,6 +810,7 @@ class AB_MCP_Admin {
 	private function render_main_column( $tokens, $groups, $all ) {
 		echo '<div class="ab-main">';
 		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
+		echo $this->doctor_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside doctor_card_html().
 		echo $this->capabilities_card_html( $groups, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
 		$this->render_connections_card( $tokens );
 
@@ -1049,14 +1064,29 @@ class AB_MCP_Admin {
 		$html .= $this->signin_setting_html( 'chatgpt' );
 		$html .= '</div>';
 
-		// Cursor: a token and the ready-made configuration.
+		// Cursor: through the hub with one click (Cursor's install link, then
+		// the sign-in on this site, no token), and directly with a token and
+		// the ready-made configuration. The hub signs in through this site's
+		// OAuth, so without it only the token way is offered.
+		$token_steps  = $this->step( 1, __( 'Create a connection', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor connects with a token. Create one below.', 'alphabridge-mcp' ) . '</p>' );
+		$token_steps .= $this->step( 2, __( 'Copy the configuration', 'alphabridge-mcp' ), '<p>' . esc_html__( 'It appears right after you create the connection, and only then.', 'alphabridge-mcp' ) . '</p>' );
+		$token_steps .= $this->step( 3, __( 'Paste it into Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers.', 'alphabridge-mcp' ) . '</p>' );
 		$html .= '<div class="ab-panel" id="ab-panel-cursor" data-panel="cursor" hidden>';
 		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect Cursor', 'alphabridge-mcp' ) . '</h2>';
-		$html .= '<div class="ab-steps">';
-		$html .= $this->step( 1, __( 'Create a connection', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor connects with a token. Create one below.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= $this->step( 2, __( 'Copy the configuration', 'alphabridge-mcp' ), '<p>' . esc_html__( 'It appears right after you create the connection, and only then.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= $this->step( 3, __( 'Paste it into Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= '</div>';
+		if ( $oauth ) {
+			$html .= '<div class="ab-ways">';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Through the hub', 'alphabridge-mcp' ), __( 'one connection, up to 10 sites', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">';
+			$html .= $this->step( 1, __( 'Add AlphaBridge to Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor opens and asks you to confirm.', 'alphabridge-mcp' ) . '</p><a class="ab-btn ab-btn--sm" href="' . esc_url( self::CURSOR_INSTALL, array( 'cursor' ) ) . '">' . esc_html__( 'Add to Cursor', 'alphabridge-mcp' ) . '</a>' );
+			$html .= $this->step( 2, __( 'Start the sign-in, enter this address', 'alphabridge-mcp' ), '<p>' . esc_html__( 'In Cursor, open Customize → MCPs and start the sign-in next to alphabridge. The hub asks for your site’s address.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( home_url(), __( 'This site’s address', 'alphabridge-mcp' ), __( 'Copy address', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 3, __( 'Sign in here and approve', 'alphabridge-mcp' ), '<p>' . esc_html__( 'This site asks you to sign in and to approve. The connection then shows up under Your connections.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div></section>';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Directly', 'alphabridge-mcp' ), __( 'this site only', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">' . $token_steps . '</div></section>';
+			$html .= '</div>';
+		} else {
+			$html .= '<div class="ab-steps">' . $token_steps . '</div>';
+		}
 		$html .= '<div class="ab-links">' . $this->ext_link( $docs, __( 'Setup guide', 'alphabridge-mcp' ), '?' ) . '</div>';
 		$html .= '</div>';
 
@@ -1078,6 +1108,73 @@ class AB_MCP_Admin {
 		$html .= '<form method="post" action="' . $post . '" id="ab-firewall-form">' . wp_nonce_field( 'ab_mcp_firewall_check', '_wpnonce', true, false ) . '<input type="hidden" name="action" value="ab_mcp_firewall_check"></form>';
 		$html .= '<form method="post" action="' . $post . '" id="ab-direct-signin-form">' . wp_nonce_field( 'ab_mcp_direct_signin', '_wpnonce', true, false ) . '<input type="hidden" name="action" value="ab_mcp_direct_signin"></form>';
 		$html .= '</div>';
+
+		return $html;
+	}
+
+	/**
+	 * The card «Connection check», right under the connect card: the last
+	 * result of AB_MCP_Connection_Doctor with its age, each check with its
+	 * status as a word (not only a colour), its finding and the numbered
+	 * steps, then what a request from the site to itself cannot see, and
+	 * the button «Run check». The page never runs the check on load; only
+	 * the button does (handle_connection_check()).
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function doctor_card_html() {
+		$labels = array(
+			'ok'   => array( __( 'Passed', 'alphabridge-mcp' ), 'on' ),
+			'warn' => array( __( 'Warning', 'alphabridge-mcp' ), 'partial' ),
+			'fail' => array( __( 'Problem', 'alphabridge-mcp' ), 'off' ),
+			'info' => array( __( 'Note', 'alphabridge-mcp' ), 'read' ),
+			'skip' => array( __( 'Not checked', 'alphabridge-mcp' ), 'read' ),
+		);
+		$result = AB_MCP_Connection_Doctor::stored();
+
+		$html  = '<div class="ab-card ab-doctor" id="ab-doctor">';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Diagnostics', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connection check', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'If an app cannot connect, this check looks for the usual causes and says how to fix each one. The site sends a few requests to itself; nothing is changed.', 'alphabridge-mcp' ) . '</p>';
+
+		if ( null === $result ) {
+			$html .= '<p class="ab-direct__status">' . esc_html__( 'Not run yet.', 'alphabridge-mcp' ) . '</p>';
+		} else {
+			$ts    = (int) $result['checked'];
+			$html .= '<p class="ab-direct__status">';
+			if ( isset( $result['summary']['text'] ) ) {
+				$html .= '<b>' . esc_html( (string) $result['summary']['text'] ) . '</b> ';
+			}
+			/* translators: 1: date and time of the last run, 2: how long ago, e.g. «5 mins». */
+			$html .= esc_html( sprintf( __( 'Last run %1$s, %2$s ago.', 'alphabridge-mcp' ), self::site_datetime( $ts ), human_time_diff( $ts, time() ) ) ) . '</p>';
+			$html .= '<ul class="ab-doctor__list" aria-label="' . esc_attr__( 'Results of the connection check', 'alphabridge-mcp' ) . '">';
+			foreach ( (array) $result['checks'] as $check ) {
+				if ( ! is_array( $check ) ) {
+					continue;
+				}
+				$status = isset( $check['status'], $labels[ $check['status'] ] ) ? $check['status'] : 'skip';
+				$html  .= '<li class="ab-setting ab-doctor__check ab-doctor__check--' . esc_attr( $status ) . '">';
+				$html  .= '<h3 class="ab-setting__title"><span class="ab-pill ab-pill--' . esc_attr( $labels[ $status ][1] ) . '">' . esc_html( $labels[ $status ][0] ) . '</span> ' . esc_html( isset( $check['title'] ) ? (string) $check['title'] : '' ) . '</h3>';
+				$html  .= '<p class="ab-direct__status">' . esc_html( isset( $check['finding'] ) ? (string) $check['finding'] : '' ) . '</p>';
+				$steps  = isset( $check['steps'] ) ? array_filter( (array) $check['steps'], 'is_string' ) : array();
+				if ( ! empty( $steps ) ) {
+					$html .= '<ol class="ab-direct__steps">';
+					foreach ( $steps as $step ) {
+						$html .= '<li>' . esc_html( $step ) . '</li>';
+					}
+					$html .= '</ol>';
+				}
+				$html .= '</li>';
+			}
+			$html .= '</ul>';
+			$html .= '<p class="ab-note">' . esc_html( isset( $result['limits'] ) ? (string) $result['limits'] : AB_MCP_Connection_Doctor::limits() ) . '</p>';
+		}
+
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		$html .= wp_nonce_field( 'ab_mcp_connection_check', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_connection_check">';
+		$html .= '<p class="ab-settings__save"><button type="submit" class="ab-btn">' . esc_html__( 'Run check', 'alphabridge-mcp' ) . '</button></p>';
+		$html .= '</form></div>';
 
 		return $html;
 	}
@@ -1911,6 +2008,14 @@ class AB_MCP_Admin {
 	const HUB_ADDRESS = 'https://connect.alphabridge-mcp.com/mcp';
 
 	/**
+	 * Cursor's install link for the hub, as the website's «Add to Cursor»
+	 * gives it: name alphabridge, config the server entry {"url": HUB_ADDRESS}
+	 * in base64. No token in it: Cursor signs in through the hub, which asks
+	 * for the site's address.
+	 */
+	const CURSOR_INSTALL = 'cursor://anysphere.cursor-deeplink/mcp/install?name=alphabridge&config=eyJ1cmwiOiJodHRwczovL2Nvbm5lY3QuYWxwaGFicmlkZ2UtbWNwLmNvbS9tY3AifQ==';
+
+	/**
 	 * What is the case behind such a firewall, in bold, and the two steps
 	 * to sign in all the same: the connector anew, else through the hub.
 	 * The status line in the ChatGPT panel shows it; the readme's FAQ says
@@ -2245,9 +2350,9 @@ class AB_MCP_Admin {
 		$items    = array(
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, PHP snippets, database', 'alphabridge-mcp' ),
-			__( 'Page-builder texts, installs and updates', 'alphabridge-mcp' ),
-			__( 'Undo for files and page builders, adjustable from 1 to 30 days', 'alphabridge-mcp' ),
-			__( 'Search and replace with preview', 'alphabridge-mcp' ),
+			__( 'Options, cron jobs, export and multisite', 'alphabridge-mcp' ),
+			__( 'Undo also for files and snippets, kept from 1 to 30 days', 'alphabridge-mcp' ),
+			__( 'Code changes checked by test requests and taken back on failure', 'alphabridge-mcp' ),
 		);
 
 		$html  = '<div class="postbox ab-pro">';
@@ -2350,6 +2455,7 @@ class AB_MCP_Admin {
 		$map = array(
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
 			'checked'       => array( 'success', __( 'Checked. The finding is shown under “How ChatGPT signs in”.', 'alphabridge-mcp' ) ),
+			'connection_checked' => array( 'success', __( 'Checked. The result is shown under “Connection check”.', 'alphabridge-mcp' ) ),
 			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),

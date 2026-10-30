@@ -65,6 +65,19 @@ final class DestructiveClassificationTest extends TestCase {
 		// Free since 4.10.0.
 		'wp_update_builder_element',
 		'wp_search_replace',
+		// Free since 4.11.0: replace or remove code and switch it on or off.
+		'wp_install_plugin',
+		'wp_install_plugin_zip',
+		'wp_install_theme',
+		'wp_install_theme_zip',
+		'wp_update_core',
+		'wp_update_plugin',
+		'wp_update_theme',
+		'wp_delete_plugin',
+		'wp_delete_theme',
+		'wp_activate_plugin',
+		'wp_deactivate_plugin',
+		'wp_activate_theme',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

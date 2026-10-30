@@ -26,6 +26,7 @@ $ab_mcp_options = array(
 	'ab_mcp_audit',
 	'ab_mcp_oauth_clients',
 	'ab_mcp_firewall',
+	'ab_mcp_connection_check',
 	'ab_mcp_review',
 	'ab_mcp_review_dismissed',
 	'ab_mcp_mode_history',
@@ -34,7 +35,26 @@ $ab_mcp_options = array(
 	'ab_mcp_pro_undo_index',
 	'ab_mcp_pro_undo_lock',
 	'ab_mcp_pro_undo_ttl_days',
+	// The update and activation tools (free since 4.11.0; the names Pro gave
+	// them, as Pro's uninstall removes them): the update log, the versions
+	// held back, the note on the update lock, the folders an update replaced
+	// (network options on a network, removed below as well), and the lock
+	// for changes of the code the site runs (on the main site).
+	'ab_mcp_pro_update_log',
+	'ab_mcp_pro_update_holds',
+	'ab_mcp_pro_update_running',
+	'ab_mcp_pro_update_replaced',
+	'ab_mcp_pro_code_change.lock',
 );
+
+// The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no
+// option: once the plugin is gone nothing would take it off. Per site, as it
+// is planned on the site where the hold was written.
+$ab_mcp_cron = static function () {
+	if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+		wp_clear_scheduled_hook( 'ab_mcp_pro_resume_auto_updates' );
+	}
+};
 
 // Remove the snapshot files of the undo points: the folder ab-mcp-undo in
 // the uploads of the current site, with what is in it (the snapshots, its
@@ -57,10 +77,37 @@ $ab_mcp_undo_files = static function () {
 	@rmdir( $ab_mcp_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- a folder left behind is harmless.
 };
 
+// A package AlphaBridge took off WordPress's list of automatic updates after
+// a failed update (a hold with auto_off, AB_MCP_Update_Log) goes back on it
+// before the holds go: with them and the event RESUME gone, nothing else would
+// switch it on again (Codex, 30.10.2026). Only those: a package someone had
+// switched off before has no auto_off. Network options on a network, plain
+// options on a single site, as the holds and the lists are.
+foreach ( (array) get_site_option( 'ab_mcp_pro_update_holds', array() ) as $ab_mcp_key => $ab_mcp_hold ) {
+	if ( ! is_array( $ab_mcp_hold ) || empty( $ab_mcp_hold['auto_off'] ) || ! preg_match( '/^(plugin|theme):(.+)\z/s', (string) $ab_mcp_key, $ab_mcp_m ) ) {
+		continue;
+	}
+	$ab_mcp_list = (array) get_site_option( 'auto_update_' . $ab_mcp_m[1] . 's', array() );
+	if ( ! in_array( $ab_mcp_m[2], $ab_mcp_list, true ) ) {
+		$ab_mcp_list[] = $ab_mcp_m[2];
+		update_site_option( 'auto_update_' . $ab_mcp_m[1] . 's', array_values( $ab_mcp_list ) );
+	}
+}
+
 foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }
 $ab_mcp_undo_files();
+$ab_mcp_cron();
+
+// The update log, the holds, the note on the update lock and the replaced
+// folders are network options on a network (on a single site plain options,
+// removed above), as Pro's uninstall removes them.
+if ( function_exists( 'delete_site_option' ) ) {
+	foreach ( array( 'ab_mcp_pro_update_log', 'ab_mcp_pro_update_holds', 'ab_mcp_pro_update_running', 'ab_mcp_pro_update_replaced' ) as $ab_mcp_option ) {
+		delete_site_option( $ab_mcp_option );
+	}
+}
 
 // Multisite: clean per-site options too — on every site. get_sites() stops
 // at 100 unless told otherwise, and 'number' => 0 is "no limit".
@@ -77,6 +124,7 @@ if ( is_multisite() ) {
 			delete_option( $ab_mcp_option );
 		}
 		$ab_mcp_undo_files();
+		$ab_mcp_cron();
 		restore_current_blog();
 	}
 }

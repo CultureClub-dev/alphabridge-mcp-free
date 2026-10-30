@@ -107,6 +107,29 @@ final class ConnectorDirectoryTest extends TestCase {
 		self::assertStringContainsString( 'value="' . rest_url( AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE ) . '"', $chatgpt );
 	}
 
+	public function testCursorGetsTheHubWithOneClickAndTheTokenWayBesideIt(): void {
+		$cursor = $this->html( $this->panel( $this->card( true ), 'cursor' ) );
+
+		// The install link the website's «Add to Cursor» gives: the hub's
+		// endpoint as the server entry, no token in it.
+		self::assertMatchesRegularExpression( '#href="cursor://anysphere\.cursor-deeplink/mcp/install\?name=alphabridge&amp;config=([A-Za-z0-9+/=]+)"#', $cursor );
+		preg_match( '#config=([A-Za-z0-9+/=]+)#', AB_MCP_Admin::CURSOR_INSTALL, $m );
+		self::assertSame( array( 'url' => AB_MCP_Admin::HUB_ADDRESS ), json_decode( (string) base64_decode( $m[1], true ), true ) );
+		self::assertStringContainsString( 'Add to Cursor', $cursor );
+		self::assertStringContainsString( 'value="' . home_url() . '"', $cursor, 'The hub asks for this address.' );
+		self::assertStringContainsString( 'Customize → MCPs', $cursor );
+		// The token way stays, beside it.
+		self::assertStringContainsString( 'Through the hub', $cursor );
+		self::assertStringContainsString( 'Directly', $cursor );
+		self::assertStringContainsString( 'Cursor connects with a token. Create one below.', $cursor );
+
+		// The hub signs in through this site's OAuth: switched off, only the token way.
+		$off = $this->html( $this->panel( $this->card( false ), 'cursor' ) );
+		self::assertStringNotContainsString( 'cursor://', $off );
+		self::assertStringNotContainsString( 'Through the hub', $off );
+		self::assertStringContainsString( 'Cursor connects with a token. Create one below.', $off );
+	}
+
 	public function testOnlyCursorAndOtherClientsGetTheTokenForm(): void {
 		$x = $this->card( true );
 

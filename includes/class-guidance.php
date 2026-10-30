@@ -49,11 +49,12 @@ class AB_MCP_Guidance {
 	 * plugins, themes, cron and the error log, and WooCommerce read only;
 	 * since 4.9.0 undo, user accounts, widgets, the site settings, the status
 	 * of many posts, revisions, post, user and term meta, changing WooCommerce,
-	 * the caches, the rewrite rules and the database and transient clean-up.
+	 * the caches, the rewrite rules and the database and transient clean-up;
+	 * since 4.10.0 the page-builder writes and search and replace; since
+	 * 4.11.0 installing, updating and deleting plugins and themes, updating
+	 * WordPress core, and switching plugins and themes on and off.
 	 */
 	const PRO_TOOLS = array(
-		'wp_activate_plugin',
-		'wp_activate_theme',
 		'wp_blueprint_diff',
 		'wp_blueprint_export',
 		'wp_create_application_password',
@@ -61,21 +62,14 @@ class AB_MCP_Guidance {
 		'wp_db_query',
 		'wp_db_schema',
 		'wp_db_tables',
-		'wp_deactivate_plugin',
 		'wp_delete_option',
 		'wp_delete_php_snippet',
-		'wp_delete_plugin',
 		'wp_delete_plugin_file',
-		'wp_delete_theme',
 		'wp_delete_theme_file',
 		'wp_delete_transient',
 		'wp_delete_upload_file',
 		'wp_export_content',
 		'wp_get_php_snippet',
-		'wp_install_plugin',
-		'wp_install_plugin_zip',
-		'wp_install_theme',
-		'wp_install_theme_zip',
 		'wp_list_abilities',
 		'wp_list_php_snippets',
 		'wp_list_plugin_files',
@@ -94,10 +88,7 @@ class AB_MCP_Guidance {
 		'wp_set_transient',
 		'wp_toggle_php_snippet',
 		'wp_unschedule_cron',
-		'wp_update_core',
 		'wp_update_option',
-		'wp_update_plugin',
-		'wp_update_theme',
 		'wp_upload_abort',
 		'wp_upload_append',
 		'wp_upload_begin',
@@ -288,6 +279,6 @@ class AB_MCP_Guidance {
 	 * @return string
 	 */
 	public static function instructions_paragraph() {
-		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, installing and updating plugins and themes, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
+		return 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.';
 	}
 }

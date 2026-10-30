@@ -28,11 +28,16 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **82 structured tools** across content, media, taxonomies, comments, widgets, menus, site
-  settings, site info, users, plugins and themes, cron and the error log, SEO fields, WooCommerce,
-  maintenance, page builders, search and replace and bulk status changes.
+- **95 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+  settings, site info, users, plugins and themes (install, update, activate, delete), WordPress
+  updates, cron and the error log, SEO fields, WooCommerce, maintenance, page builders, search and
+  replace, bulk status changes and a connection check.
+- **A preview first for what has no way back** — `wp_update_core`, the two ZIP installs and the
+  two deletes run only with the `confirm_token` from their own preview (HMAC over the tool, the
+  arguments, the account, the access level and the state the preview showed; 10 minutes).
 - **Undo** — `wp_update_post`, `wp_bulk_update_status`, `wp_update_site_settings`,
-  `wp_update_builder_element` and `wp_search_replace` (page-builder pages and option rows) leave an
+  `wp_update_builder_element`, `wp_search_replace` (page-builder pages and option rows) and
+  `wp_activate_theme` leave an
   undo point with the previous values that expires after 7 days; `wp_undo_list`, `wp_undo` (with a dry run) and
   `wp_undo_discard` work on the account's own points, and a restore checks the rights of the
   original change again.
@@ -173,15 +178,14 @@ Then activate it and open *Settings → AlphaBridge MCP* to create a connection.
 
 A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do more:
 
-- change texts, links and images on pages of many page builders;
 - run the abilities other plugins offer, and say so when such a run reports success on a post
   but nothing was saved;
 - edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
 - check the site with test requests after saving active PHP code, and put the previous
   version back automatically when one of them ends with a fatal error;
-- use tool groups for the database, options, install/update, migration and multisite;
-- undo its own changes too (page-builder elements, files, PHP snippets, options); undo points
-  expire after 7 days by default, adjustable from 1 to 30 days.
+- use tool groups for the database, options, migration and multisite;
+- undo its own changes too (files, PHP snippets, options); undo points expire after 7 days by
+  default, adjustable from 1 to 30 days.
 
 Its Agency plan adds Site Deploy for agencies and developers: files, themes and whole builds
 published over SFTP onto the server the site runs on; ZIP deploys can run atomically, with

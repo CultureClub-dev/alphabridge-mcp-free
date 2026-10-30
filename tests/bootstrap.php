@@ -127,7 +127,12 @@ function get_option( $name, $default = false ) {
 	return array_key_exists( $name, $GLOBALS['ab_test_options'] ) ? $GLOBALS['ab_test_options'][ $name ] : $default;
 }
 
-function update_option( $name, $value ) {
+function update_option( $name, $value, $autoload = null ) {
+	// The autoload flag a caller passed, for a test to read (as add_option()
+	// in undo-stubs.php records it); null leaves what was recorded before.
+	if ( null !== $autoload ) {
+		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
+	}
 	// As WordPress: pre_update_option_{$option} and pre_update_option decide
 	// what is stored — another value, or the old one for a write a site
 	// refuses. Nothing here hooks them unless a test does (the read-back of
@@ -1070,8 +1075,19 @@ function esc_attr__( $text, $domain = '' ) {
 	return (string) $text;
 }
 
-function esc_url( $url ) {
-	return (string) $url;
+/**
+ * esc_url() keeps a link only with a protocol it allows: WordPress's list
+ * (as esc_url_raw() here), or the one passed, as for Cursor's cursor:// link.
+ */
+function esc_url( $url, $protocols = null ) {
+	$url = (string) $url;
+	if ( null === $protocols ) {
+		return esc_url_raw( $url );
+	}
+	if ( preg_match( '/^([a-z][a-z0-9+.\-]*):/i', $url, $m ) && ! in_array( strtolower( $m[1] ), (array) $protocols, true ) ) {
+		return '';
+	}
+	return $url;
 }
 
 function admin_url( $path = '' ) {
@@ -1554,6 +1570,24 @@ function wp_remote_get( $url, $args = array() ) {
 }
 
 /**
+ * The POST loopbacks of the connection check (AB_MCP_Connection_Doctor).
+ * Recorded and answered like wp_remote_get(), with 'method' => 'POST' in
+ * the recorded arguments, as WordPress sets it.
+ */
+function wp_remote_post( $url, $args = array() ) {
+	$args['method']            = 'POST';
+	$GLOBALS['ab_test_http'][] = array(
+		'url'  => (string) $url,
+		'args' => (array) $args,
+	);
+	$answer = $GLOBALS['ab_test_http_answer'];
+	if ( ! is_callable( $answer ) ) {
+		return new WP_Error( 'http_request_failed', 'No network in the tests.' );
+	}
+	return $answer( (string) $url, (array) $args );
+}
+
+/**
  * A response array as the WordPress HTTP API returns it. Header names are
  * looked up without regard to case, as WordPress does.
  *
@@ -1586,6 +1620,11 @@ function wp_remote_retrieve_response_code( $response ) {
 
 function wp_remote_retrieve_body( $response ) {
 	return is_array( $response ) && isset( $response['body'] ) ? $response['body'] : '';
+}
+
+/** Every header of an answer, names in lower case (WordPress: a case-insensitive dictionary). */
+function wp_remote_retrieve_headers( $response ) {
+	return is_array( $response ) && isset( $response['headers'] ) ? $response['headers'] : array();
 }
 
 function wp_remote_retrieve_header( $response, $header ) {
@@ -1700,11 +1739,13 @@ require_once __DIR__ . '/../includes/class-settings.php';
 require_once __DIR__ . '/../includes/class-site-mode.php';
 require_once __DIR__ . '/../includes/class-guidance.php';
 require_once __DIR__ . '/../includes/class-security.php';
+require_once __DIR__ . '/../includes/class-confirm-token.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';
 require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
+require_once __DIR__ . '/../includes/class-connection-doctor.php';
 // WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
 // file headers): the builder readers call parse_blocks().
 require_once __DIR__ . '/support/class-wp-block-parser.php';
