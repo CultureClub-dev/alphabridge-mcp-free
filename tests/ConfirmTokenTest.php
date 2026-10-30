@@ -212,6 +212,12 @@ final class ConfirmTokenTest extends TestCase {
 
 		self::assertTrue( $result['isError'] );
 		self::assertFalse( $ran );
+
+		foreach ( array( array(), false, '' ) as $empty ) {
+			self::assertTrue( AB_MCP_Confirm_Token::required( array( 'confirm' => $empty ) ), var_export( $empty, true ) );
+			self::assertInstanceOf( WP_Error::class, AB_MCP_Confirm_Token::gate( 't', array( 'confirm' => $empty ), array() ) );
+		}
+		self::assertFalse( AB_MCP_Confirm_Token::required( array() ) );
 	}
 
 	public function testAPreviewThatThrowsEndsInAControlledErrorWithoutItsText(): void {

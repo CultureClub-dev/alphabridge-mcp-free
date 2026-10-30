@@ -47,9 +47,10 @@ final class AB_MCP_Confirm_Token {
 	 * @return bool
 	 */
 	public static function required( array $def ) {
-		// Any non-empty `confirm` counts, a broken one included: gate() then
-		// refuses instead of letting the tool run without confirmation.
-		return ! empty( $def['confirm'] );
+		// A `confirm` key counts whatever it holds, an empty or broken one
+		// included (a definition() for a misspelt tool name gives array()):
+		// gate() then refuses instead of letting the tool run unconfirmed.
+		return array_key_exists( 'confirm', $def ) && null !== $def['confirm'];
 	}
 
 	/**
