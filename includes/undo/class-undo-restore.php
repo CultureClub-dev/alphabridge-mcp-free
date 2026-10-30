@@ -19,8 +19,11 @@
  * post_status (wp_bulk_update_status) and site_settings
  * (wp_update_site_settings); since 4.10.0 also builder_data and option_rows
  * (wp_update_builder_element, wp_search_replace), since 4.11.0 the theme
- * (wp_activate_theme), and since 4.12.0 builder_data of the posts a plugin's
- * ability changed (wp_run_ability). The undo points of Pro's tools (options, files, PHP
+ * (wp_activate_theme), since 4.12.0 builder_data of the posts a plugin's
+ * ability changed (wp_run_ability), and since 4.13.0 meta: the meta of a
+ * post, a term or a user, and the alternative text, title and caption of a
+ * file (wp_update_post_meta, wp_update_term_meta, wp_update_user_meta,
+ * wp_update_media). The undo points of Pro's tools (options, files, PHP
  * snippets) share the store; Pro reverses them with its own wp_undo, this
  * class names them and leaves them alone.
  *
@@ -75,6 +78,13 @@ class AB_MCP_Undo_Restore {
 			// The tool runs only on a full-scope token, so its undo point
 			// does too: "full_scope" (may_touch()).
 			'wp_run_ability'            => array( 'kind' => 'builder_data', 'cap' => 'edit_posts', 'full_scope' => true ),
+			// Meta (free since 4.13.0), each with the capability of its tool:
+			// the right to the object and to the key is asked by the plan,
+			// with the key rules of the tool (AB_MCP_Undo_Meta::refusal()).
+			'wp_update_post_meta'       => array( 'kind' => 'meta', 'cap' => 'edit_posts' ),
+			'wp_update_term_meta'       => array( 'kind' => 'meta', 'cap' => 'manage_categories' ),
+			'wp_update_user_meta'       => array( 'kind' => 'meta', 'cap' => 'edit_users' ),
+			'wp_update_media'           => array( 'kind' => 'meta', 'cap' => 'upload_files' ),
 		);
 	}
 
@@ -204,7 +214,7 @@ class AB_MCP_Undo_Restore {
 	 *
 	 * @param array $entry Index entry.
 	 * @param mixed $data  Decoded snapshot.
-	 * @param array $opts  force (bool): restore pages changed since (builder_data);
+	 * @param array $opts  force (bool): restore pages or meta changed since (builder_data, meta);
 	 *                     parts (array): decoded snapshots of the point's parts.
 	 * @return array|WP_Error { tool, kind, items[], blocked[], restorable }
 	 */
@@ -246,6 +256,8 @@ class AB_MCP_Undo_Restore {
 				);
 			case 'option_rows':
 				return self::plan_option_rows( $tool, $data );
+			case 'meta':
+				return self::plan_meta( $tool, $data, ! empty( $opts['force'] ) );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 	}
@@ -468,6 +480,11 @@ class AB_MCP_Undo_Restore {
 			'option_rows'   => 'site',
 			// The theme reaches every page: menus, widgets, layout.
 			'theme'         => 'site',
+			// The meta of a post or a file: the pages of that post. The meta
+			// of a term or a user reaches pages no post id names (archives,
+			// author pages): their refs are no post id, and after_restore()
+			// purges every page for them.
+			'meta'          => 'post',
 		);
 	}
 
@@ -502,14 +519,20 @@ class AB_MCP_Undo_Restore {
 
 		$scopes   = self::page_cache_scope();
 		$post_ids = array();
+		$other    = false;
 		if ( isset( $scopes[ $kind ] ) && 'post' === $scopes[ $kind ] ) {
 			foreach ( $refs as $ref ) {
 				if ( is_int( $ref ) || ( is_string( $ref ) && 1 === preg_match( '/\A[0-9]+\z/', $ref ) ) ) {
 					$post_ids[] = (int) $ref;
+				} elseif ( 'meta' === $kind ) {
+					// The meta of a term or a user ("term:3", "user:7").
+					$other = true;
 				}
 			}
 			$post_ids = array_values( array_unique( $post_ids ) );
-			$purge    = AB_MCP_Page_Cache::purge_posts( $post_ids );
+		}
+		if ( isset( $scopes[ $kind ] ) && 'post' === $scopes[ $kind ] && ! $other ) {
+			$purge = AB_MCP_Page_Cache::purge_posts( $post_ids );
 		} else {
 			$purge = AB_MCP_Page_Cache::purge_site();
 		}
@@ -520,8 +543,8 @@ class AB_MCP_Undo_Restore {
 			 * this plugin knows have been asked to purge. Hook it to purge a
 			 * cache it does not know, or to log the restore.
 			 *
-			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme (Pro fires it for its kinds too).
-			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts.
+			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme, meta (Pro fires it for its kinds too).
+			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts, and for the meta of a term or a user.
 			 * @param string $tool     The tool whose change was undone.
 			 */
 			do_action( 'ab_mcp_after_restore', $kind, $post_ids, $tool );
@@ -694,6 +717,62 @@ class AB_MCP_Undo_Restore {
 		return array(
 			'tool'       => $tool,
 			'kind'       => 'site_settings',
+			'items'      => $items,
+			'blocked'    => $blocked,
+			'restorable' => count( $items ),
+		);
+	}
+
+	/**
+	 * The meta tools (kind meta): the key or keys of one object, planned by
+	 * AB_MCP_Undo_Meta (rights, key rules, later changes). The title and
+	 * caption wp_update_media keeps with them are asked the questions of the
+	 * undo of wp_update_post too: a write of them that would be refused or
+	 * stored otherwise blocks the whole point, which is one item and never
+	 * partly restored.
+	 *
+	 * @param string $tool  Tool.
+	 * @param mixed  $data  Snapshot (AB_MCP_Undo_Meta).
+	 * @param bool   $force Restore over later changes.
+	 * @return array|WP_Error
+	 */
+	private static function plan_meta( $tool, $data, $force ) {
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once __DIR__ . '/class-undo-meta.php';
+		}
+		$plan = AB_MCP_Undo_Meta::plan( $tool, $data, $force );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+		$items   = array();
+		$blocked = $plan['blocked'];
+		foreach ( $plan['items'] as $item ) {
+			$fields = isset( $item['snap']['fields'] ) ? (array) $item['snap']['fields'] : array();
+			if ( array() !== $fields ) {
+				$pf = self::plan_post_fields(
+					$tool,
+					array(
+						'id'     => (int) $item['snap']['id'],
+						'fields' => $fields,
+					)
+				);
+				if ( is_wp_error( $pf ) ) {
+					return $pf;
+				}
+				if ( array() !== $pf['blocked'] || 1 !== count( $pf['items'] ) ) {
+					$first     = isset( $pf['blocked'][0]['reason'] ) ? (string) $pf['blocked'][0]['reason'] : 'forbidden';
+					$blocked[] = array(
+						'ref'    => $item['ref'],
+						'reason' => $first,
+					);
+					continue;
+				}
+			}
+			$items[] = $item;
+		}
+		return array(
+			'tool'       => $tool,
+			'kind'       => 'meta',
 			'items'      => $items,
 			'blocked'    => $blocked,
 			'restorable' => count( $items ),
@@ -1504,8 +1583,54 @@ class AB_MCP_Undo_Restore {
 				return static::restore_option_row( $item );
 			case 'theme':
 				return static::restore_theme( $item );
+			case 'meta':
+				return static::restore_meta( $item );
 		}
 		return new WP_Error( 'ab_mcp_undo_unknown_kind', __( 'Unknown undo kind. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * Put the meta of one object back (kind meta), and with wp_update_media
+	 * the title and caption of the file. The comparison is made again right
+	 * before the write, on the tables as they are now: the plan was a moment
+	 * ago. The columns go first, through the write of the undo of
+	 * wp_update_post (its checks and its read-back); the keys after them,
+	 * row by row (AB_MCP_Undo_Meta::write_back()).
+	 *
+	 * @param array $item Item of AB_MCP_Undo_Meta::plan().
+	 * @return true|WP_Error
+	 */
+	protected static function restore_meta( array $item ) {
+		$snap = (array) $item['snap'];
+		$cmp  = AB_MCP_Undo_Meta::compare( $snap );
+		if ( null === $cmp ) {
+			return new WP_Error( 'ab_mcp_undo_write_failed', __( 'The meta could not be read before the restore; nothing was restored. Try again in a moment; the undo point stays.', 'alphabridge-mcp' ) );
+		}
+		if ( empty( $item['force'] ) && in_array( 'changed', $cmp, true ) ) {
+			return new WP_Error( 'ab_mcp_undo_meta_changed', __( 'The meta was changed after the undo was planned; nothing was restored. Pass force=true to put the old value back over the newer change.', 'alphabridge-mcp' ) );
+		}
+		$fields = array();
+		$keys   = array();
+		foreach ( array_keys( array_diff( $cmp, array( 'before' ) ) ) as $loc ) {
+			if ( 0 === strpos( $loc, 'field:' ) ) {
+				$col            = substr( $loc, 6 );
+				$fields[ $col ] = (string) $snap['fields'][ $col ];
+			} else {
+				$keys[] = substr( $loc, 5 );
+			}
+		}
+		if ( array() !== $fields ) {
+			$done = static::restore_post_fields(
+				array(
+					'ref'    => (int) $snap['id'],
+					'fields' => $fields,
+				)
+			);
+			if ( is_wp_error( $done ) ) {
+				return $done;
+			}
+		}
+		return array() === $keys ? true : AB_MCP_Undo_Meta::write_back( $snap, $keys );
 	}
 
 	/**

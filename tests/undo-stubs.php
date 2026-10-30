@@ -196,9 +196,85 @@ if ( ! function_exists( 'wp_restore_post_revision' ) ) {
 class AbTestUndoWpdb {
 	public $posts       = 'wp_posts';
 	public $options     = 'wp_options';
+	public $postmeta    = 'wp_postmeta';
 	public $last_error  = '';
 	public $last_result = array();
 	public $queries     = array();
+
+	/**
+	 * The ids of the rows in $ab_test_meta (post => key => position => id):
+	 * the bootstrap keeps values only, the undo of meta (4.13.0) reads and
+	 * writes rows by id. A row first seen gets the next id; update_post_meta()
+	 * of the bootstrap keeps one row, which keeps the first id.
+	 *
+	 * @var array
+	 */
+	public $meta_ids = array();
+	public $next_id  = 100;
+
+	/** The rows of one key: id and value as stored, oldest first. */
+	public function meta_rows( $post_id, $key ) {
+		$values = $GLOBALS['ab_test_meta'][ (int) $post_id ][ $key ] ?? array();
+		$ids    = $this->meta_ids[ (int) $post_id ][ $key ] ?? array();
+		$ids    = array_slice( $ids, 0, count( $values ) );
+		while ( count( $ids ) < count( $values ) ) {
+			$ids[] = $this->next_id++;
+		}
+		$this->meta_ids[ (int) $post_id ][ $key ] = $ids;
+		$out = array();
+		foreach ( array_values( $values ) as $i => $value ) {
+			$out[] = array( $ids[ $i ], (string) $value );
+		}
+		return $out;
+	}
+
+	/** Where a row is: [ post, key, position ], or null. */
+	private function find_meta( $meta_id ) {
+		foreach ( $GLOBALS['ab_test_meta'] as $post_id => $keys ) {
+			foreach ( (array) $keys as $key => $values ) {
+				foreach ( $this->meta_rows( $post_id, $key ) as $i => $row ) {
+					if ( (int) $row[0] === (int) $meta_id ) {
+						return array( (int) $post_id, $key, $i );
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	public function get_var( $query ) {
+		$this->queries[] = $query;
+		if ( preg_match( '/^SELECT meta_id FROM wp_postmeta WHERE meta_id = (\d+)$/', (string) $query, $m ) ) {
+			return null === $this->find_meta( (int) $m[1] ) ? null : $m[1];
+		}
+		return null;
+	}
+
+	public function insert( $table, $data ) {
+		$post_id = (int) $data['post_id'];
+		$key     = (string) $data['meta_key'];
+		$this->meta_rows( $post_id, $key );
+		$GLOBALS['ab_test_meta'][ $post_id ][ $key ][]   = (string) $data['meta_value'];
+		$this->meta_ids[ $post_id ][ $key ][]             = isset( $data['meta_id'] ) ? (int) $data['meta_id'] : $this->next_id++;
+		return 1;
+	}
+
+	public function delete( $table, $where ) {
+		if ( isset( $where['meta_id'] ) ) {
+			$at = $this->find_meta( (int) $where['meta_id'] );
+			if ( null === $at ) {
+				return 0;
+			}
+			array_splice( $GLOBALS['ab_test_meta'][ $at[0] ][ $at[1] ], $at[2], 1 );
+			array_splice( $this->meta_ids[ $at[0] ][ $at[1] ], $at[2], 1 );
+			if ( array() === $GLOBALS['ab_test_meta'][ $at[0] ][ $at[1] ] ) {
+				unset( $GLOBALS['ab_test_meta'][ $at[0] ][ $at[1] ] );
+			}
+			return 1;
+		}
+		unset( $GLOBALS['ab_test_meta'][ (int) $where['post_id'] ][ (string) $where['meta_key'] ], $this->meta_ids[ (int) $where['post_id'] ][ (string) $where['meta_key'] ] );
+		return 1;
+	}
 
 	public function prepare( $query, ...$args ) {
 		if ( 1 === count( $args ) && is_array( $args[0] ) ) {
@@ -237,6 +313,18 @@ class AbTestUndoWpdb {
 		$this->queries[]   = $query;
 		$this->last_result = array();
 		$this->last_error  = '';
+		if ( preg_match( "/^SELECT meta_id AS meta_id, meta_key, meta_value FROM wp_postmeta WHERE post_id = (\\d+) AND meta_key = '(.*)' ORDER BY meta_id ASC$/", (string) $query, $m ) ) {
+			// meta_key under a case-insensitive collation, as MySQL compares it.
+			foreach ( array_keys( $GLOBALS['ab_test_meta'][ (int) $m[1] ] ?? array() ) as $stored ) {
+				if ( 0 !== strcasecmp( (string) $stored, stripslashes( $m[2] ) ) ) {
+					continue;
+				}
+				foreach ( $this->meta_rows( (int) $m[1], (string) $stored ) as $row ) {
+					$this->last_result[] = (object) array( 'meta_id' => (string) $row[0], 'meta_key' => (string) $stored, 'meta_value' => $row[1] );
+				}
+			}
+			return count( $this->last_result );
+		}
 		if ( preg_match( "/FROM wp_options WHERE option_name = '(.*)' LIMIT 1$/", (string) $query, $m ) ) {
 			$name = stripslashes( $m[1] );
 			if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
@@ -248,6 +336,14 @@ class AbTestUndoWpdb {
 	}
 
 	public function update( $table, $data, $where ) {
+		if ( 'wp_postmeta' === $table && isset( $where['meta_id'] ) ) {
+			$at = $this->find_meta( (int) $where['meta_id'] );
+			if ( null === $at ) {
+				return 0;
+			}
+			$GLOBALS['ab_test_meta'][ $at[0] ][ $at[1] ][ $at[2] ] = (string) $data['meta_value'];
+			return 1;
+		}
 		return 0;
 	}
 }

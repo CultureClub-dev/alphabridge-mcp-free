@@ -87,6 +87,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		ab_test_reset();
 		$GLOBALS['ab_test_way']              = array();
 		$GLOBALS['ab_test_meta_writes']      = array();
+		$GLOBALS['ab_test_meta_store']       = array();
+		$GLOBALS['ab_test_meta_vetoes']      = array();
 		$GLOBALS['ab_test_widget_vetoes']    = false;
 		$GLOBALS['ab_test_widget_violation'] = null;
 		$GLOBALS['wp_widget_factory']        = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
@@ -632,14 +634,38 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			return true;
 		};
 		$r = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'Twitter Handle!', 'value' => 'C:\\x' ) );
-		self::assertSame( array( 'updated' => true, 'user_id' => 5, 'key' => 'twitterhandle' ), $r, 'The key as sanitize_key() leaves it.' );
+		self::assertSame( array( true, 5, 'twitterhandle' ), array( $r['updated'], $r['user_id'], $r['key'] ), 'The key as sanitize_key() leaves it.' );
+		// Since 4.13.0 the answer reads back: of a key wp_get_user_meta does
+		// not show, only whether it holds what was sent, never the value.
+		self::assertSame( array(), (array) $r['saved_fields'] );
+		self::assertSame( array( 'twitterhandle' => 'not_shown' ), $r['saved_fields_omitted'] );
+		self::assertArrayNotHasKey( 'saved_differs', $r );
+		self::assertArrayHasKey( 'undo', $r );
+		self::assertNull( $r['undo'], 'Without a database to read the rows from, no undo point.' );
+		self::assertNotSame( '', $r['undo_note'] );
 		self::assertSame( array( array( 'user', 5, 'twitterhandle', 'C:\\x' ) ), $GLOBALS['ab_test_meta_writes'] );
-		self::assertSame( array( array( 'edit_user', array( 5 ) ), array( 'edit_user_meta', array( 5, 'twitterhandle' ) ) ), $asked, 'The right to this user, then to this key.' );
+		self::assertSame( array( array( 'edit_user', array( 5 ) ), array( 'edit_user_meta', array( 5, 'twitterhandle' ) ) ), array_slice( $asked, 0, 2 ), 'The right to this user, then to this key.' );
+		self::assertSame( array( array( 'list_users', array() ), array( 'edit_user', array( 5 ) ) ), array_slice( $asked, 2 ), 'Then, for the answer, whether wp_get_user_meta would answer this account for this user (Codex 31.10.2026).' );
 
 		AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'prefs' ) );
 		AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'list', 'value' => array( 'a' => array( 1, true, null ) ) ) );
 		self::assertSame( array( 'user', 5, 'prefs', '' ), $GLOBALS['ab_test_meta_writes'][1], 'Omitted: an empty string.' );
 		self::assertSame( array( 'a' => array( 1, true, null ) ), $GLOBALS['ab_test_meta_writes'][2][3], 'Arrays may nest.' );
+
+		// A profile field wp_get_user_meta shows: the value as stored.
+		$r = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'nickname', 'value' => 7 ) );
+		self::assertSame( array( 'nickname' => '7' ), (array) $r['saved_fields'], 'A number is stored as text, and that is no difference.' );
+		self::assertArrayNotHasKey( 'saved_differs', $r );
+	}
+
+	public function testUserMetaTheSiteDidNotStoreIsAnErrorNotAnUpdate(): void {
+		self::prefixes( 'wp_', 'wp_' );
+		ab_test_add_user( 5 );
+		$GLOBALS['ab_test_meta_vetoes'] = array( 'nickname' );
+		$r = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'nickname', 'value' => 'x' ) );
+		self::assertSame( 'ab_mcp_not_saved', self::code( $r ), 'Nothing stored: no updated: true.' );
+		self::assertStringContainsString( 'wp_get_user_meta', $r->get_error_message() );
+		self::assertStringContainsString( 'nickname', $r->get_error_message() );
 	}
 
 	public function testUserMetaIsRefusedWithoutWritingAnything(): void {
@@ -676,7 +702,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 	/* -------------------------------------------------------- term meta */
 
 	private static function term( int $id ): void {
-		$GLOBALS['ab_test_way']['terms'][ $id ] = (object) array( 'term_id' => $id, 'taxonomy' => 'category', 'name' => 'News' );
+		$GLOBALS['ab_test_way']['terms'][ $id ]          = (object) array( 'term_id' => $id, 'taxonomy' => 'category', 'name' => 'News' );
+		$GLOBALS['ab_test_way']['taxonomies']['category'] = (object) array( 'name' => 'category', 'cap' => (object) array( 'assign_terms' => 'assign_categories', 'manage_terms' => 'manage_categories' ) );
 	}
 
 	public function testTermMetaIsWrittenWithTheRightToTheTermsMeta(): void {
@@ -687,13 +714,25 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			return true;
 		};
 		$r = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'Color', 'value' => '#c00' ) );
-		self::assertSame( array( 'updated' => true, 'term_id' => 8, 'key' => 'color' ), $r );
+		self::assertSame( array( true, 8, 'color' ), array( $r['updated'], $r['term_id'], $r['key'] ) );
+		self::assertSame( array( 'color' => '#c00' ), (array) $r['saved_fields'], 'Read back since 4.13.0.' );
+		self::assertArrayNotHasKey( 'saved_differs', $r );
+		self::assertNull( $r['undo'] );
 		self::assertSame( array( array( 'term', 8, 'color', '#c00' ) ), $GLOBALS['ab_test_meta_writes'] );
-		self::assertSame( array( array( 'edit_term_meta', array( 8, 'color' ) ) ), $asked );
+		self::assertSame( array( array( 'edit_term_meta', array( 8, 'color' ) ) ), array_slice( $asked, 0, 1 ) );
+		self::assertSame( array( array( 'edit_posts', array() ), array( 'assign_categories', array() ) ), array_slice( $asked, 1, 2 ), 'For the answer: whether wp_get_term_meta would answer this account for this term.' );
 
 		// Codex (GitHub) 29.10.2026: backslashes are stored as sent, nested too.
 		AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'path', 'value' => array( 'p' => 'C:\\dir\\x', 're' => array( '\\d+' ) ) ) );
 		self::assertSame( array( 'p' => 'C:\\dir\\x', 're' => array( '\\d+' ) ), $GLOBALS['ab_test_meta_writes'][1][3] );
+	}
+
+	public function testTermMetaTheSiteDidNotStoreIsAnErrorNotAnUpdate(): void {
+		self::term( 8 );
+		$GLOBALS['ab_test_meta_vetoes'] = array( 'color' );
+		$r = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'color', 'value' => '#c00' ) );
+		self::assertSame( 'ab_mcp_not_saved', self::code( $r ) );
+		self::assertStringContainsString( 'wp_get_term_meta', $r->get_error_message() );
 	}
 
 	public function testTermMetaIsRefusedWithoutWritingAnything(): void {

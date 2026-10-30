@@ -817,15 +817,159 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( array( 'publish', 'publish', 'pending' ), array( get_post( 5 )->post_status, get_post( 6 )->post_status, get_post( 7 )->post_status ) );
 	}
 
-	/* --------------------------------------- the four that record no point */
+	/* ----------------------------------------- wp_update_post_meta (4.13.0) */
 
-	public function testRevisionMetaCacheAndRewriteRulesRecordNoUndoPoint(): void {
+	public function testPostMetaRecordsAnUndoPointAndWpUndoPutsTheRowsBack(): void {
+		$GLOBALS['ab_test_meta'][5]['farbe'] = array( 'rot', 'gelb' );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'Farbe', 'value' => 'blau' ) );
+		self::assertSame( array( true, 5, 'farbe' ), array( $res['updated'], $res['id'], $res['key'] ) );
+		self::assertSame( array( 'farbe' => 'blau' ), (array) $res['saved_fields'], 'What the site stored, read again.' );
+		self::assertTrue( AB_MCP_Undo::valid_token( (string) $res['undo'] ), (string) ( $res['undo_note'] ?? '' ) );
+		$claim = AB_MCP_Undo::claim( (string) $res['undo'] );
+		self::assertSame( array( 'wp_update_post_meta', 'meta', 'edit_posts' ), array( $claim['entry']['tool'], $claim['entry']['kind'], $claim['entry']['cap'] ) );
+		self::assertSame( '#5: farbe', $claim['entry']['summary'], 'The key, never the value.' );
+		self::assertSame( array( 'existed' => true, 'rows' => array( array( 'meta_id' => 100, 'value' => 'rot' ), array( 'meta_id' => 101, 'value' => 'gelb' ) ) ), $claim['data']['keys']['farbe'], 'Both rows, with their ids.' );
+
+		$out = AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) );
+		self::assertSame( 1, $out['undone'], wp_json_encode( $out ) );
+		self::assertTrue( $out['consumed'] );
+		self::assertSame( array( 'rot', 'gelb' ), $GLOBALS['ab_test_meta'][5]['farbe'], 'Both rows back, in their order.' );
+
+		// A key the call created goes again.
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'neu', 'value' => array( 'a' => 1 ) ) );
+		self::assertSame( array( 'neu' => array( 'a' => 1 ) ), (array) $res['saved_fields'] );
+		self::assertSame( 1, AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) )['undone'] );
+		self::assertArrayNotHasKey( 'neu', $GLOBALS['ab_test_meta'][5] );
+
+		// The value it held already: nothing changed, nothing to undo.
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'rot' ) );
+		self::assertTrue( $res['updated'] );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'rot' ) );
+		self::assertNull( $res['undo'] );
+		self::assertStringContainsString( 'nothing changed', $res['undo_note'] );
+	}
+
+	public function testPostMetaOfARevisionIsKeptAndPutBackOnItsPost(): void {
+		// WordPress stores the meta of a revision on the post it belongs to.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		$GLOBALS['ab_test_meta'][5]['farbe'] = array( 'rot' );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 50, 'key' => 'farbe', 'value' => 'blau' ) );
+		self::assertSame( 5, $res['id'], 'The answer names the post that was written (Codex 31.10.2026).' );
+		self::assertSame( array( 'farbe' => 'blau' ), (array) $res['saved_fields'], 'Read back from the post.' );
+		$claim = AB_MCP_Undo::claim( (string) $res['undo'] );
+		self::assertSame( 5, $claim['data']['id'], 'The snapshot is of the post that holds the meta.' );
+		self::assertSame( 1, AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) )['undone'] );
+		self::assertSame( array( 'rot' ), $GLOBALS['ab_test_meta'][5]['farbe'] );
+	}
+
+	public function testARevisionIdAsksTheRightsOfItsPostNotOfTheRevision(): void {
+		// Codex 31.10.2026: update_post_meta() writes a revision's meta to its
+		// post, so the rights asked are the post's — a key callback that
+		// refuses it on the post refuses it through the revision too.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		$asked                  = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args = array() ) use ( &$asked ): bool {
+			$asked[] = array( $cap, $args );
+			return ! ( 'edit_post_meta' === $cap && 5 === ( $args[0] ?? null ) );
+		};
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 50, 'key' => 'note', 'value' => 'x' ) );
+		self::assertInstanceOf( \WP_Error::class, $res );
+		self::assertSame( 'ab_mcp_forbidden_meta', $res->get_error_code() );
+		self::assertArrayNotHasKey( 'note', $GLOBALS['ab_test_meta'][5] ?? array(), 'Nothing written.' );
+		self::assertContains( array( 'edit_post', array( 5 ) ), $asked );
+		self::assertNotContains( array( 'edit_post', array( 50 ) ), $asked, 'Not the revision\'s rights.' );
+	}
+
+	public function testUpdatePostWithMetaOfARevisionAsksTheRightsOfItsPost(): void {
+		// Codex 31.10.2026: wp_update_post takes a revision id on purpose (its
+		// description says the meta goes to the post); the meta field then
+		// asks the rights of that post and writes there.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		$asked                  = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args = array() ) use ( &$asked ): bool {
+			$asked[] = array( $cap, $args );
+			return ! ( 'edit_post_meta' === $cap && 'locked_field' === ( $args[1] ?? null ) );
+		};
+		AB_MCP_Tools_Content::update_post( array( 'id' => 50, 'meta' => array( 'locked_field' => 'neu', 'farbe' => 'blau' ) ) );
+		self::assertArrayNotHasKey( 'locked_field', $GLOBALS['ab_test_meta'][5] ?? array(), 'A key the post guards is not reached through its revision.' );
+		self::assertSame( array( 'blau' ), $GLOBALS['ab_test_meta'][5]['farbe'] ?? null, 'A key the post allows goes to the post.' );
+		self::assertContains( array( 'edit_post_meta', array( 5, 'farbe' ) ), $asked, 'The rights of the post, not of the revision.' );
+		self::assertNotContains( array( 'edit_post_meta', array( 50, 'farbe' ) ), $asked );
+	}
+
+	public function testTheMetaFieldOfUpdateAndCreatePostAsksTheRightsOfEveryStoredSpelling(): void {
+		// Codex 31.10.2026: update_post_meta( 5, 'mixed' ) also changes a row
+		// "Mixed" (the collation). One the account may not change keeps the
+		// key out of the write, as any other refused key of the meta field.
+		$GLOBALS['ab_test_meta'][5]['Mixed'] = array( 'geschuetzt' );
+		$GLOBALS['ab_test_can']              = static fn( string $cap, array $args = array() ): bool => ! ( 'edit_post_meta' === $cap && 'Mixed' === ( $args[1] ?? null ) );
+		AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'meta' => array( 'mixed' => 'manipuliert', 'farbe' => 'blau' ) ) );
+		self::assertSame( array( 'geschuetzt' ), $GLOBALS['ab_test_meta'][5]['Mixed'] );
+		self::assertArrayNotHasKey( 'mixed', $GLOBALS['ab_test_meta'][5], 'Passed over, not written.' );
+		self::assertSame( array( 'blau' ), $GLOBALS['ab_test_meta'][5]['farbe'], 'The other keys still go.' );
+		// The same rule through a revision: the rows are the post's.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		AB_MCP_Tools_Content::update_post( array( 'id' => 50, 'meta' => array( 'mixed' => 'manipuliert' ) ) );
+		self::assertArrayNotHasKey( 'mixed', $GLOBALS['ab_test_meta'][5] );
+		// And through the single-key tool.
+		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'mixed', 'value' => 'x' ) )->get_error_code() );
+		// With the right to "Mixed", the key goes as WordPress writes it.
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'meta' => array( 'mixed' => 'neu' ) ) );
+		self::assertSame( array( 'neu' ), $GLOBALS['ab_test_meta'][5]['mixed'] ?? null );
+	}
+
+	public function testPostMetaASanitizeFilterThatRewritesTheValueIsReportedNotHidden(): void {
+		add_filter( 'sanitize_post_meta_farbe', static fn( $v ) => strtoupper( (string) $v ) );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
+		self::assertTrue( $res['updated'], 'Something was stored: the change happened.' );
+		self::assertSame( array( 'farbe' => 'BLAU' ), (array) $res['saved_fields'] );
+		self::assertSame( array( 'farbe' ), $res['saved_differs'] );
+		self::assertStringContainsString( 'wp_get_post_meta', $res['warning'] );
+		self::assertTrue( AB_MCP_Undo::valid_token( (string) $res['undo'] ), 'And it can be undone.' );
+	}
+
+	public function testPostMetaTheReaderWouldNotShowIsComparedNotShown(): void {
+		// Codex 31.10.2026: a key a plugin marks as protected is refused by
+		// wp_get_post_meta, so the writer's answer does not show it either.
+		add_filter( 'is_protected_meta', static fn( $protected, $key ) => $protected || 'internal_note' === $key, 10, 2 );
+		add_filter( 'sanitize_post_meta_internal_note', static fn() => 'server secret' );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'internal_note', 'value' => 'x' ) );
+		self::assertSame( array(), (array) $res['saved_fields'] );
+		self::assertSame( array( 'internal_note' => 'not_shown' ), $res['saved_fields_omitted'] );
+		self::assertSame( array( 'internal_note' ), $res['saved_differs'] );
+		self::assertStringNotContainsString( 'server secret', (string) wp_json_encode( $res ) );
+		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'internal_note' ) )->get_error_code(), 'The reader refuses it by the same rule.' );
+	}
+
+	public function testPostMetaOfAPostTheReaderWouldNotAnswerForIsComparedNotShown(): void {
+		// Codex 31.10.2026: wp_get_post_meta asks read_post first; where it
+		// would refuse this account, the writer's answer shows nothing either.
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'read_post' !== $cap;
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
+		self::assertSame( array(), (array) $res['saved_fields'] );
+		self::assertSame( array( 'farbe' => 'not_shown' ), $res['saved_fields_omitted'] );
+		self::assertArrayNotHasKey( 'saved_differs', $res, 'Still compared: stored as asked.' );
+		self::assertSame( 'ab_mcp_forbidden', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'farbe' ) )->get_error_code(), 'As the reader refuses it.' );
+	}
+
+	public function testPostMetaWithUndoSwitchedOffSaysWhy(): void {
+		add_filter( 'ab_mcp_undo_enabled', '__return_false' );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
+		self::assertTrue( $res['updated'] );
+		self::assertNull( $res['undo'] );
+		self::assertStringContainsString( 'Undo is switched off on this site', $res['undo_note'] );
+		self::assertSame( array(), self::stored() );
+	}
+
+	/* --------------------------------------- the three that record no point */
+
+	public function testRevisionCacheAndRewriteRulesRecordNoUndoPoint(): void {
 		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5, 'post_title' => 'Revision title', 'post_content' => 'Revision body' ) );
 		self::assertSame( array( 'restored' => true, 'post_id' => 5 ), AB_MCP_Tools_Content::restore_revision( array( 'revision_id' => 50 ) ) );
 		self::assertSame( 'Revision title', get_post( 5 )->post_title );
 		self::assertSame( 'ab_mcp_not_found', AB_MCP_Tools_Content::restore_revision( array( 'revision_id' => 5 ) )->get_error_code(), 'A post that is no revision.' );
 
-		self::assertSame( array( 'updated' => true, 'id' => 5, 'key' => 'farbe' ), AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'Farbe', 'value' => 'blau' ) ) );
 		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => '_edit_lock', 'value' => '1' ) )->get_error_code() );
 
 		$cache = AB_MCP_Tools_System::clear_cache();

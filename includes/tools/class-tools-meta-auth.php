@@ -101,7 +101,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_user_meta',
 			array(
-				'description' => 'Create or overwrite one user meta value (all stored values of the key are replaced). Refused: keys starting with "_", role and capability keys of any site (…capabilities, …user_level), session_tokens, default_password_nonce, use_ssl and credential-like keys; role and password are changed by wp_update_user. Needs edit_users, the right to edit this user and to edit this key; an unknown user is a not-found error. WordPress strips backslashes from the value. Returns updated, user_id and key. No undo point is recorded; wp_get_user_meta reads the value.',
+				'description' => 'Create or overwrite one user meta value (all stored values of the key are replaced). Refused: keys starting with "_", role and capability keys of any site (…capabilities, …user_level), session_tokens, default_password_nonce, use_ssl and credential-like keys; role and password are changed by wp_update_user. Needs edit_users, the right to edit this user and to edit this key; an unknown user is a not-found error. Returns updated, user_id, key, saved_fields (read again after the write; the value itself only for the fields wp_get_user_meta shows) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. wp_get_user_meta reads the profile fields.',
 				'capability'  => 'edit_users',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -120,7 +120,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term_meta',
 			array(
-				'description' => 'Create or overwrite one meta value of a term (category, tag or any taxonomy); all stored values of the key are replaced. Keys starting with "_" and credential-like keys are refused. Needs manage_categories and the right to edit this term\'s meta. WordPress strips backslashes from the value. Returns updated, term_id and key; an unknown term is a not-found error. No undo point is recorded; the term\'s name, slug and description change with wp_update_term.',
+				'description' => 'Create or overwrite one meta value of a term (category, tag or any taxonomy); all stored values of the key are replaced. Keys starting with "_" and credential-like keys are refused. Needs manage_categories and the right to edit this term\'s meta. Returns updated, term_id, key, saved_fields (the value as stored afterwards, read again) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. An unknown term is a not-found error. The term\'s name, slug and description change with wp_update_term.',
 				'open_world'  => true, // term fields, as wp_update_term changes the term itself.
 				'capability'  => 'manage_categories',
 				'dangerous'   => true,
@@ -172,13 +172,18 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! get_user_by( 'id', $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
 		}
-		if ( ! current_user_can( 'edit_user', $id ) ) {
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		if ( ! AB_MCP_Undo_Meta_Rules::object_readable( 'user', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
+		// The key rule this reader shares with the answer of
+		// wp_update_user_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
 		$allowed = self::allowed_user_meta_keys();
 		$key     = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( ! in_array( $key, $allowed, true ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ) {
 				return new WP_Error(
 					'ab_mcp_protected_meta',
 					sprintf(
@@ -309,13 +314,42 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes what it stores: slashed here, a
-		// backslash in a path, a pattern or JSON is stored as sent.
-		update_user_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'user_id' => $id,
-			'key'     => $key,
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0). The answer shows the stored value only of the
+		// profile fields wp_get_user_meta shows; of any other key it says
+		// whether it holds what was sent, not what it holds.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_user_meta',
+				'type'    => 'user',
+				'id'      => $id,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				'hidden'  => ( ! AB_MCP_Undo_Meta_Rules::reader_answers( 'user', $id ) || AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ) ? array( $key ) : array(),
+				'reader'  => 'wp_get_user_meta',
+				'summary' => sprintf( 'user #%d: %s', $id, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes what it stores: slashed here, a
+				// backslash in a path, a pattern or JSON is stored as sent.
+				update_user_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'user_id' => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 
@@ -333,13 +367,17 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! $term || is_wp_error( $term ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
 		}
-		$tax_obj = get_taxonomy( $term->taxonomy );
-		if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
+		// The rules this reader shares with the answer of wp_update_term_meta
+		// (AB_MCP_Undo_Meta_Rules): the term and the keys it shows.
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		if ( ! AB_MCP_Undo_Meta_Rules::object_readable( 'term', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'term' ) || self::is_sensitive_meta_key( $key ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ) {
 				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
@@ -359,8 +397,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$all  = get_term_meta( $id );
 		$flat = array();
 		foreach ( $all as $k => $v ) {
-			if ( '_' === substr( $k, 0, 1 ) || is_protected_meta( $k, 'term' ) || self::is_sensitive_meta_key( $k )
-				|| ! current_user_can( 'edit_term_meta', $id, $k ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'term', (string) $k ) || ! current_user_can( 'edit_term_meta', $id, $k ) ) {
 				continue;
 			}
 			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
@@ -397,13 +434,43 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes what it stores: slashed here, a
-		// backslash in a path, a pattern or JSON is stored as sent.
-		update_term_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'term_id' => $id,
-			'key'     => $key,
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0). update_term_meta() can refuse a term shared
+		// between taxonomies with an error of its own; the read-back sees it.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_term_meta',
+				'type'    => 'term',
+				'id'      => $id,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				// Compared, not shown, where wp_get_term_meta would not show it:
+				// not to this account for this term, or not this key.
+				'hidden'  => ( ! AB_MCP_Undo_Meta_Rules::reader_answers( 'term', $id ) || AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ) ? array( $key ) : array(),
+				'reader'  => 'wp_get_term_meta',
+				'summary' => sprintf( 'term #%d: %s', $id, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes what it stores: slashed here, a
+				// backslash in a path, a pattern or JSON is stored as sent.
+				update_term_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'term_id' => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 

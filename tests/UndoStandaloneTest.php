@@ -1,7 +1,8 @@
 <?php
 /**
  * The standalone scripts under tests/standalone/ (the undo store, the undo of
- * wp_update_post, the page caches after a restore), run by this suite.
+ * wp_update_post, the page caches after a restore, the undo of the meta
+ * tools), run by this suite.
  *
  * They come from AlphaBridge MCP Pro, where each is its own PHP script with
  * its own stand-ins for WordPress; those stand-ins cannot share a process with
@@ -32,11 +33,13 @@ final class UndoStandaloneTest extends TestCase {
 	 * through, or loses a section, does not pass.
 	 */
 	private const MINIMUM = array(
-		'undo-test.php'            => 330,
+		'undo-test.php'            => 335,
 		'undo-postfields-test.php' => 170,
 		'restore-cache-test.php'   => 90,
 		// Free since 4.11.0: the undo of a theme switch.
 		'undo-theme-test.php'      => 40,
+		// Since 4.13.0: the undo of the meta tools and their read-back.
+		'undo-meta-test.php'       => 135,
 	);
 
 	/** For a script added later, until it is listed above. */

@@ -229,7 +229,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post_meta',
 			array(
-				'description' => 'Create or overwrite one meta value of a post: every stored value of the key is replaced, so a repeated call leaves the same state. Takes id, key and value (any JSON value; an array or object is stored as a serialized array); the key is stored lower-cased (sanitize_key). Refused: keys starting with "_", credential-like keys and keys the account may not edit. Page-builder data — keys such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post (filter ab_mcp_builder_markup_meta_keys) — takes the unfiltered_html capability, which on a multisite network only a super admin has. The value is stored as given, backslashes included (\\u0026 in block JSON stays \\u0026). Returns updated, id and key; an unknown post is a not-found error. Needs edit_posts and the right to edit the post; no undo point is recorded. wp_get_post_meta reads the value; wp_update_post sets several keys through its meta field.',
+				'description' => 'Create or overwrite one meta value of a post: every stored value of the key is replaced, so a repeated call leaves the same state. Takes id, key and value (any JSON value; an array or object is stored as a serialized array); the key is stored lower-cased (sanitize_key). Refused: keys starting with "_", credential-like keys and keys the account may not edit. Page-builder data — keys such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post (filter ab_mcp_builder_markup_meta_keys) — takes the unfiltered_html capability, which on a multisite network only a super admin has. The value is stored as given, backslashes included (\\u0026 in block JSON stays \\u0026). WordPress keeps the meta of a revision on the post it belongs to, so a revision id writes there, with the rights of that post, and id in the answer names that post. Returns updated, id, key, saved_fields (the value as stored afterwards, read again) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. An unknown post is a not-found error. Needs edit_posts and the right to edit the post. wp_get_post_meta reads the value; wp_update_post sets several keys through its meta field.',
 				'open_world'  => true, // post fields, page-builder data included, are shown on the page.
 				'capability'  => 'edit_posts',
 				'dangerous'   => true,
@@ -345,12 +345,17 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! get_post( $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
-		if ( ! current_user_can( 'read_post', $id ) ) {
+		// The rules this reader shares with the answer of wp_update_post_meta
+		// (AB_MCP_Undo_Meta_Rules): the post and the keys it shows.
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		if ( ! AB_MCP_Undo_Meta_Rules::object_readable( 'post', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'post' ) || self::is_sensitive_meta_key( $key ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'post', $key ) ) {
 				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder\'s layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Deliberately strict read rule: exposing a key over MCP requires the
@@ -371,8 +376,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$all  = get_post_meta( $id );
 		$flat = array();
 		foreach ( $all as $k => $v ) {
-			if ( '_' === substr( $k, 0, 1 ) || is_protected_meta( $k, 'post' ) || self::is_sensitive_meta_key( $k )
-				|| ! current_user_can( 'edit_post_meta', $id, $k ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'post', (string) $k ) || ! current_user_can( 'edit_post_meta', $id, $k ) ) {
 				continue;
 			}
 			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
@@ -821,7 +825,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 
 		$post = get_post( $id );
 
-		$refused = self::builder_meta_refusal( $a, $post );
+		// Meta of a revision goes to its post (apply_meta_and_terms()):
+		// page-builder keys are judged on that post.
+		$owner   = (int) wp_is_post_revision( $id );
+		$refused = self::builder_meta_refusal( $a, $owner > 0 ? get_post( $owner ) : $post );
 		if ( null !== $refused ) {
 			return $refused;
 		}
@@ -1407,6 +1414,19 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! $post ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found. wp_list_posts or wp_search finds its id.', 'alphabridge-mcp' ) );
 		}
+		// WordPress stores the meta of a revision on the post it belongs to
+		// (update_post_meta()). So that post is the one asked about from here
+		// on — its rights, its key rules, the snapshot, the write and the
+		// read-back — and the answer names it; asked of the revision, the
+		// rights of a key registered for the post's type would not be asked.
+		$parent = (int) wp_is_post_revision( $id );
+		if ( $parent > 0 ) {
+			$id   = $parent;
+			$post = get_post( $id );
+			if ( ! $post ) {
+				return new WP_Error( 'ab_mcp_not_found', __( 'Post not found. wp_list_posts or wp_search finds its id.', 'alphabridge-mcp' ) );
+			}
+		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'You are not allowed to edit this post. Ask someone who may edit it, or an administrator.', 'alphabridge-mcp' ) );
 		}
@@ -1428,14 +1448,45 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them.', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes the value it is given. Without wp_slash()
-		// "\u0026" in block or builder JSON is stored as "u0026" and the JSON
-		// breaks; wp_slash() walks into arrays, so nested values keep theirs.
-		update_post_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'id'      => $id,
-			'key'     => $key,
+		$target = $id;
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0): one way for the four meta tools.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_post_meta',
+				'type'    => 'post',
+				'id'      => $target,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				// Compared, not shown, where wp_get_post_meta would not show it:
+				// not to this account for this post, or not this key.
+				'hidden'  => ( ! AB_MCP_Undo_Meta_Rules::reader_answers( 'post', $id ) || AB_MCP_Undo_Meta_Rules::read_refused( 'post', $key ) ) ? array( $key ) : array(),
+				'reader'  => 'wp_get_post_meta',
+				'summary' => sprintf( '#%d: %s', $target, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes the value it is given. Without
+				// wp_slash() "\u0026" in block or builder JSON is stored as
+				// "u0026" and the JSON breaks; wp_slash() walks into arrays,
+				// so nested values keep theirs.
+				update_post_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'id'      => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 
@@ -1477,6 +1528,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 	 */
 	private static function apply_meta_and_terms( $id, $a ) {
 		$meta = self::arr( $a, 'meta', array() );
+		// WordPress stores the meta of a revision on the post it belongs to
+		// (update_post_meta()), so the rights of the keys are that post's: a
+		// key a plugin guards for the post's type is not to be reached
+		// through one of its revisions.
+		$owner = (int) wp_is_post_revision( $id );
+		$owner = $owner > 0 ? $owner : (int) $id;
 		foreach ( $meta as $key => $value ) {
 			// Sanitize first, then screen the key that will actually be stored,
 			// so key normalisation cannot smuggle a protected/credential name past.
@@ -1487,12 +1544,21 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 			// WordPress meta capability: routes through map_meta_cap and thereby
 			// honours any auth_callback another plugin registered for this key.
-			if ( ! current_user_can( 'edit_post_meta', $id, $clean ) ) {
+			if ( ! current_user_can( 'edit_post_meta', $owner, $clean ) ) {
+				continue;
+			}
+			// A row stored under another spelling ("Mixed" for "mixed")
+			// changes with this write: it is asked the same rules, and a
+			// key it is refused for is passed over like any other.
+			if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+				require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+			}
+			if ( null !== AB_MCP_Undo_Meta::spelling_refusal( 'wp_update_post_meta', 'post', $owner, $clean ) ) {
 				continue;
 			}
 			// update_metadata() unslashes key and value; the key is already
 			// sanitize_key()'d above, the value is not.
-			update_post_meta( $id, $clean, wp_slash( $value ) );
+			update_post_meta( $owner, $clean, wp_slash( $value ) );
 		}
 
 		$terms = self::arr( $a, 'terms', array() );

@@ -510,7 +510,8 @@ ok( 'ab_mcp_undo_unknown_tool' === ab_code( AB_MCP_Undo_Restore::plan( array( 't
 $GLOBALS['ab_caps']['manage_options'] = true;
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_site_settings', 'kind' => 'option' ), array( 'blogname' => 'x' ) ) ), 'G3 a kind that does not match its tool is refused' );
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_post', 'kind' => 'post_status' ), array( array( 1, 'draft' ) ) ) ), 'G3 also between this plugin\'s own kinds' );
-ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post', 'wp_activate_theme', 'wp_update_builder_element', 'wp_search_replace', 'wp_run_ability' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the seven tools of this plugin that record undo points (two of them since 4.10.0, wp_activate_theme since 4.11.0, wp_run_ability since 4.12.0)' );
+ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post', 'wp_activate_theme', 'wp_update_builder_element', 'wp_search_replace', 'wp_run_ability', 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_media' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the eleven tools of this plugin that record undo points (two of them since 4.10.0, wp_activate_theme since 4.11.0, wp_run_ability since 4.12.0, the four meta tools since 4.13.0)' );
+ok( array( 'edit_posts', 'manage_categories', 'edit_users', 'upload_files' ) === array_column( array_intersect_key( AB_MCP_Undo_Restore::policy(), array_flip( array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_media' ) ) ), 'cap' ) && array( 'meta' ) === array_values( array_unique( array_column( array_slice( AB_MCP_Undo_Restore::policy(), 7 ), 'kind' ) ) ), 'G4 the four of 4.13.0 record kind meta, each with the capability its tool asks' );
 
 /* ============================== H) post_status: Kaskade pro Objekt (the real AB_MCP_Post_Status) */
 
@@ -775,7 +776,7 @@ ok( empty( $bad ), 'O2 every AB_MCP_*::method() reference in the undo code resol
 $pol   = AB_MCP_Undo_Restore::policy();
 $kinds = array();
 foreach ( $pol as $tool => $row ) { $kinds[ $row['kind'] ] = true; }
-ok( 7 === count( $pol ), 'O3 the policy table covers exactly the seven tools of this plugin' );
+ok( 11 === count( $pol ), 'O3 the policy table covers exactly the eleven tools of this plugin' );
 $restore_src = (string) file_get_contents( $GLOBALS['ab_free'] . 'undo/class-undo-restore.php' );
 $missing     = array();
 foreach ( array_keys( $kinds ) as $k ) {
@@ -783,7 +784,7 @@ foreach ( array_keys( $kinds ) as $k ) {
 }
 ok( empty( $missing ), 'O3 and every kind it names has a plan branch and a restore branch' . ( $missing ? ' -- fehlt: ' . implode( ', ', $missing ) : '' ) );
 $guidance_pro = AB_MCP_Guidance::PRO_TOOLS;
-ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of the seven is listed as a Pro tool' );
+ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of the eleven is listed as a Pro tool' );
 
 /* ============================== PRO) Pro-Punkte im gemeinsamen Speicher */
 

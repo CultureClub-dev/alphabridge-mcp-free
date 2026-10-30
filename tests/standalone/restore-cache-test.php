@@ -544,7 +544,7 @@ foreach ( AB_MCP_Undo_Restore::policy() as $tool => $row ) {
 	}
 }
 ok( array() === $missing, 'F1 and every kind a tool records besides its own' );
-ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site', 'builder_data' => 'post', 'option_rows' => 'site', 'theme' => 'site' ) === $scopes, 'F1 posts for the post kinds and the page-builder pages (4.10.0), the whole site for the settings, the option rows of a replace (4.10.0) and the theme (4.11.0)' );
+ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site', 'builder_data' => 'post', 'option_rows' => 'site', 'theme' => 'site', 'meta' => 'post' ) === $scopes, 'F1 posts for the post kinds, the page-builder pages (4.10.0) and the meta of posts and files (4.13.0), the whole site for the settings, the option rows of a replace (4.10.0) and the theme (4.11.0)' );
 
 reset_all();
 $out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'post_fields', 'tool' => 'wp_update_post', 'restored' => array( 5 ), 'failed' => array(), 'blocked' => array() ) );
@@ -586,6 +586,16 @@ reset_all();
 $out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'theme', 'tool' => 'wp_activate_theme', 'restored' => array( 'twentytwentyfour' ), 'failed' => array(), 'blocked' => array() ) );
 ok( $expected === $out['page_cache_purged'] && site_purged_by_all( $present, 0 ) && array() === ab_cleaned(), 'F10c theme (4.11.0): the whole site is purged, no single post' );
 ok( array( array( 'theme', array(), 'wp_activate_theme' ) ) === ab_after_restore_calls(), 'F10c theme: the action fires with no post ids' );
+reset_all();
+$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'meta', 'tool' => 'wp_update_post_meta', 'restored' => array( 5 ), 'failed' => array(), 'blocked' => array() ) );
+ok( $expected === $out['page_cache_purged'] && posts_purged_by_all( array( 5 ), $present ) && array( 5 ) === ab_cleaned(), 'F10d meta of a post (4.13.0): the page of the post is purged, no more' );
+ok( array( array( 'meta', array( 5 ), 'wp_update_post_meta' ) ) === ab_after_restore_calls(), 'F10d ... and the action names the post' );
+foreach ( array( 'term:8' => 'wp_update_term_meta', 'user:3' => 'wp_update_user_meta' ) as $ref => $tool ) {
+	reset_all();
+	$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'meta', 'tool' => $tool, 'restored' => array(), 'failed' => array( array( 'ref' => $ref, 'reason' => 'x' ) ), 'blocked' => array() ) );
+	ok( $expected === $out['page_cache_purged'] && site_purged_by_all( $present, 0 ) && array() === ab_cleaned(), "F10e meta of $ref (4.13.0): no post id names its pages, so the whole site is purged" );
+	ok( array( array( 'meta', array(), $tool ) ) === ab_after_restore_calls(), "F10e $ref: the action fires with no post ids" );
+}
 foreach ( array( 'option' => 'wp_update_option', 'file' => 'wp_write_theme_file', 'something_new' => 'wp_x' ) as $kind => $tool ) {
 	reset_all();
 	$out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => $kind, 'tool' => $tool, 'restored' => array( '5' ), 'failed' => array(), 'blocked' => array() ) );
