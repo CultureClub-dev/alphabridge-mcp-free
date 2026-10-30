@@ -119,28 +119,36 @@ class AB_MCP_Undo_Meta {
 		}
 		$after = self::read_back( $type, $id, $keys, $cols );
 
+		// Columns first, then keys, each under its own name: not
+		// array_merge(), which numbers a key of digits ("2024") anew.
 		$asked = array();
 		$saved = array();
-		foreach ( array_merge( $fwant, $want ) as $what => $value ) {
-			$name           = isset( $names[ $what ] ) ? (string) $names[ $what ] : (string) $what;
-			$asked[ $name ] = $value;
-			if ( array_key_exists( $what, $after ) ) {
-				$saved[ $name ] = $after[ $what ];
+		$off   = array();
+		foreach ( array( $fwant, $want ) as $part ) {
+			foreach ( $part as $what => $value ) {
+				$what           = (string) $what;
+				$name           = isset( $names[ $what ] ) ? (string) $names[ $what ] : $what;
+				$asked[ $name ] = $value;
+				if ( array_key_exists( $what, $after ) ) {
+					$saved[ $name ] = $after[ $what ];
+				}
+				if ( ! array_key_exists( $what, $after ) || ! AB_MCP_Undo_Answer::same( $after[ $what ], $value ) ) {
+					$off[] = $name;
+				}
 			}
 		}
 
 		// Changed or not: by the rows themselves where they could be read,
 		// else by what WordPress reads back.
 		$hashes  = null !== $snap ? self::state_hashes( $type, $id, $keys, $cols ) : null;
-		$changed = null !== $hashes ? $hashes !== self::before_hashes( $snap ) : $after !== $before;
-		$res     = AB_MCP_Undo_Answer::saved( array(), $asked, $saved, $reader, isset( $spec['hidden'] ) ? (array) $spec['hidden'] : array() );
-		if ( ! $changed && isset( $res['saved_differs'] ) ) {
+		$changed = null !== $hashes ? $hashes !== self::before_hashes( $snap ) : ! AB_MCP_Undo_Answer::same( (object) $after, (object) $before );
+		if ( ! $changed && array() !== $off ) {
 			return new WP_Error(
 				'ab_mcp_not_saved',
 				sprintf(
 					/* translators: 1: comma-separated field names, 2: tool name */
 					__( 'WordPress did not store the change: %1$s still hold what they held before. A plugin may refuse it on save (a filter on the meta update, or a rule its plugin registered for the key). Check the value with %2$s, and ask the site administrator which plugin guards it.', 'alphabridge-mcp' ),
-					implode( ', ', $res['saved_differs'] ),
+					implode( ', ', $off ),
 					$reader
 				)
 			);
@@ -167,6 +175,9 @@ class AB_MCP_Undo_Meta {
 				)
 			);
 		}
+		// The read-back goes into the answer only now: the undo point is
+		// recorded whatever a stored value turns out to be.
+		$res = AB_MCP_Undo_Answer::saved( array(), $asked, $saved, $reader, isset( $spec['hidden'] ) ? (array) $spec['hidden'] : array() );
 		return AB_MCP_Undo_Answer::with( $res, $outcome );
 	}
 
@@ -213,7 +224,7 @@ class AB_MCP_Undo_Meta {
 			$first = $values[0];
 			$same  = true;
 			foreach ( $values as $v ) {
-				$same = $same && $v === $first;
+				$same = $same && AB_MCP_Undo_Answer::same( $v, $first );
 			}
 			$out[ $key ] = $same ? $first : $values;
 		}
@@ -287,13 +298,21 @@ class AB_MCP_Undo_Meta {
 			return null;
 		}
 		$table = (string) $wpdb->{$t['table']};
-		$ran   = $wpdb->query( $wpdb->prepare( "SELECT {$t['pk']} AS meta_id, meta_value FROM {$table} WHERE {$t['col']} = %d AND meta_key = %s ORDER BY {$t['pk']} ASC", (int) $id, (string) $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- table and columns come from TABLES; the stored bytes are the point.
+		$ran   = $wpdb->query( $wpdb->prepare( "SELECT {$t['pk']} AS meta_id, meta_key, meta_value FROM {$table} WHERE {$t['col']} = %d AND meta_key = %s ORDER BY {$t['pk']} ASC", (int) $id, (string) $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- table and columns come from TABLES; the stored bytes are the point.
 		if ( false === $ran || '' !== (string) $wpdb->last_error ) {
 			return null;
 		}
 		$out = array();
 		foreach ( is_array( $wpdb->last_result ) ? $wpdb->last_result : array() as $row ) {
-			$row   = (array) $row;
+			$row = (array) $row;
+			// The column is compared with a collation, and collations fold
+			// ("LOCKED_FIELD" finds locked_field under a case-insensitive
+			// one). Only a row whose key is these very bytes is this key:
+			// the rights were asked for these bytes, not for the row the
+			// database matched.
+			if ( ! isset( $row['meta_key'] ) || (string) $row['meta_key'] !== (string) $key ) {
+				continue;
+			}
 			$out[] = array(
 				'meta_id' => (int) $row['meta_id'],
 				'value'   => null === $row['meta_value'] ? '' : (string) $row['meta_value'],
@@ -523,9 +542,13 @@ class AB_MCP_Undo_Meta {
 				return self::failed( $key );
 			}
 			if ( empty( $state['existed'] ) ) {
-				// The change created the key: it goes again.
-				if ( array() !== $now && false === $wpdb->delete( $wpdb->{$t['table']}, array( $t['col'] => $id, 'meta_key' => $key ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-					return self::failed( $key );
+				// The change created the key: its rows go again, row by row
+				// by their ids — a delete by key would take every row the
+				// collation folds onto it as well.
+				foreach ( $now as $row ) {
+					if ( false === $wpdb->delete( $wpdb->{$t['table']}, array( $t['pk'] => (int) $row['meta_id'] ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+						return self::failed( $key );
+					}
 				}
 				continue;
 			}
@@ -787,6 +810,13 @@ class AB_MCP_Undo_Meta {
 			// A key of digits comes back from JSON as a number.
 			$key = is_int( $key ) ? (string) $key : $key;
 			if ( ! is_string( $key ) || '' === $key || strlen( $key ) > 255 || ! self::valid_state( $state ) ) {
+				return false;
+			}
+			// Only a key the tool can have written: the meta tools store it
+			// through sanitize_key(), wp_update_media under one name. Another
+			// spelling ("LOCKED_FIELD") would have its rights asked for a key
+			// the database may fold onto a different one.
+			if ( $key !== ( $media ? self::MEDIA_ALT : sanitize_key( $key ) ) ) {
 				return false;
 			}
 			$locs[] = 'meta:' . $key;

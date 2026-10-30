@@ -175,10 +175,15 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'edit_user', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
+		// The key rule this reader shares with the answer of
+		// wp_update_user_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		$allowed = self::allowed_user_meta_keys();
 		$key     = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( ! in_array( $key, $allowed, true ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ) {
 				return new WP_Error(
 					'ab_mcp_protected_meta',
 					sprintf(
@@ -312,6 +317,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		// The rows of the key before, the write, the read-back and the undo
 		// point (since 4.13.0). The answer shows the stored value only of the
 		// profile fields wp_get_user_meta shows; of any other key it says
@@ -322,7 +330,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				'type'    => 'user',
 				'id'      => $id,
 				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
-				'hidden'  => in_array( $key, self::allowed_user_meta_keys(), true ) ? array() : array( $key ),
+				'hidden'  => AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ? array( $key ) : array(),
 				'reader'  => 'wp_get_user_meta',
 				'summary' => sprintf( 'user #%d: %s', $id, $key ),
 			),
@@ -363,9 +371,14 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		// The key rules this reader shares with the answer of
+		// wp_update_term_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'term' ) || self::is_sensitive_meta_key( $key ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ) {
 				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Per-key capability: honours auth_callback rules from register_meta().
@@ -385,8 +398,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$all  = get_term_meta( $id );
 		$flat = array();
 		foreach ( $all as $k => $v ) {
-			if ( '_' === substr( $k, 0, 1 ) || is_protected_meta( $k, 'term' ) || self::is_sensitive_meta_key( $k )
-				|| ! current_user_can( 'edit_term_meta', $id, $k ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'term', (string) $k ) || ! current_user_can( 'edit_term_meta', $id, $k ) ) {
 				continue;
 			}
 			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
@@ -426,6 +438,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		// The rows of the key before, the write, the read-back and the undo
 		// point (since 4.13.0). update_term_meta() can refuse a term shared
 		// between taxonomies with an error of its own; the read-back sees it.
@@ -435,6 +450,8 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				'type'    => 'term',
 				'id'      => $id,
 				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				// Compared, not shown, where wp_get_term_meta would not show it.
+				'hidden'  => AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ? array( $key ) : array(),
 				'reader'  => 'wp_get_term_meta',
 				'summary' => sprintf( 'term #%d: %s', $id, $key ),
 			),

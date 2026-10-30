@@ -39,7 +39,7 @@ final class UndoStandaloneTest extends TestCase {
 		// Free since 4.11.0: the undo of a theme switch.
 		'undo-theme-test.php'      => 40,
 		// Since 4.13.0: the undo of the meta tools and their read-back.
-		'undo-meta-test.php'       => 115,
+		'undo-meta-test.php'       => 135,
 	);
 
 	/** For a script added later, until it is listed above. */

@@ -163,6 +163,11 @@ function ab_rows( $type, $obj, $key ) {
 	}
 	return $out;
 }
+/* As the table compares meta_key: under a case-insensitive collation, as MySQL's default ones do. */
+function ab_collates( $a, $b ) { return strtolower( (string) $a ) === strtolower( (string) $b ); }
+/* is_protected_meta(): "_" keys, and those a plugin's filter marks as protected. */
+$GLOBALS['ab_protected'] = array();
+function is_protected_meta( $key, $type = '' ) { return '_' === substr( (string) $key, 0, 1 ) || in_array( (string) $key, $GLOBALS['ab_protected'], true ); }
 function ab_post( $id, $over = array() ) {
 	$GLOBALS['ab_posts'][ $id ] = (object) array_merge(
 		array( 'ID' => $id, 'post_title' => 'Old title', 'post_content' => '', 'post_excerpt' => 'Old caption', 'post_status' => 'publish', 'post_name' => 'p' . $id, 'post_parent' => 0, 'post_author' => '1', 'post_type' => 'post', 'post_date' => '2001-01-01 10:00:00', 'post_date_gmt' => '2001-01-01 09:00:00', 'post_password' => '' ),
@@ -187,12 +192,14 @@ $GLOBALS['wpdb'] = new class {
 	public function query( $sql ) {
 		$this->last_result = array();
 		$this->last_error  = '';
-		if ( preg_match( "/^SELECT (\\w+) AS meta_id, meta_value FROM (\\w+) WHERE (\\w+) = (\\d+) AND meta_key = '(.*)' ORDER BY (\\w+) ASC$/s", $sql, $m ) ) {
+		if ( preg_match( "/^SELECT (\\w+) AS meta_id, meta_key, meta_value FROM (\\w+) WHERE (\\w+) = (\\d+) AND meta_key = '(.*)' ORDER BY (\\w+) ASC$/s", $sql, $m ) ) {
 			if ( $GLOBALS['ab_db_down'] ) { return false; } // a connection that went away: false, last_error empty
 			$t = AB_TABLES[ $m[2] ];
 			if ( $t[1] !== $m[3] || $t[2] !== $m[1] || $t[2] !== $m[6] ) { $this->last_error = 'Unknown column'; return false; }
-			foreach ( ab_rows( $t[0], (int) $m[4], stripslashes( $m[5] ) ) as $id => $v ) {
-				$this->last_result[] = (object) array( 'meta_id' => (string) $id, 'meta_value' => $v ); // MySQL hands back strings
+			foreach ( $GLOBALS['ab_meta'][ $t[0] ] as $id => $r ) {
+				if ( $r[0] === (int) $m[4] && ab_collates( $r[1], stripslashes( $m[5] ) ) ) {
+					$this->last_result[] = (object) array( 'meta_id' => (string) $id, 'meta_key' => $r[1], 'meta_value' => $r[2] ); // MySQL hands back strings
+				}
 			}
 			return count( $this->last_result );
 		}
@@ -240,7 +247,7 @@ $GLOBALS['wpdb'] = new class {
 		$this->writes[] = array( 'delete', $table, $where );
 		$n = 0;
 		foreach ( $GLOBALS['ab_meta'][ $t[0] ] as $id => $r ) {
-			if ( ( isset( $where[ $t[2] ] ) && (int) $where[ $t[2] ] === $id ) || ( isset( $where[ $t[1] ] ) && (int) $where[ $t[1] ] === $r[0] && $where['meta_key'] === $r[1] ) ) {
+			if ( ( isset( $where[ $t[2] ] ) && (int) $where[ $t[2] ] === $id ) || ( isset( $where[ $t[1] ] ) && (int) $where[ $t[1] ] === $r[0] && ab_collates( $where['meta_key'], $r[1] ) ) ) {
 				unset( $GLOBALS['ab_meta'][ $t[0] ][ $id ] );
 				++$n;
 			}
@@ -306,6 +313,7 @@ function wp_update_post( $arr, $wp_error = false ) {
 	return (int) $arr['ID'];
 }
 function get_term( $id, $tax = '' ) { return $GLOBALS['ab_terms'][ (int) $id ] ?? null; }
+function get_taxonomy( $tax ) { return (object) array( 'cap' => (object) array( 'assign_terms' => 'assign_categories', 'manage_terms' => 'manage_categories' ) ); }
 function get_user_by( $field, $id ) { return isset( $GLOBALS['ab_users'][ (int) $id ] ) ? (object) array( 'ID' => (int) $id ) : false; }
 
 /* ---- the rest of the site the tools and the restore ask ---- */
@@ -382,6 +390,7 @@ function reset_all() {
 	$GLOBALS['ab_db_down']       = false;
 	$GLOBALS['ab_db_nowrite']    = false;
 	$GLOBALS['ab_db_lies']       = false;
+	$GLOBALS['ab_protected']     = array();
 	$GLOBALS['ab_meta_veto']     = array();
 	$GLOBALS['ab_meta_sanitize'] = array();
 	$GLOBALS['ab_title_filter']  = null;
@@ -773,6 +782,63 @@ $res = ab_post_meta( 5, 'farbe', 'blau' );
 $GLOBALS['ab_db_lies'] = true;
 $out = ab_undo( $res['undo'] );
 ok( 0 === $out['undone'] && 1 === count( $out['failed'] ) && false !== strpos( $out['failed'][0]['reason'], 'holds something else for: farbe' ) && null !== ab_entry( $res['undo'] ), 'K5 a write the database reports but does not hold is read back: failed, the point stays' );
+
+/* ============================== M) Codex 31.10.2026: the key as stored, keys of digits, objects */
+
+reset_all();
+$lf  = ab_add_row( 'post', 5, 'locked_field', 'locked' );
+$GLOBALS['ab_deny'] = array( 'edit_post_meta:5:locked_field' => true );
+$forged = array( 'v' => 1, 'type' => 'post', 'id' => 5, 'keys' => array( 'LOCKED_FIELD' => array( 'existed' => true, 'rows' => array( array( 'meta_id' => $lf, 'value' => 'mine' ) ) ) ), 'after' => array( 'meta:LOCKED_FIELD' => str_repeat( 'a', 64 ) ) );
+$t   = AB_MCP_Undo::record( array( 'tool' => 'wp_update_post_meta', 'cap' => 'edit_posts', 'kind' => 'meta', 'summary' => 'forged', 'items' => 1, 'data' => $forged ) );
+$out = ab_undo( $t );
+ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && array( $lf => 'locked' ) === ab_rows( 'post', 5, 'locked_field' ), 'M1 a key in another spelling than the tool writes (LOCKED_FIELD for locked_field) is refused whole; the row its rights guard stays' );
+ok( false === AB_MCP_Undo_Meta::valid( 'wp_update_media', array( 'v' => 1, 'type' => 'post', 'id' => 9, 'keys' => array( '_WP_ATTACHMENT_IMAGE_ALT' => array( 'existed' => false ) ), 'after' => array( 'meta:_WP_ATTACHMENT_IMAGE_ALT' => str_repeat( 'a', 64 ) ) ) ), 'M2 wp_update_media: the alt key only as WordPress writes it' );
+$GLOBALS['ab_deny'] = array();
+ab_add_row( 'post', 5, 'Mixed', 'a row of another key' );
+ok( array() === AB_MCP_Undo_Meta::rows( 'post', 5, 'mixed' ), 'M3 a row the collation folds onto the key is not a row of the key' );
+
+reset_all();
+$plug = ab_add_row( 'post', 5, 'NEU', 'a plugin\'s own key' );
+$res  = ab_post_meta( 5, 'neu', 'x' );
+ok( array( 'existed' => false ) === AB_MCP_Undo::claim( (string) $res['undo'] )['data']['keys']['neu'], 'M4 the snapshot keeps the key as missing: the folded row is another key' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array() === ab_rows( 'post', 5, 'neu' ) && array( $plug => 'a plugin\'s own key' ) === ab_rows( 'post', 5, 'NEU' ), 'M5 the key the change created goes row by row; the folded row stays' );
+
+reset_all();
+$GLOBALS['ab_protected'] = array( 'internal_note' );
+$GLOBALS['ab_meta_sanitize']['internal_note'] = static fn( $v ) => 'GEHEIM-server-value';
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'internal_note', 'value' => 'x' ) );
+ok( array() === (array) $res['saved_fields'] && array( 'internal_note' => 'not_shown' ) === $res['saved_fields_omitted'] && array( 'internal_note' ) === $res['saved_differs'] && false === strpos( (string) wp_json_encode( $res ), 'GEHEIM' ), 'M6 a key wp_get_term_meta does not show (protected by a filter): compared, never shown' );
+ok( 'ab_mcp_protected_meta' === ab_code( AB_MCP_Tools_Meta_Auth::get_term_meta_tool( array( 'term_id' => 8, 'key' => 'internal_note' ) ) ), 'M7 ... the same rule as the reader, which refuses it' );
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'api_hint', 'value' => 'shown' ) );
+ok( array( 'api_hint' => 'shown' ) === (array) $res['saved_fields'], 'M8 a key the reader shows is shown' );
+
+reset_all();
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => '2024', 'value' => 'blue' ) );
+ok( array( '2024' => 'blue' ) === (array) $res['saved_fields'] && ! isset( $res['saved_differs'] ) && '{"2024":"blue"}' === wp_json_encode( $res['saved_fields'] ), 'M9 a key of digits keeps its name in saved_fields' );
+ok( AB_MCP_Undo::valid_token( (string) $res['undo'] ), 'M10 ... and gets its undo point' );
+$again = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => '2024', 'value' => 'blue' ) );
+ok( is_array( $again ) && null === $again['undo'] && false !== strpos( $again['undo_note'], 'nothing changed' ), 'M11 the same call again: nothing changed, no error' );
+ok( 1 === ab_undo( $res['undo'], array( 'force' => true ) )['undone'] && array() === ab_rows( 'term', 8, '2024' ), 'M12 and the undo takes the key of digits back' );
+
+reset_all();
+$GLOBALS['ab_meta_sanitize']['obj'] = static fn( $v ) => (object) array( 'wrapped' => $v );
+$res = ab_post_meta( 5, 'obj', 'x' );
+ok( is_array( $res ) && AB_MCP_Undo::valid_token( (string) $res['undo'] ), 'M13 a value a sanitize callback turned into an object: the undo point is still recorded' );
+ok( array( 'obj' ) === $res['saved_differs'] && isset( ( (array) $res['saved_fields'] )['obj'] ) && 'x' === ( (array) $res['saved_fields'] )['obj']->wrapped, 'M14 ... reported as different, shown as stored' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array() === ab_rows( 'post', 5, 'obj' ), 'M15 ... and undone' );
+$res = ab_post_meta( 5, 'obj', 'x' );
+$res = ab_post_meta( 5, 'obj', 'x' );
+ok( 'ab_mcp_not_saved' === ab_code( $res ) && false !== strpos( ab_msg( $res ), 'obj' ), 'M16 the same call again does not break on the object: the site still holds the object of before, not what was sent, and nothing changed' );
+
+reset_all();
+$GLOBALS['ab_meta_sanitize']['obj2'] = static fn( $v ) => (object) array( 'wrapped' => $v );
+ab_add_row( 'post', 5, 'obj2', 'a' );
+ab_add_row( 'post', 5, 'obj2', 'b' );
+$res = ab_post_meta( 5, 'obj2', 'x' );
+ok( is_object( ( (array) $res['saved_fields'] )['obj2'] ), 'M17 two rows that hold the same object read as that object, not as a list' );
+$GLOBALS['ab_db_down'] = true;
+$res = ab_post_meta( 5, 'obj2', 'x' );
+ok( 'ab_mcp_not_saved' === ab_code( $res ), 'M18 without the rows, the read-back still sees that the same object is nothing new' );
 
 /* ============================== L) Pro's own wp_undo (last: the class stays) */
 

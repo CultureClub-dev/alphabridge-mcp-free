@@ -241,15 +241,14 @@ class AB_MCP_Undo_Answer {
 		foreach ( $asked as $field => $want ) {
 			$field = (string) $field;
 			$have  = array_key_exists( $field, $saved ) ? $saved[ $field ] : null;
-			if ( ! array_key_exists( $field, $saved ) || $have !== $want ) {
+			if ( ! array_key_exists( $field, $saved ) || ! self::same( $have, $want ) ) {
 				$off[] = $field;
 			}
 			if ( in_array( $field, $hidden, true ) ) {
 				$omitted[ $field ] = 'not_shown';
 				continue;
 			}
-			$bytes = strlen( is_array( $have ) ? serialize( $have ) : (string) $have ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the size as WordPress stores it.
-			if ( $bytes > self::SHOW_MAX ) {
+			if ( self::bytes( $have ) > self::SHOW_MAX ) {
 				$omitted[ $field ] = 'too_long';
 				continue;
 			}
@@ -264,6 +263,47 @@ class AB_MCP_Undo_Answer {
 			$res['warning']       = self::differs_warning( $off, $reader );
 		}
 		return $res;
+	}
+
+	/**
+	 * Is the value read back the one asked for? Exactly, types included. A
+	 * sanitize callback can make an object of the value, which WordPress
+	 * stores serialized and gives back as a new object each time: objects
+	 * are compared by what they hold, and nothing here may throw once the
+	 * write has happened.
+	 *
+	 * @param mixed $have Value as read back.
+	 * @param mixed $want Value as asked, in stored_form().
+	 * @return bool
+	 */
+	public static function same( $have, $want ) {
+		if ( ! is_object( $have ) && ! is_object( $want ) ) {
+			return $have === $want;
+		}
+		try {
+			return serialize( $have ) === serialize( $want ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- compared as WordPress stores them.
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * The size of a value as WordPress stores it: a list, a map or an object
+	 * serialized, anything else as text. A value that cannot be measured
+	 * counts as too long to show.
+	 *
+	 * @param mixed $value Value as read back.
+	 * @return int
+	 */
+	public static function bytes( $value ) {
+		if ( null === $value || is_scalar( $value ) ) {
+			return strlen( (string) $value );
+		}
+		try {
+			return strlen( serialize( $value ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the size as WordPress stores it.
+		} catch ( \Throwable $e ) {
+			return PHP_INT_MAX;
+		}
 	}
 
 	/**

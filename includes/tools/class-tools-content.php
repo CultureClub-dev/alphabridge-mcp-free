@@ -348,9 +348,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'read_post', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this specific post (a private post or another author\'s draft, for example). Connect with an account that may read it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
+		// The key rules this reader shares with the answer of
+		// wp_update_post_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
-			if ( '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'post' ) || self::is_sensitive_meta_key( $key ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'post', $key ) ) {
 				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder\'s layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Deliberately strict read rule: exposing a key over MCP requires the
@@ -371,8 +376,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$all  = get_post_meta( $id );
 		$flat = array();
 		foreach ( $all as $k => $v ) {
-			if ( '_' === substr( $k, 0, 1 ) || is_protected_meta( $k, 'post' ) || self::is_sensitive_meta_key( $k )
-				|| ! current_user_can( 'edit_post_meta', $id, $k ) ) {
+			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'post', (string) $k ) || ! current_user_can( 'edit_post_meta', $id, $k ) ) {
 				continue;
 			}
 			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
@@ -1435,6 +1439,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
 		// The rows of the key before, the write, the read-back and the undo
 		// point (since 4.13.0): one way for the four meta tools.
 		$res = AB_MCP_Undo_Meta::write(
@@ -1443,6 +1450,8 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				'type'    => 'post',
 				'id'      => $target,
 				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				// Compared, not shown, where wp_get_post_meta would not show it.
+				'hidden'  => AB_MCP_Undo_Meta_Rules::read_refused( 'post', $key ) ? array( $key ) : array(),
 				'reader'  => 'wp_get_post_meta',
 				'summary' => sprintf( '#%d: %s', $target, $key ),
 			),

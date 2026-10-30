@@ -313,9 +313,9 @@ class AbTestUndoWpdb {
 		$this->queries[]   = $query;
 		$this->last_result = array();
 		$this->last_error  = '';
-		if ( preg_match( "/^SELECT meta_id AS meta_id, meta_value FROM wp_postmeta WHERE post_id = (\\d+) AND meta_key = '(.*)' ORDER BY meta_id ASC$/", (string) $query, $m ) ) {
+		if ( preg_match( "/^SELECT meta_id AS meta_id, meta_key, meta_value FROM wp_postmeta WHERE post_id = (\\d+) AND meta_key = '(.*)' ORDER BY meta_id ASC$/", (string) $query, $m ) ) {
 			foreach ( $this->meta_rows( (int) $m[1], stripslashes( $m[2] ) ) as $row ) {
-				$this->last_result[] = (object) array( 'meta_id' => (string) $row[0], 'meta_value' => $row[1] );
+				$this->last_result[] = (object) array( 'meta_id' => (string) $row[0], 'meta_key' => stripslashes( $m[2] ), 'meta_value' => $row[1] );
 			}
 			return count( $this->last_result );
 		}

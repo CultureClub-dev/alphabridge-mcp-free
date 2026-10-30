@@ -872,6 +872,19 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertTrue( AB_MCP_Undo::valid_token( (string) $res['undo'] ), 'And it can be undone.' );
 	}
 
+	public function testPostMetaTheReaderWouldNotShowIsComparedNotShown(): void {
+		// Codex 31.10.2026: a key a plugin marks as protected is refused by
+		// wp_get_post_meta, so the writer's answer does not show it either.
+		add_filter( 'is_protected_meta', static fn( $protected, $key ) => $protected || 'internal_note' === $key, 10, 2 );
+		add_filter( 'sanitize_post_meta_internal_note', static fn() => 'server secret' );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'internal_note', 'value' => 'x' ) );
+		self::assertSame( array(), (array) $res['saved_fields'] );
+		self::assertSame( array( 'internal_note' => 'not_shown' ), $res['saved_fields_omitted'] );
+		self::assertSame( array( 'internal_note' ), $res['saved_differs'] );
+		self::assertStringNotContainsString( 'server secret', (string) wp_json_encode( $res ) );
+		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'internal_note' ) )->get_error_code(), 'The reader refuses it by the same rule.' );
+	}
+
 	public function testPostMetaWithUndoSwitchedOffSaysWhy(): void {
 		add_filter( 'ab_mcp_undo_enabled', '__return_false' );
 		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
