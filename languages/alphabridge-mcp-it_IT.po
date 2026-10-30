@@ -5047,3 +5047,9 @@ msgstr "Il menu %d contiene una voce che questo account non può eliminare, ed e
 
 msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
 msgstr "Nessun punto di ripristino: la riga di opzione di questi widget contiene un oggetto PHP, che un punto di ripristino non rimette. Controlla il risultato con wp_get_widgets; un widget simile si ripristina in wp-admin in Aspetto › Widget."
+
+msgid "Menu items %1$s of menu %2$d are still there after the deletion, or could not be read back; the menu was kept and the undo point stays. Check them with wp_get_menu, remove them with wp_delete_menu_item, then try again."
+msgstr "Le voci di menu %1$s del menu %2$d sono ancora presenti dopo l'eliminazione, o non è stato possibile rileggerle; il menu è stato mantenuto e il punto di ripristino resta. Controllale con wp_get_menu, rimuovile con wp_delete_menu_item, poi riprova."
+
+msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
+msgstr "In una rete multisito WordPress rimuove l'account solo da questo sito: l'account, il suo ID e la sua password restano, e i suoi contenuti qui sono stati trattati come indicato dalla chiamata. Prima di rimuovere un account che potrebbe servire di nuovo qui, annota il suo ruolo con wp_get_user; un amministratore della rete lo aggiunge di nuovo a questo sito in wp-admin, sotto Utenti."

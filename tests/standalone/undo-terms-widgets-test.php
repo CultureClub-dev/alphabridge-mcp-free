@@ -147,6 +147,7 @@ function ab_db_reset() {
 	$GLOBALS['ab_db_noflag']  = false; // an update of an option that writes the value and drops the flag
 	$GLOBALS['ab_db_error']   = false; // a SELECT that ran and failed: no rows, and last_error says why
 	$GLOBALS['ab_delete_lies'] = false; // a deletion of a term or a post that reports success and deletes nothing
+	$GLOBALS['ab_keep_posts']  = array(); // posts a plugin keeps from deletion (pre_delete_post)
 }
 ab_db_reset();
 function ab_next() { return $GLOBALS['ab_next']++; }
@@ -459,6 +460,7 @@ function is_nav_menu_item( $id ) { return isset( $GLOBALS['T']['posts'][ (int) $
 function wp_delete_post( $id, $force = false ) {
 	$p = get_post( $id );
 	if ( ! $p ) { return false; }
+	if ( in_array( (int) $id, $GLOBALS['ab_keep_posts'], true ) ) { return false; } // pre_delete_post said no
 	if ( $GLOBALS['ab_delete_lies'] ) { return $p; }
 	unset( $GLOBALS['T']['posts'][ (int) $id ] );
 	$GLOBALS['T']['postmeta'] = array_filter( $GLOBALS['T']['postmeta'], static fn( $r ) => $r[0] !== (int) $id );
@@ -770,6 +772,18 @@ ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && 
 $out = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 1 === $out['undone'] && false === wp_get_nav_menu_object( 'Main' ) && null === get_post( $item['item_id'] ), 'E5 with force the menu goes, with its items, as wp-admin deletes it' );
 
+// Codex round 4: an item a plugin keeps from deletion.
+reset_all();
+$res                      = AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'Main' ) );
+$item                     = AB_MCP_Tools_Menus_Users::add_menu_item( array( 'menu' => 'Main', 'title' => 'Home', 'url' => 'https://example.test/' ) );
+$keep                     = AB_MCP_Tools_Menus_Users::add_menu_item( array( 'menu' => 'Main', 'title' => 'Kept', 'url' => 'https://example.test/k' ) );
+$GLOBALS['ab_keep_posts'] = array( (int) $keep['item_id'] );
+$out                      = ab_undo( $res['undo'], array( 'force' => true ) );
+ok( 0 === $out['undone'] && 1 === count( $out['failed'] ) && false !== strpos( $out['failed'][0]['reason'], (string) $keep['item_id'] ) && false !== wp_get_nav_menu_object( 'Main' ) && null !== get_post( $keep['item_id'] ) && null !== ab_entry( $res['undo'] ), 'E5a an item that stays: the menu is kept, the item named, the point stays' );
+$GLOBALS['ab_keep_posts'] = array();
+$out                      = ab_undo( $res['undo'], array( 'force' => true ) );
+ok( 1 === $out['undone'] && false === wp_get_nav_menu_object( 'Main' ) && null === get_post( $keep['item_id'] ) && null === get_post( $item['item_id'] ), 'E5b once it may go, the same token deletes it and the menu' );
+
 reset_all();
 $res                     = AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'Main' ) );
 $GLOBALS['ab_locations'] = array( 'primary' => $res['menu_id'] );
@@ -982,6 +996,14 @@ update_option( 'widget_text', array( 2 => array( 'title' => 'Hello' ), '_multiwi
 update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'counter-007', 'text-2' ), 'array_version' => 3 ) );
 $res = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
 ok( 1 === ab_undo( $res['undo'] )['undone'], 'F20i an older widget whose id ends in digits with a leading zero is another type\'s: no obstacle' );
+
+// Codex round 4: a sidebar registered with a numeric id is a whole-number key.
+reset_all();
+update_option( 'widget_text', array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( '123' => array( 'text-2' ), 'empty-one' => array(), 'array_version' => 3 ) );
+$map = ab_raw( 'sidebars_widgets' );
+$res = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-2' ) );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && $map === ab_raw( 'sidebars_widgets' ) && array( 'text-2' ) === get_option( 'sidebars_widgets' )[123], 'F20n a sidebar with a numeric id: the deletion comes back' );
 
 // Codex round 3: any id wp_register_sidebar_widget() takes, a dot or a space in it.
 foreach ( array( 'legacy.weather', 'legacy weather', 'Wetter_ä' ) as $legacy ) {

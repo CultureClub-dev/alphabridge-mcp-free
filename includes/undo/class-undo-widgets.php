@@ -661,7 +661,9 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 						}
 						continue;
 					}
-					if ( ! is_string( $sidebar ) || ! is_array( $ids ) ) {
+					// A sidebar registered with a numeric id ("123")
+					// is a whole-number key in PHP.
+					if ( ( ! is_string( $sidebar ) && ! is_int( $sidebar ) ) || ! is_array( $ids ) ) {
 						return false;
 					}
 					foreach ( $ids as $wid ) {

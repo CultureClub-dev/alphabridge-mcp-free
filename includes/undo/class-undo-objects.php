@@ -376,10 +376,11 @@ abstract class AB_MCP_Undo_Objects {
 	 * The undo_note of the tools that delete for good, by tool: why there is
 	 * no way back, and what to do first.
 	 *
-	 * @param string $tool wp_delete_term, wp_delete_menu_item, wp_delete_media or wp_delete_user.
+	 * @param string    $tool      wp_delete_term, wp_delete_menu_item, wp_delete_media or wp_delete_user.
+	 * @param bool|null $multisite For wp_delete_user: on a multisite network (null: this site's).
 	 * @return string
 	 */
-	public static function deleted_for_good( $tool ) {
+	public static function deleted_for_good( $tool, $multisite = null ) {
 		switch ( (string) $tool ) {
 			case 'wp_delete_term':
 				$why = __( 'WordPress deletes a term for good, with its meta and its place on every post that had it. Before deleting a term that may be needed again, note it with wp_get_term and wp_get_term_meta; wp_create_term makes it anew, under a new id and on no post.', 'alphabridge-mcp' );
@@ -391,6 +392,11 @@ abstract class AB_MCP_Undo_Objects {
 				$why = __( 'WordPress deletes the file, its image sizes and its entry in the media library for good. Before deleting a file that may be needed again, keep a copy of it (wp_get_media gives its address); wp_upload_media adds it anew, under a new id and address.', 'alphabridge-mcp' );
 				break;
 			default:
+				if ( null === $multisite ? ( function_exists( 'is_multisite' ) && is_multisite() ) : (bool) $multisite ) {
+					// wp_delete_user() takes the account off this site only.
+					$why = __( 'On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin.', 'alphabridge-mcp' );
+					break;
+				}
 				$why = __( 'WordPress deletes the account for good, and its content as the call said. Before deleting an account that may be needed again, note it with wp_get_user and wp_get_user_meta; wp_create_user creates a new one, under a new id and with a new password.', 'alphabridge-mcp' );
 		}
 		return AB_MCP_Undo_Answer::not_undoable( $why );

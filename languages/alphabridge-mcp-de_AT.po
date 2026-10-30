@@ -5047,3 +5047,9 @@ msgstr "Menü %d enthält einen Eintrag, den dieses Konto nicht löschen darf, u
 
 msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
 msgstr "Kein Undo-Punkt: Die Optionszeile dieser Widgets enthält ein PHP-Objekt, das ein Undo-Punkt nicht zurücklegt. Das Ergebnis mit wp_get_widgets prüfen; ein solches Widget wird in wp-admin unter Design › Widgets zurückgeändert."
+
+msgid "Menu items %1$s of menu %2$d are still there after the deletion, or could not be read back; the menu was kept and the undo point stays. Check them with wp_get_menu, remove them with wp_delete_menu_item, then try again."
+msgstr "Die Menüeinträge %1$s des Menüs %2$d sind nach dem Löschen noch da oder konnten nicht zurückgelesen werden; das Menü wurde behalten, und der Undo-Punkt bleibt. Die Einträge mit wp_get_menu prüfen, mit wp_delete_menu_item entfernen und dann erneut versuchen."
+
+msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
+msgstr "In einem Multisite-Netzwerk entfernt WordPress das Konto nur von dieser Website: Das Konto, seine ID und sein Passwort bleiben, und seine Inhalte hier gingen so, wie der Aufruf es angab. Vor dem Entfernen eines Kontos, das hier wieder gebraucht werden könnte, seine Rolle mit wp_get_user festhalten; ein Administrator des Netzwerks fügt es in wp-admin unter Benutzer wieder zu dieser Website hinzu."

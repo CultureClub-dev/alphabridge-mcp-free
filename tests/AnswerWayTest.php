@@ -549,6 +549,10 @@ final class AnswerWayTest extends TestCase {
 			self::assertStringStartsWith( 'not undoable: ', $note, $tool );
 			self::assertMatchesRegularExpression( self::WAY, substr( $note, strlen( 'not undoable: ' ) ), $tool );
 		}
+		$network = \AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user', true );
+		self::assertStringStartsWith( 'not undoable: On a multisite network', $network, 'On a network, wp_delete_user() takes the account off this site only.' );
+		self::assertMatchesRegularExpression( self::WAY, $network );
+		self::assertNotSame( $network, \AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user', false ) );
 		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-terms.php';
 		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Terms::not_created_note( 'wp_get_term' ), 'And the note of a term this call did not create.' );
 		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-widgets.php';

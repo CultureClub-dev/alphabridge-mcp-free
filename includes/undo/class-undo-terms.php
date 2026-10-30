@@ -195,6 +195,45 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 	}
 
 	/**
+	 * Delete the items of a menu before the menu, each read back.
+	 * wp_delete_nav_menu() deletes them as well, but deletes the menu
+	 * whatever became of them: an item a plugin keeps (pre_delete_post)
+	 * would stay behind a menu reported gone. So the menu goes only once
+	 * none of its items is left.
+	 *
+	 * @param int $id    Menu term id.
+	 * @param int $tt_id Its term_taxonomy_id.
+	 * @return true|WP_Error
+	 */
+	private static function delete_items( $id, $tt_id ) {
+		global $wpdb;
+		$objects = self::objects( $tt_id );
+		if ( null === $objects || ! self::has_tables( array( 'posts' ) ) ) {
+			return new WP_Error( 'ab_mcp_undo_write_failed', __( 'The state could not be read before the restore; nothing was restored. Try again in a moment; the undo point stays.', 'alphabridge-mcp' ) );
+		}
+		$left = array();
+		foreach ( $objects as $oid ) {
+			wp_delete_post( $oid, true );
+			$row = self::select( $wpdb->prepare( "SELECT post_type FROM {$wpdb->posts} WHERE ID = %d", $oid ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( null === $row || isset( $row[0] ) ) {
+				$left[] = (int) $oid;
+			}
+		}
+		if ( array() === $left ) {
+			return true;
+		}
+		return new WP_Error(
+			'ab_mcp_undo_write_failed',
+			sprintf(
+				/* translators: 1: menu item ids, 2: menu id */
+				__( 'Menu items %1$s of menu %2$d are still there after the deletion, or could not be read back; the menu was kept and the undo point stays. Check them with wp_get_menu, remove them with wp_delete_menu_item, then try again.', 'alphabridge-mcp' ),
+				implode( ', ', $left ),
+				(int) $id
+			)
+		);
+	}
+
+	/**
 	 * Run a creating call and say which terms it created: the ids for which
 	 * created_term fired while it ran. wp_insert_term() answers a duplicate
 	 * made at the same moment by another request with the id of the older
@@ -507,6 +546,12 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 						$id
 					)
 				);
+			}
+			if ( 'nav_menu' === $tax && is_array( $row ) ) {
+				$left = self::delete_items( $id, $row['tt_id'] );
+				if ( true !== $left ) {
+					return $left;
+				}
 			}
 			$done = ( 'nav_menu' === $tax && function_exists( 'wp_delete_nav_menu' ) ) ? wp_delete_nav_menu( $id ) : wp_delete_term( $id, $tax );
 			if ( is_wp_error( $done ) || ! $done || false !== self::row( $id, $tax ) ) {
