@@ -229,7 +229,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_post_meta',
 			array(
-				'description' => 'Create or overwrite one meta value of a post: every stored value of the key is replaced, so a repeated call leaves the same state. Takes id, key and value (any JSON value; an array or object is stored as a serialized array); the key is stored lower-cased (sanitize_key). Refused: keys starting with "_", credential-like keys and keys the account may not edit. Page-builder data — keys such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post (filter ab_mcp_builder_markup_meta_keys) — takes the unfiltered_html capability, which on a multisite network only a super admin has. The value is stored as given, backslashes included (\\u0026 in block JSON stays \\u0026). Returns updated, id and key; an unknown post is a not-found error. Needs edit_posts and the right to edit the post; no undo point is recorded. wp_get_post_meta reads the value; wp_update_post sets several keys through its meta field.',
+				'description' => 'Create or overwrite one meta value of a post: every stored value of the key is replaced, so a repeated call leaves the same state. Takes id, key and value (any JSON value; an array or object is stored as a serialized array); the key is stored lower-cased (sanitize_key). Refused: keys starting with "_", credential-like keys and keys the account may not edit. Page-builder data — keys such as panels_data, dslc_code, pagelayer-data, brizy, mfn-page-items or tve_updated_post (filter ab_mcp_builder_markup_meta_keys) — takes the unfiltered_html capability, which on a multisite network only a super admin has. The value is stored as given, backslashes included (\\u0026 in block JSON stays \\u0026). Returns updated, id, key, saved_fields (the value as stored afterwards, read again) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. An unknown post is a not-found error. Needs edit_posts and the right to edit the post. wp_get_post_meta reads the value; wp_update_post sets several keys through its meta field.',
 				'open_world'  => true, // post fields, page-builder data included, are shown on the page.
 				'capability'  => 'edit_posts',
 				'dangerous'   => true,
@@ -1428,14 +1428,42 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them.', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes the value it is given. Without wp_slash()
-		// "\u0026" in block or builder JSON is stored as "u0026" and the JSON
-		// breaks; wp_slash() walks into arrays, so nested values keep theirs.
-		update_post_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'id'      => $id,
-			'key'     => $key,
+		// WordPress stores the meta of a revision on the post it belongs to;
+		// the snapshot and the read-back are of that post.
+		$target = (int) wp_is_post_revision( $id );
+		$target = $target > 0 ? $target : $id;
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0): one way for the four meta tools.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_post_meta',
+				'type'    => 'post',
+				'id'      => $target,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				'reader'  => 'wp_get_post_meta',
+				'summary' => sprintf( '#%d: %s', $target, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes the value it is given. Without
+				// wp_slash() "\u0026" in block or builder JSON is stored as
+				// "u0026" and the JSON breaks; wp_slash() walks into arrays,
+				// so nested values keep theirs.
+				update_post_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'id'      => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 

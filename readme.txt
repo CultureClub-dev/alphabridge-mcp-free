@@ -82,7 +82,7 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 = What your AI can do with the free plugin =
 
 * **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, set their custom fields and bring back an earlier revision. Publish, unpublish or trash up to 500 at once. Search the whole site.
-* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, page-builder elements, status changes in bulk, changes of the site settings and the option rows a search and replace changed leave an undo point that expires after 7 days. Ask the AI what it changed, and one sentence puts the previous values back. Custom fields and terms are not part of it.
+* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, page-builder elements, status changes in bulk, changes of the site settings and the option rows a search and replace changed leave an undo point that expires after 7 days, and so do custom fields of posts, terms and users changed with their own tools and the title, caption and alt text of a file. Ask the AI what it changed, and one sentence puts the previous values back. Terms are not part of it.
 * **Media.** Add JPEG, PNG, GIF, WebP and PDF files from the chat or from a web address. Change titles, captions and alt texts, and delete files.
 * **Categories and tags.** Create, rename and delete the terms of any taxonomy.
 * **Comments.** Read, approve, answer and delete comments, and move spam out of the way.
@@ -220,6 +220,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.13.0 =
+* **Undo for custom fields and media details, and a read-back after the write.** `wp_update_post_meta`, `wp_update_term_meta`, `wp_update_user_meta` and `wp_update_media` leave an undo point: `wp_undo` puts every stored row of the key back as it was, removes a key the change created, refuses one changed since unless `force=true`, and asks the rights and key rules of the tool again. Their answers carry `saved_fields`, what the site stored, read again; where it differs from what was sent, `saved_differs` and a warning say so, and a write the site did not store at all is an error instead of `updated: true`. Where there is no undo point, `undo_note` says why.
 
 = 4.12.0 =
 * **Pictures from the chat go straight into the media library.** In ChatGPT, a picture or PDF you attach is handed to `wp_upload_media` as a file: the site downloads it from its temporary address with the same checks as `wp_upload_media_from_url` (public host on every redirect, 20 MB, image or PDF only). Base64 content works as before.
@@ -484,6 +487,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.13.0 =
+Custom fields of posts, terms and users and the title, caption and alt text of a file get an undo point, and these tools report what the site stored after the write. No setting changes.
 
 = 4.12.0 =
 Pictures from the ChatGPT chat go straight into the media library, the same file is not stored twice, wp_find_media finds a file by its content, address or name, and the abilities of other plugins run once you approve them. No setting changes.

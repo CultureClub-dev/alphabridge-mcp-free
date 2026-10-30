@@ -101,7 +101,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_user_meta',
 			array(
-				'description' => 'Create or overwrite one user meta value (all stored values of the key are replaced). Refused: keys starting with "_", role and capability keys of any site (…capabilities, …user_level), session_tokens, default_password_nonce, use_ssl and credential-like keys; role and password are changed by wp_update_user. Needs edit_users, the right to edit this user and to edit this key; an unknown user is a not-found error. WordPress strips backslashes from the value. Returns updated, user_id and key. No undo point is recorded; wp_get_user_meta reads the value.',
+				'description' => 'Create or overwrite one user meta value (all stored values of the key are replaced). Refused: keys starting with "_", role and capability keys of any site (…capabilities, …user_level), session_tokens, default_password_nonce, use_ssl and credential-like keys; role and password are changed by wp_update_user. Needs edit_users, the right to edit this user and to edit this key; an unknown user is a not-found error. Returns updated, user_id, key, saved_fields (read again after the write; the value itself only for the fields wp_get_user_meta shows) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. wp_get_user_meta reads the profile fields.',
 				'capability'  => 'edit_users',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -120,7 +120,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term_meta',
 			array(
-				'description' => 'Create or overwrite one meta value of a term (category, tag or any taxonomy); all stored values of the key are replaced. Keys starting with "_" and credential-like keys are refused. Needs manage_categories and the right to edit this term\'s meta. WordPress strips backslashes from the value. Returns updated, term_id and key; an unknown term is a not-found error. No undo point is recorded; the term\'s name, slug and description change with wp_update_term.',
+				'description' => 'Create or overwrite one meta value of a term (category, tag or any taxonomy); all stored values of the key are replaced. Keys starting with "_" and credential-like keys are refused. Needs manage_categories and the right to edit this term\'s meta. Returns updated, term_id, key, saved_fields (the value as stored afterwards, read again) and undo: the token for wp_undo, which puts every stored row of the key back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so; where it stored nothing, the call fails. An unknown term is a not-found error. The term\'s name, slug and description change with wp_update_term.',
 				'open_world'  => true, // term fields, as wp_update_term changes the term itself.
 				'capability'  => 'manage_categories',
 				'dangerous'   => true,
@@ -309,13 +309,39 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes what it stores: slashed here, a
-		// backslash in a path, a pattern or JSON is stored as sent.
-		update_user_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'user_id' => $id,
-			'key'     => $key,
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0). The answer shows the stored value only of the
+		// profile fields wp_get_user_meta shows; of any other key it says
+		// whether it holds what was sent, not what it holds.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_user_meta',
+				'type'    => 'user',
+				'id'      => $id,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				'hidden'  => in_array( $key, self::allowed_user_meta_keys(), true ) ? array() : array( $key ),
+				'reader'  => 'wp_get_user_meta',
+				'summary' => sprintf( 'user #%d: %s', $id, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes what it stores: slashed here, a
+				// backslash in a path, a pattern or JSON is stored as sent.
+				update_user_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'user_id' => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 
@@ -397,13 +423,37 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
-		// update_metadata() unslashes what it stores: slashed here, a
-		// backslash in a path, a pattern or JSON is stored as sent.
-		update_term_meta( $id, $key, wp_slash( $value ) );
-		return array(
-			'updated' => true,
-			'term_id' => $id,
-			'key'     => $key,
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		// The rows of the key before, the write, the read-back and the undo
+		// point (since 4.13.0). update_term_meta() can refuse a term shared
+		// between taxonomies with an error of its own; the read-back sees it.
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_term_meta',
+				'type'    => 'term',
+				'id'      => $id,
+				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
+				'reader'  => 'wp_get_term_meta',
+				'summary' => sprintf( 'term #%d: %s', $id, $key ),
+			),
+			static function () use ( $id, $key, $value ) {
+				// update_metadata() unslashes what it stores: slashed here, a
+				// backslash in a path, a pattern or JSON is stored as sent.
+				update_term_meta( $id, $key, wp_slash( $value ) );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'updated' => true,
+				'term_id' => $id,
+				'key'     => $key,
+			),
+			$res
 		);
 	}
 

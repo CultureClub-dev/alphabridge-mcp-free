@@ -176,7 +176,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_media',
 			array(
-				'description' => 'Change the title, caption or alt text of one file in the media library (attachment); the file itself stays as it is. Only the fields passed change. Alt text is stored as plain text. Returns {updated: true, id}; an id that is not a media file returns a not-found error. Needs the right to edit that file. Title, caption and alt text can be public wherever the file is shown. A new file is added with wp_upload_media; a file\'s description and parent are changed with wp_update_post.',
+				'description' => 'Change the title, caption or alt text of one file in the media library (attachment); the file itself stays as it is. Only the fields passed change. Alt text is stored as plain text. Returns {updated: true, id, saved_fields} with the fields as stored afterwards, read again, and undo: one token for wp_undo that puts the title, caption and alt text of before back, or null with undo_note saying why. Where the site stored something else than sent, saved_differs and warning say so. An id that is not a media file returns a not-found error. Needs the right to edit that file. Title, caption and alt text can be public wherever the file is shown. A new file is added with wp_upload_media; a file\'s description and parent are changed with wp_update_post.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -878,16 +878,48 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			if ( null !== $refused ) {
 				return $refused;
 			}
-			if ( ! wp_update_post( wp_slash( $update ) ) ) {
-				return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the attachment, so its title and caption are unchanged; a plugin may have stopped the save. Check it with wp_get_media and try again, or edit it in wp-admin under Media.', 'alphabridge-mcp' ) );
+		}
+		$alt  = array_key_exists( 'alt', $a ) ? sanitize_text_field( self::s( $a, 'alt' ) ) : null;
+		$keys = null !== $alt ? array( '_wp_attachment_image_alt' => $alt ) : array();
+		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+		}
+		// Title, caption and alternative text before, the write, the
+		// read-back and one undo point for all three (since 4.13.0).
+		$res = AB_MCP_Undo_Meta::write(
+			array(
+				'tool'    => 'wp_update_media',
+				'type'    => 'post',
+				'id'      => $id,
+				'keys'    => $keys,
+				'fields'  => array_diff_key( $update, array( 'ID' => true ) ),
+				'names'   => array(
+					'post_title'               => 'title',
+					'post_excerpt'             => 'caption',
+					'_wp_attachment_image_alt' => 'alt',
+				),
+				'reader'  => 'wp_get_media',
+				'summary' => sprintf( 'media #%d: %s', $id, implode( ', ', array_intersect( array( 'title', 'caption', 'alt' ), array_keys( $a ) ) ) ),
+			),
+			static function () use ( $id, $update, $alt ) {
+				if ( count( $update ) > 1 && ! wp_update_post( wp_slash( $update ) ) ) {
+					return new WP_Error( 'ab_mcp_update_failed', __( 'WordPress did not save the attachment, so its title and caption are unchanged; a plugin may have stopped the save. Check it with wp_get_media and try again, or edit it in wp-admin under Media.', 'alphabridge-mcp' ) );
+				}
+				if ( null !== $alt ) {
+					update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( $alt ) );
+				}
+				return true;
 			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
 		}
-		if ( array_key_exists( 'alt', $a ) ) {
-			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( self::s( $a, 'alt' ) ) ) );
-		}
-		return array(
-			'updated' => true,
-			'id'      => $id,
+		return array_merge(
+			array(
+				'updated' => true,
+				'id'      => $id,
+			),
+			$res
 		);
 	}
 

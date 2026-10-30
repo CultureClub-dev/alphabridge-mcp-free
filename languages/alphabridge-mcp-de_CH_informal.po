@@ -4945,3 +4945,42 @@ msgstr "Konten, die sich beim MCP-Adapter anmelden, etwa mit einem Anwendungspas
 
 msgid "This site runs WordPress %s. The Abilities API needs WordPress 6.9 or newer; until WordPress is updated under Dashboard → Updates, nothing is offered."
 msgstr "Diese Website läuft mit WordPress %s. Die Abilities API braucht WordPress 6.9 oder neuer; bis WordPress unter Dashboard → Aktualisierungen aktualisiert ist, wird nichts angeboten."
+
+msgid "No undo point was recorded (%s). Check the result of the change before relying on it; wp_undo_list shows the undo points there are."
+msgstr "Es wurde kein Undo-Punkt erstellt (%s). Das Ergebnis der Änderung prüfen, bevor man sich darauf verlässt; wp_undo_list zeigt die vorhandenen Undo-Punkte."
+
+msgid "No undo point was recorded. Check the result of the change before relying on it; wp_undo_list shows the undo points there are."
+msgstr "Es wurde kein Undo-Punkt erstellt. Das Ergebnis der Änderung prüfen, bevor man sich darauf verlässt; wp_undo_list zeigt die vorhandenen Undo-Punkte."
+
+msgid "not undoable: %s"
+msgstr "nicht rückgängig zu machen: %s"
+
+msgid "No undo point: the site already held what was asked for, so nothing changed. %s shows it."
+msgstr "Kein Undo-Punkt: Die Website enthielt bereits, was verlangt war, darum hat sich nichts geändert. %s zeigt es."
+
+msgid "No undo point: the previous value could not be read from the database, so there was nothing reliable to keep. Check the result with %s before relying on the change."
+msgstr "Kein Undo-Punkt: Der bisherige Wert liess sich nicht aus der Datenbank lesen, darum gab es nichts Verlässliches zu sichern. Das Ergebnis mit %s prüfen, bevor man sich auf die Änderung verlässt."
+
+msgid "No undo point: the wp_undo of AlphaBridge MCP Pro, which runs on this site, does not reverse changes of %1$s. Check the result with %2$s before relying on the change."
+msgstr "Kein Undo-Punkt: Das wp_undo von AlphaBridge MCP Pro, das auf dieser Website läuft, macht Änderungen von %1$s nicht rückgängig. Das Ergebnis mit %2$s prüfen, bevor man sich auf die Änderung verlässt."
+
+msgid "The site stored something else than asked for: %1$s. saved_fields shows what is stored now; a plugin may rewrite or refuse these values on save. Check them with %2$s before relying on the change."
+msgstr "Die Website hat etwas anderes gespeichert als verlangt: %1$s. saved_fields zeigt, was jetzt gespeichert ist; ein Plugin kann diese Werte beim Speichern umschreiben oder ablehnen. Mit %2$s prüfen, bevor man sich auf die Änderung verlässt."
+
+msgid "WordPress did not store the change: %1$s still hold what they held before. A plugin may refuse it on save (a filter on the meta update, or a rule its plugin registered for the key). Check the value with %2$s, and ask the site administrator which plugin guards it."
+msgstr "WordPress hat die Änderung nicht gespeichert: Bei %1$s steht weiterhin der Wert von vorher. Ein Plugin kann sie beim Speichern ablehnen (ein Filter auf die Aktualisierung der Meta-Daten oder eine Regel, die sein Plugin für den Schlüssel registriert hat). Den Wert mit %2$s prüfen und den Administrator der Website fragen, welches Plugin ihn schützt."
+
+msgid "The meta was written back, but the database holds something else for: %s. Check the value with the reading tool of its object (wp_get_post_meta, wp_get_term_meta, wp_get_user_meta or wp_get_media)."
+msgstr "Die Meta-Daten wurden zurückgeschrieben, aber die Datenbank enthält etwas anderes für: %s. Den Wert mit dem Lesewerkzeug seines Objekts prüfen (wp_get_post_meta, wp_get_term_meta, wp_get_user_meta oder wp_get_media)."
+
+msgid "The database did not take back %s; the undo point stays. Try again; the reading tool of its object (wp_get_post_meta, wp_get_term_meta, wp_get_user_meta or wp_get_media) shows how it is now."
+msgstr "Die Datenbank hat %s nicht zurückgenommen; der Undo-Punkt bleibt. Erneut versuchen; das Lesewerkzeug seines Objekts (wp_get_post_meta, wp_get_term_meta, wp_get_user_meta oder wp_get_media) zeigt, wie es jetzt ist."
+
+msgid "The snapshot of the meta is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Der Schnappschuss der Meta-Daten hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt ist nicht verwendbar; wp_undo_discard entfernt ihn."
+
+msgid "The meta could not be read before the restore; nothing was restored. Try again in a moment; the undo point stays."
+msgstr "Die Meta-Daten liessen sich vor der Wiederherstellung nicht lesen; nichts wurde wiederhergestellt. In einem Moment erneut versuchen; der Undo-Punkt bleibt."
+
+msgid "The meta was changed after the undo was planned; nothing was restored. Pass force=true to put the old value back over the newer change."
+msgstr "Die Meta-Daten wurden geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um den alten Wert über die neuere Änderung zu legen."

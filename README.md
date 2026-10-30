@@ -37,9 +37,11 @@ directory. It is the same code WordPress.org ships.
   two deletes run only with the `confirm_token` from their own preview (HMAC over the tool, the
   arguments, the account, the access level and the state the preview showed; 10 minutes).
 - **Undo** — `wp_update_post`, `wp_bulk_update_status`, `wp_update_site_settings`,
-  `wp_update_builder_element`, `wp_search_replace` (page-builder pages and option rows) and
-  `wp_activate_theme` leave an
-  undo point with the previous values that expires after 7 days; `wp_undo_list`, `wp_undo` (with a dry run) and
+  `wp_update_builder_element`, `wp_search_replace` (page-builder pages and option rows),
+  `wp_activate_theme`, `wp_update_post_meta`, `wp_update_term_meta`, `wp_update_user_meta` and
+  `wp_update_media` leave an
+  undo point with the previous values that expires after 7 days; an answer without one says why
+  (`undo_note`), and the meta tools and `wp_update_media` read back what was stored (`saved_fields`); `wp_undo_list`, `wp_undo` (with a dry run) and
   `wp_undo_discard` work on the account's own points, and a restore checks the rights of the
   original change again.
 - **Page builders** — `wp_get_builder_layout` reads a page as an outline: its elements in page

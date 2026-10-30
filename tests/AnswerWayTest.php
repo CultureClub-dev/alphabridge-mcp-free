@@ -512,6 +512,20 @@ final class AnswerWayTest extends TestCase {
 		'Without an undo point nothing ran.',
 	);
 
+	/**
+	 * The notes that say why an answer carries no undo point (4.13.0) are
+	 * no WP_Error, so the reader above does not see them; each names a way.
+	 */
+	public function testEveryUndoNoteNamesAWay(): void {
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-answer.php';
+		$notes = \AB_MCP_Undo_Answer::own_notes();
+		self::assertGreaterThan( 5, count( $notes ) );
+		foreach ( $notes as $note ) {
+			self::assertMatchesRegularExpression( self::WAY, $note, $note );
+		}
+		self::assertSame( 'not undoable: Check it first.', \AB_MCP_Undo_Answer::not_undoable( 'Check it first.' ), 'A frame around the reason, which names the way.' );
+	}
+
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {
 		// WordPress' own errors (a duplicate term name, a failed insert) are
 		// passed on as they come, so neither readme promises more.
