@@ -111,6 +111,12 @@ AB_MCP_Theme_Switch_State::hook();
 require_once AB_MCP_DIR . 'includes/abilities/class-ability-broker.php';
 require_once AB_MCP_DIR . 'includes/abilities/class-ability-switches.php';
 AB_MCP_Ability_Switches::hook();
+// AlphaBridge's own tools as WordPress abilities, for the MCP adapter of
+// WordPress (since 4.12.0): off until an administrator switches it on under
+// Fine-tuning. Hooked here, before init, because the Abilities API fires its
+// actions the first time anything asks for an ability.
+require_once AB_MCP_DIR . 'includes/abilities/class-own-abilities.php';
+AB_MCP_Own_Abilities::hook();
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

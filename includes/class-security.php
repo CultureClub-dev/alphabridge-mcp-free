@@ -14,13 +14,40 @@ defined( 'ABSPATH' ) || exit;
 class AB_MCP_Security {
 
 	/**
-	 * Decide whether the current request may run a tool.
+	 * Decide whether the current request may run a tool: permits(), then
+	 * the rate limit, which counts this call.
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  Tool definition.
 	 * @return true|WP_Error
 	 */
 	public static function authorize( $name, array $def ) {
+		$allowed = self::permits( $name, $def );
+		if ( is_wp_error( $allowed ) ) {
+			return $allowed;
+		}
+
+		// 5. Rate limiting.
+		$rl = self::check_rate_limit( get_current_user_id(), $def );
+		if ( is_wp_error( $rl ) ) {
+			return $rl;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Every check of authorize() but the rate limit: the capability, write
+	 * access, the tool's switch and the token's scope. Counts nothing, so a
+	 * caller may ask before the call itself: the Abilities API asks an
+	 * ability's permission callback once or twice before it runs it
+	 * (AB_MCP_Own_Abilities), and the run goes through authorize() once.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  Tool definition.
+	 * @return true|WP_Error
+	 */
+	public static function permits( $name, array $def ) {
 		$user_id = get_current_user_id();
 
 		// Every refusal below says why, what the person can do, where (a
@@ -97,12 +124,6 @@ class AB_MCP_Security {
 					AB_MCP_Guidance::settings_url( 'ab-connections' )
 				)
 			);
-		}
-
-		// 5. Rate limiting.
-		$rl = self::check_rate_limit( $user_id, $def );
-		if ( is_wp_error( $rl ) ) {
-			return $rl;
 		}
 
 		return true;

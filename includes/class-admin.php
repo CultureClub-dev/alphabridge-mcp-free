@@ -1957,6 +1957,11 @@ class AB_MCP_Admin {
 		$html .= '</div>';
 		$html .= '<div class="ab-groups">' . $rows . '</div>';
 		$html .= '<p class="ab-note ab-caps__none" hidden>' . esc_html__( 'No tool matches.', 'alphabridge-mcp' ) . '</p>';
+		// AlphaBridge's tools as WordPress abilities, for the MCP adapter:
+		// one switch of its own, off by default, saved with this form.
+		if ( class_exists( 'AB_MCP_Own_Abilities' ) ) {
+			$html .= AB_MCP_Own_Abilities::fine_html();
+		}
 		$html .= '<div class="ab-savebar"><button type="submit" form="ab-caps" class="ab-btn">' . esc_html__( 'Save changes', 'alphabridge-mcp' ) . '</button>';
 		$html .= '<span class="ab-savebar__text" data-dirty="' . esc_attr__( 'Unsaved changes — save to apply them.', 'alphabridge-mcp' ) . '">' . esc_html__( 'New connections see the change at once. An assistant that is already connected may load the tool list again only when you connect it again.', 'alphabridge-mcp' ) . '</span></div>';
 		/* translators: %d: requests per minute. */
@@ -2220,7 +2225,9 @@ class AB_MCP_Admin {
 			// argument as a timestamp already shifted to local time and printed
 			// the UTC clock instead.
 			$status = isset( $statuses[ $row['status'] ] ) ? $statuses[ $row['status'] ] : $row['status'];
-			echo '<tr><td>' . esc_html( wp_date( $format, (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code></td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $status ) . '</td></tr>';
+			// A call that came through the MCP adapter (AB_MCP_Own_Abilities), not a connection.
+			$via = isset( $row['via'] ) && 'ability' === $row['via'] ? ' <span class="ab-log__via">' . esc_html__( 'via the MCP Adapter', 'alphabridge-mcp' ) . '</span>' : '';
+			echo '<tr><td>' . esc_html( wp_date( $format, (int) $row['ts'] ) ) . '</td><td><code>' . esc_html( $row['tool'] ) . '</code>' . $via . '</td><td><span class="' . esc_attr( $dot ) . '" aria-hidden="true"></span> ' . esc_html( $status ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $via is built from escaped parts above.
 		}
 		echo '</tbody></table></div>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-log__clear">';
