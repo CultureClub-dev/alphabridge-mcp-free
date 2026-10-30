@@ -739,6 +739,32 @@ final class RedactionTest extends TestCase {
 		}
 	}
 
+	public function testPairsInJsonEncodedInALineAreFoundAtEveryLevelOfEscaping(): void {
+		// Codex 7: error_log( 'Request: ' . wp_json_encode( array( 'body' => wp_json_encode( … ) ) ) ).
+		$one   = '[31-Oct-2026 10:00:00 UTC] Request: ' . wp_json_encode( array( 'body' => wp_json_encode( array( 'client_secret' => 'PLACEHOLDER-1', 'scope' => 'read' ) ) ) );
+		$two   = '[31-Oct-2026 10:00:01 UTC] Request: ' . wp_json_encode( array( 'body' => wp_json_encode( array( 'inner' => wp_json_encode( array( 'api_key' => 'PLACEHOLDER-2', 'n' => 1 ) ) ) ) ) );
+		$deep  = '[31-Oct-2026 10:00:02 UTC] Request: ' . wp_json_encode( array( 'body' => wp_json_encode( array( 'token' => wp_json_encode( array( 'k' => 'PLACEHOLDER-3' ) ), 'after' => 'shown' ) ) ) );
+		$num   = '[31-Oct-2026 10:00:03 UTC] Request: ' . wp_json_encode( array( 'body' => wp_json_encode( array( 'otp' => 987654, 'ok' => true ) ) ) );
+		$plain = '[31-Oct-2026 10:00:04 UTC] Request: ' . wp_json_encode( array( 'body' => wp_json_encode( array( 'color' => 'red', 'password_hint' => 'x', 'token' => '', 'secret' => null ) ) ) );
+
+		$out   = $this->read( array( 'log' => implode( "\n", array( $one, $two, $deep, $num, $plain ) ) ), 'wp_get_error_log' );
+		$lines = explode( "\n", $out['log'] );
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $out['log'] );
+		self::assertStringNotContainsString( '987654', $out['log'] );
+		self::assertSame( str_replace( 'PLACEHOLDER-1', self::R, $one ), $lines[0], 'The value to its closing quote, the rest of the line stays.' );
+		self::assertSame( str_replace( 'PLACEHOLDER-2', self::R, $two ), $lines[1] );
+		self::assertStringContainsString( '\\"token\\":\\"[REDACTED]\\",\\"after\\":\\"shown\\"', $lines[2], 'Quotes of a deeper level do not end the value.' );
+		self::assertStringEndsWith( '\\"otp\\":[REDACTED]', $lines[3], 'A value without quotes: to the end of the line.' );
+		self::assertSame( $plain, $lines[4], 'Ordinary pairs, an empty value and null stay.' );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+
+		// An encoded value without quotes before a value in brackets that a
+		// credential's name opens: the lines of that value go too.
+		$both = '[31-Oct-2026] ' . wp_json_encode( array( 'b' => wp_json_encode( array( 'otp' => 1 ) ) ) ) . ' "token": [' . "\n" . '"PLACEHOLDER-4"' . "\n" . ']' . "\n" . '[31-Oct-2026] next';
+		self::assertSame( '[31-Oct-2026] {"b":"{\\"otp\\":[REDACTED]' . "\n" . '[31-Oct-2026] next', $this->read( array( 'log' => $both ), 'wp_get_error_log' )['log'] );
+	}
+
 	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
 		// Codex 5 #5: a Bearer token before a pair, and after it.
 		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );

@@ -1145,6 +1145,9 @@ final class AB_MCP_Redactor {
 	 *   separator to the end of the line, an Authorization header's scheme
 	 *   (Bearer, Basic, Digest) kept; a value whose brackets ([ or {) are
 	 *   still open there on to the line that closes them (bracket_end());
+	 * - a pair in JSON encoded inside the line (\"name\":\"value\", at any
+	 *   level of escaping): the value to its closing quote of the same
+	 *   level (escaped_pairs());
 	 * - a Bearer token anywhere.
 	 *
 	 * @param string   $text  Text.
@@ -1338,8 +1341,9 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * One line: from the separator after a credential's name to the end of
-	 * the line (an Authorization header's scheme kept), and every Bearer
-	 * token before it. Both rules read every line.
+	 * the line (an Authorization header's scheme kept), and before it every
+	 * pair in encoded JSON (escaped_pairs()) and every Bearer token. All
+	 * rules read every line.
 	 *
 	 * @param string   $line  Line.
 	 * @param int      $hits  Replacements (added to).
@@ -1371,13 +1375,103 @@ final class AB_MCP_Redactor {
 			$open   = self::brackets( $rest );
 			break;
 		}
-		// Every Bearer token in what stays of the line.
-		$head = self::bearer( null === $cut ? $line : substr( $line, 0, $cut ), $hits );
-		if ( null === $head || null === $cut ) {
+		// Every pair in encoded JSON and every Bearer token in what stays of
+		// the line.
+		$head = self::escaped_pairs( null === $cut ? $line : substr( $line, 0, $cut ), $hits, $extra, $to_end );
+		$head = null === $head ? null : self::bearer( $head, $hits );
+		if ( null === $head ) {
+			return null;
+		}
+		if ( $to_end ) {
+			// A value without quotes in encoded JSON: redacted to the end;
+			// brackets a pair after it left open are still followed.
+			return $head . ( "\r" === substr( $line, -1 ) ? "\r" : '' );
+		}
+		if ( null === $cut ) {
 			return $head;
 		}
 		++$hits;
 		return $head . $tail;
+	}
+
+	/**
+	 * Every pair under a credential's name in JSON encoded inside a text, at
+	 * any level of escaping: \"name\":\"value\" (wp_json_encode() of
+	 * wp_json_encode()), \\\"name\\\":\\\"value\\\" and so on. A text value is
+	 * redacted to its closing quote of the same level, the quotes kept; any
+	 * other value (a number, an object) to the end of the text, and so is
+	 * one whose closing quote is not found (fail-closed). An empty text,
+	 * true, false and null stay.
+	 *
+	 * @param string   $text   Text.
+	 * @param int      $hits   Replacements (added to).
+	 * @param string[] $extra  extra_keys().
+	 * @param bool     $to_end Set where the rest of the text was redacted.
+	 * @return string|null Null where the pattern gave up.
+	 */
+	private static function escaped_pairs( $text, &$hits, array $extra, &$to_end ) {
+		$to_end = false;
+		if ( false === strpos( $text, '\\"' ) ) {
+			return $text;
+		}
+		$n = preg_match_all( '/(?<!\\\\)(\\\\+)"([A-Za-z_][\w\-]{0,127})\1"[ \t]{0,16}:[ \t]{0,16}/', $text, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
+		if ( false === $n ) {
+			return null;
+		}
+		$out = '';
+		$pos = 0;
+		foreach ( $found as $m ) {
+			if ( $m[0][1] < $pos || ! self::redacts_key( $m[2][0], $extra ) ) {
+				continue;
+			}
+			$quote = $m[1][0] . '"';
+			$from  = $m[0][1] + strlen( $m[0][0] );
+			if ( $quote === substr( $text, $from, strlen( $quote ) ) ) {
+				$start = $from + strlen( $quote );
+				$end   = self::escaped_close( $text, $start, strlen( $m[1][0] ) );
+				if ( $start === $end ) {
+					continue;
+				}
+				++$hits;
+				if ( null === $end ) {
+					$to_end = true;
+					return $out . substr( $text, $pos, $start - $pos ) . self::MARK;
+				}
+				$out .= substr( $text, $pos, $start - $pos ) . self::MARK;
+				$pos  = $end;
+				continue;
+			}
+			if ( preg_match( '/^(?:true|false|null)\b/i', substr( $text, $from, 5 ) ) ) {
+				continue;
+			}
+			++$hits;
+			$to_end = true;
+			return $out . substr( $text, $pos, $from - $pos ) . self::MARK;
+		}
+		return $out . substr( $text, $pos );
+	}
+
+	/**
+	 * Where the closing quote of an encoded text value begins: the first "
+	 * from an offset on with exactly as many backslashes before it as the
+	 * opening one had. A quote of a deeper level has more.
+	 *
+	 * @param string $text Text.
+	 * @param int    $from Offset of the value's first character.
+	 * @param int    $run  Backslashes before the opening quote.
+	 * @return int|null Offset of the closing quote's first backslash; null for none.
+	 */
+	private static function escaped_close( $text, $from, $run ) {
+		for ( $at = strpos( $text, '"', $from ); false !== $at; $at = strpos( $text, '"', $at + 1 ) ) {
+			$back = 0;
+			while ( $at - $back - 1 >= $from && '\\' === $text[ $at - $back - 1 ] ) {
+				++$back;
+			}
+			if ( $back === $run ) {
+				return $at - $run;
+			}
+		}
+		return null;
 	}
 
 	/**
