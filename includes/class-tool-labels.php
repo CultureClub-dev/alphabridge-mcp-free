@@ -249,6 +249,7 @@ class AB_MCP_Tool_Labels {
 			'wp_db_optimize'                 => _x( 'Optimize database tables', 'tool label', 'alphabridge-mcp' ),
 			'wp_site_info'                   => _x( 'Show the environment', 'tool label', 'alphabridge-mcp' ),
 			'wp_site_health'                 => _x( 'Check site health', 'tool label', 'alphabridge-mcp' ),
+			'wp_connection_doctor'           => _x( 'Check the connection', 'tool label', 'alphabridge-mcp' ),
 			'wp_dashboard_counts'            => _x( 'Count content', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_post_types'              => _x( 'List post types', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_taxonomies'              => _x( 'List taxonomies', 'tool label', 'alphabridge-mcp' ),

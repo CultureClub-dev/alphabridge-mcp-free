@@ -25,9 +25,39 @@ class AB_MCP_Auth {
 	public static function verify_request( $request ) {
 		$token = self::extract_token( $request );
 		if ( '' === $token ) {
+			self::$token_presence = 'missing';
 			return false;
 		}
-		return self::verify_token( $token );
+		$user_id              = self::verify_token( $token );
+		self::$token_presence = $user_id ? 'accepted' : 'rejected';
+		return $user_id;
+	}
+
+	/**
+	 * What the last verify_request() found of the token: 'missing' when no
+	 * token reached PHP at all, 'rejected' when one arrived and was not
+	 * valid, 'accepted' when it authenticated; '' before any check.
+	 *
+	 * Recorded where the token is read, so nothing reads the request a
+	 * second time. The REST controller names the first two on a 401
+	 * (AB_MCP_REST_Controller::AUTH_HEADER): the connection check sends a
+	 * made-up token to the site itself and learns from «rejected» that the
+	 * Authorization header arrives, and from «missing» that the server
+	 * dropped it on the way — the most common reason why a site answers
+	 * every app with 401. It reveals only whether a header arrived, never
+	 * anything about a token.
+	 *
+	 * @var string
+	 */
+	private static $token_presence = '';
+
+	/**
+	 * What the last token check of this request found; see $token_presence.
+	 *
+	 * @return string 'missing', 'rejected', 'accepted' or ''.
+	 */
+	public static function token_presence() {
+		return self::$token_presence;
 	}
 
 	/**

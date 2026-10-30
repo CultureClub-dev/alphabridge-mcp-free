@@ -82,6 +82,16 @@ class AB_MCP_REST_Controller {
 	const ERROR_CODE_HEADER = 'X-AlphaBridge-Error';
 
 	/**
+	 * The header on a 401 of the MCP route that says whether a token reached
+	 * PHP: «missing» when none did, «rejected» when one arrived and was not
+	 * valid (AB_MCP_Auth::token_presence()). It reveals nothing beyond that
+	 * the request carried a header; the connection check
+	 * (AB_MCP_Connection_Doctor) reads it to find servers that drop the
+	 * Authorization header before WordPress sees it.
+	 */
+	const AUTH_HEADER = 'X-AB-MCP-Auth';
+
+	/**
 	 * Methods whose request must mirror a body field in the Mcp-Name header,
 	 * and the field it mirrors.
 	 */
@@ -358,6 +368,17 @@ class AB_MCP_REST_Controller {
 					'WWW-Authenticate',
 					'Bearer resource_metadata="' . esc_url_raw( AB_MCP_OAuth::resource_metadata_url() ) . '"'
 				);
+			}
+
+			// Whether a token reached PHP at all (AB_MCP_Auth::token_presence()):
+			// a missing and an invalid token both answer 401, and this line is
+			// the only difference. The connection check reads it to tell a
+			// server that drops the Authorization header from a wrong token.
+			if ( 401 === (int) $response->get_status() ) {
+				$presence = AB_MCP_Auth::token_presence();
+				if ( 'missing' === $presence || 'rejected' === $presence ) {
+					$response->header( self::AUTH_HEADER, $presence );
+				}
 			}
 		}
 		return $response;
