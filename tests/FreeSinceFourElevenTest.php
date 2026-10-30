@@ -107,7 +107,7 @@ final class FreeSinceFourElevenTest extends TestCase {
 		}
 	}
 
-	public function testThisPluginNowHas94Tools(): void {
+	public function testThisPluginNowHas95Tools(): void {
 		foreach ( glob( dirname( __DIR__ ) . '/includes/tools/class-tools-*.php' ) as $file ) {
 			require_once $file;
 		}
@@ -117,7 +117,7 @@ final class FreeSinceFourElevenTest extends TestCase {
 				$class::register( $r );
 			}
 		}
-		self::assertCount( 94, $r->all(), '82 until 4.10.0, and the twelve.' );
+		self::assertCount( 95, $r->all(), '82 until 4.10.0, the twelve, and wp_connection_doctor.' );
 		foreach ( array_keys( self::TOOLS ) as $name ) {
 			self::assertNotNull( $r->get( $name ), $name );
 		}

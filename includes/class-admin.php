@@ -2328,8 +2328,8 @@ class AB_MCP_Admin {
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, PHP snippets, database', 'alphabridge-mcp' ),
 			__( 'Options, cron jobs, export and multisite', 'alphabridge-mcp' ),
-			__( 'Undo for files and page builders, adjustable from 1 to 30 days', 'alphabridge-mcp' ),
-			__( 'Search and replace with preview', 'alphabridge-mcp' ),
+			__( 'Undo also for files and snippets, kept from 1 to 30 days', 'alphabridge-mcp' ),
+			__( 'Code changes checked by test requests and taken back on failure', 'alphabridge-mcp' ),
 		);
 
 		$html  = '<div class="postbox ab-pro">';

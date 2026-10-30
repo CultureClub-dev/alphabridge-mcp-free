@@ -151,7 +151,7 @@ final class ProBoxTest extends TestCase {
 		// README.md wraps its lines.
 		$github = (string) preg_replace( '/\s+/', ' ', (string) file_get_contents( AB_MCP_PATH . 'README.md' ) );
 
-		self::assertStringContainsString( 'Undo for files and page builders, adjustable from 1 to 30 days', $html );
+		self::assertStringContainsString( 'Undo also for files and snippets, kept from 1 to 30 days', $html );
 		self::assertStringContainsString( 'undo point that expires after 7 days', $readme, 'The free undo, since 4.9.0.' );
 		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $readme );
 		self::assertStringContainsString( 'undo points expire after 7 days by default, adjustable from 1 to 30 days', $github );
