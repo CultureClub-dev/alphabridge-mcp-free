@@ -1481,7 +1481,10 @@ class AB_MCP_Builder_Writer_Elementor extends AB_MCP_Builder_Writer {
 	 * AlphaBridge (Fine-tuning, a namespace rule, or the filter
 	 * ab_mcp_pro_ability_allowed): the way to switch it on, '' when it may
 	 * run (found in the review of 03.10.2026: before, the writer ran them
-	 * while they were switched off).
+	 * while they were switched off). Only Pro's switches count here: the
+	 * approvals of this plugin (4.12.0) are for wp_run_ability, the general
+	 * runner; this writer uses Elementor's abilities inside its own checked
+	 * change with an undo point, as before.
 	 *
 	 * @param string $name Ability.
 	 * @return string

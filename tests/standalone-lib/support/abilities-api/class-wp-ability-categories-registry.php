@@ -1,6 +1,6 @@
 <?php
 /*
- * Fixed copy for the Pro test suite only: wp-includes/abilities-api/class-wp-ability-categories-registry.php from WordPress 7.0.2
+ * Fixed copy for the test suite of AlphaBridge MCP only: wp-includes/abilities-api/class-wp-ability-categories-registry.php from WordPress 7.0.2
  * (wp-includes/version.php: $wp_version = '7.0.2'), taken from the local core
  * copy ~/.wp-env/wp-env-wporg-4.0.0-f26facd6/WordPress on 02.10.2026. Unchanged
  * below this comment (the file's own first line, "<?php", is the line above).
@@ -9,8 +9,10 @@
  * version 2 or later (GPL-2.0-or-later), like this plugin. Copyright WordPress
  * contributors, https://wordpress.org/about/license/.
  *
- * Not shipped: test/ lies outside the plugin folder that build-pro.sh packs,
- * and build-pro.sh checks that no copy of a WordPress class lands in the ZIP.
+ * Not shipped: tests/ is left out of every release (.distignore, and
+ * export-ignore in .gitattributes), and the CI job checks the package for it.
+ * Taken over from AlphaBridge MCP Pro's test suite with the abilities tests
+ * (4.12.0).
  */
 /**
  * Abilities API

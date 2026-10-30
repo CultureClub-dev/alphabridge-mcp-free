@@ -169,6 +169,7 @@ final class AB_MCP_Plugin {
 			'search-replace',
 			'install-update',
 			'plugins-themes-manage',
+			'abilities',
 		);
 
 		foreach ( $files as $file ) {
@@ -209,6 +210,9 @@ final class AB_MCP_Plugin {
 			// and deleting, and switching plugins and themes on and off.
 			'AB_MCP_Tools_Install_Update'        => array( 'lifecycle', __( 'Install & Update', 'alphabridge-mcp' ) ),
 			'AB_MCP_Tools_Plugins_Themes_Manage' => array( 'plugins-themes', __( 'Plugins & Themes', 'alphabridge-mcp' ) ),
+			// Free since 4.12.0, the group as in Pro: the abilities of other
+			// plugins, each only once an administrator approved it.
+			'AB_MCP_Tools_Abilities'             => array( 'abilities', __( 'Abilities of other plugins', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {

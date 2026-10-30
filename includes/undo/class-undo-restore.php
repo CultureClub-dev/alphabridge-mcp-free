@@ -18,8 +18,9 @@
  * the three kinds of the tools of this plugin: post_fields (wp_update_post),
  * post_status (wp_bulk_update_status) and site_settings
  * (wp_update_site_settings); since 4.10.0 also builder_data and option_rows
- * (wp_update_builder_element, wp_search_replace), and since 4.11.0 the theme
- * (wp_activate_theme). The undo points of Pro's tools (options, files, PHP
+ * (wp_update_builder_element, wp_search_replace), since 4.11.0 the theme
+ * (wp_activate_theme), and since 4.12.0 builder_data of the posts a plugin's
+ * ability changed (wp_run_ability). The undo points of Pro's tools (options, files, PHP
  * snippets) share the store; Pro reverses them with its own wp_undo, this
  * class names them and leaves them alone.
  *
@@ -69,6 +70,11 @@ class AB_MCP_Undo_Restore {
 			// the pages (also, free since 4.10.0): their old values, written
 			// back as the option tools write.
 			'wp_search_replace'         => array( 'kind' => 'builder_data', 'cap' => 'manage_options', 'also' => array( 'option_rows' ) ),
+			// A plugin's ability, run by wp_run_ability (free since 4.12.0):
+			// edit_post per post is asked by the plan, as for a builder page.
+			// The tool runs only on a full-scope token, so its undo point
+			// does too: "full_scope" (may_touch()).
+			'wp_run_ability'            => array( 'kind' => 'builder_data', 'cap' => 'edit_posts', 'full_scope' => true ),
 		);
 	}
 

@@ -78,6 +78,8 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_activate_plugin',
 		'wp_deactivate_plugin',
 		'wp_activate_theme',
+		// Free since 4.12.0: runs whatever another plugin's ability does.
+		'wp_run_ability',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

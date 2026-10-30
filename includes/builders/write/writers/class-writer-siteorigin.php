@@ -303,7 +303,9 @@ class AB_MCP_Builder_Writer_SiteOrigin extends AB_MCP_Builder_Settings_Writer {
 	/**
 	 * SiteOrigin's layout-update ability, where it is registered and not
 	 * switched off for AlphaBridge (measured 02.10.2026: before, the writer
-	 * used it while it was switched off).
+	 * used it while it was switched off). Only Pro's switches count: the
+	 * approvals of this plugin (4.12.0) are for wp_run_ability, the general
+	 * runner, not for this writer's own checked change.
 	 *
 	 * @return WP_Ability|null
 	 */

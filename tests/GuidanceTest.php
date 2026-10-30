@@ -208,7 +208,7 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 41, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0 and 12 more since 4.11.0, and they run here.' );
+		self::assertCount( 39, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0, 12 more since 4.11.0 and 2 more since 4.12.0, and they run here.' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );
@@ -221,7 +221,10 @@ final class GuidanceTest extends TestCase {
 		foreach ( array( 'wp_create_application_password', 'wp_revoke_application_password', 'wp_schedule_cron', 'wp_unschedule_cron', 'wp_set_transient', 'wp_delete_transient' ) as $name ) {
 			self::assertContains( $name, $pro, $name . ' stays in Pro.' );
 		}
-		foreach ( array( 'wp_run_ability', 'wp_list_abilities', 'wp_db_query', 'wp_read_plugin_file', 'wp_update_option', 'wp_network_activate_plugin', 'wp_create_application_password', 'wp_upload_begin' ) as $name ) {
+		foreach ( array( 'wp_list_abilities', 'wp_run_ability' ) as $name ) {
+			self::assertNotContains( $name, $pro, $name . ' is free since 4.12.0.' );
+		}
+		foreach ( array( 'wp_db_query', 'wp_read_plugin_file', 'wp_update_option', 'wp_network_activate_plugin', 'wp_create_application_password', 'wp_upload_begin' ) as $name ) {
 			self::assertContains( $name, $pro );
 		}
 		foreach ( array( 'wp_install_plugin', 'wp_install_theme', 'wp_install_plugin_zip', 'wp_install_theme_zip', 'wp_update_core', 'wp_update_plugin', 'wp_update_theme', 'wp_delete_plugin', 'wp_delete_theme', 'wp_activate_plugin', 'wp_deactivate_plugin', 'wp_activate_theme' ) as $name ) {
@@ -253,7 +256,7 @@ final class GuidanceTest extends TestCase {
 		$paragraph = AB_MCP_Guidance::instructions_paragraph();
 
 		self::assertStringContainsString( ' ' . $paragraph, $m->invoke( new AB_MCP_REST_Controller( self::free_registry() ) ) );
-		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, export, multisite, the abilities of other plugins, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
+		self::assertSame( 'NOT ON THIS SITE: theme and plugin files, PHP snippets, database queries, export, multisite, applying blueprints and Site Deploy over FTP/SFTP. These tools belong to AlphaBridge MCP Pro and its Agency plan, which are not active here. When the person asks for one of these, say that the edition of AlphaBridge MCP on this site does not include it.', $paragraph, 'Word for word: a request to point the person to Pro, or to upgrade, would break the rules of ChatGPT\'s directory.' );
 		self::assertNoPromotion( $paragraph );
 		self::assertStringStartsWith( 'The tool "wp_blueprint_apply" is not on this site: it belongs to the Agency plan', AB_MCP_Guidance::unavailable_tool( 'wp_blueprint_apply' )->get_error_message() );
 		self::assertLessThanOrEqual( 3, preg_match_all( '/[.!?](\s|$)/', $paragraph ), 'Short: it is loaded into every session.' );

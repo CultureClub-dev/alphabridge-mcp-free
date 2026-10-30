@@ -1648,6 +1648,11 @@ class AB_MCP_Admin {
 	 * abilities_need_wp: WordPress is older than 6.9 (one %s, the version);
 	 * abilities_none: no plugin offers any; abilities_kept_off: the start of
 	 * a list of switched-off abilities whose plugin is not active right now.
+	 * abilities_lead and abilities_kept_off describe the Pro add-on's
+	 * switches, on until switched off; this plugin's own approvals (since
+	 * 4.12.0, AB_MCP_Ability_Switches) have abilities_approve_lead and
+	 * abilities_kept_on: none runs until it is switched on, and switching on
+	 * write access switches none on.
 	 *
 	 * @param string $key One of the keys above.
 	 * @return string Unescaped text; '' for an unknown key.
@@ -1671,6 +1676,10 @@ class AB_MCP_Admin {
 				return __( 'No plugin on this site offers abilities yet.', 'alphabridge-mcp' );
 			case 'abilities_kept_off':
 				return __( 'Also switched off, not offered right now (kept):', 'alphabridge-mcp' );
+			case 'abilities_approve_lead':
+				return __( 'Plugins offer their actions to AI assistants as abilities (WordPress Abilities API). None of them runs until you switch it on here, reading or writing, and only with write access on; switching on write access switches no ability on. Each one also checks the rights of the connected account.', 'alphabridge-mcp' );
+			case 'abilities_kept_on':
+				return __( 'Also switched on, not offered right now (kept):', 'alphabridge-mcp' );
 		}
 		return '';
 	}

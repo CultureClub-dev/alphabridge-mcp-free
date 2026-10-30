@@ -28,10 +28,11 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **96 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+- **98 structured tools** across content, media, taxonomies, comments, widgets, menus, site
   settings, site info, users, plugins and themes (install, update, activate, delete), WordPress
   updates, cron and the error log, SEO fields, WooCommerce, maintenance, page builders, search and
-  replace, bulk status changes and a connection check.
+  replace, bulk status changes, a connection check and the abilities of other plugins, each one
+  once an administrator has switched it on.
 - **A preview first for what has no way back** — `wp_update_core`, the two ZIP installs and the
   two deletes run only with the `confirm_token` from their own preview (HMAC over the tool, the
   arguments, the account, the access level and the state the preview showed; 10 minutes).
@@ -178,8 +179,6 @@ Then activate it and open *Settings → AlphaBridge MCP* to create a connection.
 
 A separate commercial add-on, **AlphaBridge MCP Pro**, lets the assistant do more:
 
-- run the abilities other plugins offer, and say so when such a run reports success on a post
-  but nothing was saved;
 - edit plugin and theme files and the PHP snippets of Code Snippets or WPCode;
 - check the site with test requests after saving active PHP code, and put the previous
   version back automatically when one of them ends with a fatal error;

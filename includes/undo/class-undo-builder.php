@@ -629,8 +629,8 @@ class AB_MCP_Undo_Builder {
 	/**
 	 * What changed in an autosave revision since the change created it: its
 	 * copies in the snapshot, copies it has now and the snapshot does not
-	 * (wp_run_ability's own list, AB_MCP_Pro_Ability_Broker::locs_of()), and
-	 * its row ("post_fields").
+	 * (wp_run_ability's own list, locs_of() of its broker: Pro's where Pro is
+	 * loaded, else this plugin's), and its row ("post_fields").
 	 *
 	 * @param array $item Snapshot item with "created".
 	 * @return string[] Locs.
@@ -638,8 +638,9 @@ class AB_MCP_Undo_Builder {
 	private static function created_changes( array $item ) {
 		$id      = (int) $item['id'];
 		$changed = array_keys( self::compare( $item, null ), 'changed', true );
-		if ( class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ) {
-			foreach ( AB_MCP_Pro_Ability_Broker::locs_of( $id ) as $loc ) {
+		$broker  = class_exists( 'AB_MCP_Pro_Ability_Broker', false ) ? 'AB_MCP_Pro_Ability_Broker' : 'AB_MCP_Ability_Broker';
+		if ( class_exists( $broker, false ) ) {
+			foreach ( call_user_func( array( $broker, 'locs_of' ), $id ) as $loc ) {
 				if ( ! array_key_exists( $loc, $item['locs'] ) ) {
 					$changed[] = $loc;
 				}

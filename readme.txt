@@ -36,7 +36,7 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-96 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+98 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
@@ -127,12 +127,11 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 
 = More with Pro =
 
-AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 136 tools on your site:
+AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 137 tools on your site:
 
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
 * **Undo for files and code.** Theme and plugin files, PHP snippets and options come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
 * **Database and options.** Query the database, change rows of plugin tables with structured statements, and write options, with guards for what must stay protected.
-* **Your other plugins.** Run the abilities your other plugins offer the AI.
 
 The Agency plan adds Site Deploy: the AI publishes files, themes and whole builds over SFTP onto the server the site runs on. Agency covers up to 10 sites.
 
@@ -163,7 +162,7 @@ Ask it to undo. Edits of posts and pages, page-builder elements, status changes 
 Claude in the browser, the desktop app and on the phone, ChatGPT from Plus upwards, Claude Code, Cursor, Codex, VS Code, Windsurf and any other client that speaks MCP. Claude connects from its connector directory, ChatGPT as a plugin with OAuth, the others with OAuth or a connection you create in the plugin.
 
 = Do I need the WordPress MCP Adapter? =
-No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. With Pro, the AI can also run the abilities that your other plugins register.
+No. AlphaBridge is its own MCP server with its own tools, so it works without the adapter and without the Abilities API. The AI can also run the abilities that your other plugins register, each one once you have switched it on.
 
 = Does it work with WooCommerce, Elementor, Yoast and Rank Math? =
 Yes. The free plugin reads Elementor pages and the pages of many other page builders and changes their texts, links and images, reads and sets the SEO title, meta description and focus keyword of Yoast SEO and Rank Math, reads the orders, products, coupons and customers of WooCommerce, and changes prices, stock and order status and creates coupons.
@@ -225,7 +224,8 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 = 4.12.0 =
 * **Pictures from the chat go straight into the media library.** In ChatGPT, a picture or PDF you attach is handed to `wp_upload_media` as a file: the site downloads it from its temporary address with the same checks as `wp_upload_media_from_url` (public host on every redirect, 20 MB, image or PDF only). Base64 content works as before.
 * **The same file is not stored twice.** Every file AlphaBridge adds keeps its SHA-256; uploading the same file again names the one that is there (`duplicate: true`) instead of adding a copy, unless `allow_duplicate` is set. `max_size` scales a large JPEG, PNG or WebP down to a longest edge before it is stored.
-* **New: `wp_find_media`** finds files by their SHA-256, by the address of the file or one of its image sizes, by file name or by text. 96 tools in all.
+* **New: `wp_find_media`** finds files by their SHA-256, by the address of the file or one of its image sizes, by file name or by text.
+* **Abilities of other plugins, with your approval per ability.** `wp_list_abilities` and `wp_run_ability` came with AlphaBridge MCP Pro only; they work as they did there, with a preview, an undo point of the posts the input names and a read-back that reports a silent failure, with one change: an ability runs only once an administrator has switched it on under Fine-tuning, group «Abilities of other plugins», and switching on write access switches none on. The abilities of the MCP adapter and AlphaBridge's own are never run through them. 98 tools in all.
 
 = 4.11.0 =
 * **Installing, updating and activating in the free plugin, 95 tools in all.** `wp_install_plugin`, `wp_install_theme`, `wp_install_plugin_zip`, `wp_install_theme_zip`, `wp_update_plugin`, `wp_update_theme`, `wp_update_core`, `wp_activate_plugin`, `wp_deactivate_plugin`, `wp_activate_theme`, `wp_delete_plugin` and `wp_delete_theme` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages. Test requests check the site before and after an update or a switch-on, and a version or theme that breaks it is put back in the same call.
@@ -485,7 +485,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 == Upgrade Notice ==
 
 = 4.12.0 =
-Pictures from the ChatGPT chat go straight into the media library, the same file is not stored twice, and wp_find_media finds a file by its content, address or name. No setting changes.
+Pictures from the ChatGPT chat go straight into the media library, the same file is not stored twice, wp_find_media finds a file by its content, address or name, and the abilities of other plugins run once you approve them. No setting changes.
 
 = 4.11.0 =
 Installing, updating and activating plugins and themes are free now, 95 tools in all, with a connection check. Updating WordPress, ZIP installs and deletes run after a preview with a token. No setting changes.
