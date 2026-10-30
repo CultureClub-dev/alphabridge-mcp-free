@@ -898,6 +898,7 @@ class AB_MCP_Undo {
 $GLOBALS['ab_free'] = dirname( __DIR__, 3 ) . '/includes/';
 require_once $GLOBALS['ab_free'] . 'tools/class-tools-base.php';
 require_once $GLOBALS['ab_free'] . 'lifecycle/class-update-log.php';
+require_once $GLOBALS['ab_free'] . 'class-lifecycle-confirm.php';
 require_once $GLOBALS['ab_free'] . 'tools/class-tools-install-update.php';
 
 /** The guard without the waits, and with a clock the tests set and the waits and timeouts move on. */

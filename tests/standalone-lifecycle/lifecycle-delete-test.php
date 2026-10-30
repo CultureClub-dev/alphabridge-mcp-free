@@ -96,6 +96,7 @@ function get_stylesheet() { return 'child-theme'; }
 function get_template() { return 'twentytwentyfour'; }
 class AB_MCP_Tool_Registry {}
 require_once AB_MCP_DIR . 'includes/tools/class-tools-base.php';
+require_once AB_MCP_DIR . 'includes/class-lifecycle-confirm.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-install-update.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-plugins-themes-manage.php';
 

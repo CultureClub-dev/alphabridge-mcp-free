@@ -176,7 +176,7 @@ final class ConfirmTokenTest extends TestCase {
 
 		self::assertArrayHasKey( 'confirm_token', (array) $def['inputSchema']['properties'] );
 		self::assertSame( array( 'plugin' ), $def['inputSchema']['required'], 'The token is never required: the first call goes without.' );
-		self::assertStringContainsString( 'Two steps', $def['description'] );
+		self::assertStringContainsString( 'two steps', $def['description'] );
 	}
 
 	public function testArgumentsWithoutACanonicalFormAreRefusedNotBoundToAnEmptyString(): void {

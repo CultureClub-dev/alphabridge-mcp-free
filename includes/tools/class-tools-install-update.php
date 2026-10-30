@@ -85,6 +85,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 						'activate' => array( 'type' => 'boolean', 'description' => 'true activates the plugin after install (needs activate_plugins). Default false.' ),
 					),
 				),
+				// Runs only with the token from its own preview (AB_MCP_Confirm_Token).
+				'confirm'     => AB_MCP_Lifecycle_Confirm::definition( 'wp_install_plugin_zip' ),
 				'callback'    => array( __CLASS__, 'install_plugin_zip' ),
 			)
 		);
@@ -105,6 +107,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 						'activate' => array( 'type' => 'boolean', 'description' => 'true switches to the theme after install (needs switch_themes). Default false.' ),
 					),
 				),
+				// Runs only with the token from its own preview (AB_MCP_Confirm_Token).
+				'confirm'     => AB_MCP_Lifecycle_Confirm::definition( 'wp_install_theme_zip' ),
 				'callback'    => array( __CLASS__, 'install_theme_zip' ),
 			)
 		);
@@ -135,6 +139,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 					'required'   => array( 'plugin' ),
 					'properties' => array( 'plugin' => array( 'type' => 'string', 'description' => 'Exact plugin file of an installed plugin as wp_list_plugins lists it, e.g. "akismet/akismet.php". A folder name alone or an unknown file is refused.' ) ),
 				),
+				// Runs only with the token from its own preview (AB_MCP_Confirm_Token).
+				'confirm'     => AB_MCP_Lifecycle_Confirm::definition( 'wp_delete_plugin' ),
 				'callback'    => array( __CLASS__, 'delete_plugin' ),
 			)
 		);
@@ -180,6 +186,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 					'required'   => array( 'stylesheet' ),
 					'properties' => array( 'stylesheet' => array( 'type' => 'string', 'description' => 'Exact directory name of an installed theme as wp_list_themes reports it, e.g. "twentytwentyfour". Anything else is refused.' ) ),
 				),
+				// Runs only with the token from its own preview (AB_MCP_Confirm_Token).
+				'confirm'     => AB_MCP_Lifecycle_Confirm::definition( 'wp_delete_theme' ),
 				'callback'    => array( __CLASS__, 'delete_theme' ),
 			)
 		);
@@ -190,6 +198,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 				'description' => 'Update WordPress core itself (not plugins or themes) to the first version WordPress offers, with WordPress\'s own core updater; it checks for offers first, and wp_get_update_status shows them. Already current: updated false with a message; otherwise updated true and new_version, or the updater\'s error. Needs update_core; refused when DISALLOW_FILE_MODS is set. Replaces core files site-wide. Unlike wp_update_plugin, AlphaBridge runs no test requests and puts nothing back; no undo point is recorded.',
 				'capability'  => 'update_core',
 				'dangerous'   => true,
+				// Runs only with the token from its own preview (AB_MCP_Confirm_Token).
+				'confirm'     => AB_MCP_Lifecycle_Confirm::definition( 'wp_update_core' ),
 				'callback'    => array( __CLASS__, 'update_core' ),
 			)
 		);

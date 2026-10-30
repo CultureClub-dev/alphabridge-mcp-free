@@ -97,9 +97,13 @@ final class FreeSinceFourElevenTest extends TestCase {
 				self::assertArrayHasKey( $param, $r->get( $name )['inputSchema']['properties'], $name . '.' . $param );
 			}
 		}
-		self::assertSame( array(), (array) $r->get( 'wp_update_core' )['inputSchema']['properties'], 'wp_update_core takes no arguments.' );
-		foreach ( array_keys( self::TOOLS ) as $name ) {
-			self::assertArrayNotHasKey( 'confirm', $r->get( $name ), $name . ': the confirmation token is wired up separately.' );
+		self::assertSame( array( 'confirm_token' ), array_keys( (array) $r->get( 'wp_update_core' )['inputSchema']['properties'] ), 'wp_update_core takes no arguments but the confirmation.' );
+		foreach ( array( 'wp_update_core', 'wp_install_plugin_zip', 'wp_install_theme_zip', 'wp_delete_plugin', 'wp_delete_theme' ) as $name ) {
+			self::assertTrue( \AB_MCP_Confirm_Token::required( $r->get( $name ) ), $name . ' runs only with the token from its preview.' );
+			self::assertArrayHasKey( 'confirm_token', (array) $r->get( $name )['inputSchema']['properties'], $name );
+		}
+		foreach ( array( 'wp_install_plugin', 'wp_install_theme', 'wp_update_plugin', 'wp_update_theme', 'wp_activate_plugin', 'wp_deactivate_plugin', 'wp_activate_theme' ) as $name ) {
+			self::assertFalse( \AB_MCP_Confirm_Token::required( $r->get( $name ) ), $name . ' has its own way back or none is needed, so no confirmation.' );
 		}
 	}
 

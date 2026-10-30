@@ -61,7 +61,7 @@ final class AB_MCP_Confirm_Token {
 	public static function schema_property() {
 		return array(
 			'type'        => 'string',
-			'description' => __( 'Confirmation from the preview. Leave it out on the first call: the tool then changes nothing and answers with a preview and a confirm_token. Call again with the same arguments and that token to run it. The token is valid for 10 minutes and only while nothing has changed.', 'alphabridge-mcp' ),
+			'description' => __( 'Confirmation from the preview: a call without it changes nothing and answers with a preview and a confirm_token, and the same arguments with that token run the tool. A token is valid for 10 minutes and only while what it covers is unchanged.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -71,7 +71,7 @@ final class AB_MCP_Confirm_Token {
 	 * @return string
 	 */
 	public static function description_note() {
-		return __( 'Two steps: the first call changes nothing and returns a preview with a confirm_token; the second call with the same arguments and that token runs it. This guards against a call nobody meant; it does not make the change reversible.', 'alphabridge-mcp' );
+		return __( 'Runs in two steps: a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it. This guards against a call nobody meant; it does not make the change reversible.', 'alphabridge-mcp' );
 	}
 
 	/**
