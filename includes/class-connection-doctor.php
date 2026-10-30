@@ -13,22 +13,25 @@
  * the case in one sentence and the steps that fix it.
  *
  * Every request goes from the site to itself (a loopback), sent the way the
- * firewall self-test sends its own (AB_MCP_OAuth::run_firewall_check()): with
- * a browser's user agent, without following redirects or sending cookies,
- * with the certificate check WordPress uses for requests to itself, and with
- * the HTTP Basic login of the current request where a staging site is behind
- * one. A block that applies only to requests from outside cannot be seen
- * that way — Cloudflare's bot rules for AI crawlers are the typical case —
- * and the result says so (limits()).
+ * firewall self-test sends its own (AB_MCP_OAuth::firewall_probe()): with a
+ * browser's user agent, without following redirects or sending cookies, with
+ * the certificate check WordPress uses for requests to itself. The MCP
+ * endpoint is asked without the administrator's HTTP Basic login, as an app
+ * would ask it; only behind such a login do the later requests carry it, and
+ * say so (run()). A block that applies only to requests from outside cannot
+ * be seen this way — Cloudflare's bot rules for AI crawlers are the typical
+ * case — and the result says so (limits()).
  *
  * The judgement of each answer is a pure function of what came back (status,
- * headers, the start of the body) and of the site's settings, so every case
- * can be tested without a network: the interpret_*() methods. run() only
- * sends the requests and hands the answers over.
+ * headers, the body up to BODY_LIMIT) and of the site's settings, so every
+ * case can be tested without a network: the interpret_*() methods. run()
+ * only sends the requests and hands the answers over.
  *
- * Nothing on the site is changed. The one thing kept is the result itself,
- * by the button on the settings page (run_and_store()), and the firewall
- * self-test keeps its own finding as it always does.
+ * Nothing on the site is changed by the tool wp_connection_doctor, which a
+ * read-only connection may run: the firewall self-test probes without
+ * keeping its finding, since that finding decides what the sign-in offers.
+ * Only the button on the settings page (run_and_store()), behind its nonce
+ * and manage_options, keeps the result and the firewall finding.
  *
  * @package AlphaBridge_MCP
  */
@@ -52,9 +55,12 @@ class AB_MCP_Connection_Doctor {
 	const TIMEOUT = 5;
 
 	/**
-	 * How much of an answer's body is kept for judging it.
+	 * How much of an answer's body is read and judged whole. A sign-in
+	 * description is a few hundred bytes; a body larger than this is no
+	 * description of this plugin's (interpret_well_known()). Nothing of a
+	 * body is shown or kept.
 	 */
-	const BODY_EXCERPT = 2000;
+	const BODY_LIMIT = 65536;
 
 	/**
 	 * The statuses a check can end with, in the order the summary counts them.
@@ -81,45 +87,72 @@ class AB_MCP_Connection_Doctor {
 	/**
 	 * Run every check now.
 	 *
+	 * The MCP endpoint is asked without the HTTP Basic login of the current
+	 * request: apps do not have it, so a site behind such a login must fail
+	 * there, not pass because the administrator's browser knew the password.
+	 * Only when that first answer is the login's own challenge, and the
+	 * current request carried the credentials, do the requests that follow
+	 * carry them too — to see past the login for the remaining checks — and
+	 * each of their findings says so.
+	 *
+	 * With $store false nothing is kept: the firewall self-test probes
+	 * without storing its finding (AB_MCP_OAuth::firewall_probe()), since the
+	 * kept finding changes what the sign-in offers. Only the settings page's
+	 * button stores (run_and_store()).
+	 *
+	 * @param bool $store Whether the firewall finding may be kept.
 	 * @return array{checks:array,summary:array,checked_at:string,checked:int,limits:string}
 	 */
-	public static function run() {
+	public static function run( $store = false ) {
 		$oauth    = class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled();
 		$endpoint = self::endpoint_url();
 		$plain    = '' === (string) get_option( 'permalink_structure', '' );
-		$basic    = isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] );
+		$has_login = isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] );
 		$answers  = array();
 
 		$checks   = array();
 		$checks[] = self::interpret_https( home_url( '/' ), $endpoint );
 		$checks[] = self::interpret_permalinks( $plain );
 
-		// 3. The endpoint, without a token: it must answer 401 itself.
-		$answers['endpoint'] = self::send( 'POST', $endpoint, self::mcp_headers( null ) );
+		// 3. The endpoint, without a token and without the Basic login: it
+		// must answer 401 itself.
+		$answers['endpoint'] = self::send( 'POST', $endpoint, self::mcp_headers( null ), false );
 		$checks[]            = self::interpret_endpoint( $answers['endpoint'], $oauth );
 		$reached             = self::is_own_answer( $answers['endpoint'] );
+		$behind_login        = self::is_login_challenge( $answers['endpoint'] );
+		$with_login          = $behind_login && $has_login;
 
 		// 4. The same with a made-up token: does the header arrive? Behind an
-		// HTTP login the header is taken by the login, so it is not sent.
-		if ( $reached && ! $basic ) {
-			$answers['authorization'] = self::send( 'POST', $endpoint, self::mcp_headers( 'Bearer abmcp-check-' . bin2hex( random_bytes( 12 ) ) ) );
+		// HTTP login the header belongs to the login, so it is not sent.
+		if ( $reached && ! $behind_login ) {
+			$answers['authorization'] = self::send( 'POST', $endpoint, self::mcp_headers( 'Bearer abmcp-check-' . bin2hex( random_bytes( 12 ) ) ), false );
 			$checks[]                 = self::interpret_authorization( $answers['authorization'], true, false );
 		} else {
-			$checks[] = self::interpret_authorization( null, $reached, $basic );
+			$checks[] = self::interpret_authorization( null, $reached, $behind_login );
 		}
 
-		// 5. The sign-in description below /.well-known/.
-		if ( $oauth ) {
-			$answers['well_known'] = self::send( 'GET', AB_MCP_OAuth::resource_metadata_url(), array( 'Accept' => 'application/json' ) );
-			$checks[]              = self::interpret_well_known( $answers['well_known'], true, $plain );
-		} else {
-			$checks[] = self::interpret_well_known( null, false, $plain );
+		// 5. The two sign-in descriptions below /.well-known/.
+		$wk = array(
+			'resource' => $oauth ? AB_MCP_OAuth::resource_metadata_url() : '',
+			'server'   => $oauth ? self::server_metadata_url() : '',
+		);
+		foreach ( $wk as $kind => $url ) {
+			$answer = null;
+			if ( $oauth ) {
+				$answer                     = self::send( 'GET', $url, array( 'Accept' => 'application/json' ), $with_login );
+				$answers[ 'well_known_' . $kind ] = $answer;
+			}
+			$checks[] = self::with_login_note( self::interpret_well_known( $answer, $oauth, $plain, $kind ), $with_login && $oauth );
 		}
 
-		// 6. The firewall self-test, as the settings page runs it; only where
-		// the direct sign-in it tests is offered at all.
-		$direct   = $oauth && AB_MCP_OAuth::cimd_enabled();
-		$checks[] = self::interpret_firewall( $direct ? AB_MCP_OAuth::run_firewall_check() : null, $oauth, $direct );
+		// 6. The firewall self-test; only where the direct sign-in it tests is
+		// offered at all, and kept only when $store says so.
+		$direct = $oauth && AB_MCP_OAuth::cimd_enabled();
+		$probe  = null;
+		if ( $direct ) {
+			$probe = $store ? AB_MCP_OAuth::run_firewall_check() : AB_MCP_OAuth::firewall_probe();
+		}
+		$checks[] = self::with_login_note( self::interpret_firewall( $probe, $oauth, $direct ), $with_login && $direct );
 
 		// 7. Cloudflare, by its header in any of the answers above.
 		$checks[] = self::interpret_cloudflare( array_column( $answers, 'headers' ) );
@@ -138,12 +171,13 @@ class AB_MCP_Connection_Doctor {
 	}
 
 	/**
-	 * Run every check and keep the result for the settings page.
+	 * Run every check and keep the result for the settings page, the
+	 * firewall finding included (as «Check again» does).
 	 *
 	 * @return array The result, as run() returns it.
 	 */
 	public static function run_and_store() {
-		$result = self::run();
+		$result = self::run( true );
 		update_option( self::OPTION, $result, false );
 		return $result;
 	}
@@ -230,6 +264,47 @@ class AB_MCP_Connection_Doctor {
 	}
 
 	/**
+	 * The authorization-server metadata (RFC 8414) as this plugin serves it:
+	 * below the site address, also where WordPress lives in a subdirectory
+	 * (AB_MCP_OAuth::serve_well_known()).
+	 *
+	 * @return string
+	 */
+	public static function server_metadata_url() {
+		return AB_MCP_OAuth::issuer() . '/.well-known/oauth-authorization-server';
+	}
+
+	/**
+	 * Whether an answer is an HTTP login's challenge in front of WordPress:
+	 * 401 with WWW-Authenticate: Basic, not this plugin's own answer.
+	 *
+	 * @param array|null $answer Answer as send() returns it.
+	 * @return bool
+	 */
+	public static function is_login_challenge( $answer ) {
+		if ( ! is_array( $answer ) || 401 !== $answer['status'] || self::is_own_answer( $answer ) ) {
+			return false;
+		}
+		$challenge = isset( $answer['headers']['www-authenticate'] ) ? (string) $answer['headers']['www-authenticate'] : '';
+		return 0 === stripos( ltrim( $challenge ), 'basic' );
+	}
+
+	/**
+	 * A check's result with the note that its request carried the
+	 * administrator's HTTP login, which apps do not have.
+	 *
+	 * @param array $check      Result.
+	 * @param bool  $with_login Whether the login was passed on.
+	 * @return array
+	 */
+	private static function with_login_note( array $check, $with_login ) {
+		if ( $with_login ) {
+			$check['finding'] .= ' ' . __( 'This request carried your HTTP login to get past it; apps do not have that login, see the MCP endpoint check.', 'alphabridge-mcp' );
+		}
+		return $check;
+	}
+
+	/**
 	 * Where the sign-in descriptions lie.
 	 *
 	 * @return string
@@ -284,13 +359,17 @@ class AB_MCP_Connection_Doctor {
 	 * Send one request to the site itself, the way the firewall self-test
 	 * does (AB_MCP_OAuth::firewall_probe_args()), and keep what came back.
 	 *
-	 * @param string $method  GET or POST.
-	 * @param string $url     Address on this site.
-	 * @param array  $headers Request headers.
+	 * The HTTP Basic login of the current request goes along only with
+	 * $with_login, and never with an Authorization header of its own.
+	 *
+	 * @param string $method     GET or POST.
+	 * @param string $url        Address on this site.
+	 * @param array  $headers    Request headers.
+	 * @param bool   $with_login Whether to pass on the current request's Basic login.
 	 * @return array{status:int|null,headers:array,body:string,error:string}
 	 */
-	private static function send( $method, $url, array $headers ) {
-		if ( ! isset( $headers['Authorization'] ) && isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] ) ) {
+	private static function send( $method, $url, array $headers, $with_login ) {
+		if ( $with_login && ! isset( $headers['Authorization'] ) && isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] ) ) {
 			$headers['Authorization'] = 'Basic ' . base64_encode( wp_unslash( $_SERVER['PHP_AUTH_USER'] ) . ':' . wp_unslash( $_SERVER['PHP_AUTH_PW'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- passed on to this site itself, as WordPress's own loopback test does.
 		}
 		$headers['Cache-Control'] = 'no-cache';
@@ -302,7 +381,8 @@ class AB_MCP_Connection_Doctor {
 			'user-agent'          => AB_MCP_OAuth::FIREWALL_USER_AGENT,
 			'headers'             => $headers,
 			'cookies'             => array(),
-			'limit_response_size' => 65536,
+			// One byte more than is judged, so a larger body shows as larger.
+			'limit_response_size' => self::BODY_LIMIT + 1,
 		);
 		if ( 'POST' === $method ) {
 			$args['body'] = self::initialize_body();
@@ -321,7 +401,7 @@ class AB_MCP_Connection_Doctor {
 		return array(
 			'status'  => (int) wp_remote_retrieve_response_code( $response ),
 			'headers' => self::header_list( wp_remote_retrieve_headers( $response ) ),
-			'body'    => substr( (string) wp_remote_retrieve_body( $response ), 0, self::BODY_EXCERPT ),
+			'body'    => (string) wp_remote_retrieve_body( $response ),
 			'error'   => '',
 		);
 	}
@@ -775,17 +855,26 @@ class AB_MCP_Connection_Doctor {
 	}
 
 	/**
-	 * 5. The sign-in description below /.well-known/ (RFC 9728), which
-	 * Claude, ChatGPT and the AlphaBridge hub all read before they sign in.
+	 * 5. The two sign-in descriptions below /.well-known/, which Claude,
+	 * ChatGPT and the AlphaBridge hub all read before they sign in: the
+	 * resource's (RFC 9728, $kind 'resource') and the authorization
+	 * server's (RFC 8414, $kind 'server'). Each is judged by the same table;
+	 * a 200 counts only when it is this plugin's document
+	 * (description_problem()).
 	 *
 	 * @param array|null $answer Answer as send() returns it; null when not sent.
 	 * @param bool       $oauth  Whether the sign-in for apps is on.
 	 * @param bool       $plain  Whether the permalinks are set to “Plain”.
+	 * @param string     $kind   'resource' or 'server'.
 	 * @return array
 	 */
-	public static function interpret_well_known( $answer, $oauth, $plain ) {
-		$id    = 'well_known';
-		$title = __( 'Sign-in addresses (.well-known)', 'alphabridge-mcp' );
+	public static function interpret_well_known( $answer, $oauth, $plain, $kind = 'resource' ) {
+		$server = 'server' === $kind;
+		$id     = $server ? 'well_known_server' : 'well_known';
+		$title  = $server ? __( 'Sign-in server description (.well-known)', 'alphabridge-mcp' ) : __( 'Resource description (.well-known)', 'alphabridge-mcp' );
+		if ( ! $oauth && $server ) {
+			return self::result( $id, 'skip', $title, __( 'The sign-in for apps is off on this site, so there are no sign-in addresses to check; apps connect with a token only.', 'alphabridge-mcp' ) );
+		}
 		if ( ! $oauth ) {
 			return self::result(
 				$id,
@@ -797,7 +886,7 @@ class AB_MCP_Connection_Doctor {
 				)
 			);
 		}
-		$url    = AB_MCP_OAuth::resource_metadata_url();
+		$url    = $server ? self::server_metadata_url() : AB_MCP_OAuth::resource_metadata_url();
 		$answer = self::normalize( $answer );
 		$status = $answer['status'];
 		if ( null === $status ) {
@@ -807,8 +896,8 @@ class AB_MCP_Connection_Doctor {
 		$perma     = __( 'Under Settings → Permalinks choose “Post name” and click “Save Changes”.', 'alphabridge-mcp' );
 
 		if ( 200 === $status ) {
-			$data = json_decode( $answer['body'], true );
-			if ( is_array( $data ) && isset( $data['resource'] ) ) {
+			$problem = self::description_problem( $answer['body'], $kind );
+			if ( null === $problem ) {
 				return self::result(
 					$id,
 					'ok',
@@ -821,8 +910,8 @@ class AB_MCP_Connection_Doctor {
 				$id,
 				'fail',
 				$title,
-				/* translators: %s: address of the sign-in description. */
-				sprintf( __( 'The address %s answers, but not with this plugin’s sign-in description: another plugin or the server answers it.', 'alphabridge-mcp' ), $url ),
+				/* translators: 1: address of the sign-in description, 2: what is wrong with the answer. */
+				sprintf( __( 'The address %1$s answers, but not with this plugin’s sign-in description (%2$s): another plugin or the server answers it.', 'alphabridge-mcp' ), $url, $problem ),
 				array(
 					__( 'If another plugin that offers OAuth or MCP is active, switch it off and run this check again.', 'alphabridge-mcp' ),
 					$host_step,
@@ -877,6 +966,53 @@ class AB_MCP_Connection_Doctor {
 				self::token_way(),
 			)
 		);
+	}
+
+	/**
+	 * Why a 200 is not this plugin's sign-in description, or null when it is.
+	 * The whole body is read, up to BODY_LIMIT. The resource description must
+	 * name this site's MCP endpoint as resource (a trailing slash aside) and
+	 * at least one authorization server; the server description must name
+	 * this site as issuer and carry the authorization and token endpoints.
+	 *
+	 * @param string $body Body of the answer.
+	 * @param string $kind 'resource' or 'server'.
+	 * @return string|null Unescaped reason.
+	 */
+	public static function description_problem( $body, $kind ) {
+		$body = (string) $body;
+		if ( strlen( $body ) > self::BODY_LIMIT ) {
+			/* translators: %d: size limit in KB. */
+			return sprintf( __( 'larger than %d KB', 'alphabridge-mcp' ), (int) ( self::BODY_LIMIT / 1024 ) );
+		}
+		$data = json_decode( $body, true );
+		if ( ! is_array( $data ) ) {
+			return __( 'not JSON', 'alphabridge-mcp' );
+		}
+		$same = static function ( $a, $b ) {
+			return is_string( $a ) && '' !== $a && untrailingslashit( $a ) === untrailingslashit( (string) $b );
+		};
+		if ( 'server' === $kind ) {
+			if ( ! isset( $data['issuer'] ) || ! $same( $data['issuer'], AB_MCP_OAuth::issuer() ) ) {
+				return __( 'its issuer is not this site', 'alphabridge-mcp' );
+			}
+			foreach ( array( 'authorization_endpoint', 'token_endpoint' ) as $key ) {
+				if ( empty( $data[ $key ] ) || ! is_string( $data[ $key ] ) ) {
+					/* translators: %s: name of the missing field. */
+					return sprintf( __( '%s is missing', 'alphabridge-mcp' ), $key );
+				}
+			}
+			return null;
+		}
+		$own = AB_MCP_OAuth::resource_metadata();
+		if ( ! isset( $data['resource'] ) || ! $same( $data['resource'], $own['resource'] ) ) {
+			return __( 'its resource is not this site’s MCP endpoint', 'alphabridge-mcp' );
+		}
+		$servers = isset( $data['authorization_servers'] ) ? $data['authorization_servers'] : null;
+		if ( ! is_array( $servers ) || array() === $servers || count( array_filter( $servers, static fn( $s ) => is_string( $s ) && '' !== $s ) ) !== count( $servers ) ) {
+			return __( 'authorization_servers is missing or empty', 'alphabridge-mcp' );
+		}
+		return null;
 	}
 
 	/**

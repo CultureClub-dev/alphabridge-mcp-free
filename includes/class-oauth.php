@@ -658,20 +658,33 @@ class AB_MCP_OAuth {
 	}
 
 	/**
+	 * Send the probe and judge the answer, without keeping anything. The
+	 * kept finding decides whether the discovery metadata offers the direct
+	 * sign-in (metadata()), so only an administrator's action may store it
+	 * (run_firewall_check()); the read-only tool wp_connection_doctor probes
+	 * with this and leaves the sign-in as it is.
+	 *
+	 * @return array{verdict:string,status:int|null,checked:int}
+	 */
+	public static function firewall_probe() {
+		$response = wp_remote_get( self::firewall_probe_url(), self::firewall_probe_args() );
+		$failed   = is_wp_error( $response );
+		$status   = $failed ? null : (int) wp_remote_retrieve_response_code( $response );
+		$mark     = $failed ? '' : wp_remote_retrieve_header( $response, self::MARK_HEADER );
+		return array(
+			'verdict' => self::firewall_verdict( $status, $mark ),
+			'status'  => $status,
+			'checked' => time(),
+		);
+	}
+
+	/**
 	 * Send the probe, judge the answer, keep the finding with its time.
 	 *
 	 * @return array{verdict:string,status:int|null,checked:int}
 	 */
 	public static function run_firewall_check() {
-		$response = wp_remote_get( self::firewall_probe_url(), self::firewall_probe_args() );
-		$failed   = is_wp_error( $response );
-		$status   = $failed ? null : (int) wp_remote_retrieve_response_code( $response );
-		$mark     = $failed ? '' : wp_remote_retrieve_header( $response, self::MARK_HEADER );
-		$finding  = array(
-			'verdict' => self::firewall_verdict( $status, $mark ),
-			'status'  => $status,
-			'checked' => time(),
-		);
+		$finding = self::firewall_probe();
 		update_option( self::FIREWALL_OPTION, $finding );
 		return $finding;
 	}

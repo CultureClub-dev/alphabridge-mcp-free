@@ -52,6 +52,8 @@ final class ConnectionDoctorTest extends TestCase {
 
 	private const ENDPOINT   = 'https://example.test/wp-json/alphabridge/v1/mcp';
 	private const WELL_KNOWN = 'https://example.test/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp';
+	private const AS_META    = 'https://example.test/.well-known/oauth-authorization-server';
+	private const LOGIN      = 'Basic c3RhZ2luZzpzZWNyZXQ=';
 	private const POINTER    = 'Bearer resource_metadata="https://example.test/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp"';
 
 	protected function setUp(): void {
@@ -245,7 +247,8 @@ final class ConnectionDoctorTest extends TestCase {
 		return array(
 			'sign-in off'              => array( null, false, false, 'info', 'sign-in for apps is off', 'How Claude signs in' ),
 			'the description'          => array( self::answer( 200, array( 'Content-Type' => 'application/json' ), $doc ), true, false, 'ok', 'answers as it should', '' ),
-			'someone else’s page'      => array( self::answer( 200, array(), '<html>Home</html>' ), true, false, 'fail', 'not with this plugin’s sign-in description', 'OAuth or MCP' ),
+			'someone else’s page'      => array( self::answer( 200, array(), '<html>Home</html>' ), true, false, 'fail', 'not with this plugin’s sign-in description (not JSON)', 'OAuth or MCP' ),
+			'an empty resource'        => array( self::answer( 200, array(), '{"resource":""}' ), true, false, 'fail', 'its resource is not this site’s MCP endpoint', 'OAuth or MCP' ),
 			'404'                      => array( self::answer( 404 ), true, false, 'fail', 'answers 404: the server answers the addresses below /.well-known/ itself', '/.well-known/oauth- to WordPress’s index.php' ),
 			'404 with plain permalinks' => array( self::answer( 404 ), true, true, 'fail', 'answers 404', 'Post name' ),
 			'403'                      => array( self::answer( 403 ), true, false, 'fail', 'Something in front of the site answered 403', 'log of blocked requests' ),
@@ -274,6 +277,87 @@ final class ConnectionDoctorTest extends TestCase {
 		// The hub reads the same addresses, so it is no way round a 404 here.
 		self::assertStringContainsString( 'the AlphaBridge hub cannot find the sign-in', $pretty['finding'] );
 		self::assertStringContainsString( 'connect with a token', $pretty['steps'][1] );
+	}
+
+	/**
+	 * Bodies of a 200 and why they are not this plugin's description (null:
+	 * they are).
+	 *
+	 * @return array<string,array{0:string,1:string,2:string|null}>
+	 */
+	public static function descriptions(): array {
+		$resource = array(
+			'resource'              => self::ENDPOINT,
+			'authorization_servers' => array( 'https://example.test' ),
+		);
+		$server   = array(
+			'issuer'                 => 'https://example.test',
+			'authorization_endpoint' => 'https://example.test/?ab_mcp_oauth=authorize',
+			'token_endpoint'         => 'https://example.test/wp-json/alphabridge/v1/oauth/token',
+		);
+		$json     = static fn( array $a ): string => (string) wp_json_encode( $a );
+		return array(
+			'the resource description'           => array( $json( $resource ), 'resource', null ),
+			'with a trailing slash'              => array( $json( array( 'resource' => self::ENDPOINT . '/' ) + $resource ), 'resource', null ),
+			'longer than any excerpt'            => array( $json( $resource + array( 'resource_name' => str_repeat( 'x', 5000 ) ) ), 'resource', null ),
+			'an empty resource'                  => array( $json( array( 'resource' => '' ) + $resource ), 'resource', 'its resource is not this site’s MCP endpoint' ),
+			'only an empty resource'             => array( '{"resource":""}', 'resource', 'its resource is not this site’s MCP endpoint' ),
+			'another site’s resource'            => array( $json( array( 'resource' => 'https://other.test/mcp' ) + $resource ), 'resource', 'its resource is not this site’s MCP endpoint' ),
+			'no authorization servers'           => array( $json( array( 'resource' => self::ENDPOINT ) ), 'resource', 'authorization_servers is missing or empty' ),
+			'an empty list of servers'           => array( $json( array( 'authorization_servers' => array() ) + $resource ), 'resource', 'authorization_servers is missing or empty' ),
+			'a server that is no text'           => array( $json( array( 'authorization_servers' => array( 1 ) ) + $resource ), 'resource', 'authorization_servers is missing or empty' ),
+			'a page'                             => array( '<html>Home</html>', 'resource', 'not JSON' ),
+			'too large'                          => array( str_repeat( ' ', AB_MCP_Connection_Doctor::BODY_LIMIT ) . $json( $resource ), 'resource', 'larger than 64 KB' ),
+			'the server description'             => array( $json( $server ), 'server', null ),
+			'the plugin’s own server metadata'   => array( $json( AB_MCP_OAuth::metadata() ), 'server', null ),
+			'another issuer'                     => array( $json( array( 'issuer' => 'https://other.test' ) + $server ), 'server', 'its issuer is not this site' ),
+			'no token endpoint'                  => array( $json( array( 'token_endpoint' => '' ) + $server ), 'server', 'token_endpoint is missing' ),
+			'no authorization endpoint'          => array( $json( array_diff_key( $server, array( 'authorization_endpoint' => 1 ) ) ), 'server', 'authorization_endpoint is missing' ),
+			'the resource description as server' => array( $json( $resource ), 'server', 'its issuer is not this site' ),
+		);
+	}
+
+	#[DataProvider( 'descriptions' )]
+	public function testOnlyThisPluginsDescriptionCounts( string $body, string $kind, ?string $problem ): void {
+		self::assertSame( $problem, AB_MCP_Connection_Doctor::description_problem( $body, $kind ) );
+		$check = AB_MCP_Connection_Doctor::interpret_well_known( self::answer( 200, array(), $body ), true, false, $kind );
+		self::assertShape( $check, 'server' === $kind ? 'well_known_server' : 'well_known' );
+		if ( null === $problem ) {
+			self::assertSame( 'ok', $check['status'] );
+			return;
+		}
+		self::assertSame( 'fail', $check['status'] );
+		self::assertStringContainsString( 'not with this plugin’s sign-in description (' . $problem . ')', $check['finding'] );
+	}
+
+	/**
+	 * The server description is judged by the same table.
+	 *
+	 * @return array<string,array{0:array|null,1:bool,2:string,3:string}>
+	 */
+	public static function serverAnswers(): array {
+		return array(
+			'sign-in off'  => array( null, false, 'skip', 'sign-in for apps is off' ),
+			'404'          => array( self::answer( 404 ), true, 'fail', self::AS_META . ' answers 404' ),
+			'403'          => array( self::answer( 403 ), true, 'fail', 'Something in front of the site answered 403' ),
+			'406'          => array( self::answer( 406 ), true, 'fail', 'answered 406' ),
+			'foreign'      => array( self::answer( 200, array(), '{"issuer":"https://other.test"}' ), true, 'fail', 'its issuer is not this site' ),
+			'redirect'     => array( self::answer( 301, array( 'Location' => 'https://www.example.test/' ) ), true, 'warn', 'redirect (301)' ),
+			'server error' => array( self::answer( 503 ), true, 'fail', 'status 503' ),
+			'no answer'    => array( self::answer( null, array(), '', 'timed out' ), true, 'skip', 'could not reach itself at ' . self::AS_META ),
+		);
+	}
+
+	#[DataProvider( 'serverAnswers' )]
+	public function testTheServerDescriptionIsReadByTheSameTable( ?array $answer, bool $oauth, string $expected, string $finding ): void {
+		$check = AB_MCP_Connection_Doctor::interpret_well_known( $answer, $oauth, false, 'server' );
+		self::assertShape( $check, 'well_known_server' );
+		self::assertSame( $expected, $check['status'], $check['finding'] );
+		self::assertStringContainsString( $finding, $check['finding'] );
+	}
+
+	public function testTheServerDescriptionIsAskedWhereThePluginServesIt(): void {
+		self::assertSame( self::AS_META, AB_MCP_Connection_Doctor::server_metadata_url() );
 	}
 
 	/* ------------------------------------------- 6, 7, 8: firewall, Cloudflare, plugins */
@@ -384,10 +468,14 @@ final class ConnectionDoctorTest extends TestCase {
 	 * when $strip), the sign-in description and the firewall probe as this
 	 * plugin answers them.
 	 */
-	private static function site( bool $strip ): void {
+	private static function site( bool $strip, bool $login = false ): void {
 		$GLOBALS['ab_test_routes'] = array();
 		( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ) )->register_routes();
-		$GLOBALS['ab_test_http_answer'] = static function ( string $url, array $args ) use ( $strip ): array {
+		$GLOBALS['ab_test_http_answer'] = static function ( string $url, array $args ) use ( $strip, $login ): array {
+			// Behind an HTTP login every address asks for it first.
+			if ( $login && self::LOGIN !== ( $args['headers']['Authorization'] ?? '' ) ) {
+				return ab_test_http_response( 401, '<html>Authorization Required</html>', array( 'WWW-Authenticate' => 'Basic realm="Staging"' ) );
+			}
 			if ( self::ENDPOINT === $url ) {
 				$request = new WP_REST_Request();
 				$request->set_method( 'POST' );
@@ -402,7 +490,10 @@ final class ConnectionDoctorTest extends TestCase {
 				return ab_test_http_response( $response->get_status(), (string) wp_json_encode( $response->get_data() ), $response->get_headers() + array( 'CF-RAY' => '8a1b2c3d4e5f6789-ZRH' ) );
 			}
 			if ( self::WELL_KNOWN === $url ) {
-				return ab_test_http_response( 200, (string) wp_json_encode( array( 'resource' => self::ENDPOINT ) ), array( 'Content-Type' => 'application/json' ) );
+				return ab_test_http_response( 200, (string) wp_json_encode( AB_MCP_OAuth::resource_metadata() ), array( 'Content-Type' => 'application/json' ) );
+			}
+			if ( self::AS_META === $url ) {
+				return ab_test_http_response( 200, (string) wp_json_encode( AB_MCP_OAuth::metadata() ), array( 'Content-Type' => 'application/json' ) );
 			}
 			if ( false !== strpos( $url, 'ab_mcp_oauth=authorize' ) ) {
 				return ab_test_http_response( 302, '', array( AB_MCP_OAuth::MARK_HEADER => AB_MCP_OAuth::MARK_AUTHORIZE ) );
@@ -422,16 +513,16 @@ final class ConnectionDoctorTest extends TestCase {
 
 		$result = AB_MCP_Connection_Doctor::run();
 
-		self::assertSame( array( 'https', 'permalinks', 'mcp_endpoint', 'authorization_header', 'well_known', 'firewall', 'cloudflare', 'rest_plugins' ), array_column( $result['checks'], 'id' ) );
+		self::assertSame( array( 'https', 'permalinks', 'mcp_endpoint', 'authorization_header', 'well_known', 'well_known_server', 'firewall', 'cloudflare', 'rest_plugins' ), array_column( $result['checks'], 'id' ) );
 		foreach ( $result['checks'] as $check ) {
 			self::assertShape( $check, $check['id'] );
 		}
 		$by = self::byId( $result );
-		foreach ( array( 'https', 'permalinks', 'mcp_endpoint', 'authorization_header', 'well_known', 'firewall', 'rest_plugins' ) as $id ) {
+		foreach ( array( 'https', 'permalinks', 'mcp_endpoint', 'authorization_header', 'well_known', 'well_known_server', 'firewall', 'rest_plugins' ) as $id ) {
 			self::assertSame( 'ok', $by[ $id ]['status'], $id . ': ' . $by[ $id ]['finding'] );
 		}
 		self::assertSame( 'info', $by['cloudflare']['status'] );
-		self::assertSame( 7, $result['summary']['ok'] );
+		self::assertSame( 8, $result['summary']['ok'] );
 		self::assertSame( 1, $result['summary']['info'] );
 		self::assertSame( 0, $result['summary']['fail'] );
 		self::assertSame( 'Nothing that these checks can see stops apps from connecting.', $result['summary']['text'] );
@@ -445,9 +536,9 @@ final class ConnectionDoctorTest extends TestCase {
 		AB_MCP_Connection_Doctor::run();
 
 		$calls = $GLOBALS['ab_test_http'];
-		self::assertSame( array( self::ENDPOINT, self::ENDPOINT, self::WELL_KNOWN ), array_slice( array_column( $calls, 'url' ), 0, 3 ) );
-		self::assertStringContainsString( 'ab_mcp_oauth=authorize', $calls[3]['url'] );
-		foreach ( array_slice( $calls, 0, 3 ) as $call ) {
+		self::assertSame( array( self::ENDPOINT, self::ENDPOINT, self::WELL_KNOWN, self::AS_META ), array_slice( array_column( $calls, 'url' ), 0, 4 ) );
+		self::assertStringContainsString( 'ab_mcp_oauth=authorize', $calls[4]['url'] );
+		foreach ( array_slice( $calls, 0, 4 ) as $call ) {
 			self::assertSame( 0, $call['args']['redirection'] );
 			self::assertSame( array(), $call['args']['cookies'] );
 			self::assertSame( AB_MCP_OAuth::FIREWALL_USER_AGENT, $call['args']['user-agent'] );
@@ -479,24 +570,55 @@ final class ConnectionDoctorTest extends TestCase {
 
 		self::assertSame( 'fail', $by['mcp_endpoint']['status'] );
 		self::assertSame( 'skip', $by['authorization_header']['status'] );
-		self::assertCount( 3, $GLOBALS['ab_test_http'], 'No request with a token: the endpoint, the description, the firewall probe.' );
+		self::assertCount( 4, $GLOBALS['ab_test_http'], 'No request with a token: the endpoint, the two descriptions, the firewall probe.' );
 		self::assertSame( 'warn', $by['firewall']['status'], 'The firewall probe saw 406 too.' );
 		self::assertGreaterThanOrEqual( 2, $result['summary']['fail'] );
 		self::assertStringContainsString( 'found problems', $result['summary']['text'] );
 	}
 
-	public function testBehindAnHttpLoginTheTokenIsNotSent(): void {
+	public function testAnHttpLoginFailsTheEndpointEvenWithTheAdminsCredentials(): void {
+		$_SERVER['PHP_AUTH_USER'] = 'staging';
+		$_SERVER['PHP_AUTH_PW']   = 'secret';
+		self::site( false, true );
+
+		$by    = self::byId( AB_MCP_Connection_Doctor::run() );
+		$calls = $GLOBALS['ab_test_http'];
+
+		// The endpoint is asked as an app asks it: without the login.
+		self::assertSame( self::ENDPOINT, $calls[0]['url'] );
+		self::assertArrayNotHasKey( 'Authorization', $calls[0]['args']['headers'] );
+		self::assertSame( 'fail', $by['mcp_endpoint']['status'] );
+		self::assertStringContainsString( 'HTTP login', $by['mcp_endpoint']['finding'] );
+		self::assertStringContainsString( 'password protection', $by['mcp_endpoint']['steps'][0] );
+		// No token behind the login: the header belongs to the login.
+		self::assertSame( 'skip', $by['authorization_header']['status'] );
+		foreach ( $calls as $call ) {
+			self::assertStringNotContainsString( 'abmcp-check-', (string) ( $call['args']['headers']['Authorization'] ?? '' ) );
+		}
+		// The rest sees past the login, and says so.
+		self::assertSame( array( self::WELL_KNOWN, self::AS_META ), array( $calls[1]['url'], $calls[2]['url'] ) );
+		foreach ( array( 1, 2 ) as $i ) {
+			self::assertSame( self::LOGIN, $calls[ $i ]['args']['headers']['Authorization'] );
+		}
+		foreach ( array( 'well_known', 'well_known_server', 'firewall' ) as $id ) {
+			self::assertSame( 'ok', $by[ $id ]['status'], $id );
+			self::assertStringContainsString( 'This request carried your HTTP login to get past it; apps do not have that login', $by[ $id ]['finding'], $id );
+		}
+	}
+
+	public function testCredentialsWithoutALoginInFrontAreNotSent(): void {
 		$_SERVER['PHP_AUTH_USER'] = 'staging';
 		$_SERVER['PHP_AUTH_PW']   = 'secret';
 		self::site( false );
 
 		$by = self::byId( AB_MCP_Connection_Doctor::run() );
 
-		self::assertSame( 'skip', $by['authorization_header']['status'] );
-		self::assertSame( 'Basic ' . base64_encode( 'staging:secret' ), $GLOBALS['ab_test_http'][0]['args']['headers']['Authorization'] );
-		foreach ( $GLOBALS['ab_test_http'] as $call ) {
-			self::assertStringNotContainsString( 'abmcp-check-', (string) ( $call['args']['headers']['Authorization'] ?? '' ) );
+		self::assertSame( 'ok', $by['mcp_endpoint']['status'] );
+		self::assertSame( 'ok', $by['authorization_header']['status'], 'Without a login in front, the token check runs.' );
+		foreach ( array( 0, 2, 3 ) as $i ) {
+			self::assertStringNotContainsString( 'Basic', (string) ( $GLOBALS['ab_test_http'][ $i ]['args']['headers']['Authorization'] ?? '' ) );
 		}
+		self::assertStringNotContainsString( 'HTTP login', $by['well_known']['finding'] );
 	}
 
 	public function testWithTheSignInOffThereIsNothingToFetchBelowWellKnown(): void {
@@ -508,6 +630,7 @@ final class ConnectionDoctorTest extends TestCase {
 		self::assertSame( 'ok', $by['mcp_endpoint']['status'] );
 		self::assertSame( 'info', $by['well_known']['status'] );
 		self::assertSame( 'skip', $by['firewall']['status'] );
+		self::assertSame( 'skip', $by['well_known_server']['status'] );
 		self::assertSame( array( self::ENDPOINT, self::ENDPOINT ), array_column( $GLOBALS['ab_test_http'], 'url' ) );
 	}
 
@@ -545,8 +668,36 @@ final class ConnectionDoctorTest extends TestCase {
 		$out = call_user_func( array( 'AB_MCP_Connection_Doctor', 'tool' ), array() );
 
 		self::assertSame( array( 'checks', 'summary', 'checked_at', 'limits' ), array_keys( $out ) );
-		self::assertCount( 8, $out['checks'] );
+		self::assertCount( 9, $out['checks'] );
 		self::assertArrayNotHasKey( AB_MCP_Connection_Doctor::OPTION, $GLOBALS['ab_test_options'], 'The tool keeps nothing.' );
+	}
+
+	public function testTheToolLeavesTheFirewallFindingAndTheSignInAlone(): void {
+		// A finding of «open» is kept; the probe now meets a firewall.
+		update_option( AB_MCP_OAuth::FIREWALL_OPTION, array( 'verdict' => 'open', 'status' => 302, 'checked' => 1000 ) );
+		$writes = ab_test_writes( AB_MCP_OAuth::FIREWALL_OPTION );
+		$meta   = AB_MCP_OAuth::metadata();
+		self::assertTrue( $meta['client_id_metadata_document_supported'] );
+		self::site( false );
+		$answer                         = $GLOBALS['ab_test_http_answer'];
+		$GLOBALS['ab_test_http_answer'] = static fn( string $url, array $args ): array => false !== strpos( $url, 'ab_mcp_oauth=authorize' ) ? ab_test_http_response( 406, '' ) : $answer( $url, $args );
+
+		$out = AB_MCP_Connection_Doctor::tool();
+
+		self::assertSame( 'warn', self::byId( $out )['firewall']['status'], 'The tool reports what it saw.' );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_OAuth::FIREWALL_OPTION ), 'and stores nothing' );
+		self::assertSame( array( 'verdict' => 'open', 'status' => 302, 'checked' => 1000 ), get_option( AB_MCP_OAuth::FIREWALL_OPTION ) );
+		self::assertSame( $meta, AB_MCP_OAuth::metadata(), 'The sign-in offers what it offered before.' );
+	}
+
+	public function testTheProbeKeepsNothingAndTheCheckKeepsItsFinding(): void {
+		$GLOBALS['ab_test_http_answer'] = static fn(): array => ab_test_http_response( 406, '' );
+
+		self::assertSame( 'blocked', AB_MCP_OAuth::firewall_probe()['verdict'] );
+		self::assertNull( AB_MCP_OAuth::firewall_check() );
+
+		self::assertSame( 'blocked', AB_MCP_OAuth::run_firewall_check()['verdict'] );
+		self::assertSame( 'blocked', AB_MCP_OAuth::firewall_check()['verdict'] );
 	}
 
 	/* ------------------------------------------------------------ the card */
@@ -581,6 +732,7 @@ final class ConnectionDoctorTest extends TestCase {
 		self::assertStringEndsWith( '#ab-doctor', $exit->detail );
 		self::assertNotNull( AB_MCP_Connection_Doctor::stored() );
 		self::assertFalse( $GLOBALS['ab_test_autoload'][ AB_MCP_Connection_Doctor::OPTION ], 'Kept without autoload.' );
+		self::assertSame( 'open', AB_MCP_OAuth::firewall_check()['verdict'], 'The button keeps the firewall finding, as «Check again» does.' );
 	}
 
 	/**
