@@ -159,6 +159,16 @@ class AB_MCP_Tool_Registry {
 			$def['group_label'] = $this->current_group['label'];
 		}
 
+		// A tool whose effect cannot be undone runs only with the token from
+		// its own preview (AB_MCP_Confirm_Token). The schema and the
+		// description say so to every client.
+		if ( class_exists( 'AB_MCP_Confirm_Token' ) && AB_MCP_Confirm_Token::required( $def ) ) {
+			$props = isset( $def['inputSchema']['properties'] ) ? (array) $def['inputSchema']['properties'] : array();
+			$props[ AB_MCP_Confirm_Token::PARAM ] = AB_MCP_Confirm_Token::schema_property();
+			$def['inputSchema']['properties']     = $props;
+			$def['description']                   = trim( $def['description'] . ' ' . AB_MCP_Confirm_Token::description_note() );
+		}
+
 		$this->tools[ $name ] = $def;
 	}
 

@@ -1700,6 +1700,7 @@ require_once __DIR__ . '/../includes/class-settings.php';
 require_once __DIR__ . '/../includes/class-site-mode.php';
 require_once __DIR__ . '/../includes/class-guidance.php';
 require_once __DIR__ . '/../includes/class-security.php';
+require_once __DIR__ . '/../includes/class-confirm-token.php';
 require_once __DIR__ . '/../includes/class-audit-log.php';
 require_once __DIR__ . '/../includes/class-review-notice.php';
 require_once __DIR__ . '/../includes/class-auth.php';

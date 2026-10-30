@@ -1298,6 +1298,20 @@ class AB_MCP_REST_Controller {
 			return $this->result( $id, $this->tool_error( $valid->get_error_message(), self::error_code( 'params', $valid->get_error_code() ) ) );
 		}
 
+		if ( AB_MCP_Confirm_Token::required( $def ) ) {
+			$gate = AB_MCP_Confirm_Token::gate( $name, $def, $args );
+			if ( is_wp_error( $gate ) ) {
+				AB_MCP_Audit_Log::record( $name, $args, 'denied', $gate->get_error_message() );
+				return $this->result( $id, $this->tool_error( $gate->get_error_message(), self::error_code( 'tool', $gate->get_error_code() ) ) );
+			}
+			if ( is_array( $gate ) ) {
+				// The first call: a preview and a token, nothing changed.
+				AB_MCP_Audit_Log::record( $name, $args, 'preview', null );
+				return $this->result( $id, $this->tool_ok( $gate ) );
+			}
+			$args = AB_MCP_Confirm_Token::without_token( $args );
+		}
+
 		if ( ! is_callable( $def['callback'] ) ) {
 			return $this->result( $id, $this->tool_error( __( 'Tool has no handler, so nothing ran. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ), self::error_code( 'no_handler' ) ) );
 		}
