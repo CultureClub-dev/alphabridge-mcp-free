@@ -449,11 +449,38 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 				continue;
 			}
 			$clean = AB_MCP_Undo_Widget_Rules::sanitize_instance( $base, $num, $instance, $current );
-			if ( ! is_array( $clean ) || ! self::plain( $clean ) || ! self::alike( $clean, $instance ) ) {
+			if ( ! is_array( $clean ) || ! self::plain( $clean ) || ( ! self::alike( $clean, $instance ) && ! self::post_safe( $instance ) ) ) {
 				return 'forbidden';
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * May an account without unfiltered_html store every text of these
+	 * settings as the content of a post? A text without "<" carries no
+	 * markup; any other has to come out of wp_kses_post() as it is. The
+	 * widget's own update() is the first measure (refusal()), but it does not
+	 * always give a stored instance back byte for byte: it may work a field
+	 * out again (the RSS widget's link) or keep one from the instance stored
+	 * now. Settings it changes that way can still hold nothing the account
+	 * could not store itself.
+	 *
+	 * @param mixed $value Settings, or one value of them.
+	 * @return bool
+	 */
+	private static function post_safe( $value ) {
+		if ( is_string( $value ) ) {
+			return false === strpos( $value, '<' ) || ( function_exists( 'wp_kses_post' ) && wp_kses_post( $value ) === $value );
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				if ( ! self::post_safe( (string) $key ) || ! self::post_safe( $item ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**

@@ -498,7 +498,23 @@ class AB_Text_Like_Widget extends WP_Widget {
 		return $instance;
 	}
 }
-$GLOBALS['wp_widget_factory']      = (object) array( 'widgets' => array( new WP_Widget( 'text' ), new WP_Widget( 'feed' ), new AB_Text_Like_Widget( 'textcore' ) ) );
+// As WP_Widget_RSS::update() with wp_widget_rss_process(): the feed's
+// link is worked out again only when the address changed, else empty.
+class AB_Rss_Like_Widget extends WP_Widget {
+	public function update( $new, $old ) {
+		$new = (array) $new;
+		$url = (string) ( $new['url'] ?? '' );
+		return array(
+			'title' => strip_tags( (string) ( $new['title'] ?? '' ) ),
+			'url'   => $url,
+			'link'  => $url !== (string) ( ( (array) $old )['url'] ?? '' ) ? 'https://example.test/' : '',
+		);
+	}
+}
+// wp_kses_post() as far as these checks need it: a script goes, a link stays,
+// a lone "&" becomes "&amp;" as wp_kses_normalize_entities() writes it.
+function wp_kses_post( $s ) { return preg_replace( '/&(?![a-z]+;|#[0-9]+;)/i', '&amp;', strip_tags( (string) $s, '<a><b><strong><em><p>' ) ); }
+$GLOBALS['wp_widget_factory']      = (object) array( 'widgets' => array( new WP_Widget( 'text' ), new WP_Widget( 'feed' ), new AB_Text_Like_Widget( 'textcore' ), new AB_Rss_Like_Widget( 'rss' ) ) );
 $GLOBALS['wp_registered_sidebars'] = array( 'sidebar-1' => array( 'name' => 'Side' ), 'footer' => array( 'name' => 'Foot' ) );
 
 /* ---- the rest of the site the tools and the restore ask ---- */
@@ -1109,6 +1125,17 @@ $out    = ab_undo( $upd['undo'] );
 ok( is_array( $out ) && 1 === $out['undone'] && $before === ab_raw( 'widget_textcore' ), 'F30a a text widget switched to visual mode since comes back without it, for an account without unfiltered_html' );
 $GLOBALS['ab_deny'] = array();
 
+// Codex round 6: a field the widget works out again does not make it forbidden.
+reset_all();
+update_option( 'widget_rss', array( 2 => array( 'title' => 'News', 'url' => 'https://example.test/feed/?lang=de&cat=2', 'link' => 'https://example.test/' ), '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'rss-2' ), 'array_version' => 3 ) );
+$GLOBALS['ab_deny']['unfiltered_html'] = true;
+$before = ab_raw( 'widget_rss' );
+$upd    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'rss-2', 'settings' => array( 'title' => 'Latest' ) ) );
+$out    = ab_undo( $upd['undo'] );
+ok( is_array( $out ) && 1 === $out['undone'] && $before === ab_raw( 'widget_rss' ), 'F30b an RSS widget whose link its update() works out anew comes back, for an account without unfiltered_html' );
+$GLOBALS['ab_deny'] = array();
+
 /* a hand-edited point gains no right */
 reset_all();
 ab_widgets();
@@ -1120,6 +1147,10 @@ $evil['rows']['widget_text']['value'] = serialize( array( 2 => array( 'title' =>
 $t   = ab_forge( 'wp_update_widget', 'widget', $evil );
 $out = ab_undo( $t, array( 'force' => true ) );
 ok( 0 === $out['undone'] && 'forbidden' === $out['blocked'][0]['reason'] && false === strpos( ab_raw( 'widget_text' ), 'script' ), 'F28 settings the widget would not store for an account without unfiltered_html are not written back' );
+$keyed = $data;
+$keyed['rows']['widget_text']['value'] = serialize( array( 2 => array( 'title' => '<b>Hello</b>', '<script>x</script>' => 'y' ), 3 => array( 'title' => 'Other' ), '_multiwidget' => 1 ) ); // phpcs:ignore
+$out = ab_undo( ab_forge( 'wp_update_widget', 'widget', $keyed ), array( 'force' => true ) );
+ok( 0 === $out['undone'] && 'forbidden' === $out['blocked'][0]['reason'] && false === strpos( ab_raw( 'widget_text' ), 'script' ), 'F28c nor markup in a key, where the texts alone would pass' );
 $odd = $data;
 $odd['rows']['widget_text']['value'] = serialize( array( 2 => 'not settings', 3 => array( 'title' => 'Other' ), '_multiwidget' => 1 ) ); // phpcs:ignore
 $out = ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) );
