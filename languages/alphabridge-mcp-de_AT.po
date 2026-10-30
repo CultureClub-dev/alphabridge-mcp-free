@@ -5038,3 +5038,9 @@ msgstr "Die Widgets wurden geändert, nachdem das Undo geplant war; nichts wurde
 
 msgid "The snapshot of the widgets is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "Der Schnappschuss der Widgets hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "No undo point: WordPress answered with a term this call did not create (another request created the same one at the same moment, or a plugin stepped in), so there is nothing of this call to take back. Check it with %s."
+msgstr "Kein Undo-Punkt: WordPress hat mit einem Begriff geantwortet, den dieser Aufruf nicht angelegt hat (eine andere Anfrage hat im selben Moment denselben angelegt, oder ein Plugin hat eingegriffen), darum gibt es von diesem Aufruf nichts zurückzunehmen. Mit %s prüfen."
+
+msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
+msgstr "Menü %d enthält einen Eintrag, den dieses Konto nicht löschen darf, und das Löschen des Menüs würde ihn mitlöschen; nichts wurde wiederhergestellt. Diesen Eintrag mit einem Konto entfernen, das es darf (wp_get_menu listet die Einträge, wp_delete_menu_item entfernt einen), dann das Undo erneut ausführen."

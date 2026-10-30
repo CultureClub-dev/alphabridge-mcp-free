@@ -319,15 +319,20 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		}
 		// wp_insert_term() unslashes exactly two of these — name and
 		// description — so only those are slashed. Slashing the slug would add
-		// a backslash that sanitize_title() then turns into a dash.
-		$res = wp_insert_term(
-			wp_slash( self::s( $a, 'name' ) ),
-			$tax,
-			array(
-				'slug'        => self::s( $a, 'slug', '' ),
-				'description' => wp_slash( self::s( $a, 'description', '' ) ),
-				'parent'      => self::i( $a, 'parent', 0 ),
-			)
+		// a backslash that sanitize_title() then turns into a dash. Observed
+		// (since 4.13.0): only a term this call created gets an undo point.
+		list( $res, $made ) = AB_MCP_Undo_Terms::observe(
+			static function () use ( $a, $tax ) {
+				return wp_insert_term(
+					wp_slash( self::s( $a, 'name' ) ),
+					$tax,
+					array(
+						'slug'        => self::s( $a, 'slug', '' ),
+						'description' => wp_slash( self::s( $a, 'description', '' ) ),
+						'parent'      => self::i( $a, 'parent', 0 ),
+					)
+				);
+			}
 		);
 		if ( is_wp_error( $res ) ) {
 			return $res;
@@ -350,7 +355,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 				'created' => true,
 				'term_id' => $id,
 			),
-			AB_MCP_Undo_Terms::created( 'wp_create_term', $id, $tax, $asked, 'wp_get_term', sprintf( 'new term #%d (%s)', $id, $tax ) )
+			AB_MCP_Undo_Terms::created( 'wp_create_term', $id, $tax, $asked, 'wp_get_term', sprintf( 'new term #%d (%s)', $id, $tax ), $made )
 		);
 	}
 

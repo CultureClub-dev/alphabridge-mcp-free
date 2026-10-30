@@ -366,18 +366,9 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 		if ( self::option_refusal( $base ) ) {
 			return 'protected_now';
 		}
-		// What comes back has the form the widgets of WordPress write: the
-		// row of the type a list marked _multiwidget, the map a list.
+		// valid() let only rows through in the form the widgets of
+		// WordPress write them (canonical_rows()).
 		$old = self::peek( self::raw( (array) $snap['rows'][ $name ] ) );
-		if ( null !== $old && ! ( is_array( $old ) && ! empty( $old['_multiwidget'] ) ) ) {
-			return 'protected_now';
-		}
-		if ( isset( $snap['rows'][ self::MAP ] ) ) {
-			$map = self::peek( self::raw( (array) $snap['rows'][ self::MAP ] ) );
-			if ( null !== $map && ! is_array( $map ) ) {
-				return 'protected_now';
-			}
-		}
 		if ( null === $old || current_user_can( 'unfiltered_html' ) ) {
 			return '';
 		}
@@ -388,15 +379,13 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 		$now = is_array( $now ) ? $now : array();
 		self::rules();
 		foreach ( $old as $num => $instance ) {
-			if ( ! is_int( $num ) ) {
+			// Every instance is checked; only the mark is no instance.
+			if ( '_multiwidget' === $num ) {
 				continue;
 			}
 			$current = isset( $now[ $num ] ) && is_array( $now[ $num ] ) ? $now[ $num ] : array();
 			if ( isset( $now[ $num ] ) && self::plain( $instance ) && self::plain( $now[ $num ] ) && self::same( $instance, $now[ $num ] ) ) {
 				continue;
-			}
-			if ( ! is_array( $instance ) || ! self::plain( $instance ) || ! self::plain( $current ) ) {
-				return 'forbidden';
 			}
 			$clean = AB_MCP_Undo_Widget_Rules::sanitize_instance( $base, $num, $instance, $current );
 			if ( ! is_array( $clean ) || ! self::plain( $clean ) || ! self::same( $clean, $instance ) ) {
@@ -548,6 +537,67 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 		foreach ( $data['after'] as $sha ) {
 			if ( ! is_string( $sha ) || ( self::ABSENT !== $sha && 1 !== preg_match( '/\A[0-9a-f]{64}\z/', $sha ) ) ) {
 				return false;
+			}
+		}
+		// An update changes the settings of a widget there was: its row
+		// was there.
+		if ( 'wp_update_widget' === $tool && empty( $data['rows'][ 'widget_' . $base ]['existed'] ) ) {
+			return false;
+		}
+		return self::canonical_rows( $data );
+	}
+
+	/**
+	 * Do the rows of a snapshot have exactly the form the widgets of
+	 * WordPress write? The row of the type: a list marked _multiwidget whose
+	 * every other key is an instance number as WordPress writes it (a
+	 * positive whole number, never "02" or "2a") holding a list of settings.
+	 * The map: a list of sidebars, each a list of widget ids
+	 * "<id_base>-<number>" with such a number, and its array_version. Any
+	 * other form is refused whole: no check is ever skipped because a value
+	 * has a shape it does not expect.
+	 *
+	 * @param array $data Snapshot.
+	 * @return bool
+	 */
+	private static function canonical_rows( array $data ) {
+		foreach ( $data['rows'] as $name => $state ) {
+			if ( empty( $state['existed'] ) ) {
+				continue;
+			}
+			$value = self::peek( self::raw( (array) $state ) );
+			if ( ! is_array( $value ) ) {
+				return false;
+			}
+			if ( self::MAP === (string) $name ) {
+				foreach ( $value as $sidebar => $ids ) {
+					if ( 'array_version' === $sidebar ) {
+						if ( ! is_int( $ids ) ) {
+							return false;
+						}
+						continue;
+					}
+					if ( ! is_string( $sidebar ) || ! is_array( $ids ) ) {
+						return false;
+					}
+					foreach ( $ids as $wid ) {
+						if ( ! is_string( $wid ) || 1 !== preg_match( '/\A.+-[1-9][0-9]*\z/', $wid ) ) {
+							return false;
+						}
+					}
+				}
+				continue;
+			}
+			if ( empty( $value['_multiwidget'] ) ) {
+				return false;
+			}
+			foreach ( $value as $num => $instance ) {
+				if ( '_multiwidget' === $num ) {
+					continue;
+				}
+				if ( ! is_int( $num ) || $num <= 0 || ! is_array( $instance ) ) {
+					return false;
+				}
 			}
 		}
 		return true;

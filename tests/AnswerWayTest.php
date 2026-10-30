@@ -549,6 +549,8 @@ final class AnswerWayTest extends TestCase {
 			self::assertStringStartsWith( 'not undoable: ', $note, $tool );
 			self::assertMatchesRegularExpression( self::WAY, substr( $note, strlen( 'not undoable: ' ) ), $tool );
 		}
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-terms.php';
+		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Terms::not_created_note( 'wp_get_term' ), 'And the note of a term this call did not create.' );
 	}
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {

@@ -11,8 +11,12 @@
  *              "fields": { "name", "slug", "description", "parent": string },
  *              "after": { "term": sha256 } }
  * "term" is the fields as the tables hold them; "use" what hangs on a new
- * term: the objects it is assigned to (for a menu: its items), its child
- * terms, its meta rows and, for a menu, the theme locations it is in. The
+ * term, by identity and content, not by count: the objects it is assigned
+ * to (for a menu: its items, each with its row, meta and sub-items), its
+ * child terms, its meta rows with their values and, for a menu, the theme
+ * locations it is in. A point is only recorded where the call itself
+ * created the term (created_term fired for it, observe()): wp_insert_term()
+ * answers a parallel duplicate with the id of the older term. The
  * undo of a created term deletes it only while both are as the change left
  * them, and refuses a term renamed or put to use since unless force is set;
  * a term deleted since is nothing to do. The fields go back through
@@ -20,7 +24,10 @@
  * tables; the rights of the tool (the taxonomy's right to edit or delete
  * terms, edit_term or delete_term for this one) and the default-term rule
  * are asked again on the term the database holds under the id and the
- * exact taxonomy of the point.
+ * exact taxonomy of the point. A menu is deleted with its items
+ * (wp_delete_nav_menu() asks no right of its own): each has to be a menu
+ * item the account may delete (delete_post), with force too — force
+ * passes over later changes, never over a right.
  *
  * @package AlphaBridge_MCP
  */
@@ -83,33 +90,151 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * What hangs on a term: the objects it is assigned to, its child terms,
-	 * its meta rows, and for a menu the theme locations it is in. null when
-	 * the tables could not be read.
+	 * What hangs on a term, by identity and content: the objects it is
+	 * assigned to (for a menu, each item with its state,
+	 * AB_MCP_Undo_Menu_Items::state()), its child terms, its meta rows (id,
+	 * key, sha256 of the value), and for a menu the theme locations it is
+	 * in. null when the tables could not be read.
 	 *
 	 * @param int    $id       Term id.
 	 * @param int    $tt_id    Its term_taxonomy_id.
 	 * @param string $taxonomy Taxonomy.
-	 * @return array<string,int>|null
+	 * @return array|null
 	 */
 	public static function usage( $id, $tt_id, $taxonomy ) {
 		global $wpdb;
 		if ( ! self::has_tables( array( 'term_relationships', 'term_taxonomy', 'termmeta' ) ) ) {
 			return null;
 		}
-		$rows = self::select( $wpdb->prepare( "SELECT (SELECT COUNT(*) FROM {$wpdb->term_relationships} WHERE term_taxonomy_id = %d) AS objects, (SELECT COUNT(*) FROM {$wpdb->term_taxonomy} WHERE parent = %d AND taxonomy = %s) AS children, (SELECT COUNT(*) FROM {$wpdb->termmeta} WHERE term_id = %d) AS meta", (int) $tt_id, (int) $id, (string) $taxonomy, (int) $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from $wpdb.
-		if ( null === $rows || ! isset( $rows[0] ) ) {
+		$objects = self::objects( $tt_id );
+		$kids    = self::select( $wpdb->prepare( "SELECT term_id FROM {$wpdb->term_taxonomy} WHERE parent = %d AND taxonomy = %s ORDER BY term_id ASC", (int) $id, (string) $taxonomy ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from $wpdb.
+		$meta    = self::select( $wpdb->prepare( "SELECT meta_id, meta_key, meta_value FROM {$wpdb->termmeta} WHERE term_id = %d ORDER BY meta_id ASC", (int) $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( null === $objects || null === $kids || null === $meta ) {
 			return null;
 		}
 		$out = array(
-			'objects'  => (int) ( $rows[0]['objects'] ?? 0 ),
-			'children' => (int) ( $rows[0]['children'] ?? 0 ),
-			'meta'     => (int) ( $rows[0]['meta'] ?? 0 ),
+			'objects'  => $objects,
+			'children' => array(),
+			'meta'     => array(),
 		);
-		if ( 'nav_menu' === $taxonomy && function_exists( 'get_nav_menu_locations' ) ) {
-			$out['locations'] = count( array_keys( array_map( 'intval', (array) get_nav_menu_locations() ), (int) $id, true ) );
+		foreach ( $kids as $k ) {
+			$out['children'][] = (int) ( $k['term_id'] ?? 0 );
+		}
+		foreach ( $meta as $m ) {
+			$out['meta'][] = array( (int) ( $m['meta_id'] ?? 0 ), (string) ( $m['meta_key'] ?? '' ), hash( 'sha256', (string) ( $m['meta_value'] ?? '' ) ) );
+		}
+		if ( 'nav_menu' === $taxonomy ) {
+			// The items of a menu, each as it is: a changed item is a change.
+			if ( ! class_exists( 'AB_MCP_Undo_Menu_Items', false ) ) {
+				require_once __DIR__ . '/class-undo-menu-items.php';
+			}
+			$out['items'] = array();
+			foreach ( $objects as $oid ) {
+				$state = AB_MCP_Undo_Menu_Items::state( $oid );
+				if ( null === $state ) {
+					return null;
+				}
+				$out['items'][ 'i' . $oid ] = $state;
+			}
+			if ( function_exists( 'get_nav_menu_locations' ) ) {
+				$out['locations'] = array_keys( array_map( 'intval', (array) get_nav_menu_locations() ), (int) $id, true );
+				sort( $out['locations'] );
+			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The ids of the objects a term is assigned to, in order; null when the
+	 * table could not be read.
+	 *
+	 * @param int $tt_id term_taxonomy_id.
+	 * @return int[]|null
+	 */
+	public static function objects( $tt_id ) {
+		global $wpdb;
+		if ( ! self::has_tables( array( 'term_relationships' ) ) ) {
+			return null;
+		}
+		$rows = self::select( $wpdb->prepare( "SELECT object_id FROM {$wpdb->term_relationships} WHERE term_taxonomy_id = %d ORDER BY object_id ASC", (int) $tt_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( null === $rows ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $rows as $r ) {
+			$out[] = (int) ( $r['object_id'] ?? 0 );
+		}
+		return $out;
+	}
+
+	/**
+	 * Why the items of a menu may not go with it, '' when they may: each
+	 * object of the menu has to be a menu item the account may delete
+	 * (delete_post), as wp_delete_menu_item asks; wp_delete_nav_menu() would
+	 * delete any of them without asking.
+	 *
+	 * @param int $tt_id term_taxonomy_id of the menu.
+	 * @return string forbidden, unreadable or ''.
+	 */
+	public static function items_refusal( $tt_id ) {
+		global $wpdb;
+		$objects = self::objects( $tt_id );
+		if ( null === $objects || ! self::has_tables( array( 'posts' ) ) ) {
+			return 'unreadable';
+		}
+		foreach ( $objects as $oid ) {
+			$row = self::select( $wpdb->prepare( "SELECT post_type FROM {$wpdb->posts} WHERE ID = %d", $oid ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( null === $row ) {
+				return 'unreadable';
+			}
+			if ( ! isset( $row[0]['post_type'] ) || 'nav_menu_item' !== (string) $row[0]['post_type'] || ! current_user_can( 'delete_post', $oid ) ) {
+				return 'forbidden';
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Run a creating call and say which terms it created: the ids for which
+	 * created_term fired while it ran. wp_insert_term() answers a duplicate
+	 * made at the same moment by another request with the id of the older
+	 * term and fires nothing for it; only a term this call created gets an
+	 * undo point that deletes it.
+	 *
+	 * @param callable $call The call (wp_insert_term(), wp_create_nav_menu()).
+	 * @return array { 0: what the call returned, 1: "<taxonomy>:<id>" of each term it created }
+	 */
+	public static function observe( callable $call ) {
+		$made = array();
+		$hook = static function ( $term_id, $tt_id = 0, $taxonomy = '' ) use ( &$made ) {
+			$made[] = (string) $taxonomy . ':' . (int) $term_id;
+		};
+		$can = function_exists( 'add_action' ) && function_exists( 'remove_action' );
+		if ( $can ) {
+			add_action( 'created_term', $hook, 10, 3 );
+		}
+		try {
+			$res = call_user_func( $call );
+		} finally {
+			if ( $can ) {
+				remove_action( 'created_term', $hook, 10 );
+			}
+		}
+		return array( $res, $made );
+	}
+
+	/**
+	 * The note where a call answered with a term it did not create.
+	 *
+	 * @param string $reader The tool that shows it.
+	 * @return string
+	 */
+	public static function not_created_note( $reader ) {
+		return sprintf(
+			/* translators: %s: tool name, e.g. wp_get_term */
+			__( 'No undo point: WordPress answered with a term this call did not create (another request created the same one at the same moment, or a plugin stepped in), so there is nothing of this call to take back. Check it with %s.', 'alphabridge-mcp' ),
+			(string) $reader
+		);
 	}
 
 	/**
@@ -190,9 +315,14 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 	 * @param array    $asked   field => value as sent (name, slug, description, parent).
 	 * @param string   $reader  The tool that shows it.
 	 * @param string   $summary Summary for wp_undo_list.
+	 * @param string[] $made    The terms the call created (observe()).
 	 * @return array { saved_fields, saved_differs?, warning?, undo, undo_note? }
 	 */
-	public static function created( $tool, $id, $tax, array $asked, $reader, $summary ) {
+	public static function created( $tool, $id, $tax, array $asked, $reader, $summary, array $made ) {
+		$res = AB_MCP_Undo_Answer::saved( array(), $asked, self::read_back( $id, $tax ), $reader );
+		if ( ! in_array( (string) $tax . ':' . (int) $id, $made, true ) && self::on() ) {
+			return AB_MCP_Undo_Answer::with( $res, self::not_created_note( $reader ) );
+		}
 		$snap = null;
 		if ( self::on() ) {
 			$data  = array(
@@ -206,9 +336,7 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 				$snap          = $data;
 			}
 		}
-		$outcome = self::outcome( $tool, $reader, true, $snap, $summary );
-		$res     = AB_MCP_Undo_Answer::saved( array(), $asked, self::read_back( $id, $tax ), $reader );
-		return AB_MCP_Undo_Answer::with( $res, $outcome );
+		return AB_MCP_Undo_Answer::with( $res, self::outcome( $tool, $reader, true, $snap, $summary ) );
 	}
 
 	/**
@@ -350,7 +478,10 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 		if ( (int) get_option( 'default_' . $tax ) === $id || (int) get_option( 'default_term_' . $tax ) === $id ) {
 			return 'protected_now';
 		}
-		return current_user_can( $obj->cap->delete_terms ) && current_user_can( 'delete_term', $id ) ? '' : 'forbidden';
+		if ( ! current_user_can( $obj->cap->delete_terms ) || ! current_user_can( 'delete_term', $id ) ) {
+			return 'forbidden';
+		}
+		return 'nav_menu' === $tax ? self::items_refusal( $row['tt_id'] ) : '';
 	}
 
 	/**
@@ -362,7 +493,21 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 		$id  = (int) $snap['id'];
 		$tax = (string) $snap['taxonomy'];
 		if ( ! isset( $snap['fields'] ) ) {
-			// A menu goes with its items and its theme locations, as wp-admin deletes it.
+			// A menu goes with its items and its theme locations, as wp-admin
+			// deletes it; the right to each item is asked once more right
+			// before, on the items the menu holds now.
+			$row = self::row( $id, $tax );
+			$why = ( 'nav_menu' === $tax && is_array( $row ) ) ? self::items_refusal( $row['tt_id'] ) : '';
+			if ( '' !== $why ) {
+				return new WP_Error(
+					'ab_mcp_undo_forbidden',
+					sprintf(
+						/* translators: %d: menu id */
+						__( 'Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again.', 'alphabridge-mcp' ),
+						$id
+					)
+				);
+			}
 			$done = ( 'nav_menu' === $tax && function_exists( 'wp_delete_nav_menu' ) ) ? wp_delete_nav_menu( $id ) : wp_delete_term( $id, $tax );
 			if ( is_wp_error( $done ) || ! $done || false !== self::row( $id, $tax ) ) {
 				return new WP_Error(

@@ -926,18 +926,26 @@ class AB_MCP_Tools_Menus_Users extends AB_MCP_Tools_Base {
 		// Slashed, like add_menu_item: wp_create_nav_menu() ends in
 		// wp_insert_term(), which unslashes what it is given. Without this a
 		// name like "C:\Docs" is stored as "C:Docs".
-		$id = wp_create_nav_menu( wp_slash( self::s( $a, 'name' ) ) );
+		list( $id, $made ) = AB_MCP_Undo_Terms::observe(
+			static function () use ( $a ) {
+				return wp_create_nav_menu( wp_slash( self::s( $a, 'name' ) ) );
+			}
+		);
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
 		// The read-back and an undo point that deletes the menu again
-		// (since 4.13.0): a menu is a term of nav_menu.
+		// (since 4.13.0): a menu is a term of nav_menu, created through
+		// wp_insert_term() and observed like a term. An item needs no such
+		// watch: wp_update_nav_menu_item() with item id 0 ends in
+		// wp_insert_post(), which inserts a new row every time and never
+		// answers with an existing one.
 		return array_merge(
 			array(
 				'created' => true,
 				'menu_id' => (int) $id,
 			),
-			AB_MCP_Undo_Terms::created( 'wp_create_menu', (int) $id, 'nav_menu', array( 'name' => self::s( $a, 'name' ) ), 'wp_get_menu', sprintf( 'new menu #%d', (int) $id ) )
+			AB_MCP_Undo_Terms::created( 'wp_create_menu', (int) $id, 'nav_menu', array( 'name' => self::s( $a, 'name' ) ), 'wp_get_menu', sprintf( 'new menu #%d', (int) $id ), $made )
 		);
 	}
 

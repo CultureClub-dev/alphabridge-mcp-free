@@ -5038,3 +5038,9 @@ msgstr "I widget sono stati modificati dopo che l'annullamento era stato pianifi
 
 msgid "The snapshot of the widgets is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'istantanea dei widget non ha una forma che questo strumento scrive; non è stato ripristinato nulla. Questo punto di ripristino non è utilizzabile; wp_undo_discard lo rimuove."
+
+msgid "No undo point: WordPress answered with a term this call did not create (another request created the same one at the same moment, or a plugin stepped in), so there is nothing of this call to take back. Check it with %s."
+msgstr "Nessun punto di ripristino: WordPress ha risposto con un termine che questa chiamata non ha creato (un'altra richiesta ha creato lo stesso nello stesso momento, o è intervenuto un plugin), quindi non c'è nulla di questa chiamata da annullare. Controllalo con %s."
+
+msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
+msgstr "Il menu %d contiene una voce che questo account non può eliminare, ed eliminare il menu eliminerebbe anche quella; non è stato ripristinato nulla. Rimuovi quella voce con un account che può farlo (wp_get_menu elenca le voci, wp_delete_menu_item ne rimuove una), poi esegui di nuovo l'annullamento."

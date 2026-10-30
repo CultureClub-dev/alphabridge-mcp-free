@@ -5038,3 +5038,9 @@ msgstr "Los widgets se han cambiado después de planificar el deshacer; no se ha
 
 msgid "The snapshot of the widgets is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "La instantánea de los widgets no tiene una forma que esta herramienta escriba; no se ha restaurado nada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "No undo point: WordPress answered with a term this call did not create (another request created the same one at the same moment, or a plugin stepped in), so there is nothing of this call to take back. Check it with %s."
+msgstr "Sin punto de restauración: WordPress ha respondido con un término que esta llamada no ha creado (otra solicitud creó el mismo en el mismo momento, o intervino un plugin), así que no hay nada de esta llamada que deshacer. Compruébalo con %s."
+
+msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
+msgstr "El menú %d contiene un elemento que esta cuenta no puede eliminar, y eliminar el menú también lo eliminaría; no se ha restaurado nada. Quita ese elemento con una cuenta que pueda (wp_get_menu lista los elementos, wp_delete_menu_item quita uno) y vuelve a ejecutar el deshacer."

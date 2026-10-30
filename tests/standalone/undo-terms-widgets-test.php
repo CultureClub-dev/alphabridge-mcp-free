@@ -75,8 +75,16 @@ function apply_filters( $tag, $value, ...$args ) {
 	return $value;
 }
 function has_filter( $tag, $cb = false ) { return array_key_exists( $tag, $GLOBALS['ab_filters'] ); }
-function has_action( $tag, $cb = false ) { return false; }
-function do_action( $tag, ...$args ) {}
+$GLOBALS['ab_actions'] = array();
+function add_action( $tag, $cb, $prio = 10, $n = 1 ) { $GLOBALS['ab_actions'][ $tag ][] = $cb; return true; }
+function remove_action( $tag, $cb, $prio = 10 ) {
+	foreach ( $GLOBALS['ab_actions'][ $tag ] ?? array() as $i => $f ) {
+		if ( $f === $cb ) { unset( $GLOBALS['ab_actions'][ $tag ][ $i ] ); return true; }
+	}
+	return false;
+}
+function has_action( $tag, $cb = false ) { return ! empty( $GLOBALS['ab_actions'][ $tag ] ); }
+function do_action( $tag, ...$args ) { foreach ( $GLOBALS['ab_actions'][ $tag ] ?? array() as $f ) { $f( ...$args ); } }
 function is_multisite() { return false; }
 $GLOBALS['ab_cache_deleted'] = array();
 function wp_cache_delete( $k, $group = '' ) { $GLOBALS['ab_cache_deleted'][] = $group . ':' . $k; return true; }
@@ -184,11 +192,25 @@ $GLOBALS['wpdb'] = new class {
 					$out[] = array( 'name' => $T['terms'][ $r[0] ][0], 'slug' => $T['terms'][ $r[0] ][1], 'term_taxonomy_id' => (string) $tt, 'taxonomy' => $r[1], 'description' => $r[2], 'parent' => (string) $r[3] );
 				}
 			}
-		} elseif ( preg_match( "/^SELECT \\(SELECT COUNT\\(\\*\\) FROM wp_term_relationships WHERE term_taxonomy_id = (\\d+)\\) AS objects, \\(SELECT COUNT\\(\\*\\) FROM wp_term_taxonomy WHERE parent = (\\d+) AND taxonomy = '(.*)'\\) AS children, \\(SELECT COUNT\\(\\*\\) FROM wp_termmeta WHERE term_id = (\\d+)\\) AS meta$/", $sql, $m ) ) {
-			$objects = count( array_filter( $T['rel'], static fn( $r ) => $r[1] === (int) $m[1] ) );
-			$kids    = count( array_filter( $T['tt'], static fn( $r ) => $r[3] === (int) $m[2] && $r[1] === stripslashes( $m[3] ) ) );
-			$meta    = count( array_filter( $T['termmeta'], static fn( $r ) => $r[0] === (int) $m[4] ) );
-			$out     = array( array( 'objects' => (string) $objects, 'children' => (string) $kids, 'meta' => (string) $meta ) );
+		} elseif ( preg_match( '/^SELECT object_id FROM wp_term_relationships WHERE term_taxonomy_id = (\d+) ORDER BY object_id ASC$/', $sql, $m ) ) {
+			$ids = array();
+			foreach ( $T['rel'] as $r ) {
+				if ( $r[1] === (int) $m[1] ) { $ids[] = $r[0]; }
+			}
+			sort( $ids );
+			$out = array_map( static fn( $i ) => array( 'object_id' => (string) $i ), $ids );
+		} elseif ( preg_match( "/^SELECT term_id FROM wp_term_taxonomy WHERE parent = (\\d+) AND taxonomy = '(.*)' ORDER BY term_id ASC$/", $sql, $m ) ) {
+			$ids = array();
+			foreach ( $T['tt'] as $r ) {
+				if ( $r[3] === (int) $m[1] && $r[1] === stripslashes( $m[2] ) ) { $ids[] = $r[0]; }
+			}
+			sort( $ids );
+			$out = array_map( static fn( $i ) => array( 'term_id' => (string) $i ), $ids );
+		} elseif ( preg_match( '/^SELECT meta_id, meta_key, meta_value FROM wp_termmeta WHERE term_id = (\d+) ORDER BY meta_id ASC$/', $sql, $m ) ) {
+			$out = array();
+			foreach ( $T['termmeta'] as $mid => $r ) {
+				if ( $r[0] === (int) $m[1] ) { $out[] = array( 'meta_id' => (string) $mid, 'meta_key' => $r[1], 'meta_value' => $r[2] ); }
+			}
 		} elseif ( preg_match( '/^SELECT ([a-z_, ]+) FROM wp_posts WHERE ID = (\d+)$/', $sql, $m ) ) {
 			$out = array();
 			if ( isset( $T['posts'][ (int) $m[2] ] ) ) {
@@ -313,7 +335,14 @@ function wp_insert_term( $name, $tax, $args = array() ) {
 	$tt = ab_next();
 	$GLOBALS['T']['terms'][ $id ] = array( $name, $slug );
 	$GLOBALS['T']['tt'][ $tt ]    = array( $id, $tax, wp_unslash( (string) ( $args['description'] ?? '' ) ), $parent );
+	// As WordPress: a duplicate another request made at the same moment is
+	// removed again, and the older term is answered, without the create hooks.
+	if ( isset( $GLOBALS['ab_insert_dupe'] ) ) {
+		unset( $GLOBALS['T']['terms'][ $id ], $GLOBALS['T']['tt'][ $tt ] );
+		return array( 'term_id' => $GLOBALS['ab_insert_dupe'], 'term_taxonomy_id' => ab_tt_of( $GLOBALS['ab_insert_dupe'] ) );
+	}
 	if ( isset( $GLOBALS['ab_on_create_term'] ) ) { ( $GLOBALS['ab_on_create_term'] )( $id ); }
+	do_action( 'created_term', $id, $tt, $tax );
 	return array( 'term_id' => $id, 'term_taxonomy_id' => $tt );
 }
 function wp_update_term( $id, $tax, $args = array() ) {
@@ -502,7 +531,7 @@ function reset_all() {
 	$GLOBALS['ab_term_veto']     = false;
 	$GLOBALS['ab_locations']     = array();
 	$GLOBALS['ab_cache_deleted'] = array();
-	unset( $GLOBALS['ab_on_create_term'] );
+	unset( $GLOBALS['ab_on_create_term'], $GLOBALS['ab_insert_dupe'] );
 	$GLOBALS['wpdb']->writes = array();
 }
 
@@ -968,7 +997,21 @@ ok( 0 === $out['undone'] && 'forbidden' === $out['blocked'][0]['reason'] && fals
 $odd = $data;
 $odd['rows']['widget_text']['value'] = serialize( array( 2 => 'not settings', 3 => array( 'title' => 'Other' ), '_multiwidget' => 1 ) ); // phpcs:ignore
 $out = ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) );
-ok( 0 === $out['undone'] && 'forbidden' === $out['blocked'][0]['reason'], 'F28a settings that are no list cannot be checked by the widget: not written back' );
+ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && false === strpos( ab_raw( 'widget_text' ), 'not settings' ), 'F28a settings that are no list: the point is refused whole' );
+// Codex 31.10.: an instance number WordPress would never write ("02")
+// must not skip the widget's check.
+foreach ( array( '"02"' => array( '02' => array( 'title' => '<script>x</script>' ) ), '"2a"' => array( '2a' => array( 'title' => '<script>x</script>' ) ), '0' => array( 0 => array( 'title' => 'x' ) ), '-1' => array( -1 => array( 'title' => 'x' ) ) ) as $why => $inst ) {
+	$odd = $data;
+	$odd['rows']['widget_text']['value'] = serialize( $inst + array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 1 ) ); // phpcs:ignore
+	$out = ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) );
+	ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && false === strpos( ab_raw( 'widget_text' ), 'script' ), "F28b an instance number $why WordPress never writes: the point is refused whole, nothing written" );
+}
+$odd = $data;
+$odd['rows']['widget_text']['value'] = serialize( array( 2 => array( 'title' => 'Hello' ) ) ); // phpcs:ignore
+ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) ) ), 'F28c settings without the _multiwidget mark: refused whole' );
+$odd = $data;
+$odd['rows']['widget_text'] = array( 'existed' => false );
+ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) ) ) && null !== ab_raw( 'widget_text' ), 'F28d an update of a row that was not there: refused whole, the row is not deleted' );
 ok( 1 === ab_undo( $res['undo'] )['undone'] && 'Hello' === get_option( 'widget_text' )[2]['title'], 'F29 settings it would store come back for that account' );
 $GLOBALS['ab_deny'] = array();
 $out = ab_undo( $t, array( 'force' => true ) );
@@ -996,15 +1039,25 @@ $GLOBALS['wp_widget_factory']->widgets = $factory;
 reset_all();
 ab_widgets();
 $hash = str_repeat( 'a', 64 );
-$t    = ab_forge( 'wp_update_widget', 'widget', array( 'v' => 1, 'base' => 'TEXT', 'rows' => array( 'widget_TEXT' => array( 'existed' => false ) ), 'after' => array( 'option:widget_TEXT' => $hash ) ) );
+$t    = ab_forge( 'wp_add_widget', 'widget', array( 'v' => 1, 'base' => 'TEXT', 'rows' => array( 'widget_TEXT' => array( 'existed' => false ), 'sidebars_widgets' => array( 'existed' => true, 'value' => ab_raw( 'sidebars_widgets' ), 'autoload' => 'yes' ) ), 'after' => array( 'option:widget_TEXT' => $hash, 'option:sidebars_widgets' => $hash ) ) );
 $out  = ab_undo( $t, array( 'force' => true ) );
 ok( 0 === $out['undone'] && 'unreadable' === $out['blocked'][0]['reason'] && null !== ab_raw( 'widget_text' ), 'F31 another spelling of the row reaches the row the database matches: nothing is deleted' );
 $t   = ab_forge( 'wp_update_widget', 'widget', array( 'v' => 1, 'base' => 'x', 'rows' => array( 'sidebars_widgets' => array( 'existed' => false ) ), 'after' => array( 'option:sidebars_widgets' => $hash ) ) );
 ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) ) && null !== ab_raw( 'sidebars_widgets' ), 'F32 a point naming a row the tool does not write is refused whole' );
 $t   = ab_forge( 'wp_update_widget', 'widget', array( 'v' => 1, 'base' => 'feed', 'rows' => array( 'widget_feed' => array( 'existed' => true, 'value' => 'not a list', 'autoload' => 'yes' ) ), 'after' => array( 'option:widget_feed' => $hash ) ) );
-ok( 'protected_now' === ab_undo( $t, array( 'force' => true ) )['blocked'][0]['reason'], 'F33 nor are settings put back that are no list of the widgets of WordPress' );
+ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) ), 'F33 nor are settings put back that are no list of the widgets of WordPress' );
 $t   = ab_forge( 'wp_add_widget', 'widget', array( 'v' => 1, 'base' => 'feed', 'rows' => array( 'widget_feed' => array( 'existed' => false ), 'sidebars_widgets' => array( 'existed' => true, 'value' => 'not a list', 'autoload' => 'yes' ) ), 'after' => array( 'option:widget_feed' => $hash, 'option:sidebars_widgets' => $hash ) ) );
-ok( 'protected_now' === ab_undo( $t, array( 'force' => true ) )['blocked'][0]['reason'] && is_array( get_option( 'sidebars_widgets' ) ), 'F33a nor a map of the widgets per sidebar that is no list' );
+ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) ) && is_array( get_option( 'sidebars_widgets' ) ), 'F33a nor a map of the widgets per sidebar that is no list' );
+foreach ( array(
+	'an id with "02"'        => array( 'sidebar-1' => array( 'custom_html-02' ), 'array_version' => 3 ),
+	'an id without a number' => array( 'sidebar-1' => array( 'custom_html' ), 'array_version' => 3 ),
+	'an id that is no text'  => array( 'sidebar-1' => array( 5 ), 'array_version' => 3 ),
+	'a sidebar no list'      => array( 'sidebar-1' => 'text-2', 'array_version' => 3 ),
+	'a version no number'    => array( 'sidebar-1' => array( 'text-2' ), 'array_version' => '3' ),
+) as $why => $map ) {
+	$t = ab_forge( 'wp_add_widget', 'widget', array( 'v' => 1, 'base' => 'feed', 'rows' => array( 'widget_feed' => array( 'existed' => false ), 'sidebars_widgets' => array( 'existed' => true, 'value' => serialize( $map ), 'autoload' => 'yes' ) ), 'after' => array( 'option:widget_feed' => $hash, 'option:sidebars_widgets' => $hash ) ) ); // phpcs:ignore
+	ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) ), "F33b a map with $why: refused whole" );
+}
 
 reset_all();
 ab_widgets();
@@ -1018,7 +1071,7 @@ $bad = array(
 	'value and b64'   => array_merge( $good, array( 'rows' => array( 'widget_text' => $good['rows']['widget_text'] + array( 'b64' => 'eA==' ) ) + $good['rows'] ) ),
 	'missing w/ value' => array_merge( $good, array( 'rows' => array( 'widget_text' => array( 'existed' => false, 'value' => 'x' ) ) + $good['rows'] ) ),
 	'a control char'  => array( 'v' => 1, 'base' => "te\nxt", 'rows' => array( "widget_te\nxt" => $good['rows']['widget_text'], 'sidebars_widgets' => $good['rows']['sidebars_widgets'] ), 'after' => array( "option:widget_te\nxt" => $hash, 'option:sidebars_widgets' => $hash ) ),
-	'a row more'      => array_merge( $good, array( 'rows' => $good['rows'] + array( 'active_plugins' => $good['rows']['sidebars_widgets'] ) ) ),
+	'a row more'      => array_merge( $good, array( 'rows' => $good['rows'] + array( 'active_plugins' => array( 'existed' => false ) ) ) ),
 	'neither value nor b64' => array_merge( $good, array( 'rows' => array( 'widget_text' => array( 'existed' => true, 'raw' => 'x', 'autoload' => 'yes' ) ) + $good['rows'] ) ),
 	'after of another row'  => array_merge( $good, array( 'after' => array( 'option:widget_text' => $hash, 'option:active_plugins' => $hash ) ) ),
 	'version 2'       => array_merge( $good, array( 'v' => 2 ) ),
@@ -1131,6 +1184,76 @@ $GLOBALS['ab_filters'] = array();
 update_option( 'widget_feed', array( 2 => array( 'title' => 'File', 'api_key' => 'GEHEIM-KEY', 'auth' => array( 'client_secret' => 'GEHEIM-SECRET', 'user' => 'u' ) ), '_multiwidget' => 1 ) );
 $out = ab_undo( $res['undo'] );
 ok( 1 === $out['undone'] && 'Feed' === get_option( 'widget_feed' )[2]['title'], 'H8 ... and comes back from it' );
+
+/* ============================== K) Codex 31.10.: identities, rights of the items, a term not created here */
+
+// Not counts but identities and contents.
+reset_all();
+$GLOBALS['ab_on_create_term'] = static function ( $id ) { $GLOBALS['T']['termmeta'][ ab_next() ] = array( $id, 'order', '0' ); };
+$res = AB_MCP_Tools_Taxonomy_Comments::create_term( array( 'taxonomy' => 'category', 'name' => 'Shop' ) );
+foreach ( $GLOBALS['T']['termmeta'] as $mid => $r ) {
+	if ( $r[0] === $res['term_id'] ) { $GLOBALS['T']['termmeta'][ $mid ][2] = '42'; }
+}
+$out = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && array( 'use' ) === $out['blocked'][0]['locs'] && null !== get_term( $res['term_id'], 'category' ), 'K1 a meta value changed since, the number of rows the same: blocked' );
+foreach ( $GLOBALS['T']['termmeta'] as $mid => $r ) {
+	if ( $r[0] === $res['term_id'] ) { unset( $GLOBALS['T']['termmeta'][ $mid ] ); $GLOBALS['T']['termmeta'][ ab_next() ] = array( $r[0], 'order', '0' ); }
+}
+ok( 'changed_since' === ab_undo( $res['undo'] )['blocked'][0]['reason'], 'K1a a meta row deleted and written anew with the old value: another row, changed' );
+
+reset_all();
+$res = AB_MCP_Tools_Taxonomy_Comments::create_term( array( 'taxonomy' => 'category', 'name' => 'Swap' ) );
+$GLOBALS['T']['rel'][] = array( 55, ab_tt_of( $res['term_id'] ) );
+$c = AB_MCP_Undo::claim( $res['undo'] )['data'];
+// The state after the change had post 55 on it; now another post instead.
+$c['after'] = AB_MCP_Undo_Terms::now_hashes( $c );
+$GLOBALS['T']['rel'][ count( $GLOBALS['T']['rel'] ) - 1 ][0] = 56;
+ok( 'changed' === AB_MCP_Undo_Terms::compare( $c )['use'], 'K2 another post in place of one, the count the same: changed' );
+$kid = ab_add_term( 'category', 'Kid', null, $res['term_id'] );
+$c['after'] = AB_MCP_Undo_Terms::now_hashes( $c );
+$GLOBALS['T']['tt'][ ab_tt_of( $kid ) ][3] = 0;
+ab_add_term( 'category', 'Other kid', null, $res['term_id'] );
+ok( 'changed' === AB_MCP_Undo_Terms::compare( $c )['use'], 'K3 another child term in place of one: changed' );
+
+reset_all();
+AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'Main' ) );
+$item = AB_MCP_Tools_Menus_Users::add_menu_item( array( 'menu' => 'Main', 'title' => 'Home', 'url' => '/' ) );
+$c    = array( 'v' => 1, 'id' => wp_get_nav_menu_object( 'Main' )->term_id, 'taxonomy' => 'nav_menu' );
+$c['after'] = AB_MCP_Undo_Terms::now_hashes( $c );
+$GLOBALS['T']['posts'][ $item['item_id'] ]['post_title'] = 'Changed';
+ok( 'changed' === AB_MCP_Undo_Terms::compare( $c )['use'], 'K4 an item of a menu changed: the menu changed' );
+
+// The rights of the items a menu takes with it, with force too.
+reset_all();
+$menu = AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'Main' ) );
+$item = AB_MCP_Tools_Menus_Users::add_menu_item( array( 'menu' => 'Main', 'title' => 'Home', 'url' => '/' ) );
+$GLOBALS['ab_deny'] = array( 'delete_post:' . $item['item_id'] => true );
+$out = ab_undo( $menu['undo'], array( 'force' => true ) );
+ok( 0 === $out['undone'] && 'forbidden' === $out['blocked'][0]['reason'] && null !== get_post( $item['item_id'] ) && false !== wp_get_nav_menu_object( 'Main' ), 'K5 a menu with an item the account may not delete stays, even with force' );
+$GLOBALS['ab_deny'] = array();
+ab_add_post( 300, array( 'post_type' => 'page' ) );
+$GLOBALS['T']['rel'][] = array( 300, ab_tt_of( $menu['menu_id'] ) );
+$out = ab_undo( $menu['undo'], array( 'force' => true ) );
+ok( 'forbidden' === $out['blocked'][0]['reason'] && null !== get_post( 300 ), 'K6 nor one holding a post that is no menu item' );
+$GLOBALS['T']['rel'] = array_values( array_filter( $GLOBALS['T']['rel'], static fn( $r ) => 300 !== $r[0] ) );
+$plan = AB_MCP_Undo_Terms::plan( 'wp_create_menu', AB_MCP_Undo::claim( $menu['undo'] )['data'], true );
+$GLOBALS['ab_deny'] = array( 'delete_post:' . $item['item_id'] => true ); // between the plan and the write
+$again = AB_MCP_Undo_Terms::restore( $plan['items'][0] );
+ok( 'ab_mcp_undo_forbidden' === ab_code( $again ) && null !== get_post( $item['item_id'] ) && false !== strpos( ab_msg( $again ), 'wp_delete_menu_item' ), 'K7 the rights of the items are asked once more right before the write, with the way' );
+$GLOBALS['ab_deny'] = array();
+ok( 1 === ab_undo( $menu['undo'], array( 'force' => true ) )['undone'] && null === get_post( $item['item_id'] ), 'K8 with the right to each item, force deletes the menu with them' );
+
+// A term WordPress answered with, though this call did not create it.
+reset_all();
+$old                       = ab_add_term( 'category', 'Twin' );
+$GLOBALS['ab_insert_dupe'] = $old;
+$res = AB_MCP_Tools_Taxonomy_Comments::create_term( array( 'taxonomy' => 'category', 'name' => 'Twin' ) );
+ok( true === $res['created'] && $old === $res['term_id'] && null === $res['undo'] && false !== strpos( $res['undo_note'], 'did not create' ) && false !== strpos( $res['undo_note'], 'wp_get_term' ) && 0 === ab_points(), 'K9 a term of another request answered for a duplicate: no point that would delete it' );
+$res = AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'Menu twin' ) );
+ok( null === $res['undo'] && false !== strpos( $res['undo_note'], 'did not create' ) && 0 === ab_points() && null !== get_term( $old, 'category' ), 'K10 the same for a menu' );
+unset( $GLOBALS['ab_insert_dupe'] );
+$res = AB_MCP_Tools_Taxonomy_Comments::create_term( array( 'taxonomy' => 'category', 'name' => 'Own' ) );
+ok( ab_token( $res ) && empty( $GLOBALS['ab_actions']['created_term'] ), 'K11 a term the call created gets its point, and the watch is gone again' );
 
 /* Pro's own wp_undo (last: the class stays) */
 reset_all();
