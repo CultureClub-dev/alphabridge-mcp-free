@@ -2245,7 +2245,7 @@ class AB_MCP_Admin {
 		$items    = array(
 			__( 'Over 120 tools on this site', 'alphabridge-mcp' ),
 			__( 'Theme and plugin files, PHP snippets, database', 'alphabridge-mcp' ),
-			__( 'Page-builder texts, installs and updates', 'alphabridge-mcp' ),
+			__( 'Options, cron jobs, export and multisite', 'alphabridge-mcp' ),
 			__( 'Undo for files and page builders, adjustable from 1 to 30 days', 'alphabridge-mcp' ),
 			__( 'Search and replace with preview', 'alphabridge-mcp' ),
 		);

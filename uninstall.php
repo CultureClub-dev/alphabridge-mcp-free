@@ -34,7 +34,26 @@ $ab_mcp_options = array(
 	'ab_mcp_pro_undo_index',
 	'ab_mcp_pro_undo_lock',
 	'ab_mcp_pro_undo_ttl_days',
+	// The update and activation tools (free since 4.11.0; the names Pro gave
+	// them, as Pro's uninstall removes them): the update log, the versions
+	// held back, the note on the update lock, the folders an update replaced
+	// (network options on a network, removed below as well), and the lock
+	// for changes of the code the site runs (on the main site).
+	'ab_mcp_pro_update_log',
+	'ab_mcp_pro_update_holds',
+	'ab_mcp_pro_update_running',
+	'ab_mcp_pro_update_replaced',
+	'ab_mcp_pro_code_change.lock',
 );
+
+// The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no
+// option: once the plugin is gone nothing would take it off. Per site, as it
+// is planned on the site where the hold was written.
+$ab_mcp_cron = static function () {
+	if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+		wp_clear_scheduled_hook( 'ab_mcp_pro_resume_auto_updates' );
+	}
+};
 
 // Remove the snapshot files of the undo points: the folder ab-mcp-undo in
 // the uploads of the current site, with what is in it (the snapshots, its
@@ -61,6 +80,16 @@ foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }
 $ab_mcp_undo_files();
+$ab_mcp_cron();
+
+// The update log, the holds, the note on the update lock and the replaced
+// folders are network options on a network (on a single site plain options,
+// removed above), as Pro's uninstall removes them.
+if ( function_exists( 'delete_site_option' ) ) {
+	foreach ( array( 'ab_mcp_pro_update_log', 'ab_mcp_pro_update_holds', 'ab_mcp_pro_update_running', 'ab_mcp_pro_update_replaced' ) as $ab_mcp_option ) {
+		delete_site_option( $ab_mcp_option );
+	}
+}
 
 // Multisite: clean per-site options too — on every site. get_sites() stops
 // at 100 unless told otherwise, and 'number' => 0 is "no limit".
@@ -77,6 +106,7 @@ if ( is_multisite() ) {
 			delete_option( $ab_mcp_option );
 		}
 		$ab_mcp_undo_files();
+		$ab_mcp_cron();
 		restore_current_blog();
 	}
 }

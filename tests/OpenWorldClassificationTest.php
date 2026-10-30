@@ -44,6 +44,20 @@ final class OpenWorldClassificationTest extends TestCase {
 		'wp_deploy_push_zip',
 	);
 
+	/**
+	 * Tools of this plugin that talk to other servers by their name: they
+	 * download from WordPress.org or an update offer (free since 4.11.0).
+	 * The two ZIP installs say it with their 'open_world' flag, for the url
+	 * they download (FreeSinceFourElevenTest).
+	 */
+	private const NETWORKED_HERE = array(
+		'wp_install_plugin',
+		'wp_install_theme',
+		'wp_update_core',
+		'wp_update_plugin',
+		'wp_update_theme',
+	);
+
 	/** Tools that stay inside the site: reading, drafts, new terms, removal. */
 	private const INSIDE = array(
 		'wp_list_posts',
@@ -102,7 +116,7 @@ final class OpenWorldClassificationTest extends TestCase {
 		// And no other tool of this plugin is counted as publishing or networked.
 		$open = array_values( array_filter( $names, static fn( $n ) => AB_MCP_Tool_Registry::is_open_world( $n, array() ) ) );
 		sort( $open );
-		$expected = self::PUBLISHING;
+		$expected = array_merge( self::PUBLISHING, self::NETWORKED_HERE );
 		sort( $expected );
 		$this->assertSame( $expected, $open, 'the set of open-world tools changed — check the new tool' );
 	}
