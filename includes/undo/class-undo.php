@@ -56,9 +56,9 @@ class AB_MCP_Undo {
 	const TTL_DAYS_MIN     = 1;
 
 	/**
-	 * Seven days at most here; Pro keeps points for up to 30 with its own
-	 * store. A longer window stored by Pro reads as seven, a shorter one is
-	 * kept.
+	 * Seven days at most here (max_days()); Pro keeps points for up to 30. A
+	 * longer window stored by Pro reads as seven while Pro is not there to
+	 * say otherwise, a shorter one is kept.
 	 */
 	const TTL_DAYS_MAX = 7;
 
@@ -134,13 +134,28 @@ class AB_MCP_Undo {
 	}
 
 	/**
-	 * The window in days (1 to 7, default 7): what was set on the settings
-	 * screen of Pro, if anything, within this store's range. Before the filter.
+	 * The window in days (1 to max_days(), default 7): what was set on the
+	 * settings screen of Pro, if anything, within this store's range. Before
+	 * the filter ab_mcp_undo_ttl.
 	 *
 	 * @return int
 	 */
 	public static function ttl_days() {
 		return self::clamp_days( get_option( self::TTL_OPTION, self::TTL_DAYS_DEFAULT ) );
+	}
+
+	/**
+	 * The longest window, in days: seven, or what the filter
+	 * ab_mcp_undo_max_days says. AlphaBridge MCP Pro keeps its points in this
+	 * same index and answers with its own limit (30 days): a point this
+	 * plugin records there then lives as long as the window set in Pro, and
+	 * the clean-up when it records (expires_of()) leaves Pro's longer-lived
+	 * points alone. Never below the shortest window.
+	 *
+	 * @return int
+	 */
+	public static function max_days() {
+		return max( self::TTL_DAYS_MIN, (int) apply_filters( 'ab_mcp_undo_max_days', self::TTL_DAYS_MAX ) );
 	}
 
 	/**
@@ -165,7 +180,7 @@ class AB_MCP_Undo {
 		if ( ! is_finite( $days ) ) {
 			return self::TTL_DAYS_DEFAULT;
 		}
-		return (int) floor( max( (float) self::TTL_DAYS_MIN, min( (float) self::TTL_DAYS_MAX, $days ) ) );
+		return (int) floor( max( (float) self::TTL_DAYS_MIN, min( (float) self::max_days(), $days ) ) );
 	}
 
 	/**

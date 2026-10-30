@@ -1085,6 +1085,20 @@ ok( 90 * DAY_IN_SECONDS === AB_MCP_Undo::ttl(), 'X4 the filter is not held to th
 $GLOBALS['ab_filters']['ab_mcp_undo_ttl'] = 10;
 ok( 60 === AB_MCP_Undo::ttl(), 'X4 but to the 60-second floor' );
 unset( $GLOBALS['ab_filters']['ab_mcp_undo_ttl'], $GLOBALS['ab_opts'][ AB_MCP_Undo::TTL_OPTION ] );
+// Pro shares this index and says its own limit on ab_mcp_undo_max_days.
+$GLOBALS['ab_filters']['ab_mcp_undo_max_days'] = 30;
+$GLOBALS['ab_opts'][ AB_MCP_Undo::TTL_OPTION ] = 30;
+ok( 30 === AB_MCP_Undo::max_days() && 30 === AB_MCP_Undo::ttl_days() && 30 * DAY_IN_SECONDS === AB_MCP_Undo::ttl(), 'X4a with Pro\'s 30 days on ab_mcp_undo_max_days, the 30 days Pro stored hold here too' );
+$tx4  = AB_MCP_Undo::record( ab_set_rec( 'blogname', 'x4a' ) );
+$ex4  = ab_entry_of( $tx4 );
+ok( is_array( $ex4 ) && 30 * DAY_IN_SECONDS === (int) $ex4['expires_at'] - (int) $ex4['created_at'], 'X4b a point recorded then lives the 30 days' );
+$old  = array( 'created_at' => time() - 10 * DAY_IN_SECONDS, 'expires_at' => time() + 20 * DAY_IN_SECONDS );
+ok( AB_MCP_Undo::expires_of( $old ) > time(), 'X4c and a point of Pro ten days old is not expired for the clean-up here' );
+$GLOBALS['ab_filters']['ab_mcp_undo_max_days'] = 0;
+ok( 1 === AB_MCP_Undo::max_days(), 'X4d the limit is never below one day' );
+unset( $GLOBALS['ab_filters']['ab_mcp_undo_max_days'] );
+ok( 7 === AB_MCP_Undo::max_days() && 7 === AB_MCP_Undo::ttl_days(), 'X4e without the filter it is seven again' );
+unset( $GLOBALS['ab_opts'][ AB_MCP_Undo::TTL_OPTION ] );
 $tx5 = AB_MCP_Undo::record( ab_set_rec( 'blogname', 'x5' ) );
 $ex5 = ab_entry_of( $tx5 );
 ok( is_array( $ex5 ) && 7 * DAY_IN_SECONDS === (int) $ex5['expires_at'] - (int) $ex5['created_at'], 'X5 a new point expires 7 days after it was taken' );
