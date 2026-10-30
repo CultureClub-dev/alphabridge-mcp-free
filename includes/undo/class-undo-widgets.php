@@ -272,6 +272,28 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 	}
 
 	/**
+	 * As the objects compare, but a row whose bytes are back as before
+	 * while its autoload flag is not (a restore the database took only half
+	 * of) is still to put back: put_back() writes the flag with the bytes.
+	 *
+	 * @param array $snap Snapshot.
+	 * @return array<string,string>|null
+	 */
+	public static function compare( array $snap ) {
+		$out = parent::compare( $snap );
+		if ( null === $out ) {
+			return null;
+		}
+		foreach ( (array) $snap['rows'] as $name => $state ) {
+			$loc = 'option:' . $name;
+			if ( 'before' === ( $out[ $loc ] ?? '' ) && ! empty( $state['existed'] ) && ! self::holds( self::row( (string) $name ), (array) $state ) ) {
+				$out[ $loc ] = 'after';
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * @param array $snap Snapshot.
 	 * @return string
 	 */
@@ -452,7 +474,7 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 				continue;
 			}
 			$state = (array) $snap['rows'][ $option ];
-			if ( ! self::write_row( $option, $state ) || self::hash_state( self::encode_state( self::row( $option ) ) ) !== self::hash_state( $state ) ) {
+			if ( ! self::write_row( $option, $state ) || ! self::holds( self::row( $option ), $state ) ) {
 				return new WP_Error(
 					'ab_mcp_undo_write_failed',
 					sprintf(
@@ -487,7 +509,15 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			$flag = AB_MCP_Undo::normalize_autoload( (string) ( $state['autoload'] ?? '' ) ) ? (string) $state['autoload'] : 'no';
 			$done = $wpdb->insert( $wpdb->options, array( 'option_name' => $name, 'option_value' => $raw, 'autoload' => $flag ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		} else {
-			$done = $wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// The flag too, as stored: core may have changed it with the
+			// value (a large row kept at auto-off becomes auto once the
+			// tool made it smaller), and the old bytes under the new flag
+			// would be loaded on every request.
+			$set = array( 'option_value' => $raw );
+			if ( AB_MCP_Undo::normalize_autoload( (string) ( $state['autoload'] ?? '' ) ) ) {
+				$set['autoload'] = (string) $state['autoload'];
+			}
+			$done = $wpdb->update( $wpdb->options, $set, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		wp_cache_delete( $name, 'options' );
 		wp_cache_delete( 'alloptions', 'options' );
@@ -497,6 +527,21 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			$GLOBALS['_wp_sidebars_widgets'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the request copy of the core, cleared as wp_set_sidebars_widgets() clears it.
 		}
 		return false !== $done;
+	}
+
+	/**
+	 * Does a row hold what a state holds: its bytes and, for a row that was
+	 * there, its autoload flag as stored?
+	 *
+	 * @param array|false|null $row   row().
+	 * @param array            $state encode_state().
+	 * @return bool
+	 */
+	private static function holds( $row, array $state ) {
+		if ( self::hash_state( self::encode_state( $row ) ) !== self::hash_state( $state ) ) {
+			return false;
+		}
+		return empty( $state['existed'] ) || ( is_array( $row ) && (string) $row['autoload'] === (string) $state['autoload'] );
 	}
 
 	/**
@@ -586,8 +631,9 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 	 * WordPress write? The row of the type: a list marked _multiwidget whose
 	 * every other key is an instance number as WordPress writes it (a
 	 * positive whole number, never "02" or "2a") holding a list of settings.
-	 * The map: a list of sidebars, each a list of widget ids
-	 * "<id_base>-<number>" with such a number, and its array_version. Any
+	 * The map: a list of sidebars, each a list of widget ids (text without
+	 * control characters; one of this point's type "<id_base>-<number>"
+	 * with such a number), and its array_version. Any
 	 * other form is refused whole: no check is ever skipped because a value
 	 * has a shape it does not expect.
 	 *
@@ -619,11 +665,13 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 						return false;
 					}
 					foreach ( $ids as $wid ) {
-						// Any widget id WordPress registers (an older
-						// widget of wp_register_sidebar_widget() has no
-						// number); one of this point's type has its number
-						// as WordPress writes it.
-						if ( ! is_string( $wid ) || 1 !== preg_match( '/\A[A-Za-z0-9_\-]{1,190}\z/', $wid ) ) {
+						// Any widget id WordPress registers: an older
+						// widget of wp_register_sidebar_widget() may be
+						// any text ("legacy.weather", no number), only
+						// control characters are no id. One of this
+						// point's type has its number as WordPress
+						// writes it.
+						if ( ! is_string( $wid ) || '' === $wid || 1 === preg_match( '/[\x00-\x1f\x7f]/', $wid ) ) {
 							return false;
 						}
 						if ( 1 === preg_match( '/\A(.+)-([0-9]+)\z/', $wid, $m ) && $base === $m[1] && 1 !== preg_match( '/\A[1-9][0-9]*\z/', $m[2] ) ) {

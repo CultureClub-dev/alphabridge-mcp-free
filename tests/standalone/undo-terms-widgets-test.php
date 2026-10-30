@@ -144,6 +144,7 @@ function ab_db_reset() {
 	$GLOBALS['ab_db_down']    = false; // the tables cannot be read
 	$GLOBALS['ab_db_nowrite'] = false; // the options table takes no write
 	$GLOBALS['ab_db_lies']    = false; // an update of an option that reports a write and writes nothing
+	$GLOBALS['ab_db_noflag']  = false; // an update of an option that writes the value and drops the flag
 	$GLOBALS['ab_db_error']   = false; // a SELECT that ran and failed: no rows, and last_error says why
 	$GLOBALS['ab_delete_lies'] = false; // a deletion of a term or a post that reports success and deletes nothing
 }
@@ -264,6 +265,9 @@ $GLOBALS['wpdb'] = new class {
 		$this->writes[] = array( 'update', $name );
 		if ( $GLOBALS['ab_db_lies'] ) { return 1; }
 		$GLOBALS['T']['options'][ $name ][0] = (string) $data['option_value'];
+		if ( isset( $data['autoload'] ) && ! $GLOBALS['ab_db_noflag'] ) {
+			$GLOBALS['T']['options'][ $name ][1] = (string) $data['autoload'];
+		}
 		return 1;
 	}
 	public function delete( $table, $where ) {
@@ -979,6 +983,35 @@ update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'counter-007', '
 $res = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
 ok( 1 === ab_undo( $res['undo'] )['undone'], 'F20i an older widget whose id ends in digits with a leading zero is another type\'s: no obstacle' );
 
+// Codex round 3: any id wp_register_sidebar_widget() takes, a dot or a space in it.
+foreach ( array( 'legacy.weather', 'legacy weather', 'Wetter_ä' ) as $legacy ) {
+	reset_all();
+	update_option( 'widget_text', array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 1 ) );
+	update_option( 'sidebars_widgets', array( 'sidebar-1' => array( $legacy, 'text-2' ), 'wp_inactive_widgets' => array(), 'array_version' => 3 ) );
+	$map = ab_raw( 'sidebars_widgets' );
+	$res = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-2' ) );
+	$out = ab_undo( $res['undo'] );
+	ok( is_array( $out ) && 1 === $out['undone'] && $map === ab_raw( 'sidebars_widgets' ), "F20j an older widget \"$legacy\" in the sidebar: the deletion comes back" );
+	$res = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+	ok( 1 === ab_undo( $res['undo'] )['undone'] && $map === ab_raw( 'sidebars_widgets' ), "F20k ... and so does an addition" );
+}
+
+// Codex round 3: the flag comes back with the bytes.
+reset_all();
+ab_widgets();
+$GLOBALS['T']['options']['widget_text'][1] = 'auto-off';
+$before = ab_raw( 'widget_text' );
+$res    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'title' => 'New' ) ) );
+$GLOBALS['T']['options']['widget_text'][1] = 'auto'; // core rates the flag of the smaller value again
+$out = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && $before === ab_raw( 'widget_text' ) && 'auto-off' === $GLOBALS['T']['options']['widget_text'][1], 'F20l a row whose flag core changed with the value comes back with its bytes and its flag as stored' );
+reset_all();
+ab_widgets();
+$GLOBALS['T']['options']['sidebars_widgets'][1] = 'off';
+$res = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-2' ) );
+$GLOBALS['T']['options']['sidebars_widgets'][1] = 'yes';
+ok( 1 === ab_undo( $res['undo'] )['undone'] && 'off' === $GLOBALS['T']['options']['sidebars_widgets'][1], 'F20m ... and the map with its flag' );
+
 // Codex round 2: no PHP object comes back.
 reset_all();
 ab_widgets();
@@ -1096,7 +1129,8 @@ ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) )
 foreach ( array(
 	'an id of its type with "02"' => array( 'sidebar-1' => array( 'feed-02' ), 'array_version' => 3 ),
 	'an id of its type with 0'    => array( 'sidebar-1' => array( 'feed-0' ), 'array_version' => 3 ),
-	'an id with a space'          => array( 'sidebar-1' => array( 'legacy weather' ), 'array_version' => 3 ),
+	'an id with a control character' => array( 'sidebar-1' => array( "legacy\tweather" ), 'array_version' => 3 ),
+	'an id with a line break'     => array( 'sidebar-1' => array( "legacy\nweather" ), 'array_version' => 3 ),
 	'an empty id'                 => array( 'sidebar-1' => array( '' ), 'array_version' => 3 ),
 	'an object in it'             => array( 'sidebar-1' => array( 'text-2' ), 'x' => array( new ArrayObject() ), 'array_version' => 3 ),
 	'an id that is no text'  => array( 'sidebar-1' => array( 5 ), 'array_version' => 3 ),
@@ -1144,6 +1178,14 @@ $out                   = ab_undo( $res['undo'] );
 ok( 0 === $out['undone'] && 1 === count( $out['failed'] ) && null !== ab_entry( $res['undo'] ), 'F37a a write the database reports and does not hold is read again: failed, the point stays' );
 $GLOBALS['ab_db_lies'] = false;
 ab_undo( $res['undo'] );
+$GLOBALS['T']['options']['widget_text'][1] = 'auto-off';
+$res                     = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'title' => 'Newer' ) ) );
+$GLOBALS['T']['options']['widget_text'][1] = 'auto';
+$GLOBALS['ab_db_noflag'] = true;
+$out                     = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 1 === count( $out['failed'] ) && null !== ab_entry( $res['undo'] ), 'F37b the bytes back but the flag not: read again, failed, the point stays' );
+$GLOBALS['ab_db_noflag'] = false;
+ok( 1 === ab_undo( $res['undo'] )['undone'] && 'auto-off' === $GLOBALS['T']['options']['widget_text'][1], 'F37c once the flag is taken too, the same token restores' );
 $res                   = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'title' => 'New' ) ) );
 $GLOBALS['ab_db_down'] = true;
 ok( 'unreadable' === ab_undo( $res['undo'] )['blocked'][0]['reason'], 'F38 a table that cannot be read: blocked, nothing written on a guess' );
