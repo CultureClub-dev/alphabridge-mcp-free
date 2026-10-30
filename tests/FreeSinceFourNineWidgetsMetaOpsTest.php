@@ -644,7 +644,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertNull( $r['undo'], 'Without a database to read the rows from, no undo point.' );
 		self::assertNotSame( '', $r['undo_note'] );
 		self::assertSame( array( array( 'user', 5, 'twitterhandle', 'C:\\x' ) ), $GLOBALS['ab_test_meta_writes'] );
-		self::assertSame( array( array( 'edit_user', array( 5 ) ), array( 'edit_user_meta', array( 5, 'twitterhandle' ) ) ), $asked, 'The right to this user, then to this key.' );
+		self::assertSame( array( array( 'edit_user', array( 5 ) ), array( 'edit_user_meta', array( 5, 'twitterhandle' ) ) ), array_slice( $asked, 0, 2 ), 'The right to this user, then to this key.' );
+		self::assertSame( array( array( 'list_users', array() ), array( 'edit_user', array( 5 ) ) ), array_slice( $asked, 2 ), 'Then, for the answer, whether wp_get_user_meta would answer this account for this user (Codex 31.10.2026).' );
 
 		AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'prefs' ) );
 		AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'list', 'value' => array( 'a' => array( 1, true, null ) ) ) );
@@ -701,7 +702,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 	/* -------------------------------------------------------- term meta */
 
 	private static function term( int $id ): void {
-		$GLOBALS['ab_test_way']['terms'][ $id ] = (object) array( 'term_id' => $id, 'taxonomy' => 'category', 'name' => 'News' );
+		$GLOBALS['ab_test_way']['terms'][ $id ]          = (object) array( 'term_id' => $id, 'taxonomy' => 'category', 'name' => 'News' );
+		$GLOBALS['ab_test_way']['taxonomies']['category'] = (object) array( 'name' => 'category', 'cap' => (object) array( 'assign_terms' => 'assign_categories', 'manage_terms' => 'manage_categories' ) );
 	}
 
 	public function testTermMetaIsWrittenWithTheRightToTheTermsMeta(): void {
@@ -717,7 +719,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertArrayNotHasKey( 'saved_differs', $r );
 		self::assertNull( $r['undo'] );
 		self::assertSame( array( array( 'term', 8, 'color', '#c00' ) ), $GLOBALS['ab_test_meta_writes'] );
-		self::assertSame( array( array( 'edit_term_meta', array( 8, 'color' ) ) ), $asked );
+		self::assertSame( array( array( 'edit_term_meta', array( 8, 'color' ) ) ), array_slice( $asked, 0, 1 ) );
+		self::assertSame( array( array( 'edit_posts', array() ), array( 'assign_categories', array() ) ), array_slice( $asked, 1, 2 ), 'For the answer: whether wp_get_term_meta would answer this account for this term.' );
 
 		// Codex (GitHub) 29.10.2026: backslashes are stored as sent, nested too.
 		AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'path', 'value' => array( 'p' => 'C:\\dir\\x', 're' => array( '\\d+' ) ) ) );

@@ -172,14 +172,14 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! get_user_by( 'id', $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'User not found: no user has this id. The authors\' ids are in the answers of wp_list_posts and wp_get_post.', 'alphabridge-mcp' ) );
 		}
-		if ( ! current_user_can( 'edit_user', $id ) ) {
+		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
+			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		if ( ! AB_MCP_Undo_Meta_Rules::object_readable( 'user', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read this user\'s meta: that takes the right to edit this user, which every user has for their own profile and administrators for other users (on a multisite network, super admins). Connect with such an account.', 'alphabridge-mcp' ) );
 		}
 		// The key rule this reader shares with the answer of
 		// wp_update_user_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
-		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
-			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
-		}
 		$allowed = self::allowed_user_meta_keys();
 		$key     = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
@@ -330,7 +330,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				'type'    => 'user',
 				'id'      => $id,
 				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
-				'hidden'  => AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ? array( $key ) : array(),
+				'hidden'  => ( ! AB_MCP_Undo_Meta_Rules::reader_answers( 'user', $id ) || AB_MCP_Undo_Meta_Rules::read_refused( 'user', $key ) ) ? array( $key ) : array(),
 				'reader'  => 'wp_get_user_meta',
 				'summary' => sprintf( 'user #%d: %s', $id, $key ),
 			),
@@ -367,14 +367,13 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! $term || is_wp_error( $term ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Term not found: no term has this id. Look it up with wp_list_terms.', 'alphabridge-mcp' ) );
 		}
-		$tax_obj = get_taxonomy( $term->taxonomy );
-		if ( ! $tax_obj || ! current_user_can( $tax_obj->cap->assign_terms ) ) {
-			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
-		}
-		// The key rules this reader shares with the answer of
-		// wp_update_term_meta (AB_MCP_Undo_Meta_Rules::read_refused()).
+		// The rules this reader shares with the answer of wp_update_term_meta
+		// (AB_MCP_Undo_Meta_Rules): the term and the keys it shows.
 		if ( ! class_exists( 'AB_MCP_Undo_Meta_Rules', false ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta-rules.php';
+		}
+		if ( ! AB_MCP_Undo_Meta_Rules::object_readable( 'term', $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot read the meta of terms in this taxonomy: that takes the right to assign its terms. Connect with an account that has it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
@@ -450,8 +449,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 				'type'    => 'term',
 				'id'      => $id,
 				'keys'    => array( $key => AB_MCP_Undo_Answer::stored_form( $value ) ),
-				// Compared, not shown, where wp_get_term_meta would not show it.
-				'hidden'  => AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ? array( $key ) : array(),
+				// Compared, not shown, where wp_get_term_meta would not show it:
+				// not to this account for this term, or not this key.
+				'hidden'  => ( ! AB_MCP_Undo_Meta_Rules::reader_answers( 'term', $id ) || AB_MCP_Undo_Meta_Rules::read_refused( 'term', $key ) ) ? array( $key ) : array(),
 				'reader'  => 'wp_get_term_meta',
 				'summary' => sprintf( 'term #%d: %s', $id, $key ),
 			),

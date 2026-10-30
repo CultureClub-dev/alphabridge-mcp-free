@@ -854,12 +854,30 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
 		$GLOBALS['ab_test_meta'][5]['farbe'] = array( 'rot' );
 		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 50, 'key' => 'farbe', 'value' => 'blau' ) );
-		self::assertSame( 50, $res['id'] );
+		self::assertSame( 5, $res['id'], 'The answer names the post that was written (Codex 31.10.2026).' );
 		self::assertSame( array( 'farbe' => 'blau' ), (array) $res['saved_fields'], 'Read back from the post.' );
 		$claim = AB_MCP_Undo::claim( (string) $res['undo'] );
 		self::assertSame( 5, $claim['data']['id'], 'The snapshot is of the post that holds the meta.' );
 		self::assertSame( 1, AB_MCP_Tools_Undo_Core::undo( array( 'token' => (string) $res['undo'] ) )['undone'] );
 		self::assertSame( array( 'rot' ), $GLOBALS['ab_test_meta'][5]['farbe'] );
+	}
+
+	public function testARevisionIdAsksTheRightsOfItsPostNotOfTheRevision(): void {
+		// Codex 31.10.2026: update_post_meta() writes a revision's meta to its
+		// post, so the rights asked are the post's — a key callback that
+		// refuses it on the post refuses it through the revision too.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		$asked                  = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args = array() ) use ( &$asked ): bool {
+			$asked[] = array( $cap, $args );
+			return ! ( 'edit_post_meta' === $cap && 5 === ( $args[0] ?? null ) );
+		};
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 50, 'key' => 'note', 'value' => 'x' ) );
+		self::assertInstanceOf( \WP_Error::class, $res );
+		self::assertSame( 'ab_mcp_forbidden_meta', $res->get_error_code() );
+		self::assertArrayNotHasKey( 'note', $GLOBALS['ab_test_meta'][5] ?? array(), 'Nothing written.' );
+		self::assertContains( array( 'edit_post', array( 5 ) ), $asked );
+		self::assertNotContains( array( 'edit_post', array( 50 ) ), $asked, 'Not the revision\'s rights.' );
 	}
 
 	public function testPostMetaASanitizeFilterThatRewritesTheValueIsReportedNotHidden(): void {
@@ -883,6 +901,17 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertSame( array( 'internal_note' ), $res['saved_differs'] );
 		self::assertStringNotContainsString( 'server secret', (string) wp_json_encode( $res ) );
 		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'internal_note' ) )->get_error_code(), 'The reader refuses it by the same rule.' );
+	}
+
+	public function testPostMetaOfAPostTheReaderWouldNotAnswerForIsComparedNotShown(): void {
+		// Codex 31.10.2026: wp_get_post_meta asks read_post first; where it
+		// would refuse this account, the writer's answer shows nothing either.
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'read_post' !== $cap;
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
+		self::assertSame( array(), (array) $res['saved_fields'] );
+		self::assertSame( array( 'farbe' => 'not_shown' ), $res['saved_fields_omitted'] );
+		self::assertArrayNotHasKey( 'saved_differs', $res, 'Still compared: stored as asked.' );
+		self::assertSame( 'ab_mcp_forbidden', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'farbe' ) )->get_error_code(), 'As the reader refuses it.' );
 	}
 
 	public function testPostMetaWithUndoSwitchedOffSaysWhy(): void {

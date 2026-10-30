@@ -18,9 +18,14 @@
  * Snapshot (one point, one object):
  *   { "v": 1, "type": "post"|"term"|"user", "id": int,
  *     "keys":   { "<key>": { "existed": false }
- *                        | { "existed": true, "rows": [ { "meta_id": int, "value"|"b64": … }, … ] } },
+ *                        | { "existed": true, "rows": [ { "meta_id": int, "key"?: string, "value"|"b64": … }, … ] } },
  *     "fields": { "post_title"|"post_excerpt": string },   wp_update_media only
  *     "after":  { "meta:<key>"|"field:<column>": sha256 } }
+ * The rows are every row the database matches for the key: meta_key is
+ * compared with a collation, and update_metadata() writes "Mixed" with a
+ * write of "mixed". A row stored under such another spelling keeps it in
+ * "key" and goes back under it; the rights are asked for every spelling, and
+ * a row whose key is not the point's in other letter case is not restored.
  * "after" is the state the change left, read right after the write. wp_undo
  * restores a key or field only where it still has that state — or the one
  * from before, where there is nothing to do — and refuses one somebody has
@@ -265,7 +270,7 @@ class AB_MCP_Undo_Meta {
 			if ( null === $rows ) {
 				return null;
 			}
-			$out['keys'][ (string) $key ] = self::encode_state( $rows );
+			$out['keys'][ (string) $key ] = self::encode_state( $rows, (string) $key );
 		}
 		if ( array() !== $cols ) {
 			$row = self::post_row( $id, $cols );
@@ -288,7 +293,7 @@ class AB_MCP_Undo_Meta {
 	 * @param string $type post, term or user.
 	 * @param int    $id   Object id.
 	 * @param string $key  Meta key.
-	 * @return array<int,array{meta_id:int,value:string}>|null
+	 * @return array<int,array{meta_id:int,key:string,value:string}>|null
 	 */
 	public static function rows( $type, $id, $key ) {
 		global $wpdb;
@@ -305,16 +310,13 @@ class AB_MCP_Undo_Meta {
 		$out = array();
 		foreach ( is_array( $wpdb->last_result ) ? $wpdb->last_result : array() as $row ) {
 			$row = (array) $row;
-			// The column is compared with a collation, and collations fold
-			// ("LOCKED_FIELD" finds locked_field under a case-insensitive
-			// one). Only a row whose key is these very bytes is this key:
-			// the rights were asked for these bytes, not for the row the
-			// database matched.
-			if ( ! isset( $row['meta_key'] ) || (string) $row['meta_key'] !== (string) $key ) {
-				continue;
-			}
+			// Every row the database matches: meta_key is compared with a
+			// collation, and update_metadata() writes with the same WHERE,
+			// so a row "Mixed" changes with a write of "mixed" and has to
+			// come back with it. Each keeps the key it is stored under.
 			$out[] = array(
 				'meta_id' => (int) $row['meta_id'],
+				'key'     => isset( $row['meta_key'] ) ? (string) $row['meta_key'] : (string) $key,
 				'value'   => null === $row['meta_value'] ? '' : (string) $row['meta_value'],
 			);
 		}
@@ -365,7 +367,7 @@ class AB_MCP_Undo_Meta {
 			if ( null === $rows ) {
 				return null;
 			}
-			$out[ 'meta:' . $key ] = self::hash_state( self::encode_state( $rows ) );
+			$out[ 'meta:' . $key ] = self::hash_state( self::encode_state( $rows, (string) $key ) );
 		}
 		if ( array() !== $cols ) {
 			$row = self::post_row( $id, $cols );
@@ -409,7 +411,9 @@ class AB_MCP_Undo_Meta {
 		$values = array();
 		if ( ! empty( $state['existed'] ) && isset( $state['rows'] ) && is_array( $state['rows'] ) ) {
 			foreach ( $state['rows'] as $row ) {
-				$values[] = self::encode_value( self::raw_value( (array) $row ) );
+				// The key a row is stored under counts: a row renamed since
+				// is not the row of before.
+				$values[] = array_merge( self::encode_value( self::raw_value( (array) $row ) ), isset( $row['key'] ) ? array( 'key' => (string) $row['key'] ) : array() );
 			}
 		}
 		return hash(
@@ -455,7 +459,33 @@ class AB_MCP_Undo_Meta {
 			'items'   => array(),
 			'blocked' => array(),
 		);
-		$why = self::refusal( (string) $tool, $data );
+		// The keys the rows are stored under, before and now: a write of
+		// "mixed" reached "Mixed" too (the collation), and the restore puts
+		// each row back under its own. Each spelling is asked the rights of
+		// the tool; one that is not the key in other letter case is no
+		// spelling of it, and such a point is not restored.
+		$spellings = array();
+		$foreign   = false;
+		foreach ( $data['keys'] as $key => $state ) {
+			$key = (string) $key;
+			$now = self::rows( (string) $data['type'], (int) $data['id'], $key );
+			if ( null === $now ) {
+				$out['blocked'][] = array(
+					'ref'    => $ref,
+					'reason' => 'unreadable',
+				);
+				return $out;
+			}
+			foreach ( array_merge( isset( $state['rows'] ) ? (array) $state['rows'] : array(), $now ) as $row ) {
+				$spelling    = isset( $row['key'] ) ? (string) $row['key'] : $key;
+				$spellings[] = $spelling;
+				$foreign     = $foreign || ! self::same_key( $spelling, $key );
+			}
+		}
+		$why = self::refusal( (string) $tool, $data, array_values( array_unique( $spellings ) ) );
+		if ( '' === $why && $foreign ) {
+			$why = 'key_spelling';
+		}
 		if ( '' !== $why ) {
 			$out['blocked'][] = array(
 				'ref'    => $ref,
@@ -541,6 +571,16 @@ class AB_MCP_Undo_Meta {
 			if ( null === $now ) {
 				return self::failed( $key );
 			}
+			// A row under a key that is no other letter case of this one is
+			// not written; the read-back below then reports the key.
+			$now = array_values(
+				array_filter(
+					$now,
+					static function ( $row ) use ( $key ) {
+						return self::same_key( $row['key'], $key );
+					}
+				)
+			);
 			if ( empty( $state['existed'] ) ) {
 				// The change created the key: its rows go again, row by row
 				// by their ids — a delete by key would take every row the
@@ -556,6 +596,7 @@ class AB_MCP_Undo_Meta {
 			foreach ( $state['rows'] as $row ) {
 				$rows[] = array(
 					'meta_id' => (int) $row['meta_id'],
+					'key'     => isset( $row['key'] ) ? (string) $row['key'] : $key,
 					'value'   => self::raw_value( (array) $row ),
 				);
 			}
@@ -609,8 +650,8 @@ class AB_MCP_Undo_Meta {
 	 * @param string $type post, term or user.
 	 * @param int    $id   Object id.
 	 * @param string $key  Meta key.
-	 * @param array  $rows Snapshot rows { meta_id, value }, oldest first.
-	 * @param array  $now  Rows of the key now (rows()).
+	 * @param array  $rows Snapshot rows { meta_id, key, value }, oldest first.
+	 * @param array  $now  Rows of the key now (rows()), each with its key.
 	 * @return bool
 	 */
 	private static function restore_rows( $type, $id, $key, array $rows, array $now ) {
@@ -635,12 +676,12 @@ class AB_MCP_Undo_Meta {
 				$mid          = (int) $row['meta_id'];
 				$keep[ $mid ] = true;
 				if ( isset( $by_id[ $mid ] ) ) {
-					if ( $by_id[ $mid ]['value'] === $row['value'] ) {
+					if ( $by_id[ $mid ]['value'] === $row['value'] && $by_id[ $mid ]['key'] === $row['key'] ) {
 						continue;
 					}
-					$done = $wpdb->update( $table, array( 'meta_value' => $row['value'] ), array( $t['pk'] => $mid ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					$done = $wpdb->update( $table, array( 'meta_key' => $row['key'], 'meta_value' => $row['value'] ), array( $t['pk'] => $mid ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 				} else {
-					$done = $wpdb->insert( $table, array( $t['pk'] => $mid, $t['col'] => (int) $id, 'meta_key' => $key, 'meta_value' => $row['value'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					$done = $wpdb->insert( $table, array( $t['pk'] => $mid, $t['col'] => (int) $id, 'meta_key' => $row['key'], 'meta_value' => $row['value'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 				}
 				if ( false === $done ) {
 					return false;
@@ -657,12 +698,12 @@ class AB_MCP_Undo_Meta {
 		$slots = array_values( $now );
 		foreach ( array_values( $rows ) as $i => $row ) {
 			if ( isset( $slots[ $i ] ) ) {
-				if ( $slots[ $i ]['value'] === $row['value'] ) {
+				if ( $slots[ $i ]['value'] === $row['value'] && $slots[ $i ]['key'] === $row['key'] ) {
 					continue;
 				}
-				$done = $wpdb->update( $table, array( 'meta_value' => $row['value'] ), array( $t['pk'] => (int) $slots[ $i ]['meta_id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				$done = $wpdb->update( $table, array( 'meta_key' => $row['key'], 'meta_value' => $row['value'] ), array( $t['pk'] => (int) $slots[ $i ]['meta_id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 			} else {
-				$done = $wpdb->insert( $table, array( $t['col'] => (int) $id, 'meta_key' => $key, 'meta_value' => $row['value'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				$done = $wpdb->insert( $table, array( $t['col'] => (int) $id, 'meta_key' => $row['key'], 'meta_value' => $row['value'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 			}
 			if ( false === $done ) {
 				return false;
@@ -679,19 +720,26 @@ class AB_MCP_Undo_Meta {
 	 * object is gone, the account lacks the right the tool asks, or the tool
 	 * would refuse the key now.
 	 *
-	 * @param string $tool Tool of the point.
-	 * @param array  $snap Snapshot (valid()).
-	 * @return string gone, forbidden or protected_now; '' when allowed.
+	 * @param string   $tool      Tool of the point.
+	 * @param array    $snap      Snapshot (valid()).
+	 * @param string[] $spellings Further keys the rows are stored under.
+	 * @return string gone, revision, forbidden or protected_now; '' when allowed.
 	 */
-	public static function refusal( $tool, array $snap ) {
+	public static function refusal( $tool, array $snap, array $spellings = array() ) {
 		$id   = (int) $snap['id'];
-		$keys = array_map( 'strval', array_keys( (array) $snap['keys'] ) );
+		$keys = array_values( array_unique( array_merge( array_map( 'strval', array_keys( (array) $snap['keys'] ) ), array_map( 'strval', $spellings ) ) ) );
 		switch ( (string) $snap['type'] ) {
 			case 'post':
 				wp_cache_delete( $id, 'posts' );
 				$post = get_post( $id );
 				if ( ! $post || ( 'wp_update_media' === $tool && 'attachment' !== $post->post_type ) ) {
 					return 'gone';
+				}
+				// The tool writes the meta of a revision to its post and
+				// records that post; a point naming a revision is none it
+				// wrote, and the rows written here would be the revision's.
+				if ( function_exists( 'wp_is_post_revision' ) && false !== wp_is_post_revision( $id ) ) {
+					return 'revision';
 				}
 				if ( ! current_user_can( 'edit_post', $id ) ) {
 					return 'forbidden';
@@ -755,6 +803,19 @@ class AB_MCP_Undo_Meta {
 			require_once __DIR__ . '/class-undo-meta-rules.php';
 		}
 		return (bool) call_user_func( array( 'AB_MCP_Undo_Meta_Rules', $rule ), (string) $key );
+	}
+
+	/**
+	 * Is a key the row is stored under the key of the point, in other letter
+	 * case at most? What a case-insensitive collation folds onto it is; what
+	 * any other folding would (accents, the Latin i/j) is not trusted.
+	 *
+	 * @param string $spelling Key of a row.
+	 * @param string $key      Key of the point.
+	 * @return bool
+	 */
+	private static function same_key( $spelling, $key ) {
+		return strtolower( (string) $spelling ) === strtolower( (string) $key );
 	}
 
 	/**
@@ -862,6 +923,9 @@ class AB_MCP_Undo_Meta {
 				return false;
 			}
 			$seen[ $row['meta_id'] ] = true;
+			if ( array_key_exists( 'key', $row ) && ( ! is_string( $row['key'] ) || '' === $row['key'] || strlen( $row['key'] ) > 255 ) ) {
+				return false;
+			}
 			$has_value               = array_key_exists( 'value', $row );
 			$has_b64                 = array_key_exists( 'b64', $row );
 			if ( $has_value === $has_b64 || ( $has_value && ! is_string( $row['value'] ) )
@@ -875,16 +939,22 @@ class AB_MCP_Undo_Meta {
 	/**
 	 * Rows as rows() reads them, in the form a snapshot keeps them.
 	 *
-	 * @param array $rows rows().
+	 * @param array  $rows rows().
+	 * @param string $key  The key of the point.
 	 * @return array
 	 */
-	private static function encode_state( array $rows ) {
+	private static function encode_state( array $rows, $key ) {
 		if ( array() === $rows ) {
 			return array( 'existed' => false );
 		}
 		$out = array();
 		foreach ( $rows as $row ) {
-			$out[] = array_merge( array( 'meta_id' => (int) $row['meta_id'] ), self::encode_value( (string) $row['value'] ) );
+			$one = array_merge( array( 'meta_id' => (int) $row['meta_id'] ), self::encode_value( (string) $row['value'] ) );
+			// A row stored under another spelling of the key keeps it.
+			if ( isset( $row['key'] ) && (string) $row['key'] !== (string) $key ) {
+				$one['key'] = (string) $row['key'];
+			}
+			$out[] = $one;
 		}
 		return array(
 			'existed' => true,

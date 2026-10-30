@@ -67,4 +67,50 @@ abstract class AB_MCP_Undo_Meta_Rules extends AB_MCP_Tools_Meta_Auth {
 		}
 		return '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, (string) $type ) || self::is_sensitive_meta_key( $key );
 	}
+
+	/**
+	 * May the reader of this type read this object for the current account?
+	 * wp_get_post_meta asks read_post, wp_get_term_meta the right to assign
+	 * terms of the term's taxonomy, wp_get_user_meta the right to edit the
+	 * user. The readers ask it here, so a writer's answer that shows what is
+	 * stored asks exactly the same.
+	 *
+	 * @param string $type post, term or user.
+	 * @param int    $id   Object id.
+	 * @return bool
+	 */
+	public static function object_readable( $type, $id ) {
+		$id = (int) $id;
+		if ( 'post' === $type ) {
+			return current_user_can( 'read_post', $id );
+		}
+		if ( 'term' === $type ) {
+			$term    = get_term( $id );
+			$tax_obj = ( $term && ! is_wp_error( $term ) ) ? get_taxonomy( $term->taxonomy ) : null;
+			return (bool) $tax_obj && current_user_can( $tax_obj->cap->assign_terms );
+		}
+		if ( 'user' === $type ) {
+			return current_user_can( 'edit_user', $id );
+		}
+		return false;
+	}
+
+	/**
+	 * Would the reader of this type answer the current account for this
+	 * object at all: the capability the reader tool takes (edit_posts for
+	 * post and term meta, list_users for user meta) and object_readable()?
+	 * Where it would not, a writer's answer shows none of the stored values.
+	 *
+	 * @param string $type post, term or user.
+	 * @param int    $id   Object id.
+	 * @return bool
+	 */
+	public static function reader_answers( $type, $id ) {
+		$caps = array(
+			'post' => 'edit_posts',
+			'term' => 'edit_posts',
+			'user' => 'list_users',
+		);
+		return isset( $caps[ $type ] ) && current_user_can( $caps[ $type ] ) && self::object_readable( $type, $id );
+	}
 }

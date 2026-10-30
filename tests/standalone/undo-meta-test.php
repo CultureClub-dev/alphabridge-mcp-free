@@ -239,6 +239,7 @@ $GLOBALS['wpdb'] = new class {
 		if ( ! isset( $GLOBALS['ab_meta'][ $t[0] ][ $id ] ) ) { return 0; }
 		if ( $GLOBALS['ab_db_lies'] ) { return 1; }
 		$GLOBALS['ab_meta'][ $t[0] ][ $id ][2] = (string) $data['meta_value'];
+		if ( isset( $data['meta_key'] ) ) { $GLOBALS['ab_meta'][ $t[0] ][ $id ][1] = (string) $data['meta_key']; }
 		return 1;
 	}
 	public function delete( $table, $where ) {
@@ -269,12 +270,16 @@ function ab_update_meta( $type, $obj, $key, $value ) {
 	if ( isset( $GLOBALS['ab_meta_sanitize'][ $key ] ) ) { $value = $GLOBALS['ab_meta_sanitize'][ $key ]( $value ); }
 	$stored = maybe_serialize( $value );
 	$stored = is_bool( $stored ) ? ( $stored ? '1' : '' ) : ( null === $stored ? '' : (string) $stored );
-	$rows   = ab_rows( $type, $obj, $key );
+	// WHERE meta_key = …, under the collation: "Mixed" is updated with "mixed".
+	$rows = array();
+	foreach ( $GLOBALS['ab_meta'][ $type ] as $id => $r ) {
+		if ( $r[0] === (int) $obj && ab_collates( $r[1], $key ) ) { $rows[] = $id; }
+	}
 	if ( array() === $rows ) {
 		ab_add_row( $type, $obj, $key, $stored );
 		return true;
 	}
-	foreach ( array_keys( $rows ) as $id ) { $GLOBALS['ab_meta'][ $type ][ $id ][2] = $stored; }
+	foreach ( $rows as $id ) { $GLOBALS['ab_meta'][ $type ][ $id ][2] = $stored; }
 	return true;
 }
 function ab_get_meta( $type, $obj, $key, $single ) {
@@ -297,7 +302,8 @@ function get_post_status_object( $s ) { return (object) array( 'name' => $s, 'pu
 function get_post_stati( $args = array(), $output = 'names' ) { $k = array( 'publish', 'draft', 'pending', 'private', 'future', 'trash', 'auto-draft', 'inherit' ); if ( ! empty( $args['date_floating'] ) ) { $k = array( 'draft', 'pending', 'auto-draft' ); } return array_combine( $k, $k ); }
 function get_gmt_from_date( $d ) { return $d; }
 function wp_timezone() { return new DateTimeZone( 'UTC' ); }
-function wp_is_post_revision( $p ) { return false; }
+$GLOBALS['ab_revisions'] = array(); // revision id => its post
+function wp_is_post_revision( $p ) { return $GLOBALS['ab_revisions'][ (int) $p ] ?? false; }
 /* wp_update_post: the fields as given (unslashed), unless a filter rewrites the title (kses for an account without unfiltered_html) or the save is vetoed. */
 $GLOBALS['ab_title_filter'] = null;
 $GLOBALS['ab_save_veto']    = false;
@@ -391,6 +397,7 @@ function reset_all() {
 	$GLOBALS['ab_db_nowrite']    = false;
 	$GLOBALS['ab_db_lies']       = false;
 	$GLOBALS['ab_protected']     = array();
+	$GLOBALS['ab_revisions']     = array();
 	$GLOBALS['ab_meta_veto']     = array();
 	$GLOBALS['ab_meta_sanitize'] = array();
 	$GLOBALS['ab_title_filter']  = null;
@@ -794,14 +801,65 @@ $out = ab_undo( $t );
 ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && array( $lf => 'locked' ) === ab_rows( 'post', 5, 'locked_field' ), 'M1 a key in another spelling than the tool writes (LOCKED_FIELD for locked_field) is refused whole; the row its rights guard stays' );
 ok( false === AB_MCP_Undo_Meta::valid( 'wp_update_media', array( 'v' => 1, 'type' => 'post', 'id' => 9, 'keys' => array( '_WP_ATTACHMENT_IMAGE_ALT' => array( 'existed' => false ) ), 'after' => array( 'meta:_WP_ATTACHMENT_IMAGE_ALT' => str_repeat( 'a', 64 ) ) ) ), 'M2 wp_update_media: the alt key only as WordPress writes it' );
 $GLOBALS['ab_deny'] = array();
-ab_add_row( 'post', 5, 'Mixed', 'a row of another key' );
-ok( array() === AB_MCP_Undo_Meta::rows( 'post', 5, 'mixed' ), 'M3 a row the collation folds onto the key is not a row of the key' );
+$mx = ab_add_row( 'post', 5, 'Mixed', 'another spelling' );
+$r3 = AB_MCP_Undo_Meta::rows( 'post', 5, 'mixed' );
+ok( 1 === count( $r3 ) && $mx === $r3[0]['meta_id'] && 'Mixed' === $r3[0]['key'], 'M3 every row the database matches for the key, with the key it is stored under' );
+
+/* Codex 31.10.2026, second round: update_metadata() writes "Mixed" with "mixed". */
+reset_all();
+$m1  = ab_add_row( 'term', 8, 'mixed', 'alt1' );
+$m2  = ab_add_row( 'term', 8, 'Mixed', 'alt2' );
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'neu' ) );
+ok( array( $m1 => 'neu' ) === ab_rows( 'term', 8, 'mixed' ) && array( $m2 => 'neu' ) === ab_rows( 'term', 8, 'Mixed' ), 'M4 (the write as WordPress does it: both rows)' );
+$st = AB_MCP_Undo::claim( (string) $res['undo'] )['data']['keys']['mixed'];
+ok( array( array( 'meta_id' => $m1, 'value' => 'alt1' ), array( 'meta_id' => $m2, 'value' => 'alt2', 'key' => 'Mixed' ) ) === $st['rows'], 'M4 the snapshot holds both rows, the other spelling with its key' );
+$out = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && array( $m1 => 'alt1' ) === ab_rows( 'term', 8, 'mixed' ) && array( $m2 => 'alt2' ) === ab_rows( 'term', 8, 'Mixed' ), 'M5 and the undo puts both back, each under its own key' );
 
 reset_all();
-$plug = ab_add_row( 'post', 5, 'NEU', 'a plugin\'s own key' );
-$res  = ab_post_meta( 5, 'neu', 'x' );
-ok( array( 'existed' => false ) === AB_MCP_Undo::claim( (string) $res['undo'] )['data']['keys']['neu'], 'M4 the snapshot keeps the key as missing: the folded row is another key' );
-ok( 1 === ab_undo( $res['undo'] )['undone'] && array() === ab_rows( 'post', 5, 'neu' ) && array( $plug => 'a plugin\'s own key' ) === ab_rows( 'post', 5, 'NEU' ), 'M5 the key the change created goes row by row; the folded row stays' );
+$m1  = ab_add_row( 'term', 8, 'mixed', 'alt1' );
+$m2  = ab_add_row( 'term', 8, 'Mixed', 'alt2' );
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'neu' ) );
+$GLOBALS['ab_meta']['term'][ $m2 ][1] = 'MIXED'; // renamed since, value as the change left it
+$out = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'], 'M5i a row renamed since counts as changed: its key is part of its state' );
+$out = ab_undo( $res['undo'], array( 'force' => true ) );
+ok( 1 === $out['undone'] && array( $m2 => 'alt2' ) === ab_rows( 'term', 8, 'Mixed' ) && array() === ab_rows( 'term', 8, 'MIXED' ), 'M5j with force it comes back under the key it had' );
+
+reset_all();
+$m2  = ab_add_row( 'term', 8, 'Mixed', 'alt2' );
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'mixed', 'value' => 'neu' ) );
+ok( is_array( $res ) && AB_MCP_Undo::valid_token( (string) $res['undo'] ) && array( 'mixed' ) === $res['saved_differs'], 'M5a only "Mixed" there: the write changed it, so it is no refusal, it is undoable, and the answer says the key reads otherwise' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array( $m2 => 'alt2' ) === ab_rows( 'term', 8, 'Mixed' ), 'M5b and the undo puts "Mixed" back' );
+
+reset_all();
+$x   = ab_add_row( 'post', 5, 'mixed', 'old' );
+$fp  = array( 'v' => 1, 'type' => 'post', 'id' => 5, 'keys' => array( 'mixed' => array( 'existed' => true, 'rows' => array( array( 'meta_id' => $x, 'value' => 'mine', 'key' => 'MIXED' ) ) ) ), 'after' => array( 'meta:mixed' => str_repeat( 'a', 64 ) ) );
+$GLOBALS['ab_deny'] = array( 'edit_post_meta:5:MIXED' => true );
+$out = ab_undo( AB_MCP_Undo::record( array( 'tool' => 'wp_update_post_meta', 'cap' => 'edit_posts', 'kind' => 'meta', 'summary' => 'f', 'items' => 1, 'data' => $fp ) ), array( 'force' => true ) );
+ok( 'forbidden' === $out['blocked'][0]['reason'] && array( $x => 'old' ) === ab_rows( 'post', 5, 'mixed' ), 'M5c every spelling a row is stored under is asked the rights of the tool' );
+$GLOBALS['ab_deny'] = array();
+$fp['keys']['mixed']['rows'][0]['key'] = 'locked_field';
+$out = ab_undo( AB_MCP_Undo::record( array( 'tool' => 'wp_update_post_meta', 'cap' => 'edit_posts', 'kind' => 'meta', 'summary' => 'f', 'items' => 1, 'data' => $fp ) ), array( 'force' => true ) );
+ok( 'key_spelling' === $out['blocked'][0]['reason'] && array( $x => 'old' ) === ab_rows( 'post', 5, 'mixed' ) && array() === ab_rows( 'post', 5, 'locked_field' ), 'M5d a row stored under a key that is no other letter case of it: not restored' );
+
+reset_all();
+ab_post( 6, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+$GLOBALS['ab_revisions'][6] = 5;
+$fr  = array( 'v' => 1, 'type' => 'post', 'id' => 6, 'keys' => array( 'note' => array( 'existed' => false ) ), 'after' => array( 'meta:note' => str_repeat( 'a', 64 ) ) );
+$out = ab_undo( AB_MCP_Undo::record( array( 'tool' => 'wp_update_post_meta', 'cap' => 'edit_posts', 'kind' => 'meta', 'summary' => 'f', 'items' => 1, 'data' => $fr ) ), array( 'force' => true ) );
+ok( 'revision' === $out['blocked'][0]['reason'], 'M5e a point that names a revision (the tool records its post) is not restored' );
+
+reset_all();
+$GLOBALS['ab_deny'] = array( 'assign_categories' => true );
+$GLOBALS['ab_meta_sanitize']['note'] = static fn( $v ) => 'GEHEIM-server';
+$res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'key' => 'note', 'value' => 'x' ) );
+ok( array() === (array) $res['saved_fields'] && array( 'note' => 'not_shown' ) === $res['saved_fields_omitted'] && false === strpos( (string) wp_json_encode( $res ), 'GEHEIM' ), 'M5f an account wp_get_term_meta does not answer for this term (no right to assign its terms): nothing shown' );
+ok( 'ab_mcp_forbidden' === ab_code( AB_MCP_Tools_Meta_Auth::get_term_meta_tool( array( 'term_id' => 8 ) ) ), 'M5g ... as the reader refuses it, by the same rule' );
+$GLOBALS['ab_deny'] = array( 'list_users' => true );
+$res = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 5, 'key' => 'nickname', 'value' => 'Tom' ) );
+ok( array() === (array) $res['saved_fields'] && array( 'nickname' => 'not_shown' ) === $res['saved_fields_omitted'], 'M5h without list_users, the capability of wp_get_user_meta, a profile field is not shown either' );
+$GLOBALS['ab_deny'] = array();
 
 reset_all();
 $GLOBALS['ab_protected'] = array( 'internal_note' );
