@@ -147,9 +147,16 @@ final class RedactionWriteBackTest extends TestCase {
 	}
 
 	public function testTheMetaWritersAreLeftToRestoreAndTheirReadBackIsRedacted(): void {
-		foreach ( array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta' ) as $tool ) {
-			self::assertFalse( AB_MCP_Redactor::guards( $tool, array() ), $tool );
-			self::assertSame( array( 'saved_fields' ), AB_MCP_Redactor::PARTS[ $tool ] );
+		// As the core registers them: its own handlers.
+		$r = new AB_MCP_Tool_Registry();
+		foreach ( array( AB_MCP_Tools_Content::class => 'content', AB_MCP_Tools_Meta_Auth::class => 'meta-auth', AB_MCP_Tools_Widgets::class => 'widgets' ) as $class => $group ) {
+			$r->set_current_group( $group, $group );
+			$class::register( $r );
+		}
+		foreach ( array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_widget' ) as $tool ) {
+			self::assertFalse( AB_MCP_Redactor::guards( $tool, $r->get( $tool ) ), $tool );
+			self::assertTrue( AB_MCP_Redactor::guards( $tool, array() ), $tool . ' without the core\'s handler is guarded.' );
+			self::assertContains( 'saved_fields', AB_MCP_Redactor::PARTS[ $tool ] );
 		}
 		$out = $this->answer( 'wp_update_media', array( 'updated' => true, 'saved_fields' => (object) array( 'alt' => 'x', 'token' => 'PLACEHOLDER' ) ) );
 		self::assertSame( self::R, $out['saved_fields']->token );
@@ -301,7 +308,7 @@ final class RedactionWriteBackTest extends TestCase {
 		try {
 			$read = $this->answer( 'wp_get_widgets', AB_MCP_Tools_Widgets::get_widgets( array() ) );
 			self::assertSame( array( 'accessToken' => self::R, 'count' => 5 ), $read['widgets'][0]['settings']['feed'] );
-			self::assertFalse( AB_MCP_Redactor::guards( 'wp_update_widget', array() ), 'Left to the writer, as the meta writers are.' );
+			self::assertFalse( AB_MCP_Redactor::guards( 'wp_update_widget', array( 'callback' => array( AB_MCP_Tools_Widgets::class, 'update_widget' ) ) ), 'Left to the writer, as the meta writers are.' );
 
 			$sent                  = $read['widgets'][0]['settings'];
 			$sent['feed']['count'] = 10;
@@ -329,6 +336,61 @@ final class RedactionWriteBackTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A tools/call of a writing tool registered with this callback.
+	 *
+	 * @param string              $tool     Tool name.
+	 * @param callable            $callback Its handler.
+	 * @param array<string,mixed> $args     Arguments.
+	 * @return array The result of the call.
+	 */
+	private function call( string $tool, $callback, array $args ): array {
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'content', 'Posts & Pages' );
+		$r->register( $tool, array( 'description' => 'Change a thing.', 'callback' => $callback ) );
+		$request = new \WP_REST_Request();
+		$request->set_json_params(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'tools/call',
+				'params'  => array( 'name' => $tool, 'arguments' => $args ),
+			)
+		);
+		return ( new \AB_MCP_REST_Controller( $r ) )->handle( $request )->get_data()['result'];
+	}
+
+	public function testOnlyTheCoresOwnHandlersAreLeftToRestore(): void {
+		// AlphaBridge MCP Pro 4.12 registers its own copies of these writers,
+		// which put nothing back: the central guard refuses for them.
+		$GLOBALS['wp_widget_factory'] = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
+		update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'feed' => array( 'accessToken' => 'STORED-AT', 'count' => 5 ) ), '_multiwidget' => 1 ) );
+		$meta   = array( 'id' => 5, 'key' => 'settings', 'value' => array( 'api_key' => self::R, 'color' => 'blue' ) );
+		$widget = array( 'id' => 'text-4', 'settings' => array( 'feed' => array( 'accessToken' => self::R, 'count' => 10 ) ) );
+		try {
+			RedactionProCopyProbe::$calls = 0;
+			foreach ( array( 'wp_update_post_meta' => array( RedactionProCopyProbe::class, 'update_post_meta_tool' ), 'wp_update_widget' => array( RedactionProCopyProbe::class, 'update_widget' ) ) as $tool => $copy ) {
+				$result = $this->call( $tool, $copy, 'wp_update_widget' === $tool ? $widget : $meta );
+				self::assertTrue( $result['isError'], $tool );
+				self::assertStringContainsString( 'Send the real value', $result['content'][0]['text'], $tool );
+			}
+			self::assertSame( 0, RedactionProCopyProbe::$calls, 'Neither copy ran.' );
+			self::assertSame( array( 'api_key' => 'STORED-KEY', 'color' => 'red' ), get_post_meta( 5, 'settings', true ) );
+			self::assertSame( 'STORED-AT', get_option( 'widget_text' )[4]['feed']['accessToken'] );
+
+			// The core's own handlers put the stored value back.
+			$result = $this->call( 'wp_update_post_meta', array( AB_MCP_Tools_Content::class, 'update_post_meta_tool' ), $meta );
+			self::assertFalse( $result['isError'], (string) wp_json_encode( $result ) );
+			self::assertSame( array( 'api_key' => 'STORED-KEY', 'color' => 'blue' ), get_post_meta( 5, 'settings', true ) );
+			$result = $this->call( 'wp_update_widget', array( AB_MCP_Tools_Widgets::class, 'update_widget' ), $widget );
+			self::assertFalse( $result['isError'], (string) wp_json_encode( $result ) );
+			self::assertSame( array( 'accessToken' => 'STORED-AT', 'count' => 10 ), get_option( 'widget_text' )[4]['feed'] );
+		} finally {
+			unset( $GLOBALS['wp_widget_factory'] );
+		}
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 
@@ -351,5 +413,27 @@ final class RedactionNoCopyProbe {
 	public string $password = 'a\\b';
 
 	private function __clone() {
+	}
+}
+
+/**
+ * A writer's own copy, as AlphaBridge MCP Pro 4.12 registers it: a subclass
+ * of the core's tool class with the same method name, which writes what it
+ * is sent and puts nothing back.
+ */
+final class RedactionProCopyProbe extends AB_MCP_Tools_Content {
+
+	/** @var int How often a copy ran. */
+	public static int $calls = 0;
+
+	public static function update_post_meta_tool( $a ) {
+		++self::$calls;
+		update_post_meta( (int) $a['id'], (string) $a['key'], wp_slash( $a['value'] ) );
+		return array( 'updated' => true );
+	}
+
+	public static function update_widget( $a ) {
+		++self::$calls;
+		return array( 'updated' => true );
 	}
 }

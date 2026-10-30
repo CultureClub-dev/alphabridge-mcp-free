@@ -172,11 +172,19 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Writing tools that put the stored value back for the placeholder
-	 * themselves: the meta writers (value_back()) and wp_update_widget, from
-	 * the stored instance (restore_placeholders()); run_tool() lets their
-	 * arguments through.
+	 * themselves, and the core's handler that does it: the meta writers
+	 * (value_back()) and wp_update_widget, from the stored instance
+	 * (restore_placeholders()). run_tool() lets their arguments through only
+	 * where the tool runs that very handler (restores()); another one
+	 * registered for the name (AlphaBridge MCP Pro 4.12 brings its own
+	 * copies, which put nothing back) is guarded as every writer.
 	 */
-	const RESTORES = array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_widget' );
+	const RESTORES = array(
+		'wp_update_post_meta' => array( 'AB_MCP_Tools_Content', 'update_post_meta_tool' ),
+		'wp_update_term_meta' => array( 'AB_MCP_Tools_Meta_Auth', 'update_term_meta_tool' ),
+		'wp_update_user_meta' => array( 'AB_MCP_Tools_Meta_Auth', 'update_user_meta_tool' ),
+		'wp_update_widget'    => array( 'AB_MCP_Tools_Widgets', 'update_widget' ),
+	);
 
 	/**
 	 * Arguments of a writing tool that map names to texts authors wrote, each
@@ -371,14 +379,37 @@ final class AB_MCP_Redactor {
 	/**
 	 * Whether run_tool() looks for the placeholder in a tool's arguments:
 	 * for every tool that writes, but those that put the stored value back
-	 * themselves (RESTORES) and those that take patterns (PATTERN_TOOLS).
+	 * themselves (restores()) and those that take patterns (PATTERN_TOOLS).
 	 *
 	 * @param string $name Tool name.
 	 * @param array  $def  The tool's definition.
 	 * @return bool
 	 */
 	public static function guards( $name, array $def ) {
-		return ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) && ! in_array( $name, self::RESTORES, true ) && ! in_array( $name, self::PATTERN_TOOLS, true );
+		return ! AB_MCP_Tool_Registry::is_read_only( $name, $def ) && ! self::restores( $name, $def ) && ! in_array( $name, self::PATTERN_TOOLS, true );
+	}
+
+	/**
+	 * Whether a tool puts the stored value back itself: one of RESTORES whose
+	 * definition runs the core's own handler for it, compared as a callback
+	 * (its class and method, regardless of case as PHP resolves them). A
+	 * subclass's method of the same name is another handler.
+	 *
+	 * @param string $name Tool name.
+	 * @param array  $def  The tool's definition.
+	 * @return bool
+	 */
+	public static function restores( $name, array $def ) {
+		$name = (string) $name;
+		if ( ! isset( self::RESTORES[ $name ], $def['callback'] ) ) {
+			return false;
+		}
+		$callback = is_string( $def['callback'] ) ? explode( '::', $def['callback'] ) : $def['callback'];
+		if ( ! is_array( $callback ) || array( 0, 1 ) !== array_keys( $callback ) || ! is_string( $callback[1] ) ) {
+			return false;
+		}
+		$class = is_object( $callback[0] ) ? get_class( $callback[0] ) : ( is_string( $callback[0] ) ? ltrim( $callback[0], '\\' ) : '' );
+		return 0 === strcasecmp( $class, self::RESTORES[ $name ][0] ) && 0 === strcasecmp( $callback[1], self::RESTORES[ $name ][1] );
 	}
 
 	/**

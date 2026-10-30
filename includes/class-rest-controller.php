@@ -1382,7 +1382,8 @@ class AB_MCP_REST_Controller {
 		// A value read from an answer in which a credential was replaced by
 		// [REDACTED] and sent back would replace the stored credential with
 		// the placeholder. Writers that put the stored value back themselves
-		// (AB_MCP_Redactor::RESTORES) handle it, tools that take patterns
+		// handle it, with the core's own handler only
+		// (AB_MCP_Redactor::restores()); tools that take patterns
 		// (wp_search_replace) are not concerned; every other one refuses.
 		if ( AB_MCP_Redactor::guards( $name, $def ) ) {
 			$mark = AB_MCP_Redactor::placeholder_in( $args, $name );
