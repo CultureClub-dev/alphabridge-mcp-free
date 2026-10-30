@@ -4539,3 +4539,12 @@ msgstr "Diese Website erfüllt die Anforderungen des Themes nicht: %s WordPress 
 
 msgid "The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "Der gespeicherte Stand nennt ein ungültiges Theme. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins."
+msgstr "Nicht aktiviert: In diesem Netzwerk wird das Plugin für jede Website aktiviert (sein Header sagt «Network: true»), und das braucht einen Super-Admin des Netzwerks. Nichts wurde geändert. Einen Super-Admin des Netzwerks bitten, es unter Netzwerkverwaltung → Plugins zu aktivieren."
+
+msgid "Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins."
+msgstr "Nicht deaktiviert: Das Plugin ist im ganzen Netzwerk aktiv; deaktiviert wäre es auf jeder Website aus, und das braucht einen Super-Admin des Netzwerks. Nichts wurde geändert. Einen Super-Admin des Netzwerks bitten, es unter Netzwerkverwaltung → Plugins zu deaktivieren."
+
+msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
+msgstr "Nicht aktualisiert: WordPress kam nicht an seine eigenen Dateien; dieser Host verlangt einen FTP- oder SSH-Zugang, den ein Aufruf über AlphaBridge nicht eingeben kann. Nichts wurde geändert. Den Host bitten, dem Webserver Schreibrechte auf die WordPress-Dateien zu geben, oder WordPress in wp-admin unter Dashboard → Aktualisierungen aktualisieren."

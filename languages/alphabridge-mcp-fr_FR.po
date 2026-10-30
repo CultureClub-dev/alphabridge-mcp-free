@@ -4539,3 +4539,12 @@ msgstr "Ce site ne remplit pas les exigences du thème : %s Mettez à jour Word
 
 msgid "The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'instantané désigne un thème non valide. Ce point de restauration ne peut pas être utilisé ; wp_undo_discard le supprime."
+
+msgid "Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins."
+msgstr "Activation non effectuée : sur ce réseau, l'extension s'active pour tous les sites (son en-tête indique « Network: true »), ce qui demande un administrateur du réseau. Rien n'a été modifié. Demandez à un administrateur du réseau de l'activer sous Administration du réseau › Extensions."
+
+msgid "Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins."
+msgstr "Désactivation non effectuée : l'extension est active sur tout le réseau, la désactiver l'arrête donc sur tous les sites, ce qui demande un administrateur du réseau. Rien n'a été modifié. Demandez à un administrateur du réseau de la désactiver sous Administration du réseau › Extensions."
+
+msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
+msgstr "Mise à jour non effectuée : WordPress n'a pas pu accéder à ses propres fichiers ; cet hébergeur demande un accès FTP ou SSH, qu'un appel via AlphaBridge ne peut pas saisir. Rien n'a été modifié. Demandez à l'hébergeur de donner au serveur web l'accès en écriture aux fichiers de WordPress, ou mettez-le à jour dans wp-admin sous Tableau de bord › Mises à jour."

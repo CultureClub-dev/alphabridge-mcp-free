@@ -130,13 +130,26 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 				__( 'Not deactivated: this is AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). It is not deactivated through AlphaBridge: that would end this connection or take tools away from it, and only wp-admin brings them back. Nothing was changed. Deactivate it in wp-admin under Plugins.', 'alphabridge-mcp' )
 			);
 		}
+		// deactivate_plugins() takes a plugin active on the network off the
+		// network's list too, so for every site: that takes the network's own
+		// right, not activate_plugins of one site (Codex, 30.10.2026).
+		$network = is_multisite() && is_plugin_active_for_network( $plugin );
+		if ( $network && ! current_user_can( 'manage_network_plugins' ) ) {
+			return AB_MCP_Guidance::role_refusal(
+				__( 'Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins.', 'alphabridge-mcp' ),
+				array(
+					'steps' => '',
+					'url'   => network_admin_url( 'plugins.php' ),
+				)
+			);
+		}
 		$was_active = is_plugin_active( $plugin );
 		deactivate_plugins( array( $plugin ) );
 		return array(
 			'deactivated' => true,
 			'plugin'      => $plugin,
 			'was_active'  => $was_active,
-		);
+		) + ( $network ? array( 'network_wide' => true ) : array() );
 	}
 
 	/* --------------------------------------------------------------- themes */

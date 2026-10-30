@@ -462,7 +462,8 @@ function ab_late_request( array $view, $at100 = null ) {
 }
 function is_super_admin() { return true; }
 /* AB_MCP_Guidance::role_refusal() of this plugin adds the way to the role; here the message only. */
-class AB_MCP_Guidance { public static function role_refusal( $m, array $args = array() ) { return new WP_Error( 'ab_mcp_forbidden', $m ); } }
+class AB_MCP_Guidance { public static function role_refusal( $m, array $args = array() ) { return new WP_Error( 'ab_mcp_forbidden', $m . ( isset( $args['url'] ) ? ' Direct link: ' . $args['url'] : '' ) ); } }
+function network_admin_url( $path = '' ) { return 'https://example.test/wp-admin/network/' . $path; }
 class WP_Theme extends AB_Test_Theme {}
 
 require_once $GLOBALS['ab_free'] . 'tools/class-tools-plugins-themes-manage.php';
@@ -987,6 +988,24 @@ $r    = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => 
 ok( ! is_wp_error( $r ) && true === ( $r['network_wide'] ?? null ) && is_plugin_active_for_network( $a11b ) && 'passed' === $r['probe']['after']['result'], 'A11 a healthy one stays active network-wide, and the answer says network_wide: ' . ab_msg( $r ) );
 $r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $a11b ) );
 ok( ! is_wp_error( $r ) && true === $r['already_active'] && true === ( $r['network_wide'] ?? null ), 'A11 asked again: already active network-wide, not tested again' );
+echo "A11n a site administrator without the network's right (Codex, 30.10.2026)\n";
+ab_reset_activation();
+$GLOBALS['ab_denied_caps'] = array( 'manage_network_plugins' );
+$a11n = ab_new_network_plugin( 'netsiteadmin' );
+$GLOBALS['ab_events'] = array();
+$r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $a11n ) );
+ok( 'ab_mcp_forbidden' === ab_code( $r ) && ! is_plugin_active( $a11n ) && array() === ab_events_like( 'activate_plugin:' ) && array() === ab_events_like( 'probe:' ) && ab_has( ab_msg( $r ), 'Network: true', 'Nothing was changed', 'Network Admin › Plugins', 'Direct link: https://example.test/wp-admin/network/plugins.php' ), 'A11n "Network: true" refused without manage_network_plugins, before any test request: ' . ab_msg( $r ) );
+$a11s = ab_new_plugin( 'siteonly' );
+$r    = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $a11s ) );
+ok( ! is_wp_error( $r ) && in_array( $a11s, (array) get_option( 'active_plugins' ), true ) && array() === (array) get_site_option( 'active_sitewide_plugins', array() ), 'A11n a plugin for one site still goes on this site only: ' . ab_msg( $r ) );
+update_site_option( 'active_sitewide_plugins', array( $a11n => time() ) );
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => $a11n ) );
+ok( 'ab_mcp_forbidden' === ab_code( $r ) && is_plugin_active_for_network( $a11n ) && ab_has( ab_msg( $r ), 'every site', 'Nothing was changed', 'Network Admin › Plugins', 'Direct link: https://example.test/wp-admin/network/plugins.php' ), 'A11n a plugin active on the network is not deactivated without manage_network_plugins: ' . ab_msg( $r ) );
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => $a11s ) );
+ok( ! is_wp_error( $r ) && true === $r['was_active'] && ! isset( $r['network_wide'] ) && ! is_plugin_active( $a11s ), 'A11n one of this site goes off as before: ' . ab_msg( $r ) );
+$GLOBALS['ab_denied_caps'] = array();
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => $a11n ) );
+ok( ! is_wp_error( $r ) && true === ( $r['network_wide'] ?? null ) && ! is_plugin_active_for_network( $a11n ), 'A11n with the right: off on the network, and the answer says network_wide: ' . ab_msg( $r ) );
 echo "A12 \"Network: true\" on a network, installed with activate\n";
 ab_reset_activation();
 $zip_a12 = base64_encode( "PK\x03\x04" . str_repeat( 'x', 40 ) );

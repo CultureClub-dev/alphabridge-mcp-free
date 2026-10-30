@@ -94,6 +94,21 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 				return $req;
 			}
 		}
+		// On a network a plugin with "Network: true" goes on for every site
+		// (plugin_locked()), which takes the network's own right: a site
+		// administrator with activate_plugins (the network lets site
+		// administrators manage plugins) would switch on code on every other
+		// site. WordPress's plugins screen of a site refuses it the same way
+		// (Codex, 30.10.2026).
+		if ( is_multisite() && ( $asked || is_network_only_plugin( $file ) ) && ! current_user_can( 'manage_network_plugins' ) ) {
+			return AB_MCP_Guidance::role_refusal(
+				__( 'Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins.', 'alphabridge-mcp' ),
+				array(
+					'steps' => '',
+					'url'   => network_admin_url( 'plugins.php' ),
+				)
+			);
+		}
 		// From here the state before is read, so it is read under the lock
 		// (AB_MCP_Change_Lock): read before another activation's switch
 		// and used after it, its way back would undo that one.

@@ -265,6 +265,29 @@ final class UninstallTest extends TestCase {
 		self::assertSame( array( array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 2 ) ), $GLOBALS['ab_test_cleared_hooks'], 'The event goes on every site.' );
 	}
 
+	public function testAutomaticUpdatesAlphaBridgeSwitchedOffGoBackOnBeforeTheHoldsGo(): void {
+		// A failed update on a network where AlphaBridge does not run on the
+		// main site takes the package off WordPress's list (auto_off); the
+		// hold and the event RESUME would switch it on again. Uninstalled,
+		// both are gone, so the uninstall switches it on (Codex, 30.10.2026).
+		// A package someone had switched off (no auto_off) stays off.
+		$GLOBALS['ab_test_site_options'][ \AB_MCP_Update_Log::HOLDS ] = array(
+			'plugin:bad/bad.php'      => array( 'version' => '2.0', 'auto_off' => true ),
+			'plugin:manual/manual.php' => array( 'version' => '3.0', 'auto_off' => false ),
+			'theme:shaky'             => array( 'version' => '1.1', 'auto_off' => true ),
+			'theme:listed'            => array( 'version' => '1.0', 'auto_off' => true ),
+			'nonsense'                => array( 'auto_off' => true ),
+		);
+		$GLOBALS['ab_test_site_options']['auto_update_plugins'] = array( 'akismet/akismet.php' );
+		$GLOBALS['ab_test_site_options']['auto_update_themes']  = array( 'listed' );
+
+		$this->runUninstall();
+
+		self::assertSame( array( 'akismet/akismet.php', 'bad/bad.php' ), $GLOBALS['ab_test_site_options']['auto_update_plugins'] );
+		self::assertSame( array( 'listed', 'shaky' ), $GLOBALS['ab_test_site_options']['auto_update_themes'], 'Once on the list, not twice.' );
+		self::assertArrayNotHasKey( \AB_MCP_Update_Log::HOLDS, $GLOBALS['ab_test_site_options'] );
+	}
+
 	public function testNothingIsDeletedWhileProIsStillInstalled(): void {
 		// Pro bundles this core and shares its data; its own uninstall removes
 		// the shared rows when it goes last.

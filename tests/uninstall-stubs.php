@@ -24,6 +24,13 @@ if ( ! function_exists( 'delete_site_option' ) ) {
 	}
 }
 
+if ( ! function_exists( 'update_site_option' ) ) {
+	function update_site_option( $name, $value ) {
+		$GLOBALS['ab_test_site_options'][ $name ] = $value;
+		return true;
+	}
+}
+
 if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
 	function wp_clear_scheduled_hook( $hook ) {
 		$GLOBALS['ab_test_cleared_hooks'][] = array( (string) $hook, (int) ( $GLOBALS['ab_test_blog'] ?? 1 ) );

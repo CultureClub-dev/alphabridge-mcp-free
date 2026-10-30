@@ -4539,3 +4539,12 @@ msgstr "Questo sito non soddisfa i requisiti del tema: %s Aggiorna WordPress o P
 
 msgid "The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'istantanea indica un tema non valido. Questo punto di ripristino non può essere usato; wp_undo_discard lo rimuove."
+
+msgid "Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins."
+msgstr "Non attivato: in questo network il plugin si attiva per tutti i siti (la sua intestazione dice “Network: true”), e questo richiede un super amministratore della rete. Non è stato modificato nulla. Chiedi a un super amministratore della rete di attivarlo in Amministrazione network › Plugin."
+
+msgid "Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins."
+msgstr "Non disattivato: il plugin è attivo in tutto il network, quindi disattivarlo lo spegne per tutti i siti, e questo richiede un super amministratore della rete. Non è stato modificato nulla. Chiedi a un super amministratore della rete di disattivarlo in Amministrazione network › Plugin."
+
+msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
+msgstr "Non aggiornato: WordPress non ha potuto raggiungere i propri file; questo hosting chiede un accesso FTP o SSH che una chiamata tramite AlphaBridge non può inserire. Non è stato modificato nulla. Chiedi all'hosting di dare al server web i permessi di scrittura sui file di WordPress, oppure aggiornalo in wp-admin in Bacheca › Aggiornamenti."

@@ -909,6 +909,13 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		// Core_Upgrader::upgrade() answers false where it cannot reach the
+		// files (fs_connect(): the host asks for FTP or SSH access, which no
+		// one can enter here), before anything is copied; the new version
+		// as a string otherwise (Codex, 30.10.2026).
+		if ( ! $result ) {
+			return new WP_Error( 'ab_mcp_update_failed', __( 'Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates.', 'alphabridge-mcp' ) );
+		}
 		return array(
 			'updated'     => true,
 			'new_version' => isset( $updates[0]->current ) ? $updates[0]->current : null,

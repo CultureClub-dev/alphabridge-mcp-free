@@ -73,6 +73,8 @@ function get_plugins() {
 $GLOBALS['t_active']      = array();
 $GLOBALS['t_deactivated'] = array();
 function is_plugin_active( $p ) { return in_array( $p, $GLOBALS['t_active'], true ); }
+// A single site: wp_deactivate_plugin asks for the network's right only on a network.
+function is_multisite() { return false; }
 function deactivate_plugins( $plugins ) {
 	foreach ( (array) $plugins as $p ) {
 		$GLOBALS['t_deactivated'][] = $p;

@@ -292,7 +292,8 @@ function ab_run_cron( $blog ) {
 
 /* misc */
 function get_current_user_id() { return 1; }
-function current_user_can( $c, ...$a ) { return true; }
+/* Every capability, except those a test takes away in $GLOBALS['ab_denied_caps']. */
+function current_user_can( $c, ...$a ) { return ! in_array( $c, (array) ( $GLOBALS['ab_denied_caps'] ?? array() ), true ); }
 function trailingslashit( $p ) { return rtrim( $p, '/\\' ) . '/'; }
 function untrailingslashit( $p ) { return rtrim( $p, '/\\' ); }
 function wp_normalize_path( $p ) { return str_replace( '\\', '/', (string) $p ); }

@@ -4539,3 +4539,12 @@ msgstr "Este site não cumpre os requisitos do tema: %s Atualize o WordPress ou 
 
 msgid "The snapshot names an invalid theme. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "O instantâneo indica um tema inválido. Este ponto de restauro não pode ser usado; wp_undo_discard remove-o."
+
+msgid "Not activated: on this network the plugin goes on for every site (its header says “Network: true”), and that takes a network administrator. Nothing was changed. Ask a network administrator to activate it under Network Admin › Plugins."
+msgstr "Não ativado: nesta rede o plugin fica ativo em todos os sites (o cabeçalho diz «Network: true»), e isso exige um administrador da rede. Nada foi alterado. Peça a um administrador da rede que o ative em «Administração da rede › Plugins»."
+
+msgid "Not deactivated: the plugin is active on the whole network, so deactivating it turns it off for every site, and that takes a network administrator. Nothing was changed. Ask a network administrator to deactivate it under Network Admin › Plugins."
+msgstr "Não desativado: o plugin está ativo em toda a rede, por isso desativá-lo desliga-o em todos os sites, e isso exige um administrador da rede. Nada foi alterado. Peça a um administrador da rede que o desative em «Administração da rede › Plugins»."
+
+msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
+msgstr "Não atualizado: o WordPress não conseguiu aceder aos próprios ficheiros; este alojamento pede um acesso FTP ou SSH, que uma chamada através do AlphaBridge não consegue introduzir. Nada foi alterado. Peça ao alojamento que dê ao servidor web permissão de escrita sobre os ficheiros do WordPress, ou atualize-o no wp-admin em «Painel › Atualizações»."

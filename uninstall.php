@@ -77,6 +77,23 @@ $ab_mcp_undo_files = static function () {
 	@rmdir( $ab_mcp_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- a folder left behind is harmless.
 };
 
+// A package AlphaBridge took off WordPress's list of automatic updates after
+// a failed update (a hold with auto_off, AB_MCP_Update_Log) goes back on it
+// before the holds go: with them and the event RESUME gone, nothing else would
+// switch it on again (Codex, 30.10.2026). Only those: a package someone had
+// switched off before has no auto_off. Network options on a network, plain
+// options on a single site, as the holds and the lists are.
+foreach ( (array) get_site_option( 'ab_mcp_pro_update_holds', array() ) as $ab_mcp_key => $ab_mcp_hold ) {
+	if ( ! is_array( $ab_mcp_hold ) || empty( $ab_mcp_hold['auto_off'] ) || ! preg_match( '/^(plugin|theme):(.+)\z/s', (string) $ab_mcp_key, $ab_mcp_m ) ) {
+		continue;
+	}
+	$ab_mcp_list = (array) get_site_option( 'auto_update_' . $ab_mcp_m[1] . 's', array() );
+	if ( ! in_array( $ab_mcp_m[2], $ab_mcp_list, true ) ) {
+		$ab_mcp_list[] = $ab_mcp_m[2];
+		update_site_option( 'auto_update_' . $ab_mcp_m[1] . 's', array_values( $ab_mcp_list ) );
+	}
+}
+
 foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }

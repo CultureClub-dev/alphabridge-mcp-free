@@ -86,4 +86,21 @@ $GLOBALS['ab_install'] = static function ( $up, $pkg ) { return true; };
 $r = AB_MCP_Tools_Install_Update::install_plugin_zip( array( 'content' => $zip ) );
 ok( ! is_wp_error( $r ) && true === $r['installed'], 'E6 an install that works still reports installed' );
 
+echo "E7 a core update the upgrader answers with false (Codex, 30.10.2026)\n";
+/* Core_Upgrader::upgrade() (WordPress 7.0.2): false where fs_connect() cannot
+ * reach the files, before anything is copied; the new version otherwise. */
+class Core_Upgrader extends WP_Upgrader {
+	public function upgrade( $current, $args = array() ) { return $GLOBALS['ab_core_result']; }
+}
+function wp_version_check( $extra = array(), $force = false ) {}
+function get_core_updates( $options = array() ) { return array( (object) array( 'response' => 'upgrade', 'current' => '7.0.3' ) ); }
+$GLOBALS['ab_core_result'] = false;
+$r = AB_MCP_Tools_Install_Update::update_core();
+ok( 'ab_mcp_update_failed' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'Nothing was changed' ) && false !== strpos( ab_msg( $r ), 'Dashboard › Updates' ), 'E7 false is a failure, not "updated": ' . ( is_wp_error( $r ) ? ab_msg( $r ) : json_encode( $r ) ) );
+$GLOBALS['ab_core_result'] = new WP_Error( 'up_to_date', 'WordPress is at the latest version.' );
+ok( 'up_to_date' === ab_code( AB_MCP_Tools_Install_Update::update_core() ), 'E7 an error of the upgrader comes through as it is' );
+$GLOBALS['ab_core_result'] = '7.0.3';
+$r = AB_MCP_Tools_Install_Update::update_core();
+ok( ! is_wp_error( $r ) && true === $r['updated'] && '7.0.3' === $r['new_version'], 'E7 the new version as a string: updated' );
+
 ab_finish( 'LIFECYCLE-ERRORS' );
