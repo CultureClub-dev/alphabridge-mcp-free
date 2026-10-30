@@ -10,6 +10,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-widgets.php';
 
 /**
  * Class AB_MCP_Tools_Widgets
@@ -53,7 +54,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_widget',
 			array(
-				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too. Returns updated, id and the stored settings. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved. No undo point is recorded.',
+				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too. Returns updated, id, the stored settings, saved_fields (the fields sent, as stored afterwards and read again; a credential is compared, not shown, and saved_differs and warning name a field the widget stored otherwise than sent) and undo: the token for wp_undo, which puts the widget type\'s option row back byte for byte, or null with undo_note saying why. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved.',
 				'open_world'  => true, // a widget in an active area is public.
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
@@ -72,7 +73,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_add_widget',
 			array(
-				'description' => 'Add a new widget of a registered type to a sidebar, or to wp_inactive_widgets. Returns added, id (the new "<id_base>-<number>") and sidebar. Settings pass the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. An unknown type or sidebar, or settings the widget rejects, are refused and nothing is saved. Existing widgets are changed by wp_update_widget; no undo point is recorded.',
+				'description' => 'Add a new widget of a registered type to a sidebar, or to wp_inactive_widgets. Returns added, id (the new "<id_base>-<number>"), sidebar, saved_fields (as for wp_update_widget) and undo: the token for wp_undo, which puts the widget type\'s option row and the widgets per sidebar back as they were, or null with undo_note saying why. Settings pass the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. An unknown type or sidebar, or settings the widget rejects, are refused and nothing is saved. Existing widgets are changed by wp_update_widget.',
 				'destructive' => true, // what is published cannot be taken back (PUBLISHING in the registry).
 				'open_world'  => true, // a widget in an active area is public at once.
 				'capability'  => 'edit_theme_options',
@@ -94,7 +95,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_widget',
 			array(
-				'description' => 'Remove a widget instance from its sidebar and delete its settings. The widget option is rewritten directly, without the widget\'s own cleanup routines. Returns deleted and id; an id found neither in a sidebar nor in the stored settings is reported as not found. Permanent: no undo point is recorded. The settings of an existing widget change with wp_update_widget.',
+				'description' => 'Remove a widget instance from its sidebar and delete its settings. The widget option is rewritten directly, without the widget\'s own cleanup routines. Returns deleted, id and undo: the token for wp_undo, which puts the widget type\'s option row and the widgets per sidebar back as they were, or null with undo_note saying why; an id found neither in a sidebar nor in the stored settings is reported as not found. The settings of an existing widget change with wp_update_widget.',
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -513,21 +514,9 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	 * @return WP_Error|false
 	 */
 	private static function widget_option_refused( $base ) {
-		if ( class_exists( 'AB_MCP_Tools_Options_Settings_Pro' ) && method_exists( 'AB_MCP_Tools_Options_Settings_Pro', 'option_write_refused' ) ) {
-			return AB_MCP_Tools_Options_Settings_Pro::option_write_refused( 'widget_' . $base );
-		}
-		$row = get_option( 'widget_' . $base, null );
-		if ( null !== $row && ! ( is_array( $row ) && ! empty( $row['_multiwidget'] ) ) ) {
-			return new WP_Error(
-				'ab_mcp_blocked',
-				sprintf(
-					/* translators: %s: option name */
-					__( 'The option %s was not written by the widgets of WordPress, so it is not changed here; nothing was changed. wp_get_widgets lists the widgets and their ids.', 'alphabridge-mcp' ),
-					'widget_' . $base
-				)
-			);
-		}
-		return false;
+		// The rule lives with the undo of these tools since 4.13.0, so a
+		// restore asks the very same (AB_MCP_Undo_Widgets::refusal()).
+		return AB_MCP_Undo_Widgets::option_refusal( $base );
 	}
 
 	/**
@@ -611,6 +600,8 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( $refused ) {
 			return $refused;
 		}
+		// The row as stored, right before the write (since 4.13.0).
+		$snap                = AB_MCP_Undo_Widgets::take( $base, array( 'widget_' . $base ) );
 		$opt[ $num ]         = $clean;
 		$opt['_multiwidget'] = 1;
 		update_option( 'widget_' . $base, $opt );
@@ -619,6 +610,15 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( ! self::widget_row_holds( $base, $num, $clean ) ) {
 			return new WP_Error( 'ab_mcp_write_failed', __( 'The widget settings were not stored — a filter or the database rejected the write. Use Appearance › Widgets in wp-admin to change the widget.', 'alphabridge-mcp' ) );
 		}
+		$undo = AB_MCP_Undo_Widgets::answer(
+			array(
+				'tool'    => 'wp_update_widget',
+				'snap'    => $snap,
+				'summary' => 'widget ' . $id,
+				'asked'   => $sent,
+				'saved'   => AB_MCP_Undo_Widgets::instance( $base, $num ),
+			)
+		);
 		// The answer shows the settings as wp_get_widgets does: a write tool
 		// must not read out what the reader leaves out.
 		$left = array();
@@ -630,7 +630,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( $left ) {
 			$res['hidden_keys'] = $left;
 		}
-		return $res;
+		return $res + $undo;
 	}
 
 	/**
@@ -681,6 +681,8 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( $refused ) {
 			return $refused;
 		}
+		// Both rows as stored, right before the first write (since 4.13.0).
+		$snap                = AB_MCP_Undo_Widgets::take( $base, array( 'widget_' . $base, AB_MCP_Undo_Widgets::MAP ) );
 		$opt[ $num ]         = $clean;
 		$opt['_multiwidget'] = 1;
 		update_option( 'widget_' . $base, $opt );
@@ -726,6 +728,14 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 			'added'   => true,
 			'id'      => $wid,
 			'sidebar' => $sidebar,
+		) + AB_MCP_Undo_Widgets::answer(
+			array(
+				'tool'    => 'wp_add_widget',
+				'snap'    => $snap,
+				'summary' => sprintf( 'new widget %s in %s', $wid, $sidebar ),
+				'asked'   => self::arr( $a, 'settings' ),
+				'saved'   => AB_MCP_Undo_Widgets::instance( $base, $num ),
+			)
 		);
 	}
 
@@ -747,6 +757,8 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( $refused ) {
 			return $refused;
 		}
+		// Both rows as stored, right before the first write (since 4.13.0).
+		$snap    = AB_MCP_Undo_Widgets::take( $base, array( 'widget_' . $base, AB_MCP_Undo_Widgets::MAP ) );
 		$map     = self::sidebars_map();
 		$removed = false;
 		foreach ( $map as $sb => $ids ) {
@@ -785,6 +797,12 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		return array(
 			'deleted' => true,
 			'id'      => $id,
+		) + AB_MCP_Undo_Widgets::answer(
+			array(
+				'tool'    => 'wp_delete_widget',
+				'snap'    => $snap,
+				'summary' => 'deleted widget ' . $id,
+			)
 		);
 	}
 }

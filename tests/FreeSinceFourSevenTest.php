@@ -138,7 +138,8 @@ final class FreeSinceFourSevenTest extends TestCase {
 
 	public function testANewMenuGoesToWordPressSlashed(): void {
 		$res = AB_MCP_Tools_Menus_Users::create_menu( array( 'name' => 'C:\\Docs' ) );
-		self::assertSame( array( 'created' => true, 'menu_id' => 77 ), $res );
+		self::assertSame( array( 'created' => true, 'menu_id' => 77 ), array_slice( $res, 0, 2 ) );
+		self::assertArrayHasKey( 'undo', $res, 'Since 4.13.0 the answer says whether there is an undo point.' );
 		self::assertSame( array( array( 'create', 'C:\\\\Docs' ) ), $GLOBALS['ab_test_menu_writes'] );
 	}
 
@@ -152,7 +153,8 @@ final class FreeSinceFourSevenTest extends TestCase {
 		self::assertSame( array(), $GLOBALS['ab_test_menu_writes'], 'Refused, nothing is written.' );
 
 		$ok = AB_MCP_Tools_Menus_Users::add_menu_item( array( 'menu' => 'footer', 'title' => 'Contact', 'url' => 'https://example.test/contact' ) );
-		self::assertSame( array( 'added' => true, 'item_id' => 900 ), $ok, 'Another menu of the same account is open.' );
+		self::assertSame( array( 'added' => true, 'item_id' => 900 ), array_slice( $ok, 0, 2 ), 'Another menu of the same account is open.' );
+		self::assertArrayHasKey( 'undo', $ok );
 	}
 
 	public function testAnItemIsACustomLinkOrALinkToAPost(): void {
@@ -191,7 +193,10 @@ final class FreeSinceFourSevenTest extends TestCase {
 		self::assertStringContainsString( 'cannot delete this specific menu item', $res->get_error_message() );
 		self::assertSame( array(), $GLOBALS['ab_test_deleted'], 'Refused, nothing is deleted.' );
 
-		self::assertSame( array( 'deleted' => true, 'item_id' => 30 ), AB_MCP_Tools_Menus_Users::delete_menu_item( array( 'item_id' => 30 ) ) );
+		$done = AB_MCP_Tools_Menus_Users::delete_menu_item( array( 'item_id' => 30 ) );
+		self::assertSame( array( 'deleted' => true, 'item_id' => 30, 'undo' => null ), array_slice( $done, 0, 3 ) );
+		self::assertStringStartsWith( 'not undoable: ', $done['undo_note'], 'Since 4.13.0 the answer says there is no way back.' );
+		self::assertStringContainsString( 'wp_get_menu', $done['undo_note'] );
 		self::assertSame( array( array( 30, true ) ), $GLOBALS['ab_test_deleted'], 'For good: a menu item has no trash.' );
 
 		$not_an_item = AB_MCP_Tools_Menus_Users::delete_menu_item( array( 'item_id' => 12 ) );

@@ -8,6 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-terms.php';
 
 /**
  * Class AB_MCP_Tools_Taxonomy_Comments
@@ -45,7 +46,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_create_term',
 			array(
-				'description' => 'Create a new term (category, tag or custom taxonomy term) in a taxonomy. Returns {created: true, term_id}. Needs the taxonomy\'s right to manage terms (for categories and tags: manage_categories). WordPress refuses a parent that does not exist and, without a distinct slug, a name the taxonomy already has (in a hierarchical taxonomy: under the same parent). Existing terms are changed with wp_update_term.',
+				'description' => 'Create a new term (category, tag or custom taxonomy term) in a taxonomy. Returns {created: true, term_id}, saved_fields (name, slug, description and parent as stored, read again; saved_differs and warning where WordPress stored something else than sent, e.g. a slug made unique) and undo: the token for wp_undo, which deletes the term again while it is unchanged and unused, or null with undo_note saying why. Needs the taxonomy\'s right to manage terms (for categories and tags: manage_categories). WordPress refuses a parent that does not exist and, without a distinct slug, a name the taxonomy already has (in a hierarchical taxonomy: under the same parent). Existing terms are changed with wp_update_term.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -65,7 +66,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_term',
 			array(
-				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}; an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories) and the right to edit this term (edit_term), which a site can withhold for single terms. Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
+				'description' => 'Change the name, slug, description or parent of an existing term; term_id and taxonomy identify it. Only the fields passed change, the others keep their values. Returns {updated: true, term_id}, saved_fields (the fields passed as stored afterwards, read again; saved_differs and warning where WordPress stored something else than sent) and undo: the token for wp_undo, which puts name, slug, description and parent of before back, or null with undo_note saying why. A change WordPress did not store at all is an error (ab_mcp_not_saved); an unknown term returns an error. Needs the taxonomy\'s right to edit terms (for categories and tags: manage_categories) and the right to edit this term (edit_term), which a site can withhold for single terms. Where the permalink structure uses slugs, a new slug changes the URL of the term\'s archive, and WordPress does not redirect the old one. The term\'s custom meta is not changed here.',
 				'capability'  => 'manage_categories',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -86,7 +87,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_term',
 			array(
-				'description' => 'Delete a term from a taxonomy for good; terms have no trash. Posts lose the term (a post left without a category gets the default category), child terms move up to the deleted term\'s parent, and the term\'s meta is removed. The taxonomy\'s default term, such as the default category, is not deleted; it and an unknown term_id return an error. Needs the taxonomy\'s right to delete terms and the right to delete this term (delete_term), which a site can withhold for single terms. Returns {deleted: true}.',
+				'description' => 'Delete a term from a taxonomy for good; terms have no trash. Posts lose the term (a post left without a category gets the default category), child terms move up to the deleted term\'s parent, and the term\'s meta is removed. The taxonomy\'s default term, such as the default category, is not deleted; it and an unknown term_id return an error. Needs the taxonomy\'s right to delete terms and the right to delete this term (delete_term), which a site can withhold for single terms. Returns {deleted: true}, and undo: null with undo_note: the deletion cannot be undone, so note a term that may be needed again with wp_get_term and wp_get_term_meta first.',
 				'capability'  => 'manage_categories',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -331,9 +332,25 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
-		return array(
-			'created' => true,
-			'term_id' => (int) $res['term_id'],
+		$id = (int) $res['term_id'];
+		// What was sent, as WordPress was asked to store it; the read-back
+		// and an undo point that deletes the term again (since 4.13.0).
+		$asked = array( 'name' => self::s( $a, 'name' ) );
+		if ( '' !== self::s( $a, 'slug', '' ) ) {
+			$asked['slug'] = self::s( $a, 'slug' );
+		}
+		if ( array_key_exists( 'description', $a ) ) {
+			$asked['description'] = self::s( $a, 'description' );
+		}
+		if ( array_key_exists( 'parent', $a ) ) {
+			$asked['parent'] = self::i( $a, 'parent' );
+		}
+		return array_merge(
+			array(
+				'created' => true,
+				'term_id' => $id,
+			),
+			AB_MCP_Undo_Terms::created( 'wp_create_term', $id, $tax, $asked, 'wp_get_term', sprintf( 'new term #%d (%s)', $id, $tax ) )
 		);
 	}
 
@@ -380,13 +397,41 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( array_key_exists( 'parent', $a ) ) {
 			$fields['parent'] = self::i( $a, 'parent' );
 		}
-		$res = wp_update_term( $id, $tax, $fields );
+		// The fields as sent; an empty slug asks WordPress to derive one, so
+		// what it stores is no difference.
+		$asked = array();
+		foreach ( $fields as $k => $v ) {
+			if ( 'slug' === $k && '' === $v ) {
+				continue;
+			}
+			$asked[ $k ] = 'parent' === $k ? (int) $v : self::s( $a, $k );
+		}
+		// The fields before, the write, the read-back and the undo point
+		// (since 4.13.0). An id of no term of this taxonomy is refused by
+		// wp_update_term() before anything is kept.
+		$res = AB_MCP_Undo_Terms::update(
+			array(
+				'tool'     => 'wp_update_term',
+				'id'       => $id,
+				'taxonomy' => $tax,
+				'asked'    => $asked,
+				'reader'   => 'wp_get_term',
+				'summary'  => sprintf( 'term #%d (%s): %s', $id, $tax, implode( ', ', array_keys( $fields ) ) ),
+			),
+			static function () use ( $id, $tax, $fields ) {
+				$done = wp_update_term( $id, $tax, $fields );
+				return is_wp_error( $done ) ? $done : true;
+			}
+		);
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
-		return array(
-			'updated' => true,
-			'term_id' => $id,
+		return array_merge(
+			array(
+				'updated' => true,
+				'term_id' => $id,
+			),
+			$res
 		);
 	}
 
@@ -431,7 +476,11 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! $res ) {
 			return self::not_deleted();
 		}
-		return array( 'deleted' => true );
+		return array(
+			'deleted'   => true,
+			'undo'      => null,
+			'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_term' ),
+		);
 	}
 
 	/**
