@@ -1064,14 +1064,29 @@ class AB_MCP_Admin {
 		$html .= $this->signin_setting_html( 'chatgpt' );
 		$html .= '</div>';
 
-		// Cursor: a token and the ready-made configuration.
+		// Cursor: through the hub with one click (Cursor's install link, then
+		// the sign-in on this site, no token), and directly with a token and
+		// the ready-made configuration. The hub signs in through this site's
+		// OAuth, so without it only the token way is offered.
+		$token_steps  = $this->step( 1, __( 'Create a connection', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor connects with a token. Create one below.', 'alphabridge-mcp' ) . '</p>' );
+		$token_steps .= $this->step( 2, __( 'Copy the configuration', 'alphabridge-mcp' ), '<p>' . esc_html__( 'It appears right after you create the connection, and only then.', 'alphabridge-mcp' ) . '</p>' );
+		$token_steps .= $this->step( 3, __( 'Paste it into Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers.', 'alphabridge-mcp' ) . '</p>' );
 		$html .= '<div class="ab-panel" id="ab-panel-cursor" data-panel="cursor" hidden>';
 		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connect Cursor', 'alphabridge-mcp' ) . '</h2>';
-		$html .= '<div class="ab-steps">';
-		$html .= $this->step( 1, __( 'Create a connection', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor connects with a token. Create one below.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= $this->step( 2, __( 'Copy the configuration', 'alphabridge-mcp' ), '<p>' . esc_html__( 'It appears right after you create the connection, and only then.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= $this->step( 3, __( 'Paste it into Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers.', 'alphabridge-mcp' ) . '</p>' );
-		$html .= '</div>';
+		if ( $oauth ) {
+			$html .= '<div class="ab-ways">';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Through the hub', 'alphabridge-mcp' ), __( 'one connection, up to 10 sites', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">';
+			$html .= $this->step( 1, __( 'Add AlphaBridge to Cursor', 'alphabridge-mcp' ), '<p>' . esc_html__( 'Cursor opens and asks you to confirm.', 'alphabridge-mcp' ) . '</p><a class="ab-btn ab-btn--sm" href="' . esc_url( self::CURSOR_INSTALL, array( 'cursor' ) ) . '">' . esc_html__( 'Add to Cursor', 'alphabridge-mcp' ) . '</a>' );
+			$html .= $this->step( 2, __( 'Start the sign-in, enter this address', 'alphabridge-mcp' ), '<p>' . esc_html__( 'In Cursor, open Customize → MCPs and start the sign-in next to alphabridge. The hub asks for your site’s address.', 'alphabridge-mcp' ) . '</p>' . $this->copy_field( home_url(), __( 'This site’s address', 'alphabridge-mcp' ), __( 'Copy address', 'alphabridge-mcp' ) ) );
+			$html .= $this->step( 3, __( 'Sign in here and approve', 'alphabridge-mcp' ), '<p>' . esc_html__( 'This site asks you to sign in and to approve. The connection then shows up under Your connections.', 'alphabridge-mcp' ) . '</p>' );
+			$html .= '</div></section>';
+			$html .= '<section class="ab-way">' . $this->way_title( __( 'Directly', 'alphabridge-mcp' ), __( 'this site only', 'alphabridge-mcp' ) );
+			$html .= '<div class="ab-steps ab-steps--col">' . $token_steps . '</div></section>';
+			$html .= '</div>';
+		} else {
+			$html .= '<div class="ab-steps">' . $token_steps . '</div>';
+		}
 		$html .= '<div class="ab-links">' . $this->ext_link( $docs, __( 'Setup guide', 'alphabridge-mcp' ), '?' ) . '</div>';
 		$html .= '</div>';
 
@@ -1991,6 +2006,14 @@ class AB_MCP_Admin {
 	 * app connects to the hub, the hub asks for the site's address.
 	 */
 	const HUB_ADDRESS = 'https://connect.alphabridge-mcp.com/mcp';
+
+	/**
+	 * Cursor's install link for the hub, as the website's «Add to Cursor»
+	 * gives it: name alphabridge, config the server entry {"url": HUB_ADDRESS}
+	 * in base64. No token in it: Cursor signs in through the hub, which asks
+	 * for the site's address.
+	 */
+	const CURSOR_INSTALL = 'cursor://anysphere.cursor-deeplink/mcp/install?name=alphabridge&config=eyJ1cmwiOiJodHRwczovL2Nvbm5lY3QuYWxwaGFicmlkZ2UtbWNwLmNvbS9tY3AifQ==';
 
 	/**
 	 * What is the case behind such a firewall, in bold, and the two steps

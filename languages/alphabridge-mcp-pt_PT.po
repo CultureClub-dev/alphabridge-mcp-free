@@ -4548,3 +4548,18 @@ msgstr "Não desativado: o plugin está ativo em toda a rede, por isso desativá
 
 msgid "Not updated: WordPress could not reach its own files; this host asks for FTP or SSH access, which a call through AlphaBridge cannot enter. Nothing was changed. Ask the host to give the web server write access to the WordPress files, or update it in wp-admin under Dashboard › Updates."
 msgstr "Não atualizado: o WordPress não conseguiu aceder aos próprios ficheiros; este alojamento pede um acesso FTP ou SSH, que uma chamada através do AlphaBridge não consegue introduzir. Nada foi alterado. Peça ao alojamento que dê ao servidor web permissão de escrita sobre os ficheiros do WordPress, ou atualize-o no wp-admin em «Painel › Atualizações»."
+
+msgid "Add AlphaBridge to Cursor"
+msgstr "Adicionar o AlphaBridge ao Cursor"
+
+msgid "Cursor opens and asks you to confirm."
+msgstr "O Cursor abre-se e pede-lhe que confirme."
+
+msgid "Add to Cursor"
+msgstr "Adicionar ao Cursor"
+
+msgid "Start the sign-in, enter this address"
+msgstr "Inicie a autenticação e introduza este endereço"
+
+msgid "In Cursor, open Customize → MCPs and start the sign-in next to alphabridge. The hub asks for your site’s address."
+msgstr "No Cursor, abra «Customize → MCPs» e, junto de alphabridge, inicie a autenticação. O hub pede o endereço do seu site."

@@ -1075,8 +1075,19 @@ function esc_attr__( $text, $domain = '' ) {
 	return (string) $text;
 }
 
-function esc_url( $url ) {
-	return (string) $url;
+/**
+ * esc_url() keeps a link only with a protocol it allows: WordPress's list
+ * (as esc_url_raw() here), or the one passed, as for Cursor's cursor:// link.
+ */
+function esc_url( $url, $protocols = null ) {
+	$url = (string) $url;
+	if ( null === $protocols ) {
+		return esc_url_raw( $url );
+	}
+	if ( preg_match( '/^([a-z][a-z0-9+.\-]*):/i', $url, $m ) && ! in_array( strtolower( $m[1] ), (array) $protocols, true ) ) {
+		return '';
+	}
+	return $url;
 }
 
 function admin_url( $path = '' ) {
