@@ -58,6 +58,7 @@ require_once AB_MCP_DIR . 'includes/class-site-mode.php';
 require_once AB_MCP_DIR . 'includes/class-guidance.php';
 require_once AB_MCP_DIR . 'includes/class-security.php';
 require_once AB_MCP_DIR . 'includes/class-confirm-token.php';
+require_once AB_MCP_DIR . 'includes/class-lifecycle-confirm.php';
 require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 // Undo (free since 4.9.0, before in Pro only): the store, its restore, and
 // the post rules and page caches both of them use.

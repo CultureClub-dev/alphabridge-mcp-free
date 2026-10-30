@@ -1299,7 +1299,13 @@ class AB_MCP_REST_Controller {
 		}
 
 		if ( AB_MCP_Confirm_Token::required( $def ) ) {
-			$gate = AB_MCP_Confirm_Token::gate( $name, $def, $args );
+			try {
+				$gate = AB_MCP_Confirm_Token::gate( $name, $def, $args );
+			} catch ( \Throwable $e ) {
+				// As for the tool itself: the text goes to the audit log only.
+				AB_MCP_Audit_Log::record( $name, $args, 'error', $e->getMessage() );
+				return $this->result( $id, $this->tool_error( __( 'The preview of this tool failed with an internal error, so nothing ran. The error itself went to the AlphaBridge MCP log (the ab_mcp_audit option), not into this answer, as it can name server paths. Try again; if it keeps failing, ask the site administrator.', 'alphabridge-mcp' ), self::error_code( 'internal' ) ) );
+			}
 			if ( is_wp_error( $gate ) ) {
 				AB_MCP_Audit_Log::record( $name, $args, 'denied', $gate->get_error_message() );
 				return $this->result( $id, $this->tool_error( $gate->get_error_message(), self::error_code( 'tool', $gate->get_error_code() ) ) );

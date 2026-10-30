@@ -47,7 +47,10 @@ final class AB_MCP_Confirm_Token {
 	 * @return bool
 	 */
 	public static function required( array $def ) {
-		return ! empty( $def['confirm'] ) && is_array( $def['confirm'] ) && isset( $def['confirm']['state'] ) && is_callable( $def['confirm']['state'] );
+		// A `confirm` key counts whatever it holds, an empty or broken one
+		// included (a definition() for a misspelt tool name gives array()):
+		// gate() then refuses instead of letting the tool run unconfirmed.
+		return array_key_exists( 'confirm', $def ) && null !== $def['confirm'];
 	}
 
 	/**
@@ -82,7 +85,13 @@ final class AB_MCP_Confirm_Token {
 	 * @return true|array|WP_Error
 	 */
 	public static function gate( $tool, array $def, array $args, $now = null ) {
-		$now   = null === $now ? time() : (int) $now;
+		$now = null === $now ? time() : (int) $now;
+		if ( ! is_array( $def['confirm'] ) || ! isset( $def['confirm']['state'] ) || ! is_callable( $def['confirm']['state'] ) ) {
+			return new WP_Error( 'ab_mcp_confirm_broken', __( 'Nothing ran: this tool asks for confirmation but registered no way to check it. The plugin that registered it is at fault; tell the site administrator.', 'alphabridge-mcp' ) );
+		}
+		if ( null === self::canonical( self::without_token( $args ) ) ) {
+			return new WP_Error( 'ab_mcp_confirm_args', __( 'Nothing ran: the arguments hold a value that cannot be written as JSON (a number out of range, for example), so no confirmation can be bound to them. Leave out that value and call again.', 'alphabridge-mcp' ) );
+		}
 		$state = call_user_func( $def['confirm']['state'], self::without_token( $args ) );
 		if ( is_wp_error( $state ) ) {
 			return $state;
@@ -122,7 +131,10 @@ final class AB_MCP_Confirm_Token {
 	 */
 	public static function issue( $tool, array $args, $state, $now ) {
 		$expires = (int) $now + self::TTL;
-		return $expires . '.' . self::mac( $tool, $args, $state, $expires );
+		$mac     = self::mac( $tool, $args, $state, $expires );
+		// gate() refuses arguments without a canonical form before issuing;
+		// called directly with such arguments, no token is the answer.
+		return null === $mac ? '' : $expires . '.' . $mac;
 	}
 
 	/**
@@ -143,7 +155,8 @@ final class AB_MCP_Confirm_Token {
 		if ( $expires < (int) $now || $expires > (int) $now + self::TTL ) {
 			return new WP_Error( 'ab_mcp_confirm_expired', __( 'Nothing was changed: the confirm_token has expired (it is valid for 10 minutes). Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token.', 'alphabridge-mcp' ) );
 		}
-		if ( ! hash_equals( self::mac( $tool, $args, $state, $expires ), $m[2] ) ) {
+		$mac = self::mac( $tool, $args, $state, $expires );
+		if ( null === $mac || ! hash_equals( $mac, $m[2] ) ) {
 			return new WP_Error( 'ab_mcp_confirm_mismatch', __( 'Nothing was changed: the confirm_token does not match this call. The arguments differ from the preview, it was issued to another connection, or what it covers has changed since. Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token.', 'alphabridge-mcp' ) );
 		}
 		return true;
@@ -167,9 +180,13 @@ final class AB_MCP_Confirm_Token {
 	 * @param array  $args    Arguments.
 	 * @param string $state   State fingerprint.
 	 * @param int    $expires Expiry timestamp.
-	 * @return string 64 hex characters.
+	 * @return string|null 64 hex characters; null when the arguments have no canonical form.
 	 */
 	private static function mac( $tool, array $args, $state, $expires ) {
+		$canonical = self::canonical( self::without_token( $args ) );
+		if ( null === $canonical ) {
+			return null;
+		}
 		$payload = implode(
 			"\n",
 			array(
@@ -178,7 +195,7 @@ final class AB_MCP_Confirm_Token {
 				(string) get_current_user_id(),
 				class_exists( 'AB_MCP_Auth' ) ? AB_MCP_Auth::current_scope() : 'full',
 				(string) (int) $expires,
-				hash( 'sha256', self::canonical( self::without_token( $args ) ) ),
+				hash( 'sha256', $canonical ),
 				hash( 'sha256', (string) $state ),
 			)
 		);
@@ -190,11 +207,16 @@ final class AB_MCP_Confirm_Token {
 	 * the same arguments in another order give the same token. Lists keep
 	 * their order (it can matter).
 	 *
+	 * A value JSON cannot hold (INF, NAN, invalid UTF-8 in a key) gives
+	 * null, never an empty string: two different argument sets must never
+	 * share one form.
+	 *
 	 * @param mixed $value Value.
-	 * @return string
+	 * @return string|null
 	 */
 	private static function canonical( $value ) {
-		return (string) wp_json_encode( self::sorted( $value ) );
+		$json = wp_json_encode( self::sorted( $value ) );
+		return is_string( $json ) && '' !== $json ? $json : null;
 	}
 
 	/**
