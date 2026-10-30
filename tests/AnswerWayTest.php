@@ -213,6 +213,17 @@ final class AnswerWayTest extends TestCase {
 		self::assertStringContainsString( 'wp_list_media', self::message( $res ) );
 	}
 
+	public function testADeletedFileSaysItCannotBeUndoneAndWhatToKeepFirst(): void {
+		// Since 4.13.0 a deletion without a way back says so (undo_note).
+		self::allow();
+		ab_test_add_post( 12, array( 'post_type' => 'attachment' ) );
+		$GLOBALS['ab_test_way']['attachment_deleted'] = true;
+		$res = AB_MCP_Tools_Media::delete_media( array( 'id' => 12 ) );
+		self::assertSame( array( 'deleted' => true, 'id' => 12, 'undo' => null ), array_slice( $res, 0, 3 ) );
+		self::assertStringStartsWith( 'not undoable: ', $res['undo_note'] );
+		self::assertStringContainsString( 'wp_get_media', $res['undo_note'] );
+	}
+
 	public function testAnAddressThatIsNotHttpNamesTheOtherUpload(): void {
 		self::allow();
 		$res = AB_MCP_Tools_Media::upload_from_url( array( 'url' => 'ftp://example.com/photo.jpg' ) );
@@ -524,6 +535,28 @@ final class AnswerWayTest extends TestCase {
 			self::assertMatchesRegularExpression( self::WAY, $note, $note );
 		}
 		self::assertSame( 'not undoable: Check it first.', \AB_MCP_Undo_Answer::not_undoable( 'Check it first.' ), 'A frame around the reason, which names the way.' );
+	}
+
+	/**
+	 * The deletions without a way back (4.13.0) say so, each with the tool
+	 * that notes the object first.
+	 */
+	public function testEveryNoteOfADeletionWithoutUndoNamesAWay(): void {
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-objects.php';
+		$notes = \AB_MCP_Undo_Objects::own_notes();
+		self::assertSame( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user' ), array_keys( $notes ) );
+		foreach ( $notes as $tool => $note ) {
+			self::assertStringStartsWith( 'not undoable: ', $note, $tool );
+			self::assertMatchesRegularExpression( self::WAY, substr( $note, strlen( 'not undoable: ' ) ), $tool );
+		}
+		$network = \AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user', true );
+		self::assertStringStartsWith( 'not undoable: On a multisite network', $network, 'On a network, wp_delete_user() takes the account off this site only.' );
+		self::assertMatchesRegularExpression( self::WAY, $network );
+		self::assertNotSame( $network, \AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_user', false ) );
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-terms.php';
+		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Terms::not_created_note( 'wp_get_term' ), 'And the note of a term this call did not create.' );
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-widgets.php';
+		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Widgets::object_note(), 'And the note of a widget row that holds an object.' );
 	}
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {

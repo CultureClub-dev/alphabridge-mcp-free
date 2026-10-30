@@ -177,12 +177,25 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		self::assertSame( 1, count( array_filter( array_keys( $r->all() ), static fn( $n ) => 'wp_update_widget' === $n ) ) );
 	}
 
+	/**
+	 * An answer without its undo part (4.13.0), which the undo test covers
+	 * (tests/standalone/undo-terms-widgets-test.php); here every write
+	 * answers with "undo", a token or null with its reason.
+	 */
+	private static function without_undo( $res ) {
+		self::assertIsArray( $res );
+		self::assertArrayHasKey( 'undo', $res );
+		self::assertTrue( null !== $res['undo'] || isset( $res['undo_note'] ), 'No token without a reason.' );
+		return array_diff_key( $res, array_flip( array( 'saved_fields', 'saved_fields_omitted', 'saved_differs', 'warning', 'undo', 'undo_note' ) ) );
+	}
+
 	/* ------------------------------------------------------- add a widget */
 
 	public function testANewWidgetGoesIntoTheStoredMapNotTheFilteredView(): void {
 		$GLOBALS['_wp_sidebars_widgets'] = array( 'stale' => true ); // The copy wp_get_sidebars_widgets() keeps for the request.
 		$r = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1', 'settings' => array( 'title' => 'new' ) ) );
-		self::assertSame( array( 'added' => true, 'id' => 'text-10', 'sidebar' => 'sidebar-1' ), $r, 'The next free number.' );
+		self::assertSame( array( 'added' => true, 'id' => 'text-10', 'sidebar' => 'sidebar-1' ), self::without_undo( $r ), 'The next free number.' );
+		self::assertSame( array( 'title' => 'new' ), (array) $r['saved_fields'], 'Read again after the write (4.13.0).' );
 		self::assertSame( array( 'text-2', 'text-9', 'token-2', 'text-10' ), self::map()['sidebar-1'], 'Appended; text-9, which a plugin may hide from the filtered view, keeps its place.' );
 		self::assertSame( 3, self::map()['array_version'], 'Added on store, as wp_set_sidebars_widgets() would.' );
 		self::assertArrayHasKey( '_wp_sidebars_widgets', $GLOBALS );
@@ -287,7 +300,8 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 
 	public function testAnUpdateMergesTheTopLevelAndAnswersWithoutHiddenKeysWhenThereAreNone(): void {
 		$r = AB_MCP_Tools_Widgets::update_widget( array( 'id' => ' text-2 ', 'settings' => array( 'text' => 'body' ) ) );
-		self::assertSame( array( 'updated' => true, 'id' => 'text-2', 'settings' => array( 'title' => 'a', 'text' => 'body', 'seen_number' => 2 ) ), $r );
+		self::assertSame( array( 'updated' => true, 'id' => 'text-2', 'settings' => array( 'title' => 'a', 'text' => 'body', 'seen_number' => 2 ) ), self::without_undo( $r ) );
+		self::assertSame( array( 'text' => 'body' ), (array) $r['saved_fields'], 'The field sent, read again (4.13.0).' );
 		self::assertSame( array( 'title' => 'hidden by a plugin' ), self::text( 9 ), 'The other instances stay.' );
 	}
 
@@ -401,7 +415,7 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		} finally {
 			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
 		}
-		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ), 'Without the filter as before.' );
+		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ) ), 'Without the filter as before.' );
 
 		// Codex 29.10.2026: a filter that stores the map but changes another
 		// sidebar as well. What counts is where this widget is.
@@ -416,7 +430,7 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			$r = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
 			self::assertIsArray( $r, 'The widget is in its sidebar: added.' );
 			self::assertArrayHasKey( (int) substr( $r['id'], 5 ), get_option( 'widget_text' ), 'Its settings stay.' );
-			self::assertSame( array( 'deleted' => true, 'id' => $r['id'] ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => $r['id'] ) ), 'And it goes again: no sidebar names it.' );
+			self::assertSame( array( 'deleted' => true, 'id' => $r['id'] ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => $r['id'] ) ) ), 'And it goes again: no sidebar names it.' );
 		} finally {
 			unset( $GLOBALS['ab_test_filters']['pre_update_option_sidebars_widgets'] );
 		}
@@ -472,7 +486,7 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 
 	public function testADeletedWidgetLeavesItsSidebarAndItsRow(): void {
 		$r = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => "text-9\n" ) );
-		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), $r, 'A trailing newline is trimmed; the id comes back clean.' );
+		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), self::without_undo( $r ), 'A trailing newline is trimmed; the id comes back clean.' );
 		self::assertSame( array( 'text-2', 'token-2' ), self::map()['sidebar-1'] );
 		self::assertArrayNotHasKey( 9, get_option( 'widget_text' ) );
 		self::assertSame( array( 'title' => 'a' ), self::text( 2 ) );
@@ -488,9 +502,9 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 
 	public function testAWidgetOnlyInTheMapOrOnlyInTheRowIsRemovedToo(): void {
 		update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'text-2', 'text-5' ), 'array_version' => 3 ) );
-		self::assertSame( array( 'deleted' => true, 'id' => 'text-5' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-5' ) ), 'An entry without settings.' );
+		self::assertSame( array( 'deleted' => true, 'id' => 'text-5' ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-5' ) ) ), 'An entry without settings.' );
 		self::assertSame( array( 'text-2' ), self::map()['sidebar-1'] );
-		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ), 'Settings without an entry.' );
+		self::assertSame( array( 'deleted' => true, 'id' => 'text-9' ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-9' ) ) ), 'Settings without an entry.' );
 		self::assertArrayNotHasKey( 9, get_option( 'widget_text' ) );
 	}
 
@@ -509,9 +523,9 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		// The row the widgets wrote goes as before, and so does an entry of
 		// the map whose row is gone.
 		update_option( 'widget_token', array( 2 => array( 'title' => 'w' ), '_multiwidget' => 1 ) );
-		self::assertSame( array( 'deleted' => true, 'id' => 'token-2' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'token-2' ) ) );
+		self::assertSame( array( 'deleted' => true, 'id' => 'token-2' ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'token-2' ) ) ) );
 		update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'gone-4' ), 'array_version' => 3 ) );
-		self::assertSame( array( 'deleted' => true, 'id' => 'gone-4' ), AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'gone-4' ) ) );
+		self::assertSame( array( 'deleted' => true, 'id' => 'gone-4' ), self::without_undo( AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'gone-4' ) ) ) );
 	}
 
 	#[RunInSeparateProcess]

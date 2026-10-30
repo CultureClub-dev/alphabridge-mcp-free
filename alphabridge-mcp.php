@@ -71,6 +71,11 @@ require_once AB_MCP_DIR . 'includes/undo/class-undo-restore.php';
 // The undo part of a tool's answer and its read-back, and the undo of meta (4.13.0).
 require_once AB_MCP_DIR . 'includes/undo/class-undo-answer.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-meta.php';
+// The undo of terms, menus, menu items and widgets (4.13.0).
+require_once AB_MCP_DIR . 'includes/undo/class-undo-objects.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo-terms.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo-menu-items.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo-widgets.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';

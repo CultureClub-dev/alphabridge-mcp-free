@@ -27,6 +27,13 @@ if ( ! function_exists( 'wp_update_term' ) ) {
 			return new WP_Error( 'invalid_term', 'Empty Term.' );
 		}
 		$GLOBALS['ab_test_term_writes'][] = array( 'update', (int) $term_id, (string) $taxonomy );
+		// And the change itself, unslashed as WordPress stores it (the tool
+		// reads it back since 4.13.0).
+		foreach ( array( 'name', 'slug', 'description', 'parent' ) as $field ) {
+			if ( array_key_exists( $field, $args ) ) {
+				$term->$field = 'parent' === $field ? (int) $args[ $field ] : wp_unslash( (string) $args[ $field ] );
+			}
+		}
 		return array(
 			'term_id'          => (int) $term_id,
 			'term_taxonomy_id' => (int) $term_id,

@@ -4988,6 +4988,72 @@ msgstr "Les métadonnées ont été modifiées après la planification de l'annu
 msgid "Nothing was written: a row of this key is stored as \"%1$s\", and a write of \"%2$s\" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change \"%1$s\" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator."
 msgstr "Rien n'a été écrit : une ligne de cette clé est enregistrée sous « %1$s », et une écriture de « %2$s » la modifierait aussi, car la base de données compare les clés sans tenir compte des majuscules et minuscules. Le compte de cette connexion ne peut pas modifier « %1$s » (une extension la protège, ou c'est une clé protégée). Modifiez-la là où son extension le propose, ou demandez à l'administrateur du site."
 
+msgid "WordPress did not delete menu item %d again; the undo point stays. Check the menu with wp_get_menu, and try again."
+msgstr "WordPress n'a pas supprimé à nouveau l'élément de menu %d ; le point de restauration reste. Vérifiez le menu avec wp_get_menu, puis réessayez."
+
+msgid "The menu item was changed, moved or given sub-items after the undo was planned; nothing was restored. Pass force=true to delete it over the newer change."
+msgstr "L'élément de menu a été modifié, déplacé ou a reçu des sous-éléments après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour le supprimer malgré la modification plus récente."
+
+msgid "The snapshot of the menu item is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "L'instantané de l'élément de menu n'a pas une forme que cet outil écrit ; rien n'a été restauré. Ce point de restauration est inutilisable ; wp_undo_discard le supprime."
+
+msgid "The state could not be read before the restore; nothing was restored. Try again in a moment; the undo point stays."
+msgstr "L'état n'a pas pu être lu avant la restauration ; rien n'a été restauré. Réessayez dans un instant ; le point de restauration reste."
+
+msgid "WordPress deletes a term for good, with its meta and its place on every post that had it. Before deleting a term that may be needed again, note it with wp_get_term and wp_get_term_meta; wp_create_term makes it anew, under a new id and on no post."
+msgstr "WordPress supprime un terme définitivement, avec ses métadonnées et sa place sur chaque publication qui l'avait. Avant de supprimer un terme qui pourrait resservir, notez-le avec wp_get_term et wp_get_term_meta ; wp_create_term le recrée, sous un nouvel identifiant et sur aucune publication."
+
+msgid "WordPress deletes a menu item for good, not into the trash. Before deleting one that may be needed again, note it with wp_get_menu; wp_add_menu_item adds it anew, under a new id and at the end of the menu."
+msgstr "WordPress supprime un élément de menu définitivement, sans passer par la corbeille. Avant de supprimer un élément qui pourrait resservir, notez-le avec wp_get_menu ; wp_add_menu_item l'ajoute à nouveau, sous un nouvel identifiant et à la fin du menu."
+
+msgid "WordPress deletes the file, its image sizes and its entry in the media library for good. Before deleting a file that may be needed again, keep a copy of it (wp_get_media gives its address); wp_upload_media adds it anew under a new id, at its old address only if it lands in the same upload folder under the same file name."
+msgstr "WordPress supprime définitivement le fichier, ses tailles d'image et son entrée dans la médiathèque. Avant de supprimer un fichier qui pourrait resservir, gardez-en une copie (wp_get_media donne son adresse) ; wp_upload_media l'ajoute à nouveau sous un nouvel identifiant ; il ne retrouve son ancienne adresse que s'il arrive dans le même dossier de téléversement sous le même nom de fichier."
+
+msgid "WordPress deletes the account for good, and its content as the call said. Before deleting an account that may be needed again, note it with wp_get_user and wp_get_user_meta; wp_create_user creates a new one, under a new id and with a new password."
+msgstr "WordPress supprime définitivement le compte, et son contenu comme l'appel l'a indiqué. Avant de supprimer un compte qui pourrait resservir, notez-le avec wp_get_user et wp_get_user_meta ; wp_create_user en crée un nouveau, sous un nouvel identifiant et avec un nouveau mot de passe."
+
+msgid "WordPress did not store the change: %1$s of the term still hold what they held before. A plugin may refuse it on save (a filter on the term update). Check the term with %2$s, and ask the site administrator which plugin guards it."
+msgstr "WordPress n'a pas enregistré la modification : %1$s du terme contiennent toujours ce qu'ils contenaient avant. Une extension peut la refuser à l'enregistrement (un filtre sur la mise à jour du terme). Vérifiez le terme avec %2$s et demandez à l'administrateur du site quelle extension le protège."
+
+msgid "WordPress did not delete term %1$d again%2$s; the undo point stays. Check it with wp_get_term, and try again."
+msgstr "WordPress n'a pas supprimé à nouveau le terme %1$d%2$s ; le point de restauration reste. Vérifiez-le avec wp_get_term, puis réessayez."
+
+msgid "WordPress did not take the old fields of the term back (%s); the undo point stays. Check the term with wp_get_term: a slug taken since or a parent deleted since is changed there first."
+msgstr "WordPress n'a pas repris les anciens champs du terme (%s) ; le point de restauration reste. Vérifiez le terme avec wp_get_term : un identifiant (slug) pris entre-temps ou un parent supprimé entre-temps se corrige d'abord là."
+
+msgid "The term was written back, but the database holds something else for: %s. A plugin may rewrite term fields on save; check the term with wp_get_term."
+msgstr "Le terme a été réécrit, mais la base de données contient autre chose pour : %s. Une extension peut réécrire les champs des termes à l'enregistrement ; vérifiez le terme avec wp_get_term."
+
+msgid "The term was changed or put to use after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Le terme a été modifié ou mis en usage après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour le restaurer malgré la modification plus récente."
+
+msgid "The snapshot of the term is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "L'instantané du terme n'a pas une forme que cet outil écrit ; rien n'a été restauré. Ce point de restauration est inutilisable ; wp_undo_discard le supprime."
+
+msgid "The database did not take back the option %s; the undo point stays. Try again; wp_get_widgets shows the widgets as they are now."
+msgstr "La base de données n'a pas repris l'option %s ; le point de restauration reste. Réessayez ; wp_get_widgets montre les widgets dans leur état actuel."
+
+msgid "The widgets were changed after the undo was planned; nothing was restored. Pass force=true to put the old state back over the newer change."
+msgstr "Les widgets ont été modifiés après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour remettre l'ancien état par-dessus la modification plus récente."
+
+msgid "The snapshot of the widgets is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "L'instantané des widgets n'a pas une forme que cet outil écrit ; rien n'a été restauré. Ce point de restauration est inutilisable ; wp_undo_discard le supprime."
+
+msgid "No undo point: WordPress answered with a term this call did not create (another request created the same one at the same moment, or a plugin stepped in), so there is nothing of this call to take back. Check it with %s."
+msgstr "Aucun point de restauration : WordPress a répondu avec un terme que cet appel n'a pas créé (une autre requête a créé le même au même moment, ou une extension est intervenue) ; il n'y a donc rien de cet appel à annuler. Vérifiez-le avec %s."
+
+msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
+msgstr "Le menu %d contient un élément que ce compte ne peut pas supprimer, et supprimer le menu le supprimerait aussi ; rien n'a été restauré. Retirez cet élément avec un compte qui le peut (wp_get_menu liste les éléments, wp_delete_menu_item en retire un), puis relancez l'annulation."
+
+msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
+msgstr "Aucun point de restauration : la ligne d'option de ces widgets contient un objet PHP, qu'un point de restauration ne remet pas en place. Vérifiez le résultat avec wp_get_widgets ; un tel widget se rétablit dans wp-admin sous Apparence › Widgets."
+
+msgid "Menu items %1$s of menu %2$d are still there after the deletion, or could not be read back; the menu was kept and the undo point stays. Check them with wp_get_menu, remove them with wp_delete_menu_item, then try again."
+msgstr "Les éléments de menu %1$s du menu %2$d sont toujours là après la suppression, ou n'ont pas pu être relus ; le menu a été conservé et le point de restauration reste. Vérifiez-les avec wp_get_menu, retirez-les avec wp_delete_menu_item, puis réessayez."
+
+msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
+msgstr "Sur un réseau multisite, WordPress retire le compte de ce site seulement : le compte, son identifiant et son mot de passe restent, et son contenu ici a été traité comme l'appel l'a indiqué. Avant de retirer un compte qui pourrait resservir ici, notez son rôle avec wp_get_user ; un administrateur du réseau l'ajoute de nouveau à ce site dans wp-admin, sous Utilisateurs."
+
 #, php-format
 msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
 msgstr "L'argument à %1$s contient %2$s, l'espace réservé qui remplace des identifiants dans la réponse d'un outil de lecture. Réécrit, il remplacerait les identifiants enregistrés, c'est pourquoi rien n'a été modifié. Envoyez la vraie valeur, ou omettez ce champ pour que la valeur enregistrée reste."

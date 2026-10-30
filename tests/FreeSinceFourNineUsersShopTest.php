@@ -199,7 +199,9 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 		self::assertSame( array( 'updated' => true, 'id' => 1 ), self::demote( 1 ) );
 		self::assertSame( array( 'editor' ), $GLOBALS['ab_test_user_db'][1] );
 		ab_test_user_site( array( 1 => array( 'administrator' ), 2 => array( 'administrator' ) ) );
-		self::assertSame( array( 'deleted' => true, 'id' => 1 ), self::remove( 1 ) );
+		$gone = self::remove( 1 );
+		self::assertSame( array( 'deleted' => true, 'id' => 1, 'undo' => null ), array_slice( $gone, 0, 3 ) );
+		self::assertStringContainsString( 'wp_get_user', $gone['undo_note'], 'Since 4.13.0 the answer says there is no way back, and what to do first.' );
 		self::assertArrayNotHasKey( 1, $GLOBALS['ab_test_user_db'] );
 		// Keeping the administrator role is no demotion.
 		ab_test_user_site( array( 1 => array( 'administrator' ) ) );
