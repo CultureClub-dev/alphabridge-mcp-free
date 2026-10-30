@@ -531,6 +531,7 @@ AB_MCP_Ability_Broker::set_on( array( 'alphabridge/*', 'alphabridge/wp-list-post
 add_filter( 'ab_mcp_ability_allowed', '__return_true' );
 ok( array() === array_filter( array_keys( AB_MCP_Ability_Broker::all() ), static function ( $n ) { return 0 === strpos( $n, 'alphabridge/' ); } ), 'F1 the broker lists none of them' );
 ok( null === AB_MCP_Ability_Broker::get( 'alphabridge/wp-list-posts' ) && false === AB_MCP_Ability_Broker::is_on( 'alphabridge/wp-list-posts' ), 'F2 nor gets one, approved or not' );
+ok( true === AB_MCP_Ability_Broker::is_own( ' AlphaBridge/wp-list-posts ' ) && false === AB_MCP_Ability_Broker::is_own( 'alphabridge-x/wp-list-posts' ), 'F2 is_own() knows the namespace in any case and with spaces around, and no other' );
 update_option( AB_MCP_Audit_Log::OPTION, array() );
 foreach ( array( 'alphabridge/wp-list-posts', 'AlphaBridge/wp-list-posts', ' alphabridge/wp-delete-plugin ' ) as $n ) {
 	$res = AB_MCP_Tools_Abilities::run_ability( array( 'name' => $n, 'apply' => true, 'input' => array( 'plugin' => 'hello.php' ) ) );
