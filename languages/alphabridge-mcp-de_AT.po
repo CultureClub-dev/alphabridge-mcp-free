@@ -4018,8 +4018,8 @@ msgid "Not kept active: after %1$s was activated, its own code switched the site
 msgstr "Nicht aktiv behalten: Nachdem %1$s aktiviert wurde, hat sein eigener Code die Website während der Testanfragen weiter umgestellt, und das ließ sich NICHT zurücknehmen (%3$s). Jetzt aktiv: %2$s. Das Theme in wp-admin unter Design → Themes wechseln."
 
 #, php-format
-msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one."
-msgstr "Nicht aktiv: Aktiviert wurde %s, aber nach den Testanfragen ist es nicht mehr aktiv. Sein eigener Code hat es ausgeschaltet, während die Website es lud, meist weil etwas fehlt, das es braucht (ein anderes Plugin, eine PHP-Erweiterung, eine Einstellung). Nichts wurde zurückgenommen, und die Website läuft wie vorher. Seinen Grund, falls es einen genannt hat, in wp-admin unter Plugins nachsehen."
+msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme."
+msgstr "Nicht aktiv: Aktiviert wurde %s, aber nach den Testanfragen ist es nicht mehr aktiv. Sein eigener Code hat es ausgeschaltet, während die Website es lud, meist weil etwas fehlt, das es braucht (ein anderes Plugin, eine PHP-Erweiterung, eine Einstellung). Nichts wurde zurückgenommen, und die Website läuft wie vorher. Den Grund, falls einer genannt ist, in wp-admin nachsehen: unter Plugins für ein Plugin, unter Design › Themes für ein Theme."
 
 #, php-format
 msgid "It is active, but while activating it WordPress or PHP said: %s."

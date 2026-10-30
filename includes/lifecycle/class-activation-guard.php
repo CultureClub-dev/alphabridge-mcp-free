@@ -1096,7 +1096,7 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 			'ab_mcp_activation_switched_off',
 			sprintf(
 				/* translators: %s: plugin or theme */
-				__( 'Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one.', 'alphabridge-mcp' ),
+				__( 'Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme.', 'alphabridge-mcp' ),
 				self::named( $job )
 			)
 		);

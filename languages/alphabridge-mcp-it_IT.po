@@ -4018,8 +4018,8 @@ msgid "Not kept active: after %1$s was activated, its own code switched the site
 msgstr "Non mantenuto attivo: dopo che %1$s è stato attivato, il suo stesso codice ha cambiato il sito durante le richieste di prova, e NON è stato possibile annullarlo (%3$s). Ora è attivo: %2$s. Cambia tema in wp-admin in Aspetto › Temi."
 
 #, php-format
-msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one."
-msgstr "Non attivo: %s è stato attivato, ma dopo le richieste di prova non è più attivo. Il suo stesso codice lo ha disattivato mentre il sito lo caricava, il più delle volte perché manca qualcosa di cui ha bisogno (un altro plugin, un'estensione PHP, un'impostazione). Non è stato annullato nulla, e il sito funziona come prima. Controlla il suo motivo in wp-admin in Plugin, se ne ha indicato uno."
+msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme."
+msgstr "Non attivo: %s è stato attivato, ma dopo le richieste di prova non è più attivo. Il suo stesso codice lo ha disattivato mentre il sito lo caricava, il più delle volte perché manca qualcosa di cui ha bisogno (un altro plugin, un'estensione PHP, un'impostazione). Non è stato annullato nulla, e il sito funziona come prima. Controlla il motivo in wp-admin, se ne è indicato uno: in Plugin per un plugin, in Aspetto › Temi per un tema."
 
 #, php-format
 msgid "It is active, but while activating it WordPress or PHP said: %s."

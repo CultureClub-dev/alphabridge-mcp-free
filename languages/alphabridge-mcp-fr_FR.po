@@ -4018,8 +4018,8 @@ msgid "Not kept active: after %1$s was activated, its own code switched the site
 msgstr "Activation non conservée pour %1$s : après l'activation, son propre code a fait basculer le site pendant les requêtes de test, et cela n'a PAS pu être annulé (%3$s). Actif maintenant : %2$s. Changez de thème dans wp-admin sous Apparence › Thèmes."
 
 #, php-format
-msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one."
-msgstr "Activation sans effet : WordPress a activé %s, mais après les requêtes de test l'élément n'est plus actif. Son propre code l'a désactivé pendant que le site le chargeait, le plus souvent parce qu'il manque quelque chose dont il a besoin (une autre extension, une extension PHP, un réglage). Rien n'a été annulé, et le site fonctionne comme avant. Consultez sa raison dans wp-admin sous Extensions, s'il en a donné une."
+msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme."
+msgstr "Activation sans effet : WordPress a activé %s, mais après les requêtes de test l'élément n'est plus actif. Son propre code l'a désactivé pendant que le site le chargeait, le plus souvent parce qu'il manque quelque chose dont il a besoin (une autre extension, une extension PHP, un réglage). Rien n'a été annulé, et le site fonctionne comme avant. Consultez la raison dans wp-admin, s'il y en a une : sous Extensions pour une extension, sous Apparence › Thèmes pour un thème."
 
 #, php-format
 msgid "It is active, but while activating it WordPress or PHP said: %s."

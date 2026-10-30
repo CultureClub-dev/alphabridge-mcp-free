@@ -4018,8 +4018,8 @@ msgid "Not kept active: after %1$s was activated, its own code switched the site
 msgstr "No se ha mantenido activo: tras activar %1$s, su propio código ha cambiado el sitio durante las peticiones de prueba, y eso NO se ha podido revertir (%3$s). Activo ahora: %2$s. Cambia de tema en wp-admin, en Apariencia › Temas."
 
 #, php-format
-msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin under Plugins, if it gave one."
-msgstr "No activo: %s se ha activado, pero tras las peticiones de prueba ya no está activo. Su propio código lo ha desactivado mientras el sitio lo cargaba, casi siempre porque falta algo que necesita (otro plugin, una extensión de PHP, un ajuste). No se ha revertido nada y el sitio funciona como antes. Consulta su motivo en wp-admin, en Plugins, si ha dado alguno."
+msgid "Not active: %s was activated, but after the test requests it is no longer active. Its own code switched it off while the site loaded it, most often because something it needs is missing (another plugin, a PHP extension, a setting). Nothing was taken back, and the site runs as before. Check its reason in wp-admin, if it gave one: under Plugins for a plugin, under Appearance › Themes for a theme."
+msgstr "No activo: %s se ha activado, pero tras las peticiones de prueba ya no está activo. Su propio código lo ha desactivado mientras el sitio lo cargaba, casi siempre porque falta algo que necesita (otro plugin, una extensión de PHP, un ajuste). No se ha revertido nada y el sitio funciona como antes. Consulta el motivo en wp-admin, si se indica alguno: en Plugins para un plugin, en Apariencia › Temas para un tema."
 
 #, php-format
 msgid "It is active, but while activating it WordPress or PHP said: %s."
