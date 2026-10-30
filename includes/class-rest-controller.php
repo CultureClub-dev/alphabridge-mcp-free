@@ -1387,10 +1387,9 @@ class AB_MCP_REST_Controller {
 		if ( AB_MCP_Redactor::guards( $name, $def ) ) {
 			$mark = AB_MCP_Redactor::placeholder_in( $args );
 			if ( null !== $mark ) {
-				/* translators: 1: where in the arguments, as a JSON pointer such as /value/api_key; 2: the placeholder [REDACTED] */
-				$message = sprintf( __( 'The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays.', 'alphabridge-mcp' ), '' === $mark ? '/' : $mark, AB_MCP_Redactor::MARK );
-				AB_MCP_Audit_Log::record( $name, $args, 'denied', $message, $via );
-				return $fail( 'params', 'ab_mcp_redacted_value', $message );
+				$refused = AB_MCP_Redactor::refusal( $mark );
+				AB_MCP_Audit_Log::record( $name, $args, 'denied', $refused->get_error_message(), $via );
+				return $fail( 'params', $refused->get_error_code(), $refused->get_error_message() );
 			}
 		}
 

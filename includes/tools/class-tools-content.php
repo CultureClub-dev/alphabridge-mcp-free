@@ -1449,6 +1449,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them.', 'alphabridge-mcp' ) );
 		}
 		$target = $id;
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'post', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}

@@ -314,6 +314,12 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'user', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
@@ -433,6 +439,12 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$value = isset( $a['value'] ) ? $a['value'] : '';
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
+		}
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'term', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
 		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';

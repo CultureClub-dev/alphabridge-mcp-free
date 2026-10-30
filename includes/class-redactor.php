@@ -144,16 +144,32 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Writing tools of which one part of the answer is another plugin's data,
-	 * and which part.
+	 * and which part: the result of an ability, and the read-back of what a
+	 * writer stored (saved_fields), which holds the credential a value sent
+	 * with [REDACTED] kept (restore_placeholders()). Terms, menus and
+	 * widgets answer with saved_fields too.
 	 */
-	const PARTS = array( 'wp_run_ability' => array( 'result' ) );
+	const PARTS = array(
+		'wp_run_ability'      => array( 'result' ),
+		'wp_update_post_meta' => array( 'saved_fields' ),
+		'wp_update_term_meta' => array( 'saved_fields' ),
+		'wp_update_user_meta' => array( 'saved_fields' ),
+		'wp_update_media'     => array( 'saved_fields' ),
+		'wp_create_post'      => array( 'saved_fields', 'meta' ),
+		'wp_update_post'      => array( 'saved_fields', 'meta' ),
+		'wp_create_term'      => array( 'saved_fields' ),
+		'wp_update_term'      => array( 'saved_fields' ),
+		'wp_create_menu'      => array( 'saved_fields' ),
+		'wp_add_menu_item'    => array( 'saved_fields' ),
+		'wp_add_widget'       => array( 'saved_fields' ),
+		'wp_update_widget'    => array( 'saved_fields' ),
+	);
 
 	/**
 	 * Writing tools that put the stored value back for the placeholder
-	 * themselves (restore_placeholders()); run_tool() lets their arguments
-	 * through.
+	 * themselves (value_back()); run_tool() lets their arguments through.
 	 */
-	const RESTORES = array();
+	const RESTORES = array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta' );
 
 	/**
 	 * Writing tools whose arguments are search patterns and replacement text
@@ -376,6 +392,53 @@ final class AB_MCP_Redactor {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The refusal of a value that carries the placeholder back.
+	 *
+	 * @param string $pointer Where, as a JSON pointer.
+	 * @return WP_Error
+	 */
+	public static function refusal( $pointer ) {
+		return new WP_Error(
+			'ab_mcp_redacted_value',
+			sprintf(
+				/* translators: 1: where in the arguments, as a JSON pointer such as /value/api_key; 2: the placeholder [REDACTED] */
+				__( 'The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays.', 'alphabridge-mcp' ),
+				'' === (string) $pointer ? '/' : (string) $pointer,
+				self::MARK
+			)
+		);
+	}
+
+	/**
+	 * A meta value to be written, with the stored credential back where it
+	 * holds [REDACTED] (restore_placeholders()); the refusal where a
+	 * placeholder is left. The three meta writers ask this after their
+	 * rights checks and before the shared write (AB_MCP_Undo_Meta::write()),
+	 * so the value written, compared in saved_fields and kept in the undo
+	 * point is the restored one. Compared with the first stored value of the
+	 * key: the one wp_get_post_meta shows for the key, and the one value
+	 * update_*_meta() leaves in every row.
+	 *
+	 * @param string $type post, term or user.
+	 * @param int    $id   Object id.
+	 * @param string $key  Meta key.
+	 * @param mixed  $value Value sent.
+	 * @return mixed|WP_Error The value to write.
+	 */
+	public static function value_back( $type, $id, $key, $value ) {
+		if ( is_string( $value ) ) {
+			return false !== strpos( $value, self::MARK ) ? self::refusal( '/value' ) : $value;
+		}
+		if ( ! is_array( $value ) && ! $value instanceof stdClass ) {
+			return $value;
+		}
+		$get    = 'get_' . $type . '_meta';
+		$stored = function_exists( $get ) ? $get( (int) $id, (string) $key, true ) : '';
+		$back   = self::restore_placeholders( $value, $stored, $left );
+		return $left ? self::refusal( '/value' ) : $back;
 	}
 
 	/**
