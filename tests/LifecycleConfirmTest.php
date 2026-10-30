@@ -13,14 +13,12 @@ declare( strict_types = 1 );
 namespace {
 	// Stubs of the wp-admin readers these fingerprints use, only where the
 	// shared bootstrap does not bring them.
-	if ( ! function_exists( 'get_plugins' ) ) {
-		function get_plugins() {
-			return $GLOBALS['ab_test_lc_plugins'] ?? array();
-		}
-	}
+	// get_plugins() comes from the shared tests/wp-admin/includes/plugin.php
+	// ($GLOBALS['ab_test_plugins']), as wp_list_plugins loads it.
+	require_once __DIR__ . '/wp-admin/includes/plugin.php';
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		function is_plugin_active( $plugin ) {
-			return in_array( $plugin, $GLOBALS['ab_test_lc_active'] ?? array(), true );
+			return in_array( $plugin, (array) get_option( 'active_plugins', array() ), true );
 		}
 	}
 	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
@@ -64,11 +62,11 @@ namespace AlphaBridge\Tests {
 
 		protected function setUp(): void {
 			ab_test_reset();
-			$GLOBALS['ab_test_lc_plugins'] = array(
+			$GLOBALS['ab_test_plugins'] = array(
 				'hello/hello.php'       => array( 'Name' => 'Hello Dolly', 'Version' => '1.7.2' ),
 				'akismet/akismet.php'   => array( 'Name' => 'Akismet', 'Version' => '5.3' ),
 			);
-			$GLOBALS['ab_test_lc_active']  = array( 'akismet/akismet.php' );
+			update_option( 'active_plugins', array( 'akismet/akismet.php' ) );
 			$GLOBALS['ab_test_lc_themes']  = array(
 				'twentytwentyfive' => new LcTheme( array( 'Name' => 'Twenty Twenty-Five', 'Version' => '1.2' ) ),
 				'astra'            => new LcTheme( array( 'Name' => 'Astra', 'Version' => '4.8' ) ),
@@ -106,14 +104,14 @@ namespace AlphaBridge\Tests {
 			$args   = array( 'plugin' => 'akismet/akismet.php' );
 			$before = ( $def['state'] )( $args );
 
-			$GLOBALS['ab_test_lc_plugins']['akismet/akismet.php']['Version'] = '5.4';
+			$GLOBALS['ab_test_plugins']['akismet/akismet.php']['Version'] = '5.4';
 			self::assertNotSame( $before, ( $def['state'] )( $args ), 'An update in between' );
 
-			$GLOBALS['ab_test_lc_plugins']['akismet/akismet.php']['Version'] = '5.3';
-			$GLOBALS['ab_test_lc_active'] = array();
+			$GLOBALS['ab_test_plugins']['akismet/akismet.php']['Version'] = '5.3';
+			update_option( 'active_plugins', array() );
 			self::assertNotSame( $before, ( $def['state'] )( $args ), 'Deactivated in between' );
 
-			unset( $GLOBALS['ab_test_lc_plugins']['akismet/akismet.php'] );
+			unset( $GLOBALS['ab_test_plugins']['akismet/akismet.php'] );
 			self::assertStringEndsWith( '|absent', ( $def['state'] )( $args ) );
 		}
 
@@ -153,7 +151,7 @@ namespace AlphaBridge\Tests {
 			self::assertNotSame( $base, ( $def['state'] )( $zip + array( 'activate' => true ) ), 'Activate or not' );
 			self::assertNotSame( $base, ( $def['state'] )( array( 'url' => 'https://example.org/x.zip' ) ), 'Address instead of content' );
 
-			$GLOBALS['ab_test_lc_plugins']['new/new.php'] = array( 'Name' => 'New', 'Version' => '1.0' );
+			$GLOBALS['ab_test_plugins']['new/new.php'] = array( 'Name' => 'New', 'Version' => '1.0' );
 			self::assertNotSame( $base, ( $def['state'] )( $zip ), 'A plugin appeared in between' );
 
 			$theme = self::def( 'wp_install_theme_zip' );
