@@ -389,7 +389,7 @@ abstract class AB_MCP_Undo_Objects {
 				$why = __( 'WordPress deletes a menu item for good, not into the trash. Before deleting one that may be needed again, note it with wp_get_menu; wp_add_menu_item adds it anew, under a new id and at the end of the menu.', 'alphabridge-mcp' );
 				break;
 			case 'wp_delete_media':
-				$why = __( 'WordPress deletes the file, its image sizes and its entry in the media library for good. Before deleting a file that may be needed again, keep a copy of it (wp_get_media gives its address); wp_upload_media adds it anew, under a new id and address.', 'alphabridge-mcp' );
+				$why = __( 'WordPress deletes the file, its image sizes and its entry in the media library for good. Before deleting a file that may be needed again, keep a copy of it (wp_get_media gives its address); wp_upload_media adds it anew under a new id, at its old address only if it lands in the same upload folder under the same file name.', 'alphabridge-mcp' );
 				break;
 			default:
 				if ( null === $multisite ? ( function_exists( 'is_multisite' ) && is_multisite() ) : (bool) $multisite ) {

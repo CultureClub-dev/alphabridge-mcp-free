@@ -439,7 +439,12 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			if ( '_multiwidget' === $num ) {
 				continue;
 			}
-			$current = isset( $now[ $num ] ) && is_array( $now[ $num ] ) ? $now[ $num ] : array();
+			// The update() starts from what is stored now, but only from the
+			// keys the snapshot has: the restore writes the snapshot, so a
+			// key added since (the text widget's "visual") is gone after it
+			// and must not steer the check (WP_Widget_Text::update() keeps
+			// it from the old instance and turns "filter" on with it).
+			$current = isset( $now[ $num ] ) && is_array( $now[ $num ] ) ? array_intersect_key( $now[ $num ], is_array( $instance ) ? $instance : array() ) : array();
 			if ( isset( $now[ $num ] ) && self::plain( $instance ) && self::plain( $now[ $num ] ) && self::alike( $instance, $now[ $num ] ) ) {
 				continue;
 			}

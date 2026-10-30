@@ -484,7 +484,21 @@ class WP_Widget {
 		return $clean;
 	}
 }
-$GLOBALS['wp_widget_factory']      = (object) array( 'widgets' => array( new WP_Widget( 'text' ), new WP_Widget( 'feed' ) ) );
+// As WP_Widget_Text::update(): starts from the stored instance, keeps
+// "visual" from it, and visual mode turns "filter" on.
+class AB_Text_Like_Widget extends WP_Widget {
+	public function update( $new, $old ) {
+		$new                = array_merge( array( 'title' => '', 'text' => '', 'filter' => false, 'visual' => null ), (array) $new );
+		$instance           = (array) $old;
+		$instance['title']  = strip_tags( (string) $new['title'] );
+		$instance['text']   = current_user_can( 'unfiltered_html' ) ? (string) $new['text'] : strip_tags( (string) $new['text'] );
+		$instance['filter'] = ! empty( $new['filter'] );
+		if ( isset( $new['visual'] ) ) { $instance['visual'] = ! empty( $new['visual'] ); }
+		if ( ! empty( $instance['visual'] ) ) { $instance['filter'] = true; }
+		return $instance;
+	}
+}
+$GLOBALS['wp_widget_factory']      = (object) array( 'widgets' => array( new WP_Widget( 'text' ), new WP_Widget( 'feed' ), new AB_Text_Like_Widget( 'textcore' ) ) );
 $GLOBALS['wp_registered_sidebars'] = array( 'sidebar-1' => array( 'name' => 'Side' ), 'footer' => array( 'name' => 'Foot' ) );
 
 /* ---- the rest of the site the tools and the restore ask ---- */
@@ -1082,6 +1096,18 @@ $GLOBALS['ab_deny'] = array();
 $GLOBALS['T']['options']['widget_text'][0] = serialize( array( 2 => array( 'title' => 'New' ) ) ); // phpcs:ignore -- a row no WP_Widget wrote (no _multiwidget)
 $out = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 'protected_now' === $out['blocked'][0]['reason'] && false === strpos( ab_raw( 'widget_text' ), 'Hello' ), 'F27 a row the widgets of WordPress no longer own is not written, even with force' );
+
+// Codex round 5: a key the widget gained since does not steer the check.
+reset_all();
+update_option( 'widget_textcore', array( '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( 'sidebar-1' => array(), 'array_version' => 3 ) );
+$GLOBALS['ab_deny']['unfiltered_html'] = true;
+$add    = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'textcore', 'sidebar' => 'sidebar-1', 'settings' => array( 'title' => 'T', 'text' => 'Body', 'filter' => false ) ) );
+$before = ab_raw( 'widget_textcore' );
+$upd    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => $add['id'], 'settings' => array( 'title' => 'T', 'text' => 'Body', 'visual' => true ) ) );
+$out    = ab_undo( $upd['undo'] );
+ok( is_array( $out ) && 1 === $out['undone'] && $before === ab_raw( 'widget_textcore' ), 'F30a a text widget switched to visual mode since comes back without it, for an account without unfiltered_html' );
+$GLOBALS['ab_deny'] = array();
 
 /* a hand-edited point gains no right */
 reset_all();
