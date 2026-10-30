@@ -31,11 +31,25 @@ final class MediaTestEditor {
 	public $resized = null;
 	public $saved   = null;
 	public $mime    = null;
+	public $calls   = array();
+	public $rotate  = false;
 	public function __construct( private int $w, private int $h, private bool $fail = false ) {}
 	public function get_size() {
 		return array( 'width' => $this->w, 'height' => $this->h );
 	}
+	/** As WP_Image_Editor::maybe_exif_rotate() for a photo taken upright (orientation 6): width and height swap. */
+	public function maybe_exif_rotate() {
+		$this->calls[] = 'rotate';
+		if ( $this->rotate instanceof \WP_Error ) {
+			return $this->rotate;
+		}
+		if ( $this->rotate ) {
+			list( $this->w, $this->h ) = array( $this->h, $this->w );
+		}
+		return $this->rotate;
+	}
 	public function resize( $max_w, $max_h, $crop = false ) {
+		$this->calls[] = 'resize';
 		$this->resized = array( $max_w, $max_h, $crop );
 		$scale         = min( $max_w / $this->w, $max_h / $this->h );
 		$this->w       = (int) round( $this->w * $scale );
@@ -271,6 +285,30 @@ final class MediaChatFileTest extends TestCase {
 		self::assertSame( array( 'from' => array( 4000, 3000 ), 'to' => array( 1600, 1200 ) ), $r['resized'] );
 		self::assertSame( 'scaled', $GLOBALS['ab_test_sideloads'][0]['bytes'], 'The scaled copy is stored.' );
 		self::assertSame( hash( 'sha256', self::PNG ), $r['sha256'], 'The hash is the one of the file as received.' );
+	}
+
+	public function testAPhoneSideways(): void {
+		// A portrait photo stored 4000 x 3000 with EXIF orientation 6: turned
+		// upright before scaling, as WordPress does, or GD would store it
+		// sideways (Codex on #104).
+		$editor                    = new MediaTestEditor( 4000, 3000 );
+		$editor->rotate            = true;
+		$GLOBALS['ab_test_editor'] = static fn() => $editor;
+		$r = AB_MCP_Tools_Media::upload_base64( array( 'filename' => 'portrait.jpg', 'content' => base64_encode( 'JPEG-portrait' ), 'max_size' => 1600 ) );
+
+		self::assertSame( array( 'rotate', 'resize' ), $editor->calls );
+		self::assertSame( array( 'from' => array( 3000, 4000 ), 'to' => array( 1200, 1600 ) ), $r['resized'] );
+		self::assertSame( 'image/jpeg', $editor->mime );
+
+		// An error while turning: nothing saved, stored as it came, with a warning.
+		$broken                    = new MediaTestEditor( 4000, 3000 );
+		$broken->rotate            = new \WP_Error( 'image_rotate_error', 'Image rotate failed.' );
+		$GLOBALS['ab_test_editor'] = static fn() => $broken;
+		$r = AB_MCP_Tools_Media::upload_base64( array( 'filename' => 'portrait2.jpg', 'content' => base64_encode( 'JPEG-portrait-2' ), 'max_size' => 1600 ) );
+		self::assertSame( array( 'rotate' ), $broken->calls );
+		self::assertNull( $broken->saved );
+		self::assertSame( 'JPEG-portrait-2', end( $GLOBALS['ab_test_sideloads'] )['bytes'] );
+		self::assertStringContainsString( 'max_size was not applied', $r['warning'] );
 	}
 
 	public function testMaxSizeLeavesSmallImagesGifsPdfsAndUnreadableImagesAlone(): void {

@@ -548,6 +548,22 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		if ( max( $from ) <= $max ) {
 			return array( 'path' => $tmp );
 		}
+		// GD writes the pixels without the EXIF data, so a phone photo stored
+		// sideways would stay sideways: turn it upright first, as
+		// wp_create_image_subsizes() does (Codex on #104, 30.10.2026).
+		// An error leaves the image half turned: then nothing is saved, as in
+		// core, and the file is stored as it came.
+		$turned = method_exists( $editor, 'maybe_exif_rotate' ) ? $editor->maybe_exif_rotate() : false;
+		if ( is_wp_error( $turned ) ) {
+			return array(
+				'path'    => $tmp,
+				'warning' => __( 'max_size was not applied: the server\'s image editor could not scale this image, so it is stored at its own size. WordPress still scales images above 2560 pixels.', 'alphabridge-mcp' ),
+			);
+		}
+		if ( true === $turned ) {
+			$size = $editor->get_size();
+			$from = array( (int) $size['width'], (int) $size['height'] );
+		}
 		$done  = $editor->resize( $max, $max, false );
 		$saved = is_wp_error( $done ) ? $done : $editor->save( $tmp, self::SHRINK_TYPES[ $ext ] );
 		if ( is_wp_error( $saved ) || ! is_array( $saved ) || empty( $saved['path'] ) ) {
