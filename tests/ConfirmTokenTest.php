@@ -179,6 +179,62 @@ final class ConfirmTokenTest extends TestCase {
 		self::assertStringContainsString( 'Two steps', $def['description'] );
 	}
 
+	public function testArgumentsWithoutACanonicalFormAreRefusedNotBoundToAnEmptyString(): void {
+		$result = $this->call( 'wp_delete_plugin', array( 'plugin' => 'hello/hello.php', 'x' => INF ) );
+
+		self::assertTrue( $result['isError'] );
+		self::assertSame( 0, $this->runs );
+		self::assertStringContainsString( 'cannot be written as JSON', $result['content'][0]['text'] );
+
+		$args = array( 'plugin' => 'hello/hello.php', 'x' => INF );
+		self::assertSame( '', AB_MCP_Confirm_Token::issue( 'wp_delete_plugin', $args, 's', 1_000_000 ) );
+		$token = AB_MCP_Confirm_Token::issue( 'wp_delete_plugin', array( 'plugin' => 'hello/hello.php' ), 's', 1_000_000 );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Confirm_Token::check( 'wp_delete_plugin', $args, 's', $token, 1_000_000 ) );
+	}
+
+	public function testABrokenConfirmDefinitionRefusesInsteadOfRunningUnconfirmed(): void {
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'plugins', 'Plugins' );
+		$ran = false;
+		$r->register(
+			'wp_delete_broken',
+			array(
+				'confirm'  => array( 'state' => 'no_such_function_anywhere' ),
+				'callback' => static function () use ( &$ran ): string {
+					$ran = true;
+					return 'ran';
+				},
+			)
+		);
+		$request = new WP_REST_Request();
+		$request->set_json_params( array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => array( 'name' => 'wp_delete_broken', 'arguments' => array() ) ) );
+		$result = ( new AB_MCP_REST_Controller( $r ) )->handle( $request )->get_data()['result'];
+
+		self::assertTrue( $result['isError'] );
+		self::assertFalse( $ran );
+	}
+
+	public function testAPreviewThatThrowsEndsInAControlledErrorWithoutItsText(): void {
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'plugins', 'Plugins' );
+		$r->register(
+			'wp_delete_throwing',
+			array(
+				'confirm'  => array( 'state' => static function (): string {
+					throw new \RuntimeException( 'secret path /var/www/x' );
+				} ),
+				'callback' => static fn(): string => 'ran',
+			)
+		);
+		$request = new WP_REST_Request();
+		$request->set_json_params( array( 'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => array( 'name' => 'wp_delete_throwing', 'arguments' => array() ) ) );
+		$result = ( new AB_MCP_REST_Controller( $r ) )->handle( $request )->get_data()['result'];
+
+		self::assertTrue( $result['isError'] );
+		self::assertStringNotContainsString( '/var/www', $result['content'][0]['text'] );
+		self::assertStringContainsString( 'nothing ran', $result['content'][0]['text'] );
+	}
+
 	/* ---------------------------------------------------------- the token itself */
 
 	public function testTheTokenExpiresAfterTenMinutes(): void {

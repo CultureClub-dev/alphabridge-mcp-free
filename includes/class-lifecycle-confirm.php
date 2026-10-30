@@ -155,8 +155,8 @@ final class AB_MCP_Lifecycle_Confirm {
 				? __( 'Unpacks the package into wp-content/plugins. Its code runs with this site’s rights as soon as it is active.', 'alphabridge-mcp' )
 				: __( 'Unpacks the package into wp-content/themes. Its code runs with this site’s rights as soon as it is active.', 'alphabridge-mcp' ),
 			'no_way_back' => 'plugin' === $kind
-				? __( 'Undo does not cover installs. Deleting the plugin removes its folder (wp_delete_plugin); what its code wrote into the database stays.', 'alphabridge-mcp' )
-				: __( 'Undo does not cover installs. Deleting the theme removes its folder (wp_delete_theme); what its code wrote into the database stays.', 'alphabridge-mcp' ),
+				? __( 'Undo does not cover installs. Deleting the plugin later (wp_delete_plugin) removes its folder and runs its own uninstall routine, if it has one; whatever else its code changed stays.', 'alphabridge-mcp' )
+				: __( 'Undo does not cover installs. Deleting the theme later (wp_delete_theme) removes its folder; whatever its code changed while active stays.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -229,7 +229,10 @@ final class AB_MCP_Lifecycle_Confirm {
 
 	/**
 	 * Whether the plugin is there, its version, and whether it is active
-	 * here or for the network.
+	 * here or for the network. Not the contents of its files: the person
+	 * confirms deleting the plugin as such, and hashing every file of a
+	 * large plugin on each call would cost more than it protects. The same
+	 * holds for themes and for the inventory of the ZIP installs.
 	 *
 	 * @param array $a Arguments.
 	 * @return string
@@ -266,7 +269,7 @@ final class AB_MCP_Lifecycle_Confirm {
 			'effect'      => self::plugin_active( $plugin )
 				? __( 'Deactivates the plugin, then deletes its folder with all its files.', 'alphabridge-mcp' )
 				: __( 'Deletes the plugin’s folder with all its files.', 'alphabridge-mcp' ),
-			'no_way_back' => __( 'Undo does not cover deletes, and the files are gone. What the plugin stored in the database stays. A plugin from wordpress.org comes back with wp_install_plugin, without changes made to its files.', 'alphabridge-mcp' ),
+			'no_way_back' => __( 'Undo does not cover deletes, and the files are gone. WordPress also runs the plugin’s own uninstall routine, if it has one, which may remove its settings and tables. A plugin from wordpress.org comes back with wp_install_plugin, without changes made to its files.', 'alphabridge-mcp' ),
 		);
 	}
 
