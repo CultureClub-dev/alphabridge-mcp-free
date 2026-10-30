@@ -1547,6 +1547,15 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			if ( ! current_user_can( 'edit_post_meta', $owner, $clean ) ) {
 				continue;
 			}
+			// A row stored under another spelling ("Mixed" for "mixed")
+			// changes with this write: it is asked the same rules, and a
+			// key it is refused for is passed over like any other.
+			if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
+				require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
+			}
+			if ( null !== AB_MCP_Undo_Meta::spelling_refusal( 'wp_update_post_meta', 'post', $owner, $clean ) ) {
+				continue;
+			}
 			// update_metadata() unslashes key and value; the key is already
 			// sanitize_key()'d above, the value is not.
 			update_post_meta( $owner, $clean, wp_slash( $value ) );

@@ -114,31 +114,12 @@ class AB_MCP_Undo_Meta {
 		$cols   = array_map( 'strval', array_keys( $fwant ) );
 		$on     = class_exists( 'AB_MCP_Undo' ) && AB_MCP_Undo::enabled();
 
-		// update_metadata() writes with WHERE meta_key = …, which the
-		// database compares with a collation: a write of "mixed" changes a
-		// row "Mixed" too. The tool asked the rights of its key; a row
-		// stored under another spelling is asked the same rules before
-		// anything is written (refusal(), as the undo asks them). Where the
-		// table cannot be read, the write goes ahead as it always did.
+		// A row stored under another spelling of the key changes with it;
+		// it is asked the rules of the tool first (spelling_refusal()).
 		foreach ( $keys as $key ) {
-			$found = self::rows( $type, $id, $key );
-			$other = array();
-			foreach ( null === $found ? array() : $found as $row ) {
-				if ( $row['key'] !== $key ) {
-					$other[] = $row['key'];
-				}
-			}
-			$other = array_values( array_unique( $other ) );
-			if ( array() !== $other && '' !== self::refusal( $tool, array( 'type' => $type, 'id' => $id, 'keys' => array( $key => array() ) ), $other ) ) {
-				return new WP_Error(
-					'ab_mcp_protected_meta',
-					sprintf(
-						/* translators: 1: meta key as stored in another letter case, 2: meta key of the call */
-						__( 'Nothing was written: a row of this key is stored as "%1$s", and a write of "%2$s" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change "%1$s" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator.', 'alphabridge-mcp' ),
-						$other[0],
-						$key
-					)
-				);
+			$refused = self::spelling_refusal( $tool, $type, $id, $key );
+			if ( null !== $refused ) {
+				return $refused;
 			}
 		}
 
@@ -212,6 +193,46 @@ class AB_MCP_Undo_Meta {
 		// recorded whatever a stored value turns out to be.
 		$res = AB_MCP_Undo_Answer::saved( array(), $asked, $saved, $reader, isset( $spec['hidden'] ) ? (array) $spec['hidden'] : array() );
 		return AB_MCP_Undo_Answer::with( $res, $outcome );
+	}
+
+	/**
+	 * update_metadata() writes with WHERE meta_key = …, which the database
+	 * compares with a collation: a write of "mixed" changes a row "Mixed"
+	 * too, and so do update_*_meta() and delete_*_meta() wherever a key
+	 * comes from a call. The caller asked the rights of its key; a row
+	 * stored under another spelling is asked the same rules here, as the
+	 * undo asks them (refusal()), before anything is written. Every path
+	 * that writes a meta key a call names asks this. Where the table cannot
+	 * be read, nothing is refused on a guess: the write goes ahead as it
+	 * always did.
+	 *
+	 * @param string $tool The tool whose rules apply (wp_update_post_meta for a post's meta field).
+	 * @param string $type post, term or user.
+	 * @param int    $id   Object id the meta is stored on.
+	 * @param string $key  Meta key as the call writes it.
+	 * @return WP_Error|null The refusal, or null when the write may go ahead.
+	 */
+	public static function spelling_refusal( $tool, $type, $id, $key ) {
+		$found = self::rows( $type, $id, $key );
+		$other = array();
+		foreach ( null === $found ? array() : $found as $row ) {
+			if ( $row['key'] !== (string) $key ) {
+				$other[] = $row['key'];
+			}
+		}
+		$other = array_values( array_unique( $other ) );
+		if ( array() === $other || '' === self::refusal( (string) $tool, array( 'type' => (string) $type, 'id' => (int) $id, 'keys' => array( (string) $key => array() ) ), $other ) ) {
+			return null;
+		}
+		return new WP_Error(
+			'ab_mcp_protected_meta',
+			sprintf(
+				/* translators: 1: meta key as stored in another letter case, 2: meta key of the call */
+				__( 'Nothing was written: a row of this key is stored as "%1$s", and a write of "%2$s" would change it too, since the database compares keys without regard to letter case. The account of this connection may not change "%1$s" (a plugin protects it, or it is a protected key). Change it where its plugin offers it, or ask the site administrator.', 'alphabridge-mcp' ),
+				$other[0],
+				(string) $key
+			)
+		);
 	}
 
 	/**

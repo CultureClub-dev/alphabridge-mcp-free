@@ -897,6 +897,28 @@ final class FreeSinceFourNineUndoTest extends TestCase {
 		self::assertNotContains( array( 'edit_post_meta', array( 50, 'farbe' ) ), $asked );
 	}
 
+	public function testTheMetaFieldOfUpdateAndCreatePostAsksTheRightsOfEveryStoredSpelling(): void {
+		// Codex 31.10.2026: update_post_meta( 5, 'mixed' ) also changes a row
+		// "Mixed" (the collation). One the account may not change keeps the
+		// key out of the write, as any other refused key of the meta field.
+		$GLOBALS['ab_test_meta'][5]['Mixed'] = array( 'geschuetzt' );
+		$GLOBALS['ab_test_can']              = static fn( string $cap, array $args = array() ): bool => ! ( 'edit_post_meta' === $cap && 'Mixed' === ( $args[1] ?? null ) );
+		AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'meta' => array( 'mixed' => 'manipuliert', 'farbe' => 'blau' ) ) );
+		self::assertSame( array( 'geschuetzt' ), $GLOBALS['ab_test_meta'][5]['Mixed'] );
+		self::assertArrayNotHasKey( 'mixed', $GLOBALS['ab_test_meta'][5], 'Passed over, not written.' );
+		self::assertSame( array( 'blau' ), $GLOBALS['ab_test_meta'][5]['farbe'], 'The other keys still go.' );
+		// The same rule through a revision: the rows are the post's.
+		ab_test_add_post( 50, array( 'post_type' => 'revision', 'post_parent' => 5 ) );
+		AB_MCP_Tools_Content::update_post( array( 'id' => 50, 'meta' => array( 'mixed' => 'manipuliert' ) ) );
+		self::assertArrayNotHasKey( 'mixed', $GLOBALS['ab_test_meta'][5] );
+		// And through the single-key tool.
+		self::assertSame( 'ab_mcp_protected_meta', AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'mixed', 'value' => 'x' ) )->get_error_code() );
+		// With the right to "Mixed", the key goes as WordPress writes it.
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		AB_MCP_Tools_Content::update_post( array( 'id' => 5, 'meta' => array( 'mixed' => 'neu' ) ) );
+		self::assertSame( array( 'neu' ), $GLOBALS['ab_test_meta'][5]['mixed'] ?? null );
+	}
+
 	public function testPostMetaASanitizeFilterThatRewritesTheValueIsReportedNotHidden(): void {
 		add_filter( 'sanitize_post_meta_farbe', static fn( $v ) => strtoupper( (string) $v ) );
 		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'farbe', 'value' => 'blau' ) );
