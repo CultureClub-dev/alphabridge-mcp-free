@@ -286,19 +286,13 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			}
 			// What the widget stores as text and was sent as a number (or
 			// the reverse) is no difference.
-			if ( array_key_exists( $field, $saved ) && self::plain( $have ) && self::same( $have, $want ) ) {
+			if ( array_key_exists( $field, $saved ) && self::plain( $have ) && self::alike( $have, $want ) ) {
 				$asked[ $field ] = $have;
 			}
 		}
-		// A value that is no value JSON carries reads as not found: never
-		// equal to what was asked, never cast to show it.
-		$plain_saved = array();
-		foreach ( $saved as $field => $value ) {
-			if ( self::plain( $value ) ) {
-				$plain_saved[ $field ] = $value;
-			}
-		}
-		$res = AB_MCP_Undo_Answer::saved( array(), $asked, $plain_saved, $reader, $hidden );
+		// saved() compares exactly (AB_MCP_Undo_Answer::same()) and does not
+		// throw on an object; a value that is not plain is not shown ($hidden).
+		$res = AB_MCP_Undo_Answer::saved( array(), $asked, $saved, $reader, $hidden );
 		return AB_MCP_Undo_Answer::with( $res, $outcome );
 	}
 
@@ -384,11 +378,11 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 				continue;
 			}
 			$current = isset( $now[ $num ] ) && is_array( $now[ $num ] ) ? $now[ $num ] : array();
-			if ( isset( $now[ $num ] ) && self::plain( $instance ) && self::plain( $now[ $num ] ) && self::same( $instance, $now[ $num ] ) ) {
+			if ( isset( $now[ $num ] ) && self::plain( $instance ) && self::plain( $now[ $num ] ) && self::alike( $instance, $now[ $num ] ) ) {
 				continue;
 			}
 			$clean = AB_MCP_Undo_Widget_Rules::sanitize_instance( $base, $num, $instance, $current );
-			if ( ! is_array( $clean ) || ! self::plain( $clean ) || ! self::same( $clean, $instance ) ) {
+			if ( ! is_array( $clean ) || ! self::plain( $clean ) || ! self::alike( $clean, $instance ) ) {
 				return 'forbidden';
 			}
 		}

@@ -342,21 +342,23 @@ abstract class AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * Whether a value WordPress read back is what was sent, the way it
-	 * stores it: a scalar as its text (true as "1", false and null as ""),
-	 * a list key by key.
+	 * Whether a value a widget kept is what was sent, the way it stores
+	 * it: a scalar as its text (true as "1", false and null as ""), a list
+	 * key by key. Looser than AB_MCP_Undo_Answer::same(), which compares
+	 * exactly: a widget's update() keeps a number sent as text as a number,
+	 * and that is no difference.
 	 *
 	 * @param mixed $a One value.
 	 * @param mixed $b The other.
 	 * @return bool
 	 */
-	public static function same( $a, $b ) {
+	public static function alike( $a, $b ) {
 		if ( is_array( $a ) || is_array( $b ) ) {
 			if ( ! is_array( $a ) || ! is_array( $b ) || count( $a ) !== count( $b ) ) {
 				return false;
 			}
 			foreach ( $a as $k => $v ) {
-				if ( ! array_key_exists( $k, $b ) || ! self::same( $v, $b[ $k ] ) ) {
+				if ( ! array_key_exists( $k, $b ) || ! self::alike( $v, $b[ $k ] ) ) {
 					return false;
 				}
 			}

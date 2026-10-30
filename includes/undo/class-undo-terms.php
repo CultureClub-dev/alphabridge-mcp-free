@@ -381,7 +381,7 @@ class AB_MCP_Undo_Terms extends AB_MCP_Undo_Objects {
 			$refused = array();
 			foreach ( $asked as $f => $want ) {
 				$have = array_key_exists( $f, $after ) ? $after[ $f ] : null;
-				if ( $have !== $want && $have !== self::expected( (string) $f, $want, $id, $tax ) ) {
+				if ( ! AB_MCP_Undo_Answer::same( $have, $want ) && ! AB_MCP_Undo_Answer::same( $have, self::expected( (string) $f, $want, $id, $tax ) ) ) {
 					$refused[] = (string) $f;
 				}
 			}

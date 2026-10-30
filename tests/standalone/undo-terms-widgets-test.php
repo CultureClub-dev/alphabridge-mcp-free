@@ -473,6 +473,7 @@ class WP_Widget {
 		foreach ( (array) $new as $k => $v ) {
 			$clean[ $k ] = is_string( $v ) && ! current_user_can( 'unfiltered_html' ) ? strip_tags( $v ) : $v;
 			if ( 'count' === $k ) { $clean[ $k ] = (int) $v; } // a number field, kept as a number
+			if ( 'shape' === $k ) { $clean[ $k ] = (object) array( 'kept' => $v ); } // a widget that keeps an object
 		}
 		return $clean;
 	}
@@ -955,6 +956,11 @@ $res    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'setting
 delete_option( 'widget_text' );
 $out = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 1 === $out['undone'] && $before === ab_raw( 'widget_text' ) && 'no' === $GLOBALS['T']['options']['widget_text'][1], 'F20c a row deleted since comes back with its bytes and its autoload flag' );
+
+reset_all();
+ab_widgets();
+$res  = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'shape' => 'round' ) ) );
+ok( array( 'shape' => 'not_shown' ) === $res['saved_fields_omitted'] && array( 'shape' ) === $res['saved_differs'] && ab_token( $res ), 'F20d a value the widget keeps as an object: compared, named as different, not shown, and the answer comes' );
 
 /* credentials: compared, never shown */
 reset_all();
