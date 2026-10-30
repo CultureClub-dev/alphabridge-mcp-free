@@ -19,6 +19,10 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/lifecycle/class-update-guard.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-activation-guard.php';
+// The confirmation of the five tools without a way back; loaded here too, so the
+// class registers wherever it is loaded (tests and the bundled core of Pro included).
+require_once dirname( __DIR__ ) . '/class-confirm-token.php';
+require_once dirname( __DIR__ ) . '/class-lifecycle-confirm.php';
 
 /**
  * Class AB_MCP_Tools_Install_Update
