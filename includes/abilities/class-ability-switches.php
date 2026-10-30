@@ -220,19 +220,33 @@ class AB_MCP_Ability_Switches {
 	 * The new list of approved abilities: what the screen did not show stays
 	 * as it was; of what it showed, every one whose switch was on.
 	 *
+	 * A namespace pattern ("vendor/*") that covers a shown ability whose
+	 * switch is now off goes: else switching that one off would change
+	 * nothing (Codex, 30.10.2026). The shown abilities of that namespace
+	 * whose switches stay on keep their approval by name; one the provider
+	 * adds later then needs its own.
+	 *
 	 * @param string[] $stored Approved before.
 	 * @param string[] $shown  Abilities the screen showed (registered).
 	 * @param mixed    $on     Names whose switch was on, as posted.
 	 * @return string[]
 	 */
 	public static function merge( array $stored, array $shown, $on ) {
+		$on   = AB_MCP_Ability_Broker::sanitize_list( is_array( $on ) ? $on : array() );
 		$keep = array();
 		foreach ( $stored as $item ) {
-			if ( ! in_array( $item, $shown, true ) ) {
-				$keep[] = $item;
+			if ( in_array( $item, $shown, true ) ) {
+				continue;
 			}
+			if ( '/*' === substr( $item, -2 ) ) {
+				foreach ( $shown as $name ) {
+					if ( AB_MCP_Ability_Broker::listed( $name, array( $item ) ) && ! in_array( $name, $on, true ) ) {
+						continue 2;
+					}
+				}
+			}
+			$keep[] = $item;
 		}
-		$on = AB_MCP_Ability_Broker::sanitize_list( is_array( $on ) ? $on : array() );
 		foreach ( $shown as $name ) {
 			if ( in_array( $name, $on, true ) ) {
 				$keep[] = $name;

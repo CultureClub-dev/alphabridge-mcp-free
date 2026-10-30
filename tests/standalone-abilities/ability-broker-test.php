@@ -1249,7 +1249,11 @@ ok( true === AB_MCP_Ability_Broker::mode_allows_run() && true === $l['run_enable
 ok( false !== strpos( AB_MCP_Ability_Broker::instructions(), 'runs one with a preview' ) && false === strpos( AB_MCP_Ability_Switches::fine_html( AB_MCP_Ability_Switches::state() ), 'ab-abilities__read' ), 'QR7 the instructions say how a run goes, and the switches say nothing about write access' );
 ok( array( 'gone/away', 'test/silent' ) === AB_MCP_Ability_Switches::merge( array( 'gone/away', 'test/set-meta' ), array( 'test/set-meta', 'test/silent' ), array( 'test/silent', 'test/not-shown' ) ), 'Q4 saving: what the screen did not show stays approved; of what it showed, exactly those switched on are, and nothing else gets in' );
 ok( array( 'gone/away' ) === AB_MCP_Ability_Switches::merge( array( 'gone/away', 'test/set-meta' ), array( 'test/set-meta' ), array() ), 'Q4 an approved ability switched off leaves the list' );
-ok( array( 'woo/*' ) === AB_MCP_Ability_Switches::merge( array( 'woo/*' ), array( 'woo/x' ), array() ), 'Q4 a namespace pattern written by code stays: the screen shows names only' );
+$q4 = AB_MCP_Ability_Switches::merge( array( 'other/x', 'vendor/*' ), array( 'vendor/read', 'vendor/write' ), array( 'vendor/read' ) );
+ok( array( 'other/x', 'vendor/read' ) === $q4 && ! AB_MCP_Ability_Broker::listed( 'vendor/write', $q4 ) && AB_MCP_Ability_Broker::listed( 'vendor/read', $q4 ), 'Q4 one ability of an approved namespace switched off: the pattern goes, the others shown keep their approval by name (Codex, 30.10.2026): ' . implode( ',', $q4 ) );
+ok( array( 'vendor/*', 'vendor/read', 'vendor/write' ) === AB_MCP_Ability_Switches::merge( array( 'vendor/*' ), array( 'vendor/read', 'vendor/write' ), array( 'vendor/read', 'vendor/write' ) ), 'Q4 all of them left on: the pattern stays' );
+ok( array() === AB_MCP_Ability_Switches::merge( array( 'woo/*' ), array( 'woo/x' ), array() ), 'Q4 a namespace pattern (written by code) goes when the screen showed an ability under it switched off' );
+ok( array( 'woo/*' ) === AB_MCP_Ability_Switches::merge( array( 'woo/*' ), array( 'other/y' ), array() ), 'Q4 a pattern none of whose abilities the screen showed stays' );
 
 /* ================================ F) the switches in the fine-tuning */
 
