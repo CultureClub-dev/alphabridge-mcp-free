@@ -261,6 +261,7 @@ class AB_MCP_Tool_Registry {
 			'wp_db_schema',
 			'wp_site_info',
 			'wp_site_health',
+			'wp_connection_doctor',
 			'wp_dashboard_counts',
 			'wp_deploy_list',
 			'wp_deploy_read',

@@ -70,6 +70,8 @@ require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';
 require_once AB_MCP_DIR . 'includes/class-rest-controller.php';
+// The connection check: the settings card and the tool wp_connection_doctor.
+require_once AB_MCP_DIR . 'includes/class-connection-doctor.php';
 // Page builders: recognition and reading; defines AB_MCP_BUILDER_API, which Pro checks.
 require_once AB_MCP_DIR . 'includes/builders/class-builders.php';
 require_once AB_MCP_DIR . 'includes/class-tool-labels.php';

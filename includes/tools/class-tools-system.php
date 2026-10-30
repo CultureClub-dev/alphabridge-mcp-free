@@ -30,6 +30,18 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 			)
 		);
 
+		// The connection check of the settings page (AB_MCP_Connection_Doctor),
+		// for an assistant that is connected and helps with a second app.
+		// Read-only by name (AB_MCP_Tool_Registry::is_read_only()).
+		$r->register(
+			'wp_connection_doctor',
+			array(
+				'description' => 'Check what stops an app from connecting to this site and how to fix it: HTTPS, the permalinks, whether the MCP endpoint answers a request without a token with its own 401 or something in front of the site answers instead (a ModSecurity rule, Cloudflare, LiteSpeed, Wordfence, a plugin that restricts the REST API, an HTTP login), whether the server passes the Authorization header on to WordPress, the sign-in description below /.well-known/, the firewall test of the direct sign-in, whether the site is behind Cloudflare, and active plugins known to restrict the REST API. Every request goes from the site to itself, so a block that applies only to requests from outside, such as Cloudflare\'s bot rules for AI crawlers, is not seen; the result says so in limits. Returns checks: [{id, status (ok, warn, fail, info or skip), title, finding, steps}], summary (the count per status and one line), checked_at (UTC, ISO 8601) and limits. Changes nothing on the site; the firewall test keeps its finding, as on the settings page. Needs manage_options; takes no arguments.',
+				'capability'  => 'manage_options',
+				'callback'    => array( 'AB_MCP_Connection_Doctor', 'tool' ),
+			)
+		);
+
 		$r->register(
 			'wp_get_post_types',
 			array(
