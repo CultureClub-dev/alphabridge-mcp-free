@@ -4991,3 +4991,7 @@ msgstr "Nichts wurde geschrieben: Eine Zeile dieses Schlüssels ist als «%1$s»
 #, php-format
 msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
 msgstr "Das Argument unter %1$s enthält %2$s, den Platzhalter, der in der Antwort eines lesenden Werkzeugs für ein Zugangsdatum steht. Zurückgeschrieben würde er das gespeicherte Zugangsdatum ersetzen, darum wurde nichts geändert. Sende den echten Wert, oder lass dieses Feld weg, damit der gespeicherte bleibt."
+
+#, php-format
+msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
+msgstr "Nichts wurde geändert: Wo der Wert %1$s enthält, ist der gespeicherte Wert ein Objekt, das sich nicht unverändert zurückschreiben lässt. Sende statt %1$s den echten Wert, oder ändere ihn in dem Plugin, das ihn speichert."

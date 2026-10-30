@@ -19,8 +19,12 @@
  * - A key read as name=[REDACTED] gets the stored key back; an object the
  *   reader showed by its JSON form (ArrayObject) is written back by it; a
  *   stored object put back keeps the backslashes of its texts.
- * - Texts people wrote are written as sent: one that only mentions
- *   [REDACTED], and one under a content field that is exactly [REDACTED].
+ * - Texts people wrote are written as sent: one that only mentions or
+ *   quotes [REDACTED], and one under a content field that is exactly
+ *   [REDACTED]; a content field the reader redacts (a filter's name) gets
+ *   the stored value back.
+ * - A stored object that cannot be copied to be slashed is not written
+ *   back: refused, nothing written, its backslashes kept.
  * - The same for user meta; wp_update_widget's answer shows its settings
  *   redacted, as wp_get_widgets does.
  *
@@ -243,6 +247,48 @@ final class RedactionWriteBackTest extends TestCase {
 		self::assertSame( 'STORED-AT', get_option( 'widget_text' )[4]['accessToken'], 'Stored as it was.' );
 	}
 
+	public function testAKeyTheReaderRedactsIsRestoredThoughItIsAContentField(): void {
+		// Codex 5 #1: the reader redacts before it spares a content field;
+		// writing back goes the same way.
+		add_filter( 'ab_mcp_redact_keys', static fn() => array( 'description' ) );
+		add_post_meta( 5, 'card', array( 'description' => 'STORED-D', 'color' => 'red' ) );
+		$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'card' ) ) );
+		self::assertSame( array( 'description' => self::R, 'color' => 'red' ), $read['value'] );
+
+		$sent          = $read['value'];
+		$sent['color'] = 'blue';
+		$res           = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'card', 'value' => $sent ) );
+
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'description' => 'STORED-D', 'color' => 'blue' ), get_post_meta( 5, 'card', true ) );
+		self::assertSame( '/value/description', AB_MCP_Redactor::placeholder_in( array( 'value' => array( 'description' => self::R ) ) ), 'The central guard refuses it.' );
+	}
+
+	public function testAStoredObjectThatCannotBeSlashedIsNotWrittenBack(): void {
+		// Codex 5 #2: no copy, so no slashes; written, WordPress would strip them.
+		$GLOBALS['ab_test_meta'][5]['conn'] = array( serialize( array( 'credentials' => new RedactionNoCopyProbe(), 'color' => 'red' ) ) );
+		$before                             = $GLOBALS['ab_test_meta'];
+
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'conn', 'value' => array( 'credentials' => self::R, 'color' => 'blue' ) ) );
+
+		self::assertInstanceOf( \WP_Error::class, $res );
+		self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+		self::assertStringContainsString( 'cannot be written back unchanged', $res->get_error_message() );
+		self::assertStringContainsString( 'Send the real value in place of [REDACTED]', $res->get_error_message() );
+		self::assertSame( $before, $GLOBALS['ab_test_meta'], 'Nothing was written.' );
+		self::assertSame( 'a\\b', get_post_meta( 5, 'conn', true )['credentials']->password );
+	}
+
+	public function testATextThatOnlyQuotesThePlaceholderIsWrittenAsSent(): void {
+		// Codex 5 #3: the placeholder is carried by what decodes as the reader decodes.
+		foreach ( array( 'Name: "[REDACTED]"', 'He wrote "[REDACTED]" and s:10:"[REDACTED]";', array( 'note' => '"[REDACTED]" in quotes' ) ) as $i => $value ) {
+			$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'note', 'value' => $value ) );
+			self::assertIsArray( $res, $i . ': ' . ( is_object( $res ) ? $res->get_error_message() : '' ) );
+			self::assertSame( $value, get_post_meta( 5, 'note', true ) );
+		}
+		self::assertNull( AB_MCP_Redactor::placeholder_in( array( 'label' => 'Name: "[REDACTED]"' ) ) );
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 
@@ -252,5 +298,18 @@ final class RedactionWriteBackTest extends TestCase {
 		self::assertSame( array( 'token' => 'STORED-TOKEN', 'list' => 'offers' ), get_user_meta( 7, 'crm', true ) );
 		$res = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 7, 'key' => 'crm', 'value' => array( 'other_secret' => self::R ) ) );
 		self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+	}
+}
+
+/**
+ * A stored object of a class that allows no copy, with a backslash in a
+ * public property.
+ */
+final class RedactionNoCopyProbe {
+
+	/** @var string Public, with a backslash. */
+	public string $password = 'a\\b';
+
+	private function __clone() {
 	}
 }

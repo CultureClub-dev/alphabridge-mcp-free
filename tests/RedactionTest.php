@@ -30,8 +30,12 @@
  *   name=[REDACTED].
  * - A writing tool refuses the placeholder as an answer holds it: the whole
  *   value, inside JSON or serialized data at any level of escaping, a key
- *   name=[REDACTED]. A text that only mentions it passes, and so does what
- *   people write (content, captions, alt texts, descriptions).
+ *   name=[REDACTED], found by decoding as the reader decodes. A text that
+ *   only mentions or quotes it passes, and so does what people write
+ *   (content, captions, alt texts, descriptions, a text widget's text),
+ *   unless the reader redacts that key (the filter's names included).
+ * - Every rule of the error log reads every line: a Bearer token before a
+ *   pair is redacted too.
  *
  * The cases named «Codex #n» are the counterexamples of the review of
  * 30.10.2026. The values below are made-up placeholders, not credentials.
@@ -697,6 +701,13 @@ final class RedactionTest extends TestCase {
 		self::assertSame( "old Bearer [REDACTED] new Bearer [REDACTED] end\nsent bearer [REDACTED]", $out['log'] );
 	}
 
+	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
+		// Codex 5 #5: a Bearer token before a pair, and after it.
+		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );
+
+		self::assertSame( "Retry Bearer [REDACTED] api_key=[REDACTED]\napi_key=[REDACTED]\nAuthorization: Bearer [REDACTED]", $out['log'] );
+	}
+
 	public function testALongValueIsRedactedWithoutThePatternGivingUp(): void {
 		// Codex #3: a value of 10'000 characters.
 		$long = str_repeat( 'x', 10000 );
@@ -1089,6 +1100,16 @@ final class RedactionTest extends TestCase {
 		self::assertFalse( $result['isError'] );
 		self::assertSame( 1, $calls );
 		self::assertSame( '/a/0', AB_MCP_Redactor::placeholder_in( array( 'a' => array( self::R ) ) ) );
+	}
+
+	public function testTheTextOfATextWidgetIsWhatPeopleWrote(): void {
+		// Codex 5 #4: the text widget keeps its content in settings.text.
+		$widgets = array( 'widgets' => array( array( 'id' => 'text-4', 'settings' => array( 'title' => 'Help', 'text' => '{"password":"tutorial example"}' ) ) ) );
+
+		self::assertSame( $widgets, $this->read( $widgets, 'wp_get_widgets' ), 'Read as stored, nothing redacted.' );
+		[ $result, $calls ] = $this->write( array( 'id' => 'text-4', 'settings' => array( 'text' => self::R, 'content' => self::R ) ), 'wp_update_widget' );
+		self::assertFalse( $result['isError'] );
+		self::assertSame( 1, $calls );
 	}
 
 	public function testCaptionsAltTextsAndDescriptionsPassTheWriteGuard(): void {

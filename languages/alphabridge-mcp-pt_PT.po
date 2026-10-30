@@ -4991,3 +4991,7 @@ msgstr "Nada foi escrito: uma linha desta chave está guardada como \"%1$s\", e 
 #, php-format
 msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
 msgstr "O argumento em %1$s contém %2$s, o marcador que substitui uma credencial na resposta de uma ferramenta de leitura. Se fosse escrito de volta, substituiria a credencial guardada, por isso nada foi alterado. Envie o valor real ou omita este campo para que o valor guardado se mantenha."
+
+#, php-format
+msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
+msgstr "Nada foi alterado: onde o valor contém %1$s, o valor guardado é um objeto que não pode ser escrito de volta sem alterações. Envie o valor real em vez de %1$s ou altere-o no plugin que o guarda."

@@ -4991,3 +4991,7 @@ msgstr "Rien n'a été écrit : une ligne de cette clé est enregistrée sous «
 #, php-format
 msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
 msgstr "L'argument à %1$s contient %2$s, l'espace réservé qui remplace des identifiants dans la réponse d'un outil de lecture. Réécrit, il remplacerait les identifiants enregistrés, c'est pourquoi rien n'a été modifié. Envoyez la vraie valeur, ou omettez ce champ pour que la valeur enregistrée reste."
+
+#, php-format
+msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
+msgstr "Rien n'a été modifié : là où la valeur contient %1$s, la valeur enregistrée est un objet qui ne peut pas être réécrit tel quel. Envoyez la vraie valeur à la place de %1$s, ou modifiez-la dans l'extension qui l'enregistre."
