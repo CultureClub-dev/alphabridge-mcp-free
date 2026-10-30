@@ -183,11 +183,13 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 	/**
 	 * The snapshot before a write: each row named, as stored. null when one
 	 * could not be read: a row read as missing would be deleted by the
-	 * restore.
+	 * restore. false when one holds a PHP object: putting its bytes back
+	 * would make that object again on the next read, and no undo point
+	 * restores one (canonical_rows()).
 	 *
 	 * @param string   $base  Widget base id.
 	 * @param string[] $names Option names.
-	 * @return array|null
+	 * @return array|false|null
 	 */
 	public static function take( $base, array $names ) {
 		if ( ! self::on() ) {
@@ -203,9 +205,42 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			if ( null === $row ) {
 				return null;
 			}
+			if ( is_array( $row ) && self::holds_object( self::peek( $row['value'] ) ) ) {
+				return false;
+			}
 			$snap['rows'][ (string) $name ] = self::encode_state( $row );
 		}
 		return $snap;
+	}
+
+	/**
+	 * Is there a PHP object anywhere in a value (an incomplete one of
+	 * peek() included)?
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function holds_object( $value ) {
+		if ( is_object( $value ) ) {
+			return true;
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $v ) {
+				if ( self::holds_object( $v ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The note when a row held a PHP object before the write.
+	 *
+	 * @return string
+	 */
+	public static function object_note() {
+		return __( 'No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets.', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -258,6 +293,7 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 	public static function answer( array $spec ) {
 		$tool   = (string) $spec['tool'];
 		$reader = 'wp_get_widgets';
+		$object = isset( $spec['snap'] ) && false === $spec['snap'];
 		$snap   = isset( $spec['snap'] ) && is_array( $spec['snap'] ) ? $spec['snap'] : null;
 		$after  = null !== $snap ? self::now_hashes( $snap ) : null;
 		$asked  = isset( $spec['asked'] ) ? (array) $spec['asked'] : null;
@@ -271,6 +307,10 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 			$snap = null;
 		}
 		$outcome = self::outcome( $tool, $reader, $changed, $snap, (string) $spec['summary'] );
+		// Where the rows were read but one held an object, that is the reason.
+		if ( $object && AB_MCP_Undo_Answer::unreadable( $reader ) === $outcome ) {
+			$outcome = self::object_note();
+		}
 		if ( null === $asked ) {
 			return AB_MCP_Undo_Answer::with( array(), $outcome );
 		}
@@ -555,12 +595,16 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 	 * @return bool
 	 */
 	private static function canonical_rows( array $data ) {
+		$base = (string) $data['base'];
 		foreach ( $data['rows'] as $name => $state ) {
 			if ( empty( $state['existed'] ) ) {
 				continue;
 			}
+			// Read without making any object; an object anywhere is no
+			// form the widgets of WordPress write, and bytes that would
+			// make one again on the next read are not put back.
 			$value = self::peek( self::raw( (array) $state ) );
-			if ( ! is_array( $value ) ) {
+			if ( ! is_array( $value ) || self::holds_object( $value ) ) {
 				return false;
 			}
 			if ( self::MAP === (string) $name ) {
@@ -575,14 +619,21 @@ class AB_MCP_Undo_Widgets extends AB_MCP_Undo_Objects {
 						return false;
 					}
 					foreach ( $ids as $wid ) {
-						if ( ! is_string( $wid ) || 1 !== preg_match( '/\A.+-[1-9][0-9]*\z/', $wid ) ) {
+						// Any widget id WordPress registers (an older
+						// widget of wp_register_sidebar_widget() has no
+						// number); one of this point's type has its number
+						// as WordPress writes it.
+						if ( ! is_string( $wid ) || 1 !== preg_match( '/\A[A-Za-z0-9_\-]{1,190}\z/', $wid ) ) {
+							return false;
+						}
+						if ( 1 === preg_match( '/\A(.+)-([0-9]+)\z/', $wid, $m ) && $base === $m[1] && 1 !== preg_match( '/\A[1-9][0-9]*\z/', $m[2] ) ) {
 							return false;
 						}
 					}
 				}
 				continue;
 			}
-			if ( empty( $value['_multiwidget'] ) ) {
+			if ( ! array_key_exists( '_multiwidget', $value ) || 1 !== $value['_multiwidget'] ) {
 				return false;
 			}
 			foreach ( $value as $num => $instance ) {

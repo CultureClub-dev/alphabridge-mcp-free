@@ -5044,3 +5044,6 @@ msgstr "Kein Undo-Punkt: WordPress hat mit einem Begriff geantwortet, den dieser
 
 msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
 msgstr "Menü %d enthält einen Eintrag, den dieses Konto nicht löschen darf, und das Löschen des Menüs würde ihn mitlöschen; nichts wurde wiederhergestellt. Diesen Eintrag mit einem Konto entfernen, das es darf (wp_get_menu listet die Einträge, wp_delete_menu_item entfernt einen), dann das Undo erneut ausführen."
+
+msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
+msgstr "Kein Undo-Punkt: Die Optionszeile dieser Widgets enthält ein PHP-Objekt, das ein Undo-Punkt nicht zurücklegt. Das Ergebnis mit wp_get_widgets prüfen; ein solches Widget wird in wp-admin unter Design › Widgets zurückgeändert."

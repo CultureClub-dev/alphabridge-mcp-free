@@ -962,6 +962,45 @@ ab_widgets();
 $res  = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'shape' => 'round' ) ) );
 ok( array( 'shape' => 'not_shown' ) === $res['saved_fields_omitted'] && array( 'shape' ) === $res['saved_differs'] && ab_token( $res ), 'F20d a value the widget keeps as an object: compared, named as different, not shown, and the answer comes' );
 
+// Codex round 2: a sidebar with an older widget, registered without a number.
+reset_all();
+update_option( 'widget_text', array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'legacy_weather', 'text-2' ), 'wp_inactive_widgets' => array(), 'array_version' => 3 ) );
+$map = ab_raw( 'sidebars_widgets' );
+$res = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1', 'settings' => array( 'title' => 'New' ) ) );
+$out = ab_undo( $res['undo'] );
+ok( is_array( $out ) && 1 === $out['undone'] && $map === ab_raw( 'sidebars_widgets' ) && in_array( 'legacy_weather', get_option( 'sidebars_widgets' )['sidebar-1'], true ), 'F20e a sidebar with an older widget without a number: the undo goes through, the older widget stays' );
+$res = AB_MCP_Tools_Widgets::delete_widget( array( 'id' => 'text-2' ) );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && $map === ab_raw( 'sidebars_widgets' ), 'F20f ... and a deletion comes back there too' );
+
+reset_all();
+update_option( 'widget_text', array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'counter-007', 'text-2' ), 'array_version' => 3 ) );
+$res = AB_MCP_Tools_Widgets::add_widget( array( 'id_base' => 'text', 'sidebar' => 'sidebar-1' ) );
+ok( 1 === ab_undo( $res['undo'] )['undone'], 'F20i an older widget whose id ends in digits with a leading zero is another type\'s: no obstacle' );
+
+// Codex round 2: no PHP object comes back.
+reset_all();
+ab_widgets();
+$res  = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'title' => 'New' ) ) );
+$data = AB_MCP_Undo::claim( $res['undo'] )['data'];
+foreach ( array(
+	'_multiwidget an object' => array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => new ArrayObject() ),
+	'_multiwidget "1"'       => array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => '1' ),
+	'_multiwidget 2'         => array( 2 => array( 'title' => 'Hello' ), '_multiwidget' => 2 ),
+	'an object in settings'  => array( 2 => array( 'title' => 'Hello', 'x' => array( new ArrayObject() ) ), '_multiwidget' => 1 ),
+) as $why => $row ) {
+	$odd = $data;
+	$odd['rows']['widget_text']['value'] = serialize( $row ); // phpcs:ignore
+	$out = ab_undo( ab_forge( 'wp_update_widget', 'widget', $odd ), array( 'force' => true ) );
+	ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && false === strpos( ab_raw( 'widget_text' ), 'ArrayObject' ), "F20g a row with $why: refused whole, nothing written" );
+}
+reset_all();
+ab_widgets();
+AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'shape' => 'round' ) ) ); // the widget keeps an object now
+$res = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'title' => 'Next' ) ) );
+ok( true === $res['updated'] && null === $res['undo'] && false !== strpos( $res['undo_note'], 'PHP object' ) && false !== strpos( $res['undo_note'], 'wp_get_widgets' ), 'F20h a row that holds an object before the write: no point, the note says why and where' );
+
 /* credentials: compared, never shown */
 reset_all();
 ab_widgets();
@@ -1055,8 +1094,11 @@ ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) )
 $t   = ab_forge( 'wp_add_widget', 'widget', array( 'v' => 1, 'base' => 'feed', 'rows' => array( 'widget_feed' => array( 'existed' => false ), 'sidebars_widgets' => array( 'existed' => true, 'value' => 'not a list', 'autoload' => 'yes' ) ), 'after' => array( 'option:widget_feed' => $hash, 'option:sidebars_widgets' => $hash ) ) );
 ok( 'ab_mcp_undo_corrupt' === ab_code( ab_undo( $t, array( 'force' => true ) ) ) && is_array( get_option( 'sidebars_widgets' ) ), 'F33a nor a map of the widgets per sidebar that is no list' );
 foreach ( array(
-	'an id with "02"'        => array( 'sidebar-1' => array( 'custom_html-02' ), 'array_version' => 3 ),
-	'an id without a number' => array( 'sidebar-1' => array( 'custom_html' ), 'array_version' => 3 ),
+	'an id of its type with "02"' => array( 'sidebar-1' => array( 'feed-02' ), 'array_version' => 3 ),
+	'an id of its type with 0'    => array( 'sidebar-1' => array( 'feed-0' ), 'array_version' => 3 ),
+	'an id with a space'          => array( 'sidebar-1' => array( 'legacy weather' ), 'array_version' => 3 ),
+	'an empty id'                 => array( 'sidebar-1' => array( '' ), 'array_version' => 3 ),
+	'an object in it'             => array( 'sidebar-1' => array( 'text-2' ), 'x' => array( new ArrayObject() ), 'array_version' => 3 ),
 	'an id that is no text'  => array( 'sidebar-1' => array( 5 ), 'array_version' => 3 ),
 	'a sidebar no list'      => array( 'sidebar-1' => 'text-2', 'array_version' => 3 ),
 	'a version no number'    => array( 'sidebar-1' => array( 'text-2' ), 'array_version' => '3' ),

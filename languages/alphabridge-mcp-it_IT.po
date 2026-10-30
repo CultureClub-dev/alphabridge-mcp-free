@@ -5044,3 +5044,6 @@ msgstr "Nessun punto di ripristino: WordPress ha risposto con un termine che que
 
 msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
 msgstr "Il menu %d contiene una voce che questo account non può eliminare, ed eliminare il menu eliminerebbe anche quella; non è stato ripristinato nulla. Rimuovi quella voce con un account che può farlo (wp_get_menu elenca le voci, wp_delete_menu_item ne rimuove una), poi esegui di nuovo l'annullamento."
+
+msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
+msgstr "Nessun punto di ripristino: la riga di opzione di questi widget contiene un oggetto PHP, che un punto di ripristino non rimette. Controlla il risultato con wp_get_widgets; un widget simile si ripristina in wp-admin in Aspetto › Widget."

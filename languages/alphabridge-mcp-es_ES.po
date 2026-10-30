@@ -5044,3 +5044,6 @@ msgstr "Sin punto de restauración: WordPress ha respondido con un término que 
 
 msgid "Menu %d holds an item this account may not delete, and deleting the menu would delete it too; nothing was restored. Remove that item with an account that may (wp_get_menu lists the items, wp_delete_menu_item removes one), then run the undo again."
 msgstr "El menú %d contiene un elemento que esta cuenta no puede eliminar, y eliminar el menú también lo eliminaría; no se ha restaurado nada. Quita ese elemento con una cuenta que pueda (wp_get_menu lista los elementos, wp_delete_menu_item quita uno) y vuelve a ejecutar el deshacer."
+
+msgid "No undo point: the option row of these widgets holds a PHP object, which an undo point does not put back. Check the result with wp_get_widgets; such a widget is changed back in wp-admin under Appearance › Widgets."
+msgstr "Sin punto de restauración: la fila de opción de estos widgets contiene un objeto PHP, que un punto de restauración no vuelve a poner. Comprueba el resultado con wp_get_widgets; un widget así se revierte en wp-admin en Apariencia › Widgets."

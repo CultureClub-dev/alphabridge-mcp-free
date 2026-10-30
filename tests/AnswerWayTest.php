@@ -551,6 +551,8 @@ final class AnswerWayTest extends TestCase {
 		}
 		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-terms.php';
 		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Terms::not_created_note( 'wp_get_term' ), 'And the note of a term this call did not create.' );
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-widgets.php';
+		self::assertMatchesRegularExpression( self::WAY, \AB_MCP_Undo_Widgets::object_note(), 'And the note of a widget row that holds an object.' );
 	}
 
 	public function testTheReadmesClaimTheWayOnlyForAlphaBridgesOwnChecks(): void {
