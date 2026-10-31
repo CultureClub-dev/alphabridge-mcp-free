@@ -299,9 +299,9 @@ class AB_MCP_Outbound {
 	/**
 	 * A jar of the cookies to carry along, WP_Http_Cookie objects by name:
 	 * what a caller gives as WordPress takes it ('cookies': objects, arrays
-	 * or name => value), and the cookies of each answer; a later one of the
-	 * same name replaces an earlier, as the cookie jar of WordPress's
-	 * transport keeps them.
+	 * or name => value, the value kept as given), and the cookies of each
+	 * answer (cookies_set()); a later one of the same name replaces an
+	 * earlier, as the cookie jar of WordPress's transport keeps them.
 	 *
 	 * @param mixed                      $cookies Cookies to add.
 	 * @param array<string,WP_Http_Cookie> $jar     Jar so far.
@@ -320,8 +320,51 @@ class AB_MCP_Outbound {
 	}
 
 	/**
+	 * The cookies an answer set, each with the value as its Set-Cookie
+	 * header carries it. WordPress hands the cookies of an answer over
+	 * URL-decoded (WP_HTTP_Requests_Response::get_cookies()), while its
+	 * transport, following a redirect itself, sends the value on as it came;
+	 * a value with "%2F", "+" or "=" would otherwise reach the next hop
+	 * changed. The value is the part of the header before the first ";"
+	 * and after the first "=", trimmed, as the transport reads it; the
+	 * attributes (domain, path, expiry, host-only) stay those WordPress
+	 * read. A cookie without a header to take the value from (a transport
+	 * that hands none over) keeps WordPress's value.
+	 *
+	 * @param array|WP_Error $response The answer.
+	 * @return WP_Http_Cookie[]
+	 */
+	private static function cookies_set( $response ) {
+		$headers = wp_remote_retrieve_header( $response, 'set-cookie' );
+		$headers = is_array( $headers ) ? $headers : ( '' !== (string) $headers ? array( (string) $headers ) : array() );
+		$raw     = array();
+		foreach ( $headers as $header ) {
+			list( $pair ) = explode( ';', (string) $header, 2 );
+			if ( false === strpos( $pair, '=' ) ) {
+				continue;
+			}
+			list( $name, $value ) = explode( '=', $pair, 2 );
+			$raw[ trim( $name ) ]  = trim( $value );
+		}
+		$cookies = array();
+		foreach ( wp_remote_retrieve_cookies( $response ) as $cookie ) {
+			if ( ! $cookie instanceof WP_Http_Cookie || null === $cookie->name ) {
+				continue;
+			}
+			$cookie = clone $cookie;
+			if ( isset( $raw[ (string) $cookie->name ] ) ) {
+				$cookie->value = $raw[ (string) $cookie->name ];
+			}
+			$cookies[] = $cookie;
+		}
+		return $cookies;
+	}
+
+	/**
 	 * The cookies of the jar that go with a request to an address, as
-	 * WordPress's transport sends them when it follows a redirect itself:
+	 * WordPress's transport sends them when it follows a redirect itself
+	 * (a value as it is, with no encoding or decoding, as
+	 * WP_Http::normalize_cookies() hands it to the transport):
 	 * those that hold for the address (WP_Http_Cookie::test(): domain,
 	 * path, port, expiry), and one set without a Domain only to the very
 	 * host that set it (host-only, as the transport's cookie jar keeps it).
@@ -386,7 +429,7 @@ class AB_MCP_Outbound {
 			if ( is_wp_error( $response ) ) {
 				return $response;
 			}
-			$jar      = self::cookie_jar( wp_remote_retrieve_cookies( $response ), $jar );
+			$jar      = self::cookie_jar( self::cookies_set( $response ), $jar );
 			$status   = (int) wp_remote_retrieve_response_code( $response );
 			$location = wp_remote_retrieve_header( $response, 'location' );
 			$location = is_array( $location ) ? (string) reset( $location ) : (string) $location;
