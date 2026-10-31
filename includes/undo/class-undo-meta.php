@@ -106,7 +106,8 @@ class AB_MCP_Undo_Meta {
 	 *                        AB_MCP_Undo_Answer::stored_form(), fields: column
 	 *                        => text (wp_update_media), names: key|column =>
 	 *                        name in the answer, hidden: names not shown,
-	 *                        reader: the tool that reads them, summary }.
+	 *                        reader: the tool that reads them, summary,
+	 *                        blank: a key without a row reads as "" }.
 	 * @param callable $write Does the write; may return a WP_Error, which is
 	 *                        passed on as it is.
 	 * @return array|WP_Error { saved_fields, saved_fields_omitted?, saved_differs?, warning?, undo, undo_note? }
@@ -119,6 +120,7 @@ class AB_MCP_Undo_Meta {
 		$fwant  = isset( $spec['fields'] ) ? (array) $spec['fields'] : array();
 		$names  = isset( $spec['names'] ) ? (array) $spec['names'] : array();
 		$reader = isset( $spec['reader'] ) ? (string) $spec['reader'] : '';
+		$blank  = ! empty( $spec['blank'] );
 		$keys   = array_map( 'strval', array_keys( $want ) );
 		$cols   = array_map( 'strval', array_keys( $fwant ) );
 		$on     = class_exists( 'AB_MCP_Undo' ) && AB_MCP_Undo::enabled();
@@ -141,6 +143,13 @@ class AB_MCP_Undo_Meta {
 			return $done;
 		}
 		$after = self::read_back( $type, $id, $keys, $cols );
+		if ( $blank ) {
+			// A key without a row reads as the empty text there.
+			foreach ( $keys as $key ) {
+				$before += array( $key => AB_MCP_Undo_Answer::stored_form( '' ) );
+				$after  += array( $key => AB_MCP_Undo_Answer::stored_form( '' ) );
+			}
+		}
 
 		// Columns first, then keys, each under its own name: not
 		// array_merge(), which numbers a key of digits ("2024") anew.

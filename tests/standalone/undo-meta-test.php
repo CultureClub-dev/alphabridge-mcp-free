@@ -267,6 +267,13 @@ function ab_update_meta( $type, $obj, $key, $value ) {
 	$key   = wp_unslash( $key );
 	$value = wp_unslash( $value );
 	if ( isset( $GLOBALS['ab_meta_veto'][ $key ] ) ) { return false; }
+	// As Yoast SEO: an empty field is kept as no row (WPSEO_Meta deletes it).
+	if ( '' === $value && 0 === strpos( (string) $key, '_yoast_wpseo_' ) ) {
+		foreach ( $GLOBALS['ab_meta'][ $type ] as $id => $r ) {
+			if ( $r[0] === (int) $obj && ab_collates( $r[1], $key ) ) { unset( $GLOBALS['ab_meta'][ $type ][ $id ] ); }
+		}
+		return true;
+	}
 	if ( isset( $GLOBALS['ab_meta_sanitize'][ $key ] ) ) { $value = $GLOBALS['ab_meta_sanitize'][ $key ]( $value ); }
 	$stored = maybe_serialize( $value );
 	$stored = is_bool( $stored ) ? ( $stored ? '1' : '' ) : ( null === $stored ? '' : (string) $stored );
@@ -972,6 +979,21 @@ $GLOBALS['ab_deny'] = array();
 reset_all();
 $res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5 ) );
 ok( null === $res['undo'] && false !== strpos( (string) $res['undo_note'], 'wp_seo_get' ) && array() === $res['changed'], 'S9 no field given: nothing changed, undo null with the reason' );
+
+// Codex round 1: a revision writes to its post, and an empty Yoast field is no row.
+reset_all();
+ab_post( 6, array( 'post_type' => 'revision' ) );
+$GLOBALS['ab_revisions'][6] = 5;
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 6, 'title' => 'Via revision' ) );
+ok( ! is_wp_error( $res ) && 5 === $res['post_id'] && is_string( $res['undo'] ) && array( 'Via revision' ) === array_values( ab_rows( 'post', 5, '_yoast_wpseo_title' ) ) && array() === ab_rows( 'post', 6, '_yoast_wpseo_title' ), 'S15 a revision id: the post it belongs to is written, named in the answer, with its undo point' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S16 and the undo takes it back there' );
+reset_all();
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => '' ) );
+ok( ! is_wp_error( $res ) && null === $res['undo'] && (object) array( 'title' => '' ) == $res['saved_fields'] && ! isset( $res['saved_differs'] ), 'S17 an empty title where there was none: nothing changed, no error, saved as empty' );
+ab_add_row( 'post', 5, '_yoast_wpseo_title', 'Was set' );
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => '' ) );
+ok( ! is_wp_error( $res ) && is_string( $res['undo'] ) && (object) array( 'title' => '' ) == $res['saved_fields'] && ! isset( $res['saved_differs'] ) && ! isset( $res['warning'] ) && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S18 emptying a set title: the row goes, read back as empty, no warning, an undo point' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array( 'Was set' ) === array_values( ab_rows( 'post', 5, '_yoast_wpseo_title' ) ), 'S19 and the undo brings the title back' );
 
 reset_all();
 $t   = ab_forge( 'wp_seo_set', 'post', 5, 'api_key' );
