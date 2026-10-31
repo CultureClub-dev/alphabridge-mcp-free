@@ -95,7 +95,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_seo_set',
 			array(
-				'description' => 'Set the SEO title, meta description and/or focus keyword of a post in the active SEO plugin\'s own fields: Yoast SEO, otherwise Rank Math (Yoast wins when both are active). Only the fields given are written, each overwriting the stored value; tags and line breaks are stripped. Returns updated, provider, changed (the fields written), saved_fields (each field as stored afterwards, read again; where it differs from what was sent, saved_differs and warning say so) and undo: the token for wp_undo, which puts the fields back as they were, or null with undo_note saying why. With neither active the call is refused, also where All in One SEO is the SEO plugin; an unknown post is a not-found error. wp_seo_get reads the values. Needs edit_posts and the right to edit the post and each SEO field.',
+				'description' => 'Set the SEO title, meta description and/or focus keyword of a post in the active SEO plugin\'s own fields: Yoast SEO, otherwise Rank Math (Yoast wins when both are active). Only the fields given are written, each overwriting the stored value; tags and line breaks are stripped. Returns updated, post_id (the post written; for a revision the post it belongs to, as WordPress stores the meta of a revision there), provider, changed (the fields written), saved_fields (each field as stored afterwards, read again; where it differs from what was sent, saved_differs and warning say so) and undo: the token for wp_undo, which puts the fields back as they were, or null with undo_note saying why. With neither active the call is refused, also where All in One SEO is the SEO plugin; an unknown post is a not-found error. wp_seo_get reads the values. Needs edit_posts and the right to edit the post and each SEO field.',
 				'open_world'  => true, // SEO title and description show in search results.
 				'capability'  => 'edit_posts',
 				'dangerous'   => true,
@@ -193,6 +193,17 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		if ( ! get_post( $id ) ) {
 			return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
 		}
+		// WordPress stores the meta of a revision on the post it belongs to
+		// (update_post_meta()), so that post is the one asked about from here
+		// on — its rights, the snapshot, the write and the read-back — as
+		// wp_update_post_meta does, and the answer names it.
+		$parent = function_exists( 'wp_is_post_revision' ) ? (int) wp_is_post_revision( $id ) : 0;
+		if ( $parent > 0 ) {
+			$id = $parent;
+			if ( ! get_post( $id ) ) {
+				return new WP_Error( 'ab_mcp_not_found', __( 'Post not found: no post has this id. Look it up with wp_list_posts or wp_search.', 'alphabridge-mcp' ) );
+			}
+		}
 		if ( ! current_user_can( 'edit_post', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot edit this specific post. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
@@ -243,6 +254,7 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 		}
 		$res = array(
 			'updated'  => true,
+			'post_id'  => $id,
 			'provider' => $provider,
 			'changed'  => $changed,
 		);
@@ -268,6 +280,9 @@ class AB_MCP_Tools_Seo extends AB_MCP_Tools_Base {
 				'names'   => $names,
 				'reader'  => 'wp_seo_get',
 				'summary' => sprintf( 'post #%d: SEO %s', $id, implode( ', ', $changed ) ),
+				// An SEO plugin keeps an empty field as no row (Yoast deletes
+				// it): read back, a missing row is the empty text.
+				'blank'   => true,
 			),
 			static function () use ( $id, $texts ) {
 				foreach ( $texts as $meta_key => $text ) {
