@@ -19,6 +19,8 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/lifecycle/class-update-guard.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-activation-guard.php';
+// The files of wp-admin the routines and hooks of other plugins expect.
+require_once dirname( __DIR__ ) . '/lifecycle/class-admin-files.php';
 // The confirmation of the five tools without a way back; loaded here too, so the
 // class registers wherever it is loaded (tests and the bundled core of Pro included).
 require_once dirname( __DIR__ ) . '/class-confirm-token.php';
@@ -38,15 +40,13 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 	 * Load the WordPress upgrader stack (defensively). These wp-admin
 	 * includes are loaded right before the upgrader is used, and only inside
 	 * the install and update tools, which write and run with write access on
-	 * only.
+	 * only. First the files wp-admin loads on every screen
+	 * (AB_MCP_Admin_Files): the hooks other plugins hang on the upgrader,
+	 * and the deactivation and uninstall routine a delete runs, expect them.
 	 */
 	protected static function boot_upgrader() {
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		require_once ABSPATH . 'wp-admin/includes/update.php';
+		AB_MCP_Admin_Files::load();
 		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
-		require_once ABSPATH . 'wp-admin/includes/theme.php';
 		require_once ABSPATH . 'wp-admin/includes/theme-install.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		if ( ! class_exists( 'Automatic_Upgrader_Skin' ) && file_exists( ABSPATH . 'wp-admin/includes/class-automatic-upgrader-skin.php' ) ) {

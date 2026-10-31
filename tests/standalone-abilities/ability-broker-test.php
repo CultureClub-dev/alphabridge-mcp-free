@@ -39,9 +39,17 @@
  *           two after this plugin replaces them, and the switches step back;
  *   writers the page-builder writers and the undo of a staged draft ask
  *           this plugin's broker where Pro is not loaded, and Pro's where it
- *           is (a stand-in with Pro's methods).
+ *           is (a stand-in with Pro's methods);
+ *   adminfiles  an ability finds the files of wp-admin loaded
+ *           (AB_MCP_Admin_Files), as in wp-admin: one that deactivates a
+ *           plugin through deactivate_plugins(), whose deactivation routine
+ *           calls get_home_path() and insert_with_markers(), and a read-only
+ *           one that calls get_home_path(). The two functions exist only in
+ *           stand-ins under an ABSPATH of its own, and nothing loads them
+ *           before the call (checked first). Without load() in call(), both
+ *           fail (mutation probe, 31.10.2026; Codex on 973f790).
  *
- * Run: php tests/standalone-abilities/ability-broker-test.php main|noapi|scope|writers|extra [7.0.2|7.1.2]
+ * Run: php tests/standalone-abilities/ability-broker-test.php main|noapi|scope|writers|extra|adminfiles [7.0.2|7.1.2]
  *      The second argument picks the Abilities API: of WordPress 7.0.2 (the
  *      default) or of 7.1.2, under tests/standalone-lib/support/
  *      abilities-api-7.1.2/, which resolves show_in_rest from its new meta
@@ -49,9 +57,33 @@
  */
 
 $scenario = isset( $argv[1] ) ? $argv[1] : '';
-if ( ! in_array( $scenario, array( 'main', 'noapi', 'scope', 'writers', 'extra' ), true ) ) {
-	fwrite( STDERR, "Szenario fehlt oder unbekannt: main, noapi, scope, writers oder extra\n" );
+if ( ! in_array( $scenario, array( 'main', 'noapi', 'scope', 'writers', 'extra', 'adminfiles' ), true ) ) {
+	fwrite( STDERR, "Szenario fehlt oder unbekannt: main, noapi, scope, writers, extra oder adminfiles\n" );
 	exit( 2 );
+}
+// adminfiles: ABSPATH in a folder of its own, where only file.php and
+// misc.php of wp-admin/includes/ stand, each noting that it was loaded and
+// holding the one function a routine calls; gone at the end of the run.
+if ( 'adminfiles' === $scenario ) {
+	define( 'ABSPATH', sys_get_temp_dir() . '/ab-ability-admin-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) ) . '/' );
+	mkdir( ABSPATH . 'wp-admin/includes', 0777, true );
+	file_put_contents( ABSPATH . 'wp-admin/includes/file.php', "<?php\n\$GLOBALS['ab_admin_loaded'][] = 'file.php';\nfunction get_home_path() { return ABSPATH; }\n" );
+	file_put_contents(
+		ABSPATH . 'wp-admin/includes/misc.php',
+		"<?php\n\$GLOBALS['ab_admin_loaded'][] = 'misc.php';\n" .
+		"function insert_with_markers( \$filename, \$marker, \$insertion ) { return false !== file_put_contents( \$filename, \"# BEGIN \$marker\\n\" . implode( '', array_map( static function ( \$l ) { return \$l . \"\\n\"; }, (array) \$insertion ) ) . \"# END \$marker\\n\" ); }\n"
+	);
+	$GLOBALS['ab_admin_loaded'] = array();
+	register_shutdown_function(
+		static function () {
+			foreach ( array( 'wp-admin/includes/file.php', 'wp-admin/includes/misc.php', '.htaccess' ) as $f ) {
+				@unlink( ABSPATH . $f );
+			}
+			@rmdir( ABSPATH . 'wp-admin/includes' );
+			@rmdir( ABSPATH . 'wp-admin' );
+			@rmdir( ABSPATH );
+		}
+	);
 }
 $wp_api = isset( $argv[2] ) ? $argv[2] : '7.0.2';
 if ( ! in_array( $wp_api, array( '7.0.2', '7.1.2' ), true ) ) {
@@ -549,6 +581,21 @@ add_action(
 			'meta'             => array( 'annotations' => array( 'readonly' => true, 'destructive' => false, 'idempotent' => true ) ),
 		) );
 		}
+		// Scenario adminfiles only: an ability that deactivates a plugin the
+		// way WordPress does, and a read-only one that asks for the home path.
+		if ( 'adminfiles' === $GLOBALS['scenario'] ) {
+		ab_ability( 'test/deactivate-through-core', array(
+			'input_schema'     => array( 'type' => 'object', 'required' => array( 'file' ), 'properties' => array( 'file' => array( 'type' => 'string' ) ) ),
+			'execute_callback' => static function ( $input ) {
+				deactivate_plugins( (string) $input['file'] );
+				return array( 'deactivated' => ! in_array( (string) $input['file'], (array) get_option( 'active_plugins', array() ), true ) );
+			},
+		) );
+		ab_ability( 'test/home-path', array(
+			'execute_callback' => static function () { return array( 'home' => get_home_path() ); },
+			'meta'             => array( 'annotations' => array( 'readonly' => true, 'destructive' => false, 'idempotent' => true ), 'show_in_rest' => true ),
+		) );
+		}
 		// Stages the change in the account's autosave revision (#90), as
 		// Elementor's manage-elements does on a published page.
 		ab_ability( 'test/stage-draft', array(
@@ -872,6 +919,58 @@ remove_all_filters( 'ab_mcp_undo_raw_max' );
 ok( null === $tok && $n === ab_points() && array() === $cov, 'Z7 nothing it could put back: no undo point is left (Codex, 30.10.2026): ' . json_encode( array( $tok, $warn ) ) );
 AB_MCP_Ability_Broker::set_on( $prev_on );
 	ab_result( 'ABILITY-BROKER (extra)' );
+}
+
+/* ====================== AF) an ability finds wp-admin's files (Codex on 973f790) */
+
+if ( 'adminfiles' === $scenario ) {
+	/* Core's deactivate_plugins() (wp-admin/includes/plugin.php, 7.1.3), on
+	 * one site: the deactivation hook runs before the list is written, so a
+	 * fatal error there leaves the plugin active. */
+	function deactivate_plugins( $plugins, $silent = false, $network_wide = null ) {
+		$current = (array) get_option( 'active_plugins', array() );
+		foreach ( (array) $plugins as $plugin ) {
+			if ( ! in_array( $plugin, $current, true ) ) {
+				continue;
+			}
+			if ( ! $silent ) {
+				do_action( 'deactivate_plugin', $plugin, false );
+			}
+			$current = array_values( array_diff( $current, array( $plugin ) ) );
+			if ( ! $silent ) {
+				do_action( "deactivate_{$plugin}", false );
+				do_action( 'deactivated_plugin', $plugin, false );
+			}
+		}
+		update_option( 'active_plugins', $current );
+	}
+	// The cache plugin, active and loaded: as WP Super Cache, its
+	// deactivation routine rewrites its block in .htaccess through
+	// get_home_path() and insert_with_markers(), with no function_exists().
+	update_option( 'active_plugins', array( 'akismet/akismet.php', 'cache/cache.php' ) );
+	file_put_contents( ABSPATH . '.htaccess', "# BEGIN Test cache\nRewriteEngine On\n# END Test cache\n" );
+	$GLOBALS['ab_routines'] = array();
+	add_action(
+		'deactivate_cache/cache.php',
+		static function () {
+			insert_with_markers( get_home_path() . '.htaccess', 'Test cache', array() );
+			$GLOBALS['ab_routines'][] = 'deactivate';
+		}
+	);
+	AB_MCP_Ability_Broker::set_on( array( 'test/deactivate-through-core', 'test/home-path' ) );
+
+	ok( ! function_exists( 'get_home_path' ) && ! function_exists( 'insert_with_markers' ) && array() === $GLOBALS['ab_admin_loaded'], 'AF0 neither function nor file of wp-admin is there before the call' );
+	// A read-only ability first, while nothing is loaded: the files are
+	// there for it as well.
+	$r = ab_run( array( 'name' => 'test/home-path' ) );
+	ok( is_array( $r ) && ! is_wp_error( $r ) && false !== strpos( (string) json_encode( $r ), json_encode( ABSPATH ) ), 'AF1 a read-only ability that asks for the home path gets it: ' . ( is_wp_error( $r ) ? $r->get_error_code() . ': ' . ab_msg( $r ) : '' ) );
+	$r = ab_run( array( 'name' => 'test/deactivate-through-core', 'input' => array( 'file' => 'cache/cache.php' ), 'apply' => true ) );
+	ok( is_array( $r ) && ! is_wp_error( $r ), 'AF2 the ability that deactivates a plugin runs, without an error: ' . ( is_wp_error( $r ) ? $r->get_error_code() . ': ' . ab_msg( $r ) : '' ) );
+	ok( array( 'akismet/akismet.php' ) === get_option( 'active_plugins' ), 'AF2 the plugin is off (with the error it stayed active)' );
+	ok( array( 'deactivate' ) === $GLOBALS['ab_routines'], 'AF2 its deactivation routine ran to its end' );
+	ok( "# BEGIN Test cache\n# END Test cache\n" === (string) file_get_contents( ABSPATH . '.htaccess' ), 'AF2 its block in .htaccess is empty' );
+	ok( array( 'file.php', 'misc.php' ) === $GLOBALS['ab_admin_loaded'], 'AF2 file.php and misc.php were loaded, once each: ' . implode( ', ', $GLOBALS['ab_admin_loaded'] ) );
+	ab_result( 'ABILITY-BROKER (adminfiles)' );
 }
 
 /* ================= writers: which broker the page-builder writers ask */

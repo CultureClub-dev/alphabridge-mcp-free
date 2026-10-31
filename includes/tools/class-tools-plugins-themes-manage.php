@@ -22,6 +22,8 @@ require_once dirname( __DIR__ ) . '/lifecycle/class-activation-guard.php';
 // A theme switch taken back leaves menu locations, widgets and rewrite rules
 // as they were.
 require_once dirname( __DIR__ ) . '/lifecycle/class-theme-switch-state.php';
+// The files of wp-admin a deactivation routine expects.
+require_once dirname( __DIR__ ) . '/lifecycle/class-admin-files.php';
 
 /**
  * Class AB_MCP_Tools_Plugins_Themes_Manage
@@ -144,6 +146,10 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 			);
 		}
 		$was_active = is_plugin_active( $plugin );
+		// Its deactivation routine runs here as in wp-admin, with wp-admin's
+		// files loaded: without them WP Super Cache's ended with a fatal
+		// error, and the plugin stayed active (31.10.2026).
+		AB_MCP_Admin_Files::load();
 		deactivate_plugins( array( $plugin ) );
 		return array(
 			'deactivated' => true,

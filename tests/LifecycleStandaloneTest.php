@@ -47,6 +47,18 @@ final class LifecycleStandaloneTest extends TestCase {
 		'lifecycle-delete-test.php'  => array( '' => 0 ),
 		'lifecycle-errors-test.php'  => array( '' => 12 ),
 		'probe-key-test.php'         => array( '' => 12 ),
+		// One process per path: one path's loading cannot stand in for another's.
+		'admin-files-test.php'       => array(
+			// 14 checks, 17 where a copy of core 7.1.3 is at hand.
+			'list'       => 13,
+			'deactivate' => 7,
+			'activate'   => 8,
+			'network'    => 7,
+			'delete'     => 7,
+			'theme'      => 8,
+			'update'     => 6,
+			'install'    => 5,
+		),
 	);
 
 	/** @return array<string,array{string,string,int}> */

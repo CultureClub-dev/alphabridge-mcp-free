@@ -51,6 +51,8 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-ability-code-gate.php';
+// The files of wp-admin the code of an ability may expect.
+require_once dirname( __DIR__ ) . '/lifecycle/class-admin-files.php';
 
 /**
  * Class AB_MCP_Ability_Broker
@@ -2163,11 +2165,21 @@ class AB_MCP_Ability_Broker {
 	 * A plugin or theme the ability would switch on stays off
 	 * (AB_MCP_Ability_Code_Gate), and the answer is the error that says so.
 	 *
+	 * The files of wp-admin come first (AB_MCP_Admin_Files), for every
+	 * ability, read-only ones included: an ability runs whatever code its
+	 * plugin gave it, its annotations are the plugin's word and not a promise
+	 * (WP_Ability::$default_annotations), and what it does through WordPress
+	 * would run with these files in wp-admin. An ability that deactivated a
+	 * plugin through deactivate_plugins() ended with ab_mcp_ability_threw
+	 * where the plugin's deactivation routine called get_home_path(), and
+	 * the plugin stayed active (Codex on 973f790, 31.10.2026, on core 7.1.3).
+	 *
 	 * @param WP_Ability $ability Ability.
 	 * @param mixed      $input   Input.
 	 * @return mixed|WP_Error
 	 */
 	private static function call( $ability, $input ) {
+		AB_MCP_Admin_Files::load();
 		AB_MCP_Ability_Code_Gate::open();
 		try {
 			$result = self::result_error( $ability, $ability->execute( $input ) );
