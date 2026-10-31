@@ -184,6 +184,11 @@ final class AB_MCP_Redactor {
 		'wp_moderate_comment' => array( 'saved_fields' ),
 		'wp_reply_comment'    => array( 'saved_fields' ),
 		'wp_delete_comment'   => array( 'saved_fields' ),
+		// The product and the coupon as stored (4.14.0): what wp_wc_get_product
+		// and wp_wc_list_coupons read, redacted alike; product is the fields
+		// of wp_wc_get_product the answer has carried since 4.9.0.
+		'wp_wc_update_product' => array( 'saved_fields', 'product' ),
+		'wp_wc_create_coupon'  => array( 'saved_fields' ),
 	);
 
 	/**

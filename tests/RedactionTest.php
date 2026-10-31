@@ -1329,6 +1329,42 @@ final class RedactionTest extends TestCase {
 		}
 	}
 
+	public function testTheReadBackOfTheShopWritersIsRedactedAsTheirReadersAre(): void {
+		// Z5 Teil 3: a field a site protects reads as the placeholder in the
+		// answers of wp_wc_update_product and wp_wc_create_coupon too, as
+		// wp_wc_get_product and wp_wc_list_coupons show it. The note on the
+		// stock is a text of the plugin, not a value of the site: it stays.
+		add_filter( 'ab_mcp_redact_keys', static fn() => array( 'sale_price', 'sku', 'code' ) );
+		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-products.php';
+		$note = \AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) );
+
+		$out = AB_MCP_Redactor::tool_result(
+			'wp_wc_update_product',
+			array(),
+			array(
+				'updated'      => true,
+				'product'      => array( 'id' => 7, 'sku' => 'PLACEHOLDER-S', 'regular_price' => '20', 'sale_price' => 'PLACEHOLDER-P', 'stock' => 10 ),
+				'saved_fields' => (object) array( 'regular_price' => '20', 'sale_price' => 'PLACEHOLDER-P', 'stock' => 10 ),
+				'undo'         => 'undo_x',
+				'stock_note'   => $note,
+			)
+		);
+		self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ) );
+		self::assertSame( '20', ( (array) $out['saved_fields'] )['regular_price'] );
+		self::assertSame( 10, ( (array) $out['saved_fields'] )['stock'] );
+		self::assertSame( '20', $out['product']['regular_price'] );
+		self::assertSame( array( '/saved_fields/sale_price', '/product/sku', '/product/sale_price' ), $out['redacted'] );
+		self::assertSame( $note, $out['stock_note'], 'The note on the stock stays as it is.' );
+		self::assertStringContainsString( 'it was 3', $out['stock_note'] );
+		self::assertSame( 'undo_x', $out['undo'] );
+
+		$out = AB_MCP_Redactor::tool_result( 'wp_wc_create_coupon', array(), array( 'created' => true, 'id' => 99, 'saved_fields' => (object) array( 'code' => 'PLACEHOLDER-C', 'amount' => '10', 'discount_type' => 'percent' ), 'undo' => 'undo_y' ) );
+		self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ) );
+		self::assertSame( '10', ( (array) $out['saved_fields'] )['amount'] );
+		self::assertSame( array( '/saved_fields/code' ), $out['redacted'] );
+		self::assertSame( 99, $out['id'] );
+	}
+
 	public function testPathsAreUnambiguousAndNoFindIsMerged(): void {
 		// Codex #12: a.b/token and a/b/token are two places.
 		$out = $this->read(
