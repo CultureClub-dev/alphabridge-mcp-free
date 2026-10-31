@@ -5074,3 +5074,6 @@ msgstr "O lixo está desativado neste site (EMPTY_TRASH_DAYS é 0), por isso o W
 
 msgid "WordPress did not store the new status of comment %d: it still has the status it had before. A plugin may keep it from changing. Check the comment with wp_get_comment, and ask the site administrator which plugin guards it."
 msgstr "O WordPress não guardou o novo estado do comentário %d: continua com o estado que tinha antes. Um plugin pode impedir a alteração. Verifique o comentário com wp_get_comment e pergunte ao administrador do site que plugin o protege."
+
+msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
+msgstr "O artigo deste comentário está no lixo, o que deixa os seus comentários em post-trashed, e nenhuma chamada do WordPress volta a pôr um comentário nesse estado. O WordPress devolve aos comentários de um artigo o estado que tinham antes quando o artigo sai do lixo: retire o artigo do lixo com wp_bulk_update_status ou em Artigos › Lixo no wp-admin e depois verifique o comentário com wp_get_comment."

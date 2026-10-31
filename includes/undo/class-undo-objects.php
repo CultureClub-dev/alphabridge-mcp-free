@@ -413,7 +413,8 @@ abstract class AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * The notes of deleted_for_good(), for the check that each names a way
+	 * The notes of deleted_for_good(), and of a comment whose post is in the
+	 * trash (since 4.14.0), for the check that each names a way
 	 * (AnswerWayTest).
 	 *
 	 * @return string[]
@@ -423,6 +424,10 @@ abstract class AB_MCP_Undo_Objects {
 		foreach ( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user', 'wp_delete_comment', 'wp_moderate_comment' ) as $tool ) {
 			$out[ $tool ] = self::deleted_for_good( $tool );
 		}
+		if ( ! class_exists( 'AB_MCP_Undo_Comments', false ) ) {
+			require_once __DIR__ . '/class-undo-comments.php';
+		}
+		$out['post-trashed'] = AB_MCP_Undo_Comments::post_trashed_note();
 		return $out;
 	}
 }

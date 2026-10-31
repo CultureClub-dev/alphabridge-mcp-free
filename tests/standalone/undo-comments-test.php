@@ -838,16 +838,35 @@ $GLOBALS['ab_on_insert'] = static function ( $id ) { $GLOBALS['T']['comments'][ 
 $res = ab_reply( 'Hallo' );
 ok( array( 'content' ) === $res['saved_differs'] && 'Umgeschrieben' === $res['saved_fields']->content && false !== strpos( $res['warning'], 'wp_get_comment' ) && ab_token( $res ), 'R12 a plugin that rewrites the content: saved_differs and a warning naming the reader, still a token' );
 
-/* ============================== P) a comment whose post was in the trash */
+/* ============================== P) a comment whose post is in the trash: no point */
 
+foreach ( array(
+	'wp_moderate_comment approve' => array( static fn() => ab_moderate( 80, 'approve' ), '1', 'moderated' ),
+	'wp_moderate_comment spam'    => array( static fn() => ab_moderate( 80, 'spam' ), 'spam', 'moderated' ),
+	'wp_moderate_comment trash'   => array( static fn() => ab_moderate( 80, 'trash' ), 'trash', 'moderated' ),
+	'wp_delete_comment'           => array( static fn() => ab_delete( 80 ), 'trash', 'deleted' ),
+) as $what => $case ) {
+	reset_all();
+	ab_comment( 80, array( 'comment_approved' => 'post-trashed' ) );
+	$res = ( $case[0] )();
+	ok( true === $res[ $case[2] ] && $case[1] === ab_status( 80 ) && null === $res['undo'] && 0 === ab_points(), "P1 a post-trashed comment changed ($what): no undo point that would always be refused" );
+	ok( AB_MCP_Undo_Comments::post_trashed_note() === $res['undo_note'] && 0 === strpos( $res['undo_note'], 'not undoable: The post of this comment is in the trash' ), "P2 ... the note says why ($what)" );
+	ok( false !== strpos( $res['undo_note'], 'wp_bulk_update_status' ) && false !== strpos( $res['undo_note'], 'wp-admin' ) && false !== strpos( $res['undo_note'], 'wp_get_comment' ), "P3 ... and the way: the post out of the trash ($what)" );
+}
 reset_all();
-ab_comment( 80, array( 'comment_approved' => 'post-trashed' ) );
-$res = ab_moderate( 80, 'approve' );
-ok( '1' === ab_status( 80 ) && ab_token( $res ), 'P1 a post-trashed comment approved: a point' );
-$dry = ab_undo( $res['undo'], array( 'dry_run' => true ) );
-ok( 0 === $dry['would_undo'] && 'post_trashed' === $dry['blocked'][0]['reason'], 'P2 its undo is blocked with the reason: no call sets post-trashed again' );
-$out = ab_undo( $res['undo'], array( 'force' => true ) );
-ok( 0 === $out['undone'] && 'post_trashed' === $out['blocked'][0]['reason'] && '1' === ab_status( 80 ), 'P3 ... also with force, and nothing is written' );
+ab_comment( 81, array( 'comment_approved' => 'post-trashed' ) );
+$res = ab_moderate( 81, 'approve' );
+$res = ab_moderate( 81, 'hold' );
+ok( ab_token( $res ) && array( 'status' => '1', 'trash' => array() ) === AB_MCP_Undo::claim( $res['undo'] )['data']['before']['comment:81'], 'P4 moderated again from a status that can be set: a point as for any comment' );
+reset_all();
+ab_comment( 82, array( 'comment_approved' => 'held-by-plugin' ) );
+$res = ab_moderate( 82, 'approve' );
+ok( null === $res['undo'] && false !== strpos( $res['undo_note'], 'No undo point was recorded' ) && false === strpos( $res['undo_note'], 'trash' ) && 0 === ab_points(), 'P5 another status no call sets: no point, and no reason that is not true' );
+reset_all();
+ab_comment( 83, array( 'comment_approved' => 'post-trashed' ) );
+$GLOBALS['ab_toolstate']['wp_undo'] = false;
+$res = ab_moderate( 83, 'approve' );
+ok( null === $res['undo'] && false !== strpos( $res['undo_note'], 'Undo is switched off' ), 'P6 with undo switched off, the note says that' );
 
 /* ============================== H) why there is no undo point */
 
@@ -928,6 +947,7 @@ $bad  = array(
 	'the first location not the call' => array_merge( $good, array( 'before' => array( 'comment:101' => $good['before']['comment:100'], 'comment:100' => $good['before']['comment:100'] ) ) ),
 	'after without the location'      => array_merge( $good, array( 'after' => array() ) ),
 	'a status in another spelling'    => array_merge( $good, array( 'before' => array( 'comment:100' => array( 'status' => 'SPAM', 'trash' => array() ) ) ) ),
+	'a status no call sets'           => array_merge( $good, array( 'before' => array( 'comment:100' => array( 'status' => 'post-trashed', 'trash' => array() ) ) ) ),
 	'a foreign meta key'              => array_merge( $good, array( 'before' => array( 'comment:100' => array( 'status' => '1', 'trash' => array( array( '_edit_lock', '1' ) ) ) ) ) ),
 	'a trash time that is no time'    => array_merge( $good, array( 'before' => array( 'comment:100' => array( 'status' => '1', 'trash' => array( array( '_wp_trash_meta_time', 'x' ) ) ) ) ) ),
 	'a location of another form'      => array_merge( $good, array( 'before' => array( 'comment:100' => $good['before']['comment:100'], 'post:5' => $good['before']['comment:100'] ) ) ),
@@ -961,7 +981,7 @@ ok( false === strpos( $json, 'vertraulich' ) && false === strpos( $json, 'Geheim
 /* ============================== N) the notes of a deletion without undo */
 
 $notes = AB_MCP_Undo_Objects::own_notes();
-foreach ( array( 'wp_delete_comment', 'wp_moderate_comment' ) as $tool ) {
+foreach ( array( 'wp_delete_comment', 'wp_moderate_comment', 'post-trashed' ) as $tool ) {
 	ok( isset( $notes[ $tool ] ) && 0 === strpos( $notes[ $tool ], 'not undoable: ' ) && false !== strpos( $notes[ $tool ], 'wp_get_comment' ), "N1 the note of $tool says not undoable and names wp_get_comment" );
 }
 ok( $notes['wp_delete_comment'] !== $notes['wp_moderate_comment'], 'N2 the trash turned off is its own reason' );

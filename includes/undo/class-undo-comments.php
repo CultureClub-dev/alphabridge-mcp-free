@@ -21,9 +21,10 @@
  * any other status with wp_set_comment_status() and the old one; the trash
  * rows of before are written again afterwards where those calls left others
  * (the trash and the spam of WordPress replace them). A comment or a reply
- * note moderated since is refused unless force is set; a comment its post
- * took into the trash (post-trashed) has no call that sets that status
- * again and is blocked (post_trashed).
+ * note moderated since is refused unless force is set. A comment its post
+ * took into the trash (post-trashed) gets no point: no call sets that status
+ * again, and WordPress gives it back its status of before when the post
+ * comes out of the trash (post_trashed_note()).
  *
  * "comment" of a new comment is its row; "use" its replies and its meta rows
  * (id, key, sha256 of the value). The undo deletes it for good, as
@@ -363,9 +364,10 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 		call_user_func( $write );
 		$now = self::read_back( $id );
 
-		$snap    = null;
-		$gone    = false;
-		$changed = $now !== $was;
+		$snap       = null;
+		$gone       = false;
+		$unsettable = null;
+		$changed    = $now !== $was;
 		if ( null !== $before ) {
 			$hashes = self::now_hashes( array( 'before' => $before ) );
 			if ( null !== $hashes ) {
@@ -388,6 +390,13 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 					'before' => array_intersect_key( $before, $keep ),
 					'after'  => array_intersect_key( $hashes, $keep ),
 				);
+				// A status no call sets again (post-trashed, its post in the
+				// trash): no point that would always be refused (below).
+				foreach ( null !== $snap ? $snap['before'] : array() as $state ) {
+					if ( ! in_array( $state['status'], self::SETTABLE, true ) ) {
+						$unsettable = $state['status'];
+					}
+				}
 			}
 		}
 
@@ -400,9 +409,27 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 		if ( $notes > 0 ) {
 			$summary .= sprintf( ', with %d reply notes', $notes );
 		}
-		$outcome = $gone ? AB_MCP_Undo_Answer::note( null ) : self::outcome( $tool, self::READER, $changed, $snap, $summary );
-		$res     = AB_MCP_Undo_Answer::saved( array(), array( 'status' => $want ), $now, self::READER );
+		if ( $changed && null !== $unsettable ) {
+			$outcome = 'post-trashed' === $unsettable ? self::post_trashed_note() : AB_MCP_Undo_Answer::note( null );
+		} elseif ( $gone ) {
+			$outcome = AB_MCP_Undo_Answer::note( null );
+		} else {
+			$outcome = self::outcome( $tool, self::READER, $changed, $snap, $summary );
+		}
+		$res = AB_MCP_Undo_Answer::saved( array(), array( 'status' => $want ), $now, self::READER );
 		return AB_MCP_Undo_Answer::with( $res, $outcome );
+	}
+
+	/**
+	 * The undo_note where a comment was post-trashed: its post is in the
+	 * trash, no call of WordPress sets that status again, and
+	 * wp_untrash_post_comments() gives the comments of a post the status they
+	 * had before when the post comes out of the trash.
+	 *
+	 * @return string
+	 */
+	public static function post_trashed_note() {
+		return AB_MCP_Undo_Answer::not_undoable( __( 'The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -506,14 +533,6 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 			// passes over it); every other one needs the right to it.
 			if ( false !== self::status_of( $cid ) && ! current_user_can( 'edit_comment', $cid ) ) {
 				return 'forbidden';
-			}
-		}
-		foreach ( (array) $snap['before'] as $state ) {
-			$status = (string) ( $state['status'] ?? '' );
-			if ( ! in_array( $status, self::SETTABLE, true ) ) {
-				// WordPress sets post-trashed only when the post goes into
-				// the trash, and no call sets it again.
-				return 'post-trashed' === $status ? 'post_trashed' : 'status_not_settable';
 			}
 		}
 		return '';
@@ -672,9 +691,10 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * Is a location in the form set_status() writes: a status as
-	 * comment_approved holds it, and trash rows that only WordPress' own
-	 * keys and values could have written?
+	 * Is a location in the form set_status() writes: a status
+	 * wp_set_comment_status() sets (set_status() keeps no point of another,
+	 * such as post-trashed), and trash rows that only WordPress' own keys
+	 * and values could have written?
 	 *
 	 * @param mixed $state Location of a snapshot.
 	 * @return bool
@@ -685,7 +705,7 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 		}
 		$keys = array_keys( $state );
 		sort( $keys );
-		if ( array( 'status', 'trash' ) !== $keys || ! is_string( $state['status'] ) || 1 !== preg_match( '/\A[a-z0-9-]{1,20}\z/', $state['status'] ) || ! is_array( $state['trash'] ) || ! array_is_list( $state['trash'] ) ) {
+		if ( array( 'status', 'trash' ) !== $keys || ! in_array( $state['status'], self::SETTABLE, true ) || ! is_array( $state['trash'] ) || ! array_is_list( $state['trash'] ) ) {
 			return false;
 		}
 		foreach ( $state['trash'] as $pair ) {
