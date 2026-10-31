@@ -180,6 +180,10 @@ final class AB_MCP_Redactor {
 		'wp_update_widget'    => array( 'saved_fields', 'settings' ),
 		// The SEO fields as stored (4.14.0): what wp_seo_get reads, redacted alike.
 		'wp_seo_set'          => array( 'saved_fields' ),
+		// The comments as stored (4.14.0): what wp_get_comment reads, redacted alike.
+		'wp_moderate_comment' => array( 'saved_fields' ),
+		'wp_reply_comment'    => array( 'saved_fields' ),
+		'wp_delete_comment'   => array( 'saved_fields' ),
 	);
 
 	/**
