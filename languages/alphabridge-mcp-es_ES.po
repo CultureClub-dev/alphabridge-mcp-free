@@ -5054,6 +5054,18 @@ msgstr "Los elementos de menú %1$s del menú %2$d siguen ahí después de la el
 msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
 msgstr "En una red multisitio, WordPress quita la cuenta solo de este sitio: la cuenta, su ID y su contraseña se mantienen, y su contenido aquí se trató como indicó la llamada. Antes de quitar una cuenta que puede volver a necesitarse aquí, anota su rol con wp_get_user; un administrador de la red la vuelve a añadir a este sitio en wp-admin, en Usuarios."
 
+#, php-format
+msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
+msgstr "El argumento en %1$s contiene %2$s, el marcador que sustituye una credencial en la respuesta de una herramienta de lectura. Si se volviera a escribir, reemplazaría la credencial guardada, así que no se ha cambiado nada. Envía el valor real u omite este campo para que se conserve el guardado."
+
+#, php-format
+msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
+msgstr "No se ha cambiado nada: donde el valor contiene %1$s, el valor guardado es un objeto que no se puede volver a escribir sin cambios. Envía el valor real en lugar de %1$s o cámbialo en el plugin que lo guarda."
+
+#, php-format
+msgid "settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget's own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials."
+msgstr "settings.%1$s: esta lista contiene credenciales que wp_get_widgets omite o muestra como %2$s, y sus entradas han cambiado (una añadida, eliminada, movida o cambiada sin sus credenciales), así que no se pueden asignar a sus entradas; no se ha guardado nada. Cambia esta lista en el formulario propio del widget en wp-admin, en Apariencia › Widgets, o envía cada entrada cambiada con sus credenciales reales."
+
 msgid "WordPress did not delete comment %d again; the undo point stays. Check the comment with wp_get_comment, and try again."
 msgstr "WordPress no ha vuelto a eliminar el comentario %d; el punto de restauración se mantiene. Comprueba el comentario con wp_get_comment y vuelve a intentarlo."
 
