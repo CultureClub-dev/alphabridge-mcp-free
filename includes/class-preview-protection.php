@@ -106,8 +106,9 @@
  *   xmlrpc.php run no wp(), so neither parse_request nor template_redirect
  *   fires there; the checks on the request constants are kept all the
  *   same, each with its test, so a later change of the hooks cannot lock
- *   them by accident. admin-ajax.php and admin-post.php have a gate of
- *   their own on admin_init (below).
+ *   them by accident — all but DOING_AJAX, which a plugin may define on a
+ *   front-end request (see below). admin-ajax.php and admin-post.php have
+ *   a gate of their own on admin_init (below).
  *
  * Where WordPress gives content out without template_redirect (measured on
  * the core, 31.10.2026), the gate hangs a second time:
@@ -185,10 +186,18 @@
  * answers an action nobody handles; for admin-post.php the password page,
  * whose form posts to the home page, since this gate takes no password.
  * AlphaBridge has no nopriv action of its own (tests/StagingCardTest.php
- * holds that) and the connection check asks neither script. The clause ajax
- * of frontend_decision() stays: it is for the front-end gates, which never
- * run for these scripts. WooCommerce's ?wc-ajax= (template_redirect at 0)
- * goes through wp() and meets the first line on parse_request.
+ * holds that) and the connection check asks neither script. The front-end
+ * gates have no clause for DOING_AJAX: admin-ajax.php never reaches them,
+ * and a plugin may define the constant on a front-end request, as
+ * WooCommerce does on init for its ?wc-ajax= (served on template_redirect
+ * at 0), where it would have opened /?sitemap=1&wc-ajax=… to the sitemap
+ * (Codex, 31.10.2026); so ?wc-ajax= goes through wp(), meets the first
+ * line on parse_request and is locked for a visitor without login and
+ * cookie like every front-end request, which is what the lock of the
+ * nopriv actions means for a shop's cart fragments as well. The cookie is
+ * set for COOKIEPATH and, where it differs, SITECOOKIEPATH (cookie_paths()),
+ * so a visitor who entered the password reaches the two admin scripts under
+ * the WordPress folder too.
  * - robots.txt: with blog_public 0 WordPress answers Disallow: /, which a
  *   crawler reads only if the file is not behind the password.
  * - A visitor with a valid cookie, also for the REST calls a page makes
@@ -208,7 +217,10 @@
  * WordPress itself adds noindex, disables its sitemaps and answers
  * robots.txt with Disallow: /; switching off writes the remembered value
  * back, never a plain 1. X-Robots-Tag: noindex, nofollow goes on every
- * front-end answer while on (wp_headers). Deactivating the plugin takes the
+ * front-end answer while on: through wp_headers where WP::send_headers()
+ * runs, and from the gates themselves where an answer ends before it or
+ * without it (parse_request, wp-links-opml.php, the two admin scripts;
+ * send_robots_header()). Deactivating the plugin takes the
  * gates with it, so it writes the remembered value back as well, notes that
  * it did (restored) and keeps the state; activating it again sets 0 once
  * more, taking the value found as the new remembered one where the note is
@@ -1036,7 +1048,11 @@ class AB_MCP_Preview_Protection {
 			'cookie'          => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
 			'logged_in'       => is_user_logged_in(),
 			'admin'           => is_admin(),
-			'ajax'            => defined( 'DOING_AJAX' ) && DOING_AJAX,
+			// No clause for DOING_AJAX: admin-ajax.php runs no wp(), so the
+			// front-end gates never see it (it has gate_admin()), and a plugin
+			// may define the constant on a front-end request (WooCommerce on
+			// init for ?wc-ajax=), which then is a front-end request like any
+			// other, sitemap variables included (Codex, 31.10.2026).
 			'cron'            => defined( 'DOING_CRON' ) && DOING_CRON,
 			'xmlrpc'          => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
 			'rest'            => defined( 'REST_REQUEST' ) && REST_REQUEST,
@@ -1083,7 +1099,7 @@ class AB_MCP_Preview_Protection {
 		if ( empty( $state['on'] ) ) {
 			return self::decision( 'pass', 'off' );
 		}
-		foreach ( array( 'admin', 'ajax', 'cron', 'xmlrpc', 'rest', 'cli' ) as $kind ) {
+		foreach ( array( 'admin', 'cron', 'xmlrpc', 'rest', 'cli' ) as $kind ) {
 			if ( ! empty( $ctx[ $kind ] ) ) {
 				return self::decision( 'pass', $kind );
 			}
@@ -1154,6 +1170,7 @@ class AB_MCP_Preview_Protection {
 			define( 'DONOTCACHEPAGE', true );
 		}
 		nocache_headers();
+		self::send_robots_header();
 
 		$ctx      = self::frontend_context( true === $with_themes, $wp );
 		$decision = self::frontend_decision( $ctx, $state, time() );
@@ -1301,6 +1318,7 @@ class AB_MCP_Preview_Protection {
 		if ( ! $state['on'] ) {
 			return;
 		}
+		self::send_robots_header();
 		$ctx      = self::admin_context();
 		$decision = self::admin_decision( $ctx, $state, time() );
 		if ( 'pass' === $decision['action'] ) {
@@ -1320,9 +1338,33 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
-	 * Set the cookie, where headers can still be sent. Path and domain as
-	 * WordPress sets its own, so on a sub-directory network the cookie of
-	 * one site does not reach another.
+	 * The paths the cookie is set for, as WordPress sets its login cookie
+	 * (wp_set_auth_cookie()): COOKIEPATH, the path of the home address, and,
+	 * where it differs, SITECOOKIEPATH, the path of the WordPress folder
+	 * (home https://example.test/staging, WordPress in /wordpress): a cookie
+	 * for /staging/ alone never reaches /wordpress/wp-admin/admin-ajax.php
+	 * and admin-post.php, and the AJAX of a page a visitor unlocked would
+	 * meet gate_admin() without it (Codex, 31.10.2026). Domain as WordPress
+	 * sets its own, so on a sub-directory network the cookie of one site
+	 * does not reach another.
+	 *
+	 * @return string[] One or two paths, COOKIEPATH first.
+	 */
+	public static function cookie_paths() {
+		$paths = array( defined( 'COOKIEPATH' ) && '' !== (string) COOKIEPATH ? (string) COOKIEPATH : '/' );
+		if ( defined( 'SITECOOKIEPATH' ) && '' !== (string) SITECOOKIEPATH && (string) SITECOOKIEPATH !== $paths[0] ) {
+			$paths[] = (string) SITECOOKIEPATH;
+		}
+		return $paths;
+	}
+
+	/**
+	 * Set the cookie, where headers can still be sent: once per path of
+	 * cookie_paths(), with the same value, expiry and flags. Each setcookie()
+	 * is followed by the action ab_mcp_preview_cookie_sent with its
+	 * arguments, so that a test, or code that watches what the site answers,
+	 * sees what was set and for which path (PHP's CLI keeps no list of the
+	 * headers it sent; the mark of AB_MCP_OAuth is reported the same way).
 	 *
 	 * @param string $value   cookie_value().
 	 * @param int    $expires Unix time.
@@ -1331,18 +1373,50 @@ class AB_MCP_Preview_Protection {
 		if ( headers_sent() ) {
 			return;
 		}
-		setcookie(
-			self::COOKIE,
-			$value,
-			array(
+		foreach ( self::cookie_paths() as $path ) {
+			$options = array(
 				'expires'  => (int) $expires,
-				'path'     => defined( 'COOKIEPATH' ) && '' !== COOKIEPATH ? COOKIEPATH : '/',
+				'path'     => $path,
 				'domain'   => defined( 'COOKIE_DOMAIN' ) && is_string( COOKIE_DOMAIN ) ? COOKIE_DOMAIN : '',
 				'secure'   => function_exists( 'is_ssl' ) && is_ssl(),
 				'httponly' => true,
 				'samesite' => 'Lax',
-			)
-		);
+			);
+			setcookie( self::COOKIE, $value, $options );
+			/**
+			 * Fires after the preview cookie was set for one path.
+			 *
+			 * @param string $name    The cookie's name.
+			 * @param string $value   Its value.
+			 * @param array  $options The options setcookie() got (expires, path, domain, secure, httponly, samesite).
+			 */
+			do_action( 'ab_mcp_preview_cookie_sent', self::COOKIE, $value, $options );
+		}
+	}
+
+	/**
+	 * X-Robots-Tag on an answer a gate gives itself. The filter wp_headers
+	 * (headers()) runs in WP::send_headers(), after parse_request; the
+	 * password page, the reload after the password and the documents handed
+	 * to AB_MCP_OAuth end on parse_request before that, wp-links-opml.php
+	 * and the two admin scripts never run it. So every gate sends the header
+	 * as soon as the protection is on, where headers can still be sent;
+	 * header() replaces a header of the same name, so the second line and
+	 * WP::send_headers() add no second one (Codex, 31.10.2026). Followed by
+	 * the action ab_mcp_preview_header_sent with the line, as the cookie.
+	 */
+	private static function send_robots_header() {
+		if ( headers_sent() ) {
+			return;
+		}
+		$line = 'X-Robots-Tag: ' . self::ROBOTS;
+		header( $line, true );
+		/**
+		 * Fires after a gate sent a header of its own.
+		 *
+		 * @param string $line The header line sent.
+		 */
+		do_action( 'ab_mcp_preview_header_sent', $line );
 	}
 
 	/**
@@ -1403,7 +1477,9 @@ class AB_MCP_Preview_Protection {
 
 	/**
 	 * X-Robots-Tag on every front-end answer while on (the wp_headers
-	 * filter, sent by WP::send_headers() before the template loads).
+	 * filter, sent by WP::send_headers() before the template loads). The
+	 * answers that end before that get it from the gates themselves
+	 * (send_robots_header()).
 	 *
 	 * @param array $headers Headers WordPress is about to send.
 	 * @return array

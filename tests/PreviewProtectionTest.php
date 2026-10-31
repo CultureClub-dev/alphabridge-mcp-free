@@ -245,7 +245,6 @@ final class PreviewProtectionTest extends TestCase {
 				'cookie'          => '',
 				'logged_in'       => false,
 				'admin'           => false,
-				'ajax'            => false,
 				'cron'            => false,
 				'xmlrpc'          => false,
 				'rest'            => false,
@@ -449,7 +448,6 @@ final class PreviewProtectionTest extends TestCase {
 	public static function passes(): array {
 		return array(
 			'wp-admin'                 => array( array( 'admin' => true ), 'admin' ),
-			'admin-ajax'               => array( array( 'ajax' => true ), 'ajax' ),
 			'wp-cron'                  => array( array( 'cron' => true ), 'cron' ),
 			'xmlrpc'                   => array( array( 'xmlrpc' => true ), 'xmlrpc' ),
 			'REST'                     => array( array( 'rest' => true ), 'rest' ),
@@ -743,7 +741,7 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( '1|abc', $ctx['cookie'] );
 		self::assertTrue( $ctx['logged_in'] );
 		self::assertTrue( $ctx['admin'] );
-		self::assertFalse( $ctx['ajax'] );
+		self::assertArrayNotHasKey( 'ajax', $ctx, 'DOING_AJAX proves nothing about the script on the front end.' );
 		self::assertFalse( $ctx['cron'] );
 		self::assertFalse( $ctx['xmlrpc'] );
 		self::assertFalse( $ctx['rest'] );
@@ -782,7 +780,7 @@ final class PreviewProtectionTest extends TestCase {
 		define( 'REST_REQUEST', true );
 		define( 'WP_CLI', true );
 		$ctx = AB_MCP_Preview_Protection::frontend_context();
-		self::assertTrue( $ctx['ajax'] );
+		self::assertArrayNotHasKey( 'ajax', $ctx );
 		self::assertTrue( $ctx['cron'] );
 		self::assertTrue( $ctx['xmlrpc'] );
 		self::assertTrue( $ctx['rest'] );
@@ -962,6 +960,58 @@ final class PreviewProtectionTest extends TestCase {
 			self::assertSame( 'sitemap', $exit->kind );
 		}
 		self::assertCount( 3, $printed() );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testDoingAjaxOnTheFrontEndOpensNothing(): void {
+		// WooCommerce defines DOING_AJAX on init for ?wc-ajax= and serves it
+		// on template_redirect at 0; a clause on the constant let
+		// /?sitemap=1&wc-ajax=get_refreshed_fragments pass the first line,
+		// and Yoast printed the sitemap on pre_get_posts (Codex, 31.10.2026).
+		// The constant proves nothing about the script: admin-ajax.php never
+		// reaches the front-end gates.
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'DOING_AJAX', true );
+		$printed = self::sitemapPlugin( 'pre_get_posts', 1 );
+		AB_MCP_Preview_Protection::hook();
+		$_SERVER['REQUEST_URI'] = '/?sitemap=1&wc-ajax=get_refreshed_fragments';
+		$_GET                   = array( 'sitemap' => '1', 'wc-ajax' => 'get_refreshed_fragments' );
+		$wp                     = self::wp( array( 'sitemap' => '1' ) );
+		$sequence               = static function () use ( $wp ): void {
+			do_action_ref_array( 'parse_request', array( $wp ) );
+			do_action( 'pre_get_posts' );
+		};
+		$this->on();
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() )['action'] );
+		try {
+			$sequence();
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind, 'The password page, not the sitemap.' );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		self::assertSame( array(), $printed(), 'The sitemap plugin never ran.' );
+		// Signed in, or with the cookie: the request runs as before, the cart
+		// fragments of a shop included.
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $state['hash'], time() + 100 );
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		self::assertCount( 2, $printed() );
 	}
 
 	public function testARestRequestPassesTheFirstLineToTheRestGate(): void {
@@ -1347,6 +1397,163 @@ final class PreviewProtectionTest extends TestCase {
 		$GLOBALS['ab_test_logged_in'] = true;
 		AB_MCP_Preview_Protection::gate_frontend();
 		self::assertTrue( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE, 'On: also the answer a signed-in user gets.' );
+	}
+
+	/**
+	 * What the gates sent: the lines of ab_mcp_preview_header_sent and the
+	 * arguments of ab_mcp_preview_cookie_sent, which follow the real header()
+	 * and setcookie() (PHP's CLI keeps no list of sent headers). Only in a
+	 * process of its own, where nothing was printed yet and headers_sent()
+	 * is false, as on a web server.
+	 *
+	 * @return array{headers:string[],cookies:array}
+	 */
+	private static function sent(): array {
+		$out = array( 'headers' => array(), 'cookies' => array() );
+		foreach ( $GLOBALS['ab_test_actions'] as list( $hook, $args ) ) {
+			if ( 'ab_mcp_preview_header_sent' === $hook ) {
+				$out['headers'][] = $args[0];
+			} elseif ( 'ab_mcp_preview_cookie_sent' === $hook ) {
+				$out['cookies'][] = $args;
+			}
+		}
+		return $out;
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheRightPasswordSetsTheCookieForTheHomePathAndTheWordPressFolder(): void {
+		// home https://example.test/staging, WordPress in /wordpress: a cookie
+		// for /staging/ alone never reaches /wordpress/wp-admin/admin-ajax.php,
+		// and the AJAX of an unlocked page would meet gate_admin() without it
+		// (Codex, 31.10.2026). As WordPress sets its login cookie: COOKIEPATH
+		// and, where it differs, SITECOOKIEPATH.
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'COOKIEPATH', '/staging/' );
+		define( 'SITECOOKIEPATH', '/wordpress/' );
+		define( 'COOKIE_DOMAIN', '' );
+		self::assertFalse( headers_sent(), 'Nothing printed yet in this process: the gate really sends.' );
+		self::assertSame( array( '/staging/', '/wordpress/' ), AB_MCP_Preview_Protection::cookie_paths() );
+
+		$password                  = $this->on();
+		$_SERVER['REQUEST_URI']    = '/staging/about/';
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) );
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 2, $cookies, 'One setcookie() per path.' );
+		self::assertSame( '/staging/', $cookies[0][2]['path'] );
+		self::assertSame( '/wordpress/', $cookies[1][2]['path'] );
+		foreach ( $cookies as $cookie ) {
+			self::assertSame( AB_MCP_Preview_Protection::COOKIE, $cookie[0] );
+			self::assertSame( $cookies[0][1], $cookie[1], 'The same value.' );
+			self::assertTrue( AB_MCP_Preview_Protection::cookie_valid( $cookie[1], AB_MCP_Preview_Protection::state()['hash'], time() ) );
+			self::assertSame( $cookies[0][2]['expires'], $cookie[2]['expires'], 'The same expiry.' );
+			self::assertGreaterThan( time() + 13 * DAY_IN_SECONDS, $cookie[2]['expires'] );
+			self::assertSame( '', $cookie[2]['domain'] );
+			self::assertFalse( $cookie[2]['secure'] );
+			self::assertTrue( $cookie[2]['httponly'] );
+			self::assertSame( 'Lax', $cookie[2]['samesite'] );
+		}
+		// The reload after the password carries the robots header as well.
+		self::assertContains( 'X-Robots-Tag: noindex, nofollow', self::sent()['headers'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheCookieIsSetOnceWhenTheTwoPathsAreTheSame(): void {
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'COOKIEPATH', '/' );
+		define( 'SITECOOKIEPATH', '/' );
+		self::assertSame( array( '/' ), AB_MCP_Preview_Protection::cookie_paths() );
+		$password                  = $this->on();
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 1, $cookies, 'The same path twice would be the same cookie twice.' );
+		self::assertSame( '/', $cookies[0][2]['path'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testWithoutTheConstantsTheCookiePathIsTheRoot(): void {
+		self::assertSame( array( '/' ), AB_MCP_Preview_Protection::cookie_paths() );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testEveryAnswerAGateGivesItselfCarriesXRobotsTag(): void {
+		// The filter wp_headers runs in WP::send_headers(), after
+		// parse_request: the password page, the documents handed to
+		// AB_MCP_OAuth, wp-links-opml.php (live measured without the header)
+		// and the two admin scripts never reach it, so the gates send the
+		// header themselves (Codex, 31.10.2026).
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		self::assertFalse( headers_sent() );
+		$line = 'X-Robots-Tag: noindex, nofollow';
+		$sent = static function ( callable $gate ): array {
+			$GLOBALS['ab_test_actions'] = array();
+			try {
+				$gate();
+			} catch ( AbTestExit $exit ) {
+				return self::sent()['headers'];
+			}
+			return self::sent()['headers'];
+		};
+
+		// Off: nothing.
+		$_SERVER['REQUEST_URI'] = '/about/';
+		self::assertSame( array(), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ), 'Off: no header of ours.' );
+
+		$this->on();
+		// The password page on parse_request.
+		$GLOBALS['ab_test_die_args'] = array();
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'], 'The password page followed the header.' );
+		// A pass on parse_request carries it too (WordPress would send the
+		// same again through wp_headers; header() replaces).
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
+		$GLOBALS['ab_test_logged_in'] = false;
+		// The consent page handed to its handler.
+		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json' );
+		$_REQUEST                  = $_GET;
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json';
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) ) ) );
+		$_GET     = array();
+		$_REQUEST = array();
+		// wp-links-opml.php on wp_loaded.
+		$GLOBALS['pagenow']     = 'wp-links-opml.php';
+		$_SERVER['REQUEST_URI'] = '/wp-links-opml.php';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_script() ) );
+		// admin-ajax.php and admin-post.php on admin_init.
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-ajax.php';
+		$_REQUEST['action']            = 'load_more';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		$GLOBALS['ab_test_doing_ajax'] = false;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
 	}
 
 	public function testXRobotsTagGoesOnEveryAnswerWhileOn(): void {
