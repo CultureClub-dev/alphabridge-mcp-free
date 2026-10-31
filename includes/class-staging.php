@@ -1062,10 +1062,14 @@ class AB_MCP_Staging {
 	 * Whether the assistant of this connection is asked to offer the way to
 	 * a staging site: the sentence in the server instructions and the
 	 * prompt staging_workflow, under the same condition. wp_staging_status
-	 * has to be on in the registry the server answers with, and the
-	 * connection has to be able to change something: write access on, and
-	 * at least one writing tool that tools/list shows this connection (its
-	 * switch on, and allowed for the access level of the token,
+	 * has to be in the registry the server answers with, and the account
+	 * of the connection has to be allowed to call it, by the same check the
+	 * call makes (AB_MCP_Security::permits(): its capability manage_options,
+	 * its switch, write access and the token's access level), or the
+	 * sentence would ask for a call that is refused. And the connection has
+	 * to be able to change something: write access on, and at least one
+	 * writing tool that tools/list shows this connection (its switch on,
+	 * and allowed for the access level of the token,
 	 * AB_MCP_Tool_Registry::scope_allows()). For a connection that only
 	 * reads, the question would be about a change it cannot make.
 	 *
@@ -1077,7 +1081,7 @@ class AB_MCP_Staging {
 			return false;
 		}
 		$def = $registry->get( 'wp_staging_status' );
-		if ( ! is_array( $def ) || ! AB_MCP_Settings::is_tool_enabled( 'wp_staging_status', $def ) ) {
+		if ( ! is_array( $def ) || true !== AB_MCP_Security::permits( 'wp_staging_status', $def ) ) {
 			return false;
 		}
 		if ( ! AB_MCP_Site_Mode::is_full() ) {

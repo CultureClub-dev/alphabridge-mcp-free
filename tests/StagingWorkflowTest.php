@@ -12,6 +12,10 @@
  *   whether to work on a staging site first: always with the reason and
  *   the way, offering to set staging up now and to continue there. Without
  *   the tool, or with it switched off, not a word of it.
+ * - Only for an account that may call wp_staging_status, by the check the
+ *   call makes (AB_MCP_Security::permits()): an editor whose connection
+ *   writes posts, without manage_options, gets neither, an administrator
+ *   both.
  * - A connection can write with write access on and a writing tool that
  *   tools/list shows it: switched on and allowed for the access level of
  *   its token. With write access off, a token that only reads, a token for
@@ -78,6 +82,7 @@ final class StagingWorkflowTest extends TestCase {
 		ab_test_reset();
 		self::scope( 'full' );
 		AB_MCP_Settings::set( 'site_mode', 'full' );
+		self::account( true );
 	}
 
 	protected function tearDown(): void {
@@ -87,6 +92,13 @@ final class StagingWorkflowTest extends TestCase {
 	/** The access level of the current connection, as AB_MCP_Auth records it after the token check. */
 	private static function scope( string $scope ): void {
 		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, $scope );
+	}
+
+	/** The account of the connection: an administrator, or an editor who may change posts but has no manage_options. */
+	private static function account( bool $admin ): void {
+		$GLOBALS['ab_test_can'] = $admin
+			? static fn(): bool => true
+			: static fn( string $cap ): bool => 'manage_options' !== $cap;
 	}
 
 	/** The tools of the group «Staging», as the plugin registers them; its only writing tool needs manage_options. */
@@ -191,6 +203,17 @@ final class StagingWorkflowTest extends TestCase {
 		AB_MCP_Settings::set_tool_state( array( 'wp_set_preview_protection' => false ) );
 		self::assertNotOffered( self::staging_registry(), 'Its only writing tool is off.' );
 		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'One writing tool on is enough: the steps name the settings page as the other way to the protection.' );
+	}
+
+	public function testOnlyForAnAccountThatMayCallTheStatusTool(): void {
+		$r = self::with_content_writer( self::staging_registry() );
+
+		self::account( false );
+		self::assertNotOffered( $r, 'An editor writes posts, but wp_staging_status needs manage_options: the sentence would ask for a call that is refused.' );
+		self::assertSame( 'ab_mcp_forbidden', \AB_MCP_Security::permits( 'wp_staging_status', $r->get( 'wp_staging_status' ) )->get_error_code(), 'As the call itself would be refused.' );
+
+		self::account( true );
+		self::assertOffered( $r, 'An administrator may call it.' );
 	}
 
 	public function testTheSentenceIsShortAndStandsBeforeTheFilterOfTheAddOns(): void {

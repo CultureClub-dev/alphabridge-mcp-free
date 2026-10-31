@@ -293,8 +293,10 @@ final class GuidanceTest extends TestCase {
 		// The question «staging first?» (4.15.0) is about how to work, not
 		// about an edition: the same rules as above hold for its sentence
 		// in the instructions and for the prompt staging_workflow, both
-		// there for a connection that can write.
+		// there for a connection that can write and an account that may
+		// call wp_staging_status.
 		\AB_MCP_Settings::set( 'site_mode', 'full' );
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
 		$r     = self::free_registry();
 		$m     = new ReflectionMethod( AB_MCP_REST_Controller::class, 'instructions' );
 		$text  = $m->invoke( new AB_MCP_REST_Controller( $r ) );
