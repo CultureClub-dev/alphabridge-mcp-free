@@ -544,7 +544,7 @@ final class AnswerWayTest extends TestCase {
 	public function testEveryNoteOfADeletionWithoutUndoNamesAWay(): void {
 		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-objects.php';
 		$notes = \AB_MCP_Undo_Objects::own_notes();
-		self::assertSame( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user' ), array_keys( $notes ) );
+		self::assertSame( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user', 'wp_delete_comment', 'wp_moderate_comment', 'post-trashed' ), array_keys( $notes ) );
 		foreach ( $notes as $tool => $note ) {
 			self::assertStringStartsWith( 'not undoable: ', $note, $tool );
 			self::assertMatchesRegularExpression( self::WAY, substr( $note, strlen( 'not undoable: ' ) ), $tool );

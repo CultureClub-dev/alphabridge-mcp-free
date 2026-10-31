@@ -63,9 +63,20 @@ if ( ! function_exists( 'wp_kses_post' ) ) {
 }
 
 if ( ! function_exists( 'wp_insert_comment' ) ) {
-	/** Notes the comment and answers the id of a new one. */
+	/**
+	 * Notes the comment, keeps it as WordPress stores it (unslashed; the
+	 * tool reads it back since 4.14.0), and answers the id of a new one.
+	 */
 	function wp_insert_comment( $commentdata ) {
 		$GLOBALS['ab_test_term_writes'][] = array( 'comment', (int) $commentdata['comment_post_ID'] );
+		$data                             = wp_unslash( $commentdata );
+		$GLOBALS['ab_test_comments'][77]  = (object) array(
+			'comment_ID'       => 77,
+			'comment_post_ID'  => (int) $data['comment_post_ID'],
+			'comment_parent'   => (int) $data['comment_parent'],
+			'comment_content'  => (string) $data['comment_content'],
+			'comment_approved' => (string) $data['comment_approved'],
+		);
 		return 77;
 	}
 }

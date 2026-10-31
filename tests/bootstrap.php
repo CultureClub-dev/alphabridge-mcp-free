@@ -877,6 +877,12 @@ $GLOBALS['ab_test_moderated'] = array();
 
 function wp_set_comment_status( $id, $status ) {
 	$GLOBALS['ab_test_moderated'][] = array( (int) $id, (string) $status );
+	// And the status itself, as comment_approved holds it: the moderation
+	// tool reads it back since 4.14.0.
+	$stored = array( 'approve' => '1', 'hold' => '0' )[ (string) $status ] ?? (string) $status;
+	if ( isset( $GLOBALS['ab_test_comments'][ (int) $id ] ) ) {
+		$GLOBALS['ab_test_comments'][ (int) $id ]->comment_approved = $stored;
+	}
 	return true;
 }
 

@@ -9,6 +9,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
 require_once dirname( __DIR__ ) . '/undo/class-undo-terms.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-comments.php';
 
 /**
  * Class AB_MCP_Tools_Taxonomy_Comments
@@ -126,7 +127,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_moderate_comment',
 			array(
-				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status}, status being the one asked for: the answer does not confirm that WordPress stored it, and wp_get_comment shows the stored status. Needs moderate_comments and the right to edit this comment (edit_comment), which follows the right to edit its post. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress; every other change can be reversed by a later call. Trashing a top-level note (comment_type note) also trashes its reply notes, and setting the note to approve or hold later does not bring those back. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
+				'description' => 'Set the moderation status of one comment: approve marks it approved, hold sets it back to pending, spam marks it as spam, trash moves it to the trash. Returns {moderated: true, comment_id, status} with the status asked for, saved_fields (the status as stored afterwards, read again, in the form wp_get_comment shows it; saved_differs and warning where WordPress stored another one) and undo: the token for wp_undo, which puts the status of before back (out of the trash and out of spam the way WordPress takes a comment out), or null with undo_note saying why, also where the comment had the status already. A status WordPress did not store at all is an error (ab_mcp_not_saved). Needs moderate_comments and the right to edit this comment (edit_comment), which follows the right to edit its post. Approving shows the comment wherever the post\'s comments are public, and WordPress may notify the post\'s author, also when an undo approves it again. Trashing a top-level note (comment_type note) also trashes its reply notes, and its undo takes them out of the trash too. Where the site\'s trash is off (EMPTY_TRASH_DAYS 0), trash deletes the comment for good, as in WordPress: the answer then carries deleted: true, undo: null and undo_note. A comment hidden because its post is in the trash (post-trashed) gets no undo point (undo: null, undo_note): no call sets that status again, and WordPress gives the comment its earlier status back when the post comes out of the trash. An unknown comment_id returns a not-found error. Deleting outright is done by wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -147,7 +148,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_reply_comment',
 			array(
-				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}. Needs moderate_comments and the right to edit the post (edit_post), as a reply from the comments screen in wp-admin. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
+				'description' => 'Add a comment to a post as the connected user: a reply to a comment (parent) or a new top-level comment. Each call adds one, so a repeated call posts it twice. It is saved approved and shows at once wherever the post\'s comments are public, under the user\'s display name, with the user\'s email address stored; WordPress sends none of its new-comment emails. HTML is filtered as in post content. Not checked: whether comments are open, and whether parent exists on that post. Returns {created: true, comment_id}, saved_fields (post_id, parent, content and status as stored, read again; saved_differs and warning where WordPress stored something else than sent, e.g. HTML filtered out) and undo: the token for wp_undo, which deletes the comment again for good while it is unchanged, without replies and without new meta, or null with undo_note saying why. Needs moderate_comments and the right to edit the post (edit_post), as a reply from the comments screen in wp-admin. Existing comments are approved, held or deleted with wp_moderate_comment and wp_delete_comment.',
 				'capability'  => 'moderate_comments',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -165,7 +166,7 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_delete_comment',
 			array(
-				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. A trashed comment can be set to approve or hold again with wp_moderate_comment. Returns {deleted: true, comment_id}; an unknown comment_id returns a not-found error. Needs moderate_comments and the right to edit this comment (edit_comment).',
+				'description' => 'Delete one comment: into the trash by default, for good with force=true, which also removes its meta and moves its replies up a level. A comment already in the trash or marked as spam, and any comment on a site with the trash turned off, is deleted for good even without force, as in WordPress, so a second call on the same comment deletes it for good. Trashing a top-level note (comment_type note) also trashes its reply notes. Returns {deleted: true, comment_id}; into the trash also saved_fields (the status as stored afterwards, read again) and undo: the token for wp_undo, which takes the comment out of the trash again the way WordPress does, with the reply notes that went with it, or null with undo_note saying why (also for a comment whose post is in the trash, post-trashed). Deleted for good, undo is null and undo_note says it is not undoable, so note a comment that may be needed again with wp_get_comment first. An unknown comment_id returns a not-found error. Needs moderate_comments and the right to edit this comment (edit_comment).',
 				'capability'  => 'moderate_comments',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -596,22 +597,72 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'edit_comment', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot moderate this specific comment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
-
-		if ( 'spam' === $status ) {
-			wp_spam_comment( $id );
-		} elseif ( 'trash' === $status ) {
-			wp_trash_comment( $id );
-		} elseif ( in_array( $status, array( 'approve', 'hold' ), true ) ) {
-			wp_set_comment_status( $id, $status );
-		} else {
+		// The status asked for, as wp_get_comment shows it once stored.
+		$labels = array(
+			'approve' => 'approved',
+			'hold'    => 'unapproved',
+			'spam'    => 'spam',
+			'trash'   => 'trash',
+		);
+		if ( ! isset( $labels[ $status ] ) ) {
 			return new WP_Error( 'ab_mcp_bad_status', __( 'Status must be approve, hold, spam or trash.', 'alphabridge-mcp' ) );
 		}
-
-		return array(
-			'moderated' => true,
-			'comment_id'=> $id,
-			'status'    => $status,
+		$out = array(
+			'moderated'  => true,
+			'comment_id' => $id,
+			'status'     => $status,
 		);
+
+		// With the trash turned off WordPress deletes the comment for good:
+		// no way back (since 4.14.0 the answer says so). Its replies move up
+		// a level, a top-level note's reply notes too: wp_trash_comment()
+		// looks for them only after the note is gone.
+		if ( 'trash' === $status && ! AB_MCP_Undo_Comments::trash_on() ) {
+			wp_trash_comment( $id );
+			if ( array() !== AB_MCP_Undo_Comments::read_back( $id ) ) {
+				return self::comment_not_deleted();
+			}
+			return array_merge(
+				$out,
+				array(
+					'deleted'   => true,
+					'undo'      => null,
+					'undo_note' => AB_MCP_Undo_Objects::deleted_for_good( 'wp_moderate_comment' ),
+				)
+			);
+		}
+
+		// The state before, the call, the read-back and the undo point
+		// (since 4.14.0): a status WordPress did not store is an error.
+		$res = AB_MCP_Undo_Comments::set_status(
+			array(
+				'tool'    => 'wp_moderate_comment',
+				'id'      => $id,
+				'want'    => $labels[ $status ],
+				'summary' => sprintf( 'comment #%d: %s', $id, $status ),
+				'refused' => new WP_Error(
+					'ab_mcp_not_saved',
+					sprintf(
+						/* translators: %d: comment id */
+						__( 'WordPress did not store the new status of comment %d: it still has the status it had before. A plugin may keep it from changing. Check the comment with wp_get_comment, and ask the site administrator which plugin guards it.', 'alphabridge-mcp' ),
+						$id
+					)
+				),
+			),
+			static function () use ( $id, $status ) {
+				if ( 'spam' === $status ) {
+					return wp_spam_comment( $id );
+				}
+				if ( 'trash' === $status ) {
+					return wp_trash_comment( $id );
+				}
+				return wp_set_comment_status( $id, $status );
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge( $out, $res );
 	}
 
 	/**
@@ -630,13 +681,15 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot reply under this specific post: a reply from here takes the right to edit the post, as in wp-admin. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
-		$user = wp_get_current_user();
+		$user    = wp_get_current_user();
+		$parent  = self::i( $a, 'parent', 0 );
+		$content = wp_kses_post( self::s( $a, 'content' ) );
 		// wp_insert_comment() unslashes the whole array it is given.
-		$id   = wp_insert_comment(
+		$id = wp_insert_comment(
 			wp_slash( array(
 				'comment_post_ID'      => $post_id,
-				'comment_parent'       => self::i( $a, 'parent', 0 ),
-				'comment_content'      => wp_kses_post( self::s( $a, 'content' ) ),
+				'comment_parent'       => $parent,
+				'comment_content'      => $content,
 				'user_id'              => $user->ID,
 				'comment_author'       => $user->display_name,
 				'comment_author_email' => $user->user_email,
@@ -646,9 +699,20 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! $id ) {
 			return new WP_Error( 'ab_mcp_comment_failed', __( 'WordPress did not save the comment, so nothing was written. Try again; if it keeps failing, ask the site administrator to check the database.', 'alphabridge-mcp' ) );
 		}
-		return array(
-			'created'    => true,
-			'comment_id' => (int) $id,
+		// What WordPress was asked to store, the read-back and an undo point
+		// that deletes the comment again (since 4.14.0).
+		$asked = array(
+			'post_id' => $post_id,
+			'parent'  => $parent,
+			'content' => $content,
+			'status'  => 'approved',
+		);
+		return array_merge(
+			array(
+				'created'    => true,
+				'comment_id' => (int) $id,
+			),
+			AB_MCP_Undo_Comments::created( (int) $id, $asked, sprintf( 'new comment #%d on post #%d', (int) $id, $post_id ) )
 		);
 	}
 
@@ -668,16 +732,58 @@ class AB_MCP_Tools_Taxonomy_Comments extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'edit_comment', $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot delete this specific comment. Connect with an account that may edit it, such as an editor or an administrator.', 'alphabridge-mcp' ) );
 		}
-		// Nothing promised about what is left: deleting for good, WordPress
-		// moves replies up and removes the comment's meta before its row;
-		// trashing a note, it says false when a reply stays out of the trash.
-		$res = wp_delete_comment( $id, self::b( $a, 'force', false ) );
-		if ( ! $res ) {
-			return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the comment; a plugin may have stopped it. Check it with wp_get_comment and try again.', 'alphabridge-mcp' ) );
+		// For good, as wp_delete_comment() decides it: with force, with the
+		// trash turned off, and for a comment in the trash or in spam. No way
+		// back, and the answer says so (since 4.14.0). Nothing promised about
+		// what is left: WordPress moves replies up and removes the comment's
+		// meta before its row.
+		$force = self::b( $a, 'force', false );
+		$was   = (string) ( get_comment( $id )->comment_approved ?? '' );
+		if ( $force || ! AB_MCP_Undo_Comments::trash_on() || in_array( $was, array( 'trash', 'spam' ), true ) ) {
+			if ( ! wp_delete_comment( $id, $force ) ) {
+				return self::comment_not_deleted();
+			}
+			return array(
+				'deleted'    => true,
+				'comment_id' => $id,
+				'undo'       => null,
+				'undo_note'  => AB_MCP_Undo_Objects::deleted_for_good( 'wp_delete_comment' ),
+			);
 		}
-		return array(
-			'deleted'    => true,
-			'comment_id' => $id,
+		// Into the trash, with an undo point that takes it out again, and
+		// the reply notes of a top-level note with it (since 4.14.0).
+		// Trashing a note, WordPress says false when a reply note stays out
+		// of the trash; what did go is in the point all the same.
+		$res = AB_MCP_Undo_Comments::set_status(
+			array(
+				'tool'    => 'wp_delete_comment',
+				'id'      => $id,
+				'want'    => 'trash',
+				'summary' => sprintf( 'comment #%d: into the trash', $id ),
+				'refused' => self::comment_not_deleted(),
+			),
+			static function () use ( $id ) {
+				return wp_delete_comment( $id, false );
+			}
 		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
+		}
+		return array_merge(
+			array(
+				'deleted'    => true,
+				'comment_id' => $id,
+			),
+			$res
+		);
+	}
+
+	/**
+	 * The answer when WordPress kept a comment it was asked to delete.
+	 *
+	 * @return WP_Error
+	 */
+	private static function comment_not_deleted() {
+		return new WP_Error( 'ab_mcp_delete_failed', __( 'WordPress did not delete the comment; a plugin may have stopped it. Check it with wp_get_comment and try again.', 'alphabridge-mcp' ) );
 	}
 }

@@ -28,8 +28,11 @@
  * wp_update_term), menu_item (wp_add_menu_item) and widget (the option rows
  * wp_update_widget, wp_add_widget and wp_delete_widget write), planned and
  * written by AB_MCP_Undo_Terms, AB_MCP_Undo_Menu_Items and
- * AB_MCP_Undo_Widgets. The undo points of Pro's tools (options, files, PHP
- * snippets) share the store; Pro reverses them with its own wp_undo, this
+ * AB_MCP_Undo_Widgets; since 4.14.0 the SEO fields (wp_seo_set, kind meta)
+ * and comment (the status wp_moderate_comment set, a comment wp_delete_comment
+ * moved into the trash, a comment wp_reply_comment added), planned and
+ * written by AB_MCP_Undo_Comments. The undo points of Pro's tools (options,
+ * files, PHP snippets) share the store; Pro reverses them with its own wp_undo, this
  * class names them and leaves them alone.
  *
  * @package AlphaBridge_MCP
@@ -103,6 +106,12 @@ class AB_MCP_Undo_Restore {
 			// The SEO fields (free since 4.14.0): the post and each field are
 			// asked as the tool asks them (AB_MCP_Undo_Meta::refusal()).
 			'wp_seo_set'                => array( 'kind' => 'meta', 'cap' => 'edit_posts' ),
+			// Comments (free since 4.14.0), with the capability of the tools:
+			// the right to each comment (edit_comment) is asked by the plan,
+			// as the tools ask it (AB_MCP_Undo_Comments::refusal()).
+			'wp_moderate_comment'       => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
+			'wp_reply_comment'          => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
+			'wp_delete_comment'         => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
 		);
 	}
 
@@ -279,6 +288,7 @@ class AB_MCP_Undo_Restore {
 			case 'term':
 			case 'menu_item':
 			case 'widget':
+			case 'comment':
 				$class = self::object_kinds()[ $kind ];
 				return $class::plan( $tool, $data, ! empty( $opts['force'] ) );
 		}
@@ -513,12 +523,18 @@ class AB_MCP_Undo_Restore {
 			'term'          => 'site',
 			'menu_item'     => 'site',
 			'widget'        => 'site',
+			// A comment shows beyond the page of its post: in the comment
+			// count of archive pages, in the latest-comments widget and block
+			// on every page with them, and in the comment feeds. Its refs
+			// name comments, no post (after_restore() would purge nothing).
+			'comment'       => 'site',
 		);
 	}
 
 	/**
-	 * The kinds of one object written through WordPress (since 4.13.0) and
-	 * the class that plans and writes each, loaded on first use.
+	 * The kinds of one object written through WordPress (since 4.13.0,
+	 * comment since 4.14.0) and the class that plans and writes each, loaded
+	 * on first use.
 	 *
 	 * @return array<string,string>
 	 */
@@ -527,6 +543,7 @@ class AB_MCP_Undo_Restore {
 			'term'      => array( 'AB_MCP_Undo_Terms', 'class-undo-terms.php' ),
 			'menu_item' => array( 'AB_MCP_Undo_Menu_Items', 'class-undo-menu-items.php' ),
 			'widget'    => array( 'AB_MCP_Undo_Widgets', 'class-undo-widgets.php' ),
+			'comment'   => array( 'AB_MCP_Undo_Comments', 'class-undo-comments.php' ),
 		);
 		$out = array();
 		foreach ( $kinds as $kind => $c ) {
@@ -593,7 +610,7 @@ class AB_MCP_Undo_Restore {
 			 * this plugin knows have been asked to purge. Hook it to purge a
 			 * cache it does not know, or to log the restore.
 			 *
-			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme, meta (Pro fires it for its kinds too).
+			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme, meta, term, menu_item, widget, comment (Pro fires it for its kinds too).
 			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts, and for the meta of a term or a user.
 			 * @param string $tool     The tool whose change was undone.
 			 */
@@ -1638,6 +1655,7 @@ class AB_MCP_Undo_Restore {
 			case 'term':
 			case 'menu_item':
 			case 'widget':
+			case 'comment':
 				$class = self::object_kinds()[ $kind ];
 				return $class::restore( $item );
 		}

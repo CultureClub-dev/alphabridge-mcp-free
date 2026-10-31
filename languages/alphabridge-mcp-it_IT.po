@@ -5065,3 +5065,27 @@ msgstr "Non è stato modificato nulla: dove il valore contiene %1$s, il valore s
 #, php-format
 msgid "settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget's own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials."
 msgstr "settings.%1$s: questo elenco contiene credenziali che wp_get_widgets omette o mostra come %2$s, e le sue voci sono cambiate (una aggiunta, rimossa, spostata o modificata senza le sue credenziali), quindi non si possono abbinare alle loro voci; non è stato salvato nulla. Modifica questo elenco nel modulo del widget stesso in wp-admin, in Aspetto › Widget, oppure invia ogni voce modificata con le sue credenziali reali."
+
+msgid "WordPress did not delete comment %d again; the undo point stays. Check the comment with wp_get_comment, and try again."
+msgstr "WordPress non ha eliminato di nuovo il commento %d; il punto di ripristino resta. Controlla il commento con wp_get_comment e riprova."
+
+msgid "WordPress did not take the status of comment %d back; the undo point stays. A plugin may hold the status of comments. Check the comment with wp_get_comment, and try again."
+msgstr "WordPress non ha ripreso lo stato del commento %d; il punto di ripristino resta. Un plugin può bloccare lo stato dei commenti. Controlla il commento con wp_get_comment e riprova."
+
+msgid "The comment was edited, moderated or answered after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Il commento è stato modificato, moderato o ha ricevuto una risposta dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per ripristinarlo nonostante la modifica più recente."
+
+msgid "The snapshot of the comment is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "L'istantanea del commento non ha una forma che questo strumento scrive; non è stato ripristinato nulla. Questo punto di ripristino non è utilizzabile; wp_undo_discard lo rimuove."
+
+msgid "WordPress deletes a comment for good with force=true, from the trash or from spam, and on a site with the trash turned off: its meta goes and its replies move up a level. Before deleting a comment that may be needed again, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "WordPress elimina un commento definitivamente con force=true, dal cestino o dallo spam, e su un sito con il cestino disattivato: i suoi metadati vanno persi e le sue risposte salgono di un livello. Prima di eliminare un commento che potrebbe servire di nuovo, annotalo con wp_get_comment; wp_reply_comment ne aggiunge uno nuovo con il suo testo, con un nuovo ID e a nome dell'account collegato."
+
+msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), so WordPress deleted the comment for good instead: its meta went and its replies moved up a level. Before trashing a comment on this site, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "Il cestino è disattivato su questo sito (EMPTY_TRASH_DAYS è 0), quindi WordPress ha eliminato il commento definitivamente: i suoi metadati sono andati persi e le sue risposte sono salite di un livello. Prima di spostare un commento nel cestino su questo sito, annotalo con wp_get_comment; wp_reply_comment ne aggiunge uno nuovo con il suo testo, con un nuovo ID e a nome dell'account collegato."
+
+msgid "WordPress did not store the new status of comment %d: it still has the status it had before. A plugin may keep it from changing. Check the comment with wp_get_comment, and ask the site administrator which plugin guards it."
+msgstr "WordPress non ha salvato il nuovo stato del commento %d: ha ancora lo stato che aveva prima. Un plugin può impedire la modifica. Controlla il commento con wp_get_comment e chiedi all'amministratore del sito quale plugin lo protegge."
+
+msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
+msgstr "L'articolo di questo commento è nel cestino, il che porta i suoi commenti a post-trashed, e nessuna chiamata di WordPress rimette un commento in questo stato. WordPress restituisce ai commenti di un articolo lo stato che avevano prima quando l'articolo esce dal cestino: ripristina l'articolo dal cestino con wp_bulk_update_status o in wp-admin sotto Articoli › Cestino, poi controlla il commento con wp_get_comment."

@@ -1316,6 +1316,19 @@ final class RedactionTest extends TestCase {
 		self::assertSame( array( 'focus_keyword' ), $out['changed'] );
 	}
 
+	public function testTheReadBackOfTheCommentToolsIsRedactedAsTheirReaderIs(): void {
+		// Codex (Z5 Teil 2): a field a site protects reads as the placeholder in
+		// the answers of the comment tools too, as wp_get_comment shows it.
+		add_filter( 'ab_mcp_redact_keys', static fn() => array( 'content' ) );
+
+		foreach ( array( 'wp_reply_comment', 'wp_moderate_comment', 'wp_delete_comment' ) as $tool ) {
+			$out = AB_MCP_Redactor::tool_result( $tool, array(), array( 'comment_id' => 7, 'saved_fields' => (object) array( 'content' => 'PLACEHOLDER-C', 'status' => 'approve' ) ) );
+			self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ), $tool );
+			self::assertSame( 'approve', ( (array) $out['saved_fields'] )['status'], $tool );
+			self::assertSame( 7, $out['comment_id'], $tool );
+		}
+	}
+
 	public function testPathsAreUnambiguousAndNoFindIsMerged(): void {
 		// Codex #12: a.b/token and a/b/token are two places.
 		$out = $this->read(
