@@ -781,6 +781,53 @@ final class StagingStatusTest extends TestCase {
 		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
 	}
 
+	public function testTheBoundRequestSwitchesAProxyOfTheEnvironmentOff(): void {
+		self::assertSame(
+			array(
+				CURLOPT_RESOLVE => array( 'staging.example.com:443:' . self::PUBLIC_V4 ),
+				CURLOPT_PROXY   => '',
+			),
+			AB_MCP_Outbound::curl_options( 'staging.example.com:443:' . self::PUBLIC_V4 ),
+			'An empty proxy disables http_proxy, HTTPS_PROXY and all_proxy for this handle (libcurl, CURLOPT_PROXY).'
+		);
+	}
+
+	/**
+	 * The hook applies curl_options() to the handle of the request: a hook
+	 * after it sees the handle, and cURL's log shows the address entry the
+	 * options carry (testTheConnectionIsTiedToTheCheckedAddresses); here the
+	 * proxy part, on a handle of its own, with the environment's proxy set
+	 * to a port that refuses: cURL must not try it.
+	 */
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testWithTheOptionsCurlIgnoresTheProxyOfTheEnvironment(): void {
+		$handle = curl_init();
+		$log    = fopen( 'php://temp', 'w+' );
+		putenv( 'http_proxy=http://127.0.0.1:9' );
+		try {
+			curl_setopt_array(
+				$handle,
+				AB_MCP_Outbound::curl_options( 'pin.example:80:127.0.0.1' ) + array(
+					CURLOPT_URL               => 'http://pin.example:80/',
+					CURLOPT_VERBOSE           => true,
+					CURLOPT_STDERR            => $log,
+					CURLOPT_RETURNTRANSFER    => true,
+					CURLOPT_CONNECTTIMEOUT_MS => 500,
+					CURLOPT_TIMEOUT_MS        => 1000,
+				)
+			);
+			curl_exec( $handle );
+			rewind( $log );
+			$verbose = (string) stream_get_contents( $log );
+		} finally {
+			putenv( 'http_proxy' );
+			fclose( $log );
+		}
+		self::assertStringNotContainsString( 'http_proxy', $verbose, 'cURL names an environment proxy it uses; it uses none.' );
+		self::assertStringNotContainsString( '127.0.0.1:9', $verbose );
+		self::assertMatchesRegularExpression( '/127\.0\.0\.1.*\b80\b/', $verbose, 'It goes to the pinned address on this machine instead.' );
+	}
+
 	public function testTheHooksAreGoneAfterAFailedRequestToo(): void {
 		self::confirm( 'production', self::STAGING );
 		self::answer( new WP_Error( 'http_request_failed', 'timed out' ) );

@@ -20,7 +20,9 @@
  * its target would be looked up unbound. Nor is a request sent where
  * WordPress would send it through a proxy (WP_PROXY_HOST): the proxy looks
  * the name up itself, which no binding reaches; a host in
- * WP_PROXY_BYPASS_HOSTS goes direct and is tied as above.
+ * WP_PROXY_BYPASS_HOSTS goes direct and is tied as above, and a proxy from
+ * the environment of PHP is switched off for the bound request
+ * (curl_options()).
  *
  * Used by wp_staging_status to ask the other site of a staging pair
  * (AB_MCP_Staging::check_partner()).
@@ -141,6 +143,26 @@ class AB_MCP_Outbound {
 	}
 
 	/**
+	 * What the bound request sets on its cURL handle: the checked addresses
+	 * for the host (CURLOPT_RESOLVE), and no proxy. A proxy from the
+	 * environment of PHP (http_proxy, HTTPS_PROXY, all_proxy), which cURL
+	 * uses without WordPress knowing, would look the name up itself; an
+	 * empty CURLOPT_PROXY «explicitly disables the use of a proxy, even if
+	 * there is an environment variable set for it» (libcurl,
+	 * CURLOPT_PROXY(3)). WordPress's own proxy (WP_PROXY_HOST) never gets
+	 * here: get() does not send what would go through it.
+	 *
+	 * @param string $entry CURLOPT_RESOLVE entry (resolve_entry()).
+	 * @return array<int,mixed>
+	 */
+	public static function curl_options( $entry ) {
+		return array(
+			CURLOPT_RESOLVE => array( (string) $entry ),
+			CURLOPT_PROXY   => '',
+		);
+	}
+
+	/**
 	 * GET an http(s) address with the addresses of its host checked and the
 	 * connection tied to them. The arguments go to wp_safe_remote_get(),
 	 * with no redirect followed.
@@ -176,7 +198,7 @@ class AB_MCP_Outbound {
 
 		$bound = false;
 		$pin   = static function ( $handle ) use ( $entry, &$bound ) {
-			curl_setopt( $handle, CURLOPT_RESOLVE, array( $entry ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- the WordPress HTTP API offers no other way to fix the address a name connects to.
+			curl_setopt_array( $handle, self::curl_options( $entry ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array -- the WordPress HTTP API offers no other way to fix the address a name connects to.
 			$bound = true;
 		};
 		// The fsockopen transport cannot be tied to an address; its first
