@@ -110,6 +110,11 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_http_transport'] = 'curl';
+	// No DNS in the tests either: a test answers the hosts of its outgoing
+	// requests through the filter ab_mcp_outbound_addresses (as a site's own
+	// resolver could); a host no test answered fails here, last in line,
+	// instead of asking the resolver of this machine.
+	add_filter( 'ab_mcp_outbound_addresses', 'ab_test_no_dns', PHP_INT_MAX, 2 );
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
@@ -1668,6 +1673,21 @@ function wp_remote_post( $url, $args = array() ) {
  */
 if ( ! defined( 'MB_IN_BYTES' ) ) {
 	define( 'MB_IN_BYTES', 1024 * 1024 );
+}
+
+/**
+ * The last filter on ab_mcp_outbound_addresses (ab_test_reset()): a host no
+ * test answered would be looked up for real; the test fails instead.
+ *
+ * @param string[]|null $addresses What the test's filters answered.
+ * @param string        $host      Host name.
+ * @return string[]
+ */
+function ab_test_no_dns( $addresses, $host ) {
+	if ( null === $addresses ) {
+		throw new LogicException( 'No DNS in the tests: answer the host ' . $host . ' through the filter ab_mcp_outbound_addresses.' );
+	}
+	return $addresses;
 }
 
 /** As in WordPress, in short: loopback and private hosts are refused. */

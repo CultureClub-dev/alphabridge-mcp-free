@@ -40,6 +40,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The fetch of a client metadata document, tied to the checked addresses of its host.
+require_once __DIR__ . '/class-outbound.php';
+
 /**
  * Class AB_MCP_OAuth
  */
@@ -819,13 +822,15 @@ class AB_MCP_OAuth {
 	 * address, through WordPress's safe HTTP API, without following
 	 * redirects, for at most CIMD_TIMEOUT seconds and CIMD_MAX_BYTES.
 	 *
-	 * The connection goes to the addresses checked here and nowhere else:
-	 * cURL would otherwise look the name up again, and a name that answers
-	 * differently the second time (DNS rebinding) could lead the request to
-	 * an address never checked. CURLOPT_RESOLVE hands cURL the checked
-	 * answer; the name still serves for TLS, so the certificate must match
-	 * it. Without cURL (WordPress then falls back to fsockopen) and through
-	 * a proxy, the name is looked up again on connecting, as before.
+	 * The connection goes to the addresses checked here and nowhere else
+	 * (AB_MCP_Outbound::get(), which checks them once more): cURL would
+	 * otherwise look the name up again, and a name that answers differently
+	 * the second time (DNS rebinding) could lead the request to an address
+	 * never checked. The name still serves for TLS, so the certificate must
+	 * match it. Where the request could not be tied, it is not sent: without
+	 * cURL, or where WordPress would send it through its proxy
+	 * (WP_PROXY_HOST) unless the host is in WP_PROXY_BYPASS_HOSTS; a proxy
+	 * from the environment of PHP is switched off for the request.
 	 *
 	 * @param string $url Document URL.
 	 * @return array|WP_Error array( 'client' => …, 'ttl' => seconds to keep it ).
@@ -837,16 +842,7 @@ class AB_MCP_OAuth {
 			return self::cimd_error( $url, $addresses );
 		}
 
-		// The entry names host and port, so a request to any other host that
-		// might run while the hook is in place keeps its own lookup.
-		$resolve = self::curl_resolve_entry( $url, $addresses );
-		$pin     = static function ( $handle ) use ( $resolve ) {
-			if ( null !== $resolve ) {
-				curl_setopt( $handle, CURLOPT_RESOLVE, array( $resolve ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- the WordPress HTTP API offers no other way to fix the address a name connects to.
-			}
-		};
-		add_action( 'http_api_curl', $pin );
-		$response = wp_safe_remote_get(
+		$response = AB_MCP_Outbound::get(
 			$url,
 			array(
 				'timeout'             => self::CIMD_TIMEOUT,
@@ -860,12 +856,11 @@ class AB_MCP_OAuth {
 				// WordPress's default user agent names this site's address; the
 				// document's host has no need to learn it.
 				'user-agent'          => 'AlphaBridge-MCP/' . AB_MCP_VERSION,
-			)
+			),
+			$addresses
 		);
-		remove_action( 'http_api_curl', $pin );
 		if ( is_wp_error( $response ) ) {
-			/* translators: %s: the error WordPress reports for the request. */
-			return self::cimd_error( $url, sprintf( __( 'it could not be loaded (%s)', 'alphabridge-mcp' ), $response->get_error_message() ) );
+			return self::cimd_error( $url, self::cimd_fetch_problem( $response ) );
 		}
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		if ( 200 !== $code ) {
@@ -999,20 +994,26 @@ class AB_MCP_OAuth {
 		if ( '' === $host || 'localhost' === $host || '.localhost' === substr( $host, -10 ) ) {
 			return __( 'its host is this machine', 'alphabridge-mcp' );
 		}
+		$not_public = __( 'its host resolves to an address that is not public; documents are fetched only from public addresses', 'alphabridge-mcp' );
 
 		/**
 		 * The addresses a metadata host resolves to, before the plugin looks
 		 * them up itself. Return a list to answer from elsewhere (a resolver
-		 * of your own, a fixed mapping); null leaves the lookup to the plugin.
-		 * Every address is checked either way: a filter cannot open the way
-		 * to a private one. The request then connects to these addresses.
+		 * of your own, a fixed mapping); null leaves the lookup to the plugin
+		 * (AB_MCP_Outbound::public_addresses(), with its filter
+		 * ab_mcp_outbound_addresses, then the A and AAAA records). Every
+		 * address is checked either way: a filter cannot open the way to a
+		 * private one. The request then connects to these addresses.
 		 *
 		 * @param string[]|null $addresses Null.
 		 * @param string        $host      Host name.
 		 */
 		$addresses = apply_filters( 'ab_mcp_oauth_cimd_addresses', null, $host );
 		if ( null === $addresses ) {
-			$addresses = false !== filter_var( $host, FILTER_VALIDATE_IP ) ? array( $host ) : self::resolve_host( $host );
+			$addresses = AB_MCP_Outbound::public_addresses( $host );
+		}
+		if ( 'local' === $addresses ) {
+			return $not_public;
 		}
 		if ( ! is_array( $addresses ) || empty( $addresses ) ) {
 			return __( 'its host name could not be resolved', 'alphabridge-mcp' );
@@ -1020,7 +1021,7 @@ class AB_MCP_OAuth {
 		$checked = array();
 		foreach ( $addresses as $address ) {
 			if ( ! self::is_public_ip( (string) $address ) ) {
-				return __( 'its host resolves to an address that is not public; documents are fetched only from public addresses', 'alphabridge-mcp' );
+				return $not_public;
 			}
 			$checked[] = (string) $address;
 		}
@@ -1028,45 +1029,22 @@ class AB_MCP_OAuth {
 	}
 
 	/**
-	 * The CURLOPT_RESOLVE entry that ties a URL's host to checked addresses:
-	 * "host:port:address,address". None for a host that is an address
-	 * already, since nothing is looked up for it.
+	 * Why a document could not be fetched, from the refusal of
+	 * AB_MCP_Outbound::get() or the error of the transport: a clause for
+	 * cimd_error(), with the way where the site's own rules refused.
 	 *
-	 * The host is written as the URL spells it, which is what older cURL
-	 * versions compare the entry with; every version reads a bare IPv6
-	 * address here.
-	 *
-	 * @param string   $url       Document URL.
-	 * @param string[] $addresses Checked addresses.
-	 * @return string|null
+	 * @param WP_Error $error The refusal or the error.
+	 * @return string
 	 */
-	private static function curl_resolve_entry( $url, array $addresses ) {
-		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
-		if ( '' === $host || false !== filter_var( trim( $host, '[]' ), FILTER_VALIDATE_IP ) || empty( $addresses ) ) {
-			return null;
+	private static function cimd_fetch_problem( WP_Error $error ) {
+		switch ( $error->get_error_code() ) {
+			case 'ab_mcp_outbound_proxy':
+				return __( 'this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses and was not sent; an administrator can add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php', 'alphabridge-mcp' );
+			case 'ab_mcp_outbound_unbound':
+				return __( 'WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so the request was not sent; the host can enable the curl extension of PHP', 'alphabridge-mcp' );
 		}
-		$port = (int) wp_parse_url( $url, PHP_URL_PORT );
-		return $host . ':' . ( $port > 0 ? $port : 443 ) . ':' . implode( ',', $addresses );
-	}
-
-	/**
-	 * IPv4 and IPv6 addresses of a host name.
-	 *
-	 * @param string $host Host name.
-	 * @return string[]
-	 */
-	private static function resolve_host( $host ) {
-		$addresses = gethostbynamel( $host );
-		$addresses = is_array( $addresses ) ? $addresses : array();
-		if ( function_exists( 'dns_get_record' ) ) {
-			$records = @dns_get_record( $host, DNS_AAAA ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed lookup is handled as "no address", not as a PHP warning on the consent page.
-			foreach ( is_array( $records ) ? $records : array() as $record ) {
-				if ( isset( $record['ipv6'] ) ) {
-					$addresses[] = (string) $record['ipv6'];
-				}
-			}
-		}
-		return $addresses;
+		/* translators: %s: the error WordPress reports for the request. */
+		return sprintf( __( 'it could not be loaded (%s)', 'alphabridge-mcp' ), $error->get_error_message() );
 	}
 
 	/**

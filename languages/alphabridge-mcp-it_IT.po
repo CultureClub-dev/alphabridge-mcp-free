@@ -5487,3 +5487,67 @@ msgstr "Il percorso di staging è pronto: il sito di staging %s risponde ed è i
 msgctxt "tool label"
 msgid "Show the staging status"
 msgstr "Mostra lo stato dello staging"
+
+msgid "this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses and was not sent; an administrator can add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php"
+msgstr "questo sito invia le sue richieste tramite un proxy (WP_PROXY_HOST), che risolve da sé il nome; quindi la richiesta non si è potuta vincolare agli indirizzi verificati e non è stata inviata; un amministratore può aggiungere l’host a WP_PROXY_BYPASS_HOSTS in wp-config.php"
+
+msgid "WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so the request was not sent; the host can enable the curl extension of PHP"
+msgstr "su questo sito WordPress invia le sue richieste senza cURL, e solo cURL si può vincolare agli indirizzi verificati; quindi la richiesta non è stata inviata; l’hosting può attivare l’estensione curl di PHP"
+
+#, php-format
+msgid "The address redirects to %s, a private or internal host, so nothing was downloaded: the site downloads only from public hosts. 1. Open the address in a browser and use the address of the ZIP itself, on a public host. 2. Or pass the ZIP base64-encoded as \"content\"."
+msgstr "L’indirizzo reindirizza a %s, un host privato o interno; quindi non è stato scaricato nulla: il sito scarica solo da host pubblici. 1. Apri l’indirizzo in un browser e usa l’indirizzo dello ZIP stesso, su un host pubblico. 2. Oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "The URL points to a private or internal host (one of the addresses its name resolves to is not public), so nothing was downloaded: the site downloads only from public hosts. Give the public http or https address of the ZIP, or pass the ZIP base64-encoded as \"content\"."
+msgstr "L’URL punta a un host privato o interno (uno degli indirizzi in cui si risolve il suo nome non è pubblico); quindi non è stato scaricato nulla: il sito scarica solo da host pubblici. Indica l’indirizzo pubblico http o https dello ZIP, oppure passa lo ZIP codificato in base64 come “content”."
+
+#, php-format
+msgid "The address redirects to %s, whose name has no address, so nothing was downloaded. 1. Open the address in a browser and use the address of the ZIP itself. 2. Or pass the ZIP base64-encoded as \"content\"."
+msgstr "L’indirizzo reindirizza a %s, il cui nome non ha un indirizzo; quindi non è stato scaricato nulla. 1. Apri l’indirizzo in un browser e usa l’indirizzo dello ZIP stesso. 2. Oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "The host name of the URL has no address, so nothing was downloaded. Check the spelling of the address, or pass the ZIP base64-encoded as \"content\"."
+msgstr "Il nome host dell’URL non ha un indirizzo; quindi non è stato scaricato nulla. Controlla come è scritto l’indirizzo, oppure passa lo ZIP codificato in base64 come “content”."
+
+#, php-format
+msgid "This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the download could not be tied to the checked addresses and was not started."
+msgstr "Questo sito invia le sue richieste tramite un proxy (WP_PROXY_HOST), che risolve da sé il nome di %s; quindi il download non si è potuto vincolare agli indirizzi verificati e non è stato avviato."
+
+msgid "1. To let the site download from that host directly, an administrator adds it to WP_PROXY_BYPASS_HOSTS in wp-config.php; then try again. 2. Or pass the ZIP base64-encoded as \"content\"."
+msgstr "1. Perché il sito scarichi direttamente da quell’host, un amministratore lo aggiunge a WP_PROXY_BYPASS_HOSTS in wp-config.php; poi riprova. 2. Oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so nothing was downloaded. 1. Ask the host to enable the curl extension of PHP. 2. Until then, pass the ZIP base64-encoded as \"content\"."
+msgstr "Su questo sito WordPress invia le sue richieste senza cURL, e solo cURL si può vincolare agli indirizzi verificati; quindi non è stato scaricato nulla. 1. Chiedi all’hosting di attivare l’estensione curl di PHP. 2. Fino ad allora, passa lo ZIP codificato in base64 come “content”."
+
+#, php-format
+msgid "The address redirected more than %d times, so nothing was downloaded. 1. Open it in a browser and use the address the browser ends on, the ZIP itself. 2. Or pass the ZIP base64-encoded as \"content\"."
+msgstr "L’indirizzo ha reindirizzato più di %d volte; quindi non è stato scaricato nulla. 1. Aprilo in un browser e usa l’indirizzo a cui arriva il browser, lo ZIP stesso. 2. Oppure passa lo ZIP codificato in base64 come “content”."
+
+msgid "The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the ZIP itself. 2. Or pass the ZIP base64-encoded as \"content\"."
+msgstr "L’indirizzo reindirizza a qualcosa che non è un indirizzo http(s); quindi non è stato scaricato nulla. 1. Aprilo in un browser e usa l’indirizzo dello ZIP stesso. 2. Oppure passa lo ZIP codificato in base64 come “content”."
+
+#, php-format
+msgid "The address redirects to %s, a private or internal host, so nothing was downloaded: WordPress downloads only from public hosts. 1. Open the address in a browser and use the address of the file itself, on a public host. 2. Or send the file's content with wp_upload_media."
+msgstr "L’indirizzo reindirizza a %s, un host privato o interno; quindi non è stato scaricato nulla: WordPress scarica solo da host pubblici. 1. Apri l’indirizzo in un browser e usa l’indirizzo del file stesso, su un host pubblico. 2. Oppure invia il contenuto del file con wp_upload_media."
+
+msgid "The address points to a private or internal host (one of the addresses its name resolves to is not public), so nothing was downloaded: WordPress downloads only from public hosts. Use the address of the file on a public host, or send its content with wp_upload_media."
+msgstr "L’indirizzo punta a un host privato o interno (uno degli indirizzi in cui si risolve il suo nome non è pubblico); quindi non è stato scaricato nulla: WordPress scarica solo da host pubblici. Usa l’indirizzo del file su un host pubblico, oppure invia il suo contenuto con wp_upload_media."
+
+#, php-format
+msgid "The address redirects to %s, whose name has no address, so nothing was downloaded. 1. Open the address in a browser and use the address of the file itself. 2. Or send the file's content with wp_upload_media."
+msgstr "L’indirizzo reindirizza a %s, il cui nome non ha un indirizzo; quindi non è stato scaricato nulla. 1. Apri l’indirizzo in un browser e usa l’indirizzo del file stesso. 2. Oppure invia il contenuto del file con wp_upload_media."
+
+msgid "The host name of the address has no address, so nothing was downloaded. Check the spelling of the address, or send the file's content with wp_upload_media."
+msgstr "Il nome host dell’indirizzo non ha un indirizzo; quindi non è stato scaricato nulla. Controlla come è scritto l’indirizzo, oppure invia il contenuto del file con wp_upload_media."
+
+msgid "1. To let the site download from that host directly, an administrator adds it to WP_PROXY_BYPASS_HOSTS in wp-config.php; then try again. 2. Or send the file's content with wp_upload_media."
+msgstr "1. Perché il sito scarichi direttamente da quell’host, un amministratore lo aggiunge a WP_PROXY_BYPASS_HOSTS in wp-config.php; poi riprova. 2. Oppure invia il contenuto del file con wp_upload_media."
+
+msgid "WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so nothing was downloaded. 1. Ask the host to enable the curl extension of PHP. 2. Until then, send the file's content with wp_upload_media."
+msgstr "Su questo sito WordPress invia le sue richieste senza cURL, e solo cURL si può vincolare agli indirizzi verificati; quindi non è stato scaricato nulla. 1. Chiedi all’hosting di attivare l’estensione curl di PHP. 2. Fino ad allora, invia il contenuto del file con wp_upload_media."
+
+#, php-format
+msgid "The address redirected more than %d times, so nothing was downloaded. 1. Open it in a browser and use the address the browser ends on, the file itself. 2. Or send the file's content with wp_upload_media."
+msgstr "L’indirizzo ha reindirizzato più di %d volte; quindi non è stato scaricato nulla. 1. Aprilo in un browser e usa l’indirizzo a cui arriva il browser, il file stesso. 2. Oppure invia il contenuto del file con wp_upload_media."
+
+msgid "The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the file itself. 2. Or send the file's content with wp_upload_media."
+msgstr "L’indirizzo reindirizza a qualcosa che non è un indirizzo http(s); quindi non è stato scaricato nulla. 1. Aprilo in un browser e usa l’indirizzo del file stesso. 2. Oppure invia il contenuto del file con wp_upload_media."

@@ -25,11 +25,18 @@ final class UploadFromUrlSizeTest extends TestCase {
 	protected function setUp(): void {
 		$GLOBALS['ab_test_http'] = array();
 		add_filter( 'ab_mcp_upload_max_bytes', array( self::class, 'limit' ) );
+		// No DNS in the tests: example.com answers with a public address.
+		add_filter( 'ab_mcp_outbound_addresses', array( self::class, 'address' ) );
 	}
 
 	protected function tearDown(): void {
 		remove_filter( 'ab_mcp_upload_max_bytes', array( self::class, 'limit' ) );
+		remove_filter( 'ab_mcp_outbound_addresses', array( self::class, 'address' ) );
 		$GLOBALS['ab_test_http_answer'] = null;
+	}
+
+	public static function address(): array {
+		return array( '93.184.216.34' );
 	}
 
 	public static function limit(): int {

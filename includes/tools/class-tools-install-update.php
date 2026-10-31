@@ -23,11 +23,16 @@ require_once dirname( __DIR__ ) . '/lifecycle/class-activation-guard.php';
 // class registers wherever it is loaded (tests and the bundled core of Pro included).
 require_once dirname( __DIR__ ) . '/class-confirm-token.php';
 require_once dirname( __DIR__ ) . '/class-lifecycle-confirm.php';
+// The download of a ZIP from an address, tied to the checked addresses of its host.
+require_once dirname( __DIR__ ) . '/class-outbound.php';
 
 /**
  * Class AB_MCP_Tools_Install_Update
  */
 class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
+
+	/** How many redirects the download of a ZIP follows, each target checked and tied like the first. */
+	const REDIRECTS = 3;
 
 	/**
 	 * Load the WordPress upgrader stack (defensively). These wp-admin
@@ -222,7 +227,11 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 	}
 	/**
 	 * Turn a base64 "content" argument or a "url" argument into a local .zip
-	 * package path. Validates it is really a ZIP; URLs are fetched SSRF-safely.
+	 * package path. Validates it is really a ZIP. An address is fetched
+	 * through AB_MCP_Outbound::get(): every IPv4 and IPv6 address of its host
+	 * public, the connection tied to exactly these addresses, each of the
+	 * REDIRECTS redirects checked and tied the same way; wp_http_validate_url()
+	 * before it keeps WordPress's rules on the form of the address.
 	 *
 	 * @param array $a Args.
 	 * @return string|WP_Error Local temp zip path.
@@ -274,16 +283,16 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			if ( ! $url || ! preg_match( '#^https?://#i', $url ) || ! wp_http_validate_url( $url ) ) {
 				return new WP_Error( 'ab_mcp_blocked_url', __( 'The URL is invalid or points to a disallowed host. Give the public http or https address of the ZIP, or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
 			}
-			$resp = wp_safe_remote_get(
+			$resp = AB_MCP_Outbound::get(
 				$url,
 				array(
 					'timeout'             => 30,
-					'redirection'         => 3,
+					'redirection'         => self::REDIRECTS,
 					'limit_response_size' => $max,
 				)
 			);
 			if ( is_wp_error( $resp ) ) {
-				return $resp;
+				return self::download_refused( $resp );
 			}
 			if ( 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
 				return new WP_Error( 'ab_mcp_fetch_failed', __( 'Could not download the package. Check that the address answers with the ZIP, or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
@@ -312,6 +321,53 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_write_failed', __( 'Could not write the package. The server\'s temporary folder is not writable or is full; the host can check it.', 'alphabridge-mcp' ) );
 		}
 		return $tmp;
+	}
+
+	/**
+	 * What a download AB_MCP_Outbound::get() refused means for the person:
+	 * the reason, and the way (the address of the ZIP itself on a public
+	 * host, the proxy setting, the curl extension, or the ZIP base64-encoded
+	 * as "content"). An error of the transport is passed on as it comes.
+	 *
+	 * @param WP_Error $error The refusal.
+	 * @return WP_Error
+	 */
+	private static function download_refused( WP_Error $error ) {
+		$data = (array) $error->get_error_data();
+		$hop  = isset( $data['hop'] ) ? (int) $data['hop'] : 0;
+		$host = isset( $data['url'] ) ? (string) wp_parse_url( (string) $data['url'], PHP_URL_HOST ) : '';
+		switch ( $error->get_error_code() ) {
+			case 'ab_mcp_outbound_local':
+				if ( $hop > 0 ) {
+					/* translators: %s: host the address redirects to. */
+					return new WP_Error( 'ab_mcp_blocked_url', sprintf( __( 'The address redirects to %s, a private or internal host, so nothing was downloaded: the site downloads only from public hosts. 1. Open the address in a browser and use the address of the ZIP itself, on a public host. 2. Or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ), $host ) );
+				}
+				return new WP_Error( 'ab_mcp_blocked_url', __( 'The URL points to a private or internal host (one of the addresses its name resolves to is not public), so nothing was downloaded: the site downloads only from public hosts. Give the public http or https address of the ZIP, or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_unresolved':
+				if ( $hop > 0 ) {
+					/* translators: %s: host the address redirects to. */
+					return new WP_Error( 'ab_mcp_fetch_failed', sprintf( __( 'The address redirects to %s, whose name has no address, so nothing was downloaded. 1. Open the address in a browser and use the address of the ZIP itself. 2. Or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ), $host ) );
+				}
+				return new WP_Error( 'ab_mcp_fetch_failed', __( 'The host name of the URL has no address, so nothing was downloaded. Check the spelling of the address, or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_proxy':
+				return new WP_Error(
+					'ab_mcp_proxy',
+					AB_MCP_Guidance::compose(
+						/* translators: %s: host name of the address. */
+						sprintf( __( 'This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the download could not be tied to the checked addresses and was not started.', 'alphabridge-mcp' ), $host ),
+						__( '1. To let the site download from that host directly, an administrator adds it to WP_PROXY_BYPASS_HOSTS in wp-config.php; then try again. 2. Or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ),
+						AB_MCP_Guidance::settings_url()
+					)
+				);
+			case 'ab_mcp_outbound_unbound':
+				return new WP_Error( 'ab_mcp_unbound', __( 'WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so nothing was downloaded. 1. Ask the host to enable the curl extension of PHP. 2. Until then, pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_redirects':
+				/* translators: %d: how many redirects are followed at most. */
+				return new WP_Error( 'ab_mcp_fetch_failed', sprintf( __( 'The address redirected more than %d times, so nothing was downloaded. 1. Open it in a browser and use the address the browser ends on, the ZIP itself. 2. Or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ), self::REDIRECTS ) );
+			case 'ab_mcp_outbound_redirect':
+				return new WP_Error( 'ab_mcp_fetch_failed', __( 'The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the ZIP itself. 2. Or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
+		}
+		return $error;
 	}
 	/**
 	 * Install plugin from slug.
