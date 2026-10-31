@@ -101,6 +101,9 @@ final class MediaChatFileTest extends TestCase {
 			return $per > 0 ? array_slice( $out, ( max( 1, (int) ( $args['paged'] ?? 1 ) ) - 1 ) * $per, $per ) : $out;
 		};
 		$this->serve( self::PNG, 'application/octet-stream' );
+		// No DNS in the tests: every host of these addresses answers with a
+		// public address (the download is tied to it, OutboundBindingTest).
+		add_filter( 'ab_mcp_outbound_addresses', static fn(): array => array( '93.184.216.34' ) );
 	}
 
 	protected function tearDown(): void {
@@ -177,7 +180,8 @@ final class MediaChatFileTest extends TestCase {
 		self::assertTrue( $r['uploaded'] ?? null, self::code( $r ) );
 		self::assertSame( hash( 'sha256', self::PNG ), $r['sha256'] );
 		self::assertSame( 'https://files.oaiusercontent.com/file-abc?se=2026-10-30&sig=x', $GLOBALS['ab_test_http'][0]['url'], 'Downloaded from the address the chat gave.' );
-		self::assertSame( 3, $GLOBALS['ab_test_http'][0]['args']['redirection'], 'With the limits of wp_upload_media_from_url.' );
+		self::assertSame( 20 * MB_IN_BYTES + 1, $GLOBALS['ab_test_http'][0]['args']['limit_response_size'], 'With the limits of wp_upload_media_from_url.' );
+		self::assertSame( 0, $GLOBALS['ab_test_http'][0]['args']['redirection'], 'The plugin follows redirects itself, each target checked (AB_MCP_Outbound, 4.15.0).' );
 		self::assertSame( 'photo.png', $GLOBALS['ab_test_sideloads'][0]['name'] );
 		self::assertSame( self::PNG, $GLOBALS['ab_test_sideloads'][0]['bytes'] );
 		self::assertSame( 'Bakery front', $GLOBALS['ab_test_sideloads'][0]['title'] );

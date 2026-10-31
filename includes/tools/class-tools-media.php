@@ -8,6 +8,8 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+// The download of a file from an address, tied to the checked addresses of its host.
+require_once dirname( __DIR__ ) . '/class-outbound.php';
 
 /**
  * Class AB_MCP_Tools_Media
@@ -20,6 +22,9 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 	 * wp_find_media finds it by content.
 	 */
 	const HASH_META = '_ab_mcp_sha256';
+
+	/** How many redirects a download from an address follows, each target checked and tied like the first. */
+	const REDIRECTS = 3;
 
 	/** Pages of matches wp_find_media checks at most for files the account may read. */
 	const FIND_PAGES = 50;
@@ -124,7 +129,7 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_upload_media_from_url',
 			array(
-				'description' => 'Download a file from a public http(s) URL and add it to the media library; the file is public under its new URL afterwards. A file that is already there (same SHA-256 as one AlphaBridge added) is not added again: the answer names it with duplicate: true, and allow_duplicate: true adds a copy all the same. The site fetches the file itself through WordPress\' safe-URL check, repeated on every redirect: private and internal hosts are refused unless WordPress allows them (such as the site\'s own host); at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must name JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are refused, and WordPress then checks the file as for any upload. No third-party API is involved. Returns {uploaded: true, id, url, sha256}. Needs upload_files, and the right to edit post_id when given. File content at hand is uploaded as base64 with wp_upload_media; wp_find_media finds a file by its content, address or name.',
+				'description' => 'Download a file from a public http(s) URL and add it to the media library; the file is public under its new URL afterwards. A file that is already there (same SHA-256 as one AlphaBridge added) is not added again: the answer names it with duplicate: true, and allow_duplicate: true adds a copy all the same. The site fetches the file itself, only from a host whose every IPv4 and IPv6 address is public, with the connection tied to exactly these addresses, and checks each redirect the same way: private and internal hosts are refused; at most 3 redirects, 20 seconds per request, 20 MB by default (filter ab_mcp_upload_max_bytes). The URL or the content type must name JPEG, PNG, GIF, WebP or PDF; HTML, SVG, XML and script responses are refused, and WordPress then checks the file as for any upload. No third-party API is involved. Returns {uploaded: true, id, url, sha256}. Needs upload_files, and the right to edit post_id when given. File content at hand is uploaded as base64 with wp_upload_media; wp_find_media finds a file by its content, address or name.',
 				'capability'  => 'upload_files',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -310,9 +315,10 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		if ( ! $url || ! preg_match( '#^https?://#i', $url ) ) {
 			return new WP_Error( 'ab_mcp_bad_url', __( 'Only http(s) URLs are allowed. Pass the file\'s public http:// or https:// address, or send its content with wp_upload_media.', 'alphabridge-mcp' ) );
 		}
-		// SSRF guard: reject loopback / private / link-local hosts (blocks cloud
-		// metadata endpoints and internal services). wp_http_validate_url() is
-		// WordPress core's own check for safe outbound request targets.
+		// WordPress core's own check of an outbound address: its form (no user
+		// name, only the ports WordPress allows) and, IPv4 only and at this
+		// moment, its host. Which addresses the host has and where the
+		// connection goes is decided in fetch() (AB_MCP_Outbound).
 		if ( ! wp_http_validate_url( $url ) ) {
 			return new WP_Error( 'ab_mcp_blocked_url', __( 'This URL points to a private or disallowed host and was blocked: WordPress downloads only from public hosts. Put the file on a public address, or send its content with wp_upload_media.', 'alphabridge-mcp' ) );
 		}
@@ -332,10 +338,11 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 	/**
 	 * Download a file for the media library from a public address.
 	 *
-	 * Fetched with wp_safe_remote_get: it sets reject_unsafe_urls, so every
-	 * redirect hop is checked again by wp_http_validate_url (download_url
-	 * does not do this, which would let an allowed URL redirect to an
-	 * internal address).
+	 * Through AB_MCP_Outbound::get(): every IPv4 and IPv6 address of the host
+	 * must be public, the connection goes to exactly these addresses, and
+	 * each of the REDIRECTS redirects is followed by the plugin with the same
+	 * check and binding for its target (WordPress's transport would look a
+	 * target up unbound, download_url() would not check it at all).
 	 *
 	 * @param string $url Address, already checked by wp_http_validate_url.
 	 * @return array|WP_Error { body, type } with the content type in lower case.
@@ -347,16 +354,16 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 		// limit, so a file cut at exactly the maximum would look like one that
 		// fits and be stored broken. With the extra byte, an oversized file
 		// arrives longer than the maximum and is refused below.
-		$response = wp_safe_remote_get(
+		$response = AB_MCP_Outbound::get(
 			$url,
 			array(
 				'timeout'             => 20,
-				'redirection'         => 3,
+				'redirection'         => self::REDIRECTS,
 				'limit_response_size' => $max_bytes + 1,
 			)
 		);
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return self::download_refused( $response );
 		}
 		$http_code = (int) wp_remote_retrieve_response_code( $response );
 		if ( 200 !== $http_code ) {
@@ -389,6 +396,53 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 			'body' => $body,
 			'type' => $ctype,
 		);
+	}
+
+	/**
+	 * What a download AB_MCP_Outbound::get() refused means for the person:
+	 * the reason, and the way (the address of the file itself on a public
+	 * host, the proxy setting, the curl extension, or wp_upload_media with
+	 * the content). An error of the transport is passed on as it comes.
+	 *
+	 * @param WP_Error $error The refusal.
+	 * @return WP_Error
+	 */
+	private static function download_refused( WP_Error $error ) {
+		$data = (array) $error->get_error_data();
+		$hop  = isset( $data['hop'] ) ? (int) $data['hop'] : 0;
+		$host = isset( $data['url'] ) ? (string) wp_parse_url( (string) $data['url'], PHP_URL_HOST ) : '';
+		switch ( $error->get_error_code() ) {
+			case 'ab_mcp_outbound_local':
+				if ( $hop > 0 ) {
+					/* translators: %s: host the address redirects to. */
+					return new WP_Error( 'ab_mcp_blocked_url', sprintf( __( 'The address redirects to %s, a private or internal host, so nothing was downloaded: WordPress downloads only from public hosts. 1. Open the address in a browser and use the address of the file itself, on a public host. 2. Or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ), $host ) );
+				}
+				return new WP_Error( 'ab_mcp_blocked_url', __( 'The address points to a private or internal host (one of the addresses its name resolves to is not public), so nothing was downloaded: WordPress downloads only from public hosts. Use the address of the file on a public host, or send its content with wp_upload_media.', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_unresolved':
+				if ( $hop > 0 ) {
+					/* translators: %s: host the address redirects to. */
+					return new WP_Error( 'ab_mcp_fetch_failed', sprintf( __( 'The address redirects to %s, whose name has no address, so nothing was downloaded. 1. Open the address in a browser and use the address of the file itself. 2. Or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ), $host ) );
+				}
+				return new WP_Error( 'ab_mcp_fetch_failed', __( 'The host name of the address has no address, so nothing was downloaded. Check the spelling of the address, or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_proxy':
+				return new WP_Error(
+					'ab_mcp_proxy',
+					AB_MCP_Guidance::compose(
+						/* translators: %s: host name of the address. */
+						sprintf( __( 'This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the download could not be tied to the checked addresses and was not started.', 'alphabridge-mcp' ), $host ),
+						__( '1. To let the site download from that host directly, an administrator adds it to WP_PROXY_BYPASS_HOSTS in wp-config.php; then try again. 2. Or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ),
+						AB_MCP_Guidance::settings_url()
+					)
+				);
+			case 'ab_mcp_outbound_unbound':
+				return new WP_Error( 'ab_mcp_unbound', __( 'WordPress sends its requests on this site without cURL, and only cURL can be tied to the checked addresses, so nothing was downloaded. 1. Ask the host to enable the curl extension of PHP. 2. Until then, send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ) );
+			case 'ab_mcp_outbound_redirects':
+				/* translators: %d: how many redirects are followed at most. */
+				return new WP_Error( 'ab_mcp_fetch_failed', sprintf( __( 'The address redirected more than %d times, so nothing was downloaded. 1. Open it in a browser and use the address the browser ends on, the file itself. 2. Or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ), self::REDIRECTS ) );
+			case 'ab_mcp_outbound_redirect':
+				return new WP_Error( 'ab_mcp_fetch_failed', __( 'The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the file itself. 2. Or send the file\'s content with wp_upload_media.', 'alphabridge-mcp' ) );
+		}
+		return $error;
 	}
 
 	/**
@@ -644,7 +698,8 @@ class AB_MCP_Tools_Media extends AB_MCP_Tools_Base {
 	/**
 	 * A file from the chat (ChatGPT, _meta["openai/fileParams"]): the site
 	 * downloads it from its temporary address, with the same checks as
-	 * wp_upload_media_from_url (public host on every redirect, size, type).
+	 * wp_upload_media_from_url (every address of the host public and the
+	 * connection tied to them, on every redirect; size; type).
 	 * Its name comes from file_name, else from the address; the extension
 	 * from the name, else from mime_type or the served content type.
 	 *

@@ -201,6 +201,11 @@ Handing an AI access to a site should feel safe, so control comes first:
   the post meta of page builders, each builder's keys together or not at all. Credential-shaped
   keys, the original's editing state, the meta of a revision,
   builder caches and other plugins' protected keys are not copied.
+- **Outgoing requests go only where the check looked.** A file or ZIP the site downloads on request,
+  the metadata document of an app that signs in and the other site of a staging pair are fetched
+  only when every IPv4 and IPv6 address of the host is public, with the connection tied to exactly
+  these addresses, each redirect checked the same way, and never through a proxy that would look
+  the name up itself.
 - **Audit log** of the latest 200 tool calls, plus a rate limit of 120 requests a minute against request bursts.
 
 Details: https://alphabridge-mcp.com/security.html
