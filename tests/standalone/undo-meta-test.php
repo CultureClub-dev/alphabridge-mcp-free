@@ -89,7 +89,7 @@ function apply_filters( $tag, $value, ...$args ) {
 }
 function has_filter( $tag, $cb = false ) { return array_key_exists( $tag, $GLOBALS['ab_filters'] ); }
 function has_action( $tag, $cb = false ) { return false; }
-function do_action( $tag, ...$args ) {}
+function do_action( $tag, ...$args ) { $GLOBALS['ab_actions'][] = array_merge( array( $tag ), $args ); }
 function is_multisite() { return false; }
 $GLOBALS['ab_cleaned'] = array();
 function clean_post_cache( $id ) { $GLOBALS['ab_cleaned'][] = (int) $id; }
@@ -267,6 +267,13 @@ function ab_update_meta( $type, $obj, $key, $value ) {
 	$key   = wp_unslash( $key );
 	$value = wp_unslash( $value );
 	if ( isset( $GLOBALS['ab_meta_veto'][ $key ] ) ) { return false; }
+	// As Yoast SEO: an empty field is kept as no row (WPSEO_Meta deletes it).
+	if ( '' === $value && 0 === strpos( (string) $key, '_yoast_wpseo_' ) ) {
+		foreach ( $GLOBALS['ab_meta'][ $type ] as $id => $r ) {
+			if ( $r[0] === (int) $obj && ab_collates( $r[1], $key ) ) { unset( $GLOBALS['ab_meta'][ $type ][ $id ] ); }
+		}
+		return true;
+	}
 	if ( isset( $GLOBALS['ab_meta_sanitize'][ $key ] ) ) { $value = $GLOBALS['ab_meta_sanitize'][ $key ]( $value ); }
 	$stored = maybe_serialize( $value );
 	$stored = is_bool( $stored ) ? ( $stored ? '1' : '' ) : ( null === $stored ? '' : (string) $stored );
@@ -351,6 +358,9 @@ require $GLOBALS['ab_free'] . 'class-page-cache.php';
 require $GLOBALS['ab_free'] . 'tools/class-tools-base.php';
 require $GLOBALS['ab_free'] . 'tools/class-tools-meta-auth.php';
 require $GLOBALS['ab_free'] . 'tools/class-tools-media.php';
+// wp_seo_set (since 4.14.0) with Yoast SEO, whose fields are protected ("_") keys.
+define( 'WPSEO_VERSION', '26.0' );
+require $GLOBALS['ab_free'] . 'tools/class-tools-seo.php';
 require $GLOBALS['ab_free'] . 'tools/class-tools-undo-core.php';
 require $GLOBALS['ab_free'] . 'undo/class-undo.php';
 require $GLOBALS['ab_free'] . 'undo/class-undo-restore.php';
@@ -404,6 +414,7 @@ function reset_all() {
 	$GLOBALS['ab_save_veto']     = false;
 	$GLOBALS['ab_cleaned']       = array();
 	$GLOBALS['ab_last_changed']  = array();
+	$GLOBALS['ab_actions']       = array();
 	$GLOBALS['ab_posts']         = array();
 	$GLOBALS['ab_terms']         = array( 8 => (object) array( 'term_id' => 8, 'taxonomy' => 'category' ) );
 	$GLOBALS['ab_users']         = array( 5 => true );
@@ -933,6 +944,78 @@ $res = AB_MCP_Tools_Meta_Auth::update_term_meta_tool( array( 'term_id' => 8, 'ke
 ok( 'ab_mcp_protected_meta' !== ab_code( $res ) && array( $mx => 'neu' ) === ab_rows( 'term', 8, 'Mixed' ), 'N7 a table that cannot be read: no refusal on a guess, the write goes ahead as before' );
 $GLOBALS['ab_db_down'] = false;
 $GLOBALS['ab_deny']    = array();
+
+/* ============================== S) wp_seo_set (4.14.0): the fields of the SEO plugin, one point for all */
+
+reset_all();
+ab_add_row( 'post', 5, '_yoast_wpseo_title', 'Old SEO title' );
+$tr  = ab_rows( 'post', 5, '_yoast_wpseo_title' );
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => 'New <b>title</b>', 'description' => 'New description' ) );
+$e   = ab_entry( (string) $res['undo'] );
+ok( true === $res['updated'] && is_string( $res['undo'] ) && 'wp_seo_set' === $e['tool'] && 'meta' === $e['kind'] && 'edit_posts' === $e['cap'], 'S1 wp_seo_set records one undo point of the kind meta, with edit_posts' );
+ok( (object) array( 'title' => 'New title', 'description' => 'New description' ) == $res['saved_fields'] && ! isset( $res['saved_differs'] ), 'S2 saved_fields under the names of the tool, as stored (the tags stripped as the tool strips them)' );
+$GLOBALS['ab_actions'] = array();
+$out = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && $tr === ab_rows( 'post', 5, '_yoast_wpseo_title' ) && array() === ab_rows( 'post', 5, '_yoast_wpseo_metadesc' ), 'S3 wp_undo puts the title row back as it was and takes the description the change created away' );
+$tags = array_map( static fn( $a ) => $a[0] . ':' . $a[3], $GLOBALS['ab_actions'] );
+ok( in_array( 'updated_post_meta:_yoast_wpseo_title', $tags, true ) && in_array( 'deleted_post_meta:_yoast_wpseo_metadesc', $tags, true ), 'S4 and tells the SEO plugin (updated_post_meta, deleted_post_meta), which rebuilds what the page shows from them' );
+
+reset_all();
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => 'A' ) );
+update_post_meta( 5, '_yoast_wpseo_title', 'Edited in Yoast since' );
+$out = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'], 'S5 a field changed since is not written back' );
+$out = ab_undo( $res['undo'], array( 'force' => true ) );
+ok( 1 === $out['undone'] && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S6 with force it is' );
+
+reset_all();
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'focus_keyword' => 'bread' ) );
+$GLOBALS['ab_deny'] = array( 'edit_post_meta:5:_yoast_wpseo_focuskw' => true );
+ok( 'forbidden' === ab_undo( $res['undo'] )['blocked'][0]['reason'] && 1 === count( ab_rows( 'post', 5, '_yoast_wpseo_focuskw' ) ), 'S7 the right to each field is asked on the way back, as the tool asks it' );
+$GLOBALS['ab_deny'] = array( 'edit_post:5' => true );
+ok( 'forbidden' === ab_undo( $res['undo'] )['blocked'][0]['reason'], 'S8 and the right to the post' );
+$GLOBALS['ab_deny'] = array();
+
+reset_all();
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5 ) );
+ok( null === $res['undo'] && false !== strpos( (string) $res['undo_note'], 'wp_seo_get' ) && array() === $res['changed'], 'S9 no field given: nothing changed, undo null with the reason' );
+
+// Codex round 1: a revision writes to its post, and an empty Yoast field is no row.
+reset_all();
+ab_post( 6, array( 'post_type' => 'revision' ) );
+$GLOBALS['ab_revisions'][6] = 5;
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 6, 'title' => 'Via revision' ) );
+ok( ! is_wp_error( $res ) && 5 === $res['post_id'] && is_string( $res['undo'] ) && array( 'Via revision' ) === array_values( ab_rows( 'post', 5, '_yoast_wpseo_title' ) ) && array() === ab_rows( 'post', 6, '_yoast_wpseo_title' ), 'S15 a revision id: the post it belongs to is written, named in the answer, with its undo point' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S16 and the undo takes it back there' );
+reset_all();
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => '' ) );
+ok( ! is_wp_error( $res ) && null === $res['undo'] && (object) array( 'title' => '' ) == $res['saved_fields'] && ! isset( $res['saved_differs'] ), 'S17 an empty title where there was none: nothing changed, no error, saved as empty' );
+ab_add_row( 'post', 5, '_yoast_wpseo_title', 'Was set' );
+$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 5, 'title' => '' ) );
+ok( ! is_wp_error( $res ) && is_string( $res['undo'] ) && (object) array( 'title' => '' ) == $res['saved_fields'] && ! isset( $res['saved_differs'] ) && ! isset( $res['warning'] ) && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S18 emptying a set title: the row goes, read back as empty, no warning, an undo point' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && array( 'Was set' ) === array_values( ab_rows( 'post', 5, '_yoast_wpseo_title' ) ), 'S19 and the undo brings the title back' );
+
+reset_all();
+$t   = ab_forge( 'wp_seo_set', 'post', 5, 'api_key' );
+$out = ab_undo( $t, array( 'force' => true ) );
+ok( 'ab_mcp_undo_corrupt' === ab_code( $out ) && array() === ab_rows( 'post', 5, 'api_key' ), 'S10 a point of wp_seo_set with a key that is no SEO field is refused whole' );
+$t   = ab_forge( 'wp_update_post_meta', 'post', 5, '_yoast_wpseo_title' );
+$out = ab_undo( $t, array( 'force' => true ) );
+ok( 0 === $out['undone'] && 'protected_now' === $out['blocked'][0]['reason'] && array() === ab_rows( 'post', 5, '_yoast_wpseo_title' ), 'S11 a protected SEO key in a point of wp_update_post_meta stays refused: only wp_seo_set writes it' );
+$four = array( 'v' => 1, 'type' => 'post', 'id' => 5, 'keys' => array(), 'after' => array() );
+foreach ( array_merge( AB_MCP_Undo_Meta::SEO_KEYS ) as $i => $k ) {
+	if ( $i > 3 ) { break; }
+	$four['keys'][ $k ]          = array( 'existed' => false );
+	$four['after'][ 'meta:' . $k ] = str_repeat( 'a', 64 );
+}
+ok( false === AB_MCP_Undo_Meta::valid( 'wp_seo_set', $four ), 'S12 more than the three fields one call writes: refused whole' );
+ok( array( '_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_yoast_wpseo_focuskw', 'rank_math_title', 'rank_math_description', 'rank_math_focus_keyword' ) === array_merge( array_values( ( new ReflectionMethod( 'AB_MCP_Tools_Seo', 'keys' ) )->invoke( null, 'yoast' ) ), array_values( ( new ReflectionMethod( 'AB_MCP_Tools_Seo', 'keys' ) )->invoke( null, 'rankmath' ) ) ) && AB_MCP_Undo_Meta::SEO_KEYS === array( '_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_yoast_wpseo_focuskw', 'rank_math_title', 'rank_math_description', 'rank_math_focus_keyword' ), 'S13 the SEO keys of the undo are those the tool writes' );
+
+reset_all();
+$res = ab_post_meta( 5, 'color', 'red' );
+$GLOBALS['ab_actions'] = array();
+ab_undo( $res['undo'] );
+ok( array() === array_filter( $GLOBALS['ab_actions'], static fn( $a ) => in_array( $a[0], array( 'updated_post_meta', 'deleted_post_meta', 'added_post_meta' ), true ) ), 'S14 a key that is no SEO field goes back without the meta hooks, as before' );
 
 /* ============================== L) Pro's own wp_undo (last: the class stays) */
 

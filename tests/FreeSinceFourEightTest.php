@@ -30,6 +30,8 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/tools/class-tools-seo.php';
+// Since 4.14.0 wp_seo_set writes through the meta undo (AB_MCP_Undo_Meta).
+require_once __DIR__ . '/undo-stubs.php';
 
 final class FreeSinceFourEightTest extends TestCase {
 
@@ -113,7 +115,13 @@ final class FreeSinceFourEightTest extends TestCase {
 		define( 'WPSEO_VERSION', '26.0' );
 		$res = AB_MCP_Tools_Seo::set_seo( array( 'post_id' => 12, 'title' => 'Fresh <b>bread</b>', 'description' => "Line one\nline two" ) );
 
-		self::assertSame( array( 'updated' => true, 'provider' => 'yoast', 'changed' => array( 'title', 'description' ) ), $res );
+		self::assertSame( array( 'updated' => true, 'provider' => 'yoast', 'changed' => array( 'title', 'description' ) ), array_intersect_key( $res, array_flip( array( 'updated', 'provider', 'changed' ) ) ) );
+		// Since 4.14.0 the fields as stored, read again, and the undo outcome
+		// (here no point: this test has no tables the undo can read).
+		self::assertEquals( (object) array( 'title' => 'Fresh bread', 'description' => 'Line one line two' ), $res['saved_fields'] );
+		self::assertArrayHasKey( 'undo', $res );
+		self::assertNull( $res['undo'] );
+		self::assertArrayHasKey( 'undo_note', $res );
 		self::assertSame( 'Fresh bread', self::stored( self::YOAST['title'] ), 'Tags are stripped.' );
 		self::assertSame( 'Line one line two', self::stored( self::YOAST['description'] ), 'Line breaks are stripped.' );
 		self::assertSame( '', self::stored( self::YOAST['focus_keyword'] ), 'A field not given is not touched.' );

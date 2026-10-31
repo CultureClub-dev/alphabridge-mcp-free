@@ -178,6 +178,8 @@ final class AB_MCP_Redactor {
 		'wp_add_menu_item'    => array( 'saved_fields' ),
 		'wp_add_widget'       => array( 'saved_fields' ),
 		'wp_update_widget'    => array( 'saved_fields', 'settings' ),
+		// The SEO fields as stored (4.14.0): what wp_seo_get reads, redacted alike.
+		'wp_seo_set'          => array( 'saved_fields' ),
 	);
 
 	/**

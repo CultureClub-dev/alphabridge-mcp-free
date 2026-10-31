@@ -1304,6 +1304,18 @@ final class RedactionTest extends TestCase {
 		self::assertSame( array( '/meta/connection=…' ), $out['redacted'] );
 	}
 
+	public function testTheReadBackOfTheSeoFieldsIsRedactedAsTheirReaderIs(): void {
+		// Codex (Z5 Teil 1): a field a site protects reads as the placeholder in
+		// the answer of wp_seo_set too, as wp_seo_get shows it.
+		add_filter( 'ab_mcp_redact_keys', static fn() => array( 'focus_keyword' ) );
+
+		$out = AB_MCP_Redactor::tool_result( 'wp_seo_set', array(), array( 'updated' => true, 'changed' => array( 'focus_keyword' ), 'saved_fields' => (object) array( 'focus_keyword' => 'PLACEHOLDER-K', 'title' => 'Bread' ) ) );
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ) );
+		self::assertSame( 'Bread', ( (array) $out['saved_fields'] )['title'] );
+		self::assertSame( array( 'focus_keyword' ), $out['changed'] );
+	}
+
 	public function testPathsAreUnambiguousAndNoFindIsMerged(): void {
 		// Codex #12: a.b/token and a/b/token are two places.
 		$out = $this->read(
