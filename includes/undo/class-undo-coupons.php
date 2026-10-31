@@ -4,23 +4,25 @@
  * moved into the trash again.
  *
  * Snapshot (one point, one coupon):
- *   { "v": 1, "id": int, "after": { "coupon": sha256, "use": sha256 } }
+ *   { "v": 1, "id": int, "after": { "coupon": sha256 } }
  *
  * "coupon" is the coupon as the change left it: all its data as WooCommerce
  * reads it (WC_Coupon::get_data(): code, status, amount, discount type,
  * expiry, the restrictions — individual use, minimum and maximum amount,
  * products and categories, e-mail addresses, limits — and its other meta),
  * without the id and the times it was created and changed, which a change
- * of its meta alone does not touch; "use" its use — the usage count, the
- * customers it was used by, and the orders that hold it while they are paid
- * (WooCommerce's tentative usage). Both are read through WC_Coupon, as the
- * product kind reads a product (AB_MCP_Undo_Products). The undo moves the coupon into the
- * trash through WooCommerce (WC_Coupon::delete() without force, as the trash
- * link of wp-admin does), not for good (decision of 30.10.2026): that is the
- * gentler way, and it frees the code again, since WooCommerce finds only
- * published coupons by their code. It does so only while both are as the
- * change left them, and refuses a coupon changed or used since unless force
- * is set; a coupon deleted or trashed since is nothing to do. Where the
+ * of its meta alone does not touch, and without its use. Read through
+ * WC_Coupon, as the product kind reads a product (AB_MCP_Undo_Products).
+ * The undo moves the coupon into the trash through WooCommerce
+ * (WC_Coupon::delete() without force, as the trash link of wp-admin does),
+ * not for good (decision of 30.10.2026): that is the gentler way, and it
+ * frees the code again, since WooCommerce finds only published coupons by
+ * their code. It does so only while the coupon is unused, whatever force
+ * says (in_use, in_use_note()): no usage count, no customer it was used by
+ * (_used_by), no order that holds it while it is paid (_coupon_held_ and
+ * _maybe_used_by_ rows whose time has not run out), as WooCommerce keeps
+ * them; and it refuses a coupon changed since unless force is set. A coupon
+ * deleted or trashed since is nothing to do. Where the
  * site's trash is off (EMPTY_TRASH_DAYS 0) the trash would delete for good:
  * the coupon gets no point then (trash_off_note()), and a point of before is
  * refused (no_trash). The account needs manage_woocommerce and the right to
@@ -140,26 +142,50 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * The orders that hold a coupon while they are paid, as WooCommerce counts
-	 * them; null where its data store does not say.
+	 * The orders that hold a coupon while they are paid, as WooCommerce keeps
+	 * them: a meta row _coupon_held_<until>_<random> for the coupon's usage
+	 * limit, _maybe_used_by_<until>_<random> for its limit per customer
+	 * (WC_Coupon_Data_Store_CPT::check_and_hold_coupon() and
+	 * check_and_hold_coupon_for_user()), each until its time runs out.
 	 *
 	 * @param WC_Coupon $c  Coupon.
 	 * @param int       $id Its id.
-	 * @return int|null
+	 * @return int
 	 */
 	private static function held( $c, $id ) {
-		$store = method_exists( $c, 'get_data_store' ) ? $c->get_data_store() : null;
-		if ( ! is_object( $store ) ) {
-			return null;
+		$n = 0;
+		foreach ( array_keys( function_exists( 'get_post_meta' ) ? (array) get_post_meta( (int) $id ) : array() ) as $key ) {
+			if ( 1 === preg_match( '/\A_(?:coupon_held|maybe_used_by)_([0-9]+)_/', (string) $key, $m ) && (int) $m[1] > time() ) {
+				++$n;
+			}
 		}
-		// WC_Data_Store hands every call on to its store (__call), so it
-		// says itself which ones that store has.
-		$has = method_exists( $store, 'has_callable' ) ? $store->has_callable( 'get_tentative_usage_count' ) : method_exists( $store, 'get_tentative_usage_count' );
-		if ( ! $has ) {
-			return null;
-		}
-		$n = $store->get_tentative_usage_count( $id );
-		return null === $n ? null : (int) $n;
+		return $n;
+	}
+
+	/**
+	 * Has the coupon been used, or does an order hold it?
+	 *
+	 * @param array $use The use of state_of().
+	 * @return bool
+	 */
+	private static function used( array $use ) {
+		return $use['count'] > 0 || array() !== $use['used_by'] || $use['held'] > 0;
+	}
+
+	/**
+	 * Why a coupon in use stays: the note of a blocked or failed undo.
+	 *
+	 * @param int $id Coupon id.
+	 * @return string
+	 */
+	public static function in_use_note( $id ) {
+		return AB_MCP_Undo_Answer::not_undoable(
+			sprintf(
+				/* translators: %d: coupon id */
+				__( 'Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons.', 'alphabridge-mcp' ),
+				(int) $id
+			)
+		);
 	}
 
 	/**
@@ -194,16 +220,7 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 		if ( null === $state ) {
 			return null;
 		}
-		if ( false === $state ) {
-			return array(
-				'coupon' => self::ABSENT,
-				'use'    => self::ABSENT,
-			);
-		}
-		return array(
-			'coupon' => self::hash( $state['coupon'] ),
-			'use'    => self::hash( $state['use'] ),
-		);
+		return array( 'coupon' => false === $state ? self::ABSENT : self::hash( $state['coupon'] ) );
 	}
 
 	/**
@@ -211,10 +228,7 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 	 * @return array<string,string>
 	 */
 	public static function before_hashes( array $snap ) {
-		return array(
-			'coupon' => self::ABSENT,
-			'use'    => self::ABSENT,
-		);
+		return array( 'coupon' => self::ABSENT );
 	}
 
 	/**
@@ -272,17 +286,41 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 	 * @return string
 	 */
 	public static function refusal( $tool, array $snap ) {
-		$id = (int) $snap['id'];
-		if ( ! is_array( self::state_of( $id ) ) ) {
+		$id    = (int) $snap['id'];
+		$state = self::state_of( $id );
+		if ( ! is_array( $state ) ) {
 			return 'gone';
 		}
 		// Into the trash, never for good: with the trash off it would be.
 		if ( ! self::trash_on() ) {
 			return 'no_trash';
 		}
+		// Only an unused coupon, whatever force says (decision of 30.10.2026).
+		if ( self::used( $state['use'] ) ) {
+			return 'in_use';
+		}
 		// The right of the type, asked as the tools ask it (not copied).
 		self::load_tools( 'AB_MCP_Tools_Shop', 'class-tools-shop.php' );
 		return current_user_can( AB_MCP_Tools_Shop::delete_cap( 'shop_coupon' ), $id ) ? '' : 'forbidden';
+	}
+
+	/**
+	 * The plan of the kind; a coupon in use is blocked with its note, which
+	 * says why and what to do instead.
+	 *
+	 * @param string $tool  Tool of the point.
+	 * @param mixed  $data  Snapshot.
+	 * @param bool   $force Restore over later changes.
+	 * @return array|WP_Error
+	 */
+	public static function plan( $tool, $data, $force ) {
+		$out = parent::plan( $tool, $data, $force );
+		foreach ( is_array( $out ) ? $out['blocked'] : array() as $i => $b ) {
+			if ( 'in_use' === $b['reason'] ) {
+				$out['blocked'][ $i ]['note'] = self::in_use_note( (int) $data['id'] );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -292,7 +330,12 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 	 */
 	protected static function put_back( array $snap, array $locs ) {
 		$id = (int) $snap['id'];
-		$c  = self::trash_on() ? self::load( $id ) : null;
+		// Asked again right before: an order may have taken it since the plan.
+		$state = self::state_of( $id );
+		if ( is_array( $state ) && self::used( $state['use'] ) ) {
+			return new WP_Error( 'ab_mcp_undo_coupon_in_use', self::in_use_note( $id ) );
+		}
+		$c = self::trash_on() ? self::load( $id ) : null;
 		if ( is_object( $c ) ) {
 			$c->delete( false );
 		}
@@ -313,7 +356,7 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 	 * @return WP_Error
 	 */
 	protected static function changed_error() {
-		return new WP_Error( 'ab_mcp_undo_coupon_changed', __( 'The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_undo_coupon_changed', __( 'The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -341,7 +384,7 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 		}
 		$locs = array_keys( $data['after'] );
 		sort( $locs );
-		if ( array( 'coupon', 'use' ) !== $locs ) {
+		if ( array( 'coupon' ) !== $locs ) {
 			return false;
 		}
 		foreach ( $data['after'] as $sha ) {

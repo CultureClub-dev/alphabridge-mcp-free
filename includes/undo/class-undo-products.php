@@ -27,10 +27,11 @@
  * and its getters in the edit context — not from the tables: WooCommerce
  * decides where a product keeps its data, and its data store keeps _price
  * and the product lookup table in step when it saves. The state "after" is
- * read again from the database after the save, where it is the call's own
- * (own(): what it saved, or the status WordPress made of it by the date);
- * a value of another request in between stays the tool's saved one, so that
- * change is not taken back without force. The undo writes the same way: wc_get_product(), the setters with the old
+ * read again from the database after the save, field by field
+ * (field_after()): the call's own value where it was stored as saved, or the
+ * status WordPress made of it by the post's date; a field a filter refused
+ * is no change; a value of another request in between stays the tool's
+ * saved one, so that change is not taken back without force. The undo writes the same way: wc_get_product(), the setters with the old
  * values, save(), the product read again and compared.
  *
  * A price or a status changed since is refused unless force is set. The type
@@ -259,25 +260,44 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		$stored = self::state_of( $id );
 		$read   = self::read_back( $stored );
 
+		// Field by field (field_after()): what the call changed and was
+		// stored, and the state after of each location in the point.
 		$changed = array();
 		$after   = array();
+		$date    = is_array( $stored ) ? self::post_date( $id ) : null;
 		foreach ( is_array( $stored ) ? self::LOCS : array() as $loc ) {
-			if ( self::hash( $stored['locs'][ $loc ] ) !== self::hash( $before['locs'][ $loc ] ) ) {
-				$changed[ $loc ] = $before['locs'][ $loc ];
-				// The stored state where it is this call's own; another is
-				// another request's, made right after the save: the point
-				// then holds what the call saved, so an undo does not take
-				// that later change back without force.
-				$after[ $loc ] = self::hash( self::own( $loc, $stored['locs'][ $loc ], $set['locs'][ $loc ] ) ? $stored['locs'][ $loc ] : $set['locs'][ $loc ] );
-			}
-		}
-		if ( is_array( $stored ) && array() === $changed ) {
-			$refused = array();
-			foreach ( $asked as $field => $want ) {
-				if ( ! array_key_exists( $field, $read ) || ! AB_MCP_Undo_Answer::same( $read[ $field ], $want ) ) {
-					$refused[] = (string) $field;
+			$fields = 'price' === $loc ? self::PRICE : array( null );
+			$value  = array();
+			$moved  = false;
+			foreach ( $fields as $f ) {
+				$b   = null === $f ? $before['locs'][ $loc ] : $before['locs'][ $loc ][ $f ];
+				$w   = null === $f ? $set['locs'][ $loc ] : $set['locs'][ $loc ][ $f ];
+				$got = null === $f ? $stored['locs'][ $loc ] : $stored['locs'][ $loc ][ $f ];
+				list( $own, $v ) = self::field_after( $loc, $b, $w, $got, $date );
+				$moved           = $moved || $own;
+				if ( null === $f ) {
+					$value = $v;
+				} else {
+					$value[ $f ] = $v;
 				}
 			}
+			if ( $moved ) {
+				$changed[ $loc ] = $before['locs'][ $loc ];
+				$after[ $loc ]   = self::hash( $value );
+			}
+		}
+		// An error only where nothing that was sent is stored: a stock that
+		// was is a change stored, though no part of the point.
+		$refused = array();
+		$kept    = false;
+		foreach ( $asked as $field => $want ) {
+			if ( array_key_exists( $field, $read ) && AB_MCP_Undo_Answer::same( $read[ $field ], $want ) ) {
+				$kept = true;
+			} else {
+				$refused[] = (string) $field;
+			}
+		}
+		if ( is_array( $stored ) && array() === $changed && ! $kept ) {
 			if ( array() !== $refused ) {
 				return new WP_Error(
 					'ab_mcp_not_saved',
@@ -331,21 +351,58 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * Is a stored value of a location this call's own: what it saved, or for
-	 * the status what WordPress makes of it by the post's date — a future
-	 * date passed is published, a publish with a date ahead is scheduled?
+	 * One field after the save, three ways: a field the call did not change
+	 * keeps its value of before as its state after, so a change of another
+	 * request shows as one. Of a field it changed, the stored value is the
+	 * call's own where it is what the call saved, or for the status what
+	 * WordPress makes of it by the post's date (a future whose date has
+	 * passed is published, a publish with a date ahead is scheduled); it is
+	 * no change where it is the value of before (a filter refused it); any
+	 * other is another request's, made right after the save, and the point
+	 * holds what the call saved, so an undo does not take that back without
+	 * force.
 	 *
-	 * @param string $loc    Location.
-	 * @param mixed  $stored As read again from the database.
-	 * @param mixed  $saved  As the object the tool saved holds it.
-	 * @return bool
+	 * @param string   $loc    Location.
+	 * @param mixed    $before Value before the call.
+	 * @param mixed    $saved  Value the object the tool saved holds.
+	 * @param mixed    $stored Value as read again from the database.
+	 * @param int|null $date   post_date_gmt of the product as stored, as a timestamp.
+	 * @return array { 0: whether the call changed it, 1: its state after }
 	 */
-	private static function own( $loc, $stored, $saved ) {
-		if ( self::hash( $stored ) === self::hash( $saved ) ) {
-			return true;
+	private static function field_after( $loc, $before, $saved, $stored, $date ) {
+		if ( $saved === $before ) {
+			return array( false, $before );
 		}
-		$dated = array( 'future', 'publish' );
-		return 'status' === $loc && in_array( $saved, $dated, true ) && in_array( $stored, $dated, true );
+		if ( $stored === $before ) {
+			return array( false, $stored );
+		}
+		if ( $stored === $saved ) {
+			return array( true, $stored );
+		}
+		if ( 'status' === $loc && null !== $date ) {
+			$passed = $date <= time();
+			if ( ( 'future' === $saved && 'publish' === $stored && $passed ) || ( 'publish' === $saved && 'future' === $stored && ! $passed ) ) {
+				return array( true, $stored );
+			}
+		}
+		return array( true, $saved );
+	}
+
+	/**
+	 * The date of the product's post in UTC, as stored, by which WordPress
+	 * sets a status; null where it has none.
+	 *
+	 * @param int $id Product id.
+	 * @return int|null
+	 */
+	private static function post_date( $id ) {
+		$post = function_exists( 'get_post' ) ? get_post( (int) $id ) : null;
+		$gmt  = is_object( $post ) && isset( $post->post_date_gmt ) ? (string) $post->post_date_gmt : '';
+		if ( '' === $gmt || '0000-00-00 00:00:00' === $gmt ) {
+			return null;
+		}
+		$ts = strtotime( $gmt . ' UTC' );
+		return false === $ts ? null : $ts;
 	}
 
 	/**

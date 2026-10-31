@@ -462,7 +462,7 @@ abstract class AB_MCP_Undo_Objects {
 
 	/**
 	 * The notes of deleted_for_good(), of a comment whose post is in the
-	 * trash, of a coupon created where the trash is off, of the stock of a
+	 * trash, of a coupon created where the trash is off or in use, of the stock of a
 	 * product and of a change of an order's status (all since 4.14.0), for
 	 * the check that each names a way (AnswerWayTest).
 	 *
@@ -481,6 +481,7 @@ abstract class AB_MCP_Undo_Objects {
 			require_once __DIR__ . '/class-undo-coupons.php';
 		}
 		$out['wp_wc_create_coupon']       = AB_MCP_Undo_Coupons::trash_off_note();
+		$out['coupon-in-use']             = AB_MCP_Undo_Coupons::in_use_note( 99 );
 		if ( ! class_exists( 'AB_MCP_Undo_Products', false ) ) {
 			require_once __DIR__ . '/class-undo-products.php';
 		}

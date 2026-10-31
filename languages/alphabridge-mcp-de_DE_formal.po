@@ -5096,8 +5096,8 @@ msgstr "Der Papierkorb ist auf dieser Website ausgeschaltet (EMPTY_TRASH_DAYS is
 msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
 msgstr "WooCommerce hat den Gutschein %d nicht in den Papierkorb verschoben; der Undo-Punkt bleibt. Ein Plugin kann ihn festhalten. Die Gutscheine mit wp_wc_list_coupons prüfen und erneut versuchen."
 
-msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
-msgstr "Der Gutschein wurde geändert oder verwendet, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um ihn trotz der neueren Änderung in den Papierkorb zu verschieben."
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "Der Gutschein wurde geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um ihn trotz der neueren Änderung in den Papierkorb zu verschieben."
 
 msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "Der Schnappschuss des Gutscheins hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
@@ -5125,3 +5125,6 @@ msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die s
 
 msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
 msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die seither eingegangenen Bestellungen zurücknehmen. Vor diesem Aufruf betrug er %s. wp_wc_get_product zeigt den Lagerbestand jetzt, und wp_wc_update_product setzt ihn wieder, wo das gewünscht ist, abzüglich des seither Verkauften."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "Der Gutschein %d wurde verwendet oder ist von einer Bestellung reserviert, die gerade bezahlt wird, und das Undo verschiebt nur einen unbenutzten Gutschein in den Papierkorb, auch mit force=true: Die Bestellungen, die ihn verwendet haben, behalten ihn. Damit er nicht mehr gilt, ihm in wp-admin unter Marketing › Gutscheine ein Ablaufdatum oder eine Nutzungsgrenze geben; wp_wc_list_coupons listet die Gutscheine auf."

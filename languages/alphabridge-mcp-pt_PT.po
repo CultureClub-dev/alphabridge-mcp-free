@@ -5096,8 +5096,8 @@ msgstr "O lixo está desativado neste site (EMPTY_TRASH_DAYS é 0), e anular um 
 msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
 msgstr "O WooCommerce não enviou o cupão %d para o lixo; o ponto de restauro mantém-se. Um plugin pode retê-lo. Verifique os cupões com wp_wc_list_coupons e tente novamente."
 
-msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
-msgstr "O cupão foi alterado ou usado depois de a anulação ter sido planeada; nada foi reposto. Passe force=true para o enviar para o lixo apesar da alteração mais recente."
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "O cupão foi alterado depois de a anulação ter sido planeada; nada foi reposto. Passe force=true para o enviar para o lixo apesar da alteração mais recente."
 
 msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "O instantâneo do cupão não tem uma forma que esta ferramenta escreva; nada foi reposto. Este ponto de restauro não pode ser usado; wp_undo_discard remove-o."
@@ -5125,3 +5125,6 @@ msgstr "O stock não faz parte da anulação: repô-lo anularia as encomendas fe
 
 msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
 msgstr "O stock não faz parte da anulação: repô-lo anularia as encomendas feitas desde então. Antes desta chamada era %s. wp_wc_get_product mostra o stock atual, e wp_wc_update_product volta a defini-lo onde se pretender, menos o que foi vendido desde então."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "O cupão %d foi usado ou está reservado por uma encomenda em pagamento, e a anulação só envia para o lixo um cupão não usado, também com force=true: as encomendas que o usaram mantêm-no. Para o retirar de uso, atribua-lhe uma data de validade ou um limite de utilização em Marketing › Cupões no wp-admin; wp_wc_list_coupons lista os cupões."

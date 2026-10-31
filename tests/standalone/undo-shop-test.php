@@ -183,7 +183,19 @@ function ab_db_reset() {
 	$GLOBALS['ab_on_coupon'] = null; // a plugin on woocommerce_new_coupon
 }
 function get_post_type( $post = null ) { return $GLOBALS['TYPES'][ (int) $post ] ?? false; }
-function get_post( $id ) { return isset( $GLOBALS['TYPES'][ (int) $id ] ) ? (object) array( 'ID' => (int) $id, 'post_type' => $GLOBALS['TYPES'][ (int) $id ] ) : null; }
+function get_post( $id ) {
+	$id = (int) $id;
+	if ( ! isset( $GLOBALS['TYPES'][ $id ] ) ) { return null; }
+	$post = array( 'ID' => $id, 'post_type' => $GLOBALS['TYPES'][ $id ] );
+	if ( isset( $GLOBALS['P'][ $id ]['date'] ) ) { $post['post_date_gmt'] = gmdate( 'Y-m-d H:i:s', $GLOBALS['P'][ $id ]['date'] ); }
+	return (object) $post;
+}
+/* All meta rows of a coupon: its reservations, as WooCommerce writes them (_coupon_held_<until>_<random>, _maybe_used_by_<until>_<random>). */
+function get_post_meta( $id, $key = '', $single = false ) {
+	$rows = array();
+	foreach ( $GLOBALS['C'][ (int) $id ]['holds'] ?? array() as $k ) { $rows[ $k ] = array( '1' ); }
+	return '' === $key ? $rows : ( $single ? ( $rows[ $key ][0] ?? '' ) : ( $rows[ $key ] ?? array() ) );
+}
 $GLOBALS['ab_cleaned'] = array();
 function clean_post_cache( $id ) { $GLOBALS['ab_cleaned'][] = (int) $id; }
 /* The post types as WooCommerce registers them: product_variation borrows the capabilities of product. */
@@ -400,7 +412,7 @@ function wc_get_order( $id ) { return $GLOBALS['O'][ (int) $id ] ?? false; }
 /* A coupon: read by its id, saved, used, held, trashed. */
 class WC_Coupon {
 	public $id   = 0;
-	public $data = array( 'code' => '', 'status' => 'publish', 'amount' => '0', 'discount_type' => 'fixed_cart', 'date_created' => null, 'date_expires' => null, 'date_modified' => null, 'usage_count' => 0, 'used_by' => array(), 'held' => 0, 'individual_use' => false, 'minimum_amount' => '', 'product_ids' => array(), 'meta' => array() );
+	public $data = array( 'code' => '', 'status' => 'publish', 'amount' => '0', 'discount_type' => 'fixed_cart', 'date_created' => null, 'date_expires' => null, 'date_modified' => null, 'usage_count' => 0, 'used_by' => array(), 'holds' => array(), 'individual_use' => false, 'minimum_amount' => '', 'product_ids' => array(), 'meta' => array() );
 	public function __construct( $data = '' ) {
 		if ( is_int( $data ) && 'shop_coupon' === get_post_type( $data ) ) {
 			if ( ! isset( $GLOBALS['C'][ $data ] ) ) { throw new Exception( 'Invalid coupon.' ); }
@@ -421,7 +433,7 @@ class WC_Coupon {
 	public function get_data() {
 		$out = array( 'id' => $this->id );
 		foreach ( $this->data as $k => $v ) {
-			if ( in_array( $k, array( 'held', 'meta' ), true ) ) { continue; }
+			if ( in_array( $k, array( 'holds', 'meta' ), true ) ) { continue; }
 			$out[ $k ] = in_array( $k, array( 'date_created', 'date_expires', 'date_modified' ), true ) && null !== $v ? new AB_WC_DateTime( $v ) : $v;
 		}
 		$out['meta_data'] = array();
@@ -476,7 +488,7 @@ class WC_Coupon {
 	public function get_data_store() {
 		return new class {
 			public function has_callable( $m ) { return 'get_tentative_usage_count' === $m; }
-			public function get_tentative_usage_count( $id ) { return (string) ( $GLOBALS['C'][ (int) $id ]['held'] ?? 0 ); }
+			public function get_tentative_usage_count( $id ) { return (string) count( $GLOBALS['C'][ (int) $id ]['holds'] ?? array() ); }
 		};
 	}
 }
@@ -756,6 +768,52 @@ ok( ab_token( $res ) && array( 'status' ) === array_keys( AB_MCP_Undo::claim( $r
 $GLOBALS['ab_meta_veto'] = array();
 ok( 1 === ab_undo( $res['undo'] )['undone'] && 'publish' === ab_p( 7, 'status' ) && '10' === ab_p( 7, 'regular_price' ), 'C8h ... and its undo puts the status back' );
 
+// Codex 31.10. (4): field by field. 10/5, the call 20/8, a filter refuses
+// only the sale price: stored 20/5, the point holds that, and the undo at
+// once takes it back.
+reset_all();
+ab_product( 7, array( 'sale_price' => '5', 'price' => '5' ) );
+$GLOBALS['ab_meta_veto'] = array( 'sale_price' );
+$res                     = ab_update( array( 'regular_price' => '20', 'sale_price' => '8' ) );
+$GLOBALS['ab_meta_veto'] = array();
+ok( ab_token( $res ) && '20' === ab_p( 7, 'regular_price' ) && '5' === ab_p( 7, 'sale_price' ) && array( 'sale_price' ) === $res['saved_differs'] && '5' === $res['saved_fields']->sale_price, 'C8i a sale price a filter refused beside a stored regular price: saved_differs names it' );
+$out = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && array() === $out['blocked'] && '10' === ab_p( 7, 'regular_price' ) && '5' === ab_p( 7, 'sale_price' ), 'C8j ... the undo at once puts 10/5 back, no changed_since' );
+
+// Codex 31.10. (4): a stock stored is a change stored, though no part of
+// the point. Stock 3 to 10 stored, the price refused: no error.
+reset_all();
+ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
+$GLOBALS['ab_meta_veto'] = array( 'regular_price' );
+$res                     = ab_update( array( 'regular_price' => '20', 'stock' => 10 ) );
+$GLOBALS['ab_meta_veto'] = array();
+ok( is_array( $res ) && true === $res['updated'] && 10 === ab_p( 7, 'stock_quantity' ) && 10 === $res['saved_fields']->stock && '10' === $res['saved_fields']->regular_price && array( 'regular_price' ) === $res['saved_differs'], 'C8k the stock stored, the price refused: updated, saved_fields and saved_differs say which' );
+ok( null === $res['undo'] && 0 === ab_points() && AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) ) === $res['undo_note'], 'C8l ... no point, undo_note the note of the stock with its value before' );
+
+// Codex 31.10. (4): future and publish are WordPress's only where the date
+// of the post says so. A product dated tomorrow set to future and published
+// right after the save by another request: not the call's.
+reset_all();
+ab_product( 7, array( 'status' => 'draft', 'date' => time() + 86400 ) );
+$GLOBALS['ab_after_save'] = static function ( $id ) { $GLOBALS['P'][ $id ]['status'] = 'publish'; };
+$res                      = ab_update( array( 'status' => 'future' ) );
+$out                      = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && 'publish' === ab_p( 7, 'status' ), 'C8m publish with a date ahead is not WordPress\'s making of future: another request\'s, refused without force' );
+reset_all();
+ab_product( 7, array( 'status' => 'draft' ) ); // dated yesterday
+$GLOBALS['ab_after_save'] = static function ( $id ) { $GLOBALS['P'][ $id ]['status'] = 'future'; };
+$res                      = ab_update( array( 'status' => 'publish' ) );
+ok( 'changed_since' === ab_undo( $res['undo'] )['blocked'][0]['reason'] && 'future' === ab_p( 7, 'status' ), 'C8n and future with a date passed is not WordPress\'s making of publish' );
+
+// A field the call did not change, changed by another request right after
+// the save: no part of the point, so the undo of the status goes through
+// and that price stays.
+reset_all();
+$GLOBALS['ab_after_save'] = static function ( $id ) { $GLOBALS['P'][ $id ]['regular_price'] = '13'; };
+$res                      = ab_update( array( 'status' => 'draft' ) );
+ok( array( 'status' ) === array_keys( AB_MCP_Undo::claim( $res['undo'] )['data']['before'] ), 'C8o a price another request set right after a status change: the point holds the status only' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && 'publish' === ab_p( 7, 'status' ) && '13' === ab_p( 7, 'regular_price' ), 'C8p ... its undo puts the status back and leaves that price' );
+
 // A price another request set right after the save is not the tool's: the
 // point holds the price the tool saved, so the newer one is not undone
 // without force.
@@ -897,7 +955,7 @@ ok( true === $res['created'] && 'fruehling' === $res['code'] && ab_token( $res )
 ok( array( 'code' => 'fruehling', 'amount' => '10', 'discount_type' => 'percent', 'expires' => '2026-12-31' ) === (array) $res['saved_fields'] && ! isset( $res['saved_differs'] ), 'E2 saved_fields: code, amount, discount_type and expires as stored, as wp_wc_list_coupons shows them' );
 $c = AB_MCP_Undo::claim( $res['undo'] );
 ok( 'wp_wc_create_coupon' === $c['entry']['tool'] && 'wc_coupon' === $c['entry']['kind'] && 'manage_woocommerce' === $c['entry']['cap'] && sprintf( 'new coupon #%d', $id ) === $c['entry']['summary'], 'E3 kind wc_coupon, the capability of the tool, the summary names the coupon by id' );
-ok( array( 'v', 'id', 'after' ) === array_keys( $c['data'] ) && $id === $c['data']['id'] && array( 'coupon', 'use' ) === array_keys( $c['data']['after'] ), 'E4 the snapshot names the coupon and keeps the state after' );
+ok( array( 'v', 'id', 'after' ) === array_keys( $c['data'] ) && $id === $c['data']['id'] && array( 'coupon' ) === array_keys( $c['data']['after'] ), 'E4 the snapshot names the coupon and keeps its state after; its use is asked at the undo' );
 $dry = ab_undo( $res['undo'], array( 'dry_run' => true ) );
 ok( 1 === $dry['would_undo'] && 'publish' === ab_coupon( $id )['status'], 'E5 the dry run would restore it and changes nothing' );
 $GLOBALS['ab_filters']['ab_mcp_pro_page_cache_purgers'] = static fn( $all, $scope ) => array( 'host-' . $scope => static function () {} );
@@ -909,33 +967,59 @@ unset( $GLOBALS['ab_filters']['ab_mcp_pro_page_cache_purgers'] );
 ok( 'ok' === ( is_wp_error( ab_create() ) ? 'no' : 'ok' ), 'E9 and a new coupon can take the code again' );
 
 foreach ( array(
-	'used in an order'   => array( 'use', static function ( $id ) { $GLOBALS['C'][ $id ]['usage_count'] = 1; $GLOBALS['C'][ $id ]['used_by'] = array( '12' ); } ),
-	'held by an order'   => array( 'use', static function ( $id ) { $GLOBALS['C'][ $id ]['held'] = 1; } ),
-	'given a new amount' => array( 'coupon', static function ( $id ) { $GLOBALS['C'][ $id ]['amount'] = '20'; } ),
-	'saved in wp-admin'  => array( 'coupon', static function ( $id ) { $c = new WC_Coupon( $id ); $c->set_individual_use( true ); $c->save(); } ),
-	'given an expiry'    => array( 'coupon', static function ( $id ) { $GLOBALS['C'][ $id ]['date_expires'] = 1900000000; } ),
+	'given a new amount' => static function ( $id ) { $GLOBALS['C'][ $id ]['amount'] = '20'; },
+	'saved in wp-admin'  => static function ( $id ) { $c = new WC_Coupon( $id ); $c->set_individual_use( true ); $c->save(); },
+	'given an expiry'    => static function ( $id ) { $GLOBALS['C'][ $id ]['date_expires'] = 1900000000; },
 	// Codex 31.10.: a restriction set by meta alone (the REST API, say),
 	// which leaves the time of the last change as it was.
-	'given a minimum spend by meta'   => array( 'coupon', static function ( $id ) { $GLOBALS['C'][ $id ]['minimum_amount'] = '50'; } ),
-	'limited to a product by meta'    => array( 'coupon', static function ( $id ) { $GLOBALS['C'][ $id ]['product_ids'] = array( 7 ); } ),
-	'given a meta row of a plugin'    => array( 'coupon', static function ( $id ) { $GLOBALS['C'][ $id ]['meta']['_plugin_rule'] = 'members'; } ),
-	'remembering a customer alone'    => array( 'use', static function ( $id ) { $GLOBALS['C'][ $id ]['used_by'] = array( 'anna@example.test' ); } ),
-) as $what => $case ) {
+	'given a minimum spend by meta'   => static function ( $id ) { $GLOBALS['C'][ $id ]['minimum_amount'] = '50'; },
+	'limited to a product by meta'    => static function ( $id ) { $GLOBALS['C'][ $id ]['product_ids'] = array( 7 ); },
+	'given a meta row of a plugin'    => static function ( $id ) { $GLOBALS['C'][ $id ]['meta']['_plugin_rule'] = 'members'; },
+) as $what => $change ) {
 	reset_all();
 	$res = ab_create();
-	( $case[1] )( $res['id'] );
+	$change( $res['id'] );
 	$out = ab_undo( $res['undo'] );
-	ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && array( $case[0] ) === $out['blocked'][0]['locs'] && 'publish' === ab_coupon( $res['id'] )['status'] && null !== ab_entry( $res['undo'] ), "E10 a coupon $what since is not trashed, the location named, the point stays" );
+	ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && array( 'coupon' ) === $out['blocked'][0]['locs'] && 'publish' === ab_coupon( $res['id'] )['status'] && null !== ab_entry( $res['undo'] ), "E10 a coupon $what since is not trashed, the location named, the point stays" );
 }
 $out = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 1 === $out['undone'] && 'trash' === ab_coupon( $res['id'] )['status'], 'E11 with force it is' );
 
+// Codex 31.10. (4), decision of 30.10.2026: only an unused coupon goes,
+// whatever force says; the answer says why and what to do instead.
+foreach ( array(
+	'used in an order'             => static function ( $id ) { $GLOBALS['C'][ $id ]['usage_count'] = 1; $GLOBALS['C'][ $id ]['used_by'] = array( '12' ); },
+	'counted as used alone'        => static function ( $id ) { $GLOBALS['C'][ $id ]['usage_count'] = 1; },
+	'remembering a customer alone' => static function ( $id ) { $GLOBALS['C'][ $id ]['used_by'] = array( 'anna@example.test' ); },
+	'held for its usage limit'     => static function ( $id ) { $GLOBALS['C'][ $id ]['holds'] = array( '_coupon_held_' . ( time() + 600 ) . '_abcdef' ); },
+	'held for a customer\'s limit' => static function ( $id ) { $GLOBALS['C'][ $id ]['holds'] = array( '_maybe_used_by_' . ( time() + 600 ) . '_abcdef' ); },
+) as $what => $use ) {
+	reset_all();
+	$res = ab_create();
+	$use( $res['id'] );
+	$out = ab_undo( $res['undo'], array( 'force' => true ) );
+	ok( 0 === $out['undone'] && 'in_use' === $out['blocked'][0]['reason'] && 'publish' === ab_coupon( $res['id'] )['status'] && null !== ab_entry( $res['undo'] ), "E10b a coupon $what: never into the trash, also with force (in_use)" );
+	ok( AB_MCP_Undo_Coupons::in_use_note( $res['id'] ) === $out['blocked'][0]['note'] && false !== strpos( $out['blocked'][0]['note'], 'Marketing › Coupons' ) && false !== strpos( $out['blocked'][0]['note'], 'wp_wc_list_coupons' ), "E10c ... the answer says why and what to do instead ($what)" );
+}
+$dry = ab_undo( $res['undo'], array( 'dry_run' => true, 'force' => true ) );
+ok( 0 === $dry['would_undo'] && 'in_use' === $dry['blocked'][0]['reason'] && isset( $dry['blocked'][0]['note'] ), 'E10d the dry run says so too' );
+
+reset_all();
+$res                                      = ab_create();
+$GLOBALS['C'][ $res['id'] ]['holds'] = array( '_coupon_held_' . ( time() - 600 ) . '_abcdef', '_coupon_held_x' ); // a hold run out, a row of another form
+ok( 1 === ab_undo( $res['undo'] )['undone'] && 'trash' === ab_coupon( $res['id'] )['status'], 'E10e a hold whose time ran out holds nothing: the unused coupon goes' );
+reset_all();
+$res = ab_create();
+$GLOBALS['C'][ $res['id'] ]['usage_count'] = 1;
+$GLOBALS['C'][ $res['id'] ]['usage_count'] = 0; // the order was cancelled: WooCommerce counted it back
+ok( 1 === ab_undo( $res['undo'] )['undone'], 'E10f a use counted back is no use' );
+
 reset_all();
 $res  = ab_create();
-$plan = AB_MCP_Undo_Coupons::plan( 'wp_wc_create_coupon', AB_MCP_Undo::claim( $res['undo'] )['data'], false );
+$plan = AB_MCP_Undo_Coupons::plan( 'wp_wc_create_coupon', AB_MCP_Undo::claim( $res['undo'] )['data'], true );
 $GLOBALS['C'][ $res['id'] ]['usage_count'] = 1; // used between the plan and the write
 $again = AB_MCP_Undo_Coupons::restore( $plan['items'][0] );
-ok( 'ab_mcp_undo_coupon_changed' === ab_code( $again ) && false !== strpos( ab_msg( $again ), 'force=true' ) && 'publish' === ab_coupon( $res['id'] )['status'], 'E12 used between the plan and the write: refused, with the way' );
+ok( 'ab_mcp_undo_coupon_in_use' === ab_code( $again ) && AB_MCP_Undo_Coupons::in_use_note( $res['id'] ) === ab_msg( $again ) && 'publish' === ab_coupon( $res['id'] )['status'], 'E12 used between the plan and the write, with force: refused, with the note' );
 
 reset_all();
 $res = ab_create();
@@ -1046,8 +1130,8 @@ $coupon = ab_create();
 $cgood  = AB_MCP_Undo::claim( $coupon['undo'] )['data'];
 foreach ( array(
 	'a field more'          => array_merge( $cgood, array( 'before' => array() ) ),
-	'without its use'       => array_merge( $cgood, array( 'after' => array( 'coupon' => $cgood['after']['coupon'] ) ) ),
-	'a hash that is none'   => array_merge( $cgood, array( 'after' => array( 'coupon' => 'x', 'use' => $cgood['after']['use'] ) ) ),
+	'with a location of use' => array_merge( $cgood, array( 'after' => array( 'coupon' => $cgood['after']['coupon'], 'use' => $cgood['after']['coupon'] ) ) ),
+	'a hash that is none'    => array_merge( $cgood, array( 'after' => array( 'coupon' => 'x' ) ) ),
 	'the id below one'      => array_merge( $cgood, array( 'id' => 0 ) ),
 ) as $what => $data ) {
 	$t = ab_forge( 'wp_wc_create_coupon', 'wc_coupon', $data );

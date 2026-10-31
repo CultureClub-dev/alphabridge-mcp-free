@@ -5096,8 +5096,8 @@ msgstr "La papelera está desactivada en este sitio (EMPTY_TRASH_DAYS es 0), y d
 msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
 msgstr "WooCommerce no ha enviado el cupón %d a la papelera; el punto de restauración se mantiene. Un plugin puede retenerlo. Comprueba los cupones con wp_wc_list_coupons y vuelve a intentarlo."
 
-msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
-msgstr "El cupón se ha cambiado o usado después de planificar el deshacer; no se ha restaurado nada. Indica force=true para enviarlo a la papelera pese al cambio más reciente."
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "El cupón se ha cambiado después de planificar el deshacer; no se ha restaurado nada. Indica force=true para enviarlo a la papelera pese al cambio más reciente."
 
 msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "La instantánea del cupón no tiene una forma que esta herramienta escriba; no se ha restaurado nada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
@@ -5125,3 +5125,6 @@ msgstr "El inventario no forma parte del deshacer: restablecerlo desharía los p
 
 msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
 msgstr "El inventario no forma parte del deshacer: restablecerlo desharía los pedidos realizados desde entonces. Antes de esta llamada era %s. wp_wc_get_product muestra el inventario actual, y wp_wc_update_product lo vuelve a fijar donde se desee, menos lo vendido desde entonces."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "El cupón %d se ha usado o está reservado por un pedido que se está pagando, y deshacer solo envía a la papelera un cupón sin usar, también con force=true: los pedidos que lo usaron lo conservan. Para retirarlo del uso, ponle una fecha de caducidad o un límite de uso en wp-admin en Marketing › Cupones; wp_wc_list_coupons muestra los cupones."

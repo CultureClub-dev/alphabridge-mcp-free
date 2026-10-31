@@ -5096,8 +5096,8 @@ msgstr "La corbeille est désactivée sur ce site (EMPTY_TRASH_DAYS vaut 0), et 
 msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
 msgstr "WooCommerce n'a pas mis le code promo %d à la corbeille ; le point de restauration reste. Une extension peut le retenir. Vérifiez les codes promo avec wp_wc_list_coupons, puis réessayez."
 
-msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
-msgstr "Le code promo a été modifié ou utilisé après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour le mettre à la corbeille malgré la modification plus récente."
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "Le code promo a été modifié après la planification de l'annulation ; rien n'a été restauré. Transmettez force=true pour le mettre à la corbeille malgré la modification plus récente."
 
 msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'instantané du code promo n'a pas une forme que cet outil écrit ; rien n'a été restauré. Ce point de restauration est inutilisable ; wp_undo_discard le supprime."
@@ -5125,3 +5125,6 @@ msgstr "Le stock ne fait pas partie de l'annulation : le remettre annulerait les
 
 msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
 msgstr "Le stock ne fait pas partie de l'annulation : le remettre annulerait les commandes passées depuis. Avant cet appel, il était de %s. wp_wc_get_product affiche le stock actuel, et wp_wc_update_product le redéfinit si on le souhaite, moins ce qui a été vendu depuis."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "Le code promo %d a été utilisé ou est réservé par une commande en cours de paiement, et l'annulation ne met à la corbeille qu'un code promo inutilisé, même avec force=true : les commandes qui l'ont utilisé le conservent. Pour le retirer de l'usage, donnez-lui une date d'expiration ou une limite d'utilisation sous Marketing › Codes promo dans wp-admin ; wp_wc_list_coupons liste les codes promo."

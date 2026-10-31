@@ -5096,8 +5096,8 @@ msgstr "Il cestino è disattivato su questo sito (EMPTY_TRASH_DAYS è 0), e l'an
 msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
 msgstr "WooCommerce non ha spostato il coupon %d nel cestino; il punto di ripristino resta. Un plugin può trattenerlo. Controlla i coupon con wp_wc_list_coupons e riprova."
 
-msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
-msgstr "Il coupon è stato modificato o usato dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per spostarlo nel cestino nonostante la modifica più recente."
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "Il coupon è stato modificato dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per spostarlo nel cestino nonostante la modifica più recente."
 
 msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'istantanea del coupon non ha una forma che questo strumento scrive; non è stato ripristinato nulla. Questo punto di ripristino non è utilizzabile; wp_undo_discard lo rimuove."
@@ -5125,3 +5125,6 @@ msgstr "Le scorte non fanno parte dell'annullamento: ripristinarle annullerebbe 
 
 msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
 msgstr "Le scorte non fanno parte dell'annullamento: ripristinarle annullerebbe gli ordini effettuati nel frattempo. Prima di questa chiamata erano %s. wp_wc_get_product mostra le scorte attuali, e wp_wc_update_product le reimposta dove lo si desidera, meno quanto venduto nel frattempo."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "Il coupon %d è stato usato o è riservato da un ordine in fase di pagamento, e l'annullamento sposta nel cestino solo un coupon non usato, anche con force=true: gli ordini che lo hanno usato lo mantengono. Per toglierlo dall'uso, assegnagli una data di scadenza o un limite di utilizzo in wp-admin sotto Marketing › Codici promozionali; wp_wc_list_coupons elenca i coupon."
