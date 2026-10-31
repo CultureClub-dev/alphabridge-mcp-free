@@ -56,6 +56,12 @@ abstract class AB_MCP_Undo_Meta_Rules extends AB_MCP_Tools_Meta_Auth {
 	 * the reader as in the writer. A writer's answer does not show the
 	 * stored value of a key its reader would not show.
 	 *
+	 * The allow-listed protected keys wp_get_post and wp_get_post_meta add
+	 * for an account with manage_options (include_protected, since 4.14.0)
+	 * count as refused here all the same: the writers refuse "_" keys before
+	 * they write, and a key a plugin marks as protected without "_" stays
+	 * out of their answers even where a site allow-lists it.
+	 *
 	 * @param string $type post, term or user.
 	 * @param string $key  Meta key.
 	 * @return bool

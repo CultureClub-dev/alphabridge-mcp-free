@@ -1593,8 +1593,8 @@ msgstr "Cette URL pointe vers un hôte privé ou non autorisé et a été bloqu�
 msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
 msgstr "Cette connexion a le niveau d'accès « %2$s », qui n'inclut pas l'outil « %1$s »."
 
-msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder's layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them."
-msgstr "Cette clé méta est protégée : les clés qui commencent par « _ », que WordPress marque comme protégées ou qui ressemblent à des identifiants d'accès ne sont pas lues par cet outil. Lisez la mise en page d'un constructeur de pages avec wp_get_builder_layout et les champs SEO avec wp_seo_get ; les autres clés protégées relèvent de l'extension à laquelle elles appartiennent."
+msgid "This meta key looks like a credential (a password, a token, a secret or an API key, for example): such keys are not read through this tool for any account, and their values stay on the site. They belong to the plugin that owns them."
+msgstr "Cette clé méta ressemble à un identifiant d'accès (un mot de passe, un jeton, un secret ou une clé d'API, par exemple) : cet outil ne lit ces clés pour aucun compte, et leurs valeurs restent sur le site. Elles relèvent de l'extension à laquelle elles appartiennent."
 
 msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them."
 msgstr "Cette clé méta est protégée : les clés qui commencent par « _ », que WordPress marque comme protégées ou qui ressemblent à des identifiants d'accès ne sont pas lues par cet outil ; elles relèvent de l'extension à laquelle elles appartiennent."
@@ -5089,3 +5089,15 @@ msgstr "WordPress n'a pas enregistré le nouveau statut du commentaire %d : il a
 
 msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
 msgstr "L'article de ce commentaire est dans la corbeille, ce qui met ses commentaires en post-trashed, et aucun appel de WordPress ne remet un commentaire dans ce statut. WordPress rend aux commentaires d'un article le statut qu'ils avaient avant lorsque l'article sort de la corbeille : sortez l'article de la corbeille avec wp_bulk_update_status ou sous Articles › Corbeille dans wp-admin, puis vérifiez le commentaire avec wp_get_comment."
+
+msgid "include_protected requires the manage_options capability. Leave it out, or connect with an administrator account."
+msgstr "include_protected nécessite la permission manage_options. Laissez-le de côté, ou connectez-vous avec le compte d'un administrateur."
+
+msgid "This meta key is protected. Of the protected keys only the allow-listed page-builder and layout keys can be read (a site owner extends the list with the ab_mcp_pro_protected_meta_allowlist filter); include_protected=true lists the ones this post has."
+msgstr "Cette clé méta est protégée. Parmi les clés protégées, seules les clés de constructeur de pages et de mise en page de la liste autorisée peuvent être lues (le propriétaire du site étend la liste avec le filtre ab_mcp_pro_protected_meta_allowlist) ; include_protected=true liste celles que possède cet article."
+
+msgid "Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account."
+msgstr "Lire une clé méta protégée nécessite la permission manage_options, comme include_protected : connectez-vous avec le compte d'un administrateur."
+
+msgid "Only allow-listed protected keys are returned. Other plugins' internal keys are never exposed."
+msgstr "Seules les clés protégées de la liste autorisée sont renvoyées. Les clés internes des autres extensions ne sont jamais exposées."

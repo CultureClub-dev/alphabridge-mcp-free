@@ -3176,35 +3176,6 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 	}
 
 	/**
-	 * Protected ("_") meta keys that include_protected may return. Deliberately
-	 * an allow-list of known builder/layout fields: a block-list could never
-	 * know every secret another plugin decides to store in post meta, and this
-	 * data leaves the site through an external API.
-	 *
-	 * Sites that genuinely need another key can add it via the filter — that is
-	 * an intentional extension point, and the per-key capability still applies.
-	 *
-	 * @return string[]
-	 */
-	public static function protected_meta_allowlist() {
-		return (array) apply_filters(
-			'ab_mcp_pro_protected_meta_allowlist',
-			array(
-				'_elementor_data',
-				'_elementor_page_settings',
-				'_elementor_edit_mode',
-				'_elementor_template_type',
-				'_elementor_controls_usage',
-				'_wp_page_template',
-				'_thumbnail_id',
-				'_wp_attached_file',
-				'_wp_attachment_image_alt',
-				'_wp_attachment_metadata',
-			)
-		);
-	}
-
-	/**
 	 * Post meta keys in which a page builder keeps markup or code that ends up
 	 * in the page: layout trees with HTML fields, compiled HTML, page CSS and
 	 * JavaScript. A builder's own save path filters such data for an account
@@ -3357,35 +3328,5 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 			}
 		}
 		return false;
-	}
-
-	/**
-	 * May this protected key be exposed? Allow-list membership is not enough on
-	 * its own — the per-key meta capability must also pass, so any
-	 * register_meta() auth_callback still has the final say.
-	 *
-	 * @param string $key Meta key.
-	 * @param int    $id  Post id.
-	 * @return bool
-	 */
-	public static function may_expose_protected( $key, $id ) {
-		if ( ! in_array( $key, self::protected_meta_allowlist(), true ) ) {
-			return false;
-		}
-		// A key registered through register_meta()/register_post_meta() carries an
-		// auth_callback. That callback is the site's own explicit decision about
-		// who may touch the key, so it wins over anything we think.
-		if ( registered_meta_key_exists( 'post', $key, (string) get_post_type( $id ) )
-			|| registered_meta_key_exists( 'post', $key ) ) {
-			return current_user_can( 'edit_post_meta', $id, $key );
-		}
-		// Unregistered protected key — the normal case for builder payloads like
-		// _elementor_data. WordPress default-DENIES edit_post_meta for every
-		// protected key that has no auth_callback, so asking it here would deny
-		// even an administrator and make the allow-list unreachable: the feature
-		// would silently return nothing. For these keys the allow-list is itself
-		// the authorisation decision (they are vetted layout data, not secrets);
-		// editing rights on the post are still required.
-		return current_user_can( 'edit_post', $id );
 	}
 }
