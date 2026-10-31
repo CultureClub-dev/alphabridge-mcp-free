@@ -41,6 +41,8 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-update-guard.php';
 require_once __DIR__ . '/class-change-lock.php';
+// The files of wp-admin an activation routine expects.
+require_once __DIR__ . '/class-admin-files.php';
 
 /**
  * Class AB_MCP_Activation_Guard
@@ -146,7 +148,9 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 		// (Codex, 05.10.2026). The stored list counts after the switch.
 		if ( $network_wide ? is_plugin_active_for_network( $file ) : is_plugin_active( $file ) ) {
 			// Its code runs already; nothing new to test. Called all the same:
-			// a plugin active network-wide still gets onto this site's list.
+			// a plugin active network-wide still gets onto this site's list,
+			// and its activation hook runs for that.
+			AB_MCP_Admin_Files::load();
 			$res = activate_plugin( $file, '', $network_wide );
 			return is_wp_error( $res ) ? $res : array( 'already_active' => true ) + $extra;
 		}
@@ -460,12 +464,17 @@ class AB_MCP_Activation_Guard extends AB_MCP_Update_Guard {
 	 * its activation hook — comes back as an error, with the output buffer
 	 * activate_plugin() opened closed again.
 	 *
+	 * The files of wp-admin come first (AB_MCP_Admin_Files): an activation
+	 * hook, and the switch_theme callbacks of the theme left, run here as in
+	 * wp-admin, where those files are loaded.
+	 *
 	 * @param array $job See activate().
 	 * @return true|WP_Error
 	 */
 	private static function switch_on( array $job ) {
 		$level = ob_get_level();
 		try {
+			AB_MCP_Admin_Files::load();
 			$res = call_user_func( $job['activate'] );
 		} catch ( \Throwable $e ) {
 			while ( ob_get_level() > $level ) {
