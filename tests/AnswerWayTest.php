@@ -487,6 +487,9 @@ final class AnswerWayTest extends TestCase {
 		'ab_mcp_bad_status'         => 'names the statuses it accepts',
 		'ab_mcp_elementor_not_json' => 'a note on a copy that was made, not a refusal',
 		'ab_mcp_elementor_ids'      => 'a note on a copy that was made, not a refusal',
+		// The staging record (4.15.0): the message is the list of what each
+		// field must be (AB_MCP_Staging::problem()).
+		'ab_mcp_staging_invalid'    => 'names what each field must be',
 	);
 
 	/**
@@ -498,6 +501,12 @@ final class AnswerWayTest extends TestCase {
 	 * 4.10.0, with the writers.
 	 */
 	private const REASON_ONLY = array(
+		// The refusals of AB_MCP_Outbound::get() (4.15.0), which its caller
+		// turns into a finding with the steps (AB_MCP_Staging::check_partner()).
+		'The address was not asked: its host name has no address.',
+		'The address was not asked: it is local or not public.',
+		'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.',
+		'The address was not asked: the request would go through the proxy, which looks the name up itself.',
 		'After the save %s did not hold what was written.',
 		'After the save Beaver Builder\'s draft did not hold the same elements as before.',
 		'After the save the page had %2$d elements instead of %1$d (missing: %3$s).',

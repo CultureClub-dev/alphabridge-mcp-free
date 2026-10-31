@@ -109,6 +109,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http']        = array();
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
+	$GLOBALS['ab_test_http_transport'] = 'curl';
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
@@ -118,6 +119,7 @@ function ab_test_reset(): void {
 	unset( $GLOBALS['pagenow'] );
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
+	$GLOBALS['ab_test_environment'] = 'production';
 }
 
 function get_option( $name, $default = false ) {
@@ -1221,6 +1223,15 @@ function checked( $checked, $current = true, $display = true ) {
 	return $out;
 }
 
+/** Like checked(), for the options of a select. */
+function selected( $selected, $current = true, $display = true ) {
+	$out = ( (string) $selected === (string) $current ) ? " selected='selected'" : '';
+	if ( $display ) {
+		echo $out; // phpcs:ignore
+	}
+	return $out;
+}
+
 function wp_dropdown_users( $args = array() ) {
 	$html = '<select name="' . ( $args['name'] ?? 'user' ) . '"></select>';
 	if ( ! isset( $args['echo'] ) || $args['echo'] ) {
@@ -1543,6 +1554,11 @@ $GLOBALS['ab_test_http'] = array();
 $GLOBALS['ab_test_http_answer'] = null;
 /** @var bool $ab_test_http_curl When true, every call also records what cURL was told about host addresses ('curl'). */
 $GLOBALS['ab_test_http_curl'] = false;
+/** @var string $ab_test_http_transport The transport WordPress picks: curl (the http_api_curl hook runs), fsockopen (its first hook runs) or other (none). */
+$GLOBALS['ab_test_http_transport'] = 'curl';
+require_once __DIR__ . '/support/requests-exception.php';
+// WordPress' proxy settings (WP_PROXY_HOST …), a fixed copy from 7.0.2.
+require_once __DIR__ . '/support/class-wp-http-proxy.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
@@ -1561,7 +1577,19 @@ function wp_safe_remote_get( $url, $args = array() ) {
 		'url'  => (string) $url,
 		'args' => (array) $args,
 	);
-	if ( function_exists( 'curl_init' ) ) {
+	// The transport WordPress would pick (ab_test_http_transport): with
+	// fsockopen, its first hook runs before it connects, and an exception
+	// of Requests there ends the request as WP_Http::request() does, with
+	// nothing sent; with another one no cURL hook runs at all.
+	$transport = $GLOBALS['ab_test_http_transport'] ?? 'curl';
+	if ( 'fsockopen' === $transport ) {
+		try {
+			do_action_ref_array( 'requests-fsockopen.before_request', array() );
+		} catch ( WpOrg\Requests\Exception $e ) {
+			return new WP_Error( 'http_request_failed', $e->getMessage() );
+		}
+	}
+	if ( 'curl' === $transport && function_exists( 'curl_init' ) ) {
 		$handle = curl_init();
 		do_action_ref_array( 'http_api_curl', array( &$handle, (array) $args, (string) $url ) );
 		if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {
@@ -1675,6 +1703,13 @@ function wp_remote_retrieve_headers( $response ) {
 function wp_remote_retrieve_header( $response, $header ) {
 	$header = strtolower( (string) $header );
 	return is_array( $response ) && isset( $response['headers'][ $header ] ) ? $response['headers'][ $header ] : '';
+}
+
+/** @var string $ab_test_environment What wp_get_environment_type() answers; production, as WordPress without a setting. */
+$GLOBALS['ab_test_environment'] = 'production';
+
+function wp_get_environment_type() {
+	return (string) $GLOBALS['ab_test_environment'];
 }
 
 /* ------------------------------------------------- login, redirects, exits */
@@ -1843,6 +1878,8 @@ require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-redactor.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/class-connection-doctor.php';
+// The staging record (4.15.0): the site contract reports its role.
+require_once __DIR__ . '/../includes/class-staging.php';
 // WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
 // file headers): the builder readers call parse_blocks().
 require_once __DIR__ . '/support/class-wp-block-parser.php';

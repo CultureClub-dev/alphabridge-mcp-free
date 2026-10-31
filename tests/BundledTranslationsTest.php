@@ -681,7 +681,7 @@ final class BundledTranslationsTest extends TestCase {
 	public function testEveryShortNameOfAToolIsTranslated( string $locale ): void {
 		$mo    = self::mo( self::file( $locale, 'mo' ) );
 		$names = \AB_MCP_Tool_Labels::all();
-		self::assertCount( 146, $names, 'Every tool of the core, of Pro and of its Agency plan (wp_find_media new in 4.12.0, wp_set_preview_protection in 4.15.0).' );
+		self::assertCount( 147, $names, 'Every tool of the core, of Pro and of its Agency plan (wp_find_media new in 4.12.0, wp_set_preview_protection and wp_staging_status in 4.15.0).' );
 		foreach ( $names as $tool => $label ) {
 			self::assertArrayHasKey( "tool label\x04" . $label, $mo, $locale . ': ' . $tool );
 			self::assertNotSame( '', $mo[ "tool label\x04" . $label ] );

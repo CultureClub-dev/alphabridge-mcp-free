@@ -136,6 +136,10 @@ AB_MCP_Own_Abilities::hook();
 // is on. Hooked by the plugin on init (AB_MCP_Plugin), after the OAuth
 // handlers it leaves out.
 require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
+// The staging record of the site (free since 4.15.0): its confirmed role,
+// the pair with the other site and the host, for wp_staging_status, the
+// settings page, the hub's REST route and the site contract.
+require_once AB_MCP_DIR . 'includes/class-staging.php';
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

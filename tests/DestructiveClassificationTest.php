@@ -87,6 +87,15 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_set_preview_protection',
 	);
 
+	/**
+	 * Tools whose definition says they only read ('readonly' => true), which
+	 * their name alone does not show; each has its own test of that
+	 * (wp_staging_status: StagingStatusTest).
+	 */
+	private const READS_BY_DEFINITION = array(
+		'wp_staging_status',
+	);
+
 	/** Tools that only ever add something new, and keep it inside the site. */
 	private const ADDS_ONLY = array(
 		'wp_create_term',
@@ -231,7 +240,7 @@ final class DestructiveClassificationTest extends TestCase {
 		$this->assertGreaterThan( 30, count( $names ), 'the tool list was not found' );
 
 		$writing = array_values(
-			array_filter( $names, static fn( $n ) => ! AB_MCP_Tool_Registry::is_read_only( $n, array() ) )
+			array_filter( $names, static fn( $n ) => ! AB_MCP_Tool_Registry::is_read_only( $n, array() ) && ! in_array( $n, self::READS_BY_DEFINITION, true ) )
 		);
 		$this->assertNotEmpty( $writing );
 

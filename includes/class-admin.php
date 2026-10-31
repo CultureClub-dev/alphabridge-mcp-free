@@ -93,6 +93,9 @@ class AB_MCP_Admin {
 		// password once (as a token is shown), so no plaintext is persisted.
 		add_action( 'admin_post_ab_mcp_preview_protection', array( $this, 'handle_preview_protection' ) );
 		add_action( 'wp_ajax_ab_mcp_preview_protection', array( $this, 'ajax_preview_protection' ) );
+		// The role of the site, the other site of its pair and the host
+		// (free since 4.15.0, AB_MCP_Staging): a plain form.
+		add_action( 'admin_post_ab_mcp_staging', array( $this, 'handle_staging_record' ) );
 		// Creating or rotating a token reveals a secret. That is done over
 		// authenticated admin-ajax so the plaintext is returned once, directly to
 		// the admin's own browser, and is never written to the database — not even
@@ -599,6 +602,36 @@ class AB_MCP_Admin {
 			$this->redirect( 'preview_off', AB_MCP_Preview_Protection::ANCHOR );
 		}
 		$this->redirect( 'saved', AB_MCP_Preview_Protection::ANCHOR );
+	}
+
+	/**
+	 * The form «Role of this site» (AB_MCP_Staging): the role, the address
+	 * of the other site and the host, saved together. Nothing is saved when
+	 * anything is wrong; the notice names the first problem. A part that
+	 * stays as it was keeps who confirmed it, when and where, also when the
+	 * hub set it.
+	 */
+	public function handle_staging_record() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_staging' );
+		$role    = isset( $_POST['staging_role'] ) ? sanitize_key( wp_unslash( $_POST['staging_role'] ) ) : '';
+		// The address as typed: AB_MCP_Staging::save() trims it, checks it
+		// and stores it only as an http(s) address of a host (anything else,
+		// a value that is no text included, is refused or read as empty);
+		// sanitize_text_field() would take percent-encoded characters out of
+		// its path and so change an unchanged pair on every save.
+		$partner = isset( $_POST['partner_url'] ) ? wp_unslash( $_POST['partner_url'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated by AB_MCP_Staging::normalize_url() in save().
+		$host    = isset( $_POST['host'] ) ? sanitize_key( wp_unslash( $_POST['host'] ) ) : '';
+		if ( ! AB_MCP_Staging::is_host_choice( $host ) ) {
+			$this->redirect( 'staging_bad_host', AB_MCP_Staging::ANCHOR );
+		}
+		$saved = AB_MCP_Staging::save( $role, $partner, null, get_current_user_id(), AB_MCP_Staging::SOURCE_FORM );
+		if ( is_wp_error( $saved ) ) {
+			$data = $saved->get_error_data();
+			$this->redirect( 'staging_bad_' . ( is_array( $data ) && isset( $data['problems'][0] ) ? $data['problems'][0] : 'role' ), AB_MCP_Staging::ANCHOR );
+		}
+		AB_MCP_Staging::set_host( $host, get_current_user_id() );
+		$this->redirect( 'staging_saved', AB_MCP_Staging::ANCHOR );
 	}
 
 	/**
@@ -1181,7 +1214,9 @@ class AB_MCP_Admin {
 	 * On and a new password run over ajax (ajax_preview_protection()), so the
 	 * password reaches only this browser, once; off is a plain form
 	 * (handle_preview_protection()). The card ends with what the protection
-	 * does not cover. A first step of the card «Staging» of a later version.
+	 * does not cover, then the form for the role of the site, the other
+	 * site of its pair and the host (staging_record_html()). A first step of
+	 * the card «Staging» of a later version.
 	 *
 	 * @return string HTML, escaped.
 	 */
@@ -1221,8 +1256,106 @@ class AB_MCP_Admin {
 		$missing = $on && ! AB_MCP_Preview_Protection::loader_current();
 		$html   .= '<div class="notice notice-warning inline ab-preview__loader"' . ( $missing ? '' : ' hidden' ) . '><p class="ab-preview__loader-text">' . ( $missing ? esc_html( $this->preview_loader_note() ) : '' ) . '</p>';
 		$html   .= '<details><summary>' . esc_html__( 'File content', 'alphabridge-mcp' ) . '</summary><textarea readonly rows="12" class="ab-preview__source" aria-label="' . esc_attr__( 'File content', 'alphabridge-mcp' ) . '">' . ( $missing ? esc_textarea( AB_MCP_Preview_Protection::loader_source() ) : '' ) . '</textarea></details></div>';
+		$html   .= $this->staging_record_html();
 		$html   .= '</div>';
 		return $html;
+	}
+
+	/**
+	 * The form «Role of this site» in the card above (AB_MCP_Staging): the
+	 * confirmed role with who and when, the suggestion from what the site
+	 * shows (a hint, never proof), the address of the other site of the
+	 * pair, and the host as detected or chosen. One plain form
+	 * (handle_staging_record()).
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function staging_record_html() {
+		$record     = AB_MCP_Staging::record();
+		$role       = null !== $record['role'] ? $record['role']['value'] : AB_MCP_Staging::ROLE_UNCONFIRMED;
+		$suggestion = AB_MCP_Staging::suggestion();
+		$detected   = AB_MCP_Staging::detect_host();
+		$chosen     = null !== $record['host'] ? $record['host']['value'] : '';
+		$labels     = self::staging_role_labels();
+
+		$html  = '<div class="ab-staging" id="' . esc_attr( AB_MCP_Staging::ANCHOR ) . '">';
+		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Role of this site', 'alphabridge-mcp' ) . '</h3>';
+		$html .= '<p class="ab-direct__status ab-staging-status">' . esc_html( $this->staging_status_text( $record ) ) . '</p>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-staging__form">';
+		$html .= wp_nonce_field( 'ab_mcp_staging', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_staging">';
+		$html .= '<fieldset class="ab-staging__role"><legend class="screen-reader-text">' . esc_html__( 'Role of this site', 'alphabridge-mcp' ) . '</legend>';
+		foreach ( array( AB_MCP_Staging::ROLE_UNCONFIRMED, AB_MCP_Staging::ROLE_PRODUCTION, AB_MCP_Staging::ROLE_STAGING ) as $value ) {
+			$html .= '<label><input type="radio" name="staging_role" value="' . esc_attr( $value ) . '"' . checked( $role, $value, false ) . '> ' . esc_html( $labels[ $value ] ) . '</label> ';
+		}
+		$html .= '</fieldset>';
+		if ( array() !== $suggestion['hints'] ) {
+			/* translators: %s: what the site shows, one or more sentences. */
+			$hint = sprintf( __( 'Suggestion: staging site. %s', 'alphabridge-mcp' ), implode( ' ', array_column( $suggestion['hints'], 'finding' ) ) ) . ' ' . __( 'A suggestion is a hint, not proof.', 'alphabridge-mcp' );
+		} else {
+			$hint = __( 'Suggestion: production site; nothing on this site points to a staging site.', 'alphabridge-mcp' );
+		}
+		$html .= '<p class="ab-note ab-staging__suggestion">' . esc_html( $hint ) . '</p>';
+		$html .= '<p class="ab-field"><label for="ab-staging-partner">' . esc_html__( 'Address of the other site', 'alphabridge-mcp' ) . '</label> ';
+		$html .= '<input type="url" id="ab-staging-partner" name="partner_url" class="regular-text" value="' . esc_attr( null !== $record['pair'] ? $record['pair']['partner_url'] : '' ) . '" placeholder="https://"></p>';
+		$html .= '<p class="ab-note">' . esc_html__( 'The staging site when this is the production site, the production site when this is the staging site. Empty: no pair.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<p class="ab-field"><label for="ab-staging-host">' . esc_html__( 'Host', 'alphabridge-mcp' ) . '</label> ';
+		$html .= '<select id="ab-staging-host" name="host" class="ab-select">';
+		$auto  = '' !== $detected['host']
+			/* translators: %s: name of the host, such as Kinsta. */
+			? sprintf( __( 'As detected: %s', 'alphabridge-mcp' ), AB_MCP_Staging::HOSTS[ $detected['host'] ] )
+			: __( 'As detected: nothing found', 'alphabridge-mcp' );
+		$html .= '<option value=""' . selected( $chosen, '', false ) . '>' . esc_html( $auto ) . '</option>';
+		$html .= '<option value="' . esc_attr( AB_MCP_Staging::HOST_UNKNOWN ) . '"' . selected( $chosen, AB_MCP_Staging::HOST_UNKNOWN, false ) . '>' . esc_html__( 'Not known', 'alphabridge-mcp' ) . '</option>';
+		foreach ( AB_MCP_Staging::HOSTS as $key => $name ) {
+			$html .= '<option value="' . esc_attr( $key ) . '"' . selected( $chosen, $key, false ) . '>' . esc_html( $name ) . '</option>';
+		}
+		$html .= '</select></p>';
+		$html .= '<p><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
+		$html .= '</form></div>';
+		return $html;
+	}
+
+	/**
+	 * The names of the roles on the settings page.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function staging_role_labels() {
+		return array(
+			AB_MCP_Staging::ROLE_UNCONFIRMED => __( 'Not confirmed (counts as the production site)', 'alphabridge-mcp' ),
+			AB_MCP_Staging::ROLE_PRODUCTION  => __( 'Production site', 'alphabridge-mcp' ),
+			AB_MCP_Staging::ROLE_STAGING     => __( 'Staging site', 'alphabridge-mcp' ),
+		);
+	}
+
+	/**
+	 * The state line of the role and the pair: who confirmed what, when
+	 * and where.
+	 *
+	 * @param array $record AB_MCP_Staging::record().
+	 * @return string Unescaped text.
+	 */
+	private function staging_status_text( array $record ) {
+		if ( null === $record['role'] ) {
+			return __( 'Not confirmed: this site counts as the production site.', 'alphabridge-mcp' );
+		}
+		$labels = self::staging_role_labels();
+		$where  = static function ( array $part ) {
+			return AB_MCP_Staging::SOURCE_HUB === $part['source'] ? __( 'in the hub', 'alphabridge-mcp' ) : __( 'on the settings page', 'alphabridge-mcp' );
+		};
+		$who    = static function ( array $part ) {
+			return '' !== $part['user_login'] ? $part['user_login'] : '#' . $part['user_id'];
+		};
+		$role   = $record['role'];
+		/* translators: 1: role such as Production site, 2: user name, 3: date and time, 4: where, such as on the settings page. */
+		$text = sprintf( __( '%1$s, confirmed by %2$s on %3$s %4$s.', 'alphabridge-mcp' ), $labels[ $role['value'] ], $who( $role ), self::site_datetime( $role['at'] ), $where( $role ) );
+		$pair = $record['pair'];
+		if ( null !== $pair ) {
+			/* translators: 1: address, 2: role such as Staging site, 3: user name, 4: date and time, 5: where, such as in the hub. */
+			$text .= ' ' . sprintf( __( 'Other site: %1$s (%2$s), entered by %3$s on %4$s %5$s.', 'alphabridge-mcp' ), $pair['partner_url'], $labels[ $pair['partner_role'] ], $who( $pair ), self::site_datetime( $pair['at'] ), $where( $pair ) );
+		}
+		return $text;
 	}
 
 	/**
@@ -2627,7 +2760,13 @@ class AB_MCP_Admin {
 			'mode_notice_dismissed' => array( 'success', __( 'Noted. Whether AI assistants may write on this site is shown at the top of this page.', 'alphabridge-mcp' ) ),
 			'terms_notice_dismissed' => array( 'success', __( 'Noted. The agreement to the Terms of Use is asked for the next time write access is switched on.', 'alphabridge-mcp' ) ),
 			'preview_off'      => array( 'success', __( 'The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before.', 'alphabridge-mcp' ) ),
+			'staging_saved'    => array( 'success', __( 'Saved: the role of this site, the address of the other site and the host.', 'alphabridge-mcp' ) ),
 		);
+		// What the form «Role of this site» refused, with the first problem.
+		foreach ( array( 'role', 'partner_url', 'self', 'ipv6', 'no_role', 'partner_role', 'same_roles', 'host' ) as $code ) {
+			/* translators: %s: what is wrong, one or more sentences. */
+			$map[ 'staging_bad_' . $code ] = array( 'error', sprintf( __( 'Nothing was saved: %s', 'alphabridge-mcp' ), AB_MCP_Staging::problem( $code ) ) );
+		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );
 		if ( isset( $map[ $key ] ) ) {

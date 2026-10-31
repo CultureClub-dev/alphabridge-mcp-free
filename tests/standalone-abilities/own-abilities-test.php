@@ -97,7 +97,7 @@ foreach ( glob( $free . 'includes/tools/class-tools-*.php' ) as $file ) {
 require_once $free . 'includes/abilities/class-own-abilities.php';
 
 // The plugin's registry as AB_MCP_Plugin builds it: every tool class of
-// includes/tools (99 tools, FreeSinceFourElevenTest), then what an add-on
+// includes/tools (100 tools, FreeSinceFourElevenTest), then what an add-on
 // registers after it (ab_test_addon()).
 $GLOBALS['ab_addon'] = null;
 function ab_test_registry() {
@@ -315,7 +315,7 @@ AB_MCP_Settings::set( AB_MCP_Own_Abilities::SETTING, true );
 ok( true === AB_MCP_Own_Abilities::enabled(), 'B0 switched on' );
 ab_request();
 $registry = AB_MCP_Plugin::instance()->registry;
-ok( 99 === count( $registry->all() ), 'B1 the registry holds the 99 tools of this plugin' );
+ok( 100 === count( $registry->all() ), 'B1 the registry holds the 100 tools of this plugin' );
 $expected = array();
 foreach ( $registry->all() as $tool => $def ) {
 	if ( ! in_array( $tool, array( 'wp_undo', 'wp_undo_list', 'wp_undo_discard', 'wp_list_abilities', 'wp_run_ability' ), true ) ) {
@@ -324,7 +324,7 @@ foreach ( $registry->all() as $tool => $def ) {
 }
 sort( $expected );
 $own = ab_own();
-ok( 94 === count( $own ) && $expected === $own, 'B2 94 abilities: every tool but undo (3) and the two abilities tools, named alphabridge/<tool with - for _> (' . count( $own ) . ')' );
+ok( 95 === count( $own ) && $expected === $own, 'B2 95 abilities: every tool but undo (3) and the two abilities tools, named alphabridge/<tool with - for _> (' . count( $own ) . ')' );
 ok( array() === $GLOBALS['ab_wrong'], 'B2 registered without a notice: ' . implode( ' | ', $GLOBALS['ab_wrong'] ) );
 $cat = wp_get_ability_category( 'alphabridge' );
 ok( null !== $cat && 'AlphaBridge MCP' === $cat->get_label() && '' !== $cat->get_description(), 'B3 the category alphabridge' );
@@ -430,12 +430,12 @@ ok( null === ab_ability( 'wp_test_nocap' ) && null === ab_ability( 'wp_test_empt
 ok( null === ab_ability( 'wp_get_post' ), 'C8 a tool Pro replaced with a class of its own is not offered' );
 ok( null === ab_ability( 'wp_list_posts' ), 'C9 nor with a method its class inherits from this plugin\'s' );
 ok( null === ab_ability( 'wp_get_media' ) && null === ab_ability( 'wp_get_term' ) && null === ab_ability( 'wp_get_comment' ), 'C10 nor with a closure, a function or "Class::method" from outside includes/' );
-ok( 94 - 5 + 1 === count( ab_own() ), 'C11 the rest stays offered (' . count( ab_own() ) . ')' );
+ok( 95 - 5 + 1 === count( ab_own() ), 'C11 the rest stays offered (' . count( ab_own() ) . ')' );
 ok( true === AB_MCP_Own_Abilities::is_own_callback( array( 'AB_MCP_Tools_Content', 'get_post' ) ) && true === AB_MCP_Own_Abilities::is_own_callback( 'AB_MCP_Connection_Doctor::tool' ) && false === AB_MCP_Own_Abilities::is_own_callback( array( 'AB_No_Such_Class', 'x' ) ) && false === AB_MCP_Own_Abilities::is_own_callback( 'no_such_function' ) && false === AB_MCP_Own_Abilities::is_own_callback( null ), 'C12 is_own_callback(): this plugin\'s classes under includes/ (also outside includes/tools), nothing unknown' );
 $GLOBALS['ab_addon'] = null;
 update_option( AB_MCP_Settings::OPT_TOOLSTATE, array( 'wp_get_cron' => false ) );
 ab_request();
-ok( null === ab_ability( 'wp_get_cron' ) && 93 === count( ab_own() ), 'C13 a switched-off tool is not offered, as tools/list does not list it' );
+ok( null === ab_ability( 'wp_get_cron' ) && 94 === count( ab_own() ), 'C13 a switched-off tool is not offered, as tools/list does not list it' );
 update_option( AB_MCP_Settings::OPT_TOOLSTATE, array() );
 ab_request();
 

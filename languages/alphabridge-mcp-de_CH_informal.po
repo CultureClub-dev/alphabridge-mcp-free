@@ -5235,3 +5235,255 @@ msgstr "WordPress bedient einige Anfragen, ohne Plugins zu laden (wp-activate.ph
 
 msgid "File content"
 msgstr "Dateiinhalt"
+
+# The staging record of a site and wp_staging_status (4.15.0).
+msgid "Role of this site"
+msgstr "Rolle dieser Website"
+
+#, php-format
+msgid "Suggestion: staging site. %s"
+msgstr "Vorschlag: Staging-Website. %s"
+
+msgid "A suggestion is a hint, not proof."
+msgstr "Ein Vorschlag ist ein Hinweis, kein Beweis."
+
+msgid "Suggestion: production site; nothing on this site points to a staging site."
+msgstr "Vorschlag: Produktiv-Website; nichts an dieser Website deutet auf eine Staging-Website hin."
+
+msgid "Address of the other site"
+msgstr "Adresse der anderen Website"
+
+msgid "The staging site when this is the production site, the production site when this is the staging site. Empty: no pair."
+msgstr "Die Staging-Website, wenn dies die Produktiv-Website ist, die Produktiv-Website, wenn dies die Staging-Website ist. Leer: kein Paar."
+
+msgid "Host"
+msgstr "Hoster"
+
+#, php-format
+msgid "As detected: %s"
+msgstr "Wie erkannt: %s"
+
+msgid "As detected: nothing found"
+msgstr "Wie erkannt: nichts gefunden"
+
+msgid "Not known"
+msgstr "Nicht bekannt"
+
+msgid "Not confirmed (counts as the production site)"
+msgstr "Nicht bestätigt (gilt als Produktiv-Website)"
+
+msgid "Production site"
+msgstr "Produktiv-Website"
+
+msgid "Staging site"
+msgstr "Staging-Website"
+
+msgid "Not confirmed: this site counts as the production site."
+msgstr "Nicht bestätigt: Diese Website gilt als Produktiv-Website."
+
+msgid "in the hub"
+msgstr "im Hub"
+
+msgid "on the settings page"
+msgstr "auf der Einstellungsseite"
+
+#, php-format
+msgid "%1$s, confirmed by %2$s on %3$s %4$s."
+msgstr "%1$s, bestätigt von %2$s am %3$s %4$s."
+
+#, php-format
+msgid "Other site: %1$s (%2$s), entered by %3$s on %4$s %5$s."
+msgstr "Andere Website: %1$s (%2$s), eingetragen von %3$s am %4$s %5$s."
+
+msgid "Saved: the role of this site, the address of the other site and the host."
+msgstr "Gespeichert: die Rolle dieser Website, die Adresse der anderen Website und der Hoster."
+
+#, php-format
+msgid "Nothing was saved: %s"
+msgstr "Nichts wurde gespeichert: %s"
+
+#, php-format
+msgid "The account of this connection lacks the capability \"%s\" that the staging pair needs."
+msgstr "Dem Konto dieser Verbindung fehlt die Berechtigung «%s», die das Staging-Paar braucht."
+
+#, php-format
+msgid "This connection has the access level \"%s\", which does not include setting the staging pair."
+msgstr "Diese Verbindung hat die Zugriffsstufe «%s», die das Setzen des Staging-Paars nicht umfasst."
+
+msgid "The source must be the hub."
+msgstr "Die Quelle muss der Hub sein."
+
+msgid "The role of this site must be production site or staging site."
+msgstr "Die Rolle dieser Website muss Produktiv-Website oder Staging-Website sein."
+
+msgid "The role of the other site must be production site or staging site."
+msgstr "Die Rolle der anderen Website muss Produktiv-Website oder Staging-Website sein."
+
+msgid "The two roles must differ: a pair is one production site and one staging site."
+msgstr "Die beiden Rollen müssen sich unterscheiden: Ein Paar besteht aus einer Produktiv-Website und einer Staging-Website."
+
+msgid "The address of the other site must be an http:// or https:// address, without user name, password, query or fragment."
+msgstr "Die Adresse der anderen Website muss eine http://- oder https://-Adresse sein, ohne Benutzernamen, Passwort, Abfrage oder Fragment."
+
+msgid "The address of the other site is the address of this site."
+msgstr "Die Adresse der anderen Website ist die Adresse dieser Website."
+
+msgid "A pair needs the role of this site first: choose production site or staging site."
+msgstr "Ein Paar braucht zuerst die Rolle dieser Website: Wähle Produktiv-Website oder Staging-Website."
+
+msgid "The host must be one of the list, or not known."
+msgstr "Der Hoster muss einer aus der Liste sein oder «Nicht bekannt»."
+
+#, php-format
+msgid "WordPress reports the environment type “%s”."
+msgstr "WordPress meldet den Umgebungstyp «%s»."
+
+#, php-format
+msgid "The address begins with “%s”."
+msgstr "Die Adresse beginnt mit «%s»."
+
+#, php-format
+msgid "The address ends in “%s”, a name for testing or local development."
+msgstr "Die Adresse endet auf «%s», einen Namen für Tests oder lokale Entwicklung."
+
+msgid "The preview protection is on."
+msgstr "Der Vorschau-Schutz ist eingeschaltet."
+
+msgid "Search engines are discouraged (blog_public is 0)."
+msgstr "Suchmaschinen werden abgehalten (blog_public ist 0)."
+
+#, php-format
+msgid "This site does not contact %s: the address is local or private. A local copy cannot be checked from here."
+msgstr "Diese Website fragt %s nicht an: Die Adresse ist lokal oder privat. Eine lokale Kopie lässt sich von hier aus nicht prüfen."
+
+#, php-format
+msgid "The name of the other site %s does not resolve to an address."
+msgstr "Der Name der anderen Website %s lässt sich zu keiner Adresse auflösen."
+
+#, php-format
+msgid "This site does not ask %s: WordPress sends its requests here without cURL, and only cURL can be tied to the checked address."
+msgstr "Diese Website fragt %s nicht an: WordPress sendet seine Anfragen hier ohne cURL, und nur cURL lässt sich an die geprüfte Adresse binden."
+
+#, php-format
+msgid "This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the request could not be tied to the checked address and was not sent."
+msgstr "Diese Website sendet ihre Anfragen über einen Proxy (WP_PROXY_HOST), der den Namen von %s selbst auflöst; darum liess sich die Anfrage nicht an die geprüfte Adresse binden und wurde nicht gesendet."
+
+msgid "1. To let this site ask the staging site directly, add its host name to WP_PROXY_BYPASS_HOSTS in wp-config.php and check again. 2. Or check by hand: open the address of the staging site in a browser and see that it answers."
+msgstr "1. Damit diese Website die Staging-Website direkt fragt, trage deren Hostnamen in WP_PROXY_BYPASS_HOSTS in der wp-config.php ein und prüfe erneut. 2. Oder prüfe von Hand: Öffne die Adresse der Staging-Website in einem Browser und sieh nach, ob sie antwortet."
+
+msgid "The address of the other site is an IPv6 address, which WordPress does not ask: use the host name of the other site."
+msgstr "Die Adresse der anderen Website ist eine IPv6-Adresse, die WordPress nicht anfragt: Verwende den Hostnamen der anderen Website."
+
+#, php-format
+msgid "The other site %1$s could not be reached: %2$s"
+msgstr "Die andere Website %1$s war nicht erreichbar: %2$s"
+
+#, php-format
+msgid "The other site %s answers, and AlphaBridge MCP runs there."
+msgstr "Die andere Website %s antwortet, und AlphaBridge MCP läuft dort."
+
+#, php-format
+msgid "The other site %s asks for an HTTP login, which keeps apps and the hub out."
+msgstr "Die andere Website %s verlangt eine HTTP-Anmeldung, die Apps und den Hub aussperrt."
+
+#, php-format
+msgid "The other site %1$s redirects to %2$s."
+msgstr "Die andere Website %1$s leitet auf %2$s weiter."
+
+#, php-format
+msgid "The other site %1$s answers with HTTP %2$d, but not as AlphaBridge MCP."
+msgstr "Die andere Website %1$s antwortet mit HTTP %2$d, aber nicht als AlphaBridge MCP."
+
+msgid "The preview protection is on, but this site is confirmed as the production site: its visitors see the password page."
+msgstr "Der Vorschau-Schutz ist eingeschaltet, aber diese Website ist als Produktiv-Website bestätigt: Besucher dieser Website sehen die Passwortseite."
+
+msgid "Role confirmed"
+msgstr "Rolle bestätigt"
+
+msgid "This site is confirmed as the staging site."
+msgstr "Diese Website ist als Staging-Website bestätigt."
+
+msgid "This site is confirmed as the production site."
+msgstr "Diese Website ist als Produktiv-Website bestätigt."
+
+msgid "The role of this site is not confirmed yet, so it counts as the production site."
+msgstr "Die Rolle dieser Website ist noch nicht bestätigt, darum gilt sie als Produktiv-Website."
+
+msgid "1. Open the settings page of AlphaBridge MCP at Staging. 2. Choose whether this site is the production site or the staging site; the suggestion there is a hint, not proof. 3. Save."
+msgstr "1. Öffne die Einstellungsseite von AlphaBridge MCP bei Staging. 2. Wähle, ob diese Website die Produktiv-Website oder die Staging-Website ist; der Vorschlag dort ist ein Hinweis, kein Beweis. 3. Speichere."
+
+msgid "Staging site there and answering"
+msgstr "Staging-Website vorhanden und erreichbar"
+
+msgid "This site is the staging site."
+msgstr "Diese Website ist die Staging-Website."
+
+#, php-format
+msgid "1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
+msgstr "1. Lege mit der Staging-Funktion im Kundenbereich von %s eine Staging-Kopie dieser Website an. 2. Installiere und aktiviere AlphaBridge MCP auf der Kopie. 3. Trage die Adresse der Kopie auf der Einstellungsseite dieser Website bei Staging ein und auf der Kopie die Adresse dieser Website."
+
+msgid "1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
+msgstr "1. Lege eine Staging-Kopie dieser Website an: mit der Staging-Funktion deines Hosters, falls er eine hat, oder mit einem Staging-Plugin aus dem WordPress-Plugin-Verzeichnis. 2. Installiere und aktiviere AlphaBridge MCP auf der Kopie. 3. Trage die Adresse der Kopie auf der Einstellungsseite dieser Website bei Staging ein und auf der Kopie die Adresse dieser Website."
+
+msgid "No staging site is known for this site yet."
+msgstr "Für diese Website ist noch keine Staging-Website bekannt."
+
+msgid "If neither the host nor a plugin can make a copy: for changes to texts, pages, posts and media alone, work in drafts and previews, and publish once the person has approved them."
+msgstr "Wenn weder der Hoster noch ein Plugin eine Kopie anlegen kann: Für Änderungen nur an Texten, Seiten, Beiträgen und Medien in Entwürfen und Vorschauen arbeiten und veröffentlichen, sobald die Person sie freigegeben hat."
+
+msgid "Preview protection on the staging site"
+msgstr "Vorschau-Schutz auf der Staging-Website"
+
+msgid "The preview protection is checked on the staging site itself."
+msgstr "Der Vorschau-Schutz wird auf der Staging-Website selbst geprüft."
+
+msgid "The preview protection is off: visitors and search engines can read the staging site."
+msgstr "Der Vorschau-Schutz ist ausgeschaltet: Besucher und Suchmaschinen können die Staging-Website lesen."
+
+msgid "1. Switch on the preview protection on the settings page at Staging, or have the assistant call wp_set_preview_protection. 2. Pass the password it shows on to whoever should see the preview."
+msgstr "1. Schalte den Vorschau-Schutz auf der Einstellungsseite bei Staging ein oder lass den Assistenten wp_set_preview_protection aufrufen. 2. Gib das angezeigte Passwort an die weiter, die die Vorschau sehen sollen."
+
+msgid "Pair set"
+msgstr "Paar gesetzt"
+
+#, php-format
+msgid "Paired with the staging site %s."
+msgstr "Gepaart mit der Staging-Website %s."
+
+#, php-format
+msgid "Paired with the production site %s."
+msgstr "Gepaart mit der Produktiv-Website %s."
+
+msgid "No pair is set yet."
+msgstr "Noch kein Paar gesetzt."
+
+msgid "1. Confirm the role of this site, if it is not yet. 2. Enter the address of the other site on the settings page at Staging and save. 3. On the other site, enter the address of this one."
+msgstr "1. Bestätige die Rolle dieser Website, falls sie noch nicht bestätigt ist. 2. Trage die Adresse der anderen Website auf der Einstellungsseite bei Staging ein und speichere. 3. Trage auf der anderen Website die Adresse dieser ein."
+
+#, php-format
+msgid "The staging site %s is entered; whether it answers has not been checked."
+msgstr "Die Staging-Website %s ist eingetragen; ob sie antwortet, wurde nicht geprüft."
+
+msgid "1. Switch off the host's password protection for the staging site. 2. Switch on the preview protection of AlphaBridge MCP there instead: it keeps visitors out and lets apps and the hub in."
+msgstr "1. Schalte den Passwortschutz des Hosters für die Staging-Website aus. 2. Schalte dort stattdessen den Vorschau-Schutz von AlphaBridge MCP ein: Er hält Besucher fern und lässt Apps und den Hub herein."
+
+msgid "1. If that is the staging site, enter that address on the settings page at Staging. 2. Check again."
+msgstr "1. Wenn das die Staging-Website ist, trage diese Adresse auf der Einstellungsseite bei Staging ein. 2. Prüfe erneut."
+
+msgid "1. Install and activate AlphaBridge MCP on the staging site. 2. Check again."
+msgstr "1. Installiere und aktiviere AlphaBridge MCP auf der Staging-Website. 2. Prüfe erneut."
+
+msgid "1. Open the address in a browser and check that it is the staging site. 2. Correct it on the settings page at Staging if it is not."
+msgstr "1. Öffne die Adresse in einem Browser und prüfe, ob es die Staging-Website ist. 2. Korrigiere sie auf der Einstellungsseite bei Staging, wenn nicht."
+
+#, php-format
+msgid "The staging way is in place: this site is the protected staging site of %s. Make the changes here and show them with the preview password; carry them over to the production site one at a time once they are approved."
+msgstr "Der Staging-Weg steht: Diese Website ist die geschützte Staging-Website von %s. Nimm die Änderungen hier vor und zeige sie mit dem Vorschau-Passwort; übernimm sie einzeln auf die Produktiv-Website, sobald sie freigegeben sind."
+
+#, php-format
+msgid "The staging way is in place: the staging site %s answers and is paired with this site. Make the changes there and carry them over to this site one at a time once they are approved."
+msgstr "Der Staging-Weg steht: Die Staging-Website %s antwortet und ist mit dieser Website gepaart. Nimm die Änderungen dort vor und übernimm sie einzeln auf diese Website, sobald sie freigegeben sind."
+
+msgctxt "tool label"
+msgid "Show the staging status"
+msgstr "Staging-Stand anzeigen"

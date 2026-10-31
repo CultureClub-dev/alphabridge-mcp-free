@@ -248,6 +248,28 @@ class AB_MCP_REST_Controller {
 			$handlers
 		);
 
+		// The staging pair (free since 4.15.0): the hub writes the pair a
+		// person confirmed there to both sites, with that person's site
+		// token, and reads it back (AB_MCP_Staging). No MCP tool: the token
+		// is checked as for the MCP endpoint, then manage_options of its
+		// account, and for writing a token of the full access level.
+		register_rest_route(
+			AB_MCP_REST_NAMESPACE,
+			AB_MCP_Staging::ROUTE,
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( 'AB_MCP_Staging', 'rest_read' ),
+					'permission_callback' => array( $this, 'check_staging_permission' ),
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( 'AB_MCP_Staging', 'rest_write' ),
+					'permission_callback' => array( $this, 'check_staging_write_permission' ),
+				),
+			)
+		);
+
 		// DELETE is answered before WordPress looks for a handler, not by a
 		// handler of its own: WordPress lists every handler of a route in the
 		// Allow header of each response (rest_send_allow_header), so a DELETE
@@ -439,6 +461,79 @@ class AB_MCP_REST_Controller {
 			);
 		}
 		wp_set_current_user( $user_id );
+		return true;
+	}
+
+	/**
+	 * Auth gate of the staging pair's route, for reading: the token as for
+	 * the MCP endpoint (check_permission(), with the check of a browser's
+	 * Origin), then manage_options of the token's account, as
+	 * wp_staging_status needs it. Each refusal says why and where it is
+	 * changed (AB_MCP_Guidance::compose()). Counts nothing: WordPress asks
+	 * the gate of every method of the route once more, with the same
+	 * request, when it builds the Allow header; the rate limit is counted
+	 * in the write itself (AB_MCP_Staging::rest_write()).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function check_staging_permission( $request ) {
+		$allowed = $this->check_permission( $request );
+		if ( true !== $allowed ) {
+			return $allowed;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			$user  = wp_get_current_user();
+			$login = is_object( $user ) && isset( $user->user_login ) && '' !== (string) $user->user_login ? (string) $user->user_login : '#' . (int) get_current_user_id();
+			return new WP_Error(
+				'ab_mcp_forbidden',
+				AB_MCP_Guidance::compose(
+					/* translators: %s: capability */
+					sprintf( __( 'The account of this connection lacks the capability "%s" that the staging pair needs.', 'alphabridge-mcp' ), 'manage_options' ),
+					sprintf(
+						/* translators: 1: user name of the account, 2: capability */
+						__( 'To allow it, ask an administrator to give the account "%1$s" a role with the capability "%2$s" under Users, or connect the app again with an account that has it, such as an administrator.', 'alphabridge-mcp' ),
+						$login,
+						'manage_options'
+					),
+					admin_url( 'users.php' )
+				),
+				array( 'status' => 403 )
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * Auth gate of the staging pair's route, for writing: the gate for
+	 * reading, then a token of the full access level, as a writing tool with
+	 * that capability needs (a scope only narrows). A gate of its own rather
+	 * than a look at the request's method: the Allow header asks both gates
+	 * with the same request.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function check_staging_write_permission( $request ) {
+		$allowed = $this->check_staging_permission( $request );
+		if ( true !== $allowed ) {
+			return $allowed;
+		}
+		if ( 'full' !== AB_MCP_Auth::current_scope() ) {
+			$labels = AB_MCP_Tool_Registry::scope_labels();
+			$scope  = AB_MCP_Auth::current_scope();
+			return new WP_Error(
+				'ab_mcp_scope',
+				AB_MCP_Guidance::compose(
+					/* translators: %s: name of the access level, e.g. Read only */
+					sprintf( __( 'This connection has the access level "%s", which does not include setting the staging pair.', 'alphabridge-mcp' ), isset( $labels[ $scope ] ) ? $labels[ $scope ] : $scope ),
+					/* translators: %s: name of the widest access level */
+					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ), $labels['full'] ),
+					AB_MCP_Guidance::settings_url( 'ab-connections' )
+				),
+				array( 'status' => 403 )
+			);
+		}
 		return true;
 	}
 
@@ -1122,6 +1217,12 @@ class AB_MCP_REST_Controller {
 			// field counts as legacy-only. The modern revision is listed only
 			// while it is switched on.
 			'protocol_versions' => self::protocol_versions(),
+			// Added within contract 1 as well (4.15.0), optional for a
+			// reader: the role of this site in its staging pair as a person
+			// confirmed it (AB_MCP_Staging): 'production', 'staging', or
+			// 'unconfirmed', which counts as the production site. A hub shows
+			// it without calling a tool.
+			'staging_role'      => AB_MCP_Staging::role(),
 		);
 	}
 
