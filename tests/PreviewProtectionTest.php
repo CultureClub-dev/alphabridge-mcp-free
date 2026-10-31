@@ -75,6 +75,11 @@
  * - robots.txt passes only on the way with themes; without them the
  *   template loader returns to wp-signup.php, which renders on.
  * - Uninstall respects the note: a value chosen after a deactivation stays.
+ * - Mixed activation on a network: a network-wide deactivation leaves out
+ *   a site where the plugin is active by its own activation (the protection
+ *   runs on there), a network-wide activation remembers nothing twice on
+ *   such a site, and the loader counts only sites whose protection runs
+ *   (on, plugin active there, no note of a deactivation).
  * - The tool needs manage_options and write access, is not destructive by
  *   its definition, returns the password exactly once, reports the state
  *   and what is not covered, and refuses to renew a password while off with
@@ -1493,7 +1498,8 @@ final class PreviewProtectionTest extends TestCase {
 		foreach ( array( 1, 3 ) as $site ) {
 			switch_to_blog( $site );
 			ab_test_add_user( 7 );
-			$GLOBALS['ab_test_options']['blog_public'] = '1';
+			$GLOBALS['ab_test_options']['blog_public']    = '1';
+			$GLOBALS['ab_test_options']['active_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' );
 			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
 			restore_current_blog();
 		}
@@ -1517,7 +1523,144 @@ final class PreviewProtectionTest extends TestCase {
 		AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
 		restore_current_blog();
 		AB_MCP_Preview_Protection::on_deactivate( true );
-		self::assertFileDoesNotExist( $path, 'Deactivated for the network: removed whatever the sites say.' );
+		self::assertFileExists( $path, 'Deactivated for the network while sites 1 and 3 are active by their own activation: they run on, the loader stays.' );
+
+		// Active for the network only: a network-wide deactivation ends every
+		// protection, and the loader goes.
+		foreach ( array( 1, 3 ) as $site ) {
+			switch_to_blog( $site );
+			$GLOBALS['ab_test_options']['active_plugins'] = array();
+			restore_current_blog();
+		}
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' => time() );
+		AB_MCP_Preview_Protection::on_deactivate( true );
+		self::assertFileDoesNotExist( $path, 'Nobody runs it any more: removed.' );
+	}
+
+	public function testANetworkWideDeactivationLeavesOutASiteWhereThePluginStaysActiveLocally(): void {
+		// WordPress fires the hooks before it writes the activation options:
+		// under a network-wide deactivation a site's own activation still
+		// stands, and so the protection runs on there.
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		$plugin                       = 'alphabridge-mcp/alphabridge-mcp.php';
+		foreach ( array( 1, 2 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public']    = '1';
+			$GLOBALS['ab_test_options']['active_plugins'] = 1 === $site ? array( $plugin ) : array();
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			restore_current_blog();
+		}
+
+		// Activated for the network on top: site 1 runs the protection by
+		// its own activation already, nothing is remembered twice.
+		switch_to_blog( 1 );
+		$GLOBALS['ab_test_options']['blog_public'] = 0;
+		restore_current_blog();
+		$purges = $GLOBALS['ab_test_purges'];
+		AB_MCP_Preview_Protection::on_activate( true );
+		switch_to_blog( 1 );
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'], 'Site 1: the remembered value stays what the local activation remembered.' );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+		restore_current_blog();
+		self::assertSame( $purges + 1, $GLOBALS['ab_test_purges'], 'Site 2 was taken up (its cache emptied once); site 1 was left alone.' );
+
+		// Deactivated for the network: site 1 keeps running by its own
+		// activation, site 2 (network only) goes back.
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( $plugin => time() );
+		AB_MCP_Preview_Protection::on_deactivate( true );
+		switch_to_blog( 1 );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Site 1: still discouraged, the protection runs on.' );
+		self::assertFalse( AB_MCP_Preview_Protection::state()['restored'], 'No note: nothing was written back.' );
+		self::assertTrue( AB_MCP_Preview_Protection::is_on() );
+		restore_current_blog();
+		switch_to_blog( 2 );
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'Site 2: written back.' );
+		self::assertTrue( AB_MCP_Preview_Protection::state()['restored'] );
+		restore_current_blog();
+		self::assertFileExists( AB_MCP_Preview_Protection::loader_path(), 'Site 1 runs the protection: the loader stays for it.' );
+
+		// WordPress then writes the option: the network activation is gone.
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array();
+
+		// The other way round: activated on site 2 by itself, then activated
+		// for the network on top and deactivated locally: the network
+		// activation keeps the protection running there, the visibility stays.
+		switch_to_blog( 2 );
+		$GLOBALS['ab_test_options']['active_plugins'] = array( $plugin );
+		AB_MCP_Preview_Protection::on_activate( false );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Activated by itself: discouraged again.' );
+		self::assertFalse( AB_MCP_Preview_Protection::state()['restored'] );
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( $plugin => time() );
+		$purges                                                     = $GLOBALS['ab_test_purges'];
+		AB_MCP_Preview_Protection::on_activate( false );
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'], 'A local activation under the network one remembers nothing anew.' );
+		self::assertSame( $purges, $GLOBALS['ab_test_purges'], 'And does nothing else either.' );
+		AB_MCP_Preview_Protection::on_deactivate( false );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Site 2 stays active for the network: the visibility stays.' );
+		self::assertFalse( AB_MCP_Preview_Protection::state()['restored'] );
+		self::assertFileExists( AB_MCP_Preview_Protection::loader_path() );
+		restore_current_blog();
+	}
+
+	public function testOnASingleSiteAStaleNetworkOptionDoesNotKeepTheProtection(): void {
+		// Not a network: active_sitewide_plugins means nothing here (a row a
+		// former network left behind), so a deactivation writes back.
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' => time() );
+		$this->on();
+		AB_MCP_Preview_Protection::on_deactivate( false );
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'] );
+		self::assertTrue( AB_MCP_Preview_Protection::state()['restored'] );
+	}
+
+	public function testTheLoaderCountsOnlySitesWhoseProtectionRuns(): void {
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2, 3 );
+		$plugin                       = 'alphabridge-mcp/alphabridge-mcp.php';
+		$path                         = AB_MCP_Preview_Protection::loader_path();
+		foreach ( array( 1, 2, 3 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public']    = '1';
+			// Site 3: a plugin whose folder only begins like this one's.
+			$GLOBALS['ab_test_options']['active_plugins'] = 3 === $site ? array( 'alphabridge-mcp-extra/alphabridge-mcp-extra.php' ) : array( $plugin );
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			restore_current_blog();
+		}
+		// Site 3: on, but the plugin is active neither there nor for the
+		// network — a state left behind; it protects nothing.
+
+		switch_to_blog( 1 );
+		AB_MCP_Preview_Protection::on_deactivate( false );
+		restore_current_blog();
+		self::assertFileExists( $path, 'Site 2 runs the protection.' );
+
+		switch_to_blog( 2 );
+		AB_MCP_Preview_Protection::on_deactivate( false );
+		restore_current_blog();
+		self::assertFileDoesNotExist( $path, 'Site 1 was deactivated (restored), site 3 has no active plugin: nobody runs it, the loader goes.' );
+
+		// Switching off on a site counts the same way.
+		switch_to_blog( 2 );
+		AB_MCP_Preview_Protection::on_activate( false );
+		restore_current_blog();
+		self::assertFileExists( $path );
+		switch_to_blog( 2 );
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		restore_current_blog();
+		self::assertFileDoesNotExist( $path );
+
+		// A site the network activation covers counts, with no local activation.
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( $plugin => time() );
+		switch_to_blog( 2 );
+		AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		$GLOBALS['ab_test_options']['active_plugins'] = array();
+		restore_current_blog();
+		switch_to_blog( 3 );
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		restore_current_blog();
+		self::assertFileExists( $path, 'Site 2 runs the protection by the network activation.' );
 	}
 
 	public function testRobotsPassesOnlyOnTheWayWithThemes(): void {

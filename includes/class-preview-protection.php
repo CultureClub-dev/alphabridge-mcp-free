@@ -132,8 +132,12 @@
  * more, taking the value found as the new remembered one where the note is
  * there (a 0 set by hand while deactivated is a choice), and keeping the
  * old one where it is not (the 0 is this plugin's own, left by a
- * deactivation whose hook never ran); on a network both run on every site
- * (on_deactivate(), on_activate()). uninstall.php writes the value back
+ * deactivation whose hook never ran); on a network both run on every site,
+ * leaving out a site where the plugin stays active the other way (a local
+ * activation under a network-wide deactivation, a network activation under
+ * a local one: WordPress keeps the other activation, and the protection
+ * runs on; the hooks fire before WordPress writes the activation options,
+ * so both still show) (on_deactivate(), on_activate()). uninstall.php writes the value back
  * before it removes the option. A deactivated plugin that left «discouraged»
  * behind would be a change nobody can see the reason for.
  *
@@ -254,9 +258,14 @@ class AB_MCP_Preview_Protection {
 	public static function on_activate( $network_wide = false ) {
 		self::each_site(
 			(bool) $network_wide,
-			static function () {
+			static function () use ( $network_wide ) {
 				$state = self::state();
 				if ( ! $state['on'] ) {
+					return;
+				}
+				// Active here the other way already: the protection runs,
+				// nothing to remember or set again.
+				if ( $network_wide ? self::active_locally() : self::active_network() ) {
 					return;
 				}
 				$before = get_option( 'blog_public', '1' );
@@ -283,17 +292,22 @@ class AB_MCP_Preview_Protection {
 	 * for the next activation, as the plugin keeps its other settings. On
 	 * every site of a network when deactivated for the network. The page
 	 * cache is emptied, so no password page is served from it after. The
-	 * loader goes too: for the network or a single site at once, for one
-	 * site of a network only when no other site's protection is on.
+	 * loader goes too, once no site of the network runs the protection any
+	 * more (running_anywhere()).
 	 *
 	 * @param bool $network_wide Deactivated for the whole network.
 	 */
 	public static function on_deactivate( $network_wide = false ) {
 		self::each_site(
 			(bool) $network_wide,
-			static function () {
+			static function () use ( $network_wide ) {
 				$state = self::state();
 				if ( ! $state['on'] ) {
+					return;
+				}
+				// Still active here the other way: the protection runs on,
+				// the visibility stays.
+				if ( $network_wide ? self::active_locally() : self::active_network() ) {
 					return;
 				}
 				if ( null !== $state['blog_public'] ) {
@@ -303,7 +317,10 @@ class AB_MCP_Preview_Protection {
 				AB_MCP_Page_Cache::purge_site();
 			}
 		);
-		if ( $network_wide || ! is_multisite() || ! self::on_elsewhere() ) {
+		// The loader stays while a site of the network runs the protection:
+		// one left out above (active the other way), or one deactivated
+		// another time and still running.
+		if ( ! is_multisite() || ! self::running_anywhere() ) {
 			self::remove_loader();
 		}
 	}
@@ -464,7 +481,7 @@ class AB_MCP_Preview_Protection {
 			update_option( 'blog_public', $state['blog_public'] );
 		}
 		self::store( array( 'on' => false ), (int) $user_id, (string) $source );
-		if ( ! is_multisite() || ! self::on_elsewhere() ) {
+		if ( ! is_multisite() || ! self::running_anywhere() ) {
 			self::remove_loader();
 		}
 		return array(
@@ -642,18 +659,20 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
-	 * On a network: is the protection on for a site other than the current
-	 * one? The loader is one file for the whole network and stays while it
-	 * is.
+	 * On a network: does any site run the protection? Running means: on,
+	 * the plugin active there (locally or for the network), and no note of
+	 * a deactivation (restored) — a site where the plugin was deactivated
+	 * keeps its state for the next activation but protects nothing, and a
+	 * site switched off is off. The loader is one file for the whole network
+	 * and stays while a site runs the protection.
 	 *
 	 * @return bool
 	 */
-	private static function on_elsewhere() {
+	private static function running_anywhere() {
 		if ( ! is_multisite() ) {
 			return false;
 		}
-		$current = get_current_blog_id();
-		$sites   = get_sites(
+		$sites = get_sites(
 			array(
 				'fields' => 'ids',
 				'number' => 0,
@@ -661,18 +680,64 @@ class AB_MCP_Preview_Protection {
 		);
 		$found = false;
 		foreach ( (array) $sites as $site_id ) {
-			if ( (int) $site_id === (int) $current ) {
-				continue;
-			}
 			switch_to_blog( (int) $site_id );
-			$on = self::is_on();
+			$state   = self::state();
+			$running = $state['on'] && ! $state['restored'] && ( self::active_locally() || self::active_network() );
 			restore_current_blog();
-			if ( $on ) {
+			if ( $running ) {
 				$found = true;
 				break;
 			}
 		}
 		return $found;
+	}
+
+	/**
+	 * The folder of the plugin that carries this core: this plugin's, or
+	 * the Pro add-on's where it bundles the core. What active_plugins and
+	 * active_sitewide_plugins name begins with it.
+	 *
+	 * @return string
+	 */
+	private static function carrier_folder() {
+		$basename = defined( 'AB_MCP_BASENAME' ) ? (string) AB_MCP_BASENAME : 'alphabridge-mcp/alphabridge-mcp.php';
+		return (string) strtok( $basename, '/' );
+	}
+
+	/**
+	 * Is the plugin that carries this core active on the current site by
+	 * its own activation (active_plugins)?
+	 *
+	 * @return bool
+	 */
+	private static function active_locally() {
+		return self::names_carrier( (array) get_option( 'active_plugins', array() ) );
+	}
+
+	/**
+	 * Is the plugin that carries this core active for the whole network
+	 * (active_sitewide_plugins)?
+	 *
+	 * @return bool
+	 */
+	private static function active_network() {
+		return is_multisite() && self::names_carrier( array_keys( (array) get_site_option( 'active_sitewide_plugins', array() ) ) );
+	}
+
+	/**
+	 * Does a list of plugin files name the carrier of this core?
+	 *
+	 * @param array $plugins Plugin files, folder/file.php.
+	 * @return bool
+	 */
+	private static function names_carrier( array $plugins ) {
+		$folder = self::carrier_folder();
+		foreach ( $plugins as $plugin ) {
+			if ( is_string( $plugin ) && 0 === strpos( $plugin, $folder . '/' ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
