@@ -794,4 +794,59 @@
 			} );
 		}
 	} );
+
+	/* ---- Preview protection: switch on, new password (over ajax, so the
+	 * password is shown once, straight to this browser, as a token is). Off
+	 * is a plain form. ---- */
+	document.addEventListener( 'click', function ( e ) {
+		var btn = e.target.closest ? e.target.closest( '.ab-preview-ajax' ) : null;
+		if ( ! btn ) {
+			return;
+		}
+		e.preventDefault();
+		var card = btn.closest( '#ab-preview' ) || document;
+		busy( btn, true );
+		ajax( 'ab_mcp_preview_protection', { preview: btn.getAttribute( 'data-preview' ) || '' } ).then( function ( res ) {
+			busy( btn, false );
+			if ( ! res || ! res.success ) {
+				fail( res && res.data && res.data.message );
+				return;
+			}
+			var input = card.querySelector( '.ab-preview-password' );
+			if ( input ) {
+				input.value = res.data.password || '';
+			}
+			var reveal = card.querySelector( '.ab-preview-reveal' );
+			if ( reveal ) {
+				reveal.hidden = false;
+			}
+			var status = card.querySelector( '.ab-preview-status' );
+			if ( status ) {
+				status.textContent = res.data.status || '';
+			}
+			// The loader for the requests WordPress serves without plugins:
+			// where switching on could not write it, the answer carries the
+			// note and the file to create; shown at once, as a reload would.
+			var loader = card.querySelector( '.ab-preview__loader' );
+			if ( loader ) {
+				var note   = res.data.loader_note || '';
+				var text   = loader.querySelector( '.ab-preview__loader-text' );
+				var source = loader.querySelector( '.ab-preview__source' );
+				if ( text ) {
+					text.textContent = note;
+				}
+				if ( source ) {
+					source.value = res.data.loader_source || '';
+				}
+				loader.hidden = '' === note;
+			}
+			// The protection is on now: the buttons and the form for «on».
+			Array.prototype.forEach.call( card.querySelectorAll( '[data-when]' ), function ( el ) {
+				el.hidden = 'on' !== el.getAttribute( 'data-when' );
+			} );
+		} ).catch( function () {
+			busy( btn, false );
+			fail();
+		} );
+	} );
 }() );

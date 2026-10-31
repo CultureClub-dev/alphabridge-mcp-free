@@ -110,6 +110,12 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_logged_in']   = false;
+	$GLOBALS['ab_test_is_admin']    = false;
+	$GLOBALS['ab_test_home']        = 'https://example.test';
+	$GLOBALS['ab_test_using_themes'] = true;
+	$GLOBALS['ab_test_installing']   = false;
+	$GLOBALS['ab_test_is_robots']    = false;
+	unset( $GLOBALS['pagenow'] );
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
 }
@@ -324,12 +330,15 @@ function language_attributes( $doctype = 'html' ) {
 	echo 'lang="en-US"';
 }
 
+/** @var string $ab_test_home The home address; a test sets a sub-directory one (https://example.test/staging). */
+$GLOBALS['ab_test_home'] = 'https://example.test';
+
 function home_url( $path = '' ) {
-	return 'https://example.test' . $path;
+	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
 function site_url( $path = '' ) {
-	return 'https://example.test' . $path;
+	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
 /**
@@ -420,6 +429,22 @@ function current_user_can( $cap, ...$args ) {
 
 function is_multisite() {
 	return (bool) $GLOBALS['ab_test_multisite'];
+}
+
+// The three multisite helpers AB_MCP_Page_Cache asks on a network, as
+// tests/undo-stubs.php defines them for the tests that load it (its guarded
+// definitions then stand back): a sub-directory network whose every site
+// counts as the main site.
+function is_subdomain_install() {
+	return false;
+}
+
+function is_main_site( $site_id = null, $network_id = null ) {
+	return true;
+}
+
+function get_current_blog_id() {
+	return (int) $GLOBALS['ab_test_blog'];
 }
 
 /**
@@ -1661,6 +1686,53 @@ function is_user_logged_in() {
 	return (bool) $GLOBALS['ab_test_logged_in'];
 }
 
+/** @var bool $ab_test_is_admin Whether the request is one of wp-admin (is_admin()). */
+$GLOBALS['ab_test_is_admin'] = false;
+
+function is_admin() {
+	return ! empty( $GLOBALS['ab_test_is_admin'] );
+}
+
+/** @var bool $ab_test_using_themes WP_USE_THEMES: true for index.php, false for wp-signup.php, wp-activate.php and wp-trackback.php. */
+$GLOBALS['ab_test_using_themes'] = true;
+
+function wp_using_themes() {
+	return ! empty( $GLOBALS['ab_test_using_themes'] );
+}
+
+/** @var bool $ab_test_installing WP_INSTALLING: true for wp-activate.php, where no plugin loads. */
+$GLOBALS['ab_test_installing'] = false;
+
+function wp_installing( $is_installing = null ) {
+	if ( null !== $is_installing ) {
+		$GLOBALS['ab_test_installing'] = (bool) $is_installing;
+	}
+	return ! empty( $GLOBALS['ab_test_installing'] );
+}
+
+/** @var bool $ab_test_is_robots Whether the request is robots.txt (is_robots()). */
+$GLOBALS['ab_test_is_robots'] = false;
+
+function is_robots() {
+	return ! empty( $GLOBALS['ab_test_is_robots'] );
+}
+
+function esc_textarea( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function wp_mkdir_p( $target ) {
+	return is_dir( $target ) || @mkdir( $target, 0777, true ); // phpcs:ignore
+}
+
+function rest_get_url_prefix() {
+	return 'wp-json';
+}
+
+function wp_login_url( $redirect = '' ) {
+	return 'https://example.test/wp-login.php' . ( '' !== (string) $redirect ? '?redirect_to=' . rawurlencode( (string) $redirect ) : '' );
+}
+
 /**
  * auth_redirect(), wp_redirect(), wp_safe_redirect() and wp_die() end the
  * request in WordPress. Here they end the code under test by throwing, so a
@@ -1691,7 +1763,11 @@ function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress
 	throw new AbTestExit( 'redirect', (string) $location );
 }
 
+/** @var array $ab_test_die_args The arguments of the last wp_die() (its response status among them). */
+$GLOBALS['ab_test_die_args'] = array();
+
 function wp_die( $message = '', $title = '', $args = array() ) {
+	$GLOBALS['ab_test_die_args'] = is_array( $args ) ? $args : array( 'response' => (int) $args );
 	throw new AbTestExit( 'die', (string) $message );
 }
 

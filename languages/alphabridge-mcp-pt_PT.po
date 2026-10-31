@@ -5140,3 +5140,98 @@ msgstr "O stock não faz parte da anulação: repô-lo anularia as encomendas fe
 
 msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
 msgstr "O cupão %d foi usado ou está reservado por uma encomenda em pagamento, e a anulação só envia para o lixo um cupão não usado, também com force=true: as encomendas que o usaram mantêm-no. Para o retirar de uso, atribua-lhe uma data de validade ou um limite de utilização em Marketing › Cupões no wp-admin; wp_wc_list_coupons lista os cupões."
+
+# The preview protection of a staging site (4.15.0).
+msgid "The preview protection is on already, and its password is not shown again. “New password” sets a new one and shows it once."
+msgstr "A proteção da pré-visualização já está ativada e a sua senha não é mostrada de novo. «Nova senha» define uma nova e mostra-a uma vez."
+
+msgid "The preview protection is off, so there is no password to renew. Switch it on first; that sets a password."
+msgstr "A proteção da pré-visualização está desativada, por isso não há senha para renovar. Ative-a primeiro; isso define uma senha."
+
+msgid "Unknown setting; nothing was changed."
+msgstr "Definição desconhecida; nada foi alterado."
+
+msgid "Staging"
+msgstr "Staging"
+
+msgctxt "tool group"
+msgid "Staging"
+msgstr "Staging"
+
+msgid "Preview protection"
+msgstr "Proteção da pré-visualização"
+
+msgid "For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before."
+msgstr "Para um site de staging: os visitantes sem sessão veem uma página de senha em vez do site, e os motores de busca são mantidos afastados. Os utilizadores com sessão, as aplicações ligadas e o hub continuam a funcionar como antes."
+
+msgid "Note this password down now — it is shown only once."
+msgstr "Anote esta senha agora — só é mostrada uma vez."
+
+msgid "Only its hash is stored. Visitors enter it once and are remembered for 14 days; a new password signs them all out."
+msgstr "Só o seu hash é guardado. Os visitantes introduzem-na uma vez e são lembrados durante 14 dias; uma nova senha desliga-os a todos."
+
+msgid "Preview password"
+msgstr "Senha da pré-visualização"
+
+msgid "Switch on"
+msgstr "Ativar"
+
+msgid "New password"
+msgstr "Nova senha"
+
+msgid "Switch off"
+msgstr "Desativar"
+
+msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
+msgstr "O que não cobre: os ficheiros em /wp-content/uploads/ continuam acessíveis pelo seu endereço enquanto o seu alojamento não adicionar uma regra para essa pasta; uma cache fora do PHP (cache do alojamento, CDN) pode continuar a mostrar páginas até a esvaziar lá; a senha partilhada não identifica ninguém, por isso serve para um site de staging mostrado a um cliente, não para dados confidenciais."
+
+msgid "Off: visitors see the site."
+msgstr "Desativada: os visitantes veem o site."
+
+#, php-format
+msgid "On since %1$s, switched on by %2$s. The search engine visibility is set to “discouraged” until you switch off; then it goes back to what it was."
+msgstr "Ativada desde %1$s, por %2$s. A visibilidade para os motores de busca está definida como «desencorajada» até a desativar; depois volta ao que era."
+
+msgid "The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before."
+msgstr "A proteção da pré-visualização está desativada: os visitantes voltam a ver o site e a visibilidade para os motores de busca voltou ao que era."
+
+msgid "Preview"
+msgstr "Pré-visualização"
+
+msgid "This site is a preview and not public yet. Enter the password you were given to see it; the browser then remembers you for 14 days."
+msgstr "Este site é uma pré-visualização e ainda não é público. Introduza a senha que lhe foi dada para o ver; depois, este navegador lembrar-se-á de si durante 14 dias."
+
+msgid "That password is not right. Check it with the person who gave it to you and try again."
+msgstr "Essa senha não está correta. Confirme-a com a pessoa que lha deu e tente de novo."
+
+msgid "Password"
+msgstr "Senha"
+
+msgid "Show the preview"
+msgstr "Mostrar a pré-visualização"
+
+msgid "Members of this site log in as usual instead."
+msgstr "Os membros deste site iniciam sessão como habitualmente."
+
+msgid "Log in"
+msgstr "Iniciar sessão"
+
+msgid "This site is a preview behind a password, so its REST API answers only signed-in users (a cookie with a nonce, or an application password) and visitors who entered the preview password in their browser. Enter it on the password page of the site, sign in, or ask the site administrator; the MCP endpoint and the sign-in of AlphaBridge MCP are open as always."
+msgstr "Este site é uma pré-visualização protegida por senha, por isso a sua API REST responde apenas a utilizadores com sessão (cookie com nonce, ou senha de aplicação) e a visitantes que introduziram a senha da pré-visualização no navegador. Introduza-a na página de senha do site, inicie sessão ou pergunte ao administrador do site; o ponto de acesso MCP e o início de sessão do AlphaBridge MCP continuam abertos como sempre."
+
+msgid "The preview protection is off, so there is no password to renew."
+msgstr "A proteção da pré-visualização está desativada, por isso não há senha para renovar."
+
+msgid "1. Switch it on with enabled=true, which sets a password and returns it once. 2. Pass the password on to whoever should see the preview."
+msgstr "1. Ative-a com enabled=true; isso define uma senha e devolve-a uma vez. 2. Passe a senha a quem deva ver a pré-visualização."
+
+msgctxt "tool label"
+msgid "Switch the preview protection on or off"
+msgstr "Ativar ou desativar a proteção da pré-visualização"
+
+#, php-format
+msgid "WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password."
+msgstr "O WordPress serve alguns pedidos sem carregar plugins (wp-activate.php: feeds e API REST), e o carregador que lhes responde pela proteção não pôde ser escrito em %s. Crie esse ficheiro à mão com o conteúdo abaixo, ou dê permissão de escrita à pasta; até lá, esses pedidos respondem sem senha."
+
+msgid "File content"
+msgstr "Conteúdo do ficheiro"

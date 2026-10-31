@@ -1492,7 +1492,29 @@ class AB_MCP_OAuth {
 		if ( ! self::enabled() || ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		$path = (string) wp_parse_url( (string) $_SERVER['REQUEST_URI'], PHP_URL_PATH ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched, never echoed.
+		$document = self::well_known_document( (string) $_SERVER['REQUEST_URI'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched, never echoed.
+		if ( 'authorization-server' === $document ) {
+			self::send_json( self::metadata() );
+		}
+		if ( 'protected-resource' === $document ) {
+			self::send_json( self::resource_metadata() );
+		}
+	}
+
+	/**
+	 * Which of the two documents below /.well-known/ a request URI asks for,
+	 * exactly as serve_well_known() decides it: the path as sent, the home
+	 * path of a WordPress in a sub-directory taken off the front, the
+	 * document name followed by a slash or the end, nothing normalised (a
+	 * double slash is not served). The preview protection asks the same
+	 * question (AB_MCP_Preview_Protection), so the two never disagree about
+	 * what is served and what WordPress would answer with its 404 page.
+	 *
+	 * @param string $request_uri REQUEST_URI.
+	 * @return string 'authorization-server', 'protected-resource' or ''.
+	 */
+	public static function well_known_document( $request_uri ) {
+		$path = (string) wp_parse_url( (string) $request_uri, PHP_URL_PATH );
 
 		// When WordPress lives in a subdirectory, .well-known sits under the
 		// HOME path — strip that prefix before matching.
@@ -1502,11 +1524,12 @@ class AB_MCP_OAuth {
 		}
 
 		if ( preg_match( '#^/\.well-known/oauth-authorization-server(/|$)#', $path ) ) {
-			self::send_json( self::metadata() );
+			return 'authorization-server';
 		}
 		if ( preg_match( '#^/\.well-known/oauth-protected-resource(/|$)#', $path ) ) {
-			self::send_json( self::resource_metadata() );
+			return 'protected-resource';
 		}
+		return '';
 	}
 
 	/**

@@ -321,6 +321,9 @@ final class BundledTranslationsTest extends TestCase {
 		"tool group\x04Site Deploy (FTP/SFTP)",
 		'claude.ai, Desktop, iPhone',
 		'WooCommerce',
+		// The staging site (4.15.0): the word every one of these languages uses.
+		'Staging',
+		"tool group\x04Staging",
 	);
 
 	/**
@@ -331,7 +334,7 @@ final class BundledTranslationsTest extends TestCase {
 	const SAME_AS_ENGLISH_IN = array(
 		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', 'Undo', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets", 'Plugins & Themes' ),
 		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets" ),
-		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token' ),
+		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token', 'Password' ),
 		'es' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
 		'pt' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
 	);
@@ -678,7 +681,7 @@ final class BundledTranslationsTest extends TestCase {
 	public function testEveryShortNameOfAToolIsTranslated( string $locale ): void {
 		$mo    = self::mo( self::file( $locale, 'mo' ) );
 		$names = \AB_MCP_Tool_Labels::all();
-		self::assertCount( 145, $names, 'Every tool of the core, of Pro and of its Agency plan (wp_find_media new in 4.12.0).' );
+		self::assertCount( 146, $names, 'Every tool of the core, of Pro and of its Agency plan (wp_find_media new in 4.12.0, wp_set_preview_protection in 4.15.0).' );
 		foreach ( $names as $tool => $label ) {
 			self::assertArrayHasKey( "tool label\x04" . $label, $mo, $locale . ': ' . $tool );
 			self::assertNotSame( '', $mo[ "tool label\x04" . $label ] );

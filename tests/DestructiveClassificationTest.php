@@ -80,6 +80,11 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_activate_theme',
 		// Free since 4.12.0: runs whatever another plugin's ability does.
 		'wp_run_ability',
+		// Free since 4.15.0: by its name alone, as this count goes; its
+		// definition says destructive => false, since the same call takes
+		// the switch back and nothing of the site is overwritten
+		// (PreviewProtectionTest).
+		'wp_set_preview_protection',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

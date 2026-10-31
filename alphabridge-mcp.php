@@ -3,7 +3,7 @@
  * Plugin Name:       AlphaBridge MCP
  * Plugin URI:        https://www.alphabridge-mcp.com
  * Description:       Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches.
- * Version:           4.14.0
+ * Version:           4.15.0
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            AlphaBridge
@@ -28,7 +28,7 @@ if ( defined( 'AB_MCP_VERSION' ) || class_exists( 'AB_MCP_Plugin', false ) ) {
 	return;
 }
 
-define( 'AB_MCP_VERSION', '4.14.0' );
+define( 'AB_MCP_VERSION', '4.15.0' );
 define( 'AB_MCP_FILE', __FILE__ );
 define( 'AB_MCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AB_MCP_URL', plugin_dir_url( __FILE__ ) );
@@ -131,6 +131,11 @@ AB_MCP_Ability_Switches::hook();
 // actions the first time anything asks for an ability.
 require_once AB_MCP_DIR . 'includes/abilities/class-own-abilities.php';
 AB_MCP_Own_Abilities::hook();
+// The preview protection of a staging site (free since 4.15.0): the
+// password page for visitors and the 401 of the public REST API while it
+// is on. Hooked by the plugin on init (AB_MCP_Plugin), after the OAuth
+// handlers it leaves out.
+require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

@@ -109,4 +109,85 @@ for ( const storageBlocked of [ false, true ] ) {
 		}
 	}
 }
+/* ---- The preview protection: switching on over ajax shows the password once
+ * and, where the loader for wp-activate.php could not be written, the note
+ * and the file to create at once, as a reload would. ---- */
+async function runPreview( answer ) {
+	const listeners = {};
+	const node = ( attrs = {}, children = [] ) => {
+		const n = {
+			attrs, children, hidden: 'hidden' in attrs, value: '', textContent: '', innerHTML: '', disabled: false, dataset: {},
+			getAttribute( k ) { return k in this.attrs ? this.attrs[ k ] : null; },
+			matches( sel ) {
+				return sel.split( ',' ).some( ( one ) => {
+					one = one.trim();
+					if ( one.startsWith( '#' ) ) { return this.attrs.id === one.slice( 1 ); }
+					if ( one.startsWith( '.' ) ) { return ( this.attrs.class || '' ).split( ' ' ).includes( one.slice( 1 ) ); }
+					if ( one.startsWith( '[' ) ) { return one.slice( 1, -1 ) in this.attrs; }
+					return false;
+				} );
+			},
+			closest( sel ) { let c = this; while ( c ) { if ( c.matches( sel ) ) { return c; } c = c.parent || null; } return null; },
+			all() { return this.children.flatMap( ( c ) => [ c, ...c.all() ] ); },
+			querySelector( sel ) { return this.all().find( ( c ) => c.matches( sel ) ) || null; },
+			querySelectorAll( sel ) { return this.all().filter( ( c ) => c.matches( sel ) ); },
+		};
+		for ( const c of children ) { c.parent = n; }
+		return n;
+	};
+	const onBtn    = node( { class: 'ab-btn ab-preview-ajax', 'data-preview': 'on', 'data-when': 'off' } );
+	const renewBtn = node( { class: 'ab-btn ab-preview-ajax', 'data-preview': 'password', 'data-when': 'on', hidden: '' } );
+	const offForm  = node( { class: 'ab-preview__off', 'data-when': 'on', hidden: '' } );
+	const password = node( { class: 'ab-select ab-preview-password' } );
+	const reveal   = node( { class: 'ab-reveal ab-preview-reveal', hidden: '' }, [ password ] );
+	const status   = node( { class: 'ab-direct__status ab-preview-status' } );
+	const text     = node( { class: 'ab-preview__loader-text' } );
+	const source   = node( { class: 'ab-preview__source' } );
+	const loader   = node( { class: 'notice ab-preview__loader', hidden: '' }, [ text, source ] );
+	const card     = node( { id: 'ab-preview', class: 'ab-card ab-preview' }, [ status, reveal, onBtn, renewBtn, offForm, loader ] );
+	const document = {
+		addEventListener( kind, fn ) { ( listeners[ kind ] = listeners[ kind ] || [] ).push( fn ); },
+		querySelector( sel ) { return card.querySelector( sel ); },
+		querySelectorAll( sel ) { return card.querySelectorAll( sel ); },
+		getElementById( id ) { return 'ab-preview' === id ? card : null; },
+	};
+	let sent = null;
+	const window = {
+		abMcpAdmin: { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n' },
+		location: { hash: '' },
+		localStorage: { getItem() { return null; }, setItem() {} },
+		addEventListener() {},
+		FormData: class { constructor() { this.fields = {}; } append( k, v ) { this.fields[ k ] = v; } },
+		fetch( url, init ) { sent = { url, body: init.body.fields }; return Promise.resolve( { json: () => Promise.resolve( answer ) } ); },
+		alert( msg ) { throw new Error( 'alert: ' + msg ); },
+	};
+	vm.runInNewContext( code, { document, window, console } );
+	for ( const fn of listeners.click || [] ) {
+		fn( { target: onBtn, preventDefault() {} } );
+	}
+	// The fetch and its json() resolve in two steps.
+	await new Promise( ( r ) => setTimeout( r, 0 ) );
+	return { sent, card, onBtn, renewBtn, offForm, password, reveal, status, loader, text, source };
+}
+
+const written = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: true }, loader_note: '', loader_source: '' } } );
+assert.equal( written.sent.body.action, 'ab_mcp_preview_protection' );
+assert.equal( written.sent.body.preview, 'on' );
+assert.equal( written.password.value, 'abcdEFGH23456789', 'the password, shown once' );
+assert.equal( written.reveal.hidden, false );
+assert.equal( written.status.textContent, 'On since now' );
+assert.equal( written.onBtn.hidden, true, 'on is done' );
+assert.equal( written.renewBtn.hidden, false );
+assert.equal( written.offForm.hidden, false );
+assert.equal( written.loader.hidden, true, 'the loader was written: no note' );
+assert.equal( written.text.textContent, '' );
+cases++;
+
+const missing = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: false }, loader_note: 'could not be written to /mu/alphabridge-preview-protection.php', loader_source: "<?php\n// ab-mcp-preview-loader" } } );
+assert.equal( missing.loader.hidden, false, 'the note shows at once, without a reload' );
+assert.equal( missing.text.textContent, 'could not be written to /mu/alphabridge-preview-protection.php' );
+assert.equal( missing.source.value, "<?php\n// ab-mcp-preview-loader", 'with the file to create' );
+assert.equal( missing.password.value, 'abcdEFGH23456789', 'and the password all the same' );
+cases++;
+
 console.log( `admin-js-test: ${ cases } cases passed` );

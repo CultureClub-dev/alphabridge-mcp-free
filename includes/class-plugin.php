@@ -59,6 +59,10 @@ final class AB_MCP_Plugin {
 		// page, register/token endpoints) that lets Claude's native "Connect"
 		// button work against this site.
 		AB_MCP_OAuth::boot();
+		// The preview protection of a staging site (free since 4.15.0): its
+		// front-end gate runs after the OAuth handlers above, its REST gate
+		// after WordPress's own checks.
+		AB_MCP_Preview_Protection::hook();
 
 		if ( is_admin() ) {
 			new AB_MCP_Admin( $this->registry );
@@ -170,6 +174,7 @@ final class AB_MCP_Plugin {
 			'install-update',
 			'plugins-themes-manage',
 			'abilities',
+			'staging',
 		);
 
 		foreach ( $files as $file ) {
@@ -213,6 +218,9 @@ final class AB_MCP_Plugin {
 			// Free since 4.12.0, the group as in Pro: the abilities of other
 			// plugins, each only once an administrator approved it.
 			'AB_MCP_Tools_Abilities'             => array( 'abilities', __( 'Abilities of other plugins', 'alphabridge-mcp' ) ),
+			// Free since 4.15.0: the staging site, beginning with its
+			// preview protection.
+			'AB_MCP_Tools_Staging'               => array( 'staging', __( 'Staging', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {
@@ -233,18 +241,31 @@ final class AB_MCP_Plugin {
 
 	/**
 	 * Activation: create defaults + audit table.
+	 *
+	 * @param bool $network_wide Activated for the whole network.
 	 */
-	public static function on_activate() {
+	public static function on_activate( $network_wide = false ) {
 		require_once AB_MCP_DIR . 'includes/class-settings.php';
 		require_once AB_MCP_DIR . 'includes/class-audit-log.php';
+		require_once AB_MCP_DIR . 'includes/class-page-cache.php';
+		require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
 		AB_MCP_Settings::install_defaults();
 		AB_MCP_Audit_Log::install_table();
+		// A preview protection left on across a deactivation takes the
+		// search engine visibility again (free since 4.15.0), on every site
+		// when activated for the network.
+		AB_MCP_Preview_Protection::on_activate( (bool) $network_wide );
 	}
 
 	/**
-	 * Deactivation hook (kept minimal – no data loss).
+	 * Deactivation hook: tokens and settings stay. The preview protection
+	 * (free since 4.15.0) writes the search engine visibility back, since its
+	 * gates go with the plugin, and keeps its state for the next activation;
+	 * on every site when deactivated for the network.
+	 *
+	 * @param bool $network_wide Deactivated for the whole network.
 	 */
-	public static function on_deactivate() {
-		// Intentionally empty: keep tokens/settings on deactivate.
+	public static function on_deactivate( $network_wide = false ) {
+		AB_MCP_Preview_Protection::on_deactivate( (bool) $network_wide );
 	}
 }

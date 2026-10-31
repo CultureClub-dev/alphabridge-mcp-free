@@ -5140,3 +5140,98 @@ msgstr "Le scorte non fanno parte dell'annullamento: ripristinarle annullerebbe 
 
 msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
 msgstr "Il coupon %d è stato usato o è riservato da un ordine in fase di pagamento, e l'annullamento sposta nel cestino solo un coupon non usato, anche con force=true: gli ordini che lo hanno usato lo mantengono. Per toglierlo dall'uso, assegnagli una data di scadenza o un limite di utilizzo in wp-admin sotto Marketing › Codici promozionali; wp_wc_list_coupons elenca i coupon."
+
+# The preview protection of a staging site (4.15.0).
+msgid "The preview protection is on already, and its password is not shown again. “New password” sets a new one and shows it once."
+msgstr "La protezione dell’anteprima è già attiva e la sua password non viene più mostrata. «Nuova password» ne imposta una nuova e la mostra una volta."
+
+msgid "The preview protection is off, so there is no password to renew. Switch it on first; that sets a password."
+msgstr "La protezione dell’anteprima è disattivata, quindi non c’è nessuna password da rinnovare. Attivala prima; questo imposta una password."
+
+msgid "Unknown setting; nothing was changed."
+msgstr "Impostazione sconosciuta; non è stato modificato nulla."
+
+msgid "Staging"
+msgstr "Staging"
+
+msgctxt "tool group"
+msgid "Staging"
+msgstr "Staging"
+
+msgid "Preview protection"
+msgstr "Protezione dell’anteprima"
+
+msgid "For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before."
+msgstr "Per un sito di staging: i visitatori senza accesso vedono una pagina con richiesta di password al posto del sito, e i motori di ricerca vengono tenuti lontani. Gli utenti collegati, le app connesse e l’hub continuano a funzionare come prima."
+
+msgid "Note this password down now — it is shown only once."
+msgstr "Annota questa password ora — viene mostrata una sola volta."
+
+msgid "Only its hash is stored. Visitors enter it once and are remembered for 14 days; a new password signs them all out."
+msgstr "Viene salvato solo il suo hash. I visitatori la inseriscono una volta e vengono ricordati per 14 giorni; una nuova password li scollega tutti."
+
+msgid "Preview password"
+msgstr "Password dell’anteprima"
+
+msgid "Switch on"
+msgstr "Attiva"
+
+msgid "New password"
+msgstr "Nuova password"
+
+msgid "Switch off"
+msgstr "Disattiva"
+
+msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
+msgstr "Cosa non copre: i file sotto /wp-content/uploads/ restano raggiungibili dal loro indirizzo finché il tuo hosting non aggiunge una regola per quella cartella; una cache fuori da PHP (cache dell’hosting, CDN) può continuare a mostrare pagine finché non la svuoti lì; la password condivisa non identifica nessuno, quindi va bene per un sito di staging mostrato a un cliente, non per dati riservati."
+
+msgid "Off: visitors see the site."
+msgstr "Disattivata: i visitatori vedono il sito."
+
+#, php-format
+msgid "On since %1$s, switched on by %2$s. The search engine visibility is set to “discouraged” until you switch off; then it goes back to what it was."
+msgstr "Attiva dal %1$s, attivata da %2$s. La visibilità per i motori di ricerca è impostata su «scoraggiata» finché non la disattivi; poi torna com’era."
+
+msgid "The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before."
+msgstr "La protezione dell’anteprima è disattivata: i visitatori vedono di nuovo il sito e la visibilità per i motori di ricerca è tornata com’era prima."
+
+msgid "Preview"
+msgstr "Anteprima"
+
+msgid "This site is a preview and not public yet. Enter the password you were given to see it; the browser then remembers you for 14 days."
+msgstr "Questo sito è un’anteprima e non è ancora pubblico. Inserisci la password che ti è stata data per vederlo; questo browser ti ricorderà poi per 14 giorni."
+
+msgid "That password is not right. Check it with the person who gave it to you and try again."
+msgstr "Questa password non è corretta. Verificala con la persona che te l’ha data e riprova."
+
+msgid "Password"
+msgstr "Password"
+
+msgid "Show the preview"
+msgstr "Mostra l’anteprima"
+
+msgid "Members of this site log in as usual instead."
+msgstr "I membri di questo sito accedono invece come al solito."
+
+msgid "Log in"
+msgstr "Accedi"
+
+msgid "This site is a preview behind a password, so its REST API answers only signed-in users (a cookie with a nonce, or an application password) and visitors who entered the preview password in their browser. Enter it on the password page of the site, sign in, or ask the site administrator; the MCP endpoint and the sign-in of AlphaBridge MCP are open as always."
+msgstr "Questo sito è un’anteprima protetta da password, quindi la sua API REST risponde solo agli utenti collegati (cookie con nonce, o password applicazione) e ai visitatori che hanno inserito la password dell’anteprima nel browser. Inseriscila nella pagina della password del sito, accedi oppure chiedi all’amministratore del sito; l’endpoint MCP e l’accesso di AlphaBridge MCP restano aperti come sempre."
+
+msgid "The preview protection is off, so there is no password to renew."
+msgstr "La protezione dell’anteprima è disattivata, quindi non c’è nessuna password da rinnovare."
+
+msgid "1. Switch it on with enabled=true, which sets a password and returns it once. 2. Pass the password on to whoever should see the preview."
+msgstr "1. Attivala con enabled=true; questo imposta una password e la restituisce una volta. 2. Passa la password a chi deve vedere l’anteprima."
+
+msgctxt "tool label"
+msgid "Switch the preview protection on or off"
+msgstr "Attivare o disattivare la protezione dell’anteprima"
+
+#, php-format
+msgid "WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password."
+msgstr "WordPress serve alcune richieste senza caricare i plugin (wp-activate.php: feed e API REST), e il caricatore che risponde per la protezione non ha potuto essere scritto in %s. Crea quel file a mano con il contenuto qui sotto, oppure dai alla cartella il permesso di scrittura; fino ad allora quelle richieste rispondono senza password."
+
+msgid "File content"
+msgstr "Contenuto del file"
