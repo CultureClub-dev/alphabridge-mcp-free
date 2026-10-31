@@ -916,7 +916,7 @@ class AB_MCP_Staging {
 				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
-			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to texts, pages, posts and media alone, work in drafts and previews, and publish once the person has approved them.', 'alphabridge-mcp' );
+			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
 			$items[]          = $item;
 		} else {
 			$items[] = self::staging_item( $title, $pair['partner_url'], $check );

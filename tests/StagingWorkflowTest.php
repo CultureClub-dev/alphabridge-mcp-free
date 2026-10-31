@@ -27,6 +27,9 @@
  *   wp_staging_status check the setting up only, cover a protection that
  *   is on already, and say that carrying over needs a connection that can
  *   write on both sites.
+ * - The sentence, the prompt and the checklist of wp_staging_status keep
+ *   drafts to the same content, posts and pages; the prompt and the
+ *   checklist say that media, menus and settings take effect at once.
  * - Neither advertises anything: no Pro, Agency, upgrade, licence, price or
  *   checkout, and no link.
  *
@@ -42,6 +45,7 @@ namespace AlphaBridge\Tests;
 use AB_MCP_Auth;
 use AB_MCP_REST_Controller;
 use AB_MCP_Settings;
+use AB_MCP_Staging;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
 use PHPUnit\Framework\TestCase;
@@ -291,6 +295,28 @@ final class StagingWorkflowTest extends TestCase {
 		self::assertSame( 'staging_workflow', $with[1]['name'] );
 		self::assertSame( array( $other ), AB_MCP_Tools_Staging::add_prompt( array( $other ), new AB_MCP_Tool_Registry() ) );
 		self::assertSame( array(), AB_MCP_Tools_Staging::add_prompt( 'not a list', new AB_MCP_Tool_Registry() ) );
+	}
+
+	public function testTheChecklistThePromptAndTheSentenceKeepDraftsToPostsAndPages(): void {
+		$items    = AB_MCP_Staging::checklist( AB_MCP_Staging::ROLE_PRODUCTION, null, null, false, array( 'name' => '' ) );
+		$fallback = '';
+		foreach ( $items as $item ) {
+			if ( 'staging_connected' === $item['id'] ) {
+				$fallback = $item['fallback'];
+			}
+		}
+		$prompt = AB_MCP_Tools_Staging::add_prompt( array(), self::staging_registry() )[0]['text'];
+
+		$scope = static function ( string $pattern, string $text ): string {
+			self::assertSame( 1, preg_match( $pattern, $text, $m ), $text );
+			return $m[1];
+		};
+		self::assertSame( 'posts and pages', $scope( '/drafts for (.+?) alone/', self::instructions( self::staging_registry() ) ), 'The sentence, as the server sends it.' );
+		self::assertSame( 'posts and pages', $scope( '/For changes to (.+?) alone, drafts/', $prompt ), 'The prompt.' );
+		self::assertSame( 'posts and pages', $scope( '/for changes to (.+?) alone, work in drafts/', $fallback ), 'The checklist the prompt sends the assistant to.' );
+		foreach ( array( 'prompt' => $prompt, 'checklist' => $fallback ) as $what => $text ) {
+			self::assertMatchesRegularExpression( '/media, menus,? (and )?settings[^.]* take effect at once/', $text, $what . ': what drafts do not cover, and why.' );
+		}
 	}
 
 	/* --------------------------------------------- nothing advertised */
