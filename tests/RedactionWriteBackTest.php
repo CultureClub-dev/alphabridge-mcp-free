@@ -391,6 +391,46 @@ final class RedactionWriteBackTest extends TestCase {
 		}
 	}
 
+	public function testAPlaceholderInAListIsPutBackOnlyWhereTheListIsAsRead(): void {
+		// Codex 9 #1: a list is matched by position, so only one as read is.
+		$stored = array(
+			'connections' => array( array( 'name' => 'production', 'api_key' => 'PROD-KEY' ), array( 'name' => 'staging', 'api_key' => 'STAGE-KEY' ) ),
+			'color'       => 'red',
+		);
+		add_post_meta( 5, 'conns', $stored );
+		$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => 'conns' ) ) )['value'];
+		self::assertSame( array( array( 'name' => 'production', 'api_key' => self::R ), array( 'name' => 'staging', 'api_key' => self::R ) ), $read['connections'] );
+		$write = static fn( $value ) => AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'conns', 'value' => $value ) );
+
+		$before = $GLOBALS['ab_test_meta'];
+		foreach (
+			array(
+				'removed'  => array( $read['connections'][1] ),
+				'the last' => array( $read['connections'][0] ),
+				'swapped'  => array( $read['connections'][1], $read['connections'][0] ),
+				'inserted' => array( array( 'name' => 'dev', 'api_key' => 'DEV-KEY' ), $read['connections'][0], $read['connections'][1] ),
+				'changed'  => array( $read['connections'][0], array( 'name' => 'stage', 'api_key' => self::R ) ),
+			) as $why => $list
+		) {
+			$res = $write( array( 'connections' => $list, 'color' => 'blue' ) );
+			self::assertInstanceOf( \WP_Error::class, $res, $why );
+			self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code(), $why );
+			self::assertStringContainsString( 'Send the real value', $res->get_error_message(), $why );
+		}
+		self::assertSame( $before, $GLOBALS['ab_test_meta'], 'Nothing was written.' );
+
+		// As read, with another field changed: put back.
+		$res = $write( array( 'connections' => $read['connections'], 'color' => 'blue' ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'connections' => $stored['connections'], 'color' => 'blue' ), get_post_meta( 5, 'conns', true ) );
+
+		// A changed entry without a placeholder changes; the one with it stays as stored.
+		add_post_meta( 5, 'mixed', array( array( 'name' => 'production', 'api_key' => 'PROD-KEY' ), array( 'name' => 'staging', 'region' => 'eu' ) ) );
+		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'mixed', 'value' => array( array( 'name' => 'production', 'api_key' => self::R ), array( 'name' => 'staging', 'region' => 'us' ) ) ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( array( 'name' => 'production', 'api_key' => 'PROD-KEY' ), array( 'name' => 'staging', 'region' => 'us' ) ), get_post_meta( 5, 'mixed', true ) );
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 

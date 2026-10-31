@@ -636,8 +636,9 @@ final class AB_MCP_Redactor {
 	 * in the reader's order: a key the reader redacts is restored.
 	 * $left says whether a placeholder is left after that (carries_mark()):
 	 * one without a stored value at its path, a key without its one stored
-	 * key, one inside JSON or serialized data, or a value too deep or too
-	 * large to look through. The writer refuses then.
+	 * key, one inside JSON or serialized data, one in a list not as read
+	 * (another length, or its entry changed but for the placeholders), or a
+	 * value too deep or too large to look through. The writer refuses then.
 	 *
 	 * @param mixed $new    Value to be written.
 	 * @param mixed $stored Value stored now.
@@ -680,6 +681,14 @@ final class AB_MCP_Redactor {
 		}
 		$vars = $has ? self::vars( $stored ) : array();
 		$out  = is_array( $new ) ? array() : new stdClass();
+		// A list is matched by position: a placeholder in it is put back only
+		// where the list is as read, as long as the stored one and the entry
+		// that holds it as stored but for its placeholders (below). An entry
+		// removed, added or moved would put another entry's value back.
+		$list = is_array( $new ) && self::is_list( $new );
+		if ( $list && ( ! self::is_list( $vars ) || count( $vars ) !== count( $new ) ) && self::holds_mark( $new, $depth, $budget, $extra, $parse ) ) {
+			$left = true;
+		}
 		foreach ( is_array( $new ) ? $new : get_object_vars( $new ) as $k => $v ) {
 			if ( self::is_masked_key( $k, $extra ) && ! array_key_exists( $k, $vars ) ) {
 				$key  = self::stored_key( $k, $vars, $extra );
@@ -694,6 +703,9 @@ final class AB_MCP_Redactor {
 			} else {
 				$here = array_key_exists( $k, $vars );
 				$back = self::restore( $v, $here, $here ? $vars[ $k ] : null, $depth + 1, $budget, $left, $extra, $parse && ! $content );
+				if ( $list && $here && ! $left && self::holds_mark( $v, $depth + 1, $budget, $extra, $parse ) && ! self::same_view( $back, $vars[ $k ] ) ) {
+					$left = true;
+				}
 			}
 			if ( is_array( $out ) ) {
 				$out[ $k ] = $back;
@@ -702,6 +714,45 @@ final class AB_MCP_Redactor {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether an array is a list: its keys 0, 1, 2 … in this order, as JSON
+	 * writes an array (not an object).
+	 *
+	 * @param array $value Array.
+	 * @return bool
+	 */
+	private static function is_list( array $value ) {
+		return array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+	}
+
+	/**
+	 * Whether a value sent holds a placeholder that restore() would put the
+	 * stored value back for, as placeholder_in() finds one.
+	 *
+	 * @param mixed    $value  Value.
+	 * @param int      $depth  Nesting so far.
+	 * @param int      $budget Visits left.
+	 * @param string[] $extra  extra_keys().
+	 * @param bool     $parse  Whether the reader decodes texts here.
+	 * @return bool
+	 */
+	private static function holds_mark( $value, $depth, &$budget, array $extra, $parse ) {
+		return null !== self::find_mark( $value, array(), $depth, $budget, $extra, $parse );
+	}
+
+	/**
+	 * Whether two values read alike in their JSON form, the form the reader
+	 * hands out; false where one has none.
+	 *
+	 * @param mixed $a Value.
+	 * @param mixed $b Value.
+	 * @return bool
+	 */
+	private static function same_view( $a, $b ) {
+		$x = wp_json_encode( $a );
+		return is_string( $x ) && wp_json_encode( $b ) === $x;
 	}
 
 	/**
@@ -1547,6 +1598,34 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
+	 * The bytes of a token from an offset on: its characters (RFC 6750's
+	 * b64token), and backslashes before one of them, as JSON escapes a slash
+	 * (\/, \\\/ in JSON inside JSON).
+	 *
+	 * @param string $text  Text.
+	 * @param int    $from  Offset.
+	 * @param int    $chars Set to the token's characters, backslashes not counted.
+	 * @return int
+	 */
+	private static function token_length( $text, $from, &$chars ) {
+		$set   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/';
+		$at    = $from;
+		$chars = 0;
+		$size  = strlen( $text );
+		while ( $at < $size ) {
+			$n      = strspn( $text, $set, $at );
+			$at    += $n;
+			$chars += $n;
+			$run    = $at < $size ? strspn( $text, '\\', $at ) : 0;
+			if ( 0 === $run || $at + $run >= $size || 1 !== strspn( $text, $set, $at + $run, 1 ) ) {
+				break;
+			}
+			$at += $run;
+		}
+		return $at - $from;
+	}
+
+	/**
 	 * Every Bearer token of a text.
 	 *
 	 * @param string $line Text.
@@ -1562,8 +1641,8 @@ final class AB_MCP_Redactor {
 		$pos = 0;
 		foreach ( $found[0] as $m ) {
 			$from = $m[1] + strlen( $m[0] );
-			$len  = strspn( $line, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/', $from );
-			if ( $m[1] >= $pos && $len >= 8 ) {
+			$len  = self::token_length( $line, $from, $chars );
+			if ( $m[1] >= $pos && $chars >= 8 ) {
 				++$hits;
 				$out .= substr( $line, $pos, $from - $pos ) . self::MARK;
 				$pos  = $from + $len + strspn( $line, '=', $from + $len );

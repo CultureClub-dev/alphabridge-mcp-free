@@ -826,6 +826,36 @@ final class RedactionTest extends TestCase {
 		self::assertSame( '[31-Oct-2026] {"b":"{\\"otp\\":[REDACTED]' . "\n" . '[31-Oct-2026] next', $this->read( array( 'log' => $both ), 'wp_get_error_log' )['log'] );
 	}
 
+	public function testABearerTokenWithEscapedCharactersIsRedactedWhole(): void {
+		// Codex 9 #2: wp_json_encode() writes / as \/.
+		$log = implode(
+			"\n",
+			array(
+				wp_json_encode( array( 'message' => 'Bearer PL/ACEHOLDER1xyz' ) ),
+				wp_json_encode( array( 'message' => 'Bearer /PLACEHOLDER2abc' ) ),
+				wp_json_encode( array( 'message' => 'Bearer PLACEHOLDER3/a/b/c end' ) ),
+				wp_json_encode( array( 'body' => wp_json_encode( array( 'message' => 'Bearer PLA/CEHOLDER4zz' ) ) ) ),
+				'Missing Bearer token in request; Bearer \\/ Basic; see Bearer \\/api\\/v1',
+			)
+		);
+
+		$out = $this->read( array( 'log' => $log ), 'wp_get_error_log' );
+
+		self::assertSame(
+			implode(
+				"\n",
+				array(
+					'{"message":"Bearer [REDACTED]"}',
+					'{"message":"Bearer [REDACTED]"}',
+					'{"message":"Bearer [REDACTED] end"}',
+					'{"body":"{\\"message\\":\\"Bearer [REDACTED]\\"}"}',
+					'Missing Bearer token in request; Bearer \\/ Basic; see Bearer \\/api\\/v1',
+				)
+			),
+			$out['log']
+		);
+	}
+
 	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
 		// Codex 5 #5: a Bearer token before a pair, and after it.
 		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );
