@@ -384,6 +384,19 @@ final class AB_MCP_Redactor {
 	}
 
 	/**
+	 * A value as a reading tool's answer shows it: redacted (walk()), without
+	 * the field that names the paths. A writer compares what it is sent with
+	 * this form of what it stores.
+	 *
+	 * @param mixed $value Value.
+	 * @return mixed
+	 */
+	public static function view( $value ) {
+		$st = self::state( '' );
+		return self::walk( $value, array(), $st, 0 );
+	}
+
+	/**
 	 * Whether run_tool() looks for the placeholder in a tool's arguments:
 	 * for every tool that writes, but those that put the stored value back
 	 * themselves (restores()) and those that take patterns (PATTERN_TOOLS).
@@ -723,7 +736,7 @@ final class AB_MCP_Redactor {
 	 * @param array $value Array.
 	 * @return bool
 	 */
-	private static function is_list( array $value ) {
+	public static function is_list( array $value ) {
 		return array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
 	}
 
@@ -750,7 +763,7 @@ final class AB_MCP_Redactor {
 	 * @param mixed $b Value.
 	 * @return bool
 	 */
-	private static function same_view( $a, $b ) {
+	public static function same_view( $a, $b ) {
 		$x = wp_json_encode( $a );
 		$y = wp_json_encode( $b );
 		if ( ! is_string( $x ) || ! is_string( $y ) ) {

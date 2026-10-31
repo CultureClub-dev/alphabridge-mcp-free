@@ -442,6 +442,52 @@ final class RedactionWriteBackTest extends TestCase {
 		self::assertSame( array( array( 'name' => 'production', 'api_key' => 'PROD-KEY' ), array( 'name' => 'staging', 'region' => 'us' ) ), get_post_meta( 5, 'mixed', true ) );
 	}
 
+	public function testAWidgetListIsMatchedInTheFormTheReaderShows(): void {
+		// Codex 11: wp_get_widgets leaves refresh_token out and shows
+		// accessToken as [REDACTED]; a list is matched by position.
+		$GLOBALS['wp_widget_factory']     = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
+		$GLOBALS['wp_registered_widgets'] = array( 'text-4' => array( 'name' => 'Text' ) );
+		update_option( 'sidebars_widgets', array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-4' ) ) );
+		$one    = array( 'name' => 'production', 'accessToken' => 'ACCESS', 'refresh_token' => 'REFRESH' );
+		$update = static fn( array $settings ) => AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => $settings ) );
+		try {
+			// As read, another field changed: the stored entry stays whole.
+			update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'accounts' => array( $one ) ), '_multiwidget' => 1 ) );
+			$read = $this->answer( 'wp_get_widgets', AB_MCP_Tools_Widgets::get_widgets( array() ) )['widgets'][0]['settings'];
+			self::assertSame( array( array( 'name' => 'production', 'accessToken' => self::R ) ), $read['accounts'] );
+			$read['title'] = 'feed 2';
+			$res           = $update( array_reverse( $read, true ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array( $one ), get_option( 'widget_text' )[4]['accounts'] );
+			self::assertSame( 'feed 2', get_option( 'widget_text' )[4]['title'] );
+
+			// An account removed from a list with credentials: refused, nothing written.
+			$two = array( array( 'name' => 'production', 'accessToken' => 'PROD' ), array( 'name' => 'staging', 'accessToken' => 'STAGE' ) );
+			update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'accounts' => $two ), '_multiwidget' => 1 ) );
+			$before = get_option( 'widget_text' );
+			foreach ( array( array( array( 'name' => 'staging' ) ), array( array( 'name' => 'staging', 'accessToken' => self::R ) ), array( array( 'name' => 'stage', 'accessToken' => self::R ), $two[1] ), array( array( 'name' => 'production' ), array( 'name' => 'staging' ) ) ) as $i => $accounts ) {
+				$res = $update( array( 'accounts' => $accounts ) );
+				self::assertInstanceOf( \WP_Error::class, $res, (string) $i );
+				self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code(), (string) $i );
+				self::assertStringContainsString( 'settings.accounts', $res->get_error_message(), (string) $i );
+				self::assertStringContainsString( 'Appearance › Widgets', $res->get_error_message(), (string) $i );
+				self::assertSame( $before, get_option( 'widget_text' ), (string) $i );
+			}
+			// With the real credentials it is a change like any other.
+			$res = $update( array( 'accounts' => array( array( 'name' => 'staging', 'accessToken' => 'STAGE-2' ) ) ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array( array( 'name' => 'staging', 'accessToken' => 'STAGE-2' ) ), get_option( 'widget_text' )[4]['accounts'] );
+
+			// A list without credentials changes freely.
+			update_option( 'widget_text', array( 4 => array( 'title' => 'feed', 'accounts' => array( array( 'name' => 'a', 'region' => 'eu' ), array( 'name' => 'b', 'region' => 'us' ) ) ), '_multiwidget' => 1 ) );
+			$res = $update( array( 'accounts' => array( array( 'name' => 'b', 'region' => 'us' ) ) ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array( array( 'name' => 'b', 'region' => 'us' ) ), get_option( 'widget_text' )[4]['accounts'] );
+		} finally {
+			unset( $GLOBALS['wp_widget_factory'], $GLOBALS['wp_registered_widgets'] );
+		}
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 

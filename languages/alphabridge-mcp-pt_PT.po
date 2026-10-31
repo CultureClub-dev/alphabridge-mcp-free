@@ -5061,3 +5061,7 @@ msgstr "O argumento em %1$s contém %2$s, o marcador que substitui uma credencia
 #, php-format
 msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
 msgstr "Nada foi alterado: onde o valor contém %1$s, o valor guardado é um objeto que não pode ser escrito de volta sem alterações. Envie o valor real em vez de %1$s ou altere-o no plugin que o guarda."
+
+#, php-format
+msgid "settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget's own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials."
+msgstr "settings.%1$s: esta lista contém credenciais que wp_get_widgets omite ou mostra como %2$s, e as suas entradas mudaram (uma adicionada, removida, movida ou alterada sem as suas credenciais), por isso não podem ser associadas às suas entradas; nada foi guardado. Altere esta lista no formulário próprio do widget no wp-admin, em «Apresentação › Widgets», ou envie cada entrada alterada com as suas credenciais reais."

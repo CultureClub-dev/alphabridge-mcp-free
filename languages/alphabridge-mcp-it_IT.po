@@ -5061,3 +5061,7 @@ msgstr "L'argomento in %1$s contiene %2$s, il segnaposto che nella risposta di u
 #, php-format
 msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
 msgstr "Non è stato modificato nulla: dove il valore contiene %1$s, il valore salvato è un oggetto che non si può riscrivere invariato. Invia il valore reale al posto di %1$s oppure modificalo nel plugin che lo salva."
+
+#, php-format
+msgid "settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget's own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials."
+msgstr "settings.%1$s: questo elenco contiene credenziali che wp_get_widgets omette o mostra come %2$s, e le sue voci sono cambiate (una aggiunta, rimossa, spostata o modificata senza le sue credenziali), quindi non si possono abbinare alle loro voci; non è stato salvato nulla. Modifica questo elenco nel modulo del widget stesso in wp-admin, in Aspetto › Widget, oppure invia ogni voce modificata con le sue credenziali reali."
