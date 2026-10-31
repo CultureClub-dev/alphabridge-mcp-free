@@ -858,6 +858,22 @@
 			Array.prototype.forEach.call( card.querySelectorAll( '[data-when]' ), function ( el ) {
 				el.hidden = 'on' !== el.getAttribute( 'data-when' );
 			} );
+			// The rest of the card «Staging» the protection changes: its
+			// checklist (rendered and escaped by the server), the line under
+			// its title and the suggestion for the role, as a reload would
+			// show them, without losing the password shown once.
+			var checklist = document.getElementById( 'ab-staging-checklist' );
+			if ( checklist && res.data.staging_checklist ) {
+				checklist.outerHTML = res.data.staging_checklist;
+			}
+			var stateLine = document.querySelector( '.ab-staging-card__state' );
+			if ( stateLine && res.data.staging_state ) {
+				stateLine.textContent = res.data.staging_state;
+			}
+			var suggestion = document.querySelector( '.ab-staging__suggestion' );
+			if ( suggestion && res.data.staging_suggestion ) {
+				suggestion.textContent = res.data.staging_suggestion;
+			}
 		} ).catch( function () {
 			busy( btn, false );
 			fail();

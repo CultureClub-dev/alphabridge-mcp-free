@@ -1005,8 +1005,8 @@ final class ModernProtocolTest extends TestCase {
 	public function testTheRoutesKeepTheirHandlers( bool $modern ): void {
 		AB_MCP_Settings::set( 'modern_protocol', $modern );
 
-		self::assertSame( array( 'POST', 'GET', 'POST', 'GET', 'GET', 'POST' ), array_column( $this->routes(), 1 ), 'Both endpoints, the plain one and the one with the token in the path, as before, then the route of the staging pair (4.15.0).' );
-		self::assertSame( array( '/mcp', '/mcp', '/mcp/(?P<token>[A-Za-z0-9_]+)', '/mcp/(?P<token>[A-Za-z0-9_]+)', '/staging-pair', '/staging-pair' ), array_column( $this->routes(), 0 ) );
+		self::assertSame( array( 'POST', 'GET', 'POST', 'GET', 'GET', 'POST', 'DELETE' ), array_column( $this->routes(), 1 ), 'Both endpoints, the plain one and the one with the token in the path, as before, then the route of the staging pair (4.15.0), which takes a pair back with DELETE; the MCP endpoint has no DELETE handler.' );
+		self::assertSame( array( '/mcp', '/mcp', '/mcp/(?P<token>[A-Za-z0-9_]+)', '/mcp/(?P<token>[A-Za-z0-9_]+)', '/staging-pair', '/staging-pair', '/staging-pair' ), array_column( $this->routes(), 0 ) );
 	}
 
 	/**

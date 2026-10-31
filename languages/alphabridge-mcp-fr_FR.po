@@ -5707,3 +5707,6 @@ msgstr "Un site de staging que vous avez déjà : installez-y AlphaBridge MCP et
 
 msgid "Pair in the hub: setting the pair on both sites at once from the AlphaBridge hub is coming. Until then, enter the address of the other site here, and the address of this site there."
 msgstr "Paire dans le hub : définir la paire sur les deux sites à la fois depuis le hub AlphaBridge arrive bientôt. D’ici là, saisissez ici l’adresse de l’autre site, et là-bas l’adresse de ce site."
+
+msgid "An assistant checks it from here: wp_staging_status with check_partner=true asks the other site once whether AlphaBridge MCP answers there."
+msgstr "Un assistant le vérifie d’ici : wp_staging_status avec check_partner=true demande une fois à l’autre site si AlphaBridge MCP y répond."

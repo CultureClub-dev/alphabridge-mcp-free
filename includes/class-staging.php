@@ -138,6 +138,14 @@ class AB_MCP_Staging {
 	const DOMAIN_SUFFIXES = array( '.test', '.local', '.localhost' );
 
 	/**
+	 * The kinds of the next step (next_item()).
+	 */
+	const NEXT_OPEN      = 'open';
+	const NEXT_CHECK     = 'check';
+	const NEXT_UNREACHED = 'unreached';
+	const NEXT_IN_PLACE  = 'in_place';
+
+	/**
 	 * How long the check of the other site waits, in seconds.
 	 */
 	const CHECK_TIMEOUT = 10;
@@ -1076,9 +1084,7 @@ class AB_MCP_Staging {
 	}
 
 	/**
-	 * The first open item of a checklist (done false), or null: the next
-	 * step, for next_step() and for the card «Staging» on the settings page
-	 * alike.
+	 * The first open item of a checklist (done false), or null.
 	 *
 	 * @param array $items Checklist.
 	 * @return array|null
@@ -1093,10 +1099,51 @@ class AB_MCP_Staging {
 	}
 
 	/**
+	 * Which item is the next step, and of what kind, for next_step() and
+	 * for the card «Staging» on the settings page alike, so that both say
+	 * the same: OPEN, the first open item (its steps); else CHECK, the
+	 * first item the assistant can check from here (its check); else
+	 * UNREACHED, a staging site that could not be asked from here (a local
+	 * or private address: its finding says why); else IN_PLACE, the way is
+	 * in place (no item).
+	 *
+	 * @param array $items Checklist.
+	 * @return array{kind:string,item:array|null}
+	 */
+	public static function next_item( array $items ) {
+		$item = self::first_open( $items );
+		if ( null !== $item ) {
+			return array(
+				'kind' => self::NEXT_OPEN,
+				'item' => $item,
+			);
+		}
+		foreach ( $items as $item ) {
+			if ( isset( $item['check'] ) ) {
+				return array(
+					'kind' => self::NEXT_CHECK,
+					'item' => $item,
+				);
+			}
+			if ( 'staging_connected' === $item['id'] && true !== $item['done'] ) {
+				return array(
+					'kind' => self::NEXT_UNREACHED,
+					'item' => $item,
+				);
+			}
+		}
+		return array(
+			'kind' => self::NEXT_IN_PLACE,
+			'item' => null,
+		);
+	}
+
+	/**
 	 * The next step: the first open item with its steps, its fallback and
 	 * the direct link (AB_MCP_Guidance::compose()); without one, the first
 	 * check the assistant can make from here, or why the staging site could
-	 * not be asked; without that, what to do now that the way is in place.
+	 * not be asked; without that, what to do now that the way is in place
+	 * (next_item()).
 	 *
 	 * @param array      $items Checklist.
 	 * @param string     $role  The confirmed role or ROLE_UNCONFIRMED.
@@ -1104,20 +1151,16 @@ class AB_MCP_Staging {
 	 * @return string
 	 */
 	public static function next_step( array $items, $role, $pair ) {
-		$item = self::first_open( $items );
-		if ( null !== $item ) {
-			$steps = $item['steps'] . ( isset( $item['fallback'] ) ? ' ' . $item['fallback'] : '' );
-			return AB_MCP_Guidance::compose( $item['finding'], $steps, AB_MCP_Guidance::settings_url( self::ANCHOR ) );
-		}
-		foreach ( $items as $item ) {
-			if ( isset( $item['check'] ) ) {
+		$next = self::next_item( $items );
+		$item = $next['item'];
+		switch ( $next['kind'] ) {
+			case self::NEXT_OPEN:
+				$steps = $item['steps'] . ( isset( $item['fallback'] ) ? ' ' . $item['fallback'] : '' );
+				return AB_MCP_Guidance::compose( $item['finding'], $steps, AB_MCP_Guidance::settings_url( self::ANCHOR ) );
+			case self::NEXT_CHECK:
 				return $item['check'];
-			}
-			// A staging site that could not be asked from here (a local or
-			// private address) is not shown to answer: its finding says why.
-			if ( 'staging_connected' === $item['id'] && true !== $item['done'] ) {
+			case self::NEXT_UNREACHED:
 				return $item['finding'];
-			}
 		}
 		$other = null !== $pair ? $pair['partner_url'] : '';
 		return self::ROLE_STAGING === $role
@@ -1233,6 +1276,53 @@ class AB_MCP_Staging {
 		$response = new WP_REST_Response( $data );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
+	}
+
+	/**
+	 * DELETE: the hub takes the pair back, whoever set it. Only the pair:
+	 * the role stays as it is, with who confirmed it and where. Without a
+	 * pair the site counts as unpaired, so «Staging first» holds it again;
+	 * taking a pair away makes the gate stricter, never looser, so the
+	 * source of the pair does not matter here. Counts towards the rate
+	 * limit of the account like a write; the permission callback has
+	 * checked the token, manage_options and the full access level. The
+	 * answer is the state as GET reports it, with role_changed and
+	 * pair_changed as POST has them; without a pair nothing is written.
+	 *
+	 * @param WP_REST_Request $request Request (unused).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function rest_delete( $request ) {
+		unset( $request );
+		$rate = AB_MCP_Security::check_rate( get_current_user_id() );
+		if ( is_wp_error( $rate ) ) {
+			return new WP_Error( $rate->get_error_code(), $rate->get_error_message(), array( 'status' => 429 ) );
+		}
+		return self::respond(
+			array_merge(
+				array(
+					'role_changed' => false,
+					'pair_changed' => self::remove_pair(),
+				),
+				self::summary()
+			)
+		);
+	}
+
+	/**
+	 * Remove the stored pair, also one that reads as no pair (a broken
+	 * record), and nothing else of the record.
+	 *
+	 * @return bool Whether a pair was in force.
+	 */
+	public static function remove_pair() {
+		$had = null !== self::record()['pair'];
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		if ( is_array( $raw ) && array_key_exists( 'pair', $raw ) ) {
+			unset( $raw['pair'] );
+			AB_MCP_Settings::set( self::KEY, $raw );
+		}
+		return $had;
 	}
 
 	/**

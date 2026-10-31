@@ -250,9 +250,10 @@ class AB_MCP_REST_Controller {
 
 		// The staging pair (free since 4.15.0): the hub writes the pair a
 		// person confirmed there to both sites, with that person's site
-		// token, and reads it back (AB_MCP_Staging). No MCP tool: the token
-		// is checked as for the MCP endpoint, then manage_options of its
-		// account, and for writing a token of the full access level.
+		// token, reads it back, and removes it again (AB_MCP_Staging). No
+		// MCP tool: the token is checked as for the MCP endpoint, then
+		// manage_options of its account, and for writing or removing a token
+		// of the full access level.
 		register_rest_route(
 			AB_MCP_REST_NAMESPACE,
 			AB_MCP_Staging::ROUTE,
@@ -265,6 +266,11 @@ class AB_MCP_REST_Controller {
 				array(
 					'methods'             => 'POST',
 					'callback'            => array( 'AB_MCP_Staging', 'rest_write' ),
+					'permission_callback' => array( $this, 'check_staging_write_permission' ),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'callback'            => array( 'AB_MCP_Staging', 'rest_delete' ),
 					'permission_callback' => array( $this, 'check_staging_write_permission' ),
 				),
 			)
@@ -505,8 +511,8 @@ class AB_MCP_REST_Controller {
 	}
 
 	/**
-	 * Auth gate of the staging pair's route, for writing: the gate for
-	 * reading, then a token of the full access level, as a writing tool with
+	 * Auth gate of the staging pair's route, for writing and removing: the
+	 * gate for reading, then a token of the full access level, as a writing tool with
 	 * that capability needs (a scope only narrows). A gate of its own rather
 	 * than a look at the request's method: the Allow header asks both gates
 	 * with the same request.

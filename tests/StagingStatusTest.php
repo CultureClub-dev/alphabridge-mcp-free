@@ -1330,15 +1330,120 @@ final class StagingStatusTest extends TestCase {
 		return AB_MCP_Settings::add_token( 7, 'Hub', $scope, 0 );
 	}
 
-	public function testTheRouteIsRegisteredForReadingAndWriting(): void {
+	public function testTheRouteIsRegisteredForReadingWritingAndRemoving(): void {
 		$GLOBALS['ab_test_routes'] = array();
 		( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ) )->register_routes();
 		$routes = array_values( array_filter( $GLOBALS['ab_test_routes'], static fn( array $r ): bool => '/staging-pair' === $r['route'] ) );
 		self::assertCount( 1, $routes );
 		self::assertSame( 'alphabridge/v1', $routes[0]['namespace'] );
-		self::assertSame( array( 'GET', 'POST' ), array_column( $routes[0]['args'], 'methods' ) );
+		self::assertSame( array( 'GET', 'POST', 'DELETE' ), array_column( $routes[0]['args'], 'methods' ) );
 		self::assertSame( 'check_staging_permission', $routes[0]['args'][0]['permission_callback'][1] );
 		self::assertSame( 'check_staging_write_permission', $routes[0]['args'][1]['permission_callback'][1] );
+		self::assertSame( 'check_staging_write_permission', $routes[0]['args'][2]['permission_callback'][1], 'Removing needs what writing needs.' );
+		self::assertSame( array( 'AB_MCP_Staging', 'rest_delete' ), $routes[0]['args'][2]['callback'] );
+	}
+
+	/* ------------------------------------------------- route: the pair goes */
+
+	public function testRemovingThePairNeedsAValidTokenManageOptionsAndTheFullAccessLevel(): void {
+		self::confirm( 'production', self::STAGING );
+		$raw = self::raw();
+
+		self::assertSame( 401, $this->route( 'DELETE' )->get_status(), 'Without a token.' );
+		self::assertSame( 'ab_mcp_unauthorized', $this->route( 'DELETE' )->get_data()['code'] );
+		self::assertSame( 401, $this->route( 'DELETE', array(), 'abmcp_' . str_repeat( 'f', 48 ) )->get_status(), 'A token nobody has.' );
+		self::assertSame( $raw, self::raw() );
+
+		$token                  = self::token();
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' !== $cap;
+		$response               = $this->route( 'DELETE', array(), $token );
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( 'ab_mcp_forbidden', $response->get_data()['code'] );
+		self::assertSame( $raw, self::raw() );
+
+		foreach ( array( 'read', 'content' ) as $scope ) {
+			$response = $this->route( 'DELETE', array(), self::token( $scope ) );
+			self::assertSame( 403, $response->get_status(), $scope );
+			self::assertSame( 'ab_mcp_scope', $response->get_data()['code'] );
+			self::assertSame( 'GET', $response->get_headers()['Allow'], 'Reading stays allowed.' );
+		}
+		self::assertSame( $raw, self::raw() );
+
+		$response = $this->route( 'DELETE', array(), self::token(), array( 'Origin' => 'https://evil.example' ) );
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( 'ab_mcp_bad_origin', $response->get_data()['code'] );
+		self::assertSame( $raw, self::raw() );
+	}
+
+	/** @return array<string,array{0:string}> */
+	public static function pairSources(): array {
+		return array(
+			'set by the hub'           => array( AB_MCP_Staging::SOURCE_HUB ),
+			'set on the settings page' => array( AB_MCP_Staging::SOURCE_FORM ),
+		);
+	}
+
+	#[DataProvider( 'pairSources' )]
+	public function testRemovingTakesThePairAndOnlyThePairWhoeverSetIt( string $source ): void {
+		require_once dirname( __DIR__ ) . '/includes/class-staging-gate.php';
+		ab_test_add_user( 9 );
+		AB_MCP_Staging::save( 'production', self::STAGING, AB_MCP_Staging::SOURCE_HUB === $source ? 'staging' : null, 9, $source );
+		$role = self::raw()['role'];
+		self::assertSame( \AB_MCP_Staging_Gate::RUNS, \AB_MCP_Staging_Gate::would_hold_next( time(), array( 'kind' => 'user', 'id' => '5' ), array() ), 'Paired: outside the gate.' );
+
+		$response = $this->route( 'DELETE', array(), self::token() );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'no-store', $response->get_headers()['Cache-Control'] );
+		self::assertSame( 'GET, POST, DELETE', $response->get_headers()['Allow'] );
+		$data = $response->get_data();
+		self::assertSame( array_merge( array( 'role_changed' => false, 'pair_changed' => true ), AB_MCP_Staging::summary() ), $data, 'The state as GET reports it.' );
+		self::assertNull( $data['pair'] );
+		self::assertSame( 'production', $data['role']['value'] );
+		self::assertArrayNotHasKey( 'pair', self::raw() );
+		self::assertSame( $role, self::raw()['role'], 'The role stays, with who confirmed it and where.' );
+		self::assertSame( $source, self::raw()['role']['source'] );
+		self::assertSame( \AB_MCP_Staging_Gate::ASK, \AB_MCP_Staging_Gate::would_hold_next( time(), array( 'kind' => 'user', 'id' => '5' ), array() ), 'Unpaired: the gate holds again, stricter, never looser.' );
+		self::assertSame( AB_MCP_Staging::summary(), $this->route( 'GET', array(), self::token() )->get_data() );
+	}
+
+	public function testRemovingWithoutAPairChangesNothing(): void {
+		$response = $this->route( 'DELETE', array(), self::token() );
+		self::assertSame( 200, $response->get_status(), 'Nothing to remove on a site without a record.' );
+		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), array_slice( $response->get_data(), 0, 2 ) );
+		self::assertSame( array(), self::raw() );
+
+		self::confirm( 'staging' );
+		$raw    = self::raw();
+		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
+		$response = $this->route( 'DELETE', array(), self::token() );
+		self::assertSame( 200, $response->get_status() );
+		self::assertFalse( $response->get_data()['pair_changed'] );
+		self::assertSame( 'staging', $response->get_data()['role']['value'] );
+		self::assertSame( $raw, self::raw() );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'Not one write.' );
+	}
+
+	public function testRemovingABrokenPairCleansItAndSaysNoPairWasInForce(): void {
+		self::store( array( 'role' => array( 'value' => 'production', 'source' => 'form', 'user_id' => 7, 'at' => 1 ), 'pair' => array( 'partner_url' => 'not an address', 'partner_role' => 'staging' ) ) );
+		self::assertNull( AB_MCP_Staging::record()['pair'] );
+		$response = $this->route( 'DELETE', array(), self::token() );
+		self::assertSame( 200, $response->get_status() );
+		self::assertFalse( $response->get_data()['pair_changed'], 'No pair was in force.' );
+		self::assertArrayNotHasKey( 'pair', self::raw() );
+		self::assertSame( 'production', self::raw()['role']['value'] );
+	}
+
+	public function testRemovingCountsTowardsTheRateLimit(): void {
+		self::confirm( 'production', self::STAGING );
+		$token = self::token();
+		AB_MCP_Settings::set( 'rate_limit_per_min', 1 );
+		foreach ( array( 0, 60 ) as $offset ) {
+			$GLOBALS['ab_test_transients'][ 'ab_mcp_rl_7_' . gmdate( 'YmdHi', time() + $offset ) ] = 1;
+		}
+		$response = $this->route( 'DELETE', array(), $token );
+		self::assertSame( 429, $response->get_status() );
+		self::assertSame( 'ab_mcp_rate_limited', $response->get_data()['code'] );
+		self::assertSame( self::STAGING, AB_MCP_Staging::record()['pair']['partner_url'], 'Nothing removed.' );
 	}
 
 	public function testTheProtectionLeavesTheRouteOpen(): void {

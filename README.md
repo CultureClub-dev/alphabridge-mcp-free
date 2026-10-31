@@ -98,7 +98,7 @@ directory. It is the same code WordPress.org ships.
   checklist with the next step. On request (`check_partner`) it asks the other site whether
   AlphaBridge MCP answers there, only at public addresses and tied to them. The role, the other site and the
   host are set on the settings page or, for both sites at once, by the hub over
-  `alphabridge/v1/staging-pair`. Before the first change, the server instructions have an assistant that
+  `alphabridge/v1/staging-pair`, which takes a pair back with `DELETE` and leaves the role. Before the first change, the server instructions have an assistant that
   can write and may use the tool call it and ask the person whether to work on staging first, saying why and how; the prompt
   `staging_workflow` has the steps.
 - **Staging first** — on a site that counts as the production site, the first writing call a

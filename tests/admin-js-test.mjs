@@ -144,12 +144,18 @@ async function runPreview( answer ) {
 	const text     = node( { class: 'ab-preview__loader-text' } );
 	const source   = node( { class: 'ab-preview__source' } );
 	const loader   = node( { class: 'notice ab-preview__loader', hidden: '' }, [ text, source ] );
-	const card     = node( { id: 'ab-preview', class: 'ab-card ab-preview' }, [ status, reveal, onBtn, renewBtn, offForm, loader ] );
+	const card     = node( { id: 'ab-preview', class: 'ab-staging ab-preview' }, [ status, reveal, onBtn, renewBtn, offForm, loader ] );
+	// The rest of the card «Staging», outside the part of the protection.
+	const checklist  = node( { id: 'ab-staging-checklist', class: 'ab-staging ab-staging-checklist' } );
+	checklist.outerHTML = '<div id="ab-staging-checklist">before</div>';
+	const stateLine  = node( { class: 'ab-direct__status ab-staging-card__state' } );
+	const suggestion = node( { class: 'ab-note ab-staging__suggestion' } );
+	const page       = node( { id: 'ab-staging-card' }, [ stateLine, checklist, suggestion, card ] );
 	const document = {
 		addEventListener( kind, fn ) { ( listeners[ kind ] = listeners[ kind ] || [] ).push( fn ); },
-		querySelector( sel ) { return card.querySelector( sel ); },
-		querySelectorAll( sel ) { return card.querySelectorAll( sel ); },
-		getElementById( id ) { return 'ab-preview' === id ? card : null; },
+		querySelector( sel ) { return page.querySelector( sel ); },
+		querySelectorAll( sel ) { return page.querySelectorAll( sel ); },
+		getElementById( id ) { return page.all().find( ( c ) => c.attrs.id === id ) || null; },
 	};
 	let sent = null;
 	const window = {
@@ -167,10 +173,10 @@ async function runPreview( answer ) {
 	}
 	// The fetch and its json() resolve in two steps.
 	await new Promise( ( r ) => setTimeout( r, 0 ) );
-	return { sent, card, onBtn, renewBtn, offForm, password, reveal, status, loader, text, source };
+	return { sent, card, onBtn, renewBtn, offForm, password, reveal, status, loader, text, source, checklist, stateLine, suggestion };
 }
 
-const written = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: true }, loader_note: '', loader_source: '' } } );
+const written = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: true }, loader_note: '', loader_source: '', staging_checklist: '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">after</div>', staging_state: 'Staging site. Checklist: 3 of 4 done. Staging first: ask.', staging_suggestion: 'Suggestion: staging site. The preview protection is on.' } } );
 assert.equal( written.sent.body.action, 'ab_mcp_preview_protection' );
 assert.equal( written.sent.body.preview, 'on' );
 assert.equal( written.password.value, 'abcdEFGH23456789', 'the password, shown once' );
@@ -181,6 +187,11 @@ assert.equal( written.renewBtn.hidden, false );
 assert.equal( written.offForm.hidden, false );
 assert.equal( written.loader.hidden, true, 'the loader was written: no note' );
 assert.equal( written.text.textContent, '' );
+// The checklist, the line under the title and the suggestion follow, as a reload would show them.
+assert.equal( written.checklist.outerHTML, '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">after</div>', 'the checklist is the one of the answer' );
+assert.equal( written.stateLine.textContent, 'Staging site. Checklist: 3 of 4 done. Staging first: ask.' );
+assert.equal( written.suggestion.textContent, 'Suggestion: staging site. The preview protection is on.' );
+assert.equal( written.password.value, 'abcdEFGH23456789', 'the password stays shown' );
 cases++;
 
 const missing = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: false }, loader_note: 'could not be written to /mu/alphabridge-preview-protection.php', loader_source: "<?php\n// ab-mcp-preview-loader" } } );
@@ -188,6 +199,8 @@ assert.equal( missing.loader.hidden, false, 'the note shows at once, without a r
 assert.equal( missing.text.textContent, 'could not be written to /mu/alphabridge-preview-protection.php' );
 assert.equal( missing.source.value, "<?php\n// ab-mcp-preview-loader", 'with the file to create' );
 assert.equal( missing.password.value, 'abcdEFGH23456789', 'and the password all the same' );
+assert.equal( missing.checklist.outerHTML, '<div id="ab-staging-checklist">before</div>', 'an answer without a checklist leaves it as it is' );
+assert.equal( missing.stateLine.textContent, '' );
 cases++;
 
 /* ---- The card «Staging»: its details element folds by itself; a click on

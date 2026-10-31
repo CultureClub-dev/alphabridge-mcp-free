@@ -736,14 +736,21 @@ class AB_MCP_Admin {
 		// The loader for the requests WordPress serves without plugins: where
 		// switching on could not write it, the answer carries the note and the
 		// file to create, so the card shows them at once, as a reload would.
+		// So do the checklist, the line under the card's title and the
+		// suggestion for the role, which the protection changes: a reload
+		// would lose the password shown once.
 		$written = AB_MCP_Preview_Protection::loader_current();
+		$report  = AB_MCP_Staging::report( false );
 		wp_send_json_success(
 			array(
-				'password'      => $result['password'],
-				'status'        => $this->preview_status_text(),
-				'loader'        => AB_MCP_Preview_Protection::loader_status( $written ),
-				'loader_note'   => $written ? '' : $this->preview_loader_note(),
-				'loader_source' => $written ? '' : AB_MCP_Preview_Protection::loader_source(),
+				'password'           => $result['password'],
+				'status'             => $this->preview_status_text(),
+				'loader'             => AB_MCP_Preview_Protection::loader_status( $written ),
+				'loader_note'        => $written ? '' : $this->preview_loader_note(),
+				'loader_source'      => $written ? '' : AB_MCP_Preview_Protection::loader_source(),
+				'staging_checklist'  => $this->staging_checklist_html( $report ),
+				'staging_state'      => $this->staging_state_text( $report ),
+				'staging_suggestion' => $this->staging_suggestion_text( AB_MCP_Staging::suggestion() ),
 			)
 		);
 	}
@@ -1329,25 +1336,16 @@ class AB_MCP_Admin {
 	 * @return string HTML, escaped.
 	 */
 	private function staging_card_html() {
-		$report  = AB_MCP_Staging::report( false );
-		$items   = $report['checklist'];
-		$done    = self::done_count( $items );
-		$labels  = self::staging_role_labels();
-		$setting = array(
-			AB_MCP_Staging_Gate::OFF     => _x( 'off', 'staging first setting', 'alphabridge-mcp' ),
-			AB_MCP_Staging_Gate::ASK     => _x( 'ask', 'staging first setting', 'alphabridge-mcp' ),
-			AB_MCP_Staging_Gate::REQUIRE => _x( 'require', 'staging first setting', 'alphabridge-mcp' ),
-		);
+		$report = AB_MCP_Staging::report( false );
 
 		$html  = '<section class="ab-card ab-staging-card" id="' . esc_attr( self::STAGING_CARD ) . '" aria-labelledby="ab-staging-card-title">';
 		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Staging', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<h2 class="ab-card__title" id="ab-staging-card-title">' . esc_html__( 'Work on a staging site first', 'alphabridge-mcp' ) . '</h2>';
-		/* translators: 1: role of the site, such as Production site, 2: items of the checklist done, 3: all items, 4: the setting Staging first: off, ask or require. */
-		$html .= '<p class="ab-direct__status ab-staging-card__state">' . esc_html( sprintf( __( '%1$s. Checklist: %2$d of %3$d done. Staging first: %4$s.', 'alphabridge-mcp' ), $labels[ $report['role']['value'] ], $done, count( $items ), $setting[ AB_MCP_Staging_Gate::setting() ] ) ) . '</p>';
+		$html .= '<p class="ab-direct__status ab-staging-card__state">' . esc_html( $this->staging_state_text( $report ) ) . '</p>';
 		$html .= '<details class="ab-staging-card__fold"' . ( $this->staging_card_open() ? ' open' : '' ) . '>';
 		$html .= '<summary class="ab-staging-card__summary">' . esc_html__( 'Steps and settings', 'alphabridge-mcp' ) . '</summary>';
 		$html .= '<p class="ab-lead">' . esc_html__( 'A staging site is a copy of this site where changes are made and checked first, then carried over to the production site once they are approved. Here you see where this site stands on that way and set what it needs.', 'alphabridge-mcp' ) . '</p>';
-		$html .= $this->staging_checklist_html( $items, $report['role']['value'], $report['pair'] );
+		$html .= $this->staging_checklist_html( $report );
 		$html .= $this->staging_record_html();
 		if ( AB_MCP_Staging::ROLE_STAGING !== $report['role']['value'] ) {
 			$html .= $this->staging_host_html( $report['host'] );
@@ -1356,6 +1354,24 @@ class AB_MCP_Admin {
 		$html .= $this->staging_first_html();
 		$html .= '</details></section>';
 		return $html;
+	}
+
+	/**
+	 * The line under the title of the card «Staging»: the role, how much of
+	 * the checklist is done, and the setting «Staging first».
+	 *
+	 * @param array $report AB_MCP_Staging::report().
+	 * @return string Unescaped text.
+	 */
+	private function staging_state_text( array $report ) {
+		$labels  = self::staging_role_labels();
+		$setting = array(
+			AB_MCP_Staging_Gate::OFF     => _x( 'off', 'staging first setting', 'alphabridge-mcp' ),
+			AB_MCP_Staging_Gate::ASK     => _x( 'ask', 'staging first setting', 'alphabridge-mcp' ),
+			AB_MCP_Staging_Gate::REQUIRE => _x( 'require', 'staging first setting', 'alphabridge-mcp' ),
+		);
+		/* translators: 1: role of the site, such as Production site, 2: items of the checklist done, 3: all items, 4: the setting Staging first: off, ask or require. */
+		return sprintf( __( '%1$s. Checklist: %2$d of %3$d done. Staging first: %4$s.', 'alphabridge-mcp' ), $labels[ $report['role']['value'] ], self::done_count( $report['checklist'] ), count( $report['checklist'] ), $setting[ AB_MCP_Staging_Gate::setting() ] );
 	}
 
 	/**
@@ -1378,20 +1394,23 @@ class AB_MCP_Admin {
 	 * The checklist of the card «Staging»: the items wp_staging_status
 	 * reports (AB_MCP_Staging::report(), the same call, nothing counted
 	 * again), each with its state as a word, its finding and, while open,
-	 * its steps and fallback; the first open one is the next step
-	 * (AB_MCP_Staging::first_open(), as the tool's next_step). Where every
-	 * item is done, the tool's next_step says what to do now that the way
-	 * is in place. The other site is not asked from here: whether it
-	 * answers stays «not checked» until an assistant checks it
-	 * (wp_staging_status with check_partner).
+	 * its steps and fallback. The next step is the item the tool's
+	 * next_step names (AB_MCP_Staging::next_item(), one decision for both):
+	 * the first open item; else the check an assistant makes from here,
+	 * said for the person (the tool's check is written for the assistant);
+	 * else a staging site that could not be asked, whose finding says why.
+	 * Where the way is in place, the tool's next_step says what to do now.
+	 * The other site is not asked from here. Also sent after the preview
+	 * protection is switched on over ajax (ajax_preview_protection()), so
+	 * the card shows it at once, as a reload would.
 	 *
-	 * @param array      $items Checklist as AB_MCP_Staging::report() gives it.
-	 * @param string     $role  The confirmed role or ROLE_UNCONFIRMED.
-	 * @param array|null $pair  Pair as AB_MCP_Staging::summary() reports it.
+	 * @param array $report AB_MCP_Staging::report().
 	 * @return string HTML, escaped.
 	 */
-	private function staging_checklist_html( array $items, $role, $pair ) {
-		$next = AB_MCP_Staging::first_open( $items );
+	private function staging_checklist_html( array $report ) {
+		$items = $report['checklist'];
+		$next  = AB_MCP_Staging::next_item( $items );
+		$id    = null !== $next['item'] ? $next['item']['id'] : '';
 
 		$html  = '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">';
 		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Where this site stands', 'alphabridge-mcp' ) . '</h3>';
@@ -1399,10 +1418,10 @@ class AB_MCP_Admin {
 		foreach ( $items as $item ) {
 			if ( true === $item['done'] ) {
 				$state = array( 'done', __( 'Done', 'alphabridge-mcp' ), 'on' );
+			} elseif ( $id === $item['id'] ) {
+				$state = array( 'next', __( 'Next step', 'alphabridge-mcp' ), 'partial' );
 			} elseif ( false === $item['done'] ) {
-				$state = null !== $next && $next['id'] === $item['id']
-					? array( 'next', __( 'Next step', 'alphabridge-mcp' ), 'partial' )
-					: array( 'open', __( 'Open', 'alphabridge-mcp' ), 'off' );
+				$state = array( 'open', __( 'Open', 'alphabridge-mcp' ), 'off' );
 			} else {
 				$state = array( 'unchecked', __( 'Not checked', 'alphabridge-mcp' ), 'read' );
 			}
@@ -1415,11 +1434,14 @@ class AB_MCP_Admin {
 			if ( false === $item['done'] && isset( $item['fallback'] ) ) {
 				$html .= '<p class="ab-note">' . esc_html( $item['fallback'] ) . '</p>';
 			}
+			if ( AB_MCP_Staging::NEXT_CHECK === $next['kind'] && $id === $item['id'] ) {
+				$html .= '<p class="ab-direct__steps ab-staging-checklist__check">' . esc_html__( 'An assistant checks it from here: wp_staging_status with check_partner=true asks the other site once whether AlphaBridge MCP answers there.', 'alphabridge-mcp' ) . '</p>';
+			}
 			$html .= '</li>';
 		}
 		$html .= '</ol>';
-		if ( array() !== $items && count( $items ) === self::done_count( $items ) ) {
-			$html .= '<p class="ab-direct__status ab-staging-checklist__in-place">' . esc_html( AB_MCP_Staging::next_step( $items, $role, $pair ) ) . '</p>';
+		if ( AB_MCP_Staging::NEXT_IN_PLACE === $next['kind'] ) {
+			$html .= '<p class="ab-direct__status ab-staging-checklist__in-place">' . esc_html( AB_MCP_Staging::next_step( $items, $report['role']['value'], $report['pair'] ) ) . '</p>';
 		}
 		$html .= '</div>';
 		return $html;
@@ -1673,13 +1695,7 @@ class AB_MCP_Admin {
 			$html .= '<label><input type="radio" name="staging_role" value="' . esc_attr( $value ) . '"' . checked( $role, $value, false ) . '> ' . esc_html( $labels[ $value ] ) . '</label> ';
 		}
 		$html .= '</fieldset>';
-		if ( array() !== $suggestion['hints'] ) {
-			/* translators: %s: what the site shows, one or more sentences. */
-			$hint = sprintf( __( 'Suggestion: staging site. %s', 'alphabridge-mcp' ), implode( ' ', array_column( $suggestion['hints'], 'finding' ) ) ) . ' ' . __( 'A suggestion is a hint, not proof.', 'alphabridge-mcp' );
-		} else {
-			$hint = __( 'Suggestion: production site; nothing on this site points to a staging site.', 'alphabridge-mcp' );
-		}
-		$html .= '<p class="ab-note ab-staging__suggestion">' . esc_html( $hint ) . '</p>';
+		$html .= '<p class="ab-note ab-staging__suggestion">' . esc_html( $this->staging_suggestion_text( $suggestion ) ) . '</p>';
 		$html .= '<p class="ab-field"><label for="ab-staging-partner">' . esc_html__( 'Address of the other site', 'alphabridge-mcp' ) . '</label> ';
 		$html .= '<input type="url" id="ab-staging-partner" name="partner_url" class="regular-text" value="' . esc_attr( null !== $record['pair'] ? $record['pair']['partner_url'] : '' ) . '" placeholder="https://"></p>';
 		$html .= '<p class="ab-note">' . esc_html__( 'The staging site when this is the production site, the production site when this is the staging site. Empty: no pair.', 'alphabridge-mcp' ) . '</p>';
@@ -1699,6 +1715,22 @@ class AB_MCP_Admin {
 		$html .= '<p><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
 		$html .= '</form></div>';
 		return $html;
+	}
+
+	/**
+	 * The suggestion for the role, from what the site shows: a hint, never
+	 * proof. The preview protection is one of the hints, so the answer of
+	 * switching it on over ajax carries this line too.
+	 *
+	 * @param array $suggestion AB_MCP_Staging::suggestion().
+	 * @return string Unescaped text.
+	 */
+	private function staging_suggestion_text( array $suggestion ) {
+		if ( array() !== $suggestion['hints'] ) {
+			/* translators: %s: what the site shows, one or more sentences. */
+			return sprintf( __( 'Suggestion: staging site. %s', 'alphabridge-mcp' ), implode( ' ', array_column( $suggestion['hints'], 'finding' ) ) ) . ' ' . __( 'A suggestion is a hint, not proof.', 'alphabridge-mcp' );
+		}
+		return __( 'Suggestion: production site; nothing on this site points to a staging site.', 'alphabridge-mcp' );
 	}
 
 	/**

@@ -358,7 +358,22 @@ final class StagingCardTest extends TestCase {
 
 		$items = $x->query( '//div[@id="ab-staging-checklist"]//li' );
 		self::assertSame( count( $tool['checklist'] ), $items->length );
-		$next = AB_MCP_Staging::first_open( $tool['checklist'] );
+		// The item the tool's next_step names, read from its text.
+		$next  = '';
+		$check = false;
+		foreach ( $tool['checklist'] as $item ) {
+			if ( '' !== $next ) {
+				break;
+			}
+			if ( false === $item['done'] && 0 === strpos( $tool['next_step'], $item['finding'] . ' ' . $item['steps'] ) ) {
+				$next = $item['id'];
+			} elseif ( isset( $item['check'] ) && $tool['next_step'] === $item['check'] ) {
+				$next  = $item['id'];
+				$check = true;
+			} elseif ( true !== $item['done'] && $tool['next_step'] === $item['finding'] ) {
+				$next = $item['id'];
+			}
+		}
 		foreach ( $tool['checklist'] as $i => $item ) {
 			$li    = $items->item( $i );
 			$texts = array();
@@ -367,8 +382,10 @@ final class StagingCardTest extends TestCase {
 			}
 			if ( true === $item['done'] ) {
 				$word = 'Done';
+			} elseif ( $next === $item['id'] ) {
+				$word = 'Next step';
 			} elseif ( false === $item['done'] ) {
-				$word = $next['id'] === $item['id'] ? 'Next step' : 'Open';
+				$word = 'Open';
 			} else {
 				$word = 'Not checked';
 			}
@@ -379,6 +396,9 @@ final class StagingCardTest extends TestCase {
 					$want[] = $item['fallback'];
 				}
 			}
+			if ( $check && $next === $item['id'] ) {
+				$want[] = 'An assistant checks it from here: wp_staging_status with check_partner=true asks the other site once whether AlphaBridge MCP answers there.';
+			}
 			self::assertSame( $want, $texts, $state . ': item ' . $item['id'] . ' as the tool reports it.' );
 			self::assertSame( $word, self::text( $x->query( './/span[contains(@class, "ab-pill")]', $li )->item( 0 ) ), 'Its state as a word, not only a colour.' );
 		}
@@ -388,11 +408,57 @@ final class StagingCardTest extends TestCase {
 		self::assertStringContainsString( 'Checklist: ' . $done . ' of ' . count( $tool['checklist'] ) . ' done.', $line );
 
 		$in_place = $x->query( '//p[contains(@class, "ab-staging-checklist__in-place")]' );
-		if ( count( $tool['checklist'] ) === $done ) {
-			self::assertSame( $tool['next_step'], self::text( $in_place->item( 0 ) ), 'Every item done: what the tool says to do now.' );
+		if ( '' === $next ) {
+			self::assertSame( $tool['next_step'], self::text( $in_place->item( 0 ) ), 'No next item: what the tool says to do now that the way is in place.' );
 		} else {
 			self::assertSame( 0, $in_place->length );
+			self::assertSame( 1, $x->query( '//li[contains(@class, "ab-staging-checklist__item--next")]' )->length, 'One next step, the tool\'s.' );
 			self::assertStringNotContainsString( 'Direct link:', $html, 'The tool\'s next step is written for the assistant; the card shows the item.' );
+		}
+	}
+
+	public function testAPairedProductionSiteShowsTheCheckAsTheNextStep(): void {
+		self::state( 'production paired' );
+		$tool = AB_MCP_Tools_Staging::staging_status( array() );
+		self::assertSame( 'Call wp_staging_status with check_partner=true to check that the staging site answers.', $tool['next_step'] );
+		$x    = self::xpath( $this->card() );
+		$next = $x->query( '//li[contains(@class, "ab-staging-checklist__item--next")]' );
+		self::assertSame( 1, $next->length );
+		self::assertStringStartsWith( 'Next step Staging site there and answering', self::text( $next->item( 0 ) ) );
+		self::assertSame( 1, $x->query( './/p[contains(@class, "ab-staging-checklist__check")]', $next->item( 0 ) )->length, 'The check, said for the person.' );
+		self::assertSame( 0, $x->query( '//p[contains(@class, "ab-staging-checklist__in-place")]' )->length, 'Not in place before the check.' );
+	}
+
+	public function testSwitchingTheProtectionOnOverAjaxBringsTheCardUpToDate(): void {
+		self::state( 'staging unprotected' );
+		$before = $this->admin( 'staging_checklist_html', AB_MCP_Staging::report( false ) );
+		self::assertStringContainsString( 'Next step</span> <b>Preview protection on the staging site', $before );
+
+		$_POST = array( 'preview' => 'on' );
+		try {
+			( new AB_MCP_Admin() )->ajax_preview_protection();
+			self::fail( 'No answer.' );
+		} catch ( AbTestJsonExit $exit ) {
+			self::assertSame( 200, $exit->status );
+			$data = $exit->payload;
+		}
+		self::assertSame( AB_MCP_Preview_Protection::PASSWORD_LENGTH, strlen( $data['password'] ), 'The password, once.' );
+		$card = self::xpath( $this->card() );
+		self::assertSame( $this->admin( 'staging_checklist_html', AB_MCP_Staging::report( false ) ), $data['staging_checklist'], 'The checklist as a reload would show it.' );
+		self::assertStringContainsString( 'Done</span> <b>Preview protection on the staging site', $data['staging_checklist'] );
+		self::assertStringStartsWith( '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">', $data['staging_checklist'], 'It takes the place of the old one.' );
+		self::assertSame( self::text( $card->query( '//p[contains(@class, "ab-staging-card__state")]' )->item( 0 ) ), $data['staging_state'] );
+		self::assertSame( 'Staging site. Checklist: 3 of 4 done. Staging first: ask.', $data['staging_state'] );
+		self::assertSame( self::text( $card->query( '//p[contains(@class, "ab-staging__suggestion")]' )->item( 0 ) ), $data['staging_suggestion'] );
+		self::assertStringContainsString( 'The preview protection is on.', $data['staging_suggestion'] );
+
+		$_POST = array( 'preview' => 'password' );
+		try {
+			( new AB_MCP_Admin() )->ajax_preview_protection();
+			self::fail( 'No answer.' );
+		} catch ( AbTestJsonExit $exit ) {
+			self::assertSame( 200, $exit->status );
+			self::assertSame( $data['staging_checklist'], $exit->payload['staging_checklist'], 'A new password: the same checklist, sent all the same.' );
 		}
 	}
 
