@@ -1561,11 +1561,14 @@ $GLOBALS['ab_test_http_answer'] = null;
 $GLOBALS['ab_test_http_curl'] = false;
 /** @var string $ab_test_http_transport The transport WordPress picks: curl (the http_api_curl hook runs), fsockopen (its first hook runs) or other (none). */
 $GLOBALS['ab_test_http_transport'] = 'curl';
-require_once __DIR__ . '/support/requests-exception.php';
+// Requests, the HTTP library of WordPress: its exception, which a hook throws
+// to end a request, and its cookie jar, fixed copies from 7.0.2.
+require_once __DIR__ . '/support/requests.php';
 // WordPress' proxy settings (WP_PROXY_HOST …), a fixed copy from 7.0.2.
 require_once __DIR__ . '/support/class-wp-http-proxy.php';
-// WordPress' cookie of an answer and its test for an address, a fixed copy from 7.0.2.
+// WordPress' cookie as a caller passes it, and how WP_Http fills the jar from it, fixed copies from 7.0.2.
 require_once __DIR__ . '/support/class-wp-http-cookie.php';
+require_once __DIR__ . '/support/class-wp-http.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
