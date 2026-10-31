@@ -624,10 +624,17 @@ class AB_MCP_Admin {
 		} else {
 			wp_send_json_error( array( 'message' => __( 'Unknown setting; nothing was changed.', 'alphabridge-mcp' ) ), 400 );
 		}
+		// The loader for the requests WordPress serves without plugins: where
+		// switching on could not write it, the answer carries the note and the
+		// file to create, so the card shows them at once, as a reload would.
+		$written = AB_MCP_Preview_Protection::loader_current();
 		wp_send_json_success(
 			array(
-				'password' => $result['password'],
-				'status'   => $this->preview_status_text(),
+				'password'      => $result['password'],
+				'status'        => $this->preview_status_text(),
+				'loader'        => AB_MCP_Preview_Protection::loader_status( $written ),
+				'loader_note'   => $written ? '' : $this->preview_loader_note(),
+				'loader_source' => $written ? '' : AB_MCP_Preview_Protection::loader_source(),
 			)
 		);
 	}
@@ -1206,16 +1213,26 @@ class AB_MCP_Admin {
 		$html .= '</div>';
 
 		$html .= '<p class="ab-note">' . esc_html__( 'What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data.', 'alphabridge-mcp' ) . '</p>';
-		if ( $on && ! AB_MCP_Preview_Protection::loader_current() ) {
-			// The requests WordPress serves without plugins: the loader for
-			// them is missing, so the person can create it by hand.
-			$html .= '<div class="notice notice-warning inline ab-preview__loader"><p>';
-			/* translators: %s: path of the file. */
-			$html .= esc_html( sprintf( __( 'WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password.', 'alphabridge-mcp' ), AB_MCP_Preview_Protection::loader_path() ) );
-			$html .= '</p><details><summary>' . esc_html__( 'File content', 'alphabridge-mcp' ) . '</summary><textarea readonly rows="12" class="ab-preview__source" aria-label="' . esc_attr__( 'File content', 'alphabridge-mcp' ) . '">' . esc_textarea( AB_MCP_Preview_Protection::loader_source() ) . '</textarea></details></div>';
-		}
-		$html .= '</div>';
+		// The requests WordPress serves without plugins: where the loader for
+		// them is missing, the person can create it by hand. The block is
+		// always there, hidden while nothing is missing, so the ajax answer of
+		// switching on (ajax_preview_protection()) can show it at once, as a
+		// reload would (admin.js).
+		$missing = $on && ! AB_MCP_Preview_Protection::loader_current();
+		$html   .= '<div class="notice notice-warning inline ab-preview__loader"' . ( $missing ? '' : ' hidden' ) . '><p class="ab-preview__loader-text">' . ( $missing ? esc_html( $this->preview_loader_note() ) : '' ) . '</p>';
+		$html   .= '<details><summary>' . esc_html__( 'File content', 'alphabridge-mcp' ) . '</summary><textarea readonly rows="12" class="ab-preview__source" aria-label="' . esc_attr__( 'File content', 'alphabridge-mcp' ) . '">' . ( $missing ? esc_textarea( AB_MCP_Preview_Protection::loader_source() ) : '' ) . '</textarea></details></div>';
+		$html   .= '</div>';
 		return $html;
+	}
+
+	/**
+	 * The sentence for a loader that could not be written, with its path.
+	 *
+	 * @return string Unescaped text.
+	 */
+	private function preview_loader_note() {
+		/* translators: %s: path of the file. */
+		return sprintf( __( 'WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password.', 'alphabridge-mcp' ), AB_MCP_Preview_Protection::loader_path() );
 	}
 
 	/**

@@ -84,7 +84,13 @@
  *   WPMU_PLUGIN_DIR/alphabridge-preview-protection.php (loader_source()),
  *   which does something only under wp_installing(), with this plugin
  *   active, its files in place and the protection on: it loads this class
- *   and hooks the gates. Written on switching on and on activation, kept
+ *   and hooks the gates. It does so on plugins_loaded (priority 0), which
+ *   fires under WP_INSTALLING as well, after the must-use and the network
+ *   plugins (wp-settings.php): a network-activated plugin that bundles this
+ *   core (the Pro add-on) has loaded the classes by then and hooks the
+ *   gates itself on init, so the loader only calls hook() and requires
+ *   nothing whose class exists (a second copy of the core from another
+ *   folder would be a fatal error). Written on switching on and on activation, kept
  *   current on every load (hook()), removed on switching off, on
  *   deactivation and by uninstall.php; on a network it stays while another
  *   site's protection is on, since the folder is shared. Where the folder
@@ -205,7 +211,7 @@ class AB_MCP_Preview_Protection {
 	 * loader an earlier version wrote is replaced (hook()).
 	 */
 	const LOADER_FILE    = 'alphabridge-preview-protection.php';
-	const LOADER_VERSION = 1;
+	const LOADER_VERSION = 2;
 
 	/**
 	 * Where a change came from.
@@ -494,7 +500,9 @@ class AB_MCP_Preview_Protection {
 	 * does is guarded: nothing outside wp_installing(), nothing without the
 	 * plugin active on this site or the network, nothing when the files are
 	 * gone (a plugin deleted over FTP must not leave a fatal error behind),
-	 * nothing while the protection is off.
+	 * nothing while the protection is off. It waits for plugins_loaded, after
+	 * the network plugins, and requires no file whose class is there already:
+	 * a network-activated Pro add-on carries this core itself.
 	 *
 	 * @return string
 	 */
@@ -520,43 +528,61 @@ class AB_MCP_Preview_Protection {
 			'if ( ! defined( \'ABSPATH\' ) || ! function_exists( \'wp_installing\' ) || ! wp_installing() ) {',
 			'	return;',
 			'}',
-			'$ab_mcp_loader_folder = ' . var_export( $folder, true ) . ';',
-			'$ab_mcp_loader_dir    = ' . $dir_code . ';',
-			'$ab_mcp_loader_active = false;',
-			'foreach ( (array) get_option( \'active_plugins\', array() ) as $ab_mcp_loader_plugin ) {',
-			'	if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
-			'		$ab_mcp_loader_active = true;',
-			'	}',
-			'}',
-			'if ( ! $ab_mcp_loader_active && function_exists( \'is_multisite\' ) && is_multisite() ) {',
-			'	foreach ( array_keys( (array) get_site_option( \'active_sitewide_plugins\', array() ) ) as $ab_mcp_loader_plugin ) {',
-			'		if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
-			'			$ab_mcp_loader_active = true;',
+			'// After the must-use and the network plugins: a network-activated plugin',
+			'// that carries this core has loaded its classes by then.',
+			'add_action(',
+			'	\'plugins_loaded\',',
+			'	static function () {',
+			'		$ab_mcp_loader_folder = ' . var_export( $folder, true ) . ';',
+			'		$ab_mcp_loader_dir    = ' . $dir_code . ';',
+			'		$ab_mcp_loader_active = false;',
+			'		foreach ( (array) get_option( \'active_plugins\', array() ) as $ab_mcp_loader_plugin ) {',
+			'			if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
+			'				$ab_mcp_loader_active = true;',
+			'			}',
 			'		}',
-			'	}',
-			'}',
-			'if ( ! $ab_mcp_loader_active ) {',
-			'	return;',
-			'}',
-			'foreach ( array( \'includes/class-settings.php\', \'includes/class-page-cache.php\', \'includes/class-preview-protection.php\' ) as $ab_mcp_loader_file ) {',
-			'	if ( ! is_readable( $ab_mcp_loader_dir . $ab_mcp_loader_file ) ) {',
-			'		return;',
-			'	}',
-			'}',
-			'$ab_mcp_loader_options = get_option( \'ab_mcp_options\' );',
-			'if ( ! is_array( $ab_mcp_loader_options ) || ! isset( $ab_mcp_loader_options[\'preview_protection\'] ) || ! is_array( $ab_mcp_loader_options[\'preview_protection\'] ) ) {',
-			'	return;',
-			'}',
-			'$ab_mcp_loader_state = $ab_mcp_loader_options[\'preview_protection\'];',
-			'if ( ! isset( $ab_mcp_loader_state[\'on\'], $ab_mcp_loader_state[\'hash\'] ) || true !== $ab_mcp_loader_state[\'on\'] || \'\' === (string) $ab_mcp_loader_state[\'hash\'] ) {',
-			'	return;',
-			'}',
-			'require_once $ab_mcp_loader_dir . \'includes/class-settings.php\';',
-			'require_once $ab_mcp_loader_dir . \'includes/class-page-cache.php\';',
-			'require_once $ab_mcp_loader_dir . \'includes/class-preview-protection.php\';',
-			'if ( class_exists( \'AB_MCP_Preview_Protection\' ) ) {',
-			'	AB_MCP_Preview_Protection::hook();',
-			'}',
+			'		if ( ! $ab_mcp_loader_active && function_exists( \'is_multisite\' ) && is_multisite() ) {',
+			'			foreach ( array_keys( (array) get_site_option( \'active_sitewide_plugins\', array() ) ) as $ab_mcp_loader_plugin ) {',
+			'				if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
+			'					$ab_mcp_loader_active = true;',
+			'				}',
+			'			}',
+			'		}',
+			'		if ( ! $ab_mcp_loader_active ) {',
+			'			return;',
+			'		}',
+			'		$ab_mcp_loader_options = get_option( \'ab_mcp_options\' );',
+			'		if ( ! is_array( $ab_mcp_loader_options ) || ! isset( $ab_mcp_loader_options[\'preview_protection\'] ) || ! is_array( $ab_mcp_loader_options[\'preview_protection\'] ) ) {',
+			'			return;',
+			'		}',
+			'		$ab_mcp_loader_state = $ab_mcp_loader_options[\'preview_protection\'];',
+			'		if ( ! isset( $ab_mcp_loader_state[\'on\'], $ab_mcp_loader_state[\'hash\'] ) || true !== $ab_mcp_loader_state[\'on\'] || \'\' === (string) $ab_mcp_loader_state[\'hash\'] ) {',
+			'			return;',
+			'		}',
+			'		// Each file only where its class is not there yet: a network plugin',
+			'		// with this core has loaded them, from its own folder.',
+			'		$ab_mcp_loader_files = array(',
+			'			\'AB_MCP_Settings\'           => \'includes/class-settings.php\',',
+			'			\'AB_MCP_Page_Cache\'         => \'includes/class-page-cache.php\',',
+			'			\'AB_MCP_Preview_Protection\' => \'includes/class-preview-protection.php\',',
+			'		);',
+			'		foreach ( $ab_mcp_loader_files as $ab_mcp_loader_class => $ab_mcp_loader_file ) {',
+			'			if ( ! class_exists( $ab_mcp_loader_class, false ) && ! is_readable( $ab_mcp_loader_dir . $ab_mcp_loader_file ) ) {',
+			'				return;',
+			'			}',
+			'		}',
+			'		foreach ( $ab_mcp_loader_files as $ab_mcp_loader_class => $ab_mcp_loader_file ) {',
+			'			if ( ! class_exists( $ab_mcp_loader_class, false ) ) {',
+			'				require_once $ab_mcp_loader_dir . $ab_mcp_loader_file;',
+			'			}',
+			'		}',
+			'		if ( class_exists( \'AB_MCP_Preview_Protection\', false ) ) {',
+			'			// Idempotent: the core hooks the same callbacks on init where it loaded itself.',
+			'			AB_MCP_Preview_Protection::hook();',
+			'		}',
+			'	},',
+			'	0',
+			');',
 		);
 		return implode( "\n", $lines ) . "\n";
 	}

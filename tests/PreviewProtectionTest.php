@@ -68,6 +68,10 @@
  *   feed for visitors and passes cookie holders and signed-in users. A
  *   folder that cannot be written is reported by the tool and the card,
  *   with the file to create.
+ *   It acts on plugins_loaded, after the network plugins, and requires no
+ *   file whose class a network-activated plugin with this core (Pro) has
+ *   loaded already: no second copy of the core, no fatal error. Switching
+ *   on over ajax carries the note and the file in its answer.
  * - robots.txt passes only on the way with themes; without them the
  *   template loader returns to wp-signup.php, which renders on.
  * - Uninstall respects the note: a value chosen after a deactivation stays.
@@ -178,10 +182,15 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertFileDoesNotExist( WP_PLUGIN_DIR . '/alphabridge-mcp-pro/alphabridge-mcp-pro.php' );
 	}
 
-	/** Include the loader (its own file, or a copy with another source) with every hook of the process forgotten first. */
+	/**
+	 * Include the loader (its own file, or a copy with another source) with
+	 * every hook of the process forgotten first, and let plugins_loaded fire,
+	 * as WordPress does after the network plugins.
+	 */
 	private static function runLoader( string $file ): void {
 		$GLOBALS['ab_test_filters'] = array();
 		include $file;
+		do_action( 'plugins_loaded' );
 	}
 
 	/** The access level of the current connection, as AB_MCP_Auth records it after the token check. */
@@ -1255,6 +1264,8 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertStringContainsString( '// ab-mcp-preview-loader ' . AB_MCP_Preview_Protection::LOADER_VERSION . ' ' . AB_MCP_VERSION . "\n", $source, 'The version mark.' );
 		self::assertStringContainsString( "wp_installing()", $source );
 		self::assertStringContainsString( "'alphabridge-mcp'", $source, 'The folder of the plugin that carries the core.' );
+		self::assertStringContainsString( "'plugins_loaded'", $source, 'After the network plugins.' );
+		self::assertSame( 3, substr_count( $source, 'class_exists(' ), 'Each file only where its class is not there, and hook() only with the class.' );
 		self::assertTrue( AB_MCP_Preview_Protection::loader_current() );
 		self::assertSame( array( 'path' => $path, 'written' => true ), AB_MCP_Preview_Protection::summary()['loader'] );
 
@@ -1313,7 +1324,7 @@ final class PreviewProtectionTest extends TestCase {
 		$copy = $path . '.copy.php';
 		file_put_contents( $copy, str_replace( var_export( rtrim( AB_MCP_DIR, '/' ) . '/', true ), var_export( sys_get_temp_dir() . '/ab-mcp-gone-' . getmypid() . '/', true ), AB_MCP_Preview_Protection::loader_source() ) );
 		self::runLoader( $copy );
-		self::assertFalse( $hooked(), 'The plugin files are gone (deleted over FTP): nothing, no fatal error.' );
+		self::assertTrue( $hooked(), 'The files are gone but the classes are there (a network plugin with the core, here the test process): the gates, from the classes loaded. The case with neither runs in a process of its own (the child below, mode gone).' );
 
 		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
 		file_put_contents( $copy, AB_MCP_Preview_Protection::loader_source() );
@@ -1373,6 +1384,56 @@ final class PreviewProtectionTest extends TestCase {
 		$_GET = array();
 	}
 
+	public function testWithANetworkPluginThatCarriesTheCoreTheLoaderRequiresNoSecondCopy(): void {
+		// A network-activated Pro add-on loads under WP_INSTALLING too
+		// (wp_get_active_network_plugins() has no such check) and brings the
+		// core's classes from its own folder. The loader, pointed at a copy
+		// of the files in another folder, must not require them again: that
+		// would be «Cannot redeclare class». The classes are loaded in this
+		// process, so the copy stands for the network plugin's.
+		$this->on();
+		$copy_dir = sys_get_temp_dir() . '/ab-mcp-core-copy-' . getmypid() . '/';
+		mkdir( $copy_dir . 'includes', 0755, true );
+		foreach ( array( 'class-settings.php', 'class-page-cache.php', 'class-preview-protection.php' ) as $file ) {
+			copy( AB_MCP_DIR . 'includes/' . $file, $copy_dir . 'includes/' . $file );
+		}
+		try {
+			$loader = AB_MCP_Preview_Protection::loader_path() . '.copy.php';
+			file_put_contents( $loader, str_replace( var_export( rtrim( AB_MCP_DIR, '/' ) . '/', true ), var_export( $copy_dir, true ), AB_MCP_Preview_Protection::loader_source() ) );
+			$GLOBALS['ab_test_installing']                = true;
+			$GLOBALS['ab_test_options']['active_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' );
+			self::runLoader( $loader );
+			self::assertSame( 10, has_action( 'wp', array( AB_MCP_Preview_Protection::class, 'gate_without_themes' ) ), 'The gates hang, with the classes already there.' );
+			self::assertSame( 110, has_filter( 'rest_authentication_errors', array( AB_MCP_Preview_Protection::class, 'gate_rest' ) ) );
+			self::assertNotContains( realpath( $copy_dir . 'includes/class-preview-protection.php' ), array_map( 'realpath', get_included_files() ), 'The copy was not required: no second copy of the core.' );
+		} finally {
+			foreach ( (array) glob( $copy_dir . 'includes/*' ) as $file ) {
+				unlink( $file );
+			}
+			rmdir( $copy_dir . 'includes' );
+			rmdir( $copy_dir );
+		}
+	}
+
+	public function testInAProcessWithoutThePluginTheLoaderLoadsTheClassesAndHooksTheGates(): void {
+		// As wp-activate.php: no plugin loaded. The classes are in this
+		// process from the start, so a process of its own runs the loader
+		// against stubs (tests/standalone-preview/loader-child.php).
+		$this->on();
+		$path = AB_MCP_Preview_Protection::loader_path();
+		// A loader whose plugin folder is gone (the plugin deleted over FTP).
+		$gone = $path . '.gone.php';
+		file_put_contents( $gone, str_replace( var_export( rtrim( AB_MCP_DIR, '/' ) . '/', true ), var_export( sys_get_temp_dir() . '/ab-mcp-gone-' . getmypid() . '/', true ), AB_MCP_Preview_Protection::loader_source() ) );
+		foreach ( array( 'fresh', 'off', 'gone' ) as $mode ) {
+			$out  = array();
+			$code = 1;
+			exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( __DIR__ . '/standalone-preview/loader-child.php' ) . ' ' . escapeshellarg( 'gone' === $mode ? $gone : $path ) . ' ' . $mode . ' 2>&1', $out, $code );
+			self::assertSame( 0, $code, $mode . ': ' . implode( ' | ', $out ) );
+			self::assertSame( 'LOADER-CHILD ok', end( $out ), $mode );
+			self::assertStringNotContainsString( 'FAIL', implode( "\n", $out ), $mode );
+		}
+	}
+
 	public function testAFolderThatCannotBeWrittenIsReportedNotHidden(): void {
 		mkdir( WPMU_PLUGIN_DIR, 0755, true );
 		chmod( WPMU_PLUGIN_DIR, 0555 );
@@ -1392,9 +1453,19 @@ final class PreviewProtectionTest extends TestCase {
 
 			$GLOBALS['ab_test_can'] = static fn(): bool => true;
 			$html                   = $this->admin( 'preview_card_html' );
+			self::assertStringContainsString( '<div class="notice notice-warning inline ab-preview__loader"><p class="ab-preview__loader-text">', $html, 'The block shows.' );
 			self::assertStringContainsString( 'could not be written to ' . AB_MCP_Preview_Protection::loader_path(), $html );
 			self::assertStringContainsString( '<textarea readonly', $html );
 			self::assertStringContainsString( htmlspecialchars( '// ab-mcp-preview-loader ' . AB_MCP_Preview_Protection::LOADER_VERSION, ENT_QUOTES, 'UTF-8' ), $html, 'The file to create, in full.' );
+
+			// Switching on over ajax says the same at once, without a reload.
+			AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => false ) );
+			$exit = $this->ajax( 'on' );
+			self::assertSame( 200, $exit->status );
+			self::assertSame( array( 'path' => AB_MCP_Preview_Protection::loader_path(), 'written' => false ), $exit->payload['loader'] );
+			self::assertStringContainsString( 'could not be written to ' . AB_MCP_Preview_Protection::loader_path(), $exit->payload['loader_note'] );
+			self::assertSame( AB_MCP_Preview_Protection::loader_source(), $exit->payload['loader_source'] );
+			self::assertSame( AB_MCP_Preview_Protection::PASSWORD_LENGTH, strlen( $exit->payload['password'] ), 'And the password all the same.' );
 
 			chmod( WPMU_PLUGIN_DIR, 0755 );
 			$ok = AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => false ) );
@@ -1402,7 +1473,14 @@ final class PreviewProtectionTest extends TestCase {
 			self::assertTrue( $ok['loader']['written'] );
 			self::assertCount( 3, $ok['not_covered'] );
 			self::assertArrayNotHasKey( 'loader_source', $ok );
-			self::assertStringNotContainsString( 'could not be written', $this->admin( 'preview_card_html' ) );
+			$html = $this->admin( 'preview_card_html' );
+			self::assertStringNotContainsString( 'could not be written', $html );
+			self::assertStringContainsString( '<div class="notice notice-warning inline ab-preview__loader" hidden><p class="ab-preview__loader-text"></p>', $html, 'The block is there for the ajax answer, hidden and empty.' );
+			AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => false ) );
+			$exit = $this->ajax( 'on' );
+			self::assertSame( '', $exit->payload['loader_note'], 'Written: no note.' );
+			self::assertSame( '', $exit->payload['loader_source'] );
+			self::assertTrue( $exit->payload['loader']['written'] );
 		} finally {
 			chmod( WPMU_PLUGIN_DIR, 0755 );
 		}
@@ -1583,6 +1661,8 @@ final class PreviewProtectionTest extends TestCase {
 		$password = $exit->payload['password'];
 		self::assertSame( AB_MCP_Preview_Protection::PASSWORD_LENGTH, strlen( $password ) );
 		self::assertStringContainsString( 'switched on by user7.', $exit->payload['status'] );
+		self::assertSame( array( 'path' => AB_MCP_Preview_Protection::loader_path(), 'written' => true ), $exit->payload['loader'] );
+		self::assertSame( '', $exit->payload['loader_note'] );
 		self::assertTrue( AB_MCP_Preview_Protection::is_on() );
 		self::assertSame( 'form', AB_MCP_Preview_Protection::state()['source'] );
 		self::assertTrue( AB_MCP_Preview_Protection::verify_password( $password, AB_MCP_Preview_Protection::state()['hash'] ) );

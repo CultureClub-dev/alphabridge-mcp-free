@@ -824,6 +824,22 @@
 			if ( status ) {
 				status.textContent = res.data.status || '';
 			}
+			// The loader for the requests WordPress serves without plugins:
+			// where switching on could not write it, the answer carries the
+			// note and the file to create; shown at once, as a reload would.
+			var loader = card.querySelector( '.ab-preview__loader' );
+			if ( loader ) {
+				var note   = res.data.loader_note || '';
+				var text   = loader.querySelector( '.ab-preview__loader-text' );
+				var source = loader.querySelector( '.ab-preview__source' );
+				if ( text ) {
+					text.textContent = note;
+				}
+				if ( source ) {
+					source.value = res.data.loader_source || '';
+				}
+				loader.hidden = '' === note;
+			}
 			// The protection is on now: the buttons and the form for «on».
 			Array.prototype.forEach.call( card.querySelectorAll( '[data-when]' ), function ( el ) {
 				el.hidden = 'on' !== el.getAttribute( 'data-when' );
