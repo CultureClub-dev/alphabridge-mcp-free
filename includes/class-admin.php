@@ -1526,7 +1526,7 @@ class AB_MCP_Admin {
 		$html .= '</form>';
 		$html .= '</div>';
 
-		$html .= '<p class="ab-note">' . esc_html__( 'What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<p class="ab-note">' . esc_html__( 'What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; what a plugin answers before WordPress has read the request (payment callbacks such as the wc-api of WooCommerce, downloads such as ?download_file=) and the pingbacks of xmlrpc.php are not held back; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data.', 'alphabridge-mcp' ) . '</p>';
 		// The requests WordPress serves without plugins: where the loader for
 		// them is missing, the person can create it by hand. The block is
 		// always there, hidden while nothing is missing, so the ajax answer of

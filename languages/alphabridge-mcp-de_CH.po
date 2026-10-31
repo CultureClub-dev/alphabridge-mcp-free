@@ -5181,8 +5181,8 @@ msgstr "Neues Passwort"
 msgid "Switch off"
 msgstr "Ausschalten"
 
-msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
-msgstr "Was er nicht abdeckt: Dateien unter /wp-content/uploads/ bleiben über ihre Adresse abrufbar, solange Ihr Hoster keine Regel für diesen Ordner setzt; ein Cache ausserhalb von PHP (Hoster-Cache, CDN) kann Seiten weiter anzeigen, bis Sie ihn dort leeren; das geteilte Passwort identifiziert niemanden, es eignet sich also für eine Staging-Website, die einem Kunden gezeigt wird, nicht für vertrauliche Daten."
+msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; what a plugin answers before WordPress has read the request (payment callbacks such as the wc-api of WooCommerce, downloads such as ?download_file=) and the pingbacks of xmlrpc.php are not held back; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
+msgstr "Was er nicht abdeckt: Dateien unter /wp-content/uploads/ bleiben über ihre Adresse abrufbar, solange Ihr Hoster keine Regel für diesen Ordner setzt; ein Cache ausserhalb von PHP (Hoster-Cache, CDN) kann Seiten weiter anzeigen, bis Sie ihn dort leeren; was ein Plugin beantwortet, bevor WordPress die Anfrage gelesen hat (Zahlungs-Rückrufe wie das wc-api von WooCommerce, Downloads wie ?download_file=), und die Pingbacks von xmlrpc.php werden nicht aufgehalten; das geteilte Passwort identifiziert niemanden, es eignet sich also für eine Staging-Website, die einem Kunden gezeigt wird, nicht für vertrauliche Daten."
 
 msgid "Off: visitors see the site."
 msgstr "Aus: Besucher sehen die Website."

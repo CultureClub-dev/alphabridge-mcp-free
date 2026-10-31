@@ -1773,12 +1773,31 @@ class AB_MCP_OAuth {
 	/* ----------------------------------------------------- authorize/consent */
 
 	/**
+	 * Is this request the authorization endpoint's, /?ab_mcp_oauth=authorize?
+	 * The one routing decision of handle_authorize(), which serves exactly
+	 * these requests and ends every one of them; any other value of the
+	 * parameter, an array, or no parameter is not it. The preview protection
+	 * asks the same question (AB_MCP_Preview_Protection), so what it hands to
+	 * the handler is exactly what the handler serves.
+	 *
+	 * @return bool
+	 */
+	public static function is_authorize_request() {
+		return isset( $_GET['ab_mcp_oauth'] ) && is_string( $_GET['ab_mcp_oauth'] ) && 'authorize' === $_GET['ab_mcp_oauth']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only; the consent POST is nonce-verified in handle_authorize().
+	}
+
+	/**
 	 * The authorization endpoint: /?ab_mcp_oauth=authorize. GET renders the
 	 * consent screen (behind wp-login), POST (nonce-checked) issues the code
-	 * and redirects back to the client.
+	 * and redirects back to the client. Every request it serves ends here:
+	 * the consent screen, the redirect to the login, the redirect back to the
+	 * client and the error page each exit or wp_die(); only a request that is
+	 * not the endpoint's returns. Hooked on template_redirect (boot()); while
+	 * the preview protection is on, its gate calls it earlier, on
+	 * parse_request, before another plugin can answer the request.
 	 */
 	public static function handle_authorize() {
-		if ( ! isset( $_GET['ab_mcp_oauth'] ) || 'authorize' !== $_GET['ab_mcp_oauth'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only; the consent POST below is nonce-verified.
+		if ( ! self::is_authorize_request() ) {
 			return;
 		}
 		// Every answer of this endpoint carries the mark the firewall

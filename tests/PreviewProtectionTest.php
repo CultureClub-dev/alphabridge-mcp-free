@@ -19,26 +19,52 @@
  * - The front-end gate answers a visitor without login and cookie with the
  *   password page and 401, a right password with the cookie and a reload,
  *   a wrong one with the page again; and it passes, each clause with its own
- *   case: wp-admin, admin-ajax, cron, XML-RPC, REST and WP-CLI requests,
- *   the documents below /.well-known/, the consent page, robots.txt,
- *   signed-in users, and a visitor with a valid cookie. Feeds, search,
- *   sitemaps and uploads paths that reach WordPress are not exempt.
+ *   case: wp-admin, admin-ajax, cron, XML-RPC, REST and WP-CLI requests, a
+ *   REST route WordPress parsed, robots.txt, signed-in users, and a visitor
+ *   with a valid cookie; the documents below /.well-known/ and the consent
+ *   page it hands to the handler of AB_MCP_OAuth, which ends the request.
+ *   Feeds, search, sitemaps and uploads paths that reach WordPress are not
+ *   exempt.
+ * - The gate decides first on parse_request at priority 1, once WordPress
+ *   has parsed the request: a Yoast-like sitemap on pre_get_posts (priority
+ *   1) or on parse_request (priority 10) prints nothing for a visitor, since
+ *   the 401 comes before; off, both run. For a visitor nothing passes: a
+ *   REST request is served there by rest_api_loaded(), robots.txt by
+ *   do_robots (with themes only), the consent page and the documents by
+ *   their handlers, each ending the request, so a second parameter on the
+ *   same address (sitemap, wc-ajax) reaches no later handler (the matrix of
+ *   six); ?ab_mcp_oauth=0, an array and the entry points without themes get
+ *   the password page. Signed-in users and cookie holders pass before any
+ *   of that, so their requests run as without the protection. The gates on
+ *   template_redirect and wp stay.
+ * - admin-ajax.php and admin-post.php have a gate of their own on admin_init
+ *   (priority 1): a nopriv action of a plugin that prints content prints
+ *   nothing for a visitor without login and cookie and answers 401 («0» for
+ *   AJAX, the password page for admin-post.php, its form posting to the
+ *   home page); off, signed in or with a valid cookie it runs; the two
+ *   nopriv actions of the core (heartbeat, generate-password) pass, on
+ *   admin-ajax.php only; the pages of wp-admin are not this gate's business.
  * - While on, every front-end answer is marked DONOTCACHEPAGE and carries
  *   X-Robots-Tag: noindex, nofollow.
  * - The REST gate passes an error of WordPress's own checks through, passes
  *   signed-in users, the root /wp-json/ (the namespace index the hub
  *   reads), every route of this plugin's namespace (the MCP endpoint with
- *   and without the token in the path, the three OAuth routes), and a
- *   visitor with a valid cookie; wp/v2, oembed/1.0, the Store API and every
- *   other namespace answer 401 to anyone else, whether the route comes as
- *   a pretty permalink or as ?rest_route=.
- * - The gates hang after the OAuth handlers (template_redirect 0) and after
- *   WordPress's REST checks (rest_authentication_errors 100).
- * - The connection check asks only addresses the protection leaves open;
- *   the consent page it calls is answered by the OAuth handler at priority
- *   0, which ends every request it serves, so the gate has no clause for
- *   the parameter, and ?ab_mcp_oauth with any other value is the password
- *   page.
+ *   and without the token in the path, the three OAuth routes), the CORS
+ *   preflight of a browser (OPTIONS, which carries no credentials and gets
+ *   no content; not with a method override), and a visitor with a valid
+ *   cookie; wp/v2, oembed/1.0, the Store API and every other namespace
+ *   answer 401 to anyone else, whether the route comes as a pretty
+ *   permalink or as ?rest_route=.
+ * - On a network the cookie carries the id of the site in its name, since
+ *   the sites of a sub-directory network share the cookie path; the cookie
+ *   of one site is nothing on another. On a single site the name stays.
+ * - The gates hang on parse_request before rest_api_loaded() and the plugins
+ *   at the default priority (1), after the OAuth handlers (template_redirect
+ *   0) and after WordPress's REST checks (rest_authentication_errors 100).
+ * - The connection check asks only addresses the protection leaves open or
+ *   hands to the OAuth handler; the handler ends every request it serves,
+ *   the clause asks its own routing decision, and ?ab_mcp_oauth with any
+ *   other value is the password page.
  * - The REST index for a visitor without login and cookie holds the
  *   namespaces alone (what the hub reads), without links to embed; every
  *   REST answer while on carries the no-cache headers.
@@ -152,10 +178,15 @@ final class PreviewProtectionTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		$_GET    = array();
-		$_POST   = array();
-		$_COOKIE = array();
-		unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'], $GLOBALS['wp'] );
+		$_GET     = array();
+		$_POST    = array();
+		$_COOKIE  = array();
+		$_REQUEST = array();
+		unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'], $GLOBALS['wp'], $GLOBALS['pagenow'] );
+		$GLOBALS['ab_test_logged_in']    = false;
+		$GLOBALS['ab_test_is_admin']     = false;
+		$GLOBALS['ab_test_is_robots']    = false;
+		$GLOBALS['ab_test_using_themes'] = true;
 		self::scope( 'full' );
 		self::cleanMuDir();
 	}
@@ -214,23 +245,100 @@ final class PreviewProtectionTest extends TestCase {
 	private function visitor( array $over = array() ): array {
 		return array_merge(
 			array(
-				'path'        => '/',
-				'request_uri' => '/',
-				'method'      => 'GET',
-				'well_known'  => false,
-				'password'    => null,
-				'cookie'      => '',
-				'logged_in'   => false,
-				'admin'       => false,
-				'ajax'        => false,
-				'cron'        => false,
-				'xmlrpc'      => false,
-				'rest'        => false,
-				'cli'         => false,
-				'robots'      => false,
+				'path'            => '/',
+				'request_uri'     => '/',
+				'method'          => 'GET',
+				'well_known'      => false,
+				'oauth_authorize' => false,
+				'password'        => null,
+				'cookie'          => '',
+				'logged_in'       => false,
+				'admin'           => false,
+				'cron'            => false,
+				'xmlrpc'          => false,
+				'rest_route'      => false,
+				'cli'             => false,
+				'robots'          => false,
 			),
 			$over
 		);
+	}
+
+	/**
+	 * The WP object as parse_request passes it: the parsed query vars. It is
+	 * $GLOBALS['wp'], which rest_api_loaded() reads, as in the core.
+	 */
+	private static function wp( array $query_vars ): object {
+		$GLOBALS['wp'] = (object) array( 'query_vars' => $query_vars );
+		return $GLOBALS['wp'];
+	}
+
+	/** The core's do_robots, as the template loader fires it; here it ends the code under test. */
+	private static function robotsStub(): void {
+		add_action(
+			'do_robots',
+			static function (): void {
+				throw new AbTestExit( 'robots', "User-agent: *\nDisallow: /" );
+			}
+		);
+	}
+
+	/**
+	 * The handlers that run later on the same request and print content: a
+	 * Yoast-like sitemap on pre_get_posts at 1, a WooCommerce-like dispatcher
+	 * on template_redirect at 0 reading $_GET['wc-ajax']. Each records what
+	 * it printed and ends the request. Returns a reader.
+	 */
+	private static function lateHandlers(): \Closure {
+		$printed = array();
+		add_action(
+			'pre_get_posts',
+			static function () use ( &$printed ): void {
+				$printed[] = 'sitemap';
+				throw new AbTestExit( 'late', 'sitemap' );
+			},
+			1
+		);
+		add_action(
+			'template_redirect',
+			static function () use ( &$printed ): void {
+				if ( isset( $_GET['wc-ajax'] ) ) {
+					$printed[] = 'wc-ajax';
+					throw new AbTestExit( 'late', 'wc-ajax' );
+				}
+			},
+			0
+		);
+		return static function () use ( &$printed ): array {
+			return $printed;
+		};
+	}
+
+	/** WP::main() as far as the gates and the stubs go: parse_request, the query, the template. */
+	private static function main( object $wp ): void {
+		do_action_ref_array( 'parse_request', array( $wp ) );
+		do_action( 'pre_get_posts' );
+		do_action( 'template_redirect' );
+	}
+
+	/**
+	 * A Yoast-like plugin: a callback that prints its sitemap and ends the
+	 * request where SEO plugins do, on pre_get_posts (Yoast SEO, priority 1)
+	 * or on parse_request (priority 10). Returns a reader of what it printed.
+	 */
+	private static function sitemapPlugin( string $hook, int $priority ): \Closure {
+		$printed = array();
+		add_action(
+			$hook,
+			static function () use ( &$printed, $hook ): void {
+				$printed[] = $hook . ': <urlset>https://example.test/secret-page/</urlset>';
+				throw new AbTestExit( 'sitemap', $hook );
+			},
+			$priority
+		);
+		return static function () use ( &$printed ): array {
+			return $printed;
+		};
 	}
 
 	/** Every stored option and transient as one text, to look for a password in it. */
@@ -400,13 +508,9 @@ final class PreviewProtectionTest extends TestCase {
 	public static function passes(): array {
 		return array(
 			'wp-admin'                 => array( array( 'admin' => true ), 'admin' ),
-			'admin-ajax'               => array( array( 'ajax' => true ), 'ajax' ),
 			'wp-cron'                  => array( array( 'cron' => true ), 'cron' ),
 			'xmlrpc'                   => array( array( 'xmlrpc' => true ), 'xmlrpc' ),
-			'REST'                     => array( array( 'rest' => true ), 'rest' ),
 			'WP-CLI'                   => array( array( 'cli' => true ), 'cli' ),
-			'OAuth metadata document'  => array( array( 'path' => '/.well-known/oauth-authorization-server', 'well_known' => true ), 'well_known' ),
-			'robots.txt'               => array( array( 'path' => '/robots.txt', 'robots' => true ), 'robots' ),
 			'signed-in user'           => array( array( 'logged_in' => true ), 'logged_in' ),
 		);
 	}
@@ -417,6 +521,102 @@ final class PreviewProtectionTest extends TestCase {
 		$state = AB_MCP_Preview_Protection::state();
 		$d     = AB_MCP_Preview_Protection::frontend_decision( $this->visitor( $over ), $state, time() );
 		self::assertSame( array( 'action' => 'pass', 'reason' => $reason ), $d );
+	}
+
+	/** @return array<string,array{0:array,1:string}> */
+	public static function served(): array {
+		return array(
+			'REST route parsed'       => array( array( 'path' => '/index.php', 'request_uri' => '/index.php?rest_route=/wp/v2/posts', 'rest_route' => true ), 'rest_route' ),
+			'OAuth metadata document' => array( array( 'path' => '/.well-known/oauth-authorization-server', 'well_known' => true ), 'well_known' ),
+			'consent page'            => array( array( 'request_uri' => '/?ab_mcp_oauth=authorize&client_id=x', 'oauth_authorize' => true ), 'oauth_authorize' ),
+			'robots.txt'              => array( array( 'path' => '/robots.txt', 'robots' => true ), 'robots' ),
+		);
+	}
+
+	#[DataProvider( 'served' )]
+	public function testAVisitorsExemptionIsAnsweredByTheGateNeverPassed( array $over, string $reason ): void {
+		// The rule of the first line: for a visitor nothing passes. Between
+		// parse_request and template_redirect other plugins answer, and a
+		// second parameter beside the exemption would be their answer (a
+		// sitemap, the cart fragments). The gate calls the handler, which
+		// ends the request.
+		$this->on();
+		$state = AB_MCP_Preview_Protection::state();
+		$d     = AB_MCP_Preview_Protection::frontend_decision( $this->visitor( $over ), $state, time() );
+		self::assertSame( array( 'action' => 'serve', 'reason' => $reason ), $d );
+		// A signed-in user or a cookie holder passes before any of it: for
+		// them the gate changes nothing.
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'logged_in' ), AB_MCP_Preview_Protection::frontend_decision( $this->visitor( $over + array( 'logged_in' => true ) ), $state, time() ) );
+		$cookie = AB_MCP_Preview_Protection::cookie_value( $state['hash'], time() + 100 );
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'cookie' ), AB_MCP_Preview_Protection::frontend_decision( $this->visitor( $over + array( 'cookie' => $cookie ) ), $state, time() ) );
+		// REST comes first among the exemptions: rest_api_loaded() serves such a request.
+		self::assertSame( 'rest_route', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array_merge( $over, array( 'rest_route' => true ) ) ), $state, time() )['reason'] );
+	}
+
+	/** @return array<string,array{0:string,1:array,2:array,3:string}> */
+	public static function anonymousExceptions(): array {
+		// Address, $_GET, the parsed query vars, the answer of the exemption.
+		return array(
+			'robots + wc-ajax'     => array( '/?robots=1&wc-ajax=get_refreshed_fragments', array( 'robots' => '1', 'wc-ajax' => 'get_refreshed_fragments' ), array( 'robots' => '1' ), 'robots' ),
+			'robots + sitemap'     => array( '/?robots=1&sitemap=1', array( 'robots' => '1', 'sitemap' => '1' ), array( 'robots' => '1', 'sitemap' => '1' ), 'robots' ),
+			'rest_route + sitemap' => array( '/index.php?rest_route=%2Fwp%2Fv2%2Fposts&sitemap=1', array( 'rest_route' => '/wp/v2/posts', 'sitemap' => '1' ), array( 'rest_route' => '/wp/v2/posts', 'sitemap' => '1' ), 'rest' ),
+			'rest_route + wc-ajax' => array( '/wp-json/wp/v2/posts?wc-ajax=get_refreshed_fragments', array( 'wc-ajax' => 'get_refreshed_fragments' ), array( 'rest_route' => '/wp/v2/posts' ), 'rest' ),
+			'oauth + wc-ajax'      => array( '/?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json&wc-ajax=get_refreshed_fragments', array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json', 'wc-ajax' => 'get_refreshed_fragments' ), array(), 'login' ),
+		);
+	}
+
+	#[DataProvider( 'anonymousExceptions' )]
+	public function testAnAnonymousExceptionAnswersItselfAndOpensNoLaterHandler( string $uri, array $get, array $vars, string $answer ): void {
+		// /?robots=1&wc-ajax=get_refreshed_fragments was the cart fragments,
+		// /?ab_mcp_oauth=authorize&sitemap=1 the sitemap (Codex, 31.10.2026):
+		// a pass on a parameter opened everything later on the same request.
+		// The well-known document runs the same matrix in a process of its
+		// own (serve-child.php), since its handler exits.
+		$late = self::lateHandlers();
+		self::robotsStub();
+		AB_MCP_Preview_Protection::hook();
+		$_SERVER['REQUEST_URI']    = $uri;
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_GET                      = $get;
+		$_REQUEST                  = $get;
+		$wp                        = self::wp( $vars );
+		$this->on();
+		try {
+			self::main( $wp );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( $answer, $exit->kind, 'The answer of the exemption, never the content of a later handler.' );
+		}
+		self::assertSame( array(), $late(), 'Neither the sitemap nor the dispatcher ran.' );
+
+		// Signed in, or with the cookie: the request runs on to them as
+		// without the protection.
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			self::main( $wp );
+			self::fail( 'The late handlers did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'late', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		try {
+			self::main( $wp );
+			self::fail( 'The late handlers did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'late', $exit->kind );
+		}
+		self::assertCount( 2, $late() );
+		// Off: as always.
+		$_COOKIE = array();
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		try {
+			self::main( $wp );
+			self::fail( 'The late handlers did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'late', $exit->kind );
+		}
+		$_REQUEST = array();
 	}
 
 	public function testTheRestOfWellKnownIsNotOpenAndTheHubReadsThe401AsNotThere(): void {
@@ -433,9 +633,9 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 'challenge', $decide( '/.well-known/alphabridge.json' ) );
 		self::assertSame( 'challenge', $decide( '/.well-known/security.txt' ) );
 		self::assertSame( 'challenge', $decide( '/.well-known/oauth-authorization-server-x' ), 'Matched as AB_MCP_OAuth matches it: the document, or a path below it.' );
-		self::assertSame( 'pass', $decide( '/.well-known/oauth-protected-resource' ) );
-		self::assertSame( 'pass', $decide( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp' ) );
-		self::assertSame( 'pass', $decide( '/.well-known/oauth-authorization-server?x=1' ) );
+		self::assertSame( 'serve', $decide( '/.well-known/oauth-protected-resource' ) );
+		self::assertSame( 'serve', $decide( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp' ) );
+		self::assertSame( 'serve', $decide( '/.well-known/oauth-authorization-server?x=1' ) );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
 		self::assertSame( 'challenge', $decide( '/.well-known/oauth-authorization-server' ), 'With the sign-in off nothing serves the document; WordPress would show its 404 page.' );
 	}
@@ -460,37 +660,140 @@ final class PreviewProtectionTest extends TestCase {
 		$_SERVER['REQUEST_URI'] = '/staging//.well-known/oauth-authorization-server';
 		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'], 'So the gate does not open it either.' );
 		$_SERVER['REQUEST_URI'] = '/staging/.well-known/oauth-authorization-server';
-		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		self::assertSame( 'serve', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
 	}
 
-	public function testTheOAuthParameterOpensNothingTheConsentPageIsAnsweredBeforeTheGate(): void {
+	public function testTheOAuthParameterOpensNothingButTheConsentPageWhichGoesToItsHandler(): void {
 		$this->on();
 		$state = AB_MCP_Preview_Protection::state();
+		// The clause asks the handler's own routing decision: any other value
+		// of the parameter, an array, a case or a space is nothing the
+		// handler serves, and is the password page.
 		foreach ( array( '0', 'x', '', 'authorize ', 'Authorize', array( 'authorize' ) ) as $value ) {
 			$_GET                   = array( 'ab_mcp_oauth' => $value );
 			$_SERVER['REQUEST_URI'] = '/beitrag/?ab_mcp_oauth=' . ( is_array( $value ) ? 'a' : rawurlencode( $value ) );
-			$d                      = AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() );
+			self::assertFalse( AB_MCP_OAuth::is_authorize_request() );
+			$d = AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() );
 			self::assertSame( 'challenge', $d['action'], 'ab_mcp_oauth=' . ( is_array( $value ) ? 'array' : $value ) . ' is nothing the handler serves: the password page.' );
+			try {
+				AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) );
+				self::fail( 'No page.' );
+			} catch ( AbTestExit $exit ) {
+				self::assertSame( 'die', $exit->kind );
+				self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+			}
 		}
-		// The handler at priority 0 ends every request it serves — for a
-		// visitor the redirect to the login, or the error page — so the gate
-		// at priority 1 never sees the consent page, and the gate itself
-		// treats the address like any other.
-		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'x', 'redirect_uri' => 'https://client.test/cb', 'response_type' => 'code' );
+		// The consent page itself: the gate hands it to the handler, which
+		// ends every request it serves; for a visitor with a client that
+		// identifies itself with a metadata document (a URL) the redirect to
+		// the login comes first, after the mark the firewall self-test looks
+		// for (with any other client id the error page for an unknown
+		// client, see the next test).
+		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json', 'redirect_uri' => 'https://client.test/cb', 'response_type' => 'code' );
 		$_REQUEST                  = $_GET;
-		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=x';
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json&redirect_uri=https%3A%2F%2Fclient.test%2Fcb&response_type=code';
 		$_SERVER['REQUEST_METHOD'] = 'GET';
-		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		self::assertTrue( AB_MCP_OAuth::is_authorize_request() );
+		self::assertSame( array( 'action' => 'serve', 'reason' => 'oauth_authorize' ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() ) );
+		$GLOBALS['ab_test_actions'] = array();
 		try {
-			AB_MCP_OAuth::handle_authorize();
-			self::fail( 'handle_authorize() returned for ab_mcp_oauth=authorize; the gate would see the consent page.' );
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) );
+			self::fail( 'The gate returned: WordPress would go on to the plugins and the template.' );
 		} catch ( AbTestExit $exit ) {
-			self::assertContains( $exit->kind, array( 'login', 'redirect', 'die' ) );
+			self::assertSame( 'login', $exit->kind, 'The handler answered, not the password page.' );
 		}
-		$_REQUEST = array();
+		self::assertContains( 'ab_mcp_oauth_mark_sent', array_column( $GLOBALS['ab_test_actions'], 0 ), 'The mark of the authorization endpoint went out first.' );
+		// Without themes the handler would never run (no template_redirect),
+		// so the password page as before: wp-signup.php?ab_mcp_oauth=authorize
+		// is not the consent page.
+		$GLOBALS['ab_test_using_themes'] = false;
+		$_SERVER['REQUEST_URI']          = '/wp-signup.php?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json';
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( false ), $state, time() )['action'] );
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) );
+			self::fail( 'No page.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		$GLOBALS['ab_test_using_themes'] = true;
+		$_REQUEST                        = array();
 		AB_MCP_OAuth::boot();
 		AB_MCP_Preview_Protection::hook();
-		self::assertLessThan( has_action( 'template_redirect', array( AB_MCP_Preview_Protection::class, 'gate_frontend' ) ), has_action( 'template_redirect', array( AB_MCP_OAuth::class, 'handle_authorize' ) ), 'The handler runs first.' );
+		self::assertLessThan( has_action( 'template_redirect', array( AB_MCP_Preview_Protection::class, 'gate_frontend' ) ), has_action( 'template_redirect', array( AB_MCP_OAuth::class, 'handle_authorize' ) ), 'On template_redirect the handler still runs first.' );
+	}
+
+	public function testTheConsentPageWithASitemapVariableIsTheConsentPageNotTheSitemap(): void {
+		// A clause that passed the consent page on parse_request and waited
+		// for the handler on template_redirect would be a hole: a Yoast-like
+		// plugin on pre_get_posts answers the sitemap variable before. The
+		// gate hands the request to the handler instead, which ends it.
+		$this->on();
+		$sitemap                   = self::sitemapPlugin( 'pre_get_posts', 1 );
+		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json', 'sitemap' => '1' );
+		$_REQUEST                  = $_GET;
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json&sitemap=1';
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		AB_MCP_Preview_Protection::hook();
+		try {
+			do_action_ref_array( 'parse_request', array( self::wp( array( 'sitemap' => '1' ) ) ) );
+			do_action( 'pre_get_posts' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'login', $exit->kind, 'The handler: the redirect to the login.' );
+		}
+		self::assertSame( array(), $sitemap(), 'The sitemap plugin never ran.' );
+		$_REQUEST = array();
+	}
+
+	public function testEveryBranchOfTheHandlerEndsTheRequestWhereTheGateHandsItOver(): void {
+		// The branches a test process can take without exit: a visitor with a
+		// client that identifies itself with a metadata document (redirect to
+		// the login, before the document is fetched), a visitor with an
+		// unknown client and the sign-in switched off (error page, 400), a
+		// signed-in user without the capability (error page). The consent
+		// screen and the redirects back to the client end with exit in the
+		// handler itself (consent_page(), client_error_redirect(), the code),
+		// read in the source. None of them is the password page (401).
+		$this->on();
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize';
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$run                       = static function ( array $get ): AbTestExit {
+			$_GET     = array( 'ab_mcp_oauth' => 'authorize' ) + $get;
+			$_REQUEST = $_GET;
+			try {
+				AB_MCP_Preview_Protection::gate_parse_request( (object) array( 'query_vars' => array() ) );
+			} catch ( AbTestExit $exit ) {
+				return $exit;
+			}
+			self::fail( 'handle_authorize() returned for ' . http_build_query( $get ) . '; the password page would follow, never the site.' );
+		};
+		self::assertSame( 'login', $run( array( 'client_id' => 'https://client.test/client.json' ) )->kind, 'A visitor: to the login.' );
+		$exit = $run( array( 'client_id' => 'unknown' ) );
+		self::assertSame( 'die', $exit->kind, 'An unknown client: the error page.' );
+		self::assertSame( 400, $GLOBALS['ab_test_die_args']['response'] );
+		AB_MCP_Settings::set( 'oauth_enabled', false );
+		$exit = $run( array( 'client_id' => 'https://client.test/client.json' ) );
+		self::assertSame( 'die', $exit->kind, 'Sign-in off: the error page.' );
+		self::assertSame( 400, $GLOBALS['ab_test_die_args']['response'] );
+		AB_MCP_Settings::set( 'oauth_enabled', true );
+		// A signed-in user passes the gate (nothing changes for them), and the
+		// handler on template_redirect at 0 answers as always: without the
+		// capability the error page.
+		$GLOBALS['ab_test_logged_in'] = true;
+		$GLOBALS['ab_test_can']       = static fn(): bool => false;
+		$_GET                         = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json' );
+		$_REQUEST                     = $_GET;
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) ), 'Signed in: the gate passes.' );
+		try {
+			AB_MCP_OAuth::handle_authorize();
+			self::fail( 'handle_authorize() returned for a signed-in user without the capability.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind, 'Signed in without the capability: the error page.' );
+			self::assertSame( 400, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_REQUEST                     = array();
 	}
 
 	public function testASubDirectoryInstallLosesItsFolderOnceOnly(): void {
@@ -527,7 +830,7 @@ final class PreviewProtectionTest extends TestCase {
 
 		// The well-known documents and the REST prefix sit under the folder.
 		$_SERVER['REQUEST_URI'] = '/staging/.well-known/oauth-authorization-server';
-		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		self::assertSame( 'serve', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
 		self::assertSame( '/wp/v2/posts', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/wp/v2/posts' ), array() ) );
 		self::assertSame( '/', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/' ), array() ) );
 		$_SERVER['REQUEST_URI'] = '/staging/wp-json/wp/v2/posts';
@@ -569,16 +872,18 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( '/hello/', $ctx['path'] );
 		self::assertSame( '/hello/?x=1', $ctx['request_uri'] );
 		self::assertSame( 'POST', $ctx['method'] );
-		self::assertArrayNotHasKey( 'oauth', $ctx, 'The consent page is no business of the gate.' );
+		self::assertTrue( $ctx['oauth_authorize'], 'The consent page, as the handler decides it.' );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( false )['oauth_authorize'], 'Without themes the handler would not run.' );
+		self::assertFalse( $ctx['rest_route'], 'No parsed query here.' );
 		self::assertFalse( $ctx['well_known'], 'Not one of the two documents.' );
 		self::assertSame( 'secret', $ctx['password'] );
 		self::assertSame( '1|abc', $ctx['cookie'] );
 		self::assertTrue( $ctx['logged_in'] );
 		self::assertTrue( $ctx['admin'] );
-		self::assertFalse( $ctx['ajax'] );
+		self::assertArrayNotHasKey( 'ajax', $ctx, 'DOING_AJAX proves nothing about the script on the front end.' );
 		self::assertFalse( $ctx['cron'] );
 		self::assertFalse( $ctx['xmlrpc'] );
-		self::assertFalse( $ctx['rest'] );
+		self::assertArrayNotHasKey( 'rest', $ctx, 'REST_REQUEST proves nothing on the front end either.' );
 		self::assertFalse( $ctx['cli'] );
 		self::assertFalse( $ctx['robots'] );
 
@@ -593,6 +898,12 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 'GET', $ctx['method'] );
 		self::assertNull( $ctx['password'] );
 		self::assertSame( '', $ctx['cookie'] );
+		self::assertFalse( $ctx['oauth_authorize'] );
+		// On parse_request the parsed query vars decide REST and robots.
+		self::assertTrue( AB_MCP_Preview_Protection::frontend_context( true, self::wp( array( 'rest_route' => '/wp/v2/posts' ) ) )['rest_route'] );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( true, self::wp( array( 'rest_route' => '' ) ) )['rest_route'], 'Empty: not a REST request, as rest_api_loaded() reads it.' );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( true, self::wp( array( 'pagename' => 'wp-json/wp/v2/posts' ) ) )['rest_route'], 'A path that looks like REST decides nothing.' );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( true, (object) array() )['rest_route'], 'No query vars at all.' );
 		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
 		self::assertTrue( AB_MCP_Preview_Protection::frontend_context()['well_known'], 'The sign-in is on by default, and the handler serves this.' );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
@@ -608,10 +919,10 @@ final class PreviewProtectionTest extends TestCase {
 		define( 'REST_REQUEST', true );
 		define( 'WP_CLI', true );
 		$ctx = AB_MCP_Preview_Protection::frontend_context();
-		self::assertTrue( $ctx['ajax'] );
+		self::assertArrayNotHasKey( 'ajax', $ctx );
 		self::assertTrue( $ctx['cron'] );
 		self::assertTrue( $ctx['xmlrpc'] );
-		self::assertTrue( $ctx['rest'] );
+		self::assertArrayNotHasKey( 'rest', $ctx, 'REST_REQUEST is defined by rest_api_loaded(), which never returns; on the front end only a plugin could have defined it.' );
 		self::assertTrue( $ctx['cli'] );
 	}
 
@@ -722,6 +1033,501 @@ final class PreviewProtectionTest extends TestCase {
 		}
 	}
 
+	/* ------------------------------------------- the first line: parse_request */
+
+	/** @return array<string,array{0:string,1:int}> */
+	public static function sitemapHooks(): array {
+		return array(
+			'Yoast SEO on pre_get_posts 1'        => array( 'pre_get_posts', 1 ),
+			'another plugin on parse_request 10'  => array( 'parse_request', 10 ),
+		);
+	}
+
+	#[DataProvider( 'sitemapHooks' )]
+	public function testASitemapPluginPrintsNothingForAVisitorThe401ComesBefore( string $hook, int $priority ): void {
+		// Measured 31.10.2026 (WordPress 7.1.4, Yoast SEO 28.8): with the
+		// gate on template_redirect alone, /sitemap_index.xml, the type
+		// sitemaps and /?sitemap=1 came with 200 and every address. Yoast
+		// answers on pre_get_posts at 1 (WPSEO_Sitemaps::redirect()), others
+		// on parse_request at 10; both before template_redirect.
+		$printed = self::sitemapPlugin( $hook, $priority );
+		AB_MCP_Preview_Protection::hook();
+		$_SERVER['REQUEST_URI'] = '/sitemap_index.xml';
+		$wp                     = self::wp( array( 'sitemap' => '1' ) );
+		$sequence               = static function () use ( $wp ): void {
+			// What WP::main() does: parse_request, then (headers,) the query
+			// with pre_get_posts, then the template.
+			do_action_ref_array( 'parse_request', array( $wp ) );
+			do_action( 'pre_get_posts' );
+		};
+
+		// Off: the plugin answers as always.
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		self::assertCount( 1, $printed() );
+
+		// On: the 401 comes first, the plugin never runs.
+		$this->on();
+		try {
+			$sequence();
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind, 'The password page, not the sitemap.' );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+			self::assertStringContainsString( 'name="' . AB_MCP_Preview_Protection::FIELD . '"', $exit->detail );
+		}
+		self::assertCount( 1, $printed(), 'Nothing more was printed.' );
+
+		// A signed-in user and a cookie holder read the sitemap as before.
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		self::assertCount( 3, $printed() );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testDoingAjaxOnTheFrontEndOpensNothing(): void {
+		// WooCommerce defines DOING_AJAX on init for ?wc-ajax= and serves it
+		// on template_redirect at 0; a clause on the constant let
+		// /?sitemap=1&wc-ajax=get_refreshed_fragments pass the first line,
+		// and Yoast printed the sitemap on pre_get_posts (Codex, 31.10.2026).
+		// The constant proves nothing about the script: admin-ajax.php never
+		// reaches the front-end gates.
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'DOING_AJAX', true );
+		$printed = self::sitemapPlugin( 'pre_get_posts', 1 );
+		AB_MCP_Preview_Protection::hook();
+		$_SERVER['REQUEST_URI'] = '/?sitemap=1&wc-ajax=get_refreshed_fragments';
+		$_GET                   = array( 'sitemap' => '1', 'wc-ajax' => 'get_refreshed_fragments' );
+		$wp                     = self::wp( array( 'sitemap' => '1' ) );
+		$sequence               = static function () use ( $wp ): void {
+			do_action_ref_array( 'parse_request', array( $wp ) );
+			do_action( 'pre_get_posts' );
+		};
+		$this->on();
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() )['action'] );
+		try {
+			$sequence();
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind, 'The password page, not the sitemap.' );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		self::assertSame( array(), $printed(), 'The sitemap plugin never ran.' );
+		// Signed in, or with the cookie: the request runs as before, the cart
+		// fragments of a shop included.
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $state['hash'], time() + 100 );
+		try {
+			$sequence();
+			self::fail( 'The sitemap plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'sitemap', $exit->kind );
+		}
+		self::assertCount( 2, $printed() );
+	}
+
+	public function testARestRequestIsServedByRestApiLoadedOnTheFirstLine(): void {
+		// rest_api_loaded() (wp-includes/rest-api.php) serves on parse_request
+		// at 10 every request whose parsed rest_route is not empty, reading
+		// $GLOBALS['wp']->query_vars, and dies. The gate calls it itself at 1
+		// for a visitor, so nothing on the same request runs before the REST
+		// API; gate_rest() decides inside it on rest_authentication_errors.
+		$this->on();
+		$state = AB_MCP_Preview_Protection::state();
+		foreach ( array( '/index.php?rest_route=%2Fwp%2Fv2%2Fposts', '/wp-json/wp/v2/posts', '/wp-json/alphabridge/v1/mcp' ) as $uri ) {
+			$_SERVER['REQUEST_URI'] = $uri;
+			$wp                     = self::wp( array( 'rest_route' => '/wp/v2/posts' ) );
+			self::assertSame( array( 'action' => 'serve', 'reason' => 'rest_route' ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() ), $uri );
+			try {
+				AB_MCP_Preview_Protection::gate_parse_request( $wp );
+				self::fail( 'The gate returned: WordPress would go on to the plugins before rest_api_loaded().' );
+			} catch ( AbTestExit $exit ) {
+				self::assertSame( 'rest', $exit->kind, $uri );
+				self::assertSame( '/wp/v2/posts', $exit->detail, 'The route WordPress parsed, whatever the path.' );
+			}
+			// And inside it the REST gate, as for every REST request.
+			self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), $uri );
+		}
+		// A signed-in user passes the first line (rest_api_loaded() at 10 serves as always).
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'rest_route' => '/wp/v2/posts' ) ) ) );
+		$GLOBALS['ab_test_logged_in'] = false;
+		// The path decides nothing: without the parsed variable a request to
+		// /wp-json/... is no REST request (rest_api_loaded() serves nothing),
+		// and the password page answers it.
+		$_SERVER['REQUEST_URI'] = '/wp-json/wp/v2/posts';
+		foreach ( array( self::wp( array() ), self::wp( array( 'rest_route' => '' ) ), self::wp( array( 'pagename' => 'wp-json/wp/v2/posts' ) ) ) as $wp ) {
+			self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() )['action'] );
+			try {
+				AB_MCP_Preview_Protection::gate_parse_request( $wp );
+				self::fail( 'No page.' );
+			} catch ( AbTestExit $exit ) {
+				self::assertSame( 'die', $exit->kind );
+			}
+		}
+	}
+
+	public function testRobotsOnTheFirstLineIsTheParsedVariableAnsweredByDoRobotsWithThemesOnly(): void {
+		// On parse_request WP_Query has not run, so is_robots() says nothing
+		// yet; the gate reads the parsed variable robots as WP_Query will
+		// ('' !== $qv['robots']) and answers robots.txt itself: do_robots and
+		// exit, as the template loader. Whatever else the address carries
+		// reaches no later handler.
+		$this->on();
+		self::robotsStub();
+		$state                  = AB_MCP_Preview_Protection::state();
+		$_SERVER['REQUEST_URI'] = '/robots.txt';
+		$decide                 = static fn( bool $themes, array $vars ): string => AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( $themes, self::wp( $vars ) ), $state, time() )['action'];
+
+		self::assertSame( 'serve', $decide( true, array( 'robots' => '1' ) ) );
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'robots' => '1' ) ) );
+			self::fail( 'The gate returned.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'robots', $exit->kind, 'robots.txt, with Disallow: / from blog_public 0, through the filter robots_txt as always.' );
+		}
+		self::assertSame( 'challenge', $decide( false, array( 'robots' => '1' ) ), 'Without themes the template loader returns to wp-signup.php, which renders on.' );
+		self::assertSame( 'challenge', $decide( true, array( 'robots' => '' ) ), 'Empty: WP_Query would not set is_robots.' );
+		self::assertSame( 'serve', $decide( true, array( 'robots' => array( '1' ) ) ), 'As WP_Query reads it: anything but the empty string.' );
+		self::assertSame( 'serve', $decide( true, array( 'robots' => '1', 'sitemap' => '1' ) ), 'A second variable changes nothing: robots.txt is answered, and the sitemap never.' );
+		self::assertSame( 'challenge', $decide( true, array( 'feed' => 'rss2' ) ) );
+		// is_robots() is not asked on parse_request: the parsed variable is.
+		$GLOBALS['ab_test_is_robots'] = true;
+		self::assertSame( 'challenge', $decide( true, array( 'sitemap' => '1' ) ) );
+		self::assertSame( 'serve', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true ), $state, time() )['action'], 'template_redirect: is_robots().' );
+		$GLOBALS['ab_test_is_robots'] = false;
+
+		$GLOBALS['ab_test_using_themes'] = false;
+		$_SERVER['REQUEST_URI']          = '/wp-signup.php?robots=1';
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'robots' => '1' ) ) );
+			self::fail( 'wp-signup.php rendered with the theme.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+	}
+
+	public function testTheFirstLineDecidesForTheEntryPointsWithoutThemesToo(): void {
+		// wp-signup.php, wp-activate.php and wp-trackback.php run wp(), so
+		// parse_request fires there as well, with wp_using_themes() false.
+		$GLOBALS['ab_test_using_themes'] = false;
+		$_SERVER['REQUEST_URI']          = '/wp-signup.php?feed=rss2';
+		$wp                              = self::wp( array( 'feed' => 'rss2' ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( $wp ), 'Off: the feed.' );
+		$this->on();
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( $wp );
+			self::fail( 'The feed went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( $wp ), 'A signed-in user signs up on the network as before.' );
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( $wp ), 'A visitor with the cookie reads the feed.' );
+	}
+
+	public function testTheExemptionsThatEndWithExitAnswerThemselvesInAProcessOfTheirOwn(): void {
+		// serve_well_known() prints the JSON and exits, robots.txt ends in the
+		// gate's own exit, rest_api_loaded() dies; so these run in a process
+		// of their own (tests/standalone-preview/serve-child.php), each with a
+		// second parameter a late handler would answer (a sitemap on
+		// pre_get_posts, a dispatcher on template_redirect 0). The answer of
+		// the exemption must come out, never the late handler's content, and
+		// never CHILD-RETURNED.
+		$this->on();
+		$run = static function ( string $case ): array {
+			$out  = array();
+			$code = 1;
+			exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( __DIR__ . '/standalone-preview/serve-child.php' ) . ' ' . escapeshellarg( $case ) . ' 2>&1', $out, $code );
+			return array( $code, implode( "\n", $out ) );
+		};
+		list( $code, $out ) = $run( 'well-known-sitemap' );
+		self::assertSame( 0, $code, $out );
+		$document = json_decode( $out, true );
+		self::assertIsArray( $document, 'The handler answered with the metadata document, and nothing else was printed: ' . $out );
+		self::assertSame( 'https://example.test', $document['issuer'] );
+		self::assertSame( 'https://example.test/?ab_mcp_oauth=authorize', $document['authorization_endpoint'] );
+		foreach ( array( 'LATE-', 'CHILD-RETURNED', 'CHILD-EXIT' ) as $never ) {
+			self::assertStringNotContainsString( $never, $out );
+		}
+		// The sign-in off: nothing serves the document, the password page.
+		list( $code, $out ) = $run( 'well-known-disabled' );
+		self::assertSame( 0, $code, $out );
+		self::assertStringContainsString( 'CHILD-EXIT die', $out );
+		self::assertStringEndsWith( ' 401', $out );
+		self::assertStringNotContainsString( 'LATE-', $out );
+		// robots.txt with wc-ajax beside it: robots.txt, then the gate's exit.
+		list( $code, $out ) = $run( 'robots-wc-ajax' );
+		self::assertSame( 0, $code, $out );
+		self::assertSame( "User-agent: *\nDisallow: /", $out, 'do_robots answered, as the template loader would have it, and the process ended there.' );
+		// A REST request with wc-ajax beside it: the REST API.
+		list( $code, $out ) = $run( 'rest-wc-ajax' );
+		self::assertSame( 0, $code, $out );
+		self::assertSame( 'CHILD-EXIT rest /wp/v2/posts 0', $out );
+	}
+
+	public function testTheSecondRunOfTheGateChangesNothing(): void {
+		// With themes the first line passes a request and template_redirect
+		// decides the same way again: the constant is defined once, the
+		// headers are the same, the decision too.
+		$this->on();
+		$GLOBALS['ab_test_logged_in'] = true;
+		$_SERVER['REQUEST_URI']       = '/about/';
+		$wp                           = self::wp( array( 'pagename' => 'about' ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_parse_request( $wp ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_frontend(), 'template_redirect after parse_request: the same answer, no error.' );
+		self::assertNull( AB_MCP_Preview_Protection::gate_frontend() );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() ) );
+	}
+
+	/* ------------------------------------- admin-ajax.php and admin-post.php */
+
+	/**
+	 * A plugin that prints content for visitors over the nopriv ways: «load
+	 * more» on admin-ajax.php (and the same action for signed-in users, as
+	 * plugins register both), a form's thank-you page on admin-post.php.
+	 * Each records what it printed and ends the request as such a handler
+	 * does. Returns a reader of what was printed.
+	 */
+	private static function noprivPlugin(): \Closure {
+		$printed = array();
+		foreach ( array( 'wp_ajax_nopriv_load_more', 'wp_ajax_load_more' ) as $hook ) {
+			add_action(
+				$hook,
+				static function () use ( &$printed ): void {
+					$printed[] = '<article><h2>Secret post</h2><p>Not public yet.</p></article>';
+					throw new AbTestExit( 'ajax', 'load_more' );
+				}
+			);
+		}
+		foreach ( array( 'admin_post_nopriv_contact_form', 'admin_post_contact_form' ) as $hook ) {
+			add_action(
+				$hook,
+				static function () use ( &$printed ): void {
+					$printed[] = 'thank-you page with the theme';
+					throw new AbTestExit( 'admin_post', 'contact_form' );
+				}
+			);
+		}
+		return static function () use ( &$printed ): array {
+			return $printed;
+		};
+	}
+
+	/**
+	 * admin-ajax.php as WordPress runs it: admin_init, then the action, the
+	 * nopriv one for a visitor.
+	 */
+	private static function adminAjax( string $action ): void {
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-ajax.php';
+		$_REQUEST['action']            = $action;
+		do_action( 'admin_init' );
+		do_action( ( is_user_logged_in() ? 'wp_ajax_' : 'wp_ajax_nopriv_' ) . $action );
+	}
+
+	/** admin-post.php as WordPress runs it: admin_init, then the action. */
+	private static function adminPost( string $action ): void {
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = false;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		$_REQUEST['action']            = $action;
+		do_action( 'admin_init' );
+		do_action( ( is_user_logged_in() ? 'admin_post_' : 'admin_post_nopriv_' ) . $action );
+	}
+
+	public function testANoprivAjaxActionOfAPluginPrintsNothingForAVisitor(): void {
+		// Plugins and themes print content over wp_ajax_nopriv_*: «load
+		// more», endless scrolling, an AJAX search with titles and excerpts,
+		// the cart fragments of a shop. The core's own nopriv actions print
+		// none, which an earlier header took for all of them.
+		$printed = self::noprivPlugin();
+		AB_MCP_Preview_Protection::hook();
+
+		// Off: the plugin answers as always.
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		self::assertCount( 1, $printed() );
+
+		// On, a visitor: «0» with 401, as admin-ajax.php answers an action
+		// nobody handles; the plugin never runs.
+		$this->on();
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( '0', $exit->detail, 'No content, not even the password page.' );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		self::assertCount( 1, $printed(), 'Nothing more was printed.' );
+
+		// Signed in: runs (the AJAX of wp-admin and of a page a member reads).
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		// With the cookie: runs (the AJAX a page makes after the password).
+		$hash                                         = AB_MCP_Preview_Protection::state()['hash'];
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $hash, time() + 100 );
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		self::assertCount( 3, $printed() );
+		// An expired cookie does not.
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $hash, time() - 1 );
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		$_COOKIE = array();
+
+		// The two nopriv actions of the core keep answering a visitor: the
+		// heartbeat and the password suggestion of the reset form.
+		foreach ( AB_MCP_Preview_Protection::CORE_NOPRIV as $core ) {
+			self::adminAjax( $core );
+			self::assertSame( 'core', AB_MCP_Preview_Protection::admin_decision( AB_MCP_Preview_Protection::admin_context(), AB_MCP_Preview_Protection::state(), time() )['reason'], $core );
+		}
+		self::assertSame( array( 'heartbeat', 'generate-password' ), AB_MCP_Preview_Protection::CORE_NOPRIV, 'Exactly the two of admin-ajax.php (measured on the core, 31.10.2026).' );
+		self::assertCount( 3, $printed() );
+	}
+
+	public function testAdminPostForAVisitorIsThePasswordPageWhoseFormPostsToTheHomePage(): void {
+		$printed = self::noprivPlugin();
+		AB_MCP_Preview_Protection::hook();
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'Off: as always.' );
+		}
+
+		$this->on();
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+			self::assertStringContainsString( 'name="' . AB_MCP_Preview_Protection::FIELD . '"', $exit->detail, 'The password page.' );
+			self::assertStringContainsString( 'action="https://example.test/"', $exit->detail, 'Its form posts to the home page, where the front-end gate takes the password; this gate takes none.' );
+		}
+		self::assertCount( 1, $printed() );
+
+		// The names of the core's AJAX actions open nothing here: the clause
+		// is for admin-ajax.php.
+		try {
+			self::adminPost( 'heartbeat' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'Signed in: runs.' );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'With the cookie: runs.' );
+		}
+		self::assertCount( 3, $printed() );
+	}
+
+	public function testThePagesOfWpAdminAreNotThisGatesBusiness(): void {
+		// wp-admin sends a visitor to the login itself; the gate decides only
+		// while AJAX runs or the script is admin-post.php.
+		$this->on();
+		$state                       = AB_MCP_Preview_Protection::state();
+		$GLOBALS['ab_test_is_admin'] = true;
+		foreach ( array( 'index.php', 'admin.php', 'edit.php', 'wp-login.php' ) as $pagenow ) {
+			$GLOBALS['pagenow'] = $pagenow;
+			$ctx                = AB_MCP_Preview_Protection::admin_context();
+			self::assertFalse( $ctx['ajax'] );
+			self::assertFalse( $ctx['post'] );
+			self::assertSame( array( 'action' => 'pass', 'reason' => 'admin' ), AB_MCP_Preview_Protection::admin_decision( $ctx, $state, time() ), $pagenow );
+			self::assertNull( AB_MCP_Preview_Protection::gate_admin(), $pagenow );
+		}
+		unset( $GLOBALS['pagenow'] );
+		self::assertNull( AB_MCP_Preview_Protection::gate_admin(), 'No script name at all.' );
+		// Off: nothing, wherever.
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'off' ), AB_MCP_Preview_Protection::admin_decision( AB_MCP_Preview_Protection::admin_context(), AB_MCP_Preview_Protection::state(), time() ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_admin() );
+	}
+
+	public function testTheAdminContextReadsTheRequest(): void {
+		$ctx = AB_MCP_Preview_Protection::admin_context();
+		self::assertSame( array( 'ajax' => false, 'post' => false, 'action' => '', 'logged_in' => false, 'cookie' => '' ), $ctx );
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		$_REQUEST['action']            = array( 'heartbeat' );
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = '1|abc';
+		$GLOBALS['ab_test_logged_in']                 = true;
+		$ctx                                          = AB_MCP_Preview_Protection::admin_context();
+		self::assertTrue( $ctx['ajax'] );
+		self::assertTrue( $ctx['post'] );
+		self::assertSame( '', $ctx['action'], 'An array is no action name.' );
+		self::assertSame( '1|abc', $ctx['cookie'] );
+		self::assertTrue( $ctx['logged_in'] );
+		$_REQUEST['action'] = 'heartbeat';
+		self::assertSame( 'heartbeat', AB_MCP_Preview_Protection::admin_context()['action'] );
+	}
+
 	public function testTheBookmarksScriptMeetsTheGateOnWpLoaded(): void {
 		// wp-links-opml.php loads WordPress without wp() and prints the
 		// bookmarks as OPML; no action of the request but wp_loaded is left.
@@ -757,6 +1563,194 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertTrue( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE, 'On: also the answer a signed-in user gets.' );
 	}
 
+	/**
+	 * What the gates sent: the lines of ab_mcp_preview_header_sent and the
+	 * arguments of ab_mcp_preview_cookie_sent, which follow the real header()
+	 * and setcookie() (PHP's CLI keeps no list of sent headers). Only in a
+	 * process of its own, where nothing was printed yet and headers_sent()
+	 * is false, as on a web server.
+	 *
+	 * @return array{headers:string[],cookies:array}
+	 */
+	private static function sent(): array {
+		$out = array( 'headers' => array(), 'cookies' => array() );
+		foreach ( $GLOBALS['ab_test_actions'] as list( $hook, $args ) ) {
+			if ( 'ab_mcp_preview_header_sent' === $hook ) {
+				$out['headers'][] = $args[0];
+			} elseif ( 'ab_mcp_preview_cookie_sent' === $hook ) {
+				$out['cookies'][] = $args;
+			}
+		}
+		return $out;
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheRightPasswordSetsTheCookieForTheHomePathAndTheWordPressFolder(): void {
+		// home https://example.test/staging, WordPress in /wordpress: a cookie
+		// for /staging/ alone never reaches /wordpress/wp-admin/admin-ajax.php,
+		// and the AJAX of an unlocked page would meet gate_admin() without it
+		// (Codex, 31.10.2026). As WordPress sets its login cookie: COOKIEPATH
+		// and, where it differs, SITECOOKIEPATH.
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'COOKIEPATH', '/staging/' );
+		define( 'SITECOOKIEPATH', '/wordpress/' );
+		define( 'COOKIE_DOMAIN', '' );
+		self::assertFalse( headers_sent(), 'Nothing printed yet in this process: the gate really sends.' );
+		self::assertSame( array( '/staging/', '/wordpress/' ), AB_MCP_Preview_Protection::cookie_paths() );
+
+		$password                  = $this->on();
+		$_SERVER['REQUEST_URI']    = '/staging/about/';
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) );
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 2, $cookies, 'One setcookie() per path.' );
+		self::assertSame( '/staging/', $cookies[0][2]['path'] );
+		self::assertSame( '/wordpress/', $cookies[1][2]['path'] );
+		foreach ( $cookies as $cookie ) {
+			self::assertSame( AB_MCP_Preview_Protection::cookie_name(), $cookie[0], 'Set under the name this site reads.' );
+			self::assertSame( 'ab_mcp_preview', $cookie[0] );
+			self::assertSame( $cookies[0][1], $cookie[1], 'The same value.' );
+			self::assertTrue( AB_MCP_Preview_Protection::cookie_valid( $cookie[1], AB_MCP_Preview_Protection::state()['hash'], time() ) );
+			self::assertSame( $cookies[0][2]['expires'], $cookie[2]['expires'], 'The same expiry.' );
+			self::assertGreaterThan( time() + 13 * DAY_IN_SECONDS, $cookie[2]['expires'] );
+			self::assertSame( '', $cookie[2]['domain'] );
+			self::assertFalse( $cookie[2]['secure'] );
+			self::assertTrue( $cookie[2]['httponly'] );
+			self::assertSame( 'Lax', $cookie[2]['samesite'] );
+		}
+		// The reload after the password carries the robots header as well.
+		self::assertContains( 'X-Robots-Tag: noindex, nofollow', self::sent()['headers'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheCookieIsSetOnceWhenTheTwoPathsAreTheSame(): void {
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		define( 'COOKIEPATH', '/' );
+		define( 'SITECOOKIEPATH', '/' );
+		self::assertSame( array( '/' ), AB_MCP_Preview_Protection::cookie_paths() );
+		$password                  = $this->on();
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 1, $cookies, 'The same path twice would be the same cookie twice.' );
+		self::assertSame( '/', $cookies[0][2]['path'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testOnANetworkTheCookieIsSetUnderTheNameOfTheSite(): void {
+		// Site 2 of a network sets ab_mcp_preview_2, the name it reads, so the
+		// password entered there overwrites nothing of site 1.
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		define( 'COOKIEPATH', '/' );
+		define( 'SITECOOKIEPATH', '/' );
+		switch_to_blog( 2 );
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		$password                                  = $this->on();
+		self::assertSame( 'ab_mcp_preview_2', AB_MCP_Preview_Protection::cookie_name() );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 1, $cookies );
+		self::assertSame( 'ab_mcp_preview_2', $cookies[0][0], 'Set under the name this site reads, not the plain one.' );
+		self::assertTrue( AB_MCP_Preview_Protection::cookie_valid( $cookies[0][1], AB_MCP_Preview_Protection::state()['hash'], time() ) );
+		restore_current_blog();
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testWithoutTheConstantsTheCookiePathIsTheRoot(): void {
+		self::assertSame( array( '/' ), AB_MCP_Preview_Protection::cookie_paths() );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testEveryAnswerAGateGivesItselfCarriesXRobotsTag(): void {
+		// The filter wp_headers runs in WP::send_headers(), after
+		// parse_request: the password page, the documents handed to
+		// AB_MCP_OAuth, wp-links-opml.php (live measured without the header)
+		// and the two admin scripts never reach it, so the gates send the
+		// header themselves (Codex, 31.10.2026).
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		self::assertFalse( headers_sent() );
+		$line = 'X-Robots-Tag: noindex, nofollow';
+		$sent = static function ( callable $gate ): array {
+			$GLOBALS['ab_test_actions'] = array();
+			try {
+				$gate();
+			} catch ( AbTestExit $exit ) {
+				return self::sent()['headers'];
+			}
+			return self::sent()['headers'];
+		};
+
+		// Off: nothing.
+		$_SERVER['REQUEST_URI'] = '/about/';
+		self::assertSame( array(), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ), 'Off: no header of ours.' );
+
+		$this->on();
+		// The password page on parse_request.
+		$GLOBALS['ab_test_die_args'] = array();
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'], 'The password page followed the header.' );
+		// A pass on parse_request carries it too (WordPress would send the
+		// same again through wp_headers; header() replaces).
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
+		$GLOBALS['ab_test_logged_in'] = false;
+		// The consent page handed to its handler.
+		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'https://client.test/client.json' );
+		$_REQUEST                  = $_GET;
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=https%3A%2F%2Fclient.test%2Fclient.json';
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array() ) ) ) );
+		$_GET     = array();
+		$_REQUEST = array();
+		// wp-links-opml.php on wp_loaded.
+		$GLOBALS['pagenow']     = 'wp-links-opml.php';
+		$_SERVER['REQUEST_URI'] = '/wp-links-opml.php';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_script() ) );
+		// admin-ajax.php and admin-post.php on admin_init.
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-ajax.php';
+		$_REQUEST['action']            = 'load_more';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		$GLOBALS['ab_test_doing_ajax'] = false;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ) );
+		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+	}
+
 	public function testXRobotsTagGoesOnEveryAnswerWhileOn(): void {
 		self::assertArrayNotHasKey( 'X-Robots-Tag', AB_MCP_Preview_Protection::headers( array() ) );
 		$this->on();
@@ -768,7 +1762,19 @@ final class PreviewProtectionTest extends TestCase {
 
 	public function testTheGatesHangAfterTheOAuthHandlersAndWordPressRestChecks(): void {
 		AB_MCP_Preview_Protection::hook();
+		// The first line: parse_request at 1, before rest_api_loaded() and
+		// the plugins at the default priority 10, after handlers at 0
+		// (WooCommerce's wc-api), which answer before the gate as before.
+		self::assertSame( 1, has_action( 'parse_request', array( AB_MCP_Preview_Protection::class, 'gate_parse_request' ) ) );
+		self::assertSame( 1, AB_MCP_Preview_Protection::PARSE_PRIORITY );
+		self::assertLessThan( 10, AB_MCP_Preview_Protection::PARSE_PRIORITY, 'Before rest_api_loaded() and the SEO plugins on parse_request.' );
+		self::assertGreaterThan( 0, AB_MCP_Preview_Protection::PARSE_PRIORITY, 'After handlers at 0.' );
+		// The second line stays.
 		self::assertSame( 1, has_action( 'template_redirect', array( AB_MCP_Preview_Protection::class, 'gate_frontend' ) ) );
+		// admin-ajax.php and admin-post.php: admin_init at 1, after a handler
+		// at 0, before the plugins at the default priority 10.
+		self::assertSame( 1, has_action( 'admin_init', array( AB_MCP_Preview_Protection::class, 'gate_admin' ) ) );
+		self::assertSame( 1, AB_MCP_Preview_Protection::ADMIN_PRIORITY );
 		self::assertGreaterThan( 0, AB_MCP_Preview_Protection::TEMPLATE_PRIORITY, 'After the well-known documents and the consent page (priority 0).' );
 		self::assertLessThan( 10, AB_MCP_Preview_Protection::TEMPLATE_PRIORITY, 'Before redirect_canonical.' );
 		self::assertSame( 110, has_filter( 'rest_authentication_errors', array( AB_MCP_Preview_Protection::class, 'gate_rest' ) ) );
@@ -844,6 +1850,96 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 401, $result->get_error_data()['status'] );
 		self::assertStringContainsString( 'preview behind a password', $result->get_error_message() );
 		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( null ), 'Also when no filter before decided.' );
+	}
+
+	public function testTheRestGatePassesTheCorsPreflightOfABrowser(): void {
+		// A web app of another origin reads /wp-json/wp/v2/posts with an
+		// application password; the browser's OPTIONS carries no credentials
+		// (Codex, 31.10.2026). The REST server answers OPTIONS with the
+		// description of the route (rest_handle_options_request()), never
+		// with content.
+		$_SERVER['REQUEST_URI']    = '/wp-json/wp/v2/posts';
+		$_SERVER['REQUEST_METHOD'] = 'OPTIONS';
+		self::assertTrue( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertNull( AB_MCP_Preview_Protection::gate_rest( null ), 'Off: as before.' );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+
+		$this->on();
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ), 'The preflight passes.' );
+		self::assertNull( AB_MCP_Preview_Protection::gate_rest( null ) );
+		$_SERVER['REQUEST_METHOD'] = 'options';
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ), 'Whatever the case of the method.' );
+		// The real request without credentials stays 401.
+		foreach ( array( 'GET', 'POST', 'HEAD' ) as $method ) {
+			$_SERVER['REQUEST_METHOD'] = $method;
+			self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+			self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), $method );
+		}
+		// An OPTIONS request whose method the server would replace is no
+		// preflight: GET would be dispatched (WP_REST_Server::serve_request(),
+		// $_GET['_method'] and X-HTTP-Method-Override before check_authentication()).
+		$_SERVER['REQUEST_METHOD'] = 'OPTIONS';
+		$_GET['_method']           = 'GET';
+		self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), '?_method=GET' );
+		$_GET = array();
+		$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
+		self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), 'X-HTTP-Method-Override: GET' );
+		unset( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+		// An error of WordPress's own checks passes through as always.
+		$error = new WP_Error( 'rest_cookie_invalid_nonce', 'Cookie check failed', array( 'status' => 403 ) );
+		self::assertSame( $error, AB_MCP_Preview_Protection::gate_rest( $error ) );
+	}
+
+	public function testOnANetworkEverySiteHasItsOwnCookie(): void {
+		// Every site of a sub-directory network shares the network's cookie
+		// path (ms_cookie_constants()), so one name would be one cookie for
+		// all of them, and the password entered on B would overwrite A's
+		// (Codex, 31.10.2026).
+		self::assertSame( 'ab_mcp_preview', AB_MCP_Preview_Protection::cookie_name(), 'A single site: the name as it was.' );
+		self::assertSame( AB_MCP_Preview_Protection::COOKIE, AB_MCP_Preview_Protection::cookie_name() );
+
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		$names                        = array();
+		$hashes                       = array();
+		foreach ( array( 1, 2 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public'] = '1';
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			$names[ $site ]  = AB_MCP_Preview_Protection::cookie_name();
+			$hashes[ $site ] = AB_MCP_Preview_Protection::state()['hash'];
+			restore_current_blog();
+		}
+		self::assertSame( 'ab_mcp_preview_1', $names[1] );
+		self::assertSame( 'ab_mcp_preview_2', $names[2] );
+		self::assertNotSame( $names[1], $names[2], 'Two sites, two cookies.' );
+
+		// The cookie of A, as A sets it, opens A and is nothing on B; B's
+		// cookie beside it opens B.
+		$_COOKIE[ $names[1] ] = AB_MCP_Preview_Protection::cookie_value( $hashes[1], time() + 100 );
+		switch_to_blog( 1 );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'cookie' ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_frontend() );
+		restore_current_blog();
+		switch_to_blog( 2 );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'], 'A\'s cookie is not read on B.' );
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::admin_decision( array( 'ajax' => true, 'post' => false, 'action' => 'load_more', 'logged_in' => false, 'cookie' => AB_MCP_Preview_Protection::admin_context()['cookie'] ), $state, time() )['action'] );
+		$_SERVER['REQUEST_URI'] = '/wp-json/wp/v2/posts';
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), 'Nor in the REST gate.' );
+		$_COOKIE[ $names[2] ] = AB_MCP_Preview_Protection::cookie_value( $hashes[2], time() + 100 );
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+		restore_current_blog();
+		// Both cookies stand side by side: A still opens A.
+		switch_to_blog( 1 );
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), AB_MCP_Preview_Protection::state(), time() )['action'] );
+		restore_current_blog();
 	}
 
 	public function testTheRestGatePassesAVisitorWithAValidCookie(): void {
@@ -997,8 +2093,10 @@ final class PreviewProtectionTest extends TestCase {
 				$_REQUEST = array();
 				continue;
 			}
+			// The two documents below /.well-known/: the gate hands them to
+			// the handler that serves them.
 			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'well_known' => AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $url ) ) );
-			self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $ctx, $state, time() )['action'], $url );
+			self::assertSame( array( 'action' => 'serve', 'reason' => 'well_known' ), AB_MCP_Preview_Protection::frontend_decision( $ctx, $state, time() ), $url );
 		}
 	}
 
@@ -1663,16 +2761,22 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertFileExists( $path, 'Site 2 runs the protection by the network activation.' );
 	}
 
-	public function testRobotsPassesOnlyOnTheWayWithThemes(): void {
+	public function testRobotsIsAnsweredOnlyOnTheWayWithThemes(): void {
 		$this->on();
+		self::robotsStub();
 		$state                        = AB_MCP_Preview_Protection::state();
 		$GLOBALS['ab_test_is_robots'] = true;
 		$_SERVER['REQUEST_URI']       = '/robots.txt';
 		self::assertTrue( AB_MCP_Preview_Protection::frontend_context( true )['robots'] );
 		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( false )['robots'], 'Without themes the template loader returns to the script after robots.txt, and wp-signup.php renders on.' );
-		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true ), $state, time() )['action'] );
+		self::assertSame( 'serve', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true ), $state, time() )['action'] );
 		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( false ), $state, time() )['action'] );
-		self::assertNull( AB_MCP_Preview_Protection::gate_frontend(), 'template_redirect: robots.txt is served, with Disallow: / from blog_public 0.' );
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'The gate returned.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'robots', $exit->kind, 'template_redirect: robots.txt is answered, with Disallow: / from blog_public 0.' );
+		}
 
 		$GLOBALS['ab_test_using_themes'] = false;
 		$_SERVER['REQUEST_URI']          = '/wp-signup.php?robots=1';
