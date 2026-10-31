@@ -286,18 +286,23 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 				$after[ $loc ]   = self::hash( $value );
 			}
 		}
-		// An error only where nothing that was sent is stored: a stock that
-		// was is a change stored, though no part of the point.
+		// An error where the call asked to change a field (sent other than
+		// before) and none of these fields is stored as sent, nothing having
+		// changed: a field sent as it was already hides no refusal. A stock
+		// stored counts as a field stored, though no part of the point.
 		$refused = array();
-		$kept    = false;
+		$took    = false;
 		foreach ( $asked as $field => $want ) {
+			if ( ! self::wants_change( (string) $field, $want, $before, $was ) ) {
+				continue;
+			}
 			if ( array_key_exists( $field, $read ) && AB_MCP_Undo_Answer::same( $read[ $field ], $want ) ) {
-				$kept = true;
+				$took = true;
 			} else {
 				$refused[] = (string) $field;
 			}
 		}
-		if ( is_array( $stored ) && array() === $changed && ! $kept ) {
+		if ( is_array( $stored ) && array() === $changed && ! $took ) {
 			if ( array() !== $refused ) {
 				return new WP_Error(
 					'ab_mcp_not_saved',
@@ -348,6 +353,28 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 			$res['stock_note'] = $stock;
 		}
 		return $res;
+	}
+
+	/**
+	 * Did the call ask to change a field: is what it sent other than the
+	 * field held before, in the form the read-back gives it?
+	 *
+	 * @param string $field  regular_price, sale_price, stock or status.
+	 * @param mixed  $want   As sent, in the form WooCommerce stores it.
+	 * @param array  $before state() before the call.
+	 * @param array  $was    The stock right before the save.
+	 * @return bool
+	 */
+	private static function wants_change( $field, $want, array $before, array $was ) {
+		if ( 'stock' === $field ) {
+			if ( ! $was['manage'] || null === $was['quantity'] ) {
+				return true;
+			}
+			$had = function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $was['quantity'] ) : 0 + $was['quantity'];
+			return ! AB_MCP_Undo_Answer::same( $had, $want );
+		}
+		$had = 'status' === $field ? $before['locs']['status'] : ( $before['locs']['price'][ $field ] ?? null );
+		return ! AB_MCP_Undo_Answer::same( $had, $want );
 	}
 
 	/**

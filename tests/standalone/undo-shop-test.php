@@ -647,6 +647,16 @@ $res = ab_update( array( 'regular_price' => '10' ) );
 ok( true === $res['updated'] && null === $res['undo'] && false !== strpos( $res['undo_note'], 'nothing changed' ) && false !== strpos( $res['undo_note'], 'wp_wc_get_product' ) && 0 === ab_points(), 'B1 the price the product had already: no point, the note says why' );
 ok( array( 'regular_price' => '10' ) === (array) $res['saved_fields'] && ! isset( $res['saved_differs'] ), 'B2 ... and saved_fields shows it' );
 
+// Codex, final round: a field sent as it was hides no refusal. Regular price
+// 10, no sale price; the call sends 10 and a sale price of 20, which
+// WooCommerce drops as not below the regular one: nothing changed.
+reset_all();
+$res = ab_update( array( 'regular_price' => '10', 'sale_price' => '20' ) );
+ok( 'ab_mcp_not_saved' === ab_code( $res ) && false !== strpos( ab_msg( $res ), 'sale_price' ) && false === strpos( ab_msg( $res ), 'regular_price' ) && '' === ab_p( 7, 'sale_price' ) && 0 === ab_points(), 'B2b a sale price WooCommerce dropped beside a regular price sent as it was: not updated: true, the error names the sale price' );
+reset_all();
+$res = ab_update( array( 'regular_price' => '10', 'sale_price' => '', 'status' => 'publish' ) );
+ok( true === $res['updated'] && null === $res['undo'] && false !== strpos( $res['undo_note'], 'nothing changed' ) && ! isset( $res['saved_differs'] ) && 0 === ab_points(), 'B2c everything sent as it was already: a success without a point, nothing changed' );
+
 reset_all();
 $GLOBALS['ab_on_save'] = static function ( $p ) { $p->changes['regular_price'] = $p->data['regular_price']; }; // a plugin that keeps the price
 $res = ab_update( array( 'regular_price' => '99' ) );
@@ -1155,7 +1165,9 @@ $GLOBALS['P'][7]['regular_price'] = '999.99';
 $dry  = array( ab_undo( $res['undo'], array( 'dry_run' => true ) ), ab_undo( $cou['undo'], array( 'dry_run' => true ) ) );
 $list = AB_MCP_Tools_Undo_Core::undo_list( array() );
 $json = (string) wp_json_encode( array( $dry, $list ) );
-ok( false === strpos( $json, '777' ) && false === strpos( $json, '888' ) && false === strpos( $json, 'geheimcode' ) && 2 === $list['count'], 'V1 neither the dry run nor wp_undo_list shows a price or a code' );
+// Whole prices with their decimal point: tokens are hex and times are whole
+// numbers, so neither can hold one by chance.
+ok( false === strpos( $json, '777.77' ) && false === strpos( $json, '888.88' ) && false === strpos( $json, '999.99' ) && false === strpos( $json, 'geheimcode' ) && 2 === $list['count'], 'V1 neither the dry run nor wp_undo_list shows a price or a code' );
 
 /* ============================== N) the notes of a change without undo, and the wiring */
 
