@@ -90,7 +90,7 @@ final class AnswerWayTest extends TestCase {
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
 		self::assertStringContainsString( 'The tool "wp_list_posts" is switched off in the fine-tuning of AlphaBridge MCP on this site.', self::message( $res ) );
 		self::assertStringContainsString( 'an administrator switches "wp_list_posts" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes', self::message( $res ) );
-		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-tool-wp_list_posts', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_list_posts', self::message( $res ) );
 	}
 
 	public function testReadModeNamesTheSwitchAndTheRisk(): void {
@@ -100,7 +100,7 @@ final class AnswerWayTest extends TestCase {
 		self::assertStringStartsWith( 'Write access is off on this site, so the tool "wp_update_post" did not run: it changes the site', self::message( $res ) );
 		self::assertStringContainsString( 'an administrator can switch on write access at the top of Settings → AlphaBridge MCP', self::message( $res ) );
 		self::assertStringContainsString( 'at the site owner\'s own risk', self::message( $res ) );
-		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', self::message( $res ) );
 	}
 
 	public function testANarrowAccessLevelNamesHowToWidenIt(): void {
@@ -113,7 +113,7 @@ final class AnswerWayTest extends TestCase {
 		self::assertStringStartsWith( 'This connection has the access level "Read only", which does not include the tool "wp_update_post".', self::message( $res ) );
 		self::assertStringContainsString( 'connect the app again and choose the access level "Full" on the consent screen', self::message( $res ) );
 		self::assertStringContainsString( 'Settings → AlphaBridge MCP', self::message( $res ) );
-		self::assertLeadsTo( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-connections', self::message( $res ) );
+		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-connections', self::message( $res ) );
 	}
 
 	public function testTheRateLimitSaysHowManyAndHowLongToWait(): void {

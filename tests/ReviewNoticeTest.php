@@ -384,7 +384,7 @@ final class ReviewNoticeTest extends TestCase {
 		foreach ( array( 'https://evil.example/', '//evil.example', 'index.php', '' ) as $from ) {
 			$exit = $this->dismiss_from( $from );
 			$this->assertSame( 'redirect', $exit->kind, $from );
-			$this->assertStringContainsString( 'page=alphabridge-mcp', $exit->detail, $from . ': zurück auf die eigene Seite' );
+			$this->assertStringStartsWith( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection&', $exit->detail, $from . ': zurück auf die eigene Seite' );
 			$this->assertStringNotContainsString( 'evil', $exit->detail );
 		}
 	}

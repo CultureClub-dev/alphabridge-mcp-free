@@ -365,24 +365,33 @@ final class AdminPageTest extends TestCase {
 	}
 
 	public function testTheMainColumnKeepsItsOrder(): void {
+		// Hung in the other order on purpose: the column, not the hooking, decides.
 		add_action(
 			'ab_mcp_admin_main_boxes',
 			static function () {
 				echo '<div id="addon-main"></div>';
 			}
 		);
+		add_action(
+			'ab_mcp_admin_boxes_connection',
+			static function () {
+				echo '<div id="addon-connection"></div>';
+			}
+		);
 		$r    = $this->registry();
 		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all() );
 
 		$at = array();
-		foreach ( array( 'id="ab-connect"', 'id="ab-doctor"', 'id="ab-staging-card"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
+		foreach ( array( 'id="ab-connect"', 'id="ab-doctor"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-connection"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
 			$pos = strpos( $html, $marker );
 			self::assertIsInt( $pos, $marker );
 			$at[] = $pos;
 		}
 		$sorted = $at;
 		sort( $sorted );
-		self::assertSame( $sorted, $at, 'Connect, connection check, Staging, fine-tuning, connections, add-on boxes, log.' );
+		self::assertSame( $sorted, $at, 'Connect, connection check, fine-tuning, connections, add-on boxes (the hook of 4.16.0, then the one from before), log.' );
+		self::assertStringNotContainsString( 'id="ab-staging-card"', $html, 'The card «Staging» is on the page «Staging» since 4.16.0.' );
+		self::assertStringNotContainsString( 'ab-staging', $html );
 	}
 
 	public function testTheFineTuningIsOpenAndSaysSo(): void {

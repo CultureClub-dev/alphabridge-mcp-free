@@ -98,6 +98,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_blog_store'] = array();
 	$GLOBALS['ab_test_styles']     = array();
 	$GLOBALS['ab_test_scripts']    = array();
+	$GLOBALS['ab_test_localized']  = array();
 	$GLOBALS['ab_test_locale']     = 'en_US';
 	$GLOBALS['ab_test_template']   = 'twentytwentyfive';
 	$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
@@ -1188,8 +1189,14 @@ function check_ajax_referer( $action = -1, $query_arg = false, $die = true ) {
 	return $result;
 }
 
+/**
+ * As WordPress (formatting.php): strips the slashes wp_magic_quotes() adds to
+ * the request. The identity until 4.16.0; the forwarding of the old address
+ * (AB_MCP_Admin::forward()) hands slashed parameters on, so a test must see
+ * what WordPress does with them.
+ */
 function wp_unslash( $value ) {
-	return $value;
+	return stripslashes_deep( $value );
 }
 
 function absint( $value ) {
@@ -1252,6 +1259,7 @@ function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $
 }
 
 function wp_localize_script( $handle, $object_name, $l10n ) {
+	$GLOBALS['ab_test_localized'][ $handle ][ $object_name ] = $l10n;
 	return true;
 }
 
@@ -1911,11 +1919,14 @@ class AbTestExit extends Exception {
 	public $kind;
 	/** @var string Location or message. */
 	public $detail;
+	/** @var int The status of a redirect; 0 for the others. */
+	public $status;
 
-	public function __construct( string $kind, string $detail = '' ) {
+	public function __construct( string $kind, string $detail = '', int $status = 0 ) {
 		parent::__construct( $kind . ': ' . $detail );
 		$this->kind   = $kind;
 		$this->detail = $detail;
+		$this->status = $status;
 	}
 }
 
@@ -1924,11 +1935,11 @@ function auth_redirect() {
 }
 
 function wp_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
-	throw new AbTestExit( 'redirect', (string) $location );
+	throw new AbTestExit( 'redirect', (string) $location, (int) $status );
 }
 
 function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
-	throw new AbTestExit( 'redirect', (string) $location );
+	throw new AbTestExit( 'redirect', (string) $location, (int) $status );
 }
 
 /** @var array $ab_test_die_args The arguments of the last wp_die() (its response status among them). */

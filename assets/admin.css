@@ -780,6 +780,11 @@
 	min-width: 260px;
 }
 
+/* The page «Staging»: one column, about as wide as the main column of «AI Connection». */
+.ab-mcp.ab-mcp--staging {
+	max-width: 960px;
+}
+
 .ab-mcp .ab-card {
 	position: relative;
 	margin: 0 0 20px;

@@ -1,6 +1,7 @@
 <?php
 /**
- * Admin settings screen (submenu under Settings).
+ * The admin menu «AlphaBridge» with its pages «AI Connection» and
+ * «Staging» (since 4.16.0; before, one settings page under Settings).
  *
  * @package AlphaBridge_MCP
  */
@@ -66,6 +67,42 @@ class AB_MCP_Admin {
 	const STAGING_CARD_FOLDED = 'ab_mcp_staging_card_folded';
 
 	/**
+	 * The page under Settings that carried the whole screen before 4.16.0
+	 * («Settings → AlphaBridge MCP»). It stays registered, out of the menu,
+	 * so its address leads on to «AI Connection» (forward_old_page()).
+	 */
+	const OLD_PAGE = 'alphabridge-mcp';
+
+	/**
+	 * The four stylesheet loaders of a Pro add-on before 4.16.0, which load
+	 * only on the hook of the old page (the same names since the public Pro
+	 * 4.10.0). enqueue_assets() calls them with that hook on this plugin's
+	 * pages, as long as the add-on has no ab_mcp_pro_is_core_screen().
+	 */
+	const OLD_PRO_ASSETS = array(
+		'ab_mcp_pro_undo_assets',
+		'ab_mcp_pro_deploy_assets',
+		'ab_mcp_pro_abilities_assets',
+		'ab_mcp_pro_aff_assets',
+	);
+
+	/**
+	 * The hook those loaders compare with, written as they write it.
+	 */
+	const OLD_PRO_HOOK = 'settings_page_alphabridge-mcp';
+
+	/**
+	 * The hook suffixes WordPress gave back when menu() registered the pages:
+	 * 'menu', 'connection', 'staging' and 'old'. False for a page a user
+	 * without the right does not get (add_submenu_page()); empty before
+	 * admin_menu. Kept rather than built from the titles: the part before
+	 * «_page_» comes from the menu's title through sanitize_title().
+	 *
+	 * @var array<string,string|false>
+	 */
+	private static $hooks = array();
+
+	/**
 	 * The tool registry, handed in by the plugin; looked up when not.
 	 *
 	 * @var AB_MCP_Tool_Registry|null
@@ -84,6 +121,9 @@ class AB_MCP_Admin {
 	public function __construct( $registry = null ) {
 		$this->registry = $registry instanceof AB_MCP_Tool_Registry ? $registry : null;
 		add_action( 'admin_menu', array( $this, 'menu' ) );
+		// After every other callback, the SDK of a Pro add-on before 4.16.0
+		// (999999999) included: it looks for the old page under Settings.
+		add_action( 'admin_menu', array( $this, 'hide_old_page' ), PHP_INT_MAX );
 		add_filter( 'plugin_action_links_' . AB_MCP_BASENAME, array( $this, 'action_links' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_ab_mcp_save', array( $this, 'handle_save' ) );
@@ -127,16 +167,174 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Register the menu as a sub-item of Settings.
+	 * Register the menu «AlphaBridge», right below Settings (80), with its two
+	 * pages, and the old page under Settings.
+	 *
+	 * The menu's title stays «AlphaBridge» in every language: it is the name,
+	 * and it gives the page hooks their first part. WordPress puts a first
+	 * entry under a menu of its own that points at the menu itself; it goes,
+	 * so the menu links to its first page, «AI Connection», and shows two
+	 * entries. The menu's own address leads there (forward_menu()). Each of
+	 * these pages has a callback: without one WordPress ends the request with
+	 * «Cannot load» before the load- hook that leads on.
+	 *
+	 * The old page stays registered under Settings, so its address passes the
+	 * access check of WordPress and leads on (forward_old_page()), and so the
+	 * SDK of a Pro add-on before 4.16.0 finds it where it looks: it sorts its
+	 * own pages behind it, or puts the licence screen in its place. It leaves
+	 * the menu only at the end of admin_menu (hide_old_page()).
 	 */
 	public function menu() {
-		add_options_page(
+		self::$hooks['menu'] = add_menu_page(
+			'AlphaBridge',
+			'AlphaBridge',
+			'manage_options',
+			AB_MCP_Guidance::MENU,
+			array( $this, 'render' ),
+			self::menu_icon(),
+			81
+		);
+		self::$hooks['connection'] = add_submenu_page(
+			AB_MCP_Guidance::MENU,
+			__( 'AI Connection', 'alphabridge-mcp' ),
+			__( 'AI Connection', 'alphabridge-mcp' ),
+			'manage_options',
+			AB_MCP_Guidance::PAGES['connection'],
+			array( $this, 'render' )
+		);
+		self::$hooks['staging'] = add_submenu_page(
+			AB_MCP_Guidance::MENU,
+			__( 'Staging', 'alphabridge-mcp' ),
+			__( 'Staging', 'alphabridge-mcp' ),
+			'manage_options',
+			AB_MCP_Guidance::PAGES['staging'],
+			array( $this, 'render_staging' )
+		);
+		remove_submenu_page( AB_MCP_Guidance::MENU, AB_MCP_Guidance::MENU );
+		self::$hooks['old'] = add_options_page(
 			'AlphaBridge MCP',
 			'AlphaBridge MCP',
 			'manage_options',
-			'alphabridge-mcp',
+			self::OLD_PAGE,
 			array( $this, 'render' )
 		);
+		if ( is_string( self::$hooks['menu'] ) && '' !== self::$hooks['menu'] ) {
+			add_action( 'load-' . self::$hooks['menu'], array( $this, 'forward_menu' ) );
+		}
+		if ( is_string( self::$hooks['old'] ) && '' !== self::$hooks['old'] ) {
+			add_action( 'load-' . self::$hooks['old'], array( $this, 'forward_old_page' ) );
+		}
+	}
+
+	/**
+	 * The icon of the menu: the double arrow of the AlphaBridge logo, in one
+	 * colour, as WordPress colours a menu icon given as an SVG (the fill
+	 * follows the colour scheme). The geometry of the logo's vector form;
+	 * the frame is cut to the arrow.
+	 *
+	 * @return string A data: address.
+	 */
+	private static function menu_icon() {
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 220 220"><path fill="black" d="M28 128 L88 68 L88 104 L168 104 L168 68 L228 128 L168 188 L168 152 L88 152 L88 188 Z"/></svg>';
+		return 'data:image/svg+xml;base64,' . base64_encode( $svg ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the form WordPress takes an SVG menu icon in.
+	}
+
+	/**
+	 * Take the old page out of the menu, at the very end of admin_menu, while
+	 * it is still this plugin's page. The SDK of a Pro add-on before 4.16.0
+	 * puts its licence screen in its place, until the licence is activated:
+	 * it takes the page's callbacks off and hangs its own on
+	 * (override_submenu_action()). Then the entry stays where that add-on
+	 * shows it, and the address does not lead on.
+	 */
+	public function hide_old_page() {
+		if ( $this->old_page_is_ours() ) {
+			remove_submenu_page( 'options-general.php', self::OLD_PAGE );
+		}
+	}
+
+	/**
+	 * Whether the old page still shows this plugin's screen: its callback
+	 * hangs on the page hook WordPress gave back for it.
+	 *
+	 * @return bool
+	 */
+	private function old_page_is_ours() {
+		$hook = self::$hooks['old'] ?? false;
+		return is_string( $hook ) && '' !== $hook && false !== has_action( $hook, array( $this, 'render' ) );
+	}
+
+	/**
+	 * The menu's own address, admin.php?page=alphabridge, which the menu
+	 * does not link to: on to «AI Connection» (load- hook of the page).
+	 */
+	public function forward_menu() {
+		if ( current_user_can( 'manage_options' ) ) {
+			self::forward( AB_MCP_Guidance::settings_url() );
+		}
+	}
+
+	/**
+	 * The address of the page before 4.16.0,
+	 * options-general.php?page=alphabridge-mcp, from bookmarks, older answers
+	 * and older add-ons: on to «AI Connection», unless an older SDK shows its
+	 * licence screen there (old_page_is_ours()). An anchor stays with the
+	 * browser: it keeps the one of the address it was sent away from (RFC
+	 * 9110, section 10.2.2). One of the card «Staging» names a part that is
+	 * on «Staging» now; there admin.js goes on (enqueue_assets()).
+	 */
+	public function forward_old_page() {
+		if ( current_user_can( 'manage_options' ) && $this->old_page_is_ours() ) {
+			self::forward( AB_MCP_Guidance::settings_url() );
+		}
+	}
+
+	/**
+	 * Send the request on to $target, an address of this site's admin, with
+	 * every parameter of its query except «page», unchanged: unslashed first
+	 * (WordPress slashes $_GET, wp_magic_quotes()), then encoded key by key
+	 * and value by value, nested ones too (RFC 3986), so that wp_redirect()
+	 * strips nothing on the way to the header. A GET answers 302; a POST
+	 * answers 307, so the browser sends the same form again, with its
+	 * method and its fields, to the new address. Nothing of the form goes
+	 * into the address. The target is the caller's, never one from the
+	 * request.
+	 *
+	 * @param string $target The address to lead to, without a fragment.
+	 */
+	public static function forward( $target ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the query goes on as it came; nothing is read from it here, and nothing changes.
+		$args = is_array( $_GET ) ? wp_unslash( $_GET ) : array();
+		unset( $args['page'] );
+		$query  = http_build_query( $args, '', '&', PHP_QUERY_RFC3986 );
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
+		if ( '' !== $query ) {
+			$target .= ( false === strpos( $target, '?' ) ? '?' : '&' ) . $query;
+		}
+		wp_safe_redirect( $target, 'POST' === $method ? 307 : 302 );
+		exit;
+	}
+
+	/**
+	 * Whether $hook is one of the two pages of the menu, «AI Connection» or
+	 * «Staging»: the hook suffix admin_enqueue_scripts passes, against the
+	 * ones WordPress gave back for them. A page a user does not get has none
+	 * (false), and nothing matches it. An add-on asks this before it loads
+	 * its own files.
+	 *
+	 * @param string $hook Admin page hook suffix.
+	 * @return bool
+	 */
+	public static function is_own_screen( $hook ) {
+		if ( ! is_string( $hook ) || '' === $hook ) {
+			return false;
+		}
+		foreach ( array( 'connection', 'staging' ) as $page ) {
+			if ( isset( self::$hooks[ $page ] ) && $hook === self::$hooks[ $page ] ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -313,16 +511,17 @@ class AB_MCP_Admin {
 	/**
 	 * The notice after the update that brought write access (from a version
 	 * before 4.4.0), on the admin screens of administrators until one of them
-	 * dismisses it or switches (AB_MCP_Settings::KEY_MODE_NOTICE). The
-	 * plugin's own page shows it right under the switch instead (render()),
-	 * so the switch stays the first thing there.
+	 * dismisses it or switches (AB_MCP_Settings::KEY_MODE_NOTICE). The page
+	 * «AI Connection» shows it right under the switch instead (render()),
+	 * so the switch stays the first thing there; «Staging» has no switch and
+	 * shows the notice as every other screen does.
 	 */
 	public function mode_notice() {
 		if ( ! current_user_can( 'manage_options' ) || ! AB_MCP_Settings::get( AB_MCP_Settings::KEY_MODE_NOTICE, false ) ) {
 			return;
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Only decides where the notice is shown; no state is changed.
-		if ( isset( $_GET['page'] ) && 'alphabridge-mcp' === sanitize_key( wp_unslash( $_GET['page'] ) ) ) {
+		if ( isset( $_GET['page'] ) && AB_MCP_Guidance::PAGES['connection'] === sanitize_key( wp_unslash( $_GET['page'] ) ) ) {
 			return;
 		}
 		echo $this->mode_notice_html( true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside mode_notice_html().
@@ -354,8 +553,8 @@ class AB_MCP_Admin {
 	 * access is switched on. A form, so that dismissing works without
 	 * JavaScript.
 	 *
-	 * @param bool $elsewhere Shown on another screen than the plugin's own,
-	 *                        with a link to it.
+	 * @param bool $elsewhere Shown on another screen than «AI Connection»,
+	 *                        with a link to the switch there.
 	 * @return string HTML, escaped.
 	 */
 	private function mode_notice_html( $elsewhere ) {
@@ -364,7 +563,7 @@ class AB_MCP_Admin {
 		$html .= '<p>' . esc_html__( 'Switching on write access switches every tool on; afterwards you can switch single tools off under Fine-tuning.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p class="ab-mode-notice__actions">';
 		if ( $elsewhere ) {
-			$html .= '<a class="button button-primary" href="' . esc_url( admin_url( 'options-general.php?page=alphabridge-mcp' ) ) . '">' . esc_html__( 'Open Settings → AlphaBridge MCP', 'alphabridge-mcp' ) . '</a> ';
+			$html .= '<a class="button button-primary" href="' . esc_url( AB_MCP_Guidance::settings_url( 'ab-mode' ) ) . '">' . esc_html__( 'Open AlphaBridge → AI Connection', 'alphabridge-mcp' ) . '</a> ';
 		}
 		$html .= wp_nonce_field( 'ab_mcp_mode_notice', '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_mode_notice"><button type="submit" class="button">' . esc_html__( 'Dismiss', 'alphabridge-mcp' ) . '</button></p></form></div>';
@@ -933,33 +1132,31 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Redirect back with a notice code.
+	 * Redirect back with a notice code, to the page the anchor is on
+	 * (AB_MCP_Guidance::settings_url()): the forms of the card «Staging» to
+	 * «Staging», every other form to «AI Connection».
 	 *
 	 * @param string $notice Notice key.
 	 * @param string $anchor Id on the page to land on, '' for the top.
 	 */
 	private function redirect( $notice, $anchor = '' ) {
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'page'      => 'alphabridge-mcp',
-					'ab_notice' => $notice,
-				),
-				admin_url( 'options-general.php' )
-			) . ( '' !== $anchor ? '#' . $anchor : '' )
-		);
+		$url  = AB_MCP_Guidance::settings_url( $anchor );
+		$hash = strpos( $url, '#' );
+		$base = false === $hash ? $url : substr( $url, 0, $hash );
+		wp_safe_redirect( add_query_arg( array( 'ab_notice' => $notice ), $base ) . ( false === $hash ? '' : substr( $url, $hash ) ) );
 		exit;
 	}
 
 	/**
-	 * Render the page.
+	 * Render the page «AI Connection», which carries what the settings page
+	 * carried before 4.16.0 but the card «Staging».
 	 *
 	 * Top to bottom: the main switch for write access; the band with the
 	 * logo, this site's state and the choice of assistant; how to connect the
-	 * chosen one; the connection check; the card «Staging»; the fine-tuning
-	 * of the tool switches (open, its main groups folded); the connections;
-	 * boxes from add-ons; the log. The side column carries the Pro box (free
-	 * edition only), boxes from add-ons and the guides.
+	 * chosen one; the connection check; the fine-tuning of the tool switches
+	 * (open, its main groups folded); the connections; boxes from add-ons;
+	 * the log. The side column carries the Pro box (free edition only), boxes
+	 * from add-ons and the guides.
 	 */
 	public function render() {
 		$this->guard();
@@ -995,9 +1192,39 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The main column, top to bottom: connect the chosen assistant, the
-	 * connection check, the card «Staging», the fine-tuning of the tool
-	 * switches, the connections, boxes from add-ons, the log.
+	 * Render the page «Staging»: its heading and one sentence, the marker
+	 * WordPress puts admin notices after, the notice of a form, the card
+	 * «Staging» as it stood on the settings page (it folds per user here
+	 * too), and the boxes add-ons hang below it. One column, no side
+	 * column; nothing on it for what comes later.
+	 */
+	public function render_staging() {
+		$this->guard();
+
+		echo '<div class="wrap ab-mcp ab-mcp--staging">';
+		echo '<h1>' . esc_html__( 'Staging', 'alphabridge-mcp' ) . '</h1>';
+		echo '<p class="ab-lead">' . esc_html__( 'Try changes on a staging copy first: everything this site needs for that is set here.', 'alphabridge-mcp' ) . '</p>';
+		echo '<hr class="wp-header-end">';
+		$this->notice();
+		echo '<div class="ab-main">';
+		echo $this->staging_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside staging_card_html().
+
+		/**
+		 * Add-ons render boxes on the page «Staging» here, below the card
+		 * «Staging»: the Pro add-on's undo window and Site Deploy.
+		 *
+		 * @since 4.16.0
+		 */
+		do_action( 'ab_mcp_admin_boxes_staging' );
+
+		echo '</div>'; // column.
+		echo '</div>'; // wrap.
+	}
+
+	/**
+	 * The main column of «AI Connection», top to bottom: connect the chosen
+	 * assistant, the connection check, the fine-tuning of the tool switches,
+	 * the connections, boxes from add-ons, the log.
 	 *
 	 * @param array $tokens Stored connections.
 	 * @param array $groups Tool groups from the registry.
@@ -1007,13 +1234,20 @@ class AB_MCP_Admin {
 		echo '<div class="ab-main">';
 		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
 		echo $this->doctor_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside doctor_card_html().
-		echo $this->staging_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside staging_card_html().
 		echo $this->capabilities_card_html( $groups, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
 		$this->render_connections_card( $tokens );
 
 		/**
-		 * Add-ons render extra boxes in the main column here (e.g. the Pro
-		 * add-on's Site-Deploy connection).
+		 * Add-ons render boxes in the main column of «AI Connection» here.
+		 *
+		 * @since 4.16.0
+		 */
+		do_action( 'ab_mcp_admin_boxes_connection' );
+
+		/**
+		 * The same place under its name from before 4.16.0, when it was the
+		 * one main column of the settings page; a Pro add-on before 4.16.0
+		 * hangs its boxes here (its undo window, its Site-Deploy connection).
 		 */
 		do_action( 'ab_mcp_admin_main_boxes' );
 
@@ -1310,10 +1544,12 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The card «Staging», between the connection check and the fine-tuning:
-	 * the way to a staging site and everything it needs on this site, in
-	 * the order of its checklist. Top to bottom: the checklist with the next
-	 * step (staging_checklist_html(), the one wp_staging_status reports);
+	 * The card «Staging», on the page «Staging» (render_staging(); until
+	 * 4.15.0 between the connection check and the fine-tuning of the one
+	 * settings page): the way to a staging site and everything it needs on
+	 * this site, in the order of its checklist. Top to bottom: the
+	 * checklist with the next step (staging_checklist_html(), the one
+	 * wp_staging_status reports);
 	 * the role of the site, the other site of its pair and the host, with
 	 * the pair in the hub as a note (staging_record_html()); how to make the
 	 * staging copy, with the host's own guide where one is known
@@ -2942,8 +3178,9 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The side column: the Pro box (free edition only), the invitation to the
-	 * affiliate programme, boxes from add-ons, the guides.
+	 * The side column of «AI Connection»: the Pro box (free edition only),
+	 * the invitation to the affiliate programme, boxes from add-ons, the
+	 * guides. «Staging» has none.
 	 *
 	 * @return string HTML; add-on boxes escape their own output.
 	 */
@@ -3101,14 +3338,23 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * Enqueue the settings screen's script (copy buttons, the choice of
+	 * Enqueue the script of the plugin's pages (copy buttons, the choice of
 	 * assistant, the capability switches and search, the token create/rotate
-	 * flow) and its stylesheet — only on our own admin page.
+	 * flow, the preview protection and the fold of the card «Staging») and
+	 * its stylesheet — on «AI Connection» and «Staging» only
+	 * (is_own_screen()).
+	 *
+	 * A Pro add-on before 4.16.0 loads the stylesheets of its boxes only on
+	 * the hook of the old page; its boxes stand on «AI Connection» all the
+	 * same (ab_mcp_admin_main_boxes, ab_mcp_admin_side_boxes). Where such an
+	 * add-on runs, without ab_mcp_pro_is_core_screen(), its loaders are
+	 * called here with that hook, after this plugin's stylesheet, which they
+	 * build on. A newer add-on asks is_own_screen() itself.
 	 *
 	 * @param string $hook Current admin page hook suffix.
 	 */
 	public function enqueue_assets( $hook ) {
-		if ( 'settings_page_alphabridge-mcp' !== $hook ) {
+		if ( ! self::is_own_screen( $hook ) ) {
 			return;
 		}
 		wp_enqueue_style( 'ab-mcp-admin', AB_MCP_URL . 'assets/admin.css', array(), AB_MCP_VERSION );
@@ -3135,8 +3381,25 @@ class AB_MCP_Admin {
 				'itemOff'    => _n( '%s ability off', '%s abilities off', 1, 'alphabridge-mcp' ),
 				/* translators: %s: number of abilities of other plugins switched off under Fine-tuning. */
 				'itemsOff'   => _n( '%s ability off', '%s abilities off', 2, 'alphabridge-mcp' ),
+
+				// The anchors of «Staging» and its address, for an address of
+				// the page before 4.16.0 that names a part of the card
+				// «Staging» (…alphabridge-mcp#ab-preview): the server leads it
+				// on to «AI Connection» and never sees the anchor, so admin.js
+				// goes on to «Staging» there (the table of
+				// AB_MCP_Guidance::settings_url(), not a second list).
+				'screen'         => ( self::$hooks['staging'] ?? false ) === $hook ? 'staging' : 'connection',
+				'stagingAnchors' => array_values( AB_MCP_Guidance::STAGING_ANCHORS ),
+				'stagingUrl'     => AB_MCP_Guidance::settings_url( '', 'staging' ),
 			)
 		);
+		if ( ! function_exists( 'ab_mcp_pro_is_core_screen' ) ) {
+			foreach ( self::OLD_PRO_ASSETS as $loader ) {
+				if ( function_exists( $loader ) ) {
+					$loader( self::OLD_PRO_HOOK );
+				}
+			}
+		}
 	}
 
 	/**
@@ -3215,3 +3478,11 @@ class AB_MCP_Admin {
 		}
 	}
 }
+
+/*
+ * The sign that this core draws the menu «AlphaBridge» (since 4.16.0), with
+ * the menu's slug: the Pro add-on asks for it where it draws its boxes, on
+ * «Staging» with this core, under the old hook with an older one, whose page
+ * sits under Settings. Set where the class is, which registers the menu.
+ */
+define( 'AB_MCP_ADMIN_MENU', AB_MCP_Guidance::MENU );

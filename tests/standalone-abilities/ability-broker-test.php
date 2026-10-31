@@ -1055,7 +1055,7 @@ $by = array();
 foreach ( $l['abilities'] as $row ) { $by[ $row['name'] ] = $row; }
 $runs = array();
 foreach ( $by as $name => $row ) {
-	if ( false !== $row['allowed'] || false !== $row['can_run'] || 0 !== strpos( $row['allowed_why'], 'not approved' ) || ! ab_way( $row['way'], 'options-general.php?page=alphabridge-mcp#' . AB_MCP_Ability_Broker::anchor( $name ) ) ) {
+	if ( false !== $row['allowed'] || false !== $row['can_run'] || 0 !== strpos( $row['allowed_why'], 'not approved' ) || ! ab_way( $row['way'], 'admin.php?page=alphabridge-connection#' . AB_MCP_Ability_Broker::anchor( $name ) ) ) {
 		$runs[] = $name;
 	}
 }
@@ -1065,11 +1065,11 @@ ok( 1 === $l['hidden'] && ! isset( $by['test/internal-export'] ) && ab_has( $l['
 $GLOBALS['calls'] = array();
 $r = ab_run( array( 'name' => 'test/read-info' ) );
 ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && array() === $GLOBALS['calls'], 'OI2 a read-only ability that runs at once once approved does not run' );
-ok( false !== strpos( ab_msg( $r ), 'The ability "test/read-info" is not approved for AlphaBridge on this site' ) && false !== strpos( ab_msg( $r ), 'Nothing ran.' ) && false !== strpos( ab_msg( $r ), 'Fine-tuning, group «Abilities of other plugins»' ) && false !== strpos( ab_msg( $r ), 'switching on write access approves no ability' ) && ab_way( ab_msg( $r ), 'options-general.php?page=alphabridge-mcp#ab-ability-test__read-info' ), 'OI2 the refusal names the reason, the switch, that write access approves nothing, the link to the switch and the request to pass it on: ' . ab_msg( $r ) );
+ok( false !== strpos( ab_msg( $r ), 'The ability "test/read-info" is not approved for AlphaBridge on this site' ) && false !== strpos( ab_msg( $r ), 'Nothing ran.' ) && false !== strpos( ab_msg( $r ), 'Fine-tuning, group «Abilities of other plugins»' ) && false !== strpos( ab_msg( $r ), 'switching on write access approves no ability' ) && ab_way( ab_msg( $r ), 'admin.php?page=alphabridge-connection#ab-ability-test__read-info' ), 'OI2 the refusal names the reason, the switch, that write access approves nothing, the link to the switch and the request to pass it on: ' . ab_msg( $r ) );
 $r = ab_run( array( 'name' => 'test/set-meta', 'input' => array( 'post_id' => 30, 'key' => 'farbe', 'value' => 'rot' ), 'apply' => true ) );
 ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && $before === ab_dump( 30 ) && 0 === ab_points() && array() === $GLOBALS['calls'], 'OI3 a writing one does not run either: nothing changed, no undo point' );
 $p = ab_run( array( 'name' => 'test/set-meta', 'input' => array( 'post_id' => 30, 'key' => 'farbe', 'value' => 'rot' ) ) );
-ok( is_array( $p ) && true === $p['dry_run'] && false === $p['allowed'] && 'not_checked' === $p['permission'] && ab_way( $p['how_to_allow'], 'options-general.php?page=alphabridge-mcp#ab-ability-test__set-meta' ) && ab_has( $p['notes'], 'not approved for AlphaBridge' ), 'OI4 the preview says it is not approved, with the way; its permission check is not run' );
+ok( is_array( $p ) && true === $p['dry_run'] && false === $p['allowed'] && 'not_checked' === $p['permission'] && ab_way( $p['how_to_allow'], 'admin.php?page=alphabridge-connection#ab-ability-test__set-meta' ) && ab_has( $p['notes'], 'not approved for AlphaBridge' ), 'OI4 the preview says it is not approved, with the way; its permission check is not run' );
 $r = ab_run( array( 'name' => 'test/internal-export' ) );
 ok( is_wp_error( $r ) && 'ab_mcp_ability_unknown' === $r->get_error_code() && array() === $GLOBALS['calls'], 'OI5 an internal one answers "not available" to an account that may not see it' );
 
@@ -1145,7 +1145,7 @@ ok( true === $l['run_enabled'] && ! isset( $l['how_to_run'] ), 'A12 wp_run_abili
 $GLOBALS['ab_toolstate']['wp_run_ability'] = false;
 $off = AB_MCP_Tools_Abilities::list_abilities( array() );
 $one = AB_MCP_Tools_Abilities::list_abilities( array( 'name' => 'test/set-meta' ) );
-ok( false === $off['run_enabled'] && false !== strpos( $off['how_to_run'], '"wp_run_ability"' ) && false !== strpos( $off['how_to_run'], 'Fine-tuning, group «Abilities of other plugins»' ) && ab_way( $off['how_to_run'], 'options-general.php?page=alphabridge-mcp#ab-tool-wp_run_ability' ), 'A12 switched off: the listing says so, where to switch it on, with the link to the switch, and asks to pass it on' );
+ok( false === $off['run_enabled'] && false !== strpos( $off['how_to_run'], '"wp_run_ability"' ) && false !== strpos( $off['how_to_run'], 'Fine-tuning, group «Abilities of other plugins»' ) && ab_way( $off['how_to_run'], 'admin.php?page=alphabridge-connection#ab-tool-wp_run_ability' ), 'A12 switched off: the listing says so, where to switch it on, with the link to the switch, and asks to pass it on' );
 ok( false === $one['run_enabled'] && $off['how_to_run'] === $one['how_to_run'] && false === $one['ability']['can_run'] && $off['how_to_run'] === $one['ability']['way'], 'A12 the listing of one ability says the same, also as its way' );
 $rows_off = array();
 foreach ( $off['abilities'] as $row ) { $rows_off[ $row['name'] ] = $row; }
@@ -1159,20 +1159,20 @@ ok( array_keys( AB_MCP_Ability_Broker::all() ) === get_option( AB_MCP_Ability_Br
 $before = ab_dump( 30 );
 ab_off( array( 'test/set-meta' ) );
 $r = ab_run( array( 'name' => 'test/set-meta', 'input' => array( 'post_id' => 30, 'key' => 'farbe', 'value' => 'rot' ), 'apply' => true ) );
-ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && false !== strpos( ab_msg( $r ), 'The ability "test/set-meta" is not approved for AlphaBridge on this site' ) && false !== strpos( ab_msg( $r ), 'Nothing ran' ) && false !== strpos( ab_msg( $r ), 'group «Abilities of other plugins»' ) && ab_way( ab_msg( $r ), 'options-general.php?page=alphabridge-mcp#ab-ability-test__set-meta' ), 'B1 not approved: refused with the reason, the steps, the link to its switch and the request to pass it on' );
+ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && false !== strpos( ab_msg( $r ), 'The ability "test/set-meta" is not approved for AlphaBridge on this site' ) && false !== strpos( ab_msg( $r ), 'Nothing ran' ) && false !== strpos( ab_msg( $r ), 'group «Abilities of other plugins»' ) && ab_way( ab_msg( $r ), 'admin.php?page=alphabridge-connection#ab-ability-test__set-meta' ), 'B1 not approved: refused with the reason, the steps, the link to its switch and the request to pass it on' );
 ok( $before === ab_dump( 30 ) && 0 === ab_points() && ! in_array( 'set-meta', $GLOBALS['calls'], true ), 'B1 nothing ran, nothing changed, no undo point' );
 ok( array( 'a/b', 'woo/*' ) === AB_MCP_Ability_Broker::sanitize_list( array( 'woo/*', '*', 'Foo', 'a/b/c', 'A/B', 7, 'x/' ) ), 'B2 the list keeps names and namespace patterns only' );
 $l  = AB_MCP_Tools_Abilities::list_abilities( array() );
 $by = array();
 foreach ( $l['abilities'] as $row ) { $by[ $row['name'] ] = $row; }
-ok( false === $by['test/set-meta']['allowed'] && false === $by['test/set-meta']['can_run'] && 0 === strpos( $by['test/set-meta']['allowed_why'], 'not approved' ) && ab_way( $by['test/set-meta']['way'], 'options-general.php?page=alphabridge-mcp#ab-ability-test__set-meta' ) && true === $by['test/silent']['can_run'], 'B3 the listing: that one cannot run, and the way to its switch; the others still can' );
+ok( false === $by['test/set-meta']['allowed'] && false === $by['test/set-meta']['can_run'] && 0 === strpos( $by['test/set-meta']['allowed_why'], 'not approved' ) && ab_way( $by['test/set-meta']['way'], 'admin.php?page=alphabridge-connection#ab-ability-test__set-meta' ) && true === $by['test/silent']['can_run'], 'B3 the listing: that one cannot run, and the way to its switch; the others still can' );
 AB_MCP_Ability_Broker::set_on( array( 'other/*' ) );
 $d = AB_MCP_Ability_Broker::decision( wp_get_ability( 'other/thing' ) );
 ok( true === $d['allowed'] && 'on' === $d['reason'] && false === AB_MCP_Ability_Broker::decision( wp_get_ability( 'test/set-meta' ) )['allowed'], 'B4 a namespace pattern (written by code) approves a whole plugin, and only it' );
 ab_off( array() );
 add_filter( 'ab_mcp_ability_allowed', static function ( $allowed, $name ) { return 'test/read-info' === $name ? false : $allowed; }, 10, 2 );
 $d = AB_MCP_Ability_Broker::decision( wp_get_ability( 'test/read-info' ) );
-ok( false === $d['allowed'] && 'filter' === $d['reason'] && false !== strpos( $d['how'], 'ab_mcp_ability_allowed' ) && ab_way( $d['how'], 'options-general.php?page=alphabridge-mcp#ab-ability-test__read-info' ), 'B5 the last-word filter holds even an approved read-only ability off, and says it is code' );
+ok( false === $d['allowed'] && 'filter' === $d['reason'] && false !== strpos( $d['how'], 'ab_mcp_ability_allowed' ) && ab_way( $d['how'], 'admin.php?page=alphabridge-connection#ab-ability-test__read-info' ), 'B5 the last-word filter holds even an approved read-only ability off, and says it is code' );
 $r = ab_run( array( 'name' => 'test/read-info' ) );
 ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && ! in_array( 'read-info', $GLOBALS['calls'], true ), 'B5 and it does not run' );
 remove_all_filters( 'ab_mcp_ability_allowed' );
@@ -1196,7 +1196,7 @@ $p = ab_run( array( 'name' => 'test/set-meta', 'input' => array( 'post_id' => 30
 ok( is_string( $p['input_valid'] ) && false !== strpos( $p['input_valid'], 'value' ) && 'not_checked' === $p['permission'], 'C4 an input that does not fit: the reason, permission not checked' );
 ab_off( array( 'test/admin-only' ) );
 $p = ab_run( array( 'name' => 'test/admin-only', 'input' => array( 'id' => 30 ), 'apply' => false ) );
-ok( 'not_checked' === $p['permission'] && false === $p['allowed'] && ab_way( $p['how_to_allow'], 'options-general.php?page=alphabridge-mcp#ab-ability-test__admin-only' ) && ab_has( $p['notes'], 'not approved for AlphaBridge' ), 'C5 an ability that is not approved: its permission check is not run, and the preview gives the way to its switch' );
+ok( 'not_checked' === $p['permission'] && false === $p['allowed'] && ab_way( $p['how_to_allow'], 'admin.php?page=alphabridge-connection#ab-ability-test__admin-only' ) && ab_has( $p['notes'], 'not approved for AlphaBridge' ), 'C5 an ability that is not approved: its permission check is not run, and the preview gives the way to its switch' );
 ab_off( array() );
 $p = ab_run( array( 'name' => 'test/admin-only', 'input' => array( 'id' => 30 ) ) );
 ok( 'denied' === $p['permission'] && ab_has( $p['warnings'], 'The permission check of the ability "test/admin-only" refuses the account of this connection' ) && ab_has( $p['warnings'], 'a role that may do this in test under Users' ) && ab_has( $p['warnings'], 'Direct link: http://x/wp-admin/users.php' ) && ab_has( $p['warnings'], 'Pass this on' ), 'C6 the ability\'s own permission check says no: the way, with the link to the users' );
@@ -1308,11 +1308,11 @@ ok( is_array( $r ) && null === $r['undo_token'] && ab_has( $r['warnings'], 'your
 
 $GLOBALS['ab_scope'] = 'content';
 $r = ab_run( array( 'name' => 'test/read-info' ) );
-ok( is_wp_error( $r ) && 'ab_mcp_scope' === $r->get_error_code() && false !== strpos( ab_msg( $r ), 'access level "content"' ) && false !== strpos( ab_msg( $r ), 'the access level "Full"' ) && ab_way( ab_msg( $r ), 'options-general.php?page=alphabridge-mcp#ab-connections' ), 'I1 a content token cannot run abilities; the answer names the access level it needs, with the link to the connections' );
+ok( is_wp_error( $r ) && 'ab_mcp_scope' === $r->get_error_code() && false !== strpos( ab_msg( $r ), 'access level "content"' ) && false !== strpos( ab_msg( $r ), 'the access level "Full"' ) && ab_way( ab_msg( $r ), 'admin.php?page=alphabridge-connection#ab-connections' ), 'I1 a content token cannot run abilities; the answer names the access level it needs, with the link to the connections' );
 $l = AB_MCP_Tools_Abilities::list_abilities( array() );
-ok( false === $l['run_enabled'] && ab_way( $l['how_to_run'], 'options-general.php?page=alphabridge-mcp#ab-connections' ), 'I1 and the listing says so for that connection' );
+ok( false === $l['run_enabled'] && ab_way( $l['how_to_run'], 'admin.php?page=alphabridge-connection#ab-connections' ), 'I1 and the listing says so for that connection' );
 $mt = AB_MCP_Undo_Restore::may_touch( 'wp_run_ability' );
-ok( is_wp_error( $mt ) && 'ab_mcp_undo_scope' === $mt->get_error_code() && false !== strpos( ab_msg( $mt ), 'access level "content"' ) && ab_way( ab_msg( $mt ), 'options-general.php?page=alphabridge-mcp#ab-connections' ), 'I2 nor touch their undo points; the answer leads to the connections' );
+ok( is_wp_error( $mt ) && 'ab_mcp_undo_scope' === $mt->get_error_code() && false !== strpos( ab_msg( $mt ), 'access level "content"' ) && ab_way( ab_msg( $mt ), 'admin.php?page=alphabridge-connection#ab-connections' ), 'I2 nor touch their undo points; the answer leads to the connections' );
 $mt = AB_MCP_Undo_Restore::may_touch( 'wp_search_replace' );
 ok( is_wp_error( $mt ) && 'ab_mcp_undo_forbidden' === $mt->get_error_code() && false !== strpos( ab_msg( $mt ), '(manage_options), and the account of this connection lacks it' ) && ab_way( ab_msg( $mt ), 'users.php' ), 'I2 an undo point of a tool the account\'s role does not reach: the answer leads to the users' );
 ok( true === AB_MCP_Undo_Restore::may_touch( 'wp_update_builder_element' ), 'I3 while a builder point stays within its reach' );
@@ -1413,7 +1413,7 @@ ok( false !== strpos( $ins, 'WooCommerce' ) && false !== strpos( $ins, 'Elemento
 ok( false === strpos( $ins, 'unless an administrator switched it off' ), 'Q1 and they do not say that every ability runs' );
 $GLOBALS['ab_toolstate']['wp_run_ability'] = false;
 $ins = AB_MCP_Ability_Broker::instructions();
-ok( false !== strpos( $ins, 'running them (wp_run_ability) is switched off' ) && false !== strpos( $ins, 'Settings → AlphaBridge MCP → Fine-tuning (http://x/wp-admin/options-general.php?page=alphabridge-mcp#ab-tool-wp_run_ability)' ) && false !== strpos( $ins, 'tell them that kindly' ) && false === strpos( $ins, 'undo point' ), 'Q2 with wp_run_ability switched off: that running is off, where to switch it on, with the link, and to tell the person kindly' );
+ok( false !== strpos( $ins, 'running them (wp_run_ability) is switched off' ) && false !== strpos( $ins, 'Settings → AlphaBridge MCP → Fine-tuning (http://x/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_run_ability)' ) && false !== strpos( $ins, 'tell them that kindly' ) && false === strpos( $ins, 'undo point' ), 'Q2 with wp_run_ability switched off: that running is off, where to switch it on, with the link, and to tell the person kindly' );
 $GLOBALS['ab_toolstate']['wp_list_abilities'] = false;
 $GLOBALS['ab_toolstate']['wp_run_ability']    = false;
 ok( '' === AB_MCP_Ability_Broker::instructions(), 'Q3 with both tools off, no sentence' );
@@ -1438,7 +1438,7 @@ $refusal = AB_MCP_Site_Mode::refusal( 'wp_run_ability' )->get_error_message();
 ok( false === AB_MCP_Ability_Broker::mode_allows_run(), 'QR1 with write access off wp_run_ability may not run' );
 $l   = AB_MCP_Tools_Abilities::list_abilities( array() );
 $one = AB_MCP_Tools_Abilities::list_abilities( array( 'name' => 'test/read-info' ) );
-ok( false === $l['run_enabled'] && $refusal === $l['how_to_run'] && ab_way( $l['how_to_run'], 'options-general.php?page=alphabridge-mcp#ab-mode' ), 'QR2 with write access off the listing says running is not possible, in the plugin\'s words, with the link to the switch' );
+ok( false === $l['run_enabled'] && $refusal === $l['how_to_run'] && ab_way( $l['how_to_run'], 'admin.php?page=alphabridge-connection#ab-mode' ), 'QR2 with write access off the listing says running is not possible, in the plugin\'s words, with the link to the switch' );
 ok( false === $one['run_enabled'] && $refusal === $one['how_to_run'] && true === $one['ability']['allowed'] && false === $one['ability']['can_run'] && $refusal === $one['ability']['way'], 'QR2 also for one read-only ability: approved, but it cannot run before write access is on' );
 $GLOBALS['ab_toolstate']['wp_run_ability'] = false;
 $l = AB_MCP_Tools_Abilities::list_abilities( array() );
@@ -1542,7 +1542,7 @@ ok( is_wp_error( $r ) && 'ab_mcp_ability_unknown' === $r->get_error_code() && ar
 $GLOBALS['ab_caps']['manage_options'] = true;
 $l  = AB_MCP_Tools_Abilities::list_abilities( array( 'name' => 'test/internal-export' ) );
 $ie = is_array( $l ) ? $l['ability'] : array();
-ok( false === $ie['allowed'] && false === $ie['can_run'] && false === $ie['public'] && ab_way( $ie['way'], 'options-general.php?page=alphabridge-mcp#ab-ability-test__internal-export' ), 'R4 an administrator sees it: not approved, internal, and the way to its switch' );
+ok( false === $ie['allowed'] && false === $ie['can_run'] && false === $ie['public'] && ab_way( $ie['way'], 'admin.php?page=alphabridge-connection#ab-ability-test__internal-export' ), 'R4 an administrator sees it: not approved, internal, and the way to its switch' );
 $r = ab_run( array( 'name' => 'test/internal-export' ) );
 ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && array() === $GLOBALS['calls'], 'R5 not approved it does not run, not even for an administrator' );
 ab_off( array() );
@@ -1559,7 +1559,7 @@ $r = ab_run( array( 'name' => 'test/contra', 'input' => array( 'id' => 30 ) ) );
 ok( false === AB_MCP_Ability_Broker::is_readonly( wp_get_ability( 'test/contra' ) ) && is_array( $r ) && true === $r['dry_run'] && array() === $GLOBALS['calls'] && $before === ab_dump( 30 ), 'R9 read-only and destructive at once: the reading that it writes wins, the call previews' );
 ab_off( array( 'test/read-info' ) );
 $r = ab_run( array( 'name' => 'test/read-info' ) );
-ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && ab_way( ab_msg( $r ), 'options-general.php?page=alphabridge-mcp#ab-ability-test__read-info' ) && array() === $GLOBALS['calls'], 'R10 an administrator took the approval of a read-only ability back: it does not run, and the answer leads to its switch' );
+ok( is_wp_error( $r ) && 'ab_mcp_ability_not_allowed' === $r->get_error_code() && ab_way( ab_msg( $r ), 'admin.php?page=alphabridge-connection#ab-ability-test__read-info' ) && array() === $GLOBALS['calls'], 'R10 an administrator took the approval of a read-only ability back: it does not run, and the answer leads to its switch' );
 ab_off( array() );
 
 /* ============================ T) more posts than one undo point takes */

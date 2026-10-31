@@ -363,7 +363,7 @@ final class SiteModeTest extends TestCase {
 			}
 			self::assertInstanceOf( WP_Error::class, $res, $name . ' writes or is Mighty, so write access off refuses it.' );
 			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
-			self::assertStringContainsString( 'Direct link: https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode', $res->get_error_message() );
+			self::assertStringContainsString( 'Direct link: https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', $res->get_error_message() );
 			if ( AB_MCP_Tool_Registry::is_read_only( $name, $def ) ) {
 				$mighty[] = $name;
 				self::assertStringContainsString( 'the tool "' . $name . '" did not run: it is one of the reading tools that run only with write access on', $res->get_error_message() );
@@ -379,7 +379,7 @@ final class SiteModeTest extends TestCase {
 
 	public function testTheRefusalNamesWhoSwitchesWhereAndTheRisk(): void {
 		$way = ' To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.'
-			. ' Direct link: https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode'
+			. ' Direct link: https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode'
 			. ' Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it.';
 		self::assertSame(
 			'Write access is off on this site, so the tool "wp_update_post" did not run: it changes the site, and with write access off AI assistants only read.' . $way,
@@ -791,7 +791,7 @@ final class SiteModeTest extends TestCase {
 
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', $sentence ), 'One sentence.' );
 		self::assertStringStartsWith( 'WRITE ACCESS IS OFF: ', $sentence );
-		self::assertStringContainsString( 'until an administrator switches on write access at the top of Settings → AlphaBridge MCP (https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode)', $sentence );
+		self::assertStringContainsString( 'until an administrator switches on write access at the top of Settings → AlphaBridge MCP (https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode)', $sentence );
 		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused', $sentence, 'Says that the readers of code, files, the database, logs or credentials wait for write access too.' );
 		self::assertStringNotContainsStringIgnoringCase( 'mighty', $sentence, 'No marking that tools/list does not show.' );
 		self::assertStringContainsString( 'when the person asks for a change, tell them that kindly and where the switch is', $sentence, 'And that the assistant leads there.' );
@@ -1480,7 +1480,8 @@ final class SiteModeTest extends TestCase {
 		self::assertStringContainsString( 'AlphaBridge MCP now only reads on this site.', $notice->textContent );
 		self::assertStringContainsString( 'an administrator switches on write access at the top of Settings → AlphaBridge MCP', $notice->textContent );
 		self::assertStringContainsString( 'at the site owner\'s own risk', $notice->textContent );
-		self::assertSame( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp', $x->query( './/a', $notice )->item( 0 )->getAttribute( 'href' ) );
+		self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', $x->query( './/a', $notice )->item( 0 )->getAttribute( 'href' ), 'The button leads to the switch on «AI Connection».' );
+		self::assertSame( 'Open AlphaBridge → AI Connection', trim( $x->query( './/a', $notice )->item( 0 )->textContent ) );
 		self::assertSame( 'nonce-ab_mcp_mode_notice', $x->query( './/input[@name="_wpnonce"]', $notice )->item( 0 )->getAttribute( 'value' ) );
 		self::assertSame( 'ab_mcp_mode_notice', $x->query( './/input[@name="action"]', $notice )->item( 0 )->getAttribute( 'value' ) );
 	}
@@ -1501,11 +1502,24 @@ final class SiteModeTest extends TestCase {
 		self::before_the_update();
 		AB_MCP_Settings::maybe_upgrade();
 		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
-		$_GET                   = array( 'page' => 'alphabridge-mcp' );
+		$_GET                   = array( 'page' => 'alphabridge-connection' );
 
 		self::assertSame( '', $this->admin( 'mode_notice' ), 'Not twice.' );
 		$x = $this->page();
 		self::assertSame( 1, $x->query( '//section[@id="ab-mode"]/following-sibling::*[1][contains(@class, "ab-mode-notice")]' )->length );
+	}
+
+	public function testOnThePageStagingAndAtTheOldAddressTheNoticeLeadsToTheSwitch(): void {
+		self::before_the_update();
+		AB_MCP_Settings::maybe_upgrade();
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		foreach ( array( 'alphabridge-staging', 'alphabridge-mcp', 'alphabridge' ) as $page ) {
+			$_GET   = array( 'page' => $page );
+			$x      = $this->xpath( $this->admin( 'mode_notice' ) );
+			$notice = $x->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 );
+			self::assertNotNull( $notice, $page . ': «Staging» has no switch, so the notice shows as on every other screen.' );
+			self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', $x->query( './/a', $notice )->item( 0 )->getAttribute( 'href' ), $page );
+		}
 	}
 
 	public function testDismissingTheNoticeNeedsTheNonceAndAnAdministrator(): void {

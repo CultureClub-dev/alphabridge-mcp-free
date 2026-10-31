@@ -45,8 +45,8 @@ final class PluginActionLinksTest extends TestCase {
 		self::may_manage_options( true );
 		$links = ( new AB_MCP_Admin() )->action_links( self::row() );
 		self::assertSame( array( 'settings', 'deactivate' ), array_keys( $links ) );
-		self::assertSame( '<a href="https://example.test/wp-admin/options-general.php?page=alphabridge-mcp">Settings</a>', $links['settings'] );
-		self::assertSame( AB_MCP_Guidance::settings_url(), 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp', 'the same address as every other way to the page' );
+		self::assertSame( '<a href="https://example.test/wp-admin/admin.php?page=alphabridge-connection">Settings</a>', $links['settings'] );
+		self::assertSame( AB_MCP_Guidance::settings_url(), 'https://example.test/wp-admin/admin.php?page=alphabridge-connection', 'the same address as every other way to the page' );
 	}
 
 	public function test_it_is_not_shown_to_someone_who_may_not_open_the_page(): void {

@@ -114,18 +114,69 @@ class AB_MCP_Guidance {
 	);
 
 	/**
-	 * The plugin's settings page, at an anchor: «ab-mode» is the main switch
-	 * for write access, «ab-fine» the fine-tuning, «ab-tool-<name>» one tool
-	 * in it (the page opens the groups around it), «ab-connections» the
-	 * connections. The site's own admin address, so on a network the site the
-	 * connection belongs to.
+	 * The menu «AlphaBridge» of the plugin (since 4.16.0; before, its one page
+	 * sat under Settings as «AlphaBridge MCP»). AB_MCP_Admin registers it.
+	 */
+	const MENU = 'alphabridge';
+
+	/**
+	 * The two pages of the menu, by the names settings_url() takes:
+	 * «AI Connection» carries what the settings page carried, «Staging» the
+	 * card «Staging». The menu itself links to «AI Connection».
+	 */
+	const PAGES = array(
+		'connection' => 'alphabridge-connection',
+		'staging'    => 'alphabridge-staging',
+	);
+
+	/**
+	 * The ids on the page «Staging»: the card «Staging»
+	 * (AB_MCP_Admin::STAGING_CARD) and the parts inside it, among them
+	 * AB_MCP_Staging::ANCHOR, AB_MCP_Preview_Protection::ANCHOR and
+	 * AB_MCP_Staging_Gate::ANCHOR. Every other id of the plugin is on «AI
+	 * Connection». Written out rather than read from those classes, as this
+	 * class also loads where they do not (the standalone runs); a test holds
+	 * the list to the ids the page shows. admin.js gets the same list
+	 * (AB_MCP_Admin::enqueue_assets()) for the anchors of older addresses.
+	 */
+	const STAGING_ANCHORS = array(
+		'ab-staging-card',
+		'ab-staging-card-title',
+		'ab-staging-checklist',
+		'ab-staging',
+		'ab-staging-partner',
+		'ab-staging-host',
+		'ab-staging-copy',
+		'ab-preview',
+		'ab-staging-first',
+	);
+
+	/**
+	 * A page of the plugin, at an anchor: «ab-mode» is the main switch for
+	 * write access, «ab-fine» the fine-tuning, «ab-tool-<name>» one tool in
+	 * it (the page opens the groups around it), «ab-connections» the
+	 * connections, all on «AI Connection»; the anchors of STAGING_ANCHORS
+	 * lead to «Staging». The site's own admin address, so on a network the
+	 * site the connection belongs to; built with admin_url(), never from the
+	 * registered menu, since the address also goes into answers of the REST
+	 * endpoint, where no menu is registered.
 	 *
 	 * @param string $anchor Id on the page, without «#»; '' for none.
+	 * @param string $page   'connection' or 'staging' (PAGES); '' for the page
+	 *                       the anchor is on. Any other value: «AI Connection».
+	 *                       An add-on names the page of its own anchors (the
+	 *                       Pro add-on: 'staging' for its undo and Site Deploy);
+	 *                       a core before 4.16.0 takes one argument only.
 	 * @return string
 	 */
-	public static function settings_url( $anchor = '' ) {
-		$url    = admin_url( 'options-general.php?page=alphabridge-mcp' );
+	public static function settings_url( $anchor = '', $page = '' ) {
 		$anchor = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $anchor );
+		$page   = is_string( $page ) ? $page : '';
+		if ( '' === $page ) {
+			$page = in_array( $anchor, self::STAGING_ANCHORS, true ) ? 'staging' : 'connection';
+		}
+		$slug = self::PAGES[ $page ] ?? self::PAGES['connection'];
+		$url  = admin_url( 'admin.php?page=' . $slug );
 		return '' !== $anchor ? $url . '#' . $anchor : $url;
 	}
 
