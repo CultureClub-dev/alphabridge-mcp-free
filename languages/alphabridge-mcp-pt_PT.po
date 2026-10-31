@@ -5077,3 +5077,36 @@ msgstr "O WordPress não guardou o novo estado do comentário %d: continua com o
 
 msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
 msgstr "O artigo deste comentário está no lixo, o que deixa os seus comentários em post-trashed, e nenhuma chamada do WordPress volta a pôr um comentário nesse estado. O WordPress devolve aos comentários de um artigo o estado que tinham antes quando o artigo sai do lixo: retire o artigo do lixo com wp_bulk_update_status ou em Artigos › Lixo no wp-admin e depois verifique o comentário com wp_get_comment."
+
+msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), and the undo of a new coupon moves it into the trash, which here would delete it for good; so there is no undo point. wp_wc_list_coupons lists the coupon; a coupon that is not wanted is taken out of use under Marketing › Coupons in wp-admin."
+msgstr "O lixo está desativado neste site (EMPTY_TRASH_DAYS é 0), e anular um cupão novo envia-o para o lixo, o que aqui o eliminaria definitivamente; por isso não há ponto de restauro. wp_wc_list_coupons lista o cupão; um cupão indesejado retira-se em Marketing › Cupões no wp-admin."
+
+msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
+msgstr "O WooCommerce não enviou o cupão %d para o lixo; o ponto de restauro mantém-se. Um plugin pode retê-lo. Verifique os cupões com wp_wc_list_coupons e tente novamente."
+
+msgid "The coupon was changed or used after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "O cupão foi alterado ou usado depois de a anulação ter sido planeada; nada foi reposto. Passe force=true para o enviar para o lixo apesar da alteração mais recente."
+
+msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "O instantâneo do cupão não tem uma forma que esta ferramenta escreva; nada foi reposto. Este ponto de restauro não pode ser usado; wp_undo_discard remove-o."
+
+msgid "The order had this status already, so only the private order note was added, as an entry of its own, and no tool of this plugin removes an order note. An order note added by mistake is deleted in the order screen in wp-admin (WooCommerce › Orders, Order notes); wp_wc_get_order shows the order."
+msgstr "A encomenda já tinha este estado, por isso só foi adicionada a nota privada da encomenda, como entrada própria, e nenhuma ferramenta deste plugin remove uma nota de encomenda. Uma nota adicionada por engano elimina-se no ecrã da encomenda no wp-admin (WooCommerce › Encomendas, Notas da encomenda); wp_wc_get_order mostra a encomenda."
+
+msgid "WooCommerce reacts to a new order status as in the order screen: it reduces or restores stock, records a full refund for refunded and sends its status e-mails, and setting the old status again takes none of that back but makes WooCommerce react once more. Before changing the status of an order, check it with wp_wc_get_order; to go back, set the old status with wp_wc_update_order_status, knowing that WooCommerce reacts to that change too."
+msgstr "O WooCommerce reage a um novo estado de encomenda como no ecrã da encomenda: reduz ou repõe o stock, regista um reembolso total para refunded e envia os seus e-mails de estado, e voltar a definir o estado anterior não desfaz nada disso, mas faz o WooCommerce reagir mais uma vez. Antes de alterar o estado de uma encomenda, verifique-a com wp_wc_get_order; para voltar atrás, defina o estado anterior com wp_wc_update_order_status, sabendo que o WooCommerce também reage a essa alteração."
+
+msgid "WooCommerce did not store the change: %1$s of the product still hold what they held before. A plugin may refuse it on save. Check the product with %2$s, and ask the site administrator which plugin guards it."
+msgstr "O WooCommerce não guardou a alteração: %1$s do produto continuam a conter o que continham antes. Um plugin pode recusá-la ao guardar. Verifique o produto com %2$s e pergunte ao administrador do site que plugin o protege."
+
+msgid "The stock of product %d moved after the change (an order, a refund or a change by hand), and an undo never overwrites a stock that has moved: it stays as it is, and the other fields come back. Check the stock with wp_wc_get_product."
+msgstr "O stock do produto %d mudou depois da alteração (uma encomenda, um reembolso ou uma alteração à mão), e uma anulação nunca sobrescreve um stock que mudou: fica como está, e os restantes campos voltam. Verifique o stock com wp_wc_get_product."
+
+msgid "WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again."
+msgstr "O WooCommerce não aceitou de volta %1$s do produto %2$d; o ponto de restauro mantém-se. Um plugin pode reescrever os campos de um produto ao guardar. Verifique o produto com wp_wc_get_product e tente novamente."
+
+msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change; a stock that moved is left as it is even then."
+msgstr "O produto foi alterado depois de a anulação ter sido planeada; nada foi reposto. Passe force=true para o repor apesar da alteração mais recente; um stock que mudou fica como está mesmo assim."
+
+msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "O instantâneo do produto não tem uma forma que esta ferramenta escreva; nada foi reposto. Este ponto de restauro não pode ser usado; wp_undo_discard remove-o."

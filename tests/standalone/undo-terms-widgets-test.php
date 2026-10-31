@@ -1297,8 +1297,9 @@ ok( true === $res['deleted'] && array_key_exists( 'undo', $res ) && null === $re
 ab_add_post( 30, array( 'post_type' => 'nav_menu_item' ) );
 $res = AB_MCP_Tools_Menus_Users::delete_menu_item( array( 'item_id' => 30 ) );
 ok( true === $res['deleted'] && null === $res['undo'] && 0 === strpos( $res['undo_note'], 'not undoable: ' ) && false !== strpos( $res['undo_note'], 'wp_get_menu' ), 'G2 wp_delete_menu_item: the same' );
+// The shop's notes (4.14.0) name its readers, wp_wc_get_order and wp_wc_list_coupons.
 foreach ( AB_MCP_Undo_Objects::own_notes() as $tool => $note ) {
-	ok( 0 === strpos( $note, 'not undoable: ' ) && 1 === preg_match( '/\bwp_(get|create|add|upload)_[a-z_]+/', $note ), "G3 the note of $tool names a tool to note it with first" );
+	ok( 0 === strpos( $note, 'not undoable: ' ) && 1 === preg_match( '/\bwp_(wc_)?(get|list|create|add|upload)_[a-z_]+/', $note ), "G3 the note of $tool names a tool to note it with first" );
 }
 
 /* ============================== H) why there is no undo point */

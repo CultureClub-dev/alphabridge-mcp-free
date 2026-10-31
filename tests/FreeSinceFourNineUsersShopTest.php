@@ -770,14 +770,24 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 			$res   = self::set_status( $in, 'n' );
 			self::assertSame( array( array( $key, '', true ) ), $order->calls, "'$in'" );
 			self::assertSame( array( array( 'n', 0, true ) ), $order->notes, "'$in'" );
-			self::assertSame( array( 'updated' => true, 'id' => 5, 'status' => $status, 'status_unchanged' => false ), $res, "'$in'" );
+			// Since 4.14.0 with undo null and the note that a status change
+			// has no way back, and why.
+			self::assertSame( array( 'updated' => true, 'id' => 5, 'status' => $status, 'status_unchanged' => false, 'undo' => null, 'undo_note' => \AB_MCP_Undo_Objects::order_status_note( true ) ), $res, "'$in'" );
 		}
 
-		// A note asked for is written also when the status already is set.
+		// A note asked for is written also when the status already is set;
+		// the note alone is not undoable either.
 		ab_test_wc_reset();
 		$res = self::set_status( 'processing', 'Kunde informiert' );
 		self::assertTrue( $res['status_unchanged'] );
 		self::assertSame( array( array( 'Kunde informiert', 0, true ) ), $GLOBALS['ab_test_wc_order']->notes );
+		self::assertNull( $res['undo'] );
+		self::assertSame( \AB_MCP_Undo_Objects::order_status_note( false ), $res['undo_note'] );
+		// The status set already and no note: nothing changed.
+		ab_test_wc_reset();
+		$res = self::set_status( 'processing' );
+		self::assertNull( $res['undo'] );
+		self::assertSame( \AB_MCP_Undo_Answer::nothing_changed( 'wp_wc_get_order' ), $res['undo_note'] );
 		// No note: none besides WooCommerce's own.
 		ab_test_wc_reset();
 		self::set_status( 'completed' );
@@ -904,6 +914,11 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 		self::assertSame( array( 'regular_price' => '20', 'manage_stock' => true, 'stock' => 4, 'saved' => true ), $p->set );
 		self::assertSame( array( 'id' => 7, 'name' => 'Widget', 'sku' => 'W-1', 'price' => '20', 'regular_price' => '20', 'sale_price' => '', 'stock' => 4, 'stock_status' => 'instock', 'status' => 'publish' ), $res['product'] );
 		self::assertTrue( $res['updated'] );
+		// Since 4.14.0 the fields sent, as stored, read again, and the undo
+		// part (its point is checked by tests/standalone/undo-shop-test.php).
+		self::assertSame( array( 'regular_price' => '20', 'stock' => 4 ), (array) $res['saved_fields'] );
+		self::assertArrayNotHasKey( 'saved_differs', $res );
+		self::assertArrayHasKey( 'undo', $res );
 
 		// In a shop that writes decimals with a comma, 12,50 is twelve and a half.
 		$GLOBALS['ab_test_wc_dec'] = ',';
@@ -951,7 +966,12 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 		self::assertSame( array(), \WC_Coupon::$saved, 'Nothing was saved by any refused call.' );
 
 		$res = $create( array( 'amount' => ' 10 ', 'discount_type' => 'fixed_cart', 'expires' => '2026-12-31' ) );
-		self::assertSame( array( 'created' => true, 'id' => 99, 'code' => 'spring' ), $res );
+		self::assertSame( array( 'created' => true, 'id' => 99, 'code' => 'spring' ), array_slice( $res, 0, 3 ) );
+		// Since 4.14.0 the coupon as stored, read again, and the undo part
+		// (its point is checked by tests/standalone/undo-shop-test.php).
+		self::assertSame( array( 'code' => 'spring', 'amount' => '10', 'discount_type' => 'fixed_cart', 'expires' => '2026-12-31' ), (array) $res['saved_fields'] );
+		self::assertArrayNotHasKey( 'saved_differs', $res );
+		self::assertArrayHasKey( 'undo', $res );
 		self::assertSame( array( 'code' => 'spring', 'discount_type' => 'fixed_cart', 'amount' => '10', 'expires' => '2026-12-31' ), \WC_Coupon::$saved[0] );
 		$create( array( 'code' => 'summer', 'amount' => '5' ) );
 		self::assertSame( array( 'code' => 'summer', 'discount_type' => 'percent', 'amount' => '5' ), \WC_Coupon::$saved[1], 'Defaults: percent, no expiry.' );

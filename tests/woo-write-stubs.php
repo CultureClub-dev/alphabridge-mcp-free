@@ -6,6 +6,9 @@
  * behave where it matters as WooCommerce does (an unknown status becomes
  * "pending", set_code() normalises, set_discount_type() throws, a percentage
  * over 100 is refused). The same stage as Pro's test/wc-input-test.php.
+ * Since 4.14.0 the getters take the context, and a coupon is read again by
+ * its id: the tools read back what was stored. The undo itself is checked
+ * by tests/standalone/undo-shop-test.php.
  *
  * WooCommerce cannot be unloaded, and tests/woo-stubs.php declares some of
  * the same functions for the reading tools. So this file is loaded only in a
@@ -148,27 +151,39 @@ final class AB_Test_WC_Write_Product {
 		return 'W-1';
 	}
 
+	public function get_type() {
+		return 'simple';
+	}
+
+	public function get_parent_id( $context = 'view' ) {
+		return 0;
+	}
+
 	public function get_price() {
 		return $this->set['sale_price'] ?? $this->set['regular_price'] ?? '10';
 	}
 
-	public function get_regular_price() {
+	public function get_regular_price( $context = 'view' ) {
 		return $this->set['regular_price'] ?? '10';
 	}
 
-	public function get_sale_price() {
+	public function get_sale_price( $context = 'view' ) {
 		return $this->set['sale_price'] ?? '';
 	}
 
-	public function get_stock_quantity() {
+	public function get_manage_stock( $context = 'view' ) {
+		return $this->set['manage_stock'] ?? true;
+	}
+
+	public function get_stock_quantity( $context = 'view' ) {
 		return $this->set['stock'] ?? 3;
 	}
 
-	public function get_stock_status() {
+	public function get_stock_status( $context = 'view' ) {
 		return 'instock';
 	}
 
-	public function get_status() {
+	public function get_status( $context = 'view' ) {
 		return $this->set['status'] ?? 'publish';
 	}
 }
@@ -192,9 +207,9 @@ function wc_get_product( $id ) {
 	return 7 === (int) $id ? $GLOBALS['ab_test_wc_product'] : false;
 }
 
-/** Product 7 is a product. */
+/** Product 7 is a product, 99 the coupon every save makes. */
 function get_post_type( $post = null ) {
-	return 7 === (int) $post ? 'product' : false;
+	return 7 === (int) $post ? 'product' : ( 99 === (int) $post ? 'shop_coupon' : false );
 }
 
 function wc_get_price_decimal_separator() {
@@ -219,10 +234,43 @@ function wc_format_coupon_code( $code ) {
 	return strtolower( trim( strip_tags( html_entity_decode( (string) $code ) ) ) );
 }
 
-/** A new coupon: what the tool sets, and the saves in WC_Coupon::$saved. */
+/** A new coupon: what the tool sets, and the saves in WC_Coupon::$saved; read by its id (99), the last save. */
 class WC_Coupon {
 	public static $saved = array();
 	public $set          = array();
+	public $id           = 0;
+
+	public function __construct( $data = 0 ) {
+		if ( 99 === $data && array() !== self::$saved ) {
+			$this->id  = 99;
+			$this->set = end( self::$saved );
+		}
+	}
+
+	public function get_id() {
+		return $this->id;
+	}
+
+	public function get_amount( $context = 'view' ) {
+		return $this->set['amount'] ?? '';
+	}
+
+	public function get_discount_type( $context = 'view' ) {
+		return $this->set['discount_type'] ?? 'fixed_cart';
+	}
+
+	public function get_date_expires( $context = 'view' ) {
+		$day = $this->set['expires'] ?? null;
+		return null === $day ? null : new class( $day ) {
+			private $day;
+			public function __construct( $day ) {
+				$this->day = $day;
+			}
+			public function date( $format ) {
+				return $this->day;
+			}
+		};
+	}
 
 	/** Like WooCommerce: set_code() normalises on its own. */
 	public function set_code( $v ) {

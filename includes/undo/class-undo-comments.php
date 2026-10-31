@@ -234,16 +234,6 @@ class AB_MCP_Undo_Comments extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * Is the site's trash on? WordPress deletes a comment for good instead
-	 * where EMPTY_TRASH_DAYS is 0 (wp_trash_comment()).
-	 *
-	 * @return bool
-	 */
-	public static function trash_on() {
-		return ! defined( 'EMPTY_TRASH_DAYS' ) || (bool) EMPTY_TRASH_DAYS;
-	}
-
-	/**
 	 * The status of comment_approved as wp_get_comment shows it: approved,
 	 * unapproved, spam, trash, or false for any other (post-trashed).
 	 *

@@ -78,6 +78,9 @@ require_once AB_MCP_DIR . 'includes/undo/class-undo-menu-items.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-widgets.php';
 // The undo of the comment tools (4.14.0).
 require_once AB_MCP_DIR . 'includes/undo/class-undo-comments.php';
+// The undo of a product and of a new coupon of WooCommerce (4.14.0).
+require_once AB_MCP_DIR . 'includes/undo/class-undo-products.php';
+require_once AB_MCP_DIR . 'includes/undo/class-undo-coupons.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';
