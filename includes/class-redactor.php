@@ -621,7 +621,11 @@ final class AB_MCP_Redactor {
 	 * key: the one wp_get_post_meta shows for the key, and the one value
 	 * update_*_meta() leaves in every row. A stored object put back is
 	 * written with slash(), not wp_slash(); one slash() cannot copy is
-	 * refused.
+	 * refused. A value that is exactly [REDACTED] for a key whose whole
+	 * value the reader showed so (a credential's name to the reader, not to
+	 * the meta guard: client-secret, auth) is the stored value: written
+	 * back, nothing changes. Not where the key holds several rows, of which
+	 * the reader showed the first.
 	 *
 	 * @param string $type post, term or user.
 	 * @param int    $id   Object id.
@@ -630,17 +634,24 @@ final class AB_MCP_Redactor {
 	 * @return mixed|WP_Error The value to write.
 	 */
 	public static function value_back( $type, $id, $key, $value ) {
+		$get = 'get_' . $type . '_meta';
 		if ( is_string( $value ) ) {
-			return self::carries_mark( $value ) ? self::refusal( '/value' ) : $value;
-		}
-		if ( ! is_array( $value ) && ! $value instanceof stdClass ) {
+			if ( self::MARK !== $value || ! function_exists( $get ) || ! self::redacts_key( (string) $key, self::extra_keys() ) ) {
+				return self::carries_mark( $value ) ? self::refusal( '/value' ) : $value;
+			}
+			$rows = $get( (int) $id, (string) $key, false );
+			if ( ! is_array( $rows ) || 1 !== count( $rows ) || ! self::holds( reset( $rows ) ) ) {
+				return self::refusal( '/value' );
+			}
+			$back = reset( $rows );
+		} elseif ( ! is_array( $value ) && ! $value instanceof stdClass ) {
 			return $value;
-		}
-		$get    = 'get_' . $type . '_meta';
-		$stored = function_exists( $get ) ? $get( (int) $id, (string) $key, true ) : '';
-		$back   = self::restore_placeholders( $value, $stored, $left );
-		if ( $left ) {
-			return self::refusal( '/value' );
+		} else {
+			$stored = function_exists( $get ) ? $get( (int) $id, (string) $key, true ) : '';
+			$back   = self::restore_placeholders( $value, $stored, $left );
+			if ( $left ) {
+				return self::refusal( '/value' );
+			}
 		}
 		// A stored object put back that slash() cannot copy would lose its
 		// backslashes on the way in: not written at all.

@@ -510,6 +510,47 @@ final class RedactionWriteBackTest extends TestCase {
 		}
 	}
 
+	public function testAWholeValueReadAsThePlaceholderStaysAsStored(): void {
+		// Codex 15: client-secret and auth pass the meta guard, and the reader
+		// shows their whole value as [REDACTED].
+		add_post_meta( 5, 'client-secret', 'STORED-CS' );
+		add_post_meta( 5, 'auth', array( 'user' => 'u', 'pass' => 'STORED-P' ) );
+		foreach ( array( 'client-secret', 'auth' ) as $key ) {
+			$read = $this->answer( 'wp_get_post_meta', AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 5, 'key' => $key ) ) );
+			self::assertSame( self::R, $read['value'], $key );
+			$before = $GLOBALS['ab_test_meta'][5][ $key ];
+
+			$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => $key, 'value' => $read['value'] ) );
+
+			self::assertIsArray( $res, $key . ': ' . ( is_object( $res ) ? $res->get_error_message() : '' ) );
+			self::assertTrue( $res['updated'], $key );
+			self::assertNull( $res['undo'], $key );
+			self::assertStringContainsString( 'nothing changed', $res['undo_note'], $key );
+			self::assertArrayNotHasKey( 'saved_differs', $res, $key );
+			self::assertSame( $before, $GLOBALS['ab_test_meta'][5][ $key ], $key . ': stored as it was.' );
+			self::assertStringNotContainsString( 'STORED', (string) wp_json_encode( $this->answer( 'wp_update_post_meta', $res ) ), $key );
+		}
+		$GLOBALS['ab_test_meta_store']['user'][7]['auth'] = array( 'STORED-U' );
+		$res = AB_MCP_Tools_Meta_Auth::update_user_meta_tool( array( 'user_id' => 7, 'key' => 'auth', 'value' => self::R ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( 'STORED-U', get_user_meta( 7, 'auth', true ) );
+
+		// A key the reader does not redact, a text with the placeholder inside,
+		// a key with several rows (the reader showed the first), an empty
+		// value (the reader showed it as it is): refused.
+		add_post_meta( 5, 'motto', 'x' );
+		add_post_meta( 5, 'auth-token', '' );
+		add_post_meta( 5, 'api-token', 'STORED-A' );
+		add_post_meta( 5, 'api-token', 'STORED-B' );
+		$before = $GLOBALS['ab_test_meta'];
+		foreach ( array( array( 'motto', self::R ), array( 'client-secret', '{"a":"[REDACTED]"}' ), array( 'api-token', self::R ), array( 'auth-token', self::R ) ) as [ $key, $value ] ) {
+			$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => $key, 'value' => $value ) );
+			self::assertInstanceOf( \WP_Error::class, $res, $key );
+			self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code(), $key );
+		}
+		self::assertSame( $before, $GLOBALS['ab_test_meta'], 'Nothing was written.' );
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 
