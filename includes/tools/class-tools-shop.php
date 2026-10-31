@@ -11,12 +11,18 @@
  * over these. Registered always; every handler first checks that WooCommerce
  * is active and answers with the way to it otherwise.
  *
+ * Since 4.14.0 a change of a product and a new coupon leave an undo point
+ * (AB_MCP_Undo_Products, AB_MCP_Undo_Coupons) and read back what WooCommerce
+ * stored; a change of an order's status says it is not undoable.
+ *
  * @package AlphaBridge_MCP
  */
 
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-products.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo-coupons.php';
 
 /**
  * Class AB_MCP_Tools_Shop
@@ -41,13 +47,40 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 	 * hands it on as edit_post, but a user_has_cap filter sees this name, so
 	 * asking edit_post instead would pass where such a filter refuses
 	 * (Codex, 28.10.2026). edit_post where the type is not registered.
+	 * Public since 4.14.0: the undo of a product asks it again
+	 * (AB_MCP_Undo_Products::refusal()).
 	 *
 	 * @param string|false $type Post type.
 	 * @return string
 	 */
-	private static function edit_cap( $type ) {
+	public static function edit_cap( $type ) {
+		return self::type_cap( $type, 'edit_post' );
+	}
+
+	/**
+	 * The capability to delete one object of a type, under its name as
+	 * edit_cap() asks it (delete_shop_coupon); delete_post where the type is
+	 * not registered. Since 4.14.0, for the undo of a new coupon
+	 * (AB_MCP_Undo_Coupons::refusal()).
+	 *
+	 * @param string|false $type Post type.
+	 * @return string
+	 */
+	public static function delete_cap( $type ) {
+		return self::type_cap( $type, 'delete_post' );
+	}
+
+	/**
+	 * One meta capability of a post type under its own name, or the generic
+	 * one where the type is not registered.
+	 *
+	 * @param string|false $type Post type.
+	 * @param string       $cap  edit_post or delete_post.
+	 * @return string
+	 */
+	private static function type_cap( $type, $cap ) {
 		$obj = is_string( $type ) && '' !== $type ? get_post_type_object( $type ) : null;
-		return is_object( $obj ) && isset( $obj->cap->edit_post ) && is_string( $obj->cap->edit_post ) ? $obj->cap->edit_post : 'edit_post';
+		return is_object( $obj ) && isset( $obj->cap->$cap ) && is_string( $obj->cap->$cap ) ? $obj->cap->$cap : $cap;
 	}
 
 	/**
@@ -93,7 +126,7 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_wc_update_order_status',
 			array(
-				'description' => 'WooCommerce: set one order to one of the statuses this shop knows (processing, completed, on-hold, cancelled, refunded, … plus any a plugin registers); an unknown status is refused, with the list of known ones. Only the status changes: no payment is touched and no money moves, but WooCommerce reacts as in the order screen (status e-mails, stock handling, whatever plugins attach to the transition), and "refunded" makes it record a full refund of what is still unrefunded (wc_order_fully_refunded), which shows in the shop\'s reports. A note is added as a private order note of its own, beside WooCommerce\'s transition note, on every call that carries one, also when the status was already set. Returns updated, id, status and status_unchanged; an unknown order is a not-found error. Needs manage_woocommerce and the right to edit this order (edit_shop_order), which a site can withhold for single orders; no undo point is recorded. Requires WooCommerce.',
+				'description' => 'WooCommerce: set one order to one of the statuses this shop knows (processing, completed, on-hold, cancelled, refunded, … plus any a plugin registers); an unknown status is refused, with the list of known ones. Only the status changes: no payment is touched and no money moves, but WooCommerce reacts as in the order screen (status e-mails, stock handling, whatever plugins attach to the transition), and "refunded" makes it record a full refund of what is still unrefunded (wc_order_fully_refunded), which shows in the shop\'s reports. A note is added as a private order note of its own, beside WooCommerce\'s transition note, on every call that carries one, also when the status was already set. Returns updated, id, status and status_unchanged, with undo: null and undo_note: a change of the status is not undoable, since setting the old status again takes back none of what WooCommerce did but makes it react once more; wp_wc_get_order shows an order before it changes, and wp_wc_update_order_status sets the old status again where that is wanted, with WooCommerce reacting to it as well. With the status set already, the note alone is not undoable either, and without a note undo_note says that nothing changed. An unknown order is a not-found error. Needs manage_woocommerce and the right to edit this order (edit_shop_order), which a site can withhold for single orders. Requires WooCommerce.',
 				'open_world'  => true, // WooCommerce mails the customer on most status changes.
 				'capability'  => $cap,
 				'dangerous'   => true,
@@ -145,7 +178,7 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_wc_update_product',
 			array(
-				'description' => 'WooCommerce: change a product\'s regular price, sale price, stock quantity or status. Only the fields given change; all of them are checked before anything is written, so a refused call (bad price, unknown status, unknown id) leaves the product as it was. Returns updated and the product as saved (the fields of wp_wc_get_product). Needs manage_woocommerce and the right to edit this product (edit_product), which a site can withhold for single products; no undo point is recorded. Requires WooCommerce.',
+				'description' => 'WooCommerce: change a product\'s regular price, sale price, stock quantity or status. Only the fields given change; all of them are checked before anything is written, so a refused call (bad price, unknown status, unknown id) leaves the product as it was. Returns updated, the product as saved (the fields of wp_wc_get_product), saved_fields (the fields sent, as WooCommerce stored them, read again; saved_differs and warning where it stored something else; a change it did not store at all is an error, ab_mcp_not_saved) and undo: the token for wp_undo, which sets the prices and status of before again through WooCommerce, or null with undo_note saying why, also where the product held the values already. The stock is no part of the undo, since setting it back would take back the orders placed since: where the call sets it, stock_note says so with the stock of before (undo_note, where nothing else changed, and such a call gets no undo point), and wp_wc_update_product sets it again where wanted. A price or status changed since, a sale price or sale period included, blocks the undo unless force=true. Needs manage_woocommerce, the right to edit this product (edit_product), which a site can withhold for single products, and the right to publish products for a status that takes the product live (publish, private, future); the undo asks these again. Requires WooCommerce.',
 				'open_world'  => true, // changes a product the shop shows, price and status included.
 				'capability'  => $cap,
 				'dangerous'   => true,
@@ -180,7 +213,7 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_wc_create_coupon',
 			array(
-				'description' => 'WooCommerce: create a published coupon with a new, unused code, an amount, a discount type and an optional expiry date. Everything is checked before the coupon exists: a code already in use, an unknown discount type or an impossible date is refused. Returns created, id and the code as WooCommerce stores it (normally lower-cased). A repeated call with the same code after the first has finished is refused, since the code is then in use; two calls that overlap (a retry while the first still runs) are not guarded against and can create two coupons. wp_wc_list_coupons lists the existing coupons; changing or deleting one is done in WooCommerce. Needs manage_woocommerce. Requires WooCommerce.',
+				'description' => 'WooCommerce: create a published coupon with a new, unused code, an amount, a discount type and an optional expiry date. Everything is checked before the coupon exists: a code already in use, an unknown discount type or an impossible date is refused. Returns created, id, the code as WooCommerce stores it (normally lower-cased), saved_fields (code, amount, discount_type and expires as stored, read again) and undo: the token for wp_undo, which moves the coupon into the trash again while none of its fields or restrictions has changed, and so frees its code, or null with undo_note saying why; a coupon an order has used or holds is never moved, also not with force=true; on a site with the trash turned off (EMPTY_TRASH_DAYS 0) the trash would delete it for good, so there it is not undoable. A repeated call with the same code after the first has finished is refused, since the code is then in use; two calls that overlap (a retry while the first still runs) are not guarded against and can create two coupons. wp_wc_list_coupons lists the existing coupons; changing or deleting one is done in WooCommerce. Needs manage_woocommerce and the right to publish coupons (publish_shop_coupons); the undo asks for the right to delete this coupon (delete_shop_coupon). Requires WooCommerce.',
 				'capability'  => $cap,
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -368,14 +401,30 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_not_saved', __( 'WooCommerce did not save this status change. Check the order with wp_wc_get_order, then try again.', 'alphabridge-mcp' ) );
 		}
 		$after = (string) $order->get_status( 'edit' );
-		if ( '' !== $note && method_exists( $order, 'add_order_note' ) ) {
+		$noted = '' !== $note && method_exists( $order, 'add_order_note' );
+		if ( $noted ) {
 			$order->add_order_note( $note, 0, true );
 		}
-		return array(
-			'updated'          => true,
-			'id'               => $order->get_id(),
-			'status'           => (string) $order->get_status(),
-			'status_unchanged' => $after === $before,
+		// No undo point (since 4.14.0, decision of 30.10.2026): WooCommerce
+		// reacted to the new status (stock, a refund, e-mails), and setting
+		// the old one again would make it react once more, not take that
+		// back. The answer says so, and what to do instead; where the status
+		// was set already, only the note is new, and without one nothing.
+		if ( $after !== $before ) {
+			$why = AB_MCP_Undo_Objects::order_status_note( true );
+		} elseif ( $noted ) {
+			$why = AB_MCP_Undo_Objects::order_status_note( false );
+		} else {
+			$why = AB_MCP_Undo_Answer::nothing_changed( 'wp_wc_get_order' );
+		}
+		return AB_MCP_Undo_Answer::with(
+			array(
+				'updated'          => true,
+				'id'               => $order->get_id(),
+				'status'           => (string) $order->get_status(),
+				'status_unchanged' => $after === $before,
+			),
+			$why
 		);
 	}
 
@@ -574,16 +623,14 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 				return AB_MCP_Guidance::role_refusal( __( 'Your account cannot publish products, so this status was not set and nothing was changed. Leave status out to change the other fields, or ask someone who may publish products, such as a shop manager, or an administrator.', 'alphabridge-mcp' ) );
 			}
 		}
-		foreach ( array(
-			'regular_price' => 'set_regular_price',
-			'sale_price'    => 'set_sale_price',
-		) as $field => $setter ) {
+		$prices = array();
+		foreach ( array( 'regular_price', 'sale_price' ) as $field ) {
 			if ( ! array_key_exists( $field, $a ) ) {
 				continue;
 			}
 			$given = trim( self::s( $a, $field ) );
 			if ( '' === $given ) {
-				$p->$setter( '' );
+				$prices[ $field ] = '';
 				continue;
 			}
 			$number = self::shop_number( $given );
@@ -592,21 +639,55 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 				// here means an empty price can never be written by accident.
 				return new WP_Error( 'ab_mcp_bad_price', __( 'This price is not a plain number this shop writes. Use a value such as 12.50.', 'alphabridge-mcp' ) );
 			}
-			$p->$setter( $number );
+			$prices[ $field ] = $number;
+		}
+		// What WooCommerce is asked to store, in the form its setters store
+		// it, for the read-back (since 4.14.0).
+		$asked = array();
+		foreach ( $prices as $field => $value ) {
+			$asked[ $field ] = function_exists( 'wc_format_decimal' ) ? (string) wc_format_decimal( $value ) : $value;
 		}
 		if ( array_key_exists( 'stock', $a ) ) {
-			$p->set_manage_stock( true );
-			$p->set_stock_quantity( self::i( $a, 'stock' ) );
+			$asked['stock'] = function_exists( 'wc_stock_amount' ) ? wc_stock_amount( self::i( $a, 'stock' ) ) : self::i( $a, 'stock' );
 		}
 		if ( array_key_exists( 'status', $a ) ) {
-			$p->set_status( self::s( $a, 'status' ) );
+			$asked['status'] = self::s( $a, 'status' );
 		}
-		if ( (int) $p->save() < 1 ) {
-			return new WP_Error( 'ab_mcp_not_saved', __( 'WooCommerce did not save this product. Check it with wp_wc_get_product, then try again.', 'alphabridge-mcp' ) );
+		// The state before, the setters and the save, the read-back and the
+		// undo point (since 4.14.0).
+		$res = AB_MCP_Undo_Products::update(
+			$p,
+			$asked,
+			static function () use ( $p, $a, $prices ) {
+				foreach ( $prices as $field => $value ) {
+					if ( 'regular_price' === $field ) {
+						$p->set_regular_price( $value );
+					} else {
+						$p->set_sale_price( $value );
+					}
+				}
+				if ( array_key_exists( 'stock', $a ) ) {
+					$p->set_manage_stock( true );
+					$p->set_stock_quantity( self::i( $a, 'stock' ) );
+				}
+				if ( array_key_exists( 'status', $a ) ) {
+					$p->set_status( self::s( $a, 'status' ) );
+				}
+				if ( (int) $p->save() < 1 ) {
+					return new WP_Error( 'ab_mcp_not_saved', __( 'WooCommerce did not save this product. Check it with wp_wc_get_product, then try again.', 'alphabridge-mcp' ) );
+				}
+				return true;
+			}
+		);
+		if ( is_wp_error( $res ) ) {
+			return $res;
 		}
-		return array(
-			'updated' => true,
-			'product' => self::product_summary( wc_get_product( $p->get_id() ) ),
+		return array_merge(
+			array(
+				'updated' => true,
+				'product' => self::product_summary( wc_get_product( $p->get_id() ) ),
+			),
+			$res
 		);
 	}
 
@@ -648,12 +729,14 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 	 * May the account publish entries of this post type: the type's own
 	 * publish capability (publish_products, publish_shop_coupons where
 	 * WooCommerce maps them), the given name where the type is not registered.
+	 * Public since 4.14.0: the undo of a product asks it again where it sets
+	 * a status that takes the product live.
 	 *
 	 * @param string $type     Post type.
 	 * @param string $fallback Capability when the type is unknown.
 	 * @return bool
 	 */
-	private static function may_publish( $type, $fallback ) {
+	public static function may_publish( $type, $fallback ) {
 		$pto = get_post_type_object( $type );
 		$cap = ( $pto && isset( $pto->cap->publish_posts ) ) ? (string) $pto->cap->publish_posts : (string) $fallback;
 		return current_user_can( $cap );
@@ -767,10 +850,22 @@ class AB_MCP_Tools_Shop extends AB_MCP_Tools_Base {
 		if ( $id < 1 ) {
 			return new WP_Error( 'ab_mcp_not_saved', __( 'WooCommerce did not save this coupon. wp_wc_list_coupons shows whether it exists; if not, try again.', 'alphabridge-mcp' ) );
 		}
-		return array(
-			'created' => true,
-			'id'      => $id,
-			'code'    => $c->get_code( 'edit' ),
+		// What WooCommerce was asked to store, as its setters stored it on
+		// the object, the read-back and an undo point that moves the coupon
+		// into the trash again (since 4.14.0).
+		$asked = array(
+			'code'          => (string) $c->get_code( 'edit' ),
+			'amount'        => (string) $c->get_amount( 'edit' ),
+			'discount_type' => (string) $c->get_discount_type( 'edit' ),
+			'expires'       => '' !== $expires ? $expires : null,
+		);
+		return array_merge(
+			array(
+				'created' => true,
+				'id'      => $id,
+				'code'    => $c->get_code( 'edit' ),
+			),
+			AB_MCP_Undo_Coupons::created( $id, $asked, sprintf( 'new coupon #%d', $id ) )
 		);
 	}
 

@@ -5101,3 +5101,42 @@ msgstr "Einen geschützten Meta-Schlüssel zu lesen, braucht wie include_protect
 
 msgid "Only allow-listed protected keys are returned. Other plugins' internal keys are never exposed."
 msgstr "Nur geschützte Schlüssel auf der Erlaubnisliste werden zurückgegeben. Interne Schlüssel anderer Plugins werden nie offengelegt."
+
+msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), and the undo of a new coupon moves it into the trash, which here would delete it for good; so there is no undo point. wp_wc_list_coupons lists the coupon; a coupon that is not wanted is taken out of use under Marketing › Coupons in wp-admin."
+msgstr "Der Papierkorb ist auf dieser Website ausgeschaltet (EMPTY_TRASH_DAYS ist 0), und das Undo eines neuen Gutscheins verschiebt ihn in den Papierkorb, was ihn hier endgültig löschen würde; darum gibt es keinen Undo-Punkt. wp_wc_list_coupons listet den Gutschein auf; ein nicht gewünschter Gutschein wird in wp-admin unter Marketing › Gutscheine entfernt."
+
+msgid "WooCommerce did not move coupon %d into the trash; the undo point stays. A plugin may keep it. Check the coupons with wp_wc_list_coupons, and try again."
+msgstr "WooCommerce hat den Gutschein %d nicht in den Papierkorb verschoben; der Undo-Punkt bleibt. Ein Plugin kann ihn festhalten. Die Gutscheine mit wp_wc_list_coupons prüfen und erneut versuchen."
+
+msgid "The coupon was changed after the undo was planned; nothing was restored. Pass force=true to move it into the trash over the newer change."
+msgstr "Der Gutschein wurde geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um ihn trotz der neueren Änderung in den Papierkorb zu verschieben."
+
+msgid "The snapshot of the coupon is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Der Schnappschuss des Gutscheins hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "The order had this status already, so only the private order note was added, as an entry of its own, and no tool of this plugin removes an order note. An order note added by mistake is deleted in the order screen in wp-admin (WooCommerce › Orders, Order notes); wp_wc_get_order shows the order."
+msgstr "Die Bestellung hatte diesen Status bereits, darum wurde nur die private Bestellnotiz hinzugefügt, als eigener Eintrag, und kein Werkzeug dieses Plugins entfernt eine Bestellnotiz. Eine versehentlich hinzugefügte Bestellnotiz wird in wp-admin in der Bestellansicht gelöscht (WooCommerce › Bestellungen, Bestellnotizen); wp_wc_get_order zeigt die Bestellung."
+
+msgid "WooCommerce reacts to a new order status as in the order screen: it reduces or restores stock, records a full refund for refunded and sends its status e-mails, and setting the old status again takes none of that back but makes WooCommerce react once more. Before changing the status of an order, check it with wp_wc_get_order; to go back, set the old status with wp_wc_update_order_status, knowing that WooCommerce reacts to that change too."
+msgstr "WooCommerce reagiert auf einen neuen Bestellstatus wie in der Bestellansicht: Es senkt oder erhöht den Lagerbestand, erfasst bei refunded eine volle Rückerstattung und verschickt seine Status-E-Mails, und den alten Status wieder zu setzen nimmt davon nichts zurück, sondern lässt WooCommerce erneut reagieren. Vor dem Ändern des Status einer Bestellung sie mit wp_wc_get_order prüfen; für den Weg zurück den alten Status mit wp_wc_update_order_status setzen, im Wissen, dass WooCommerce auch auf diese Änderung reagiert."
+
+msgid "WooCommerce did not store the change: %1$s of the product still hold what they held before. A plugin may refuse it on save. Check the product with %2$s, and ask the site administrator which plugin guards it."
+msgstr "WooCommerce hat die Änderung nicht gespeichert: Bei %1$s des Produkts steht weiterhin der Wert von vorher. Ein Plugin kann sie beim Speichern ablehnen. Das Produkt mit %2$s prüfen und den Administrator der Website fragen, welches Plugin es schützt."
+
+msgid "WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again."
+msgstr "WooCommerce hat %1$s des Produkts %2$d nicht zurückgenommen; der Undo-Punkt bleibt. Ein Plugin kann die Felder eines Produkts beim Speichern umschreiben. Das Produkt mit wp_wc_get_product prüfen und erneut versuchen."
+
+msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Das Produkt wurde geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um es trotz der neueren Änderung wiederherzustellen."
+
+msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Der Schnappschuss des Produkts hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call WooCommerce did not manage the stock of this product itself; this call switched that on. wp_wc_get_product shows the stock now, and stock management is switched off again under Inventory in the product screen of wp-admin, where that is wanted."
+msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die seither eingegangenen Bestellungen zurücknehmen. Vor diesem Aufruf hat WooCommerce den Lagerbestand dieses Produkts nicht selbst verwaltet; dieser Aufruf hat das eingeschaltet. wp_wc_get_product zeigt den Lagerbestand jetzt, und die Lagerverwaltung wird in wp-admin in der Produktansicht unter Lagerbestand wieder ausgeschaltet, wo das gewünscht ist."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
+msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die seither eingegangenen Bestellungen zurücknehmen. Vor diesem Aufruf betrug er %s. wp_wc_get_product zeigt den Lagerbestand jetzt, und wp_wc_update_product setzt ihn wieder, wo das gewünscht ist, abzüglich des seither Verkauften."
+
+msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
+msgstr "Der Gutschein %d wurde verwendet oder ist von einer Bestellung reserviert, die gerade bezahlt wird, und das Undo verschiebt nur einen unbenutzten Gutschein in den Papierkorb, auch mit force=true: Die Bestellungen, die ihn verwendet haben, behalten ihn. Damit er nicht mehr gilt, ihm in wp-admin unter Marketing › Gutscheine ein Ablaufdatum oder eine Nutzungsgrenze geben; wp_wc_list_coupons listet die Gutscheine auf."

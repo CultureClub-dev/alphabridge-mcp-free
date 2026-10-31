@@ -2,8 +2,11 @@
 /**
  * The undo of a change a tool made to one object through WordPress — a term
  * or a menu (a menu is a term), a menu item, the option rows of a widget,
- * since 4.14.0 a comment — since 4.13.0: the half that AB_MCP_Undo_Terms,
- * AB_MCP_Undo_Menu_Items, AB_MCP_Undo_Widgets and AB_MCP_Undo_Comments share.
+ * since 4.14.0 a comment, a product and a coupon of WooCommerce — since
+ * 4.13.0: the half that AB_MCP_Undo_Terms, AB_MCP_Undo_Menu_Items,
+ * AB_MCP_Undo_Widgets, AB_MCP_Undo_Comments, AB_MCP_Undo_Products and
+ * AB_MCP_Undo_Coupons share. Products and coupons are read through the
+ * objects of WooCommerce, not from the tables (AB_MCP_Undo_Products).
  *
  * The rule is AB_MCP_Undo_Meta's. Each kind reads the state of its object
  * straight from the tables, before the write (or, for an object the tool
@@ -267,6 +270,35 @@ abstract class AB_MCP_Undo_Objects {
 		return class_exists( 'AB_MCP_Undo' ) && AB_MCP_Undo::enabled();
 	}
 
+	/**
+	 * A tool class whose checks a kind asks again at the restore, loaded
+	 * where it is not yet: wp_undo can be reached where the tool classes
+	 * were not loaded in this request (since 4.14.0, the shop tools).
+	 *
+	 * @param string $class Class name.
+	 * @param string $file  Its file under includes/tools/.
+	 */
+	protected static function load_tools( $class, $file ) {
+		if ( class_exists( $class, false ) ) {
+			return;
+		}
+		if ( ! class_exists( 'AB_MCP_Tools_Base', false ) ) {
+			require_once dirname( __DIR__ ) . '/tools/class-tools-base.php';
+		}
+		require_once dirname( __DIR__ ) . '/tools/' . $file;
+	}
+
+	/**
+	 * Is the site's trash on? WordPress deletes a comment or a post (a coupon
+	 * is one) for good instead where EMPTY_TRASH_DAYS is 0
+	 * (wp_trash_comment(), wp_trash_post()).
+	 *
+	 * @return bool
+	 */
+	public static function trash_on() {
+		return ! defined( 'EMPTY_TRASH_DAYS' ) || (bool) EMPTY_TRASH_DAYS;
+	}
+
 	/* ------------------------------------------------------------- helpers */
 
 	/**
@@ -370,7 +402,7 @@ abstract class AB_MCP_Undo_Objects {
 		return AB_MCP_Undo_Answer::stored_form( $a ) === AB_MCP_Undo_Answer::stored_form( $b );
 	}
 
-	/* --------------------------------------------------- deletes without undo */
+	/* --------------------------------------------------- changes without undo */
 
 	/**
 	 * The undo_note of the tools that delete for good, by tool: why there is
@@ -413,9 +445,26 @@ abstract class AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * The notes of deleted_for_good(), and of a comment whose post is in the
-	 * trash (since 4.14.0), for the check that each names a way
-	 * (AnswerWayTest).
+	 * The undo_note of wp_wc_update_order_status (since 4.14.0), which
+	 * records no undo point: setting the old status again is no way back,
+	 * since WooCommerce reacts to it once more instead of taking back what
+	 * it did on the change (decision of 30.10.2026).
+	 *
+	 * @param bool $status_changed Whether the status changed; false: the order had it already, and only the note was added.
+	 * @return string
+	 */
+	public static function order_status_note( $status_changed ) {
+		if ( ! $status_changed ) {
+			return AB_MCP_Undo_Answer::not_undoable( __( 'The order had this status already, so only the private order note was added, as an entry of its own, and no tool of this plugin removes an order note. An order note added by mistake is deleted in the order screen in wp-admin (WooCommerce › Orders, Order notes); wp_wc_get_order shows the order.', 'alphabridge-mcp' ) );
+		}
+		return AB_MCP_Undo_Answer::not_undoable( __( 'WooCommerce reacts to a new order status as in the order screen: it reduces or restores stock, records a full refund for refunded and sends its status e-mails, and setting the old status again takes none of that back but makes WooCommerce react once more. Before changing the status of an order, check it with wp_wc_get_order; to go back, set the old status with wp_wc_update_order_status, knowing that WooCommerce reacts to that change too.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The notes of deleted_for_good(), of a comment whose post is in the
+	 * trash, of a coupon created where the trash is off or in use, of the stock of a
+	 * product and of a change of an order's status (all since 4.14.0), for
+	 * the check that each names a way (AnswerWayTest).
 	 *
 	 * @return string[]
 	 */
@@ -428,6 +477,18 @@ abstract class AB_MCP_Undo_Objects {
 			require_once __DIR__ . '/class-undo-comments.php';
 		}
 		$out['post-trashed'] = AB_MCP_Undo_Comments::post_trashed_note();
+		if ( ! class_exists( 'AB_MCP_Undo_Coupons', false ) ) {
+			require_once __DIR__ . '/class-undo-coupons.php';
+		}
+		$out['wp_wc_create_coupon']       = AB_MCP_Undo_Coupons::trash_off_note();
+		$out['coupon-in-use']             = AB_MCP_Undo_Coupons::in_use_note( 99 );
+		if ( ! class_exists( 'AB_MCP_Undo_Products', false ) ) {
+			require_once __DIR__ . '/class-undo-products.php';
+		}
+		$out['stock-managed']   = AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) );
+		$out['stock-unmanaged'] = AB_MCP_Undo_Products::stock_note( array( 'manage' => false, 'quantity' => null ) );
+		$out['wp_wc_update_order_status'] = self::order_status_note( true );
+		$out['order-note']                = self::order_status_note( false );
 		return $out;
 	}
 }

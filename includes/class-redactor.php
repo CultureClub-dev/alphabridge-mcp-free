@@ -184,6 +184,12 @@ final class AB_MCP_Redactor {
 		'wp_moderate_comment' => array( 'saved_fields' ),
 		'wp_reply_comment'    => array( 'saved_fields' ),
 		'wp_delete_comment'   => array( 'saved_fields' ),
+		// The product and the coupon as stored (4.14.0): what wp_wc_get_product
+		// and wp_wc_list_coupons read, redacted alike; product is the fields
+		// of wp_wc_get_product the answer has carried since 4.9.0, code the
+		// coupon's code beside saved_fields.
+		'wp_wc_update_product' => array( 'saved_fields', 'product' ),
+		'wp_wc_create_coupon'  => array( 'saved_fields', 'code' ),
 	);
 
 	/**
@@ -386,7 +392,10 @@ final class AB_MCP_Redactor {
 		} elseif ( isset( self::PARTS[ $name ] ) && is_array( $result ) ) {
 			foreach ( self::PARTS[ $name ] as $part ) {
 				if ( array_key_exists( $part, $result ) ) {
-					$result[ $part ] = self::walk( $result[ $part ], array( (string) $part ), $st, 1 );
+					// Judged by its own name too, as any key: a part that is a
+					// single value (the code of a new coupon) is no array.
+					$walked          = self::walk_array( array( $part => $result[ $part ] ), array(), $st, 0 );
+					$result[ $part ] = $walked[ $part ];
 				}
 			}
 		}

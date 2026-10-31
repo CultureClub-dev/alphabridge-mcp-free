@@ -31,9 +31,12 @@
  * AB_MCP_Undo_Widgets; since 4.14.0 the SEO fields (wp_seo_set, kind meta)
  * and comment (the status wp_moderate_comment set, a comment wp_delete_comment
  * moved into the trash, a comment wp_reply_comment added), planned and
- * written by AB_MCP_Undo_Comments. The undo points of Pro's tools (options,
- * files, PHP snippets) share the store; Pro reverses them with its own wp_undo, this
- * class names them and leaves them alone.
+ * written by AB_MCP_Undo_Comments, and wc_product and wc_coupon (the
+ * prices and status wp_wc_update_product changed, a coupon
+ * wp_wc_create_coupon created), planned and written through WooCommerce by
+ * AB_MCP_Undo_Products and AB_MCP_Undo_Coupons. The undo points of Pro's
+ * tools (options, files, PHP snippets) share the store; Pro reverses them
+ * with its own wp_undo, this class names them and leaves them alone.
  *
  * @package AlphaBridge_MCP
  */
@@ -112,6 +115,15 @@ class AB_MCP_Undo_Restore {
 			'wp_moderate_comment'       => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
 			'wp_reply_comment'          => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
 			'wp_delete_comment'         => array( 'kind' => 'comment', 'cap' => 'moderate_comments' ),
+			// WooCommerce (free since 4.14.0), with the capability of the
+			// tools: the right to edit the product (and to publish it, where
+			// the status of before takes it live) or to delete the coupon is
+			// asked by the plan (AB_MCP_Undo_Products::refusal(),
+			// AB_MCP_Undo_Coupons::refusal()); the stock of a product is no
+			// part of its point. wp_wc_update_order_status records none: its
+			// answer says it is not undoable.
+			'wp_wc_update_product'      => array( 'kind' => 'wc_product', 'cap' => 'manage_woocommerce' ),
+			'wp_wc_create_coupon'       => array( 'kind' => 'wc_coupon', 'cap' => 'manage_woocommerce' ),
 		);
 	}
 
@@ -289,6 +301,8 @@ class AB_MCP_Undo_Restore {
 			case 'menu_item':
 			case 'widget':
 			case 'comment':
+			case 'wc_product':
+			case 'wc_coupon':
 				$class = self::object_kinds()[ $kind ];
 				return $class::plan( $tool, $data, ! empty( $opts['force'] ) );
 		}
@@ -528,13 +542,23 @@ class AB_MCP_Undo_Restore {
 			// on every page with them, and in the comment feeds. Its refs
 			// name comments, no post (after_restore() would purge nothing).
 			'comment'       => 'site',
+			// A product's price and its visibility show beyond its
+			// own page: on the shop page, the archives of its categories and
+			// tags, in product blocks and widgets and among the related
+			// products of others. Purging its page alone would leave those.
+			'wc_product'    => 'site',
+			// A coupon has no page and shows on none a page cache keeps:
+			// WooCommerce applies it in the cart and at the checkout, which
+			// the caching plugins leave out of their caches. Its ref names
+			// the coupon, no post, so nothing is purged.
+			'wc_coupon'     => 'post',
 		);
 	}
 
 	/**
 	 * The kinds of one object written through WordPress (since 4.13.0,
-	 * comment since 4.14.0) and the class that plans and writes each, loaded
-	 * on first use.
+	 * comment, wc_product and wc_coupon since 4.14.0) and the class that
+	 * plans and writes each, loaded on first use.
 	 *
 	 * @return array<string,string>
 	 */
@@ -543,7 +567,9 @@ class AB_MCP_Undo_Restore {
 			'term'      => array( 'AB_MCP_Undo_Terms', 'class-undo-terms.php' ),
 			'menu_item' => array( 'AB_MCP_Undo_Menu_Items', 'class-undo-menu-items.php' ),
 			'widget'    => array( 'AB_MCP_Undo_Widgets', 'class-undo-widgets.php' ),
-			'comment'   => array( 'AB_MCP_Undo_Comments', 'class-undo-comments.php' ),
+			'comment'    => array( 'AB_MCP_Undo_Comments', 'class-undo-comments.php' ),
+			'wc_product' => array( 'AB_MCP_Undo_Products', 'class-undo-products.php' ),
+			'wc_coupon'  => array( 'AB_MCP_Undo_Coupons', 'class-undo-coupons.php' ),
 		);
 		$out = array();
 		foreach ( $kinds as $kind => $c ) {
@@ -610,7 +636,7 @@ class AB_MCP_Undo_Restore {
 			 * this plugin knows have been asked to purge. Hook it to purge a
 			 * cache it does not know, or to log the restore.
 			 *
-			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme, meta, term, menu_item, widget, comment (Pro fires it for its kinds too).
+			 * @param string $kind     Undo kind: post_status, post_fields, site_settings, builder_data, option_rows, theme, meta, term, menu_item, widget, comment, wc_product, wc_coupon (Pro fires it for its kinds too).
 			 * @param int[]  $post_ids The posts written; empty for the kinds that are not posts, and for the meta of a term or a user.
 			 * @param string $tool     The tool whose change was undone.
 			 */
@@ -1656,6 +1682,8 @@ class AB_MCP_Undo_Restore {
 			case 'menu_item':
 			case 'widget':
 			case 'comment':
+			case 'wc_product':
+			case 'wc_coupon':
 				$class = self::object_kinds()[ $kind ];
 				return $class::restore( $item );
 		}

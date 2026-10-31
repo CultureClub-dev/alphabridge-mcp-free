@@ -13,8 +13,9 @@
  *    leaves a value as it is; WordPress's strips the backslashes, and that
  *    is what the check is about.
  *
- * The rest of WordPress here is just what these calls reach. The same stage
- * as Pro's test/object-rights-test.php (R3, R4) and test/wc-input-test.php.
+ * The rest of WordPress here is just what these calls reach (since 4.14.0
+ * also the getters the read-back after the write asks). The same stage as
+ * Pro's test/object-rights-test.php (R3, R4) and test/wc-input-test.php.
  *
  * Run: php tests/shop-probe.php
  *
@@ -80,9 +81,9 @@ function get_post_type_object( $type ) {
 	);
 	return ! $GLOBALS['ab_types_gone'] && isset( $caps[ $type ] ) ? (object) array( 'cap' => (object) array( 'edit_post' => $caps[ $type ] ) ) : null;
 }
-// Product 7 is a product, 8 a variation.
+// Product 7 is a product, 8 a variation, 99 the coupon every save makes.
 function get_post_type( $post = null ) {
-	return 7 === (int) $post ? 'product' : ( 8 === (int) $post ? 'product_variation' : false );
+	return 7 === (int) $post ? 'product' : ( 8 === (int) $post ? 'product_variation' : ( 99 === (int) $post ? 'shop_coupon' : false ) );
 }
 
 class WooCommerce {
@@ -151,22 +152,37 @@ final class AB_Probe_Product {
 	public function get_sku() {
 		return 'W-1';
 	}
+	public function get_type() {
+		return 8 === $this->id ? 'variation' : 'simple';
+	}
+	public function get_parent_id( $context = 'view' ) {
+		return 8 === $this->id ? 7 : 0;
+	}
 	public function get_price() {
 		return '10';
 	}
-	public function get_regular_price() {
-		return '10';
+	public function get_regular_price( $context = 'view' ) {
+		return $this->set['regular_price'] ?? '10';
 	}
-	public function get_sale_price() {
+	public function get_sale_price( $context = 'view' ) {
 		return '';
 	}
-	public function get_stock_quantity() {
+	public function get_date_on_sale_from( $context = 'view' ) {
+		return null;
+	}
+	public function get_date_on_sale_to( $context = 'view' ) {
+		return null;
+	}
+	public function get_manage_stock( $context = 'view' ) {
+		return true;
+	}
+	public function get_stock_quantity( $context = 'view' ) {
 		return 3;
 	}
-	public function get_stock_status() {
+	public function get_stock_status( $context = 'view' ) {
 		return 'instock';
 	}
-	public function get_status() {
+	public function get_status( $context = 'view' ) {
 		return 'publish';
 	}
 }
@@ -197,6 +213,25 @@ function wc_format_coupon_code( $code ) {
 class WC_Coupon {
 	public static $saved = array();
 	public $set          = array();
+	public $id           = 0;
+	public function __construct( $data = 0 ) {
+		if ( 99 === $data && array() !== self::$saved ) {
+			$this->id  = 99;
+			$this->set = end( self::$saved );
+		}
+	}
+	public function get_id() {
+		return $this->id;
+	}
+	public function get_amount( $context = 'view' ) {
+		return $this->set['amount'] ?? '';
+	}
+	public function get_discount_type( $context = 'view' ) {
+		return $this->set['discount_type'] ?? 'fixed_cart';
+	}
+	public function get_date_expires( $context = 'view' ) {
+		return null;
+	}
 	public function set_code( $v ) {
 		$this->set['code'] = wc_format_coupon_code( $v );
 	}
