@@ -177,6 +177,7 @@ function ab_db_reset() {
 	$GLOBALS['ab_on_load']   = null; // another request, before a product is loaded
 	$GLOBALS['ab_now']       = null; // the clock of the sale period (null: now)
 	$GLOBALS['ab_meta_veto'] = array(); // fields a filter on update_post_metadata keeps from being written
+	$GLOBALS['ab_meta_rewrite'] = array(); // field => value a filter on update_post_metadata writes instead
 	$GLOBALS['ab_bookings']  = array(); // [id, operation, quantity] of wc_update_product_stock()
 	$GLOBALS['ab_booking_fails'] = false;
 	$GLOBALS['ab_veto']      = false; // a plugin on woocommerce_pre_delete_coupon
@@ -322,6 +323,9 @@ class AB_WC_Product {
 		}
 		foreach ( $GLOBALS['ab_meta_veto'] as $field ) {
 			$row[ $field ] = $GLOBALS['P'][ $this->id ][ $field ];
+		}
+		foreach ( $GLOBALS['ab_meta_rewrite'] as $field => $value ) {
+			$row[ $field ] = $value;
 		}
 		// handle_updated_props(): a sale price not below the regular one goes,
 		// and the price is derived again where a price field changed.
@@ -799,6 +803,29 @@ $res                     = ab_update( array( 'regular_price' => '20', 'stock' =>
 $GLOBALS['ab_meta_veto'] = array();
 ok( is_array( $res ) && true === $res['updated'] && 10 === ab_p( 7, 'stock_quantity' ) && 10 === $res['saved_fields']->stock && '10' === $res['saved_fields']->regular_price && array( 'regular_price' ) === $res['saved_differs'], 'C8k the stock stored, the price refused: updated, saved_fields and saved_differs say which' );
 ok( null === $res['undo'] && 0 === ab_points() && AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) ) === $res['undo_note'], 'C8l ... no point, undo_note the note of the stock with its value before' );
+
+// Codex 31.10. (6): stored changed means another value than before, sent or
+// not. Stock 3, the call sends 10, a stock plugin caps it at 5 on save.
+reset_all();
+ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
+$GLOBALS['ab_on_save'] = static function ( $p ) { if ( isset( $p->changes['stock_quantity'] ) ) { $p->changes['stock_quantity'] = min( 5, $p->changes['stock_quantity'] ); } };
+$res                   = ab_update( array( 'stock' => 10 ) );
+ok( is_array( $res ) && true === $res['updated'] && 5 === ab_p( 7, 'stock_quantity' ) && 5 === $res['saved_fields']->stock && array( 'stock' ) === $res['saved_differs'] && false !== strpos( $res['warning'], 'wp_wc_get_product' ), 'C8q a stock a plugin capped at 5: no ab_mcp_not_saved, saved_differs names it with the warning' );
+ok( null === $res['undo'] && 0 === ab_points() && false !== strpos( $res['undo_note'], 'it was 3' ), 'C8r ... no point, the note names the stock of before (3)' );
+
+// A price a filter sets to a third value (stored, neither sent nor before):
+// a success, saved_differs names it. That looks the same as another
+// request's change right after the save (C8b), so the point holds what the
+// tool saved: an immediate undo is blocked and needs force, rather than
+// overwriting a value that may not be the tool's.
+reset_all();
+$GLOBALS['ab_meta_rewrite'] = array( 'regular_price' => '15' );
+$res                        = ab_update( array( 'regular_price' => '20' ) );
+$GLOBALS['ab_meta_rewrite'] = array();
+ok( ab_token( $res ) && '15' === ab_p( 7, 'regular_price' ) && '15' === $res['saved_fields']->regular_price && array( 'regular_price' ) === $res['saved_differs'], 'C8s a price a filter set to 15 when 20 was sent: a success, saved_differs names it' );
+$out = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && '15' === ab_p( 7, 'regular_price' ), 'C8t ... the undo is blocked (changed_since), it does not overwrite the 15' );
+ok( 1 === ab_undo( $res['undo'], array( 'force' => true ) )['undone'] && '10' === ab_p( 7, 'regular_price' ), 'C8u ... with force the price of before comes back' );
 
 // Codex 31.10. (4): future and publish are WordPress's only where the date
 // of the post says so. A product dated tomorrow set to future and published
