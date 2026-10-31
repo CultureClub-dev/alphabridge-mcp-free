@@ -1058,6 +1058,42 @@ class AB_MCP_Staging {
 			: sprintf( __( 'The staging way is in place: the staging site %s answers and is paired with this site. Make the changes there and carry them over to this site one at a time once they are approved.', 'alphabridge-mcp' ), $other );
 	}
 
+	/**
+	 * Whether the assistant of this connection is asked to offer the way to
+	 * a staging site: the sentence in the server instructions and the
+	 * prompt staging_workflow, under the same condition. wp_staging_status
+	 * has to be on in the registry the server answers with, and the
+	 * connection has to be able to change something: write access on, and
+	 * at least one writing tool that tools/list shows this connection (its
+	 * switch on, and allowed for the access level of the token,
+	 * AB_MCP_Tool_Registry::scope_allows()). For a connection that only
+	 * reads, the question would be about a change it cannot make.
+	 *
+	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
+	 * @return bool
+	 */
+	public static function offered( $registry ) {
+		if ( ! $registry instanceof AB_MCP_Tool_Registry ) {
+			return false;
+		}
+		$def = $registry->get( 'wp_staging_status' );
+		if ( ! is_array( $def ) || ! AB_MCP_Settings::is_tool_enabled( 'wp_staging_status', $def ) ) {
+			return false;
+		}
+		if ( ! AB_MCP_Site_Mode::is_full() ) {
+			return false;
+		}
+		$scope = AB_MCP_Auth::current_scope();
+		foreach ( $registry->all() as $name => $tool ) {
+			if ( ! AB_MCP_Tool_Registry::is_read_only( $name, $tool )
+				&& AB_MCP_Settings::is_tool_enabled( $name, $tool )
+				&& AB_MCP_Tool_Registry::scope_allows( $scope, $name, $tool ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/* ------------------------------------------------------- REST route */
 
 	/**

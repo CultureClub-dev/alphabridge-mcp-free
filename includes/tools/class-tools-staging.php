@@ -83,11 +83,13 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	}
 
 	/**
-	 * The guided prompt staging_workflow, while wp_staging_status is on in
-	 * the registry the server answers with: the way from a change the
-	 * person asks for to a staging site, the work there and the changes
-	 * carried over one at a time. It names only what wp_staging_status
-	 * reports about the host and advertises nothing.
+	 * The guided prompt staging_workflow, under the condition of the
+	 * sentence in the server instructions (AB_MCP_Staging::offered():
+	 * wp_staging_status on in the registry the server answers with, and a
+	 * connection that can write): the way from a change the person asks
+	 * for to a staging site, the work there and the changes carried over
+	 * one at a time. It names only what wp_staging_status reports about the
+	 * host and advertises nothing.
 	 *
 	 * @param array                     $prompts  Prompts.
 	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
@@ -95,11 +97,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function add_prompt( $prompts, $registry = null ) {
 		$prompts = is_array( $prompts ) ? $prompts : array();
-		if ( ! $registry instanceof AB_MCP_Tool_Registry ) {
-			return $prompts;
-		}
-		$def = $registry->get( 'wp_staging_status' );
-		if ( ! is_array( $def ) || ! AB_MCP_Settings::is_tool_enabled( 'wp_staging_status', $def ) ) {
+		if ( ! AB_MCP_Staging::offered( $registry ) ) {
 			return $prompts;
 		}
 		$prompts[] = array(
@@ -119,12 +117,12 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 			),
 			'text'        => "You are helping the person change this WordPress site through AlphaBridge, on a staging site first. Change: {{change}}. Staging site, if there is one already: {{staging_site}}\n\n"
 				. "1. Sum up. Say in a sentence or two what the person wants changed, and why staging comes first: a change on the production site is visible to visitors at once; on a staging site it is checked first and carried over once it is approved.\n"
-				. "2. Look where the site stands. Call wp_staging_status and pass its findings on in plain words. Call it again after every step below, on the site you are working on: it checks the step, and next_step says what comes next.\n"
-				. "3. Choose the way with the person: a staging copy made with the host's staging function or with a staging plugin, an existing staging site connected to this one, or, for changes to texts, pages, posts and media alone, drafts and previews published once approved. Follow the steps of the checklist. Name a host and its staging function only where wp_staging_status names them, and describe nothing of the host's or the plugin's screens beyond what it says.\n"
+				. "2. Look where the site stands. Call wp_staging_status and pass its findings on in plain words. Call it again after each step of setting up (steps 4 and 5), on the site you are working on: it checks the role, the pair, whether the staging site answers and its preview protection, and next_step says what comes next. It does not check the work or what was carried over: for that, read the objects on both sites with the reading tools.\n"
+				. "3. Choose the way with the person: a staging copy made with the host's staging function or with a staging plugin, or an existing staging site connected to this one. For changes to posts and pages alone, drafts and previews published once approved are a way too; media, menus, settings and the other changes take effect at once, so for them staging. Follow the steps of the checklist. Name a host and its staging function only where wp_staging_status names them, and describe nothing of the host's or the plugin's screens beyond what it says.\n"
 				. "4. Set it up. The person makes the copy, in the host's control panel or the plugin's own screen, and AlphaBridge MCP has to be active on it. On the settings page of each site, at Staging, the person confirms its role and enters the address of the other site; a copy can carry the settings of this site, so check the role on the copy. Then the person connects you to the staging site as well, so you can work there.\n"
-				. "5. Protect the staging site. On the staging site, switch on the preview protection with wp_set_preview_protection (enabled=true), or on its settings page at Staging, and give the person the password from the answer for whoever should see the preview.\n"
+				. "5. Protect the staging site. On the staging site, switch on the preview protection with wp_set_preview_protection (enabled=true), or on its settings page at Staging, and give the person the password from the answer for whoever should see the preview. If the protection is on already, the answer says changed=false and carries no password: ask the person for the password they have, or, only with their yes, set a new one with new_password=true, which signs every visitor out; say so first.\n"
 				. "6. Work on the staging site. Make the change there with the usual tools, show it to the person with the preview password, and get their approval.\n"
-				. "7. Carry it over one object at a time. Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools, after showing the person what will change. Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back; where the answer has none, tell the person that this change has no way back through AlphaBridge. A file: wp_upload_media_from_url with its address on the staging site (the preview protection does not cover files under /wp-content/uploads/).\n"
+				. "7. Carry it over one object at a time. This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it: connect you on the settings page of AlphaBridge MCP on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media and categories only) and write access switched on there. Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools, after showing the person what will change. Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back; where the answer has none, tell the person that this change has no way back through AlphaBridge. A file: wp_upload_media_from_url with its address on the staging site (the preview protection does not cover files under /wp-content/uploads/).\n"
 				. "8. Check. Read the changed objects on the production site again and tell the person what changed and where to look.\n\n"
 				. 'If the person would rather not use staging, or chooses drafts, go ahead that way: the choice is theirs.',
 		);

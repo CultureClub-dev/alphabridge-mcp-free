@@ -5,20 +5,28 @@
  *
  * What must hold:
  *
- * - While wp_staging_status is registered and switched on, the server
- *   instructions (initialize and server/discover) tell the assistant to
- *   call it before the first change and, unless it reports the role
- *   staging or a pair, to ask the person whether to work on a staging site
- *   first: always with the reason and the way, offering to set staging up
- *   now and to continue there. Without the tool, or with it switched off,
- *   not a word of it; whether the preview protection tool is on does not
- *   matter.
+ * - While wp_staging_status is registered and switched on and the
+ *   connection can write, the server instructions (initialize and
+ *   server/discover) tell the assistant to call it before the first change
+ *   and, unless it reports the role staging or a pair, to ask the person
+ *   whether to work on a staging site first: always with the reason and
+ *   the way, offering to set staging up now and to continue there. Without
+ *   the tool, or with it switched off, not a word of it.
+ * - A connection can write with write access on and a writing tool that
+ *   tools/list shows it: switched on and allowed for the access level of
+ *   its token. With write access off, a token that only reads, a token for
+ *   content on a site whose only writing tool is no content tool, or every
+ *   writing tool switched off: not a word of it, and no prompt.
  * - The sentence stands before the filter of the add-ons and is short: the
  *   instructions go with every connection.
- * - The prompt staging_workflow comes with the tool, once, with its two
- *   optional arguments and its steps, through prompts/list and prompts/get;
- *   not without the tool in the registry the server answers with, not with
- *   it switched off, not without a registry; other prompts stay as they are.
+ * - The prompt staging_workflow comes under the same condition, once, with
+ *   its two optional arguments and its steps, through prompts/list and
+ *   prompts/get; not without the tool in the registry the server answers
+ *   with, not with it switched off, not without a registry; other prompts
+ *   stay as they are. Its steps keep drafts to posts and pages, have
+ *   wp_staging_status check the setting up only, cover a protection that
+ *   is on already, and say that carrying over needs a connection that can
+ *   write on both sites.
  * - Neither advertises anything: no Pro, Agency, upgrade, licence, price or
  *   checkout, and no link.
  *
@@ -50,12 +58,13 @@ final class StagingWorkflowTest extends TestCase {
 	 * The sentence, word for word: the reason and the way every time
 	 * (Thomas, 31.10.2026: «fragen und erläutern warum und wie, das ist
 	 * wichtig immer mit begründung»), and the offer to set staging up and
-	 * to continue there.
+	 * to continue there. Drafts only for posts and pages: media and the
+	 * other changes take effect at once.
 	 */
 	const SENTENCE = ' Before the first change on this site, call wp_staging_status. Unless it reports the role staging or a pair,'
 		. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
 		. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
-		. ' connecting an existing staging site, or drafts for content alone; its checklist has the steps), and offer to set up'
+		. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
 		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here.';
 
 	/** What would advertise an edition, as the staging tool's own test reads it, and what would link anything. */
@@ -63,13 +72,35 @@ final class StagingWorkflowTest extends TestCase {
 
 	protected function setUp(): void {
 		ab_test_reset();
-		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, 'full' );
+		self::scope( 'full' );
+		AB_MCP_Settings::set( 'site_mode', 'full' );
 	}
 
-	/** The tools of the group «Staging», as the plugin registers them. */
+	protected function tearDown(): void {
+		self::scope( 'full' );
+	}
+
+	/** The access level of the current connection, as AB_MCP_Auth records it after the token check. */
+	private static function scope( string $scope ): void {
+		( new ReflectionProperty( AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, $scope );
+	}
+
+	/** The tools of the group «Staging», as the plugin registers them; its only writing tool needs manage_options. */
 	private static function staging_registry(): AB_MCP_Tool_Registry {
 		$r = new AB_MCP_Tool_Registry();
 		AB_MCP_Tools_Staging::register( $r );
+		return $r;
+	}
+
+	/** A writing tool for content, as a token with the access level Content may call it. */
+	private static function with_content_writer( AB_MCP_Tool_Registry $r ): AB_MCP_Tool_Registry {
+		$r->register(
+			'wp_update_post',
+			array(
+				'capability' => 'edit_posts',
+				'readonly'   => false,
+			)
+		);
 		return $r;
 	}
 
@@ -94,6 +125,18 @@ final class StagingWorkflowTest extends TestCase {
 		return null;
 	}
 
+	/** Neither the sentence nor the prompt, for this registry and connection. */
+	private static function assertNotOffered( AB_MCP_Tool_Registry $r, string $why ): void {
+		self::assertStringNotContainsStringIgnoringCase( 'staging', self::instructions( $r ), $why );
+		self::assertNull( self::prompt( apply_filters( 'ab_mcp_prompts', array(), $r ) ), $why . ' No prompt either.' );
+	}
+
+	/** The sentence and the prompt, for this registry and connection. */
+	private static function assertOffered( AB_MCP_Tool_Registry $r, string $why ): void {
+		self::assertStringContainsString( self::SENTENCE, self::instructions( $r ), $why );
+		self::assertNotNull( self::prompt( apply_filters( 'ab_mcp_prompts', array(), $r ) ), $why . ' The prompt too.' );
+	}
+
 	/* ------------------------------------------------- the instructions */
 
 	public function testWhileTheStatusToolIsOnTheInstructionsAskForStagingWithReasonAndWay(): void {
@@ -104,19 +147,46 @@ final class StagingWorkflowTest extends TestCase {
 	}
 
 	public function testNotAWordOfItWithoutTheTool(): void {
-		$r = new AB_MCP_Tool_Registry();
-		$r->register( 'wp_get_post', array( 'capability' => 'read', 'readonly' => true ) );
+		self::staging_registry(); // The prompt is hooked.
+		$r = self::with_content_writer( new AB_MCP_Tool_Registry() );
+		$r->register(
+			'wp_get_post',
+			array(
+				'capability' => 'read',
+				'readonly'   => true,
+			)
+		);
 
-		self::assertStringNotContainsStringIgnoringCase( 'staging', self::instructions( $r ), 'It would point to a tool that is not there.' );
-		self::assertStringNotContainsStringIgnoringCase( 'staging', self::instructions( new AB_MCP_Tool_Registry() ) );
+		self::assertNotOffered( $r, 'It would point to a tool that is not there, on a site that can write.' );
+		self::assertNotOffered( new AB_MCP_Tool_Registry(), 'Nor on an empty one.' );
 	}
 
 	public function testNotAWordOfItWhileTheToolIsSwitchedOff(): void {
 		AB_MCP_Settings::set_tool_state( array( 'wp_staging_status' => false ) );
-		self::assertStringNotContainsStringIgnoringCase( 'staging', self::instructions( self::staging_registry() ) );
+		self::assertNotOffered( self::with_content_writer( self::staging_registry() ), 'Switched off under Fine-tuning.' );
+	}
 
+	public function testNotAWordOfItWithWriteAccessOff(): void {
+		AB_MCP_Settings::set( 'site_mode', 'read' );
+		self::assertNotOffered( self::with_content_writer( self::staging_registry() ), 'The question is about a change this site does not allow.' );
+		self::assertStringContainsString( 'WRITE ACCESS IS OFF', self::instructions( self::staging_registry() ), 'The instructions say that instead.' );
+	}
+
+	public function testNotAWordOfItForATokenThatOnlyReads(): void {
+		self::scope( 'read' );
+		self::assertNotOffered( self::with_content_writer( self::staging_registry() ), 'tools/list shows this connection no writing tool.' );
+	}
+
+	public function testATokenForContentNeedsAWritingToolOfItsLevel(): void {
+		self::scope( 'content' );
+		self::assertNotOffered( self::staging_registry(), 'wp_set_preview_protection needs manage_options, which the access level Content does not reach.' );
+		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'With a tool for content it can write.' );
+	}
+
+	public function testEveryWritingToolSwitchedOffIsNoConnectionThatWrites(): void {
 		AB_MCP_Settings::set_tool_state( array( 'wp_set_preview_protection' => false ) );
-		self::assertStringContainsString( self::SENTENCE, self::instructions( self::staging_registry() ), 'Only the status tool decides: the steps name the settings page as the other way to the protection.' );
+		self::assertNotOffered( self::staging_registry(), 'Its only writing tool is off.' );
+		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'One writing tool on is enough: the steps name the settings page as the other way to the protection.' );
 	}
 
 	public function testTheSentenceIsShortAndStandsBeforeTheFilterOfTheAddOns(): void {
@@ -158,14 +228,20 @@ final class StagingWorkflowTest extends TestCase {
 		self::assertSame( array( '1', '2', '3', '4', '5', '6', '7', '8' ), $m[1], 'Eight steps, in order.' );
 		$parts = array(
 			'the reason'                            => 'a change on the production site is visible to visitors at once; on a staging site it is checked first and carried over once it is approved',
-			'the status after every step'           => 'Call it again after every step below',
-			'the way: host'                         => 'the host\'s staging function',
-			'the way: plugin'                       => 'a staging plugin',
-			'the way: an existing staging site'     => 'an existing staging site connected to this one',
-			'the way: drafts'                       => 'drafts and previews published once approved',
+			'the status after setting up'           => 'Call it again after each step of setting up (steps 4 and 5), on the site you are working on: it checks the role, the pair, whether the staging site answers and its preview protection',
+			'not the work'                          => 'It does not check the work or what was carried over: for that, read the objects on both sites with the reading tools.',
+			'the way: host'                         => 'a staging copy made with the host\'s staging function',
+			'the way: plugin'                       => 'or with a staging plugin',
+			'the way: an existing staging site'     => 'or an existing staging site connected to this one',
+			'the way: drafts, for posts and pages'  => 'For changes to posts and pages alone, drafts and previews published once approved are a way too',
+			'not for media and the rest'            => 'media, menus, settings and the other changes take effect at once, so for them staging',
 			'nothing of the host it does not say'   => 'Name a host and its staging function only where wp_staging_status names them',
 			'the preview protection'                => 'switch on the preview protection with wp_set_preview_protection (enabled=true), or on its settings page at Staging',
-			'one object at a time'                  => 'Carry it over one object at a time. Read each changed page, post, menu, term or setting on the staging site and write it on the production site',
+			'a protection on already'               => 'If the protection is on already, the answer says changed=false and carries no password: ask the person for the password they have, or, only with their yes, set a new one with new_password=true, which signs every visitor out; say so first.',
+			'one object at a time'                  => 'Carry it over one object at a time.',
+			'a connection that writes on both'      => 'This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it',
+			'the way to that connection'            => 'connect you on the settings page of AlphaBridge MCP on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media and categories only) and write access switched on there',
+			'read there, write here'                => 'Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools',
 			'undo where a tool records a point'     => 'Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back',
 			'and where it records none'             => 'where the answer has none, tell the person that this change has no way back through AlphaBridge',
 			'the person decides'                    => 'If the person would rather not use staging, or chooses drafts, go ahead that way',
@@ -195,7 +271,7 @@ final class StagingWorkflowTest extends TestCase {
 	public function testNoPromptWithoutTheToolWithItOffOrWithoutTheRegistry(): void {
 		AB_MCP_Tools_Staging::register( new AB_MCP_Tool_Registry() );
 
-		self::assertSame( array(), apply_filters( 'ab_mcp_prompts', array(), new AB_MCP_Tool_Registry() ), 'The server answers with tools without it.' );
+		self::assertSame( array(), apply_filters( 'ab_mcp_prompts', array(), self::with_content_writer( new AB_MCP_Tool_Registry() ) ), 'The server answers with tools without it.' );
 		self::assertSame( array(), apply_filters( 'ab_mcp_prompts', array() ), 'A caller that names no registry gets none.' );
 		self::assertArrayNotHasKey( 'prompts', self::server( new AB_MCP_Tool_Registry(), 'capabilities' ), 'And the server offers no prompts.' );
 
