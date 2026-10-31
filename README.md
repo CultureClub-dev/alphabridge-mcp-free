@@ -28,7 +28,7 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **98 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+- **99 structured tools** across content, media, taxonomies, comments, widgets, menus, site
   settings, site info, users, plugins and themes (install, update, activate, delete), WordPress
   updates, cron and the error log, SEO fields, WooCommerce, maintenance, page builders, search and
   replace, bulk status changes, a connection check and the abilities of other plugins, each one
@@ -85,6 +85,13 @@ directory. It is the same code WordPress.org ships.
   `post_ids` keeps a run to the posts it names, `expected_count` writes only when the dry run still
   fits, protected options are never touched, and changed option rows get an undo point of their
   own (`options_undo_token`).
+- **Preview protection for a staging site** — `wp_set_preview_protection` (and a section on the
+  settings page) puts the site behind a shared password for visitors: a password page with HTTP
+  401 instead of every page, feed and search, the public REST API closed to them too, search
+  engine visibility set to discouraged (and written back on switching off), `X-Robots-Tag:
+  noindex`, nothing cached, the page cache emptied. The MCP endpoint, the sign-in, wp-admin, the
+  REST root the hub reads and signed-in users keep working. Not covered, and said so: files under
+  `/wp-content/uploads/`, caches outside PHP, and a shared password identifies nobody.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

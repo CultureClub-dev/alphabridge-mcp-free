@@ -35,9 +35,17 @@ final class UninstallTest extends TestCase {
 	/**
 	 * Constants with an ab_mcp_ name that is no option: the WP-Cron event of
 	 * the update tools (AB_MCP_Update_Log::RESUME, free since 4.11.0), which
-	 * the uninstall clears with wp_clear_scheduled_hook().
+	 * the uninstall clears with wp_clear_scheduled_hook(), and the cookie and
+	 * form field of the preview protection.
 	 */
-	private const NOT_OPTIONS = array( 'ab_mcp_pro_resume_auto_updates' );
+	private const NOT_OPTIONS = array(
+		'ab_mcp_pro_resume_auto_updates',
+		// The cookie and the form field of the preview protection
+		// (AB_MCP_Preview_Protection::COOKIE and FIELD, free since 4.15.0);
+		// its state lives inside ab_mcp_options.
+		'ab_mcp_preview',
+		'ab_mcp_preview_password',
+	);
 
 	public static function setUpBeforeClass(): void {
 		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {

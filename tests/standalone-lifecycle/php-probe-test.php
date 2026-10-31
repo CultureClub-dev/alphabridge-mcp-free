@@ -684,6 +684,12 @@ $j = AB_MCP_Php_Probe::judge( array( 'response' => array( 'code' => 404 ), 'body
 ok( 'stopped' === $j['result'] && 404 === $j['http_status'], 'B36 a 404 there (wp-admin hidden): stopped as well' );
 $j = AB_MCP_Php_Probe::judge( array( 'response' => array( 'code' => 403 ), 'body' => '<html>x</html>' . $m( 'true' ) ), $k, 'home' );
 ok( 'ok' === $j['result'], 'B37 counter-check: a 403 at the home page (a members-only page) still counts as run through' );
+// The preview protection of a staging site (4.15.0) answers the home page
+// with its password page and 401; WordPress ran through to shutdown, so the
+// markers are there, and the round counts it as answered.
+$j = AB_MCP_Php_Probe::judge( array( 'response' => array( 'code' => 401 ), 'body' => '<html><body id="error-page"><form method="post"><input type="password" name="ab_mcp_preview_password"></form></body></html>' . $m( 'true' ) ), $k, 'home' );
+ok( 'ok' === $j['result'] && 401 === $j['http_status'], 'B39 the 401 password page of the preview protection at the home page: run through' );
+ok( 'passed' === AB_MCP_Php_Probe::verdict( array( $j, array( 'result' => 'ok' ), array( 'result' => 'ok' ) ) ), 'B39 and the verdict of a round with it is passed' );
 $j = AB_MCP_Php_Probe::judge( array( 'response' => array( 'code' => 200 ), 'body' => '<html>dashboard</html>' . $m( 'true' ) ), $k, 'admin' );
 ok( 'ok' === $j['result'], 'B38 counter-check: the dashboard with 200: ok' );
 $j = AB_MCP_Php_Probe::judge( array( 'response' => array( 'code' => 302 ), 'headers' => array( 'location' => "http://other.test/?wp_scrape_key=$k" ), 'body' => $m( 'true' ) ), $k, 'home' );

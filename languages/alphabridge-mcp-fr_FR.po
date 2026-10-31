@@ -5140,3 +5140,91 @@ msgstr "Le stock ne fait pas partie de l'annulation : le remettre annulerait les
 
 msgid "Coupon %d has been used or is held by an order being paid, and the undo moves only an unused coupon into the trash, also with force=true: the orders that used it keep it. To take it out of use, give it an expiry date or a usage limit under Marketing › Coupons in wp-admin; wp_wc_list_coupons lists the coupons."
 msgstr "Le code promo %d a été utilisé ou est réservé par une commande en cours de paiement, et l'annulation ne met à la corbeille qu'un code promo inutilisé, même avec force=true : les commandes qui l'ont utilisé le conservent. Pour le retirer de l'usage, donnez-lui une date d'expiration ou une limite d'utilisation sous Marketing › Codes promo dans wp-admin ; wp_wc_list_coupons liste les codes promo."
+
+# The preview protection of a staging site (4.15.0).
+msgid "The preview protection is on already, and its password is not shown again. “New password” sets a new one and shows it once."
+msgstr "La protection de l’aperçu est déjà activée et son mot de passe n’est plus affiché. « Nouveau mot de passe » en définit un nouveau et l’affiche une fois."
+
+msgid "The preview protection is off, so there is no password to renew. Switch it on first; that sets a password."
+msgstr "La protection de l’aperçu est désactivée, il n’y a donc pas de mot de passe à renouveler. Activez-la d’abord ; cela définit un mot de passe."
+
+msgid "Unknown setting; nothing was changed."
+msgstr "Réglage inconnu ; rien n’a été modifié."
+
+msgid "Staging"
+msgstr "Staging"
+
+msgctxt "tool group"
+msgid "Staging"
+msgstr "Staging"
+
+msgid "Preview protection"
+msgstr "Protection de l’aperçu"
+
+msgid "For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before."
+msgstr "Pour un site de staging : les visiteurs non connectés voient une page de mot de passe à la place du site, et les moteurs de recherche sont tenus à l’écart. Les utilisateurs connectés, les applications reliées et le hub continuent de fonctionner comme avant."
+
+msgid "Note this password down now — it is shown only once."
+msgstr "Notez ce mot de passe maintenant — il n’est affiché qu’une seule fois."
+
+msgid "Only its hash is stored. Visitors enter it once and are remembered for 14 days; a new password signs them all out."
+msgstr "Seule son empreinte (hash) est stockée. Les visiteurs le saisissent une fois et restent reconnus pendant 14 jours ; un nouveau mot de passe les déconnecte tous."
+
+msgid "Preview password"
+msgstr "Mot de passe de l’aperçu"
+
+msgid "Switch on"
+msgstr "Activer"
+
+msgid "New password"
+msgstr "Nouveau mot de passe"
+
+msgid "Switch off"
+msgstr "Désactiver"
+
+msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
+msgstr "Ce qu’elle ne couvre pas : les fichiers sous /wp-content/uploads/ restent accessibles par leur adresse tant que votre hébergeur n’ajoute pas de règle pour ce dossier ; un cache hors PHP (cache de l’hébergeur, CDN) peut continuer d’afficher des pages jusqu’à ce que vous le vidiez là-bas ; le mot de passe partagé n’identifie personne, il convient donc à un site de staging montré à un client, pas à des données confidentielles."
+
+msgid "Off: visitors see the site."
+msgstr "Désactivée : les visiteurs voient le site."
+
+#, php-format
+msgid "On since %1$s, switched on by %2$s. The search engine visibility is set to “discouraged” until you switch off; then it goes back to what it was."
+msgstr "Activée depuis %1$s, par %2$s. La visibilité pour les moteurs de recherche est réglée sur « découragée » jusqu’à ce que vous la désactiviez ; elle retrouve ensuite sa valeur précédente."
+
+msgid "The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before."
+msgstr "La protection de l’aperçu est désactivée : les visiteurs voient de nouveau le site, et la visibilité pour les moteurs de recherche est revenue à ce qu’elle était."
+
+msgid "Preview"
+msgstr "Aperçu"
+
+msgid "This site is a preview and not public yet. Enter the password you were given to see it; the browser then remembers you for 14 days."
+msgstr "Ce site est un aperçu et n’est pas encore public. Saisissez le mot de passe qui vous a été remis pour le voir ; ce navigateur vous reconnaîtra ensuite pendant 14 jours."
+
+msgid "That password is not right. Check it with the person who gave it to you and try again."
+msgstr "Ce mot de passe n’est pas le bon. Vérifiez-le auprès de la personne qui vous l’a remis et réessayez."
+
+msgid "Password"
+msgstr "Mot de passe"
+
+msgid "Show the preview"
+msgstr "Afficher l’aperçu"
+
+msgid "Members of this site log in as usual instead."
+msgstr "Les membres de ce site se connectent comme d’habitude."
+
+msgid "Log in"
+msgstr "Se connecter"
+
+msgid "This site is a preview behind a password, so its REST API answers only signed-in users (a cookie with a nonce, or an application password) and visitors who entered the preview password in their browser. Enter it on the password page of the site, sign in, or ask the site administrator; the MCP endpoint and the sign-in of AlphaBridge MCP are open as always."
+msgstr "Ce site est un aperçu protégé par un mot de passe ; son API REST ne répond donc qu’aux utilisateurs connectés (cookie avec nonce, ou mot de passe d’application) et aux visiteurs qui ont saisi le mot de passe de l’aperçu dans leur navigateur. Saisissez-le sur la page de mot de passe du site, connectez-vous ou demandez à l’administrateur du site ; le point de terminaison MCP et la connexion d’AlphaBridge MCP restent ouverts comme toujours."
+
+msgid "The preview protection is off, so there is no password to renew."
+msgstr "La protection de l’aperçu est désactivée, il n’y a donc pas de mot de passe à renouveler."
+
+msgid "1. Switch it on with enabled=true, which sets a password and returns it once. 2. Pass the password on to whoever should see the preview."
+msgstr "1. Activez-la avec enabled=true ; cela définit un mot de passe et le renvoie une fois. 2. Transmettez le mot de passe à ceux qui doivent voir l’aperçu."
+
+msgctxt "tool label"
+msgid "Switch the preview protection on or off"
+msgstr "Activer ou désactiver la protection de l’aperçu"

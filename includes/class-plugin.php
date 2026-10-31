@@ -59,6 +59,10 @@ final class AB_MCP_Plugin {
 		// page, register/token endpoints) that lets Claude's native "Connect"
 		// button work against this site.
 		AB_MCP_OAuth::boot();
+		// The preview protection of a staging site (free since 4.15.0): its
+		// front-end gate runs after the OAuth handlers above, its REST gate
+		// after WordPress's own checks.
+		AB_MCP_Preview_Protection::hook();
 
 		if ( is_admin() ) {
 			new AB_MCP_Admin( $this->registry );
@@ -170,6 +174,7 @@ final class AB_MCP_Plugin {
 			'install-update',
 			'plugins-themes-manage',
 			'abilities',
+			'staging',
 		);
 
 		foreach ( $files as $file ) {
@@ -213,6 +218,9 @@ final class AB_MCP_Plugin {
 			// Free since 4.12.0, the group as in Pro: the abilities of other
 			// plugins, each only once an administrator approved it.
 			'AB_MCP_Tools_Abilities'             => array( 'abilities', __( 'Abilities of other plugins', 'alphabridge-mcp' ) ),
+			// Free since 4.15.0: the staging site, beginning with its
+			// preview protection.
+			'AB_MCP_Tools_Staging'               => array( 'staging', __( 'Staging', 'alphabridge-mcp' ) ),
 		);
 
 		foreach ( $classes as $class => $group ) {

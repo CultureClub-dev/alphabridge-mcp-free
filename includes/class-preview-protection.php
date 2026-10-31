@@ -1,0 +1,727 @@
+<?php
+/**
+ * The preview protection of a staging site (free since 4.15.0).
+ *
+ * A staging site is shown to a client before it goes live, and nobody else
+ * should read it: not a visitor who guesses the address, not a search
+ * engine. With the protection on, a visitor without a WordPress login sees a
+ * password page instead of the site, for every page, post, archive, feed and
+ * search, and the public REST API answers such a visitor 401 as well, for
+ * every namespace (wp/v2 gives the content away, oembed/1.0 titles and
+ * excerpts, the Store API of a shop its products). A visitor who enters the
+ * shared password is remembered in a browser cookie for 14 days.
+ *
+ * What the protection must never lock, because AlphaBridge itself and the
+ * hub come in through it (the list of the survey of 31.10.2026, each with a
+ * test of its own):
+ *
+ * - The MCP endpoint and every other route under this plugin's REST
+ *   namespace: the token is checked in the route's own permission callback,
+ *   so on rest_authentication_errors nobody is signed in yet; the OAuth
+ *   routes (register, token, revoke) are public by their RFCs.
+ * - The two OAuth metadata documents below /.well-known/, which
+ *   AB_MCP_OAuth serves on template_redirect at priority 0 while the
+ *   sign-in is on; the clause here is for the case that order changes.
+ *   Not the rest of /.well-known/: WordPress would answer those with the
+ *   theme's 404 page, menus and sidebars included. The hub asks for
+ *   /.well-known/alphabridge.json first when it looks for the endpoint of
+ *   a site, and reads any status but 200 as «not there» (alphabridge-connect
+ *   src/detect.ts, readWellKnown()), so the password page there sends it on
+ *   to the probe of the MCP endpoint as a 404 would.
+ * - The consent page /?ab_mcp_oauth=authorize: the person signs in there,
+ *   and the firewall self-test calls it without a login.
+ * - The REST root /wp-json/ (the namespace index): the hub reads it to find
+ *   the endpoint; a locked root makes a protected staging site impossible
+ *   to link.
+ * - REST requests of signed-in users (Gutenberg and the site editor with
+ *   the cookie and the nonce, application passwords): this filter runs
+ *   after WordPress's own checks (priority 100), where is_user_logged_in()
+ *   is settled, and passes an error of theirs through.
+ * - wp-admin, wp-login.php, admin-ajax.php, admin-post.php, wp-cron.php and
+ *   xmlrpc.php never load the template loader, so template_redirect does
+ *   not fire there; the checks on the request constants are kept all the
+ *   same, each with its test, so a later change of the hook cannot lock
+ *   them by accident.
+ * - robots.txt: with blog_public 0 WordPress answers Disallow: /, which a
+ *   crawler reads only if the file is not behind the password.
+ * - A visitor with a valid cookie, also for the REST calls a page makes
+ *   from the browser (a shop's Store API, forms).
+ *
+ * The password page answers 401, not 200, and every front-end answer while
+ * the protection is on carries DONOTCACHEPAGE and nocache_headers(): a page
+ * cache stores 200 answers and would hand the page a visitor with the cookie
+ * saw to everyone after. The page cache of the supported caching plugins is
+ * emptied when the protection goes on and when it goes off
+ * (AB_MCP_Page_Cache::purge_site()). Caches outside PHP (a host cache,
+ * Cloudflare APO, a CDN) are not reached, and files under
+ * /wp-content/uploads/ are delivered by the web server without PHP: the
+ * tool and the settings page say both (limits()).
+ *
+ * Switching on remembers the site's blog_public and sets it to 0, so
+ * WordPress itself adds noindex, disables its sitemaps and answers
+ * robots.txt with Disallow: /; switching off writes the remembered value
+ * back, never a plain 1. X-Robots-Tag: noindex, nofollow goes on every
+ * front-end answer while on (wp_headers).
+ *
+ * The password is generated here and shown once, by the tool in its answer
+ * and on the settings page; only its hash is stored. The cookie is an HMAC
+ * over the hash with the site's salt, so a new password makes every cookie
+ * invalid at once. A shared password identifies nobody.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Class AB_MCP_Preview_Protection
+ */
+class AB_MCP_Preview_Protection {
+
+	/**
+	 * Key of the state in AB_MCP_Settings::OPT_OPTIONS (the option
+	 * ab_mcp_options, which uninstall.php removes).
+	 */
+	const KEY = 'preview_protection';
+
+	/**
+	 * Name of the cookie a visitor gets after entering the password.
+	 */
+	const COOKIE = 'ab_mcp_preview';
+
+	/**
+	 * How long the cookie lasts.
+	 */
+	const COOKIE_DAYS = 14;
+
+	/**
+	 * Name of the password field of the password page.
+	 */
+	const FIELD = 'ab_mcp_preview_password';
+
+	/**
+	 * Length of a generated password, and the characters it is made of:
+	 * letters and digits without the ones people confuse when they read a
+	 * password aloud (0 and O, 1, l and I).
+	 */
+	const PASSWORD_LENGTH   = 16;
+	const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+	/**
+	 * The two documents below /.well-known/ that AB_MCP_OAuth::serve_well_known()
+	 * answers, matched as it matches them.
+	 */
+	const WELL_KNOWN = '#^/\.well-known/oauth-(authorization-server|protected-resource)(/|$)#';
+
+	/**
+	 * Priority on template_redirect: after AB_MCP_OAuth's handlers at 0
+	 * (the well-known documents and the consent page), before
+	 * redirect_canonical at 10.
+	 */
+	const TEMPLATE_PRIORITY = 1;
+
+	/**
+	 * Priority on rest_authentication_errors: after WordPress's
+	 * rest_application_password_check_errors (90) and
+	 * rest_cookie_check_errors (100), so is_user_logged_in() is settled.
+	 */
+	const REST_PRIORITY = 110;
+
+	/**
+	 * The value of X-Robots-Tag while the protection is on.
+	 */
+	const ROBOTS = 'noindex, nofollow';
+
+	/**
+	 * Id of the section on the settings page.
+	 */
+	const ANCHOR = 'ab-preview';
+
+	/**
+	 * Where a change came from.
+	 */
+	const SOURCE_TOOL = 'tool';
+	const SOURCE_FORM = 'form';
+
+	/**
+	 * Wire the two gates and the header. Called once from the plugin
+	 * bootstrap, on init.
+	 */
+	public static function hook() {
+		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
+		add_filter( 'rest_authentication_errors', array( __CLASS__, 'gate_rest' ), self::REST_PRIORITY );
+		add_filter( 'wp_headers', array( __CLASS__, 'headers' ) );
+	}
+
+	/* ------------------------------------------------------------ state */
+
+	/**
+	 * The stored state, in a known shape. Anything other than exactly true
+	 * under 'on' with a hash reads as off: a broken record never locks.
+	 *
+	 * @return array{on:bool,hash:string,blog_public:string|null,since:int,user_id:int,user_login:string,source:string}
+	 */
+	public static function state() {
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		$raw = is_array( $raw ) ? $raw : array();
+		$out = array(
+			'on'          => false,
+			'hash'        => isset( $raw['hash'] ) && is_string( $raw['hash'] ) ? $raw['hash'] : '',
+			'blog_public' => array_key_exists( 'blog_public', $raw ) && is_scalar( $raw['blog_public'] ) ? (string) $raw['blog_public'] : null,
+			'since'       => isset( $raw['since'] ) ? (int) $raw['since'] : 0,
+			'user_id'     => isset( $raw['user_id'] ) ? (int) $raw['user_id'] : 0,
+			'user_login'  => isset( $raw['user_login'] ) && is_string( $raw['user_login'] ) ? $raw['user_login'] : '',
+			'source'      => isset( $raw['source'] ) && is_string( $raw['source'] ) ? $raw['source'] : '',
+		);
+		$out['on'] = isset( $raw['on'] ) && true === $raw['on'] && '' !== $out['hash'];
+		return $out;
+	}
+
+	/**
+	 * Is the protection on?
+	 *
+	 * @return bool
+	 */
+	public static function is_on() {
+		return self::state()['on'];
+	}
+
+	/**
+	 * Switch the protection on with a new password. Already on: nothing
+	 * changes and no password is returned (renew_password() sets a new one).
+	 *
+	 * @param int    $user_id Who switches.
+	 * @param string $source  SOURCE_TOOL or SOURCE_FORM.
+	 * @return array{changed:bool,password:string,page_cache:array}
+	 */
+	public static function enable( $user_id, $source ) {
+		$state = self::state();
+		if ( $state['on'] ) {
+			return array(
+				'changed'    => false,
+				'password'   => '',
+				'page_cache' => array(
+					'purged' => array(),
+					'failed' => array(),
+				),
+			);
+		}
+		$password = self::generate_password();
+		// Remembered as stored, so that '1', 1 or '' go back as they were.
+		$before = get_option( 'blog_public', '1' );
+		self::store(
+			array(
+				'on'          => true,
+				'hash'        => self::hash_password( $password ),
+				'blog_public' => is_scalar( $before ) ? (string) $before : '1',
+			),
+			(int) $user_id,
+			(string) $source
+		);
+		update_option( 'blog_public', 0 );
+		return array(
+			'changed'    => true,
+			'password'   => $password,
+			'page_cache' => AB_MCP_Page_Cache::purge_site(),
+		);
+	}
+
+	/**
+	 * Set a new password while the protection is on; every cookie issued
+	 * for the old one stops working.
+	 *
+	 * @param int    $user_id Who sets it.
+	 * @param string $source  SOURCE_TOOL or SOURCE_FORM.
+	 * @return array{changed:bool,password:string}|null Null when off.
+	 */
+	public static function renew_password( $user_id, $source ) {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return null;
+		}
+		$password = self::generate_password();
+		self::store(
+			array(
+				'on'          => true,
+				'hash'        => self::hash_password( $password ),
+				'blog_public' => $state['blog_public'],
+			),
+			(int) $user_id,
+			(string) $source
+		);
+		return array(
+			'changed'  => true,
+			'password' => $password,
+		);
+	}
+
+	/**
+	 * Switch the protection off: the remembered blog_public goes back as it
+	 * was, the hash goes (so every cookie dies), the page cache is emptied
+	 * once more, since caches that do store a 401 would keep the password
+	 * page.
+	 *
+	 * @param int    $user_id Who switches.
+	 * @param string $source  SOURCE_TOOL or SOURCE_FORM.
+	 * @return array{changed:bool,blog_public:string|null,page_cache:array}
+	 */
+	public static function disable( $user_id, $source ) {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return array(
+				'changed'     => false,
+				'blog_public' => null,
+				'page_cache'  => array(
+					'purged' => array(),
+					'failed' => array(),
+				),
+			);
+		}
+		if ( null !== $state['blog_public'] ) {
+			update_option( 'blog_public', $state['blog_public'] );
+		}
+		self::store( array( 'on' => false ), (int) $user_id, (string) $source );
+		return array(
+			'changed'     => true,
+			'blog_public' => $state['blog_public'],
+			'page_cache'  => AB_MCP_Page_Cache::purge_site(),
+		);
+	}
+
+	/**
+	 * Write the state with who and when.
+	 *
+	 * @param array  $fields  on, hash, blog_public.
+	 * @param int    $user_id Who.
+	 * @param string $source  Where from.
+	 */
+	private static function store( array $fields, $user_id, $source ) {
+		$user  = get_user_by( 'id', $user_id );
+		$login = ( is_object( $user ) && isset( $user->user_login ) ) ? (string) $user->user_login : '';
+		AB_MCP_Settings::set(
+			self::KEY,
+			array_merge(
+				$fields,
+				array(
+					'since'      => time(),
+					'user_id'    => $user_id,
+					'user_login' => $login,
+					'source'     => in_array( $source, array( self::SOURCE_TOOL, self::SOURCE_FORM ), true ) ? $source : '',
+				)
+			)
+		);
+	}
+
+	/**
+	 * What the tool and the settings page report about the state.
+	 *
+	 * @return array{enabled:bool,since:string,set_by:array|null,blog_public:string,blog_public_before:string|null}
+	 */
+	public static function summary() {
+		$state = self::state();
+		$out   = array(
+			'enabled'            => $state['on'],
+			'since'              => $state['on'] && $state['since'] > 0 ? gmdate( 'Y-m-d\TH:i:s\Z', $state['since'] ) : '',
+			'set_by'             => null,
+			'blog_public'        => (string) get_option( 'blog_public', '1' ),
+			'blog_public_before' => $state['on'] ? $state['blog_public'] : null,
+		);
+		if ( $state['on'] ) {
+			$out['set_by'] = array(
+				'user_id'    => $state['user_id'],
+				'user_login' => $state['user_login'],
+				'source'     => $state['source'],
+			);
+		}
+		return $out;
+	}
+
+	/* --------------------------------------------------------- password */
+
+	/**
+	 * A new shared password: PASSWORD_LENGTH characters of PASSWORD_ALPHABET.
+	 *
+	 * @return string
+	 */
+	public static function generate_password() {
+		$max = strlen( self::PASSWORD_ALPHABET ) - 1;
+		$out = '';
+		for ( $i = 0; $i < self::PASSWORD_LENGTH; $i++ ) {
+			$out .= self::PASSWORD_ALPHABET[ random_int( 0, $max ) ];
+		}
+		return $out;
+	}
+
+	/**
+	 * The hash that is stored. PHP's own hashing, not wp_hash_password():
+	 * that one is pluggable and meant for user accounts, and a plugin may
+	 * replace it with something that reads user records.
+	 *
+	 * @param string $password Plain password.
+	 * @return string
+	 */
+	public static function hash_password( $password ) {
+		return (string) password_hash( (string) $password, PASSWORD_DEFAULT );
+	}
+
+	/**
+	 * Does a password match the stored hash?
+	 *
+	 * @param string $password Plain password.
+	 * @param string $hash     Stored hash.
+	 * @return bool
+	 */
+	public static function verify_password( $password, $hash ) {
+		return '' !== (string) $hash && '' !== (string) $password && password_verify( (string) $password, (string) $hash );
+	}
+
+	/* ----------------------------------------------------------- cookie */
+
+	/**
+	 * The cookie value for a hash: the expiry and an HMAC over the expiry and
+	 * the hash with the site's salt. A new password has a new hash, so every
+	 * earlier cookie fails the check.
+	 *
+	 * @param string $hash    Stored hash.
+	 * @param int    $expires Unix time the cookie expires.
+	 * @return string
+	 */
+	public static function cookie_value( $hash, $expires ) {
+		$expires = (int) $expires;
+		return $expires . '|' . hash_hmac( 'sha256', $expires . '|' . (string) $hash, wp_salt( 'auth' ) . '|ab_mcp_preview' );
+	}
+
+	/**
+	 * Is a cookie value valid for the stored hash now?
+	 *
+	 * @param string $value Cookie value.
+	 * @param string $hash  Stored hash.
+	 * @param int    $now   Unix time.
+	 * @return bool
+	 */
+	public static function cookie_valid( $value, $hash, $now ) {
+		if ( '' === (string) $hash || ! is_string( $value ) || ! preg_match( '/\A(\d{1,12})\|[0-9a-f]{64}\z/', $value, $m ) ) {
+			return false;
+		}
+		$expires = (int) $m[1];
+		if ( $expires <= (int) $now ) {
+			return false;
+		}
+		return hash_equals( self::cookie_value( $hash, $expires ), $value );
+	}
+
+	/* --------------------------------------------------------- frontend */
+
+	/**
+	 * What the front-end gate decides on, read from the request.
+	 *
+	 * @return array
+	 */
+	public static function frontend_context() {
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
+		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+		// WordPress in a sub-directory: the documents below /.well-known/
+		// sit under the home path, as AB_MCP_OAuth::serve_well_known() reads them.
+		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
+		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $path, $home_path ) ) {
+			$path = substr( $path, strlen( $home_path ) );
+		}
+		return array(
+			'path'        => '' !== $path ? $path : '/',
+			'request_uri' => $uri,
+			'method'      => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
+			'oauth'       => isset( $_GET['ab_mcp_oauth'] ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
+			'oauth_on'    => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled(),
+			'password'    => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
+			'cookie'      => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
+			'logged_in'   => is_user_logged_in(),
+			'admin'       => is_admin(),
+			'ajax'        => defined( 'DOING_AJAX' ) && DOING_AJAX,
+			'cron'        => defined( 'DOING_CRON' ) && DOING_CRON,
+			'xmlrpc'      => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
+			'rest'        => defined( 'REST_REQUEST' ) && REST_REQUEST,
+			'cli'         => defined( 'WP_CLI' ) && WP_CLI,
+			'robots'      => function_exists( 'is_robots' ) && is_robots(),
+		);
+	}
+
+	/**
+	 * The decision for a front-end request: pass (serve the site), accept (a
+	 * right password was posted: set the cookie and reload), reject (a wrong
+	 * one: the password page again, 401) or challenge (the password page,
+	 * 401). Each exemption is one clause, in the order of the header of this
+	 * file; each has its test.
+	 *
+	 * @param array $ctx   frontend_context().
+	 * @param array $state state().
+	 * @param int   $now   Unix time.
+	 * @return array{action:string,reason:string}
+	 */
+	public static function frontend_decision( array $ctx, array $state, $now ) {
+		if ( empty( $state['on'] ) ) {
+			return self::decision( 'pass', 'off' );
+		}
+		foreach ( array( 'admin', 'ajax', 'cron', 'xmlrpc', 'rest', 'cli' ) as $kind ) {
+			if ( ! empty( $ctx[ $kind ] ) ) {
+				return self::decision( 'pass', $kind );
+			}
+		}
+		$path = isset( $ctx['path'] ) ? (string) $ctx['path'] : '/';
+		if ( ! empty( $ctx['oauth_on'] ) && preg_match( self::WELL_KNOWN, $path ) ) {
+			return self::decision( 'pass', 'well_known' );
+		}
+		if ( ! empty( $ctx['oauth'] ) ) {
+			return self::decision( 'pass', 'oauth' );
+		}
+		if ( ! empty( $ctx['robots'] ) ) {
+			return self::decision( 'pass', 'robots' );
+		}
+		if ( ! empty( $ctx['logged_in'] ) ) {
+			return self::decision( 'pass', 'logged_in' );
+		}
+		$hash = isset( $state['hash'] ) ? (string) $state['hash'] : '';
+		if ( self::cookie_valid( isset( $ctx['cookie'] ) ? $ctx['cookie'] : '', $hash, $now ) ) {
+			return self::decision( 'pass', 'cookie' );
+		}
+		if ( 'POST' === ( isset( $ctx['method'] ) ? $ctx['method'] : 'GET' ) && isset( $ctx['password'] ) && is_string( $ctx['password'] ) ) {
+			return self::verify_password( $ctx['password'], $hash )
+				? self::decision( 'accept', 'password' )
+				: self::decision( 'reject', 'wrong_password' );
+		}
+		return self::decision( 'challenge', 'anonymous' );
+	}
+
+	/**
+	 * One decision.
+	 *
+	 * @param string $action pass | accept | reject | challenge.
+	 * @param string $reason Which clause decided.
+	 * @return array{action:string,reason:string}
+	 */
+	private static function decision( $action, $reason ) {
+		return array(
+			'action' => $action,
+			'reason' => $reason,
+		);
+	}
+
+	/**
+	 * The front-end gate, on template_redirect. Does nothing while off.
+	 * While on, every answer is marked as not to be cached, whoever gets it:
+	 * a cache that stored the page a visitor with the cookie saw would hand
+	 * it to everyone after.
+	 */
+	public static function gate_frontend() {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		nocache_headers();
+
+		$ctx      = self::frontend_context();
+		$decision = self::frontend_decision( $ctx, $state, time() );
+		if ( 'pass' === $decision['action'] ) {
+			return;
+		}
+		if ( 'accept' === $decision['action'] ) {
+			$expires = time() + self::COOKIE_DAYS * DAY_IN_SECONDS;
+			self::send_cookie( self::cookie_value( $state['hash'], $expires ), $expires );
+			// The same address again, as a GET: the password is not in the
+			// address, and a reload does not post it a second time.
+			wp_safe_redirect( home_url( self::relative( $ctx['request_uri'] ) ), 303 );
+			exit;
+		}
+		wp_die(
+			self::page_html( 'reject' === $decision['action'], self::relative( $ctx['request_uri'] ) ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside page_html().
+			esc_html__( 'Preview', 'alphabridge-mcp' ),
+			array(
+				'response' => 401,
+				'exit'     => true,
+			)
+		);
+	}
+
+	/**
+	 * Set the cookie, where headers can still be sent. Path and domain as
+	 * WordPress sets its own, so on a sub-directory network the cookie of
+	 * one site does not reach another.
+	 *
+	 * @param string $value   cookie_value().
+	 * @param int    $expires Unix time.
+	 */
+	private static function send_cookie( $value, $expires ) {
+		if ( headers_sent() ) {
+			return;
+		}
+		setcookie(
+			self::COOKIE,
+			$value,
+			array(
+				'expires'  => (int) $expires,
+				'path'     => defined( 'COOKIEPATH' ) && '' !== COOKIEPATH ? COOKIEPATH : '/',
+				'domain'   => defined( 'COOKIE_DOMAIN' ) && is_string( COOKIE_DOMAIN ) ? COOKIE_DOMAIN : '',
+				'secure'   => function_exists( 'is_ssl' ) && is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Lax',
+			)
+		);
+	}
+
+	/**
+	 * A request URI as a path with its query, for home_url() and the form's
+	 * action: never a scheme or host a visitor sent.
+	 *
+	 * @param string $uri REQUEST_URI.
+	 * @return string
+	 */
+	private static function relative( $uri ) {
+		$path  = (string) wp_parse_url( (string) $uri, PHP_URL_PATH );
+		$query = (string) wp_parse_url( (string) $uri, PHP_URL_QUERY );
+		$path  = '' !== $path ? '/' . ltrim( $path, '/' ) : '/';
+		return $path . ( '' !== $query ? '?' . $query : '' );
+	}
+
+	/**
+	 * The password page: what this is, the form, and the way in for members.
+	 * wp_die() puts it into WordPress's own error page and sends the 401.
+	 *
+	 * @param string $wrong  Whether a wrong password was just entered.
+	 * @param string $action Path and query of the current address, for the form.
+	 * @return string HTML, escaped.
+	 */
+	public static function page_html( $wrong, $action ) {
+		$html  = '<p>' . esc_html__( 'This site is a preview and not public yet. Enter the password you were given to see it; the browser then remembers you for 14 days.', 'alphabridge-mcp' ) . '</p>';
+		if ( $wrong ) {
+			$html .= '<p class="ab-preview__wrong"><strong>' . esc_html__( 'That password is not right. Check it with the person who gave it to you and try again.', 'alphabridge-mcp' ) . '</strong></p>';
+		}
+		$html .= '<form method="post" action="' . esc_url( home_url( $action ) ) . '" class="ab-preview__form">';
+		$html .= '<p><label for="ab-preview-password">' . esc_html__( 'Password', 'alphabridge-mcp' ) . '</label><br>';
+		$html .= '<input type="password" id="ab-preview-password" name="' . esc_attr( self::FIELD ) . '" autocomplete="current-password" required autofocus></p>';
+		$html .= '<p><button type="submit" class="button button-primary">' . esc_html__( 'Show the preview', 'alphabridge-mcp' ) . '</button></p>';
+		$html .= '</form>';
+		$html .= '<p class="ab-preview__members">' . esc_html__( 'Members of this site log in as usual instead.', 'alphabridge-mcp' ) . ' <a href="' . esc_url( wp_login_url( home_url( $action ) ) ) . '">' . esc_html__( 'Log in', 'alphabridge-mcp' ) . '</a></p>';
+		return $html;
+	}
+
+	/**
+	 * X-Robots-Tag on every front-end answer while on (the wp_headers
+	 * filter, sent by WP::send_headers() before the template loads).
+	 *
+	 * @param array $headers Headers WordPress is about to send.
+	 * @return array
+	 */
+	public static function headers( $headers ) {
+		$headers = is_array( $headers ) ? $headers : array();
+		if ( self::is_on() ) {
+			$headers['X-Robots-Tag'] = self::ROBOTS;
+		}
+		return $headers;
+	}
+
+	/* ------------------------------------------------------------- REST */
+
+	/**
+	 * The REST route of the current request, as WordPress resolved it:
+	 * the query var rest_route (set for pretty permalinks by the rewrite
+	 * rule and for plain ones by ?rest_route=), else the path after the
+	 * REST prefix. Always with a leading slash and no trailing one; the
+	 * root is '/'.
+	 *
+	 * @param array $server     $_SERVER.
+	 * @param array $query_vars $wp->query_vars, or $_GET.
+	 * @return string
+	 */
+	public static function rest_route( array $server, array $query_vars ) {
+		$route = '';
+		if ( isset( $query_vars['rest_route'] ) && is_string( $query_vars['rest_route'] ) ) {
+			$route = $query_vars['rest_route'];
+		} elseif ( isset( $server['REQUEST_URI'] ) ) {
+			$path   = (string) wp_parse_url( (string) $server['REQUEST_URI'], PHP_URL_PATH );
+			$prefix = '/' . trim( rest_get_url_prefix(), '/' );
+			$home   = (string) wp_parse_url( home_url(), PHP_URL_PATH );
+			if ( '' !== $home && '/' !== $home && 0 === strpos( $path, $home ) ) {
+				$path = substr( $path, strlen( $home ) );
+			}
+			if ( $path === $prefix || 0 === strpos( $path, $prefix . '/' ) ) {
+				$route = substr( $path, strlen( $prefix ) );
+			}
+		}
+		$route = '/' . trim( (string) $route, '/' );
+		return $route;
+	}
+
+	/**
+	 * Is a route open to a visitor without login and cookie while the
+	 * protection is on? The root (the namespace index the hub reads), and
+	 * every route under this plugin's namespace: each of them checks its
+	 * own credential (the MCP endpoint its token in the permission callback,
+	 * the OAuth routes their code or token), and none serves content.
+	 *
+	 * @param string $route rest_route().
+	 * @return bool
+	 */
+	public static function rest_exempt( $route ) {
+		$route = '/' . trim( (string) $route, '/' );
+		if ( '/' === $route ) {
+			return true;
+		}
+		$ns = '/' . trim( defined( 'AB_MCP_REST_NAMESPACE' ) ? AB_MCP_REST_NAMESPACE : 'alphabridge/v1', '/' );
+		return $route === $ns || 0 === strpos( $route, $ns . '/' );
+	}
+
+	/**
+	 * The REST gate (rest_authentication_errors, after WordPress's own
+	 * checks). An error of theirs passes through as it is; so does every
+	 * request while off, of a signed-in user, to an exempt route, or with a
+	 * valid cookie. Anything else is answered 401.
+	 *
+	 * @param WP_Error|true|null $result What the filters before decided.
+	 * @return WP_Error|true|null
+	 */
+	public static function gate_rest( $result ) {
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return $result;
+		}
+		if ( is_user_logged_in() ) {
+			return $result;
+		}
+		$wp    = isset( $GLOBALS['wp'] ) && is_object( $GLOBALS['wp'] ) && isset( $GLOBALS['wp']->query_vars ) && is_array( $GLOBALS['wp']->query_vars ) ? $GLOBALS['wp']->query_vars : array();
+		$route = self::rest_route( $_SERVER, array_merge( $_GET, $wp ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
+		if ( self::rest_exempt( $route ) ) {
+			return $result;
+		}
+		$cookie = isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '';
+		if ( self::cookie_valid( $cookie, $state['hash'], time() ) ) {
+			return $result;
+		}
+		return new WP_Error(
+			'ab_mcp_preview_protected',
+			__( 'This site is a preview behind a password, so its REST API answers only signed-in users (a cookie with a nonce, or an application password) and visitors who entered the preview password in their browser. Enter it on the password page of the site, sign in, or ask the site administrator; the MCP endpoint and the sign-in of AlphaBridge MCP are open as always.', 'alphabridge-mcp' ),
+			array( 'status' => 401 )
+		);
+	}
+
+	/* ------------------------------------------------------------ texts */
+
+	/**
+	 * What the protection does not cover, for the tool's answer and the
+	 * settings page. English for the tool (the assistant reads it); the
+	 * settings page translates its own sentence.
+	 *
+	 * @return string[]
+	 */
+	public static function limits() {
+		return array(
+			'Files under /wp-content/uploads/ are delivered by the web server without PHP and stay reachable by their address unless the host adds a rule for that folder.',
+			'Caches outside PHP (a host cache such as at Kinsta, WP Engine or SiteGround, Cloudflare APO, a CDN) are not emptied by this plugin; purge them at the host when a page still shows without the password.',
+			'The shared password identifies nobody: it suits a staging site shown to a client, not confidential data.',
+		);
+	}
+}

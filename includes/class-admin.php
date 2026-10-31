@@ -45,6 +45,7 @@ class AB_MCP_Admin {
 		'woocommerce'    => 'shop',
 		'undo'           => 'undo',
 		'abilities'      => 'abilities',
+		'staging'        => 'site',
 	);
 
 	/**
@@ -87,6 +88,11 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
 		add_action( 'admin_post_ab_mcp_review_go', array( $this, 'handle_review_go' ) );
+		// The preview protection of a staging site (free since 4.15.0): off
+		// by form; on and a new password over ajax, which shows the
+		// password once (as a token is shown), so no plaintext is persisted.
+		add_action( 'admin_post_ab_mcp_preview_protection', array( $this, 'handle_preview_protection' ) );
+		add_action( 'wp_ajax_ab_mcp_preview_protection', array( $this, 'ajax_preview_protection' ) );
 		// Creating or rotating a token reveals a secret. That is done over
 		// authenticated admin-ajax so the plaintext is returned once, directly to
 		// the admin's own browser, and is never written to the database — not even
@@ -579,6 +585,54 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * The form of the preview protection (AB_MCP_Preview_Protection): off.
+	 * Switching off takes a password away and shows nothing new, so it is a
+	 * plain form; on and a new password, which show the password once, run
+	 * over ajax (ajax_preview_protection()). Any other value changes nothing.
+	 */
+	public function handle_preview_protection() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_preview_protection' );
+		$choice = isset( $_POST['preview'] ) ? sanitize_key( wp_unslash( $_POST['preview'] ) ) : '';
+		if ( 'off' === $choice ) {
+			AB_MCP_Preview_Protection::disable( get_current_user_id(), AB_MCP_Preview_Protection::SOURCE_FORM );
+			$this->redirect( 'preview_off', AB_MCP_Preview_Protection::ANCHOR );
+		}
+		$this->redirect( 'saved', AB_MCP_Preview_Protection::ANCHOR );
+	}
+
+	/**
+	 * AJAX: switch the preview protection on, or set a new password, and
+	 * return the password ONCE, straight to the administrator's browser, as
+	 * a new token is returned. Only the hash is stored.
+	 */
+	public function ajax_preview_protection() {
+		$this->ajax_guard();
+		check_ajax_referer( 'ab_mcp_ajax', 'nonce' );
+		$choice  = isset( $_POST['preview'] ) ? sanitize_key( wp_unslash( $_POST['preview'] ) ) : '';
+		$user_id = get_current_user_id();
+		if ( 'on' === $choice ) {
+			$result = AB_MCP_Preview_Protection::enable( $user_id, AB_MCP_Preview_Protection::SOURCE_FORM );
+			if ( ! $result['changed'] ) {
+				wp_send_json_error( array( 'message' => __( 'The preview protection is on already, and its password is not shown again. “New password” sets a new one and shows it once.', 'alphabridge-mcp' ) ), 409 );
+			}
+		} elseif ( 'password' === $choice ) {
+			$result = AB_MCP_Preview_Protection::renew_password( $user_id, AB_MCP_Preview_Protection::SOURCE_FORM );
+			if ( null === $result ) {
+				wp_send_json_error( array( 'message' => __( 'The preview protection is off, so there is no password to renew. Switch it on first; that sets a password.', 'alphabridge-mcp' ) ), 409 );
+			}
+		} else {
+			wp_send_json_error( array( 'message' => __( 'Unknown setting; nothing was changed.', 'alphabridge-mcp' ) ), 400 );
+		}
+		wp_send_json_success(
+			array(
+				'password' => $result['password'],
+				'status'   => $this->preview_status_text(),
+			)
+		);
+	}
+
+	/**
 	 * AJAX: create a connection (token) and return the plaintext ONCE.
 	 *
 	 * The secret is sent only in this JSON response, straight to the authenticated
@@ -811,6 +865,7 @@ class AB_MCP_Admin {
 		echo '<div class="ab-main">';
 		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
 		echo $this->doctor_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside doctor_card_html().
+		echo $this->preview_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside preview_card_html().
 		echo $this->capabilities_card_html( $groups, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
 		$this->render_connections_card( $tokens );
 
@@ -1110,6 +1165,65 @@ class AB_MCP_Admin {
 		$html .= '</div>';
 
 		return $html;
+	}
+
+	/**
+	 * The card «Preview protection» (AB_MCP_Preview_Protection), between the
+	 * connection check and the fine-tuning: what it does, its state, the
+	 * password shown once after switching on or renewing, and the buttons.
+	 * On and a new password run over ajax (ajax_preview_protection()), so the
+	 * password reaches only this browser, once; off is a plain form
+	 * (handle_preview_protection()). The card ends with what the protection
+	 * does not cover. A first step of the card «Staging» of a later version.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function preview_card_html() {
+		$on = AB_MCP_Preview_Protection::is_on();
+
+		$html  = '<div class="ab-card ab-preview" id="' . esc_attr( AB_MCP_Preview_Protection::ANCHOR ) . '">';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Staging', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Preview protection', 'alphabridge-mcp' ) . '</h2>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<p class="ab-direct__status ab-preview-status">' . esc_html( $this->preview_status_text() ) . '</p>';
+
+		// The password, shown once after switching on or renewing (admin.js
+		// fills it from the ajax answer); hidden until then.
+		$html .= '<div class="ab-reveal ab-preview-reveal" hidden>';
+		$html .= '<div class="notice notice-warning inline ab-reveal__warn"><p><strong>' . esc_html__( 'Note this password down now — it is shown only once.', 'alphabridge-mcp' ) . '</strong> ' . esc_html__( 'Only its hash is stored. Visitors enter it once and are remembered for 14 days; a new password signs them all out.', 'alphabridge-mcp' ) . '</p></div>';
+		$html .= '<div class="ab-field"><input type="text" readonly value="" class="ab-select ab-preview-password" aria-label="' . esc_attr__( 'Preview password', 'alphabridge-mcp' ) . '"><button type="button" class="ab-btn ab-btn--ghost ab-btn--sm ab-copy" data-copy-target=".ab-preview-password">' . esc_html__( 'Copy', 'alphabridge-mcp' ) . '</button></div>';
+		$html .= '</div>';
+
+		$html .= '<div class="ab-preview__actions">';
+		$html .= '<button type="button" class="ab-btn ab-preview-ajax" data-preview="on" data-when="off"' . ( $on ? ' hidden' : '' ) . '>' . esc_html__( 'Switch on', 'alphabridge-mcp' ) . '</button> ';
+		$html .= '<button type="button" class="ab-btn ab-btn--ghost ab-preview-ajax" data-preview="password" data-when="on"' . ( $on ? '' : ' hidden' ) . '>' . esc_html__( 'New password', 'alphabridge-mcp' ) . '</button> ';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-preview__off" data-when="on"' . ( $on ? '' : ' hidden' ) . '>';
+		$html .= wp_nonce_field( 'ab_mcp_preview_protection', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_preview_protection">';
+		$html .= '<input type="hidden" name="preview" value="off">';
+		$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html__( 'Switch off', 'alphabridge-mcp' ) . '</button>';
+		$html .= '</form>';
+		$html .= '</div>';
+
+		$html .= '<p class="ab-note">' . esc_html__( 'What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '</div>';
+		return $html;
+	}
+
+	/**
+	 * The state line of the preview protection: on since when and by whom,
+	 * with what happens to the search engine visibility, or off.
+	 *
+	 * @return string Unescaped text.
+	 */
+	private function preview_status_text() {
+		$state = AB_MCP_Preview_Protection::state();
+		if ( ! $state['on'] ) {
+			return __( 'Off: visitors see the site.', 'alphabridge-mcp' );
+		}
+		$who = '' !== $state['user_login'] ? $state['user_login'] : '#' . $state['user_id'];
+		/* translators: 1: date and time, 2: user name. */
+		return sprintf( __( 'On since %1$s, switched on by %2$s. The search engine visibility is set to “discouraged” until you switch off; then it goes back to what it was.', 'alphabridge-mcp' ), self::site_datetime( $state['since'] ), $who );
 	}
 
 	/**
@@ -1464,6 +1578,7 @@ class AB_MCP_Admin {
 			'woocommerce'    => 'WooCommerce',
 			'undo'           => _x( 'Undo', 'tool group', 'alphabridge-mcp' ),
 			'abilities'      => _x( 'Abilities of other plugins', 'tool group', 'alphabridge-mcp' ),
+			'staging'        => _x( 'Staging', 'tool group', 'alphabridge-mcp' ),
 			'other'          => _x( 'Other', 'tool group', 'alphabridge-mcp' ),
 		);
 		$slug = (string) $slug;
@@ -2486,6 +2601,7 @@ class AB_MCP_Admin {
 			'mode_unknown'     => array( 'error', __( 'Unknown setting; nothing was changed. Use the switch at the top of this page.', 'alphabridge-mcp' ) ),
 			'mode_notice_dismissed' => array( 'success', __( 'Noted. Whether AI assistants may write on this site is shown at the top of this page.', 'alphabridge-mcp' ) ),
 			'terms_notice_dismissed' => array( 'success', __( 'Noted. The agreement to the Terms of Use is asked for the next time write access is switched on.', 'alphabridge-mcp' ) ),
+			'preview_off'      => array( 'success', __( 'The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before.', 'alphabridge-mcp' ) ),
 		);
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );

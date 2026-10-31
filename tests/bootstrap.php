@@ -110,6 +110,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_logged_in']   = false;
+	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
 }
@@ -1661,6 +1662,21 @@ function is_user_logged_in() {
 	return (bool) $GLOBALS['ab_test_logged_in'];
 }
 
+/** @var bool $ab_test_is_admin Whether the request is one of wp-admin (is_admin()). */
+$GLOBALS['ab_test_is_admin'] = false;
+
+function is_admin() {
+	return ! empty( $GLOBALS['ab_test_is_admin'] );
+}
+
+function rest_get_url_prefix() {
+	return 'wp-json';
+}
+
+function wp_login_url( $redirect = '' ) {
+	return 'https://example.test/wp-login.php' . ( '' !== (string) $redirect ? '?redirect_to=' . rawurlencode( (string) $redirect ) : '' );
+}
+
 /**
  * auth_redirect(), wp_redirect(), wp_safe_redirect() and wp_die() end the
  * request in WordPress. Here they end the code under test by throwing, so a
@@ -1691,7 +1707,11 @@ function wp_safe_redirect( $location, $status = 302, $x_redirect_by = 'WordPress
 	throw new AbTestExit( 'redirect', (string) $location );
 }
 
+/** @var array $ab_test_die_args The arguments of the last wp_die() (its response status among them). */
+$GLOBALS['ab_test_die_args'] = array();
+
 function wp_die( $message = '', $title = '', $args = array() ) {
+	$GLOBALS['ab_test_die_args'] = is_array( $args ) ? $args : array( 'response' => (int) $args );
 	throw new AbTestExit( 'die', (string) $message );
 }
 
