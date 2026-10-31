@@ -21,9 +21,11 @@
  *   routes (register, token, revoke) are public by their RFCs.
  * - The two OAuth metadata documents below /.well-known/, which
  *   AB_MCP_OAuth serves on template_redirect at priority 0 while the
- *   sign-in is on; the clause here is for the case that order changes.
- *   Not the rest of /.well-known/: WordPress would answer those with the
- *   theme's 404 page, menus and sidebars included. The hub asks for
+ *   sign-in is on; the clause here is for the case that order changes, and
+ *   it asks AB_MCP_OAuth::well_known_document() itself, so what the gate
+ *   lets through is exactly what the handler serves (a double slash is
+ *   neither). Not the rest of /.well-known/: WordPress would answer those
+ *   with the theme's 404 page, menus and sidebars included. The hub asks for
  *   /.well-known/alphabridge.json first when it looks for the endpoint of
  *   a site, and reads any status but 200 as «not there» (alphabridge-connect
  *   src/detect.ts, readWellKnown()), so the password page there sends it on
@@ -57,6 +59,27 @@
  *   not fire there; the checks on the request constants are kept all the
  *   same, each with its test, so a later change of the hook cannot lock
  *   them by accident.
+ *
+ * Where WordPress gives content out without template_redirect (measured on
+ * the core, 31.10.2026), the gate hangs a second time:
+ *
+ * - wp-signup.php, wp-activate.php and wp-trackback.php run wp() without
+ *   WP_USE_THEMES; the template loader then skips template_redirect but
+ *   still answers is_feed() with do_feed(), so /wp-signup.php?feed=rss2 is
+ *   the whole feed. The gate also hangs on the action wp, where it runs only
+ *   when wp_using_themes() is false (gate_without_themes()); with themes
+ *   template_redirect follows and runs it once. Signed-in users and cookie
+ *   holders pass there as everywhere, so the sign-up of a network keeps
+ *   working for them; a single site's wp-signup.php redirects to the
+ *   registration anyway.
+ * - wp-links-opml.php loads WordPress without wp() and prints the bookmarks;
+ *   the gate runs for it on wp_loaded (gate_script()).
+ * - Embeds (/embed/, ?embed=true), previews (?p=…&preview=true) and the
+ *   feeds of index.php load the template loader with themes and so pass
+ *   template_redirect. wp-comments-post.php and the nopriv actions of
+ *   admin-ajax.php print no content of the site; xmlrpc.php is open by
+ *   design (its reads need a login). Files under /wp-content/ never reach
+ *   PHP.
  * - robots.txt: with blog_public 0 WordPress answers Disallow: /, which a
  *   crawler reads only if the file is not behind the password.
  * - A visitor with a valid cookie, also for the REST calls a page makes
@@ -77,11 +100,15 @@
  * robots.txt with Disallow: /; switching off writes the remembered value
  * back, never a plain 1. X-Robots-Tag: noindex, nofollow goes on every
  * front-end answer while on (wp_headers). Deactivating the plugin takes the
- * gates with it, so it writes the remembered value back as well and keeps
- * the state; activating it again sets 0 once more (on_deactivate(),
- * on_activate()); uninstall.php writes the value back before it removes the
- * option. A deactivated plugin that left «discouraged» behind would be a
- * change nobody can see the reason for.
+ * gates with it, so it writes the remembered value back as well, notes that
+ * it did (restored) and keeps the state; activating it again sets 0 once
+ * more, taking the value found as the new remembered one where the note is
+ * there (a 0 set by hand while deactivated is a choice), and keeping the
+ * old one where it is not (the 0 is this plugin's own, left by a
+ * deactivation whose hook never ran); on a network both run on every site
+ * (on_deactivate(), on_activate()). uninstall.php writes the value back
+ * before it removes the option. A deactivated plugin that left «discouraged»
+ * behind would be a change nobody can see the reason for.
  *
  * The password is generated here and shown once, by the tool in its answer
  * and on the settings page; only its hash is stored. The cookie is an HMAC
@@ -128,12 +155,6 @@ class AB_MCP_Preview_Protection {
 	const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 	/**
-	 * The two documents below /.well-known/ that AB_MCP_OAuth::serve_well_known()
-	 * answers, matched as it matches them.
-	 */
-	const WELL_KNOWN = '#^/\.well-known/oauth-(authorization-server|protected-resource)(/|$)#';
-
-	/**
 	 * Priority on template_redirect: after AB_MCP_OAuth's handlers at 0
 	 * (the well-known documents and the consent page), before
 	 * redirect_canonical at 10.
@@ -169,6 +190,8 @@ class AB_MCP_Preview_Protection {
 	 */
 	public static function hook() {
 		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
+		add_action( 'wp', array( __CLASS__, 'gate_without_themes' ) );
+		add_action( 'wp_loaded', array( __CLASS__, 'gate_script' ) );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'gate_rest' ), self::REST_PRIORITY );
 		add_filter( 'rest_index', array( __CLASS__, 'index' ), 10, 2 );
 		add_filter( 'rest_send_nocache_headers', array( __CLASS__, 'nocache' ) );
@@ -178,38 +201,90 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * Activation: a protection left on when the plugin was deactivated
 	 * (on_deactivate() wrote the visibility back and kept the state) takes
-	 * the visibility again. The current value is remembered anew, unless it
-	 * is the 0 this plugin sets itself (a deactivation whose hook never ran
-	 * left it), in which case the remembered value stays.
+	 * the visibility again, on every site of a network when activated for
+	 * the network. The value found is remembered anew where the deactivation
+	 * noted that it wrote the old one back (restored): whatever stands there
+	 * now, a 0 included, is a choice made while the plugin was off. Without
+	 * the note (a deactivation whose hook never ran) a 0 is this plugin's
+	 * own and the remembered value stays; any other value is remembered.
+	 *
+	 * @param bool $network_wide Activated for the whole network.
 	 */
-	public static function on_activate() {
-		$state = self::state();
-		if ( ! $state['on'] ) {
-			return;
-		}
-		$before = get_option( 'blog_public', '1' );
-		if ( is_scalar( $before ) && '0' !== (string) $before ) {
-			self::write( array( 'blog_public' => (string) $before ) );
-		}
-		update_option( 'blog_public', 0 );
-		AB_MCP_Page_Cache::purge_site();
+	public static function on_activate( $network_wide = false ) {
+		self::each_site(
+			(bool) $network_wide,
+			static function () {
+				$state = self::state();
+				if ( ! $state['on'] ) {
+					return;
+				}
+				$before = get_option( 'blog_public', '1' );
+				if ( is_scalar( $before ) && ( $state['restored'] || '0' !== (string) $before ) ) {
+					self::write(
+						array(
+							'blog_public' => (string) $before,
+							'restored'    => false,
+						)
+					);
+				} else {
+					self::write( array( 'restored' => false ) );
+				}
+				update_option( 'blog_public', 0 );
+				AB_MCP_Page_Cache::purge_site();
+			}
+		);
 	}
 
 	/**
 	 * Deactivation: the gates are gone, so the remembered visibility goes
-	 * back; the state (hash and all) stays for the next activation, as the
-	 * plugin keeps its other settings. The page cache is emptied, so no
-	 * password page is served from it after.
+	 * back and the state notes it (restored); the state (hash and all) stays
+	 * for the next activation, as the plugin keeps its other settings. On
+	 * every site of a network when deactivated for the network. The page
+	 * cache is emptied, so no password page is served from it after.
+	 *
+	 * @param bool $network_wide Deactivated for the whole network.
 	 */
-	public static function on_deactivate() {
-		$state = self::state();
-		if ( ! $state['on'] ) {
+	public static function on_deactivate( $network_wide = false ) {
+		self::each_site(
+			(bool) $network_wide,
+			static function () {
+				$state = self::state();
+				if ( ! $state['on'] ) {
+					return;
+				}
+				if ( null !== $state['blog_public'] ) {
+					update_option( 'blog_public', $state['blog_public'] );
+				}
+				self::write( array( 'restored' => true ) );
+				AB_MCP_Page_Cache::purge_site();
+			}
+		);
+	}
+
+	/**
+	 * Run a step on this site, or on every site of the network when asked
+	 * for the network: the state and blog_public are per site. Every site,
+	 * not the hundred get_sites() stops at by default (as uninstall.php).
+	 *
+	 * @param bool     $network_wide Every site of the network.
+	 * @param callable $step         What to do on each site.
+	 */
+	private static function each_site( $network_wide, $step ) {
+		if ( ! $network_wide || ! is_multisite() ) {
+			$step();
 			return;
 		}
-		if ( null !== $state['blog_public'] ) {
-			update_option( 'blog_public', $state['blog_public'] );
+		$sites = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		);
+		foreach ( (array) $sites as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			$step();
+			restore_current_blog();
 		}
-		AB_MCP_Page_Cache::purge_site();
 	}
 
 	/* ------------------------------------------------------------ state */
@@ -218,7 +293,7 @@ class AB_MCP_Preview_Protection {
 	 * The stored state, in a known shape. Anything other than exactly true
 	 * under 'on' with a hash reads as off: a broken record never locks.
 	 *
-	 * @return array{on:bool,hash:string,blog_public:string|null,since:int,user_id:int,user_login:string,source:string}
+	 * @return array{on:bool,hash:string,blog_public:string|null,since:int,user_id:int,user_login:string,source:string,restored:bool}
 	 */
 	public static function state() {
 		$raw = AB_MCP_Settings::get( self::KEY, array() );
@@ -231,6 +306,7 @@ class AB_MCP_Preview_Protection {
 			'user_id'     => isset( $raw['user_id'] ) ? (int) $raw['user_id'] : 0,
 			'user_login'  => isset( $raw['user_login'] ) && is_string( $raw['user_login'] ) ? $raw['user_login'] : '',
 			'source'      => isset( $raw['source'] ) && is_string( $raw['source'] ) ? $raw['source'] : '',
+			'restored'    => ! empty( $raw['restored'] ),
 		);
 		$out['on'] = isset( $raw['on'] ) && true === $raw['on'] && '' !== $out['hash'];
 		return $out;
@@ -493,7 +569,7 @@ class AB_MCP_Preview_Protection {
 			'path'        => $path,
 			'request_uri' => $uri,
 			'method'      => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
-			'oauth_on'    => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled(),
+			'well_known'  => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $uri ),
 			'password'    => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
 			'cookie'      => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
 			'logged_in'   => is_user_logged_in(),
@@ -529,8 +605,7 @@ class AB_MCP_Preview_Protection {
 				return self::decision( 'pass', $kind );
 			}
 		}
-		$path = isset( $ctx['path'] ) ? (string) $ctx['path'] : '/';
-		if ( ! empty( $ctx['oauth_on'] ) && preg_match( self::WELL_KNOWN, $path ) ) {
+		if ( ! empty( $ctx['well_known'] ) ) {
 			return self::decision( 'pass', 'well_known' );
 		}
 		if ( ! empty( $ctx['robots'] ) ) {
@@ -605,6 +680,30 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
+	 * The gate for an entry point that runs wp() without themes (the action
+	 * wp, which WP::main() fires before the template loader): wp-signup.php,
+	 * wp-activate.php and wp-trackback.php, where the template loader skips
+	 * template_redirect but still answers a feed. With themes nothing happens
+	 * here; template_redirect follows and runs the gate once.
+	 */
+	public static function gate_without_themes() {
+		if ( wp_using_themes() ) {
+			return;
+		}
+		self::gate_frontend();
+	}
+
+	/**
+	 * The gate for a script that prints content without wp(): on wp_loaded,
+	 * for wp-links-opml.php (the bookmarks as OPML).
+	 */
+	public static function gate_script() {
+		if ( isset( $GLOBALS['pagenow'] ) && 'wp-links-opml.php' === $GLOBALS['pagenow'] ) {
+			self::gate_frontend();
+		}
+	}
+
+	/**
 	 * Set the cookie, where headers can still be sent. Path and domain as
 	 * WordPress sets its own, so on a sub-directory network the cookie of
 	 * one site does not reach another.
@@ -648,9 +747,9 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * A request path without the folder of the home address (WordPress in a
 	 * sub-directory, home https://example.test/staging), with a leading
-	 * slash; '/' for the home page. The documents below /.well-known/ sit
-	 * under that folder as AB_MCP_OAuth::serve_well_known() reads them, and
-	 * so does the REST prefix.
+	 * slash; '/' for the home page. For the addresses this class builds
+	 * (the form's action, the reload) and for the REST prefix; the documents
+	 * below /.well-known/ are matched by AB_MCP_OAuth itself.
 	 *
 	 * @param string $path Path of the request.
 	 * @return string
@@ -736,6 +835,10 @@ class AB_MCP_Preview_Protection {
 	 * own credential (the MCP endpoint its token in the permission callback,
 	 * the OAuth routes their code or token), and none serves content.
 	 *
+	 * Compared without regard to case, as WordPress's router matches a route
+	 * (preg_match with the i flag in WP_REST_Server::match_request_to_handler()):
+	 * /wp-json/AlphaBridge/v1/mcp reaches the MCP endpoint and so is open.
+	 *
 	 * @param string $route rest_route().
 	 * @return bool
 	 */
@@ -745,7 +848,7 @@ class AB_MCP_Preview_Protection {
 			return true;
 		}
 		$ns = '/' . trim( defined( 'AB_MCP_REST_NAMESPACE' ) ? AB_MCP_REST_NAMESPACE : 'alphabridge/v1', '/' );
-		return $route === $ns || 0 === strpos( $route, $ns . '/' );
+		return 1 === preg_match( '#^' . preg_quote( $ns, '#' ) . '(/|$)#i', $route );
 	}
 
 	/**

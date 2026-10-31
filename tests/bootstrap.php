@@ -112,6 +112,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
+	$GLOBALS['ab_test_using_themes'] = true;
+	unset( $GLOBALS['pagenow'] );
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
 }
@@ -425,6 +427,22 @@ function current_user_can( $cap, ...$args ) {
 
 function is_multisite() {
 	return (bool) $GLOBALS['ab_test_multisite'];
+}
+
+// The three multisite helpers AB_MCP_Page_Cache asks on a network, as
+// tests/undo-stubs.php defines them for the tests that load it (its guarded
+// definitions then stand back): a sub-directory network whose every site
+// counts as the main site.
+function is_subdomain_install() {
+	return false;
+}
+
+function is_main_site( $site_id = null, $network_id = null ) {
+	return true;
+}
+
+function get_current_blog_id() {
+	return (int) $GLOBALS['ab_test_blog'];
 }
 
 /**
@@ -1671,6 +1689,13 @@ $GLOBALS['ab_test_is_admin'] = false;
 
 function is_admin() {
 	return ! empty( $GLOBALS['ab_test_is_admin'] );
+}
+
+/** @var bool $ab_test_using_themes WP_USE_THEMES: true for index.php, false for wp-signup.php, wp-activate.php and wp-trackback.php. */
+$GLOBALS['ab_test_using_themes'] = true;
+
+function wp_using_themes() {
+	return ! empty( $GLOBALS['ab_test_using_themes'] );
 }
 
 function rest_get_url_prefix() {

@@ -241,8 +241,10 @@ final class AB_MCP_Plugin {
 
 	/**
 	 * Activation: create defaults + audit table.
+	 *
+	 * @param bool $network_wide Activated for the whole network.
 	 */
-	public static function on_activate() {
+	public static function on_activate( $network_wide = false ) {
 		require_once AB_MCP_DIR . 'includes/class-settings.php';
 		require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 		require_once AB_MCP_DIR . 'includes/class-page-cache.php';
@@ -250,16 +252,20 @@ final class AB_MCP_Plugin {
 		AB_MCP_Settings::install_defaults();
 		AB_MCP_Audit_Log::install_table();
 		// A preview protection left on across a deactivation takes the
-		// search engine visibility again (free since 4.15.0).
-		AB_MCP_Preview_Protection::on_activate();
+		// search engine visibility again (free since 4.15.0), on every site
+		// when activated for the network.
+		AB_MCP_Preview_Protection::on_activate( (bool) $network_wide );
 	}
 
 	/**
 	 * Deactivation hook: tokens and settings stay. The preview protection
 	 * (free since 4.15.0) writes the search engine visibility back, since its
-	 * gates go with the plugin, and keeps its state for the next activation.
+	 * gates go with the plugin, and keeps its state for the next activation;
+	 * on every site when deactivated for the network.
+	 *
+	 * @param bool $network_wide Deactivated for the whole network.
 	 */
-	public static function on_deactivate() {
-		AB_MCP_Preview_Protection::on_deactivate();
+	public static function on_deactivate( $network_wide = false ) {
+		AB_MCP_Preview_Protection::on_deactivate( (bool) $network_wide );
 	}
 }

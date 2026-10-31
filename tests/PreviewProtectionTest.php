@@ -44,9 +44,20 @@
  *   REST answer while on carries the no-cache headers.
  * - WordPress in a sub-directory: the request path loses the home folder
  *   once, so the form action and the reload land on the page asked for.
- * - Deactivating writes the search engine visibility back and keeps the
- *   state; activating takes it again; uninstalling writes it back before
- *   the option goes.
+ * - Deactivating writes the search engine visibility back, notes it and
+ *   keeps the state; activating takes it again, remembering a value set by
+ *   hand in between (a 0 too) where the note is there, and keeping the old
+ *   one where it is not; both on every site of a network when done for the
+ *   network; uninstalling writes it back before the option goes.
+ * - The entry points that run WordPress without themes (wp-signup.php,
+ *   wp-activate.php, wp-trackback.php: the template loader skips
+ *   template_redirect there but still answers a feed) and wp-links-opml.php
+ *   (no wp() at all) meet the gate too; with themes it stays with
+ *   template_redirect.
+ * - The well-known clause asks the OAuth handler's own path decision, so a
+ *   path the handler does not serve (a double slash) is the password page,
+ *   not the theme's 404; the namespace of the REST exemption is compared
+ *   without regard to case, as WordPress's router matches routes.
  * - The tool needs manage_options and write access, is not destructive by
  *   its definition, returns the password exactly once, reports the state
  *   and what is not covered, and refuses to renew a password while off with
@@ -138,7 +149,7 @@ final class PreviewProtectionTest extends TestCase {
 				'path'        => '/',
 				'request_uri' => '/',
 				'method'      => 'GET',
-				'oauth_on'    => false,
+				'well_known'  => false,
 				'password'    => null,
 				'cookie'      => '',
 				'logged_in'   => false,
@@ -326,8 +337,7 @@ final class PreviewProtectionTest extends TestCase {
 			'xmlrpc'                   => array( array( 'xmlrpc' => true ), 'xmlrpc' ),
 			'REST'                     => array( array( 'rest' => true ), 'rest' ),
 			'WP-CLI'                   => array( array( 'cli' => true ), 'cli' ),
-			'OAuth server metadata'    => array( array( 'path' => '/.well-known/oauth-authorization-server', 'oauth_on' => true ), 'well_known' ),
-			'OAuth resource metadata'  => array( array( 'path' => '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', 'oauth_on' => true ), 'well_known' ),
+			'OAuth metadata document'  => array( array( 'path' => '/.well-known/oauth-authorization-server', 'well_known' => true ), 'well_known' ),
 			'robots.txt'               => array( array( 'path' => '/robots.txt', 'robots' => true ), 'robots' ),
 			'signed-in user'           => array( array( 'logged_in' => true ), 'logged_in' ),
 		);
@@ -348,11 +358,41 @@ final class PreviewProtectionTest extends TestCase {
 		// as «not there» (alphabridge-connect src/detect.ts, readWellKnown()),
 		// so the password page sends it on to the probe as a 404 would; left
 		// open, WordPress would answer it with the theme's 404 page.
-		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/alphabridge.json', 'oauth_on' => true ) ), $state, time() )['action'] );
-		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/security.txt', 'oauth_on' => true ) ), $state, time() )['action'] );
-		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-authorization-server', 'oauth_on' => false ) ), $state, time() )['action'], 'With the sign-in off nothing serves the document; WordPress would show its 404 page.' );
-		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-authorization-server-x', 'oauth_on' => true ) ), $state, time() )['action'], 'Matched as AB_MCP_OAuth matches it: the document, or a path below it.' );
-		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-protected-resource', 'oauth_on' => true ) ), $state, time() )['action'] );
+		$decide = static function ( string $uri ) use ( $state ): string {
+			$_SERVER['REQUEST_URI'] = $uri;
+			return AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'];
+		};
+		self::assertSame( 'challenge', $decide( '/.well-known/alphabridge.json' ) );
+		self::assertSame( 'challenge', $decide( '/.well-known/security.txt' ) );
+		self::assertSame( 'challenge', $decide( '/.well-known/oauth-authorization-server-x' ), 'Matched as AB_MCP_OAuth matches it: the document, or a path below it.' );
+		self::assertSame( 'pass', $decide( '/.well-known/oauth-protected-resource' ) );
+		self::assertSame( 'pass', $decide( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp' ) );
+		self::assertSame( 'pass', $decide( '/.well-known/oauth-authorization-server?x=1' ) );
+		AB_MCP_Settings::set( 'oauth_enabled', false );
+		self::assertSame( 'challenge', $decide( '/.well-known/oauth-authorization-server' ), 'With the sign-in off nothing serves the document; WordPress would show its 404 page.' );
+	}
+
+	public function testTheWellKnownClauseAsksTheHandlerSoADoubleSlashIsNotOpen(): void {
+		// AB_MCP_OAuth::serve_well_known() takes the home path off the front
+		// and matches the rest as sent; it normalises nothing, so with a
+		// double slash it serves nothing, and WordPress would answer the
+		// theme's 404 page. The gate asks the same function.
+		self::assertSame( 'authorization-server', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-authorization-server' ) );
+		self::assertSame( 'protected-resource', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp?x=1' ) );
+		self::assertSame( '', AB_MCP_OAuth::well_known_document( '//.well-known/oauth-authorization-server' ) );
+		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known//oauth-authorization-server' ) );
+		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-authorization-server-x' ) );
+		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known/alphabridge.json' ) );
+
+		$GLOBALS['ab_test_home'] = 'https://example.test/staging';
+		self::assertSame( 'authorization-server', AB_MCP_OAuth::well_known_document( '/staging/.well-known/oauth-authorization-server' ) );
+		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/staging//.well-known/oauth-authorization-server' ), 'The handler does not serve this.' );
+		$this->on();
+		$state                  = AB_MCP_Preview_Protection::state();
+		$_SERVER['REQUEST_URI'] = '/staging//.well-known/oauth-authorization-server';
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'], 'So the gate does not open it either.' );
+		$_SERVER['REQUEST_URI'] = '/staging/.well-known/oauth-authorization-server';
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
 	}
 
 	public function testTheOAuthParameterOpensNothingTheConsentPageIsAnsweredBeforeTheGate(): void {
@@ -418,7 +458,8 @@ final class PreviewProtectionTest extends TestCase {
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 
 		// The well-known documents and the REST prefix sit under the folder.
-		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => AB_MCP_Preview_Protection::strip_home( '/staging/.well-known/oauth-authorization-server' ), 'oauth_on' => true ) ), $state, time() )['action'] );
+		$_SERVER['REQUEST_URI'] = '/staging/.well-known/oauth-authorization-server';
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
 		self::assertSame( '/wp/v2/posts', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/wp/v2/posts' ), array() ) );
 		self::assertSame( '/', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/' ), array() ) );
 		$_SERVER['REQUEST_URI'] = '/staging/wp-json/wp/v2/posts';
@@ -461,7 +502,7 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( '/hello/?x=1', $ctx['request_uri'] );
 		self::assertSame( 'POST', $ctx['method'] );
 		self::assertArrayNotHasKey( 'oauth', $ctx, 'The consent page is no business of the gate.' );
-		self::assertTrue( $ctx['oauth_on'], 'The sign-in is on by default.' );
+		self::assertFalse( $ctx['well_known'], 'Not one of the two documents.' );
 		self::assertSame( 'secret', $ctx['password'] );
 		self::assertSame( '1|abc', $ctx['cookie'] );
 		self::assertTrue( $ctx['logged_in'] );
@@ -484,8 +525,10 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 'GET', $ctx['method'] );
 		self::assertNull( $ctx['password'] );
 		self::assertSame( '', $ctx['cookie'] );
+		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
+		self::assertTrue( AB_MCP_Preview_Protection::frontend_context()['well_known'], 'The sign-in is on by default, and the handler serves this.' );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
-		self::assertFalse( AB_MCP_Preview_Protection::frontend_context()['oauth_on'] );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context()['well_known'] );
 	}
 
 	#[RunInSeparateProcess]
@@ -574,6 +617,64 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertNull( AB_MCP_Preview_Protection::gate_frontend() );
 	}
 
+	public function testAFeedThroughAnEntryPointWithoutThemesMeetsTheGateToo(): void {
+		// wp-signup.php, wp-activate.php and wp-trackback.php run wp() without
+		// WP_USE_THEMES; the template loader skips template_redirect there
+		// but still answers is_feed() with do_feed() (WordPress core,
+		// wp-includes/template-loader.php). So the gate also hangs on wp.
+		$GLOBALS['ab_test_using_themes'] = false;
+		$_SERVER['REQUEST_URI']          = '/wp-signup.php?feed=rss2';
+		self::assertNull( AB_MCP_Preview_Protection::gate_without_themes(), 'Off: the feed.' );
+
+		$this->on();
+		try {
+			AB_MCP_Preview_Protection::gate_without_themes();
+			self::fail( 'The feed went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+			self::assertStringContainsString( 'name="' . AB_MCP_Preview_Protection::FIELD . '"', $exit->detail );
+		}
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertNull( AB_MCP_Preview_Protection::gate_without_themes(), 'A signed-in user signs up on the network as before.' );
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		self::assertNull( AB_MCP_Preview_Protection::gate_without_themes(), 'A visitor with the cookie reads the feed.' );
+		$_COOKIE = array();
+
+		// With themes template_redirect follows and runs the gate once.
+		$GLOBALS['ab_test_using_themes'] = true;
+		$_SERVER['REQUEST_URI']          = '/feed/';
+		self::assertNull( AB_MCP_Preview_Protection::gate_without_themes(), 'index.php: nothing here, the gate on template_redirect answers.' );
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'The feed went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+	}
+
+	public function testTheBookmarksScriptMeetsTheGateOnWpLoaded(): void {
+		// wp-links-opml.php loads WordPress without wp() and prints the
+		// bookmarks as OPML; no action of the request but wp_loaded is left.
+		$this->on();
+		$GLOBALS['pagenow']     = 'wp-login.php';
+		$_SERVER['REQUEST_URI'] = '/wp-login.php';
+		self::assertNull( AB_MCP_Preview_Protection::gate_script(), 'The login, or any other script, is not this gate\'s business.' );
+		$GLOBALS['pagenow']     = 'wp-links-opml.php';
+		$_SERVER['REQUEST_URI'] = '/wp-links-opml.php';
+		try {
+			AB_MCP_Preview_Protection::gate_script();
+			self::fail( 'The bookmarks went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertNull( AB_MCP_Preview_Protection::gate_script() );
+		unset( $GLOBALS['pagenow'] );
+	}
+
 	#[RunInSeparateProcess]
 	#[PreserveGlobalState( false )]
 	public function testEveryAnswerWhileOnIsMarkedNotCacheable(): void {
@@ -605,6 +706,8 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 110, has_filter( 'rest_authentication_errors', array( AB_MCP_Preview_Protection::class, 'gate_rest' ) ) );
 		self::assertGreaterThan( 100, AB_MCP_Preview_Protection::REST_PRIORITY, 'After rest_cookie_check_errors (100), where is_user_logged_in() is settled.' );
 		self::assertSame( 10, has_filter( 'wp_headers', array( AB_MCP_Preview_Protection::class, 'headers' ) ) );
+		self::assertSame( 10, has_action( 'wp', array( AB_MCP_Preview_Protection::class, 'gate_without_themes' ) ), 'The entry points without themes.' );
+		self::assertSame( 10, has_action( 'wp_loaded', array( AB_MCP_Preview_Protection::class, 'gate_script' ) ), 'wp-links-opml.php.' );
 
 		AB_MCP_OAuth::boot();
 		self::assertSame( 0, has_action( 'template_redirect', array( AB_MCP_OAuth::class, 'serve_well_known' ) ) );
@@ -718,6 +821,15 @@ final class PreviewProtectionTest extends TestCase {
 		foreach ( array( '/', '', '/alphabridge/v1', '/alphabridge/v1/', '/alphabridge/v1/mcp', '/alphabridge/v1/mcp/abc', '/alphabridge/v1/oauth/register', '/alphabridge/v1/staging-pair' ) as $route ) {
 			self::assertTrue( AB_MCP_Preview_Protection::rest_exempt( $route ), $route );
 		}
+		// WordPress's router matches a route without regard to case
+		// (WP_REST_Server::match_request_to_handler(), the i flag), so these
+		// reach the MCP endpoint and its token check, and are open.
+		foreach ( array( '/AlphaBridge/v1/mcp', '/ALPHABRIDGE/V1/MCP', '/alphabridge/V1/oauth/token' ) as $route ) {
+			self::assertTrue( AB_MCP_Preview_Protection::rest_exempt( $route ), $route );
+		}
+		$this->on();
+		$_SERVER['REQUEST_URI'] = '/wp-json/AlphaBridge/v1/mcp';
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ), 'A client that spells the namespace with capitals.' );
 		foreach ( array( '/wp/v2', '/wp/v2/posts', '/oembed/1.0/embed', '/alphabridge/v10', '/alphabridge/v1x/mcp', '/alphabridge', '/x/alphabridge/v1/mcp' ) as $route ) {
 			self::assertFalse( AB_MCP_Preview_Protection::rest_exempt( $route ), $route );
 		}
@@ -817,7 +929,7 @@ final class PreviewProtectionTest extends TestCase {
 				$_REQUEST = array();
 				continue;
 			}
-			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'oauth_on' => AB_MCP_OAuth::enabled() ) );
+			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'well_known' => AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $url ) ) );
 			self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $ctx, $state, time() )['action'], $url );
 		}
 	}
@@ -978,15 +1090,83 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertTrue( AB_MCP_Preview_Protection::verify_password( $password, AB_MCP_Preview_Protection::state()['hash'] ), 'The same password.' );
 		self::assertSame( 3, $GLOBALS['ab_test_purges'], 'Pages cached while off go.' );
 
-		// Changed to discouraged by hand while deactivated: remembered, so
-		// switching off leaves it. A 0 left by a deactivation whose hook
-		// never ran is this plugin's own and not remembered.
+		// Deactivation noted that it wrote the value back (restored), so
+		// whatever stands there on activation was set while the plugin was
+		// off: a 0 too is a choice, and switching off later leaves it.
 		AB_MCP_Preview_Protection::on_deactivate();
+		self::assertTrue( AB_MCP_Preview_Protection::state()['restored'] );
 		$GLOBALS['ab_test_options']['blog_public'] = 0;
 		AB_MCP_Preview_Protection::on_activate();
-		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'], 'A 0 found on activation is not remembered.' );
+		self::assertSame( '0', AB_MCP_Preview_Protection::state()['blog_public'], 'Set by hand while deactivated: remembered.' );
+		self::assertFalse( AB_MCP_Preview_Protection::state()['restored'], 'The note is used up.' );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
 		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		self::assertSame( '0', $GLOBALS['ab_test_options']['blog_public'], 'Switching off leaves the choice.' );
+	}
+
+	public function testWithoutTheNoteAZeroOnActivationIsThePluginsOwn(): void {
+		// A deactivation whose hook never ran (the folder replaced, the
+		// plugin switched off by hand): blog_public is still the 0 this
+		// plugin set, no note was written, so the remembered value stays.
+		$this->on();
+		self::assertFalse( AB_MCP_Preview_Protection::state()['restored'] );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'], 'The 0 is not remembered.' );
+		// And a value other than 0 found without the note is remembered: it
+		// cannot be this plugin's.
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		AB_MCP_Settings::set( AB_MCP_Preview_Protection::KEY, array_merge( AB_MCP_Settings::get( AB_MCP_Preview_Protection::KEY ), array( 'blog_public' => '0' ) ) );
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'] );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+	}
+
+	public function testNetworkWideDeactivationAndActivationReachEverySite(): void {
+		$GLOBALS['ab_test_multisite'] = true;
+		// More sites than get_sites() lists by default (100): the loop must
+		// ask for every site, as uninstall.php does.
+		$GLOBALS['ab_test_sites'] = range( 1, 101 );
+		foreach ( array( 1, 101 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public'] = '1';
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+			restore_current_blog();
+		}
+		switch_to_blog( 2 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		restore_current_blog();
+
+		AB_MCP_Preview_Protection::on_deactivate( true );
+		foreach ( array( 1, 101 ) as $site ) {
+			switch_to_blog( $site );
+			self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'Site ' . $site . ': written back.' );
+			self::assertTrue( AB_MCP_Preview_Protection::state()['on'] );
+			restore_current_blog();
+		}
+		switch_to_blog( 2 );
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'A site without the protection is left alone.' );
+		self::assertFalse( AB_MCP_Preview_Protection::is_on() );
+		restore_current_blog();
+
+		AB_MCP_Preview_Protection::on_activate( true );
+		foreach ( array( 1, 101 ) as $site ) {
+			switch_to_blog( $site );
+			self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Site ' . $site . ': discouraged again.' );
+			restore_current_blog();
+		}
+		self::assertSame( 1, $GLOBALS['ab_test_blog'], 'Back on the site it started from.' );
+
+		// Not for the network: the current site only.
+		switch_to_blog( 101 );
+		AB_MCP_Preview_Protection::on_deactivate( false );
 		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'] );
+		restore_current_blog();
+		switch_to_blog( 1 );
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Site 1 untouched.' );
+		restore_current_blog();
 	}
 
 	public function testUninstallingWritesTheVisibilityBackBeforeTheOptionGoes(): void {
