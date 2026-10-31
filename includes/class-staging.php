@@ -99,6 +99,23 @@ class AB_MCP_Staging {
 	);
 
 	/**
+	 * The guide of a host to its own staging function, on the host's own
+	 * site, in English: each page read on 31.10.2026, and each describes
+	 * making a staging copy of a WordPress site in the host's control panel.
+	 * A host of HOSTS without an entry here (Infomaniak: its guides describe
+	 * a second installation by hand, no staging function of its own) is
+	 * named with the ways that work with any host, never with a staging
+	 * function nobody has read about.
+	 */
+	const HOST_GUIDES = array(
+		'kinsta'     => 'https://kinsta.com/docs/wordpress-hosting/staging-environment/',
+		'wpengine'   => 'https://wpengine.com/support/environments/',
+		'siteground' => 'https://www.siteground.com/tutorials/staging/create-staging',
+		'cloudways'  => 'https://support.cloudways.com/en/articles/5124886-how-to-create-a-staging-environment',
+		'hostinger'  => 'https://www.hostinger.com/support/5720286-how-to-create-a-wordpress-staging-environment-in-hostinger/',
+	);
+
+	/**
 	 * The REST route of the hub, under AB_MCP_REST_NAMESPACE.
 	 */
 	const ROUTE = '/staging-pair';
@@ -119,6 +136,14 @@ class AB_MCP_Staging {
 	 * copy for development.
 	 */
 	const DOMAIN_SUFFIXES = array( '.test', '.local', '.localhost' );
+
+	/**
+	 * The kinds of the next step (next_item()).
+	 */
+	const NEXT_OPEN      = 'open';
+	const NEXT_CHECK     = 'check';
+	const NEXT_UNREACHED = 'unreached';
+	const NEXT_IN_PLACE  = 'in_place';
 
 	/**
 	 * How long the check of the other site waits, in seconds.
@@ -680,10 +705,21 @@ class AB_MCP_Staging {
 	}
 
 	/**
-	 * The host as it counts: the person's choice, else the detected one,
-	 * else unknown.
+	 * The guide of a host to its own staging function (HOST_GUIDES).
 	 *
-	 * @return array{value:string,name:string,source:string,detected:string|null,evidence:string[],chosen_by:array|null}
+	 * @param string $host A key of HOSTS, or HOST_UNKNOWN.
+	 * @return string|null The address, or null where none is known.
+	 */
+	public static function host_guide( $host ) {
+		return is_string( $host ) && isset( self::HOST_GUIDES[ $host ] ) ? self::HOST_GUIDES[ $host ] : null;
+	}
+
+	/**
+	 * The host as it counts: the person's choice, else the detected one,
+	 * else unknown; with the guide to its staging function where one is
+	 * known (host_guide()).
+	 *
+	 * @return array{value:string,name:string,source:string,detected:string|null,evidence:string[],chosen_by:array|null,guide:string|null}
 	 */
 	public static function host() {
 		$chosen   = self::record()['host'];
@@ -705,6 +741,7 @@ class AB_MCP_Staging {
 			'detected'  => '' !== $detected['host'] ? $detected['host'] : null,
 			'evidence'  => $detected['evidence'],
 			'chosen_by' => null !== $chosen ? self::who_out( $chosen, false ) : null,
+			'guide'     => self::host_guide( $value ),
 		);
 	}
 
@@ -932,9 +969,12 @@ class AB_MCP_Staging {
 		if ( $staging ) {
 			$items[] = self::item( 'staging_connected', $title, true, __( 'This site is the staging site.', 'alphabridge-mcp' ) );
 		} elseif ( null === $pair ) {
-			$steps   = '' !== $host['name']
-				/* translators: %s: name of the host, such as Kinsta. */
-				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
+			// A host's own staging function only where its guide was read
+			// (HOST_GUIDES), with that guide.
+			$guide   = isset( $host['guide'] ) && is_string( $host['guide'] ) ? $host['guide'] : '';
+			$steps   = '' !== $host['name'] && '' !== $guide
+				/* translators: 1: name of the host, such as Kinsta, 2: address of the host's guide. */
+				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'], $guide )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
 			$item['fallback'] = self::drafts_fallback();
@@ -1044,10 +1084,66 @@ class AB_MCP_Staging {
 	}
 
 	/**
+	 * The first open item of a checklist (done false), or null.
+	 *
+	 * @param array $items Checklist.
+	 * @return array|null
+	 */
+	public static function first_open( array $items ) {
+		foreach ( $items as $item ) {
+			if ( is_array( $item ) && array_key_exists( 'done', $item ) && false === $item['done'] ) {
+				return $item;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Which item is the next step, and of what kind, for next_step() and
+	 * for the card «Staging» on the settings page alike, so that both say
+	 * the same: OPEN, the first open item (its steps); else CHECK, the
+	 * first item the assistant can check from here (its check); else
+	 * UNREACHED, a staging site that could not be asked from here (a local
+	 * or private address: its finding says why); else IN_PLACE, the way is
+	 * in place (no item).
+	 *
+	 * @param array $items Checklist.
+	 * @return array{kind:string,item:array|null}
+	 */
+	public static function next_item( array $items ) {
+		$item = self::first_open( $items );
+		if ( null !== $item ) {
+			return array(
+				'kind' => self::NEXT_OPEN,
+				'item' => $item,
+			);
+		}
+		foreach ( $items as $item ) {
+			if ( isset( $item['check'] ) ) {
+				return array(
+					'kind' => self::NEXT_CHECK,
+					'item' => $item,
+				);
+			}
+			if ( 'staging_connected' === $item['id'] && true !== $item['done'] ) {
+				return array(
+					'kind' => self::NEXT_UNREACHED,
+					'item' => $item,
+				);
+			}
+		}
+		return array(
+			'kind' => self::NEXT_IN_PLACE,
+			'item' => null,
+		);
+	}
+
+	/**
 	 * The next step: the first open item with its steps, its fallback and
 	 * the direct link (AB_MCP_Guidance::compose()); without one, the first
 	 * check the assistant can make from here, or why the staging site could
-	 * not be asked; without that, what to do now that the way is in place.
+	 * not be asked; without that, what to do now that the way is in place
+	 * (next_item()).
 	 *
 	 * @param array      $items Checklist.
 	 * @param string     $role  The confirmed role or ROLE_UNCONFIRMED.
@@ -1055,21 +1151,16 @@ class AB_MCP_Staging {
 	 * @return string
 	 */
 	public static function next_step( array $items, $role, $pair ) {
-		foreach ( $items as $item ) {
-			if ( false === $item['done'] ) {
+		$next = self::next_item( $items );
+		$item = $next['item'];
+		switch ( $next['kind'] ) {
+			case self::NEXT_OPEN:
 				$steps = $item['steps'] . ( isset( $item['fallback'] ) ? ' ' . $item['fallback'] : '' );
 				return AB_MCP_Guidance::compose( $item['finding'], $steps, AB_MCP_Guidance::settings_url( self::ANCHOR ) );
-			}
-		}
-		foreach ( $items as $item ) {
-			if ( isset( $item['check'] ) ) {
+			case self::NEXT_CHECK:
 				return $item['check'];
-			}
-			// A staging site that could not be asked from here (a local or
-			// private address) is not shown to answer: its finding says why.
-			if ( 'staging_connected' === $item['id'] && true !== $item['done'] ) {
+			case self::NEXT_UNREACHED:
 				return $item['finding'];
-			}
 		}
 		$other = null !== $pair ? $pair['partner_url'] : '';
 		return self::ROLE_STAGING === $role
@@ -1185,6 +1276,53 @@ class AB_MCP_Staging {
 		$response = new WP_REST_Response( $data );
 		$response->header( 'Cache-Control', 'no-store' );
 		return $response;
+	}
+
+	/**
+	 * DELETE: the hub takes the pair back, whoever set it. Only the pair:
+	 * the role stays as it is, with who confirmed it and where. Without a
+	 * pair the site counts as unpaired, so «Staging first» holds it again;
+	 * taking a pair away makes the gate stricter, never looser, so the
+	 * source of the pair does not matter here. Counts towards the rate
+	 * limit of the account like a write; the permission callback has
+	 * checked the token, manage_options and the full access level. The
+	 * answer is the state as GET reports it, with role_changed and
+	 * pair_changed as POST has them; without a pair nothing is written.
+	 *
+	 * @param WP_REST_Request $request Request (unused).
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function rest_delete( $request ) {
+		unset( $request );
+		$rate = AB_MCP_Security::check_rate( get_current_user_id() );
+		if ( is_wp_error( $rate ) ) {
+			return new WP_Error( $rate->get_error_code(), $rate->get_error_message(), array( 'status' => 429 ) );
+		}
+		return self::respond(
+			array_merge(
+				array(
+					'role_changed' => false,
+					'pair_changed' => self::remove_pair(),
+				),
+				self::summary()
+			)
+		);
+	}
+
+	/**
+	 * Remove the stored pair, also one that reads as no pair (a broken
+	 * record), and nothing else of the record.
+	 *
+	 * @return bool Whether a pair was in force.
+	 */
+	public static function remove_pair() {
+		$had = null !== self::record()['pair'];
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		if ( is_array( $raw ) && array_key_exists( 'pair', $raw ) ) {
+			unset( $raw['pair'] );
+			AB_MCP_Settings::set( self::KEY, $raw );
+		}
+		return $had;
 	}
 
 	/**

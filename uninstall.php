@@ -131,6 +131,11 @@ foreach ( $ab_mcp_options as $ab_mcp_option ) {
 $ab_mcp_undo_files();
 $ab_mcp_cron();
 
+// Whether a user folded the card «Staging» on the settings page
+// (AB_MCP_Admin::STAGING_CARD_FOLDED, free since 4.15.0): user meta, of every
+// user. User meta belongs to the whole network on a network, so once.
+delete_metadata( 'user', 0, 'ab_mcp_staging_card_folded', '', true );
+
 // The update log, the holds, the note on the update lock and the replaced
 // folders are network options on a network (on a single site plain options,
 // removed above), as Pro's uninstall removes them.

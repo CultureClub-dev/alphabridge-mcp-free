@@ -795,6 +795,20 @@
 		}
 	} );
 
+	/* ---- The card «Staging»: its details element folds by itself; a click
+	 * on its summary (a mouse, Enter or Space) also keeps the choice for
+	 * this user, so the card opens as it was left. The click comes before
+	 * the details element toggles, so open now means folded next. An
+	 * address that opens the card (unfold()) changes nothing kept. ---- */
+	document.addEventListener( 'click', function ( e ) {
+		var summary = e.target.closest ? e.target.closest( '.ab-staging-card__summary' ) : null;
+		var fold = summary ? summary.parentElement : null;
+		if ( ! fold || 'DETAILS' !== fold.tagName ) {
+			return;
+		}
+		ajax( 'ab_mcp_staging_card', { folded: fold.open ? '1' : '0' } ).catch( function () {} );
+	} );
+
 	/* ---- Preview protection: switch on, new password (over ajax, so the
 	 * password is shown once, straight to this browser, as a token is). Off
 	 * is a plain form. ---- */
@@ -844,6 +858,22 @@
 			Array.prototype.forEach.call( card.querySelectorAll( '[data-when]' ), function ( el ) {
 				el.hidden = 'on' !== el.getAttribute( 'data-when' );
 			} );
+			// The rest of the card «Staging» the protection changes: its
+			// checklist (rendered and escaped by the server), the line under
+			// its title and the suggestion for the role, as a reload would
+			// show them, without losing the password shown once.
+			var checklist = document.getElementById( 'ab-staging-checklist' );
+			if ( checklist && res.data.staging_checklist ) {
+				checklist.outerHTML = res.data.staging_checklist;
+			}
+			var stateLine = document.querySelector( '.ab-staging-card__state' );
+			if ( stateLine && res.data.staging_state ) {
+				stateLine.textContent = res.data.staging_state;
+			}
+			var suggestion = document.querySelector( '.ab-staging__suggestion' );
+			if ( suggestion && res.data.staging_suggestion ) {
+				suggestion.textContent = res.data.staging_suggestion;
+			}
 		} ).catch( function () {
 			busy( btn, false );
 			fail();

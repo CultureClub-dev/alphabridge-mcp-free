@@ -144,12 +144,18 @@ async function runPreview( answer ) {
 	const text     = node( { class: 'ab-preview__loader-text' } );
 	const source   = node( { class: 'ab-preview__source' } );
 	const loader   = node( { class: 'notice ab-preview__loader', hidden: '' }, [ text, source ] );
-	const card     = node( { id: 'ab-preview', class: 'ab-card ab-preview' }, [ status, reveal, onBtn, renewBtn, offForm, loader ] );
+	const card     = node( { id: 'ab-preview', class: 'ab-staging ab-preview' }, [ status, reveal, onBtn, renewBtn, offForm, loader ] );
+	// The rest of the card «Staging», outside the part of the protection.
+	const checklist  = node( { id: 'ab-staging-checklist', class: 'ab-staging ab-staging-checklist' } );
+	checklist.outerHTML = '<div id="ab-staging-checklist">before</div>';
+	const stateLine  = node( { class: 'ab-direct__status ab-staging-card__state' } );
+	const suggestion = node( { class: 'ab-note ab-staging__suggestion' } );
+	const page       = node( { id: 'ab-staging-card' }, [ stateLine, checklist, suggestion, card ] );
 	const document = {
 		addEventListener( kind, fn ) { ( listeners[ kind ] = listeners[ kind ] || [] ).push( fn ); },
-		querySelector( sel ) { return card.querySelector( sel ); },
-		querySelectorAll( sel ) { return card.querySelectorAll( sel ); },
-		getElementById( id ) { return 'ab-preview' === id ? card : null; },
+		querySelector( sel ) { return page.querySelector( sel ); },
+		querySelectorAll( sel ) { return page.querySelectorAll( sel ); },
+		getElementById( id ) { return page.all().find( ( c ) => c.attrs.id === id ) || null; },
 	};
 	let sent = null;
 	const window = {
@@ -167,10 +173,10 @@ async function runPreview( answer ) {
 	}
 	// The fetch and its json() resolve in two steps.
 	await new Promise( ( r ) => setTimeout( r, 0 ) );
-	return { sent, card, onBtn, renewBtn, offForm, password, reveal, status, loader, text, source };
+	return { sent, card, onBtn, renewBtn, offForm, password, reveal, status, loader, text, source, checklist, stateLine, suggestion };
 }
 
-const written = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: true }, loader_note: '', loader_source: '' } } );
+const written = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: true }, loader_note: '', loader_source: '', staging_checklist: '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">after</div>', staging_state: 'Staging site. Checklist: 3 of 4 done. Staging first: ask.', staging_suggestion: 'Suggestion: staging site. The preview protection is on.' } } );
 assert.equal( written.sent.body.action, 'ab_mcp_preview_protection' );
 assert.equal( written.sent.body.preview, 'on' );
 assert.equal( written.password.value, 'abcdEFGH23456789', 'the password, shown once' );
@@ -181,6 +187,11 @@ assert.equal( written.renewBtn.hidden, false );
 assert.equal( written.offForm.hidden, false );
 assert.equal( written.loader.hidden, true, 'the loader was written: no note' );
 assert.equal( written.text.textContent, '' );
+// The checklist, the line under the title and the suggestion follow, as a reload would show them.
+assert.equal( written.checklist.outerHTML, '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">after</div>', 'the checklist is the one of the answer' );
+assert.equal( written.stateLine.textContent, 'Staging site. Checklist: 3 of 4 done. Staging first: ask.' );
+assert.equal( written.suggestion.textContent, 'Suggestion: staging site. The preview protection is on.' );
+assert.equal( written.password.value, 'abcdEFGH23456789', 'the password stays shown' );
 cases++;
 
 const missing = await runPreview( { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { path: '/mu/alphabridge-preview-protection.php', written: false }, loader_note: 'could not be written to /mu/alphabridge-preview-protection.php', loader_source: "<?php\n// ab-mcp-preview-loader" } } );
@@ -188,6 +199,87 @@ assert.equal( missing.loader.hidden, false, 'the note shows at once, without a r
 assert.equal( missing.text.textContent, 'could not be written to /mu/alphabridge-preview-protection.php' );
 assert.equal( missing.source.value, "<?php\n// ab-mcp-preview-loader", 'with the file to create' );
 assert.equal( missing.password.value, 'abcdEFGH23456789', 'and the password all the same' );
+assert.equal( missing.checklist.outerHTML, '<div id="ab-staging-checklist">before</div>', 'an answer without a checklist leaves it as it is' );
+assert.equal( missing.stateLine.textContent, '' );
 cases++;
+
+/* ---- The card «Staging»: its details element folds by itself; a click on
+ * its summary also keeps the choice for this user over ajax (folded=1 when
+ * it was open, 0 when it was folded). A click elsewhere sends nothing, and
+ * an address naming a part inside the folded card opens it without
+ * changing what is kept. ---- */
+async function runCard( { hash = '', open = true } ) {
+	const listeners = {};
+	const sent = [];
+	const mk = ( tagName, attrs, parent ) => ( {
+		tagName, attrs, parentElement: parent, hidden: false, open: false,
+		classList: { contains: ( c ) => ( attrs.class || '' ).split( ' ' ).includes( c ) },
+		getAttribute( k ) { return k in this.attrs ? this.attrs[ k ] : null; },
+		closest( sel ) {
+			for ( let c = this; c; c = c.parentElement ) {
+				if ( sel.startsWith( '.' ) && ! sel.includes( ',' ) && c.classList.contains( sel.slice( 1 ) ) ) { return c; }
+			}
+			return null;
+		},
+		scrollIntoView() {},
+	} );
+	const body    = mk( 'BODY', {}, null );
+	const card    = mk( 'SECTION', { id: 'ab-staging-card', class: 'ab-card ab-staging-card' }, body );
+	const details = mk( 'DETAILS', { class: 'ab-staging-card__fold' }, card );
+	details.open  = open;
+	const summary = mk( 'SUMMARY', { class: 'ab-staging-card__summary' }, details );
+	const part    = mk( 'DIV', { id: 'ab-staging-first', class: 'ab-staging ab-staging-first' }, details );
+	const title   = mk( 'H2', { class: 'ab-card__title' }, card );
+	const byId    = { 'ab-staging-card': card, 'ab-staging-first': part };
+	const document = {
+		body,
+		addEventListener( kind, fn ) { ( listeners[ kind ] = listeners[ kind ] || [] ).push( fn ); },
+		querySelector() { return null; },
+		querySelectorAll() { return []; },
+		getElementById( id ) { return byId[ id ] || null; },
+	};
+	const window = {
+		abMcpAdmin: { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n' },
+		location: { hash },
+		localStorage: { getItem() { return null; }, setItem() {} },
+		addEventListener() {},
+		FormData: class { constructor() { this.fields = {}; } append( k, v ) { this.fields[ k ] = v; } },
+		fetch( url, init ) { sent.push( { url, body: init.body.fields } ); return Promise.resolve( { json: () => Promise.resolve( { success: true, data: {} } ) } ); },
+		alert( msg ) { throw new Error( 'alert: ' + msg ); },
+	};
+	vm.runInNewContext( code, { document, window, console } );
+	const click = async ( target ) => {
+		for ( const fn of listeners.click || [] ) {
+			fn( { target, preventDefault() {} } );
+		}
+		await new Promise( ( r ) => setTimeout( r, 0 ) );
+	};
+	return { details, summary, title, sent, click };
+}
+
+{
+	const page = await runCard( { open: true } );
+	await page.click( page.summary );
+	assert.deepEqual( page.sent.map( ( s ) => s.body ), [ { action: 'ab_mcp_staging_card', nonce: 'n', folded: '1' } ], 'open, a click folds it and keeps that' );
+	assert.equal( page.sent[ 0 ].url, 'https://example.test/wp-admin/admin-ajax.php' );
+	page.details.open = false; // The browser folds the details element itself.
+	await page.click( page.summary );
+	assert.deepEqual( page.sent[ 1 ].body, { action: 'ab_mcp_staging_card', nonce: 'n', folded: '0' }, 'folded, a click unfolds it' );
+	await page.click( page.title );
+	assert.equal( page.sent.length, 2, 'a click elsewhere keeps nothing' );
+	cases++;
+}
+{
+	const page = await runCard( { open: false, hash: '#ab-staging-first' } );
+	assert.equal( page.details.open, true, 'an address naming a part inside opens the folded card' );
+	assert.equal( page.sent.length, 0, 'and changes nothing kept' );
+	cases++;
+}
+{
+	const page = await runCard( { open: false, hash: '#ab-elsewhere' } );
+	assert.equal( page.details.open, false, 'another address leaves it folded' );
+	assert.equal( page.sent.length, 0 );
+	cases++;
+}
 
 console.log( `admin-js-test: ${ cases } cases passed` );

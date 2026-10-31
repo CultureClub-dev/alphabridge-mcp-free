@@ -1328,6 +1328,77 @@
 	margin: 0 0 6px;
 }
 
+/* ---------- The card «Staging»: a state line, then its parts, folded by
+ * a details element ---------- */
+
+.ab-mcp .ab-staging-card__state {
+	margin: 0 0 10px;
+}
+
+.ab-mcp .ab-staging-card__summary {
+	color: var(--ab-acc-deep);
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.ab-mcp .ab-staging-card__fold[open] > .ab-staging-card__summary {
+	margin-bottom: 12px;
+}
+
+.ab-mcp .ab-staging-card .ab-staging {
+	margin: 16px 0 0;
+	padding: 14px 16px;
+	border: 1px solid var(--ab-line);
+	border-radius: 12px;
+	background: var(--ab-tint);
+}
+
+.ab-mcp .ab-staging-checklist__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.ab-mcp .ab-staging-checklist__item {
+	margin: 0 0 10px;
+}
+
+.ab-mcp .ab-staging-checklist__item:last-child {
+	margin-bottom: 0;
+}
+
+.ab-mcp .ab-staging-checklist__title {
+	margin: 0 0 2px;
+	color: var(--ab-ink);
+	font-size: 13.5px;
+}
+
+.ab-mcp .ab-staging-checklist__item .ab-direct__steps {
+	margin-left: 0;
+}
+
+.ab-mcp .ab-staging-checklist__in-place {
+	margin-top: 10px;
+	color: var(--ab-ink);
+}
+
+.ab-mcp .ab-preview__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin: 8px 0 0;
+}
+
+.ab-mcp .ab-preview__actions [hidden] {
+	display: none;
+}
+
+.ab-mcp .ab-staging__role label {
+	display: inline-block;
+	margin: 0 14px 6px 0;
+}
+
 /* ---------- Capabilities ---------- */
 
 .ab-mcp .ab-capbar {

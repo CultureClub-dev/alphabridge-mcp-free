@@ -101,6 +101,10 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_template']   = 'twentytwentyfive';
 	$GLOBALS['ab_test_stylesheet'] = 'twentytwentyfive';
 	$GLOBALS['ab_test_site_options'] = array();
+	$GLOBALS['ab_test_meta_store']   = array();
+	$GLOBALS['ab_test_meta_vetoes']  = array();
+	$GLOBALS['ab_test_meta_writes']  = array();
+	$GLOBALS['ab_test_ajax_strict']  = false;
 	// The builder registry caches signatures, adapters and block profiles
 	// for a request; every test starts without them.
 	if ( class_exists( 'AB_MCP_Builders', false ) ) {
@@ -971,6 +975,66 @@ function ab_test_unslash_deep( $value ) {
 }
 
 /**
+ * The stored meta of users and terms, kind => id => key => list of values,
+ * as get_*_meta( …, false ) gives them back. A key in
+ * $ab_test_meta_vetoes is not stored, as a plugin's update_*_metadata
+ * filter can keep it from being stored (since 4.13.0 the tools read back).
+ * $ab_test_meta_writes has one entry per write: kind, object id, key,
+ * value. The term meta functions are in widgets-meta-ops-stubs.php.
+ */
+$GLOBALS['ab_test_meta_store']  = array();
+$GLOBALS['ab_test_meta_vetoes'] = array();
+$GLOBALS['ab_test_meta_writes'] = array();
+
+/**
+ * A value as the meta table gives it back: unslashed, a list as it is
+ * (serialized with its types), anything else as text.
+ */
+function ab_test_stored_meta( $value ) {
+	$value = ab_test_unslash_deep( $value );
+	if ( is_array( $value ) ) {
+		return $value;
+	}
+	return is_bool( $value ) ? ( $value ? '1' : '' ) : (string) $value;
+}
+
+function update_user_meta( $user_id, $meta_key, $meta_value, $prev_value = '' ) {
+	// As update_metadata(): what is stored is unslashed.
+	$GLOBALS['ab_test_meta_writes'][] = array( 'user', (int) $user_id, (string) $meta_key, ab_test_unslash_deep( $meta_value ) );
+	if ( in_array( (string) $meta_key, $GLOBALS['ab_test_meta_vetoes'], true ) ) {
+		return false;
+	}
+	$GLOBALS['ab_test_meta_store']['user'][ (int) $user_id ][ (string) $meta_key ] = array( ab_test_stored_meta( $meta_value ) );
+	return true;
+}
+
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	$values = $GLOBALS['ab_test_meta_store']['user'][ (int) $user_id ][ (string) $key ] ?? array();
+	return $single ? ( $values ? $values[0] : '' ) : $values;
+}
+
+/** Like WordPress: every value of the key goes; false when there was none. */
+function delete_user_meta( $user_id, $meta_key, $meta_value = '' ) {
+	if ( ! isset( $GLOBALS['ab_test_meta_store']['user'][ (int) $user_id ][ (string) $meta_key ] ) ) {
+		return false;
+	}
+	unset( $GLOBALS['ab_test_meta_store']['user'][ (int) $user_id ][ (string) $meta_key ] );
+	return true;
+}
+
+/** Like WordPress with $delete_all: the key goes from every object of the kind. */
+function delete_metadata( $meta_type, $object_id, $meta_key, $meta_value = '', $delete_all = false ) {
+	$found = false;
+	foreach ( $GLOBALS['ab_test_meta_store'][ (string) $meta_type ] ?? array() as $id => $keys ) {
+		if ( ( $delete_all || (int) $id === (int) $object_id ) && array_key_exists( (string) $meta_key, $keys ) ) {
+			unset( $GLOBALS['ab_test_meta_store'][ (string) $meta_type ][ $id ][ (string) $meta_key ] );
+			$found = true;
+		}
+	}
+	return $found;
+}
+
+/**
  * The one decision of wp_insert_post() the tools depend on: "publish" and
  * "future" settled by the UTC date against the clock, a lead of a minute
  * making a post "future" — then wp_insert_post_data, which core runs after
@@ -1105,8 +1169,22 @@ function wp_send_json_success( $data = null, $status_code = null ) {
 	throw new AbTestJsonExit( (int) ( $status_code ?? 200 ), $data );
 }
 
+/**
+ * Passes by default, as the ajax tests of tokens and the preview protection
+ * send no nonce. With $ab_test_ajax_strict set, like WordPress: the nonce in
+ * the request ($query_arg, or _ajax_nonce) must be the one made for this
+ * action; otherwise the request ends.
+ */
 function check_ajax_referer( $action = -1, $query_arg = false, $die = true ) {
-	return 1;
+	if ( empty( $GLOBALS['ab_test_ajax_strict'] ) ) {
+		return 1;
+	}
+	$field  = false === $query_arg ? '_ajax_nonce' : $query_arg;
+	$result = isset( $_REQUEST[ $field ] ) ? wp_verify_nonce( $_REQUEST[ $field ], $action ) : false;
+	if ( false === $result && $die ) {
+		wp_die( '-1' );
+	}
+	return $result;
 }
 
 function wp_unslash( $value ) {
