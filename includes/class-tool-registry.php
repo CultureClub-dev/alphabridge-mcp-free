@@ -179,6 +179,19 @@ class AB_MCP_Tool_Registry {
 			$def['description']                   = trim( $def['description'] . ' ' . AB_MCP_Confirm_Token::description_note() );
 		}
 
+		// «Staging first» (AB_MCP_Staging_Gate): every writing tool the gate
+		// can hold takes the acknowledgement and the answer to the repeated
+		// question, and its description says so; reading tools and the
+		// exempt ones keep their schema. Pro's tools register through here
+		// and get the same.
+		if ( class_exists( 'AB_MCP_Staging_Gate' ) && AB_MCP_Staging_Gate::concerns( $name, $def ) ) {
+			$props = isset( $def['inputSchema']['properties'] ) ? (array) $def['inputSchema']['properties'] : array();
+			$props[ AB_MCP_Staging_Gate::PARAM ]          = AB_MCP_Staging_Gate::schema_property();
+			$props[ AB_MCP_Staging_Gate::PARAM_REMINDER ] = AB_MCP_Staging_Gate::reminder_property();
+			$def['inputSchema']['properties']             = $props;
+			$def['description']                           = trim( $def['description'] . ' ' . AB_MCP_Staging_Gate::description_note() );
+		}
+
 		$this->tools[ $name ] = $def;
 	}
 

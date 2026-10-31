@@ -162,7 +162,9 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 			self::assertFalse( AB_MCP_Site_Mode::runs_in_read( $name, $def ), $name . ' waits for write access.' );
 			self::assertFalse( AB_MCP_Tool_Registry::scope_allows( 'read', $name, $def ), $name );
 			self::assertSame( $required, $def['inputSchema']['required'], $name );
-			self::assertSame( $props, array_keys( $def['inputSchema']['properties'] ), $name );
+			// Pro's arguments, then the two of «Staging first» (4.15.0), which every writing tool takes but the order status: operation of the shop goes on on the production site.
+			self::assertSame( 'wp_wc_update_order_status' !== $name, \AB_MCP_Staging_Gate::concerns( $name, $def ), $name );
+			self::assertSame( \AB_MCP_Staging_Gate::concerns( $name, $def ) ? array_merge( $props, array( 'staging_acknowledged', 'staging_reminder' ) ) : $props, array_keys( $def['inputSchema']['properties'] ), $name );
 			self::assertIsCallable( $def['callback'], $name );
 			self::assertSame( '', AB_MCP_Guidance::edition_of( $name ), $name . ' is no longer answered as a tool of Pro.' );
 		}
@@ -174,7 +176,7 @@ final class FreeSinceFourNineUsersShopTest extends TestCase {
 		// with wp_get_post: one definition per name, the last one counts.
 		$r = $this->registry();
 		$r->register( 'wp_update_user', array( 'description' => 'Pro', 'capability' => 'edit_users', 'tier' => 'pro', 'callback' => '__return_true' ) );
-		self::assertSame( 'Pro', $r->get( 'wp_update_user' )['description'] );
+		self::assertSame( 'Pro ' . \AB_MCP_Staging_Gate::description_note(), $r->get( 'wp_update_user' )['description'], 'With the note of «Staging first» (4.15.0), as every writing tool.' );
 		self::assertSame( 1, count( array_filter( array_keys( $r->all() ), static fn( $n ) => 'wp_update_user' === $n ) ) );
 	}
 

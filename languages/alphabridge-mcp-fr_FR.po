@@ -2496,7 +2496,6 @@ msgstr "Entièrement restauré, mais le point de restauration n'a pas pu être s
 msgid "Restored. This undo point has been used up."
 msgstr "Restauré. Ce point de restauration a été consommé."
 
-
 msgid "Some undo points were kept: they came from tools this token may not act on. Use a wider-scoped token to discard those too."
 msgstr "Certains points de restauration ont été conservés : ils proviennent d'outils sur lesquels ce jeton n'a pas le droit d'agir. Utilisez un jeton de portée plus large pour les supprimer aussi."
 
@@ -5488,6 +5487,87 @@ msgctxt "tool label"
 msgid "Show the staging status"
 msgstr "Afficher l’état du staging"
 
+msgid "Off: nothing is asked."
+msgstr "Désactivé : rien n’est demandé."
+
+msgid "Ask: the first change a connection makes here is paused once; the assistant offers staging, with the reason and the way, and goes ahead when the person says so. The question comes back after 7 days, then with the answers «remind me in a week» and «ask no more»."
+msgstr "Demander : la première modification qu’une connexion fait ici est mise en pause une fois ; l’assistant propose le staging, avec la raison et la marche à suivre, et poursuit quand la personne le dit. La question revient après 7 jours, alors avec les réponses « me le rappeler dans une semaine » et « ne plus demander »."
+
+msgid "Require: every change here is refused until you release the connection below, for 24 hours or until you revoke it."
+msgstr "Exiger : toute modification ici est refusée jusqu’à ce que vous libériez la connexion ci-dessous, pour 24 heures ou jusqu’à révocation."
+
+msgid "Staging first"
+msgstr "Staging d’abord"
+
+msgid "While this site counts as the production site (no confirmed staging role, no pair), a change through an assistant is visible to visitors at once. Staging first has the assistant offer a staging site before the first change. It never holds back an undo, the preview protection, the caches, comments or an order status."
+msgstr "Tant que ce site compte comme site de production (aucun rôle de staging confirmé, aucune paire), une modification faite par un assistant est visible aussitôt par les visiteurs. « Staging d’abord » fait proposer un site de staging par l’assistant avant la première modification. Ne sont jamais retenus : une annulation, la protection de prévisualisation, les caches, les commentaires ou un statut de commande."
+
+#, php-format
+msgid "WordPress abilities adapter, account %s"
+msgstr "Adaptateur des abilities WordPress, compte %s"
+
+#, php-format
+msgid "Released to work without staging until %1$s, by %2$s."
+msgstr "Libérée pour travailler sans staging jusqu’au %1$s, par %2$s."
+
+msgid "Revoke"
+msgstr "Révoquer"
+
+msgid "Not released: every change is refused."
+msgstr "Non libérée : toute modification est refusée."
+
+msgid "Work without staging (24 hours)"
+msgstr "Travailler sans staging (24 heures)"
+
+#, php-format
+msgid "Asks no more, since %s."
+msgstr "Ne demande plus, depuis le %s."
+
+msgid "Ask again"
+msgstr "Redemander"
+
+#, php-format
+msgid "Went ahead here on %1$s; asks again from %2$s."
+msgstr "A poursuivi ici le %1$s ; redemande à partir du %2$s."
+
+msgid "Asks again with the next change."
+msgstr "Redemande à la prochaine modification."
+
+msgid "Asks with the first change."
+msgstr "Demande à la première modification."
+
+msgctxt "status of a tool call in the log"
+msgid "held"
+msgstr "retenu"
+
+msgid "Saved: Staging first. Every connection that asked no more is asked again."
+msgstr "Enregistré : Staging d’abord. Chaque connexion qui ne demandait plus est redemandée."
+
+msgid "Nothing was saved: the setting must be off, ask or require."
+msgstr "Rien n’a été enregistré : le réglage doit être désactivé, demander ou exiger."
+
+msgid "Released: this connection may change the site without staging for 24 hours. Revoke it below at any time."
+msgstr "Libérée : cette connexion peut modifier le site sans staging pendant 24 heures. Vous pouvez la révoquer ci-dessous à tout moment."
+
+msgid "Revoked: this connection is refused again until you release it."
+msgstr "Révoquée : cette connexion est de nouveau refusée jusqu’à ce que vous la libériez."
+
+msgid "Noted: this connection is asked again with its next change."
+msgstr "Noté : cette connexion est redemandée à sa prochaine modification."
+
+msgid "Nothing was changed: that connection is not known any more, or the action was not one of release, revoke or ask again."
+msgstr "Rien n’a été modifié : cette connexion n’est plus connue, ou l’action n’était ni libérer, ni révoquer, ni redemander."
+
+msgid "Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page."
+msgstr "Rien n’a été exécuté : ce site exige le staging d’abord. Il compte comme site de production, où une modification est visible aussitôt par les visiteurs, et une modification ici a besoin d’une libération par une personne sur la page des réglages."
+
+msgid "1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps."
+msgstr "1. Travailler plutôt sur un site de staging : wp_staging_status montre où en est le site et la prochaine étape, et le prompt staging_workflow a les étapes."
+
+#, php-format
+msgid "2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Pour modifier ce site malgré tout, un administrateur libère cette connexion sur la page des réglages d’AlphaBridge MCP sous « Staging d’abord » (« Travailler sans staging »), pour %d heures ou jusqu’à révocation. 3. Ou un administrateur y règle « Staging d’abord » sur Demander ou Désactivé."
+
 msgid "this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses and was not sent; an administrator can add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php"
 msgstr "ce site envoie ses requêtes par un proxy (WP_PROXY_HOST), qui résout lui-même le nom ; la requête n’a donc pas pu être liée aux adresses vérifiées et n’a pas été envoyée ; un administrateur peut ajouter l’hôte à WP_PROXY_BYPASS_HOSTS dans wp-config.php"
 
@@ -5551,3 +5631,13 @@ msgstr "L’adresse a redirigé plus de %d fois ; rien n’a donc été téléch
 
 msgid "The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the file itself. 2. Or send the file's content with wp_upload_media."
 msgstr "L’adresse redirige vers quelque chose qui n’est pas une adresse http(s) ; rien n’a donc été téléchargé. 1. Ouvrez-la dans un navigateur et utilisez l’adresse du fichier lui-même. 2. Ou envoyez le contenu du fichier avec wp_upload_media."
+
+msgid "Saved: Staging first."
+msgstr "Enregistré : Staging d’abord."
+
+#, php-format
+msgid "2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Cet appel est passé par l’adaptateur des abilities WordPress : pour modifier ce site malgré tout, un administrateur libère son compte sur la page des réglages d’AlphaBridge MCP sous « Staging d’abord » (« Travailler sans staging »), pour %d heures ou jusqu’à révocation. 3. Ou un administrateur y règle « Staging d’abord » sur Demander ou Désactivé."
+
+msgid "Not held: this site is the confirmed staging site, or paired with one."
+msgstr "Non retenu : ce site est le site de staging confirmé, ou apparié à un tel site."

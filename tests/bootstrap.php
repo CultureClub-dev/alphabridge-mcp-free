@@ -1914,6 +1914,8 @@ require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/class-connection-doctor.php';
 // The staging record (4.15.0): the site contract reports its role.
 require_once __DIR__ . '/../includes/class-staging.php';
+// «Staging first» (4.15.0): the gate in run_tool() and the schema of the writing tools.
+require_once __DIR__ . '/../includes/class-staging-gate.php';
 // WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
 // file headers): the builder readers call parse_blocks().
 require_once __DIR__ . '/support/class-wp-block-parser.php';

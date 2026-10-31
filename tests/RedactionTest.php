@@ -1506,7 +1506,8 @@ final class RedactionTest extends TestCase {
 	 */
 	private function write( array $args, string $tool = 'wp_update_thing' ): array {
 		( new ReflectionProperty( \AB_MCP_Auth::class, 'current_scope' ) )->setValue( null, 'full' );
-		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		// «Staging first» (4.15.0) off: it would answer the first writing call instead of the tool; StagingGateTest covers it.
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full', 'staging_first' => 'off' ) );
 		$calls = 0;
 		$r     = new AB_MCP_Tool_Registry();
 		$r->set_current_group( 'content', 'Posts & Pages' );

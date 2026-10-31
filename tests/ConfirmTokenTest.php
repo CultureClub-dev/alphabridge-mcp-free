@@ -34,7 +34,8 @@ final class ConfirmTokenTest extends TestCase {
 		ab_test_add_user( 3 );
 		$GLOBALS['ab_test_current_user'] = 3;
 		$GLOBALS['ab_test_can']          = static fn(): bool => true;
-		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		// «Staging first» (4.15.0) off: it would answer the first writing call instead of the tool; StagingGateTest covers it.
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full', 'staging_first' => 'off' ) );
 		$this->scope( 'full' );
 		$this->runs  = 0;
 		$this->state = 'plugin hello 1.0 active';

@@ -315,7 +315,8 @@ final class AdminPageTest extends TestCase {
 		$r = $this->registry();
 		$r->set_current_group( 'acme', 'Acme' );
 		$r->register( 'acme_sync', array( 'description' => 'Sync the catalogue. Runs for minutes.' ) );
-		$r->register( 'acme_ping', array( 'description' => 'Ping the shop.' ) );
+		// A reading tool: a writing one carries the note of «Staging first» (4.15.0) as a second sentence.
+		$r->register( 'acme_ping', array( 'description' => 'Ping the shop.', 'readonly' => true ) );
 		$r->register( 'acme_named', array( 'description' => 'Something long for the assistant. More.' ) );
 		add_filter( 'ab_mcp_tool_label', static fn( string $label, string $name ): string => 'acme_named' === $name ? 'Named by its add-on' : $label, 10, 2 );
 		$x = $this->xpath( $this->call( 'capabilities_card_html', $r->groups(), $r->all() ) );

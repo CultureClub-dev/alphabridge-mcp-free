@@ -45,6 +45,10 @@ final class AB_MCP_Plugin {
 		// An update in place never runs the activation hook; bring the options
 		// up to date here, before anything reads them.
 		AB_MCP_Settings::maybe_upgrade();
+		// «Staging first» tells a connection from before 4.15.0 that the
+		// question is new: the time this version first loaded, written once,
+		// here before any request of this load could create a token.
+		AB_MCP_Staging_Gate::stamp();
 		self::load_bundled_translations();
 		// switch_to_locale() drops every loaded translation and reloads only
 		// the language pack; add the bundled file again for the new locale.
@@ -249,7 +253,9 @@ final class AB_MCP_Plugin {
 		require_once AB_MCP_DIR . 'includes/class-audit-log.php';
 		require_once AB_MCP_DIR . 'includes/class-page-cache.php';
 		require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
+		require_once AB_MCP_DIR . 'includes/class-staging-gate.php';
 		AB_MCP_Settings::install_defaults();
+		AB_MCP_Staging_Gate::stamp();
 		AB_MCP_Audit_Log::install_table();
 		// A preview protection left on across a deactivation takes the
 		// search engine visibility again (free since 4.15.0), on every site

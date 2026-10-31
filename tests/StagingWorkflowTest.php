@@ -73,7 +73,7 @@ final class StagingWorkflowTest extends TestCase {
 		. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
 		. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
 		. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
-		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here.';
+		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here with staging_acknowledged true.';
 
 	/** What would advertise an edition, as the staging tool's own test reads it, and what would link anything. */
 	const ADVERTISING = '/\bPro\b|Agency|upgrade|licen[cs]e|price|pricing|checkout|freemius|https?:\/\/|alphabridge-mcp\.com/i';
@@ -101,8 +101,27 @@ final class StagingWorkflowTest extends TestCase {
 			: static fn( string $cap ): bool => 'manage_options' !== $cap;
 	}
 
-	/** The tools of the group «Staging», as the plugin registers them; its only writing tool needs manage_options. */
+	/**
+	 * The tools of the group «Staging», as the plugin registers them, and
+	 * one writing tool «Staging first» concerns that needs manage_options:
+	 * the group's own writing tool, wp_set_preview_protection, is exempt
+	 * from the gate (AB_MCP_Staging_Gate::WAYS_BACK), so alone it makes no
+	 * connection the question is for (Codex, 31.10.2026).
+	 */
 	private static function staging_registry(): AB_MCP_Tool_Registry {
+		$r = self::staging_tools_only();
+		$r->register(
+			'wp_update_site_settings',
+			array(
+				'capability' => 'manage_options',
+				'readonly'   => false,
+			)
+		);
+		return $r;
+	}
+
+	/** The tools of the group «Staging» alone: one reader, one exempt writer. */
+	private static function staging_tools_only(): AB_MCP_Tool_Registry {
 		$r = new AB_MCP_Tool_Registry();
 		AB_MCP_Tools_Staging::register( $r );
 		return $r;
@@ -195,14 +214,27 @@ final class StagingWorkflowTest extends TestCase {
 
 	public function testATokenForContentNeedsAWritingToolOfItsLevel(): void {
 		self::scope( 'content' );
-		self::assertNotOffered( self::staging_registry(), 'wp_set_preview_protection needs manage_options, which the access level Content does not reach.' );
+		self::assertNotOffered( self::staging_registry(), 'Its writing tool needs manage_options, which the access level Content does not reach.' );
 		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'With a tool for content it can write.' );
 	}
 
 	public function testEveryWritingToolSwitchedOffIsNoConnectionThatWrites(): void {
-		AB_MCP_Settings::set_tool_state( array( 'wp_set_preview_protection' => false ) );
-		self::assertNotOffered( self::staging_registry(), 'Its only writing tool is off.' );
-		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'One writing tool on is enough: the steps name the settings page as the other way to the protection.' );
+		AB_MCP_Settings::set_tool_state( array( 'wp_update_site_settings' => false ) );
+		self::assertNotOffered( self::staging_registry(), 'Its only writing tool the gate concerns is off.' );
+		self::assertOffered( self::with_content_writer( self::staging_registry() ), 'One writing tool on is enough.' );
+	}
+
+	public function testAWritingToolTheGateExemptsIsNoConnectionTheQuestionIsFor(): void {
+		$r = self::staging_tools_only();
+		self::assertFalse( \AB_MCP_Tool_Registry::is_read_only( 'wp_set_preview_protection', $r->get( 'wp_set_preview_protection' ) ), 'It writes.' );
+		self::assertFalse( \AB_MCP_Staging_Gate::concerns( 'wp_set_preview_protection', $r->get( 'wp_set_preview_protection' ) ), 'But the gate never holds it.' );
+		self::assertNotOffered( $r, 'Only exempt writers: the instructions would announce a hold that holds nothing.' );
+		foreach ( \AB_MCP_Staging_Gate::exempt_tools() as $name ) {
+			$r->register( $name, array( 'capability' => 'manage_options', 'readonly' => false ) );
+		}
+		self::assertNotOffered( $r, 'Every exempt writer on: still nothing.' );
+		$r->register( 'wp_update_option', array( 'capability' => 'manage_options', 'readonly' => false ) );
+		self::assertOffered( $r, 'One writer the gate concerns: the question.' );
 	}
 
 	public function testOnlyForAnAccountThatMayCallTheStatusTool(): void {

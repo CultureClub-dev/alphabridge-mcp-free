@@ -118,6 +118,27 @@ class AB_MCP_Auth {
 	}
 
 	/**
+	 * The stored hash of the token that authenticated the current request,
+	 * '' while none did. Captured by verify_token() next to the scope: the
+	 * token entry is the connection, and «Staging first» keeps its
+	 * acknowledgement there (AB_MCP_Staging_Gate). Reset on every verify.
+	 *
+	 * @var string
+	 */
+	private static $current_token_hash = '';
+
+	/**
+	 * The hash of the token entry that authenticated the current request;
+	 * '' without one (a call through the abilities adapter, or before the
+	 * check). It names the connection and grants nothing.
+	 *
+	 * @return string
+	 */
+	public static function current_token_hash() {
+		return self::$current_token_hash;
+	}
+
+	/**
 	 * Validate a token against stored tokens (constant-time). Also enforces the
 	 * token's expiry (an expired token authenticates no one) and records its
 	 * scope for the current request.
@@ -126,7 +147,8 @@ class AB_MCP_Auth {
 	 * @return int|false Mapped user id or false.
 	 */
 	public static function verify_token( $token ) {
-		self::$current_scope = 'full'; // Fail-safe default for this request.
+		self::$current_scope      = 'full'; // Fail-safe default for this request.
+		self::$current_token_hash = '';
 
 		$tokens = AB_MCP_Settings::get_tokens();
 		if ( empty( $tokens ) ) {
@@ -167,7 +189,8 @@ class AB_MCP_Auth {
 				$user_id = (int) $entry['user_id'];
 				$user    = get_user_by( 'id', $user_id );
 				if ( $user instanceof WP_User ) {
-					self::$current_scope = $scope;
+					self::$current_scope      = $scope;
+					self::$current_token_hash = (string) $entry['hash'];
 					if ( method_exists( 'AB_MCP_Settings', 'touch_token' ) ) {
 						AB_MCP_Settings::touch_token( (string) $entry['hash'] );
 					}

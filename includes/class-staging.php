@@ -17,7 +17,11 @@
  *
  * - role: production or staging, with who confirmed it, when, and where
  *   (SOURCE_FORM on the settings page, SOURCE_HUB from the hub). No role
- *   is «unconfirmed».
+ *   is «unconfirmed». Saving the form on the settings page is a
+ *   confirmation by a person: a part the hub wrote takes the form as its
+ *   source then, with who and when, also when its values stay the same
+ *   («Staging first» with the setting require counts the form only,
+ *   AB_MCP_Staging_Gate::site_exempt()).
  * - pair: the address of the other site and its role (always the other
  *   one: a pair is one production site and one staging site), with who
  *   confirmed it, when and where. A pair needs a confirmed role; a stored
@@ -306,8 +310,11 @@ class AB_MCP_Staging {
 
 	/**
 	 * Confirm the role of this site and the pair, as the settings page and
-	 * the hub do. Nothing is written when anything is wrong; a part that
-	 * stays as it was keeps who confirmed it, when and where.
+	 * the hub do. Nothing is written when anything is wrong. A part that
+	 * stays as it was keeps who confirmed it, when and where, unless the
+	 * settings page saves it over a record of the hub: that is a person's
+	 * confirmation, and the part takes the form as its source, with who and
+	 * when (see the head of this class).
 	 *
 	 * A role of ROLE_UNCONFIRMED takes the confirmed role back (the
 	 * settings page only); a pair needs a confirmed role, so it goes with
@@ -335,13 +342,21 @@ class AB_MCP_Staging {
 		$stored = self::record();
 		$who    = self::who( (int) $user_id, (string) $source );
 
+		// The settings page confirms what the hub wrote: the same value, now
+		// with the form as its source.
+		$confirms  = static function ( $part ) use ( $source ) {
+			return self::SOURCE_FORM === $source && null !== $part && self::SOURCE_FORM !== $part['source'];
+		};
+		$confirmed = false;
+
 		$role_changed = $unconfirm
 			? null !== $stored['role']
 			: ( null === $stored['role'] || $stored['role']['value'] !== $role );
 		if ( $unconfirm ) {
 			unset( $raw['role'] );
-		} elseif ( $role_changed ) {
+		} elseif ( $role_changed || $confirms( $stored['role'] ) ) {
 			$raw['role'] = array_merge( array( 'value' => $role ), $who );
+			$confirmed   = $confirmed || ! $role_changed;
 		}
 
 		// A stored pair exists only with a stored role, and its role is the
@@ -351,7 +366,7 @@ class AB_MCP_Staging {
 		$pair_changed = ! $keep_pair && ( '' !== $url || null !== $stored['pair'] );
 		if ( '' === $url ) {
 			unset( $raw['pair'] );
-		} elseif ( ! $keep_pair ) {
+		} elseif ( ! $keep_pair || $confirms( $stored['pair'] ) ) {
 			$raw['pair'] = array_merge(
 				array(
 					'partner_url'  => $url,
@@ -359,10 +374,16 @@ class AB_MCP_Staging {
 				),
 				$who
 			);
+			$confirmed   = $confirmed || $keep_pair;
 		}
 
-		if ( $role_changed || $pair_changed ) {
+		if ( $role_changed || $pair_changed || $confirmed ) {
 			AB_MCP_Settings::set( self::KEY, $raw );
+		}
+		// A connection that asked «Staging first» to ask no more said so for
+		// the site as it was; with another role it is asked again.
+		if ( $role_changed && class_exists( 'AB_MCP_Staging_Gate' ) ) {
+			AB_MCP_Staging_Gate::on_role_changed();
 		}
 		return array(
 			'role_changed' => $role_changed,
@@ -916,7 +937,7 @@ class AB_MCP_Staging {
 				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
-			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
+			$item['fallback'] = self::drafts_fallback();
 			$items[]          = $item;
 		} else {
 			$items[] = self::staging_item( $title, $pair['partner_url'], $check );
@@ -1058,6 +1079,43 @@ class AB_MCP_Staging {
 			: sprintf( __( 'The staging way is in place: the staging site %s answers and is paired with this site. Make the changes there and carry them over to this site one at a time once they are approved.', 'alphabridge-mcp' ), $other );
 	}
 
+	/* ----------------------------------------------------------- drafts */
+
+	/**
+	 * The way without a staging site, in one place: drafts, for posts and
+	 * pages, where media, menus and settings take effect at once. The
+	 * server instructions and the hint of «Staging first»
+	 * (drafts_in_instructions()), the prompt staging_workflow
+	 * (drafts_in_prompt()) and the checklist (drafts_fallback(), translated)
+	 * all say it from here, so that a later version with a complete way
+	 * back changes it in one place (Thomas, 31.10.2026); a test holds that
+	 * no other place writes it. The wording of 4.15.0 stays.
+	 *
+	 * @return string
+	 */
+	public static function drafts_in_instructions() {
+		return 'drafts for posts and pages alone';
+	}
+
+	/**
+	 * The same for the prompt staging_workflow, see drafts_in_instructions().
+	 *
+	 * @return string
+	 */
+	public static function drafts_in_prompt() {
+		return 'For changes to posts and pages alone, drafts and previews published once approved are a way too; media, menus, settings and the other changes take effect at once, so for them staging.';
+	}
+
+	/**
+	 * The same for the checklist of wp_staging_status, in the site's
+	 * language, see drafts_in_instructions().
+	 *
+	 * @return string
+	 */
+	public static function drafts_fallback() {
+		return __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
+	}
+
 	/**
 	 * Whether the assistant of this connection is asked to offer the way to
 	 * a staging site: the sentence in the server instructions and the
@@ -1067,11 +1125,14 @@ class AB_MCP_Staging {
 	 * call makes (AB_MCP_Security::permits(): its capability manage_options,
 	 * its switch, write access and the token's access level), or the
 	 * sentence would ask for a call that is refused. And the connection has
-	 * to be able to change something: write access on, and at least one
-	 * writing tool that tools/list shows this connection (its switch on,
-	 * and allowed for the access level of the token,
+	 * to be able to change something «Staging first» would hold: write
+	 * access on, and at least one writing tool the gate concerns
+	 * (AB_MCP_Staging_Gate::concerns(): not one it exempts, such as
+	 * wp_set_preview_protection) that tools/list shows this connection (its
+	 * switch on, and allowed for the access level of the token,
 	 * AB_MCP_Tool_Registry::scope_allows()). For a connection that only
-	 * reads, the question would be about a change it cannot make.
+	 * reads, or whose only writing tools are exempt, the question would be
+	 * about a change the gate never holds.
 	 *
 	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
 	 * @return bool
@@ -1089,7 +1150,8 @@ class AB_MCP_Staging {
 		}
 		$scope = AB_MCP_Auth::current_scope();
 		foreach ( $registry->all() as $name => $tool ) {
-			if ( ! AB_MCP_Tool_Registry::is_read_only( $name, $tool )
+			$writes = class_exists( 'AB_MCP_Staging_Gate' ) ? AB_MCP_Staging_Gate::concerns( $name, $tool ) : ! AB_MCP_Tool_Registry::is_read_only( $name, $tool );
+			if ( $writes
 				&& AB_MCP_Settings::is_tool_enabled( $name, $tool )
 				&& AB_MCP_Tool_Registry::scope_allows( $scope, $name, $tool ) ) {
 				return true;

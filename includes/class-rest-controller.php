@@ -1124,17 +1124,29 @@ class AB_MCP_REST_Controller {
 		}
 		// The way to a staging site (free since 4.15.0), while the tool that
 		// reports it is on and the connection can write (AB_MCP_Staging::
-		// offered(), the same condition as the prompt staging_workflow):
-		// before the first change the assistant asks the person whether to
-		// work on staging first, always with the reason and the way, and
-		// offers to set it up. Instructions are followed as a rule, not
-		// always; they cannot make an assistant ask.
+		// offered(), the same condition as the prompt staging_workflow), and
+		// only as far as «Staging first» would hold the next writing call of
+		// this connection (AB_MCP_Staging_Gate::would_hold_next(), the gate's
+		// own decision): with ask, before the first change the assistant asks
+		// the person whether to work on staging first, always with the reason
+		// and the way, and offers to set it up; with require, that writes
+		// need a person's release. A connection that acknowledged, a site
+		// outside the gate or the setting off: not a word, as the gate holds
+		// nothing. Instructions are followed as a rule, not always; they
+		// cannot make an assistant ask.
 		if ( AB_MCP_Staging::offered( $this->registry ) ) {
-			$instructions .= ' Before the first change on this site, call wp_staging_status. Unless it reports the role staging or a pair,'
-				. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
-				. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
-				. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
-				. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here.';
+			$next = AB_MCP_Staging_Gate::would_hold_next();
+			if ( AB_MCP_Staging_Gate::ASK === $next ) {
+				$instructions .= ' Before the first change on this site, call wp_staging_status. Unless it reports the role staging or a pair,'
+					. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
+					. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
+					. ' connecting an existing staging site, or ' . AB_MCP_Staging::drafts_in_instructions() . '; its checklist has the steps), and offer to set up'
+					. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here with staging_acknowledged true.';
+			} elseif ( AB_MCP_Staging_Gate::REQUIRE === $next ) {
+				$instructions .= ' This site requires staging first: a writing call is refused until a person releases this connection on the settings page of AlphaBridge MCP'
+					. ' under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands,'
+					. ' and the prompt staging_workflow has the steps.';
+			}
 		}
 
 		// Without the tools of AlphaBridge MCP Pro: what is not on this site,
@@ -1460,7 +1472,8 @@ class AB_MCP_REST_Controller {
 	 * Run one tool with every check tools/call makes, in its order: the
 	 * policy gate (AB_MCP_Security::authorize(): capability, write access,
 	 * the tool's switch, the token's scope, the rate limit), the arguments
-	 * (AB_MCP_Security::validate_args()), the confirmation token of a tool
+	 * (AB_MCP_Security::validate_args()), the redactor, «Staging first»
+	 * (AB_MCP_Staging_Gate::gate()), the confirmation token of a tool
 	 * without a way back (AB_MCP_Confirm_Token::gate()), the tool itself,
 	 * and an entry in the log for each outcome, with the names of the
 	 * arguments and never their values. A reading tool's result leaves
@@ -1511,6 +1524,24 @@ class AB_MCP_REST_Controller {
 				return $fail( 'params', $refused->get_error_code(), $refused->get_error_message() );
 			}
 		}
+
+		// «Staging first» (AB_MCP_Staging_Gate): on a site that counts as the
+		// production site, the first writing call of a connection comes back
+		// with staging_hint and nothing changed (ASK), or is refused until a
+		// person releases the connection (REQUIRE). Before the confirmation
+		// token: the first call of a tool without a way back would otherwise
+		// make a preview the pause throws away. The gate's own arguments do
+		// not reach the token or the tool.
+		$staging = AB_MCP_Staging_Gate::gate( $name, $def, $args );
+		if ( is_wp_error( $staging ) ) {
+			AB_MCP_Audit_Log::record( $name, $args, 'denied', $staging->get_error_message(), $via );
+			return $fail( 'tool', $staging->get_error_code(), $staging->get_error_message() );
+		}
+		if ( is_array( $staging ) ) {
+			AB_MCP_Audit_Log::record( $name, $args, AB_MCP_Staging_Gate::STATUS_HELD, null, $via );
+			return $staging;
+		}
+		$args = AB_MCP_Staging_Gate::without_params( $args );
 
 		if ( AB_MCP_Confirm_Token::required( $def ) ) {
 			try {

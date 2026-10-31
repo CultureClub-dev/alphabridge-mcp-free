@@ -67,7 +67,7 @@ final class FreeSinceFourEightTest extends TestCase {
 		self::assertArrayNotHasKey( 'tier', $def, 'A tool of this plugin now.' );
 		self::assertTrue( ! empty( $def['dangerous'] ), 'It keeps its flag.' );
 		self::assertSame( array( 'post_id' ), $def['inputSchema']['required'] );
-		self::assertSame( array( 'post_id', 'title', 'description', 'focus_keyword' ), array_keys( $def['inputSchema']['properties'] ) );
+		self::assertSame( array( 'post_id', 'title', 'description', 'focus_keyword', 'staging_acknowledged', 'staging_reminder' ), array_keys( $def['inputSchema']['properties'] ), 'Its own arguments, then the two of «Staging first» (4.15.0), as every writing tool.' );
 		self::assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_seo_set', $def ), 'SEO title and description show in search results.' );
 		self::assertTrue( AB_MCP_Tool_Registry::is_destructive( 'wp_seo_set', $def ), 'It overwrites the stored values.' );
 		self::assertFalse( AB_MCP_Tool_Registry::is_read_only( 'wp_seo_set', $def ) );
@@ -79,7 +79,8 @@ final class FreeSinceFourEightTest extends TestCase {
 	public function testProRegisteringTheSameNameReplacesTheDefinition(): void {
 		$r = $this->registry();
 		$r->register( 'wp_seo_set', array( 'description' => 'Pro', 'capability' => 'edit_posts', 'tier' => 'pro', 'callback' => '__return_true' ) );
-		self::assertSame( 'Pro', $r->get( 'wp_seo_set' )['description'] );
+		// The registry adds the note of «Staging first» (4.15.0) to every writing tool, Pro's copy included.
+		self::assertSame( 'Pro ' . \AB_MCP_Staging_Gate::description_note(), $r->get( 'wp_seo_set' )['description'] );
 		self::assertSame( 1, count( array_filter( array_keys( $r->all() ), static fn( $n ) => 'wp_seo_set' === $n ) ) );
 	}
 

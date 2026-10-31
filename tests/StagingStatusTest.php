@@ -303,18 +303,36 @@ final class StagingStatusTest extends TestCase {
 		ab_test_add_user( 9 );
 		AB_MCP_Staging::save( 'production', self::STAGING, 'staging', 9, AB_MCP_Staging::SOURCE_HUB );
 		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
-		$saved  = AB_MCP_Staging::save( 'production', self::STAGING . '/', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		$saved  = AB_MCP_Staging::save( 'production', self::STAGING, 'staging', 9, AB_MCP_Staging::SOURCE_HUB );
 		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), $saved );
-		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'Nothing changed, nothing written.' );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'The hub again, nothing changed: nothing written.' );
 		$record = AB_MCP_Staging::record();
 		self::assertSame( array( 'hub', 'user9' ), array( $record['role']['source'], $record['role']['user_login'] ) );
 		self::assertSame( array( 'hub', 'user9' ), array( $record['pair']['source'], $record['pair']['user_login'] ) );
 
-		$saved = AB_MCP_Staging::save( 'production', 'https://stage.example.com', null, 7, AB_MCP_Staging::SOURCE_FORM );
-		self::assertSame( array( 'role_changed' => false, 'pair_changed' => true ), $saved, 'Another address: the pair is new, the role stays.' );
+		// The settings page saves the same values: a person confirms what the
+		// hub wrote, so both parts take the form as their source (Codex,
+		// 31.10.2026: a role or pair the hub wrote does not count for
+		// «Staging first» with require; the confirmation on the page must).
+		$saved = AB_MCP_Staging::save( 'production', self::STAGING . '/', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), $saved, 'The values did not change.' );
+		self::assertSame( $writes + 1, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'Written once: the source.' );
 		$record = AB_MCP_Staging::record();
-		self::assertSame( 'hub', $record['role']['source'] );
+		self::assertSame( array( 'form', 'user7' ), array( $record['role']['source'], $record['role']['user_login'] ) );
 		self::assertSame( array( 'form', 'user7' ), array( $record['pair']['source'], $record['pair']['user_login'] ) );
+		self::assertSame( self::STAGING, $record['pair']['partner_url'] );
+
+		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
+		$saved  = AB_MCP_Staging::save( 'production', self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), $saved );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'Already the form\'s: nothing written again.' );
+
+		AB_MCP_Staging::save( 'production', 'https://stage.example.com', 'staging', 9, AB_MCP_Staging::SOURCE_HUB );
+		$saved = AB_MCP_Staging::save( 'production', 'https://stage.example.com', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), $saved );
+		$record = AB_MCP_Staging::record();
+		self::assertSame( array( 'form', 'user7' ), array( $record['pair']['source'], $record['pair']['user_login'] ), 'A pair the hub rewrote, confirmed on the page.' );
+		self::assertSame( array( 'form', 'user7' ), array( $record['role']['source'], $record['role']['user_login'] ), 'The role was the form\'s already.' );
 	}
 
 	public function testANewRoleNeverKeepsTheOldPair(): void {
@@ -1602,11 +1620,11 @@ final class StagingStatusTest extends TestCase {
 		$html = $this->admin( 'preview_card_html' );
 		self::assertStringContainsString( 'value="https://staging.example.com/pr%C3%BCfung"', $html, 'The field holds the stored address.' );
 
-		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
-		$exit   = $this->submit( array( 'staging_role' => 'production', 'partner_url' => ' https://staging.example.com/pr%C3%BCfung ', 'host' => '' ) );
+		$exit = $this->submit( array( 'staging_role' => 'production', 'partner_url' => ' https://staging.example.com/pr%C3%BCfung ', 'host' => '' ) );
 		self::assertStringContainsString( 'ab_notice=staging_saved', $exit->detail );
-		self::assertSame( $raw, self::raw(), 'The unchanged form keeps the hub as the source, the account and the time.' );
-		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'And writes nothing.' );
+		self::assertSame( $raw['pair']['partner_url'], self::raw()['pair']['partner_url'], 'The unchanged form keeps the address as stored.' );
+		self::assertSame( array( 'form', 7 ), array( self::raw()['pair']['source'], self::raw()['pair']['user_id'] ), 'And a person confirmed it here: the form is the source now.' );
+		self::assertSame( array( 'form', 7 ), array( self::raw()['role']['source'], self::raw()['role']['user_id'] ) );
 
 		$this->submit( array( 'staging_role' => 'production', 'partner_url' => 'https://staging.example.com/pr%C3%BCfung-2', 'host' => '' ) );
 		self::assertSame( 'https://staging.example.com/pr%C3%BCfung-2', AB_MCP_Staging::record()['pair']['partner_url'], 'Percent-encoded characters stay as typed.' );
