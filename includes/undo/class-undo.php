@@ -39,7 +39,7 @@ class AB_MCP_Undo {
 	const OPTION   = 'ab_mcp_pro_undo_index';
 	const LOCK     = 'ab_mcp_pro_undo_lock';
 	const SUBDIR   = 'ab-mcp-undo';
-	const DB_KINDS = 'post_status,option,site_settings,theme,post_fields,meta,term,menu_item,widget';
+	const DB_KINDS = 'post_status,option,site_settings,theme,post_fields,meta,term,menu_item,widget,comment';
 
 	/**
 	 * The undo window as set on the settings screen of Pro, in whole days.

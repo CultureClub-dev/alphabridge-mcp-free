@@ -201,6 +201,7 @@ final class TermAndCommentRightsTest extends TestCase {
 
 		$res = AB_MCP_Tools_Taxonomy_Comments::moderate_comment( array( 'comment_id' => 6, 'status' => 'approve' ) );
 		self::assertTrue( $res['moderated'] );
+		self::assertSame( array( 'status' => 'approved' ), (array) $res['saved_fields'], 'Read again after the write (4.14.0).' );
 		self::assertSame( array( array( 6, 'approve' ) ), $GLOBALS['ab_test_moderated'] );
 	}
 
@@ -213,7 +214,8 @@ final class TermAndCommentRightsTest extends TestCase {
 		self::assertRefused( $res, 'cannot delete this specific comment' );
 
 		$res = AB_MCP_Tools_Taxonomy_Comments::delete_comment( array( 'comment_id' => 6 ) );
-		self::assertSame( array( 'deleted' => true, 'comment_id' => 6 ), $res );
+		self::assertSame( array( 'deleted' => true, 'comment_id' => 6 ), array_slice( $res, 0, 2 ) );
+		self::assertSame( array( 'status' => 'trash' ), (array) $res['saved_fields'], 'Into the trash, read again (4.14.0).' );
 	}
 
 	public function testNoReplyUnderAPostTheAccountMayNotEdit(): void {
@@ -227,7 +229,8 @@ final class TermAndCommentRightsTest extends TestCase {
 		self::assertSame( array(), $GLOBALS['ab_test_term_writes'] );
 
 		$res = AB_MCP_Tools_Taxonomy_Comments::reply_comment( array( 'post_id' => 11, 'content' => 'Danke!' ) );
-		self::assertSame( array( 'created' => true, 'comment_id' => 77 ), $res );
+		self::assertSame( array( 'created' => true, 'comment_id' => 77 ), array_slice( $res, 0, 2 ) );
+		self::assertSame( array( 'post_id' => 11, 'parent' => 0, 'content' => 'Danke!', 'status' => 'approved' ), (array) $res['saved_fields'], 'Read again after the write (4.14.0).' );
 		self::assertSame( array( array( 'comment', 11 ) ), $GLOBALS['ab_test_term_writes'] );
 	}
 }

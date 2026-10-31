@@ -49,8 +49,20 @@ if ( ! function_exists( 'wp_delete_attachment' ) ) {
 }
 
 if ( ! function_exists( 'wp_delete_comment' ) ) {
-	/** What the test says WordPress answered: true, or false (a plugin said no). */
+	/**
+	 * What the test says WordPress answered: true, or false (a plugin said
+	 * no). Where it is true, the comment goes as in WordPress: into the
+	 * trash, or for good with force (the tool reads it back since 4.14.0).
+	 */
 	function wp_delete_comment( $comment_id, $force_delete = false ) {
-		return $GLOBALS['ab_test_way']['comment_deleted'] ?? false;
+		$done = $GLOBALS['ab_test_way']['comment_deleted'] ?? false;
+		if ( $done && isset( $GLOBALS['ab_test_comments'][ (int) $comment_id ] ) ) {
+			if ( $force_delete ) {
+				unset( $GLOBALS['ab_test_comments'][ (int) $comment_id ] );
+			} else {
+				$GLOBALS['ab_test_comments'][ (int) $comment_id ]->comment_approved = 'trash';
+			}
+		}
+		return $done;
 	}
 }

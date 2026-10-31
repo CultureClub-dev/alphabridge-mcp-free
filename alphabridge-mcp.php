@@ -76,6 +76,8 @@ require_once AB_MCP_DIR . 'includes/undo/class-undo-objects.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-terms.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-menu-items.php';
 require_once AB_MCP_DIR . 'includes/undo/class-undo-widgets.php';
+// The undo of the comment tools (4.14.0).
+require_once AB_MCP_DIR . 'includes/undo/class-undo-comments.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';

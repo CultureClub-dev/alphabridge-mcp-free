@@ -82,7 +82,7 @@ Clients that sign in with OAuth need only your site's MCP address. For the other
 = What your AI can do with the free plugin =
 
 * **Posts and pages.** Write, edit, schedule, duplicate and delete posts and pages, set their custom fields and bring back an earlier revision. Publish, unpublish or trash up to 500 at once. Search the whole site.
-* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, page-builder elements, status changes in bulk, changes of the site settings and the option rows a search and replace changed leave an undo point that expires after 7 days, and so do custom fields of posts, terms and users changed with their own tools, the title, caption and alt text of a file, new and renamed categories and tags, new menus and menu items, widgets added, changed or removed, and the SEO title, description and focus keyword of Yoast SEO or Rank Math. Ask the AI what it changed, and one sentence puts the previous values back. Deleting a term, a menu item, a file or a user account stays final, and the answer says so.
+* **Undo.** Changes to the title, content, excerpt, status, slug, parent, author or date of a post, page-builder elements, status changes in bulk, changes of the site settings and the option rows a search and replace changed leave an undo point that expires after 7 days, and so do custom fields of posts, terms and users changed with their own tools, the title, caption and alt text of a file, new and renamed categories and tags, new menus and menu items, widgets added, changed or removed, the SEO title, description and focus keyword of Yoast SEO or Rank Math, and comments approved, held, marked as spam, moved to the trash or answered. Ask the AI what it changed, and one sentence puts the previous values back. Deleting a term, a menu item, a file, a user account or a comment for good stays final, and the answer says so.
 * **Media.** Add JPEG, PNG, GIF, WebP and PDF files from the chat or from a web address. Change titles, captions and alt texts, and delete files.
 * **Categories and tags.** Create, rename and delete the terms of any taxonomy.
 * **Comments.** Read, approve, answer and delete comments, and move spam out of the way.
@@ -223,6 +223,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 
 = 4.14.0 =
 * **Undo for the SEO fields.** `wp_seo_set` leaves an undo point for the title, description and focus keyword it writes, in the fields of Yoast SEO or Rank Math: `wp_undo` puts them back as they were and lets the SEO plugin rebuild what the page shows from them. Its answer carries `saved_fields`, the fields as the site stored them.
+* **Undo for comments.** `wp_moderate_comment` and `wp_delete_comment` (into the trash) leave an undo point: `wp_undo` takes the comment out of the trash or spam the way WordPress does, with the notes WordPress keeps of its earlier status, or sets the status of before again, and brings back the reply notes that went into the trash with a top-level note. `wp_reply_comment` leaves one that deletes the new comment again as long as it is unchanged and unanswered. A comment changed since is refused unless `force=true`, and the right to edit each comment is asked again. The three tools read back what was stored (`saved_fields`); a status WordPress did not store is an error instead of `moderated: true`. A comment deleted for good, and a comment trashed on a site with the trash turned off, has no way back, and the answer says so.
 
 = 4.13.0 =
 * **Undo for custom fields and media details, and a read-back after the write.** `wp_update_post_meta`, `wp_update_term_meta`, `wp_update_user_meta` and `wp_update_media` leave an undo point: `wp_undo` puts every stored row of the key back as it was, removes a key the change created, refuses one changed since unless `force=true`, and asks the rights and key rules of the tool again. Their answers carry `saved_fields`, what the site stored, read again; where it differs from what was sent, `saved_differs` and a warning say so, and a write the site did not store at all is an error instead of `updated: true`. Where there is no undo point, `undo_note` says why.
@@ -495,7 +496,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 == Upgrade Notice ==
 
 = 4.14.0 =
-The SEO title, description and focus keyword set with wp_seo_set get an undo point and a read-back after the write. No setting changes.
+The SEO fields set with wp_seo_set, and comments approved, held, marked as spam, trashed or added with the comment tools, get an undo point and a read-back after the write. No setting changes.
 
 = 4.13.0 =
 Custom fields, the details of a file, new and changed terms, new menus and menu items and widget changes get an undo point, and these tools report what the site stored after the write. No setting changes.

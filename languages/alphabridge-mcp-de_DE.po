@@ -5053,3 +5053,24 @@ msgstr "Die Menüeinträge %1$s des Menüs %2$d sind nach dem Löschen noch da o
 
 msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
 msgstr "In einem Multisite-Netzwerk entfernt WordPress das Konto nur von dieser Website: Das Konto, seine ID und sein Passwort bleiben, und seine Inhalte hier gingen so, wie der Aufruf es angab. Vor dem Entfernen eines Kontos, das hier wieder gebraucht werden könnte, seine Rolle mit wp_get_user festhalten; ein Administrator des Netzwerks fügt es in wp-admin unter Benutzer wieder zu dieser Website hinzu."
+
+msgid "WordPress did not delete comment %d again; the undo point stays. Check the comment with wp_get_comment, and try again."
+msgstr "WordPress hat den Kommentar %d nicht wieder gelöscht; der Undo-Punkt bleibt. Den Kommentar mit wp_get_comment prüfen und erneut versuchen."
+
+msgid "WordPress did not take the status of comment %d back; the undo point stays. A plugin may hold the status of comments. Check the comment with wp_get_comment, and try again."
+msgstr "WordPress hat den Status des Kommentars %d nicht zurückgenommen; der Undo-Punkt bleibt. Ein Plugin kann den Status von Kommentaren festhalten. Den Kommentar mit wp_get_comment prüfen und erneut versuchen."
+
+msgid "The comment was edited, moderated or answered after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Der Kommentar wurde bearbeitet, moderiert oder beantwortet, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um ihn trotz der neueren Änderung wiederherzustellen."
+
+msgid "The snapshot of the comment is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "Der Schnappschuss des Kommentars hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "WordPress deletes a comment for good with force=true, from the trash or from spam, and on a site with the trash turned off: its meta goes and its replies move up a level. Before deleting a comment that may be needed again, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "WordPress löscht einen Kommentar endgültig mit force=true, aus dem Papierkorb oder aus dem Spam und auf einer Website mit ausgeschaltetem Papierkorb: Seine Metadaten gehen verloren, und seine Antworten rücken eine Ebene hoch. Vor dem Löschen eines Kommentars, der wieder gebraucht werden könnte, ihn mit wp_get_comment festhalten; wp_reply_comment legt einen neuen mit seinem Text an, unter einer neuen ID und im Namen des verbundenen Kontos."
+
+msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), so WordPress deleted the comment for good instead: its meta went and its replies moved up a level. Before trashing a comment on this site, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "Der Papierkorb ist auf dieser Website ausgeschaltet (EMPTY_TRASH_DAYS ist 0), darum hat WordPress den Kommentar stattdessen endgültig gelöscht: Seine Metadaten sind weg, und seine Antworten sind eine Ebene hochgerückt. Vor dem Verschieben eines Kommentars in den Papierkorb auf dieser Website ihn mit wp_get_comment festhalten; wp_reply_comment legt einen neuen mit seinem Text an, unter einer neuen ID und im Namen des verbundenen Kontos."
+
+msgid "WordPress did not store the new status of comment %d: it still has the status it had before. A plugin may keep it from changing. Check the comment with wp_get_comment, and ask the site administrator which plugin guards it."
+msgstr "WordPress hat den neuen Status des Kommentars %d nicht gespeichert: Er hat weiterhin den Status von vorher. Ein Plugin kann die Änderung verhindern. Den Kommentar mit wp_get_comment prüfen und den Administrator der Website fragen, welches Plugin ihn schützt."

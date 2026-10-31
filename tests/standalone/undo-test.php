@@ -510,7 +510,8 @@ ok( 'ab_mcp_undo_unknown_tool' === ab_code( AB_MCP_Undo_Restore::plan( array( 't
 $GLOBALS['ab_caps']['manage_options'] = true;
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_site_settings', 'kind' => 'option' ), array( 'blogname' => 'x' ) ) ), 'G3 a kind that does not match its tool is refused' );
 ok( 'ab_mcp_undo_kind_mismatch' === ab_code( AB_MCP_Undo_Restore::plan( array( 'tool' => 'wp_update_post', 'kind' => 'post_status' ), array( array( 1, 'draft' ) ) ) ), 'G3 also between this plugin\'s own kinds' );
-ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post', 'wp_activate_theme', 'wp_update_builder_element', 'wp_search_replace', 'wp_run_ability', 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_media', 'wp_create_term', 'wp_update_term', 'wp_create_menu', 'wp_add_menu_item', 'wp_update_widget', 'wp_add_widget', 'wp_delete_widget', 'wp_seo_set' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the nineteen tools of this plugin that record undo points (two of them since 4.10.0, wp_activate_theme since 4.11.0, wp_run_ability since 4.12.0, the four meta tools and the seven of terms, menus and widgets since 4.13.0, wp_seo_set since 4.14.0)' );
+ok( array( 'wp_bulk_update_status', 'wp_update_site_settings', 'wp_update_post', 'wp_activate_theme', 'wp_update_builder_element', 'wp_search_replace', 'wp_run_ability', 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_media', 'wp_create_term', 'wp_update_term', 'wp_create_menu', 'wp_add_menu_item', 'wp_update_widget', 'wp_add_widget', 'wp_delete_widget', 'wp_seo_set', 'wp_moderate_comment', 'wp_reply_comment', 'wp_delete_comment' ) === array_keys( AB_MCP_Undo_Restore::policy() ), 'G4 the policy names exactly the twenty-two tools of this plugin that record undo points (two of them since 4.10.0, wp_activate_theme since 4.11.0, wp_run_ability since 4.12.0, the four meta tools and the seven of terms, menus and widgets since 4.13.0, wp_seo_set and the three comment tools since 4.14.0)' );
+ok( array( 'comment:moderate_comments', 'comment:moderate_comments', 'comment:moderate_comments' ) === array_map( static fn( $p ) => $p['kind'] . ':' . $p['cap'], array_values( array_slice( AB_MCP_Undo_Restore::policy(), 19, 3 ) ) ), 'G4 the comment tools (4.14.0): kind comment, with the capability the tools ask' );
 ok( array( 'edit_posts', 'manage_categories', 'edit_users', 'upload_files' ) === array_column( array_intersect_key( AB_MCP_Undo_Restore::policy(), array_flip( array( 'wp_update_post_meta', 'wp_update_term_meta', 'wp_update_user_meta', 'wp_update_media' ) ) ), 'cap' ) && array( 'meta' ) === array_values( array_unique( array_column( array_slice( AB_MCP_Undo_Restore::policy(), 7, 4 ), 'kind' ) ) ), 'G4 the four of 4.13.0 record kind meta, each with the capability its tool asks' );
 ok( array( 'term:manage_categories', 'term:manage_categories', 'term:edit_theme_options', 'menu_item:edit_theme_options', 'widget:edit_theme_options', 'widget:edit_theme_options', 'widget:edit_theme_options' ) === array_map( static fn( $p ) => $p['kind'] . ':' . $p['cap'], array_values( array_slice( AB_MCP_Undo_Restore::policy(), 11, 7 ) ) ), 'G4 terms, menus and widgets (4.13.0): their kinds, each with the capability its tool asks' );
 
@@ -779,7 +780,7 @@ ok( empty( $bad ), 'O2 every AB_MCP_*::method() reference in the undo code resol
 $pol   = AB_MCP_Undo_Restore::policy();
 $kinds = array();
 foreach ( $pol as $tool => $row ) { $kinds[ $row['kind'] ] = true; }
-ok( 19 === count( $pol ), 'O3 the policy table covers exactly the nineteen tools of this plugin' );
+ok( 22 === count( $pol ), 'O3 the policy table covers exactly the twenty-two tools of this plugin' );
 $restore_src = (string) file_get_contents( $GLOBALS['ab_free'] . 'undo/class-undo-restore.php' );
 $missing     = array();
 foreach ( array_keys( $kinds ) as $k ) {
@@ -787,7 +788,7 @@ foreach ( array_keys( $kinds ) as $k ) {
 }
 ok( empty( $missing ), 'O3 and every kind it names has a plan branch and a restore branch' . ( $missing ? ' -- fehlt: ' . implode( ', ', $missing ) : '' ) );
 $guidance_pro = AB_MCP_Guidance::PRO_TOOLS;
-ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of the eighteen is listed as a Pro tool' );
+ok( array() === array_intersect( array_keys( $pol ), $guidance_pro ), 'O4 none of them is listed as a Pro tool' );
 
 /* ============================== PRO) Pro-Punkte im gemeinsamen Speicher */
 

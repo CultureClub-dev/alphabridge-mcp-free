@@ -1,9 +1,9 @@
 <?php
 /**
  * The undo of a change a tool made to one object through WordPress — a term
- * or a menu (a menu is a term), a menu item, the option rows of a widget —
- * since 4.13.0: the half that AB_MCP_Undo_Terms, AB_MCP_Undo_Menu_Items and
- * AB_MCP_Undo_Widgets share.
+ * or a menu (a menu is a term), a menu item, the option rows of a widget,
+ * since 4.14.0 a comment — since 4.13.0: the half that AB_MCP_Undo_Terms,
+ * AB_MCP_Undo_Menu_Items, AB_MCP_Undo_Widgets and AB_MCP_Undo_Comments share.
  *
  * The rule is AB_MCP_Undo_Meta's. Each kind reads the state of its object
  * straight from the tables, before the write (or, for an object the tool
@@ -376,12 +376,22 @@ abstract class AB_MCP_Undo_Objects {
 	 * The undo_note of the tools that delete for good, by tool: why there is
 	 * no way back, and what to do first.
 	 *
-	 * @param string    $tool      wp_delete_term, wp_delete_menu_item, wp_delete_media or wp_delete_user.
+	 * @param string    $tool      wp_delete_term, wp_delete_menu_item, wp_delete_media, wp_delete_user,
+	 *                             wp_delete_comment, or wp_moderate_comment where the trash is off.
 	 * @param bool|null $multisite For wp_delete_user: on a multisite network (null: this site's).
 	 * @return string
 	 */
 	public static function deleted_for_good( $tool, $multisite = null ) {
 		switch ( (string) $tool ) {
+			case 'wp_delete_comment':
+				// Since 4.14.0: with force, from the trash or spam, and where
+				// the trash is off; into the trash there is an undo point.
+				$why = __( 'WordPress deletes a comment for good with force=true, from the trash or from spam, and on a site with the trash turned off: its meta goes and its replies move up a level. Before deleting a comment that may be needed again, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account.', 'alphabridge-mcp' );
+				break;
+			case 'wp_moderate_comment':
+				// Since 4.14.0: trash where EMPTY_TRASH_DAYS is 0.
+				$why = __( 'The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), so WordPress deleted the comment for good instead: its meta went and its replies moved up a level. Before trashing a comment on this site, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account.', 'alphabridge-mcp' );
+				break;
 			case 'wp_delete_term':
 				$why = __( 'WordPress deletes a term for good, with its meta and its place on every post that had it. Before deleting a term that may be needed again, note it with wp_get_term and wp_get_term_meta; wp_create_term makes it anew, under a new id and on no post.', 'alphabridge-mcp' );
 				break;
@@ -410,7 +420,7 @@ abstract class AB_MCP_Undo_Objects {
 	 */
 	public static function own_notes() {
 		$out = array();
-		foreach ( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user' ) as $tool ) {
+		foreach ( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user', 'wp_delete_comment', 'wp_moderate_comment' ) as $tool ) {
 			$out[ $tool ] = self::deleted_for_good( $tool );
 		}
 		return $out;

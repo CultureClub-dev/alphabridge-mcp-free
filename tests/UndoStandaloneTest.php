@@ -2,7 +2,8 @@
 /**
  * The standalone scripts under tests/standalone/ (the undo store, the undo of
  * wp_update_post, the page caches after a restore, the undo of the meta
- * tools), run by this suite.
+ * tools, of terms, menus and widgets, and of the comment tools), run by this
+ * suite.
  *
  * They come from AlphaBridge MCP Pro, where each is its own PHP script with
  * its own stand-ins for WordPress; those stand-ins cannot share a process with
@@ -42,6 +43,8 @@ final class UndoStandaloneTest extends TestCase {
 		'undo-meta-test.php'       => 135,
 		// Since 4.13.0: the undo of terms, menus, menu items and widgets.
 		'undo-terms-widgets-test.php' => 140,
+		// Since 4.14.0: the undo of the comment tools and their read-back.
+		'undo-comments-test.php'      => 120,
 	);
 
 	/** For a script added later, until it is listed above. */

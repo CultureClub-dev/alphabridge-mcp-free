@@ -544,7 +544,7 @@ foreach ( AB_MCP_Undo_Restore::policy() as $tool => $row ) {
 	}
 }
 ok( array() === $missing, 'F1 and every kind a tool records besides its own' );
-ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site', 'builder_data' => 'post', 'option_rows' => 'site', 'theme' => 'site', 'meta' => 'post', 'term' => 'site', 'menu_item' => 'site', 'widget' => 'site' ) === $scopes, 'F1 posts for the post kinds, the page-builder pages (4.10.0) and the meta of posts and files (4.13.0), the whole site for the settings, the option rows of a replace (4.10.0), the theme (4.11.0) and terms, menus and widgets (4.13.0)' );
+ok( array( 'post_status' => 'post', 'post_fields' => 'post', 'site_settings' => 'site', 'builder_data' => 'post', 'option_rows' => 'site', 'theme' => 'site', 'meta' => 'post', 'term' => 'site', 'menu_item' => 'site', 'widget' => 'site', 'comment' => 'site' ) === $scopes, 'F1 posts for the post kinds, the page-builder pages (4.10.0) and the meta of posts and files (4.13.0), the whole site for the settings, the option rows of a replace (4.10.0), the theme (4.11.0), terms, menus and widgets (4.13.0) and comments (4.14.0)' );
 
 reset_all();
 $out = AB_MCP_Undo_Restore::after_restore( array( 'kind' => 'post_fields', 'tool' => 'wp_update_post', 'restored' => array( 5 ), 'failed' => array(), 'blocked' => array() ) );

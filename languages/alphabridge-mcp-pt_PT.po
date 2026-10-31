@@ -5053,3 +5053,24 @@ msgstr "Os itens de menu %1$s do menu %2$d continuam lá após a eliminação, o
 
 msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
 msgstr "Numa rede multisite, o WordPress remove a conta apenas deste site: a conta, o seu ID e a sua palavra-passe mantêm-se, e o seu conteúdo aqui foi tratado como a chamada indicou. Antes de remover uma conta que possa voltar a ser necessária aqui, registe a sua função com wp_get_user; um administrador da rede volta a adicioná-la a este site no wp-admin, em Utilizadores."
+
+msgid "WordPress did not delete comment %d again; the undo point stays. Check the comment with wp_get_comment, and try again."
+msgstr "O WordPress não voltou a eliminar o comentário %d; o ponto de restauro mantém-se. Verifique o comentário com wp_get_comment e tente novamente."
+
+msgid "WordPress did not take the status of comment %d back; the undo point stays. A plugin may hold the status of comments. Check the comment with wp_get_comment, and try again."
+msgstr "O WordPress não repôs o estado do comentário %d; o ponto de restauro mantém-se. Um plugin pode bloquear o estado dos comentários. Verifique o comentário com wp_get_comment e tente novamente."
+
+msgid "The comment was edited, moderated or answered after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "O comentário foi editado, moderado ou respondido depois de a anulação ter sido planeada; nada foi reposto. Passe force=true para o repor apesar da alteração mais recente."
+
+msgid "The snapshot of the comment is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
+msgstr "O instantâneo do comentário não tem uma forma que esta ferramenta escreva; nada foi reposto. Este ponto de restauro não pode ser usado; wp_undo_discard remove-o."
+
+msgid "WordPress deletes a comment for good with force=true, from the trash or from spam, and on a site with the trash turned off: its meta goes and its replies move up a level. Before deleting a comment that may be needed again, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "O WordPress elimina um comentário definitivamente com force=true, a partir do lixo ou do spam, e num site com o lixo desativado: os seus metadados desaparecem e as suas respostas sobem um nível. Antes de eliminar um comentário que possa voltar a ser necessário, registe-o com wp_get_comment; wp_reply_comment adiciona um novo com o seu texto, com um novo ID e em nome da conta ligada."
+
+msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), so WordPress deleted the comment for good instead: its meta went and its replies moved up a level. Before trashing a comment on this site, note it with wp_get_comment; wp_reply_comment adds a new one with its text, under a new id and in the name of the connected account."
+msgstr "O lixo está desativado neste site (EMPTY_TRASH_DAYS é 0), por isso o WordPress eliminou o comentário definitivamente: os seus metadados desapareceram e as suas respostas subiram um nível. Antes de enviar um comentário para o lixo neste site, registe-o com wp_get_comment; wp_reply_comment adiciona um novo com o seu texto, com um novo ID e em nome da conta ligada."
+
+msgid "WordPress did not store the new status of comment %d: it still has the status it had before. A plugin may keep it from changing. Check the comment with wp_get_comment, and ask the site administrator which plugin guards it."
+msgstr "O WordPress não guardou o novo estado do comentário %d: continua com o estado que tinha antes. Um plugin pode impedir a alteração. Verifique o comentário com wp_get_comment e pergunte ao administrador do site que plugin o protege."
