@@ -77,7 +77,16 @@ class AB_MCP_Undo_Meta {
 		'wp_update_term_meta' => 'term',
 		'wp_update_user_meta' => 'user',
 		'wp_update_media'     => 'post',
+		'wp_seo_set'          => 'post',
 	);
+
+	/**
+	 * The keys wp_seo_set writes (since 4.14.0): the title, description and
+	 * focus keyword of Yoast SEO and of Rank Math, as AB_MCP_Tools_Seo::keys()
+	 * names them. A point of wp_seo_set holds one to three of them; Yoast's
+	 * are protected ("_") keys, which the other meta tools never write.
+	 */
+	const SEO_KEYS = array( '_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_yoast_wpseo_focuskw', 'rank_math_title', 'rank_math_description', 'rank_math_focus_keyword' );
 
 	/* ------------------------------------------------------------ the write */
 
@@ -666,6 +675,7 @@ class AB_MCP_Undo_Meta {
 		}
 		if ( 'post' === $type ) {
 			clean_post_cache( $id );
+			self::announce_seo( $id, $keys );
 		}
 		// Byte for byte, or it is not a restore.
 		$cmp = self::compare( $snap );
@@ -686,6 +696,47 @@ class AB_MCP_Undo_Meta {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Tell the SEO plugins that their fields came back. The rows were written
+	 * past update_metadata(), so its hooks did not fire, and Yoast SEO
+	 * rebuilds the indexable it shows the title and description from only on
+	 * added_post_meta, updated_post_meta and deleted_post_meta of its keys:
+	 * without them the page would keep the value undone. Only for the SEO
+	 * keys; the rows of other keys go back without hooks, as before.
+	 *
+	 * @param int      $id   Post id.
+	 * @param string[] $keys Keys written back.
+	 */
+	private static function announce_seo( $id, array $keys ) {
+		if ( ! function_exists( 'do_action' ) ) {
+			return;
+		}
+		foreach ( $keys as $key ) {
+			$key = (string) $key;
+			if ( ! in_array( $key, self::SEO_KEYS, true ) ) {
+				continue;
+			}
+			$rows = self::rows( 'post', $id, $key );
+			$rows = is_array( $rows ) ? array_values(
+				array_filter(
+					$rows,
+					static function ( $row ) use ( $key ) {
+						return $row['key'] === $key;
+					}
+				)
+			) : array();
+			if ( array() === $rows ) {
+				do_action( 'deleted_post_meta', array(), $id, $key, '' );
+				continue;
+			}
+			foreach ( $rows as $row ) {
+				// The value as stored: the SEO fields are text, and no stored
+				// bytes are unserialized here.
+				do_action( 'updated_post_meta', (int) $row['meta_id'], $id, $key, self::raw_value( (array) $row ) );
+			}
+		}
 	}
 
 	/**
@@ -795,6 +846,18 @@ class AB_MCP_Undo_Meta {
 				}
 				if ( 'wp_update_media' === $tool ) {
 					// valid() let only the alternative text through.
+					return '';
+				}
+				if ( 'wp_seo_set' === $tool ) {
+					// The rights the tool asks: the post, and each field.
+					foreach ( $keys as $key ) {
+						if ( ! in_array( $key, self::SEO_KEYS, true ) ) {
+							return 'protected_now';
+						}
+						if ( ! current_user_can( 'edit_post_meta', $id, $key ) ) {
+							return 'forbidden';
+						}
+					}
 					return '';
 				}
 				foreach ( $keys as $key ) {
@@ -910,6 +973,11 @@ class AB_MCP_Undo_Meta {
 				return false;
 			}
 			if ( array() !== array_diff( array_map( 'strval', array_keys( $data['keys'] ) ), array( self::MEDIA_ALT ) ) ) {
+				return false;
+			}
+		} elseif ( 'wp_seo_set' === $tool ) {
+			// The fields of one SEO plugin, one to three of them.
+			if ( array() === $data['keys'] || count( $data['keys'] ) > 3 || array() !== array_diff( array_map( 'strval', array_keys( $data['keys'] ) ), self::SEO_KEYS ) ) {
 				return false;
 			}
 		} elseif ( 1 !== count( $data['keys'] ) ) {

@@ -100,6 +100,9 @@ class AB_MCP_Undo_Restore {
 			'wp_update_widget'          => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
 			'wp_add_widget'             => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
 			'wp_delete_widget'          => array( 'kind' => 'widget', 'cap' => 'edit_theme_options' ),
+			// The SEO fields (free since 4.14.0): the post and each field are
+			// asked as the tool asks them (AB_MCP_Undo_Meta::refusal()).
+			'wp_seo_set'                => array( 'kind' => 'meta', 'cap' => 'edit_posts' ),
 		);
 	}
 
