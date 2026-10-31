@@ -1399,8 +1399,10 @@ class AB_MCP_Preview_Protection {
 	 * for /staging/ alone never reaches /wordpress/wp-admin/admin-ajax.php
 	 * and admin-post.php, and the AJAX of a page a visitor unlocked would
 	 * meet gate_admin() without it (Codex, 31.10.2026). Domain as WordPress
-	 * sets its own, so on a sub-directory network the cookie of one site
-	 * does not reach another.
+	 * sets its own. On a sub-directory network both paths are the network's
+	 * path (ms_cookie_constants()), so the browser sends the cookie of one
+	 * site to the others as well; what keeps them apart is the name of the
+	 * cookie per site (cookie_name()) and the hash it is signed for.
 	 *
 	 * @return string[] One or two paths, COOKIEPATH first.
 	 */
