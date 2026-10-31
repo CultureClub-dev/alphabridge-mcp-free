@@ -79,6 +79,7 @@ require_once AB_MCP_DIR . 'includes/undo/class-undo-widgets.php';
 require_once AB_MCP_DIR . 'includes/class-review-notice.php';
 require_once AB_MCP_DIR . 'includes/class-auth.php';
 require_once AB_MCP_DIR . 'includes/class-oauth.php';
+require_once AB_MCP_DIR . 'includes/class-redactor.php';
 require_once AB_MCP_DIR . 'includes/class-rest-controller.php';
 // The connection check: the settings card and the tool wp_connection_doctor.
 require_once AB_MCP_DIR . 'includes/class-connection-doctor.php';

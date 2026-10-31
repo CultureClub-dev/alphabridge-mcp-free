@@ -41,7 +41,7 @@ final class UndoStandaloneTest extends TestCase {
 		// Since 4.13.0: the undo of the meta tools and their read-back.
 		'undo-meta-test.php'       => 135,
 		// Since 4.13.0: the undo of terms, menus, menu items and widgets.
-		'undo-terms-widgets-test.php' => 140,
+		'undo-terms-widgets-test.php' => 144,
 	);
 
 	/** For a script added later, until it is listed above. */

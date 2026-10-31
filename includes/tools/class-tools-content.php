@@ -211,7 +211,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -1449,6 +1449,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Meta value must be a scalar or an array of scalars. Pass text, a number, true or false, or a list of them.', 'alphabridge-mcp' ) );
 		}
 		$target = $id;
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'post', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
@@ -1473,8 +1479,9 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				// update_metadata() unslashes the value it is given. Without
 				// wp_slash() "\u0026" in block or builder JSON is stored as
 				// "u0026" and the JSON breaks; wp_slash() walks into arrays,
-				// so nested values keep theirs.
-				update_post_meta( $id, $key, wp_slash( $value ) );
+				// so nested values keep theirs, and slash() into an object
+				// value_back() put back too (since 4.13.0).
+				update_post_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {

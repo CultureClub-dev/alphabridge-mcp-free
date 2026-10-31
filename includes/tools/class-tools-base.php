@@ -7,6 +7,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The credential rule of is_sensitive_meta_key(). Loaded here as well as by
+// the plugin file, for whatever loads the tool classes on their own.
+require_once dirname( __DIR__ ) . '/class-redactor.php';
+
 /**
  * Class AB_MCP_Tools_Base
  */
@@ -180,84 +184,15 @@ abstract class AB_MCP_Tools_Base {
 	 * This is defence-in-depth on top of the "_" prefix and is_protected_meta()
 	 * checks, not a replacement for them.
 	 *
+	 * The rule and its two lists live in AB_MCP_Redactor::is_credential_key(),
+	 * which the reading tools' redaction and the SQL mirror of the search and
+	 * replace scan read too; this method stays for the classes that inherit it.
+	 *
 	 * @param string $key Meta key.
 	 * @return bool
 	 */
 	protected static function is_sensitive_meta_key( $key ) {
-		$key = strtolower( trim( (string) $key ) );
-		if ( '' === $key ) {
-			return false;
-		}
-
-		// Bare credential names, matched as the WHOLE key and never as a
-		// substring. A key called exactly "token" or "secret" is a credential in
-		// practice, but the same word inside a longer name usually is not:
-		// matching these as substrings would wrongly refuse token_count,
-		// password_hint or credential_type. Plurals are listed explicitly.
-		$exact = array(
-			'token',
-			'tokens',
-			'secret',
-			'secrets',
-			'password',
-			'passwords',
-			'passphrase',
-			'passphrases',
-			'passcode',
-			'passcodes',
-			'pwd',
-			'pwds',
-			'otp',
-			'otps',
-			'credential',
-			'credentials',
-		);
-		if ( in_array( $key, $exact, true ) ) {
-			return true;
-		}
-
-		// High-precision compound credential patterns: these virtually never
-		// occur in legitimate content meta, so they avoid false positives on
-		// keys like token_count, email_signature, password_hint or
-		// credential_type while still catching real API keys and tokens.
-		//
-		// Matched as written, on purpose. Normalising the key first — removing
-		// separators, or treating camelCase as a word boundary — would catch
-		// accessToken as well, but it also turns co_author into "coauthor",
-		// which contains "oauth". Ordinary fields must not be refused, so the
-		// guard stays literal and leaves such spellings to the meta capability
-		// check that runs after it.
-		$needles = array(
-			'api_key',
-			'apikey',
-			'api-key',
-			'api_token',
-			'api_secret',
-			'access_key',
-			'access_token',
-			'secret_key',
-			'secret_token',
-			'private_key',
-			'client_secret',
-			'consumer_key',
-			'consumer_secret',
-			'refresh_token',
-			'auth_token',
-			'bearer_token',
-			'license_key',
-			'oauth',
-			'_token',
-			'_secret',
-			'_password',
-			'passwd',
-			'smtp_pass',
-		);
-		foreach ( $needles as $needle ) {
-			if ( false !== strpos( $key, $needle ) ) {
-				return true;
-			}
-		}
-		return false;
+		return AB_MCP_Redactor::is_credential_key( $key );
 	}
 
 	/**
