@@ -54,6 +54,18 @@ class AB_MCP_Admin {
 	const MAIN_MORE = 'more';
 
 	/**
+	 * Anchor of the card «Staging» (staging_card_html()).
+	 */
+	const STAGING_CARD = 'ab-staging-card';
+
+	/**
+	 * The user meta that says this user folded the card «Staging» ('1');
+	 * absent: unfolded. Per user, as WordPress keeps the boxes a user
+	 * closed; uninstall.php removes it from every user.
+	 */
+	const STAGING_CARD_FOLDED = 'ab_mcp_staging_card_folded';
+
+	/**
 	 * The tool registry, handed in by the plugin; looked up when not.
 	 *
 	 * @var AB_MCP_Tool_Registry|null
@@ -101,6 +113,9 @@ class AB_MCP_Admin {
 		// connection. Plain forms.
 		add_action( 'admin_post_ab_mcp_staging_first', array( $this, 'handle_staging_first' ) );
 		add_action( 'admin_post_ab_mcp_staging_connection', array( $this, 'handle_staging_connection' ) );
+		// The card «Staging» folded or unfolded: the details element folds
+		// at once, and admin.js keeps the choice for this user over ajax.
+		add_action( 'wp_ajax_ab_mcp_staging_card', array( $this, 'ajax_staging_card' ) );
 		// Creating or rotating a token reveals a secret. That is done over
 		// authenticated admin-ajax so the plaintext is returned once, directly to
 		// the admin's own browser, and is never written to the database — not even
@@ -734,6 +749,25 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * AJAX: keep whether the current user folded the card «Staging»
+	 * (STAGING_CARD_FOLDED), from the click on its summary (admin.js).
+	 * folded=1 folds it, anything else unfolds it. Only the user's own
+	 * choice; nothing of the site changes.
+	 */
+	public function ajax_staging_card() {
+		$this->ajax_guard();
+		check_ajax_referer( 'ab_mcp_ajax', 'nonce' );
+		$folded  = isset( $_POST['folded'] ) && '1' === sanitize_key( wp_unslash( $_POST['folded'] ) );
+		$user_id = get_current_user_id();
+		if ( $folded ) {
+			update_user_meta( $user_id, self::STAGING_CARD_FOLDED, '1' );
+		} else {
+			delete_user_meta( $user_id, self::STAGING_CARD_FOLDED );
+		}
+		wp_send_json_success( array( 'folded' => $folded ) );
+	}
+
+	/**
 	 * AJAX: create a connection (token) and return the plaintext ONCE.
 	 *
 	 * The secret is sent only in this JSON response, straight to the authenticated
@@ -915,8 +949,8 @@ class AB_MCP_Admin {
 	 *
 	 * Top to bottom: the main switch for write access; the band with the
 	 * logo, this site's state and the choice of assistant; how to connect the
-	 * chosen one; the fine-tuning of the tool switches (open, its main groups
-	 * folded); the connections;
+	 * chosen one; the connection check; the card «Staging»; the fine-tuning
+	 * of the tool switches (open, its main groups folded); the connections;
 	 * boxes from add-ons; the log. The side column carries the Pro box (free
 	 * edition only), boxes from add-ons and the guides.
 	 */
@@ -955,8 +989,8 @@ class AB_MCP_Admin {
 
 	/**
 	 * The main column, top to bottom: connect the chosen assistant, the
-	 * fine-tuning of the tool switches, the connections, boxes from add-ons,
-	 * the settings for how apps connect, the log.
+	 * connection check, the card «Staging», the fine-tuning of the tool
+	 * switches, the connections, boxes from add-ons, the log.
 	 *
 	 * @param array $tokens Stored connections.
 	 * @param array $groups Tool groups from the registry.
@@ -966,7 +1000,7 @@ class AB_MCP_Admin {
 		echo '<div class="ab-main">';
 		echo $this->connect_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside connect_card_html().
 		echo $this->doctor_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside doctor_card_html().
-		echo $this->preview_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside preview_card_html().
+		echo $this->staging_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside staging_card_html().
 		echo $this->capabilities_card_html( $groups, $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside capabilities_card_html().
 		$this->render_connections_card( $tokens );
 
@@ -1269,25 +1303,187 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The card «Preview protection» (AB_MCP_Preview_Protection), between the
-	 * connection check and the fine-tuning: what it does, its state, the
-	 * password shown once after switching on or renewing, and the buttons.
-	 * On and a new password run over ajax (ajax_preview_protection()), so the
-	 * password reaches only this browser, once; off is a plain form
-	 * (handle_preview_protection()). The card ends with what the protection
-	 * does not cover, then the form for the role of the site, the other
-	 * site of its pair and the host (staging_record_html()). A first step of
-	 * the card «Staging» of a later version.
+	 * The card «Staging», between the connection check and the fine-tuning:
+	 * the way to a staging site and everything it needs on this site, in
+	 * the order of its checklist. Top to bottom: the checklist with the next
+	 * step (staging_checklist_html(), the one wp_staging_status reports);
+	 * the role of the site, the other site of its pair and the host, with
+	 * the pair in the hub as a note (staging_record_html()); how to make the
+	 * staging copy, with the host's own guide where one is known
+	 * (staging_host_html()); the preview protection (preview_section_html());
+	 * «Staging first» with every connection (staging_first_html()). Each part
+	 * keeps its form, its action, its nonce and the anchor the tools and
+	 * the notices link to; the card adds none of them.
+	 *
+	 * Under the title a line says where the site stands, and the rest folds
+	 * away (a details element, so it folds without JavaScript too); admin.js
+	 * remembers the choice of each user (ajax_staging_card()). It folds,
+	 * and is never taken off the page: the links of wp_staging_status, of
+	 * the preview protection and of the refusal of «Staging first» lead into
+	 * it (an address naming a part inside opens it, admin.js unfold()), and
+	 * a staging site needs its role and its protection whatever «Staging
+	 * first» says. Folded, it is one line. Nothing in it advertises: no
+	 * edition, no price, no trial (the staging concept, section 7, until the
+	 * first report of differences).
 	 *
 	 * @return string HTML, escaped.
 	 */
-	private function preview_card_html() {
+	private function staging_card_html() {
+		$report  = AB_MCP_Staging::report( false );
+		$items   = $report['checklist'];
+		$done    = self::done_count( $items );
+		$labels  = self::staging_role_labels();
+		$setting = array(
+			AB_MCP_Staging_Gate::OFF     => _x( 'off', 'staging first setting', 'alphabridge-mcp' ),
+			AB_MCP_Staging_Gate::ASK     => _x( 'ask', 'staging first setting', 'alphabridge-mcp' ),
+			AB_MCP_Staging_Gate::REQUIRE => _x( 'require', 'staging first setting', 'alphabridge-mcp' ),
+		);
+
+		$html  = '<section class="ab-card ab-staging-card" id="' . esc_attr( self::STAGING_CARD ) . '" aria-labelledby="ab-staging-card-title">';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Staging', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title" id="ab-staging-card-title">' . esc_html__( 'Work on a staging site first', 'alphabridge-mcp' ) . '</h2>';
+		/* translators: 1: role of the site, such as Production site, 2: items of the checklist done, 3: all items, 4: the setting Staging first: off, ask or require. */
+		$html .= '<p class="ab-direct__status ab-staging-card__state">' . esc_html( sprintf( __( '%1$s. Checklist: %2$d of %3$d done. Staging first: %4$s.', 'alphabridge-mcp' ), $labels[ $report['role']['value'] ], $done, count( $items ), $setting[ AB_MCP_Staging_Gate::setting() ] ) ) . '</p>';
+		$html .= '<details class="ab-staging-card__fold"' . ( $this->staging_card_open() ? ' open' : '' ) . '>';
+		$html .= '<summary class="ab-staging-card__summary">' . esc_html__( 'Steps and settings', 'alphabridge-mcp' ) . '</summary>';
+		$html .= '<p class="ab-lead">' . esc_html__( 'A staging site is a copy of this site where changes are made and checked first, then carried over to the production site once they are approved. Here you see where this site stands on that way and set what it needs.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $this->staging_checklist_html( $items, $report['role']['value'], $report['pair'] );
+		$html .= $this->staging_record_html();
+		if ( AB_MCP_Staging::ROLE_STAGING !== $report['role']['value'] ) {
+			$html .= $this->staging_host_html( $report['host'] );
+		}
+		$html .= $this->preview_section_html();
+		$html .= $this->staging_first_html();
+		$html .= '</details></section>';
+		return $html;
+	}
+
+	/**
+	 * Whether the card «Staging» opens unfolded: unless this user folded it
+	 * (STAGING_CARD_FOLDED); always after a form of the card, whose notice
+	 * and anchor land in it.
+	 *
+	 * @return bool
+	 */
+	private function staging_card_open() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
+		$notice = isset( $_GET['ab_notice'] ) ? sanitize_key( wp_unslash( $_GET['ab_notice'] ) ) : '';
+		if ( 0 === strpos( $notice, 'staging_' ) || 0 === strpos( $notice, 'preview_' ) ) {
+			return true;
+		}
+		return '1' !== (string) get_user_meta( get_current_user_id(), self::STAGING_CARD_FOLDED, true );
+	}
+
+	/**
+	 * The checklist of the card «Staging»: the items wp_staging_status
+	 * reports (AB_MCP_Staging::report(), the same call, nothing counted
+	 * again), each with its state as a word, its finding and, while open,
+	 * its steps and fallback; the first open one is the next step
+	 * (AB_MCP_Staging::first_open(), as the tool's next_step). Where every
+	 * item is done, the tool's next_step says what to do now that the way
+	 * is in place. The other site is not asked from here: whether it
+	 * answers stays «not checked» until an assistant checks it
+	 * (wp_staging_status with check_partner).
+	 *
+	 * @param array      $items Checklist as AB_MCP_Staging::report() gives it.
+	 * @param string     $role  The confirmed role or ROLE_UNCONFIRMED.
+	 * @param array|null $pair  Pair as AB_MCP_Staging::summary() reports it.
+	 * @return string HTML, escaped.
+	 */
+	private function staging_checklist_html( array $items, $role, $pair ) {
+		$next = AB_MCP_Staging::first_open( $items );
+
+		$html  = '<div class="ab-staging ab-staging-checklist" id="ab-staging-checklist">';
+		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Where this site stands', 'alphabridge-mcp' ) . '</h3>';
+		$html .= '<ol class="ab-staging-checklist__list">';
+		foreach ( $items as $item ) {
+			if ( true === $item['done'] ) {
+				$state = array( 'done', __( 'Done', 'alphabridge-mcp' ), 'on' );
+			} elseif ( false === $item['done'] ) {
+				$state = null !== $next && $next['id'] === $item['id']
+					? array( 'next', __( 'Next step', 'alphabridge-mcp' ), 'partial' )
+					: array( 'open', __( 'Open', 'alphabridge-mcp' ), 'off' );
+			} else {
+				$state = array( 'unchecked', __( 'Not checked', 'alphabridge-mcp' ), 'read' );
+			}
+			$html .= '<li class="ab-staging-checklist__item ab-staging-checklist__item--' . esc_attr( $state[0] ) . '">';
+			$html .= '<p class="ab-staging-checklist__title"><span class="ab-pill ab-pill--' . esc_attr( $state[2] ) . '">' . esc_html( $state[1] ) . '</span> <b>' . esc_html( $item['title'] ) . '</b></p>';
+			$html .= '<p class="ab-direct__status">' . esc_html( $item['finding'] ) . '</p>';
+			if ( false === $item['done'] && '' !== (string) $item['steps'] ) {
+				$html .= '<p class="ab-direct__steps">' . esc_html( $item['steps'] ) . '</p>';
+			}
+			if ( false === $item['done'] && isset( $item['fallback'] ) ) {
+				$html .= '<p class="ab-note">' . esc_html( $item['fallback'] ) . '</p>';
+			}
+			$html .= '</li>';
+		}
+		$html .= '</ol>';
+		if ( array() !== $items && count( $items ) === self::done_count( $items ) ) {
+			$html .= '<p class="ab-direct__status ab-staging-checklist__in-place">' . esc_html( AB_MCP_Staging::next_step( $items, $role, $pair ) ) . '</p>';
+		}
+		$html .= '</div>';
+		return $html;
+	}
+
+	/**
+	 * How many items of a checklist are done.
+	 *
+	 * @param array $items Checklist.
+	 * @return int
+	 */
+	private static function done_count( array $items ) {
+		return count( array_filter( array_column( $items, 'done' ), static fn( $d ) => true === $d ) );
+	}
+
+	/**
+	 * How to make the staging copy, in the card «Staging», on a site that
+	 * is not the confirmed staging site: the host's own guide where one is
+	 * known (AB_MCP_Staging::HOST_GUIDES, as wp_staging_status reports it),
+	 * else the ways that work with any host. Nothing of a host is said that
+	 * its guide does not say.
+	 *
+	 * @param array $host As AB_MCP_Staging::host() reports it.
+	 * @return string HTML, escaped.
+	 */
+	private function staging_host_html( array $host ) {
+		$html  = '<div class="ab-staging ab-staging-copy" id="ab-staging-copy">';
+		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Making the staging copy', 'alphabridge-mcp' ) . '</h3>';
+		if ( '' !== $host['name'] && is_string( $host['guide'] ) && '' !== $host['guide'] ) {
+			/* translators: %s: name of the host, such as Kinsta. */
+			$html .= '<p class="ab-direct__status">' . esc_html( sprintf( __( '%s has a staging function of its own, and its guide says how to make the copy.', 'alphabridge-mcp' ), $host['name'] ) ) . '</p>';
+			/* translators: %s: name of the host, such as Kinsta. */
+			$html .= '<p>' . $this->ext_button( $host['guide'], sprintf( __( 'Staging guide of %s', 'alphabridge-mcp' ), $host['name'] ) ) . '</p>';
+			$html .= '<p class="ab-note">' . esc_html__( 'Other ways: a staging plugin from the WordPress plugin directory, or a staging site you already have, connected by its address above.', 'alphabridge-mcp' ) . '</p>';
+		} else {
+			$html .= '<p class="ab-direct__status">' . esc_html__( 'Ways to make the copy, with any host:', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<ol class="ab-direct__steps">';
+			$html .= '<li>' . esc_html__( 'The staging function of your host, if it has one: its control panel or its help pages show it.', 'alphabridge-mcp' ) . '</li>';
+			$html .= '<li>' . esc_html__( 'A staging plugin from the WordPress plugin directory, which makes the copy in its own screen.', 'alphabridge-mcp' ) . '</li>';
+			$html .= '<li>' . esc_html__( 'A staging site you already have: install AlphaBridge MCP there and enter its address above.', 'alphabridge-mcp' ) . '</li>';
+			$html .= '</ol>';
+		}
+		$html .= '</div>';
+		return $html;
+	}
+
+	/**
+	 * The preview protection (AB_MCP_Preview_Protection), a part of the card
+	 * «Staging»: what it does, its state, the password shown once after
+	 * switching on or renewing, and the buttons. On and a new password run
+	 * over ajax (ajax_preview_protection()), so the password reaches only
+	 * this browser, once; off is a plain form (handle_preview_protection()).
+	 * It ends with what the protection does not cover and, where the loader
+	 * is missing, the file to create. admin.js finds the part by its id
+	 * (AB_MCP_Preview_Protection::ANCHOR) and its data-when elements.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function preview_section_html() {
 		$on = AB_MCP_Preview_Protection::is_on();
 
-		$html  = '<div class="ab-card ab-preview" id="' . esc_attr( AB_MCP_Preview_Protection::ANCHOR ) . '">';
-		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Staging', 'alphabridge-mcp' ) . '</p>';
-		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Preview protection', 'alphabridge-mcp' ) . '</h2>';
-		$html .= '<p class="ab-lead">' . esc_html__( 'For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before.', 'alphabridge-mcp' ) . '</p>';
+		$html  = '<div class="ab-staging ab-preview" id="' . esc_attr( AB_MCP_Preview_Protection::ANCHOR ) . '">';
+		$html .= '<h3 class="ab-setting__title">' . esc_html__( 'Preview protection', 'alphabridge-mcp' ) . '</h3>';
+		$html .= '<p class="ab-note">' . esc_html__( 'For a staging site: visitors without a login see a password page instead of the site, and search engines are told to stay away. Signed-in users, connected apps and the hub keep working as before.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<p class="ab-direct__status ab-preview-status">' . esc_html( $this->preview_status_text() ) . '</p>';
 
 		// The password, shown once after switching on or renewing (admin.js
@@ -1317,14 +1513,12 @@ class AB_MCP_Admin {
 		$missing = $on && ! AB_MCP_Preview_Protection::loader_current();
 		$html   .= '<div class="notice notice-warning inline ab-preview__loader"' . ( $missing ? '' : ' hidden' ) . '><p class="ab-preview__loader-text">' . ( $missing ? esc_html( $this->preview_loader_note() ) : '' ) . '</p>';
 		$html   .= '<details><summary>' . esc_html__( 'File content', 'alphabridge-mcp' ) . '</summary><textarea readonly rows="12" class="ab-preview__source" aria-label="' . esc_attr__( 'File content', 'alphabridge-mcp' ) . '">' . ( $missing ? esc_textarea( AB_MCP_Preview_Protection::loader_source() ) : '' ) . '</textarea></details></div>';
-		$html   .= $this->staging_record_html();
-		$html   .= $this->staging_first_html();
 		$html   .= '</div>';
 		return $html;
 	}
 
 	/**
-	 * The section «Staging first» in the card above (AB_MCP_Staging_Gate):
+	 * The section «Staging first» in the card «Staging» (AB_MCP_Staging_Gate):
 	 * the setting with its three values, and, with it on, every connection
 	 * with its state and the one button it takes: «Work without staging»
 	 * and «Revoke» (require), «Ask again» (ask, for a connection that said
@@ -1451,10 +1645,11 @@ class AB_MCP_Admin {
 	}
 
 	/**
-	 * The form «Role of this site» in the card above (AB_MCP_Staging): the
-	 * confirmed role with who and when, the suggestion from what the site
-	 * shows (a hint, never proof), the address of the other site of the
-	 * pair, and the host as detected or chosen. One plain form
+	 * The form «Role of this site» in the card «Staging» (AB_MCP_Staging):
+	 * the confirmed role with who and when, the suggestion from what the
+	 * site shows (a hint, never proof), the address of the other site of
+	 * the pair with the note on the pair in the hub (hub_pair_html()), and
+	 * the host as detected or chosen. One plain form
 	 * (handle_staging_record()).
 	 *
 	 * @return string HTML, escaped.
@@ -1488,6 +1683,7 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-field"><label for="ab-staging-partner">' . esc_html__( 'Address of the other site', 'alphabridge-mcp' ) . '</label> ';
 		$html .= '<input type="url" id="ab-staging-partner" name="partner_url" class="regular-text" value="' . esc_attr( null !== $record['pair'] ? $record['pair']['partner_url'] : '' ) . '" placeholder="https://"></p>';
 		$html .= '<p class="ab-note">' . esc_html__( 'The staging site when this is the production site, the production site when this is the staging site. Empty: no pair.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $this->hub_pair_html();
 		$html .= '<p class="ab-field"><label for="ab-staging-host">' . esc_html__( 'Host', 'alphabridge-mcp' ) . '</label> ';
 		$html .= '<select id="ab-staging-host" name="host" class="ab-select">';
 		$auto  = '' !== $detected['host']
@@ -1503,6 +1699,20 @@ class AB_MCP_Admin {
 		$html .= '<p><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
 		$html .= '</form></div>';
 		return $html;
+	}
+
+	/**
+	 * The pair in the hub, under the address of the other site: a note, no
+	 * link. The hub's page for confirming a pair (connect_pair_sites) is
+	 * not public yet: it reaches the hub's production with the public
+	 * release (Z6 plan, branch of the hub), and until then this page links
+	 * to nothing that is not there. With that release this becomes the link
+	 * to the hub with both addresses filled in, here and only here.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function hub_pair_html() {
+		return '<p class="ab-note ab-staging__hub">' . esc_html__( 'Pair in the hub: setting the pair on both sites at once from the AlphaBridge hub is coming. Until then, enter the address of the other site here, and the address of this site there.', 'alphabridge-mcp' ) . '</p>';
 	}
 
 	/**

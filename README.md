@@ -109,6 +109,10 @@ directory. It is the same code WordPress.org ships.
   and Require, which refuses every change until an administrator releases the connection there
   for 24 hours. The ways back, the preview protection, the caches, comments and the order status
   are never held; the list grows through `ab_mcp_staging_gate_exempt`.
+- **The card «Staging»** on the settings page brings it together: the checklist of
+  `wp_staging_status` with the next step, the role and the other site, how to make the staging copy
+  with the host's own staging guide where one was read (`host.guide` in the tool), the preview
+  protection and Staging first with every connection; each user can fold it away.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

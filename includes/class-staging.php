@@ -99,6 +99,23 @@ class AB_MCP_Staging {
 	);
 
 	/**
+	 * The guide of a host to its own staging function, on the host's own
+	 * site, in English: each page read on 31.10.2026, and each describes
+	 * making a staging copy of a WordPress site in the host's control panel.
+	 * A host of HOSTS without an entry here (Infomaniak: its guides describe
+	 * a second installation by hand, no staging function of its own) is
+	 * named with the ways that work with any host, never with a staging
+	 * function nobody has read about.
+	 */
+	const HOST_GUIDES = array(
+		'kinsta'     => 'https://kinsta.com/docs/wordpress-hosting/staging-environment/',
+		'wpengine'   => 'https://wpengine.com/support/environments/',
+		'siteground' => 'https://www.siteground.com/tutorials/staging/create-staging',
+		'cloudways'  => 'https://support.cloudways.com/en/articles/5124886-how-to-create-a-staging-environment',
+		'hostinger'  => 'https://www.hostinger.com/support/5720286-how-to-create-a-wordpress-staging-environment-in-hostinger/',
+	);
+
+	/**
 	 * The REST route of the hub, under AB_MCP_REST_NAMESPACE.
 	 */
 	const ROUTE = '/staging-pair';
@@ -680,10 +697,21 @@ class AB_MCP_Staging {
 	}
 
 	/**
-	 * The host as it counts: the person's choice, else the detected one,
-	 * else unknown.
+	 * The guide of a host to its own staging function (HOST_GUIDES).
 	 *
-	 * @return array{value:string,name:string,source:string,detected:string|null,evidence:string[],chosen_by:array|null}
+	 * @param string $host A key of HOSTS, or HOST_UNKNOWN.
+	 * @return string|null The address, or null where none is known.
+	 */
+	public static function host_guide( $host ) {
+		return is_string( $host ) && isset( self::HOST_GUIDES[ $host ] ) ? self::HOST_GUIDES[ $host ] : null;
+	}
+
+	/**
+	 * The host as it counts: the person's choice, else the detected one,
+	 * else unknown; with the guide to its staging function where one is
+	 * known (host_guide()).
+	 *
+	 * @return array{value:string,name:string,source:string,detected:string|null,evidence:string[],chosen_by:array|null,guide:string|null}
 	 */
 	public static function host() {
 		$chosen   = self::record()['host'];
@@ -705,6 +733,7 @@ class AB_MCP_Staging {
 			'detected'  => '' !== $detected['host'] ? $detected['host'] : null,
 			'evidence'  => $detected['evidence'],
 			'chosen_by' => null !== $chosen ? self::who_out( $chosen, false ) : null,
+			'guide'     => self::host_guide( $value ),
 		);
 	}
 
@@ -932,9 +961,12 @@ class AB_MCP_Staging {
 		if ( $staging ) {
 			$items[] = self::item( 'staging_connected', $title, true, __( 'This site is the staging site.', 'alphabridge-mcp' ) );
 		} elseif ( null === $pair ) {
-			$steps   = '' !== $host['name']
-				/* translators: %s: name of the host, such as Kinsta. */
-				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
+			// A host's own staging function only where its guide was read
+			// (HOST_GUIDES), with that guide.
+			$guide   = isset( $host['guide'] ) && is_string( $host['guide'] ) ? $host['guide'] : '';
+			$steps   = '' !== $host['name'] && '' !== $guide
+				/* translators: 1: name of the host, such as Kinsta, 2: address of the host's guide. */
+				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'], $guide )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
 			$item['fallback'] = self::drafts_fallback();
@@ -1044,6 +1076,23 @@ class AB_MCP_Staging {
 	}
 
 	/**
+	 * The first open item of a checklist (done false), or null: the next
+	 * step, for next_step() and for the card «Staging» on the settings page
+	 * alike.
+	 *
+	 * @param array $items Checklist.
+	 * @return array|null
+	 */
+	public static function first_open( array $items ) {
+		foreach ( $items as $item ) {
+			if ( is_array( $item ) && array_key_exists( 'done', $item ) && false === $item['done'] ) {
+				return $item;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * The next step: the first open item with its steps, its fallback and
 	 * the direct link (AB_MCP_Guidance::compose()); without one, the first
 	 * check the assistant can make from here, or why the staging site could
@@ -1055,11 +1104,10 @@ class AB_MCP_Staging {
 	 * @return string
 	 */
 	public static function next_step( array $items, $role, $pair ) {
-		foreach ( $items as $item ) {
-			if ( false === $item['done'] ) {
-				$steps = $item['steps'] . ( isset( $item['fallback'] ) ? ' ' . $item['fallback'] : '' );
-				return AB_MCP_Guidance::compose( $item['finding'], $steps, AB_MCP_Guidance::settings_url( self::ANCHOR ) );
-			}
+		$item = self::first_open( $items );
+		if ( null !== $item ) {
+			$steps = $item['steps'] . ( isset( $item['fallback'] ) ? ' ' . $item['fallback'] : '' );
+			return AB_MCP_Guidance::compose( $item['finding'], $steps, AB_MCP_Guidance::settings_url( self::ANCHOR ) );
 		}
 		foreach ( $items as $item ) {
 			if ( isset( $item['check'] ) ) {

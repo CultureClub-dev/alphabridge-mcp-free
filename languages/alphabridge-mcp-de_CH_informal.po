@@ -5418,8 +5418,8 @@ msgid "This site is the staging site."
 msgstr "Diese Website ist die Staging-Website."
 
 #, php-format
-msgid "1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
-msgstr "1. Lege mit der Staging-Funktion im Kundenbereich von %s eine Staging-Kopie dieser Website an. 2. Installiere und aktiviere AlphaBridge MCP auf der Kopie. 3. Trage die Adresse der Kopie auf der Einstellungsseite dieser Website bei Staging ein und auf der Kopie die Adresse dieser Website."
+msgid "1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
+msgstr "1. Lege mit der Staging-Funktion im Kundenbereich von %1$s eine Staging-Kopie dieser Website an; Anleitung: %2$s 2. Installiere und aktiviere AlphaBridge MCP auf der Kopie. 3. Trage die Adresse der Kopie auf der Einstellungsseite dieser Website bei Staging ein und auf der Kopie die Adresse dieser Website."
 
 msgid "1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
 msgstr "1. Lege eine Staging-Kopie dieser Website an: mit der Staging-Funktion deines Hosters, falls er eine hat, oder mit einem Staging-Plugin aus dem WordPress-Plugin-Verzeichnis. 2. Installiere und aktiviere AlphaBridge MCP auf der Kopie. 3. Trage die Adresse der Kopie auf der Einstellungsseite dieser Website bei Staging ein und auf der Kopie die Adresse dieser Website."
@@ -5641,3 +5641,69 @@ msgstr "2. Dieser Aufruf kam über den WordPress-Abilities-Adapter: Um diese Web
 
 msgid "Not held: this site is the confirmed staging site, or paired with one."
 msgstr "Nicht angehalten: Diese Website ist die bestätigte Staging-Website oder mit einer gepaart."
+
+msgid "Work on a staging site first"
+msgstr "Zuerst auf einer Staging-Website arbeiten"
+
+#, php-format
+msgid "%1$s. Checklist: %2$d of %3$d done. Staging first: %4$s."
+msgstr "%1$s. Checkliste: %2$d von %3$d erledigt. Staging zuerst: %4$s."
+
+msgctxt "staging first setting"
+msgid "off"
+msgstr "aus"
+
+msgctxt "staging first setting"
+msgid "ask"
+msgstr "fragen"
+
+msgctxt "staging first setting"
+msgid "require"
+msgstr "verlangen"
+
+msgid "Steps and settings"
+msgstr "Schritte und Einstellungen"
+
+msgid "A staging site is a copy of this site where changes are made and checked first, then carried over to the production site once they are approved. Here you see where this site stands on that way and set what it needs."
+msgstr "Eine Staging-Website ist eine Kopie dieser Website, auf der Änderungen zuerst gemacht und geprüft und nach der Freigabe auf die Produktiv-Website übernommen werden. Hier siehst du, wo diese Website auf diesem Weg steht, und stellst ein, was sie dafür braucht."
+
+msgid "Where this site stands"
+msgstr "Wo diese Website steht"
+
+msgid "Done"
+msgstr "Erledigt"
+
+msgid "Next step"
+msgstr "Nächster Schritt"
+
+msgid "Open"
+msgstr "Offen"
+
+msgid "Making the staging copy"
+msgstr "Die Staging-Kopie anlegen"
+
+#, php-format
+msgid "%s has a staging function of its own, and its guide says how to make the copy."
+msgstr "%s hat eine eigene Staging-Funktion; die Anleitung dazu beschreibt, wie die Kopie angelegt wird."
+
+#, php-format
+msgid "Staging guide of %s"
+msgstr "Staging-Anleitung von %s"
+
+msgid "Other ways: a staging plugin from the WordPress plugin directory, or a staging site you already have, connected by its address above."
+msgstr "Andere Wege: ein Staging-Plugin aus dem WordPress-Plugin-Verzeichnis oder eine Staging-Website, die du schon hast, verbunden über ihre Adresse oben."
+
+msgid "Ways to make the copy, with any host:"
+msgstr "Wege zur Kopie, bei jedem Hoster:"
+
+msgid "The staging function of your host, if it has one: its control panel or its help pages show it."
+msgstr "Die Staging-Funktion deines Hosters, falls er eine hat: Sein Kundenbereich oder seine Hilfeseiten zeigen sie."
+
+msgid "A staging plugin from the WordPress plugin directory, which makes the copy in its own screen."
+msgstr "Ein Staging-Plugin aus dem WordPress-Plugin-Verzeichnis, das die Kopie in seiner eigenen Oberfläche anlegt."
+
+msgid "A staging site you already have: install AlphaBridge MCP there and enter its address above."
+msgstr "Eine Staging-Website, die du schon hast: Installiere dort AlphaBridge MCP und trage oben ihre Adresse ein."
+
+msgid "Pair in the hub: setting the pair on both sites at once from the AlphaBridge hub is coming. Until then, enter the address of the other site here, and the address of this site there."
+msgstr "Paar im Hub: Das Paar vom AlphaBridge-Hub aus auf beiden Websites auf einmal zu setzen, kommt noch. Bis dahin trägst du hier die Adresse der anderen Website ein und dort die Adresse dieser Website."

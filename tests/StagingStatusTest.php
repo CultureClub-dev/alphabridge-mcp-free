@@ -1527,7 +1527,7 @@ final class StagingStatusTest extends TestCase {
 
 	public function testTheCardCarriesTheFormWithTheStateAndTheSuggestion(): void {
 		$GLOBALS['ab_test_can'] = static fn(): bool => true;
-		$html                   = $this->admin( 'preview_card_html' );
+		$html                   = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( '<div class="ab-staging" id="ab-staging">', $html );
 		self::assertStringContainsString( 'Role of this site</h3>', $html );
 		self::assertStringContainsString( 'Not confirmed: this site counts as the production site.', $html );
@@ -1540,14 +1540,14 @@ final class StagingStatusTest extends TestCase {
 		self::assertStringContainsString( 'name="partner_url" class="regular-text" value=""', $html );
 		self::assertStringContainsString( '<option value="" selected=\'selected\'>As detected: nothing found</option>', $html );
 		self::assertStringContainsString( '<option value="infomaniak">Infomaniak</option>', $html );
-		self::assertLessThan( strpos( $html, 'id="ab-staging"' ), strpos( $html, 'ab-preview__actions' ), 'Below the protection, in the same card.' );
+		self::assertLessThan( strpos( $html, 'ab-preview__actions' ), strpos( $html, 'id="ab-staging"' ), 'Above the protection, in the same card: the order of the checklist.' );
 		self::assertDoesNotMatchRegularExpression( '/\bPro\b|Agency/', $html );
 
 		$GLOBALS['ab_test_home']      = 'https://staging.example.com';
 		$_SERVER['KINSTA_CACHE_ZONE'] = 'z';
 		self::confirm( 'staging', 'https://example.com' );
 		AB_MCP_Staging::set_host( 'kinsta', 7 );
-		$html = $this->admin( 'preview_card_html' );
+		$html = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( 'value="staging" checked=\'checked\'> Staging site', $html );
 		self::assertMatchesRegularExpression( '/Staging site, confirmed by user7 on \d{4}-\d\d-\d\d \d\d:\d\d on the settings page\. Other site: https:\/\/example\.com \(Production site\), entered by user7 on [^.]+ on the settings page\./', $html );
 		self::assertStringContainsString( 'Suggestion: staging site. The address begins with “staging.”. A suggestion is a hint, not proof.', $html );
@@ -1617,7 +1617,7 @@ final class StagingStatusTest extends TestCase {
 		AB_MCP_Staging::save( 'production', 'https://staging.example.com/pr%C3%BCfung', 'staging', 9, AB_MCP_Staging::SOURCE_HUB );
 		$raw = self::raw();
 		self::assertSame( 'https://staging.example.com/pr%C3%BCfung', $raw['pair']['partner_url'] );
-		$html = $this->admin( 'preview_card_html' );
+		$html = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( 'value="https://staging.example.com/pr%C3%BCfung"', $html, 'The field holds the stored address.' );
 
 		$exit = $this->submit( array( 'staging_role' => 'production', 'partner_url' => ' https://staging.example.com/pr%C3%BCfung ', 'host' => '' ) );

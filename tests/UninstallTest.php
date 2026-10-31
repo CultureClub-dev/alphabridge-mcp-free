@@ -47,6 +47,9 @@ final class UninstallTest extends TestCase {
 		'ab_mcp_preview_password',
 		// The filter over the tools «Staging first» never holds (AB_MCP_Staging_Gate::FILTER, free since 4.15.0).
 		'ab_mcp_staging_gate_exempt',
+		// The user meta of a folded card «Staging» (AB_MCP_Admin::STAGING_CARD_FOLDED,
+		// free since 4.15.0), removed from every user (testTheFoldOfTheStagingCardGoesFromEveryUser).
+		'ab_mcp_staging_card_folded',
 	);
 
 	public static function setUpBeforeClass(): void {
@@ -219,6 +222,18 @@ final class UninstallTest extends TestCase {
 		$this->runUninstall();
 
 		self::assertFalse( self::stored( AB_MCP_OAuth::OPT_CLIENTS ) );
+	}
+
+	public function testTheFoldOfTheStagingCardGoesFromEveryUser(): void {
+		update_user_meta( 7, \AB_MCP_Admin::STAGING_CARD_FOLDED, '1' );
+		update_user_meta( 9, \AB_MCP_Admin::STAGING_CARD_FOLDED, '1' );
+		update_user_meta( 9, 'nickname', 'Not ours' );
+
+		$this->runUninstall();
+
+		self::assertSame( '', get_user_meta( 7, \AB_MCP_Admin::STAGING_CARD_FOLDED, true ) );
+		self::assertSame( '', get_user_meta( 9, \AB_MCP_Admin::STAGING_CARD_FOLDED, true ) );
+		self::assertSame( 'Not ours', get_user_meta( 9, 'nickname', true ), 'only the plugin\'s own key goes' );
 	}
 
 	public function testEverySiteOfANetworkIsCleanedNotOnlyTheFirstHundred(): void {

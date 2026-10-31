@@ -795,6 +795,20 @@
 		}
 	} );
 
+	/* ---- The card «Staging»: its details element folds by itself; a click
+	 * on its summary (a mouse, Enter or Space) also keeps the choice for
+	 * this user, so the card opens as it was left. The click comes before
+	 * the details element toggles, so open now means folded next. An
+	 * address that opens the card (unfold()) changes nothing kept. ---- */
+	document.addEventListener( 'click', function ( e ) {
+		var summary = e.target.closest ? e.target.closest( '.ab-staging-card__summary' ) : null;
+		var fold = summary ? summary.parentElement : null;
+		if ( ! fold || 'DETAILS' !== fold.tagName ) {
+			return;
+		}
+		ajax( 'ab_mcp_staging_card', { folded: fold.open ? '1' : '0' } ).catch( function () {} );
+	} );
+
 	/* ---- Preview protection: switch on, new password (over ajax, so the
 	 * password is shown once, straight to this browser, as a token is). Off
 	 * is a plain form. ---- */

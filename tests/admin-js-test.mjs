@@ -190,4 +190,83 @@ assert.equal( missing.source.value, "<?php\n// ab-mcp-preview-loader", 'with the
 assert.equal( missing.password.value, 'abcdEFGH23456789', 'and the password all the same' );
 cases++;
 
+/* ---- The card «Staging»: its details element folds by itself; a click on
+ * its summary also keeps the choice for this user over ajax (folded=1 when
+ * it was open, 0 when it was folded). A click elsewhere sends nothing, and
+ * an address naming a part inside the folded card opens it without
+ * changing what is kept. ---- */
+async function runCard( { hash = '', open = true } ) {
+	const listeners = {};
+	const sent = [];
+	const mk = ( tagName, attrs, parent ) => ( {
+		tagName, attrs, parentElement: parent, hidden: false, open: false,
+		classList: { contains: ( c ) => ( attrs.class || '' ).split( ' ' ).includes( c ) },
+		getAttribute( k ) { return k in this.attrs ? this.attrs[ k ] : null; },
+		closest( sel ) {
+			for ( let c = this; c; c = c.parentElement ) {
+				if ( sel.startsWith( '.' ) && ! sel.includes( ',' ) && c.classList.contains( sel.slice( 1 ) ) ) { return c; }
+			}
+			return null;
+		},
+		scrollIntoView() {},
+	} );
+	const body    = mk( 'BODY', {}, null );
+	const card    = mk( 'SECTION', { id: 'ab-staging-card', class: 'ab-card ab-staging-card' }, body );
+	const details = mk( 'DETAILS', { class: 'ab-staging-card__fold' }, card );
+	details.open  = open;
+	const summary = mk( 'SUMMARY', { class: 'ab-staging-card__summary' }, details );
+	const part    = mk( 'DIV', { id: 'ab-staging-first', class: 'ab-staging ab-staging-first' }, details );
+	const title   = mk( 'H2', { class: 'ab-card__title' }, card );
+	const byId    = { 'ab-staging-card': card, 'ab-staging-first': part };
+	const document = {
+		body,
+		addEventListener( kind, fn ) { ( listeners[ kind ] = listeners[ kind ] || [] ).push( fn ); },
+		querySelector() { return null; },
+		querySelectorAll() { return []; },
+		getElementById( id ) { return byId[ id ] || null; },
+	};
+	const window = {
+		abMcpAdmin: { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n' },
+		location: { hash },
+		localStorage: { getItem() { return null; }, setItem() {} },
+		addEventListener() {},
+		FormData: class { constructor() { this.fields = {}; } append( k, v ) { this.fields[ k ] = v; } },
+		fetch( url, init ) { sent.push( { url, body: init.body.fields } ); return Promise.resolve( { json: () => Promise.resolve( { success: true, data: {} } ) } ); },
+		alert( msg ) { throw new Error( 'alert: ' + msg ); },
+	};
+	vm.runInNewContext( code, { document, window, console } );
+	const click = async ( target ) => {
+		for ( const fn of listeners.click || [] ) {
+			fn( { target, preventDefault() {} } );
+		}
+		await new Promise( ( r ) => setTimeout( r, 0 ) );
+	};
+	return { details, summary, title, sent, click };
+}
+
+{
+	const page = await runCard( { open: true } );
+	await page.click( page.summary );
+	assert.deepEqual( page.sent.map( ( s ) => s.body ), [ { action: 'ab_mcp_staging_card', nonce: 'n', folded: '1' } ], 'open, a click folds it and keeps that' );
+	assert.equal( page.sent[ 0 ].url, 'https://example.test/wp-admin/admin-ajax.php' );
+	page.details.open = false; // The browser folds the details element itself.
+	await page.click( page.summary );
+	assert.deepEqual( page.sent[ 1 ].body, { action: 'ab_mcp_staging_card', nonce: 'n', folded: '0' }, 'folded, a click unfolds it' );
+	await page.click( page.title );
+	assert.equal( page.sent.length, 2, 'a click elsewhere keeps nothing' );
+	cases++;
+}
+{
+	const page = await runCard( { open: false, hash: '#ab-staging-first' } );
+	assert.equal( page.details.open, true, 'an address naming a part inside opens the folded card' );
+	assert.equal( page.sent.length, 0, 'and changes nothing kept' );
+	cases++;
+}
+{
+	const page = await runCard( { open: false, hash: '#ab-elsewhere' } );
+	assert.equal( page.details.open, false, 'another address leaves it folded' );
+	assert.equal( page.sent.length, 0 );
+	cases++;
+}
+
 console.log( `admin-js-test: ${ cases } cases passed` );

@@ -375,14 +375,14 @@ final class AdminPageTest extends TestCase {
 		$html = $this->call( 'render_main_column', array(), $r->groups(), $r->all() );
 
 		$at = array();
-		foreach ( array( 'id="ab-connect"', 'id="ab-doctor"', 'id="ab-preview"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
+		foreach ( array( 'id="ab-connect"', 'id="ab-doctor"', 'id="ab-staging-card"', 'id="ab-caps"', 'id="ab-connections"', 'id="addon-main"', 'id="ab-log"' ) as $marker ) {
 			$pos = strpos( $html, $marker );
 			self::assertIsInt( $pos, $marker );
 			$at[] = $pos;
 		}
 		$sorted = $at;
 		sort( $sorted );
-		self::assertSame( $sorted, $at, 'Connect, connection check, preview protection, fine-tuning, connections, add-on boxes, log.' );
+		self::assertSame( $sorted, $at, 'Connect, connection check, Staging, fine-tuning, connections, add-on boxes, log.' );
 	}
 
 	public function testTheFineTuningIsOpenAndSaysSo(): void {

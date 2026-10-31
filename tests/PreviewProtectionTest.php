@@ -1457,7 +1457,7 @@ final class PreviewProtectionTest extends TestCase {
 			self::assertFalse( AB_MCP_Preview_Protection::loader_current() );
 
 			$GLOBALS['ab_test_can'] = static fn(): bool => true;
-			$html                   = $this->admin( 'preview_card_html' );
+			$html                   = $this->admin( 'staging_card_html' );
 			self::assertStringContainsString( '<div class="notice notice-warning inline ab-preview__loader"><p class="ab-preview__loader-text">', $html, 'The block shows.' );
 			self::assertStringContainsString( 'could not be written to ' . AB_MCP_Preview_Protection::loader_path(), $html );
 			self::assertStringContainsString( '<textarea readonly', $html );
@@ -1478,7 +1478,7 @@ final class PreviewProtectionTest extends TestCase {
 			self::assertTrue( $ok['loader']['written'] );
 			self::assertCount( 3, $ok['not_covered'] );
 			self::assertArrayNotHasKey( 'loader_source', $ok );
-			$html = $this->admin( 'preview_card_html' );
+			$html = $this->admin( 'staging_card_html' );
 			self::assertStringNotContainsString( 'could not be written', $html );
 			self::assertStringContainsString( '<div class="notice notice-warning inline ab-preview__loader" hidden><p class="ab-preview__loader-text"></p>', $html, 'The block is there for the ajax answer, hidden and empty.' );
 			AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => false ) );
@@ -1719,10 +1719,10 @@ final class PreviewProtectionTest extends TestCase {
 
 	public function testTheCardShowsTheStateAndTheWayToSwitch(): void {
 		$GLOBALS['ab_test_can'] = static fn(): bool => true;
-		$html                   = $this->admin( 'preview_card_html' );
+		$html                   = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( 'id="ab-preview"', $html );
 		self::assertStringContainsString( '<p class="ab-eyebrow">Staging</p>', $html );
-		self::assertStringContainsString( 'Preview protection</h2>', $html );
+		self::assertStringContainsString( '<div class="ab-staging ab-preview" id="ab-preview"><h3 class="ab-setting__title">Preview protection</h3>', $html, 'A part of the card «Staging».' );
 		self::assertStringContainsString( 'Off: visitors see the site.', $html );
 		self::assertStringContainsString( 'data-preview="on" data-when="off">Switch on', $html, 'On is offered while off.' );
 		self::assertStringContainsString( 'data-preview="password" data-when="on" hidden>New password', $html );
@@ -1736,7 +1736,7 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertStringContainsString( 'identifies nobody', $html );
 
 		$this->on();
-		$html = $this->admin( 'preview_card_html' );
+		$html = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( 'switched on by user7.', $html );
 		self::assertStringContainsString( 'data-preview="on" data-when="off" hidden>Switch on', $html );
 		self::assertStringContainsString( 'data-preview="password" data-when="on">New password', $html );
