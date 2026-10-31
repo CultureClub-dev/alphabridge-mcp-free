@@ -54,7 +54,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_update_widget',
 			array(
-				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too. Returns updated, id, the stored settings, saved_fields (the fields sent, as stored afterwards and read again; a credential is compared, not shown, and saved_differs and warning name a field the widget stored otherwise than sent) and undo: the token for wp_undo, which puts the widget type\'s option row back byte for byte, or null with undo_note saying why. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved.',
+				'description' => 'Update the settings of an existing widget instance (merges the given fields at the top level; a nested value sent replaces the stored one). The merged instance passes the widget\'s own update() sanitisation and the widget_update_callback filter, the same as the widgets screen — so HTML is filtered unless the account may post unfiltered HTML. A value that wp_get_widgets leaves out as a credential stays as stored when it is left out, also inside nested settings, and the answer leaves it out too; one it shows as [REDACTED] stays as stored when it is left out or sent back as [REDACTED]. Returns updated, id, the stored settings, saved_fields (the fields sent, as stored afterwards and read again; a credential is compared, not shown, and saved_differs and warning name a field the widget stored otherwise than sent) and undo: the token for wp_undo, which puts the widget type\'s option row back byte for byte, or null with undo_note saying why. An unknown id, an unregistered widget type or a value in a shape the widget does not keep is refused, and nothing is saved.',
 				'open_world'  => true, // a widget in an active area is public.
 				'capability'  => 'edit_theme_options',
 				'dangerous'   => true,
@@ -521,30 +521,164 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 
 	/**
 	 * Settings sent for an update, with the credential values wp_get_widgets
-	 * left out put back from the stored instance where they are missing inside
-	 * nested settings. The update merges the top level only, where array_merge
-	 * keeps a key that was not sent; a nested array sent back as it was read
-	 * would replace the stored one without them.
+	 * left out or showed as [REDACTED] put back from the stored instance where
+	 * they are missing inside nested settings: every key the reader redacts
+	 * (AB_MCP_Redactor::redacts_key(), which holds the rule of
+	 * is_sensitive_meta_key()). The update merges the top level only, where
+	 * array_merge keeps a key that was not sent; a nested array sent back as
+	 * it was read would replace the stored one without them.
 	 *
-	 * @param array $new    Settings sent, or a nested part of them.
-	 * @param array $old    The stored counterpart.
-	 * @param bool  $nested Whether $new is below the top level.
+	 * @param array      $new    Settings sent, or a nested part of them.
+	 * @param array      $old    The stored counterpart.
+	 * @param bool       $nested Whether $new is below the top level.
+	 * @param array|null $extra  AB_MCP_Redactor::extra_keys(); null to ask the filter.
 	 * @return array
 	 */
-	private static function keep_hidden_credentials( array $new, array $old, $nested = false ) {
+	private static function keep_hidden_credentials( array $new, array $old, $nested = false, ?array $extra = null ) {
+		$extra = null === $extra ? AB_MCP_Redactor::extra_keys() : $extra;
 		if ( $nested ) {
 			foreach ( $old as $key => $value ) {
-				if ( ! array_key_exists( $key, $new ) && self::is_sensitive_meta_key( (string) $key ) ) {
+				if ( ! array_key_exists( $key, $new ) && AB_MCP_Redactor::redacts_key( $key, $extra ) ) {
 					$new[ $key ] = $value;
 				}
 			}
 		}
 		foreach ( $new as $key => $value ) {
-			if ( is_array( $value ) && isset( $old[ $key ] ) && is_array( $old[ $key ] ) ) {
-				$new[ $key ] = self::keep_hidden_credentials( $value, $old[ $key ], true );
+			// A stored list is matched by position, not by key
+			// (stored_lists()). The stored value says what a value sent is: an
+			// object whose keys wp_get_widgets all left out reads as [].
+			if ( is_array( $value ) && isset( $old[ $key ] ) && is_array( $old[ $key ] ) && ! AB_MCP_Redactor::is_list( $old[ $key ] ) ) {
+				$new[ $key ] = self::keep_hidden_credentials( $value, $old[ $key ], true, $extra );
 			}
 		}
 		return $new;
+	}
+
+	/**
+	 * The lists in settings sent (keys 0, 1, 2 …) whose stored counterpart
+	 * holds credentials wp_get_widgets leaves out or shows as [REDACTED]. A
+	 * list is matched by position, so only where it is as read: an entry
+	 * equal to the reader's form of the stored one at its place (by values,
+	 * keys in any order) is the stored entry, its credentials included. An
+	 * entry changed, or any entry of a list of another length, has to bring
+	 * each credential the stored entry (in a list of another length: any
+	 * stored entry) holds, with its real value; else the call is refused,
+	 * as nothing tells which entry they belong to. A list without
+	 * credentials stays as sent.
+	 *
+	 * @param array         $new     Settings sent, or a nested part of them.
+	 * @param array         $old     The stored counterpart.
+	 * @param string        $path    Where, as settings keys joined by ".".
+	 * @param WP_Error|null $refused Set to the refusal.
+	 * @return array
+	 */
+	private static function stored_lists( array $new, array $old, $path, &$refused ) {
+		$refused = null;
+		foreach ( $new as $key => $value ) {
+			if ( null !== $refused || ! is_array( $value ) || ! isset( $old[ $key ] ) || ! is_array( $old[ $key ] ) ) {
+				continue;
+			}
+			// Whether it is a list, the stored value says: [] sent for an
+			// object read as [] is that object (keep_hidden_credentials()).
+			$at          = '' === $path ? (string) $key : $path . '.' . $key;
+			$new[ $key ] = AB_MCP_Redactor::is_list( $old[ $key ] )
+				? self::stored_list( $value, $old[ $key ], $at, $refused )
+				: self::stored_lists( $value, $old[ $key ], $at, $refused );
+		}
+		return $new;
+	}
+
+	/**
+	 * stored_lists() for one list.
+	 *
+	 * @param array         $new     The list sent.
+	 * @param array         $old     The list stored.
+	 * @param string        $path    Where.
+	 * @param WP_Error|null $refused Set to the refusal.
+	 * @return array
+	 */
+	private static function stored_list( array $new, array $old, $path, &$refused ) {
+		$views = array();
+		$creds = array();
+		$all   = array();
+		foreach ( $old as $i => $entry ) {
+			$hidden      = array();
+			$views[ $i ] = AB_MCP_Redactor::view( self::without_credentials( $entry, $hidden ) );
+			$creds[ $i ] = self::credential_paths( $entry, $views[ $i ] );
+			foreach ( $creds[ $i ] as $p ) {
+				$all[ implode( "\0", $p ) ] = $p;
+			}
+		}
+		if ( array() === $all ) {
+			return $new;
+		}
+		$same = count( $new ) === count( $old ) && AB_MCP_Redactor::is_list( $new );
+		foreach ( $new as $i => $entry ) {
+			if ( $same && AB_MCP_Redactor::same_view( $entry, $views[ $i ] ) ) {
+				$new[ $i ] = $old[ $i ];
+				continue;
+			}
+			if ( null !== AB_MCP_Redactor::placeholder_in( $entry ) || ! self::has_paths( $entry, $same ? $creds[ $i ] : array_values( $all ) ) ) {
+				$refused = new WP_Error(
+					'ab_mcp_redacted_value',
+					sprintf(
+						/* translators: 1: settings key path, 2: the placeholder [REDACTED] */
+						__( 'settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget\'s own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials.', 'alphabridge-mcp' ),
+						$path,
+						AB_MCP_Redactor::MARK
+					)
+				);
+				return $new;
+			}
+		}
+		return $new;
+	}
+
+	/**
+	 * The paths in a stored value that wp_get_widgets leaves out or redacts:
+	 * keys missing from its reader's form, and values that read otherwise
+	 * there ([REDACTED], or a text with it inside).
+	 *
+	 * @param mixed $stored Stored value.
+	 * @param mixed $view   Its reader's form (AB_MCP_Redactor::view()).
+	 * @param array $path   Keys so far.
+	 * @param int   $depth  Nesting so far.
+	 * @return array[] Paths, as lists of keys.
+	 */
+	private static function credential_paths( $stored, $view, array $path = array(), $depth = 0 ) {
+		if ( ! is_array( $stored ) && ! $stored instanceof stdClass ) {
+			return $stored === $view ? array() : array( $path );
+		}
+		if ( $depth > AB_MCP_Redactor::MAX_DEPTH || ( ! is_array( $view ) && ! $view instanceof stdClass ) ) {
+			return array( $path );
+		}
+		$shown = is_array( $view ) ? $view : get_object_vars( $view );
+		$out   = array();
+		foreach ( is_array( $stored ) ? $stored : get_object_vars( $stored ) as $k => $v ) {
+			$here = array_merge( $path, array( $k ) );
+			$out  = array_merge( $out, array_key_exists( $k, $shown ) ? self::credential_paths( $v, $shown[ $k ], $here, $depth + 1 ) : array( $here ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether a value sent holds something at each of these paths.
+	 *
+	 * @param mixed   $value Value.
+	 * @param array[] $paths Paths, as lists of keys.
+	 * @return bool
+	 */
+	private static function has_paths( $value, array $paths ) {
+		foreach ( $paths as $p ) {
+			$at = $value;
+			foreach ( $p as $k ) {
+				if ( ! is_array( $at ) || ! array_key_exists( $k, $at ) ) {
+					return false;
+				}
+				$at = $at[ $k ];
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -590,6 +724,18 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		$shape = self::shape_refusal( $sent, $old );
 		if ( null !== $shape ) {
 			return $shape;
+		}
+		// Lists by position, in the form wp_get_widgets shows (since 4.13.0).
+		$sent = self::stored_lists( $sent, $old, '', $refused );
+		if ( null !== $refused ) {
+			return $refused;
+		}
+		// A value read with [REDACTED] in it gets the stored one of this
+		// instance back, or is refused (since 4.13.0); saved_fields compares
+		// the restored settings.
+		$sent = AB_MCP_Redactor::restore_placeholders( $sent, $old, $left );
+		if ( $left ) {
+			return AB_MCP_Redactor::refusal( '/settings' );
 		}
 		$merged = array_merge( $old, self::keep_hidden_credentials( $sent, $old ) );
 		$clean  = self::sanitize_widget_settings( $base, $num, $merged, $old );

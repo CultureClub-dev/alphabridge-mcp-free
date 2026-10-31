@@ -5053,3 +5053,15 @@ msgstr "Les éléments de menu %1$s du menu %2$d sont toujours là après la sup
 
 msgid "On a multisite network WordPress removes the account from this site only: the account, its id and its password stay, and its content here went as the call said. Before removing an account that may be needed here again, note its role with wp_get_user; an administrator of the network adds it to this site again under Users in wp-admin."
 msgstr "Sur un réseau multisite, WordPress retire le compte de ce site seulement : le compte, son identifiant et son mot de passe restent, et son contenu ici a été traité comme l'appel l'a indiqué. Avant de retirer un compte qui pourrait resservir ici, notez son rôle avec wp_get_user ; un administrateur du réseau l'ajoute de nouveau à ce site dans wp-admin, sous Utilisateurs."
+
+#, php-format
+msgid "The argument at %1$s holds %2$s, the placeholder that stands for a credential in the answer of a reading tool. Written back, it would replace the stored credential, so nothing was changed. Send the real value, or leave this field out so that the stored one stays."
+msgstr "L'argument à %1$s contient %2$s, l'espace réservé qui remplace des identifiants dans la réponse d'un outil de lecture. Réécrit, il remplacerait les identifiants enregistrés, c'est pourquoi rien n'a été modifié. Envoyez la vraie valeur, ou omettez ce champ pour que la valeur enregistrée reste."
+
+#, php-format
+msgid "Nothing was changed: where the value holds %1$s, the stored value is an object that cannot be written back unchanged. Send the real value in place of %1$s, or change it in the plugin that stores it."
+msgstr "Rien n'a été modifié : là où la valeur contient %1$s, la valeur enregistrée est un objet qui ne peut pas être réécrit tel quel. Envoyez la vraie valeur à la place de %1$s, ou modifiez-la dans l'extension qui l'enregistre."
+
+#, php-format
+msgid "settings.%1$s: this list holds credentials that wp_get_widgets leaves out or shows as %2$s, and its entries changed (one added, removed, moved, or changed without its credentials), so they cannot be matched to their entries; nothing was saved. Change this list in the widget's own form in wp-admin under Appearance › Widgets, or send each changed entry with its real credentials."
+msgstr "settings.%1$s : cette liste contient des identifiants que wp_get_widgets omet ou affiche comme %2$s, et ses entrées ont changé (une ajoutée, supprimée, déplacée ou modifiée sans ses identifiants), si bien qu'ils ne peuvent pas être rattachés à leurs entrées ; rien n'a été enregistré. Modifiez cette liste dans le formulaire propre du widget, dans wp-admin sous Apparence › Widgets, ou envoyez chaque entrée modifiée avec ses vrais identifiants."

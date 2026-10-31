@@ -34,6 +34,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// run_tool() hands every result to it. Loaded here as well as by the plugin
+// file, for whatever loads the controller on its own.
+require_once __DIR__ . '/class-redactor.php';
+
 /**
  * Class AB_MCP_REST_Controller
  */
@@ -1341,7 +1345,8 @@ class AB_MCP_REST_Controller {
 	 * (AB_MCP_Security::validate_args()), the confirmation token of a tool
 	 * without a way back (AB_MCP_Confirm_Token::gate()), the tool itself,
 	 * and an entry in the log for each outcome, with the names of the
-	 * arguments and never their values.
+	 * arguments and never their values. A reading tool's result leaves
+	 * through AB_MCP_Redactor::tool_result().
 	 *
 	 * tools/call and AlphaBridge's tools as WordPress abilities
 	 * (AB_MCP_Own_Abilities) both run a tool through here, so the abilities
@@ -1372,6 +1377,21 @@ class AB_MCP_REST_Controller {
 		if ( is_wp_error( $valid ) ) {
 			AB_MCP_Audit_Log::record( $name, $args, 'denied', $valid->get_error_message(), $via );
 			return $fail( 'params', $valid->get_error_code(), $valid->get_error_message() );
+		}
+
+		// A value read from an answer in which a credential was replaced by
+		// [REDACTED] and sent back would replace the stored credential with
+		// the placeholder. Writers that put the stored value back themselves
+		// handle it, with the core's own handler only
+		// (AB_MCP_Redactor::restores()); tools that take patterns
+		// (wp_search_replace) are not concerned; every other one refuses.
+		if ( AB_MCP_Redactor::guards( $name, $def ) ) {
+			$mark = AB_MCP_Redactor::placeholder_in( $args, $name );
+			if ( null !== $mark ) {
+				$refused = AB_MCP_Redactor::refusal( $mark );
+				AB_MCP_Audit_Log::record( $name, $args, 'denied', $refused->get_error_message(), $via );
+				return $fail( 'params', $refused->get_error_code(), $refused->get_error_message() );
+			}
 		}
 
 		if ( AB_MCP_Confirm_Token::required( $def ) ) {
@@ -1416,7 +1436,10 @@ class AB_MCP_REST_Controller {
 
 		AB_MCP_Audit_Log::record( $name, $args, 'ok', null, $via );
 		AB_MCP_Review_Notice::count_call();
-		return $result;
+		// What a reading tool hands on from other plugins, and the part of
+		// wp_run_ability's answer that comes from one, with the values under
+		// credential keys replaced by [REDACTED]; the answer names where.
+		return AB_MCP_Redactor::tool_result( $name, $def, $result );
 	}
 
 	/**

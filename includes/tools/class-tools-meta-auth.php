@@ -66,7 +66,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_term_meta',
 			array(
-				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} (with several stored values, the first) or {term_id, meta: {key: value}} (a key with several values gives a list). Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term.',
+				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} (with several stored values, the first) or {term_id, meta: {key: value}} (a key with several values gives a list). Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -314,6 +314,12 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'user', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
@@ -336,8 +342,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			),
 			static function () use ( $id, $key, $value ) {
 				// update_metadata() unslashes what it stores: slashed here, a
-				// backslash in a path, a pattern or JSON is stored as sent.
-				update_user_meta( $id, $key, wp_slash( $value ) );
+				// backslash in a path, a pattern or JSON is stored as sent,
+				// also in an object value_back() put back (since 4.13.0).
+				update_user_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {
@@ -434,6 +441,12 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		if ( ! self::safe_value( $value ) ) {
 			return new WP_Error( 'ab_mcp_bad_value', __( 'Value must be a scalar or array of scalars. Pass text, a number, true, false, null or a list of these (lists may nest).', 'alphabridge-mcp' ) );
 		}
+		// A value read with [REDACTED] in it gets the stored credential back,
+		// or is refused (since 4.13.0).
+		$value = AB_MCP_Redactor::value_back( 'term', $id, $key, $value );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		if ( ! class_exists( 'AB_MCP_Undo_Meta' ) ) {
 			require_once dirname( __DIR__ ) . '/undo/class-undo-meta.php';
 		}
@@ -457,8 +470,9 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 			),
 			static function () use ( $id, $key, $value ) {
 				// update_metadata() unslashes what it stores: slashed here, a
-				// backslash in a path, a pattern or JSON is stored as sent.
-				update_term_meta( $id, $key, wp_slash( $value ) );
+				// backslash in a path, a pattern or JSON is stored as sent,
+				// also in an object value_back() put back (since 4.13.0).
+				update_term_meta( $id, $key, AB_MCP_Redactor::slash( $value ) );
 			}
 		);
 		if ( is_wp_error( $res ) ) {

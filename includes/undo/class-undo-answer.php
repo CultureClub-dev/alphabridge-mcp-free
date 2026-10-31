@@ -269,16 +269,20 @@ class AB_MCP_Undo_Answer {
 	 * Is the value read back the one asked for? Exactly, types included. A
 	 * sanitize callback can make an object of the value, which WordPress
 	 * stores serialized and gives back as a new object each time: objects
-	 * are compared by what they hold, and nothing here may throw once the
-	 * write has happened.
+	 * are compared by what they hold, also inside an array (a stored object
+	 * AB_MCP_Redactor::value_back() put back), and nothing here may throw
+	 * once the write has happened.
 	 *
 	 * @param mixed $have Value as read back.
 	 * @param mixed $want Value as asked, in stored_form().
 	 * @return bool
 	 */
 	public static function same( $have, $want ) {
-		if ( ! is_object( $have ) && ! is_object( $want ) ) {
-			return $have === $want;
+		if ( $have === $want ) {
+			return true;
+		}
+		if ( ! is_array( $have ) && ! is_object( $have ) ) {
+			return false;
 		}
 		try {
 			return serialize( $have ) === serialize( $want ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- compared as WordPress stores them.
