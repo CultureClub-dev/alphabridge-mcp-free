@@ -3,8 +3,9 @@
  * Staging: the tools around a staging site (free since 4.15.0).
  *
  * The first of them switches the preview protection of a staging site on
- * or off (AB_MCP_Preview_Protection). The group «Staging» grows with the
- * later stages of the staging workflow.
+ * or off (AB_MCP_Preview_Protection); the second reports where the site
+ * stands on the way to a staging site and what to do next (AB_MCP_Staging).
+ * The group «Staging» grows with the later stages of the staging workflow.
  *
  * @package AlphaBridge_MCP
  */
@@ -13,6 +14,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
 require_once dirname( __DIR__ ) . '/class-preview-protection.php';
+require_once dirname( __DIR__ ) . '/class-staging.php';
 
 /**
  * Class AB_MCP_Tools_Staging
@@ -50,6 +52,38 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 				'callback'    => array( __CLASS__, 'set_preview_protection' ),
 			)
 		);
+
+		$r->register(
+			'wp_staging_status',
+			array(
+				'description' => 'Report where this site stands on the way to a staging site, and what to do next. Returns role: the role a person confirmed (production, staging, or unconfirmed, which counts as the production site), with who confirmed it, when and where (settings page or hub), and a suggestion from what the site shows: the environment type WordPress reports, an address beginning with staging., stage., dev. or test. or ending in .test, .local or .localhost, the preview protection, the search engine visibility. A suggestion is never proof; only a person confirms the role, on the settings page or in the hub. Returns pair (the other site of the pair, its role and who confirmed it where, or null), host (chosen by the person, detected from what the server shows with the evidence, or unknown), preview_protection, blog_public, checklist (role confirmed, staging site there and answering, preview protection on the staging site, pair set: each with done true, false, or null where it is decided on the other site or not checked yet, its finding and, while open, numbered steps), next_step (the first open step with a direct link, to pass on to the person) and warnings. With check_partner=true it also asks the other site of the pair once whether AlphaBridge MCP answers there: one GET to its MCP endpoint without a token, only to a public http(s) address, no redirect followed; the result is in partner_check. Reads only and changes nothing. Needs manage_options.',
+				'capability'  => 'manage_options',
+				'readonly'    => true,
+				// With check_partner it asks another site, the one of the
+				// pair; without, it reads this site only.
+				'open_world'  => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'check_partner' => array(
+							'type'        => 'boolean',
+							'description' => 'true asks the other site of the pair whether AlphaBridge MCP answers there (one request to its stored address). Default false: nothing leaves this site.',
+						),
+					),
+				),
+				'callback'    => array( __CLASS__, 'staging_status' ),
+			)
+		);
+	}
+
+	/**
+	 * wp_staging_status.
+	 *
+	 * @param array $a Arguments.
+	 * @return array
+	 */
+	public static function staging_status( array $a ) {
+		return AB_MCP_Staging::report( self::b( $a, 'check_partner' ) );
 	}
 
 	/**

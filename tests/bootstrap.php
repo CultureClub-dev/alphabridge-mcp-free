@@ -118,6 +118,7 @@ function ab_test_reset(): void {
 	unset( $GLOBALS['pagenow'] );
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
+	$GLOBALS['ab_test_environment'] = 'production';
 }
 
 function get_option( $name, $default = false ) {
@@ -1221,6 +1222,15 @@ function checked( $checked, $current = true, $display = true ) {
 	return $out;
 }
 
+/** Like checked(), for the options of a select. */
+function selected( $selected, $current = true, $display = true ) {
+	$out = ( (string) $selected === (string) $current ) ? " selected='selected'" : '';
+	if ( $display ) {
+		echo $out; // phpcs:ignore
+	}
+	return $out;
+}
+
 function wp_dropdown_users( $args = array() ) {
 	$html = '<select name="' . ( $args['name'] ?? 'user' ) . '"></select>';
 	if ( ! isset( $args['echo'] ) || $args['echo'] ) {
@@ -1677,6 +1687,13 @@ function wp_remote_retrieve_header( $response, $header ) {
 	return is_array( $response ) && isset( $response['headers'][ $header ] ) ? $response['headers'][ $header ] : '';
 }
 
+/** @var string $ab_test_environment What wp_get_environment_type() answers; production, as WordPress without a setting. */
+$GLOBALS['ab_test_environment'] = 'production';
+
+function wp_get_environment_type() {
+	return (string) $GLOBALS['ab_test_environment'];
+}
+
 /* ------------------------------------------------- login, redirects, exits */
 
 /** @var bool $ab_test_logged_in */
@@ -1843,6 +1860,8 @@ require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-redactor.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/class-connection-doctor.php';
+// The staging record (4.15.0): the site contract reports its role.
+require_once __DIR__ . '/../includes/class-staging.php';
 // WordPress' block parser and serializer, fixed copies from 7.0.2 (see the
 // file headers): the builder readers call parse_blocks().
 require_once __DIR__ . '/support/class-wp-block-parser.php';

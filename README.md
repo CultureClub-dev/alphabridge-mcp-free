@@ -28,7 +28,7 @@ directory. It is the same code WordPress.org ships.
   (protocol versions 2024-11-05, 2025-03-26, 2025-06-18 and the stateless 2026-07-28, side by
   side; the newest one can be switched off). Pure PHP inside WordPress: no Node middleware, no
   external service, nothing extra to host.
-- **99 structured tools** across content, media, taxonomies, comments, widgets, menus, site
+- **100 structured tools** across content, media, taxonomies, comments, widgets, menus, site
   settings, site info, users, plugins and themes (install, update, activate, delete), WordPress
   updates, cron and the error log, SEO fields, WooCommerce, maintenance, page builders, search and
   replace, bulk status changes, a connection check and the abilities of other plugins, each one
@@ -92,6 +92,13 @@ directory. It is the same code WordPress.org ships.
   noindex`, nothing cached, the page cache emptied. The MCP endpoint, the sign-in, wp-admin, the
   REST root the hub reads and signed-in users keep working. Not covered, and said so: files under
   `/wp-content/uploads/`, caches outside PHP, and a shared password identifies nobody.
+- **Staging status** — `wp_staging_status` reports the role a person confirmed for the site
+  (production or staging; unconfirmed counts as production) with a suggestion from what the site
+  shows, never taken as proof, the other site of the pair, the host, the preview protection and a
+  checklist with the next step. On request (`check_partner`) it asks the other site whether
+  AlphaBridge MCP answers there, public http(s) addresses only. The role, the other site and the
+  host are set on the settings page or, for both sites at once, by the hub over
+  `alphabridge/v1/staging-pair`.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

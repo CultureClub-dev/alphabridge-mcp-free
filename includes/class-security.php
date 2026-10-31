@@ -130,6 +130,18 @@ class AB_MCP_Security {
 	}
 
 	/**
+	 * The rate limit of authorize() for a request that is no tool call:
+	 * the hub's REST route for the staging pair (AB_MCP_Staging) counts
+	 * towards the same per-minute limit of the account. Counts this call.
+	 *
+	 * @param int $user_id User id.
+	 * @return true|WP_Error
+	 */
+	public static function check_rate( $user_id ) {
+		return self::check_rate_limit( (int) $user_id, array() );
+	}
+
+	/**
 	 * Fixed-window per-minute rate limit (transient based).
 	 * A soft throttle, not a hard security boundary.
 	 *

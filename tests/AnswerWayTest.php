@@ -487,6 +487,9 @@ final class AnswerWayTest extends TestCase {
 		'ab_mcp_bad_status'         => 'names the statuses it accepts',
 		'ab_mcp_elementor_not_json' => 'a note on a copy that was made, not a refusal',
 		'ab_mcp_elementor_ids'      => 'a note on a copy that was made, not a refusal',
+		// The staging record (4.15.0): the message is the list of what each
+		// field must be (AB_MCP_Staging::problem()).
+		'ab_mcp_staging_invalid'    => 'names what each field must be',
 	);
 
 	/**

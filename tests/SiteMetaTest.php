@@ -52,9 +52,9 @@ final class SiteMetaTest extends TestCase {
 
 	public function testEveryContractFieldIsPresent(): void {
 		self::assertSame(
-			array( 'contract', 'cms', 'cms_version', 'edition', 'plugin_version', 'scope', 'protocol_versions' ),
+			array( 'contract', 'cms', 'cms_version', 'edition', 'plugin_version', 'scope', 'protocol_versions', 'staging_role' ),
 			array_keys( $this->meta() ),
-			'A hub reads these seven fields; none may silently disappear.'
+			'A hub reads these eight fields; none may silently disappear.'
 		);
 	}
 
