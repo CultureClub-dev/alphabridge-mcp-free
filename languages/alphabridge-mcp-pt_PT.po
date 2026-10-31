@@ -5428,8 +5428,8 @@ msgstr "1. Crie uma cópia de staging deste site: com a função de staging do s
 msgid "No staging site is known for this site yet."
 msgstr "Ainda não se conhece nenhum site de staging para este site."
 
-msgid "If neither the host nor a plugin can make a copy: for changes to texts, pages, posts and media alone, work in drafts and previews, and publish once the person has approved them."
-msgstr "Se nem o alojamento nem um plugin conseguirem fazer uma cópia: para alterações apenas a textos, páginas, artigos e multimédia, trabalhar em rascunhos e pré-visualizações e publicar quando a pessoa as tiver aprovado."
+msgid "If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site."
+msgstr "Se nem o alojamento nem um plugin conseguirem fazer uma cópia: para alterações apenas a artigos e páginas, trabalhar em rascunhos e pré-visualizações e publicar quando a pessoa as tiver aprovado; multimédia, menus e definições têm efeito imediato, por isso precisam de um site de staging."
 
 msgid "Preview protection on the staging site"
 msgstr "Proteção da pré-visualização no site de staging"
