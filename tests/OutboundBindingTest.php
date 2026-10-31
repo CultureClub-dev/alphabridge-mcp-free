@@ -39,11 +39,12 @@ final class OutboundBindingTest extends TestCase {
 
 	/** What each test host resolves to (ab_mcp_outbound_addresses); any other name has no address. */
 	const DNS = array(
-		'files.example'  => array( self::V4, self::V6 ),
-		'cdn.example'    => array( self::V4 ),
-		'mixed.example'  => array( self::V4, 'fd00::1' ),
-		'mapped.example' => array( '::ffff:127.0.0.1' ),
-		'inside.example' => array( '10.0.0.5' ),
+		'files.example'     => array( self::V4, self::V6 ),
+		'www.files.example' => array( self::V4 ),
+		'cdn.example'       => array( self::V4 ),
+		'mixed.example'     => array( self::V4, 'fd00::1' ),
+		'mapped.example'    => array( '::ffff:127.0.0.1' ),
+		'inside.example'    => array( '10.0.0.5' ),
 	);
 
 	const PNG = "\x89PNG\r\n\x1a\n-test-image-bytes";
@@ -52,7 +53,7 @@ final class OutboundBindingTest extends TestCase {
 	/** The settings page, where AB_MCP_Guidance::compose() leads. */
 	const SETTINGS = 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp';
 
-	/** @var array<string,array|WP_Error> The answer for each address. */
+	/** @var array<string,array|WP_Error|callable> The answer for each address, or a callable that answers from the request arguments. */
 	private array $answers = array();
 
 	protected function setUp(): void {
@@ -66,7 +67,10 @@ final class OutboundBindingTest extends TestCase {
 		$GLOBALS['ab_test_query']          = static fn(): array => array();
 		add_filter( 'ab_mcp_outbound_addresses', static fn( $found, string $host ) => self::DNS[ $host ] ?? array(), 10, 2 );
 		$this->answers                  = array();
-		$GLOBALS['ab_test_http_answer'] = fn( string $url ) => $this->answers[ $url ] ?? ab_test_http_response( 404, 'no such address' );
+		$GLOBALS['ab_test_http_answer'] = function ( string $url, array $args ) {
+			$answer = $this->answers[ $url ] ?? ab_test_http_response( 404, 'no such address' );
+			return is_callable( $answer ) ? $answer( $args ) : $answer;
+		};
 	}
 
 	protected function tearDown(): void {
@@ -564,28 +568,180 @@ final class OutboundBindingTest extends TestCase {
 		self::assertStringContainsString( ' files.example:443:' . self::V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'], 'The caller\'s list, not the AAAA record DNS would add.' );
 	}
 
+	/* ------------------------------------------------------------- cookies */
+
+	/** A cookie of an answer as WordPress hands it over (WP_HTTP_Requests_Response::get_cookies()): set without a Domain, so host-only. */
+	private static function cookie( string $name, string $value, string $domain, array $more = array() ): \WP_Http_Cookie {
+		return new \WP_Http_Cookie(
+			$more + array(
+				'name'      => $name,
+				'value'     => $value,
+				'domain'    => $domain,
+				'path'      => '/',
+				'host_only' => true,
+			)
+		);
+	}
+
+	/** The cookies a recorded request carried, name => value. */
+	private static function carried( int $call ): array {
+		$out = array();
+		foreach ( $GLOBALS['ab_test_http'][ $call ]['args']['cookies'] ?? array() as $cookie ) {
+			$out[ $cookie->name ] = $cookie->value;
+		}
+		return $out;
+	}
+
+	/** An answer that serves the file only to a request with the cookie, 403 otherwise. */
+	private static function gated( string $name, string $value, string $body, string $type ): callable {
+		return static function ( array $args ) use ( $name, $value, $body, $type ): array {
+			foreach ( $args['cookies'] ?? array() as $cookie ) {
+				if ( $cookie instanceof \WP_Http_Cookie && $cookie->name === $name && $cookie->value === $value ) {
+					return ab_test_http_response( 200, $body, array( 'Content-Type' => $type ) );
+				}
+			}
+			return ab_test_http_response( 403, 'no cookie', array( 'Content-Type' => 'text/plain' ) );
+		};
+	}
+
+	/**
+	 * Codex on ccf642a: a download that sets a cookie and redirects to the
+	 * file, which answers 403 without it, worked with WordPress following
+	 * (its transport carries the cookie) and failed with get() following.
+	 */
+	public function testTheCookiesOfAnAnswerGoWithTheNextHopAsWordPressSendsThem(): void {
+		$this->answers['https://files.example/dl']       = ab_test_http_response( 302, '', array( 'Location' => '/file.png' ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
+		$this->answers['https://files.example/file.png'] = self::gated( 'download', 'ok', 'body', 'text/plain' );
+		$result = AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) );
+		self::assertSame( 'body', wp_remote_retrieve_body( $result ) );
+		self::assertArrayNotHasKey( 'cookies', $GLOBALS['ab_test_http'][0]['args'], 'Nothing to carry on the first hop.' );
+		self::assertSame( array( 'download' => 'ok' ), self::carried( 1 ) );
+	}
+
+	#[DataProvider( 'paths' )]
+	public function testADownloadBehindACookieWorksAsBefore( string $path ): void {
+		$url = self::address( $path, 'files.example', '/dl' );
+		$this->answers[ $url ] = ab_test_http_response( 302, '', array( 'Location' => '/store/' . basename( $url ) ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
+		$this->answers[ 'https://files.example/store/' . basename( $url ) ] = self::gated( 'download', 'ok', 'zip' === $path ? self::ZIP : self::PNG, 'zip' === $path ? 'application/zip' : 'image/png' );
+		self::assertStored( $path, $this->fetch( $path, $url ) );
+		self::assertSame( array( 'download' => 'ok' ), self::carried( 1 ) );
+	}
+
+	/** @return array<string,array{0:\WP_Http_Cookie,1:string}> */
+	public static function cookiesThatDoNotHold(): array {
+		return array(
+			'set by another host (host-only)' => array( self::cookie( 'c', 'v', 'files.example' ), 'https://cdn.example/x' ),
+			'host-only, a sub host'           => array( self::cookie( 'c', 'v', 'files.example' ), 'https://www.files.example/x' ),
+			'expired'                         => array( self::cookie( 'c', 'v', 'files.example', array( 'expires' => time() - 60 ) ), 'https://files.example/x' ),
+			'another path'                    => array( self::cookie( 'c', 'v', 'files.example', array( 'path' => '/dl/' ) ), 'https://files.example/other/x' ),
+			'another port'                    => array( self::cookie( 'c', 'v', 'files.example', array( 'port' => '8443' ) ), 'https://files.example/x' ),
+		);
+	}
+
+	#[DataProvider( 'cookiesThatDoNotHold' )]
+	public function testACookieThatDoesNotHoldForTheNextHopStaysBehind( \WP_Http_Cookie $cookie, string $target ): void {
+		$this->answers['https://files.example/dl'] = ab_test_http_response( 302, '', array( 'Location' => $target ), array( $cookie ) );
+		$this->serve( $target, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) ) ) );
+		self::assertSame( array( 'https://files.example/dl', $target ), self::urls() );
+		self::assertArrayNotHasKey( 'cookies', $GLOBALS['ab_test_http'][1]['args'] );
+	}
+
+	/** @return array<string,array{0:\WP_Http_Cookie,1:string}> */
+	public static function cookiesThatHold(): array {
+		return array(
+			'the same host'                    => array( self::cookie( 'c', 'v', 'files.example' ), 'https://files.example/other/x' ),
+			'a sub host, Domain set'           => array( self::cookie( 'c', 'v', 'files.example', array( 'host_only' => false ) ), 'https://www.files.example/x' ),
+			'the path it is set for'           => array( self::cookie( 'c', 'v', 'files.example', array( 'path' => '/dl/' ) ), 'https://files.example/dl/x' ),
+			'not yet expired'                  => array( self::cookie( 'c', 'v', 'files.example', array( 'expires' => time() + 3600 ) ), 'https://files.example/x' ),
+		);
+	}
+
+	#[DataProvider( 'cookiesThatHold' )]
+	public function testACookieThatHoldsForTheNextHopGoesWithIt( \WP_Http_Cookie $cookie, string $target ): void {
+		$this->answers['https://files.example/dl'] = ab_test_http_response( 302, '', array( 'Location' => $target ), array( $cookie ) );
+		$this->serve( $target, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) ) ) );
+		self::assertSame( array( 'c' => 'v' ), self::carried( 1 ) );
+	}
+
+	public function testTheCallersCookiesGoWithEveryHopTheyHoldForAndALaterCookieOfTheSameNameReplacesAnEarlier(): void {
+		$this->answers['https://files.example/1'] = ab_test_http_response( 302, '', array( 'Location' => '/2' ), array( self::cookie( 'token', 'first', 'files.example' ) ) );
+		$this->answers['https://files.example/2'] = ab_test_http_response( 302, '', array( 'Location' => 'https://cdn.example/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
+		$this->serve( 'https://cdn.example/3', 'body', 'text/plain' );
+		$result = AB_MCP_Outbound::get(
+			'https://files.example/1',
+			array(
+				'redirection' => 3,
+				// As WordPress takes them: name => value for any host, an object with its own domain.
+				'cookies'     => array(
+					'session' => 'abc',
+					new \WP_Http_Cookie(
+						array(
+							'name'   => 'cdn',
+							'value'  => 'only',
+							'domain' => 'cdn.example',
+						)
+					),
+				),
+			)
+		);
+		self::assertSame( 'body', wp_remote_retrieve_body( $result ) );
+		self::assertSame( array( 'session' => 'abc' ), self::carried( 0 ), 'The caller\'s cookie for another domain stays behind.' );
+		self::assertSame( array( 'session' => 'abc', 'token' => 'first' ), self::carried( 1 ) );
+		self::assertSame( array( 'session' => 'abc', 'cdn' => 'only' ), self::carried( 2 ), 'The host-only token of files.example does not go to cdn.example; the caller\'s cookie for it does.' );
+
+		$GLOBALS['ab_test_http'] = array();
+		$this->answers['https://files.example/2'] = ab_test_http_response( 302, '', array( 'Location' => '/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
+		$this->serve( 'https://files.example/3', 'body', 'text/plain' );
+		AB_MCP_Outbound::get( 'https://files.example/1', array( 'redirection' => 3 ) );
+		self::assertSame( array( 'token' => 'second' ), self::carried( 2 ), 'The later cookie of the same name replaces the earlier, as the transport\'s jar does.' );
+		self::assertCount( 1, $GLOBALS['ab_test_http'][2]['args']['cookies'], 'Replaced, not carried twice.' );
+	}
+
 	/* ---------------------------------------------- the address of a redirect */
 
 	/** @return array<string,array{0:string,1:string,2:string|null}> */
 	public static function locations(): array {
 		$base = 'https://files.example/dir/sub/file.png?v=1';
 		return array(
-			'absolute'            => array( 'https://cdn.example/x.png', $base, 'https://cdn.example/x.png' ),
-			'another scheme'      => array( 'ftp://cdn.example/x.png', $base, 'ftp://cdn.example/x.png' ),
-			'scheme-relative'     => array( '//cdn.example/x.png', $base, 'https://cdn.example/x.png' ),
-			'absolute path'       => array( '/other/x.png?a=b', $base, 'https://files.example/other/x.png?a=b' ),
-			'relative path'       => array( 'x.png', $base, 'https://files.example/dir/sub/x.png' ),
-			'dot segments'        => array( '../up/./x.png', $base, 'https://files.example/dir/up/x.png' ),
-			'above the root'      => array( '/../../x.png', $base, 'https://files.example/x.png' ),
-			'dots at the end'     => array( '..', $base, 'https://files.example/dir/' ),
-			'query only'          => array( '?b=2', $base, 'https://files.example/dir/sub/file.png?b=2' ),
-			'fragment dropped'    => array( 'x.png#top', $base, 'https://files.example/dir/sub/x.png' ),
-			'with the port'       => array( '/x.png', 'http://files.example:8080/a', 'http://files.example:8080/x.png' ),
-			'base without a path' => array( 'x.png', 'https://files.example', 'https://files.example/x.png' ),
-			'spaces around'       => array( '  /x.png  ', $base, 'https://files.example/x.png' ),
-			'empty'               => array( '', $base, null ),
-			'fragment alone'      => array( '#top', $base, null ),
-			'base no address'     => array( 'x.png', 'not an address', null ),
+			'absolute'                        => array( 'https://cdn.example/x.png', $base, 'https://cdn.example/x.png' ),
+			'absolute, dots kept as sent'     => array( 'https://cdn.example/a/../x.png', $base, 'https://cdn.example/a/../x.png' ),
+			'another scheme'                  => array( 'ftp://cdn.example/x.png', $base, 'ftp://cdn.example/x.png' ),
+			'scheme-relative'                 => array( '//cdn.example/x.png', $base, 'https://cdn.example/x.png' ),
+			'scheme-relative with dots'       => array( '//cdn.example:8080/a/../x.png?q#f', $base, 'https://cdn.example:8080/x.png?q' ),
+			'scheme-relative, host alone'     => array( '//cdn.example', $base, 'https://cdn.example' ),
+			'absolute path'                   => array( '/other/x.png?a=b', $base, 'https://files.example/other/x.png?a=b' ),
+			'relative path'                   => array( 'x.png', $base, 'https://files.example/dir/sub/x.png' ),
+			'dot segments'                    => array( '../up/./x.png', $base, 'https://files.example/dir/up/x.png' ),
+			'two levels up'                   => array( '../../x.png', $base, 'https://files.example/x.png' ),
+			'further up than the root'        => array( '../../../x.png', $base, 'https://files.example/x.png' ),
+			'above the root, absolute'        => array( '/../../x.png', $base, 'https://files.example/x.png' ),
+			'./ in front'                     => array( './x.png', $base, 'https://files.example/dir/sub/x.png' ),
+			'dots in the middle'              => array( 'a/./b/../c.png', $base, 'https://files.example/dir/sub/a/c.png' ),
+			'dots at the end'                 => array( '..', $base, 'https://files.example/dir/' ),
+			'dot at the end'                  => array( '.', $base, 'https://files.example/dir/sub/' ),
+			'./ alone'                        => array( './', $base, 'https://files.example/dir/sub/' ),
+			'/.. alone'                       => array( '/..', $base, 'https://files.example/' ),
+			'/. alone'                        => array( '/.', $base, 'https://files.example/' ),
+			'/./x'                            => array( '/./x.png', $base, 'https://files.example/x.png' ),
+			'dots with a query'               => array( '../x.png?v=2', $base, 'https://files.example/dir/x.png?v=2' ),
+			'doubled slash in the base path'  => array( 'x.png', 'https://files.example//dir/file.png', 'https://files.example//dir/x.png' ),
+			'doubled slash in the reference'  => array( '/a//b/x.png', $base, 'https://files.example/a//b/x.png' ),
+			'doubled slash and dots'          => array( '//dir/../x.png', 'https://files.example/a', 'https://dir/x.png' ),
+			'empty segment kept'              => array( 'a//../x.png', $base, 'https://files.example/dir/sub/a/x.png' ),
+			'query only'                      => array( '?b=2', $base, 'https://files.example/dir/sub/file.png?b=2' ),
+			'query only, base without a path' => array( '?b=2', 'https://files.example', 'https://files.example?b=2' ),
+			'fragment dropped'                => array( 'x.png#top', $base, 'https://files.example/dir/sub/x.png' ),
+			'fragment after a query'          => array( '../x.png?v=2#top', $base, 'https://files.example/dir/x.png?v=2' ),
+			'with the port'                   => array( '/x.png', 'http://files.example:8080/a', 'http://files.example:8080/x.png' ),
+			'base without a path'             => array( 'x.png', 'https://files.example', 'https://files.example/x.png' ),
+			'base without a path, dots'       => array( '../x.png', 'https://files.example', 'https://files.example/x.png' ),
+			'base path is the root'           => array( 'x.png', 'https://files.example/', 'https://files.example/x.png' ),
+			'spaces around'                   => array( '  /x.png  ', $base, 'https://files.example/x.png' ),
+			'empty'                           => array( '', $base, null ),
+			'fragment alone'                  => array( '#top', $base, null ),
+			'base no address'                 => array( 'x.png', 'not an address', null ),
 		);
 	}
 

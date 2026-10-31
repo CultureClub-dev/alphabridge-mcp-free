@@ -1564,6 +1564,8 @@ $GLOBALS['ab_test_http_transport'] = 'curl';
 require_once __DIR__ . '/support/requests-exception.php';
 // WordPress' proxy settings (WP_PROXY_HOST …), a fixed copy from 7.0.2.
 require_once __DIR__ . '/support/class-wp-http-proxy.php';
+// WordPress' cookie of an answer and its test for an address, a fixed copy from 7.0.2.
+require_once __DIR__ . '/support/class-wp-http-cookie.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
@@ -1696,7 +1698,7 @@ function wp_http_validate_url( $url ) {
 	return ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) ? false : $url;
 }
 
-function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
+function ab_test_http_response( int $code, string $body, array $headers = array(), array $cookies = array() ): array {
 	return array(
 		'response' => array(
 			'code'    => $code,
@@ -1704,7 +1706,13 @@ function ab_test_http_response( int $code, string $body, array $headers = array(
 		),
 		'body'     => $body,
 		'headers'  => array_change_key_case( $headers, CASE_LOWER ),
+		// The cookies the answer set, as WP_Http_Cookie objects (WordPress: WP_HTTP_Requests_Response::get_cookies()).
+		'cookies'  => $cookies,
 	);
+}
+
+function wp_remote_retrieve_cookies( $response ) {
+	return is_array( $response ) && ! empty( $response['cookies'] ) ? $response['cookies'] : array();
 }
 
 function wp_remote_retrieve_response_code( $response ) {

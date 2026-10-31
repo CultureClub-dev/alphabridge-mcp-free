@@ -18,7 +18,9 @@
  * without the binding is discarded. A redirect is not left to WordPress,
  * whose transport would look the target up unbound: get() follows it
  * itself where the caller allows redirects, and checks and ties every
- * target as it did the first address. Nor is a request sent where
+ * target as it did the first address; the cookies an answer sets go with
+ * the next hop where they hold for it, as the transport sends them when
+ * it follows. Nor is a request sent where
  * WordPress would send it through a proxy (WP_PROXY_HOST): the proxy looks
  * the name up itself, which no binding reaches; a host in
  * WP_PROXY_BYPASS_HOSTS goes direct and is tied as above, and a proxy from
@@ -185,11 +187,15 @@ class AB_MCP_Outbound {
 
 	/**
 	 * The address a Location header names, as an absolute address: as given
-	 * when it has a scheme, otherwise resolved against the address of the
-	 * answer that carried it (RFC 3986, section 5.2: a network-path,
-	 * absolute-path, relative-path or query-only reference), with "." and
-	 * ".." segments removed. Null for an empty header, a fragment alone, or
-	 * an answer address that is no absolute address.
+	 * when it has a scheme (sent as it is, as WordPress's transport sends
+	 * it), otherwise resolved against the address of the answer that carried
+	 * it by RFC 3986, section 5.2: a network-path reference (//host/path)
+	 * takes the scheme of the base, an absolute-path reference its scheme and
+	 * host, a relative-path reference is merged with the base path (5.2.3), a
+	 * query alone replaces the query of the base path; "." and ".." segments
+	 * are removed (5.2.4), every other character of the path, a doubled "/"
+	 * included, stays; a fragment is dropped. Null for an empty header, a
+	 * fragment alone, or an answer address that is no absolute address.
 	 *
 	 * @param string $location The header.
 	 * @param string $base     Address of the answer.
@@ -207,50 +213,136 @@ class AB_MCP_Outbound {
 		if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) ) {
 			return null;
 		}
-		if ( 0 === strpos( $location, '//' ) ) {
-			return $parts['scheme'] . ':' . $location;
-		}
-		$origin    = $parts['scheme'] . '://' . $parts['host'] . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' );
-		$base_path = isset( $parts['path'] ) && '' !== $parts['path'] ? $parts['path'] : '/';
 		list( $location ) = explode( '#', $location, 2 );
-		if ( '?' === $location[0] ) {
-			return $origin . $base_path . $location;
-		}
-		$query = '';
+		$query            = '';
 		if ( false !== strpos( $location, '?' ) ) {
 			list( $location, $query ) = explode( '?', $location, 2 );
 			$query                    = '?' . $query;
 		}
+		if ( 0 === strpos( $location, '//' ) ) {
+			// Network-path reference: its own authority, the scheme of the base.
+			$slash     = strpos( $location, '/', 2 );
+			$authority = false === $slash ? substr( $location, 2 ) : substr( $location, 2, $slash - 2 );
+			$path      = false === $slash ? '' : substr( $location, $slash );
+			return $parts['scheme'] . '://' . $authority . self::remove_dot_segments( $path ) . $query;
+		}
+		$origin    = $parts['scheme'] . '://' . $parts['host'] . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' );
+		$base_path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+		if ( '' === $location ) {
+			// A query alone: the path of the base, the new query.
+			return $origin . $base_path . $query;
+		}
 		if ( '/' !== $location[0] ) {
-			$location = substr( $base_path, 0, (int) strrpos( $base_path, '/' ) + 1 ) . $location;
+			// Merge (5.2.3): after the last "/" of the base path; at the
+			// root where the base has no path.
+			$location = ( '' === $base_path ? '/' : substr( $base_path, 0, (int) strrpos( $base_path, '/' ) + 1 ) ) . $location;
 		}
 		return $origin . self::remove_dot_segments( $location ) . $query;
 	}
 
 	/**
-	 * A path without its "." and ".." segments (RFC 3986, section 5.2.4),
-	 * never above the root.
+	 * A path without its "." and ".." segments: the algorithm of RFC 3986,
+	 * section 5.2.4, step by step, so that nothing else changes (a doubled
+	 * "/" stays, ".." never goes above the root).
 	 *
-	 * @param string $path Absolute path.
+	 * @param string $path Path.
 	 * @return string
 	 */
 	private static function remove_dot_segments( $path ) {
-		$segments = explode( '/', $path );
-		$last     = count( $segments ) - 1;
-		$out      = array();
-		foreach ( $segments as $i => $segment ) {
-			if ( '.' === $segment || '..' === $segment ) {
-				if ( '..' === $segment && count( $out ) > 1 ) {
-					array_pop( $out );
+		$input  = (string) $path;
+		$output = '';
+		while ( '' !== $input ) {
+			if ( 0 === strpos( $input, '../' ) ) {
+				$input = substr( $input, 3 );
+			} elseif ( 0 === strpos( $input, './' ) ) {
+				$input = substr( $input, 2 );
+			} elseif ( 0 === strpos( $input, '/./' ) ) {
+				$input = substr( $input, 2 );
+			} elseif ( '/.' === $input ) {
+				$input = '/';
+			} elseif ( 0 === strpos( $input, '/../' ) ) {
+				$input  = substr( $input, 3 );
+				$output = self::without_last_segment( $output );
+			} elseif ( '/..' === $input ) {
+				$input  = '/';
+				$output = self::without_last_segment( $output );
+			} elseif ( '.' === $input || '..' === $input ) {
+				$input = '';
+			} else {
+				// The first segment, with its leading "/" where it has one,
+				// up to but not including the next "/".
+				$next = strpos( $input, '/', '/' === $input[0] ? 1 : 0 );
+				if ( false === $next ) {
+					$output .= $input;
+					$input   = '';
+				} else {
+					$output .= substr( $input, 0, $next );
+					$input   = substr( $input, $next );
 				}
-				if ( $i === $last ) {
-					$out[] = '';
-				}
+			}
+		}
+		return $output;
+	}
+
+	/**
+	 * The output of remove_dot_segments() without its last segment and the
+	 * "/" before it.
+	 *
+	 * @param string $output Path so far.
+	 * @return string
+	 */
+	private static function without_last_segment( $output ) {
+		$slash = strrpos( $output, '/' );
+		return false === $slash ? '' : substr( $output, 0, $slash );
+	}
+
+	/**
+	 * A jar of the cookies to carry along, WP_Http_Cookie objects by name:
+	 * what a caller gives as WordPress takes it ('cookies': objects, arrays
+	 * or name => value), and the cookies of each answer; a later one of the
+	 * same name replaces an earlier, as the cookie jar of WordPress's
+	 * transport keeps them.
+	 *
+	 * @param mixed                      $cookies Cookies to add.
+	 * @param array<string,WP_Http_Cookie> $jar     Jar so far.
+	 * @return array<string,WP_Http_Cookie>
+	 */
+	private static function cookie_jar( $cookies, array $jar = array() ) {
+		foreach ( is_array( $cookies ) ? $cookies : array() as $name => $cookie ) {
+			if ( ! $cookie instanceof WP_Http_Cookie ) {
+				$cookie = new WP_Http_Cookie( is_array( $cookie ) ? $cookie : array( 'name' => (string) $name, 'value' => $cookie ) );
+			}
+			if ( null !== $cookie->name && '' !== (string) $cookie->name ) {
+				$jar[ (string) $cookie->name ] = $cookie;
+			}
+		}
+		return $jar;
+	}
+
+	/**
+	 * The cookies of the jar that go with a request to an address, as
+	 * WordPress's transport sends them when it follows a redirect itself:
+	 * those that hold for the address (WP_Http_Cookie::test(): domain,
+	 * path, port, expiry), and one set without a Domain only to the very
+	 * host that set it (host-only, as the transport's cookie jar keeps it).
+	 *
+	 * @param array<string,WP_Http_Cookie> $jar Jar.
+	 * @param string                      $url Address of the request.
+	 * @return WP_Http_Cookie[]
+	 */
+	private static function cookies_for( array $jar, $url ) {
+		$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		$sent = array();
+		foreach ( $jar as $cookie ) {
+			if ( ! $cookie->test( $url ) ) {
 				continue;
 			}
-			$out[] = $segment;
+			if ( ! empty( $cookie->host_only ) && strtolower( (string) $cookie->domain ) !== $host ) {
+				continue;
+			}
+			$sent[] = $cookie;
 		}
-		return '/' . ltrim( implode( '/', $out ), '/' );
+		return $sent;
 	}
 
 	/**
@@ -262,7 +354,9 @@ class AB_MCP_Outbound {
 	 * be an http(s) address, and is resolved, checked and tied like the
 	 * first; one redirect more than allowed ends the request. A 3xx answer
 	 * without a Location header, or any 3xx where no redirect is allowed, is
-	 * returned as the answer, as WordPress returns it.
+	 * returned as the answer, as WordPress returns it. The cookies of
+	 * 'cookies' and those each answer sets go with every hop they hold for
+	 * (cookies_for()), as WordPress's transport sends them when it follows.
 	 *
 	 * @param string        $url       Address.
 	 * @param array         $args      Request arguments.
@@ -280,12 +374,19 @@ class AB_MCP_Outbound {
 	 */
 	public static function get( $url, array $args, $addresses = null ) {
 		$hops = isset( $args['redirection'] ) ? max( 0, (int) $args['redirection'] ) : 0;
-		unset( $args['redirection'] );
+		$jar  = self::cookie_jar( isset( $args['cookies'] ) ? $args['cookies'] : array() );
+		unset( $args['redirection'], $args['cookies'] );
 		for ( $hop = 0; ; $hop++ ) {
-			$response = self::send( (string) $url, $args, 0 === $hop ? $addresses : null, $hop );
+			$hop_args = $args;
+			$cookies  = self::cookies_for( $jar, (string) $url );
+			if ( array() !== $cookies ) {
+				$hop_args['cookies'] = $cookies;
+			}
+			$response = self::send( (string) $url, $hop_args, 0 === $hop ? $addresses : null, $hop );
 			if ( is_wp_error( $response ) ) {
 				return $response;
 			}
+			$jar      = self::cookie_jar( wp_remote_retrieve_cookies( $response ), $jar );
 			$status   = (int) wp_remote_retrieve_response_code( $response );
 			$location = wp_remote_retrieve_header( $response, 'location' );
 			$location = is_array( $location ) ? (string) reset( $location ) : (string) $location;
