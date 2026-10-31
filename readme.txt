@@ -223,6 +223,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 == Changelog ==
 
 = 4.16.0 =
+* **AlphaBridge has a menu of its own.** The plugin sits in the WordPress menu as «AlphaBridge», right below Settings, with two pages: «AI Connection» carries what the settings page carried, and «Staging» the card «Staging» with the role of the site, the preview protection and Staging first. The address of the settings page under Settings leads to «AI Connection» with all its parameters, so bookmarks and older links keep working, and every address the plugin gives out (in the answers to assistants, in the plugin list, in its notices and after a form) leads straight to the page it names. Add-ons hang their boxes on `ab_mcp_admin_boxes_connection` and `ab_mcp_admin_boxes_staging`; `ab_mcp_admin_main_boxes` keeps its place on «AI Connection».
 * **Plugins and themes switch as in wp-admin.** Activating, deactivating, deleting and updating plugins and themes, installing them, switching the theme (an undo of it included), updating WordPress and running another plugin's ability with `wp_run_ability` now load the WordPress admin files their routines expect, as wp-admin does. The deactivation of a cache plugin such as WP Super Cache, which writes its rules into `.htaccess` with functions of these files, now goes through; before, it ended with an internal error and the plugin stayed active.
 
 = 4.15.0 =

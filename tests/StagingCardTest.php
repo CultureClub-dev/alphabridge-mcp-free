@@ -1,20 +1,20 @@
 <?php
 /**
- * The card «Staging» on the settings page (free since 4.15.0).
+ * The card «Staging» (free since 4.15.0), on the page «Staging» since 4.16.0.
  *
- * The card brings the way to a staging site together, between the
- * connection check and the fine-tuning: the checklist of wp_staging_status
- * with the next step, the role of the site and the other site of its pair
- * (the pair in the hub only as a note, no link: the hub's way is not
- * public yet), how to make the staging copy (the host's own guide only
- * where one was read), the preview protection and «Staging first» with
- * every connection. It adds no form, action or nonce of its own; it folds
+ * The card brings the way to a staging site together: the checklist of
+ * wp_staging_status with the next step, the role of the site and the
+ * other site of its pair (the pair in the hub only as a note, no link: the
+ * hub's way is not public yet), how to make the staging copy (the host's
+ * own guide only where one was read), the preview protection and «Staging
+ * first» with every connection. It adds no form, action or nonce of its own; it folds
  * per user and is never taken off the page.
  *
  * What must hold:
  *
- * - The card stands between the connection check and the fine-tuning, with
- *   its parts in the order of the checklist, each form once.
+ * - The card stands on the page «Staging» (since 4.16.0; until 4.15.0 between
+ *   the connection check and the fine-tuning of the settings page), with its
+ *   parts in the order of the checklist, each form once.
  * - Every form in the card is signed for its own handler, and every action
  *   of the card (four forms, two ajax calls) is refused without its nonce
  *   and without manage_options; a form lands on a part inside the card.
@@ -206,20 +206,13 @@ final class StagingCardTest extends TestCase {
 
 	/* ------------------------------------------------------------- place */
 
-	public function testTheCardStandsBetweenTheConnectionCheckAndTheFineTuning(): void {
-		$r = new AB_MCP_Tool_Registry();
-		$r->set_current_group( 'content', 'Posts & Pages' );
-		$r->register( 'wp_list_posts', array( 'description' => 'List posts.' ) );
-		$html = $this->admin( 'render_main_column', array(), $r->groups(), $r->all() );
+	public function testTheCardStandsOnThePageStaging(): void {
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		$html                   = $this->admin( 'render_staging' );
 
-		$doctor = strpos( $html, 'id="ab-doctor"' );
-		$card   = strpos( $html, 'id="ab-staging-card"' );
-		$fine   = strpos( $html, 'id="ab-caps"' );
-		self::assertIsInt( $doctor );
-		self::assertIsInt( $card );
-		self::assertIsInt( $fine );
-		self::assertLessThan( $card, $doctor, 'Below the connection check.' );
-		self::assertLessThan( $fine, $card, 'Above the fine-tuning.' );
+		self::assertIsInt( strpos( $html, 'id="ab-staging-card"' ) );
+		self::assertFalse( strpos( $html, 'id="ab-doctor"' ), 'Nothing of «AI Connection» there.' );
+		self::assertFalse( strpos( $html, 'id="ab-caps"' ) );
 
 		$x       = self::xpath( $html );
 		$section = $x->query( '//section[@id="ab-staging-card"]' );

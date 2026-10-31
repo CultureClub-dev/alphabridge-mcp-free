@@ -1065,8 +1065,8 @@ msgstr "Ouvrir le répertoire de Claude"
 msgid "Open Cursor’s MCP settings (for all projects: ~/.cursor/mcp.json), paste, save and reload the servers."
 msgstr "Ouvrez les réglages MCP de Cursor (pour tous les projets : ~/.cursor/mcp.json), collez, enregistrez et rechargez les serveurs."
 
-msgid "Open Settings → AlphaBridge MCP"
-msgstr "Ouvrir Réglages → AlphaBridge MCP"
+msgid "Open AlphaBridge → AI Connection"
+msgstr "Ouvrir AlphaBridge → Connexion IA"
 
 msgid "Operations (Cron, Transients, Health)"
 msgstr "Exploitation (cron, transients, santé)"
@@ -5710,3 +5710,9 @@ msgstr "Paire dans le hub : définir la paire sur les deux sites à la fois depu
 
 msgid "An assistant checks it from here: wp_staging_status with check_partner=true asks the other site once whether AlphaBridge MCP answers there."
 msgstr "Un assistant le vérifie d’ici : wp_staging_status avec check_partner=true demande une fois à l’autre site si AlphaBridge MCP y répond."
+
+msgid "AI Connection"
+msgstr "Connexion IA"
+
+msgid "Try changes on a staging copy first: everything this site needs for that is set here."
+msgstr "Essayez d’abord les modifications sur une copie de staging : tout ce dont ce site a besoin pour cela se règle ici."

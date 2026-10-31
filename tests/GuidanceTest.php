@@ -85,7 +85,7 @@ final class GuidanceTest extends TestCase {
 	public function testEveryRefusalOfThePolicyGateNamesReasonStepsLinkAndHandover(): void {
 		ab_test_add_user( 3 );
 		$GLOBALS['ab_test_current_user'] = 3;
-		$settings                        = 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp';
+		$settings                        = 'https://example.test/wp-admin/admin.php?page=alphabridge-connection';
 
 		$GLOBALS['ab_test_can'] = static fn(): bool => false;
 		$role                   = AB_MCP_Security::authorize( 'wp_list_posts', array( 'capability' => 'edit_posts' ) );
@@ -118,9 +118,9 @@ final class GuidanceTest extends TestCase {
 	}
 
 	public function testTheLinkStaysOnThisSiteAndCarriesOnlyAnAnchor(): void {
-		self::assertSame( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp', AB_MCP_Guidance::settings_url() );
-		self::assertSame( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-mode', AB_MCP_Guidance::settings_url( 'ab-mode' ) );
-		self::assertSame( 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp#ab-tool-wp_xonclick', AB_MCP_Guidance::settings_url( 'ab-tool-wp_x"onclick=' ), 'Only letters, digits, «-» and «_» survive.' );
+		self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection', AB_MCP_Guidance::settings_url() );
+		self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', AB_MCP_Guidance::settings_url( 'ab-mode' ) );
+		self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_xonclick', AB_MCP_Guidance::settings_url( 'ab-tool-wp_x"onclick=' ), 'Only letters, digits, «-» and «_» survive.' );
 	}
 
 	/* ----------------------------------------------- the tools of Pro */

@@ -17,6 +17,7 @@ namespace AlphaBridge\Tests;
 use PHPUnit\Framework\TestCase;
 use AB_MCP_Admin;
 use ReflectionMethod;
+use ReflectionProperty;
 
 final class ProBoxTest extends TestCase {
 
@@ -181,12 +182,29 @@ final class ProBoxTest extends TestCase {
 
 	public function testTheStylesheetLoadsOnThisScreenOnly(): void {
 		$admin = new AB_MCP_Admin();
+		// The hooks menu() keeps from WordPress (AdminMenuTest registers them
+		// with WordPress' own menu functions; here they are set as it leaves them).
+		$hooks = new ReflectionProperty( AB_MCP_Admin::class, 'hooks' );
+		$hooks->setValue(
+			null,
+			array(
+				'menu'       => 'toplevel_page_alphabridge',
+				'connection' => 'alphabridge_page_alphabridge-connection',
+				'staging'    => 'alphabridge_page_alphabridge-staging',
+				'old'        => 'settings_page_alphabridge-mcp',
+			)
+		);
+		try {
+			$admin->enqueue_assets( 'index.php' );
+			self::assertSame( array(), $GLOBALS['ab_test_styles'] );
+			$admin->enqueue_assets( 'settings_page_alphabridge-mcp' );
+			self::assertSame( array(), $GLOBALS['ab_test_styles'], 'The old page leads on; nothing loads there.' );
 
-		$admin->enqueue_assets( 'index.php' );
-		self::assertSame( array(), $GLOBALS['ab_test_styles'] );
-
-		$admin->enqueue_assets( 'settings_page_alphabridge-mcp' );
-		self::assertSame( AB_MCP_URL . 'assets/admin.css', $GLOBALS['ab_test_styles']['ab-mcp-admin'] ?? null );
+			$admin->enqueue_assets( 'alphabridge_page_alphabridge-connection' );
+			self::assertSame( AB_MCP_URL . 'assets/admin.css', $GLOBALS['ab_test_styles']['ab-mcp-admin'] ?? null );
+		} finally {
+			$hooks->setValue( null, array() );
+		}
 	}
 
 	public function testTheStylesheetLoadsNothingFromOutside(): void {

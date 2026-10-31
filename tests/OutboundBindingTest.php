@@ -51,7 +51,7 @@ final class OutboundBindingTest extends TestCase {
 	const ZIP = "PK\x03\x04-test-zip-bytes";
 
 	/** The settings page, where AB_MCP_Guidance::compose() leads. */
-	const SETTINGS = 'https://example.test/wp-admin/options-general.php?page=alphabridge-mcp';
+	const SETTINGS = 'https://example.test/wp-admin/admin.php?page=alphabridge-connection';
 
 	/** @var array<string,array|WP_Error|callable> The answer for each address, or a callable that answers from the request arguments. */
 	private array $answers = array();
