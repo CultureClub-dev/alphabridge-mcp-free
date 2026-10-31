@@ -345,7 +345,8 @@ final class RedactionWriteBackTest extends TestCase {
 	 * @return array The result of the call.
 	 */
 	private function call( string $tool, $callback, array $args ): array {
-		update_option( 'ab_mcp_options', array( 'site_mode' => 'full' ) );
+		// «Staging first» (4.15.0) off: it would answer the first writing call instead of the tool; StagingGateTest covers it.
+		update_option( 'ab_mcp_options', array( 'site_mode' => 'full', 'staging_first' => 'off' ) );
 		$r = new AB_MCP_Tool_Registry();
 		$r->set_current_group( 'content', 'Posts & Pages' );
 		$r->register( $tool, array( 'description' => 'Change a thing.', 'callback' => $callback ) );

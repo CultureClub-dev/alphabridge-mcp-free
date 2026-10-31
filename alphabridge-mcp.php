@@ -140,6 +140,9 @@ require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
 // the pair with the other site and the host, for wp_staging_status, the
 // settings page, the hub's REST route and the site contract.
 require_once AB_MCP_DIR . 'includes/class-staging.php';
+// «Staging first» (free since 4.15.0): the pre-check of a write on a site
+// that counts as the production site, in run_tool(), and its setting.
+require_once AB_MCP_DIR . 'includes/class-staging-gate.php';
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

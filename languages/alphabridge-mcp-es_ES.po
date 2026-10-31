@@ -5487,3 +5487,90 @@ msgstr "El camino de staging está listo: el sitio de staging %s responde y est�
 msgctxt "tool label"
 msgid "Show the staging status"
 msgstr "Mostrar el estado del staging"
+
+msgid "Off: nothing is asked."
+msgstr "Desactivado: no se pregunta nada."
+
+msgid "Ask: the first change a connection makes here is paused once; the assistant offers staging, with the reason and the way, and goes ahead when the person says so. The question comes back after 7 days, then with the answers «remind me in a week» and «ask no more»."
+msgstr "Preguntar: el primer cambio que una conexión hace aquí se detiene una vez; el asistente propone staging, con el motivo y el camino, y sigue adelante cuando la persona lo dice. La pregunta vuelve a los 7 días, entonces con las respuestas «recordármelo en una semana» y «no preguntar más»."
+
+msgid "Require: every change here is refused until you release the connection below, for 24 hours or until you revoke it."
+msgstr "Exigir: todo cambio aquí se rechaza hasta que liberes la conexión abajo, durante 24 horas o hasta que lo revoques."
+
+msgid "Staging first"
+msgstr "Primero staging"
+
+msgid "While this site counts as the production site (no confirmed staging role, no pair), a change through an assistant is visible to visitors at once. Staging first has the assistant offer a staging site before the first change. It never holds back an undo, the preview protection, the caches, comments or an order status."
+msgstr "Mientras este sitio cuente como sitio de producción (sin rol de staging confirmado, sin pareja), un cambio hecho por un asistente es visible al instante para los visitantes. «Primero staging» hace que el asistente proponga un sitio de staging antes del primer cambio. Nunca se retienen un deshacer, la protección de vista previa, las cachés, los comentarios ni el estado de un pedido."
+
+#, php-format
+msgid "WordPress abilities adapter, account %s"
+msgstr "Adaptador de abilities de WordPress, cuenta %s"
+
+#, php-format
+msgid "Released to work without staging until %1$s, by %2$s."
+msgstr "Liberada para trabajar sin staging hasta %1$s, por %2$s."
+
+msgid "Revoke"
+msgstr "Revocar"
+
+msgid "Not released: every change is refused."
+msgstr "No liberada: todo cambio se rechaza."
+
+msgid "Work without staging (24 hours)"
+msgstr "Trabajar sin staging (24 horas)"
+
+msgid "The abilities adapter has no connection to release."
+msgstr "El adaptador de abilities no tiene ninguna conexión que liberar."
+
+#, php-format
+msgid "Asks no more, since %s."
+msgstr "Ya no pregunta, desde %s."
+
+msgid "Ask again"
+msgstr "Preguntar de nuevo"
+
+#, php-format
+msgid "Went ahead here on %1$s; asks again from %2$s."
+msgstr "Siguió adelante aquí el %1$s; vuelve a preguntar desde %2$s."
+
+msgid "Asks again with the next change."
+msgstr "Vuelve a preguntar con el próximo cambio."
+
+msgid "Asks with the first change."
+msgstr "Pregunta con el primer cambio."
+
+msgctxt "status of a tool call in the log"
+msgid "held"
+msgstr "retenido"
+
+msgid "Saved: Staging first. Every connection that asked no more is asked again."
+msgstr "Guardado: Primero staging. Toda conexión que ya no preguntaba vuelve a ser preguntada."
+
+msgid "Nothing was saved: the setting must be off, ask or require."
+msgstr "No se ha guardado nada: el ajuste debe ser desactivado, preguntar o exigir."
+
+msgid "Released: this connection may change the site without staging for 24 hours. Revoke it below at any time."
+msgstr "Liberada: esta conexión puede cambiar el sitio sin staging durante 24 horas. Puedes revocarlo abajo en cualquier momento."
+
+msgid "Revoked: this connection is refused again until you release it."
+msgstr "Revocada: esta conexión se rechaza de nuevo hasta que la liberes."
+
+msgid "Noted: this connection is asked again with its next change."
+msgstr "Anotado: esta conexión vuelve a ser preguntada con su próximo cambio."
+
+msgid "Nothing was changed: that connection is not known any more, or the action was not one of release, revoke or ask again."
+msgstr "No se ha cambiado nada: esa conexión ya no se conoce, o la acción no era liberar, revocar ni preguntar de nuevo."
+
+msgid "Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page."
+msgstr "No se ejecutó nada: este sitio exige primero staging. Cuenta como sitio de producción, donde un cambio es visible al instante para los visitantes, y un cambio aquí necesita una liberación por una persona en la página de ajustes."
+
+msgid "1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps."
+msgstr "1. Trabajar en un sitio de staging en su lugar: wp_staging_status muestra dónde está el sitio y el siguiente paso, y el prompt staging_workflow tiene los pasos."
+
+#, php-format
+msgid "2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Para cambiar este sitio de todos modos, un administrador libera esta conexión en la página de ajustes de AlphaBridge MCP bajo «Primero staging» («Trabajar sin staging»), durante %d horas o hasta su revocación. 3. O un administrador pone allí «Primero staging» en Preguntar o Desactivado."
+
+msgid "2. This call came through the WordPress abilities adapter, which has no connection the settings page could release: change the site through an AlphaBridge connection an administrator releases there, or an administrator sets Staging first to Ask or Off."
+msgstr "2. Esta llamada llegó por el adaptador de abilities de WordPress, que no tiene ninguna conexión que la página de ajustes pueda liberar: cambiar el sitio mediante una conexión AlphaBridge que un administrador libere allí, o un administrador pone «Primero staging» en Preguntar o Desactivado."

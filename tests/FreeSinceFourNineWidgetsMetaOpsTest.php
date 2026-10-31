@@ -148,11 +148,15 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 			);
 			self::assertIsCallable( $def['callback'], $name );
 			self::assertNotSame( '', $def['description'], $name );
+			// Every writing tool takes the two arguments of «Staging first»
+			// (4.15.0) after its own; here Pro's are compared.
+			$own = array_values( array_diff( array_keys( (array) $def['inputSchema']['properties'] ), array( 'staging_acknowledged', 'staging_reminder' ) ) );
+			self::assertArrayHasKey( 'staging_acknowledged', (array) $def['inputSchema']['properties'], $name );
 			if ( null === self::SCHEMA[ $name ] ) {
-				self::assertSame( array(), (array) $def['inputSchema']['properties'], $name . ' takes no arguments.' );
+				self::assertSame( array(), $own, $name . ' takes no arguments of its own.' );
 			} else {
 				self::assertSame( self::SCHEMA[ $name ][0], $def['inputSchema']['required'], $name );
-				self::assertSame( self::SCHEMA[ $name ][1], array_keys( $def['inputSchema']['properties'] ), $name );
+				self::assertSame( self::SCHEMA[ $name ][1], $own, $name );
 			}
 		}
 		self::assertCount( 7, self::MOVED );
@@ -173,7 +177,7 @@ final class FreeSinceFourNineWidgetsMetaOpsTest extends TestCase {
 		// with wp_get_post: one definition per name, the last one counts.
 		$r = $this->registry();
 		$r->register( 'wp_update_widget', array( 'description' => 'Pro', 'capability' => 'edit_theme_options', 'tier' => 'pro', 'callback' => '__return_true' ) );
-		self::assertSame( 'Pro', $r->get( 'wp_update_widget' )['description'] );
+		self::assertSame( 'Pro ' . \AB_MCP_Staging_Gate::description_note(), $r->get( 'wp_update_widget' )['description'], 'With the note of «Staging first» (4.15.0), as every writing tool.' );
 		self::assertSame( 1, count( array_filter( array_keys( $r->all() ), static fn( $n ) => 'wp_update_widget' === $n ) ) );
 	}
 

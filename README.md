@@ -101,6 +101,14 @@ directory. It is the same code WordPress.org ships.
   `alphabridge/v1/staging-pair`. Before the first change, the server instructions have an assistant that
   can write and may use the tool call it and ask the person whether to work on staging first, saying why and how; the prompt
   `staging_workflow` has the steps.
+- **Staging first** — on a site that counts as the production site, the first writing call a
+  connection makes is paused: nothing runs, and the answer (`nothing_changed`, `staging_hint`) has
+  the assistant tell the person why and how and offer to set staging up now; the same call with
+  `staging_acknowledged: true` runs, and the question comes back after 7 days with the answers
+  `staging_reminder: week` or `never`. The setting on the settings page has Ask (the default), Off
+  and Require, which refuses every change until an administrator releases the connection there
+  for 24 hours. The ways back, the preview protection, the caches, comments and the order status
+  are never held; the list grows through `ab_mcp_staging_gate_exempt`.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

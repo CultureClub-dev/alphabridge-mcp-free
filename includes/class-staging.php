@@ -364,6 +364,11 @@ class AB_MCP_Staging {
 		if ( $role_changed || $pair_changed ) {
 			AB_MCP_Settings::set( self::KEY, $raw );
 		}
+		// A connection that asked «Staging first» to ask no more said so for
+		// the site as it was; with another role it is asked again.
+		if ( $role_changed && class_exists( 'AB_MCP_Staging_Gate' ) ) {
+			AB_MCP_Staging_Gate::on_role_changed();
+		}
 		return array(
 			'role_changed' => $role_changed,
 			'pair_changed' => $pair_changed,
@@ -916,7 +921,7 @@ class AB_MCP_Staging {
 				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
-			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
+			$item['fallback'] = self::drafts_fallback();
 			$items[]          = $item;
 		} else {
 			$items[] = self::staging_item( $title, $pair['partner_url'], $check );
@@ -1056,6 +1061,43 @@ class AB_MCP_Staging {
 			? sprintf( __( 'The staging way is in place: this site is the protected staging site of %s. Make the changes here and show them with the preview password; carry them over to the production site one at a time once they are approved.', 'alphabridge-mcp' ), $other )
 			/* translators: %s: address of the staging site. */
 			: sprintf( __( 'The staging way is in place: the staging site %s answers and is paired with this site. Make the changes there and carry them over to this site one at a time once they are approved.', 'alphabridge-mcp' ), $other );
+	}
+
+	/* ----------------------------------------------------------- drafts */
+
+	/**
+	 * The way without a staging site, in one place: drafts, for posts and
+	 * pages, where media, menus and settings take effect at once. The
+	 * server instructions and the hint of «Staging first»
+	 * (drafts_in_instructions()), the prompt staging_workflow
+	 * (drafts_in_prompt()) and the checklist (drafts_fallback(), translated)
+	 * all say it from here, so that a later version with a complete way
+	 * back changes it in one place (Thomas, 31.10.2026); a test holds that
+	 * no other place writes it. The wording of 4.15.0 stays.
+	 *
+	 * @return string
+	 */
+	public static function drafts_in_instructions() {
+		return 'drafts for posts and pages alone';
+	}
+
+	/**
+	 * The same for the prompt staging_workflow, see drafts_in_instructions().
+	 *
+	 * @return string
+	 */
+	public static function drafts_in_prompt() {
+		return 'For changes to posts and pages alone, drafts and previews published once approved are a way too; media, menus, settings and the other changes take effect at once, so for them staging.';
+	}
+
+	/**
+	 * The same for the checklist of wp_staging_status, in the site's
+	 * language, see drafts_in_instructions().
+	 *
+	 * @return string
+	 */
+	public static function drafts_fallback() {
+		return __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
 	}
 
 	/**

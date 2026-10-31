@@ -301,7 +301,8 @@ ab_admin();
 ab_request();
 ok( false === AB_MCP_Own_Abilities::enabled(), 'A0 off by default' );
 ok( false === AB_MCP_Settings::defaults()[ AB_MCP_Own_Abilities::SETTING ], 'A0 the default in AB_MCP_Settings is false' );
-update_option( AB_MCP_Settings::OPT_OPTIONS, array( 'site_mode' => 'full', 'rate_limit_per_min' => 120 ) );
+// «Staging first» (4.15.0) off here; block E10 switches it on for the calls without a token.
+update_option( AB_MCP_Settings::OPT_OPTIONS, array( 'site_mode' => 'full', 'rate_limit_per_min' => 120, AB_MCP_Staging_Gate::SETTING => AB_MCP_Staging_Gate::OFF ) );
 ok( false === AB_MCP_Own_Abilities::enabled(), 'A1 a site updated from before 4.12.0 (options without the key) stays off' );
 ab_request();
 ok( array() === ab_own(), 'A2 switched off: no ability alphabridge/…' );
@@ -522,6 +523,17 @@ ok( is_array( $res ) && true === $res['confirm_required'] && false === $res['don
 ok( isset( $GLOBALS['ab_test_plugins']['hello.php'] ) && 'preview' === ab_last_log()['status'] && 'ability' === ab_last_log()['via'], 'E8 nothing was deleted; logged as preview, via ability' );
 $res = ab_ability( 'wp_delete_plugin' )->execute( array( 'plugin' => 'hello.php', AB_MCP_Confirm_Token::PARAM => 'v1.0.not-a-token' ) );
 ok( is_wp_error( $res ) && 'denied' === ab_last_log()['status'] && isset( $GLOBALS['ab_test_plugins']['hello.php'] ), 'E9 a wrong token is refused, nothing deleted' );
+// «Staging first» (4.15.0) on a call without a token: kept by the account, not exempt.
+AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::ASK );
+$res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'held' ) );
+ok( is_array( $res ) && true === $res['nothing_changed'] && 'staging_first' === $res['held'] && is_string( $res['staging_hint'] ) && 'held' === ab_last_log()['status'] && 'ability' === ab_last_log()['via'], 'E10 the first writing call without a token is held with staging_hint, logged as held via ability' );
+ok( '' === AB_MCP_Auth::current_token_hash() && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'] ) === false, 'E10 no token: nothing is written to a token entry before the acknowledgement' );
+$res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'held', AB_MCP_Staging_Gate::PARAM => true ) );
+ok( is_array( $res ) && ! isset( $res['nothing_changed'] ) && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'][ (string) get_current_user_id() ][ AB_MCP_Staging_Gate::FIELD_ACK ] ), 'E10 the same call with staging_acknowledged runs, and the acknowledgement is kept by the account id' );
+AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::REQUIRE );
+$res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'refused' ) );
+ok( is_wp_error( $res ) && 'ab_mcp_staging_required' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'abilities adapter' ) && 'denied' === ab_last_log()['status'], 'E10 with require, a call without a token is refused and told that the adapter has no connection to release' );
+AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::OFF );
 ab_read();
 
 /* ------------------------------ F: wp_run_ability never reaches alphabridge/… */

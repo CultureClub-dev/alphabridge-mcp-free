@@ -5487,3 +5487,90 @@ msgstr "Il percorso di staging è pronto: il sito di staging %s risponde ed è i
 msgctxt "tool label"
 msgid "Show the staging status"
 msgstr "Mostra lo stato dello staging"
+
+msgid "Off: nothing is asked."
+msgstr "Disattivato: non viene chiesto nulla."
+
+msgid "Ask: the first change a connection makes here is paused once; the assistant offers staging, with the reason and the way, and goes ahead when the person says so. The question comes back after 7 days, then with the answers «remind me in a week» and «ask no more»."
+msgstr "Chiedi: la prima modifica che una connessione fa qui viene sospesa una volta; l’assistente propone lo staging, con il motivo e il modo, e procede quando la persona lo dice. La domanda torna dopo 7 giorni, allora con le risposte “ricordamelo tra una settimana” e “non chiedere più”."
+
+msgid "Require: every change here is refused until you release the connection below, for 24 hours or until you revoke it."
+msgstr "Richiedi: ogni modifica qui viene rifiutata finché non sblocchi la connessione qui sotto, per 24 ore o finché non lo revochi."
+
+msgid "Staging first"
+msgstr "Prima lo staging"
+
+msgid "While this site counts as the production site (no confirmed staging role, no pair), a change through an assistant is visible to visitors at once. Staging first has the assistant offer a staging site before the first change. It never holds back an undo, the preview protection, the caches, comments or an order status."
+msgstr "Finché questo sito conta come sito di produzione (nessun ruolo di staging confermato, nessuna coppia), una modifica fatta da un assistente è subito visibile ai visitatori. “Prima lo staging” fa proporre all’assistente un sito di staging prima della prima modifica. Non vengono mai trattenuti un annullamento, la protezione dell’anteprima, le cache, i commenti o lo stato di un ordine."
+
+#, php-format
+msgid "WordPress abilities adapter, account %s"
+msgstr "Adattatore delle abilities di WordPress, account %s"
+
+#, php-format
+msgid "Released to work without staging until %1$s, by %2$s."
+msgstr "Sbloccata per lavorare senza staging fino al %1$s, da %2$s."
+
+msgid "Revoke"
+msgstr "Revoca"
+
+msgid "Not released: every change is refused."
+msgstr "Non sbloccata: ogni modifica viene rifiutata."
+
+msgid "Work without staging (24 hours)"
+msgstr "Lavora senza staging (24 ore)"
+
+msgid "The abilities adapter has no connection to release."
+msgstr "L’adattatore delle abilities non ha alcuna connessione da sbloccare."
+
+#, php-format
+msgid "Asks no more, since %s."
+msgstr "Non chiede più, dal %s."
+
+msgid "Ask again"
+msgstr "Chiedi di nuovo"
+
+#, php-format
+msgid "Went ahead here on %1$s; asks again from %2$s."
+msgstr "Ha proceduto qui il %1$s; chiede di nuovo dal %2$s."
+
+msgid "Asks again with the next change."
+msgstr "Chiede di nuovo alla prossima modifica."
+
+msgid "Asks with the first change."
+msgstr "Chiede alla prima modifica."
+
+msgctxt "status of a tool call in the log"
+msgid "held"
+msgstr "trattenuto"
+
+msgid "Saved: Staging first. Every connection that asked no more is asked again."
+msgstr "Salvato: Prima lo staging. Ogni connessione che non chiedeva più viene chiesta di nuovo."
+
+msgid "Nothing was saved: the setting must be off, ask or require."
+msgstr "Non è stato salvato nulla: l’impostazione deve essere disattivato, chiedi o richiedi."
+
+msgid "Released: this connection may change the site without staging for 24 hours. Revoke it below at any time."
+msgstr "Sbloccata: questa connessione può modificare il sito senza staging per 24 ore. Puoi revocarlo qui sotto in ogni momento."
+
+msgid "Revoked: this connection is refused again until you release it."
+msgstr "Revocata: questa connessione viene di nuovo rifiutata finché non la sblocchi."
+
+msgid "Noted: this connection is asked again with its next change."
+msgstr "Annotato: questa connessione viene chiesta di nuovo alla sua prossima modifica."
+
+msgid "Nothing was changed: that connection is not known any more, or the action was not one of release, revoke or ask again."
+msgstr "Non è stato modificato nulla: quella connessione non è più nota, oppure l’azione non era sblocca, revoca o chiedi di nuovo."
+
+msgid "Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page."
+msgstr "Non è stato eseguito nulla: questo sito richiede prima lo staging. Conta come sito di produzione, dove una modifica è subito visibile ai visitatori, e una modifica qui ha bisogno di uno sblocco da parte di una persona nella pagina delle impostazioni."
+
+msgid "1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps."
+msgstr "1. Lavorare invece su un sito di staging: wp_staging_status mostra dove si trova il sito e il prossimo passo, e il prompt staging_workflow ha i passi."
+
+#, php-format
+msgid "2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Per modificare comunque questo sito, un amministratore sblocca questa connessione nella pagina delle impostazioni di AlphaBridge MCP sotto “Prima lo staging” (“Lavora senza staging”), per %d ore o fino alla revoca. 3. Oppure un amministratore imposta lì “Prima lo staging” su Chiedi o Disattivato."
+
+msgid "2. This call came through the WordPress abilities adapter, which has no connection the settings page could release: change the site through an AlphaBridge connection an administrator releases there, or an administrator sets Staging first to Ask or Off."
+msgstr "2. Questa chiamata è arrivata tramite l’adattatore delle abilities di WordPress, che non ha alcuna connessione che la pagina delle impostazioni possa sbloccare: modificare il sito tramite una connessione AlphaBridge che un amministratore sblocca lì, oppure un amministratore imposta “Prima lo staging” su Chiedi o Disattivato."

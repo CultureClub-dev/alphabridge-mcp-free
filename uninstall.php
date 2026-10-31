@@ -48,6 +48,11 @@ $ab_mcp_options = array(
 	// The abilities of other plugins an administrator approved (free since
 	// 4.12.0, a name of its own: Pro keeps its list of switched-off ones).
 	'ab_mcp_abilities_on',
+	// «Staging first» (free since 4.15.0): the history of releases and the
+	// state of the callers without a token (AB_MCP_Staging_Gate::OPTION);
+	// the setting and the acknowledgements live in ab_mcp_options and
+	// ab_mcp_tokens, removed above.
+	'ab_mcp_staging_first',
 );
 
 // The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no

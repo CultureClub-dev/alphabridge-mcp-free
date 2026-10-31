@@ -45,6 +45,8 @@ final class UninstallTest extends TestCase {
 		// its state lives inside ab_mcp_options.
 		'ab_mcp_preview',
 		'ab_mcp_preview_password',
+		// The filter over the tools «Staging first» never holds (AB_MCP_Staging_Gate::FILTER, free since 4.15.0).
+		'ab_mcp_staging_gate_exempt',
 	);
 
 	public static function setUpBeforeClass(): void {

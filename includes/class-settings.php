@@ -75,6 +75,12 @@ class AB_MCP_Settings {
 			// updated from before 4.12.0 has no such key and reads this
 			// default, so the update switches nothing on.
 			'own_abilities'              => false,
+			// «Staging first» (AB_MCP_Staging_Gate, free since 4.15.0): before
+			// the first change a connection makes on a site that counts as the
+			// production site, the assistant is asked to offer a staging site.
+			// Ask for every site, those updated from an earlier version
+			// included (Thomas, 31.10.2026); off and require are the other two.
+			'staging_first'              => 'ask',
 		);
 	}
 
@@ -515,6 +521,40 @@ class AB_MCP_Settings {
 		if ( $changed ) {
 			update_option( self::OPT_TOKENS, $tokens );
 		}
+	}
+
+	/**
+	 * Write fields of a token entry, by its hash: the acknowledgement and
+	 * the release of «Staging first» (AB_MCP_Staging_Gate) live in the
+	 * entry. A field set to null is removed. The fields that identify the
+	 * entry (hash, user_id) are not written here.
+	 *
+	 * @param string $hash   Token hash.
+	 * @param array  $fields Field => value.
+	 * @return bool Whether an entry with that hash exists.
+	 */
+	public static function update_token_fields( $hash, array $fields ) {
+		unset( $fields['hash'], $fields['user_id'] );
+		$tokens = self::get_tokens();
+		$found  = false;
+		foreach ( $tokens as &$entry ) {
+			if ( ! empty( $entry['hash'] ) && hash_equals( (string) $entry['hash'], (string) $hash ) ) {
+				foreach ( $fields as $key => $value ) {
+					if ( null === $value ) {
+						unset( $entry[ $key ] );
+					} else {
+						$entry[ $key ] = $value;
+					}
+				}
+				$found = true;
+				break;
+			}
+		}
+		unset( $entry );
+		if ( $found ) {
+			update_option( self::OPT_TOKENS, $tokens );
+		}
+		return $found;
 	}
 
 	/**
