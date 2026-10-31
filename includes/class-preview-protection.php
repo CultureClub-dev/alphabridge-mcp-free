@@ -125,6 +125,11 @@
  *   the cookie and the nonce, application passwords): this filter runs
  *   after WordPress's own checks (priority 100), where is_user_logged_in()
  *   is settled, and passes an error of theirs through.
+ * - The CORS preflight of a browser (OPTIONS without a method override):
+ *   it carries no credentials, and a 401 to it would keep a web app of
+ *   another origin from ever sending its authenticated request. The REST
+ *   server answers it with headers and the description of the route, never
+ *   with content (is_cors_preflight()).
  * - wp-admin, wp-login.php, admin-ajax.php, admin-post.php, wp-cron.php and
  *   xmlrpc.php run no wp(), so neither parse_request nor template_redirect
  *   fires there; the checks on the request constants are kept all the
@@ -262,7 +267,9 @@
  * The password is generated here and shown once, by the tool in its answer
  * and on the settings page; only its hash is stored. The cookie is an HMAC
  * over the hash with the site's salt, so a new password makes every cookie
- * invalid at once. A shared password identifies nobody.
+ * invalid at once; on a network it carries the id of the site in its name,
+ * since every site of a sub-directory network shares the network's cookie
+ * path (cookie_name()). A shared password identifies nobody.
  *
  * @package AlphaBridge_MCP
  */
@@ -281,7 +288,8 @@ class AB_MCP_Preview_Protection {
 	const KEY = 'preview_protection';
 
 	/**
-	 * Name of the cookie a visitor gets after entering the password.
+	 * Name of the cookie a visitor gets after entering the password; on a
+	 * network with the id of the site appended (cookie_name()).
 	 */
 	const COOKIE = 'ab_mcp_preview';
 
@@ -1069,7 +1077,7 @@ class AB_MCP_Preview_Protection {
 			// the entry points without themes never reach.
 			'oauth_authorize' => (bool) $with_themes && class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::is_authorize_request(),
 			'password'        => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
-			'cookie'          => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
+			'cookie'          => self::cookie_sent(),
 			'logged_in'       => is_user_logged_in(),
 			'admin'           => is_admin(),
 			// No clause for DOING_AJAX: admin-ajax.php runs no wp(), so the
@@ -1316,7 +1324,7 @@ class AB_MCP_Preview_Protection {
 			'post'      => isset( $GLOBALS['pagenow'] ) && 'admin-post.php' === $GLOBALS['pagenow'],
 			'action'    => isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ? (string) $_REQUEST['action'] : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only, as admin-ajax.php reads it.
 			'logged_in' => is_user_logged_in(),
-			'cookie'    => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
+			'cookie'    => self::cookie_sent(),
 		);
 	}
 
@@ -1419,6 +1427,7 @@ class AB_MCP_Preview_Protection {
 		if ( headers_sent() ) {
 			return;
 		}
+		$name = self::cookie_name();
 		foreach ( self::cookie_paths() as $path ) {
 			$options = array(
 				'expires'  => (int) $expires,
@@ -1428,16 +1437,44 @@ class AB_MCP_Preview_Protection {
 				'httponly' => true,
 				'samesite' => 'Lax',
 			);
-			setcookie( self::COOKIE, $value, $options );
+			setcookie( $name, $value, $options );
 			/**
 			 * Fires after the preview cookie was set for one path.
 			 *
-			 * @param string $name    The cookie's name.
+			 * @param string $name    The cookie's name (cookie_name()), as setcookie() got it.
 			 * @param string $value   Its value.
 			 * @param array  $options The options setcookie() got (expires, path, domain, secure, httponly, samesite).
 			 */
-			do_action( 'ab_mcp_preview_cookie_sent', self::COOKIE, $value, $options );
+			do_action( 'ab_mcp_preview_cookie_sent', $name, $value, $options );
 		}
+	}
+
+	/**
+	 * The name of the cookie: COOKIE on a single site; on a network COOKIE
+	 * and the id of the current site. WordPress sets COOKIEPATH and
+	 * SITECOOKIEPATH of every site of a sub-directory network to the
+	 * network's path (ms_cookie_constants()), so one name would be one cookie
+	 * for all of them, and the password entered on site B would overwrite
+	 * the cookie of site A (Codex, 31.10.2026). Reading and setting go
+	 * through this one function.
+	 *
+	 * @return string
+	 */
+	public static function cookie_name() {
+		if ( function_exists( 'is_multisite' ) && is_multisite() && function_exists( 'get_current_blog_id' ) ) {
+			return self::COOKIE . '_' . (int) get_current_blog_id();
+		}
+		return self::COOKIE;
+	}
+
+	/**
+	 * The value of this site's cookie as the request carries it, '' without one.
+	 *
+	 * @return string
+	 */
+	private static function cookie_sent() {
+		$name = self::cookie_name();
+		return isset( $_COOKIE[ $name ] ) && is_string( $_COOKIE[ $name ] ) ? (string) $_COOKIE[ $name ] : '';
 	}
 
 	/**
@@ -1592,8 +1629,8 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * The REST gate (rest_authentication_errors, after WordPress's own
 	 * checks). An error of theirs passes through as it is; so does every
-	 * request while off, of a signed-in user, to an exempt route, or with a
-	 * valid cookie. Anything else is answered 401.
+	 * request while off, of a signed-in user, to an exempt route, a CORS
+	 * preflight, or with a valid cookie. Anything else is answered 401.
 	 *
 	 * @param WP_Error|true|null $result What the filters before decided.
 	 * @return WP_Error|true|null
@@ -1614,6 +1651,9 @@ class AB_MCP_Preview_Protection {
 		if ( self::rest_exempt( $route ) ) {
 			return $result;
 		}
+		if ( self::is_cors_preflight() ) {
+			return $result;
+		}
 		if ( self::holds_cookie( $state['hash'] ) ) {
 			return $result;
 		}
@@ -1625,14 +1665,44 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
+	 * Is this the CORS preflight of a browser, an OPTIONS request? It carries
+	 * no credentials by the CORS rules, so a web app of another origin that
+	 * reads the REST API with an application password never gets past a 401
+	 * here: the browser then sends the real request not at all (Codex,
+	 * 31.10.2026). The REST server answers OPTIONS with headers and the
+	 * description of the route, never with content: rest_handle_options_request()
+	 * on rest_pre_dispatch (wp-includes/rest-api.php, hooked by
+	 * rest_api_default_filters()) answers get_data_for_route() in the context
+	 * help, the methods, arguments and schema of the route, and
+	 * rest_send_allow_header() the Allow header.
+	 *
+	 * The method as the server will read it: WP_REST_Server::serve_request()
+	 * takes $_SERVER['REQUEST_METHOD'] and then lets $_GET['_method'] or the
+	 * header X-HTTP-Method-Override replace it, before check_authentication()
+	 * runs this filter (which gets nothing but null). So an OPTIONS request
+	 * with an override is not a preflight: its effective method is the
+	 * override's, and GET would be dispatched; it is decided like any other.
+	 *
+	 * @return bool
+	 */
+	public static function is_cors_preflight() {
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'OPTIONS' !== strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) ) {
+			return false;
+		}
+		if ( isset( $_GET['_method'] ) || isset( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only, as the REST server reads it.
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Does the request carry a valid preview cookie for this hash?
 	 *
 	 * @param string $hash Stored hash.
 	 * @return bool
 	 */
 	private static function holds_cookie( $hash ) {
-		$cookie = isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '';
-		return self::cookie_valid( $cookie, (string) $hash, time() );
+		return self::cookie_valid( self::cookie_sent(), (string) $hash, time() );
 	}
 
 	/**

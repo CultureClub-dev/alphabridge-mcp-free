@@ -49,10 +49,15 @@
  * - The REST gate passes an error of WordPress's own checks through, passes
  *   signed-in users, the root /wp-json/ (the namespace index the hub
  *   reads), every route of this plugin's namespace (the MCP endpoint with
- *   and without the token in the path, the three OAuth routes), and a
- *   visitor with a valid cookie; wp/v2, oembed/1.0, the Store API and every
- *   other namespace answer 401 to anyone else, whether the route comes as
- *   a pretty permalink or as ?rest_route=.
+ *   and without the token in the path, the three OAuth routes), the CORS
+ *   preflight of a browser (OPTIONS, which carries no credentials and gets
+ *   no content; not with a method override), and a visitor with a valid
+ *   cookie; wp/v2, oembed/1.0, the Store API and every other namespace
+ *   answer 401 to anyone else, whether the route comes as a pretty
+ *   permalink or as ?rest_route=.
+ * - On a network the cookie carries the id of the site in its name, since
+ *   the sites of a sub-directory network share the cookie path; the cookie
+ *   of one site is nothing on another. On a single site the name stays.
  * - The gates hang on parse_request before rest_api_loaded() and the plugins
  *   at the default priority (1), after the OAuth handlers (template_redirect
  *   0) and after WordPress's REST checks (rest_authentication_errors 100).
@@ -1611,7 +1616,8 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( '/staging/', $cookies[0][2]['path'] );
 		self::assertSame( '/wordpress/', $cookies[1][2]['path'] );
 		foreach ( $cookies as $cookie ) {
-			self::assertSame( AB_MCP_Preview_Protection::COOKIE, $cookie[0] );
+			self::assertSame( AB_MCP_Preview_Protection::cookie_name(), $cookie[0], 'Set under the name this site reads.' );
+			self::assertSame( 'ab_mcp_preview', $cookie[0] );
 			self::assertSame( $cookies[0][1], $cookie[1], 'The same value.' );
 			self::assertTrue( AB_MCP_Preview_Protection::cookie_valid( $cookie[1], AB_MCP_Preview_Protection::state()['hash'], time() ) );
 			self::assertSame( $cookies[0][2]['expires'], $cookie[2]['expires'], 'The same expiry.' );
@@ -1646,6 +1652,36 @@ final class PreviewProtectionTest extends TestCase {
 		$cookies = self::sent()['cookies'];
 		self::assertCount( 1, $cookies, 'The same path twice would be the same cookie twice.' );
 		self::assertSame( '/', $cookies[0][2]['path'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testOnANetworkTheCookieIsSetUnderTheNameOfTheSite(): void {
+		// Site 2 of a network sets ab_mcp_preview_2, the name it reads, so the
+		// password entered there overwrites nothing of site 1.
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		define( 'COOKIEPATH', '/' );
+		define( 'SITECOOKIEPATH', '/' );
+		switch_to_blog( 2 );
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		$password                                  = $this->on();
+		self::assertSame( 'ab_mcp_preview_2', AB_MCP_Preview_Protection::cookie_name() );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		$GLOBALS['ab_test_actions']                = array();
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'redirect', $exit->kind );
+		}
+		$cookies = self::sent()['cookies'];
+		self::assertCount( 1, $cookies );
+		self::assertSame( 'ab_mcp_preview_2', $cookies[0][0], 'Set under the name this site reads, not the plain one.' );
+		self::assertTrue( AB_MCP_Preview_Protection::cookie_valid( $cookies[0][1], AB_MCP_Preview_Protection::state()['hash'], time() ) );
+		restore_current_blog();
 	}
 
 	#[RunInSeparateProcess]
@@ -1814,6 +1850,96 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 401, $result->get_error_data()['status'] );
 		self::assertStringContainsString( 'preview behind a password', $result->get_error_message() );
 		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( null ), 'Also when no filter before decided.' );
+	}
+
+	public function testTheRestGatePassesTheCorsPreflightOfABrowser(): void {
+		// A web app of another origin reads /wp-json/wp/v2/posts with an
+		// application password; the browser's OPTIONS carries no credentials
+		// (Codex, 31.10.2026). The REST server answers OPTIONS with the
+		// description of the route (rest_handle_options_request()), never
+		// with content.
+		$_SERVER['REQUEST_URI']    = '/wp-json/wp/v2/posts';
+		$_SERVER['REQUEST_METHOD'] = 'OPTIONS';
+		self::assertTrue( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertNull( AB_MCP_Preview_Protection::gate_rest( null ), 'Off: as before.' );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+
+		$this->on();
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ), 'The preflight passes.' );
+		self::assertNull( AB_MCP_Preview_Protection::gate_rest( null ) );
+		$_SERVER['REQUEST_METHOD'] = 'options';
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ), 'Whatever the case of the method.' );
+		// The real request without credentials stays 401.
+		foreach ( array( 'GET', 'POST', 'HEAD' ) as $method ) {
+			$_SERVER['REQUEST_METHOD'] = $method;
+			self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+			self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), $method );
+		}
+		// An OPTIONS request whose method the server would replace is no
+		// preflight: GET would be dispatched (WP_REST_Server::serve_request(),
+		// $_GET['_method'] and X-HTTP-Method-Override before check_authentication()).
+		$_SERVER['REQUEST_METHOD'] = 'OPTIONS';
+		$_GET['_method']           = 'GET';
+		self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), '?_method=GET' );
+		$_GET = array();
+		$_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] = 'GET';
+		self::assertFalse( AB_MCP_Preview_Protection::is_cors_preflight() );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), 'X-HTTP-Method-Override: GET' );
+		unset( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+		// An error of WordPress's own checks passes through as always.
+		$error = new WP_Error( 'rest_cookie_invalid_nonce', 'Cookie check failed', array( 'status' => 403 ) );
+		self::assertSame( $error, AB_MCP_Preview_Protection::gate_rest( $error ) );
+	}
+
+	public function testOnANetworkEverySiteHasItsOwnCookie(): void {
+		// Every site of a sub-directory network shares the network's cookie
+		// path (ms_cookie_constants()), so one name would be one cookie for
+		// all of them, and the password entered on B would overwrite A's
+		// (Codex, 31.10.2026).
+		self::assertSame( 'ab_mcp_preview', AB_MCP_Preview_Protection::cookie_name(), 'A single site: the name as it was.' );
+		self::assertSame( AB_MCP_Preview_Protection::COOKIE, AB_MCP_Preview_Protection::cookie_name() );
+
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		$names                        = array();
+		$hashes                       = array();
+		foreach ( array( 1, 2 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public'] = '1';
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			$names[ $site ]  = AB_MCP_Preview_Protection::cookie_name();
+			$hashes[ $site ] = AB_MCP_Preview_Protection::state()['hash'];
+			restore_current_blog();
+		}
+		self::assertSame( 'ab_mcp_preview_1', $names[1] );
+		self::assertSame( 'ab_mcp_preview_2', $names[2] );
+		self::assertNotSame( $names[1], $names[2], 'Two sites, two cookies.' );
+
+		// The cookie of A, as A sets it, opens A and is nothing on B; B's
+		// cookie beside it opens B.
+		$_COOKIE[ $names[1] ] = AB_MCP_Preview_Protection::cookie_value( $hashes[1], time() + 100 );
+		switch_to_blog( 1 );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'cookie' ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_frontend() );
+		restore_current_blog();
+		switch_to_blog( 2 );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'], 'A\'s cookie is not read on B.' );
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::admin_decision( array( 'ajax' => true, 'post' => false, 'action' => 'load_more', 'logged_in' => false, 'cookie' => AB_MCP_Preview_Protection::admin_context()['cookie'] ), $state, time() )['action'] );
+		$_SERVER['REQUEST_URI'] = '/wp-json/wp/v2/posts';
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ), 'Nor in the REST gate.' );
+		$_COOKIE[ $names[2] ] = AB_MCP_Preview_Protection::cookie_value( $hashes[2], time() + 100 );
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
+		restore_current_blog();
+		// Both cookies stand side by side: A still opens A.
+		switch_to_blog( 1 );
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), AB_MCP_Preview_Protection::state(), time() )['action'] );
+		restore_current_blog();
 	}
 
 	public function testTheRestGatePassesAVisitorWithAValidCookie(): void {
