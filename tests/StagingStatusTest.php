@@ -790,6 +790,69 @@ final class StagingStatusTest extends TestCase {
 			AB_MCP_Outbound::curl_options( 'staging.example.com:443:' . self::PUBLIC_V4 ),
 			'An empty proxy disables http_proxy, HTTPS_PROXY and all_proxy for this handle (libcurl, CURLOPT_PROXY).'
 		);
+		self::assertSame( array( CURLOPT_PROXY => '' ), AB_MCP_Outbound::curl_options( null ), 'An address as host: no entry, no proxy all the same.' );
+	}
+
+	/** @return array<string,array{0:string}> */
+	public static function partnersOfAnyKind(): array {
+		return array(
+			'an IPv4 address as host' => array( 'https://' . self::PUBLIC_V4 ),
+			'a host name'             => array( self::STAGING ),
+		);
+	}
+
+	/**
+	 * The request's own handle, as the hook leaves it: a later hook sees it
+	 * (the hook of get() runs first) and starts it towards this machine,
+	 * with the environment's proxy set to a port that refuses. cURL must
+	 * not try that proxy, for an address as host as for a host name.
+	 */
+	#[DataProvider( 'partnersOfAnyKind' )]
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testEveryRequestOfThePartnerCheckIgnoresTheProxyOfTheEnvironment( string $partner ): void {
+		self::confirm( 'production', $partner );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$verbose = null;
+		add_action(
+			'http_api_curl',
+			static function ( $handle ) use ( &$verbose ): void {
+				$log = fopen( 'php://temp', 'w+' );
+				putenv( 'http_proxy=http://127.0.0.1:9' );
+				try {
+					curl_setopt_array(
+						$handle,
+						array(
+							CURLOPT_URL               => 'http://pin.example:80/',
+							CURLOPT_RESOLVE           => array( 'pin.example:80:127.0.0.1' ),
+							CURLOPT_VERBOSE           => true,
+							CURLOPT_STDERR            => $log,
+							CURLOPT_RETURNTRANSFER    => true,
+							CURLOPT_CONNECTTIMEOUT_MS => 500,
+							CURLOPT_TIMEOUT_MS        => 1000,
+						)
+					);
+					curl_exec( $handle );
+					rewind( $log );
+					$verbose = (string) stream_get_contents( $log );
+				} finally {
+					putenv( 'http_proxy' );
+					fclose( $log );
+				}
+			},
+			20
+		);
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+		self::assertIsString( $verbose, 'The request ran through cURL with the hook.' );
+		self::assertStringNotContainsString( 'http_proxy', $verbose, 'cURL names an environment proxy it uses; it uses none.' );
+		self::assertStringNotContainsString( '127.0.0.1:9', $verbose );
+	}
+
+	public function testAnAddressAsHostIsAskedWithFsockopenToo(): void {
+		self::confirm( 'production', 'https://' . self::PUBLIC_V4 );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$GLOBALS['ab_test_http_transport'] = 'fsockopen';
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'], 'Nothing to tie, and fsockopen reads no proxy from the environment.' );
+		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
 	}
 
 	/**

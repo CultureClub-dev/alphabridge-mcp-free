@@ -143,8 +143,9 @@ class AB_MCP_Outbound {
 	}
 
 	/**
-	 * What the bound request sets on its cURL handle: the checked addresses
-	 * for the host (CURLOPT_RESOLVE), and no proxy. A proxy from the
+	 * What a request of get() sets on its cURL handle: the checked addresses
+	 * for a host name (CURLOPT_RESOLVE; none for an address as host, which
+	 * is looked up nowhere), and in every case no proxy. A proxy from the
 	 * environment of PHP (http_proxy, HTTPS_PROXY, all_proxy), which cURL
 	 * uses without WordPress knowing, would look the name up itself; an
 	 * empty CURLOPT_PROXY «explicitly disables the use of a proxy, even if
@@ -152,14 +153,13 @@ class AB_MCP_Outbound {
 	 * CURLOPT_PROXY(3)). WordPress's own proxy (WP_PROXY_HOST) never gets
 	 * here: get() does not send what would go through it.
 	 *
-	 * @param string $entry CURLOPT_RESOLVE entry (resolve_entry()).
+	 * @param string|null $entry CURLOPT_RESOLVE entry (resolve_entry()), or null.
 	 * @return array<int,mixed>
 	 */
 	public static function curl_options( $entry ) {
-		return array(
-			CURLOPT_RESOLVE => array( (string) $entry ),
-			CURLOPT_PROXY   => '',
-		);
+		$options                  = null !== $entry ? array( CURLOPT_RESOLVE => array( (string) $entry ) ) : array();
+		$options[ CURLOPT_PROXY ] = '';
+		return $options;
 	}
 
 	/**
@@ -191,11 +191,10 @@ class AB_MCP_Outbound {
 		if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
 			return new WP_Error( 'ab_mcp_outbound_proxy', 'The address was not asked: the request would go through the proxy, which looks the name up itself.' );
 		}
+		// Null for an address as host: nothing is looked up, so there is
+		// nothing to tie; the proxy of the environment is switched off all
+		// the same (curl_options()).
 		$entry = self::resolve_entry( $url, $checked );
-		if ( null === $entry ) {
-			return wp_safe_remote_get( $url, array_merge( $args, array( 'redirection' => 0 ) ) );
-		}
-
 		$bound = false;
 		$pin   = static function ( $handle ) use ( $entry, &$bound ) {
 			curl_setopt_array( $handle, self::curl_options( $entry ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array -- the WordPress HTTP API offers no other way to fix the address a name connects to.
@@ -203,12 +202,16 @@ class AB_MCP_Outbound {
 		};
 		// The fsockopen transport cannot be tied to an address; its first
 		// hook runs before it connects, and an exception of Requests there
-		// ends the request as a WP_Error (WP_Http::request()).
+		// ends the request as a WP_Error (WP_Http::request()). Only for a
+		// host name: an address as host needs no tie, and fsockopen reads no
+		// proxy from the environment.
 		$refuse = static function () {
 			throw new WpOrg\Requests\Exception( self::UNBOUND, 'ab_mcp_outbound_unbound' );
 		};
 		add_action( 'http_api_curl', $pin );
-		add_action( 'requests-fsockopen.before_request', $refuse );
+		if ( null !== $entry ) {
+			add_action( 'requests-fsockopen.before_request', $refuse );
+		}
 		try {
 			$response = wp_safe_remote_get( $url, array_merge( $args, array( 'redirection' => 0 ) ) );
 		} finally {
@@ -218,7 +221,7 @@ class AB_MCP_Outbound {
 		if ( is_wp_error( $response ) && self::UNBOUND === $response->get_error_message() ) {
 			return new WP_Error( 'ab_mcp_outbound_unbound', self::UNBOUND );
 		}
-		if ( ! is_wp_error( $response ) && ! $bound ) {
+		if ( null !== $entry && ! is_wp_error( $response ) && ! $bound ) {
 			return new WP_Error( 'ab_mcp_outbound_unbound', 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.' );
 		}
 		return $response;
