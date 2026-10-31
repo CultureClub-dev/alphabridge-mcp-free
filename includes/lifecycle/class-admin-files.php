@@ -8,7 +8,8 @@
  * (AB_MCP_Tools_Install_Update::boot_upgrader(): the installs, the updates,
  * the core update, wp_delete_plugin with the plugin's deactivation and
  * uninstall routine, wp_delete_theme), with the hooks other plugins hang on
- * them.
+ * them; and an ability of another plugin (wp_run_ability,
+ * AB_MCP_Ability_Broker::call()), which may do any of these.
  *
  * wp-admin loads wp-admin/includes/admin.php on every screen before any of
  * these runs; a REST request loads none of it, and WordPress's own REST

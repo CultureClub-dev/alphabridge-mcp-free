@@ -13,7 +13,9 @@
 
 error_reporting( E_ALL );
 
-define( 'ABSPATH', __DIR__ . '/' );
+// A test that needs files under ABSPATH (stand-ins of wp-admin/includes/)
+// defines it first, to a folder of its own.
+defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
 define( 'KB_IN_BYTES', 1024 );
 define( 'MB_IN_BYTES', 1048576 );
 define( 'DAY_IN_SECONDS', 86400 );

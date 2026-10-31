@@ -23,10 +23,15 @@
  * scenario checks that first. Every stand-in notes that it was loaded.
  *
  * Proves:
- *  - list: load() loads exactly the files of its list, in admin.php's order,
- *    ms.php and ms-deprecated.php on a network as well, never admin.php,
- *    admin-filters.php or ms-admin-filters.php; it adds no hook, prints
- *    nothing, and skips a file that is not there;
+ *  - list: the list of AB_MCP_Admin_Files is the one of admin.php, against
+ *    a list written out by hand from WordPress 7.1.3 (AB_ADMIN_PHP below),
+ *    with admin-filters.php and ms-admin-filters.php as the only files left
+ *    out; that hand list against admin.php itself where a copy of core 7.1.3
+ *    is at hand (AB_WP_CORE, or ~/Entwicklung/wp-core-7.1.3; otherwise
+ *    skipped, with the reason); load() loads exactly these files, in that
+ *    order, ms.php and ms-deprecated.php on a network as well, never
+ *    admin.php or a file of hooks; it adds no hook, prints nothing, and
+ *    skips a file that is not there;
  *  - deactivate: wp_deactivate_plugin runs the deactivation routine to its
  *    end and the plugin is off (the case of 31.10.2026);
  *  - activate: wp_activate_plugin runs the activation routine and the plugin
@@ -45,7 +50,10 @@
  * Mutation probe (31.10.2026): without AB_MCP_Admin_Files::load() in
  * switch_on(), activate and theme fail; in plugin_locked(), network; in
  * deactivate_plugin(), deactivate; in boot_upgrader(), delete, update and
- * install.
+ * install. With user.php taken out of FILES, every scenario fails; with it
+ * taken out of a copy of admin.php given as AB_WP_CORE, list fails. An
+ * ability of another plugin is checked in
+ * tests/standalone-abilities/ability-broker-test.php adminfiles.
  *
  * Run:  php tests/standalone-lifecycle/admin-files-test.php list
  *       (and deactivate, activate, network, delete, theme, update, install)
@@ -59,14 +67,64 @@ if ( 'network' === $ab_scenario ) {
 require __DIR__ . '/../standalone-lib/support/update-harness.php';
 require_once $GLOBALS['ab_free'] . 'tools/class-tools-plugins-themes-manage.php';
 
+/* ------------------------------------------------- what admin.php loads */
+
+/* The files wp-admin/includes/admin.php of WordPress 7.1.3 loads, in its
+ * order, written out by hand from that file and not taken from
+ * AB_MCP_Admin_Files: the list there is checked against this one (Codex on
+ * 973f790: stand-ins and order both taken from FILES, a file dropped from
+ * it went unnoticed). Left out of the list on purpose, and nowhere else:
+ * admin-filters.php and ms-admin-filters.php (hooks for the rest of the
+ * request) and the admin translations admin.php loads outside wp-admin
+ * (load_textdomain(), no file of its own). */
+const AB_ADMIN_PHP = array(
+	'admin-filters.php',
+	'bookmark.php',
+	'comment.php',
+	'file.php',
+	'image.php',
+	'media.php',
+	'import.php',
+	'misc.php',
+	'class-wp-privacy-policy-content.php',
+	'options.php',
+	'plugin.php',
+	'post.php',
+	'class-wp-screen.php',
+	'screen.php',
+	'taxonomy.php',
+	'template.php',
+	'class-wp-list-table.php',
+	'class-wp-list-table-compat.php',
+	'list-table.php',
+	'theme.php',
+	'privacy-tools.php',
+	'class-wp-privacy-requests-table.php',
+	'class-wp-privacy-data-export-requests-list-table.php',
+	'class-wp-privacy-data-removal-requests-list-table.php',
+	'user.php',
+	'class-wp-site-icon.php',
+	'update.php',
+	'deprecated.php',
+);
+/* In its block if ( is_multisite() ). */
+const AB_ADMIN_PHP_NETWORK = array( 'ms-admin-filters.php', 'ms.php', 'ms-deprecated.php' );
+const AB_LEFT_OUT          = array( 'admin-filters.php', 'ms-admin-filters.php' );
+
+/** What load() is to load: admin.php's files without the ones left out. */
+function ab_expected( $network = false ) {
+	$all = $network ? array_merge( AB_ADMIN_PHP, AB_ADMIN_PHP_NETWORK ) : AB_ADMIN_PHP;
+	return array_values( array_diff( $all, AB_LEFT_OUT ) );
+}
+
 /* ---------------------------------------------- wp-admin/includes/, stand-ins */
 
-/* Every file the list names, and those it leaves out. Each notes that it was
+/* Every file admin.php loads, and a few it does not. Each notes that it was
  * loaded; file.php and misc.php hold the two functions of the routines. */
 $ab_inc    = ABSPATH . 'wp-admin/includes/';
-$ab_others = array( 'admin.php', 'admin-filters.php', 'ms-admin-filters.php', 'plugin-install.php', 'theme-install.php', 'class-wp-upgrader.php', 'class-automatic-upgrader-skin.php' );
+$ab_others = array( 'admin.php', 'plugin-install.php', 'theme-install.php', 'class-wp-upgrader.php', 'class-automatic-upgrader-skin.php' );
 $GLOBALS['ab_admin_loaded'] = array();
-foreach ( array_merge( AB_MCP_Admin_Files::FILES, AB_MCP_Admin_Files::NETWORK_FILES, $ab_others ) as $ab_name ) {
+foreach ( array_merge( AB_ADMIN_PHP, AB_ADMIN_PHP_NETWORK, $ab_others ) as $ab_name ) {
 	$ab_src = "<?php\n\$GLOBALS['ab_admin_loaded'][] = '$ab_name';\n";
 	if ( 'file.php' === $ab_name ) {
 		// Core's computes it from home and siteurl.
@@ -97,10 +155,10 @@ unset( $ab_name, $ab_src );
 /** The files loaded so far, in order. */
 function ab_loaded() { return $GLOBALS['ab_admin_loaded']; }
 
-/** After a call: every file of the list, never admin.php or a file of hooks. */
+/** After a call: every file admin.php loads but those left out, never admin.php or a file of hooks. */
 function ab_check_loaded( $label ) {
 	$loaded = ab_loaded();
-	ok( array() === array_values( array_diff( AB_MCP_Admin_Files::FILES, $loaded ) ), "$label every file of the list was loaded: missing " . implode( ', ', array_diff( AB_MCP_Admin_Files::FILES, $loaded ) ) );
+	ok( array() === array_values( array_diff( ab_expected(), $loaded ) ), "$label every file of admin.php but those left out was loaded: missing " . implode( ', ', array_diff( ab_expected(), $loaded ) ) );
 	ok( array() === array_values( array_intersect( array( 'admin.php', 'admin-filters.php', 'ms-admin-filters.php' ), $loaded ) ), "$label neither admin.php nor its hooks" );
 }
 
@@ -283,25 +341,45 @@ ok( array() === ab_loaded(), 'B0 no file of wp-admin is loaded before the call: 
 
 switch ( $ab_scenario ) {
 	case 'list':
-		ok( array() === array_values( array_diff( array( 'file.php', 'misc.php', 'plugin.php', 'theme.php', 'template.php' ), AB_MCP_Admin_Files::FILES ) ), 'L0 the list has file.php, misc.php, plugin.php, theme.php and template.php' );
-		ok( count( AB_MCP_Admin_Files::FILES ) === count( array_unique( AB_MCP_Admin_Files::FILES ) ), 'L0 no file twice' );
+		// The list against admin.php's, by hand from WordPress 7.1.3: every
+		// file, none more, in its order; on a network the two of its block.
+		ok( ab_expected() === AB_MCP_Admin_Files::FILES, 'L0 FILES is admin.php\'s list without admin-filters.php, in its order: ' . implode( ', ', array_diff( ab_expected(), AB_MCP_Admin_Files::FILES ) ) . ' | ' . implode( ', ', array_diff( AB_MCP_Admin_Files::FILES, ab_expected() ) ) );
+		ok( array_values( array_diff( AB_ADMIN_PHP_NETWORK, AB_LEFT_OUT ) ) === AB_MCP_Admin_Files::NETWORK_FILES, 'L0 NETWORK_FILES is the network block of admin.php without ms-admin-filters.php' );
+		ok( array() === array_values( array_intersect( AB_LEFT_OUT, array_merge( AB_MCP_Admin_Files::FILES, AB_MCP_Admin_Files::NETWORK_FILES ) ) ), 'L0 neither admin-filters.php nor ms-admin-filters.php is on a list' );
+		// And the hand list against admin.php itself, where a copy of core
+		// 7.1.3 is at hand (AB_WP_CORE, or ~/Entwicklung/wp-core-7.1.3).
+		$core  = getenv( 'AB_WP_CORE' ) ? rtrim( (string) getenv( 'AB_WP_CORE' ), '/' ) : rtrim( (string) getenv( 'HOME' ), '/' ) . '/Entwicklung/wp-core-7.1.3';
+		$admin = $core . '/wp-admin/includes/admin.php';
+		if ( is_readable( $admin ) ) {
+			$src   = (string) file_get_contents( $admin );
+			$split = strpos( $src, 'if ( is_multisite() )' );
+			$read  = static function ( $part ) {
+				preg_match_all( "#require_once ABSPATH \. 'wp-admin/includes/([a-z0-9-]+\.php)';#", $part, $m );
+				return $m[1];
+			};
+			ok( false !== $split && AB_ADMIN_PHP === $read( substr( $src, 0, (int) $split ) ), 'L0 the hand list is the one of ' . $admin . ': ' . implode( ', ', false === $split ? array() : $read( substr( $src, 0, (int) $split ) ) ) );
+			ok( false !== $split && AB_ADMIN_PHP_NETWORK === $read( substr( $src, (int) $split ) ), 'L0 and its block for a network' );
+			ok( 1 === preg_match( "#if \( ! defined\( 'WP_ADMIN' \) \) \{.*?load_textdomain\( 'default', WP_LANG_DIR \. '/admin-' \. \\\$admin_locale \. '\.mo', \\\$admin_locale \);#s", $src ), 'L0 the admin translations it loads outside wp-admin, the third thing left out, are where the list says' );
+		} else {
+			echo "  SKIP: L0 the hand list against admin.php itself: no copy of WordPress 7.1.3 at $core (set AB_WP_CORE to one); the list is checked against the hand list only.\n";
+		}
 		// A file this WordPress does not have is skipped, without a warning.
 		unlink( $ab_inc . 'deprecated.php' );
 		$hooks = $GLOBALS['ab_hooks'];
 		ob_start();
 		AB_MCP_Admin_Files::load();
 		$out = ob_get_clean();
-		ok( array_values( array_diff( AB_MCP_Admin_Files::FILES, array( 'deprecated.php' ) ) ) === ab_loaded(), 'L1 one site: exactly the files of the list, in its order, without the one that is not there: ' . implode( ', ', ab_loaded() ) );
+		ok( array_values( array_diff( ab_expected(), array( 'deprecated.php' ) ) ) === ab_loaded(), 'L1 one site: exactly admin.php\'s files but those left out, in its order, without the one that is not there: ' . implode( ', ', ab_loaded() ) );
 		ok( '' === $out, 'L1 nothing printed' );
 		ok( $hooks === $GLOBALS['ab_hooks'], 'L1 no hook added' );
 		ok( function_exists( 'get_home_path' ) && function_exists( 'insert_with_markers' ), 'L1 the two functions are there afterwards' );
 		file_put_contents( $ab_inc . 'deprecated.php', "<?php\n\$GLOBALS['ab_admin_loaded'][] = 'deprecated.php';\n" );
 		AB_MCP_Admin_Files::load();
-		ok( AB_MCP_Admin_Files::FILES === ab_loaded(), 'L2 called again: the file that is there now, nothing twice' );
+		ok( ab_expected() === ab_loaded(), 'L2 called again: the file that is there now, nothing twice' );
 		$GLOBALS['ab_multisite'] = true;
 		AB_MCP_Admin_Files::load();
 		$GLOBALS['ab_multisite'] = false;
-		ok( array_merge( AB_MCP_Admin_Files::FILES, AB_MCP_Admin_Files::NETWORK_FILES ) === ab_loaded(), 'L3 on a network ms.php and ms-deprecated.php as well' );
+		ok( ab_expected( true ) === ab_loaded(), 'L3 on a network ms.php and ms-deprecated.php as well' );
 		ab_check_loaded( 'L3' );
 		ok( $hooks === $GLOBALS['ab_hooks'], 'L3 still no hook added' );
 		break;
@@ -339,7 +417,7 @@ switch ( $ab_scenario ) {
 		ok( in_array( 'cache/cache.php', (array) get_option( 'active_plugins', array() ), true ), 'N1 on this site\'s list now' );
 		ok( array( 'activate' ) === $GLOBALS['ab_routines'], 'N1 its activation routine ran to its end' );
 		ab_check_loaded( 'N1' );
-		ok( array() === array_values( array_diff( AB_MCP_Admin_Files::NETWORK_FILES, ab_loaded() ) ), 'N1 and on a network ms.php and ms-deprecated.php' );
+		ok( array() === array_values( array_diff( ab_expected( true ), ab_loaded() ) ), 'N1 and on a network ms.php and ms-deprecated.php' );
 		break;
 
 	case 'delete':

@@ -46,6 +46,7 @@ final class AbilitiesStandaloneTest extends TestCase {
 			'writers'    => 13,
 			'extra'      => 8,
 			'extra 7.1.2' => 8,
+			'adminfiles' => 7,
 		),
 		'own-abilities-test.php'  => array(
 			'main'       => 80,
