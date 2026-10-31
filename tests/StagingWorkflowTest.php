@@ -244,7 +244,7 @@ final class StagingWorkflowTest extends TestCase {
 			'a protection on already'               => 'If the protection is on already, the answer says changed=false and carries no password: ask the person for the password they have, or, only with their yes, set a new one with new_password=true, which signs every visitor out; say so first.',
 			'one object at a time'                  => 'Carry it over one object at a time.',
 			'a connection that writes on both'      => 'This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it',
-			'the way to that connection'            => 'connect you on the settings page of AlphaBridge MCP on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media and categories only) and write access switched on there',
+			'the way to that connection'            => 'connect you on the settings page of AlphaBridge MCP on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media, terms and comments only) and write access switched on there',
 			'read there, write here'                => 'Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools',
 			'undo where a tool records a point'     => 'Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back',
 			'and where it records none'             => 'where the answer has none, tell the person that this change has no way back through AlphaBridge',
