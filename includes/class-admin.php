@@ -1382,7 +1382,13 @@ class AB_MCP_Admin {
 
 	/**
 	 * One row of the table under «Staging first»: the connection, its
-	 * state and its button.
+	 * state and its button. The state comes from the gate's own decision
+	 * for this connection (AB_MCP_Staging_Gate::would_hold_next(), the one
+	 * the tool call and the server instructions follow): what its next
+	 * writing call meets, and why. A site outside the gate (the confirmed
+	 * staging site, or paired) says so for every connection; a release or
+	 * a «no more» that stands all the same is shown with its button, so a
+	 * person can take it back.
 	 *
 	 * @param string $label   Name of the connection.
 	 * @param array  $state   AB_MCP_Staging_Gate::state(): the token entry, or the account's state.
@@ -1392,28 +1398,43 @@ class AB_MCP_Admin {
 	 * @return string HTML, escaped.
 	 */
 	private function staging_connection_row( $label, array $state, array $id, $setting, $now ) {
-		$button = '';
+		$conn    = isset( $id['hash'] )
+			? array(
+				'kind' => 'token',
+				'id'   => (string) $id['hash'],
+			)
+			: array(
+				'kind' => 'user',
+				'id'   => (string) ( isset( $id['account'] ) ? $id['account'] : 0 ),
+			);
+		$outcome = AB_MCP_Staging_Gate::would_hold_next( $now, $conn, $state );
+		$never   = isset( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] ) && is_array( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] );
+		$button  = '';
+		$text    = '';
+		if ( AB_MCP_Staging_Gate::RUNS === $outcome && AB_MCP_Staging_Gate::site_exempt( $setting ) ) {
+			$text = __( 'Not held: this site is the confirmed staging site, or paired with one.', 'alphabridge-mcp' );
+		}
 		if ( AB_MCP_Staging_Gate::REQUIRE === $setting ) {
-			if ( AB_MCP_Staging_Gate::released( $state, $now ) ) {
-				$by = isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ) && '' !== $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] : '#' . (int) ( isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] ) ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] : 0 );
-				/* translators: 1: date and time, 2: user name. */
-				$text   = sprintf( __( 'Released to work without staging until %1$s, by %2$s.', 'alphabridge-mcp' ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_RELEASE ] ), $by );
-				$button = array( 'revoke', __( 'Revoke', 'alphabridge-mcp' ) );
-			} else {
+			if ( AB_MCP_Staging_Gate::REQUIRE === $outcome ) {
 				$text   = __( 'Not released: every change is refused.', 'alphabridge-mcp' );
 				$button = array( 'release', __( 'Work without staging (24 hours)', 'alphabridge-mcp' ) );
+			} elseif ( AB_MCP_Staging_Gate::released( $state, $now ) ) {
+				$by = isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ) && '' !== $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] : '#' . (int) ( isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] ) ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] : 0 );
+				/* translators: 1: date and time, 2: user name. */
+				$text   = trim( $text . ' ' . sprintf( __( 'Released to work without staging until %1$s, by %2$s.', 'alphabridge-mcp' ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_RELEASE ] ), $by ) );
+				$button = array( 'revoke', __( 'Revoke', 'alphabridge-mcp' ) );
 			}
-		} elseif ( isset( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] ) && is_array( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] ) ) {
+		} elseif ( AB_MCP_Staging_Gate::ASK === $outcome ) {
+			$text = AB_MCP_Staging_Gate::asked_before( $state )
+				? __( 'Asks again with the next change.', 'alphabridge-mcp' )
+				: __( 'Asks with the first change.', 'alphabridge-mcp' );
+		} elseif ( $never ) {
 			/* translators: %s: date and time. */
-			$text   = sprintf( __( 'Asks no more, since %s.', 'alphabridge-mcp' ), self::site_datetime( (int) ( isset( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ]['at'] ) ? $state[ AB_MCP_Staging_Gate::FIELD_NEVER ]['at'] : 0 ) ) );
+			$text   = trim( $text . ' ' . sprintf( __( 'Asks no more, since %s.', 'alphabridge-mcp' ), self::site_datetime( (int) ( isset( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ]['at'] ) ? $state[ AB_MCP_Staging_Gate::FIELD_NEVER ]['at'] : 0 ) ) ) );
 			$button = array( 'ask_again', __( 'Ask again', 'alphabridge-mcp' ) );
-		} elseif ( AB_MCP_Staging_Gate::acknowledged( $state, $now ) ) {
+		} elseif ( '' === $text ) {
 			/* translators: 1: date and time of the answer, 2: date and time the question comes back. */
 			$text = sprintf( __( 'Went ahead here on %1$s; asks again from %2$s.', 'alphabridge-mcp' ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_ACK ] ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_ACK ] + AB_MCP_Staging_Gate::ACK_DAYS * DAY_IN_SECONDS ) );
-		} elseif ( AB_MCP_Staging_Gate::asked_before( $state ) ) {
-			$text = __( 'Asks again with the next change.', 'alphabridge-mcp' );
-		} else {
-			$text = __( 'Asks with the first change.', 'alphabridge-mcp' );
 		}
 
 		$html = '<tr><td>' . esc_html( $label ) . '</td><td>' . esc_html( $text ) . '</td><td class="ab-actions">';

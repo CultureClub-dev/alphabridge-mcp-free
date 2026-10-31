@@ -961,6 +961,42 @@ final class StagingGateTest extends TestCase {
 		self::assertStringNotContainsString( 'ab-staging-first__table', $this->admin( 'preview_card_html' ), 'Off: no table.' );
 	}
 
+	public function testTheRowsFollowTheGatesDecisionOnASiteOutsideTheGate(): void {
+		$hash = self::connect( 'Claude' );
+		Gate::save_state( array( 'kind' => 'user', 'id' => '9' ), array( Gate::FIELD_SEEN => time() ) );
+		Gate::set_setting( Gate::REQUIRE );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_PRODUCTION, self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( time(), array( 'kind' => 'token', 'id' => $hash ), self::entry( $hash ) ) );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( '<td>Claude</td><td>Not held: this site is the confirmed staging site, or paired with one.</td><td class="ab-actions"></td>', $html, 'Paired: what the tool call and the instructions say, not «refused».' );
+		self::assertStringContainsString( 'account user9</td><td>Not held: this site is the confirmed staging site, or paired with one.</td><td class="ab-actions"></td>', $html );
+		self::assertStringNotContainsString( 'Not released', $html );
+		self::assertStringNotContainsString( 'Work without staging (24 hours)', $html );
+
+		Gate::release( array( 'kind' => 'token', 'id' => $hash ), 7 );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( '<td>Claude</td><td>Not held: this site is the confirmed staging site, or paired with one. Released to work without staging until ', $html, 'A release that stands all the same is shown, so it can be taken back.' );
+		self::assertStringContainsString( 'name="do" value="revoke"><input type="hidden" name="hash" value="' . $hash . '"', $html );
+
+		// The hub's pair does not count for require: the gate holds, and so says the row.
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_UNCONFIRMED, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_PRODUCTION, self::STAGING, AB_MCP_Staging::ROLE_STAGING, 9, AB_MCP_Staging::SOURCE_HUB );
+		Gate::revoke( array( 'kind' => 'token', 'id' => $hash ), 7 );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( '<td>Claude</td><td>Not released: every change is refused.</td>', $html );
+		self::assertStringNotContainsString( 'Not held:', $html );
+
+		Gate::set_setting( Gate::ASK );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( '<td>Claude</td><td>Not held: this site is the confirmed staging site, or paired with one.</td><td class="ab-actions"></td>', $html, 'With ask the hub\'s pair counts.' );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_NEVER => array( 'at' => time() ) ) );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( '<td>Claude</td><td>Not held: this site is the confirmed staging site, or paired with one. Asks no more, since ', $html, 'A «no more» that stands is shown with its button.' );
+		self::assertStringContainsString( 'name="do" value="ask_again"><input type="hidden" name="hash" value="' . $hash . '"', $html );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_NEVER => null, Gate::FIELD_ACK => time() ) );
+		self::assertStringContainsString( '<td>Claude</td><td>Not held: this site is the confirmed staging site, or paired with one.</td><td class="ab-actions"></td>', $this->admin( 'preview_card_html' ), 'An acknowledgement needs no button: the site line says it all.' );
+	}
+
 	public function testTheSettingFormSavesBehindItsNonceAndTheCapability(): void {
 		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'require' ), 'nonce-ab_mcp_staging_first' );
 		self::assertSame( 'redirect', $exit->kind );

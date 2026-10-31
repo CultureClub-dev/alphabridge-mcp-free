@@ -5638,3 +5638,6 @@ msgstr "Gespeichert: Staging zuerst."
 #, php-format
 msgid "2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
 msgstr "2. Dieser Aufruf kam über den WordPress-Abilities-Adapter: Um diese Website trotzdem zu ändern, gibt ein Administrator dessen Konto auf der Einstellungsseite von AlphaBridge MCP unter «Staging zuerst» frei («Ohne Staging arbeiten»), für %d Stunden oder bis zum Widerruf. 3. Oder ein Administrator stellt «Staging zuerst» dort auf Fragen oder Aus."
+
+msgid "Not held: this site is the confirmed staging site, or paired with one."
+msgstr "Nicht angehalten: Diese Website ist die bestätigte Staging-Website oder mit einer gepaart."

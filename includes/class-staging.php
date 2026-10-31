@@ -1125,11 +1125,14 @@ class AB_MCP_Staging {
 	 * call makes (AB_MCP_Security::permits(): its capability manage_options,
 	 * its switch, write access and the token's access level), or the
 	 * sentence would ask for a call that is refused. And the connection has
-	 * to be able to change something: write access on, and at least one
-	 * writing tool that tools/list shows this connection (its switch on,
-	 * and allowed for the access level of the token,
+	 * to be able to change something «Staging first» would hold: write
+	 * access on, and at least one writing tool the gate concerns
+	 * (AB_MCP_Staging_Gate::concerns(): not one it exempts, such as
+	 * wp_set_preview_protection) that tools/list shows this connection (its
+	 * switch on, and allowed for the access level of the token,
 	 * AB_MCP_Tool_Registry::scope_allows()). For a connection that only
-	 * reads, the question would be about a change it cannot make.
+	 * reads, or whose only writing tools are exempt, the question would be
+	 * about a change the gate never holds.
 	 *
 	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
 	 * @return bool
@@ -1147,7 +1150,8 @@ class AB_MCP_Staging {
 		}
 		$scope = AB_MCP_Auth::current_scope();
 		foreach ( $registry->all() as $name => $tool ) {
-			if ( ! AB_MCP_Tool_Registry::is_read_only( $name, $tool )
+			$writes = class_exists( 'AB_MCP_Staging_Gate' ) ? AB_MCP_Staging_Gate::concerns( $name, $tool ) : ! AB_MCP_Tool_Registry::is_read_only( $name, $tool );
+			if ( $writes
 				&& AB_MCP_Settings::is_tool_enabled( $name, $tool )
 				&& AB_MCP_Tool_Registry::scope_allows( $scope, $name, $tool ) ) {
 				return true;
