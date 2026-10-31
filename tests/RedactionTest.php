@@ -856,6 +856,36 @@ final class RedactionTest extends TestCase {
 		);
 	}
 
+	public function testAQuotedNameWithBlanksOrDashesIsJudgedAtEveryLevel(): void {
+		// Codex 10 #2: "API Key", "Access-Token" are credentials' names too.
+		$nest = static function ( array $value, int $levels ): string {
+			$json = wp_json_encode( $value );
+			for ( $i = 0; $i < $levels; $i++ ) {
+				$json = wp_json_encode( array( 'body' => $json ) );
+			}
+			return $json;
+		};
+		$stamp = '[31-Oct-2026 10:00:00 UTC] ';
+		$lines = array();
+		for ( $level = 1; $level <= 3; $level++ ) {
+			$lines[] = $stamp . $nest( array( 'API Key' => 'PLACEHOLDER-K' . $level, 'Display Name' => 'Anna' ), $level );
+			$lines[] = $stamp . $nest( array( 'Access-Token' => 'PLACEHOLDER-T' . $level, 'n' => 1 ), $level );
+		}
+		$plain  = $stamp . wp_json_encode( array( 'Display Name' => 'x', 'Access-Level' => 'admin' ) ) . " and 'Display Name' => 'x'";
+		$direct = $stamp . 'request ' . wp_json_encode( array( 'API Key' => 'PLACEHOLDER-D' ) );
+
+		$out  = $this->read( array( 'log' => implode( "\n", array_merge( $lines, array( $plain, $direct ) ) ) ), 'wp_get_error_log' );
+		$text = explode( "\n", $out['log'] );
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $out['log'] );
+		foreach ( $lines as $i => $line ) {
+			self::assertSame( preg_replace( '/PLACEHOLDER-[KT]\d/', self::R, $line ), $text[ $i ], 'Level ' . (string) ( 1 + intdiv( $i, 2 ) ) . ': the value to its closing quote.' );
+		}
+		self::assertSame( $plain, $text[6], 'Ordinary names in quotes stay.' );
+		self::assertSame( $stamp . 'request {"API Key":[REDACTED]', $text[7] );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+	}
+
 	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
 		// Codex 5 #5: a Bearer token before a pair, and after it.
 		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );

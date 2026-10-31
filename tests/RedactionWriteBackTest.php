@@ -424,6 +424,17 @@ final class RedactionWriteBackTest extends TestCase {
 		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
 		self::assertSame( array( 'connections' => $stored['connections'], 'color' => 'blue' ), get_post_meta( 5, 'conns', true ) );
 
+		// Codex 10 #1: keys in another order are the same entry; a value changed is not.
+		$reordered = array( array( 'api_key' => self::R, 'name' => 'production' ), array( 'api_key' => self::R, 'name' => 'staging' ) );
+		$res       = $write( array( 'color' => 'green', 'connections' => $reordered ) );
+		self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+		self::assertSame( array( 'PROD-KEY', 'STAGE-KEY' ), array_column( get_post_meta( 5, 'conns', true )['connections'], 'api_key' ) );
+		self::assertSame( 'green', get_post_meta( 5, 'conns', true )['color'] );
+		$before = $GLOBALS['ab_test_meta'];
+		$res    = $write( array( 'connections' => array( array( 'api_key' => self::R, 'name' => 'prod' ), $reordered[1] ) ) );
+		self::assertSame( 'ab_mcp_redacted_value', $res->get_error_code() );
+		self::assertSame( $before, $GLOBALS['ab_test_meta'] );
+
 		// A changed entry without a placeholder changes; the one with it stays as stored.
 		add_post_meta( 5, 'mixed', array( array( 'name' => 'production', 'api_key' => 'PROD-KEY' ), array( 'name' => 'staging', 'region' => 'eu' ) ) );
 		$res = AB_MCP_Tools_Content::update_post_meta_tool( array( 'id' => 5, 'key' => 'mixed', 'value' => array( array( 'name' => 'production', 'api_key' => self::R ), array( 'name' => 'staging', 'region' => 'us' ) ) ) );

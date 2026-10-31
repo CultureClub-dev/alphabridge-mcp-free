@@ -744,7 +744,7 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Whether two values read alike in their JSON form, the form the reader
-	 * hands out; false where one has none.
+	 * hands out (same_tree()); false where one has none.
 	 *
 	 * @param mixed $a Value.
 	 * @param mixed $b Value.
@@ -752,7 +752,42 @@ final class AB_MCP_Redactor {
 	 */
 	private static function same_view( $a, $b ) {
 		$x = wp_json_encode( $a );
-		return is_string( $x ) && wp_json_encode( $b ) === $x;
+		$y = wp_json_encode( $b );
+		if ( ! is_string( $x ) || ! is_string( $y ) ) {
+			return false;
+		}
+		$a = json_decode( $x, false, 512, JSON_BIGINT_AS_STRING );
+		$b = json_decode( $y, false, 512, JSON_BIGINT_AS_STRING );
+		return ( null !== $a || 'null' === $x ) && ( null !== $b || 'null' === $y ) && self::same_tree( $a, $b, 0 );
+	}
+
+	/**
+	 * same_view() one level: an object by its keys in any order, a list by
+	 * position, anything else exactly.
+	 *
+	 * @param mixed $a     Decoded JSON.
+	 * @param mixed $b     Decoded JSON.
+	 * @param int   $depth Nesting so far.
+	 * @return bool
+	 */
+	private static function same_tree( $a, $b, $depth ) {
+		if ( $depth > self::MAX_DEPTH ) {
+			return false;
+		}
+		if ( ( $a instanceof stdClass && $b instanceof stdClass ) || ( is_array( $a ) && is_array( $b ) ) ) {
+			$a = is_array( $a ) ? $a : get_object_vars( $a );
+			$b = is_array( $b ) ? $b : get_object_vars( $b );
+			if ( count( $a ) !== count( $b ) ) {
+				return false;
+			}
+			foreach ( $a as $k => $v ) {
+				if ( ! array_key_exists( $k, $b ) || ! self::same_tree( $v, $b[ $k ], $depth + 1 ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return $a === $b;
 	}
 
 	/**
@@ -1475,7 +1510,9 @@ final class AB_MCP_Redactor {
 	 * @return string|null
 	 */
 	private static function line( $line, &$hits, array $extra, &$open = 0 ) {
-		$n = preg_match_all( '/(?<![\w\-$])(["\']?)([A-Za-z_][\w\-]{0,127})\1[ \t]{0,16}(=>|:|=)[ \t]{0,16}/', $line, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
+		// A name in quotes may hold any character but its quote ("API Key");
+		// one without, letters, digits, _ and - as before.
+		$n = preg_match_all( '/(?|(?<![\w\-$\\\\])"([^"\r\n]{1,128})(?<!\\\\)"|(?<![\w\-$\\\\])\'([^\'\r\n]{1,128})(?<!\\\\)\'|(?<![\w\-$])([A-Za-z_][\w\-]{0,127}))[ \t]{0,16}(=>|:|=)[ \t]{0,16}/', $line, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
 		if ( false === $n ) {
 			return null;
 		}
@@ -1483,7 +1520,7 @@ final class AB_MCP_Redactor {
 		$cut  = null;
 		$tail = '';
 		foreach ( $found as $m ) {
-			if ( ! self::redacts_key( $m[2][0], $extra ) ) {
+			if ( ! self::redacts_key( $m[1][0], $extra ) ) {
 				continue;
 			}
 			$from = $m[0][1] + strlen( $m[0][0] );
@@ -1537,7 +1574,9 @@ final class AB_MCP_Redactor {
 		if ( false === strpos( $text, '\\"' ) ) {
 			return $text;
 		}
-		$n = preg_match_all( '/(?<!\\\\)(\\\\+)"([A-Za-z_][\w\-]{0,127})\1"[ \t]{0,16}:[ \t]{0,16}/', $text, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
+		// The name: any character but a quote, not ending in a backslash (its
+		// closing quote has the same backslashes as its opening one).
+		$n = preg_match_all( '/(?<!\\\\)(\\\\+)"([^"\r\n]{1,128}?)(?<!\\\\)\1"[ \t]{0,16}:[ \t]{0,16}/', $text, $found, PREG_OFFSET_CAPTURE | PREG_SET_ORDER );
 		if ( false === $n ) {
 			return null;
 		}
