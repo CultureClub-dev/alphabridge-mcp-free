@@ -5099,14 +5099,11 @@ msgstr "WooCommerce reagiert auf einen neuen Bestellstatus wie in der Bestellans
 msgid "WooCommerce did not store the change: %1$s of the product still hold what they held before. A plugin may refuse it on save. Check the product with %2$s, and ask the site administrator which plugin guards it."
 msgstr "WooCommerce hat die Änderung nicht gespeichert: Bei %1$s des Produkts steht weiterhin der Wert von vorher. Ein Plugin kann sie beim Speichern ablehnen. Das Produkt mit %2$s prüfen und den Administrator der Website fragen, welches Plugin es schützt."
 
-msgid "The stock of product %d moved after the change (an order, a refund or a change by hand), and an undo never overwrites a stock that has moved: it stays as it is, and the other fields come back. Check the stock with wp_wc_get_product."
-msgstr "Der Lagerbestand des Produkts %d hat sich nach der Änderung bewegt (eine Bestellung, eine Rückerstattung oder eine Änderung von Hand), und ein Undo überschreibt nie einen Lagerbestand, der sich bewegt hat: Er bleibt, wie er ist, und die übrigen Felder kommen zurück. Den Lagerbestand mit wp_wc_get_product prüfen."
-
 msgid "WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again."
 msgstr "WooCommerce hat %1$s des Produkts %2$d nicht zurückgenommen; der Undo-Punkt bleibt. Ein Plugin kann die Felder eines Produkts beim Speichern umschreiben. Das Produkt mit wp_wc_get_product prüfen und erneut versuchen."
 
-msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change; a stock that moved is left as it is even then."
-msgstr "Das Produkt wurde geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um es trotz der neueren Änderung wiederherzustellen; ein Lagerbestand, der sich bewegt hat, bleibt auch dann, wie er ist."
+msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Das Produkt wurde geändert, nachdem das Undo geplant war; nichts wurde wiederhergestellt. force=true übergeben, um es trotz der neueren Änderung wiederherzustellen."
 
 msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "Der Schnappschuss des Produkts hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."

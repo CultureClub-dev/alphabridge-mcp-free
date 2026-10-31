@@ -171,6 +171,14 @@ final class AB_Test_WC_Write_Product {
 		return $this->set['sale_price'] ?? '';
 	}
 
+	public function get_date_on_sale_from( $context = 'view' ) {
+		return null;
+	}
+
+	public function get_date_on_sale_to( $context = 'view' ) {
+		return null;
+	}
+
 	public function get_manage_stock( $context = 'view' ) {
 		return $this->set['manage_stock'] ?? true;
 	}

@@ -167,6 +167,12 @@ final class AB_Probe_Product {
 	public function get_sale_price( $context = 'view' ) {
 		return '';
 	}
+	public function get_date_on_sale_from( $context = 'view' ) {
+		return null;
+	}
+	public function get_date_on_sale_to( $context = 'view' ) {
+		return null;
+	}
 	public function get_manage_stock( $context = 'view' ) {
 		return true;
 	}

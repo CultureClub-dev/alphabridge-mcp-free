@@ -119,7 +119,8 @@ class AB_MCP_Undo_Restore {
 			// tools: the right to edit the product (and to publish it, where
 			// the status of before takes it live) or to delete the coupon is
 			// asked by the plan (AB_MCP_Undo_Products::refusal(),
-			// AB_MCP_Undo_Coupons::refusal()). wp_wc_update_order_status
+			// AB_MCP_Undo_Coupons::refusal()); the stock is booked back
+			// relative, so sales since stay. wp_wc_update_order_status
 			// records none: its answer says it is not undoable.
 			'wp_wc_update_product'      => array( 'kind' => 'wc_product', 'cap' => 'manage_woocommerce' ),
 			'wp_wc_create_coupon'       => array( 'kind' => 'wc_coupon', 'cap' => 'manage_woocommerce' ),
@@ -445,7 +446,6 @@ class AB_MCP_Undo_Restore {
 		$restored = array();
 		$failed   = array();
 		$probes   = array();
-		$kept     = array();
 
 		// A restore must not create an undo point of its own: it would double the
 		// stored snapshots and make the semantics ("undo the undo") confusing.
@@ -473,11 +473,6 @@ class AB_MCP_Undo_Restore {
 				// found, or a warning (see restore_theme()).
 				if ( is_array( $res ) && ( isset( $res['probe'] ) || isset( $res['warning'] ) ) ) {
 					$probes[] = array( 'ref' => $item['ref'] ) + $res;
-				}
-				// What came back only in part on purpose: a stock that moved
-				// since stays as it is (AB_MCP_Undo_Products::restore()).
-				if ( is_array( $res ) && isset( $res['kept'] ) && is_array( $res['kept'] ) ) {
-					$kept[] = $res['kept'];
 				}
 			}
 		} finally {
@@ -508,9 +503,6 @@ class AB_MCP_Undo_Restore {
 		}
 		if ( $probes ) {
 			$out['probe'] = $probes;
-		}
-		if ( $kept ) {
-			$out['kept'] = $kept;
 		}
 		return $out;
 	}
@@ -1668,7 +1660,7 @@ class AB_MCP_Undo_Restore {
 	 *
 	 * @param string $kind Kind.
 	 * @param array  $item Planned item.
-	 * @return true|array|WP_Error An array only from restore_theme(): done, with the test requests' report; and from the undo of a product that left a stock as it is (kept).
+	 * @return true|array|WP_Error An array only from restore_theme(): done, with the test requests' report.
 	 */
 	protected static function apply_item( $kind, array $item ) {
 		switch ( $kind ) {

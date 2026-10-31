@@ -6,13 +6,15 @@
  * Snapshot (one point, one coupon):
  *   { "v": 1, "id": int, "after": { "coupon": sha256, "use": sha256 } }
  *
- * "coupon" is the coupon as the change left it: its code, status, amount,
- * discount type and expiry date, and when it was last saved, so that an edit
- * in wp-admin of any other of its fields counts as a change too; "use" its
- * use — the usage count, the customers it was used by, and the orders that
- * hold it while they are paid (WooCommerce's tentative usage). Both are read
- * through WC_Coupon and its getters in the edit context, as the product kind
- * reads a product (AB_MCP_Undo_Products). The undo moves the coupon into the
+ * "coupon" is the coupon as the change left it: all its data as WooCommerce
+ * reads it (WC_Coupon::get_data(): code, status, amount, discount type,
+ * expiry, the restrictions — individual use, minimum and maximum amount,
+ * products and categories, e-mail addresses, limits — and its other meta),
+ * without the id and the times it was created and changed, which a change
+ * of its meta alone does not touch; "use" its use — the usage count, the
+ * customers it was used by, and the orders that hold it while they are paid
+ * (WooCommerce's tentative usage). Both are read through WC_Coupon, as the
+ * product kind reads a product (AB_MCP_Undo_Products). The undo moves the coupon into the
  * trash through WooCommerce (WC_Coupon::delete() without force, as the trash
  * link of wp-admin does), not for good (decision of 30.10.2026): that is the
  * gentler way, and it frees the code again, since WooCommerce finds only
@@ -64,27 +66,50 @@ class AB_MCP_Undo_Coupons extends AB_MCP_Undo_Objects {
 		if ( 'trash' === (string) $c->get_status( 'edit' ) ) {
 			return false;
 		}
-		$expires  = $c->get_date_expires( 'edit' );
-		$modified = $c->get_date_modified( 'edit' );
-		$used_by  = array();
-		foreach ( (array) $c->get_used_by( 'edit' ) as $who ) {
-			$used_by[] = is_scalar( $who ) ? (string) $who : '';
-		}
-		return array(
-			'coupon' => array(
-				'code'          => (string) $c->get_code( 'edit' ),
-				'status'        => (string) $c->get_status( 'edit' ),
-				'amount'        => (string) $c->get_amount( 'edit' ),
-				'discount_type' => (string) $c->get_discount_type( 'edit' ),
-				'expires'       => is_object( $expires ) ? (int) $expires->getTimestamp() : null,
-				'modified'      => is_object( $modified ) ? (int) $modified->getTimestamp() : null,
-			),
-			'use'    => array(
-				'count'   => (int) $c->get_usage_count( 'edit' ),
-				'used_by' => $used_by,
-				'held'    => self::held( $c, (int) $id ),
-			),
+		// Every field, any one of which can change what the coupon does; not
+		// the id, and no time: a change of meta alone (through the REST API,
+		// say) leaves the time of the last change as it was.
+		$data = (array) $c->get_data();
+		$use  = array(
+			'count'   => (int) ( $data['usage_count'] ?? 0 ),
+			'used_by' => array(),
+			'held'    => self::held( $c, (int) $id ),
 		);
+		foreach ( (array) ( $data['used_by'] ?? array() ) as $who ) {
+			$use['used_by'][] = is_scalar( $who ) ? (string) $who : '';
+		}
+		unset( $data['id'], $data['date_created'], $data['date_modified'], $data['usage_count'], $data['used_by'] );
+		return array(
+			'coupon' => self::plain_data( $data ),
+			'use'    => $use,
+		);
+	}
+
+	/**
+	 * The data of a coupon in a form the hash takes the same each time: a
+	 * date as its timestamp, a meta row as its key and value (its id is the
+	 * row's, not the coupon's), any other object as its public fields.
+	 *
+	 * @param mixed $value Value of get_data().
+	 * @return mixed
+	 */
+	private static function plain_data( $value ) {
+		if ( is_object( $value ) ) {
+			if ( method_exists( $value, 'getTimestamp' ) ) {
+				return (int) $value->getTimestamp();
+			}
+			if ( method_exists( $value, 'get_data' ) ) {
+				$meta = (array) $value->get_data();
+				return array( $meta['key'] ?? null, self::plain_data( $meta['value'] ?? null ) );
+			}
+			return self::plain_data( get_object_vars( $value ) );
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $k => $v ) {
+				$value[ $k ] = self::plain_data( $v );
+			}
+		}
+		return $value;
 	}
 
 	/**

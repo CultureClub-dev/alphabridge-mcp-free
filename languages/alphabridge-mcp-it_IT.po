@@ -5099,14 +5099,11 @@ msgstr "WooCommerce reagisce a un nuovo stato dell'ordine come nella schermata d
 msgid "WooCommerce did not store the change: %1$s of the product still hold what they held before. A plugin may refuse it on save. Check the product with %2$s, and ask the site administrator which plugin guards it."
 msgstr "WooCommerce non ha salvato la modifica: %1$s del prodotto contengono ancora quello che contenevano prima. Un plugin può rifiutarla al salvataggio. Controlla il prodotto con %2$s e chiedi all'amministratore del sito quale plugin lo protegge."
 
-msgid "The stock of product %d moved after the change (an order, a refund or a change by hand), and an undo never overwrites a stock that has moved: it stays as it is, and the other fields come back. Check the stock with wp_wc_get_product."
-msgstr "Le scorte del prodotto %d sono cambiate dopo la modifica (un ordine, un rimborso o una modifica a mano), e un annullamento non sovrascrive mai scorte che sono cambiate: restano come sono, e gli altri campi tornano. Controlla le scorte con wp_wc_get_product."
-
 msgid "WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again."
 msgstr "WooCommerce non ha ripreso %1$s del prodotto %2$d; il punto di ripristino resta. Un plugin può riscrivere i campi di un prodotto al salvataggio. Controlla il prodotto con wp_wc_get_product e riprova."
 
-msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change; a stock that moved is left as it is even then."
-msgstr "Il prodotto è stato modificato dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per ripristinarlo nonostante la modifica più recente; scorte che sono cambiate restano come sono anche allora."
+msgid "The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change."
+msgstr "Il prodotto è stato modificato dopo che l'annullamento era stato pianificato; non è stato ripristinato nulla. Passa force=true per ripristinarlo nonostante la modifica più recente."
 
 msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'istantanea del prodotto non ha una forma che questo strumento scrive; non è stato ripristinato nulla. Questo punto di ripristino non è utilizzabile; wp_undo_discard lo rimuove."

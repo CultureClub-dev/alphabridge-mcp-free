@@ -47,7 +47,7 @@ final class UndoStandaloneTest extends TestCase {
 		'undo-comments-test.php'      => 120,
 		// Since 4.14.0: the undo of a product and of a new coupon, the order
 		// status that says it is not undoable, and their read-back.
-		'undo-shop-test.php'          => 110,
+		'undo-shop-test.php'          => 140,
 	);
 
 	/** For a script added later, until it is listed above. */

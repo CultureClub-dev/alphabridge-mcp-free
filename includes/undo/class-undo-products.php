@@ -1,42 +1,53 @@
 <?php
 /**
- * Undo kind wc_product (since 4.14.0): the regular price, the sale price, the
- * stock and the status wp_wc_update_product changed, put back through
- * WooCommerce.
+ * Undo kind wc_product (since 4.14.0): the prices, the stock and the status
+ * wp_wc_update_product changed, put back through WooCommerce.
  *
  * Snapshot (one point, one product):
  *   { "v": 1, "id": int, "type": string, "parent": int,
  *     "before": { "<location>": value, ... },
  *     "after":  { "<location>": sha256, ... } }
  *
- * A location is one thing the tool writes: regular_price, sale_price and
- * status, each as text, and stock, which is whether WooCommerce manages the
- * stock, the quantity and the stock status ({ "manage": bool, "quantity":
- * text or null, "status": text }): the tool switches stock management on
- * with a quantity, and WooCommerce derives the stock status from the
- * quantity where it manages the stock. The point keeps only the locations
- * the call changed, so a later change of another field is no conflict.
- * Unlike the kinds of WordPress objects, the state is read through the
- * objects of WooCommerce — wc_get_product() and its getters in the edit
- * context — and not from the tables: WooCommerce decides where a product
- * keeps its data, and its data store keeps _price, the stock hooks and the
- * product lookup table in step when it saves. The undo writes the same way:
- * wc_get_product(), the setters with the old values, save(), and the product
- * read again.
+ * Three locations, each kept only where the call changed it:
+ *  - price: the regular price, the sale price, the sale period
+ *    (date_on_sale_from, date_on_sale_to, as timestamps or null) and the
+ *    price WooCommerce derives from them, as one: WooCommerce drops a sale
+ *    price that is not below the regular one and derives the price from all
+ *    of them, so a change of any since is a change of the price.
+ *  - status: the post status.
+ *  - stock: what the call booked, not a state ({ "delta": the quantity it
+ *    set less the quantity right before its save, both read in the call
+ *    itself, "manage": whether WooCommerce managed the stock before,
+ *    "status": the stock status before }). The undo books the delta back
+ *    relative to the stock as it is then, through wc_update_product_stock(),
+ *    which WooCommerce runs as one update of the database: whatever was sold
+ *    or refunded since stays, so the stock has no conflict and needs no
+ *    force (decision of 30.10.2026, review of 31.10.2026). Where the call
+ *    switched stock management on, the undo switches it off again and sets
+ *    the stock status of before, which WooCommerce does not derive for a
+ *    stock it does not manage; the quantity, which WooCommerce drops with
+ *    the management, is then not booked. A stock no longer managed since is
+ *    refused (stock_unmanaged): a booking would not be made.
  *
- * A location changed since is refused unless force is set, with one
- * exception (decision of 30.10.2026): a stock that moved since — an order, a
- * refund, a change by hand — is never written back, also not with force,
- * since that would overwrite the quantities sold. Without force the point is
- * then blocked (changed_since); with force the other locations come back,
- * the stock stays as it is, and the answer names it (kept). The type and the
- * parent of the product are kept to tell that the id is still the same
- * product (gone where not). The account needs the rights of the tool on the
- * product as it is now: the right to edit it (edit_product, for a variation
- * too) and, where a status of before takes the product live (publish,
- * private, future), the right to publish products. A product in the trash
- * gets no status back (in_trash): only WordPress' untrash would take it out
- * of the trash properly.
+ * The state is read through the objects of WooCommerce — wc_get_product()
+ * and its getters in the edit context — not from the tables: WooCommerce
+ * decides where a product keeps its data, and its data store keeps _price,
+ * the stock hooks and the product lookup table in step when it saves. The
+ * state "after" is the product object as the tool saved it, not a read
+ * again afterwards, so that a change of another request in between is not
+ * taken for the tool's. The undo writes the same way: wc_get_product(), the
+ * setters with the old values, save(), the product read again and compared
+ * in full; the stock is booked last, so a retry after a failure never books
+ * twice.
+ *
+ * A price or a status changed since is refused unless force is set. The type
+ * and the parent of the product are kept to tell that the id is still the
+ * same product (gone where not). The account needs the rights of the tool on
+ * the product as it is now: the right to edit it (edit_product, for a
+ * variation too) and, where a status of before takes the product live
+ * (publish, private, future), the right to publish products. A product in
+ * the trash gets no status back (in_trash): only WordPress' untrash would
+ * take it out of the trash properly.
  *
  * @package AlphaBridge_MCP
  */
@@ -60,7 +71,10 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	const READER = 'wp_wc_get_product';
 
 	/** The locations, in the order they are kept and written. */
-	const LOCS = array( 'regular_price', 'sale_price', 'stock', 'status' );
+	const LOCS = array( 'price', 'stock', 'status' );
+
+	/** The fields of the location price, in the order they are hashed. */
+	const PRICE = array( 'regular_price', 'sale_price', 'date_on_sale_from', 'date_on_sale_to', 'price' );
 
 	/** The statuses wp_wc_update_product sets, and so the only ones its undo sets again. */
 	const STATUSES = array( 'publish', 'draft', 'pending', 'private', 'future' );
@@ -76,40 +90,60 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	 * ask.
 	 *
 	 * @param int $id Product id.
-	 * @return array|false|null { type, parent, locs }
+	 * @return array|false|null state()
 	 */
 	public static function state_of( $id ) {
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			return null;
 		}
-		if ( function_exists( 'clean_post_cache' ) ) {
-			clean_post_cache( (int) $id );
-		}
-		$p = wc_get_product( (int) $id );
+		$p = self::load( $id );
 		return is_object( $p ) ? self::state( $p ) : false;
 	}
 
 	/**
-	 * The state of a product object: its type and parent, and each location
-	 * as its getters give it in the edit context, past the filters of the
-	 * view context.
+	 * The product object for an id, read again past the caches.
+	 *
+	 * @param int $id Product id.
+	 * @return WC_Product|false
+	 */
+	private static function load( $id ) {
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( (int) $id );
+		}
+		$p = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $id ) : false;
+		return is_object( $p ) ? $p : false;
+	}
+
+	/**
+	 * The state of a product object as its getters give it in the edit
+	 * context, past the filters of the view context: its type and parent,
+	 * the locations price and status, and its stock.
 	 *
 	 * @param WC_Product $p Product.
-	 * @return array { type, parent, locs }
+	 * @return array { type, parent, locs: { price, status }, stock: { manage, managing, quantity, status } }
 	 */
 	public static function state( $p ) {
+		$manage = (bool) $p->get_manage_stock( 'edit' );
 		return array(
 			'type'   => self::text( $p->get_type() ),
 			'parent' => (int) $p->get_parent_id( 'edit' ),
 			'locs'   => array(
-				'regular_price' => self::text( $p->get_regular_price( 'edit' ) ),
-				'sale_price'    => self::text( $p->get_sale_price( 'edit' ) ),
-				'stock'         => array(
-					'manage'   => (bool) $p->get_manage_stock( 'edit' ),
-					'quantity' => self::quantity( $p->get_stock_quantity( 'edit' ) ),
-					'status'   => self::text( $p->get_stock_status( 'edit' ) ),
+				'price'  => array(
+					'regular_price'     => self::text( $p->get_regular_price( 'edit' ) ),
+					'sale_price'        => self::text( $p->get_sale_price( 'edit' ) ),
+					'date_on_sale_from' => self::stamp( $p->get_date_on_sale_from( 'edit' ) ),
+					'date_on_sale_to'   => self::stamp( $p->get_date_on_sale_to( 'edit' ) ),
+					'price'             => self::text( $p->get_price( 'edit' ) ),
 				),
-				'status'        => self::text( $p->get_status( 'edit' ) ),
+				'status' => self::text( $p->get_status( 'edit' ) ),
+			),
+			'stock'  => array(
+				'manage'   => $manage,
+				// Whether WooCommerce books stock for it at all: the
+				// product's own setting and the shop's (managing_stock()).
+				'managing' => method_exists( $p, 'managing_stock' ) ? (bool) $p->managing_stock() : $manage,
+				'quantity' => self::quantity( $p->get_stock_quantity( 'edit' ) ),
+				'status'   => self::text( $p->get_stock_status( 'edit' ) ),
 			),
 		);
 	}
@@ -125,10 +159,21 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	}
 
 	/**
+	 * A date of WooCommerce (WC_DateTime) as its timestamp; null where there
+	 * is none.
+	 *
+	 * @param mixed $date Date as a getter gives it.
+	 * @return int|null
+	 */
+	private static function stamp( $date ) {
+		return is_object( $date ) && method_exists( $date, 'getTimestamp' ) ? (int) $date->getTimestamp() : null;
+	}
+
+	/**
 	 * A stock quantity in one spelling: null where there is none, else the
 	 * number as text — 3 and 3.0 are the same quantity.
 	 *
-	 * @param mixed $value Quantity as a getter or a snapshot gives it.
+	 * @param mixed $value Quantity.
 	 * @return string|null
 	 */
 	private static function quantity( $value ) {
@@ -149,6 +194,18 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		return $state['type'] === (string) $snap['type'] && $state['parent'] === (int) $snap['parent'];
 	}
 
+	/**
+	 * The hash "after" of a booking of the stock: a booking is undone once,
+	 * whatever the stock is now, so its location reads as after while the
+	 * product is there (now_hashes()).
+	 *
+	 * @param array $record The booking ({ delta, manage, status }).
+	 * @return string
+	 */
+	private static function booked( array $record ) {
+		return self::hash( array( 'booked' => $record ) );
+	}
+
 	/* --------------------------------------------------------------- hashes */
 
 	/**
@@ -163,7 +220,15 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		$same = is_array( $state ) && self::same_product( $state, $snap );
 		$out  = array();
 		foreach ( array_keys( (array) $snap['before'] ) as $loc ) {
-			$out[ (string) $loc ] = $same ? self::hash( $state['locs'][ $loc ] ) : self::ABSENT;
+			if ( ! $same ) {
+				$out[ (string) $loc ] = self::ABSENT;
+			} elseif ( 'stock' === $loc ) {
+				// No conflict: the booking goes back relative to the stock
+				// as it is then (refusal() asks whether it can).
+				$out['stock'] = (string) $snap['after']['stock'];
+			} else {
+				$out[ (string) $loc ] = self::hash( $state['locs'][ $loc ] );
+			}
 		}
 		return $out;
 	}
@@ -206,17 +271,32 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	public static function update( $p, array $asked, callable $write ) {
 		$id     = (int) $p->get_id();
 		$before = self::state( $p );
-		$done   = call_user_func( $write );
+		// The stock right before the save, read again in this call: what the
+		// call books is the quantity it sets less this one.
+		$was = $before['stock'];
+		if ( array_key_exists( 'stock', $asked ) ) {
+			$fresh = self::state_of( $id );
+			$was   = is_array( $fresh ) ? $fresh['stock'] : $was;
+		}
+		$done = call_user_func( $write );
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
-		$after = self::state_of( $id );
-		$read  = self::read_back( $after );
+		// The product as the tool saved it — the object, not a read again,
+		// which could already hold a change of another request — and the
+		// read-back for saved_fields.
+		$set  = self::state( $p );
+		$read = self::read_back( self::state_of( $id ) );
 
 		$changed = array();
-		foreach ( is_array( $after ) ? self::LOCS : array() as $loc ) {
-			if ( self::hash( $after['locs'][ $loc ] ) !== self::hash( $before['locs'][ $loc ] ) ) {
-				$changed[] = $loc;
+		foreach ( self::LOCS as $loc ) {
+			if ( 'stock' === $loc ) {
+				$booked = self::booking( $asked, $was, $set['stock'] );
+				if ( null !== $booked ) {
+					$changed['stock'] = $booked;
+				}
+			} elseif ( self::hash( $set['locs'][ $loc ] ) !== self::hash( $before['locs'][ $loc ] ) ) {
+				$changed[ $loc ] = $before['locs'][ $loc ];
 			}
 		}
 		if ( array() === $changed ) {
@@ -245,37 +325,60 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		// that put back only part of the change would mislead.
 		$snap = null;
 		$odd  = false;
-		if ( is_array( $after ) && array() !== $changed && self::on() ) {
+		if ( array() !== $changed && self::on() ) {
 			$snap = array(
 				'v'      => self::VERSION,
 				'id'     => $id,
 				'type'   => $before['type'],
 				'parent' => $before['parent'],
-				'before' => array(),
+				'before' => $changed,
 				'after'  => array(),
 			);
-			foreach ( $changed as $loc ) {
-				$snap['before'][ $loc ] = $before['locs'][ $loc ];
-				$snap['after'][ $loc ]  = self::hash( $after['locs'][ $loc ] );
+			foreach ( $changed as $loc => $value ) {
+				$snap['after'][ $loc ] = 'stock' === $loc ? self::booked( $value ) : self::hash( $set['locs'][ $loc ] );
 			}
 			if ( ! self::valid( self::TOOL, $snap ) ) {
 				$snap = null;
 				$odd  = true;
 			}
 		}
-		if ( $odd || ( ! is_array( $after ) && self::on() ) ) {
-			$outcome = AB_MCP_Undo_Answer::note( null );
-		} else {
-			$outcome = self::outcome( self::TOOL, self::READER, array() !== $changed, $snap, sprintf( 'product #%d: %s', $id, implode( ', ', $changed ) ) );
-		}
-		$res = AB_MCP_Undo_Answer::saved( array(), $asked, $read, self::READER );
+		$outcome = $odd ? AB_MCP_Undo_Answer::note( null ) : self::outcome( self::TOOL, self::READER, array() !== $changed, $snap, sprintf( 'product #%d: %s', $id, implode( ', ', array_keys( $changed ) ) ) );
+		$res     = AB_MCP_Undo_Answer::saved( array(), $asked, $read, self::READER );
 		return AB_MCP_Undo_Answer::with( $res, $outcome );
 	}
 
 	/**
-	 * The fields of a product as the tool takes them, from state_of():
-	 * regular_price, sale_price, stock (the quantity as WooCommerce gives it)
-	 * and status; empty where there is no product.
+	 * What the call booked on the stock, or null where it booked nothing: the
+	 * quantity it saved less the quantity right before (none counts as 0, as
+	 * WooCommerce keeps none for a stock it does not manage), and whether it
+	 * switched stock management on.
+	 *
+	 * @param array $asked The fields asked for.
+	 * @param array $was   The stock right before the save.
+	 * @param array $set   The stock as the tool saved it.
+	 * @return array|null { delta, manage, status }
+	 */
+	private static function booking( array $asked, array $was, array $set ) {
+		if ( ! array_key_exists( 'stock', $asked ) || ! $set['manage'] ) {
+			return null;
+		}
+		$from  = $was['manage'] && null !== $was['quantity'] ? 0 + $was['quantity'] : 0;
+		$to    = null !== $set['quantity'] ? 0 + $set['quantity'] : 0;
+		$delta = self::quantity( $to - $from );
+		if ( '0' === $delta && $was['manage'] ) {
+			return null;
+		}
+		return array(
+			'delta'  => $delta,
+			'manage' => (bool) $was['manage'],
+			'status' => $was['status'],
+		);
+	}
+
+	/**
+	 * The fields of a product as the tool takes them: regular_price,
+	 * sale_price, stock (the quantity as WooCommerce gives it) and status;
+	 * empty where there is no product.
 	 *
 	 * @param array|false|null $state state_of().
 	 * @return array
@@ -284,10 +387,10 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		if ( ! is_array( $state ) ) {
 			return array();
 		}
-		$q = $state['locs']['stock']['quantity'];
+		$q = $state['stock']['quantity'];
 		return array(
-			'regular_price' => $state['locs']['regular_price'],
-			'sale_price'    => $state['locs']['sale_price'],
+			'regular_price' => $state['locs']['price']['regular_price'],
+			'sale_price'    => $state['locs']['price']['sale_price'],
 			// WooCommerce counts stock in whole numbers unless a plugin says
 			// otherwise (wc_stock_amount()).
 			'stock'         => null === $q ? null : ( function_exists( 'wc_stock_amount' ) ? wc_stock_amount( $q ) : 0 + $q ),
@@ -296,77 +399,6 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	}
 
 	/* ------------------------------------------------------------- restore */
-
-	/**
-	 * The plan of the kind, and where the stock moved since and force is
-	 * set, which stock stays as it is (kept): the dry run says so too.
-	 *
-	 * @param string $tool  Tool of the point.
-	 * @param mixed  $data  Snapshot.
-	 * @param bool   $force Restore over later changes.
-	 * @return array|WP_Error
-	 */
-	public static function plan( $tool, $data, $force ) {
-		$out = parent::plan( $tool, $data, $force );
-		if ( is_array( $out ) && array() !== $out['items'] ) {
-			$cmp = self::compare( $data );
-			if ( is_array( $cmp ) && 'changed' === ( $cmp['stock'] ?? '' ) ) {
-				$out['kept'] = array( self::kept( (int) $data['id'] ) );
-			}
-		}
-		return $out;
-	}
-
-	/**
-	 * What the answer says of a stock left as it is.
-	 *
-	 * @param int $id Product id.
-	 * @return array { ref, locs, reason, note }
-	 */
-	private static function kept( $id ) {
-		return array(
-			'ref'    => 'product:' . (int) $id,
-			'locs'   => array( 'stock' ),
-			'reason' => 'stock_moved',
-			'note'   => sprintf(
-				/* translators: %d: product id */
-				__( 'The stock of product %d moved after the change (an order, a refund or a change by hand), and an undo never overwrites a stock that has moved: it stays as it is, and the other fields come back. Check the stock with wp_wc_get_product.', 'alphabridge-mcp' ),
-				(int) $id
-			),
-		);
-	}
-
-	/**
-	 * Restore one planned item: as AB_MCP_Undo_Objects::restore(), but a
-	 * stock that moved since stays as it is, also with force.
-	 *
-	 * @param array $item Item of plan().
-	 * @return true|array|WP_Error An array where the stock was kept: { kept: { ref, locs, reason, note } }.
-	 */
-	public static function restore( array $item ) {
-		$snap = (array) $item['snap'];
-		$cmp  = self::compare( $snap );
-		if ( null === $cmp ) {
-			return new WP_Error( 'ab_mcp_undo_write_failed', __( 'The state could not be read before the restore; nothing was restored. Try again in a moment; the undo point stays.', 'alphabridge-mcp' ) );
-		}
-		if ( empty( $item['force'] ) && in_array( 'changed', $cmp, true ) ) {
-			return self::changed_error();
-		}
-		// The quantities sold since stay: force passes over the other
-		// fields, never over the stock, which is then left as it is.
-		$kept = isset( $cmp['stock'] ) && 'changed' === $cmp['stock'];
-		if ( $kept ) {
-			$cmp['stock'] = 'before';
-		}
-		$locs = array_keys( array_diff( $cmp, array( 'before' ) ) );
-		if ( array() !== $locs ) {
-			$done = self::put_back( $snap, array_map( 'strval', $locs ) );
-			if ( true !== $done ) {
-				return $done;
-			}
-		}
-		return $kept ? array( 'kept' => self::kept( (int) $snap['id'] ) ) : true;
-	}
 
 	/**
 	 * @param string $tool Tool of the point.
@@ -383,6 +415,9 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		if ( '' !== $status && 'trash' === $state['locs']['status'] ) {
 			return 'in_trash';
 		}
+		if ( isset( $snap['before']['stock'] ) && ! self::bookable( $snap['before']['stock'], $state['stock'] ) ) {
+			return 'stock_unmanaged';
+		}
 		// The rights of the tool, asked as the tool asks them (not copied).
 		self::load_tools( 'AB_MCP_Tools_Shop', 'class-tools-shop.php' );
 		if ( ! current_user_can( AB_MCP_Tools_Shop::edit_cap( get_post_type( $id ) ), $id ) ) {
@@ -395,64 +430,121 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	}
 
 	/**
+	 * Can the booking of the point go back on the stock as it is now? The
+	 * product must still manage its own stock; for a quantity to book, also
+	 * as the shop books stock at all (wc_update_product_stock() books
+	 * nothing otherwise, and a variation that no longer manages its own
+	 * would book its parent's).
+	 *
+	 * @param array $record The booking of the point.
+	 * @param array $stock  The stock now (state()).
+	 * @return bool
+	 */
+	private static function bookable( array $record, array $stock ) {
+		if ( ! $stock['manage'] ) {
+			return false;
+		}
+		return ! $record['manage'] || '0' === $record['delta'] || $stock['managing'];
+	}
+
+	/**
 	 * @param array    $snap Snapshot.
 	 * @param string[] $locs Locations that differ.
 	 * @return true|WP_Error
 	 */
 	protected static function put_back( array $snap, array $locs ) {
-		$id = (int) $snap['id'];
-		if ( function_exists( 'clean_post_cache' ) ) {
-			clean_post_cache( $id );
+		$id    = (int) $snap['id'];
+		$p     = self::load( $id );
+		$stock = in_array( 'stock', $locs, true ) ? $snap['before']['stock'] : null;
+		if ( ! is_object( $p ) ) {
+			return self::not_back( $locs, $id );
 		}
-		$p     = function_exists( 'wc_get_product' ) ? wc_get_product( $id ) : false;
-		$saved = 0;
-		if ( is_object( $p ) ) {
-			foreach ( self::LOCS as $loc ) {
-				if ( ! in_array( $loc, $locs, true ) ) {
-					continue;
-				}
-				$old = $snap['before'][ $loc ];
-				if ( 'regular_price' === $loc ) {
-					$p->set_regular_price( $old );
-				} elseif ( 'sale_price' === $loc ) {
-					$p->set_sale_price( $old );
-				} elseif ( 'status' === $loc ) {
-					$p->set_status( $old );
-				} else {
-					$p->set_manage_stock( $old['manage'] );
-					// '' clears the quantity: null would be read as 0 (wc_stock_amount()).
-					$p->set_stock_quantity( null === $old['quantity'] ? '' : $old['quantity'] );
-					$p->set_stock_status( $old['status'] );
+		$write = false;
+		if ( in_array( 'price', $locs, true ) ) {
+			$old = $snap['before']['price'];
+			$p->set_regular_price( $old['regular_price'] );
+			$p->set_sale_price( $old['sale_price'] );
+			foreach ( array( 'date_on_sale_from', 'date_on_sale_to' ) as $field ) {
+				$getter = 'get_' . $field;
+				if ( self::stamp( $p->$getter( 'edit' ) ) !== $old[ $field ] ) {
+					$setter = 'set_' . $field;
+					$p->$setter( $old[ $field ] );
 				}
 			}
-			$saved = (int) $p->save();
+			$write = true;
 		}
+		if ( in_array( 'status', $locs, true ) ) {
+			$p->set_status( $snap['before']['status'] );
+			$write = true;
+		}
+		if ( null !== $stock && ! $stock['manage'] ) {
+			// Stock management back off, and the stock status of before,
+			// which WooCommerce does not derive for a stock it does not
+			// manage; the quantity goes with the management.
+			$p->set_manage_stock( false );
+			$p->set_stock_status( $stock['status'] );
+			$write = true;
+		}
+		$saved = $write ? (int) $p->save() : 1;
+
+		// Read again and compared in full before the stock is booked: a
+		// failure here leaves the booking for the retry.
 		$now = self::state_of( $id );
 		$off = array();
 		foreach ( $locs as $loc ) {
-			if ( $saved < 1 || ! is_array( $now ) || self::hash( $now['locs'][ $loc ] ) !== self::hash( $snap['before'][ $loc ] ) ) {
+			if ( 'stock' === $loc ) {
+				$back = null === $stock || $stock['manage'] || ( is_array( $now ) && false === $now['stock']['manage'] && $now['stock']['status'] === $stock['status'] );
+			} else {
+				$back = is_array( $now ) && self::hash( $now['locs'][ $loc ] ) === self::hash( $snap['before'][ $loc ] );
+			}
+			if ( $saved < 1 || ! $back ) {
 				$off[] = $loc;
 			}
 		}
 		if ( array() !== $off ) {
-			return new WP_Error(
-				'ab_mcp_undo_write_failed',
-				sprintf(
-					/* translators: 1: comma-separated field names, 2: product id */
-					__( 'WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again.', 'alphabridge-mcp' ),
-					implode( ', ', $off ),
-					$id
-				)
-			);
+			return self::not_back( $off, $id );
+		}
+
+		// The stock last, and relative: what the call booked goes back as one
+		// update of the database, and whatever was sold since stays.
+		if ( null !== $stock && $stock['manage'] && '0' !== $stock['delta'] ) {
+			$p = self::load( $id );
+			if ( ! is_object( $p ) || ! is_array( $now ) || ! self::bookable( $stock, $now['stock'] ) || ! function_exists( 'wc_update_product_stock' ) ) {
+				return self::not_back( array( 'stock' ), $id );
+			}
+			$n    = 0 + $stock['delta'];
+			$done = wc_update_product_stock( $p, abs( $n ), $n > 0 ? 'decrease' : 'increase' );
+			if ( false === $done ) {
+				return self::not_back( array( 'stock' ), $id );
+			}
 		}
 		return true;
+	}
+
+	/**
+	 * The answer where WooCommerce did not take back what the undo wrote.
+	 *
+	 * @param string[] $locs Locations not taken back.
+	 * @param int      $id   Product id.
+	 * @return WP_Error
+	 */
+	private static function not_back( array $locs, $id ) {
+		return new WP_Error(
+			'ab_mcp_undo_write_failed',
+			sprintf(
+				/* translators: 1: comma-separated field names, 2: product id */
+				__( 'WooCommerce did not take back %1$s of product %2$d; the undo point stays. A plugin may rewrite the fields of a product on save. Check the product with wp_wc_get_product, and try again.', 'alphabridge-mcp' ),
+				implode( ', ', $locs ),
+				(int) $id
+			)
+		);
 	}
 
 	/**
 	 * @return WP_Error
 	 */
 	protected static function changed_error() {
-		return new WP_Error( 'ab_mcp_undo_product_changed', __( 'The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change; a stock that moved is left as it is even then.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_undo_product_changed', __( 'The product was changed after the undo was planned; nothing was restored. Pass force=true to restore it over the newer change.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -506,25 +598,38 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 	}
 
 	/**
-	 * Is a value of before in the form the tool's undo writes back: a price
-	 * as WooCommerce stores one (a plain decimal or nothing), a status the
-	 * tool sets, a stock of its three parts?
+	 * Is a value of before in the form the tool's undo writes back: prices as
+	 * WooCommerce stores them (a plain decimal or nothing) with the sale
+	 * period as timestamps, a status the tool sets, a booking of the stock?
 	 *
 	 * @param string $loc   Location.
 	 * @param mixed  $value Value.
 	 * @return bool
 	 */
 	private static function value_form( $loc, $value ) {
-		if ( 'regular_price' === $loc || 'sale_price' === $loc ) {
-			return is_string( $value ) && 1 === preg_match( '/\A(-?[0-9]{0,20}(\.[0-9]{0,30})?)?\z/', $value );
-		}
 		if ( 'status' === $loc ) {
 			return in_array( $value, self::STATUSES, true );
 		}
-		if ( ! is_array( $value ) || array( 'manage', 'quantity', 'status' ) !== array_keys( $value ) || ! is_bool( $value['manage'] ) ) {
+		if ( 'price' === $loc ) {
+			if ( ! is_array( $value ) || self::PRICE !== array_keys( $value ) ) {
+				return false;
+			}
+			foreach ( array( 'regular_price', 'sale_price', 'price' ) as $field ) {
+				if ( ! is_string( $value[ $field ] ) || 1 !== preg_match( '/\A(-?[0-9]{0,20}(\.[0-9]{0,30})?)?\z/', $value[ $field ] ) ) {
+					return false;
+				}
+			}
+			foreach ( array( 'date_on_sale_from', 'date_on_sale_to' ) as $field ) {
+				if ( null !== $value[ $field ] && ( ! is_int( $value[ $field ] ) || $value[ $field ] < 0 ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if ( ! is_array( $value ) || array( 'delta', 'manage', 'status' ) !== array_keys( $value ) || ! is_bool( $value['manage'] ) ) {
 			return false;
 		}
-		if ( null !== $value['quantity'] && ( ! is_string( $value['quantity'] ) || 1 !== preg_match( '/\A-?[0-9]{1,20}(\.[0-9]{1,30})?\z/', $value['quantity'] ) ) ) {
+		if ( ! is_string( $value['delta'] ) || 1 !== preg_match( '/\A-?[0-9]{1,20}(\.[0-9]{1,30})?\z/', $value['delta'] ) ) {
 			return false;
 		}
 		return is_string( $value['status'] ) && 1 === preg_match( '/\A[a-z0-9_-]{1,40}\z/', $value['status'] );
