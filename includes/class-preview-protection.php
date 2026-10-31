@@ -42,9 +42,29 @@
  * - wp_loaded for wp-links-opml.php, which runs no wp() (gate_script()).
  * - The REST API decides on rest_authentication_errors (gate_rest()).
  *
+ * The rule of the first line: for a visitor without login and without a
+ * valid cookie, the gate on parse_request passes nothing. Every exemption
+ * answers the request itself and ends it (the decision serve, serve()).
+ * Only signed-in users and cookie holders pass, and the kinds of request
+ * that never reach wp() in the first place (wp-admin, cron, xmlrpc.php,
+ * WP-CLI). The reason: a pass on a parameter or a parsed variable opens
+ * everything that runs later on the same request — Yoast SEO's sitemap on
+ * pre_get_posts, WooCommerce's dispatcher on template_redirect at 0 reading
+ * $_GET['wc-ajax'] — and such a parameter combines with any other:
+ * /?robots=1&wc-ajax=get_refreshed_fragments was the cart fragments,
+ * /?ab_mcp_oauth=authorize&sitemap=1 the sitemap, /?robots=1&sitemap=1 the
+ * sitemap (Codex, 31.10.2026, rounds 1 and 2). So robots.txt is answered as
+ * the template loader answers it, a REST request by the core's own
+ * rest_api_loaded(), the OAuth documents and the consent page by their
+ * handlers, and a visitor's request never goes on to another plugin. The
+ * constants DOING_AJAX and REST_REQUEST decide nothing on the front end: a
+ * plugin may define them there (WooCommerce does for ?wc-ajax=), and the
+ * requests they really mark never reach these gates.
+ *
  * What the protection must never lock, because AlphaBridge itself and the
  * hub come in through it (the list of the survey of 31.10.2026, each with a
- * test of its own), in the order of the clauses of frontend_decision():
+ * test of its own; the clauses of frontend_decision() answer them for a
+ * visitor, after signed-in users and cookie holders have passed):
  *
  * - The MCP endpoint and every other route under this plugin's REST
  *   namespace: the token is checked in the route's own permission callback,
@@ -53,11 +73,14 @@
  * - Every REST request, on the first line: rest_api_loaded() (the core,
  *   wp-includes/rest-api.php) serves on parse_request at priority 10 every
  *   request whose $wp->query_vars['rest_route'] is not empty, set by the
- *   rewrite rule of pretty permalinks or by ?rest_route=; REST_REQUEST is
- *   not defined at priority 1. The clause rest_route is exactly that
- *   condition, read from the variable WordPress parsed and never from the
- *   path (a prefix like /wp-json/ decides nothing), and gate_rest() then
- *   decides on rest_authentication_errors as for every REST request.
+ *   rewrite rule of pretty permalinks or by ?rest_route=. The clause
+ *   rest_route is exactly that condition, read from the variable WordPress
+ *   parsed and never from the path (a prefix like /wp-json/ decides
+ *   nothing), and the gate calls rest_api_loaded() itself (serve()): it has
+ *   at priority 1 what it has at 10 (the object the action passes, with the
+ *   final query_vars; nothing else of the core hangs on parse_request), it
+ *   dies after serving, and gate_rest() decides inside it on
+ *   rest_authentication_errors as for every REST request.
  * - The two OAuth metadata documents below /.well-known/ and the consent
  *   page /?ab_mcp_oauth=authorize, which AB_MCP_OAuth serves on
  *   template_redirect at priority 0 (serve_well_known() while the sign-in
@@ -147,16 +170,17 @@
  *   site's protection is on, since the folder is shared. Where the folder
  *   cannot be written, the protection goes on all the same and the tool
  *   and the settings page say so, with the file to create by hand.
- * - robots.txt passes only on the way with themes: without themes the
+ * - robots.txt is answered only on the way with themes: without themes the
  *   template loader prints robots.txt and returns to the script, and
  *   wp-signup.php then renders its page with the theme's header and footer;
- *   so gate_without_themes() and the loader's gates do not exempt it. On
- *   template_redirect is_robots() decides; on parse_request WP_Query has
- *   not run yet (it sets is_robots when '' !== $qv['robots']), so the gate
- *   reads the query var robots WordPress parsed, and passes only when it is
- *   the only one: /?robots=1&sitemap=1 is the sitemap of an SEO plugin on
- *   pre_get_posts, not robots.txt, and on template_redirect, where the
- *   template loader answers is_robots() first, it does not matter any more.
+ *   so gate_without_themes() and the loader's gates do not exempt it. With
+ *   themes the gate answers it itself (serve(): do_action( 'do_robots' )
+ *   and exit, as the template loader does), so the filter robots_txt and
+ *   the plugins on it work as always, and whatever else the address carries
+ *   (/?robots=1&sitemap=1, /?robots=1&wc-ajax=…) reaches no later handler.
+ *   On template_redirect is_robots() decides; on parse_request WP_Query has
+ *   not run yet, so the gate reads the query var robots WordPress parsed,
+ *   as WP_Query will ('' !== $qv['robots']).
  * - Embeds (/embed/, ?embed=true), previews (?p=…&preview=true) and the
  *   feeds of index.php load the template loader with themes and so pass
  *   template_redirect. wp-comments-post.php prints no content of the site.
@@ -1055,7 +1079,9 @@ class AB_MCP_Preview_Protection {
 			// other, sitemap variables included (Codex, 31.10.2026).
 			'cron'            => defined( 'DOING_CRON' ) && DOING_CRON,
 			'xmlrpc'          => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
-			'rest'            => defined( 'REST_REQUEST' ) && REST_REQUEST,
+			// No clause for REST_REQUEST: rest_api_loaded() defines it and
+			// never returns, so on the front end only a plugin could have
+			// defined it, and that proves nothing (the rule in the header).
 			// The condition of rest_api_loaded() (wp-includes/rest-api.php),
 			// which serves the request on parse_request at priority 10: the
 			// variable WordPress parsed, never the path.
@@ -1064,31 +1090,22 @@ class AB_MCP_Preview_Protection {
 			// Only with themes: without them the template loader prints
 			// robots.txt and returns to the script, which renders on. After
 			// the query is_robots() decides; on parse_request the parsed
-			// variable, and only when nothing else was asked for.
-			'robots'          => (bool) $with_themes && ( null === $vars ? function_exists( 'is_robots' ) && is_robots() : self::only_robots( $vars ) ),
+			// variable, as WP_Query will read it ('' !== $qv['robots']).
+			'robots'          => (bool) $with_themes && ( null === $vars ? function_exists( 'is_robots' ) && is_robots() : isset( $vars['robots'] ) && '' !== $vars['robots'] ),
 		);
 	}
 
 	/**
-	 * Does a parsed query ask for robots.txt and nothing else? WP_Query sets
-	 * is_robots when '' !== $qv['robots']; a second variable beside it is
-	 * what a plugin on pre_get_posts answers (/?robots=1&sitemap=1), so it
-	 * is not robots.txt here.
-	 *
-	 * @param array $vars $wp->query_vars.
-	 * @return bool
-	 */
-	private static function only_robots( array $vars ) {
-		return array( 'robots' ) === array_keys( $vars ) && is_scalar( $vars['robots'] ) && '' !== (string) $vars['robots'];
-	}
-
-	/**
-	 * The decision for a front-end request: pass (serve the site), serve (a
-	 * document of AB_MCP_OAuth: hand the request to its handler, which ends
-	 * it), accept (a right password was posted: set the cookie and reload),
-	 * reject (a wrong one: the password page again, 401) or challenge (the
-	 * password page, 401). Each exemption is one clause, in the order of the
-	 * header of this file; each has its test.
+	 * The decision for a front-end request: pass (serve the site), serve
+	 * (answer the request here and end it: a REST request, robots.txt, a
+	 * document of AB_MCP_OAuth), accept (a right password was posted: set the
+	 * cookie and reload), reject (a wrong one: the password page again, 401)
+	 * or challenge (the password page, 401). Each exemption is one clause,
+	 * each has its test. The kinds of request that never reach wp() pass,
+	 * then signed-in users and cookie holders, for whom the gate changes
+	 * nothing; for a visitor without login and cookie nothing passes: what
+	 * is theirs to have is served by its handler and ended, everything else
+	 * is the password page (the rule in the header).
 	 *
 	 * @param array $ctx   frontend_context().
 	 * @param array $state state().
@@ -1099,15 +1116,25 @@ class AB_MCP_Preview_Protection {
 		if ( empty( $state['on'] ) ) {
 			return self::decision( 'pass', 'off' );
 		}
-		foreach ( array( 'admin', 'cron', 'xmlrpc', 'rest', 'cli' ) as $kind ) {
+		foreach ( array( 'admin', 'cron', 'xmlrpc', 'cli' ) as $kind ) {
 			if ( ! empty( $ctx[ $kind ] ) ) {
 				return self::decision( 'pass', $kind );
 			}
 		}
-		// A REST request on parse_request: rest_api_loaded() serves it next,
-		// and gate_rest() decides on rest_authentication_errors.
+		// Signed-in users and cookie holders first: for them the gate changes
+		// nothing, their request runs on as without the protection.
+		if ( ! empty( $ctx['logged_in'] ) ) {
+			return self::decision( 'pass', 'logged_in' );
+		}
+		$hash = isset( $state['hash'] ) ? (string) $state['hash'] : '';
+		if ( self::cookie_valid( isset( $ctx['cookie'] ) ? $ctx['cookie'] : '', $hash, $now ) ) {
+			return self::decision( 'pass', 'cookie' );
+		}
+		// A visitor: what they may have is answered here and ended, never
+		// passed on (the rule in the header). A REST request: rest_api_loaded()
+		// serves it and dies, gate_rest() decides on rest_authentication_errors.
 		if ( ! empty( $ctx['rest_route'] ) ) {
-			return self::decision( 'pass', 'rest_route' );
+			return self::decision( 'serve', 'rest_route' );
 		}
 		if ( ! empty( $ctx['well_known'] ) ) {
 			return self::decision( 'serve', 'well_known' );
@@ -1116,14 +1143,7 @@ class AB_MCP_Preview_Protection {
 			return self::decision( 'serve', 'oauth_authorize' );
 		}
 		if ( ! empty( $ctx['robots'] ) ) {
-			return self::decision( 'pass', 'robots' );
-		}
-		if ( ! empty( $ctx['logged_in'] ) ) {
-			return self::decision( 'pass', 'logged_in' );
-		}
-		$hash = isset( $state['hash'] ) ? (string) $state['hash'] : '';
-		if ( self::cookie_valid( isset( $ctx['cookie'] ) ? $ctx['cookie'] : '', $hash, $now ) ) {
-			return self::decision( 'pass', 'cookie' );
+			return self::decision( 'serve', 'robots' );
 		}
 		if ( 'POST' === ( isset( $ctx['method'] ) ? $ctx['method'] : 'GET' ) && isset( $ctx['password'] ) && is_string( $ctx['password'] ) ) {
 			return self::verify_password( $ctx['password'], $hash )
@@ -1201,16 +1221,42 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
-	 * Hand a request to the handler of AB_MCP_OAuth that serves it, as
-	 * template_redirect at priority 0 would later: the two documents below
-	 * /.well-known/ (serve_well_known(), which exits after the JSON) and the
-	 * consent page (handle_authorize(), whose every branch exits or
-	 * wp_die()s). Nothing else is served here; a reason this does not know
-	 * returns, and the gate shows the password page.
+	 * Answer a request a visitor may have, here and now, and end it, as the
+	 * core or AB_MCP_OAuth would later on the same request:
 	 *
-	 * @param string $reason The clause that decided: well_known or oauth_authorize.
+	 * - rest_route: rest_api_loaded() (wp-includes/rest-api.php), the core's
+	 *   own callback on parse_request at 10. It reads nothing but
+	 *   $GLOBALS['wp']->query_vars['rest_route'], the object the action
+	 *   passes, final since the filter request ran before the action; the
+	 *   rewrite rules were used before that, the REST server is built on the
+	 *   call (rest_get_server(), rest_api_init), and the core hooks nothing
+	 *   else on parse_request. So at priority 1 it has what it has at 10,
+	 *   and it dies after serving; gate_rest() decides inside it on
+	 *   rest_authentication_errors as for every REST request.
+	 * - robots: do_action( 'do_robots' ) and exit, as the template loader
+	 *   does for is_robots() (wp-includes/template-loader.php), so do_robots()
+	 *   and every plugin on the filter robots_txt answer as always.
+	 * - well_known: AB_MCP_OAuth::serve_well_known(), which exits after the
+	 *   JSON; oauth_authorize: AB_MCP_OAuth::handle_authorize(), whose every
+	 *   branch exits or wp_die()s.
+	 *
+	 * Nothing else is served here; a reason this does not know, or a handler
+	 * that returns, leaves the gate to show the password page.
+	 *
+	 * @param string $reason The clause that decided.
 	 */
 	private static function serve( $reason ) {
+		if ( 'rest_route' === $reason ) {
+			if ( function_exists( 'rest_api_loaded' ) ) {
+				rest_api_loaded();
+			}
+			return;
+		}
+		if ( 'robots' === $reason ) {
+			/** This action is documented in wp-includes/template-loader.php */
+			do_action( 'do_robots' );
+			exit;
+		}
 		if ( ! class_exists( 'AB_MCP_OAuth' ) ) {
 			return;
 		}

@@ -1841,6 +1841,19 @@ function is_admin() {
 	return ! empty( $GLOBALS['ab_test_is_admin'] );
 }
 
+/**
+ * The core's callback on parse_request (wp-includes/rest-api.php): serves
+ * the request whose parsed rest_route is not empty and dies. As the core, it
+ * reads $GLOBALS['wp'], the object the action passes; here it ends the code
+ * under test by throwing, with the route it would have served.
+ */
+function rest_api_loaded() {
+	if ( empty( $GLOBALS['wp']->query_vars['rest_route'] ) ) {
+		return;
+	}
+	throw new AbTestExit( 'rest', (string) $GLOBALS['wp']->query_vars['rest_route'] );
+}
+
 /** @var bool $ab_test_doing_ajax Whether the request is one of admin-ajax.php (wp_doing_ajax(); DOING_AJAX in WordPress). */
 $GLOBALS['ab_test_doing_ajax'] = false;
 
