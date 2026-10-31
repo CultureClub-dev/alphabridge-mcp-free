@@ -245,14 +245,21 @@ final class AB_MCP_Plugin {
 	public static function on_activate() {
 		require_once AB_MCP_DIR . 'includes/class-settings.php';
 		require_once AB_MCP_DIR . 'includes/class-audit-log.php';
+		require_once AB_MCP_DIR . 'includes/class-page-cache.php';
+		require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
 		AB_MCP_Settings::install_defaults();
 		AB_MCP_Audit_Log::install_table();
+		// A preview protection left on across a deactivation takes the
+		// search engine visibility again (free since 4.15.0).
+		AB_MCP_Preview_Protection::on_activate();
 	}
 
 	/**
-	 * Deactivation hook (kept minimal – no data loss).
+	 * Deactivation hook: tokens and settings stay. The preview protection
+	 * (free since 4.15.0) writes the search engine visibility back, since its
+	 * gates go with the plugin, and keeps its state for the next activation.
 	 */
 	public static function on_deactivate() {
-		// Intentionally empty: keep tokens/settings on deactivate.
+		AB_MCP_Preview_Protection::on_deactivate();
 	}
 }

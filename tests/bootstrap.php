@@ -111,6 +111,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
+	$GLOBALS['ab_test_home']        = 'https://example.test';
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
 }
@@ -325,12 +326,15 @@ function language_attributes( $doctype = 'html' ) {
 	echo 'lang="en-US"';
 }
 
+/** @var string $ab_test_home The home address; a test sets a sub-directory one (https://example.test/staging). */
+$GLOBALS['ab_test_home'] = 'https://example.test';
+
 function home_url( $path = '' ) {
-	return 'https://example.test' . $path;
+	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
 function site_url( $path = '' ) {
-	return 'https://example.test' . $path;
+	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
 /**

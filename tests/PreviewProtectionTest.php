@@ -34,7 +34,19 @@
  *   a pretty permalink or as ?rest_route=.
  * - The gates hang after the OAuth handlers (template_redirect 0) and after
  *   WordPress's REST checks (rest_authentication_errors 100).
- * - The connection check asks only addresses the protection leaves open.
+ * - The connection check asks only addresses the protection leaves open;
+ *   the consent page it calls is answered by the OAuth handler at priority
+ *   0, which ends every request it serves, so the gate has no clause for
+ *   the parameter, and ?ab_mcp_oauth with any other value is the password
+ *   page.
+ * - The REST index for a visitor without login and cookie holds the
+ *   namespaces alone (what the hub reads), without links to embed; every
+ *   REST answer while on carries the no-cache headers.
+ * - WordPress in a sub-directory: the request path loses the home folder
+ *   once, so the form action and the reload land on the page asked for.
+ * - Deactivating writes the search engine visibility back and keeps the
+ *   state; activating takes it again; uninstalling writes it back before
+ *   the option goes.
  * - The tool needs manage_options and write access, is not destructive by
  *   its definition, returns the password exactly once, reports the state
  *   and what is not covered, and refuses to renew a password while off with
@@ -126,7 +138,6 @@ final class PreviewProtectionTest extends TestCase {
 				'path'        => '/',
 				'request_uri' => '/',
 				'method'      => 'GET',
-				'oauth'       => false,
 				'oauth_on'    => false,
 				'password'    => null,
 				'cookie'      => '',
@@ -317,7 +328,6 @@ final class PreviewProtectionTest extends TestCase {
 			'WP-CLI'                   => array( array( 'cli' => true ), 'cli' ),
 			'OAuth server metadata'    => array( array( 'path' => '/.well-known/oauth-authorization-server', 'oauth_on' => true ), 'well_known' ),
 			'OAuth resource metadata'  => array( array( 'path' => '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', 'oauth_on' => true ), 'well_known' ),
-			'consent page'             => array( array( 'oauth' => true, 'request_uri' => '/?ab_mcp_oauth=authorize&client_id=x' ), 'oauth' ),
 			'robots.txt'               => array( array( 'path' => '/robots.txt', 'robots' => true ), 'robots' ),
 			'signed-in user'           => array( array( 'logged_in' => true ), 'logged_in' ),
 		);
@@ -343,6 +353,78 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-authorization-server', 'oauth_on' => false ) ), $state, time() )['action'], 'With the sign-in off nothing serves the document; WordPress would show its 404 page.' );
 		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-authorization-server-x', 'oauth_on' => true ) ), $state, time() )['action'], 'Matched as AB_MCP_OAuth matches it: the document, or a path below it.' );
 		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => '/.well-known/oauth-protected-resource', 'oauth_on' => true ) ), $state, time() )['action'] );
+	}
+
+	public function testTheOAuthParameterOpensNothingTheConsentPageIsAnsweredBeforeTheGate(): void {
+		$this->on();
+		$state = AB_MCP_Preview_Protection::state();
+		foreach ( array( '0', 'x', '', 'authorize ', 'Authorize', array( 'authorize' ) ) as $value ) {
+			$_GET                   = array( 'ab_mcp_oauth' => $value );
+			$_SERVER['REQUEST_URI'] = '/beitrag/?ab_mcp_oauth=' . ( is_array( $value ) ? 'a' : rawurlencode( $value ) );
+			$d                      = AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() );
+			self::assertSame( 'challenge', $d['action'], 'ab_mcp_oauth=' . ( is_array( $value ) ? 'array' : $value ) . ' is nothing the handler serves: the password page.' );
+		}
+		// The handler at priority 0 ends every request it serves — for a
+		// visitor the redirect to the login, or the error page — so the gate
+		// at priority 1 never sees the consent page, and the gate itself
+		// treats the address like any other.
+		$_GET                      = array( 'ab_mcp_oauth' => 'authorize', 'client_id' => 'x', 'redirect_uri' => 'https://client.test/cb', 'response_type' => 'code' );
+		$_REQUEST                  = $_GET;
+		$_SERVER['REQUEST_URI']    = '/?ab_mcp_oauth=authorize&client_id=x';
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() )['action'] );
+		try {
+			AB_MCP_OAuth::handle_authorize();
+			self::fail( 'handle_authorize() returned for ab_mcp_oauth=authorize; the gate would see the consent page.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertContains( $exit->kind, array( 'login', 'redirect', 'die' ) );
+		}
+		$_REQUEST = array();
+		AB_MCP_OAuth::boot();
+		AB_MCP_Preview_Protection::hook();
+		self::assertLessThan( has_action( 'template_redirect', array( AB_MCP_Preview_Protection::class, 'gate_frontend' ) ), has_action( 'template_redirect', array( AB_MCP_OAuth::class, 'handle_authorize' ) ), 'The handler runs first.' );
+	}
+
+	public function testASubDirectoryInstallLosesItsFolderOnceOnly(): void {
+		$GLOBALS['ab_test_home'] = 'https://example.test/staging';
+		$password                = $this->on();
+		$state                   = AB_MCP_Preview_Protection::state();
+
+		self::assertSame( '/about/', AB_MCP_Preview_Protection::strip_home( '/staging/about/' ) );
+		self::assertSame( '/', AB_MCP_Preview_Protection::strip_home( '/staging/' ) );
+		self::assertSame( '/', AB_MCP_Preview_Protection::strip_home( '/staging' ) );
+		self::assertSame( '/staging-old/x', AB_MCP_Preview_Protection::strip_home( '/staging-old/x' ), 'Only the folder itself, not a name that starts like it.' );
+		self::assertSame( '/other/', AB_MCP_Preview_Protection::strip_home( '/other/' ), 'A path outside the folder stays as it is.' );
+
+		$_SERVER['REQUEST_URI'] = '/staging/about/?draft=1';
+		$ctx                    = AB_MCP_Preview_Protection::frontend_context();
+		self::assertSame( '/about/', $ctx['path'] );
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No page.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertStringContainsString( 'action="https://example.test/staging/about/?draft=1"', $exit->detail, 'The folder once, not twice.' );
+			self::assertStringContainsString( 'redirect_to=' . rawurlencode( 'https://example.test/staging/about/?draft=1' ), $exit->detail );
+		}
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		try {
+			AB_MCP_Preview_Protection::gate_frontend();
+			self::fail( 'No redirect.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'https://example.test/staging/about/?draft=1', $exit->detail );
+		}
+		$_POST = array();
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+
+		// The well-known documents and the REST prefix sit under the folder.
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $this->visitor( array( 'path' => AB_MCP_Preview_Protection::strip_home( '/staging/.well-known/oauth-authorization-server' ), 'oauth_on' => true ) ), $state, time() )['action'] );
+		self::assertSame( '/wp/v2/posts', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/wp/v2/posts' ), array() ) );
+		self::assertSame( '/', AB_MCP_Preview_Protection::rest_route( array( 'REQUEST_URI' => '/staging/wp-json/' ), array() ) );
+		$_SERVER['REQUEST_URI'] = '/staging/wp-json/wp/v2/posts';
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Preview_Protection::gate_rest( true ) );
+		$_SERVER['REQUEST_URI'] = '/staging/wp-json/alphabridge/v1/mcp';
+		self::assertTrue( AB_MCP_Preview_Protection::gate_rest( true ) );
 	}
 
 	public function testAVisitorWithAValidCookiePassesAnExpiredOneDoesNot(): void {
@@ -378,7 +460,7 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( '/hello/', $ctx['path'] );
 		self::assertSame( '/hello/?x=1', $ctx['request_uri'] );
 		self::assertSame( 'POST', $ctx['method'] );
-		self::assertTrue( $ctx['oauth'] );
+		self::assertArrayNotHasKey( 'oauth', $ctx, 'The consent page is no business of the gate.' );
 		self::assertTrue( $ctx['oauth_on'], 'The sign-in is on by default.' );
 		self::assertSame( 'secret', $ctx['password'] );
 		self::assertSame( '1|abc', $ctx['cookie'] );
@@ -402,7 +484,6 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 'GET', $ctx['method'] );
 		self::assertNull( $ctx['password'] );
 		self::assertSame( '', $ctx['cookie'] );
-		self::assertFalse( $ctx['oauth'] );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
 		self::assertFalse( AB_MCP_Preview_Protection::frontend_context()['oauth_on'] );
 	}
@@ -642,6 +723,63 @@ final class PreviewProtectionTest extends TestCase {
 		}
 	}
 
+	/** The index as WordPress builds it, with what ?_embed would turn into media records. */
+	private function fullIndex(): \WP_REST_Response {
+		return new \WP_REST_Response(
+			array(
+				'name'           => 'Staging of a client',
+				'description'    => 'Not public yet',
+				'url'            => 'https://example.test',
+				'home'           => 'https://example.test',
+				'gmt_offset'     => 1,
+				'timezone_string' => 'Europe/Zurich',
+				'namespaces'     => array( 'oembed/1.0', 'wp/v2', 'wp-site-health/v1', 'alphabridge/v1' ),
+				'authentication' => array( 'application-passwords' => array( 'endpoints' => array( 'authorization' => 'https://example.test/wp-admin/authorize-application.php' ) ) ),
+				'routes'         => array( '/' => array(), '/wp/v2/posts' => array() ),
+				'site_logo'      => 12,
+				'site_icon'      => 13,
+				'site_icon_url'  => 'https://example.test/wp-content/uploads/icon.png',
+				'_links'         => array( 'https://api.w.org/featuredmedia' => array( array( 'href' => 'https://example.test/wp-json/wp/v2/media/12', 'embeddable' => true ) ) ),
+			),
+			200
+		);
+	}
+
+	public function testTheRestIndexForAVisitorHoldsTheNamespacesAlone(): void {
+		$full = $this->fullIndex();
+		self::assertSame( $full, AB_MCP_Preview_Protection::index( $full ), 'Off: as WordPress built it.' );
+
+		$this->on();
+		$reduced = AB_MCP_Preview_Protection::index( $full, new \WP_REST_Request( 'GET', '/' ) );
+		self::assertNotSame( $full, $reduced );
+		self::assertSame( array( 'namespaces' => array( 'oembed/1.0', 'wp/v2', 'wp-site-health/v1', 'alphabridge/v1' ) ), $reduced->get_data(), 'What the hub reads (alphabridge-connect src/detect.ts, hasWordPressRest()), nothing else: no name, no routes, no site icon, no links to embed.' );
+		self::assertSame( 200, $reduced->get_status() );
+		self::assertContains( 'wp/v2', $reduced->get_data()['namespaces'], 'The hub looks for wp/v2 among them.' );
+
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertSame( $full, AB_MCP_Preview_Protection::index( $full ), 'Signed in: the full index.' );
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		self::assertSame( $full, AB_MCP_Preview_Protection::index( $full ), 'With the cookie: the full index.' );
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() - 1 );
+		self::assertSame( array( 'namespaces' ), array_keys( AB_MCP_Preview_Protection::index( $full )->get_data() ), 'An expired cookie: the namespaces.' );
+
+		$odd = new \WP_REST_Response( 'not an index', 200 );
+		self::assertSame( array( 'namespaces' => array() ), AB_MCP_Preview_Protection::index( $odd )->get_data() );
+		self::assertSame( 'no response', AB_MCP_Preview_Protection::index( 'no response' ) );
+	}
+
+	public function testEveryRestAnswerWhileOnCarriesTheNoCacheHeaders(): void {
+		self::assertFalse( AB_MCP_Preview_Protection::nocache( false ), 'Off: as WordPress decided (signed-in users only).' );
+		self::assertTrue( AB_MCP_Preview_Protection::nocache( true ) );
+		$this->on();
+		self::assertTrue( AB_MCP_Preview_Protection::nocache( false ), 'On: also the answer a visitor with the cookie gets.' );
+		self::assertTrue( AB_MCP_Preview_Protection::nocache( true ) );
+		AB_MCP_Preview_Protection::hook();
+		self::assertSame( 10, has_filter( 'rest_send_nocache_headers', array( AB_MCP_Preview_Protection::class, 'nocache' ) ) );
+		self::assertSame( 10, has_filter( 'rest_index', array( AB_MCP_Preview_Protection::class, 'index' ) ) );
+	}
+
 	/* ------------------------------------------------- the connection check */
 
 	public function testTheConnectionCheckAsksOnlyAddressesTheProtectionLeavesOpen(): void {
@@ -662,7 +800,24 @@ final class PreviewProtectionTest extends TestCase {
 				self::assertTrue( AB_MCP_Preview_Protection::rest_exempt( $route ), $url );
 				continue;
 			}
-			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'oauth' => isset( $query['ab_mcp_oauth'] ), 'oauth_on' => AB_MCP_OAuth::enabled() ) );
+			if ( isset( $query['ab_mcp_oauth'] ) ) {
+				// The firewall probe calls the consent page: the OAuth handler
+				// at priority 0 answers it and ends the request, before the gate.
+				self::assertSame( 'authorize', $query['ab_mcp_oauth'] );
+				$_GET                      = $query;
+				$_REQUEST                  = $query;
+				$_SERVER['REQUEST_METHOD'] = 'GET';
+				try {
+					AB_MCP_OAuth::handle_authorize();
+					self::fail( 'handle_authorize() did not end the request for ' . $url );
+				} catch ( AbTestExit $exit ) {
+					self::assertContains( $exit->kind, array( 'login', 'redirect', 'die' ), $url );
+				}
+				$_GET     = array();
+				$_REQUEST = array();
+				continue;
+			}
+			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'oauth_on' => AB_MCP_OAuth::enabled() ) );
 			self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( $ctx, $state, time() )['action'], $url );
 		}
 	}
@@ -798,6 +953,64 @@ final class PreviewProtectionTest extends TestCase {
 		$this->on();
 		self::assertArrayHasKey( AB_MCP_Preview_Protection::KEY, $GLOBALS['ab_test_options'][ AB_MCP_Settings::OPT_OPTIONS ] );
 		self::assertStringContainsString( "'" . AB_MCP_Settings::OPT_OPTIONS . "',", (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' ) );
+	}
+
+	/* ---------------------------------------- deactivation, activation, uninstall */
+
+	public function testDeactivatingWritesTheVisibilityBackAndKeepsTheStateActivatingTakesItAgain(): void {
+		AB_MCP_Preview_Protection::on_deactivate();
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'Off: nothing happens.' );
+		self::assertSame( 0, $GLOBALS['ab_test_purges'] );
+
+		$password = $this->on();
+		$hash     = AB_MCP_Preview_Protection::state()['hash'];
+		AB_MCP_Preview_Protection::on_deactivate();
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'The gates go with the plugin, so the visibility goes back.' );
+		$state = AB_MCP_Preview_Protection::state();
+		self::assertTrue( $state['on'], 'The state stays for the next activation.' );
+		self::assertSame( $hash, $state['hash'], 'With the password.' );
+		self::assertSame( 2, $GLOBALS['ab_test_purges'], 'No password page stays in a cache.' );
+
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Activated again: discouraged again.' );
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'] );
+		self::assertTrue( AB_MCP_Preview_Protection::verify_password( $password, AB_MCP_Preview_Protection::state()['hash'] ), 'The same password.' );
+		self::assertSame( 3, $GLOBALS['ab_test_purges'], 'Pages cached while off go.' );
+
+		// Changed to discouraged by hand while deactivated: remembered, so
+		// switching off leaves it. A 0 left by a deactivation whose hook
+		// never ran is this plugin's own and not remembered.
+		AB_MCP_Preview_Protection::on_deactivate();
+		$GLOBALS['ab_test_options']['blog_public'] = 0;
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertSame( '1', AB_MCP_Preview_Protection::state()['blog_public'], 'A 0 found on activation is not remembered.' );
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'] );
+	}
+
+	public function testUninstallingWritesTheVisibilityBackBeforeTheOptionGoes(): void {
+		require_once __DIR__ . '/uninstall-stubs.php';
+		// As UninstallTest runs it: the constants WordPress sets, and a plugin
+		// folder without the Pro add-on, so the shared data is removed.
+		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+			\define( 'WP_UNINSTALL_PLUGIN', 'alphabridge-mcp/alphabridge-mcp.php' );
+		}
+		if ( ! \defined( 'WP_PLUGIN_DIR' ) ) {
+			\define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+		}
+		self::assertFileDoesNotExist( WP_PLUGIN_DIR . '/alphabridge-mcp-pro/alphabridge-mcp-pro.php' );
+		$this->on();
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+		include dirname( __DIR__ ) . '/uninstall.php';
+		self::assertSame( '1', $GLOBALS['ab_test_options']['blog_public'], 'Written back from the remembered value.' );
+		self::assertArrayNotHasKey( AB_MCP_Settings::OPT_OPTIONS, $GLOBALS['ab_test_options'] );
+
+		// Off: the visibility is the site's own and stays.
+		$GLOBALS['ab_test_options']['blog_public'] = 0;
+		AB_MCP_Settings::set( AB_MCP_Preview_Protection::KEY, array( 'on' => false, 'blog_public' => '1' ) );
+		include dirname( __DIR__ ) . '/uninstall.php';
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
 	}
 
 	/* ------------------------------------------------------- settings page */

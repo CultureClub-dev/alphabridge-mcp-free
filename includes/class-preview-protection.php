@@ -28,11 +28,26 @@
  *   a site, and reads any status but 200 as «not there» (alphabridge-connect
  *   src/detect.ts, readWellKnown()), so the password page there sends it on
  *   to the probe of the MCP endpoint as a 404 would.
- * - The consent page /?ab_mcp_oauth=authorize: the person signs in there,
- *   and the firewall self-test calls it without a login.
+ * - The consent page /?ab_mcp_oauth=authorize needs no clause here:
+ *   AB_MCP_OAuth::handle_authorize() (template_redirect 0) ends every
+ *   request it serves, with the consent screen, the redirect to the login,
+ *   the redirect back to the client or an error page (each branch exits or
+ *   wp_die()s), so the gate never sees it. A clause on the parameter would
+ *   be a hole: ?ab_mcp_oauth=0 on any page is nothing the handler serves,
+ *   and must be the password page (Codex, 31.10.2026).
  * - The REST root /wp-json/ (the namespace index): the hub reads it to find
  *   the endpoint; a locked root makes a protected staging site impossible
- *   to link.
+ *   to link. For a visitor without login and cookie the index is reduced to
+ *   the namespaces, which is all the hub reads (alphabridge-connect
+ *   src/detect.ts, hasWordPressRest(): ?_fields=namespaces, wp/v2 among
+ *   them): the full index names the site, its description, address and
+ *   timezone, every route, and links the site logo and icon, which ?_embed
+ *   turns into the two media records through an internal dispatch that no
+ *   rest_authentication_errors filter sees (index()).
+ * - While on, every REST answer carries WordPress's no-cache headers
+ *   (rest_send_nocache_headers), not only those of signed-in users: an
+ *   answer to a visitor with the cookie must not be stored for the next
+ *   visitor without one, and the 401 of everyone else is nothing to keep.
  * - REST requests of signed-in users (Gutenberg and the site editor with
  *   the cookie and the nonce, application passwords): this filter runs
  *   after WordPress's own checks (priority 100), where is_user_logged_in()
@@ -61,7 +76,12 @@
  * WordPress itself adds noindex, disables its sitemaps and answers
  * robots.txt with Disallow: /; switching off writes the remembered value
  * back, never a plain 1. X-Robots-Tag: noindex, nofollow goes on every
- * front-end answer while on (wp_headers).
+ * front-end answer while on (wp_headers). Deactivating the plugin takes the
+ * gates with it, so it writes the remembered value back as well and keeps
+ * the state; activating it again sets 0 once more (on_deactivate(),
+ * on_activate()); uninstall.php writes the value back before it removes the
+ * option. A deactivated plugin that left «discouraged» behind would be a
+ * change nobody can see the reason for.
  *
  * The password is generated here and shown once, by the tool in its answer
  * and on the settings page; only its hash is stored. The cookie is an HMAC
@@ -150,7 +170,46 @@ class AB_MCP_Preview_Protection {
 	public static function hook() {
 		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'gate_rest' ), self::REST_PRIORITY );
+		add_filter( 'rest_index', array( __CLASS__, 'index' ), 10, 2 );
+		add_filter( 'rest_send_nocache_headers', array( __CLASS__, 'nocache' ) );
 		add_filter( 'wp_headers', array( __CLASS__, 'headers' ) );
+	}
+
+	/**
+	 * Activation: a protection left on when the plugin was deactivated
+	 * (on_deactivate() wrote the visibility back and kept the state) takes
+	 * the visibility again. The current value is remembered anew, unless it
+	 * is the 0 this plugin sets itself (a deactivation whose hook never ran
+	 * left it), in which case the remembered value stays.
+	 */
+	public static function on_activate() {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return;
+		}
+		$before = get_option( 'blog_public', '1' );
+		if ( is_scalar( $before ) && '0' !== (string) $before ) {
+			self::write( array( 'blog_public' => (string) $before ) );
+		}
+		update_option( 'blog_public', 0 );
+		AB_MCP_Page_Cache::purge_site();
+	}
+
+	/**
+	 * Deactivation: the gates are gone, so the remembered visibility goes
+	 * back; the state (hash and all) stays for the next activation, as the
+	 * plugin keeps its other settings. The page cache is emptied, so no
+	 * password page is served from it after.
+	 */
+	public static function on_deactivate() {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return;
+		}
+		if ( null !== $state['blog_public'] ) {
+			update_option( 'blog_public', $state['blog_public'] );
+		}
+		AB_MCP_Page_Cache::purge_site();
 	}
 
 	/* ------------------------------------------------------------ state */
@@ -289,6 +348,16 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
+	 * Change fields of the stored record, leaving the rest as it is.
+	 *
+	 * @param array $fields Fields to set.
+	 */
+	private static function write( array $fields ) {
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		AB_MCP_Settings::set( self::KEY, array_merge( is_array( $raw ) ? $raw : array(), $fields ) );
+	}
+
+	/**
 	 * Write the state with who and when.
 	 *
 	 * @param array  $fields  on, hash, blog_public.
@@ -419,18 +488,11 @@ class AB_MCP_Preview_Protection {
 	 */
 	public static function frontend_context() {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
-		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
-		// WordPress in a sub-directory: the documents below /.well-known/
-		// sit under the home path, as AB_MCP_OAuth::serve_well_known() reads them.
-		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $path, $home_path ) ) {
-			$path = substr( $path, strlen( $home_path ) );
-		}
+		$path = self::strip_home( (string) wp_parse_url( $uri, PHP_URL_PATH ) );
 		return array(
-			'path'        => '' !== $path ? $path : '/',
+			'path'        => $path,
 			'request_uri' => $uri,
 			'method'      => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
-			'oauth'       => isset( $_GET['ab_mcp_oauth'] ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only.
 			'oauth_on'    => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled(),
 			'password'    => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
 			'cookie'      => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
@@ -450,7 +512,8 @@ class AB_MCP_Preview_Protection {
 	 * right password was posted: set the cookie and reload), reject (a wrong
 	 * one: the password page again, 401) or challenge (the password page,
 	 * 401). Each exemption is one clause, in the order of the header of this
-	 * file; each has its test.
+	 * file; each has its test. No clause for the consent page: its handler
+	 * ends the request before this gate runs (see the header).
 	 *
 	 * @param array $ctx   frontend_context().
 	 * @param array $state state().
@@ -469,9 +532,6 @@ class AB_MCP_Preview_Protection {
 		$path = isset( $ctx['path'] ) ? (string) $ctx['path'] : '/';
 		if ( ! empty( $ctx['oauth_on'] ) && preg_match( self::WELL_KNOWN, $path ) ) {
 			return self::decision( 'pass', 'well_known' );
-		}
-		if ( ! empty( $ctx['oauth'] ) ) {
-			return self::decision( 'pass', 'oauth' );
 		}
 		if ( ! empty( $ctx['robots'] ) ) {
 			return self::decision( 'pass', 'robots' );
@@ -571,17 +631,37 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
-	 * A request URI as a path with its query, for home_url() and the form's
-	 * action: never a scheme or host a visitor sent.
+	 * A request URI as a path below the home address with its query, for
+	 * home_url() and the form's action: never a scheme or host a visitor
+	 * sent, and without the folder of a WordPress in a sub-directory, which
+	 * home_url() adds again.
 	 *
 	 * @param string $uri REQUEST_URI.
 	 * @return string
 	 */
 	private static function relative( $uri ) {
-		$path  = (string) wp_parse_url( (string) $uri, PHP_URL_PATH );
+		$path  = self::strip_home( (string) wp_parse_url( (string) $uri, PHP_URL_PATH ) );
 		$query = (string) wp_parse_url( (string) $uri, PHP_URL_QUERY );
-		$path  = '' !== $path ? '/' . ltrim( $path, '/' ) : '/';
 		return $path . ( '' !== $query ? '?' . $query : '' );
+	}
+
+	/**
+	 * A request path without the folder of the home address (WordPress in a
+	 * sub-directory, home https://example.test/staging), with a leading
+	 * slash; '/' for the home page. The documents below /.well-known/ sit
+	 * under that folder as AB_MCP_OAuth::serve_well_known() reads them, and
+	 * so does the REST prefix.
+	 *
+	 * @param string $path Path of the request.
+	 * @return string
+	 */
+	public static function strip_home( $path ) {
+		$path = (string) $path;
+		$home = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		if ( '' !== $home && ( $path === $home || 0 === strpos( $path, $home . '/' ) ) ) {
+			$path = substr( $path, strlen( $home ) );
+		}
+		return '/' . ltrim( $path, '/' );
 	}
 
 	/**
@@ -639,12 +719,8 @@ class AB_MCP_Preview_Protection {
 		if ( isset( $query_vars['rest_route'] ) && is_string( $query_vars['rest_route'] ) ) {
 			$route = $query_vars['rest_route'];
 		} elseif ( isset( $server['REQUEST_URI'] ) ) {
-			$path   = (string) wp_parse_url( (string) $server['REQUEST_URI'], PHP_URL_PATH );
+			$path   = self::strip_home( (string) wp_parse_url( (string) $server['REQUEST_URI'], PHP_URL_PATH ) );
 			$prefix = '/' . trim( rest_get_url_prefix(), '/' );
-			$home   = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-			if ( '' !== $home && '/' !== $home && 0 === strpos( $path, $home ) ) {
-				$path = substr( $path, strlen( $home ) );
-			}
 			if ( $path === $prefix || 0 === strpos( $path, $prefix . '/' ) ) {
 				$route = substr( $path, strlen( $prefix ) );
 			}
@@ -697,8 +773,7 @@ class AB_MCP_Preview_Protection {
 		if ( self::rest_exempt( $route ) ) {
 			return $result;
 		}
-		$cookie = isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '';
-		if ( self::cookie_valid( $cookie, $state['hash'], time() ) ) {
+		if ( self::holds_cookie( $state['hash'] ) ) {
 			return $result;
 		}
 		return new WP_Error(
@@ -706,6 +781,58 @@ class AB_MCP_Preview_Protection {
 			__( 'This site is a preview behind a password, so its REST API answers only signed-in users (a cookie with a nonce, or an application password) and visitors who entered the preview password in their browser. Enter it on the password page of the site, sign in, or ask the site administrator; the MCP endpoint and the sign-in of AlphaBridge MCP are open as always.', 'alphabridge-mcp' ),
 			array( 'status' => 401 )
 		);
+	}
+
+	/**
+	 * Does the request carry a valid preview cookie for this hash?
+	 *
+	 * @param string $hash Stored hash.
+	 * @return bool
+	 */
+	private static function holds_cookie( $hash ) {
+		$cookie = isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '';
+		return self::cookie_valid( $cookie, (string) $hash, time() );
+	}
+
+	/**
+	 * The REST index (rest_index) for a visitor without login and cookie
+	 * while on: the namespaces alone, in a fresh response without links, so
+	 * neither _links nor ?_embed give the site logo or icon away. Everyone
+	 * else gets the index as WordPress built it.
+	 *
+	 * @param WP_REST_Response $response The index.
+	 * @param WP_REST_Request  $request  The request (unused; the filter passes it).
+	 * @return WP_REST_Response
+	 */
+	public static function index( $response, $request = null ) {
+		if ( ! ( $response instanceof WP_REST_Response ) ) {
+			return $response;
+		}
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return $response;
+		}
+		if ( is_user_logged_in() ) {
+			return $response;
+		}
+		if ( self::holds_cookie( $state['hash'] ) ) {
+			return $response;
+		}
+		$data       = $response->get_data();
+		$namespaces = ( is_array( $data ) && isset( $data['namespaces'] ) && is_array( $data['namespaces'] ) ) ? array_values( $data['namespaces'] ) : array();
+		return new WP_REST_Response( array( 'namespaces' => $namespaces ), 200 );
+	}
+
+	/**
+	 * No-cache headers on every REST answer while on
+	 * (rest_send_nocache_headers; WordPress sends them for signed-in users
+	 * only): the answer a visitor with the cookie gets is theirs alone.
+	 *
+	 * @param bool $send What WordPress decided.
+	 * @return bool
+	 */
+	public static function nocache( $send ) {
+		return self::is_on() ? true : (bool) $send;
 	}
 
 	/* ------------------------------------------------------------ texts */

@@ -97,6 +97,21 @@ foreach ( (array) get_site_option( 'ab_mcp_pro_update_holds', array() ) as $ab_m
 	}
 }
 
+// The preview protection (free since 4.15.0) set blog_public to 0 and kept
+// the earlier value in ab_mcp_options; once that option is gone nothing
+// would write it back, and the site would stay «discouraged» for search
+// engines without a visible reason. Deactivation writes it back too
+// (AB_MCP_Preview_Protection::on_deactivate()); this is for an uninstall
+// whose deactivation hook never ran. Per site, as the option is.
+$ab_mcp_preview_blog_public = static function () {
+	$ab_mcp_opts = get_option( 'ab_mcp_options', array() );
+	$ab_mcp_pp   = ( is_array( $ab_mcp_opts ) && isset( $ab_mcp_opts['preview_protection'] ) && is_array( $ab_mcp_opts['preview_protection'] ) ) ? $ab_mcp_opts['preview_protection'] : array();
+	if ( isset( $ab_mcp_pp['on'], $ab_mcp_pp['hash'] ) && true === $ab_mcp_pp['on'] && '' !== (string) $ab_mcp_pp['hash'] && array_key_exists( 'blog_public', $ab_mcp_pp ) && is_scalar( $ab_mcp_pp['blog_public'] ) ) {
+		update_option( 'blog_public', (string) $ab_mcp_pp['blog_public'] );
+	}
+};
+
+$ab_mcp_preview_blog_public();
 foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }
@@ -123,6 +138,7 @@ if ( is_multisite() ) {
 	);
 	foreach ( $ab_mcp_sites as $ab_mcp_site_id ) {
 		switch_to_blog( $ab_mcp_site_id );
+		$ab_mcp_preview_blog_public();
 		foreach ( $ab_mcp_options as $ab_mcp_option ) {
 			delete_option( $ab_mcp_option );
 		}
