@@ -5107,3 +5107,9 @@ msgstr "Das Produkt wurde geändert, nachdem das Undo geplant war; nichts wurde 
 
 msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "Der Schnappschuss des Produkts hat keine Form, die dieses Werkzeug schreibt; nichts wurde wiederhergestellt. Dieser Undo-Punkt lässt sich nicht verwenden; wp_undo_discard entfernt ihn."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call WooCommerce did not manage the stock of this product itself; this call switched that on. wp_wc_get_product shows the stock now, and stock management is switched off again under Inventory in the product screen of wp-admin, where that is wanted."
+msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die seither eingegangenen Bestellungen zurücknehmen. Vor diesem Aufruf hat WooCommerce den Lagerbestand dieses Produkts nicht selbst verwaltet; dieser Aufruf hat das eingeschaltet. wp_wc_get_product zeigt den Lagerbestand jetzt, und die Lagerverwaltung wird in wp-admin in der Produktansicht unter Lagerbestand wieder ausgeschaltet, wo das gewünscht ist."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
+msgstr "Der Lagerbestand ist nicht Teil des Undo: Ein Zurücksetzen würde die seither eingegangenen Bestellungen zurücknehmen. Vor diesem Aufruf betrug er %s. wp_wc_get_product zeigt den Lagerbestand jetzt, und wp_wc_update_product setzt ihn wieder, wo das gewünscht ist, abzüglich des seither Verkauften."

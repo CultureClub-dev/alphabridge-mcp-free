@@ -119,9 +119,9 @@ class AB_MCP_Undo_Restore {
 			// tools: the right to edit the product (and to publish it, where
 			// the status of before takes it live) or to delete the coupon is
 			// asked by the plan (AB_MCP_Undo_Products::refusal(),
-			// AB_MCP_Undo_Coupons::refusal()); the stock is booked back
-			// relative, so sales since stay. wp_wc_update_order_status
-			// records none: its answer says it is not undoable.
+			// AB_MCP_Undo_Coupons::refusal()); the stock of a product is no
+			// part of its point. wp_wc_update_order_status records none: its
+			// answer says it is not undoable.
 			'wp_wc_update_product'      => array( 'kind' => 'wc_product', 'cap' => 'manage_woocommerce' ),
 			'wp_wc_create_coupon'       => array( 'kind' => 'wc_coupon', 'cap' => 'manage_woocommerce' ),
 		);

@@ -540,13 +540,13 @@ final class AnswerWayTest extends TestCase {
 	/**
 	 * The deletions without a way back (4.13.0) say so, each with the tool
 	 * that notes the object first; and since 4.14.0 the changes without one
-	 * (a coupon where the trash is off, the status of an order, an order
-	 * note).
+	 * (a coupon where the trash is off, the stock of a product, the status
+	 * of an order, an order note).
 	 */
 	public function testEveryNoteOfADeletionWithoutUndoNamesAWay(): void {
 		require_once dirname( __DIR__ ) . '/includes/undo/class-undo-objects.php';
 		$notes = \AB_MCP_Undo_Objects::own_notes();
-		self::assertSame( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user', 'wp_delete_comment', 'wp_moderate_comment', 'post-trashed', 'wp_wc_create_coupon', 'wp_wc_update_order_status', 'order-note' ), array_keys( $notes ) );
+		self::assertSame( array( 'wp_delete_term', 'wp_delete_menu_item', 'wp_delete_media', 'wp_delete_user', 'wp_delete_comment', 'wp_moderate_comment', 'post-trashed', 'wp_wc_create_coupon', 'stock-managed', 'stock-unmanaged', 'wp_wc_update_order_status', 'order-note' ), array_keys( $notes ) );
 		foreach ( $notes as $tool => $note ) {
 			self::assertStringStartsWith( 'not undoable: ', $note, $tool );
 			self::assertMatchesRegularExpression( self::WAY, substr( $note, strlen( 'not undoable: ' ) ), $tool );

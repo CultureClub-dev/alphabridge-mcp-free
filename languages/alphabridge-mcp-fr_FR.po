@@ -5107,3 +5107,9 @@ msgstr "Le produit a été modifié après la planification de l'annulation ; ri
 
 msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "L'instantané du produit n'a pas une forme que cet outil écrit ; rien n'a été restauré. Ce point de restauration est inutilisable ; wp_undo_discard le supprime."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call WooCommerce did not manage the stock of this product itself; this call switched that on. wp_wc_get_product shows the stock now, and stock management is switched off again under Inventory in the product screen of wp-admin, where that is wanted."
+msgstr "Le stock ne fait pas partie de l'annulation : le remettre annulerait les commandes passées depuis. Avant cet appel, WooCommerce ne gérait pas lui-même le stock de ce produit ; cet appel l'a activé. wp_wc_get_product affiche le stock actuel, et la gestion du stock se désactive sous Inventaire dans l'écran du produit de wp-admin, si on le souhaite."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
+msgstr "Le stock ne fait pas partie de l'annulation : le remettre annulerait les commandes passées depuis. Avant cet appel, il était de %s. wp_wc_get_product affiche le stock actuel, et wp_wc_update_product le redéfinit si on le souhaite, moins ce qui a été vendu depuis."

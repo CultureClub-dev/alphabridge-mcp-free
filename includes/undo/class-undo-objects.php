@@ -462,9 +462,9 @@ abstract class AB_MCP_Undo_Objects {
 
 	/**
 	 * The notes of deleted_for_good(), of a comment whose post is in the
-	 * trash, of a coupon created where the trash is off and of a change of
-	 * an order's status (all since 4.14.0), for the check that each names a
-	 * way (AnswerWayTest).
+	 * trash, of a coupon created where the trash is off, of the stock of a
+	 * product and of a change of an order's status (all since 4.14.0), for
+	 * the check that each names a way (AnswerWayTest).
 	 *
 	 * @return string[]
 	 */
@@ -481,6 +481,11 @@ abstract class AB_MCP_Undo_Objects {
 			require_once __DIR__ . '/class-undo-coupons.php';
 		}
 		$out['wp_wc_create_coupon']       = AB_MCP_Undo_Coupons::trash_off_note();
+		if ( ! class_exists( 'AB_MCP_Undo_Products', false ) ) {
+			require_once __DIR__ . '/class-undo-products.php';
+		}
+		$out['stock-managed']   = AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) );
+		$out['stock-unmanaged'] = AB_MCP_Undo_Products::stock_note( array( 'manage' => false, 'quantity' => null ) );
 		$out['wp_wc_update_order_status'] = self::order_status_note( true );
 		$out['order-note']                = self::order_status_note( false );
 		return $out;

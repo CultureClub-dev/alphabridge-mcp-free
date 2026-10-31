@@ -41,8 +41,8 @@ directory. It is the same code WordPress.org ships.
   `wp_activate_theme`, `wp_update_post_meta`, `wp_update_term_meta`, `wp_update_user_meta`,
   `wp_update_media`, `wp_create_term`, `wp_update_term`, `wp_create_menu`, `wp_add_menu_item`,
   `wp_update_widget`, `wp_add_widget`, `wp_delete_widget`, `wp_seo_set`, `wp_moderate_comment`,
-  `wp_reply_comment`, `wp_delete_comment` (into the trash), `wp_wc_update_product` (through
-  WooCommerce; the stock is booked back relative, so sales since stay) and `wp_wc_create_coupon` (into the
+  `wp_reply_comment`, `wp_delete_comment` (into the trash), `wp_wc_update_product` (prices and
+  status, through WooCommerce; the stock stays as it is) and `wp_wc_create_coupon` (into the
   trash again) leave an
   undo point with the previous values that expires after 7 days; an answer without one says why
   (`undo_note`), the deleting tools of terms, menu items, files, users and comments say when they are final,

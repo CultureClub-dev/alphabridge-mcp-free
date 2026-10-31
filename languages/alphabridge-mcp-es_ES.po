@@ -5107,3 +5107,9 @@ msgstr "El producto se ha cambiado después de planificar el deshacer; no se ha 
 
 msgid "The snapshot of the product is not in a form this tool writes; nothing was restored. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "La instantánea del producto no tiene una forma que esta herramienta escriba; no se ha restaurado nada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call WooCommerce did not manage the stock of this product itself; this call switched that on. wp_wc_get_product shows the stock now, and stock management is switched off again under Inventory in the product screen of wp-admin, where that is wanted."
+msgstr "El inventario no forma parte del deshacer: restablecerlo desharía los pedidos realizados desde entonces. Antes de esta llamada WooCommerce no gestionaba por sí mismo el inventario de este producto; esta llamada lo activó. wp_wc_get_product muestra el inventario actual, y la gestión de inventario se desactiva de nuevo en Inventario, en la pantalla del producto en wp-admin, donde se desee."
+
+msgid "The stock is no part of the undo: setting it back would take back the orders placed since. Before this call it was %s. wp_wc_get_product shows the stock now, and wp_wc_update_product sets it again where that is wanted, less what was sold since."
+msgstr "El inventario no forma parte del deshacer: restablecerlo desharía los pedidos realizados desde entonces. Antes de esta llamada era %s. wp_wc_get_product muestra el inventario actual, y wp_wc_update_product lo vuelve a fijar donde se desee, menos lo vendido desde entonces."

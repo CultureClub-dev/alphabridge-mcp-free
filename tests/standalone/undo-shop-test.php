@@ -8,27 +8,26 @@
  * store as WooCommerce's do (wc_format_decimal(), '' clears a quantity, an
  * unknown stock status is instock), and save() aligns the stock first, as
  * WC_Product::validate_props() does — without stock management no quantity,
- * with it the stock status from the quantity —, writes only what changed,
- * drops a sale price that is not below the regular one and derives the
- * price, as the data store's handle_updated_props() does.
- * wc_update_product_stock() books relative to the stock in the database at
- * that moment, as WooCommerce's single UPDATE does, and only where the
- * product and the shop manage stock. A coupon is read by its id with all its
+ * with it the stock status from the quantity —, writes only what changed
+ * against the object as loaded (WC_Data::set_prop()), drops a sale price
+ * that is not below the regular one and derives the price, as the data
+ * store's handle_updated_props() does; the end of a sale sets only the
+ * derived price, as wc_apply_sale_state_for_product() does.
+ * wc_update_product_stock() is there to show that no undo calls it. A coupon is read by its id with all its
  * data and meta, counts its use and the orders that hold it, and
  * WC_Coupon::delete() without force moves it into the trash through
  * wp_trash_post(), which deletes for good where EMPTY_TRASH_DAYS is 0. The
  * undo store, the restore, wp_undo and the shop tools are the real ones.
  *
  * Proves: wp_wc_update_product records one point with only what it changed,
- * the prices as one, read through the edit context from the object as it was
- * saved; wp_undo sets the old prices and status through the setters and
- * save() and compares them all again; a price or status changed since — a
- * sale price set since included — is refused unless force; the stock goes
- * back by what the call booked, relative, so sales since stay, also one
- * between the save and the read-back or between the plan and the undo, and
- * a stock no longer managed is refused; where the call switched stock
- * management on, the undo switches it off and sets the stock status of
- * before; the rights of the tool (edit_product, publish_products for a
+ * the stored prices as one, read through the edit context from the object
+ * as it was saved; wp_undo sets the old prices and status through the
+ * setters and save() and compares them again; a price or status changed
+ * since — a sale price set since included — is refused unless force, the end
+ * of a sale is not; the stock is no part of the point: the answer says so
+ * with the stock right before the save, a call that changes only the stock
+ * gets no point, and the undo leaves the stock as it is, also that of a
+ * variation that had its parent's; the rights of the tool (edit_product, publish_products for a
  * status that takes it live) are asked again; a product of another type,
  * gone or in the trash is not written; wp_wc_create_coupon records a point
  * that moves the coupon into the trash while none of its data — a
@@ -176,6 +175,7 @@ function ab_db_reset() {
 	$GLOBALS['ab_on_save']   = null; // a plugin on woocommerce_before_product_object_save
 	$GLOBALS['ab_after_save'] = null; // another request, right after a save (once)
 	$GLOBALS['ab_on_load']   = null; // another request, before a product is loaded
+	$GLOBALS['ab_now']       = null; // the clock of the sale period (null: now)
 	$GLOBALS['ab_bookings']  = array(); // [id, operation, quantity] of wc_update_product_stock()
 	$GLOBALS['ab_booking_fails'] = false;
 	$GLOBALS['ab_veto']      = false; // a plugin on woocommerce_pre_delete_coupon
@@ -262,21 +262,26 @@ class AB_WC_Product {
 		$s = (string) $this->get_sale_price( $context );
 		$f = $this->prop( 'date_on_sale_from', $context );
 		$t = $this->prop( 'date_on_sale_to', $context );
-		return '' !== $s && (float) $this->get_regular_price( $context ) > (float) $s && ( null === $f || $f <= time() ) && ( null === $t || $t >= time() );
+		$now = $GLOBALS['ab_now'] ?? time();
+		return '' !== $s && (float) $this->get_regular_price( $context ) > (float) $s && ( null === $f || $f <= $now ) && ( null === $t || $t >= $now );
 	}
 	public function get_manage_stock( $context = 'view' ) { return $this->prop( 'manage_stock', $context ); }
 	public function get_stock_quantity( $context = 'view' ) { return $this->prop( 'stock_quantity', $context ); }
 	public function get_stock_status( $context = 'view' ) { return $this->prop( 'stock_status', $context ); }
 	public function get_backorders( $context = 'view' ) { return $this->prop( 'backorders', $context ); }
 	public function get_status( $context = 'view' ) { return $this->prop( 'status', $context ); }
-	public function set_regular_price( $v ) { $this->changes['regular_price'] = wc_format_decimal( $v ); }
-	public function set_sale_price( $v ) { $this->changes['sale_price'] = wc_format_decimal( $v ); }
-	public function set_manage_stock( $v ) { $this->changes['manage_stock'] = true === $v || 'yes' === $v || 1 === $v || '1' === $v; }
-	public function set_stock_quantity( $q ) { $this->changes['stock_quantity'] = '' !== $q ? wc_stock_amount( $q ) : null; }
-	public function set_stock_status( $s = 'instock' ) { $this->changes['stock_status'] = isset( wc_get_product_stock_status_options()[ $s ] ) ? $s : 'instock'; }
-	public function set_status( $s ) { $this->changes['status'] = $s; }
-	public function set_date_on_sale_from( $d = null ) { $this->changes['date_on_sale_from'] = empty( $d ) ? null : (int) $d; }
-	public function set_date_on_sale_to( $d = null ) { $this->changes['date_on_sale_to'] = empty( $d ) ? null : (int) $d; }
+	/* WC_Data::set_prop(): a change only where the value differs from the object as loaded. */
+	private function set_prop( $key, $v ) {
+		if ( $v === $this->data[ $key ] ) { unset( $this->changes[ $key ] ); } else { $this->changes[ $key ] = $v; }
+	}
+	public function set_regular_price( $v ) { $this->set_prop( 'regular_price', wc_format_decimal( $v ) ); }
+	public function set_sale_price( $v ) { $this->set_prop( 'sale_price', wc_format_decimal( $v ) ); }
+	public function set_manage_stock( $v ) { $this->set_prop( 'manage_stock', true === $v || 'yes' === $v || 1 === $v || '1' === $v ); }
+	public function set_stock_quantity( $q ) { $this->set_prop( 'stock_quantity', '' !== $q ? wc_stock_amount( $q ) : null ); }
+	public function set_stock_status( $s = 'instock' ) { $this->set_prop( 'stock_status', isset( wc_get_product_stock_status_options()[ $s ] ) ? $s : 'instock' ); }
+	public function set_status( $s ) { $this->set_prop( 'status', $s ); }
+	public function set_date_on_sale_from( $d = null ) { $this->set_prop( 'date_on_sale_from', empty( $d ) ? null : (int) $d ); }
+	public function set_date_on_sale_to( $d = null ) { $this->set_prop( 'date_on_sale_to', empty( $d ) ? null : (int) $d ); }
 	public function save() {
 		if ( $GLOBALS['ab_save_fails'] ) { return 0; }
 		// WC_Product::validate_props().
@@ -551,7 +556,7 @@ if ( $GLOBALS['ab_trash_off'] ) {
 
 /* ============================== A) a product: one point, put back through WooCommerce */
 
-function ab_price( $over = array() ) { return array_merge( array( 'regular_price' => '10', 'sale_price' => '', 'date_on_sale_from' => null, 'date_on_sale_to' => null, 'price' => '10' ), $over ); }
+function ab_price( $over = array() ) { return array_merge( array( 'regular_price' => '10', 'sale_price' => '', 'date_on_sale_from' => null, 'date_on_sale_to' => null ), $over ); }
 
 reset_all();
 $res = ab_update( array( 'regular_price' => '12.50' ) );
@@ -560,7 +565,7 @@ ok( array( 'regular_price' => '12.50' ) === (array) $res['saved_fields'] && ! is
 $c = AB_MCP_Undo::claim( $res['undo'] );
 ok( 'wp_wc_update_product' === $c['entry']['tool'] && 'wc_product' === $c['entry']['kind'] && 'manage_woocommerce' === $c['entry']['cap'] && 1 === (int) $c['entry']['items'], 'A3 kind wc_product, with the capability of the tool' );
 ok( array( 'v', 'id', 'type', 'parent', 'before', 'after' ) === array_keys( $c['data'] ) && 7 === $c['data']['id'] && 'simple' === $c['data']['type'] && 0 === $c['data']['parent'], 'A4 the snapshot names the product, its type and its parent' );
-ok( array( 'price' => ab_price() ) === $c['data']['before'] && array( 'price' ) === array_keys( $c['data']['after'] ), 'A5 ... and keeps the prices as one location: regular and sale price, sale period, the derived price' );
+ok( array( 'price' => ab_price() ) === $c['data']['before'] && array( 'price' ) === array_keys( $c['data']['after'] ), 'A5 ... and keeps the prices as one location: regular and sale price and the sale period, as WooCommerce stores them' );
 ok( 'product #7: price' === $c['entry']['summary'] && null !== $c['entry']['inline'], 'A6 the summary names the product and the location, no value; a small point lies inline' );
 $dry = ab_undo( $res['undo'], array( 'dry_run' => true ) );
 ok( 1 === $dry['would_undo'] && array() === $dry['blocked'] && '12.50' === ab_p( 7, 'regular_price' ), 'A7 the dry run would restore it and changes nothing' );
@@ -572,37 +577,23 @@ ok( $saves + 1 === count( $GLOBALS['ab_saves'] ) && in_array( 7, $GLOBALS['ab_cl
 ok( array( 'host-site' ) === $out['page_cache_purged'] && 'site' === AB_MCP_Undo_Restore::page_cache_scope()['wc_product'], 'A10 every page of the site is purged: a price shows on the shop page, in archives and widgets' );
 unset( $GLOBALS['ab_filters']['ab_mcp_pro_page_cache_purgers'] );
 
-// All at once: the tool switches stock management on.
+// All at once: prices and status in the point, the stock not.
 reset_all();
 ab_product( 7, array( 'stock_status' => 'outofstock', 'status' => 'draft' ) );
 $res = ab_update( array( 'regular_price' => '20', 'sale_price' => '15', 'stock' => 5, 'status' => 'publish' ) );
-ok( ab_token( $res ) && array( 'regular_price' => '20', 'sale_price' => '15', 'stock' => 5, 'status' => 'publish' ) === (array) $res['saved_fields'] && true === ab_p( 7, 'manage_stock' ) && 'instock' === ab_p( 7, 'stock_status' ) && '15' === ab_p( 7, 'price' ), 'A11 four fields; WooCommerce manages the stock now, derives its status and the price' );
+ok( ab_token( $res ) && array( 'regular_price' => '20', 'sale_price' => '15', 'stock' => 5, 'status' => 'publish' ) === (array) $res['saved_fields'] && true === ab_p( 7, 'manage_stock' ) && '15' === ab_p( 7, 'price' ), 'A11 four fields; WooCommerce manages the stock now and derives the price' );
 $c = AB_MCP_Undo::claim( $res['undo'] );
-ok( array( 'price', 'stock', 'status' ) === array_keys( $c['data']['before'] ) && ab_price() === $c['data']['before']['price'] && 'draft' === $c['data']['before']['status'], 'A12 the point keeps the prices, the stock and the status of before' );
-ok( array( 'delta' => '5', 'manage' => false, 'status' => 'outofstock' ) === $c['data']['before']['stock'], 'A13 the stock as what the call booked: 5 on a stock not managed before, with its stock status' );
+ok( array( 'price', 'status' ) === array_keys( $c['data']['before'] ) && ab_price() === $c['data']['before']['price'] && 'draft' === $c['data']['before']['status'] && 'product #7: price, status' === $c['entry']['summary'], 'A12 the point keeps the prices and the status of before, no stock' );
+ok( AB_MCP_Undo_Products::stock_note( array( 'manage' => false, 'quantity' => null ) ) === $res['stock_note'] && false !== strpos( $res['stock_note'], 'did not manage the stock' ) && false !== strpos( $res['stock_note'], 'wp_wc_get_product' ), 'A13 stock_note: the stock is no part of the undo, it was not managed before, and the way' );
 $out = ab_undo( $res['undo'] );
 ok( 1 === $out['undone'] && '10' === ab_p( 7, 'regular_price' ) && '' === ab_p( 7, 'sale_price' ) && '10' === ab_p( 7, 'price' ) && 'draft' === ab_p( 7, 'status' ), 'A14 the undo puts prices and status back' );
-ok( false === ab_p( 7, 'manage_stock' ) && null === ab_p( 7, 'stock_quantity' ) && 'outofstock' === ab_p( 7, 'stock_status' ) && array() === $GLOBALS['ab_bookings'], 'A15 ... and the stock: not managed, no quantity, the stock status set by hand before; nothing booked, as the quantity goes with the management' );
+ok( true === ab_p( 7, 'manage_stock' ) && 5 === ab_p( 7, 'stock_quantity' ) && array() === $GLOBALS['ab_bookings'], 'A15 ... and leaves the stock as it is: managed, 5, nothing booked' );
 
-// A managed stock: the call's booking goes back, relative.
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res = ab_update( array( 'stock' => 0 ) );
-ok( 0 === ab_p( 7, 'stock_quantity' ) && 'outofstock' === ab_p( 7, 'stock_status' ) && array( 'stock' => array( 'delta' => '-3', 'manage' => true, 'status' => 'instock' ) ) === AB_MCP_Undo::claim( $res['undo'] )['data']['before'], 'A16 stock 0 on a managed stock of 3: booked -3' );
-ok( 1 === ab_undo( $res['undo'] )['undone'] && 3 === ab_p( 7, 'stock_quantity' ) && 'instock' === ab_p( 7, 'stock_status' ) && array( array( 7, 'increase', 3 ) ) === $GLOBALS['ab_bookings'], 'A17 the undo books +3 through wc_update_product_stock(); WooCommerce derives the stock status' );
-
-// A managed stock without a quantity counts as 0, as WooCommerce books it.
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => null, 'stock_status' => 'outofstock' ) );
-$res = ab_update( array( 'stock' => 5 ) );
-ok( array( 'delta' => '5', 'manage' => true, 'status' => 'outofstock' ) === AB_MCP_Undo::claim( $res['undo'] )['data']['before']['stock'], 'A18 a managed stock without a quantity: booked 5' );
-ok( 1 === ab_undo( $res['undo'] )['undone'] && 0 === ab_p( 7, 'stock_quantity' ) && 'outofstock' === ab_p( 7, 'stock_status' ), 'A19 ... and its undo books -5: none in stock, out of stock as before' );
-
-// The same quantity again: nothing booked, no stock in the point.
+// The same quantity again with a price: the note all the same.
 reset_all();
 ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 4 ) );
 $res = ab_update( array( 'stock' => 4, 'regular_price' => '11' ) );
-ok( array( 'price' ) === array_keys( AB_MCP_Undo::claim( $res['undo'] )['data']['before'] ), 'A20 a quantity the stock had already: the point holds no stock' );
+ok( array( 'price' ) === array_keys( AB_MCP_Undo::claim( $res['undo'] )['data']['before'] ) && false !== strpos( $res['stock_note'], 'it was 4' ), 'A20 a quantity the stock had already: the point holds the price, the note the stock of before' );
 
 // What the tool asked for, in the form WooCommerce stores it.
 reset_all();
@@ -700,10 +691,18 @@ $res                                  = ab_update( array( 'sale_price' => '7' ) 
 $GLOBALS['P'][7]['date_on_sale_to'] = time() + 3600; // a sale period set since
 ok( array( 'price' ) === ab_undo( $res['undo'] )['blocked'][0]['locs'] && '7' === ab_p( 7, 'sale_price' ), 'C5 a sale period set since is a change of the prices too' );
 ok( 1 === ab_undo( $res['undo'], array( 'force' => true ) )['undone'] && null === ab_p( 7, 'date_on_sale_to' ) && '' === ab_p( 7, 'sale_price' ), 'C5b ... with force the sale period of before comes back as well' );
+// Codex 31.10. (2): the end of a sale between the change and the undo.
+// WooCommerce sets the price it shows to the regular one then
+// (wc_apply_sale_state_for_product()) and leaves the fields it stores.
 reset_all();
-$res                    = ab_update( array( 'sale_price' => '7' ) );
-$GLOBALS['P'][7]['price'] = '6'; // the price a plugin made active since
-ok( array( 'price' ) === ab_undo( $res['undo'] )['blocked'][0]['locs'], 'C6 and so is a derived price changed since' );
+$t0 = time();
+ab_product( 7, array( 'regular_price' => '100', 'sale_price' => '80', 'price' => '80', 'date_on_sale_to' => $t0 + 3600 ) );
+$res                      = ab_update( array( 'regular_price' => '120' ) );
+$GLOBALS['ab_now']        = $t0 + 7200; // the sale is over
+$GLOBALS['P'][7]['price'] = '120';      // and WooCommerce derived the price anew
+$out                      = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && array() === $out['blocked'] && array() === $out['failed'] && '100' === ab_p( 7, 'regular_price' ) && '80' === ab_p( 7, 'sale_price' ) && $t0 + 3600 === ab_p( 7, 'date_on_sale_to' ), 'C6 a sale that ended since: no change of the prices, the undo succeeds without force' );
+ok( '100' === ab_p( 7, 'price' ), 'C6b ... and WooCommerce derives the price of now: 100, not the 80 of before the end' );
 
 reset_all();
 $res                        = ab_update( array( 'regular_price' => '12' ) );
@@ -719,6 +718,15 @@ $GLOBALS['P'][7]['regular_price'] = '15'; // between the plan and the write
 $again = AB_MCP_Undo_Products::restore( $plan['items'][0] );
 ok( 'ab_mcp_undo_product_changed' === ab_code( $again ) && false !== strpos( ab_msg( $again ), 'force=true' ) && '15' === ab_p( 7, 'regular_price' ), 'C8 changed between the plan and the write: refused, with the way' );
 
+// A price another request set right after the save is not the tool's: the
+// point holds the price the tool saved, so the newer one is not undone
+// without force.
+reset_all();
+$GLOBALS['ab_after_save'] = static function ( $id ) { $GLOBALS['P'][ $id ]['regular_price'] = '13'; };
+$res                      = ab_update( array( 'regular_price' => '12' ) );
+$out                      = ab_undo( $res['undo'] );
+ok( 0 === $out['undone'] && 'changed_since' === $out['blocked'][0]['reason'] && '13' === ab_p( 7, 'regular_price' ), 'C8b a price another request set right after the save: refused without force, the newer price stays' );
+
 reset_all();
 $res = ab_update( array( 'regular_price' => '12' ) );
 unset( $GLOBALS['P'][7], $GLOBALS['TYPES'][7] );
@@ -731,98 +739,67 @@ $GLOBALS['P'][7]['type'] = 'variable'; // made a variable product since
 $out                      = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 0 === $out['undone'] && 'gone' === $out['blocked'][0]['reason'] && '12' === ab_p( 7, 'regular_price' ), 'C10 a product of another type under the id: not the product of the point (gone), also with force' );
 
-/* ============================== S) the stock: booked back relative, sales since stay */
+/* ============================== S) the stock: no part of the undo, the answer says so */
 
-// Codex 31.10. (decision of 30.10.2026): never written back absolutely.
+// Decision of 31.10.2026: never recorded, never written back.
 reset_all();
 ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
 $res = ab_update( array( 'stock' => 10 ) );
-ab_sell( 7 ); // an order
-$out = ab_undo( $res['undo'] );
-ok( 1 === $out['undone'] && true === $out['consumed'] && 2 === ab_p( 7, 'stock_quantity' ) && array( array( 7, 'decrease', 7 ) ) === $GLOBALS['ab_bookings'], 'S1 a sale since: the undo books -7 without force, and the sale stays (3 - 1 = 2)' );
-ok( ! isset( $out['kept'] ) && 'instock' === ab_p( 7, 'stock_status' ) && true === ab_p( 7, 'manage_stock' ), 'S2 ... no force, no conflict, the stock still managed; WooCommerce derives the status' );
-
-// Codex 31.10.: a sale between the save and the read-back is not the call's.
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$GLOBALS['ab_after_save'] = static function ( $id ) { ab_sell( $id ); };
-$res = ab_update( array( 'stock' => 10 ) );
-ok( 9 === ab_p( 7, 'stock_quantity' ) && array( 'delta' => '7', 'manage' => true, 'status' => 'instock' ) === AB_MCP_Undo::claim( $res['undo'] )['data']['before']['stock'], 'S3 a sale right after the save: the point holds what the call booked (7), not the sale' );
-ok( 1 === ab_undo( $res['undo'] )['undone'] && 2 === ab_p( 7, 'stock_quantity' ), 'S4 ... and its undo keeps that sale: 3 - 1 = 2' );
-
-// Codex 31.10.: a sale between the plan and the write.
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res  = ab_update( array( 'stock' => 10 ) );
-$plan = AB_MCP_Undo_Products::plan( 'wp_wc_update_product', AB_MCP_Undo::claim( $res['undo'] )['data'], false );
-ab_sell( 7, 2 ); // a checkout between the plan and the write
-$again = AB_MCP_Undo_Products::restore( $plan['items'][0] );
-ok( true === $again && 1 === ab_p( 7, 'stock_quantity' ), 'S5 a checkout between the plan and the write: booked relative, the 2 sold stay (3 - 2 = 1)' );
-
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res                                 = ab_update( array( 'stock' => 10 ) );
-$GLOBALS['P'][7]['stock_quantity'] += 2; // a refund put two back
-ok( 1 === ab_undo( $res['undo'] )['undone'] && 5 === ab_p( 7, 'stock_quantity' ), 'S6 a refund since stays too' );
+ok( true === $res['updated'] && 10 === ab_p( 7, 'stock_quantity' ) && null === $res['undo'] && 0 === ab_points() && ! isset( $res['stock_note'] ), 'S1 only the stock: written, no undo point' );
+ok( AB_MCP_Undo_Products::stock_note( array( 'manage' => true, 'quantity' => '3' ) ) === $res['undo_note'] && 0 === strpos( $res['undo_note'], 'not undoable: The stock is no part of the undo' ) && false !== strpos( $res['undo_note'], 'it was 3' ), 'S2 ... the note says why, with the stock of before (3)' );
+ok( false !== strpos( $res['undo_note'], 'wp_wc_get_product' ) && false !== strpos( $res['undo_note'], 'wp_wc_update_product' ) && false !== strpos( $res['undo_note'], 'sold since' ), 'S3 ... and the way: check it, set it again less what was sold since' );
 
 reset_all();
 ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
 $res = ab_update( array( 'regular_price' => '20', 'stock' => 10 ) );
-ab_sell( 7, 4 );
+ok( ab_token( $res ) && array( 'price' ) === array_keys( AB_MCP_Undo::claim( $res['undo'] )['data']['before'] ) && false !== strpos( (string) $res['stock_note'], 'it was 3' ) && ! isset( $res['undo_note'] ), 'S4 price and stock: a point for the price, stock_note for the stock with its value before' );
+ab_sell( 7, 2 );
 $out = ab_undo( $res['undo'] );
-ok( 1 === $out['undone'] && '10' === ab_p( 7, 'regular_price' ) && -1 === ab_p( 7, 'stock_quantity' ) && 'outofstock' === ab_p( 7, 'stock_status' ), 'S7 price and stock: the price back, the stock -7 relative to the 6 left' );
+ok( 1 === $out['undone'] && '10' === ab_p( 7, 'regular_price' ) && 8 === ab_p( 7, 'stock_quantity' ) && true === ab_p( 7, 'manage_stock' ) && array() === $GLOBALS['ab_bookings'], 'S5 the undo puts the price back and leaves the stock: the 2 sold stay counted (8)' );
 
+// Codex 31.10. (2): a variation whose stock its parent managed.
 reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res                               = ab_update( array( 'stock' => 10 ) );
-$GLOBALS['P'][7]['manage_stock'] = false; // stock management switched off since
-$out                               = ab_undo( $res['undo'], array( 'force' => true ) );
-ok( 0 === $out['undone'] && 'stock_unmanaged' === $out['blocked'][0]['reason'] && array() === $GLOBALS['ab_bookings'] && null !== ab_entry( $res['undo'] ), 'S8 a stock no longer managed since: blocked with the reason, also with force; nothing booked' );
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res = ab_update( array( 'stock' => 10 ) );
-$GLOBALS['ab_opts']['woocommerce_manage_stock'] = 'no'; // the shop's stock management off
-ok( 'stock_unmanaged' === ab_undo( $res['undo'] )['blocked'][0]['reason'] && 10 === ab_p( 7, 'stock_quantity' ), 'S9 the shop no longer manages stock: WooCommerce would book nothing, so it is blocked' );
-
-reset_all();
-$res = ab_update( array( 'stock' => 10 ) ); // switches stock management on
-ab_sell( 7, 3 );
+ab_product( 7, array( 'type' => 'variable', 'manage_stock' => true, 'stock_quantity' => 10 ) );
+ab_product( 8, array( 'parent' => 7, 'regular_price' => '6', 'price' => '6' ), 'product_variation' );
+$res = AB_MCP_Tools_Shop::update_product( array( 'id' => 8, 'regular_price' => '7', 'stock' => 10 ) );
+ok( true === ab_p( 8, 'manage_stock' ) && 10 === ab_p( 8, 'stock_quantity' ) && false !== strpos( (string) $res['stock_note'], 'did not manage the stock of this product itself' ), 'S6 a variation on its parent\'s stock: the call gave it its own; the note says it did not manage its own before' );
+ab_sell( 8, 2 );
 $out = ab_undo( $res['undo'] );
-ok( 1 === $out['undone'] && false === ab_p( 7, 'manage_stock' ) && null === ab_p( 7, 'stock_quantity' ) && 'instock' === ab_p( 7, 'stock_status' ) && array() === $GLOBALS['ab_bookings'], 'S10 the call switched stock management on: the undo switches it off, the stock status of before back, nothing booked' );
+ok( 1 === $out['undone'] && '6' === ab_p( 8, 'regular_price' ) && true === ab_p( 8, 'manage_stock' ) && 8 === ab_p( 8, 'stock_quantity' ) && 10 === ab_p( 7, 'stock_quantity' ), 'S7 its undo: the price back, its own stock of 8 stays, the 2 sold are not lost to the parent\'s 10' );
 reset_all();
-$res                               = ab_update( array( 'stock' => 10 ) );
-$GLOBALS['P'][7]['manage_stock'] = false;
-ok( 'stock_unmanaged' === ab_undo( $res['undo'] )['blocked'][0]['reason'], 'S11 ... and where it was switched off since, blocked with the reason' );
+ab_product( 7, array( 'type' => 'variable', 'manage_stock' => true, 'stock_quantity' => 10 ) );
+ab_product( 8, array( 'parent' => 7 ), 'product_variation' );
+$res = AB_MCP_Tools_Shop::update_product( array( 'id' => 8, 'stock' => 10 ) );
+ok( null === $res['undo'] && 0 === ab_points() && 0 === strpos( $res['undo_note'], 'not undoable: The stock is no part of the undo' ) && false !== strpos( $res['undo_note'], 'Inventory' ), 'S8 only the stock of the variation: no point, the note with the way in wp-admin' );
 
-// Booked last, so a retry never books twice.
+// Codex 31.10. (2): a sale before the save, the same quantity asked as the
+// object holds. WooCommerce writes nothing (set_prop() compares with the
+// object as loaded); no point books a difference that was none.
 reset_all();
 ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res                         = ab_update( array( 'regular_price' => '20', 'stock' => 10 ) );
-$GLOBALS['ab_booking_fails'] = true;
-$out                         = ab_undo( $res['undo'] );
-$GLOBALS['ab_booking_fails'] = false;
-ok( 0 === $out['undone'] && false !== strpos( (string) $out['failed'][0]['reason'], 'back stock of' ) && '10' === ab_p( 7, 'regular_price' ) && 10 === ab_p( 7, 'stock_quantity' ) && null !== ab_entry( $res['undo'] ), 'S12 a booking that failed: the stock named, the prices already back, the point stays' );
-$out = ab_undo( $res['undo'] );
-ok( 1 === $out['undone'] && 3 === ab_p( 7, 'stock_quantity' ) && array( array( 7, 'decrease', 7 ) ) === $GLOBALS['ab_bookings'], 'S13 the retry books once: 3 again' );
-reset_all();
-ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
-$res                      = ab_update( array( 'regular_price' => '20', 'stock' => 10 ) );
-$GLOBALS['ab_save_fails'] = true; // the prices are not saved
-$out                      = ab_undo( $res['undo'] );
-$GLOBALS['ab_save_fails'] = false;
-ok( 0 === $out['undone'] && array() === $GLOBALS['ab_bookings'] && 10 === ab_p( 7, 'stock_quantity' ), 'S14 the prices not taken back: nothing is booked before they are' );
-ok( 1 === ab_undo( $res['undo'] )['undone'] && 3 === ab_p( 7, 'stock_quantity' ) && 1 === count( $GLOBALS['ab_bookings'] ), 'S15 ... and the retry books once' );
+$loads                 = 0;
+$GLOBALS['ab_on_load'] = static function ( $id ) use ( &$loads ) { if ( 2 === ++$loads ) { ab_sell( $id ); } };
+$res                   = ab_update( array( 'stock' => 3 ) );
+$GLOBALS['ab_on_load'] = null;
+ok( 'ab_mcp_not_saved' === ab_code( $res ) && false !== strpos( ab_msg( $res ), 'stock' ) && 2 === ab_p( 7, 'stock_quantity' ) && 0 === ab_points(), 'S9 the quantity of the loaded object asked after a sale: WooCommerce stored nothing, the answer says so, no point' );
 
-// A sale between the tool's own read of the product and its save: the tool
-// sets the stock absolutely, so what it booked is counted from right before
-// its save. Its undo leaves the stock as if the call had not run: 3 - 1 = 2.
+// The value of before is the stock right before the save, read in the call.
 reset_all();
 ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
 $loads                 = 0;
 $GLOBALS['ab_on_load'] = static function ( $id ) use ( &$loads ) { if ( 2 === ++$loads ) { ab_sell( $id ); } };
 $res                   = ab_update( array( 'stock' => 10 ) );
 $GLOBALS['ab_on_load'] = null;
-ok( '8' === AB_MCP_Undo::claim( $res['undo'] )['data']['before']['stock']['delta'] && 1 === ab_undo( $res['undo'] )['undone'] && 2 === ab_p( 7, 'stock_quantity' ), 'S16 a sale between the tool\'s read and its save: booked 8, counted from right before the save; the undo leaves 2' );
+ok( false !== strpos( (string) $res['undo_note'], 'it was 2' ), 'S10 a sale between the tool\'s read and its save: the note names the 2 left right before the save' );
+
+reset_all();
+$res = ab_update( array( 'stock' => 10 ) ); // a stock not managed before
+ok( null === $res['undo'] && AB_MCP_Undo_Products::stock_note( array( 'manage' => false, 'quantity' => null ) ) === $res['undo_note'], 'S11 stock management switched on by the call: the note says it was off before' );
+reset_all();
+ab_product( 7, array( 'manage_stock' => true, 'stock_quantity' => 3 ) );
+$GLOBALS['ab_toolstate']['wp_undo'] = false;
+$res                                = ab_update( array( 'regular_price' => '20', 'stock' => 10 ) );
+ok( null === $res['undo'] && false !== strpos( $res['undo_note'], 'Undo is switched off' ) && false !== strpos( (string) $res['stock_note'], 'it was 3' ), 'S12 undo switched off: undo_note says so, stock_note the stock all the same' );
 
 /* ============================== D) the rights of the tool, asked again */
 
@@ -1000,9 +977,8 @@ ok( AB_MCP_Undo_Objects::order_status_note( true ) === ab_status( 'completed' )[
 /* ============================== K) a hand-edited point gains nothing */
 
 reset_all();
-$res  = ab_update( array( 'regular_price' => '12', 'stock' => 4 ) );
+$res  = ab_update( array( 'regular_price' => '12', 'status' => 'draft' ) );
 $good = AB_MCP_Undo::claim( $res['undo'] )['data'];
-$st   = $good['before']['stock'];
 $pr   = $good['before']['price'];
 $bad  = array(
 	'a field more'                 => array_merge( $good, array( 'x' => 1 ) ),
@@ -1012,24 +988,22 @@ $bad  = array(
 	'a parent below zero'          => array_merge( $good, array( 'parent' => -1 ) ),
 	'nothing before'               => array_merge( $good, array( 'before' => array(), 'after' => array() ) ),
 	'a location the tool lacks'    => array_merge( $good, array( 'before' => array( 'name' => 'x' ), 'after' => array( 'name' => $good['after']['price'] ) ) ),
+	'a stock location'             => array_merge( $good, array( 'before' => array( 'price' => $pr, 'stock' => array( 'delta' => '4', 'manage' => true, 'status' => 'instock' ) ), 'after' => array( 'price' => $good['after']['price'], 'stock' => $good['after']['price'] ) ) ),
 	'the locations out of order'   => array_merge( $good, array( 'before' => array_reverse( $good['before'], true ), 'after' => array_reverse( $good['after'], true ) ) ),
 	'after without a location'     => array_merge( $good, array( 'after' => array( 'price' => $good['after']['price'] ) ) ),
-	'a price in another form'      => array_merge( $good, array( 'before' => array( 'price' => array_merge( $pr, array( 'regular_price' => '1e3' ) ), 'stock' => $st ) ) ),
-	'prices without the period'    => array_merge( $good, array( 'before' => array( 'price' => array( 'regular_price' => '10', 'sale_price' => '', 'price' => '10' ), 'stock' => $st ) ) ),
-	'a sale date that is no time'  => array_merge( $good, array( 'before' => array( 'price' => array_merge( $pr, array( 'date_on_sale_to' => '2026-12-31' ) ), 'stock' => $st ) ) ),
-	'a status the tool lacks'      => array_merge( $good, array( 'before' => $good['before'] + array( 'status' => 'trash' ), 'after' => $good['after'] + array( 'status' => $good['after']['price'] ) ) ),
-	'a booking without its status' => array_merge( $good, array( 'before' => array( 'price' => $pr, 'stock' => array( 'delta' => '4', 'manage' => false ) ) ) ),
-	'a delta that is no number'    => array_merge( $good, array( 'before' => array( 'price' => $pr, 'stock' => array( 'delta' => 'viele', 'manage' => true, 'status' => 'instock' ) ) ) ),
-	'a delta as a number'          => array_merge( $good, array( 'before' => array( 'price' => $pr, 'stock' => array( 'delta' => 4, 'manage' => true, 'status' => 'instock' ) ) ) ),
-	'a manage that is no bool'     => array_merge( $good, array( 'before' => array( 'price' => $pr, 'stock' => array( 'delta' => '4', 'manage' => 'yes', 'status' => 'instock' ) ) ) ),
-	'a hash that is none'          => array_merge( $good, array( 'after' => array( 'price' => 'x', 'stock' => $good['after']['stock'] ) ) ),
+	'a price in another form'      => array_merge( $good, array( 'before' => array( 'price' => array_merge( $pr, array( 'regular_price' => '1e3' ) ), 'status' => 'publish' ) ) ),
+	'prices with the derived price' => array_merge( $good, array( 'before' => array( 'price' => $pr + array( 'price' => '10' ), 'status' => 'publish' ) ) ),
+	'prices without the period'    => array_merge( $good, array( 'before' => array( 'price' => array( 'regular_price' => '10', 'sale_price' => '' ), 'status' => 'publish' ) ) ),
+	'a sale date that is no time'  => array_merge( $good, array( 'before' => array( 'price' => array_merge( $pr, array( 'date_on_sale_to' => '2026-12-31' ) ), 'status' => 'publish' ) ) ),
+	'a status the tool lacks'      => array_merge( $good, array( 'before' => array( 'price' => $pr, 'status' => 'trash' ) ) ),
+	'a hash that is none'          => array_merge( $good, array( 'after' => array( 'price' => 'x', 'status' => $good['after']['status'] ) ) ),
 );
 foreach ( $bad as $what => $data ) {
 	$t = ab_forge( 'wp_wc_update_product', 'wc_product', $data );
 	$p = AB_MCP_Undo_Restore::plan( ab_entry( $t ), AB_MCP_Undo::claim( $t )['data'] );
 	ok( 'ab_mcp_undo_corrupt' === ab_code( $p ) && false !== strpos( ab_msg( $p ), 'wp_undo_discard' ), "K1 a product point refused whole: $what" );
 }
-ok( '12' === ab_p( 7, 'regular_price' ) && 4 === ab_p( 7, 'stock_quantity' ) && array() === $GLOBALS['ab_bookings'], 'K2 ... and nothing written or booked' );
+ok( '12' === ab_p( 7, 'regular_price' ) && 'draft' === ab_p( 7, 'status' ), 'K2 ... and nothing written' );
 $coupon = ab_create();
 $cgood  = AB_MCP_Undo::claim( $coupon['undo'] )['data'];
 foreach ( array(
