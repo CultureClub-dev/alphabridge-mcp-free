@@ -1268,7 +1268,9 @@ final class AB_MCP_Redactor {
 	 * - a pair in JSON encoded inside the line (\"name\":\"value\", at any
 	 *   level of escaping): the value to its closing quote of the same
 	 *   level (escaped_pairs());
-	 * - a Bearer token anywhere.
+	 * - a Bearer token anywhere;
+	 * - inside Xdebug's HTML var_dump() (xdebug_html()), what it dumps under
+	 *   a credential's name.
 	 *
 	 * @param string   $text  Text.
 	 * @param int      $hits  Number of replacements (added to).
@@ -1276,7 +1278,11 @@ final class AB_MCP_Redactor {
 	 * @return string|null Null where a pattern gave up.
 	 */
 	public static function text( $text, &$hits, array $extra = array() ) {
-		$lines = explode( "\n", self::pem( (string) $text, $hits ) );
+		$text = self::xdebug_html( self::pem( (string) $text, $hits ), $hits, $extra );
+		if ( null === $text ) {
+			return null;
+		}
+		$lines = explode( "\n", $text );
 		$count = count( $lines );
 		$out   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
@@ -1370,6 +1376,124 @@ final class AB_MCP_Redactor {
 			}
 		}
 		return $depth;
+	}
+
+	/**
+	 * Xdebug's var_dump() as HTML (html_errors=1), from <pre class=
+	 * 'xdebug-var-dump'> to </pre> (or the end of the text): read as text,
+	 * tags out and entities decoded, one line of it for each line of HTML,
+	 * and on a line with a credential's name, what follows its => in the
+	 * HTML replaced with REDACTED and the lines its value goes on over
+	 * dropped (xdebug_end()). A value that does not end before the block
+	 * does takes the whole block with it. Text outside such a block stays.
+	 *
+	 * @param string   $text  Text.
+	 * @param int      $hits  Replacements (added to).
+	 * @param string[] $extra extra_keys().
+	 * @return string|null Null where a pattern gave up.
+	 */
+	private static function xdebug_html( $text, &$hits, array $extra ) {
+		if ( false === strpos( $text, 'xdebug-var-dump' ) ) {
+			return $text;
+		}
+		$out = '';
+		$pos = 0;
+		while ( true ) {
+			$found = preg_match( '/<pre class=([\'"])xdebug-var-dump\1[^>]*>/', $text, $m, PREG_OFFSET_CAPTURE, $pos );
+			if ( false === $found ) {
+				return null;
+			}
+			if ( 0 === $found ) {
+				break;
+			}
+			$start = $m[0][1] + strlen( $m[0][0] );
+			$end   = strpos( $text, '</pre>', $start );
+			$stop  = false === $end ? strlen( $text ) : $end;
+			$block = self::xdebug_block( substr( $text, $start, $stop - $start ), $hits, $extra );
+			if ( null === $block ) {
+				return null;
+			}
+			$out .= substr( $text, $pos, $start - $pos ) . $block;
+			$pos  = $stop;
+		}
+		return $out . substr( $text, $pos );
+	}
+
+	/**
+	 * xdebug_html() for the inside of one block.
+	 *
+	 * @param string   $block Its HTML.
+	 * @param int      $hits  Replacements (added to).
+	 * @param string[] $extra extra_keys().
+	 * @return string|null
+	 */
+	private static function xdebug_block( $block, &$hits, array $extra ) {
+		$html  = explode( "\n", $block );
+		$plain = array();
+		foreach ( $html as $line ) {
+			$plain[] = html_entity_decode( strip_tags( $line ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		}
+		$count = count( $html );
+		$out   = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$entry = preg_match( '/^([ ]*)(?:(?:public|protected|private)[ ]+)?(?:\'((?:[^\'\\\\]|\\\\.){1,200})\'|"([^"]{1,200})")[ ]*=>[ ]?(.*)$/', $plain[ $i ], $m );
+			if ( false === $entry ) {
+				return null;
+			}
+			$value = 1 === $entry ? trim( $m[4] ) : '';
+			if ( 1 !== $entry || ! self::redacts_key( stripslashes( $m[2] . $m[3] ), $extra ) || preg_match( '/^(?:null|boolean (?:true|false)|string \'\' \(length=0\)|empty)$/', $value ) ) {
+				$out[] = $html[ $i ];
+				continue;
+			}
+			++$hits;
+			$last  = self::xdebug_end( $plain, $i, strlen( $m[1] ), $value );
+			$arrow = strpos( $html[ $i ], '=&gt;' );
+			if ( null === $last || false === $arrow ) {
+				// Not to be told apart in the HTML: none of the block goes out.
+				return self::MARK;
+			}
+			$close = strpos( $html[ $i ], '</font>', $arrow );
+			$cut   = false === $close ? $arrow + 5 : $close + 7;
+			$out[] = substr( $html[ $i ], 0, $cut ) . ' ' . self::MARK;
+			$i     = $last;
+		}
+		return implode( "\n", $out );
+	}
+
+	/**
+	 * The last line of a value Xdebug's HTML var_dump() shows under a name on
+	 * line $i (as text): the lines below indented deeper (a nested array or
+	 * object), and a text over as many lines as it takes, to its closing
+	 * ' (length=n). Null where a text does not end before the block does.
+	 *
+	 * @param string[] $plain  The block's lines as text.
+	 * @param int      $i      The line with the name.
+	 * @param int      $indent Its indentation.
+	 * @param string   $value  What follows its =>, trimmed.
+	 * @return int|null
+	 */
+	private static function xdebug_end( array $plain, $i, $indent, $value ) {
+		$close = '/\'(?:\.\.\.)?[ ]*\(length=\d+\)[ ]*$/';
+		$opens = static function ( $line ) use ( $close ) {
+			return 1 === preg_match( "/(?:^|=> ?)[ ]*string '/", $line ) && 1 !== preg_match( $close, $line );
+		};
+		$open  = 1 === preg_match( "/^string '/", $value ) && 1 !== preg_match( $close, $value );
+		$last  = $i;
+		$count = count( $plain );
+		for ( $k = $i + 1; $k < $count; $k++ ) {
+			$line = $plain[ $k ];
+			if ( $open ) {
+				$last = $k;
+				$open = 1 !== preg_match( $close, $line );
+				continue;
+			}
+			if ( '' === trim( $line ) || strlen( $line ) - strlen( ltrim( $line, ' ' ) ) <= $indent ) {
+				break;
+			}
+			$last = $k;
+			$open = $opens( $line );
+		}
+		return $open ? null : $last;
 	}
 
 	/**

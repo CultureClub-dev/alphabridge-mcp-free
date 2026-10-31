@@ -708,6 +708,94 @@ final class RedactionTest extends TestCase {
 		self::assertStringContainsString( '["token":"AlphaBridge\\Tests\\RedactionDumpProbe":private]=>[REDACTED]', $text );
 	}
 
+	/**
+	 * A line of Xdebug's HTML var_dump() (html_errors=1): name, arrow, value.
+	 *
+	 * @param int    $indent Blanks before it.
+	 * @param string $name   Name, or "public 'name'" and the like as Xdebug writes it.
+	 * @param string $value  Its value as Xdebug writes it; '' for one on the next lines.
+	 * @return string
+	 */
+	private static function xdebug_line( int $indent, string $name, string $value ): string {
+		return str_repeat( ' ', $indent ) . $name . " <font color='#888a85'>=&gt;</font> " . $value;
+	}
+
+	/**
+	 * Xdebug's HTML form of a text value.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function xdebug_string( string $text ): string {
+		return "<small>string</small> <font color='#cc0000'>'" . htmlspecialchars( $text, ENT_QUOTES ) . "'</font> <i>(length=" . strlen( $text ) . ')</i>';
+	}
+
+	public function testAnXdebugHtmlDumpIsReadAsTextAndRedacted(): void {
+		// Codex 13: ob_start(); var_dump( … ); error_log( ob_get_clean() ) with Xdebug and html_errors=1.
+		$stamp  = '[31-Oct-2026 10:00:00 UTC] ';
+		$pre    = "<pre class='xdebug-var-dump' dir='ltr'>\n<small>/var/www/html/wp-content/plugins/x/x.php:3:</small>\n";
+		$simple = $stamp . $pre . implode(
+			"\n",
+			array(
+				'<b>array</b> <i>(size=2)</i>',
+				self::xdebug_line( 2, "'api_key'", self::xdebug_string( 'PLACEHOLDER-X1' ) ),
+				self::xdebug_line( 2, "'host'", self::xdebug_string( 'example.org' ) ),
+			)
+		) . "\n</pre>";
+		$nested = $stamp . str_replace( "'xdebug-var-dump'", '"xdebug-var-dump"', $pre ) . implode(
+			"\n",
+			array(
+				'<b>array</b> <i>(size=5)</i>',
+				self::xdebug_line( 2, "'auth'", '' ),
+				'    <b>array</b> <i>(size=3)</i>',
+				self::xdebug_line( 6, "'user'", self::xdebug_string( 'u' ) ),
+				self::xdebug_line( 6, "'note'", self::xdebug_string( "PLACEHOLDER-L1\nPLACEHOLDER-L2" ) ),
+				self::xdebug_line( 6, "'k'", self::xdebug_string( 'PLACEHOLDER-X2' ) ),
+				self::xdebug_line( 2, "'conn'", '' ),
+				"    <b>object</b>(<i>Conn</i>)[<i>1</i>]",
+				self::xdebug_line( 6, "<i>public</i> 'host'", self::xdebug_string( 'example.org' ) ),
+				self::xdebug_line( 6, "<i>protected</i> 'password'", self::xdebug_string( "PLACEHOLDER-M1\nPLACEHOLDER-M2 & 'q'" ) ),
+				self::xdebug_line( 2, "'secret'", "<font color='#3465a4'>null</font>" ),
+				self::xdebug_line( 2, "'count'", "<small>int</small> <font color='#4e9a06'>5</font>" ),
+			)
+		) . "\n</pre>";
+		$cut = $stamp . $pre . self::xdebug_line( 2, "'token'", "<small>string</small> <font color='#cc0000'>'PLACEHOLDER-OPEN" ) . "\nPLACEHOLDER-MORE";
+
+		$out  = $this->read( array( 'log' => implode( "\n", array( $simple, $nested, '[31-Oct-2026 10:00:01 UTC] next', $cut ) ) ), 'wp_get_error_log' );
+		$text = $out['log'];
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $text );
+		self::assertStringContainsString( self::xdebug_line( 2, "'api_key'", self::R ), $text );
+		self::assertStringContainsString( self::xdebug_line( 2, "'host'", self::xdebug_string( 'example.org' ) ), $text );
+		self::assertStringContainsString( self::xdebug_line( 2, "'auth'", self::R ) . "\n" . self::xdebug_line( 2, "'conn'", '' ), $text, 'The nested value to its end, a text over two lines inside it too.' );
+		self::assertStringContainsString( self::xdebug_line( 6, "<i>public</i> 'host'", self::xdebug_string( 'example.org' ) ), $text );
+		self::assertStringContainsString( self::xdebug_line( 6, "<i>protected</i> 'password'", self::R ) . "\n" . self::xdebug_line( 2, "'secret'", "<font color='#3465a4'>null</font>" ), $text );
+		self::assertStringContainsString( "\n</pre>\n[31-Oct-2026 10:00:01 UTC] next\n", $text );
+		self::assertStringEndsWith( "<pre class='xdebug-var-dump' dir='ltr'>" . self::R, $text, 'A value that does not end before the block does: the block, fail-closed.' );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+	}
+
+	public function testAnOrdinaryXdebugHtmlDumpStaysAsItIs(): void {
+		$log = "[31-Oct-2026 10:00:00 UTC] <pre class='xdebug-var-dump' dir='ltr'>\n<small>/x.php:3:</small>\n" . implode(
+			"\n",
+			array(
+				'<b>array</b> <i>(size=5)</i>',
+				self::xdebug_line( 2, "'host'", self::xdebug_string( 'example.org' ) ),
+				self::xdebug_line( 2, "'secret'", "<font color='#3465a4'>null</font>" ),
+				self::xdebug_line( 2, "'token'", self::xdebug_string( '' ) ),
+				self::xdebug_line( 2, "'password_hint'", self::xdebug_string( "it's x" ) ),
+				self::xdebug_line( 2, "'list'", '' ),
+				'    <b>array</b> <i>(size=1)</i>',
+				self::xdebug_line( 6, '0', "<small>int</small> <font color='#4e9a06'>1</font>" ),
+			)
+		) . "\n</pre>\n[31-Oct-2026 10:00:01 UTC] next";
+
+		$out = $this->read( array( 'log' => $log ), 'wp_get_error_log' );
+
+		self::assertSame( $log, $out['log'] );
+		self::assertArrayNotHasKey( 'redacted', $out );
+	}
+
 	public function testOrdinaryPhpDumpsStayAsTheyAre(): void {
 		$value = array( 'host' => 'example.org', 'count' => 5, 'password_hint' => 'x', 'secret' => null, 'token' => '', 'auth' => false, 'list' => array( 'a', 'b' ) );
 		foreach ( array( self::var_dumped( $value ), var_export( $value, true ), print_r( $value, true ) ) as $i => $dump ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions
