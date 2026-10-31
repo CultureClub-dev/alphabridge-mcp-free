@@ -507,6 +507,8 @@ final class AnswerWayTest extends TestCase {
 		'The address was not asked: it is local or not public.',
 		'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.',
 		'The address was not asked: the request would go through the proxy, which looks the name up itself.',
+		'The address was not followed further: it redirected more often than allowed.',
+		'The address was not followed: it redirects to something that is not an http(s) address.',
 		'After the save %s did not hold what was written.',
 		'After the save Beaver Builder\'s draft did not hold the same elements as before.',
 		'After the save the page had %2$d elements instead of %1$d (missing: %3$s).',

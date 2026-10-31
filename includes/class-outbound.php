@@ -12,20 +12,27 @@
  * request when any of them is not public (AB_MCP_OAuth::is_public_ip(),
  * IPv4, IPv6 and IPv4 mapped into IPv6), and has cURL connect to exactly
  * these addresses for this one request (CURLOPT_RESOLVE on http_api_curl,
- * hooked for the call and taken off after it), as the fetch of a client
- * metadata document does (AB_MCP_OAuth::cimd_fetch()). Where WordPress
- * would send the request without cURL, it is refused before a connection
- * is made (the fsockopen transport's first hook), and an answer that came
- * any other way without the binding is discarded. No redirect is followed:
- * its target would be looked up unbound. Nor is a request sent where
+ * hooked for the call and taken off after it). Where WordPress would send
+ * the request without cURL, it is refused before a connection is made (the
+ * fsockopen transport's first hook), and an answer that came any other way
+ * without the binding is discarded. A redirect is not left to WordPress,
+ * whose transport would look the target up unbound: get() follows it
+ * itself where the caller allows redirects, and checks and ties every
+ * target as it did the first address; the cookies go along in the cookie
+ * jar of Requests, the HTTP library of WordPress, exactly as its transport
+ * carries them when it follows. Nor is a request sent where
  * WordPress would send it through a proxy (WP_PROXY_HOST): the proxy looks
  * the name up itself, which no binding reaches; a host in
  * WP_PROXY_BYPASS_HOSTS goes direct and is tied as above, and a proxy from
  * the environment of PHP is switched off for the bound request
  * (curl_options()).
  *
- * Used by wp_staging_status to ask the other site of a staging pair
- * (AB_MCP_Staging::check_partner()).
+ * Used for every address the site fetches on request: the other site of a
+ * staging pair (AB_MCP_Staging::check_partner(), no redirect), a file for
+ * the media library (AB_MCP_Tools_Media, from an address or from the chat,
+ * three redirects), a ZIP to install (AB_MCP_Tools_Install_Update, three
+ * redirects) and the client metadata document of an app that signs in
+ * (AB_MCP_OAuth::cimd_fetch(), no redirect).
  *
  * @package AlphaBridge_MCP
  */
@@ -38,7 +45,7 @@ defined( 'ABSPATH' ) || exit;
 class AB_MCP_Outbound {
 
 	/**
-	 * The message of the refusal on the fsockopen transport, by which get()
+	 * The message of the refusal on the fsockopen transport, by which send()
 	 * knows it again in the WP_Error WordPress makes of it.
 	 */
 	const UNBOUND = 'Not sent: without cURL the request cannot be tied to the checked addresses.';
@@ -96,11 +103,12 @@ class AB_MCP_Outbound {
 
 		/**
 		 * The addresses a host of an outgoing request of this plugin resolves
-		 * to (the other site of a staging pair), before the plugin looks them
-		 * up itself. Return a list to answer from elsewhere (a resolver of
-		 * your own, a fixed mapping); null leaves the lookup to the plugin.
-		 * Every address is checked either way: a filter cannot open the way
-		 * to a private one. The request then connects to these addresses.
+		 * to (the other site of a staging pair, a file or ZIP to download,
+		 * the metadata document of an app), before the plugin looks them up
+		 * itself. Return a list to answer from elsewhere (a resolver of your
+		 * own, a fixed mapping); null leaves the lookup to the plugin. Every
+		 * address is checked either way: a filter cannot open the way to a
+		 * private one. The request then connects to these addresses.
 		 *
 		 * @param string[]|null $addresses Null.
 		 * @param string        $host      Host name.
@@ -109,6 +117,17 @@ class AB_MCP_Outbound {
 		if ( null === $addresses ) {
 			$addresses = self::resolve( $host, $dns, $fallback );
 		}
+		return self::checked( $addresses );
+	}
+
+	/**
+	 * A list of addresses, each checked: the list as strings, 'unresolved'
+	 * for no list or an empty one, 'local' when any address is not public.
+	 *
+	 * @param mixed $addresses What a lookup, a filter or a caller handed over.
+	 * @return string[]|string
+	 */
+	private static function checked( $addresses ) {
 		if ( ! is_array( $addresses ) || array() === $addresses ) {
 			return 'unresolved';
 		}
@@ -125,6 +144,10 @@ class AB_MCP_Outbound {
 	 * addresses: "host:port:address,address", the port the address names or
 	 * the one of its scheme. None for a host that is an address already,
 	 * since nothing is looked up for it.
+	 *
+	 * The host is written as the address spells it, which is what older
+	 * cURL versions compare the entry with; every version reads a bare IPv6
+	 * address here.
 	 *
 	 * @param string   $url       Address of the request.
 	 * @param string[] $addresses Checked addresses.
@@ -163,33 +186,266 @@ class AB_MCP_Outbound {
 	}
 
 	/**
+	 * The address a Location header names, as an absolute address: as given
+	 * when it has a scheme (sent as it is, as WordPress's transport sends
+	 * it), otherwise resolved against the address of the answer that carried
+	 * it by RFC 3986, section 5.2: a network-path reference (//host/path)
+	 * takes the scheme of the base, an absolute-path reference its scheme and
+	 * host, a relative-path reference is merged with the base path (5.2.3), a
+	 * query alone replaces the query of the base path; "." and ".." segments
+	 * are removed (5.2.4), every other character of the path, a doubled "/"
+	 * included, stays; a fragment is dropped. Null for an empty header, a
+	 * fragment alone, or an answer address that is no absolute address.
+	 *
+	 * @param string $location The header.
+	 * @param string $base     Address of the answer.
+	 * @return string|null
+	 */
+	public static function absolute_url( $location, $base ) {
+		$location = trim( (string) $location );
+		if ( '' === $location || '#' === $location[0] ) {
+			return null;
+		}
+		if ( preg_match( '#^[a-z][a-z0-9+.-]*:#i', $location ) ) {
+			return $location;
+		}
+		$parts = wp_parse_url( (string) $base );
+		if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) ) {
+			return null;
+		}
+		list( $location ) = explode( '#', $location, 2 );
+		$query            = '';
+		if ( false !== strpos( $location, '?' ) ) {
+			list( $location, $query ) = explode( '?', $location, 2 );
+			$query                    = '?' . $query;
+		}
+		if ( 0 === strpos( $location, '//' ) ) {
+			// Network-path reference: its own authority, the scheme of the base.
+			$slash     = strpos( $location, '/', 2 );
+			$authority = false === $slash ? substr( $location, 2 ) : substr( $location, 2, $slash - 2 );
+			$path      = false === $slash ? '' : substr( $location, $slash );
+			return $parts['scheme'] . '://' . $authority . self::remove_dot_segments( $path ) . $query;
+		}
+		$origin    = $parts['scheme'] . '://' . $parts['host'] . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' );
+		$base_path = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+		if ( '' === $location ) {
+			// A query alone: the path of the base, the new query.
+			return $origin . $base_path . $query;
+		}
+		if ( '/' !== $location[0] ) {
+			// Merge (5.2.3): after the last "/" of the base path; at the
+			// root where the base has no path.
+			$location = ( '' === $base_path ? '/' : substr( $base_path, 0, (int) strrpos( $base_path, '/' ) + 1 ) ) . $location;
+		}
+		return $origin . self::remove_dot_segments( $location ) . $query;
+	}
+
+	/**
+	 * A path without its "." and ".." segments: the algorithm of RFC 3986,
+	 * section 5.2.4, step by step, so that nothing else changes (a doubled
+	 * "/" stays, ".." never goes above the root).
+	 *
+	 * @param string $path Path.
+	 * @return string
+	 */
+	private static function remove_dot_segments( $path ) {
+		$input  = (string) $path;
+		$output = '';
+		while ( '' !== $input ) {
+			if ( 0 === strpos( $input, '../' ) ) {
+				$input = substr( $input, 3 );
+			} elseif ( 0 === strpos( $input, './' ) ) {
+				$input = substr( $input, 2 );
+			} elseif ( 0 === strpos( $input, '/./' ) ) {
+				$input = substr( $input, 2 );
+			} elseif ( '/.' === $input ) {
+				$input = '/';
+			} elseif ( 0 === strpos( $input, '/../' ) ) {
+				$input  = substr( $input, 3 );
+				$output = self::without_last_segment( $output );
+			} elseif ( '/..' === $input ) {
+				$input  = '/';
+				$output = self::without_last_segment( $output );
+			} elseif ( '.' === $input || '..' === $input ) {
+				$input = '';
+			} else {
+				// The first segment, with its leading "/" where it has one,
+				// up to but not including the next "/".
+				$next = strpos( $input, '/', '/' === $input[0] ? 1 : 0 );
+				if ( false === $next ) {
+					$output .= $input;
+					$input   = '';
+				} else {
+					$output .= substr( $input, 0, $next );
+					$input   = substr( $input, $next );
+				}
+			}
+		}
+		return $output;
+	}
+
+	/**
+	 * The output of remove_dot_segments() without its last segment and the
+	 * "/" before it.
+	 *
+	 * @param string $output Path so far.
+	 * @return string
+	 */
+	private static function without_last_segment( $output ) {
+		$slash = strrpos( $output, '/' );
+		return false === $slash ? '' : substr( $output, 0, $slash );
+	}
+
+	/**
+	 * The Cookie header of a hop, from the jar of the request: what the
+	 * transport of WordPress (Requests) sends when it follows a redirect
+	 * itself, WpOrg\Requests\Cookie\Jar::before_request(): every cookie of
+	 * the jar that is not expired (Expires, Max-Age) and whose domain
+	 * matches the host of the address (lower case; a host-only cookie only
+	 * for the very host), the value as it came (Cookie::format_for_header()),
+	 * joined with "; ". Empty where nothing goes with the hop.
+	 *
+	 * @param WpOrg\Requests\Cookie\Jar $jar Jar of the request.
+	 * @param string                    $url Address of the hop.
+	 * @return string
+	 */
+	private static function cookie_header( WpOrg\Requests\Cookie\Jar $jar, $url ) {
+		$headers = array();
+		$data    = null;
+		$type    = null;
+		$options = array();
+		$jar->before_request( $url, $headers, $data, $type, $options );
+		return isset( $headers['Cookie'] ) ? (string) $headers['Cookie'] : '';
+	}
+
+	/**
+	 * What an answer sets, into the jar: as the transport learns it when it
+	 * follows a redirect itself (Jar::before_redirect_check()):
+	 * WpOrg\Requests\Cookie::parse_from_headers() reads the Set-Cookie
+	 * headers of the answer for its address, the domain and the path of the
+	 * address where a header names none, host-only without a Domain, a
+	 * Domain the address is not in refused, Expires and Max-Age read, the
+	 * value as it came; a cookie of a name the jar holds replaces it.
+	 * Nothing else of the answer is read: wp_remote_retrieve_cookies() would
+	 * list the carried cookies too, decoded.
+	 *
+	 * @param WpOrg\Requests\Cookie\Jar $jar      Jar of the request.
+	 * @param array|WP_Error            $response The answer.
+	 * @param string                    $url      Address of the answer.
+	 */
+	private static function learn( WpOrg\Requests\Cookie\Jar $jar, $response, $url ) {
+		$values  = wp_remote_retrieve_header( $response, 'set-cookie' );
+		$values  = is_array( $values ) ? $values : ( '' !== (string) $values ? array( (string) $values ) : array() );
+		$headers = new WpOrg\Requests\Response\Headers();
+		foreach ( $values as $value ) {
+			$headers['Set-Cookie'] = (string) $value;
+		}
+		foreach ( WpOrg\Requests\Cookie::parse_from_headers( $headers, new WpOrg\Requests\Iri( $url ) ) as $name => $cookie ) {
+			$jar[ $name ] = $cookie;
+		}
+	}
+
+	/**
 	 * GET an http(s) address with the addresses of its host checked and the
 	 * connection tied to them. The arguments go to wp_safe_remote_get(),
-	 * with no redirect followed.
+	 * except 'redirection': how many redirects get() follows itself, none
+	 * by default. Each target is read from the Location header, made
+	 * absolute against the address that redirected (absolute_url()), must
+	 * be an http(s) address, and is resolved, checked and tied like the
+	 * first; one redirect more than allowed ends the request. A 3xx answer
+	 * without a Location header, or any 3xx where no redirect is allowed, is
+	 * returned as the answer, as WordPress returns it. The cookies go in the
+	 * cookie jar of Requests, the transport of WordPress: filled from
+	 * 'cookies' as WP_Http::request() fills it (WP_Http::normalize_cookies():
+	 * WP_Http_Cookie objects or name => value, the value as given), sent
+	 * with each hop as a Cookie header (cookie_header()) and fed from each
+	 * answer (learn()) exactly as the transport does when it follows.
 	 *
-	 * @param string $url  Address.
-	 * @param array  $args Request arguments.
+	 * @param string        $url       Address.
+	 * @param array         $args      Request arguments.
+	 * @param string[]|null $addresses The addresses of the host of $url a
+	 *                                 caller checked already (checked again
+	 *                                 here); null to look them up.
 	 * @return array|WP_Error The answer, or WP_Error with the code
 	 *                        ab_mcp_outbound_local, ab_mcp_outbound_unresolved,
 	 *                        ab_mcp_outbound_proxy, ab_mcp_outbound_unbound,
-	 *                        or the transport's.
+	 *                        ab_mcp_outbound_redirects, ab_mcp_outbound_redirect
+	 *                        or the transport's. The data of the plugin's own
+	 *                        errors names the address it was about ('url') and
+	 *                        which hop it was ('hop': 0 for the address asked
+	 *                        for, n for the n-th redirect target).
 	 */
-	public static function get( $url, array $args ) {
-		$host    = (string) wp_parse_url( $url, PHP_URL_HOST );
-		$checked = preg_match( '#^https?://#i', (string) $url ) ? self::public_addresses( $host ) : 'local';
-		// Reasons for the caller, which says what to do (English: they
-		// never reach an assistant as they are).
+	public static function get( $url, array $args, $addresses = null ) {
+		$hops = isset( $args['redirection'] ) ? max( 0, (int) $args['redirection'] ) : 0;
+		$jar  = WP_Http::normalize_cookies( isset( $args['cookies'] ) && is_array( $args['cookies'] ) ? $args['cookies'] : array() );
+		unset( $args['redirection'], $args['cookies'] );
+		for ( $hop = 0; ; $hop++ ) {
+			$hop_args = $args;
+			$cookie   = self::cookie_header( $jar, (string) $url );
+			if ( '' !== $cookie ) {
+				// Over a Cookie header of the caller, as the transport sets it.
+				$hop_args['headers'] = array_merge( isset( $args['headers'] ) && is_array( $args['headers'] ) ? $args['headers'] : array(), array( 'Cookie' => $cookie ) );
+			}
+			$response = self::send( (string) $url, $hop_args, 0 === $hop ? $addresses : null, $hop );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			self::learn( $jar, $response, (string) $url );
+			$status   = (int) wp_remote_retrieve_response_code( $response );
+			$location = wp_remote_retrieve_header( $response, 'location' );
+			$location = is_array( $location ) ? (string) reset( $location ) : (string) $location;
+			if ( 0 === $hops || $status < 300 || $status >= 400 || '' === trim( $location ) ) {
+				return $response;
+			}
+			$target = self::absolute_url( $location, $url );
+			// Reasons for the caller, which says what to do (English: they
+			// never reach an assistant as they are).
+			if ( $hop >= $hops ) {
+				return new WP_Error( 'ab_mcp_outbound_redirects', 'The address was not followed further: it redirected more often than allowed.', array( 'url' => null !== $target ? $target : $location, 'hop' => $hop + 1 ) );
+			}
+			if ( null === $target || ! preg_match( '#^https?://#i', $target ) ) {
+				return new WP_Error( 'ab_mcp_outbound_redirect', 'The address was not followed: it redirects to something that is not an http(s) address.', array( 'url' => $location, 'hop' => $hop + 1 ) );
+			}
+			$url = $target;
+		}
+	}
+
+	/**
+	 * One request, without a redirect: the host checked, the connection
+	 * tied, nothing sent through a proxy or without cURL.
+	 *
+	 * @param string        $url       Address.
+	 * @param array         $args      Request arguments, without 'redirection'.
+	 * @param string[]|null $addresses Addresses a caller checked, or null.
+	 * @param int           $hop       Which hop this is, for the error data.
+	 * @return array|WP_Error
+	 */
+	private static function send( $url, array $args, $addresses, $hop ) {
+		$host = (string) wp_parse_url( $url, PHP_URL_HOST );
+		if ( ! preg_match( '#^https?://#i', $url ) ) {
+			$checked = 'local';
+		} elseif ( null !== $addresses ) {
+			// A caller's list is checked again: it cannot open the way to a
+			// private address either.
+			$checked = self::checked( $addresses );
+		} else {
+			$checked = self::public_addresses( $host );
+		}
+		$data = array(
+			'url' => $url,
+			'hop' => (int) $hop,
+		);
 		if ( 'unresolved' === $checked ) {
-			return new WP_Error( 'ab_mcp_outbound_unresolved', 'The address was not asked: its host name has no address.' );
+			return new WP_Error( 'ab_mcp_outbound_unresolved', 'The address was not asked: its host name has no address.', $data );
 		}
 		if ( ! is_array( $checked ) ) {
-			return new WP_Error( 'ab_mcp_outbound_local', 'The address was not asked: it is local or not public.' );
+			return new WP_Error( 'ab_mcp_outbound_local', 'The address was not asked: it is local or not public.', $data );
 		}
 		// The same question WP_Http::request() asks before it hands the
 		// request to a proxy.
 		$proxy = new WP_HTTP_Proxy();
 		if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
-			return new WP_Error( 'ab_mcp_outbound_proxy', 'The address was not asked: the request would go through the proxy, which looks the name up itself.' );
+			return new WP_Error( 'ab_mcp_outbound_proxy', 'The address was not asked: the request would go through the proxy, which looks the name up itself.', $data );
 		}
 		// Null for an address as host: nothing is looked up, so there is
 		// nothing to tie; the proxy of the environment is switched off all
@@ -219,10 +475,10 @@ class AB_MCP_Outbound {
 			remove_action( 'requests-fsockopen.before_request', $refuse );
 		}
 		if ( is_wp_error( $response ) && self::UNBOUND === $response->get_error_message() ) {
-			return new WP_Error( 'ab_mcp_outbound_unbound', self::UNBOUND );
+			return new WP_Error( 'ab_mcp_outbound_unbound', self::UNBOUND, $data );
 		}
 		if ( null !== $entry && ! is_wp_error( $response ) && ! $bound ) {
-			return new WP_Error( 'ab_mcp_outbound_unbound', 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.' );
+			return new WP_Error( 'ab_mcp_outbound_unbound', 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.', $data );
 		}
 		return $response;
 	}

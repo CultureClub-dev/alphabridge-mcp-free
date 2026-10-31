@@ -21,6 +21,7 @@ namespace AlphaBridge\Tests;
 use PHPUnit\Framework\TestCase;
 use AbTestExit;
 use AB_MCP_OAuth;
+use AB_MCP_Outbound;
 use AB_MCP_Settings;
 use WP_Error;
 
@@ -220,6 +221,107 @@ final class CimdTest extends TestCase {
 	}
 
 	/**
+	 * Through AB_MCP_Outbound (4.15.0): a proxy from the environment of PHP
+	 * is switched off on the handle of the request, see
+	 * OutboundBindingTest::probe_environment_proxy().
+	 */
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testTheRequestIgnoresTheProxyOfTheEnvironment(): void {
+		$verbose = null;
+		add_action(
+			'http_api_curl',
+			static function ( $handle ) use ( &$verbose ): void {
+				$log = fopen( 'php://temp', 'w+' );
+				putenv( 'http_proxy=http://127.0.0.1:9' );
+				try {
+					curl_setopt_array(
+						$handle,
+						array(
+							CURLOPT_URL               => 'http://pin.example:80/',
+							CURLOPT_RESOLVE           => array( 'pin.example:80:127.0.0.1' ),
+							CURLOPT_VERBOSE           => true,
+							CURLOPT_STDERR            => $log,
+							CURLOPT_RETURNTRANSFER    => true,
+							CURLOPT_CONNECTTIMEOUT_MS => 500,
+							CURLOPT_TIMEOUT_MS        => 1000,
+						)
+					);
+					curl_exec( $handle );
+					rewind( $log );
+					$verbose = (string) stream_get_contents( $log );
+				} finally {
+					putenv( 'http_proxy' );
+					fclose( $log );
+				}
+			},
+			20
+		);
+		self::assertIsArray( $this->resolve() );
+		self::assertIsString( $verbose, 'The request ran through cURL with the hook.' );
+		self::assertStringNotContainsString( 'http_proxy', $verbose, 'cURL names an environment proxy it uses; it uses none.' );
+		self::assertStringNotContainsString( '127.0.0.1:9', $verbose );
+	}
+
+	/** Proxy settings as in wp-config.php; constants, so each test in a process of its own. */
+	private static function proxy( string $bypass = '' ): void {
+		define( 'WP_PROXY_HOST', 'proxy.example' );
+		define( 'WP_PROXY_PORT', '3128' );
+		if ( '' !== $bypass ) {
+			define( 'WP_PROXY_BYPASS_HOSTS', $bypass );
+		}
+	}
+
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testThroughTheProxyOfWordPressTheDocumentIsNotFetched(): void {
+		self::proxy();
+		$refusal = $this->refusal();
+		self::assertStringContainsString( 'through a proxy (WP_PROXY_HOST), which looks the name up itself', $refusal );
+		self::assertStringContainsString( 'WP_PROXY_BYPASS_HOSTS', $refusal, 'The way.' );
+		self::assertSame( 0, $this->fetches(), 'The proxy would look the name up itself.' );
+	}
+
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+	public function testAHostInTheBypassListIsFetchedDirectly(): void {
+		self::proxy( 'localhost, app.example' );
+		self::assertIsArray( $this->resolve() );
+		self::assertSame( 1, $this->fetches() );
+	}
+
+	public function testWithoutCurlTheDocumentIsNotFetched(): void {
+		$GLOBALS['ab_test_http_transport'] = 'fsockopen';
+		$refusal                           = $this->refusal();
+		self::assertStringContainsString( 'without cURL', $refusal );
+		self::assertStringContainsString( 'curl extension', $refusal, 'The way.' );
+		self::assertSame( 0, $this->fetches(), 'Refused before the transport connects.' );
+		self::assertFalse( has_action( 'requests-fsockopen.before_request' ) );
+	}
+
+	/**
+	 * Without the filter of its own, the host is looked up as every other
+	 * outgoing address (AB_MCP_Outbound::public_addresses(): the filter
+	 * ab_mcp_outbound_addresses, then A and AAAA records), every address
+	 * checked.
+	 */
+	public function testWithoutItsOwnFilterTheHostIsLookedUpLikeEveryOutgoingAddress(): void {
+		$GLOBALS['ab_test_filters']['ab_mcp_oauth_cimd_addresses'] = array();
+		$answer = array( self::PUBLIC, 'fd00::1' );
+		add_filter( 'ab_mcp_outbound_addresses', static function () use ( &$answer ) { return $answer; } );
+
+		self::assertStringContainsString( 'not public', $this->refusal(), 'Only the AAAA record is internal: refused.' );
+		self::assertSame( 0, $this->fetches() );
+
+		$answer = array();
+		self::assertStringContainsString( 'could not be resolved', $this->refusal() );
+		self::assertSame( 0, $this->fetches() );
+
+		$answer = array( self::PUBLIC );
+		self::assertIsArray( $this->resolve() );
+		self::assertSame( 1, $this->fetches() );
+	}
+
+	/**
 	 * @return array<string,array{0:string,1:array<int,string>,2:string|null}>
 	 */
 	public static function resolveEntries(): array {
@@ -237,7 +339,8 @@ final class CimdTest extends TestCase {
 	 */
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'resolveEntries' )]
 	public function testTheResolveEntry( string $url, array $addresses, ?string $entry ): void {
-		self::assertSame( $entry, ( new \ReflectionMethod( AB_MCP_OAuth::class, 'curl_resolve_entry' ) )->invoke( null, $url, $addresses ) );
+		// Since the fetch goes through AB_MCP_Outbound, the entry is its (4.15.0).
+		self::assertSame( $entry, AB_MCP_Outbound::resolve_entry( $url, $addresses ) );
 	}
 
 	public function testTheDocumentIsCachedAndReused(): void {

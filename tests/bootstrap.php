@@ -110,6 +110,11 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
 	$GLOBALS['ab_test_http_transport'] = 'curl';
+	// No DNS in the tests either: a test answers the hosts of its outgoing
+	// requests through the filter ab_mcp_outbound_addresses (as a site's own
+	// resolver could); a host no test answered fails here, last in line,
+	// instead of asking the resolver of this machine.
+	add_filter( 'ab_mcp_outbound_addresses', 'ab_test_no_dns', PHP_INT_MAX, 2 );
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
@@ -1559,9 +1564,14 @@ $GLOBALS['ab_test_http_answer'] = null;
 $GLOBALS['ab_test_http_curl'] = false;
 /** @var string $ab_test_http_transport The transport WordPress picks: curl (the http_api_curl hook runs), fsockopen (its first hook runs) or other (none). */
 $GLOBALS['ab_test_http_transport'] = 'curl';
-require_once __DIR__ . '/support/requests-exception.php';
+// Requests, the HTTP library of WordPress: its exception, which a hook throws
+// to end a request, and its cookie jar, fixed copies from 7.0.2.
+require_once __DIR__ . '/support/requests.php';
 // WordPress' proxy settings (WP_PROXY_HOST …), a fixed copy from 7.0.2.
 require_once __DIR__ . '/support/class-wp-http-proxy.php';
+// WordPress' cookie as a caller passes it, and how WP_Http fills the jar from it, fixed copies from 7.0.2.
+require_once __DIR__ . '/support/class-wp-http-cookie.php';
+require_once __DIR__ . '/support/class-wp-http.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
@@ -1673,13 +1683,28 @@ if ( ! defined( 'MB_IN_BYTES' ) ) {
 	define( 'MB_IN_BYTES', 1024 * 1024 );
 }
 
+/**
+ * The last filter on ab_mcp_outbound_addresses (ab_test_reset()): a host no
+ * test answered would be looked up for real; the test fails instead.
+ *
+ * @param string[]|null $addresses What the test's filters answered.
+ * @param string        $host      Host name.
+ * @return string[]
+ */
+function ab_test_no_dns( $addresses, $host ) {
+	if ( null === $addresses ) {
+		throw new LogicException( 'No DNS in the tests: answer the host ' . $host . ' through the filter ab_mcp_outbound_addresses.' );
+	}
+	return $addresses;
+}
+
 /** As in WordPress, in short: loopback and private hosts are refused. */
 function wp_http_validate_url( $url ) {
 	$host = (string) parse_url( (string) $url, PHP_URL_HOST );
 	return ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) ? false : $url;
 }
 
-function ab_test_http_response( int $code, string $body, array $headers = array() ): array {
+function ab_test_http_response( int $code, string $body, array $headers = array(), array $cookies = array() ): array {
 	return array(
 		'response' => array(
 			'code'    => $code,
@@ -1687,7 +1712,13 @@ function ab_test_http_response( int $code, string $body, array $headers = array(
 		),
 		'body'     => $body,
 		'headers'  => array_change_key_case( $headers, CASE_LOWER ),
+		// The cookies the answer set, as WP_Http_Cookie objects (WordPress: WP_HTTP_Requests_Response::get_cookies()).
+		'cookies'  => $cookies,
 	);
+}
+
+function wp_remote_retrieve_cookies( $response ) {
+	return is_array( $response ) && ! empty( $response['cookies'] ) ? $response['cookies'] : array();
 }
 
 function wp_remote_retrieve_response_code( $response ) {
