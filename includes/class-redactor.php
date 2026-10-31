@@ -76,11 +76,21 @@ final class AB_MCP_Redactor {
 
 	/**
 	 * Names redacted on top of the meta rule, after normalize_key(): the HTTP
-	 * headers that carry a credential, a bare "auth", and the two columns of
-	 * wp_users that hold a password hash and a reset key. Not part of the
+	 * headers that carry a credential, a bare "auth", the two columns of
+	 * wp_users that hold a password hash and a reset key, and the password
+	 * PHP takes from Basic auth ($_SERVER['PHP_AUTH_PW']). Not part of the
 	 * meta guard.
 	 */
-	const EXTRA_NAMES = array( 'authorization', 'proxy_authorization', 'auth', 'user_pass', 'user_activation_key' );
+	const EXTRA_NAMES = array( 'authorization', 'proxy_authorization', 'auth', 'user_pass', 'user_activation_key', 'php_auth_pw' );
+
+	/**
+	 * Last words of a normalised name redacted on top of the meta rule, as
+	 * CREDENTIAL_EXACT's are: an Authorization header under any prefix
+	 * ($_SERVER's HTTP_AUTHORIZATION and REDIRECT_HTTP_AUTHORIZATION).
+	 * authorization_status or has_authorization stay. Not part of the meta
+	 * guard.
+	 */
+	const EXTRA_LAST = array( 'authorization' );
 
 	/**
 	 * First words of a normalised name that say something ABOUT a credential
@@ -331,7 +341,7 @@ final class AB_MCP_Redactor {
 		if ( in_array( $words[0], self::ABOUT, true ) ) {
 			return false;
 		}
-		if ( in_array( end( $words ), self::CREDENTIAL_EXACT, true ) ) {
+		if ( in_array( end( $words ), self::CREDENTIAL_EXACT, true ) || in_array( end( $words ), self::EXTRA_LAST, true ) ) {
 			return true;
 		}
 		foreach ( self::CREDENTIAL_NEEDLES as $needle ) {

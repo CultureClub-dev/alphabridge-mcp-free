@@ -488,6 +488,28 @@ final class RedactionWriteBackTest extends TestCase {
 		}
 	}
 
+	public function testAnObjectReadAsAnEmptyArrayKeepsWhatTheReaderLeftOut(): void {
+		// Codex 12 #1: wp_get_widgets leaves api_key out, so connection reads
+		// as []; the stored counterpart says it is an object.
+		$GLOBALS['wp_widget_factory'] = (object) array( 'widgets' => array( new \WP_Widget( 'text' ) ) );
+		$update                       = static fn( array $settings ) => AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-4', 'settings' => $settings ) );
+		try {
+			update_option( 'widget_text', array( 4 => array( 'title' => 'Feed', 'connection' => array( 'api_key' => 'STORED-KEY' ) ), '_multiwidget' => 1 ) );
+			$res = $update( array( 'title' => 'Feed 2', 'connection' => array() ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array( 'api_key' => 'STORED-KEY' ), get_option( 'widget_text' )[4]['connection'], 'The key stays.' );
+			self::assertSame( 'Feed 2', get_option( 'widget_text' )[4]['title'] );
+
+			// A stored list the client empties is a change of the list.
+			update_option( 'widget_text', array( 4 => array( 'title' => 'Feed', 'accounts' => array( array( 'name' => 'production', 'accessToken' => 'PROD' ) ) ), '_multiwidget' => 1 ) );
+			$res = $update( array( 'accounts' => array() ) );
+			self::assertIsArray( $res, is_object( $res ) ? $res->get_error_message() : '' );
+			self::assertSame( array(), get_option( 'widget_text' )[4]['accounts'], 'Emptied, not filled again by key.' );
+		} finally {
+			unset( $GLOBALS['wp_widget_factory'] );
+		}
+	}
+
 	public function testUserMetaKeepsTheStoredCredentialToo(): void {
 		$GLOBALS['ab_test_meta_store']['user'][7]['crm'] = array( array( 'token' => 'STORED-TOKEN', 'list' => 'news' ) );
 

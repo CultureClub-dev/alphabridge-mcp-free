@@ -544,8 +544,10 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 			}
 		}
 		foreach ( $new as $key => $value ) {
-			// A list is matched by position, not by key: stored_lists().
-			if ( is_array( $value ) && ! AB_MCP_Redactor::is_list( $value ) && isset( $old[ $key ] ) && is_array( $old[ $key ] ) ) {
+			// A stored list is matched by position, not by key
+			// (stored_lists()). The stored value says what a value sent is: an
+			// object whose keys wp_get_widgets all left out reads as [].
+			if ( is_array( $value ) && isset( $old[ $key ] ) && is_array( $old[ $key ] ) && ! AB_MCP_Redactor::is_list( $old[ $key ] ) ) {
 				$new[ $key ] = self::keep_hidden_credentials( $value, $old[ $key ], true, $extra );
 			}
 		}
@@ -576,8 +578,10 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 			if ( null !== $refused || ! is_array( $value ) || ! isset( $old[ $key ] ) || ! is_array( $old[ $key ] ) ) {
 				continue;
 			}
+			// Whether it is a list, the stored value says: [] sent for an
+			// object read as [] is that object (keep_hidden_credentials()).
 			$at          = '' === $path ? (string) $key : $path . '.' . $key;
-			$new[ $key ] = AB_MCP_Redactor::is_list( $value ) && AB_MCP_Redactor::is_list( $old[ $key ] )
+			$new[ $key ] = AB_MCP_Redactor::is_list( $old[ $key ] )
 				? self::stored_list( $value, $old[ $key ], $at, $refused )
 				: self::stored_lists( $value, $old[ $key ], $at, $refused );
 		}
@@ -608,7 +612,7 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 		if ( array() === $all ) {
 			return $new;
 		}
-		$same = count( $new ) === count( $old );
+		$same = count( $new ) === count( $old ) && AB_MCP_Redactor::is_list( $new );
 		foreach ( $new as $i => $entry ) {
 			if ( $same && AB_MCP_Redactor::same_view( $entry, $views[ $i ] ) ) {
 				$new[ $i ] = $old[ $i ];

@@ -886,6 +886,48 @@ final class RedactionTest extends TestCase {
 		self::assertSame( array( '/log' ), $out['redacted'] );
 	}
 
+	public function testTheServersAuthorizationNamesAreCredentials(): void {
+		// Codex 12 #2: as WordPress reads Basic auth (wp_populate_basic_auth_from_authorization_header()).
+		$server = array(
+			'HTTP_AUTHORIZATION'          => 'Basic PLACEHOLDER-H1',
+			'REDIRECT_HTTP_AUTHORIZATION' => 'Basic PLACEHOLDER-H2',
+			'PHP_AUTH_USER'               => 'anna',
+			'PHP_AUTH_PW'                 => 'PLACEHOLDER-PW',
+			'authorization_status'        => 'granted',
+			'require_authorization'       => 'yes',
+			'REQUEST_URI'                 => '/wp-json/x',
+		);
+		$stamp = '[31-Oct-2026 10:00:00 UTC] ';
+		foreach (
+			array(
+				'print_r'    => print_r( $server, true ), // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+				'var_export' => var_export( $server, true ), // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export
+				'json'       => wp_json_encode( $server ),
+			) as $format => $dump
+		) {
+			$text = $this->read( array( 'log' => $stamp . $dump ), 'wp_get_error_log' )['log'];
+			self::assertStringNotContainsString( 'PLACEHOLDER', $text, $format );
+			if ( 'json' === $format ) {
+				// In one line of JSON the first credential's pair ends the line.
+				self::assertSame( $stamp . '{"HTTP_AUTHORIZATION":"Basic [REDACTED]', $text );
+				continue;
+			}
+			// One pair a line: the rest stays.
+			self::assertStringContainsString( 'anna', $text, $format );
+			self::assertStringContainsString( 'granted', $text, $format );
+			self::assertStringContainsString( 'yes', $text, $format );
+		}
+		$out = $this->read( array( 'server' => $server ), 'wp_get_site_health' );
+		self::assertSame( array( 'HTTP_AUTHORIZATION' => self::R, 'REDIRECT_HTTP_AUTHORIZATION' => self::R, 'PHP_AUTH_USER' => 'anna', 'PHP_AUTH_PW' => self::R, 'authorization_status' => 'granted', 'require_authorization' => 'yes', 'REQUEST_URI' => '/wp-json/x' ), $out['server'] );
+		$guard = new ReflectionMethod( 'AB_MCP_Tools_Base', 'is_sensitive_meta_key' );
+		foreach ( array( 'HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION', 'PHP_AUTH_PW' ) as $name ) {
+			self::assertFalse( $guard->invoke( null, $name ), $name . ' is no reason for the meta guard to refuse.' );
+		}
+		foreach ( array( 'authorization_status', 'authorization_url', 'authorizationRequired', 'has_authorization', 'require_authorization' ) as $name ) {
+			self::assertFalse( AB_MCP_Redactor::redacts_key( $name ), $name );
+		}
+	}
+
 	public function testEveryRuleReadsEveryLineInEitherOrder(): void {
 		// Codex 5 #5: a Bearer token before a pair, and after it.
 		$out = $this->read( array( 'log' => "Retry Bearer PLACEHOLDERTK1 api_key=PLACEHOLDER2\napi_key=PLACEHOLDER3 Bearer PLACEHOLDERTK4\nAuthorization: Bearer PLACEHOLDERTK5" ), 'wp_get_error_log' );
