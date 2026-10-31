@@ -1557,6 +1557,8 @@ $GLOBALS['ab_test_http_curl'] = false;
 /** @var string $ab_test_http_transport The transport WordPress picks: curl (the http_api_curl hook runs), fsockopen (its first hook runs) or other (none). */
 $GLOBALS['ab_test_http_transport'] = 'curl';
 require_once __DIR__ . '/support/requests-exception.php';
+// WordPress' proxy settings (WP_PROXY_HOST …), a fixed copy from 7.0.2.
+require_once __DIR__ . '/support/class-wp-http-proxy.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,

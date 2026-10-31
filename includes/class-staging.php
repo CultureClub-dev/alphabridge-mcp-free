@@ -399,6 +399,12 @@ class AB_MCP_Staging {
 				$problems[] = 'partner_url';
 			} elseif ( self::same_site( $url, home_url() ) ) {
 				$problems[] = 'self';
+			} elseif ( false !== filter_var( trim( (string) wp_parse_url( $url, PHP_URL_HOST ), '[]' ), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
+				// WordPress asks no IPv6 address (wp_http_validate_url()
+				// reads a host as IPv4 or as a name), so the check could
+				// never reach such a partner. An IPv4 address works and
+				// stays allowed: a fresh staging server may have no name yet.
+				$problems[] = 'ipv6';
 			}
 			if ( null === $partner_role && ! $hub && self::is_role( $role ) ) {
 				$partner_role = self::other_role( $role );
@@ -519,6 +525,8 @@ class AB_MCP_Staging {
 				return __( 'The address of the other site is the address of this site.', 'alphabridge-mcp' );
 			case 'no_role':
 				return __( 'A pair needs the role of this site first: choose production site or staging site.', 'alphabridge-mcp' );
+			case 'ipv6':
+				return __( 'The address of the other site is an IPv6 address, which WordPress does not ask: use the host name of the other site.', 'alphabridge-mcp' );
 			default:
 				return __( 'The host must be one of the list, or not known.', 'alphabridge-mcp' );
 		}
@@ -727,6 +735,11 @@ class AB_MCP_Staging {
 					$out['status'] = 'unresolved';
 					/* translators: %s: address of the other site. */
 					$out['finding'] = sprintf( __( 'The name of the other site %s does not resolve to an address.', 'alphabridge-mcp' ), $partner_url );
+					break;
+				case 'ab_mcp_outbound_proxy':
+					$out['status'] = 'proxy';
+					/* translators: %s: address of the other site. */
+					$out['finding'] = sprintf( __( 'This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the request could not be tied to the checked address and was not sent.', 'alphabridge-mcp' ), $partner_url );
 					break;
 				case 'ab_mcp_outbound_unbound':
 					$out['status'] = 'unbound';
@@ -977,6 +990,8 @@ class AB_MCP_Staging {
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Switch off the host\'s password protection for the staging site. 2. Switch on the preview protection of AlphaBridge MCP there instead: it keeps visitors out and lets apps and the hub in.', 'alphabridge-mcp' ) );
 			case 'redirect':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. If that is the staging site, enter that address on the settings page at Staging. 2. Check again.', 'alphabridge-mcp' ) );
+			case 'proxy':
+				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. To let this site ask the staging site directly, add its host name to WP_PROXY_BYPASS_HOSTS in wp-config.php and check again. 2. Or check by hand: open the address of the staging site in a browser and see that it answers.', 'alphabridge-mcp' ) );
 			case 'not_alphabridge':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Install and activate AlphaBridge MCP on the staging site. 2. Check again.', 'alphabridge-mcp' ) );
 			default:

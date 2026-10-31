@@ -380,6 +380,32 @@ final class StagingStatusTest extends TestCase {
 		self::assertSame( $self, AB_MCP_Staging::same_site( $partner, $home ) );
 	}
 
+	/** @return array<string,array{0:string}> */
+	public static function ipv6Literals(): array {
+		return array(
+			'public'          => array( 'https://[2606:2800:220:1:248:1893:25c8:1946]' ),
+			'loopback'        => array( 'http://[::1]:8080' ),
+			'ULA with a path' => array( 'https://[fd12:3456::1]/staging' ),
+			'mapped IPv4'     => array( 'http://[::ffff:127.0.0.1]' ),
+		);
+	}
+
+	#[DataProvider( 'ipv6Literals' )]
+	public function testAnIpv6AddressIsRefusedWithTheWayToTheHostName( string $partner ): void {
+		$result = AB_MCP_Staging::save( 'production', $partner, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( array( 'ipv6' ), self::problems( $result ) );
+		self::assertStringContainsString( 'use the host name of the other site', $result->get_error_message() );
+		self::assertSame( array( 'ipv6' ), self::problems( AB_MCP_Staging::save( 'production', $partner, 'staging', 7, AB_MCP_Staging::SOURCE_HUB ) ) );
+		self::assertSame( array(), self::raw() );
+	}
+
+	public function testAnIpv4AddressStaysAllowed(): void {
+		foreach ( array( 'https://' . self::PUBLIC_V4, 'http://192.168.1.20/staging' ) as $partner ) {
+			self::assertIsArray( AB_MCP_Staging::save( 'production', $partner, null, 7, AB_MCP_Staging::SOURCE_FORM ), $partner );
+		}
+		self::assertSame( 'http://192.168.1.20/staging', AB_MCP_Staging::record()['pair']['partner_url'], 'A fresh staging server may have no name yet; a local copy is checked as local.' );
+	}
+
 	public function testSameSiteNeedsTwoSites(): void {
 		self::assertFalse( AB_MCP_Staging::same_site( '', '' ), 'Two addresses that are none are no site.' );
 		self::assertFalse( AB_MCP_Staging::same_site( 'ftp://example.com', 'ftp://example.com' ) );
@@ -658,9 +684,6 @@ final class StagingStatusTest extends TestCase {
 			'a private net'   => array( 'http://10.0.0.5' ),
 			'a home net'      => array( 'https://192.168.1.20/staging' ),
 			'link-local'      => array( 'http://169.254.169.254' ),
-			'IPv6 loopback'   => array( 'http://[::1]:8080' ),
-			'IPv6 ULA'        => array( 'https://[fd12:3456::1]' ),
-			'mapped loopback' => array( 'http://[::ffff:127.0.0.1]' ),
 		);
 	}
 
@@ -1096,7 +1119,7 @@ final class StagingStatusTest extends TestCase {
 		self::assertSame( 'boolean', $def['inputSchema']['properties']['check_partner']['type'] );
 		self::assertArrayNotHasKey( 'confirm_token', $def['inputSchema']['properties'] );
 		self::assertSame( 'Show the staging status', AB_MCP_Tool_Labels::english()['wp_staging_status'] );
-		foreach ( array( 'never proof', 'counts as the production site', 'check_partner=true', 'every address of its host is public and tied to those addresses', 'no redirect followed', 'Reads only and changes nothing', 'manage_options', 'next_step' ) as $said ) {
+		foreach ( array( 'never proof', 'counts as the production site', 'check_partner=true', 'every address of its host is public and tied to those addresses', 'not through a proxy', 'no redirect followed', 'Reads only and changes nothing', 'manage_options', 'next_step' ) as $said ) {
 			self::assertStringContainsString( $said, $def['description'], $said );
 		}
 		self::assertDoesNotMatchRegularExpression( '/\bPro\b|Agency|upgrade/i', $def['description'] );
@@ -1481,6 +1504,88 @@ final class StagingStatusTest extends TestCase {
 
 		$this->submit( array( 'staging_role' => 'production', 'partner_url' => array( 'https://x.example' ), 'host' => '' ) );
 		self::assertNull( AB_MCP_Staging::record()['pair'], 'A field that is no text is an empty address.' );
+	}
+
+	public function testTheRouteRefusesAnIpv6Address(): void {
+		$response = $this->route( 'POST', self::body( array( 'partner_url' => 'https://[2606:2800:220:1:248:1893:25c8:1946]' ) ), self::token() );
+		self::assertSame( 400, $response->get_status() );
+		self::assertSame( array( 'ipv6' ), $response->get_data()['data']['problems'] );
+		self::assertSame( array(), self::raw() );
+	}
+
+	public function testTheFormNamesAnIpv6Address(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		$exit                   = $this->submit( array( 'staging_role' => 'production', 'partner_url' => 'https://[fd00::1]', 'host' => '' ) );
+		self::assertStringContainsString( 'ab_notice=staging_bad_ipv6#', $exit->detail . '#' );
+		$_GET['ab_notice'] = 'staging_bad_ipv6';
+		self::assertStringContainsString( 'Nothing was saved: The address of the other site is an IPv6 address', $this->admin( 'notice' ) );
+	}
+
+	/* -------------------------------------------------------------- proxy */
+
+	/** Proxy settings as in wp-config.php; constants, so each test in a process of its own. */
+	private static function proxy( string $bypass = '' ): void {
+		\define( 'WP_PROXY_HOST', 'proxy.example' );
+		\define( 'WP_PROXY_PORT', '3128' );
+		if ( '' !== $bypass ) {
+			\define( 'WP_PROXY_BYPASS_HOSTS', $bypass );
+		}
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testThroughAProxyTheOtherSiteIsNotAsked(): void {
+		self::proxy();
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$out = AB_MCP_Staging::report( true );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'The proxy would look the name up itself.' );
+		self::assertSame( 'proxy', $out['partner_check']['status'] );
+		self::assertStringContainsString( 'through a proxy (WP_PROXY_HOST)', $out['partner_check']['finding'] );
+		$item = self::item( $out['checklist'], 'staging_connected' );
+		self::assertFalse( $item['done'] );
+		self::assertStringContainsString( 'WP_PROXY_BYPASS_HOSTS', $item['steps'] );
+		self::assertStringContainsString( 'check by hand', $item['steps'] );
+		self::assertStringStartsWith( $item['finding'] . ' 1. To let this site ask', $out['next_step'] );
+		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
+	}
+
+	/** @return array<string,array{0:string}> */
+	public static function bypasses(): array {
+		return array(
+			'the host'     => array( 'localhost, staging.example.com' ),
+			'a wildcard'   => array( '*.example.com' ),
+		);
+	}
+
+	#[DataProvider( 'bypasses' )]
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testAHostTheProxyLeavesOutIsAskedDirectlyAndTied( string $bypass ): void {
+		self::proxy( $bypass );
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$GLOBALS['ab_test_http_curl'] = true;
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+		self::assertStringContainsString( ' staging.example.com:443:' . self::PUBLIC_V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testAProxyAFilterLeavesOutIsNotInTheWay(): void {
+		self::proxy();
+		add_filter( 'pre_http_send_through_proxy', '__return_false' );
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+	}
+
+	public function testWithoutAProxyNothingStandsInTheWay(): void {
+		self::assertFalse( ( new \WP_HTTP_Proxy() )->is_enabled(), 'No proxy in this process.' );
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
 	}
 
 	public function testTheNoticeAfterSaving(): void {

@@ -2763,7 +2763,7 @@ class AB_MCP_Admin {
 			'staging_saved'    => array( 'success', __( 'Saved: the role of this site, the address of the other site and the host.', 'alphabridge-mcp' ) ),
 		);
 		// What the form «Role of this site» refused, with the first problem.
-		foreach ( array( 'role', 'partner_url', 'self', 'no_role', 'partner_role', 'same_roles', 'host' ) as $code ) {
+		foreach ( array( 'role', 'partner_url', 'self', 'ipv6', 'no_role', 'partner_role', 'same_roles', 'host' ) as $code ) {
 			/* translators: %s: what is wrong, one or more sentences. */
 			$map[ 'staging_bad_' . $code ] = array( 'error', sprintf( __( 'Nothing was saved: %s', 'alphabridge-mcp' ), AB_MCP_Staging::problem( $code ) ) );
 		}

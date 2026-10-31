@@ -17,7 +17,10 @@
  * would send the request without cURL, it is refused before a connection
  * is made (the fsockopen transport's first hook), and an answer that came
  * any other way without the binding is discarded. No redirect is followed:
- * its target would be looked up unbound.
+ * its target would be looked up unbound. Nor is a request sent where
+ * WordPress would send it through a proxy (WP_PROXY_HOST): the proxy looks
+ * the name up itself, which no binding reaches; a host in
+ * WP_PROXY_BYPASS_HOSTS goes direct and is tied as above.
  *
  * Used by wp_staging_status to ask the other site of a staging pair
  * (AB_MCP_Staging::check_partner()).
@@ -146,7 +149,8 @@ class AB_MCP_Outbound {
 	 * @param array  $args Request arguments.
 	 * @return array|WP_Error The answer, or WP_Error with the code
 	 *                        ab_mcp_outbound_local, ab_mcp_outbound_unresolved,
-	 *                        ab_mcp_outbound_unbound, or the transport's.
+	 *                        ab_mcp_outbound_proxy, ab_mcp_outbound_unbound,
+	 *                        or the transport's.
 	 */
 	public static function get( $url, array $args ) {
 		$host    = (string) wp_parse_url( $url, PHP_URL_HOST );
@@ -158,6 +162,12 @@ class AB_MCP_Outbound {
 		}
 		if ( ! is_array( $checked ) ) {
 			return new WP_Error( 'ab_mcp_outbound_local', 'The address was not asked: it is local or not public.' );
+		}
+		// The same question WP_Http::request() asks before it hands the
+		// request to a proxy.
+		$proxy = new WP_HTTP_Proxy();
+		if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
+			return new WP_Error( 'ab_mcp_outbound_proxy', 'The address was not asked: the request would go through the proxy, which looks the name up itself.' );
 		}
 		$entry = self::resolve_entry( $url, $checked );
 		if ( null === $entry ) {

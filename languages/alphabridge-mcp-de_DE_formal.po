@@ -5365,6 +5365,16 @@ msgid "This site does not ask %s: WordPress sends its requests here without cURL
 msgstr "Diese Website fragt %s nicht an: WordPress sendet seine Anfragen hier ohne cURL, und nur cURL lässt sich an die geprüfte Adresse binden."
 
 #, php-format
+msgid "This site sends its requests through a proxy (WP_PROXY_HOST), which looks the name of %s up itself, so the request could not be tied to the checked address and was not sent."
+msgstr "Diese Website sendet ihre Anfragen über einen Proxy (WP_PROXY_HOST), der den Namen von %s selbst auflöst; darum ließ sich die Anfrage nicht an die geprüfte Adresse binden und wurde nicht gesendet."
+
+msgid "1. To let this site ask the staging site directly, add its host name to WP_PROXY_BYPASS_HOSTS in wp-config.php and check again. 2. Or check by hand: open the address of the staging site in a browser and see that it answers."
+msgstr "1. Damit diese Website die Staging-Website direkt fragt, tragen Sie deren Hostnamen in WP_PROXY_BYPASS_HOSTS in der wp-config.php ein und prüfen Sie erneut. 2. Oder prüfen Sie von Hand: Öffnen Sie die Adresse der Staging-Website in einem Browser und sehen Sie nach, ob sie antwortet."
+
+msgid "The address of the other site is an IPv6 address, which WordPress does not ask: use the host name of the other site."
+msgstr "Die Adresse der anderen Website ist eine IPv6-Adresse, die WordPress nicht anfragt: Verwenden Sie den Hostnamen der anderen Website."
+
+#, php-format
 msgid "The other site %1$s could not be reached: %2$s"
 msgstr "Die andere Website %1$s war nicht erreichbar: %2$s"
 
