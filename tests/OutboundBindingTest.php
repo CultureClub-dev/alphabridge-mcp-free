@@ -600,6 +600,21 @@ final class OutboundBindingTest extends TestCase {
 		return ab_test_http_response( $status, $body, $headers + array( 'Set-Cookie' => $set_cookie ), $cookies );
 	}
 
+	/**
+	 * An answer that sets the given cookies (plain values): a Set-Cookie
+	 * header for each, as the server sends it, and the objects as WordPress
+	 * hands them over, with their attributes.
+	 *
+	 * @param \WP_Http_Cookie[] $cookies
+	 */
+	private static function answer_with( int $status, array $headers, array $cookies ): array {
+		$set_cookie = array();
+		foreach ( $cookies as $cookie ) {
+			$set_cookie[] = $cookie->name . '=' . $cookie->value . '; Path=' . $cookie->path;
+		}
+		return ab_test_http_response( $status, '', $headers + array( 'Set-Cookie' => $set_cookie ), $cookies );
+	}
+
 	/** The cookies a recorded request carried, name => value. */
 	private static function carried( int $call ): array {
 		$out = array();
@@ -627,7 +642,7 @@ final class OutboundBindingTest extends TestCase {
 	 * (its transport carries the cookie) and failed with get() following.
 	 */
 	public function testTheCookiesOfAnAnswerGoWithTheNextHopAsWordPressSendsThem(): void {
-		$this->answers['https://files.example/dl']       = ab_test_http_response( 302, '', array( 'Location' => '/file.png' ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
+		$this->answers['https://files.example/dl']       = self::answer_with( 302, array( 'Location' => '/file.png' ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
 		$this->answers['https://files.example/file.png'] = self::gated( 'download', 'ok', 'body', 'text/plain' );
 		$result = AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) );
 		self::assertSame( 'body', wp_remote_retrieve_body( $result ) );
@@ -638,7 +653,7 @@ final class OutboundBindingTest extends TestCase {
 	#[DataProvider( 'paths' )]
 	public function testADownloadBehindACookieWorksAsBefore( string $path ): void {
 		$url = self::address( $path, 'files.example', '/dl' );
-		$this->answers[ $url ] = ab_test_http_response( 302, '', array( 'Location' => '/store/' . basename( $url ) ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
+		$this->answers[ $url ] = self::answer_with( 302, array( 'Location' => '/store/' . basename( $url ) ), array( self::cookie( 'download', 'ok', 'files.example' ) ) );
 		$this->answers[ 'https://files.example/store/' . basename( $url ) ] = self::gated( 'download', 'ok', 'zip' === $path ? self::ZIP : self::PNG, 'zip' === $path ? 'application/zip' : 'image/png' );
 		self::assertStored( $path, $this->fetch( $path, $url ) );
 		self::assertSame( array( 'download' => 'ok' ), self::carried( 1 ) );
@@ -657,7 +672,7 @@ final class OutboundBindingTest extends TestCase {
 
 	#[DataProvider( 'cookiesThatDoNotHold' )]
 	public function testACookieThatDoesNotHoldForTheNextHopStaysBehind( \WP_Http_Cookie $cookie, string $target ): void {
-		$this->answers['https://files.example/dl'] = ab_test_http_response( 302, '', array( 'Location' => $target ), array( $cookie ) );
+		$this->answers['https://files.example/dl'] = self::answer_with( 302, array( 'Location' => $target ), array( $cookie ) );
 		$this->serve( $target, 'body', 'text/plain' );
 		self::assertSame( 'body', wp_remote_retrieve_body( AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) ) ) );
 		self::assertSame( array( 'https://files.example/dl', $target ), self::urls() );
@@ -676,15 +691,15 @@ final class OutboundBindingTest extends TestCase {
 
 	#[DataProvider( 'cookiesThatHold' )]
 	public function testACookieThatHoldsForTheNextHopGoesWithIt( \WP_Http_Cookie $cookie, string $target ): void {
-		$this->answers['https://files.example/dl'] = ab_test_http_response( 302, '', array( 'Location' => $target ), array( $cookie ) );
+		$this->answers['https://files.example/dl'] = self::answer_with( 302, array( 'Location' => $target ), array( $cookie ) );
 		$this->serve( $target, 'body', 'text/plain' );
 		self::assertSame( 'body', wp_remote_retrieve_body( AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) ) ) );
 		self::assertSame( array( 'c' => 'v' ), self::carried( 1 ) );
 	}
 
 	public function testTheCallersCookiesGoWithEveryHopTheyHoldForAndALaterCookieOfTheSameNameReplacesAnEarlier(): void {
-		$this->answers['https://files.example/1'] = ab_test_http_response( 302, '', array( 'Location' => '/2' ), array( self::cookie( 'token', 'first', 'files.example' ) ) );
-		$this->answers['https://files.example/2'] = ab_test_http_response( 302, '', array( 'Location' => 'https://cdn.example/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
+		$this->answers['https://files.example/1'] = self::answer_with( 302, array( 'Location' => '/2' ), array( self::cookie( 'token', 'first', 'files.example' ) ) );
+		$this->answers['https://files.example/2'] = self::answer_with( 302, array( 'Location' => 'https://cdn.example/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
 		$this->serve( 'https://cdn.example/3', 'body', 'text/plain' );
 		$result = AB_MCP_Outbound::get(
 			'https://files.example/1',
@@ -709,7 +724,7 @@ final class OutboundBindingTest extends TestCase {
 		self::assertSame( array( 'session' => 'abc', 'cdn' => 'only' ), self::carried( 2 ), 'The host-only token of files.example does not go to cdn.example; the caller\'s cookie for it does.' );
 
 		$GLOBALS['ab_test_http'] = array();
-		$this->answers['https://files.example/2'] = ab_test_http_response( 302, '', array( 'Location' => '/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
+		$this->answers['https://files.example/2'] = self::answer_with( 302, array( 'Location' => '/3' ), array( self::cookie( 'token', 'second', 'files.example' ) ) );
 		$this->serve( 'https://files.example/3', 'body', 'text/plain' );
 		AB_MCP_Outbound::get( 'https://files.example/1', array( 'redirection' => 3 ) );
 		self::assertSame( array( 'token' => 'second' ), self::carried( 2 ), 'The later cookie of the same name replaces the earlier, as the transport\'s jar does.' );
@@ -756,12 +771,75 @@ final class OutboundBindingTest extends TestCase {
 		self::assertSame( array( 'd' => 'v%20w' ), self::carried( 1 ) );
 	}
 
-	public function testACookieWithoutAHeaderToReadKeepsTheValueWordPressGave(): void {
-		// A transport that hands the objects over without the Set-Cookie headers: nothing better than WordPress's value.
+	/**
+	 * Codex on 3a27944: WordPress hands the cookies of an answer over with
+	 * every cookie the request carried (the transport's jar), decoded. An
+	 * answer in the middle of a chain that sets nothing itself must not
+	 * write the carried value back decoded: the jar learns from an answer
+	 * only what its own Set-Cookie headers set.
+	 */
+	public function testAnAnswerThatSetsNothingDoesNotWriteTheCarriedCookiesBackDecoded(): void {
+		$this->answers['https://files.example/start'] = self::answer_setting( 302, array( 'Location' => '/middle' ), array( 'token' => 'a%2Fb+c' ), 'files.example' );
+		// No Set-Cookie; WordPress lists the carried token all the same, URL-decoded.
+		$this->answers['https://files.example/middle'] = ab_test_http_response( 302, '', array( 'Location' => '/file' ), array( self::cookie( 'token', 'a/b c', 'files.example' ) ) );
+		$this->answers['https://files.example/file']   = self::gated( 'token', 'a%2Fb+c', 'body', 'text/plain' );
+		$result = AB_MCP_Outbound::get( 'https://files.example/start', array( 'redirection' => 3 ) );
+		self::assertSame( 'body', wp_remote_retrieve_body( $result ), 'The file got the raw token, as with WordPress following.' );
+		self::assertSame( array( 'token' => 'a%2Fb+c' ), self::carried( 1 ) );
+		self::assertSame( array( 'token' => 'a%2Fb+c' ), self::carried( 2 ) );
+	}
+
+	public function testAnAnswerThatSetsAnotherCookieDoesNotWriteTheCarriedOneBackDecodedEither(): void {
+		$this->answers['https://files.example/start'] = self::answer_setting( 302, array( 'Location' => '/middle' ), array( 'token' => 'a%2Fb+c' ), 'files.example' );
+		// Sets «other»; WordPress's list holds the carried token as well, URL-decoded.
+		$this->answers['https://files.example/middle'] = ab_test_http_response(
+			302,
+			'',
+			array(
+				'Location'   => '/file',
+				'Set-Cookie' => 'other=1; Path=/',
+			),
+			array( self::cookie( 'token', 'a/b c', 'files.example' ), self::cookie( 'other', '1', 'files.example' ) )
+		);
+		$this->answers['https://files.example/file'] = self::gated( 'token', 'a%2Fb+c', 'body', 'text/plain' );
+		$result = AB_MCP_Outbound::get( 'https://files.example/start', array( 'redirection' => 3 ) );
+		self::assertSame( 'body', wp_remote_retrieve_body( $result ) );
+		self::assertSame( array( 'token' => 'a%2Fb+c', 'other' => '1' ), self::carried( 2 ), 'The token as set at the start, «other» as set in the middle.' );
+	}
+
+	public function testACookieWordPressListsWithoutASetCookieHeaderIsNotLearnt(): void {
+		// Only the request's own cookies in WordPress's list, nothing set: nothing to carry on.
 		$this->answers['https://files.example/dl'] = ab_test_http_response( 302, '', array( 'Location' => '/file.png' ), array( self::cookie( 'download', 'a/b c', 'files.example' ) ) );
 		$this->serve( 'https://files.example/file.png', 'body', 'text/plain' );
 		AB_MCP_Outbound::get( 'https://files.example/dl', array( 'redirection' => 3 ) );
-		self::assertSame( array( 'download' => 'a/b c' ), self::carried( 1 ) );
+		self::assertArrayNotHasKey( 'cookies', $GLOBALS['ab_test_http'][1]['args'] );
+	}
+
+	public function testAHeaderWordPressHandedNoCookieForIsReadFromTheHeader(): void {
+		// An answer a filter made (pre_http_request), with the headers but without the objects.
+		$this->answers['https://files.example/dl/x'] = ab_test_http_response(
+			302,
+			'',
+			array(
+				'Location'   => '/dl/file.png',
+				'Set-Cookie' => array( 'a=1%2B1', 'b=2; Domain=files.example; Path=/' ),
+			)
+		);
+		$this->serve( 'https://files.example/dl/file.png', 'body', 'text/plain' );
+		AB_MCP_Outbound::get( 'https://files.example/dl/x', array( 'redirection' => 3 ) );
+		self::assertSame( array( 'a' => '1%2B1', 'b' => '2' ), self::carried( 1 ) );
+		$cookies = $GLOBALS['ab_test_http'][1]['args']['cookies'];
+		self::assertSame( 'files.example', $cookies[0]->domain, 'Domain from the address.' );
+		self::assertSame( '/dl/', $cookies[0]->path, 'Path from the address, as WordPress reads a header.' );
+		self::assertTrue( $cookies[0]->host_only, 'Without a Domain attribute: host-only.' );
+		self::assertFalse( $cookies[1]->host_only );
+
+		// Host-only, so not to a sub host; with the Domain attribute, yes.
+		$GLOBALS['ab_test_http'] = array();
+		$this->answers['https://files.example/dl/x'] = ab_test_http_response( 302, '', array( 'Location' => 'https://www.files.example/dl/file.png', 'Set-Cookie' => array( 'a=1', 'b=2; Domain=files.example' ) ) );
+		$this->serve( 'https://www.files.example/dl/file.png', 'body', 'text/plain' );
+		AB_MCP_Outbound::get( 'https://files.example/dl/x', array( 'redirection' => 3 ) );
+		self::assertSame( array( 'b' => '2' ), self::carried( 1 ) );
 	}
 
 	public function testTheCallersCookiesGoAsGivenAsWordPressSendsThem(): void {
