@@ -96,7 +96,7 @@ directory. It is the same code WordPress.org ships.
   (production or staging; unconfirmed counts as production) with a suggestion from what the site
   shows, never taken as proof, the other site of the pair, the host, the preview protection and a
   checklist with the next step. On request (`check_partner`) it asks the other site whether
-  AlphaBridge MCP answers there, public http(s) addresses only. The role, the other site and the
+  AlphaBridge MCP answers there, only at public addresses and tied to them. The role, the other site and the
   host are set on the settings page or, for both sites at once, by the hub over
   `alphabridge/v1/staging-pair`.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is

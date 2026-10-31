@@ -109,6 +109,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_http']        = array();
 	$GLOBALS['ab_test_http_answer'] = null;
 	$GLOBALS['ab_test_http_curl']   = false;
+	$GLOBALS['ab_test_http_transport'] = 'curl';
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
@@ -1553,6 +1554,9 @@ $GLOBALS['ab_test_http'] = array();
 $GLOBALS['ab_test_http_answer'] = null;
 /** @var bool $ab_test_http_curl When true, every call also records what cURL was told about host addresses ('curl'). */
 $GLOBALS['ab_test_http_curl'] = false;
+/** @var string $ab_test_http_transport The transport WordPress picks: curl (the http_api_curl hook runs), fsockopen (its first hook runs) or other (none). */
+$GLOBALS['ab_test_http_transport'] = 'curl';
+require_once __DIR__ . '/support/requests-exception.php';
 
 /**
  * Records the call and answers through ab_test_http_answer. Like WordPress,
@@ -1571,7 +1575,19 @@ function wp_safe_remote_get( $url, $args = array() ) {
 		'url'  => (string) $url,
 		'args' => (array) $args,
 	);
-	if ( function_exists( 'curl_init' ) ) {
+	// The transport WordPress would pick (ab_test_http_transport): with
+	// fsockopen, its first hook runs before it connects, and an exception
+	// of Requests there ends the request as WP_Http::request() does, with
+	// nothing sent; with another one no cURL hook runs at all.
+	$transport = $GLOBALS['ab_test_http_transport'] ?? 'curl';
+	if ( 'fsockopen' === $transport ) {
+		try {
+			do_action_ref_array( 'requests-fsockopen.before_request', array() );
+		} catch ( WpOrg\Requests\Exception $e ) {
+			return new WP_Error( 'http_request_failed', $e->getMessage() );
+		}
+	}
+	if ( 'curl' === $transport && function_exists( 'curl_init' ) ) {
 		$handle = curl_init();
 		do_action_ref_array( 'http_api_curl', array( &$handle, (array) $args, (string) $url ) );
 		if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {

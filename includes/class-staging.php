@@ -33,11 +33,12 @@
  * the same way, naming the source.
  *
  * The check whether the other site answers is a request from this site to
- * the stored address, made only when asked for (check_partner()): the
- * address must be public http(s) (wp_http_validate_url(), as for
- * wp_upload_media_from_url), the request goes through wp_safe_remote_get(),
- * which checks it again, and follows no redirect. It asks the MCP endpoint
- * of the other site without a token, whose 401 names AlphaBridge MCP
+ * the stored address, made only when asked for (check_partner()): every A
+ * and AAAA address of its host must be public, and the connection is tied
+ * to exactly these addresses (AB_MCP_Outbound::get(), against DNS
+ * rebinding); the request goes through wp_safe_remote_get(), which checks
+ * it again, and follows no redirect. It asks the MCP endpoint of the other
+ * site without a token, whose 401 names AlphaBridge MCP
  * (AB_MCP_Connection_Doctor::is_own_answer()); the preview protection
  * leaves that endpoint open, so a protected staging site answers too.
  *
@@ -47,6 +48,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-preview-protection.php';
+require_once __DIR__ . '/class-outbound.php';
 
 /**
  * Class AB_MCP_Staging
@@ -252,7 +254,8 @@ class AB_MCP_Staging {
 
 	/**
 	 * An address of a site as stored: scheme and host in lower case, the
-	 * port, the path without a slash at the end; '' for anything that is
+	 * port unless it is the one of the scheme, the path without a slash at
+	 * the end; '' for anything that is
 	 * no http(s) address of a host, that holds a space, a control character
 	 * or a character an address writes encoded (a quote, < >, a backslash,
 	 * ^ ` { | }), or that carries a user name, a password, a query or a
@@ -274,11 +277,31 @@ class AB_MCP_Staging {
 		if ( ! is_array( $parts ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['query'] ) || isset( $parts['fragment'] ) ) {
 			return '';
 		}
-		$out = strtolower( $parts['scheme'] ) . '://' . strtolower( $parts['host'] );
-		if ( isset( $parts['port'] ) ) {
+		$scheme = strtolower( $parts['scheme'] );
+		$out    = $scheme . '://' . strtolower( $parts['host'] );
+		// The port of the scheme is the address without it.
+		if ( isset( $parts['port'] ) && (int) $parts['port'] !== ( 'https' === $scheme ? 443 : 80 ) ) {
 			$out .= ':' . (int) $parts['port'];
 		}
 		return $out . rtrim( isset( $parts['path'] ) ? $parts['path'] : '', '/' );
+	}
+
+	/**
+	 * Do two addresses name the same site? As normalize_url() stores them
+	 * (host without regard to case, the port of the scheme left out, no
+	 * slash at the end), and with either scheme: http:// and https:// of one
+	 * host and path are one site.
+	 *
+	 * @param string $a Address.
+	 * @param string $b Address.
+	 * @return bool
+	 */
+	public static function same_site( $a, $b ) {
+		$strip = static function ( $url ) {
+			return (string) preg_replace( '#^https?://#', '', self::normalize_url( $url ) );
+		};
+		$a = $strip( $a );
+		return '' !== $a && $strip( $b ) === $a;
 	}
 
 	/**
@@ -374,7 +397,7 @@ class AB_MCP_Staging {
 			$url = self::normalize_url( $partner_url );
 			if ( '' === $url ) {
 				$problems[] = 'partner_url';
-			} elseif ( self::normalize_url( home_url() ) === $url ) {
+			} elseif ( self::same_site( $url, home_url() ) ) {
 				$problems[] = 'self';
 			}
 			if ( null === $partner_role && ! $hub && self::is_role( $role ) ) {
@@ -671,47 +694,51 @@ class AB_MCP_Staging {
 
 	/**
 	 * Ask the other site whether AlphaBridge MCP answers there. One GET to
-	 * its MCP endpoint without a token; nothing is sent about this site
-	 * (the user agent names the plugin only), and no redirect is followed.
+	 * its MCP endpoint without a token, tied to the checked addresses of its
+	 * host (AB_MCP_Outbound::get()); nothing is sent about this site (the
+	 * user agent names the plugin only), and no redirect is followed.
 	 *
 	 * @param string $partner_url Stored address.
 	 * @return array{status:string,url:string,http_status:int|null,finding:string,location?:string}
 	 */
 	public static function check_partner( $partner_url ) {
-		$url = self::check_url( $partner_url );
-		$out = array(
+		$url      = self::check_url( $partner_url );
+		$out      = array(
 			'url'         => $url,
 			'http_status' => null,
 		);
-		if ( ! preg_match( '#^https?://#i', $url ) || ! wp_http_validate_url( $url ) ) {
-			return array_merge(
-				$out,
-				array(
-					'status'  => 'blocked',
-					/* translators: %s: address of the other site. */
-					'finding' => sprintf( __( 'This site does not contact %s: the address is local or private, or its name does not resolve. A local copy cannot be checked from here.', 'alphabridge-mcp' ), $partner_url ),
-				)
-			);
-		}
-		$response = wp_safe_remote_get(
+		$response = AB_MCP_Outbound::get(
 			$url,
 			array(
 				'timeout'             => self::CHECK_TIMEOUT,
-				'redirection'         => 0,
 				'limit_response_size' => 4096,
 				'headers'             => array( 'Accept' => 'application/json' ),
 				'user-agent'          => 'AlphaBridge-MCP/' . AB_MCP_VERSION,
 			)
 		);
 		if ( is_wp_error( $response ) ) {
-			return array_merge(
-				$out,
-				array(
-					'status'  => 'unreachable',
+			switch ( $response->get_error_code() ) {
+				case 'ab_mcp_outbound_local':
+					$out['status'] = 'blocked';
+					/* translators: %s: address of the other site. */
+					$out['finding'] = sprintf( __( 'This site does not contact %s: the address is local or private. A local copy cannot be checked from here.', 'alphabridge-mcp' ), $partner_url );
+					break;
+				case 'ab_mcp_outbound_unresolved':
+					$out['status'] = 'unresolved';
+					/* translators: %s: address of the other site. */
+					$out['finding'] = sprintf( __( 'The name of the other site %s does not resolve to an address.', 'alphabridge-mcp' ), $partner_url );
+					break;
+				case 'ab_mcp_outbound_unbound':
+					$out['status'] = 'unbound';
+					/* translators: %s: address of the other site. */
+					$out['finding'] = sprintf( __( 'This site does not ask %s: WordPress sends its requests here without cURL, and only cURL can be tied to the checked address.', 'alphabridge-mcp' ), $partner_url );
+					break;
+				default:
+					$out['status'] = 'unreachable';
 					/* translators: 1: address of the other site, 2: the error WordPress reports. */
-					'finding' => sprintf( __( 'The other site %1$s could not be reached: %2$s', 'alphabridge-mcp' ), $partner_url, $response->get_error_message() ),
-				)
-			);
+					$out['finding'] = sprintf( __( 'The other site %1$s could not be reached: %2$s', 'alphabridge-mcp' ), $partner_url, $response->get_error_message() );
+			}
+			return $out;
 		}
 		$answer = array(
 			'status'  => (int) wp_remote_retrieve_response_code( $response ),
@@ -944,6 +971,7 @@ class AB_MCP_Staging {
 			case 'reachable':
 				return self::item( 'staging_connected', $title, true, $check['finding'] );
 			case 'blocked':
+			case 'unbound':
 				return self::item( 'staging_connected', $title, null, $check['finding'] );
 			case 'login':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Switch off the host\'s password protection for the staging site. 2. Switch on the preview protection of AlphaBridge MCP there instead: it keeps visitors out and lets apps and the hub in.', 'alphabridge-mcp' ) );

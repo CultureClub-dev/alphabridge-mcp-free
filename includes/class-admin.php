@@ -615,7 +615,12 @@ class AB_MCP_Admin {
 		$this->guard();
 		check_admin_referer( 'ab_mcp_staging' );
 		$role    = isset( $_POST['staging_role'] ) ? sanitize_key( wp_unslash( $_POST['staging_role'] ) ) : '';
-		$partner = isset( $_POST['partner_url'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_url'] ) ) : '';
+		// The address as typed: AB_MCP_Staging::save() trims it, checks it
+		// and stores it only as an http(s) address of a host (anything else,
+		// a value that is no text included, is refused or read as empty);
+		// sanitize_text_field() would take percent-encoded characters out of
+		// its path and so change an unchanged pair on every save.
+		$partner = isset( $_POST['partner_url'] ) ? wp_unslash( $_POST['partner_url'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated by AB_MCP_Staging::normalize_url() in save().
 		$host    = isset( $_POST['host'] ) ? sanitize_key( wp_unslash( $_POST['host'] ) ) : '';
 		if ( ! AB_MCP_Staging::is_host_choice( $host ) ) {
 			$this->redirect( 'staging_bad_host', AB_MCP_Staging::ANCHOR );

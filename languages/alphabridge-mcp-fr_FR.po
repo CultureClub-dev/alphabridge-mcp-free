@@ -5353,8 +5353,16 @@ msgid "Search engines are discouraged (blog_public is 0)."
 msgstr "Les moteurs de recherche sont dissuadés (blog_public vaut 0)."
 
 #, php-format
-msgid "This site does not contact %s: the address is local or private, or its name does not resolve. A local copy cannot be checked from here."
-msgstr "Ce site ne contacte pas %s : l’adresse est locale ou privée, ou son nom ne se résout pas. Une copie locale ne peut pas être vérifiée d’ici."
+msgid "This site does not contact %s: the address is local or private. A local copy cannot be checked from here."
+msgstr "Ce site ne contacte pas %s : l’adresse est locale ou privée. Une copie locale ne peut pas être vérifiée d’ici."
+
+#, php-format
+msgid "The name of the other site %s does not resolve to an address."
+msgstr "Le nom de l’autre site %s ne se résout en aucune adresse."
+
+#, php-format
+msgid "This site does not ask %s: WordPress sends its requests here without cURL, and only cURL can be tied to the checked address."
+msgstr "Ce site n’interroge pas %s : WordPress envoie ici ses requêtes sans cURL, et seul cURL peut être lié à l’adresse vérifiée."
 
 #, php-format
 msgid "The other site %1$s could not be reached: %2$s"

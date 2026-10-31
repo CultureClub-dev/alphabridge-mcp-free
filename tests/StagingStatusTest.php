@@ -59,6 +59,7 @@ namespace AlphaBridge\Tests;
 use AB_MCP_Admin;
 use AB_MCP_Auth;
 use AB_MCP_Guidance;
+use AB_MCP_Outbound;
 use AB_MCP_Preview_Protection;
 use AB_MCP_REST_Controller;
 use AB_MCP_Security;
@@ -87,6 +88,15 @@ final class StagingStatusTest extends TestCase {
 
 	const STAGING = 'https://staging.example.com';
 
+	/** A public address of the examples, and what each test host resolves to (ab_mcp_outbound_addresses); any other name has no address. */
+	const PUBLIC_V4 = '93.184.216.34';
+	const PUBLIC_V6 = '2606:2800:220:1:248:1893:25c8:1946';
+	const DNS       = array(
+		'staging.example.com' => array( self::PUBLIC_V4 ),
+		'stage.example.com'   => array( self::PUBLIC_V4 ),
+		'example.org'         => array( self::PUBLIC_V4, self::PUBLIC_V6 ),
+	);
+
 	protected function setUp(): void {
 		ab_test_reset();
 		ab_test_add_user( 7 );
@@ -98,6 +108,9 @@ final class StagingStatusTest extends TestCase {
 		$_REQUEST                                  = array();
 		unset( $_SERVER['cw_allowed_ip'], $_SERVER['KINSTA_CACHE_ZONE'] );
 		$_SERVER['DOCUMENT_ROOT'] = '/var/www/html';
+		// No DNS in the tests: the hosts answer from DNS, as a site's own
+		// resolver could through the filter.
+		add_filter( 'ab_mcp_outbound_addresses', static fn( $addresses, string $host ) => self::DNS[ $host ] ?? array(), 10, 2 );
 		if ( ! \defined( 'WPMU_PLUGIN_DIR' ) ) {
 			\define( 'WPMU_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-mu-plugins-staging-' . getmypid() );
 		}
@@ -338,9 +351,38 @@ final class StagingStatusTest extends TestCase {
 		self::assertSame( $raw, self::raw(), 'The role and the pair stay.' );
 	}
 
-	public function testTheOwnAddressIsNoOtherSite(): void {
-		self::assertSame( array( 'self' ), self::problems( AB_MCP_Staging::save( 'production', 'https://EXAMPLE.com/', null, 7, AB_MCP_Staging::SOURCE_FORM ) ) );
-		self::assertSame( array(), self::raw() );
+	/** @return array<string,array{0:string,1:string,2:bool}> */
+	public static function ownAddresses(): array {
+		return array(
+			'as it is'               => array( 'https://example.com', 'https://example.com', true ),
+			'upper case and a slash' => array( 'https://example.com', 'https://EXAMPLE.com/', true ),
+			'the https port'         => array( 'https://example.com', 'https://example.com:443', true ),
+			'the http port'          => array( 'http://example.com', 'http://example.com:80/', true ),
+			'the other scheme'       => array( 'https://example.com', 'http://example.com', true ),
+			'a home with its port'   => array( 'https://example.com:443', 'https://example.com', true ),
+			'a sub-folder home'      => array( 'https://example.com/blog', 'https://example.com/blog/', true ),
+			'another port'           => array( 'https://example.com', 'https://example.com:8443', false ),
+			'another folder'         => array( 'https://example.com/blog', 'https://example.com', false ),
+			'another host'           => array( 'https://example.com', 'https://staging.example.com', false ),
+		);
+	}
+
+	#[DataProvider( 'ownAddresses' )]
+	public function testTheOwnAddressIsNoOtherSite( string $home, string $partner, bool $self ): void {
+		$GLOBALS['ab_test_home'] = $home;
+		$saved                   = AB_MCP_Staging::save( 'production', $partner, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		if ( $self ) {
+			self::assertSame( array( 'self' ), self::problems( $saved ) );
+			self::assertSame( array(), self::raw() );
+		} else {
+			self::assertIsArray( $saved );
+		}
+		self::assertSame( $self, AB_MCP_Staging::same_site( $partner, $home ) );
+	}
+
+	public function testSameSiteNeedsTwoSites(): void {
+		self::assertFalse( AB_MCP_Staging::same_site( '', '' ), 'Two addresses that are none are no site.' );
+		self::assertFalse( AB_MCP_Staging::same_site( 'ftp://example.com', 'ftp://example.com' ) );
 	}
 
 	/** @return array<string,array{0:mixed,1:string}> */
@@ -352,6 +394,11 @@ final class StagingStatusTest extends TestCase {
 			'slashes at the end'    => array( 'https://staging.example.com///', 'https://staging.example.com' ),
 			'a sub-folder'          => array( 'https://example.com/staging/', 'https://example.com/staging' ),
 			'a port'                => array( 'http://localhost:8080', 'http://localhost:8080' ),
+			'the https port'        => array( 'https://staging.example.com:443/', 'https://staging.example.com' ),
+			'the http port'         => array( 'http://staging.example.com:80', 'http://staging.example.com' ),
+			'443 on http'           => array( 'http://staging.example.com:443', 'http://staging.example.com:443' ),
+			'80 on https'           => array( 'https://staging.example.com:80', 'https://staging.example.com:80' ),
+			'percent-encoded'       => array( 'https://example.com/pr%C3%BCfung/', 'https://example.com/pr%C3%BCfung' ),
 			'spaces around'         => array( ' https://staging.example.com ', 'https://staging.example.com' ),
 			'ftp'                   => array( 'ftp://staging.example.com', '' ),
 			'javascript'            => array( 'javascript:alert(1)', '' ),
@@ -605,10 +652,15 @@ final class StagingStatusTest extends TestCase {
 	/** @return array<string,array{0:string}> */
 	public static function privateAddresses(): array {
 		return array(
-			'loopback'      => array( 'http://127.0.0.1:8080' ),
-			'localhost'     => array( 'http://localhost' ),
-			'a private net' => array( 'http://10.0.0.5' ),
-			'a home net'    => array( 'https://192.168.1.20/staging' ),
+			'loopback'        => array( 'http://127.0.0.1:8080' ),
+			'localhost'       => array( 'http://localhost' ),
+			'a .localhost'    => array( 'http://shop.localhost' ),
+			'a private net'   => array( 'http://10.0.0.5' ),
+			'a home net'      => array( 'https://192.168.1.20/staging' ),
+			'link-local'      => array( 'http://169.254.169.254' ),
+			'IPv6 loopback'   => array( 'http://[::1]:8080' ),
+			'IPv6 ULA'        => array( 'https://[fd12:3456::1]' ),
+			'mapped loopback' => array( 'http://[::ffff:127.0.0.1]' ),
 		);
 	}
 
@@ -625,7 +677,208 @@ final class StagingStatusTest extends TestCase {
 		self::assertNull( $item['done'], 'Not decided here: a local copy is allowed.' );
 		self::assertArrayNotHasKey( 'check', $item, 'And there is nothing to check from here.' );
 		self::assertSame( $item['finding'], $out['next_step'], 'Not «the staging site answers»: it was not asked.' );
-		self::assertStringContainsString( 'or its name does not resolve', $item['finding'], 'WordPress refuses a name it cannot resolve the same way.' );
+	}
+
+	/** @return array<string,array{0:array<int,string>}> */
+	public static function internalAnswers(): array {
+		return array(
+			'public and private mixed' => array( array( self::PUBLIC_V4, '10.0.0.1' ) ),
+			'only the AAAA internal'   => array( array( self::PUBLIC_V4, 'fd00::1' ) ),
+			'AAAA loopback'            => array( array( self::PUBLIC_V4, '::1' ) ),
+			'IPv4 mapped into IPv6'    => array( array( '::ffff:127.0.0.1' ) ),
+			'a mapped public one'      => array( array( '::ffff:' . self::PUBLIC_V4 ) ),
+			'link-local, the cloud'    => array( array( '169.254.169.254' ) ),
+			'shared address space'     => array( array( '100.64.0.1' ) ),
+			'IPv6 link-local'          => array( array( self::PUBLIC_V6, 'fe80::1' ) ),
+			'no address at all, as text' => array( array( 'not-an-address' ) ),
+		);
+	}
+
+	/** @param array<int,string> $addresses */
+	#[DataProvider( 'internalAnswers' )]
+	public function testANameWithAnyAddressThatIsNotPublicIsNotAsked( array $addresses ): void {
+		self::confirm( 'production', 'https://rebind.example' );
+		add_filter( 'ab_mcp_outbound_addresses', static fn( $found, string $host ) => 'rebind.example' === $host ? $addresses : $found, 20, 2 );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$out = AB_MCP_Staging::report( true );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'No request: one internal address is enough.' );
+		self::assertSame( 'blocked', $out['partner_check']['status'] );
+	}
+
+	public function testANameWithOnlyPublicAddressesIsAsked(): void {
+		self::confirm( 'production', 'https://example.org' );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+		self::assertCount( 1, $GLOBALS['ab_test_http'] );
+	}
+
+	public function testANameWithoutAnAddressIsNotAskedAndSaysSo(): void {
+		self::confirm( 'production', 'https://nowhere.example' );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$out = AB_MCP_Staging::report( true );
+		self::assertSame( array(), $GLOBALS['ab_test_http'] );
+		self::assertSame( 'unresolved', $out['partner_check']['status'] );
+		self::assertSame( 'The name of the other site https://nowhere.example does not resolve to an address.', $out['partner_check']['finding'] );
+		$item = self::item( $out['checklist'], 'staging_connected' );
+		self::assertFalse( $item['done'], 'A wrong name is a problem to fix, not a local copy.' );
+		self::assertStringContainsString( 'Open the address in a browser', $item['steps'] );
+		self::assertStringStartsWith( $item['finding'] . ' 1. Open the address', $out['next_step'] );
+	}
+
+	/** Entries of a hook, to see that a call left none behind. */
+	private static function hooked( string $hook ): int {
+		return count( $GLOBALS['ab_test_filters'][ $hook ] ?? array() );
+	}
+
+	/** @return array<string,array{0:string,1:string}> */
+	public static function pins(): array {
+		return array(
+			'https, IPv4 and IPv6' => array( 'https://example.org', 'example.org:443:' . self::PUBLIC_V4 . ',' . self::PUBLIC_V6 ),
+			'http'                 => array( 'http://example.org', 'example.org:80:' . self::PUBLIC_V4 . ',' . self::PUBLIC_V6 ),
+			'its own port'         => array( 'https://staging.example.com:8443', 'staging.example.com:8443:' . self::PUBLIC_V4 ),
+		);
+	}
+
+	/**
+	 * cURL connects to the addresses that were checked and does not look the
+	 * name up again (DNS rebinding): cURL's own log of a real handle, see
+	 * wp_safe_remote_get() in the bootstrap.
+	 */
+	#[DataProvider( 'pins' )]
+	#[\PHPUnit\Framework\Attributes\RequiresPhpExtension( 'curl' )]
+	public function testTheConnectionIsTiedToTheCheckedAddresses( string $partner, string $entry ): void {
+		self::confirm( 'production', $partner );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$GLOBALS['ab_test_http_curl'] = true;
+		$curl                         = self::hooked( 'http_api_curl' );
+		$out                          = AB_MCP_Staging::report( true );
+		self::assertSame( 'reachable', $out['partner_check']['status'] );
+		self::assertStringContainsString( ' ' . $entry . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+		self::assertSame( $curl, self::hooked( 'http_api_curl' ), 'Taken off after the request: no other request of the site is tied.' );
+		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
+	}
+
+	public function testTheHooksAreGoneAfterAFailedRequestToo(): void {
+		self::confirm( 'production', self::STAGING );
+		self::answer( new WP_Error( 'http_request_failed', 'timed out' ) );
+		$curl = self::hooked( 'http_api_curl' );
+		self::assertSame( 'unreachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+		self::assertSame( $curl, self::hooked( 'http_api_curl' ) );
+		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
+	}
+
+	public function testWithoutCurlTheRequestIsNotSent(): void {
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$GLOBALS['ab_test_http_transport'] = 'fsockopen';
+		$out                               = AB_MCP_Staging::report( true );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'Refused before the transport connects.' );
+		self::assertSame( 'unbound', $out['partner_check']['status'] );
+		self::assertStringContainsString( 'without cURL', $out['partner_check']['finding'] );
+		$item = self::item( $out['checklist'], 'staging_connected' );
+		self::assertNull( $item['done'], 'Not decided here.' );
+		self::assertSame( $item['finding'], $out['next_step'] );
+		self::assertSame( 0, self::hooked( 'requests-fsockopen.before_request' ) );
+	}
+
+	public function testAnAnswerThatCameWithoutTheBindingIsDiscarded(): void {
+		self::confirm( 'production', self::STAGING );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		$GLOBALS['ab_test_http_transport'] = 'other';
+		$out                               = AB_MCP_Staging::report( true );
+		self::assertCount( 1, $GLOBALS['ab_test_http'] );
+		self::assertSame( 'unbound', $out['partner_check']['status'], 'Not «reachable»: the answer did not come from the checked address for sure.' );
+	}
+
+	public function testAnAddressAsHostNeedsNoBinding(): void {
+		self::confirm( 'production', 'https://' . self::PUBLIC_V4 );
+		self::answer( ab_test_http_response( 401, '{}', array( 'X-AB-MCP-Auth' => 'missing' ) ) );
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'] );
+		self::assertSame( 1, $GLOBALS['ab_test_safe_get'], 'Through wp_safe_remote_get as well.' );
+		self::assertSame( 0, $GLOBALS['ab_test_http'][0]['args']['redirection'] );
+		$GLOBALS['ab_test_http']           = array();
+		$GLOBALS['ab_test_http_transport'] = 'other';
+		self::assertSame( 'reachable', AB_MCP_Staging::report( true )['partner_check']['status'], 'Nothing is looked up for it.' );
+		self::assertSame( 0, $GLOBALS['ab_test_http'][0]['args']['redirection'] );
+	}
+
+	public function testTheResolverAsksForEveryAAndAaaaRecord(): void {
+		$GLOBALS['ab_test_filters']['ab_mcp_outbound_addresses'] = array();
+		$asked = array();
+		$dns   = static function ( string $host, int $type ) use ( &$asked ): array {
+			$asked[] = array( $host, $type );
+			return array(
+				array( 'type' => 'CNAME', 'target' => 'edge.example' ),
+				array( 'type' => 'A', 'ip' => self::PUBLIC_V4 ),
+				array( 'type' => 'AAAA', 'ipv6' => 'fd00::1' ),
+				array( 'type' => 'A', 'ip' => self::PUBLIC_V4 ),
+			);
+		};
+		$fallback = static function (): array {
+			self::fail( 'No fallback while DNS answers.' );
+		};
+		self::assertSame( array( self::PUBLIC_V4, 'fd00::1' ), AB_MCP_Outbound::resolve( 'x.example', $dns, $fallback ) );
+		self::assertSame( array( array( 'x.example', DNS_A | DNS_AAAA ) ), $asked );
+		self::assertSame( 'local', AB_MCP_Outbound::public_addresses( 'x.example', $dns, $fallback ), 'Only the AAAA record is internal: refused.' );
+	}
+
+	public function testWithoutAnAnswerFromDnsTheSystemResolverIsAsked(): void {
+		$dns_filter = $GLOBALS['ab_test_filters']['ab_mcp_outbound_addresses'];
+		$GLOBALS['ab_test_filters']['ab_mcp_outbound_addresses'] = array();
+		$fallback = static fn( string $host ): array => array( self::PUBLIC_V4 );
+		self::assertSame( array( self::PUBLIC_V4 ), AB_MCP_Outbound::resolve( 'x.example', static fn() => false, $fallback ) );
+		self::assertSame( array( self::PUBLIC_V4 ), AB_MCP_Outbound::resolve( 'x.example', static fn() => array( array( 'type' => 'MX', 'target' => 'm' ) ), $fallback ) );
+		self::assertSame( array(), AB_MCP_Outbound::resolve( 'x.example', static fn() => false, static fn() => false ) );
+		self::assertSame( 'unresolved', AB_MCP_Outbound::public_addresses( 'x.example', static fn() => false, static fn() => false ) );
+		$GLOBALS['ab_test_filters']['ab_mcp_outbound_addresses'] = $dns_filter;
+		$no_lookup = static function (): array {
+			self::fail( 'The filter answers before the lookup.' );
+		};
+		self::assertSame( array( self::PUBLIC_V4, self::PUBLIC_V6 ), AB_MCP_Outbound::public_addresses( 'example.org', $no_lookup, $no_lookup ) );
+	}
+
+	public function testThisMachineAndAnAddressAsHostAreDecidedWithoutALookup(): void {
+		$dns = static function (): array {
+			self::fail( 'No lookup.' );
+		};
+		foreach ( array( 'localhost', 'LOCALHOST', 'shop.localhost', '127.0.0.1', '[::1]', '10.1.2.3' ) as $host ) {
+			self::assertSame( 'local', AB_MCP_Outbound::public_addresses( $host, $dns, $dns ), $host );
+		}
+		self::assertSame( array( self::PUBLIC_V4 ), AB_MCP_Outbound::public_addresses( self::PUBLIC_V4, $dns, $dns ) );
+		self::assertSame( array( self::PUBLIC_V6 ), AB_MCP_Outbound::public_addresses( '[' . self::PUBLIC_V6 . ']', $dns, $dns ) );
+	}
+
+	public function testAFilterCannotOpenTheWayToAPrivateAddress(): void {
+		add_filter( 'ab_mcp_outbound_addresses', static fn(): array => array( '192.168.0.10' ), 30 );
+		self::assertSame( 'local', AB_MCP_Outbound::public_addresses( 'staging.example.com' ) );
+		add_filter( 'ab_mcp_outbound_addresses', static fn(): string => self::PUBLIC_V4, 40 );
+		self::assertSame( 'unresolved', AB_MCP_Outbound::public_addresses( 'staging.example.com' ), 'A filter answer that is no list counts as none.' );
+	}
+
+	/** @return array<string,array{0:string,1:array<int,string>,2:string|null}> */
+	public static function resolveEntries(): array {
+		return array(
+			'https'        => array( 'https://app.example/x', array( self::PUBLIC_V4 ), 'app.example:443:' . self::PUBLIC_V4 ),
+			'http'         => array( 'http://app.example/x', array( self::PUBLIC_V4 ), 'app.example:80:' . self::PUBLIC_V4 ),
+			'own port'     => array( 'http://app.example:8080/x', array( self::PUBLIC_V4 ), 'app.example:8080:' . self::PUBLIC_V4 ),
+			'two'          => array( 'https://app.example/x', array( self::PUBLIC_V4, self::PUBLIC_V6 ), 'app.example:443:' . self::PUBLIC_V4 . ',' . self::PUBLIC_V6 ),
+			'IPv4 as host' => array( 'https://' . self::PUBLIC_V4 . '/x', array( self::PUBLIC_V4 ), null ),
+			'IPv6 as host' => array( 'https://[' . self::PUBLIC_V6 . ']/x', array( self::PUBLIC_V6 ), null ),
+			'no addresses' => array( 'https://app.example/x', array(), null ),
+		);
+	}
+
+	/** @param array<int,string> $addresses */
+	#[DataProvider( 'resolveEntries' )]
+	public function testTheResolveEntry( string $url, array $addresses, ?string $entry ): void {
+		self::assertSame( $entry, AB_MCP_Outbound::resolve_entry( $url, $addresses ) );
+	}
+
+	public function testOnlyHttpAndHttpsAreAsked(): void {
+		$result = AB_MCP_Outbound::get( 'ftp://staging.example.com/x', array() );
+		self::assertInstanceOf( WP_Error::class, $result );
+		self::assertSame( 'ab_mcp_outbound_local', $result->get_error_code() );
+		self::assertSame( array(), $GLOBALS['ab_test_http'] );
 	}
 
 	public function testTheRequestGoesSafelyToTheEndpointAndCarriesNothingOfThisSite(): void {
@@ -843,7 +1096,7 @@ final class StagingStatusTest extends TestCase {
 		self::assertSame( 'boolean', $def['inputSchema']['properties']['check_partner']['type'] );
 		self::assertArrayNotHasKey( 'confirm_token', $def['inputSchema']['properties'] );
 		self::assertSame( 'Show the staging status', AB_MCP_Tool_Labels::english()['wp_staging_status'] );
-		foreach ( array( 'never proof', 'counts as the production site', 'check_partner=true', 'public http(s)', 'no redirect followed', 'Reads only and changes nothing', 'manage_options', 'next_step' ) as $said ) {
+		foreach ( array( 'never proof', 'counts as the production site', 'check_partner=true', 'every address of its host is public and tied to those addresses', 'no redirect followed', 'Reads only and changes nothing', 'manage_options', 'next_step' ) as $said ) {
 			self::assertStringContainsString( $said, $def['description'], $said );
 		}
 		self::assertDoesNotMatchRegularExpression( '/\bPro\b|Agency|upgrade/i', $def['description'] );
@@ -1205,6 +1458,29 @@ final class StagingStatusTest extends TestCase {
 		$html              = $this->admin( 'notice' );
 		self::assertStringContainsString( 'notice-error', $html );
 		self::assertStringContainsString( 'Nothing was saved: ' . AB_MCP_Staging::problem( substr( $notice, strlen( 'staging_bad_' ) ) ), $html );
+	}
+
+	public function testTheFormTakesTheAddressAsTypedAndAnUnchangedPairStays(): void {
+		$GLOBALS['ab_test_can'] = static fn(): bool => true;
+		ab_test_add_user( 9 );
+		AB_MCP_Staging::save( 'production', 'https://staging.example.com/pr%C3%BCfung', 'staging', 9, AB_MCP_Staging::SOURCE_HUB );
+		$raw = self::raw();
+		self::assertSame( 'https://staging.example.com/pr%C3%BCfung', $raw['pair']['partner_url'] );
+		$html = $this->admin( 'preview_card_html' );
+		self::assertStringContainsString( 'value="https://staging.example.com/pr%C3%BCfung"', $html, 'The field holds the stored address.' );
+
+		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
+		$exit   = $this->submit( array( 'staging_role' => 'production', 'partner_url' => ' https://staging.example.com/pr%C3%BCfung ', 'host' => '' ) );
+		self::assertStringContainsString( 'ab_notice=staging_saved', $exit->detail );
+		self::assertSame( $raw, self::raw(), 'The unchanged form keeps the hub as the source, the account and the time.' );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'And writes nothing.' );
+
+		$this->submit( array( 'staging_role' => 'production', 'partner_url' => 'https://staging.example.com/pr%C3%BCfung-2', 'host' => '' ) );
+		self::assertSame( 'https://staging.example.com/pr%C3%BCfung-2', AB_MCP_Staging::record()['pair']['partner_url'], 'Percent-encoded characters stay as typed.' );
+		self::assertSame( 'form', AB_MCP_Staging::record()['pair']['source'] );
+
+		$this->submit( array( 'staging_role' => 'production', 'partner_url' => array( 'https://x.example' ), 'host' => '' ) );
+		self::assertNull( AB_MCP_Staging::record()['pair'], 'A field that is no text is an empty address.' );
 	}
 
 	public function testTheNoticeAfterSaving(): void {
