@@ -219,6 +219,13 @@ final class AB_MCP_Redactor {
 	 */
 	const BLOCK_LINES = 200;
 
+	/**
+	 * A dump value that says only whether one is set: var_export()'s and
+	 * print_r()'s null, true, false and empty text, var_dump()'s NULL,
+	 * bool(…), string(0) "" and uninitialized(…).
+	 */
+	const DUMP_NOTHING = '/^(?:NULL|null|true|false|\'\'|""|bool\((?:true|false)\)|string\(0\) ""|uninitialized\([^)\r\n]*\)),?$/';
+
 	/** The first line of a log entry: [30-Oct-2026 10:00:00 UTC] … */
 	const ENTRY = '/^\[\d{1,2}-[A-Za-z]{3}-\d{4}/';
 
@@ -1137,10 +1144,14 @@ final class AB_MCP_Redactor {
 	/**
 	 * Credentials in the lines of a log replaced with REDACTED, line by line:
 	 *
-	 * - a dump entry under a credential's name ([name] =>, [name:Class:private] =>,
-	 *   'name' =>, "name" =>): the value to the end of the line, a nested
-	 *   array or object to its closing parenthesis, a value that goes on over
-	 *   more lines to the next entry;
+	 * - a dump entry under a credential's name: print_r()'s [name] => and
+	 *   [name:Class:private] =>, var_export()'s 'name' =>, var_dump()'s
+	 *   ["name"]=> and ["name":"Class":private]=> with the value on the next
+	 *   line (Xdebug's 'name' => too): the value to the end of its line, a
+	 *   nested array or object to its closing parenthesis, brace or bracket,
+	 *   a var_dump() text by its length, a value that goes on over more lines
+	 *   to the next entry (dump_end()); a value that says only whether one is
+	 *   set stays (DUMP_NOTHING);
 	 * - name=value, name: value or name => value anywhere in a line: from the
 	 *   separator to the end of the line, an Authorization header's scheme
 	 *   (Bearer, Basic, Digest) kept; a value whose brackets ([ or {) are
@@ -1165,13 +1176,21 @@ final class AB_MCP_Redactor {
 			if ( false === $dump ) {
 				return null;
 			}
-			$name = 1 === $dump ? $m[2] . $m[3] . $m[4] : '';
-			// var_export() puts a nested array on the next line: 'token' =>
-			$next = '' === $name || '' !== trim( $m[5] ) || $i + 1 >= $count ? '' : trim( $lines[ $i + 1 ] );
-			if ( '' !== $name && self::redacts_key( $name, $extra ) && ( '' !== trim( $m[5] ) || '(' === substr( $next, -1 ) ) ) {
-				++$hits;
-				$out[] = $m[1] . self::MARK;
-				$i     = self::dump_end( $lines, $i, trim( $m[5] ) );
+			// var_dump() writes the name in quotes: ["token"]=>
+			$name  = 1 === $dump ? trim( $m[2], '"' ) . $m[3] . $m[4] : '';
+			$value = 1 === $dump ? trim( $m[5] ) : '';
+			// var_dump(), Xdebug and var_export() of an array or object put
+			// the value on the next line: ["token"]=>, 'token' =>
+			$below = '' === $value && $i + 1 < $count && self::dump_value( $lines[ $i + 1 ] );
+			if ( '' !== $name && self::redacts_key( $name, $extra ) ) {
+				if ( $below || ( '' !== $value && ! preg_match( self::DUMP_NOTHING, $value ) ) ) {
+					++$hits;
+					$out[] = $m[1] . self::MARK;
+					$i     = $below ? self::dump_end( $lines, $i + 1, trim( $lines[ $i + 1 ] ) ) : self::dump_end( $lines, $i, $value );
+					continue;
+				}
+				// Only whether one is set ('token' => '',): the line says no more.
+				$out[] = $line;
 				continue;
 			}
 			$open = 0;
@@ -1313,7 +1332,28 @@ final class AB_MCP_Redactor {
 	 */
 	private static function dump_end( array $lines, $i, $value ) {
 		$count = count( $lines );
-		$open  = '(' === substr( $value, -1 ) ? $i : null;
+		if ( preg_match( '/^&?string\((\d+)\) "/', $value, $s ) ) {
+			return self::string_end( $lines, $i, (int) $s[1] );
+		}
+		if ( '{' === substr( $value, -1 ) ) {
+			// var_dump()'s array(2) { and object(Foo)#1 (2) { to their }.
+			$depth = 0;
+			for ( $j = $i; $j < $count; $j++ ) {
+				if ( $j > $i && preg_match( self::ENTRY, $lines[ $j ] ) ) {
+					return $j - 1;
+				}
+				$t      = trim( $lines[ $j ] );
+				$depth += ( '{' === substr( $t, -1 ) ? 1 : 0 ) - ( '}' === substr( $t, 0, 1 ) ? 1 : 0 );
+				if ( 0 === $depth ) {
+					return $j;
+				}
+			}
+			return $count - 1;
+		}
+		if ( '[' === substr( $value, -1 ) ) {
+			return self::bracket_end( $lines, $i, self::brackets( $value ) );
+		}
+		$open = '(' === substr( $value, -1 ) ? $i : null;
 		if ( '' === $value ) {
 			$open = $i + 1;
 		}
@@ -1332,11 +1372,43 @@ final class AB_MCP_Redactor {
 			return $count - 1;
 		}
 		for ( $j = $i + 1; $j < $count; $j++ ) {
-			if ( preg_match( '/^[ \t]*(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[ \t]*\)|^\[\d{1,2}-[A-Za-z]{3}-\d{4}/', $lines[ $j ] ) ) {
+			if ( preg_match( '/^[ \t]*(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[ \t]*[)}\]]|^\[\d{1,2}-[A-Za-z]{3}-\d{4}/', $lines[ $j ] ) ) {
 				return $j - 1;
 			}
 		}
 		return $count - 1;
+	}
+
+	/**
+	 * Whether a line below a dump entry with nothing after its => holds the
+	 * entry's value: not the next entry, not the end of a block or of the
+	 * log entry, not empty, and more than whether one is set.
+	 *
+	 * @param string $line Line.
+	 * @return bool
+	 */
+	private static function dump_value( $line ) {
+		$t = trim( $line );
+		return '' !== $t && ! preg_match( '/^(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[)}\]]/', $t )
+			&& ! preg_match( self::ENTRY, $line ) && ! preg_match( self::DUMP_NOTHING, $t );
+	}
+
+	/**
+	 * The last line of a text var_dump() wrote as string(n) "…" on line $i:
+	 * its n bytes and the closing quote, over as many lines as they take.
+	 *
+	 * @param string[] $lines Lines.
+	 * @param int      $i     The line with string(n) ".
+	 * @param int      $n     Its length.
+	 * @return int
+	 */
+	private static function string_end( array $lines, $i, $n ) {
+		$count = count( $lines );
+		$have  = strlen( $lines[ $i ] ) - (int) strpos( $lines[ $i ], '"' ) - 1;
+		for ( $j = $i; $j + 1 < $count && $have < $n + 1; $j++ ) {
+			$have += 1 + strlen( $lines[ $j + 1 ] );
+		}
+		return $j;
 	}
 
 	/**

@@ -657,6 +657,67 @@ final class RedactionTest extends TestCase {
 		self::assertStringContainsString( 'next line', $text );
 	}
 
+	/**
+	 * What var_dump() writes, as ob_start(); var_dump( $v ); error_log( ob_get_clean() ) logs it.
+	 *
+	 * @param mixed $value Value.
+	 * @return string
+	 */
+	private static function var_dumped( $value ): string {
+		ob_start();
+		var_dump( $value ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_dump
+		return rtrim( (string) ob_get_clean(), "\n" );
+	}
+
+	public function testEveryPhpDumpUnderACredentialsNameIsRedactedToItsEnd(): void {
+		// Codex 8: var_dump() puts the value on the next line and the name in quotes.
+		$object           = new RedactionDumpProbe();
+		$object->nested   = array( 'client_secret' => 'PLACEHOLDER-OBJ-N', 'k' => 'shown' );
+		$value            = array(
+			'api_key'  => 'PLACEHOLDER-1',
+			'password' => "PLACEHOLDER-L1\nPLACEHOLDER-L2",
+			'host'     => 'example.org',
+			'auth'     => array( 'user' => 'u', 'k' => 'PLACEHOLDER-2', 'deeper' => array( 'x' => 'PLACEHOLDER-3' ) ),
+			'conn'     => $object,
+			'count'    => 5,
+			'otp'      => 987654,
+		);
+		$stamp = '[31-Oct-2026 10:00:00 UTC] ';
+		$cases = array(
+			'var_dump'   => $stamp . self::var_dumped( $value ),
+			'var_export' => $stamp . var_export( $value, true ), // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export
+			'print_r'    => $stamp . print_r( $value + array( 'secret' => "\nPLACEHOLDER-PR" ), true ), // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+			// Xdebug's var_dump(), and an exporter writing short arrays.
+			'xdebug'     => $stamp . "array(2) {\n  'api_key' =>\n  string(13) \"PLACEHOLDER-4\"\n  'token' =>\n  array(1) {\n    'k' =>\n    string(13) \"PLACEHOLDER-5\"\n  }\n  'host' =>\n  string(11) \"example.org\"\n}",
+			'short'      => $stamp . "[\n  'token' => [\n    'k' => 'PLACEHOLDER-6',\n    'more' => ['PLACEHOLDER-7'],\n  ],\n  'host' => 'example.org',\n]",
+		);
+		foreach ( $cases as $format => $log ) {
+			$out  = $this->read( array( 'log' => $log . "\n[31-Oct-2026 10:00:01 UTC] next" ), 'wp_get_error_log' );
+			$text = $out['log'];
+			self::assertStringNotContainsString( 'PLACEHOLDER', $text, $format );
+			self::assertStringContainsString( 'example.org', $text, $format . ': the rest stays.' );
+			self::assertStringContainsString( "\n[31-Oct-2026 10:00:01 UTC] next", $text, $format );
+			self::assertSame( array( '/log' ), $out['redacted'], $format );
+		}
+		$text = $this->read( array( 'log' => $cases['var_dump'] ), 'wp_get_error_log' )['log'];
+		self::assertStringContainsString( '["api_key"]=>[REDACTED]', $text );
+		self::assertStringContainsString( "[\"host\"]=>\n  string(11) \"example.org\"\n", $text );
+		self::assertStringContainsString( "[\"count\"]=>\n  int(5)\n  [\"otp\"]=>[REDACTED]\n}", $text, 'A value ends where its block does.' );
+		self::assertStringNotContainsString( '987654', $text );
+		self::assertStringContainsString( '["password":protected]=>[REDACTED]', $text );
+		self::assertStringContainsString( '["token":"AlphaBridge\\Tests\\RedactionDumpProbe":private]=>[REDACTED]', $text );
+	}
+
+	public function testOrdinaryPhpDumpsStayAsTheyAre(): void {
+		$value = array( 'host' => 'example.org', 'count' => 5, 'password_hint' => 'x', 'secret' => null, 'token' => '', 'auth' => false, 'list' => array( 'a', 'b' ) );
+		foreach ( array( self::var_dumped( $value ), var_export( $value, true ), print_r( $value, true ) ) as $i => $dump ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+			$log = '[31-Oct-2026 10:00:00 UTC] ' . $dump . "\n[31-Oct-2026 10:00:01 UTC] next";
+			$out = $this->read( array( 'log' => $log ), 'wp_get_error_log' );
+			self::assertSame( $log, $out['log'], (string) $i );
+			self::assertArrayNotHasKey( 'redacted', $out, (string) $i );
+		}
+	}
+
 	public function testAPrivateKeyInTheLogIsRedactedWhole(): void {
 		// Codex 3 #5.
 		$pem = "-----BEGIN PRIVATE KEY-----\nPLACEHOLDERAAAA\nPLACEHOLDERBBBB\n-----END PRIVATE KEY-----";
@@ -1255,4 +1316,23 @@ final class RedactionPrivateProbe {
 
 	/** @var string Public. */
 	public string $label = 'visible';
+}
+
+/**
+ * An object with credentials in a protected and a private property, as
+ * var_dump(), var_export() and print_r() show it.
+ */
+final class RedactionDumpProbe {
+
+	/** @var string Public. */
+	public string $host = 'example.org';
+
+	/** @var string Protected. */
+	protected string $password = 'PLACEHOLDER-PROT';
+
+	/** @var string Private. */
+	private string $token = 'PLACEHOLDER-PRIV';
+
+	/** @var array Public, nested. */
+	public array $nested = array();
 }
