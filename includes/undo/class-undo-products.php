@@ -27,9 +27,10 @@
  * and its getters in the edit context — not from the tables: WooCommerce
  * decides where a product keeps its data, and its data store keeps _price
  * and the product lookup table in step when it saves. The state "after" is
- * the product object as the tool saved it, not a read again afterwards, so
- * that a change of another request in between is not taken for the tool's.
- * The undo writes the same way: wc_get_product(), the setters with the old
+ * read again from the database after the save, where it is the call's own
+ * (own(): what it saved, or the status WordPress made of it by the date);
+ * a value of another request in between stays the tool's saved one, so that
+ * change is not taken back without force. The undo writes the same way: wc_get_product(), the setters with the old
  * values, save(), the product read again and compared.
  *
  * A price or a status changed since is refused unless force is set. The type
@@ -249,19 +250,28 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
-		// The product as the tool saved it — the object, not a read again,
-		// which could already hold a change of another request — and the
-		// read-back for saved_fields.
-		$set  = self::state( $p );
-		$read = self::read_back( self::state_of( $id ) );
+		// The product as stored, read again from the database: what
+		// saved_fields shows, whether the change was stored at all, and the
+		// state after of the point. A filter can refuse a field on save, and
+		// WordPress stores a status by the date; the object the tool saved
+		// knows neither.
+		$set    = self::state( $p );
+		$stored = self::state_of( $id );
+		$read   = self::read_back( $stored );
 
 		$changed = array();
-		foreach ( self::LOCS as $loc ) {
-			if ( self::hash( $set['locs'][ $loc ] ) !== self::hash( $before['locs'][ $loc ] ) ) {
+		$after   = array();
+		foreach ( is_array( $stored ) ? self::LOCS : array() as $loc ) {
+			if ( self::hash( $stored['locs'][ $loc ] ) !== self::hash( $before['locs'][ $loc ] ) ) {
 				$changed[ $loc ] = $before['locs'][ $loc ];
+				// The stored state where it is this call's own; another is
+				// another request's, made right after the save: the point
+				// then holds what the call saved, so an undo does not take
+				// that later change back without force.
+				$after[ $loc ] = self::hash( self::own( $loc, $stored['locs'][ $loc ], $set['locs'][ $loc ] ) ? $stored['locs'][ $loc ] : $set['locs'][ $loc ] );
 			}
 		}
-		if ( array() === $changed ) {
+		if ( is_array( $stored ) && array() === $changed ) {
 			$refused = array();
 			foreach ( $asked as $field => $want ) {
 				if ( ! array_key_exists( $field, $read ) || ! AB_MCP_Undo_Answer::same( $read[ $field ], $want ) ) {
@@ -296,9 +306,7 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 				'before' => $changed,
 				'after'  => array(),
 			);
-			foreach ( $changed as $loc => $value ) {
-				$snap['after'][ $loc ] = self::hash( $set['locs'][ $loc ] );
-			}
+			$snap['after'] = $after;
 			if ( ! self::valid( self::TOOL, $snap ) ) {
 				$snap = null;
 				$odd  = true;
@@ -308,9 +316,9 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 		// answer says so — as the reason where nothing else changed, else
 		// beside the undo of the rest.
 		$stock = array_key_exists( 'stock', $asked ) ? self::stock_note( $was ) : null;
-		if ( null !== $stock && array() === $changed ) {
+		if ( null !== $stock && array() === $changed && is_array( $stored ) ) {
 			$outcome = $stock;
-		} elseif ( $odd ) {
+		} elseif ( $odd || ( ! is_array( $stored ) && self::on() ) ) {
 			$outcome = AB_MCP_Undo_Answer::note( null );
 		} else {
 			$outcome = self::outcome( self::TOOL, self::READER, array() !== $changed, $snap, sprintf( 'product #%d: %s', $id, implode( ', ', array_keys( $changed ) ) ) );
@@ -320,6 +328,24 @@ class AB_MCP_Undo_Products extends AB_MCP_Undo_Objects {
 			$res['stock_note'] = $stock;
 		}
 		return $res;
+	}
+
+	/**
+	 * Is a stored value of a location this call's own: what it saved, or for
+	 * the status what WordPress makes of it by the post's date — a future
+	 * date passed is published, a publish with a date ahead is scheduled?
+	 *
+	 * @param string $loc    Location.
+	 * @param mixed  $stored As read again from the database.
+	 * @param mixed  $saved  As the object the tool saved holds it.
+	 * @return bool
+	 */
+	private static function own( $loc, $stored, $saved ) {
+		if ( self::hash( $stored ) === self::hash( $saved ) ) {
+			return true;
+		}
+		$dated = array( 'future', 'publish' );
+		return 'status' === $loc && in_array( $saved, $dated, true ) && in_array( $stored, $dated, true );
 	}
 
 	/**

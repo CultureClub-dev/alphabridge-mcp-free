@@ -176,6 +176,7 @@ function ab_db_reset() {
 	$GLOBALS['ab_after_save'] = null; // another request, right after a save (once)
 	$GLOBALS['ab_on_load']   = null; // another request, before a product is loaded
 	$GLOBALS['ab_now']       = null; // the clock of the sale period (null: now)
+	$GLOBALS['ab_meta_veto'] = array(); // fields a filter on update_post_metadata keeps from being written
 	$GLOBALS['ab_bookings']  = array(); // [id, operation, quantity] of wc_update_product_stock()
 	$GLOBALS['ab_booking_fails'] = false;
 	$GLOBALS['ab_veto']      = false; // a plugin on woocommerce_pre_delete_coupon
@@ -299,6 +300,17 @@ class AB_WC_Product {
 		$this->data    = array_merge( $this->data, $this->changes );
 		$row           = array_merge( $GLOBALS['P'][ $this->id ], $this->changes );
 		$this->changes = array();
+		// WordPress stores a status by the post's date (wp_insert_post()), the
+		// object keeps what was set; and a filter on update_post_metadata
+		// can refuse a field, which the object does not see either.
+		if ( in_array( 'status', $changed, true ) && 'future' === $row['status'] && $row['date'] <= time() ) {
+			$row['status'] = 'publish';
+		} elseif ( in_array( 'status', $changed, true ) && 'publish' === $row['status'] && $row['date'] > time() ) {
+			$row['status'] = 'future';
+		}
+		foreach ( $GLOBALS['ab_meta_veto'] as $field ) {
+			$row[ $field ] = $GLOBALS['P'][ $this->id ][ $field ];
+		}
 		// handle_updated_props(): a sale price not below the regular one goes,
 		// and the price is derived again where a price field changed.
 		if ( array_intersect( array( 'regular_price', 'sale_price' ), $changed ) && '' !== (string) $this->data['sale_price'] && (float) $this->data['sale_price'] >= (float) $this->data['regular_price'] ) {
@@ -350,6 +362,7 @@ function ab_product( $id, $over = array(), $type = 'product' ) {
 			'price'          => '10',
 			'date_on_sale_from' => null,
 			'date_on_sale_to'   => null,
+			'date'           => time() - 86400, // post_date: yesterday
 			'manage_stock'   => false,
 			'stock_quantity' => null,
 			'stock_status'   => 'instock',
@@ -717,6 +730,31 @@ $plan = AB_MCP_Undo_Products::plan( 'wp_wc_update_product', AB_MCP_Undo::claim( 
 $GLOBALS['P'][7]['regular_price'] = '15'; // between the plan and the write
 $again = AB_MCP_Undo_Products::restore( $plan['items'][0] );
 ok( 'ab_mcp_undo_product_changed' === ab_code( $again ) && false !== strpos( ab_msg( $again ), 'force=true' ) && '15' === ab_p( 7, 'regular_price' ), 'C8 changed between the plan and the write: refused, with the way' );
+
+// Codex 31.10. (3): the state after is the stored one. A draft dated in the
+// past set to future: WordPress publishes it, the object keeps future.
+reset_all();
+ab_product( 7, array( 'status' => 'draft' ) );
+$res = ab_update( array( 'status' => 'future' ) );
+ok( 'publish' === ab_p( 7, 'status' ) && 'publish' === $res['saved_fields']->status && array( 'status' ) === $res['saved_differs'] && false !== strpos( $res['warning'], 'wp_wc_get_product' ) && ab_token( $res ), 'C8c future on a date passed: stored as publish, saved_fields and saved_differs say so, a token' );
+$out = ab_undo( $res['undo'] );
+ok( 1 === $out['undone'] && array() === $out['blocked'] && 'draft' === ab_p( 7, 'status' ), 'C8d ... and the undo at once takes it back to draft, no changed_since' );
+reset_all();
+ab_product( 7, array( 'status' => 'draft', 'date' => time() + 86400 ) );
+$res = ab_update( array( 'status' => 'publish' ) );
+ok( 'future' === ab_p( 7, 'status' ) && 1 === ab_undo( $res['undo'] )['undone'] && 'draft' === ab_p( 7, 'status' ), 'C8e publish on a date ahead: stored as future, the undo takes it back too' );
+
+// Codex 31.10. (3): a filter on update_post_metadata refuses the price.
+reset_all();
+$GLOBALS['ab_meta_veto'] = array( 'regular_price' );
+$res                     = ab_update( array( 'regular_price' => '12' ) );
+ok( 'ab_mcp_not_saved' === ab_code( $res ) && false !== strpos( ab_msg( $res ), 'regular_price' ) && '10' === ab_p( 7, 'regular_price' ) && 0 === ab_points(), 'C8f a price a filter refused: not updated: true, the error names it, no point' );
+reset_all();
+$GLOBALS['ab_meta_veto'] = array( 'regular_price' );
+$res                     = ab_update( array( 'regular_price' => '12', 'status' => 'draft' ) );
+ok( ab_token( $res ) && array( 'status' ) === array_keys( AB_MCP_Undo::claim( $res['undo'] )['data']['before'] ) && array( 'regular_price' ) === $res['saved_differs'] && '10' === $res['saved_fields']->regular_price, 'C8g a refused price beside a stored status: the point holds the status only, saved_differs names the price' );
+$GLOBALS['ab_meta_veto'] = array();
+ok( 1 === ab_undo( $res['undo'] )['undone'] && 'publish' === ab_p( 7, 'status' ) && '10' === ab_p( 7, 'regular_price' ), 'C8h ... and its undo puts the status back' );
 
 // A price another request set right after the save is not the tool's: the
 // point holds the price the tool saved, so the newer one is not undone

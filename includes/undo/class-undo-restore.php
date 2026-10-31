@@ -32,7 +32,7 @@
  * and comment (the status wp_moderate_comment set, a comment wp_delete_comment
  * moved into the trash, a comment wp_reply_comment added), planned and
  * written by AB_MCP_Undo_Comments, and wc_product and wc_coupon (the
- * prices, stock and status wp_wc_update_product changed, a coupon
+ * prices and status wp_wc_update_product changed, a coupon
  * wp_wc_create_coupon created), planned and written through WooCommerce by
  * AB_MCP_Undo_Products and AB_MCP_Undo_Coupons. The undo points of Pro's
  * tools (options, files, PHP snippets) share the store; Pro reverses them
@@ -542,7 +542,7 @@ class AB_MCP_Undo_Restore {
 			// on every page with them, and in the comment feeds. Its refs
 			// name comments, no post (after_restore() would purge nothing).
 			'comment'       => 'site',
-			// A product's price, stock status and visibility show beyond its
+			// A product's price and its visibility show beyond its
 			// own page: on the shop page, the archives of its categories and
 			// tags, in product blocks and widgets and among the related
 			// products of others. Purging its page alone would leave those.

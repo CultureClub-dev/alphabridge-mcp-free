@@ -1358,11 +1358,21 @@ final class RedactionTest extends TestCase {
 		self::assertStringContainsString( 'it was 3', $out['stock_note'] );
 		self::assertSame( 'undo_x', $out['undo'] );
 
-		$out = AB_MCP_Redactor::tool_result( 'wp_wc_create_coupon', array(), array( 'created' => true, 'id' => 99, 'saved_fields' => (object) array( 'code' => 'PLACEHOLDER-C', 'amount' => '10', 'discount_type' => 'percent' ), 'undo' => 'undo_y' ) );
+		// Codex (Z5 Teil 3, round 3): the code stands twice in the answer, in
+		// saved_fields and beside it; both read as the reader shows it.
+		$out = AB_MCP_Redactor::tool_result( 'wp_wc_create_coupon', array(), array( 'created' => true, 'id' => 99, 'code' => 'PLACEHOLDER-T', 'saved_fields' => (object) array( 'code' => 'PLACEHOLDER-C', 'amount' => '10', 'discount_type' => 'percent' ), 'undo' => 'undo_y' ) );
 		self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ) );
+		self::assertSame( self::R, $out['code'] );
 		self::assertSame( '10', ( (array) $out['saved_fields'] )['amount'] );
-		self::assertSame( array( '/saved_fields/code' ), $out['redacted'] );
+		self::assertSame( array( '/saved_fields/code', '/code' ), $out['redacted'] );
 		self::assertSame( 99, $out['id'] );
+		self::assertTrue( $out['created'] );
+
+		// Without the filter the code is no credential, and stays.
+		unset( $GLOBALS['ab_test_filters']['ab_mcp_redact_keys'] );
+		$out = AB_MCP_Redactor::tool_result( 'wp_wc_create_coupon', array(), array( 'created' => true, 'id' => 99, 'code' => 'spring', 'saved_fields' => (object) array( 'code' => 'spring' ) ) );
+		self::assertSame( 'spring', $out['code'] );
+		self::assertArrayNotHasKey( 'redacted', $out );
 	}
 
 	public function testPathsAreUnambiguousAndNoFindIsMerged(): void {
