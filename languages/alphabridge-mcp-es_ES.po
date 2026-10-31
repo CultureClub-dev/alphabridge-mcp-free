@@ -1593,8 +1593,8 @@ msgstr "Esta URL apunta a un host privado o no permitido y se ha bloqueado: Word
 msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
 msgstr "Esta conexión tiene el nivel de acceso «%2$s», que no incluye la herramienta «%1$s»."
 
-msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder's layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them."
-msgstr "Esta clave meta está protegida: esta herramienta no lee las claves que empiezan por «_», que WordPress marca como protegidas o que parecen una credencial. Lee el diseño de un constructor de páginas con wp_get_builder_layout y los campos SEO con wp_seo_get; las demás claves protegidas son cosa del plugin al que pertenecen."
+msgid "This meta key looks like a credential (a password, a token, a secret or an API key, for example): such keys are not read through this tool for any account, and their values stay on the site. They belong to the plugin that owns them."
+msgstr "Esta clave meta parece una credencial (una contraseña, un token, un secreto o una clave de API, por ejemplo): esta herramienta no lee esas claves para ninguna cuenta, y sus valores se quedan en el sitio. Son cosa del plugin al que pertenecen."
 
 msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them."
 msgstr "Esta clave meta está protegida: esta herramienta no lee las claves que empiezan por «_», que WordPress marca como protegidas o que parecen una credencial; son cosa del plugin al que pertenecen."
@@ -5089,3 +5089,15 @@ msgstr "WordPress no ha guardado el nuevo estado del comentario %d: sigue tenien
 
 msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
 msgstr "La entrada de este comentario está en la papelera, lo que deja sus comentarios en post-trashed, y ninguna llamada de WordPress vuelve a poner un comentario en ese estado. WordPress devuelve a los comentarios de una entrada el estado que tenían antes cuando la entrada sale de la papelera: saca la entrada de la papelera con wp_bulk_update_status o en wp-admin en Entradas › Papelera, y luego comprueba el comentario con wp_get_comment."
+
+msgid "include_protected requires the manage_options capability. Leave it out, or connect with an administrator account."
+msgstr "include_protected requiere la capacidad manage_options. Omítelo o conecta la app con la cuenta de un administrador."
+
+msgid "This meta key is protected. Of the protected keys only the allow-listed page-builder and layout keys can be read (a site owner extends the list with the ab_mcp_pro_protected_meta_allowlist filter); include_protected=true lists the ones this post has."
+msgstr "Esta clave meta está protegida. De las claves protegidas solo se pueden leer las de constructores de páginas y de diseño de la lista permitida (el propietario del sitio amplía la lista con el filtro ab_mcp_pro_protected_meta_allowlist); include_protected=true enumera las que tiene esta entrada."
+
+msgid "Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account."
+msgstr "Leer una clave meta protegida requiere la capacidad manage_options, igual que include_protected: conecta la app con la cuenta de un administrador."
+
+msgid "Only allow-listed protected keys are returned. Other plugins' internal keys are never exposed."
+msgstr "Solo se devuelven las claves protegidas de la lista permitida. Las claves internas de otros plugins nunca se exponen."

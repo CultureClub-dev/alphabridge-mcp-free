@@ -80,14 +80,15 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post',
 			array(
-				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so, and wp_get_builder_layout returns the page\'s elements. A revision_id from wp_list_revisions returns that revision. Needs edit_posts and the right to read the post; a password-protected post or a revision needs the right to edit it (for a revision: its post). An unknown id returns a not-found error. Read-only.',
+				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. include_protected=true (requires manage_options) adds the allow-listed protected "_" meta keys such as _elementor_data. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so, and wp_get_builder_layout returns the page\'s elements. A revision_id from wp_list_revisions returns that revision. Needs edit_posts and the right to read the post; a password-protected post or a revision needs the right to edit it (for a revision: its post). An unknown id returns a not-found error. Read-only. Inside the meta values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values; content, title and excerpt are returned as written.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'           => array( 'type' => 'integer', 'description' => 'Post id, as wp_list_posts or wp_search return it.' ),
-						'include_meta' => array( 'type' => 'boolean', 'description' => 'true includes the public custom fields the account may edit (keys starting with "_" and credential-like keys are left out). Default true.', 'default' => true ),
+						'id'                => array( 'type' => 'integer', 'description' => 'Post id, as wp_list_posts or wp_search return it.' ),
+						'include_meta'      => array( 'type' => 'boolean', 'description' => 'true includes the public custom fields the account may edit (credential-like keys are left out, and so are keys starting with "_" but for the allow-listed ones include_protected adds). Default true.', 'default' => true ),
+						'include_protected' => array( 'type' => 'boolean', 'description' => 'true also returns the allow-listed protected ("_"-prefixed) meta keys (filter ab_mcp_pro_protected_meta_allowlist) the account may edit on this post; other protected keys and credential-like keys stay out. Requires manage_options, also with include_meta=false, which returns no meta. Default false.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post' ),
@@ -211,14 +212,15 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available, and keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Credential-like keys are not available. Keys starting with "_" and keys WordPress marks as protected are not available either, except that include_protected=true (requires manage_options) adds the allow-listed protected keys (page-builder and layout data such as _elementor_data; filter ab_mcp_pro_protected_meta_allowlist); one of those keys can also be asked for by name, under the same right. Keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'id' ),
 					'properties' => array(
-						'id'  => array( 'type' => 'integer', 'description' => 'Post id.' ),
-						'key' => array( 'type' => 'string', 'description' => 'One meta key to read. When omitted, all public keys are read. A key the post does not have returns an empty value, or the default a plugin registered for it.' ),
+						'id'                => array( 'type' => 'integer', 'description' => 'Post id.' ),
+						'key'               => array( 'type' => 'string', 'description' => 'One meta key to read. When omitted, all public keys are read. A key the post does not have returns an empty value, or the default a plugin registered for it. A protected ("_") key is answered only when it is allow-listed (filter ab_mcp_pro_protected_meta_allowlist) and the account has manage_options.' ),
+						'include_protected' => array( 'type' => 'boolean', 'description' => 'true also lists the allow-listed protected ("_"-prefixed) keys in the full listing, those the account may edit on this post; credential-like keys stay out. Requires manage_options. With key, the key alone decides. Default false.' ),
 					),
 				),
 				'callback'    => array( __CLASS__, 'get_post_meta_tool' ),
@@ -355,8 +357,17 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		}
 		$key = self::s( $a, 'key', '' );
 		if ( '' !== $key ) {
+			// A protected key asked for by name: the allow-listed page-builder
+			// and layout keys are answered by the listing's rules
+			// (protected_meta_answer()). Credential-like names stay refused
+			// below, allow-list or not.
+			if ( self::is_protected_post_meta( $key ) && ! self::is_sensitive_meta_key( $key ) ) {
+				return self::protected_meta_answer( $id, $key );
+			}
+			// Of the keys the reader refuses, only credential-like ones are
+			// left here.
 			if ( AB_MCP_Undo_Meta_Rules::read_refused( 'post', $key ) ) {
-				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected: keys that start with "_", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder\'s layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key looks like a credential (a password, a token, a secret or an API key, for example): such keys are not read through this tool for any account, and their values stay on the site. They belong to the plugin that owns them.', 'alphabridge-mcp' ) );
 			}
 			// Deliberately strict read rule: exposing a key over MCP requires the
 			// key's edit capability, which honours auth_callback rules that other
@@ -373,6 +384,10 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 				'value' => get_post_meta( $id, $key, true ),
 			);
 		}
+		$protected = self::b( $a, 'include_protected', false );
+		if ( $protected && ! current_user_can( 'manage_options' ) ) {
+			return self::include_protected_refusal();
+		}
 		$all  = get_post_meta( $id );
 		$flat = array();
 		foreach ( $all as $k => $v ) {
@@ -381,10 +396,104 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
 		}
-		return array(
+		$out = array(
 			'id'   => $id,
 			'meta' => $flat,
 		);
+		if ( $protected ) {
+			$out['meta']                    = self::with_protected_meta( $id, $flat );
+			$out['meta_includes_protected'] = true;
+			$out['protected_meta_note']     = self::protected_meta_note();
+		}
+		return $out;
+	}
+
+	/**
+	 * Is this post meta key protected: starting with "_", or marked so by
+	 * is_protected_meta() (which a plugin can filter)? Such keys are read
+	 * only where they are allow-listed, by an account with manage_options
+	 * (protected_meta_answer(), with_protected_meta()).
+	 *
+	 * @param string $key Meta key.
+	 * @return bool
+	 */
+	private static function is_protected_post_meta( $key ) {
+		$key = (string) $key;
+		return '_' === substr( $key, 0, 1 ) || is_protected_meta( $key, 'post' );
+	}
+
+	/**
+	 * One protected key asked for by name, by the listing's rules: the
+	 * post's checks as the reader makes them for every key (done by the
+	 * caller), then the allow-list, manage_options (what include_protected
+	 * takes) and may_expose_protected(). As AlphaBridge MCP Pro answered it
+	 * up to 4.13.
+	 *
+	 * @param int    $id  Post id.
+	 * @param string $key Meta key, as given.
+	 * @return array|WP_Error
+	 */
+	private static function protected_meta_answer( $id, $key ) {
+		if ( ! in_array( $key, self::protected_meta_allowlist(), true ) ) {
+			return new WP_Error( 'ab_mcp_protected_meta', __( 'This meta key is protected. Of the protected keys only the allow-listed page-builder and layout keys can be read (a site owner extends the list with the ab_mcp_pro_protected_meta_allowlist filter); include_protected=true lists the ones this post has.', 'alphabridge-mcp' ) );
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account.', 'alphabridge-mcp' ) );
+		}
+		// The right to edit the post, or the plugin's rule for a key it
+		// registered: the same reason as for a public key.
+		if ( ! self::may_expose_protected( $key, $id ) ) {
+			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot access this meta key: that takes the right to edit the post itself (an author may read a colleague\'s published post, but not edit it), and the plugin that registered the key can restrict it further. Connect with an account that may edit the post and the key, such as an administrator.', 'alphabridge-mcp' ) );
+		}
+		return array(
+			'id'    => $id,
+			'key'   => $key,
+			'value' => get_post_meta( $id, $key, true ),
+		);
+	}
+
+	/**
+	 * The public meta the reader already filtered, with the protected keys
+	 * of the post appended that may be exposed: allow-listed and covered by
+	 * may_expose_protected(). The public keys keep the reader's verdict; a
+	 * credential-like key stays out even where a filter allow-lists it, as
+	 * it does when asked for by name.
+	 *
+	 * @param int   $post_id     Post id.
+	 * @param array $public_meta Meta map the reader built.
+	 * @return array
+	 */
+	private static function with_protected_meta( $post_id, array $public_meta ) {
+		$flat = $public_meta;
+		foreach ( get_post_meta( $post_id ) as $k => $v ) {
+			$k = (string) $k;
+			if ( ! self::is_protected_post_meta( $k ) ) {
+				continue; // Public key: keep the reader's verdict.
+			}
+			if ( self::is_sensitive_meta_key( $k ) || ! self::may_expose_protected( $k, $post_id ) ) {
+				continue;
+			}
+			$flat[ $k ] = count( $v ) === 1 ? maybe_unserialize( $v[0] ) : array_map( 'maybe_unserialize', $v );
+		}
+		return $flat;
+	}
+
+	/**
+	 * The refusal of include_protected for an account without manage_options.
+	 *
+	 * @return WP_Error
+	 */
+	private static function include_protected_refusal() {
+		return AB_MCP_Guidance::role_refusal( __( 'include_protected requires the manage_options capability. Leave it out, or connect with an administrator account.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The note of an answer with include_protected.
+	 *
+	 * @return string
+	 */
+	private static function protected_meta_note() {
+		return __( 'Only allow-listed protected keys are returned. Other plugins\' internal keys are never exposed.', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -510,6 +619,12 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! self::raw_content_allowed( $post ) ) {
 			return self::raw_content_error( $post );
 		}
+		// include_protected takes manage_options, also where include_meta
+		// leaves the meta out.
+		$protected = self::b( $a, 'include_protected', false );
+		if ( $protected && ! current_user_can( 'manage_options' ) ) {
+			return self::include_protected_refusal();
+		}
 
 		$data            = self::post_summary( $post );
 		$data['content'] = $post->post_content;
@@ -546,6 +661,14 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 			}
 		}
 		$data['terms'] = $terms;
+
+		// The allow-listed protected keys go onto the public meta, as
+		// wp_get_post_meta lists them with include_protected.
+		if ( $protected && isset( $data['meta'] ) ) {
+			$data['meta']                    = self::with_protected_meta( (int) $post->ID, (array) $data['meta'] );
+			$data['meta_includes_protected'] = true;
+			$data['protected_meta_note']     = self::protected_meta_note();
+		}
 
 		return $data;
 	}
