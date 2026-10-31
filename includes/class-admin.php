@@ -280,7 +280,8 @@ class AB_MCP_Admin {
 	 * and older add-ons: on to «AI Connection», unless an older SDK shows its
 	 * licence screen there (old_page_is_ours()). An anchor stays with the
 	 * browser: it keeps the one of the address it was sent away from (RFC
-	 * 9110, section 10.2.2).
+	 * 9110, section 10.2.2). One of the card «Staging» names a part that is
+	 * on «Staging» now; there admin.js goes on (enqueue_assets()).
 	 */
 	public function forward_old_page() {
 		if ( current_user_can( 'manage_options' ) && $this->old_page_is_ours() ) {
@@ -3380,6 +3381,16 @@ class AB_MCP_Admin {
 				'itemOff'    => _n( '%s ability off', '%s abilities off', 1, 'alphabridge-mcp' ),
 				/* translators: %s: number of abilities of other plugins switched off under Fine-tuning. */
 				'itemsOff'   => _n( '%s ability off', '%s abilities off', 2, 'alphabridge-mcp' ),
+
+				// The anchors of «Staging» and its address, for an address of
+				// the page before 4.16.0 that names a part of the card
+				// «Staging» (…alphabridge-mcp#ab-preview): the server leads it
+				// on to «AI Connection» and never sees the anchor, so admin.js
+				// goes on to «Staging» there (the table of
+				// AB_MCP_Guidance::settings_url(), not a second list).
+				'screen'         => ( self::$hooks['staging'] ?? false ) === $hook ? 'staging' : 'connection',
+				'stagingAnchors' => array_values( AB_MCP_Guidance::STAGING_ANCHORS ),
+				'stagingUrl'     => AB_MCP_Guidance::settings_url( '', 'staging' ),
 			)
 		);
 		if ( ! function_exists( 'ab_mcp_pro_is_core_screen' ) ) {

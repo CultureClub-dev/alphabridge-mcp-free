@@ -6,7 +6,8 @@
  * admin-ajax so the plaintext is returned once, straight to this browser, and
  * is never persisted server-side.
  *
- * Enqueued via admin_enqueue_scripts on the plugin's own page only.
+ * Enqueued via admin_enqueue_scripts on the plugin's two pages only, «AI
+ * Connection» and «Staging».
  *
  * @package AlphaBridge_MCP
  */
@@ -15,6 +16,22 @@
 
 	var cfg = window.abMcpAdmin || {};
 	var copiedLabel = cfg.copied || 'Copied';
+
+	/* ---- An address of the page before 4.16.0 that names a part of the
+	 * card «Staging» (…page=alphabridge-mcp#ab-preview, from a bookmark or
+	 * an older answer): the server leads it on to «AI Connection» and never
+	 * sees the anchor, which the browser keeps. Where the part is not on
+	 * this page, go on to «Staging» with the same anchor, in place of this
+	 * address in the history. Only an anchor of the server's list
+	 * (cfg.stagingAnchors), only on «AI Connection», so «Staging» never
+	 * leads on. ---- */
+	( function () {
+		var id = window.location.hash.slice( 1 );
+		if ( 'connection' !== cfg.screen || ! cfg.stagingUrl || -1 === ( cfg.stagingAnchors || [] ).indexOf( id ) || document.getElementById( id ) ) {
+			return;
+		}
+		window.location.replace( cfg.stagingUrl + '#' + id );
+	}() );
 
 	/* ---- Copy buttons (static value via data-copy, or live input via data-copy-target) ---- */
 	document.addEventListener( 'click', function ( e ) {

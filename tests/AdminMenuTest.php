@@ -23,7 +23,9 @@
  *   entry stays and the address does not lead on.
  * - Script, stylesheet and abMcpAdmin load on both pages and nowhere else;
  *   an older Pro add-on gets its loaders called with the old hook, a newer
- *   one does not.
+ *   one does not. abMcpAdmin tells admin.js the page it is on, the anchors of
+ *   «Staging» (the table of settings_url()) and the address of «Staging»,
+ *   for an old address whose anchor names a part of the card «Staging».
  *
  * Each test runs in a process of its own: the copied functions must not
  * reach the other tests (see the head of the copy), and each request starts
@@ -466,6 +468,29 @@ final class AdminMenuTest extends TestCase {
 		}
 		self::assertTrue( AB_MCP_Admin::is_own_screen( 'alphabridge_page_alphabridge-staging' ) );
 		self::assertFalse( AB_MCP_Admin::is_own_screen( 'settings_page_alphabridge-mcp' ) );
+	}
+
+	/**
+	 * admin.js leads an anchor of «Staging» on «AI Connection» on to
+	 * «Staging» (an address of the page before 4.16.0, whose anchor the
+	 * server never sees): with exactly the table of settings_url(), the
+	 * address of «Staging», and the page it is on.
+	 */
+	public function testThePagesTellTheScriptTheAnchorsAndTheAddressOfStaging(): void {
+		$plugin = $this->request( true );
+
+		foreach ( array(
+			'alphabridge_page_alphabridge-connection' => 'connection',
+			'alphabridge_page_alphabridge-staging'    => 'staging',
+		) as $hook => $screen ) {
+			$GLOBALS['ab_test_localized'] = array();
+			$plugin->enqueue_assets( $hook );
+			$cfg = $GLOBALS['ab_test_localized']['ab-mcp-admin']['abMcpAdmin'] ?? array();
+			self::assertSame( $screen, $cfg['screen'] ?? null, $hook );
+			self::assertSame( \AB_MCP_Guidance::STAGING_ANCHORS, $cfg['stagingAnchors'] ?? null, $hook . ': the table itself, as a list (a JSON array for the browser).' );
+			self::assertTrue( array_is_list( $cfg['stagingAnchors'] ) );
+			self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-staging', $cfg['stagingUrl'] ?? null, $hook . ': without an anchor; the script adds the one it has.' );
+		}
 	}
 
 	public function testAnOlderProGetsItsStylesheetsWithTheOldHook(): void {

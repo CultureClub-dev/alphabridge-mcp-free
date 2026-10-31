@@ -282,6 +282,58 @@ async function runCard( { hash = '', open = true } ) {
 	cases++;
 }
 
+/* ---- An anchor of the card «Staging» on «AI Connection» (since 4.16.0):
+ * the server leads an address of the page before 4.16.0 on to «AI
+ * Connection» and never sees the anchor (…alphabridge-mcp#ab-preview). The
+ * script goes on to «Staging» with the same anchor, with location.replace(),
+ * when the anchor is one of the server's list (abMcpAdmin.stagingAnchors,
+ * AB_MCP_Guidance::STAGING_ANCHORS, read here from the PHP file; AdminMenuTest
+ * holds what the server sends to it),
+ * the page is «AI Connection» and the part is not on it. Nothing else leads
+ * on: another anchor, the page «Staging», a part that is there, a page
+ * without the list or the address. ---- */
+// The table itself, read from includes/class-guidance.php, as the server sends it.
+const guidance        = readFileSync( join( dirname( fileURLToPath( import.meta.url ) ), '..', 'includes', 'class-guidance.php' ), 'utf8' );
+const STAGING_ANCHORS = [ ...( /const STAGING_ANCHORS = array\(([^;]*)\);/.exec( guidance ) || [ '', '' ] )[ 1 ].matchAll( /'([^']+)'/g ) ].map( ( m ) => m[ 1 ] );
+assert.ok( STAGING_ANCHORS.length >= 3 && STAGING_ANCHORS.includes( 'ab-preview' ), 'the table of the anchors of «Staging» is found' );
+const STAGING_URL     = 'https://example.test/wp-admin/admin.php?page=alphabridge-staging';
+function runLanding( { hash, screen = 'connection', present = [], cfg = null } ) {
+	const replaced = [];
+	const byId     = Object.fromEntries( present.map( ( id ) => [ id, { attrs: { id }, hidden: false, closest() { return null; }, getAttribute() { return null; } } ] ) );
+	const document = {
+		addEventListener() {},
+		querySelector() { return null; },
+		querySelectorAll() { return []; },
+		getElementById( id ) { return byId[ id ] || null; },
+	};
+	const location = { hash, href: 'https://example.test/wp-admin/admin.php?page=alphabridge-connection' + hash, replace( url ) { replaced.push( url ); } };
+	const window   = {
+		abMcpAdmin: cfg || { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n', screen, stagingAnchors: STAGING_ANCHORS, stagingUrl: STAGING_URL },
+		location,
+		localStorage: { getItem() { return null; }, setItem() {} },
+		addEventListener() {},
+	};
+	vm.runInNewContext( code, { document, window, console } );
+	return { replaced, href: location.href };
+}
+
+for ( const id of STAGING_ANCHORS ) {
+	const page = runLanding( { hash: '#' + id } );
+	assert.deepEqual( page.replaced, [ STAGING_URL + '#' + id ], `#${ id } on «AI Connection» goes on to «Staging» with the same anchor` );
+	assert.equal( page.href, 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#' + id, 'in place of this address (replace, not a new entry in the history)' );
+	cases++;
+}
+for ( const hash of [ '', '#', '#ab-mode', '#ab-fine', '#ab-tool-wp_list_posts', '#ab-undo', '#ab-staging-elsewhere', '#ab-previewx', '#xab-preview', '#AB-PREVIEW' ] ) {
+	assert.deepEqual( runLanding( { hash } ).replaced, [], `${ hash || 'no anchor' }: not an anchor of «Staging», nothing leads on` );
+	cases++;
+}
+assert.deepEqual( runLanding( { hash: '#ab-preview', screen: 'staging' } ).replaced, [], 'on «Staging» itself nothing leads on, even where the part is missing' );
+assert.deepEqual( runLanding( { hash: '#ab-preview', present: [ 'ab-preview' ] } ).replaced, [], 'a part that is on this page is landed on here' );
+assert.deepEqual( runLanding( { hash: '#ab-preview', cfg: { stagingAnchors: STAGING_ANCHORS, stagingUrl: STAGING_URL } } ).replaced, [], 'a page that does not say it is «AI Connection» leads nowhere' );
+assert.deepEqual( runLanding( { hash: '#ab-preview', cfg: { screen: 'connection', stagingAnchors: STAGING_ANCHORS } } ).replaced, [], 'without the address of «Staging» nothing leads on' );
+assert.deepEqual( runLanding( { hash: '#ab-preview', cfg: { screen: 'connection', stagingUrl: STAGING_URL } } ).replaced, [], 'without the list nothing leads on' );
+cases += 5;
+
 /* ---- The page «Staging» (since 4.16.0): the script runs on a page that
  * carries the card «Staging» and nothing of «AI Connection» (no switch for
  * write access, no assistants, no fine-tuning, no connections), without an
@@ -370,9 +422,10 @@ async function runStagingPage( { hash = '', open = true } ) {
 		createElement( tagName ) { return node( tagName.toUpperCase() ); },
 	};
 	const answer = { success: true, data: { password: 'abcdEFGH23456789', status: 'On since now', loader: { written: true }, loader_note: '', loader_source: '' } };
+	const replaced = [];
 	const window = {
-		abMcpAdmin: { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n', working: 'Working…' },
-		location: { hash },
+		abMcpAdmin: { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n', working: 'Working…', screen: 'staging', stagingAnchors: STAGING_ANCHORS, stagingUrl: STAGING_URL },
+		location: { hash, replace( url ) { replaced.push( url ); } },
 		localStorage: { getItem() { return 'chatgpt'; }, setItem() {} },
 		addEventListener() {},
 		FormData: class { constructor() { this.fields = {}; } append( k, v ) { this.fields[ k ] = v; } },
@@ -387,7 +440,7 @@ async function runStagingPage( { hash = '', open = true } ) {
 		}
 		await new Promise( ( r ) => setTimeout( r, 0 ) );
 	};
-	return { sent, click, onBtn, renewBtn, offForm, password, reveal, status, details, summary, preview };
+	return { sent, click, onBtn, renewBtn, offForm, password, reveal, status, details, summary, preview, replaced };
 }
 
 {
@@ -396,6 +449,7 @@ async function runStagingPage( { hash = '', open = true } ) {
 	assert.equal( page.details.open, true, 'the address opens the folded card at the part it names' );
 	assert.equal( page.preview.scrolled, true, 'and lands on it' );
 	assert.equal( page.sent.length, 0, 'loading sends nothing' );
+	assert.deepEqual( page.replaced, [], '«Staging» itself never leads on' );
 	await page.click( page.onBtn );
 	assert.deepEqual( page.sent.map( ( s ) => s.body ), [ { action: 'ab_mcp_preview_protection', nonce: 'n', preview: 'on' } ], '«Switch on» asks over ajax, with the nonce of the page' );
 	assert.equal( page.sent[ 0 ].url, 'https://example.test/wp-admin/admin-ajax.php' );

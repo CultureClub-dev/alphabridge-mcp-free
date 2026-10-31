@@ -136,7 +136,8 @@ class AB_MCP_Guidance {
 	 * AB_MCP_Staging_Gate::ANCHOR. Every other id of the plugin is on «AI
 	 * Connection». Written out rather than read from those classes, as this
 	 * class also loads where they do not (the standalone runs); a test holds
-	 * the list to the ids the page shows.
+	 * the list to the ids the page shows. admin.js gets the same list
+	 * (AB_MCP_Admin::enqueue_assets()) for the anchors of older addresses.
 	 */
 	const STAGING_ANCHORS = array(
 		'ab-staging-card',
