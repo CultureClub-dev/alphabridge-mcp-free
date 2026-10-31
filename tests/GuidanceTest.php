@@ -289,6 +289,31 @@ final class GuidanceTest extends TestCase {
 		}
 	}
 
+	public function testTheWayToStagingPromotesNothing(): void {
+		// The question «staging first?» (4.15.0) is about how to work, not
+		// about an edition: the same rules as above hold for its sentence
+		// in the instructions and for the prompt staging_workflow.
+		$r     = self::free_registry();
+		$m     = new ReflectionMethod( AB_MCP_REST_Controller::class, 'instructions' );
+		$text  = $m->invoke( new AB_MCP_REST_Controller( $r ) );
+		$start = strpos( $text, ' Before the first change on this site' );
+		self::assertNotFalse( $start, 'On a site with every tool of this plugin, the sentence is there.' );
+
+		$texts = array( substr( $text, $start, strpos( $text, ' NOT ON THIS SITE' ) - $start ) );
+		foreach ( apply_filters( 'ab_mcp_prompts', array(), $r ) as $prompt ) {
+			if ( 'staging_workflow' === $prompt['name'] ) {
+				$texts[] = $prompt['description'];
+				$texts[] = $prompt['text'];
+			}
+		}
+		self::assertCount( 3, $texts, 'The prompt is there too.' );
+		foreach ( $texts as $one ) {
+			self::assertNoPromotion( $one );
+			self::assertStringNotContainsString( 'alphabridge-mcp.com', $one );
+			self::assertDoesNotMatchRegularExpression( '#https?://#', $one );
+		}
+	}
+
 	/* ------------------------------------------------- refusals for the role */
 
 	/**
