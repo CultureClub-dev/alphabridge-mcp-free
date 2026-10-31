@@ -234,7 +234,16 @@ final class AB_MCP_Redactor {
 	 * print_r()'s null, true, false and empty text, var_dump()'s NULL,
 	 * bool(…), string(0) "" and uninitialized(…).
 	 */
-	const DUMP_NOTHING = '/^(?:NULL|null|true|false|\'\'|""|bool\((?:true|false)\)|string\(0\) ""|uninitialized\([^)\r\n]*\)),?$/';
+	const DUMP_NOTHING = '/^(?:NULL|null|true|false|\'\'|""|bool\((?:true|false)\)|string\(0\) ""|uninitialized\([^)\r\n]*\)|\*uninitialized\*),?$/';
+
+	/**
+	 * What Xdebug's var_dump() writes before an object property's name, in
+	 * its text form ("public ?string $name =>") and its HTML form ("public
+	 * string 'name' =>"): visibility and other modifiers, then a type where
+	 * the property has one (?string, int|string, \Vendor\Class). A regex
+	 * fragment.
+	 */
+	const XDEBUG_MODIFIERS = '(?:(?:public|protected|private|readonly|static)[ \t]+)+(?:[?\w\\\\|&()]+[ \t]+)?';
 
 	/** The first line of a log entry: [30-Oct-2026 10:00:00 UTC] … */
 	const ENTRY = '/^\[\d{1,2}-[A-Za-z]{3}-\d{4}/';
@@ -1287,13 +1296,14 @@ final class AB_MCP_Redactor {
 		$out   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
 			$line = $lines[ $i ];
-			$dump = preg_match( '/^([ \t]*(?:\[([^\]:\r\n]{1,200})(?::[^\]\r\n]{0,200})?\]|\'([^\'\r\n]{1,200})\'|"([^"\r\n]{1,200})")[ \t]*=>[ \t]?)(.*)$/', $line, $m );
+			// Xdebug's text form names a property "public string $name =>".
+			$dump = preg_match( '/^([ \t]*(?:\[([^\]:\r\n]{1,200})(?::[^\]\r\n]{0,200})?\]|\'([^\'\r\n]{1,200})\'|"([^"\r\n]{1,200})"|' . self::XDEBUG_MODIFIERS . '\$([^\r\n]{1,200}?)(?:[ \t]+\([^)\r\n]{1,200}\))?)[ \t]*=>[ \t]?)(.*)$/', $line, $m );
 			if ( false === $dump ) {
 				return null;
 			}
 			// var_dump() writes the name in quotes: ["token"]=>
-			$name  = 1 === $dump ? trim( $m[2], '"' ) . $m[3] . $m[4] : '';
-			$value = 1 === $dump ? trim( $m[5] ) : '';
+			$name  = 1 === $dump ? trim( $m[2], '"' ) . $m[3] . $m[4] . $m[5] : '';
+			$value = 1 === $dump ? trim( $m[6] ) : '';
 			// var_dump(), Xdebug and var_export() of an array or object put
 			// the value on the next line: ["token"]=>, 'token' =>
 			$below = '' === $value && $i + 1 < $count && self::dump_value( $lines[ $i + 1 ] );
@@ -1436,12 +1446,13 @@ final class AB_MCP_Redactor {
 		$count = count( $html );
 		$out   = array();
 		for ( $i = 0; $i < $count; $i++ ) {
-			$entry = preg_match( '/^([ ]*)(?:(?:public|protected|private)[ ]+)?(?:\'((?:[^\'\\\\]|\\\\.){1,200})\'|"([^"]{1,200})")[ ]*=>[ ]?(.*)$/', $plain[ $i ], $m );
+			// "public string 'name' =>", "private 'name' (Class) =>", "'name' =>".
+			$entry = preg_match( '/^([ ]*)(?:' . self::XDEBUG_MODIFIERS . ')?(?:\'((?:[^\'\\\\]|\\\\.){1,200})\'|"([^"]{1,200})")(?:[ ]+\([^)\r\n]{1,200}\))?[ ]*=>[ ]?(.*)$/', $plain[ $i ], $m );
 			if ( false === $entry ) {
 				return null;
 			}
 			$value = 1 === $entry ? trim( $m[4] ) : '';
-			if ( 1 !== $entry || ! self::redacts_key( stripslashes( $m[2] . $m[3] ), $extra ) || preg_match( '/^(?:null|boolean (?:true|false)|string \'\' \(length=0\)|empty)$/', $value ) ) {
+			if ( 1 !== $entry || ! self::redacts_key( stripslashes( $m[2] . $m[3] ), $extra ) || preg_match( '/^(?:null|boolean (?:true|false)|string \'\' \(length=0\)|empty|\*uninitialized\*)$/', $value ) ) {
 				$out[] = $html[ $i ];
 				continue;
 			}
@@ -1605,7 +1616,7 @@ final class AB_MCP_Redactor {
 			return $count - 1;
 		}
 		for ( $j = $i + 1; $j < $count; $j++ ) {
-			if ( preg_match( '/^[ \t]*(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[ \t]*[)}\]]|^\[\d{1,2}-[A-Za-z]{3}-\d{4}/', $lines[ $j ] ) ) {
+			if ( preg_match( '/^[ \t]*(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+|' . self::XDEBUG_MODIFIERS . '\$[^\r\n]{1,200}?)[ \t]*=>|^[ \t]*[)}\]]|^\[\d{1,2}-[A-Za-z]{3}-\d{4}/', $lines[ $j ] ) ) {
 				return $j - 1;
 			}
 		}
@@ -1622,7 +1633,7 @@ final class AB_MCP_Redactor {
 	 */
 	private static function dump_value( $line ) {
 		$t = trim( $line );
-		return '' !== $t && ! preg_match( '/^(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+)[ \t]*=>|^[)}\]]/', $t )
+		return '' !== $t && ! preg_match( '/^(?:\[[^\]\r\n]{1,200}\]|\'[^\'\r\n]{0,200}\'|"[^"\r\n]{0,200}"|\d+|' . self::XDEBUG_MODIFIERS . '\$[^\r\n]{1,200}?)[ \t]*=>|^[)}\]]/', $t )
 			&& ! preg_match( self::ENTRY, $line ) && ! preg_match( self::DUMP_NOTHING, $t );
 	}
 

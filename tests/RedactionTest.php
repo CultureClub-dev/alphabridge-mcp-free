@@ -796,6 +796,107 @@ final class RedactionTest extends TestCase {
 		self::assertArrayNotHasKey( 'redacted', $out );
 	}
 
+	public function testXdebugObjectDumpsAreJudgedByTheirPropertiesNames(): void {
+		// Codex 14: Xdebug's text form names a property "public $password =>"
+		// with the value below, its HTML form "public string 'password' =>";
+		// a type may stand between.
+		$stamp = '[31-Oct-2026 10:00:00 UTC] ';
+		$text  = $stamp . "/var/www/html/x.php:3:\n" . implode(
+			"\n",
+			array(
+				'class Conn#1 (6) {',
+				'  public $host =>',
+				'  string(11) "example.org"',
+				'  protected $password =>',
+				'  string(12) "PLACEHOLDER1"',
+				'  public ?string $apiKey =>',
+				'  string(12) "PLACEHOLDER2"',
+				'  private readonly int|string $token =>',
+				'  int(987654)',
+				'  public static \\Vendor\\Auth $auth =>',
+				'  class Vendor\\Auth#2 (1) {',
+				'    public string $user =>',
+				'    string(12) "PLACEHOLDER3"',
+				'  }',
+				'  public $nested =>',
+				'  class Inner#3 (2) {',
+				'    public string $client_secret =>',
+				'    string(12) "PLACEHOLDER4"',
+				'    public $k =>',
+				'    string(5) "shown"',
+				'  }',
+				'  public int $count =>',
+				'  int(5)',
+				'}',
+			)
+		);
+		$html = $stamp . "<pre class='xdebug-var-dump' dir='ltr'>\n<small>/x.php:3:</small>\n" . implode(
+			"\n",
+			array(
+				"<b>object</b>(<i>Conn</i>)[<i>1</i>]",
+				self::xdebug_line( 2, "<i>public</i> 'host'", self::xdebug_string( 'example.org' ) ),
+				self::xdebug_line( 2, "<i>protected</i> <i>?string</i> 'password'", self::xdebug_string( 'PLACEHOLDER-H1' ) ),
+				self::xdebug_line( 2, "<i>private readonly</i> <i>int|string</i> 'token'", "<small>int</small> <font color='#4e9a06'>987654</font>" ),
+				self::xdebug_line( 2, "<i>public</i> <i>\\Vendor\\Auth</i> 'auth'", '' ),
+				"    <b>object</b>(<i>Vendor\\Auth</i>)[<i>2</i>]",
+				self::xdebug_line( 6, "<i>public</i> <i>string</i> 'user'", self::xdebug_string( 'PLACEHOLDER-H2' ) ),
+				self::xdebug_line( 2, "<i>public</i> 'nested'", '' ),
+				"    <b>object</b>(<i>Inner</i>)[<i>3</i>]",
+				self::xdebug_line( 6, "<i>public</i> <i>string</i> 'client_secret'", self::xdebug_string( 'PLACEHOLDER-H3' ) ),
+				self::xdebug_line( 6, "<i>public</i> 'k'", self::xdebug_string( 'shown' ) ),
+				self::xdebug_line( 2, "<i>public</i> <i>int</i> 'count'", "<small>int</small> <font color='#4e9a06'>5</font>" ),
+			)
+		) . "\n</pre>";
+
+		$out = $this->read( array( 'log' => $text . "\n" . $html . "\n[31-Oct-2026 10:00:01 UTC] next" ), 'wp_get_error_log' );
+		$log = $out['log'];
+
+		self::assertStringNotContainsString( 'PLACEHOLDER', $log );
+		self::assertStringNotContainsString( '987654', $log );
+		self::assertStringContainsString( "  public \$host =>\n  string(11) \"example.org\"\n  protected \$password =>[REDACTED]\n  public ?string \$apiKey =>[REDACTED]\n", $log );
+		self::assertStringContainsString( "  public static \\Vendor\\Auth \$auth =>[REDACTED]\n  public \$nested =>\n", $log, 'An object under a credential\'s name to its end.' );
+		self::assertStringContainsString( "    public string \$client_secret =>[REDACTED]\n    public \$k =>\n    string(5) \"shown\"\n  }\n  public int \$count =>\n  int(5)\n}", $log );
+		self::assertStringContainsString( self::xdebug_line( 2, "<i>protected</i> <i>?string</i> 'password'", self::R ), $log );
+		self::assertStringContainsString( self::xdebug_line( 2, "<i>public</i> <i>\\Vendor\\Auth</i> 'auth'", self::R ) . "\n" . self::xdebug_line( 2, "<i>public</i> 'nested'", '' ), $log );
+		self::assertStringContainsString( self::xdebug_line( 6, "<i>public</i> 'k'", self::xdebug_string( 'shown' ) ), $log );
+		self::assertSame( array( '/log' ), $out['redacted'] );
+	}
+
+	public function testOrdinaryXdebugObjectDumpsStayAsTheyAre(): void {
+		$stamp = '[31-Oct-2026 10:00:00 UTC] ';
+		$log   = $stamp . implode(
+			"\n",
+			array(
+				'class Conn#1 (5) {',
+				'  public $host =>',
+				'  string(11) "example.org"',
+				'  public ?string $note =>',
+				'  NULL',
+				'  public string $token =>',
+				'  *uninitialized*',
+				'  protected int|string $password_hint =>',
+				'  string(1) "x"',
+				'  public int $count =>',
+				'  int(5)',
+				'}',
+			)
+		) . "\n" . $stamp . "<pre class='xdebug-var-dump' dir='ltr'>\n" . implode(
+			"\n",
+			array(
+				"<b>object</b>(<i>Conn</i>)[<i>1</i>]",
+				self::xdebug_line( 2, "<i>public</i> 'host'", self::xdebug_string( 'example.org' ) ),
+				self::xdebug_line( 2, "<i>public</i> <i>string</i> 'token'", '<i>*uninitialized*</i>' ),
+				self::xdebug_line( 2, "<i>protected</i> <i>?string</i> 'secret'", "<font color='#3465a4'>null</font>" ),
+				self::xdebug_line( 2, "<i>public</i> <i>int</i> 'count'", "<small>int</small> <font color='#4e9a06'>5</font>" ),
+			)
+		) . "\n</pre>\n[31-Oct-2026 10:00:01 UTC] next";
+
+		$out = $this->read( array( 'log' => $log ), 'wp_get_error_log' );
+
+		self::assertSame( $log, $out['log'] );
+		self::assertArrayNotHasKey( 'redacted', $out );
+	}
+
 	public function testOrdinaryPhpDumpsStayAsTheyAre(): void {
 		$value = array( 'host' => 'example.org', 'count' => 5, 'password_hint' => 'x', 'secret' => null, 'token' => '', 'auth' => false, 'list' => array( 'a', 'b' ) );
 		foreach ( array( self::var_dumped( $value ), var_export( $value, true ), print_r( $value, true ) ) as $i => $dump ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions
