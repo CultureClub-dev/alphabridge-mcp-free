@@ -1593,8 +1593,8 @@ msgstr "Diese URL zeigt auf einen privaten oder nicht erlaubten Host und wurde b
 msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
 msgstr "Diese Verbindung hat die Zugriffsstufe „%2$s“, die das Werkzeug „%1$s“ nicht umfasst."
 
-msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder's layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them."
-msgstr "Dieser Meta-Schlüssel ist geschützt: Schlüssel, die mit „_“ beginnen, die WordPress als geschützt markiert oder die wie Zugangsdaten aussehen, liest dieses Werkzeug nicht. Den Aufbau eines Page-Builders mit wp_get_builder_layout lesen und SEO-Felder mit wp_seo_get; andere geschützte Schlüssel sind Sache des Plugins, dem sie gehören."
+msgid "This meta key looks like a credential (a password, a token, a secret or an API key, for example): such keys are not read through this tool for any account, and their values stay on the site. They belong to the plugin that owns them."
+msgstr "Dieser Meta-Schlüssel sieht wie Zugangsdaten aus (etwa ein Passwort, ein Token, ein Geheimnis oder ein API-Schlüssel): Solche Schlüssel liest dieses Werkzeug für kein Konto, und ihre Werte bleiben auf der Website. Zuständig ist das Plugin, dem der Schlüssel gehört."
 
 msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them."
 msgstr "Dieser Meta-Schlüssel ist geschützt: Schlüssel, die mit „_“ beginnen, die WordPress als geschützt markiert oder die wie Zugangsdaten aussehen, liest dieses Werkzeug nicht; sie sind Sache des Plugins, dem sie gehören."
@@ -5089,6 +5089,18 @@ msgstr "WordPress hat den neuen Status des Kommentars %d nicht gespeichert: Er h
 
 msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
 msgstr "Der Beitrag dieses Kommentars liegt im Papierkorb, was seine Kommentare auf post-trashed setzt, und kein Aufruf von WordPress setzt einen Kommentar wieder auf diesen Status. WordPress gibt den Kommentaren eines Beitrags den Status von vorher zurück, wenn der Beitrag aus dem Papierkorb kommt: den Beitrag mit wp_bulk_update_status oder in wp-admin unter Beiträge › Papierkorb aus dem Papierkorb holen, dann den Kommentar mit wp_get_comment prüfen."
+
+msgid "include_protected requires the manage_options capability. Leave it out, or connect with an administrator account."
+msgstr "include_protected braucht die Berechtigung manage_options. Weglassen oder mit dem Konto eines Administrators verbinden."
+
+msgid "This meta key is protected. Of the protected keys only the allow-listed page-builder and layout keys can be read (a site owner extends the list with the ab_mcp_pro_protected_meta_allowlist filter); include_protected=true lists the ones this post has."
+msgstr "Dieser Meta-Schlüssel ist geschützt. Von den geschützten Schlüsseln lassen sich nur die Page-Builder- und Layout-Schlüssel auf der Erlaubnisliste lesen (ein Website-Betreiber erweitert die Liste mit dem Filter ab_mcp_pro_protected_meta_allowlist); include_protected=true listet die auf, die dieser Beitrag hat."
+
+msgid "Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account."
+msgstr "Einen geschützten Meta-Schlüssel zu lesen, braucht wie include_protected die Berechtigung manage_options: mit dem Konto eines Administrators verbinden."
+
+msgid "Only allow-listed protected keys are returned. Other plugins' internal keys are never exposed."
+msgstr "Nur geschützte Schlüssel auf der Erlaubnisliste werden zurückgegeben. Interne Schlüssel anderer Plugins werden nie offengelegt."
 
 msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), and the undo of a new coupon moves it into the trash, which here would delete it for good; so there is no undo point. wp_wc_list_coupons lists the coupon; a coupon that is not wanted is taken out of use under Marketing › Coupons in wp-admin."
 msgstr "Der Papierkorb ist auf dieser Website ausgeschaltet (EMPTY_TRASH_DAYS ist 0), und das Undo eines neuen Gutscheins verschiebt ihn in den Papierkorb, was ihn hier endgültig löschen würde; darum gibt es keinen Undo-Punkt. wp_wc_list_coupons listet den Gutschein auf; ein nicht gewünschter Gutschein wird in wp-admin unter Marketing › Gutscheine entfernt."

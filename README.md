@@ -161,12 +161,16 @@ Handing an AI access to a site should feel safe, so control comes first:
   (such as `panels_data`, `dslc_code`, `pagelayer-data`, `brizy`, `mfn-page-items` or
   `tve_updated_post`), is written through the `meta` argument of `wp_create_post` and
   `wp_update_post` only for accounts with the `unfiltered_html` capability; for any other
-  account the call is refused before anything is written. One read-only tool
-  reaches further, by design: `wp_get_builder_layout`, for an account that may edit the post,
+  account the call is refused before anything is written. Two reading paths reach further, by
+  design: `wp_get_builder_layout`, for an account that may edit the post,
   reads the page builder's own stored data of that post, protected keys included, and returns
   only the visible text, link and image fields of its elements — never the raw meta, code,
   styling or attributes; separate keys that hold a page's own scripts or CSS are not read at
-  all.
+  all. And `wp_get_post` and `wp_get_post_meta` with `include_protected=true`, for an account
+  with `manage_options`, add a fixed allow-list of protected page-builder and layout keys
+  (`_elementor_data`, `_wp_page_template`, `_thumbnail_id` and a few more; filter
+  `ab_mcp_pro_protected_meta_allowlist`) where the account may edit the post and, for a key a
+  plugin registered, the plugin's rule allows it too; credential-shaped keys stay out.
   `wp_duplicate_post` copies protected keys too, into the new draft only and only for an
   account that may edit the original: WordPress's own page template, featured image and list of
   removed hooked blocks, and — with the `unfiltered_html` capability, because it holds markup —

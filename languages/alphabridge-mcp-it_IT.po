@@ -1593,8 +1593,8 @@ msgstr "Questo URL punta a un host privato o non consentito ed è stato bloccato
 msgid "This connection has the access level \"%2$s\", which does not include the tool \"%1$s\"."
 msgstr "Questa connessione ha il livello di accesso “%2$s”, che non comprende lo strumento “%1$s”."
 
-msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool. Read a page builder's layout with wp_get_builder_layout and SEO fields with wp_seo_get; other protected keys belong to the plugin that owns them."
-msgstr "Questa chiave meta è protetta: le chiavi che iniziano con “_”, che WordPress contrassegna come protette o che sembrano credenziali non vengono lette tramite questo strumento. Leggi la struttura di un page builder con wp_get_builder_layout e i campi SEO con wp_seo_get; le altre chiavi protette sono di competenza del plugin a cui appartengono."
+msgid "This meta key looks like a credential (a password, a token, a secret or an API key, for example): such keys are not read through this tool for any account, and their values stay on the site. They belong to the plugin that owns them."
+msgstr "Questa chiave meta sembra una credenziale (ad esempio una password, un token, un segreto o una chiave API): questo strumento non legge queste chiavi per nessun account, e i loro valori restano sul sito. Sono di competenza del plugin a cui appartengono."
 
 msgid "This meta key is protected: keys that start with \"_\", that WordPress marks as protected, or that look like a credential are not read through this tool; they belong to the plugin that owns them."
 msgstr "Questa chiave meta è protetta: le chiavi che iniziano con “_”, che WordPress contrassegna come protette o che sembrano credenziali non vengono lette tramite questo strumento; sono di competenza del plugin a cui appartengono."
@@ -5089,6 +5089,18 @@ msgstr "WordPress non ha salvato il nuovo stato del commento %d: ha ancora lo st
 
 msgid "The post of this comment is in the trash, which leaves its comments post-trashed, and no call of WordPress sets a comment to that status again. WordPress gives the comments of a post the status they had before when the post comes out of the trash: take the post out of the trash with wp_bulk_update_status or under Posts › Trash in wp-admin, then check the comment with wp_get_comment."
 msgstr "L'articolo di questo commento è nel cestino, il che porta i suoi commenti a post-trashed, e nessuna chiamata di WordPress rimette un commento in questo stato. WordPress restituisce ai commenti di un articolo lo stato che avevano prima quando l'articolo esce dal cestino: ripristina l'articolo dal cestino con wp_bulk_update_status o in wp-admin sotto Articoli › Cestino, poi controlla il commento con wp_get_comment."
+
+msgid "include_protected requires the manage_options capability. Leave it out, or connect with an administrator account."
+msgstr "include_protected richiede la capacità manage_options. Omettilo, oppure collegati con l'account di un amministratore."
+
+msgid "This meta key is protected. Of the protected keys only the allow-listed page-builder and layout keys can be read (a site owner extends the list with the ab_mcp_pro_protected_meta_allowlist filter); include_protected=true lists the ones this post has."
+msgstr "Questa chiave meta è protetta. Delle chiavi protette si possono leggere solo le chiavi di page builder e di layout della lista consentita (il proprietario del sito estende la lista con il filtro ab_mcp_pro_protected_meta_allowlist); include_protected=true elenca quelle che ha questo articolo."
+
+msgid "Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account."
+msgstr "Leggere una chiave meta protetta richiede la capacità manage_options, come include_protected: collegati con l'account di un amministratore."
+
+msgid "Only allow-listed protected keys are returned. Other plugins' internal keys are never exposed."
+msgstr "Vengono restituite solo le chiavi protette della lista consentita. Le chiavi interne degli altri plugin non vengono mai esposte."
 
 msgid "The trash is turned off on this site (EMPTY_TRASH_DAYS is 0), and the undo of a new coupon moves it into the trash, which here would delete it for good; so there is no undo point. wp_wc_list_coupons lists the coupon; a coupon that is not wanted is taken out of use under Marketing › Coupons in wp-admin."
 msgstr "Il cestino è disattivato su questo sito (EMPTY_TRASH_DAYS è 0), e l'annullamento di un nuovo coupon lo sposta nel cestino, il che qui lo eliminerebbe definitivamente; quindi non c'è alcun punto di ripristino. wp_wc_list_coupons elenca il coupon; un coupon non desiderato si rimuove in wp-admin sotto Marketing › Codici promozionali."

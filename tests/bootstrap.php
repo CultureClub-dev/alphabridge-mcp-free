@@ -81,6 +81,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_meta_deleted'] = array();
 	$GLOBALS['ab_test_meta_added']   = array();
 	$GLOBALS['ab_test_meta_updated'] = array();
+	$GLOBALS['ab_test_registered_meta'] = array();
 	$GLOBALS['ab_test_rand']         = array();
 	$GLOBALS['ab_test_actions']      = array();
 	$GLOBALS['ab_test_comments_untrashed'] = array();
@@ -677,6 +678,18 @@ function update_post_meta( $post_id, $meta_key, $meta_value, $prev_value = '' ) 
 	$GLOBALS['ab_test_meta'][ (int) $post_id ][ $meta_key ] = array( maybe_serialize( $meta_value ) );
 	$GLOBALS['ab_test_meta_updated'][] = array( (int) $post_id, $meta_key );
 	return true;
+}
+
+/**
+ * registered_meta_key_exists() as WordPress answers it: whether a key was
+ * registered with register_meta() for the object type and the subtype
+ * asked (a post type); without a subtype, a registration for every one. A
+ * test registers a key in
+ * $GLOBALS['ab_test_registered_meta'][ $object_type ][ $subtype ][ $key ],
+ * with '' as the subtype of a registration for every post type.
+ */
+function registered_meta_key_exists( $object_type, $meta_key, $object_subtype = '' ) {
+	return isset( $GLOBALS['ab_test_registered_meta'][ (string) $object_type ][ (string) $object_subtype ][ (string) $meta_key ] );
 }
 
 // The four helpers below are WordPress' own (6.9 / 7.0), so a test sees

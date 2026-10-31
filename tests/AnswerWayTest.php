@@ -254,6 +254,32 @@ final class AnswerWayTest extends TestCase {
 		self::assertStringNotContainsString( 'usually because the plugin', self::message( $res ) );
 	}
 
+	public function testAProtectedPostMetaKeyNamesTheAllowListOrTheRight(): void {
+		// Since 4.14.0, as in Pro: a protected key outside the allow-list
+		// names the filter that extends it and include_protected; one on it
+		// names manage_options and the account to connect with; a credential
+		// names the plugin it belongs to.
+		self::allow();
+		ab_test_add_post( 12, array( 'post_status' => 'publish' ) );
+		$res = AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 12, 'key' => '_edit_lock' ) );
+		self::assertSame( 'ab_mcp_protected_meta', $res->get_error_code() );
+		self::assertStringContainsString( 'the ab_mcp_pro_protected_meta_allowlist filter', self::message( $res ) );
+		self::assertStringContainsString( 'include_protected=true lists the ones this post has', self::message( $res ) );
+		$res = AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 12, 'key' => 'api_key' ) );
+		self::assertSame( 'ab_mcp_protected_meta', $res->get_error_code() );
+		self::assertStringContainsString( 'They belong to the plugin that owns them.', self::message( $res ) );
+
+		self::allow( 'edit_posts', 'read_post', 'edit_post' );
+		$res = AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 12, 'key' => '_elementor_data' ) );
+		self::assertSame( 'ab_mcp_forbidden', $res->get_error_code() );
+		self::assertStringContainsString( 'requires the manage_options capability, as include_protected does: connect with an administrator account', self::message( $res ) );
+		foreach ( array( AB_MCP_Tools_Content::get_post_meta_tool( array( 'id' => 12, 'include_protected' => true ) ), AB_MCP_Tools_Content::get_post( array( 'id' => 12, 'include_protected' => true ) ) ) as $res ) {
+			self::assertSame( 'ab_mcp_forbidden', $res->get_error_code() );
+			self::assertStringContainsString( 'Leave it out, or connect with an administrator account.', self::message( $res ) );
+			self::assertLeadsTo( 'https://example.test/wp-admin/users.php', self::message( $res ) );
+		}
+	}
+
 	public function testATermMetaKeyOneMayOnlyAssignNamesTheRightToEditTheTerm(): void {
 		self::allow( 'assign_categories' );
 		$GLOBALS['ab_test_way']['terms'][3]             = (object) array( 'term_id' => 3, 'taxonomy' => 'category' );
