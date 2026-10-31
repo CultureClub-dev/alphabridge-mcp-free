@@ -74,6 +74,27 @@
  *   registration anyway.
  * - wp-links-opml.php loads WordPress without wp() and prints the bookmarks;
  *   the gate runs for it on wp_loaded (gate_script()).
+ * - wp-activate.php defines WP_INSTALLING before it loads WordPress, and
+ *   wp_get_active_and_valid_plugins() returns nothing while wp_installing()
+ *   (wp-includes/load.php): no plugin loads, this one included, and
+ *   wp-blog-header.php then serves ?rest_route= and ?feed= before the
+ *   script's own redirect. Must-use plugins load all the same
+ *   (wp-settings.php loads wp_get_mu_plugins() without that check), so
+ *   while the protection is on the plugin keeps a small loader at
+ *   WPMU_PLUGIN_DIR/alphabridge-preview-protection.php (loader_source()),
+ *   which does something only under wp_installing(), with this plugin
+ *   active, its files in place and the protection on: it loads this class
+ *   and hooks the gates. Written on switching on and on activation, kept
+ *   current on every load (hook()), removed on switching off, on
+ *   deactivation and by uninstall.php; on a network it stays while another
+ *   site's protection is on, since the folder is shared. Where the folder
+ *   cannot be written, the protection goes on all the same and the tool
+ *   and the settings page say so, with the file to create by hand.
+ * - robots.txt passes only on the way with themes (template_redirect):
+ *   without themes the template loader prints robots.txt and returns to the
+ *   script, and wp-signup.php then renders its page with the theme's header
+ *   and footer; so gate_without_themes() and the loader's gates do not
+ *   exempt it.
  * - Embeds (/embed/, ?embed=true), previews (?p=…&preview=true) and the
  *   feeds of index.php load the template loader with themes and so pass
  *   template_redirect. wp-comments-post.php and the nopriv actions of
@@ -179,6 +200,14 @@ class AB_MCP_Preview_Protection {
 	const ANCHOR = 'ab-preview';
 
 	/**
+	 * File name of the must-use loader under WPMU_PLUGIN_DIR, and the
+	 * version of its source: raised whenever loader_source() changes, so a
+	 * loader an earlier version wrote is replaced (hook()).
+	 */
+	const LOADER_FILE    = 'alphabridge-preview-protection.php';
+	const LOADER_VERSION = 1;
+
+	/**
 	 * Where a change came from.
 	 */
 	const SOURCE_TOOL = 'tool';
@@ -189,6 +218,12 @@ class AB_MCP_Preview_Protection {
 	 * bootstrap, on init.
 	 */
 	public static function hook() {
+		// The loader for the requests WordPress serves without plugins, kept
+		// current: a loader of an earlier version is replaced, a missing one
+		// written. Not under wp_installing(), where this very loader runs.
+		if ( ! wp_installing() && self::is_on() ) {
+			self::write_loader();
+		}
 		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
 		add_action( 'wp', array( __CLASS__, 'gate_without_themes' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'gate_script' ) );
@@ -230,6 +265,7 @@ class AB_MCP_Preview_Protection {
 					self::write( array( 'restored' => false ) );
 				}
 				update_option( 'blog_public', 0 );
+				self::write_loader();
 				AB_MCP_Page_Cache::purge_site();
 			}
 		);
@@ -240,7 +276,9 @@ class AB_MCP_Preview_Protection {
 	 * back and the state notes it (restored); the state (hash and all) stays
 	 * for the next activation, as the plugin keeps its other settings. On
 	 * every site of a network when deactivated for the network. The page
-	 * cache is emptied, so no password page is served from it after.
+	 * cache is emptied, so no password page is served from it after. The
+	 * loader goes too: for the network or a single site at once, for one
+	 * site of a network only when no other site's protection is on.
 	 *
 	 * @param bool $network_wide Deactivated for the whole network.
 	 */
@@ -259,6 +297,9 @@ class AB_MCP_Preview_Protection {
 				AB_MCP_Page_Cache::purge_site();
 			}
 		);
+		if ( $network_wide || ! is_multisite() || ! self::on_elsewhere() ) {
+			self::remove_loader();
+		}
 	}
 
 	/**
@@ -327,7 +368,7 @@ class AB_MCP_Preview_Protection {
 	 *
 	 * @param int    $user_id Who switches.
 	 * @param string $source  SOURCE_TOOL or SOURCE_FORM.
-	 * @return array{changed:bool,password:string,page_cache:array}
+	 * @return array{changed:bool,password:string,loader?:array,page_cache:array}
 	 */
 	public static function enable( $user_id, $source ) {
 		$state = self::state();
@@ -357,6 +398,7 @@ class AB_MCP_Preview_Protection {
 		return array(
 			'changed'    => true,
 			'password'   => $password,
+			'loader'     => self::loader_status( self::write_loader() ),
 			'page_cache' => AB_MCP_Page_Cache::purge_site(),
 		);
 	}
@@ -416,11 +458,218 @@ class AB_MCP_Preview_Protection {
 			update_option( 'blog_public', $state['blog_public'] );
 		}
 		self::store( array( 'on' => false ), (int) $user_id, (string) $source );
+		if ( ! is_multisite() || ! self::on_elsewhere() ) {
+			self::remove_loader();
+		}
 		return array(
 			'changed'     => true,
 			'blog_public' => $state['blog_public'],
 			'page_cache'  => AB_MCP_Page_Cache::purge_site(),
 		);
+	}
+
+	/* ----------------------------------------------------------- loader */
+
+	/**
+	 * Where the must-use loader lives: WPMU_PLUGIN_DIR as WordPress defines
+	 * it; '' where nothing says where must-use plugins are.
+	 *
+	 * @return string
+	 */
+	public static function loader_path() {
+		if ( defined( 'WPMU_PLUGIN_DIR' ) && '' !== (string) WPMU_PLUGIN_DIR ) {
+			return rtrim( (string) WPMU_PLUGIN_DIR, '/\\' ) . '/' . self::LOADER_FILE;
+		}
+		if ( defined( 'WP_CONTENT_DIR' ) && '' !== (string) WP_CONTENT_DIR ) {
+			return rtrim( (string) WP_CONTENT_DIR, '/\\' ) . '/mu-plugins/' . self::LOADER_FILE;
+		}
+		return '';
+	}
+
+	/**
+	 * The source of the must-use loader. It names the folder of the plugin
+	 * that carries this core (this plugin, or the Pro add-on that bundles
+	 * it) and the folder of the core's files, as PHP: below WP_PLUGIN_DIR
+	 * where the core lives there, else as an absolute path. Everything it
+	 * does is guarded: nothing outside wp_installing(), nothing without the
+	 * plugin active on this site or the network, nothing when the files are
+	 * gone (a plugin deleted over FTP must not leave a fatal error behind),
+	 * nothing while the protection is off.
+	 *
+	 * @return string
+	 */
+	public static function loader_source() {
+		$basename = defined( 'AB_MCP_BASENAME' ) ? (string) AB_MCP_BASENAME : 'alphabridge-mcp/alphabridge-mcp.php';
+		$folder   = (string) strtok( $basename, '/' );
+		$dir      = defined( 'AB_MCP_DIR' ) ? rtrim( (string) AB_MCP_DIR, '/\\' ) . '/' : '';
+		$plugins  = defined( 'WP_PLUGIN_DIR' ) ? rtrim( (string) WP_PLUGIN_DIR, '/\\' ) : '';
+		if ( '' !== $plugins && 0 === strpos( $dir, $plugins . '/' ) ) {
+			$dir_code = 'WP_PLUGIN_DIR . ' . var_export( substr( $dir, strlen( $plugins ) ), true );
+		} else {
+			$dir_code = var_export( $dir, true );
+		}
+		$version = defined( 'AB_MCP_VERSION' ) ? (string) AB_MCP_VERSION : '';
+		$lines   = array(
+			'<?php',
+			'/**',
+			' * Plugin Name: AlphaBridge MCP – Preview Protection Loader',
+			' * Description: Written by AlphaBridge MCP while its preview protection is on and removed when it goes off. It acts only on the requests WordPress serves without loading plugins (wp-activate.php sets WP_INSTALLING) and loads the protection from the plugin\'s folder for them; otherwise it does nothing. Do not edit: the plugin rewrites it.',
+			' * Version: ' . $version,
+			' */',
+			'// ab-mcp-preview-loader ' . self::LOADER_VERSION . ' ' . $version,
+			'if ( ! defined( \'ABSPATH\' ) || ! function_exists( \'wp_installing\' ) || ! wp_installing() ) {',
+			'	return;',
+			'}',
+			'$ab_mcp_loader_folder = ' . var_export( $folder, true ) . ';',
+			'$ab_mcp_loader_dir    = ' . $dir_code . ';',
+			'$ab_mcp_loader_active = false;',
+			'foreach ( (array) get_option( \'active_plugins\', array() ) as $ab_mcp_loader_plugin ) {',
+			'	if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
+			'		$ab_mcp_loader_active = true;',
+			'	}',
+			'}',
+			'if ( ! $ab_mcp_loader_active && function_exists( \'is_multisite\' ) && is_multisite() ) {',
+			'	foreach ( array_keys( (array) get_site_option( \'active_sitewide_plugins\', array() ) ) as $ab_mcp_loader_plugin ) {',
+			'		if ( is_string( $ab_mcp_loader_plugin ) && 0 === strpos( $ab_mcp_loader_plugin, $ab_mcp_loader_folder . \'/\' ) ) {',
+			'			$ab_mcp_loader_active = true;',
+			'		}',
+			'	}',
+			'}',
+			'if ( ! $ab_mcp_loader_active ) {',
+			'	return;',
+			'}',
+			'foreach ( array( \'includes/class-settings.php\', \'includes/class-page-cache.php\', \'includes/class-preview-protection.php\' ) as $ab_mcp_loader_file ) {',
+			'	if ( ! is_readable( $ab_mcp_loader_dir . $ab_mcp_loader_file ) ) {',
+			'		return;',
+			'	}',
+			'}',
+			'$ab_mcp_loader_options = get_option( \'ab_mcp_options\' );',
+			'if ( ! is_array( $ab_mcp_loader_options ) || ! isset( $ab_mcp_loader_options[\'preview_protection\'] ) || ! is_array( $ab_mcp_loader_options[\'preview_protection\'] ) ) {',
+			'	return;',
+			'}',
+			'$ab_mcp_loader_state = $ab_mcp_loader_options[\'preview_protection\'];',
+			'if ( ! isset( $ab_mcp_loader_state[\'on\'], $ab_mcp_loader_state[\'hash\'] ) || true !== $ab_mcp_loader_state[\'on\'] || \'\' === (string) $ab_mcp_loader_state[\'hash\'] ) {',
+			'	return;',
+			'}',
+			'require_once $ab_mcp_loader_dir . \'includes/class-settings.php\';',
+			'require_once $ab_mcp_loader_dir . \'includes/class-page-cache.php\';',
+			'require_once $ab_mcp_loader_dir . \'includes/class-preview-protection.php\';',
+			'if ( class_exists( \'AB_MCP_Preview_Protection\' ) ) {',
+			'	AB_MCP_Preview_Protection::hook();',
+			'}',
+		);
+		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * Is the loader in place, with the source of this version?
+	 *
+	 * @return bool
+	 */
+	public static function loader_current() {
+		$path = self::loader_path();
+		return '' !== $path && is_file( $path ) && (string) file_get_contents( $path ) === self::loader_source(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a file this plugin wrote, read back.
+	}
+
+	/**
+	 * Write the loader where it is missing or of another version: into a
+	 * temporary file first, then renamed into place (atomic within the
+	 * folder), and read back. As the undo store writes its snapshots.
+	 *
+	 * @return bool Whether the loader is in place with the current source now.
+	 */
+	public static function write_loader() {
+		$path = self::loader_path();
+		if ( '' === $path ) {
+			return false;
+		}
+		if ( self::loader_current() ) {
+			return true;
+		}
+		$dir = dirname( $path );
+		if ( ! is_dir( $dir ) && ! wp_mkdir_p( $dir ) ) {
+			return false;
+		}
+		$tmp = $path . '.' . bin2hex( random_bytes( 4 ) ) . '.tmp';
+		if ( false === @file_put_contents( $tmp, self::loader_source() ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- a folder that cannot be written is reported, not fatal.
+			return false;
+		}
+		if ( ! @rename( $tmp, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			return false;
+		}
+		return self::loader_current();
+	}
+
+	/**
+	 * Remove the loader.
+	 *
+	 * @return bool Whether no loader is there now.
+	 */
+	public static function remove_loader() {
+		$path = self::loader_path();
+		if ( '' === $path || ! file_exists( $path ) ) {
+			return true;
+		}
+		@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- a file this plugin wrote.
+		return ! file_exists( $path );
+	}
+
+	/**
+	 * On a network: is the protection on for a site other than the current
+	 * one? The loader is one file for the whole network and stays while it
+	 * is.
+	 *
+	 * @return bool
+	 */
+	private static function on_elsewhere() {
+		if ( ! is_multisite() ) {
+			return false;
+		}
+		$current = get_current_blog_id();
+		$sites   = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		);
+		$found = false;
+		foreach ( (array) $sites as $site_id ) {
+			if ( (int) $site_id === (int) $current ) {
+				continue;
+			}
+			switch_to_blog( (int) $site_id );
+			$on = self::is_on();
+			restore_current_blog();
+			if ( $on ) {
+				$found = true;
+				break;
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * What the tool and the settings page say about the loader.
+	 *
+	 * @param bool $written Whether it is in place.
+	 * @return array{path:string,written:bool}
+	 */
+	public static function loader_status( $written ) {
+		return array(
+			'path'    => self::loader_path(),
+			'written' => (bool) $written,
+		);
+	}
+
+	/**
+	 * The sentence for a loader that could not be written, for the tool
+	 * (English; the settings page translates its own).
+	 *
+	 * @return string
+	 */
+	public static function loader_missing_note() {
+		return 'WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to ' . self::loader_path() . '. Create that file with the content in loader_source, or give the folder write permission; until then those requests answer without the password.';
 	}
 
 	/**
@@ -466,6 +715,7 @@ class AB_MCP_Preview_Protection {
 		$state = self::state();
 		$out   = array(
 			'enabled'            => $state['on'],
+			'loader'             => $state['on'] ? self::loader_status( self::loader_current() ) : null,
 			'since'              => $state['on'] && $state['since'] > 0 ? gmdate( 'Y-m-d\TH:i:s\Z', $state['since'] ) : '',
 			'set_by'             => null,
 			'blog_public'        => (string) get_option( 'blog_public', '1' ),
@@ -560,9 +810,11 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * What the front-end gate decides on, read from the request.
 	 *
+	 * @param bool $with_themes Whether this is the way with themes
+	 *                          (template_redirect), where robots.txt may pass.
 	 * @return array
 	 */
-	public static function frontend_context() {
+	public static function frontend_context( $with_themes = true ) {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
 		$path = self::strip_home( (string) wp_parse_url( $uri, PHP_URL_PATH ) );
 		return array(
@@ -579,7 +831,9 @@ class AB_MCP_Preview_Protection {
 			'xmlrpc'      => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
 			'rest'        => defined( 'REST_REQUEST' ) && REST_REQUEST,
 			'cli'         => defined( 'WP_CLI' ) && WP_CLI,
-			'robots'      => function_exists( 'is_robots' ) && is_robots(),
+			// Only with themes: without them the template loader prints
+			// robots.txt and returns to the script, which renders on.
+			'robots'      => (bool) $with_themes && function_exists( 'is_robots' ) && is_robots(),
 		);
 	}
 
@@ -645,8 +899,12 @@ class AB_MCP_Preview_Protection {
 	 * While on, every answer is marked as not to be cached, whoever gets it:
 	 * a cache that stored the page a visitor with the cookie saw would hand
 	 * it to everyone after.
+	 *
+	 * @param mixed $with_themes true on template_redirect (the action passes
+	 *                           nothing, so the default); false from the
+	 *                           gates of the ways without themes.
 	 */
-	public static function gate_frontend() {
+	public static function gate_frontend( $with_themes = true ) {
 		$state = self::state();
 		if ( ! $state['on'] ) {
 			return;
@@ -656,7 +914,7 @@ class AB_MCP_Preview_Protection {
 		}
 		nocache_headers();
 
-		$ctx      = self::frontend_context();
+		$ctx      = self::frontend_context( true === $with_themes );
 		$decision = self::frontend_decision( $ctx, $state, time() );
 		if ( 'pass' === $decision['action'] ) {
 			return;
@@ -690,7 +948,7 @@ class AB_MCP_Preview_Protection {
 		if ( wp_using_themes() ) {
 			return;
 		}
-		self::gate_frontend();
+		self::gate_frontend( false );
 	}
 
 	/**
@@ -699,7 +957,7 @@ class AB_MCP_Preview_Protection {
 	 */
 	public static function gate_script() {
 		if ( isset( $GLOBALS['pagenow'] ) && 'wp-links-opml.php' === $GLOBALS['pagenow'] ) {
-			self::gate_frontend();
+			self::gate_frontend( false );
 		}
 	}
 

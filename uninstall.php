@@ -100,16 +100,24 @@ foreach ( (array) get_site_option( 'ab_mcp_pro_update_holds', array() ) as $ab_m
 // The preview protection (free since 4.15.0) set blog_public to 0 and kept
 // the earlier value in ab_mcp_options; once that option is gone nothing
 // would write it back, and the site would stay «discouraged» for search
-// engines without a visible reason. Deactivation writes it back too
-// (AB_MCP_Preview_Protection::on_deactivate()); this is for an uninstall
-// whose deactivation hook never ran. Per site, as the option is.
+// engines without a visible reason. Deactivation writes it back too and
+// notes it (restored, AB_MCP_Preview_Protection::on_deactivate()); with the
+// note the value standing now was chosen after, and stays. This is for an
+// uninstall whose deactivation hook never ran. Per site, as the option is.
 $ab_mcp_preview_blog_public = static function () {
 	$ab_mcp_opts = get_option( 'ab_mcp_options', array() );
 	$ab_mcp_pp   = ( is_array( $ab_mcp_opts ) && isset( $ab_mcp_opts['preview_protection'] ) && is_array( $ab_mcp_opts['preview_protection'] ) ) ? $ab_mcp_opts['preview_protection'] : array();
-	if ( isset( $ab_mcp_pp['on'], $ab_mcp_pp['hash'] ) && true === $ab_mcp_pp['on'] && '' !== (string) $ab_mcp_pp['hash'] && array_key_exists( 'blog_public', $ab_mcp_pp ) && is_scalar( $ab_mcp_pp['blog_public'] ) ) {
+	if ( isset( $ab_mcp_pp['on'], $ab_mcp_pp['hash'] ) && true === $ab_mcp_pp['on'] && '' !== (string) $ab_mcp_pp['hash'] && empty( $ab_mcp_pp['restored'] ) && array_key_exists( 'blog_public', $ab_mcp_pp ) && is_scalar( $ab_mcp_pp['blog_public'] ) ) {
 		update_option( 'blog_public', (string) $ab_mcp_pp['blog_public'] );
 	}
 };
+
+// The must-use loader the preview protection keeps for the requests
+// WordPress serves without plugins (AB_MCP_Preview_Protection::write_loader()):
+// one file for the install, so once, before the options go.
+if ( defined( 'WPMU_PLUGIN_DIR' ) && is_file( WPMU_PLUGIN_DIR . '/alphabridge-preview-protection.php' ) ) {
+	wp_delete_file( WPMU_PLUGIN_DIR . '/alphabridge-preview-protection.php' );
+}
 
 $ab_mcp_preview_blog_public();
 foreach ( $ab_mcp_options as $ab_mcp_option ) {

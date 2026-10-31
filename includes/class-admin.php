@@ -1206,6 +1206,14 @@ class AB_MCP_Admin {
 		$html .= '</div>';
 
 		$html .= '<p class="ab-note">' . esc_html__( 'What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data.', 'alphabridge-mcp' ) . '</p>';
+		if ( $on && ! AB_MCP_Preview_Protection::loader_current() ) {
+			// The requests WordPress serves without plugins: the loader for
+			// them is missing, so the person can create it by hand.
+			$html .= '<div class="notice notice-warning inline ab-preview__loader"><p>';
+			/* translators: %s: path of the file. */
+			$html .= esc_html( sprintf( __( 'WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password.', 'alphabridge-mcp' ), AB_MCP_Preview_Protection::loader_path() ) );
+			$html .= '</p><details><summary>' . esc_html__( 'File content', 'alphabridge-mcp' ) . '</summary><textarea readonly rows="12" class="ab-preview__source" aria-label="' . esc_attr__( 'File content', 'alphabridge-mcp' ) . '">' . esc_textarea( AB_MCP_Preview_Protection::loader_source() ) . '</textarea></details></div>';
+		}
 		$html .= '</div>';
 		return $html;
 	}

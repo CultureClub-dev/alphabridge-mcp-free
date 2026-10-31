@@ -5228,3 +5228,10 @@ msgstr "1. Activez-la avec enabled=true ; cela définit un mot de passe et le re
 msgctxt "tool label"
 msgid "Switch the preview protection on or off"
 msgstr "Activer ou désactiver la protection de l’aperçu"
+
+#, php-format
+msgid "WordPress serves a few requests without loading plugins (wp-activate.php: feeds and the REST API), and the loader that answers them for the protection could not be written to %s. Create that file by hand with the content below, or give the folder write permission; until then those requests answer without the password."
+msgstr "WordPress sert quelques requêtes sans charger les extensions (wp-activate.php : flux et API REST), et le chargeur qui y répond pour la protection n’a pas pu être écrit dans %s. Créez ce fichier à la main avec le contenu ci-dessous, ou donnez au dossier le droit d’écriture ; jusque-là, ces requêtes répondent sans mot de passe."
+
+msgid "File content"
+msgstr "Contenu du fichier"

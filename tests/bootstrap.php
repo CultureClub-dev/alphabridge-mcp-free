@@ -113,6 +113,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_is_admin']    = false;
 	$GLOBALS['ab_test_home']        = 'https://example.test';
 	$GLOBALS['ab_test_using_themes'] = true;
+	$GLOBALS['ab_test_installing']   = false;
+	$GLOBALS['ab_test_is_robots']    = false;
 	unset( $GLOBALS['pagenow'] );
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
@@ -1696,6 +1698,31 @@ $GLOBALS['ab_test_using_themes'] = true;
 
 function wp_using_themes() {
 	return ! empty( $GLOBALS['ab_test_using_themes'] );
+}
+
+/** @var bool $ab_test_installing WP_INSTALLING: true for wp-activate.php, where no plugin loads. */
+$GLOBALS['ab_test_installing'] = false;
+
+function wp_installing( $is_installing = null ) {
+	if ( null !== $is_installing ) {
+		$GLOBALS['ab_test_installing'] = (bool) $is_installing;
+	}
+	return ! empty( $GLOBALS['ab_test_installing'] );
+}
+
+/** @var bool $ab_test_is_robots Whether the request is robots.txt (is_robots()). */
+$GLOBALS['ab_test_is_robots'] = false;
+
+function is_robots() {
+	return ! empty( $GLOBALS['ab_test_is_robots'] );
+}
+
+function esc_textarea( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function wp_mkdir_p( $target ) {
+	return is_dir( $target ) || @mkdir( $target, 0777, true ); // phpcs:ignore
 }
 
 function rest_get_url_prefix() {

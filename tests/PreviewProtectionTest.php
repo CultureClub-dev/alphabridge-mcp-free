@@ -58,6 +58,19 @@
  *   path the handler does not serve (a double slash) is the password page,
  *   not the theme's 404; the namespace of the REST exemption is compared
  *   without regard to case, as WordPress's router matches routes.
+ * - wp-activate.php loads WordPress under WP_INSTALLING, where no plugin
+ *   loads but must-use plugins do: while on, a loader stands in
+ *   WPMU_PLUGIN_DIR (written on switching on, on activation and when
+ *   outdated on load; removed on switching off, deactivation and uninstall;
+ *   on a network kept while another site is on). It does nothing outside
+ *   wp_installing(), without the plugin active, without its files or with
+ *   the protection off; under wp_installing() it locks the REST API and the
+ *   feed for visitors and passes cookie holders and signed-in users. A
+ *   folder that cannot be written is reported by the tool and the card,
+ *   with the file to create.
+ * - robots.txt passes only on the way with themes; without them the
+ *   template loader returns to wp-signup.php, which renders on.
+ * - Uninstall respects the note: a value chosen after a deactivation stays.
  * - The tool needs manage_options and write access, is not destructive by
  *   its definition, returns the password exactly once, reports the state
  *   and what is not covered, and refuses to renew a password while off with
@@ -120,6 +133,13 @@ final class PreviewProtectionTest extends TestCase {
 		$_POST                                     = array();
 		$_COOKIE                                   = array();
 		unset( $GLOBALS['wp'] );
+		// The folder of must-use plugins, a temporary one of this process:
+		// every switch-on writes the loader there (WPMU_PLUGIN_DIR as
+		// WordPress defines it), so it exists for every test of this class.
+		if ( ! \defined( 'WPMU_PLUGIN_DIR' ) ) {
+			\define( 'WPMU_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-mu-plugins-' . getmypid() );
+		}
+		self::cleanMuDir();
 	}
 
 	protected function tearDown(): void {
@@ -128,6 +148,40 @@ final class PreviewProtectionTest extends TestCase {
 		$_COOKIE = array();
 		unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'], $GLOBALS['wp'] );
 		self::scope( 'full' );
+		self::cleanMuDir();
+	}
+
+	/** Remove the temporary folder of must-use plugins with whatever a test left in it. */
+	private static function cleanMuDir(): void {
+		$dir = WPMU_PLUGIN_DIR;
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+		chmod( $dir, 0755 );
+		foreach ( (array) glob( $dir . '/{,.}*', GLOB_BRACE ) as $file ) {
+			if ( is_file( $file ) ) {
+				unlink( $file );
+			}
+		}
+		rmdir( $dir );
+	}
+
+	/** The constants uninstall.php runs under, as UninstallTest sets them. */
+	private static function uninstallConstants(): void {
+		require_once __DIR__ . '/uninstall-stubs.php';
+		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+			\define( 'WP_UNINSTALL_PLUGIN', 'alphabridge-mcp/alphabridge-mcp.php' );
+		}
+		if ( ! \defined( 'WP_PLUGIN_DIR' ) ) {
+			\define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+		}
+		self::assertFileDoesNotExist( WP_PLUGIN_DIR . '/alphabridge-mcp-pro/alphabridge-mcp-pro.php' );
+	}
+
+	/** Include the loader (its own file, or a copy with another source) with every hook of the process forgotten first. */
+	private static function runLoader( string $file ): void {
+		$GLOBALS['ab_test_filters'] = array();
+		include $file;
 	}
 
 	/** The access level of the current connection, as AB_MCP_Auth records it after the token check. */
@@ -1170,16 +1224,7 @@ final class PreviewProtectionTest extends TestCase {
 	}
 
 	public function testUninstallingWritesTheVisibilityBackBeforeTheOptionGoes(): void {
-		require_once __DIR__ . '/uninstall-stubs.php';
-		// As UninstallTest runs it: the constants WordPress sets, and a plugin
-		// folder without the Pro add-on, so the shared data is removed.
-		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
-			\define( 'WP_UNINSTALL_PLUGIN', 'alphabridge-mcp/alphabridge-mcp.php' );
-		}
-		if ( ! \defined( 'WP_PLUGIN_DIR' ) ) {
-			\define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
-		}
-		self::assertFileDoesNotExist( WP_PLUGIN_DIR . '/alphabridge-mcp-pro/alphabridge-mcp-pro.php' );
+		self::uninstallConstants();
 		$this->on();
 		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
 		include dirname( __DIR__ ) . '/uninstall.php';
@@ -1191,6 +1236,253 @@ final class PreviewProtectionTest extends TestCase {
 		AB_MCP_Settings::set( AB_MCP_Preview_Protection::KEY, array( 'on' => false, 'blog_public' => '1' ) );
 		include dirname( __DIR__ ) . '/uninstall.php';
 		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'] );
+	}
+
+	/* ------------------------------------------------------------- loader */
+
+	public function testTheLoaderIsWrittenWithTheProtectionAndRemovedWithIt(): void {
+		$path = AB_MCP_Preview_Protection::loader_path();
+		self::assertSame( WPMU_PLUGIN_DIR . '/alphabridge-preview-protection.php', $path );
+		self::assertFileDoesNotExist( $path );
+
+		$on = AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		self::assertSame( array( 'path' => $path, 'written' => true ), $on['loader'] );
+		self::assertFileExists( $path );
+		$source = (string) file_get_contents( $path );
+		self::assertSame( AB_MCP_Preview_Protection::loader_source(), $source );
+		self::assertStringStartsWith( "<?php\n/**\n * Plugin Name: AlphaBridge MCP – Preview Protection Loader", $source, 'Explained under Must-Use in wp-admin.' );
+		self::assertStringContainsString( ' * Version: ' . AB_MCP_VERSION . "\n", $source );
+		self::assertStringContainsString( '// ab-mcp-preview-loader ' . AB_MCP_Preview_Protection::LOADER_VERSION . ' ' . AB_MCP_VERSION . "\n", $source, 'The version mark.' );
+		self::assertStringContainsString( "wp_installing()", $source );
+		self::assertStringContainsString( "'alphabridge-mcp'", $source, 'The folder of the plugin that carries the core.' );
+		self::assertTrue( AB_MCP_Preview_Protection::loader_current() );
+		self::assertSame( array( 'path' => $path, 'written' => true ), AB_MCP_Preview_Protection::summary()['loader'] );
+
+		AB_MCP_Preview_Protection::renew_password( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		self::assertFileExists( $path, 'A new password changes nothing about the loader.' );
+
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		self::assertFileDoesNotExist( $path, 'Off: removed.' );
+		self::assertNull( AB_MCP_Preview_Protection::summary()['loader'] );
+
+		$this->on();
+		self::assertFileExists( $path );
+		AB_MCP_Preview_Protection::on_deactivate();
+		self::assertFileDoesNotExist( $path, 'Deactivated: removed, the state kept.' );
+		self::assertTrue( AB_MCP_Preview_Protection::is_on() );
+		AB_MCP_Preview_Protection::on_activate();
+		self::assertFileExists( $path, 'Activated again: written again.' );
+
+		// A loader of an earlier version is replaced when the plugin loads.
+		file_put_contents( $path, "<?php\n// ab-mcp-preview-loader 0 4.14.0\nreturn;\n" );
+		self::assertFalse( AB_MCP_Preview_Protection::loader_current() );
+		AB_MCP_Preview_Protection::hook();
+		self::assertTrue( AB_MCP_Preview_Protection::loader_current(), 'Replaced on load.' );
+		unlink( $path );
+		AB_MCP_Preview_Protection::hook();
+		self::assertFileExists( $path, 'A missing one is written on load.' );
+
+		// Not while off, and not under wp_installing(), where the loader itself runs.
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		AB_MCP_Preview_Protection::hook();
+		self::assertFileDoesNotExist( $path );
+		$this->on();
+		unlink( $path );
+		$GLOBALS['ab_test_installing'] = true;
+		AB_MCP_Preview_Protection::hook();
+		self::assertFileDoesNotExist( $path, 'Under WP_INSTALLING nothing is written.' );
+	}
+
+	public function testTheLoaderDoesNothingOutsideInstallingWithoutThePluginWithoutItsFilesOrWithTheProtectionOff(): void {
+		$this->on();
+		$path = AB_MCP_Preview_Protection::loader_path();
+		$hooked = static fn(): bool => false !== has_action( 'wp', array( AB_MCP_Preview_Protection::class, 'gate_without_themes' ) )
+			|| false !== has_filter( 'rest_authentication_errors', array( AB_MCP_Preview_Protection::class, 'gate_rest' ) );
+		$GLOBALS['ab_test_options']['active_plugins'] = array( 'akismet/akismet.php', 'alphabridge-mcp/alphabridge-mcp.php' );
+
+		$GLOBALS['ab_test_installing'] = false;
+		self::runLoader( $path );
+		self::assertFalse( $hooked(), 'Not under WP_INSTALLING: the plugin itself hooks the gates.' );
+
+		$GLOBALS['ab_test_installing'] = true;
+		$GLOBALS['ab_test_options']['active_plugins'] = array( 'akismet/akismet.php' );
+		self::runLoader( $path );
+		self::assertFalse( $hooked(), 'The plugin is not active on this site.' );
+
+		$GLOBALS['ab_test_options']['active_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' );
+		$copy = $path . '.copy.php';
+		file_put_contents( $copy, str_replace( var_export( rtrim( AB_MCP_DIR, '/' ) . '/', true ), var_export( sys_get_temp_dir() . '/ab-mcp-gone-' . getmypid() . '/', true ), AB_MCP_Preview_Protection::loader_source() ) );
+		self::runLoader( $copy );
+		self::assertFalse( $hooked(), 'The plugin files are gone (deleted over FTP): nothing, no fatal error.' );
+
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		file_put_contents( $copy, AB_MCP_Preview_Protection::loader_source() );
+		self::runLoader( $copy );
+		self::assertFalse( $hooked(), 'The protection is off.' );
+
+		$this->on();
+		self::runLoader( $path );
+		self::assertTrue( $hooked(), 'Under WP_INSTALLING, with the plugin active, its files there and the protection on: the gates.' );
+
+		// A network-activated plugin counts too.
+		$GLOBALS['ab_test_options']['active_plugins'] = array();
+		$GLOBALS['ab_test_multisite']                 = true;
+		$GLOBALS['ab_test_site_options']['active_sitewide_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' => time() );
+		self::runLoader( $path );
+		self::assertTrue( $hooked() );
+	}
+
+	public function testUnderInstallingTheLoaderLocksRestAndFeedForVisitorsAndPassesCookieAndLogin(): void {
+		$this->on();
+		$GLOBALS['ab_test_installing']                = true;
+		$GLOBALS['ab_test_using_themes']              = false;
+		$GLOBALS['ab_test_options']['active_plugins'] = array( 'alphabridge-mcp/alphabridge-mcp.php' );
+		self::runLoader( AB_MCP_Preview_Protection::loader_path() );
+
+		// wp-activate.php?rest_route=/wp/v2/posts: the REST API under WP_INSTALLING.
+		$_SERVER['REQUEST_URI'] = '/wp-activate.php?rest_route=%2Fwp%2Fv2%2Fposts';
+		$_GET['rest_route']     = '/wp/v2/posts';
+		$result                 = apply_filters( 'rest_authentication_errors', true );
+		self::assertInstanceOf( WP_Error::class, $result );
+		self::assertSame( 401, $result->get_error_data()['status'] );
+		$_GET['rest_route'] = '/alphabridge/v1/mcp';
+		self::assertTrue( apply_filters( 'rest_authentication_errors', true ), 'The MCP endpoint stays open there too.' );
+		$_GET = array();
+
+		// wp-activate.php?feed=rss2: the feed, served without themes.
+		$_SERVER['REQUEST_URI'] = '/wp-activate.php?feed=rss2';
+		try {
+			do_action( 'wp' );
+			self::fail( 'The feed went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		$_SERVER['REQUEST_URI']                       = '/wp-activate.php?rest_route=%2Fwp%2Fv2%2Fposts';
+		$_GET['rest_route']                           = '/wp/v2/posts';
+		self::assertTrue( apply_filters( 'rest_authentication_errors', true ), 'With the cookie.' );
+		$_SERVER['REQUEST_URI'] = '/wp-activate.php?feed=rss2';
+		do_action( 'wp' );
+		$_COOKIE = array();
+
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertTrue( apply_filters( 'rest_authentication_errors', true ), 'Signed in.' );
+		do_action( 'wp' );
+		$_GET = array();
+	}
+
+	public function testAFolderThatCannotBeWrittenIsReportedNotHidden(): void {
+		mkdir( WPMU_PLUGIN_DIR, 0755, true );
+		chmod( WPMU_PLUGIN_DIR, 0555 );
+		if ( is_writable( WPMU_PLUGIN_DIR ) && false !== @file_put_contents( WPMU_PLUGIN_DIR . '/probe', 'x' ) ) {
+			unlink( WPMU_PLUGIN_DIR . '/probe' );
+			self::markTestSkipped( 'This account writes into a read-only folder (root).' );
+		}
+		try {
+			$out = AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => true ) );
+			self::assertTrue( $out['enabled'], 'The protection goes on all the same.' );
+			self::assertSame( array( 'path' => AB_MCP_Preview_Protection::loader_path(), 'written' => false ), $out['loader'] );
+			self::assertCount( 4, $out['not_covered'] );
+			self::assertStringContainsString( 'could not be written to ' . AB_MCP_Preview_Protection::loader_path(), $out['not_covered'][3] );
+			self::assertStringContainsString( 'Create that file with the content in loader_source', $out['not_covered'][3] );
+			self::assertSame( AB_MCP_Preview_Protection::loader_source(), $out['loader_source'] );
+			self::assertFalse( AB_MCP_Preview_Protection::loader_current() );
+
+			$GLOBALS['ab_test_can'] = static fn(): bool => true;
+			$html                   = $this->admin( 'preview_card_html' );
+			self::assertStringContainsString( 'could not be written to ' . AB_MCP_Preview_Protection::loader_path(), $html );
+			self::assertStringContainsString( '<textarea readonly', $html );
+			self::assertStringContainsString( htmlspecialchars( '// ab-mcp-preview-loader ' . AB_MCP_Preview_Protection::LOADER_VERSION, ENT_QUOTES, 'UTF-8' ), $html, 'The file to create, in full.' );
+
+			chmod( WPMU_PLUGIN_DIR, 0755 );
+			$ok = AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => false ) );
+			$ok = AB_MCP_Tools_Staging::set_preview_protection( array( 'enabled' => true ) );
+			self::assertTrue( $ok['loader']['written'] );
+			self::assertCount( 3, $ok['not_covered'] );
+			self::assertArrayNotHasKey( 'loader_source', $ok );
+			self::assertStringNotContainsString( 'could not be written', $this->admin( 'preview_card_html' ) );
+		} finally {
+			chmod( WPMU_PLUGIN_DIR, 0755 );
+		}
+	}
+
+	public function testOnANetworkTheLoaderStaysWhileAnotherSiteIsOn(): void {
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2, 3 );
+		$path                         = AB_MCP_Preview_Protection::loader_path();
+		foreach ( array( 1, 3 ) as $site ) {
+			switch_to_blog( $site );
+			ab_test_add_user( 7 );
+			$GLOBALS['ab_test_options']['blog_public'] = '1';
+			AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+			restore_current_blog();
+		}
+		self::assertFileExists( $path );
+
+		switch_to_blog( 1 );
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		restore_current_blog();
+		self::assertFileExists( $path, 'Site 3 is still on: the loader is the network\'s.' );
+
+		switch_to_blog( 3 );
+		AB_MCP_Preview_Protection::on_deactivate( false );
+		restore_current_blog();
+		self::assertFileDoesNotExist( $path, 'The last site with the protection deactivated the plugin: removed.' );
+
+		switch_to_blog( 3 );
+		AB_MCP_Preview_Protection::on_activate( false );
+		restore_current_blog();
+		self::assertFileExists( $path );
+		switch_to_blog( 1 );
+		AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		restore_current_blog();
+		AB_MCP_Preview_Protection::on_deactivate( true );
+		self::assertFileDoesNotExist( $path, 'Deactivated for the network: removed whatever the sites say.' );
+	}
+
+	public function testRobotsPassesOnlyOnTheWayWithThemes(): void {
+		$this->on();
+		$state                        = AB_MCP_Preview_Protection::state();
+		$GLOBALS['ab_test_is_robots'] = true;
+		$_SERVER['REQUEST_URI']       = '/robots.txt';
+		self::assertTrue( AB_MCP_Preview_Protection::frontend_context( true )['robots'] );
+		self::assertFalse( AB_MCP_Preview_Protection::frontend_context( false )['robots'], 'Without themes the template loader returns to the script after robots.txt, and wp-signup.php renders on.' );
+		self::assertSame( 'pass', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true ), $state, time() )['action'] );
+		self::assertSame( 'challenge', AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( false ), $state, time() )['action'] );
+		self::assertNull( AB_MCP_Preview_Protection::gate_frontend(), 'template_redirect: robots.txt is served, with Disallow: / from blog_public 0.' );
+
+		$GLOBALS['ab_test_using_themes'] = false;
+		$_SERVER['REQUEST_URI']          = '/wp-signup.php?robots=1';
+		try {
+			AB_MCP_Preview_Protection::gate_without_themes();
+			self::fail( 'wp-signup.php rendered with the theme.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		$GLOBALS['pagenow'] = 'wp-links-opml.php';
+		try {
+			AB_MCP_Preview_Protection::gate_script();
+			self::fail( 'The bookmarks went out.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+		unset( $GLOBALS['pagenow'] );
+	}
+
+	public function testUninstallRespectsTheNoteAndRemovesTheLoader(): void {
+		self::uninstallConstants();
+		$this->on();
+		AB_MCP_Preview_Protection::on_deactivate();
+		self::assertTrue( AB_MCP_Preview_Protection::state()['restored'] );
+		$GLOBALS['ab_test_options']['blog_public'] = 0;
+		$path = AB_MCP_Preview_Protection::loader_path();
+		file_put_contents( $path, AB_MCP_Preview_Protection::loader_source() );
+		include dirname( __DIR__ ) . '/uninstall.php';
+		self::assertSame( 0, $GLOBALS['ab_test_options']['blog_public'], 'Chosen after the deactivation: stays.' );
+		self::assertArrayNotHasKey( AB_MCP_Settings::OPT_OPTIONS, $GLOBALS['ab_test_options'] );
+		self::assertFileDoesNotExist( $path, 'The loader goes with the plugin.' );
 	}
 
 	/* ------------------------------------------------------- settings page */
