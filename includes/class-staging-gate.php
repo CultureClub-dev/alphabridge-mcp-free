@@ -708,14 +708,14 @@ class AB_MCP_Staging_Gate {
 	 * @return WP_Error
 	 */
 	public static function refusal( array $conn ) {
-		$reason = __( 'Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page.', 'alphabridge-mcp' );
+		$reason = __( 'Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the page AlphaBridge → Staging.', 'alphabridge-mcp' );
 		$way    = __( '1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps.', 'alphabridge-mcp' );
 		if ( 'token' === $conn['kind'] ) {
 			/* translators: %d: hours a release holds. */
-			$release = sprintf( __( '2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
+			$release = sprintf( __( '2. To change this site anyway, an administrator releases this connection on the page AlphaBridge → Staging under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
 		} else {
 			/* translators: %d: hours a release holds. */
-			$release = sprintf( __( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
+			$release = sprintf( __( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the page AlphaBridge → Staging under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
 		}
 		return new WP_Error(
 			'ab_mcp_staging_required',

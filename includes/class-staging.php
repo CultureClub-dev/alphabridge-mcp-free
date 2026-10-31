@@ -897,7 +897,7 @@ class AB_MCP_Staging {
 		$out                       = self::summary();
 		$out['role']['suggestion'] = array_merge(
 			self::suggestion(),
-			array( 'note' => 'A suggestion from what the site shows, never proof: only a person confirms the role, on the settings page or in the hub. Until then the site counts as the production site.' )
+			array( 'note' => 'A suggestion from what the site shows, never proof: only a person confirms the role, on the page AlphaBridge → Staging or in the hub. Until then the site counts as the production site.' )
 		);
 
 		$partner_check = null;
@@ -960,7 +960,7 @@ class AB_MCP_Staging {
 				__( 'Role confirmed', 'alphabridge-mcp' ),
 				false,
 				__( 'The role of this site is not confirmed yet, so it counts as the production site.', 'alphabridge-mcp' ),
-				__( '1. Open the settings page of AlphaBridge MCP at Staging. 2. Choose whether this site is the production site or the staging site; the suggestion there is a hint, not proof. 3. Save.', 'alphabridge-mcp' )
+				__( '1. Open the page AlphaBridge → Staging. 2. Choose whether this site is the production site or the staging site; the suggestion there is a hint, not proof. 3. Save.', 'alphabridge-mcp' )
 			);
 		}
 
@@ -974,8 +974,8 @@ class AB_MCP_Staging {
 			$guide   = isset( $host['guide'] ) && is_string( $host['guide'] ) ? $host['guide'] : '';
 			$steps   = '' !== $host['name'] && '' !== $guide
 				/* translators: 1: name of the host, such as Kinsta, 2: address of the host's guide. */
-				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'], $guide )
-				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
+				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the page AlphaBridge → Staging of this site, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'], $guide )
+				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the page AlphaBridge → Staging of this site, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
 			$item['fallback'] = self::drafts_fallback();
 			$items[]          = $item;
@@ -995,7 +995,7 @@ class AB_MCP_Staging {
 				$title,
 				false,
 				__( 'The preview protection is off: visitors and search engines can read the staging site.', 'alphabridge-mcp' ),
-				__( '1. Switch on the preview protection on the settings page at Staging, or have the assistant call wp_set_preview_protection. 2. Pass the password it shows on to whoever should see the preview.', 'alphabridge-mcp' )
+				__( '1. Switch on the preview protection on the page AlphaBridge → Staging, or have the assistant call wp_set_preview_protection. 2. Pass the password it shows on to whoever should see the preview.', 'alphabridge-mcp' )
 			);
 		}
 
@@ -1018,7 +1018,7 @@ class AB_MCP_Staging {
 				$title,
 				false,
 				__( 'No pair is set yet.', 'alphabridge-mcp' ),
-				__( '1. Confirm the role of this site, if it is not yet. 2. Enter the address of the other site on the settings page at Staging and save. 3. On the other site, enter the address of this one.', 'alphabridge-mcp' )
+				__( '1. Confirm the role of this site, if it is not yet. 2. Enter the address of the other site on the page AlphaBridge → Staging and save. 3. On the other site, enter the address of this one.', 'alphabridge-mcp' )
 			);
 		}
 
@@ -1050,13 +1050,13 @@ class AB_MCP_Staging {
 			case 'login':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Switch off the host\'s password protection for the staging site. 2. Switch on the preview protection of AlphaBridge MCP there instead: it keeps visitors out and lets apps and the hub in.', 'alphabridge-mcp' ) );
 			case 'redirect':
-				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. If that is the staging site, enter that address on the settings page at Staging. 2. Check again.', 'alphabridge-mcp' ) );
+				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. If that is the staging site, enter that address on the page AlphaBridge → Staging. 2. Check again.', 'alphabridge-mcp' ) );
 			case 'proxy':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. To let this site ask the staging site directly, add its host name to WP_PROXY_BYPASS_HOSTS in wp-config.php and check again. 2. Or check by hand: open the address of the staging site in a browser and see that it answers.', 'alphabridge-mcp' ) );
 			case 'not_alphabridge':
 				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Install and activate AlphaBridge MCP on the staging site. 2. Check again.', 'alphabridge-mcp' ) );
 			default:
-				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Open the address in a browser and check that it is the staging site. 2. Correct it on the settings page at Staging if it is not.', 'alphabridge-mcp' ) );
+				return self::item( 'staging_connected', $title, false, $check['finding'], __( '1. Open the address in a browser and check that it is the staging site. 2. Correct it on the page AlphaBridge → Staging if it is not.', 'alphabridge-mcp' ) );
 		}
 	}
 

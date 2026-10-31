@@ -382,7 +382,7 @@ class AB_MCP_Own_Abilities {
 				AB_MCP_Guidance::compose(
 					/* translators: %s: tool name */
 					sprintf( __( 'AlphaBridge\'s tools are not offered as WordPress abilities on this site, so "%s" did not run.', 'alphabridge-mcp' ), $name ),
-					__( 'To allow it, an administrator switches on "Offer AlphaBridge\'s tools as WordPress abilities" under Settings → AlphaBridge MCP → Fine-tuning and saves the changes.', 'alphabridge-mcp' ),
+					__( 'To allow it, an administrator switches on "Offer AlphaBridge\'s tools as WordPress abilities" under AlphaBridge → AI Connection → Fine-tuning and saves the changes.', 'alphabridge-mcp' ),
 					AB_MCP_Guidance::settings_url( self::ANCHOR )
 				)
 			);
@@ -395,7 +395,7 @@ class AB_MCP_Own_Abilities {
 				AB_MCP_Guidance::compose(
 					/* translators: %s: tool name */
 					sprintf( __( 'The tool "%s" is not offered as a WordPress ability on this site: it runs only through an AlphaBridge connection, with the checks of its access level.', 'alphabridge-mcp' ), $name ),
-					__( 'Use it through an AlphaBridge connection instead: an administrator connects the app under Settings → AlphaBridge MCP, and tools/list names the tool there.', 'alphabridge-mcp' ),
+					__( 'Use it through an AlphaBridge connection instead: an administrator connects the app under AlphaBridge → AI Connection, and tools/list names the tool there.', 'alphabridge-mcp' ),
 					AB_MCP_Guidance::settings_url( 'ab-connections' )
 				)
 			);

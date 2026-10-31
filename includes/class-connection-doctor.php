@@ -519,7 +519,7 @@ class AB_MCP_Connection_Doctor {
 	 * @return string
 	 */
 	private static function token_way() {
-		return __( 'Until it is fixed, connect with a token instead: under Settings → AlphaBridge MCP choose “Other”, create a connection and enter its token in the app (for an app without a field for it, tick “Also offer an address that contains the token.” there and use that address).', 'alphabridge-mcp' );
+		return __( 'Until it is fixed, connect with a token instead: under AlphaBridge → AI Connection choose “Other”, create a connection and enter its token in the app (for an app without a field for it, tick “Also offer an address that contains the token.” there and use that address).', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -838,7 +838,7 @@ class AB_MCP_Connection_Doctor {
 				array(
 					__( 'On Apache, add the line CGIPassAuth On to the .htaccess file in the WordPress folder, above the line # BEGIN WordPress. If the server does not accept that line, add these two lines there instead: “RewriteEngine On” and “RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]”.', 'alphabridge-mcp' ),
 					__( 'On nginx or any other server, ask your host to pass the Authorization header on to PHP.', 'alphabridge-mcp' ),
-					__( 'Until then, apps that take an address can connect with the token in it: under Settings → AlphaBridge MCP choose “Other”, tick “Also offer an address that contains the token.”, save, and create a connection.', 'alphabridge-mcp' ),
+					__( 'Until then, apps that take an address can connect with the token in it: under AlphaBridge → AI Connection choose “Other”, tick “Also offer an address that contains the token.”, save, and create a connection.', 'alphabridge-mcp' ),
 				)
 			);
 		}
@@ -882,7 +882,7 @@ class AB_MCP_Connection_Doctor {
 				$title,
 				__( 'The sign-in for apps is off on this site, so there are no sign-in addresses to check; apps connect with a token only.', 'alphabridge-mcp' ),
 				array(
-					__( 'To let Claude and ChatGPT connect with their Connect button, tick “Claude and other apps can sign in with their Connect button.” under Settings → AlphaBridge MCP → How Claude signs in, and save.', 'alphabridge-mcp' ),
+					__( 'To let Claude and ChatGPT connect with their Connect button, tick “Claude and other apps can sign in with their Connect button.” under AlphaBridge → AI Connection → How Claude signs in, and save.', 'alphabridge-mcp' ),
 				)
 			);
 		}

@@ -86,7 +86,7 @@ directory. It is the same code WordPress.org ships.
   fits, protected options are never touched, and changed option rows get an undo point of their
   own (`options_undo_token`).
 - **Preview protection for a staging site** — `wp_set_preview_protection` (and a section on the
-  settings page) puts the site behind a shared password for visitors: a password page with HTTP
+  page AlphaBridge → Staging) puts the site behind a shared password for visitors: a password page with HTTP
   401 instead of every page, feed, search, the sitemaps of SEO plugins and the AJAX answers of
   plugins for visitors, the public REST API closed to them too, search engine visibility set to
   discouraged (and written back on switching off), `X-Robots-Tag: noindex`, nothing cached, the
@@ -99,7 +99,7 @@ directory. It is the same code WordPress.org ships.
   shows, never taken as proof, the other site of the pair, the host, the preview protection and a
   checklist with the next step. On request (`check_partner`) it asks the other site whether
   AlphaBridge MCP answers there, only at public addresses and tied to them. The role, the other site and the
-  host are set on the settings page or, for both sites at once, by the hub over
+  host are set on the page AlphaBridge → Staging or, for both sites at once, by the hub over
   `alphabridge/v1/staging-pair`, which takes a pair back with `DELETE` and leaves the role. Before the first change, the server instructions have an assistant that
   can write and may use the tool call it and ask the person whether to work on staging first, saying why and how; the prompt
   `staging_workflow` has the steps.
@@ -107,11 +107,11 @@ directory. It is the same code WordPress.org ships.
   connection makes is paused: nothing runs, and the answer (`nothing_changed`, `staging_hint`) has
   the assistant tell the person why and how and offer to set staging up now; the same call with
   `staging_acknowledged: true` runs, and the question comes back after 7 days with the answers
-  `staging_reminder: week` or `never`. The setting on the settings page has Ask (the default), Off
+  `staging_reminder: week` or `never`. The setting on the page AlphaBridge → Staging has Ask (the default), Off
   and Require, which refuses every change until an administrator releases the connection there
   for 24 hours. The ways back, the preview protection, the caches, comments and the order status
   are never held; the list grows through `ab_mcp_staging_gate_exempt`.
-- **The card «Staging»** on the settings page brings it together: the checklist of
+- **The card «Staging»** on the page AlphaBridge → Staging brings it together: the checklist of
   `wp_staging_status` with the next step, the role and the other site, how to make the staging copy
   with the host's own staging guide where one was read (`host.guide` in the tool), the preview
   protection and Staging first with every connection; each user can fold it away.
@@ -140,7 +140,7 @@ Handing an AI access to a site should feel safe, so control comes first:
   comments, settings and the structure of the site. Every tool that creates, changes or deletes is
   refused, and so is every reading tool noted *only with write access* (in this plugin the readers
   of user profile fields and of the error log), with an answer that says why and leads to the switch. The main
-  switch *Write access for AI assistants* at the top of Settings → AlphaBridge MCP holds for every
+  switch *Write access for AI assistants* at the top of AlphaBridge → AI Connection holds for every
   connection (Claude, ChatGPT, Cursor and all others); an administrator switches it on after
   confirming, with a ticked box, that changes take effect immediately, that it is at the site
   owner's own risk and that a current backup exists. The account, the time, the version of that
@@ -231,7 +231,7 @@ To run this repository directly, clone it into your plugins directory as `alphab
 git clone https://github.com/CultureClub-dev/alphabridge-mcp-free.git wp-content/plugins/alphabridge-mcp
 ```
 
-Then activate it and open *Settings → AlphaBridge MCP* to create a connection.
+Then activate it and open *AlphaBridge → AI Connection* to create a connection.
 
 ## Paid add-on
 

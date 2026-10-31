@@ -1654,7 +1654,7 @@ final class StagingStatusTest extends TestCase {
 		AB_MCP_Staging::set_host( 'kinsta', 7 );
 		$html = $this->admin( 'staging_card_html' );
 		self::assertStringContainsString( 'value="staging" checked=\'checked\'> Staging site', $html );
-		self::assertMatchesRegularExpression( '/Staging site, confirmed by user7 on \d{4}-\d\d-\d\d \d\d:\d\d on the settings page\. Other site: https:\/\/example\.com \(Production site\), entered by user7 on [^.]+ on the settings page\./', $html );
+		self::assertMatchesRegularExpression( '/Staging site, confirmed by user7 on \d{4}-\d\d-\d\d \d\d:\d\d on the page AlphaBridge → Staging\. Other site: https:\/\/example\.com \(Production site\), entered by user7 on [^.]+ on the page AlphaBridge → Staging\./', $html );
 		self::assertStringContainsString( 'Suggestion: staging site. The address begins with “staging.”. A suggestion is a hint, not proof.', $html );
 		self::assertStringContainsString( 'value="https://example.com"', $html );
 		self::assertStringContainsString( '<option value="">As detected: Kinsta</option>', $html );

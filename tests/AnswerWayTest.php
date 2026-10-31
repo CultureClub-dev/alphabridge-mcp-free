@@ -89,7 +89,7 @@ final class AnswerWayTest extends TestCase {
 		$res = AB_MCP_Security::authorize( 'wp_list_posts', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
 		self::assertStringContainsString( 'The tool "wp_list_posts" is switched off in the fine-tuning of AlphaBridge MCP on this site.', self::message( $res ) );
-		self::assertStringContainsString( 'an administrator switches "wp_list_posts" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes', self::message( $res ) );
+		self::assertStringContainsString( 'an administrator switches "wp_list_posts" on under AlphaBridge → AI Connection → Fine-tuning and saves the changes', self::message( $res ) );
 		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_list_posts', self::message( $res ) );
 	}
 
@@ -98,7 +98,7 @@ final class AnswerWayTest extends TestCase {
 		$res = AB_MCP_Security::authorize( 'wp_update_post', array( 'capability' => 'edit_posts' ) );
 		self::assertSame( 'ab_mcp_read_mode', $res->get_error_code() );
 		self::assertStringStartsWith( 'Write access is off on this site, so the tool "wp_update_post" did not run: it changes the site', self::message( $res ) );
-		self::assertStringContainsString( 'an administrator can switch on write access at the top of Settings → AlphaBridge MCP', self::message( $res ) );
+		self::assertStringContainsString( 'an administrator can switch on write access at the top of AlphaBridge → AI Connection', self::message( $res ) );
 		self::assertStringContainsString( 'at the site owner\'s own risk', self::message( $res ) );
 		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', self::message( $res ) );
 	}
@@ -112,7 +112,7 @@ final class AnswerWayTest extends TestCase {
 		self::assertSame( 'ab_mcp_scope', $res->get_error_code() );
 		self::assertStringStartsWith( 'This connection has the access level "Read only", which does not include the tool "wp_update_post".', self::message( $res ) );
 		self::assertStringContainsString( 'connect the app again and choose the access level "Full" on the consent screen', self::message( $res ) );
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP', self::message( $res ) );
+		self::assertStringContainsString( 'AlphaBridge → AI Connection', self::message( $res ) );
 		self::assertLeadsTo( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-connections', self::message( $res ) );
 	}
 
@@ -476,7 +476,7 @@ final class AnswerWayTest extends TestCase {
 	 * The ways a message can name: a tool or a filter by name, an account to
 	 * connect with, a settings path, a parameter value, or a step to take.
 	 */
-	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|[Rr]un the ability again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b|Send the real value\b)/';
+	private const WAY = '/\b(wp_[a-z_]+|ab_mcp_[a-z_]+|[Cc]onnect with|Settings →|AlphaBridge →|force=true|allow_without_undo=true|[Pp]ass |[Uu]se |[Aa]sk |[Cc]heck |[Tt]ry again|[Cc]hoose |[Gg]ive |[Cc]onvert |[Aa]ttach it|[Ww]ait |[Ss]witch |[Uu]pdate WordPress|register with|the site administrator|host can fix|plugin that owns|(?:[Cc]hange|[Ff]ill|[Aa]dd|[Rr]emove|[Dd]iscard|[Pp]ublish) (?:it|them|those|elements|one item of it once|(?:this|the) (?:field|element|image|page|draft)) in (?:[^\s.;]+ ){0,3}editor\b|Leave (?:publish )?out\b|Send (?:it|the words|the value) without\b|Name (?:the field|it once|the text to replace)\b|Encode them\b|[Oo]pen (?:and save )?the page in\b|[Cc]hange (?:the fields one|one field) at a time\b|[Cc]hange the remaining pages in a separate call\b|[Aa]n administrator changes it in wp-admin\b|(?:Update|Delete|Deactivate|Activate) (?:it|AlphaBridge) in wp-admin\b|[Cc]all (?:it |this tool )?again\b|[Rr]un the ability again\b|(?:move it back|delete it|managed) over SFTP\b|can remove the constant\b|[Ff]ix the error and\b|Send the plugin or theme as a ZIP\b|Send the real value\b)/';
 
 	/**
 	 * Messages whose way is what they list, or that report rather than refuse.

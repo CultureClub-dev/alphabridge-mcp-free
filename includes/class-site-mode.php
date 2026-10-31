@@ -160,7 +160,7 @@ class AB_MCP_Site_Mode {
 	 * says why — the tool writes, or it is one of the readers that run only
 	 * with write access on — and the way, with a direct link to the switch
 	 * (AB_MCP_Guidance::compose()): an administrator switches write access on
-	 * at the top of Settings → AlphaBridge MCP, at the site owner's own risk.
+	 * at the top of AlphaBridge → AI Connection, at the site owner's own risk.
 	 * It does not say what a Mighty reader reads: wp_get_user_meta reads
 	 * profile fields, not code, files, the database, logs or credentials.
 	 *
@@ -188,7 +188,7 @@ class AB_MCP_Site_Mode {
 	 * @return string
 	 */
 	public static function way_text() {
-		return __( 'To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.', 'alphabridge-mcp' );
+		return __( 'To allow it, an administrator can switch on write access at the top of AlphaBridge → AI Connection and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -397,7 +397,7 @@ class AB_MCP_Site_Mode {
 		if ( self::is_full() ) {
 			return __( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now.', 'alphabridge-mcp' );
 		}
-		return __( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP.', 'alphabridge-mcp' );
+		return __( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of AlphaBridge → AI Connection.', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -414,7 +414,7 @@ class AB_MCP_Site_Mode {
 	 * @return string
 	 */
 	public static function instructions_sentence() {
-		return 'WRITE ACCESS IS OFF: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused until an administrator switches on write access at the top of Settings → AlphaBridge MCP (' . AB_MCP_Guidance::settings_url( 'ab-mode' ) . '); when the person asks for a change, tell them that kindly and where the switch is.';
+		return 'WRITE ACCESS IS OFF: AlphaBridge MCP only reads on this site, so every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused until an administrator switches on write access at the top of AlphaBridge → AI Connection (' . AB_MCP_Guidance::settings_url( 'ab-mode' ) . '); when the person asks for a change, tell them that kindly and where the switch is.';
 	}
 
 	/**
@@ -573,7 +573,7 @@ class AB_MCP_Site_Mode {
 			'ok',
 			self::SOURCE_FORM === $source
 				? sprintf(
-					'Write access (Full) switched on by %1$s (user %2$d) on the settings page; notice version %3$s agreed, wording sha256 %4$s; %5$s; plugin %6$s; locale %7$s; every switch on.',
+					'Write access (Full) switched on by %1$s (user %2$d) on the page AlphaBridge → AI Connection; notice version %3$s agreed, wording sha256 %4$s; %5$s; plugin %6$s; locale %7$s; every switch on.',
 					$who,
 					$user_id,
 					$record['notice_version'],
@@ -583,7 +583,7 @@ class AB_MCP_Site_Mode {
 					$record['locale']
 				)
 				: sprintf(
-					'Write access (Full) switched on by %1$s (user %2$d) by code, without the box on the settings page; notice version %3$s not confirmed; terms of use not agreed; plugin %4$s; locale %5$s; every switch on.',
+					'Write access (Full) switched on by %1$s (user %2$d) by code, without the box on the page AlphaBridge → AI Connection; notice version %3$s not confirmed; terms of use not agreed; plugin %4$s; locale %5$s; every switch on.',
 					$who,
 					$user_id,
 					$record['notice_version'],

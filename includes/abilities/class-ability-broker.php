@@ -17,8 +17,8 @@
  * AlphaBridge adds its rules on top and never replaces them.
  *
  * Which abilities may run: only those an administrator approved, one by one,
- * under Fine-tuning (group «Abilities of other plugins» on Settings ›
- * AlphaBridge MCP, option ON_OPTION), while write access is on (the main
+ * under Fine-tuning (group «Abilities of other plugins» on AlphaBridge ›
+ * AI Connection, option ON_OPTION), while write access is on (the main
  * switch) — wp_run_ability is a writing tool, so with write access off none
  * runs. Without an approval no ability of another plugin runs, reading or
  * writing, and switching write access on approves none: that switch is about
@@ -473,7 +473,7 @@ class AB_MCP_Ability_Broker {
 			return AB_MCP_Guidance::compose(
 				/* translators: %s: ability name */
 				sprintf( __( 'Code on this site (the filter ab_mcp_ability_allowed) keeps the ability "%s" from running through AlphaBridge, so nothing ran.', 'alphabridge-mcp' ), $name ),
-				__( 'To allow it, whoever maintains the site\'s code lifts that rule; there is no switch for it on the settings page. The link leads to the ability on the settings page.', 'alphabridge-mcp' ),
+				__( 'To allow it, whoever maintains the site\'s code lifts that rule; there is no switch for it on the page AlphaBridge → AI Connection. The link leads to the ability on the page AlphaBridge → AI Connection.', 'alphabridge-mcp' ),
 				$url
 			);
 		}
@@ -481,7 +481,7 @@ class AB_MCP_Ability_Broker {
 			/* translators: %s: ability name */
 			sprintf( __( 'The ability "%s" is not approved for AlphaBridge on this site: an ability of another plugin runs only once an administrator approved it. Nothing ran.', 'alphabridge-mcp' ), $name ),
 			/* translators: %s: ability name */
-			sprintf( __( 'To allow it, an administrator switches "%s" on under Settings → AlphaBridge MCP → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access approves no ability.', 'alphabridge-mcp' ), $name ),
+			sprintf( __( 'To allow it, an administrator switches "%s" on under AlphaBridge → AI Connection → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access approves no ability.', 'alphabridge-mcp' ), $name ),
 			$url
 		);
 	}
@@ -554,7 +554,7 @@ class AB_MCP_Ability_Broker {
 				$full
 			),
 			/* translators: %s: name of the full access level */
-			sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ), $full ),
+			sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under AlphaBridge → AI Connection.', 'alphabridge-mcp' ), $full ),
 			AB_MCP_Guidance::settings_url( 'ab-connections' )
 		);
 	}
@@ -573,7 +573,7 @@ class AB_MCP_Ability_Broker {
 		if ( ! self::run_enabled() ) {
 			return AB_MCP_Guidance::compose(
 				__( 'The tool "wp_run_ability", which runs the abilities of other plugins, is switched off in the fine-tuning of AlphaBridge MCP on this site.', 'alphabridge-mcp' ),
-				__( 'To allow it, an administrator switches it on under Settings → AlphaBridge MCP → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access switches it on as well.', 'alphabridge-mcp' ),
+				__( 'To allow it, an administrator switches it on under AlphaBridge → AI Connection → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access switches it on as well.', 'alphabridge-mcp' ),
 				AB_MCP_Guidance::settings_url( 'ab-tool-' . self::TOOL )
 			);
 		}
@@ -2054,7 +2054,7 @@ class AB_MCP_Ability_Broker {
 			if ( is_wp_error( $fits ) ) {
 				if ( 'ab_mcp_undo_disabled' === $fits->get_error_code() ) {
 					$way_back   = 'none';
-					$warnings[] = __( 'Undo is switched off on this site: running this ability would leave no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' );
+					$warnings[] = __( 'Undo is switched off on this site: running this ability would leave no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' );
 				} elseif ( 'ab_mcp_undo_too_large' === $fits->get_error_code() ) {
 					$way_back   = 'none';
 					$warnings[] = $fits->get_error_message() . ' ' . __( 'Running it will need allow_without_undo=true and will have no way back.', 'alphabridge-mcp' );
@@ -2522,7 +2522,7 @@ class AB_MCP_Ability_Broker {
 			if ( is_wp_error( $rec ) ) {
 				$data = $rec->get_error_data();
 				if ( 'ab_mcp_undo_disabled' === $rec->get_error_code() && is_array( $data ) && isset( $data['reason'] ) && 'switched_off' === $data['reason'] ) {
-					$warnings[] = __( 'Undo is switched off on this site, so this call has no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' );
+					$warnings[] = __( 'Undo is switched off on this site, so this call has no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' );
 				} elseif ( 'ab_mcp_undo_too_large' === $rec->get_error_code() ) {
 					if ( empty( $opts['allow_without_undo'] ) ) {
 						return new WP_Error( 'ab_mcp_ability_undo_too_large', $rec->get_error_message() . ' ' . __( 'Nothing ran. To run it without a way back, call again with allow_without_undo=true.', 'alphabridge-mcp' ) );
@@ -2810,6 +2810,6 @@ class AB_MCP_Ability_Broker {
 		if ( $run ) {
 			return $text . ' wp_list_abilities lists them; running them (wp_run_ability) writes, so it waits for write access.';
 		}
-		return $text . ' wp_list_abilities lists them; running them (wp_run_ability) is switched off until an administrator switches it on under Settings → AlphaBridge MCP → Fine-tuning (' . AB_MCP_Guidance::settings_url( 'ab-tool-' . self::TOOL ) . '); when the person asks for an ability to run, tell them that kindly and where the switch is.';
+		return $text . ' wp_list_abilities lists them; running them (wp_run_ability) is switched off until an administrator switches it on under AlphaBridge → AI Connection → Fine-tuning (' . AB_MCP_Guidance::settings_url( 'ab-tool-' . self::TOOL ) . '); when the person asks for an ability to run, tell them that kindly and where the switch is.';
 	}
 }

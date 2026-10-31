@@ -96,7 +96,7 @@ class AB_MCP_Tools_Undo_Core extends AB_MCP_Tools_Base {
 	protected static function off() {
 		return new WP_Error(
 			'ab_mcp_undo_disabled',
-			__( 'Undo is switched off on this site, so no snapshots are being kept. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' )
+			__( 'Undo is switched off on this site, so no snapshots are being kept. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' )
 		);
 	}
 

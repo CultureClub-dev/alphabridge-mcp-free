@@ -378,7 +378,7 @@ final class SiteModeTest extends TestCase {
 	}
 
 	public function testTheRefusalNamesWhoSwitchesWhereAndTheRisk(): void {
-		$way = ' To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.'
+		$way = ' To allow it, an administrator can switch on write access at the top of AlphaBridge → AI Connection and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.'
 			. ' Direct link: https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode'
 			. ' Pass this on to the person you are working for in a friendly way, with the steps and the link, and try again once it is done; do not look for a way around it.';
 		self::assertSame(
@@ -416,7 +416,7 @@ final class SiteModeTest extends TestCase {
 			self::assertInstanceOf( WP_Error::class, $res, $name . ' does not run in Read with scope ' . $scope );
 			self::assertSame( 'ab_mcp_read_mode', $res->get_error_code(), $name );
 			self::assertStringContainsString( '"' . $name . '" did not run: it is one of the reading tools that run only with write access on', $res->get_error_message() );
-			self::assertStringContainsString( 'an administrator can switch on write access at the top of Settings → AlphaBridge MCP', $res->get_error_message(), 'The answer names the way.' );
+			self::assertStringContainsString( 'an administrator can switch on write access at the top of AlphaBridge → AI Connection', $res->get_error_message(), 'The answer names the way.' );
 			self::assertStringContainsString( 'own risk', $res->get_error_message() );
 		}
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_get_post', array() ), 'An ordinary reader runs.' );
@@ -499,7 +499,7 @@ final class SiteModeTest extends TestCase {
 
 		$res = AB_MCP_Security::authorize( 'wp_delete_post', array( 'dangerous' => true ) );
 		self::assertSame( 'ab_mcp_tool_disabled', $res->get_error_code() );
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → Fine-tuning', $res->get_error_message() );
+		self::assertStringContainsString( 'AlphaBridge → AI Connection → Fine-tuning', $res->get_error_message() );
 		self::assertTrue( AB_MCP_Security::authorize( 'wp_update_post', array() ) );
 	}
 
@@ -791,7 +791,7 @@ final class SiteModeTest extends TestCase {
 
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', $sentence ), 'One sentence.' );
 		self::assertStringStartsWith( 'WRITE ACCESS IS OFF: ', $sentence );
-		self::assertStringContainsString( 'until an administrator switches on write access at the top of Settings → AlphaBridge MCP (https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode)', $sentence );
+		self::assertStringContainsString( 'until an administrator switches on write access at the top of AlphaBridge → AI Connection (https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode)', $sentence );
 		self::assertStringContainsString( 'every tool that creates, changes or deletes, and every reading tool that runs only with write access on (the readers of code, files, the database, logs or credentials), is refused', $sentence, 'Says that the readers of code, files, the database, logs or credentials wait for write access too.' );
 		self::assertStringNotContainsStringIgnoringCase( 'mighty', $sentence, 'No marking that tools/list does not show.' );
 		self::assertStringContainsString( 'when the person asks for a change, tell them that kindly and where the switch is', $sentence, 'And that the assistant leads there.' );
@@ -847,7 +847,7 @@ final class SiteModeTest extends TestCase {
 		self::assertCount( 1, $log );
 		self::assertSame( 'ok', $log[0]['status'] );
 		self::assertSame( 3, $log[0]['user'] );
-		self::assertStringContainsString( 'Write access (Full) switched on by user3 (user 3) on the settings page', $log[0]['message'] );
+		self::assertStringContainsString( 'Write access (Full) switched on by user3 (user 3) on the page AlphaBridge → AI Connection', $log[0]['message'] );
 		self::assertStringContainsString( 'notice version ' . AB_MCP_Site_Mode::NOTICE_VERSION . ' agreed', $log[0]['message'] );
 		self::assertStringContainsString( 'terms of use ' . AB_MCP_Site_Mode::TERMS_VERSION . ' agreed', $log[0]['message'] );
 		self::assertStringContainsString( 'wording sha256 ' . $record['notice_hash'], $log[0]['message'] );
@@ -883,7 +883,7 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( '', $record['terms_version'] );
 		self::assertSame( 'Write access on since ' . wp_date( 'Y-m-d H:i', $record['time'] ) . ' · set by code, not confirmed on this page · every connection keeps its access level', AB_MCP_Site_Mode::full_since_text() );
 		$log = self::mode_log();
-		self::assertStringContainsString( 'by code, without the box on the settings page; notice version 3 not confirmed; terms of use not agreed', end( $log )['message'] );
+		self::assertStringContainsString( 'by code, without the box on the page AlphaBridge → AI Connection; notice version 3 not confirmed; terms of use not agreed', end( $log )['message'] );
 		self::assertStringNotContainsString( ' confirmed,', end( $log )['message'] );
 
 		// Anything but the form's own word is code.
@@ -1478,7 +1478,7 @@ final class SiteModeTest extends TestCase {
 		$notice = $x->query( '//div[contains(@class, "ab-mode-notice")]' )->item( 0 );
 		self::assertNotNull( $notice );
 		self::assertStringContainsString( 'AlphaBridge MCP now only reads on this site.', $notice->textContent );
-		self::assertStringContainsString( 'an administrator switches on write access at the top of Settings → AlphaBridge MCP', $notice->textContent );
+		self::assertStringContainsString( 'an administrator switches on write access at the top of AlphaBridge → AI Connection', $notice->textContent );
 		self::assertStringContainsString( 'at the site owner\'s own risk', $notice->textContent );
 		self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-connection#ab-mode', $x->query( './/a', $notice )->item( 0 )->getAttribute( 'href' ), 'The button leads to the switch on «AI Connection».' );
 		self::assertSame( 'Open AlphaBridge → AI Connection', trim( $x->query( './/a', $notice )->item( 0 )->textContent ) );

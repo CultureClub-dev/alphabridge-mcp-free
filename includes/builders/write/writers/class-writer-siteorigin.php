@@ -261,7 +261,7 @@ class AB_MCP_Builder_Writer_SiteOrigin extends AB_MCP_Builder_Settings_Writer {
 			return __( 'Saved the way SiteOrigin\'s editor stores a layout, not through its layout-update ability: that ability filters the markup of every widget, and this page holds markup (a script, an embed) it would remove from widgets this change does not touch.', 'alphabridge-mcp' );
 		}
 		if ( 'direct_off' === $route ) {
-			return __( 'Saved the way SiteOrigin\'s editor stores a layout, not through its layout-update ability, which is switched off for AlphaBridge on this site (under Settings › AlphaBridge MCP › Fine-tuning, or by a rule in the site\'s code): panels_data, then its post_content copy through SiteOrigin.', 'alphabridge-mcp' );
+			return __( 'Saved the way SiteOrigin\'s editor stores a layout, not through its layout-update ability, which is switched off for AlphaBridge on this site (under AlphaBridge › AI Connection › Fine-tuning, or by a rule in the site\'s code): panels_data, then its post_content copy through SiteOrigin.', 'alphabridge-mcp' );
 		}
 		return __( 'Saved the way SiteOrigin\'s editor stores a layout (this SiteOrigin version has no layout-update ability): panels_data, then its post_content copy through SiteOrigin.', 'alphabridge-mcp' );
 	}

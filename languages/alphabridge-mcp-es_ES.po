@@ -765,8 +765,8 @@ msgstr "Permisos insuficientes."
 msgid "Invalid arguments: %1$s. Expected schema: %2$s"
 msgstr "Argumentos no válidos: %1$s. Esquema esperado: %2$s"
 
-msgid "Invalid or missing bearer token. Send the connection's token as \"Authorization: Bearer …\" or connect again; an administrator manages connections under Settings → AlphaBridge MCP."
-msgstr "Token Bearer no válido o ausente. Envía el token de la conexión como «Authorization: Bearer …» o vuelve a conectar; un administrador gestiona las conexiones en Ajustes → AlphaBridge MCP."
+msgid "Invalid or missing bearer token. Send the connection's token as \"Authorization: Bearer …\" or connect again; an administrator manages connections under AlphaBridge → AI Connection."
+msgstr "Token Bearer no válido o ausente. Envía el token de la conexión como «Authorization: Bearer …» o vuelve a conectar; un administrador gestiona las conexiones en AlphaBridge → Conexión IA."
 
 msgid "Issue a new secret for this connection? The current token stops working immediately."
 msgstr "¿Generar un secreto nuevo para esta conexión? El token actual deja de funcionar al instante."
@@ -1396,8 +1396,8 @@ msgstr "Inicia sesión aquí y aprueba"
 msgid "Sign in to ChatGPT and open the plugins page."
 msgstr "Inicia sesión en ChatGPT y abre la página de plugins."
 
-msgid "Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of Settings → AlphaBridge MCP, at the site owner's own risk."
-msgstr "Desde esta actualización, todos los sitios empiezan con el acceso de escritura desactivado: los asistentes de IA pueden leer contenido, medios, términos, comentarios, ajustes y la estructura del sitio; se rechaza toda herramienta que crea, cambia o borra, y también las herramientas de lectura marcadas con «solo con acceso de escritura» en «Ajuste fino», que leen código, archivos, la base de datos, registros o credenciales. Para que vuelvan a escribir, un administrador activa el acceso de escritura arriba del todo en Ajustes → AlphaBridge MCP, bajo la propia responsabilidad del propietario del sitio."
+msgid "Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of AlphaBridge → AI Connection, at the site owner's own risk."
+msgstr "Desde esta actualización, todos los sitios empiezan con el acceso de escritura desactivado: los asistentes de IA pueden leer contenido, medios, términos, comentarios, ajustes y la estructura del sitio; se rechaza toda herramienta que crea, cambia o borra, y también las herramientas de lectura marcadas con «solo con acceso de escritura» en «Ajuste fino», que leen código, archivos, la base de datos, registros o credenciales. Para que vuelvan a escribir, un administrador activa el acceso de escritura arriba del todo en AlphaBridge → Conexión IA, bajo la propia responsabilidad del propietario del sitio."
 
 msgctxt "main group of tools"
 msgid "Site & users"
@@ -1636,20 +1636,20 @@ msgstr "Hora"
 msgid "Title, status, excerpt and the other fields still change: call wp_update_post again without content."
 msgstr "El título, el estado, el extracto y los demás campos sí se pueden cambiar: vuelve a llamar a wp_update_post sin content."
 
-msgid "To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner's own risk, and a current backup is advised."
-msgstr "Para permitirlo, un administrador puede activar el acceso de escritura arriba del todo en Ajustes → AlphaBridge MCP y confirmar allí el aviso; es bajo la propia responsabilidad del propietario del sitio, y se recomienda tener una copia de seguridad reciente."
+msgid "To allow it, an administrator can switch on write access at the top of AlphaBridge → AI Connection and confirm the notice there; that is at the site owner's own risk, and a current backup is advised."
+msgstr "Para permitirlo, un administrador puede activar el acceso de escritura arriba del todo en AlphaBridge → Conexión IA y confirmar allí el aviso; es bajo la propia responsabilidad del propietario del sitio, y se recomienda tener una copia de seguridad reciente."
 
 #, php-format
-msgid "To allow it, an administrator switches \"%s\" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes."
-msgstr "Para permitirlo, un administrador activa «%s» en Ajustes → AlphaBridge MCP → Ajuste fino y guarda los cambios."
+msgid "To allow it, an administrator switches \"%s\" on under AlphaBridge → AI Connection → Fine-tuning and saves the changes."
+msgstr "Para permitirlo, un administrador activa «%s» en AlphaBridge → Conexión IA → Ajuste fino y guarda los cambios."
 
 #, php-format
 msgid "To allow it, ask an administrator to give the account \"%1$s\" a role with the capability \"%2$s\" under Users, or connect the app again with an account that has it, such as an administrator."
 msgstr "Para permitirlo, pide a un administrador que asigne en Usuarios a la cuenta «%1$s» un rol con la capacidad «%2$s», o vuelve a conectar la app con una cuenta que la tenga, como la de un administrador."
 
 #, php-format
-msgid "To allow it, connect the app again and choose the access level \"%s\" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP."
-msgstr "Para permitirlo, vuelve a conectar la app y elige el nivel de acceso «%s» en la pantalla de consentimiento, o pide a un administrador que cree una conexión con ese nivel de acceso en Ajustes → AlphaBridge MCP."
+msgid "To allow it, connect the app again and choose the access level \"%s\" on the consent screen, or have an administrator create a connection with that access level under AlphaBridge → AI Connection."
+msgstr "Para permitirlo, vuelve a conectar la app y elige el nivel de acceso «%s» en la pantalla de consentimiento, o pide a un administrador que cree una conexión con ese nivel de acceso en AlphaBridge → Conexión IA."
 
 msgid "Token"
 msgstr "Token"
@@ -1751,8 +1751,8 @@ msgstr "Usuarios y menús"
 msgid "Watch the video"
 msgstr "Ver el vídeo"
 
-msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP."
-msgstr "Elijas el nivel de acceso que elijas, el interruptor de acceso de escritura de este sitio decide si los asistentes de IA pueden escribir; ahora mismo está desactivado, así que la conexión solo lee hasta que un administrador lo active arriba del todo en Ajustes → AlphaBridge MCP."
+msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of AlphaBridge → AI Connection."
+msgstr "Elijas el nivel de acceso que elijas, el interruptor de acceso de escritura de este sitio decide si los asistentes de IA pueden escribir; ahora mismo está desactivado, así que la conexión solo lee hasta que un administrador lo active arriba del todo en AlphaBridge → Conexión IA."
 
 msgid "Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is on right now."
 msgstr "Elijas el nivel de acceso que elijas, el interruptor de acceso de escritura de este sitio decide si los asistentes de IA pueden escribir; ahora mismo está activado."
@@ -1879,8 +1879,8 @@ msgctxt "date and time format with seconds"
 msgid "Y-m-d H:i:s"
 msgstr "d/m/Y H:i:s"
 
-msgid "You can revoke this connection at any time under Settings → AlphaBridge MCP."
-msgstr "Puedes revocar esta conexión en cualquier momento en Ajustes → AlphaBridge MCP."
+msgid "You can revoke this connection at any time under AlphaBridge → AI Connection."
+msgstr "Puedes revocar esta conexión en cualquier momento en AlphaBridge → Conexión IA."
 
 msgid "You cannot attach media to that post: it does not exist, or your account may not edit it. Leave post_id out to add the file to the media library alone, or pass a post your account may edit."
 msgstr "No se pueden adjuntar medios a esa entrada: no existe o la cuenta de esta conexión no puede editarla. Omite post_id para añadir el archivo solo a la biblioteca de medios, o indica una entrada que esa cuenta pueda editar."
@@ -2228,12 +2228,12 @@ msgstr "Tú apruebas cada conexión en este sitio. Desactívalo solo si ninguna 
 msgid "Checked. The finding is shown under “How ChatGPT signs in”."
 msgstr "Comprobado. El resultado aparece en «Cómo inicia sesión ChatGPT»."
 
-msgid "This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → ChatGPT → \"Switch the direct sign-in off\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
-msgstr "Este sitio no acepta apps que se identifican con un documento de metadatos (desactivado en Ajustes → AlphaBridge MCP → ChatGPT → «Desactivar el inicio de sesión directo», por WP_HTTP_BLOCK_EXTERNAL o por el filtro ab_mcp_oauth_cimd). En su lugar, la app puede registrarse en el sitio."
+msgid "This site does not accept apps that identify themselves with a metadata document (switched off under AlphaBridge → AI Connection → ChatGPT → \"Switch the direct sign-in off\", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead."
+msgstr "Este sitio no acepta apps que se identifican con un documento de metadatos (desactivado en AlphaBridge → Conexión IA → ChatGPT → «Desactivar el inicio de sesión directo», por WP_HTTP_BLOCK_EXTERNAL o por el filtro ab_mcp_oauth_cimd). En su lugar, la app puede registrarse en el sitio."
 
 #, php-format
-msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → ChatGPT; an app that can register with the site then does that instead."
-msgstr "La app se identifica con un documento de metadatos en %1$s, y este sitio no puede usarlo: %2$s. Si el fallo está en el documento, el desarrollador de la app puede corregirlo. Hasta entonces, o si este sitio no puede llegar a otros servidores, un administrador puede desactivar el inicio de sesión directo en Ajustes → AlphaBridge MCP → ChatGPT; entonces, una app que pueda registrarse en el sitio lo hace en su lugar."
+msgid "The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app's maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under AlphaBridge → AI Connection → ChatGPT; an app that can register with the site then does that instead."
+msgstr "La app se identifica con un documento de metadatos en %1$s, y este sitio no puede usarlo: %2$s. Si el fallo está en el documento, el desarrollador de la app puede corregirlo. Hasta entonces, o si este sitio no puede llegar a otros servidores, un administrador puede desactivar el inicio de sesión directo en AlphaBridge → Conexión IA → ChatGPT; entonces, una app que pueda registrarse en el sitio lo hace en su lugar."
 
 # Free since 4.7.0: menus, reading users, plugins, themes, cron and the error log, WooCommerce read only.
 msgid "Users & Menus"
@@ -2475,8 +2475,8 @@ msgstr "La fecha de caducidad debe ser una fecha real con el formato AAAA-MM-DD.
 msgid "WooCommerce did not save this coupon. wp_wc_list_coupons shows whether it exists; if not, try again."
 msgstr "WooCommerce no ha guardado este cupón. wp_wc_list_coupons muestra si existe; si no, vuelve a intentarlo."
 
-msgid "Undo is switched off on this site, so no snapshots are being kept. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que no se guardan instantáneas. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so no snapshots are being kept. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se guardan instantáneas. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "No undo points. They are created by destructive tools and expire automatically."
 msgstr "No hay puntos de restauración. Los crean las herramientas destructivas y caducan automáticamente."
@@ -2564,8 +2564,8 @@ msgid "This connection has the access level \"%1$s\"; an undo point of \"%2$s\" 
 msgstr "Esta conexión tiene el nivel de acceso «%1$s»; un punto de restauración de «%2$s» solo se revierte o se descarta con el nivel de acceso «%3$s», ya que la propia herramienta solo se ejecuta con él."
 
 #, php-format
-msgid "To allow it, run the undo on a connection whose access level includes that tool (\"%s\" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under Settings › AlphaBridge MCP."
-msgstr "Para permitirlo, deshaz el cambio desde una conexión cuyo nivel de acceso incluya esa herramienta («%s» incluye todas las herramientas): vuelve a conectar la app y elige ese nivel en la pantalla de consentimiento, o pide a un administrador que cree una conexión así en Ajustes → AlphaBridge MCP."
+msgid "To allow it, run the undo on a connection whose access level includes that tool (\"%s\" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under AlphaBridge › AI Connection."
+msgstr "Para permitirlo, deshaz el cambio desde una conexión cuyo nivel de acceso incluya esa herramienta («%s» incluye todas las herramientas): vuelve a conectar la app y elige ese nivel en la pantalla de consentimiento, o pide a un administrador que cree una conexión así en AlphaBridge → Conexión IA."
 
 #, php-format
 msgid "This connection has the access level \"%1$s\", which does not include \"%2$s\", the tool this undo point came from."
@@ -2638,8 +2638,8 @@ msgstr "El ajuste faltaba y no se ha podido volver a añadir. Vuelve a intentarl
 msgid "The setting was written back, but the site stored something else; a plugin may filter it. wp_get_site_settings shows what it holds now."
 msgstr "El ajuste se ha vuelto a escribir, pero el sitio ha guardado otra cosa; puede que un plugin lo filtre. wp_get_site_settings muestra lo que contiene ahora."
 
-msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning, unless the ab_mcp_undo_enabled filter turns it off in code."
-msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino, salvo que el filtro ab_mcp_undo_enabled lo desactive por código."
+msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning, unless the ab_mcp_undo_enabled filter turns it off in code."
+msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino, salvo que el filtro ab_mcp_undo_enabled lo desactive por código."
 
 msgid "Recording is paused while an undo is applied, so the undo itself gets no undo point. To reverse an undo, use the tool of the original change again."
 msgstr "Mientras se deshace un cambio, se pausa el registro de puntos de restauración, así que deshacer no genera ningún punto de restauración propio. Para revertir lo que se ha deshecho, vuelve a usar la herramienta del cambio original."
@@ -2681,8 +2681,8 @@ msgstr "El índice de puntos de restauración está ocupado; vuelve a intentarlo
 msgid "That is not a valid undo token. wp_undo_list shows your undo points and their tokens."
 msgstr "Ese no es un token de deshacer válido. wp_undo_list muestra los puntos de restauración de esta cuenta y sus tokens."
 
-msgid "This undo point has expired. Undo points are kept for up to 7 days (with AlphaBridge MCP Pro for the window set under Settings › AlphaBridge MCP); this change can no longer be undone with it. An earlier version of a post can still come back with wp_restore_revision."
-msgstr "Este punto de restauración ha caducado. Los puntos de restauración se conservan hasta 7 días (con AlphaBridge MCP Pro, durante el plazo definido en Ajustes → AlphaBridge MCP); este cambio ya no se puede deshacer con él. Una versión anterior de una entrada aún se puede recuperar con wp_restore_revision."
+msgid "This undo point has expired. Undo points are kept for up to 7 days (with AlphaBridge MCP Pro for the window set under AlphaBridge › Staging); this change can no longer be undone with it. An earlier version of a post can still come back with wp_restore_revision."
+msgstr "Este punto de restauración ha caducado. Los puntos de restauración se conservan hasta 7 días (con AlphaBridge MCP Pro, durante el plazo definido en AlphaBridge → Staging); este cambio ya no se puede deshacer con él. Una versión anterior de una entrada aún se puede recuperar con wp_restore_revision."
 
 msgid "The stored snapshot could not be read back. This undo point cannot be used; wp_undo_discard removes it."
 msgstr "No se ha podido volver a leer la instantánea guardada. Este punto de restauración no se puede usar; wp_undo_discard lo elimina."
@@ -2906,8 +2906,8 @@ msgstr "Se ha alcanzado el límite de filas; devuelve next como after para conti
 msgid "This call's budget of %d ids per scan is used up; pass next back as after to continue where it stopped."
 msgstr "Se ha agotado el presupuesto de esta llamada de %d ID por escaneo; devuelve next como after para continuar donde se detuvo."
 
-msgid "Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que estos cambios no tienen vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que estos cambios no tienen vuelta atrás. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 #, php-format
 msgid "Post %1$d was written without an undo point, as allow_without_undo asked: %2$s"
@@ -3048,14 +3048,14 @@ msgstr "La opción se ha vuelto a escribir, pero el sitio ha guardado otra cosa;
 msgid "The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo."
 msgstr "El estado después del cambio no tiene una forma que guarde un punto de restauración. Comprueba el resultado del cambio antes de confiar en deshacerlo."
 
-msgid "Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que no se registraría ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se registraría ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "There is no snapshot to keep for this action. Check the result of the change before relying on an undo."
 msgstr "No hay ninguna instantánea que guardar para esta acción. Comprueba el resultado del cambio antes de confiar en deshacerlo."
 
-msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que no se ha registrado ningún punto de restauración. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "Undo points of this kind do not take parts. Change the remaining pages in a separate call; it gets an undo point of its own."
 msgstr "Los puntos de restauración de este tipo no admiten partes. Cambia las páginas restantes en una llamada aparte; esta recibe su propio punto de restauración."
@@ -3255,8 +3255,8 @@ msgstr "La propia cuenta de esta conexión tiene esta página abierta en un edit
 msgid "This page was open in an editor %d minutes ago. An editor that is still open holds the page as it was and overwrites this change when it saves; reload it first."
 msgstr "Esta página estaba abierta en un editor hace %d minutos. Un editor que siga abierto contiene la página tal como estaba y sobrescribe este cambio al guardar; recárgalo primero."
 
-msgid "Undo is switched off on this site, so this change has no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que este cambio no tiene vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so this change has no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que este cambio no tiene vuelta atrás. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "Written without an undo point, as allow_without_undo asked: the page's stored data is larger than an undo point may hold. This change has no way back through wp_undo."
 msgstr "Escrito sin punto de restauración, como pedía allow_without_undo: los datos guardados de la página superan lo que puede contener un punto de restauración. Este cambio no tiene vuelta atrás mediante wp_undo."
@@ -3446,8 +3446,8 @@ msgstr "sin respuesta"
 msgid "Check under Tools → Site Health whether WordPress reports a failed loopback request; if it does, ask your host to allow the server to send requests to its own address."
 msgstr "Comprueba en Herramientas → Salud del sitio si WordPress informa de una petición loopback fallida; si es así, pide a tu hosting que permita al servidor enviar peticiones a su propia dirección."
 
-msgid "Until it is fixed, connect with a token instead: under Settings → AlphaBridge MCP choose “Other”, create a connection and enter its token in the app (for an app without a field for it, tick “Also offer an address that contains the token.” there and use that address)."
-msgstr "Hasta que se solucione, conecta con un token: en Ajustes → AlphaBridge MCP elige «Otro», crea una conexión e introduce su token en la app (para una app sin campo para ello, marca allí «Ofrecer también una dirección que contiene el token.» y usa esa dirección)."
+msgid "Until it is fixed, connect with a token instead: under AlphaBridge → AI Connection choose “Other”, create a connection and enter its token in the app (for an app without a field for it, tick “Also offer an address that contains the token.” there and use that address)."
+msgstr "Hasta que se solucione, conecta con un token: en AlphaBridge → Conexión IA elige «Otro», crea una conexión e introduce su token en la app (para una app sin campo para ello, marca allí «Ofrecer también una dirección que contiene el token.» y usa esa dirección)."
 
 msgid "Under Settings → General make “WordPress Address (URL)” and “Site Address (URL)” the exact address the server answers at — https://, with or without www — and save."
 msgstr "En Ajustes → Generales, pon en «Dirección de WordPress (URL)» y «Dirección del sitio (URL)» la dirección exacta en la que responde el servidor —https://, con o sin www— y guarda."
@@ -3627,8 +3627,8 @@ msgstr "En Apache, añade la línea CGIPassAuth On al archivo .htaccess de la ca
 msgid "On nginx or any other server, ask your host to pass the Authorization header on to PHP."
 msgstr "En nginx o cualquier otro servidor, pide a tu hosting que pase la cabecera Authorization a PHP."
 
-msgid "Until then, apps that take an address can connect with the token in it: under Settings → AlphaBridge MCP choose “Other”, tick “Also offer an address that contains the token.”, save, and create a connection."
-msgstr "Mientras tanto, las apps que aceptan una dirección pueden conectarse con el token incluido en ella: en Ajustes → AlphaBridge MCP elige «Otro», marca «Ofrecer también una dirección que contiene el token.», guarda y crea una conexión."
+msgid "Until then, apps that take an address can connect with the token in it: under AlphaBridge → AI Connection choose “Other”, tick “Also offer an address that contains the token.”, save, and create a connection."
+msgstr "Mientras tanto, las apps que aceptan una dirección pueden conectarse con el token incluido en ella: en AlphaBridge → Conexión IA elige «Otro», marca «Ofrecer también una dirección que contiene el token.», guarda y crea una conexión."
 
 #, php-format
 msgid "The answer to a request with a token (status %d) did not say whether the header arrived, so this check has no result."
@@ -3646,8 +3646,8 @@ msgstr "Descripción del recurso (.well-known)"
 msgid "The sign-in for apps is off on this site, so there are no sign-in addresses to check; apps connect with a token only."
 msgstr "El inicio de sesión para apps está desactivado en este sitio, así que no hay direcciones de inicio de sesión que comprobar; las apps solo se conectan con un token."
 
-msgid "To let Claude and ChatGPT connect with their Connect button, tick “Claude and other apps can sign in with their Connect button.” under Settings → AlphaBridge MCP → How Claude signs in, and save."
-msgstr "Para que Claude y ChatGPT se conecten con su botón «Connect», marca «Claude y otras apps pueden iniciar sesión con su botón “Connect”.» en Ajustes → AlphaBridge MCP → Cómo inicia sesión Claude y guarda."
+msgid "To let Claude and ChatGPT connect with their Connect button, tick “Claude and other apps can sign in with their Connect button.” under AlphaBridge → AI Connection → How Claude signs in, and save."
+msgstr "Para que Claude y ChatGPT se conecten con su botón «Connect», marca «Claude y otras apps pueden iniciar sesión con su botón “Connect”.» en AlphaBridge → Conexión IA → Cómo inicia sesión Claude y guarda."
 
 msgid "Ask your host to pass the addresses that begin with /.well-known/oauth- to WordPress’s index.php, as they pass every other address that is no file."
 msgstr "Pide a tu hosting que pase a index.php de WordPress las direcciones que empiezan por /.well-known/oauth-, igual que pasa cualquier otra dirección que no es un archivo."
@@ -4597,14 +4597,14 @@ msgstr "Este sitio funciona con WordPress %s. La Abilities API, mediante la que 
 msgid "Code on this site (the filter ab_mcp_ability_allowed) keeps the ability \"%s\" from running through AlphaBridge, so nothing ran."
 msgstr "Un código de este sitio (el filtro ab_mcp_ability_allowed) impide que la habilidad «%s» se ejecute a través de AlphaBridge, así que no se ha ejecutado nada."
 
-msgid "To allow it, whoever maintains the site's code lifts that rule; there is no switch for it on the settings page. The link leads to the ability on the settings page."
-msgstr "Para permitirlo, quien mantiene el código del sitio retira esa regla; en la página de ajustes no hay ningún interruptor para ello. El enlace lleva a la habilidad en la página de ajustes."
+msgid "To allow it, whoever maintains the site's code lifts that rule; there is no switch for it on the page AlphaBridge → AI Connection. The link leads to the ability on the page AlphaBridge → AI Connection."
+msgstr "Para permitirlo, quien mantiene el código del sitio retira esa regla; en la página AlphaBridge → Conexión IA no hay ningún interruptor para ello. El enlace lleva a la habilidad en la página AlphaBridge → Conexión IA."
 
 msgid "The ability \"%s\" is not approved for AlphaBridge on this site: an ability of another plugin runs only once an administrator approved it. Nothing ran."
 msgstr "La habilidad «%s» no está aprobada para AlphaBridge en este sitio: una habilidad de otro plugin solo se ejecuta una vez que un administrador la ha aprobado. No se ha ejecutado nada."
 
-msgid "To allow it, an administrator switches \"%s\" on under Settings → AlphaBridge MCP → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access approves no ability."
-msgstr "Para permitirlo, un administrador activa «%s» en Ajustes → AlphaBridge MCP → Ajuste fino, grupo «Habilidades de otros plugins», y guarda los cambios; activar el acceso de escritura no aprueba ninguna habilidad."
+msgid "To allow it, an administrator switches \"%s\" on under AlphaBridge → AI Connection → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access approves no ability."
+msgstr "Para permitirlo, un administrador activa «%s» en AlphaBridge → Conexión IA → Ajuste fino, grupo «Habilidades de otros plugins», y guarda los cambios; activar el acceso de escritura no aprueba ninguna habilidad."
 
 msgid "\"%s\" is one of AlphaBridge's own abilities. wp_list_abilities and wp_run_ability leave those out: that way would skip the checks AlphaBridge makes for its own tools (their switches, the access level, the confirmation of the tools without a way back). Nothing ran. Call the AlphaBridge tool it stands for directly instead; tools/list names them, and that tool runs with those checks."
 msgstr "«%s» es una de las habilidades propias de AlphaBridge. wp_list_abilities y wp_run_ability las dejan fuera: por esa vía se saltarían las comprobaciones que AlphaBridge hace para sus propias herramientas (sus interruptores, el nivel de acceso, la confirmación de las herramientas sin vuelta atrás). No se ha ejecutado nada. En su lugar, llama directamente a la herramienta de AlphaBridge que representa; tools/list las indica, y esa herramienta se ejecuta con esas comprobaciones."
@@ -4615,8 +4615,8 @@ msgstr "Esta conexión tiene el nivel de acceso «%1$s»; ejecutar las habilidad
 msgid "The tool \"wp_run_ability\", which runs the abilities of other plugins, is switched off in the fine-tuning of AlphaBridge MCP on this site."
 msgstr "La herramienta «wp_run_ability», que ejecuta las habilidades de otros plugins, está desactivada en «Ajuste fino» de AlphaBridge MCP en este sitio."
 
-msgid "To allow it, an administrator switches it on under Settings → AlphaBridge MCP → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access switches it on as well."
-msgstr "Para permitirlo, un administrador la activa en Ajustes → AlphaBridge MCP → Ajuste fino, grupo «Habilidades de otros plugins», y guarda los cambios; al activar el acceso de escritura también se activa."
+msgid "To allow it, an administrator switches it on under AlphaBridge → AI Connection → Fine-tuning, group «Abilities of other plugins», and saves the changes; switching on write access switches it on as well."
+msgstr "Para permitirlo, un administrador la activa en AlphaBridge → Conexión IA → Ajuste fino, grupo «Habilidades de otros plugins», y guarda los cambios; al activar el acceso de escritura también se activa."
 
 msgid "not needed: annotated read-only (a post its input names is still read back, and a change gets an undo point)"
 msgstr "no hace falta: marcada como de solo lectura (una entrada que indiquen sus datos de entrada se vuelve a leer igualmente, y un cambio recibe un punto de restauración)"
@@ -4755,8 +4755,8 @@ msgstr "Sin vuelta atrás: los datos de entrada no indican ninguna entrada de la
 msgid "id is read as post #%1$d «%2$s» (%3$s). If id names something else here (a term, a user, an order or a comment), there is no way back and the read-back says nothing about the change: pass target_post=0, or target_post with the post the ability changes."
 msgstr "id se interpreta como la entrada #%1$d «%2$s» (%3$s). Si id indica aquí otra cosa (un término, un usuario, un pedido o un comentario), no hay vuelta atrás y la relectura no dice nada sobre el cambio: indica target_post=0, o target_post con la entrada que cambia la habilidad."
 
-msgid "Undo is switched off on this site: running this ability would leave no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio: ejecutar esta habilidad no dejaría vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site: running this ability would leave no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio: ejecutar esta habilidad no dejaría vuelta atrás. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "Running it will need allow_without_undo=true and will have no way back."
 msgstr "Ejecutarla requerirá allow_without_undo=true y no tendrá vuelta atrás."
@@ -4839,8 +4839,8 @@ msgstr "Se ha ejecutado de todos modos, como pedía allow_without_undo."
 msgid "Ran without a way back: the input names no post AlphaBridge could take an undo point of, so wp_undo cannot reverse this call."
 msgstr "Se ha ejecutado sin vuelta atrás: los datos de entrada no indican ninguna entrada de la que AlphaBridge pudiera registrar un punto de restauración, así que wp_undo no puede revertir esta llamada."
 
-msgid "Undo is switched off on this site, so this call has no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning."
-msgstr "Deshacer está desactivado en este sitio, así que esta llamada no tiene vuelta atrás. Un administrador lo activa con la herramienta wp_undo en Ajustes → AlphaBridge MCP → Ajuste fino."
+msgid "Undo is switched off on this site, so this call has no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning."
+msgstr "Deshacer está desactivado en este sitio, así que esta llamada no tiene vuelta atrás. Un administrador lo activa con la herramienta wp_undo en AlphaBridge → Conexión IA → Ajuste fino."
 
 msgid "Nothing ran. To run it without a way back, call again with allow_without_undo=true."
 msgstr "No se ha ejecutado nada. Para ejecutarla sin vuelta atrás, vuelve a llamar con allow_without_undo=true."
@@ -4927,14 +4927,14 @@ msgstr "a través del adaptador MCP"
 msgid "AlphaBridge's tools are not offered as WordPress abilities on this site, so \"%s\" did not run."
 msgstr "Las herramientas de AlphaBridge no se ofrecen como habilidades de WordPress en este sitio, así que «%s» no se ha ejecutado."
 
-msgid "To allow it, an administrator switches on \"Offer AlphaBridge's tools as WordPress abilities\" under Settings → AlphaBridge MCP → Fine-tuning and saves the changes."
-msgstr "Para permitirlo, un administrador activa «Ofrecer las herramientas de AlphaBridge como habilidades de WordPress» en Ajustes → AlphaBridge MCP → Ajuste fino y guarda los cambios."
+msgid "To allow it, an administrator switches on \"Offer AlphaBridge's tools as WordPress abilities\" under AlphaBridge → AI Connection → Fine-tuning and saves the changes."
+msgstr "Para permitirlo, un administrador activa «Ofrecer las herramientas de AlphaBridge como habilidades de WordPress» en AlphaBridge → Conexión IA → Ajuste fino y guarda los cambios."
 
 msgid "The tool \"%s\" is not offered as a WordPress ability on this site: it runs only through an AlphaBridge connection, with the checks of its access level."
 msgstr "La herramienta «%s» no se ofrece como habilidad de WordPress en este sitio: solo se ejecuta a través de una conexión de AlphaBridge, con las comprobaciones de su nivel de acceso."
 
-msgid "Use it through an AlphaBridge connection instead: an administrator connects the app under Settings → AlphaBridge MCP, and tools/list names the tool there."
-msgstr "Úsala en su lugar a través de una conexión de AlphaBridge: un administrador conecta la app en Ajustes → AlphaBridge MCP, y tools/list nombra allí la herramienta."
+msgid "Use it through an AlphaBridge connection instead: an administrator connects the app under AlphaBridge → AI Connection, and tools/list names the tool there."
+msgstr "Úsala en su lugar a través de una conexión de AlphaBridge: un administrador conecta la app en AlphaBridge → Conexión IA, y tools/list nombra allí la herramienta."
 
 msgid "Offer AlphaBridge's tools as WordPress abilities, for the MCP Adapter"
 msgstr "Ofrecer las herramientas de AlphaBridge como habilidades de WordPress, para el adaptador MCP"
@@ -5283,8 +5283,8 @@ msgstr "Sin confirmar: este sitio cuenta como sitio de producción."
 msgid "in the hub"
 msgstr "en el hub"
 
-msgid "on the settings page"
-msgstr "en la página de ajustes"
+msgid "on the page AlphaBridge → Staging"
+msgstr "en la página AlphaBridge → Staging"
 
 #, php-format
 msgid "%1$s, confirmed by %2$s on %3$s %4$s."
@@ -5408,8 +5408,8 @@ msgstr "Este sitio está confirmado como sitio de producción."
 msgid "The role of this site is not confirmed yet, so it counts as the production site."
 msgstr "El rol de este sitio aún no está confirmado, así que cuenta como sitio de producción."
 
-msgid "1. Open the settings page of AlphaBridge MCP at Staging. 2. Choose whether this site is the production site or the staging site; the suggestion there is a hint, not proof. 3. Save."
-msgstr "1. Abre la página de ajustes de AlphaBridge MCP en Staging. 2. Elige si este sitio es el sitio de producción o el sitio de staging; la sugerencia de ahí es un indicio, no una prueba. 3. Guarda."
+msgid "1. Open the page AlphaBridge → Staging. 2. Choose whether this site is the production site or the staging site; the suggestion there is a hint, not proof. 3. Save."
+msgstr "1. Abre la página AlphaBridge → Staging. 2. Elige si este sitio es el sitio de producción o el sitio de staging; la sugerencia de ahí es un indicio, no una prueba. 3. Guarda."
 
 msgid "Staging site there and answering"
 msgstr "Sitio de staging presente y accesible"
@@ -5418,11 +5418,11 @@ msgid "This site is the staging site."
 msgstr "Este sitio es el sitio de staging."
 
 #, php-format
-msgid "1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
-msgstr "1. Crea una copia de staging de este sitio con la función de staging del panel de control de %1$s; su guía: %2$s 2. Instala y activa AlphaBridge MCP en la copia. 3. Introduce la dirección de la copia en la página de ajustes de este sitio en Staging, y la dirección de este sitio en la copia."
+msgid "1. Create a staging copy of this site with the staging function in the control panel of %1$s; its guide: %2$s 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the page AlphaBridge → Staging of this site, and the address of this site on the copy."
+msgstr "1. Crea una copia de staging de este sitio con la función de staging del panel de control de %1$s; su guía: %2$s 2. Instala y activa AlphaBridge MCP en la copia. 3. Introduce la dirección de la copia en la página AlphaBridge → Staging de este sitio, y la dirección de este sitio en la copia."
 
-msgid "1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy."
-msgstr "1. Crea una copia de staging de este sitio: con la función de staging de tu proveedor de alojamiento, si la tiene, o con un plugin de staging del directorio de plugins de WordPress. 2. Instala y activa AlphaBridge MCP en la copia. 3. Introduce la dirección de la copia en la página de ajustes de este sitio en Staging, y la dirección de este sitio en la copia."
+msgid "1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the page AlphaBridge → Staging of this site, and the address of this site on the copy."
+msgstr "1. Crea una copia de staging de este sitio: con la función de staging de tu proveedor de alojamiento, si la tiene, o con un plugin de staging del directorio de plugins de WordPress. 2. Instala y activa AlphaBridge MCP en la copia. 3. Introduce la dirección de la copia en la página AlphaBridge → Staging de este sitio, y la dirección de este sitio en la copia."
 
 msgid "No staging site is known for this site yet."
 msgstr "Aún no se conoce ningún sitio de staging para este sitio."
@@ -5439,8 +5439,8 @@ msgstr "La protección de la vista previa se comprueba en el propio sitio de sta
 msgid "The preview protection is off: visitors and search engines can read the staging site."
 msgstr "La protección de la vista previa está desactivada: los visitantes y los motores de búsqueda pueden leer el sitio de staging."
 
-msgid "1. Switch on the preview protection on the settings page at Staging, or have the assistant call wp_set_preview_protection. 2. Pass the password it shows on to whoever should see the preview."
-msgstr "1. Activa la protección de la vista previa en la página de ajustes en Staging, o haz que el asistente llame a wp_set_preview_protection. 2. Pasa la contraseña que se muestra a quien deba ver la vista previa."
+msgid "1. Switch on the preview protection on the page AlphaBridge → Staging, or have the assistant call wp_set_preview_protection. 2. Pass the password it shows on to whoever should see the preview."
+msgstr "1. Activa la protección de la vista previa en la página AlphaBridge → Staging, o haz que el asistente llame a wp_set_preview_protection. 2. Pasa la contraseña que se muestra a quien deba ver la vista previa."
 
 msgid "Pair set"
 msgstr "Par fijado"
@@ -5456,8 +5456,8 @@ msgstr "Emparejado con el sitio de producción %s."
 msgid "No pair is set yet."
 msgstr "Aún no hay ningún par fijado."
 
-msgid "1. Confirm the role of this site, if it is not yet. 2. Enter the address of the other site on the settings page at Staging and save. 3. On the other site, enter the address of this one."
-msgstr "1. Confirma el rol de este sitio, si aún no lo está. 2. Introduce la dirección del otro sitio en la página de ajustes en Staging y guarda. 3. En el otro sitio, introduce la dirección de este."
+msgid "1. Confirm the role of this site, if it is not yet. 2. Enter the address of the other site on the page AlphaBridge → Staging and save. 3. On the other site, enter the address of this one."
+msgstr "1. Confirma el rol de este sitio, si aún no lo está. 2. Introduce la dirección del otro sitio en la página AlphaBridge → Staging y guarda. 3. En el otro sitio, introduce la dirección de este."
 
 #, php-format
 msgid "The staging site %s is entered; whether it answers has not been checked."
@@ -5466,14 +5466,14 @@ msgstr "El sitio de staging %s está introducido; no se ha comprobado si respond
 msgid "1. Switch off the host's password protection for the staging site. 2. Switch on the preview protection of AlphaBridge MCP there instead: it keeps visitors out and lets apps and the hub in."
 msgstr "1. Desactiva la protección por contraseña del proveedor de alojamiento para el sitio de staging. 2. Activa allí en su lugar la protección de la vista previa de AlphaBridge MCP: deja fuera a los visitantes y deja entrar a las aplicaciones y al hub."
 
-msgid "1. If that is the staging site, enter that address on the settings page at Staging. 2. Check again."
-msgstr "1. Si ese es el sitio de staging, introduce esa dirección en la página de ajustes en Staging. 2. Comprueba de nuevo."
+msgid "1. If that is the staging site, enter that address on the page AlphaBridge → Staging. 2. Check again."
+msgstr "1. Si ese es el sitio de staging, introduce esa dirección en la página AlphaBridge → Staging. 2. Comprueba de nuevo."
 
 msgid "1. Install and activate AlphaBridge MCP on the staging site. 2. Check again."
 msgstr "1. Instala y activa AlphaBridge MCP en el sitio de staging. 2. Comprueba de nuevo."
 
-msgid "1. Open the address in a browser and check that it is the staging site. 2. Correct it on the settings page at Staging if it is not."
-msgstr "1. Abre la dirección en un navegador y comprueba que es el sitio de staging. 2. Corrígela en la página de ajustes en Staging si no lo es."
+msgid "1. Open the address in a browser and check that it is the staging site. 2. Correct it on the page AlphaBridge → Staging if it is not."
+msgstr "1. Abre la dirección en un navegador y comprueba que es el sitio de staging. 2. Corrígela en la página AlphaBridge → Staging si no lo es."
 
 #, php-format
 msgid "The staging way is in place: this site is the protected staging site of %s. Make the changes here and show them with the preview password; carry them over to the production site one at a time once they are approved."
@@ -5558,15 +5558,15 @@ msgstr "Anotado: esta conexión vuelve a ser preguntada con su próximo cambio."
 msgid "Nothing was changed: that connection is not known any more, or the action was not one of release, revoke or ask again."
 msgstr "No se ha cambiado nada: esa conexión ya no se conoce, o la acción no era liberar, revocar ni preguntar de nuevo."
 
-msgid "Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page."
-msgstr "No se ejecutó nada: este sitio exige primero staging. Cuenta como sitio de producción, donde un cambio es visible al instante para los visitantes, y un cambio aquí necesita una liberación por una persona en la página de ajustes."
+msgid "Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the page AlphaBridge → Staging."
+msgstr "No se ejecutó nada: este sitio exige primero staging. Cuenta como sitio de producción, donde un cambio es visible al instante para los visitantes, y un cambio aquí necesita una liberación por una persona en la página AlphaBridge → Staging."
 
 msgid "1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps."
 msgstr "1. Trabajar en un sitio de staging en su lugar: wp_staging_status muestra dónde está el sitio y el siguiente paso, y el prompt staging_workflow tiene los pasos."
 
 #, php-format
-msgid "2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
-msgstr "2. Para cambiar este sitio de todos modos, un administrador libera esta conexión en la página de ajustes de AlphaBridge MCP bajo «Primero staging» («Trabajar sin staging»), durante %d horas o hasta su revocación. 3. O un administrador pone allí «Primero staging» en Preguntar o Desactivado."
+msgid "2. To change this site anyway, an administrator releases this connection on the page AlphaBridge → Staging under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Para cambiar este sitio de todos modos, un administrador libera esta conexión en la página AlphaBridge → Staging bajo «Primero staging» («Trabajar sin staging»), durante %d horas o hasta su revocación. 3. O un administrador pone allí «Primero staging» en Preguntar o Desactivado."
 
 msgid "this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses and was not sent; an administrator can add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php"
 msgstr "este sitio envía sus peticiones a través de un proxy (WP_PROXY_HOST), que resuelve por sí mismo el nombre; por eso la petición no se ha podido vincular a las direcciones comprobadas y no se ha enviado; un administrador puede añadir el host a WP_PROXY_BYPASS_HOSTS en wp-config.php"
@@ -5636,8 +5636,8 @@ msgid "Saved: Staging first."
 msgstr "Guardado: Primero staging."
 
 #, php-format
-msgid "2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
-msgstr "2. Esta llamada llegó por el adaptador de abilities de WordPress: para cambiar este sitio de todos modos, un administrador libera su cuenta en la página de ajustes de AlphaBridge MCP bajo «Primero staging» («Trabajar sin staging»), durante %d horas o hasta su revocación. 3. O un administrador pone allí «Primero staging» en Preguntar o Desactivado."
+msgid "2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the page AlphaBridge → Staging under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Esta llamada llegó por el adaptador de abilities de WordPress: para cambiar este sitio de todos modos, un administrador libera su cuenta en la página AlphaBridge → Staging bajo «Primero staging» («Trabajar sin staging»), durante %d horas o hasta su revocación. 3. O un administrador pone allí «Primero staging» en Preguntar o Desactivado."
 
 msgid "Not held: this site is the confirmed staging site, or paired with one."
 msgstr "No retenido: este sitio es el sitio de staging confirmado, o está emparejado con uno."

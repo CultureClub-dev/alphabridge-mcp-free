@@ -95,7 +95,7 @@ class AB_MCP_Security {
 					/* translators: %s: tool */
 					sprintf( __( 'The tool "%s" is switched off in the fine-tuning of AlphaBridge MCP on this site.', 'alphabridge-mcp' ), $name ),
 					/* translators: %s: tool */
-					sprintf( __( 'To allow it, an administrator switches "%s" on under Settings → AlphaBridge MCP → Fine-tuning and saves the changes.', 'alphabridge-mcp' ), $name ),
+					sprintf( __( 'To allow it, an administrator switches "%s" on under AlphaBridge → AI Connection → Fine-tuning and saves the changes.', 'alphabridge-mcp' ), $name ),
 					AB_MCP_Guidance::settings_url( 'ab-tool-' . $name )
 				)
 			);
@@ -120,7 +120,7 @@ class AB_MCP_Security {
 						isset( $labels[ $scope ] ) ? $labels[ $scope ] : $scope
 					),
 					/* translators: %s: name of the widest access level */
-					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ), $labels['full'] ),
+					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under AlphaBridge → AI Connection.', 'alphabridge-mcp' ), $labels['full'] ),
 					AB_MCP_Guidance::settings_url( 'ab-connections' )
 				)
 			);

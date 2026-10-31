@@ -822,7 +822,7 @@ abstract class AB_MCP_Builder_Writer {
 		}
 		$data = $token->get_error_data();
 		if ( 'ab_mcp_undo_disabled' === $token->get_error_code() && is_array( $data ) && isset( $data['reason'] ) && 'switched_off' === $data['reason'] ) {
-			$this->warnings[] = __( 'Undo is switched off on this site, so this change has no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' );
+			$this->warnings[] = __( 'Undo is switched off on this site, so this change has no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' );
 			return array(
 				'token'     => null,
 				'snapshot'  => $snapshot,
