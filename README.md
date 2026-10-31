@@ -166,8 +166,8 @@ Handing an AI access to a site should feel safe, so control comes first:
   all. And `wp_get_post` and `wp_get_post_meta` with `include_protected=true`, for an account
   with `manage_options`, add a fixed allow-list of protected page-builder and layout keys
   (`_elementor_data`, `_wp_page_template`, `_thumbnail_id` and a few more; filter
-  `ab_mcp_pro_protected_meta_allowlist`) where the account may edit the post, or where the
-  plugin that registered the key allows it; credential-shaped keys stay out.
+  `ab_mcp_pro_protected_meta_allowlist`) where the account may edit the post and, for a key a
+  plugin registered, the plugin's rule allows it too; credential-shaped keys stay out.
   `wp_duplicate_post` copies protected keys too, into the new draft only and only for an
   account that may edit the original: WordPress's own page template, featured image and list of
   removed hooked blocks, and — with the `unfiltered_html` capability, because it holds markup —

@@ -17,6 +17,16 @@ require_once dirname( __DIR__ ) . '/class-redactor.php';
 abstract class AB_MCP_Tools_Base {
 
 	/**
+	 * What the core does to the answer of a reader that hands on meta values
+	 * (AB_MCP_Redactor, since 4.13.0), and where it stops: a text under the
+	 * name of a field people write (AB_MCP_Redactor::CONTENT_FIELDS) is not
+	 * decoded, so a credential in JSON or serialized data there stays. The
+	 * descriptions of wp_get_post, wp_get_post_meta and wp_get_term_meta end
+	 * with it.
+	 */
+	const READ_REDACTION_NOTE = 'Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. A text under the name of a field people write (such as content, title, excerpt, caption, alt, description, text, raw or rendered) is not decoded, so JSON or serialized data inside it is returned as written.';
+
+	/**
 	 * Post fields WP_Query orders by that several posts can share, under the
 	 * names it accepts (WP_Query::parse_orderby()). The id is unique and not
 	 * among them.
@@ -243,8 +253,10 @@ abstract class AB_MCP_Tools_Base {
 			return false;
 		}
 		// A key registered through register_meta()/register_post_meta() carries an
-		// auth_callback. That callback is the site's own explicit decision about
-		// who may touch the key, so it wins over anything we think.
+		// auth_callback, the site's own decision about who may touch the key.
+		// edit_post_meta asks the right to edit the post first and the callback
+		// on top (map_meta_cap(), case 'edit_post_meta'): the callback can
+		// narrow the right, never stand in for a missing edit_post.
 		if ( registered_meta_key_exists( 'post', $key, (string) get_post_type( $id ) )
 			|| registered_meta_key_exists( 'post', $key ) ) {
 			return current_user_can( 'edit_post_meta', $id, $key );

@@ -14,12 +14,14 @@
  * - One allow-listed key asked for by name is answered under the same
  *   right, include_protected or not; a key outside the allow-list is
  *   refused with the filter named, whoever asks.
- * - An allow-listed key needs the right to edit the post, or, for a key a
- *   plugin registered, the plugin's rule for it (may_expose_protected()).
+ * - An allow-listed key needs the right to edit the post and, for a key a
+ *   plugin registered, the plugin's rule for it on top, as WordPress maps
+ *   edit_post_meta (may_expose_protected()).
  * - A credential-like key stays out, by name and in the listing, whatever
  *   the filter adds; and the answer is redacted like every reader's
  *   (AB_MCP_Redactor): a credential inside an allow-listed value reads as
- *   [REDACTED].
+ *   [REDACTED], but for a text under the name of a field people write,
+ *   which is not decoded (the redactor's limit, as its readers describe it).
  * - The allow-list is one list, read by the readers and wp_search_replace.
  *
  * @package AlphaBridge_MCP
@@ -204,11 +206,32 @@ final class ProtectedMetaReadTest extends TestCase {
 		self::assertSame( array(), self::meta( array( 'id' => 6, 'include_protected' => true ) )['meta'] );
 	}
 
+	/**
+	 * Capabilities as map_meta_cap() maps them: edit_post_meta takes what
+	 * edit_post takes, and the auth_callback of the key on top (here the
+	 * one a plugin registered for _elementor_data).
+	 *
+	 * @param bool $edit_post Whether the account may edit the post.
+	 * @param bool $auth      What the plugin's auth_callback answers.
+	 */
+	private static function wp_meta_caps( bool $edit_post, bool $auth ): void {
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( $edit_post, $auth ): bool {
+			if ( 'edit_post' === $cap ) {
+				return $edit_post;
+			}
+			if ( 'edit_post_meta' === $cap ) {
+				return $edit_post && ( '_elementor_data' !== ( $args[1] ?? '' ) || $auth );
+			}
+			return true;
+		};
+	}
+
 	public function testAKeyAPluginRegisteredFollowsItsRule(): void {
 		// Registered for posts: may_expose_protected() asks edit_post_meta,
-		// which runs the plugin's auth_callback, instead of edit_post.
+		// which asks the right to edit the post and then the plugin's
+		// auth_callback for the key.
 		$GLOBALS['ab_test_registered_meta']['post']['post']['_elementor_data'] = true;
-		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => ! ( 'edit_post_meta' === $cap && '_elementor_data' === ( $args[1] ?? '' ) );
+		self::wp_meta_caps( true, false );
 		self::assertSame( 'ab_mcp_forbidden', self::code( self::meta( array( 'id' => 5, 'key' => '_elementor_data' ) ) ) );
 		self::assertArrayNotHasKey( '_elementor_data', self::meta( array( 'id' => 5, 'include_protected' => true ) )['meta'] );
 		self::assertArrayHasKey( '_elementor_edit_mode', self::meta( array( 'id' => 5, 'include_protected' => true ) )['meta'], 'An unregistered key still follows edit_post.' );
@@ -217,9 +240,16 @@ final class ProtectedMetaReadTest extends TestCase {
 		$GLOBALS['ab_test_registered_meta'] = array( 'post' => array( '' => array( '_elementor_data' => true ) ) );
 		self::assertSame( 'ab_mcp_forbidden', self::code( self::meta( array( 'id' => 5, 'key' => '_elementor_data' ) ) ) );
 
-		// The rule allows it, while edit_post is denied: the plugin decides.
-		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'edit_post' !== $cap;
+		// The rule allows it, and the account may edit the post: read.
+		self::wp_meta_caps( true, true );
 		self::assertSame( self::LAYOUT, self::meta( array( 'id' => 5, 'key' => '_elementor_data' ) )['value'] );
+
+		// A rule that allows it does not stand in for the right to edit the post.
+		self::wp_meta_caps( false, true );
+		$res = self::meta( array( 'id' => 5, 'key' => '_elementor_data' ) );
+		self::assertSame( 'ab_mcp_forbidden', self::code( $res ) );
+		self::assertStringStartsWith( 'Your account cannot access this meta key: that takes the right to edit the post itself', self::message( $res ) );
+		self::assertSame( array(), self::meta( array( 'id' => 5, 'include_protected' => true ) )['meta'], 'Nor in the listing, where the public keys take that right too.' );
 	}
 
 	public function testAKeyAPluginMarksAsProtectedIsAProtectedKey(): void {
@@ -337,6 +367,39 @@ final class ProtectedMetaReadTest extends TestCase {
 		self::assertSame( 'Text of post 5', $post['content'], 'What people wrote stays.' );
 	}
 
+	public function testATextUnderAFieldPeopleWriteIsNotDecodedAndItsNeighboursAreRedacted(): void {
+		// The redactor's limit, as the descriptions state it: a text under
+		// the name of a field people write (AB_MCP_Redactor::CONTENT_FIELDS)
+		// is returned as written, JSON with a credential in it included; a
+		// credential key beside it, or in an array below it, is redacted.
+		delete_post_meta( 5, '_elementor_page_settings' );
+		add_post_meta(
+			5,
+			'_elementor_page_settings',
+			array(
+				'raw'     => '{"api_key":"VISIBLE-1"}',
+				'text'    => array( 'api_key' => 'PLACEHOLDER-T' ),
+				'api_key' => 'PLACEHOLDER-K',
+			)
+		);
+		foreach ( array(
+			array( 'wp_get_post_meta', self::meta( array( 'id' => 5, 'key' => '_elementor_page_settings' ) ), array( 'value' ), '/value' ),
+			array( 'wp_get_post_meta', self::meta( array( 'id' => 5, 'include_protected' => true ) ), array( 'meta', '_elementor_page_settings' ), '/meta/_elementor_page_settings' ),
+			array( 'wp_get_post', AB_MCP_Tools_Content::get_post( array( 'id' => 5, 'include_protected' => true ) ), array( 'meta', '_elementor_page_settings' ), '/meta/_elementor_page_settings' ),
+		) as list( $tool, $result, $at, $pointer ) ) {
+			$out   = AB_MCP_Redactor::tool_result( $tool, array(), $result );
+			$value = $out;
+			foreach ( $at as $step ) {
+				$value = $value[ $step ];
+			}
+			self::assertSame( '{"api_key":"VISIBLE-1"}', $value['raw'], $tool . ': not decoded under raw, so returned as written.' );
+			self::assertSame( array( 'api_key' => AB_MCP_Redactor::MARK ), $value['text'], $tool . ': an array under such a name is judged by its keys.' );
+			self::assertSame( AB_MCP_Redactor::MARK, $value['api_key'], $tool );
+			self::assertSame( array( $pointer . '/text/api_key', $pointer . '/api_key' ), $out['redacted'], $tool . ': the raw text is not named as redacted.' );
+			self::assertStringNotContainsString( 'PLACEHOLDER', (string) wp_json_encode( $out ), $tool );
+		}
+	}
+
 	/* ------------------------------------------------ the definitions */
 
 	public function testBothToolsOfferIncludeProtectedAndSayWhatItTakes(): void {
@@ -350,9 +413,14 @@ final class ProtectedMetaReadTest extends TestCase {
 			self::assertStringContainsString( 'manage_options', $prop['description'], $name );
 			self::assertStringContainsString( 'manage_options', $def['description'], $name );
 			self::assertStringContainsString( 'include_protected=true', $def['description'], $name );
-			self::assertStringContainsString( 'reads as [REDACTED], and redacted lists the paths of those values', $def['description'], $name . ' keeps its sentence on redaction.' );
+			self::assertStringContainsString( \AB_MCP_Tools_Base::READ_REDACTION_NOTE, $def['description'], $name . ' keeps its sentence on redaction, with its limit.' );
 			self::assertSame( 'edit_posts', $def['capability'], $name );
 		}
+		// The limit stands where the promise does: the term meta reader too.
+		require_once dirname( __DIR__ ) . '/includes/tools/class-tools-meta-auth.php';
+		\AB_MCP_Tools_Meta_Auth::register( $r );
+		self::assertStringContainsString( \AB_MCP_Tools_Base::READ_REDACTION_NOTE, $r->get( 'wp_get_term_meta' )['description'] );
+		self::assertStringContainsString( 'is not decoded, so JSON or serialized data inside it is returned as written', \AB_MCP_Tools_Base::READ_REDACTION_NOTE );
 		$key = $r->get( 'wp_get_post_meta' )['inputSchema']['properties']['key']['description'];
 		self::assertStringContainsString( 'manage_options', $key );
 		self::assertStringContainsString( 'ab_mcp_pro_protected_meta_allowlist', $key );

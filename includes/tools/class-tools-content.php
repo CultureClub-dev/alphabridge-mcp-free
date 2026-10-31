@@ -80,7 +80,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post',
 			array(
-				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. include_protected=true (requires manage_options) adds the allow-listed protected "_" meta keys such as _elementor_data. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so, and wp_get_builder_layout returns the page\'s elements. A revision_id from wp_list_revisions returns that revision. Needs edit_posts and the right to read the post; a password-protected post or a revision needs the right to edit it (for a revision: its post). An unknown id returns a not-found error. Read-only. Inside the meta values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values; content, title and excerpt are returned as written.',
+				'description' => 'Get one post, page or entry of any post type by id: the fields of wp_list_posts plus the raw content, public custom fields (meta) and the assigned term names per taxonomy. include_protected=true (requires manage_options) adds the allow-listed protected "_" meta keys such as _elementor_data. For a post built with a page builder or block library, built_with names the builder, how the page is stored and the tools that change it (write_via); where post_content is not what the site shows, its note says so, and wp_get_builder_layout returns the page\'s elements. A revision_id from wp_list_revisions returns that revision. Needs edit_posts and the right to read the post; a password-protected post or a revision needs the right to edit it (for a revision: its post). An unknown id returns a not-found error. Read-only. ' . self::READ_REDACTION_NOTE,
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -212,7 +212,7 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_post_meta',
 			array(
-				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Credential-like keys are not available. Keys starting with "_" and keys WordPress marks as protected are not available either, except that include_protected=true (requires manage_options) adds the allow-listed protected keys (page-builder and layout data such as _elementor_data; filter ab_mcp_pro_protected_meta_allowlist); one of those keys can also be asked for by name, under the same right. Keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values. wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
+				'description' => 'Read custom fields (post meta) of one post: one key, or all public keys. Credential-like keys are not available. Keys starting with "_" and keys WordPress marks as protected are not available either, except that include_protected=true (requires manage_options) adds the allow-listed protected keys (page-builder and layout data such as _elementor_data; filter ab_mcp_pro_protected_meta_allowlist); one of those keys can also be asked for by name, under the same right. Keys are returned only where the account may edit the post (and the key). Returns {id, key, value} (with several stored values, the first) or {id, meta: {key: value}} (a key with several values gives a list). An unknown post id returns a not-found error. Read-only. ' . self::READ_REDACTION_NOTE . ' wp_get_post returns the same keys along with the post; page builder layouts are read with wp_get_builder_layout, SEO fields with wp_seo_get.',
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
@@ -440,8 +440,8 @@ class AB_MCP_Tools_Content extends AB_MCP_Tools_Base {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Reading a protected meta key requires the manage_options capability, as include_protected does: connect with an administrator account.', 'alphabridge-mcp' ) );
 		}
-		// The right to edit the post, or the plugin's rule for a key it
-		// registered: the same reason as for a public key.
+		// The right to edit the post, and for a key a plugin registered its
+		// rule on top: the same reason as for a public key.
 		if ( ! self::may_expose_protected( $key, $id ) ) {
 			return AB_MCP_Guidance::role_refusal( __( 'Your account cannot access this meta key: that takes the right to edit the post itself (an author may read a colleague\'s published post, but not edit it), and the plugin that registered the key can restrict it further. Connect with an account that may edit the post and the key, such as an administrator.', 'alphabridge-mcp' ) );
 		}

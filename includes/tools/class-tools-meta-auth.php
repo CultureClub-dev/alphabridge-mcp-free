@@ -66,7 +66,7 @@ class AB_MCP_Tools_Meta_Auth extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_term_meta',
 			array(
-				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} (with several stored values, the first) or {term_id, meta: {key: value}} (a key with several values gives a list). Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term. Inside the values returned, whatever sits under a credential-like key (in an array, serialized data or JSON) reads as [REDACTED], and redacted lists the paths of those values.',
+				'description' => 'Read custom meta of one term: one key, or all public keys. Keys starting with "_", keys WordPress marks as protected and credential-like keys are not available; without a key, keys the account may not edit are left out too. Returns {term_id, key, value} (with several stored values, the first) or {term_id, meta: {key: value}} (a key with several values gives a list). Needs the right to assign terms of the term\'s taxonomy; one key needs the right to edit the term. An unknown term_id returns a not-found error. Read-only; the term\'s own fields come from wp_get_term. ' . self::READ_REDACTION_NOTE,
 				'capability'  => 'edit_posts',
 				'inputSchema' => array(
 					'type'       => 'object',
