@@ -5,38 +5,86 @@
  * A staging site is shown to a client before it goes live, and nobody else
  * should read it: not a visitor who guesses the address, not a search
  * engine. With the protection on, a visitor without a WordPress login sees a
- * password page instead of the site, for every page, post, archive, feed and
- * search, and the public REST API answers such a visitor 401 as well, for
- * every namespace (wp/v2 gives the content away, oembed/1.0 titles and
- * excerpts, the Store API of a shop its products). A visitor who enters the
- * shared password is remembered in a browser cookie for 14 days.
+ * password page instead of the site, for every page, post, archive, feed,
+ * search and the sitemaps of SEO plugins, and the public REST API answers
+ * such a visitor 401 as well, for every namespace (wp/v2 gives the content
+ * away, oembed/1.0 titles and excerpts, the Store API of a shop its
+ * products). A visitor who enters the shared password is remembered in a
+ * browser cookie for 14 days.
+ *
+ * Where the front-end gate hangs, and why there:
+ *
+ * - First line: parse_request at priority 1 (gate_parse_request()), the
+ *   action WP::parse_request() fires once it has turned the request into
+ *   $wp->query_vars, before WP::main() goes on to the headers, the query and
+ *   the template. SEO plugins answer their sitemaps on the way between: Yoast
+ *   SEO on pre_get_posts at priority 1 (WPSEO_Sitemaps::redirect() prints
+ *   the sitemap and ends the request), others on parse_request at the
+ *   default priority 10; a gate on template_redirect alone never saw them.
+ *   Measured on 31.10.2026 on a live site (WordPress 7.1.4, Yoast SEO 28.8):
+ *   every page, post, archive, feed, search and REST route answered 401,
+ *   /sitemap_index.xml, /post-sitemap.xml, /page-sitemap.xml,
+ *   /category-sitemap.xml and /?sitemap=1 answered 200 with every address.
+ *   Priority 1, not 0: a handler at 0 (WooCommerce's wc-api on
+ *   parse_request) answers before the gate today and keeps doing so.
+ * - Not covered, by the same token: what answers before WordPress has parsed
+ *   the request, on parse_request at 0, on init or on wp_loaded (a plugin's
+ *   own download or form handler). Their behaviour is unchanged, and the
+ *   tool's description says so.
+ * - Second line: template_redirect at priority 1 (gate_frontend()) and the
+ *   action wp for the entry points without themes (gate_without_themes(),
+ *   below), as before. A plugin can filter do_parse_request to false; then
+ *   parse_request never fires, template_redirect does. The decision is one
+ *   function (frontend_decision()), so a request the first line passed is
+ *   decided the same way again; DONOTCACHEPAGE is defined once (guarded)
+ *   and nocache_headers() replaces headers of the same name, so the second
+ *   run changes nothing.
+ * - wp_loaded for wp-links-opml.php, which runs no wp() (gate_script()).
+ * - The REST API decides on rest_authentication_errors (gate_rest()).
  *
  * What the protection must never lock, because AlphaBridge itself and the
  * hub come in through it (the list of the survey of 31.10.2026, each with a
- * test of its own):
+ * test of its own), in the order of the clauses of frontend_decision():
  *
  * - The MCP endpoint and every other route under this plugin's REST
  *   namespace: the token is checked in the route's own permission callback,
  *   so on rest_authentication_errors nobody is signed in yet; the OAuth
  *   routes (register, token, revoke) are public by their RFCs.
- * - The two OAuth metadata documents below /.well-known/, which
- *   AB_MCP_OAuth serves on template_redirect at priority 0 while the
- *   sign-in is on; the clause here is for the case that order changes, and
- *   it asks AB_MCP_OAuth::well_known_document() itself, so what the gate
- *   lets through is exactly what the handler serves (a double slash is
- *   neither). Not the rest of /.well-known/: WordPress would answer those
- *   with the theme's 404 page, menus and sidebars included. The hub asks for
+ * - Every REST request, on the first line: rest_api_loaded() (the core,
+ *   wp-includes/rest-api.php) serves on parse_request at priority 10 every
+ *   request whose $wp->query_vars['rest_route'] is not empty, set by the
+ *   rewrite rule of pretty permalinks or by ?rest_route=; REST_REQUEST is
+ *   not defined at priority 1. The clause rest_route is exactly that
+ *   condition, read from the variable WordPress parsed and never from the
+ *   path (a prefix like /wp-json/ decides nothing), and gate_rest() then
+ *   decides on rest_authentication_errors as for every REST request.
+ * - The two OAuth metadata documents below /.well-known/ and the consent
+ *   page /?ab_mcp_oauth=authorize, which AB_MCP_OAuth serves on
+ *   template_redirect at priority 0 (serve_well_known() while the sign-in
+ *   is on, handle_authorize()). The gate does not pass them and wait for
+ *   that: between parse_request and template_redirect the plugins above
+ *   answer, and /.well-known/oauth-authorization-server?sitemap=1 or
+ *   /?ab_mcp_oauth=authorize&sitemap=1 would be their sitemap, not the
+ *   document. It calls the handler itself (decision serve, serve()), and the
+ *   handler ends every request it serves: send_json() exits;
+ *   handle_authorize() ends with the consent screen, the redirect to the
+ *   login, the redirect back to the client or an error page (each branch
+ *   exits or wp_die()s). Should a handler return, the password page follows.
+ *   Each clause asks the handler's own routing decision, so what the gate
+ *   hands over is exactly what the handler serves:
+ *   AB_MCP_OAuth::well_known_document() (a double slash is neither
+ *   document) and AB_MCP_OAuth::is_authorize_request() (?ab_mcp_oauth=0 on
+ *   any page is nothing the handler serves, and is the password page; Codex,
+ *   31.10.2026). The consent clause holds with themes only, where the
+ *   handler would run on template_redirect; on wp-signup.php the password
+ *   page as before. On template_redirect the handlers at 0 have answered
+ *   already, so the clauses there are for the case that order changes.
+ *   Not the rest of /.well-known/: WordPress would answer those with the
+ *   theme's 404 page, menus and sidebars included. The hub asks for
  *   /.well-known/alphabridge.json first when it looks for the endpoint of
  *   a site, and reads any status but 200 as «not there» (alphabridge-connect
  *   src/detect.ts, readWellKnown()), so the password page there sends it on
  *   to the probe of the MCP endpoint as a 404 would.
- * - The consent page /?ab_mcp_oauth=authorize needs no clause here:
- *   AB_MCP_OAuth::handle_authorize() (template_redirect 0) ends every
- *   request it serves, with the consent screen, the redirect to the login,
- *   the redirect back to the client or an error page (each branch exits or
- *   wp_die()s), so the gate never sees it. A clause on the parameter would
- *   be a hole: ?ab_mcp_oauth=0 on any page is nothing the handler serves,
- *   and must be the password page (Codex, 31.10.2026).
  * - The REST root /wp-json/ (the namespace index): the hub reads it to find
  *   the endpoint; a locked root makes a protected staging site impossible
  *   to link. For a visitor without login and cookie the index is reduced to
@@ -55,9 +103,9 @@
  *   after WordPress's own checks (priority 100), where is_user_logged_in()
  *   is settled, and passes an error of theirs through.
  * - wp-admin, wp-login.php, admin-ajax.php, admin-post.php, wp-cron.php and
- *   xmlrpc.php never load the template loader, so template_redirect does
- *   not fire there; the checks on the request constants are kept all the
- *   same, each with its test, so a later change of the hook cannot lock
+ *   xmlrpc.php run no wp(), so neither parse_request nor template_redirect
+ *   fires there; the checks on the request constants are kept all the
+ *   same, each with its test, so a later change of the hooks cannot lock
  *   them by accident.
  *
  * Where WordPress gives content out without template_redirect (measured on
@@ -66,12 +114,13 @@
  * - wp-signup.php, wp-activate.php and wp-trackback.php run wp() without
  *   WP_USE_THEMES; the template loader then skips template_redirect but
  *   still answers is_feed() with do_feed(), so /wp-signup.php?feed=rss2 is
- *   the whole feed. The gate also hangs on the action wp, where it runs only
- *   when wp_using_themes() is false (gate_without_themes()); with themes
- *   template_redirect follows and runs it once. Signed-in users and cookie
- *   holders pass there as everywhere, so the sign-up of a network keeps
- *   working for them; a single site's wp-signup.php redirects to the
- *   registration anyway.
+ *   the whole feed. The first line decides there as everywhere, with
+ *   $with_themes = wp_using_themes(); the gate also hangs on the action wp,
+ *   where it runs only when wp_using_themes() is false
+ *   (gate_without_themes()); with themes template_redirect follows and runs
+ *   it once. Signed-in users and cookie holders pass there as everywhere, so
+ *   the sign-up of a network keeps working for them; a single site's
+ *   wp-signup.php redirects to the registration anyway.
  * - wp-links-opml.php loads WordPress without wp() and prints the bookmarks;
  *   the gate runs for it on wp_loaded (gate_script()).
  * - wp-activate.php defines WP_INSTALLING before it loads WordPress, and
@@ -96,11 +145,16 @@
  *   site's protection is on, since the folder is shared. Where the folder
  *   cannot be written, the protection goes on all the same and the tool
  *   and the settings page say so, with the file to create by hand.
- * - robots.txt passes only on the way with themes (template_redirect):
- *   without themes the template loader prints robots.txt and returns to the
- *   script, and wp-signup.php then renders its page with the theme's header
- *   and footer; so gate_without_themes() and the loader's gates do not
- *   exempt it.
+ * - robots.txt passes only on the way with themes: without themes the
+ *   template loader prints robots.txt and returns to the script, and
+ *   wp-signup.php then renders its page with the theme's header and footer;
+ *   so gate_without_themes() and the loader's gates do not exempt it. On
+ *   template_redirect is_robots() decides; on parse_request WP_Query has
+ *   not run yet (it sets is_robots when '' !== $qv['robots']), so the gate
+ *   reads the query var robots WordPress parsed, and passes only when it is
+ *   the only one: /?robots=1&sitemap=1 is the sitemap of an SEO plugin on
+ *   pre_get_posts, not robots.txt, and on template_redirect, where the
+ *   template loader answers is_robots() first, it does not matter any more.
  * - Embeds (/embed/, ?embed=true), previews (?p=…&preview=true) and the
  *   feeds of index.php load the template loader with themes and so pass
  *   template_redirect. wp-comments-post.php and the nopriv actions of
@@ -186,6 +240,14 @@ class AB_MCP_Preview_Protection {
 	const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 	/**
+	 * Priority on parse_request: after handlers at 0 (WooCommerce's wc-api),
+	 * before rest_api_loaded() and the plugins at the default priority 10,
+	 * and before everything WP::main() does after parse_request (the query
+	 * with pre_get_posts, where Yoast SEO answers its sitemaps).
+	 */
+	const PARSE_PRIORITY = 1;
+
+	/**
 	 * Priority on template_redirect: after AB_MCP_OAuth's handlers at 0
 	 * (the well-known documents and the consent page), before
 	 * redirect_canonical at 10.
@@ -224,8 +286,8 @@ class AB_MCP_Preview_Protection {
 	const SOURCE_FORM = 'form';
 
 	/**
-	 * Wire the two gates and the header. Called once from the plugin
-	 * bootstrap, on init.
+	 * Wire the gates and the header. Called once from the plugin bootstrap,
+	 * on init.
 	 */
 	public static function hook() {
 		// The loader for the requests WordPress serves without plugins, kept
@@ -234,6 +296,10 @@ class AB_MCP_Preview_Protection {
 		if ( ! wp_installing() && self::is_on() ) {
 			self::write_loader();
 		}
+		// The first line, once WordPress has parsed the request; the two
+		// below are the second, for a request that arrives without
+		// parse_request (do_parse_request filtered to false).
+		add_action( 'parse_request', array( __CLASS__, 'gate_parse_request' ), self::PARSE_PRIORITY );
 		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
 		add_action( 'wp', array( __CLASS__, 'gate_without_themes' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'gate_script' ) );
@@ -901,40 +967,68 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * What the front-end gate decides on, read from the request.
 	 *
-	 * @param bool $with_themes Whether this is the way with themes
-	 *                          (template_redirect), where robots.txt may pass.
+	 * @param bool        $with_themes Whether this is the way with themes
+	 *                                 (WP_USE_THEMES), where robots.txt may
+	 *                                 pass and the consent page is served.
+	 * @param object|null $wp          On parse_request the WP object with the
+	 *                                 parsed query_vars; null on the hooks
+	 *                                 after the query, where is_robots() is
+	 *                                 settled and REST has answered already.
 	 * @return array
 	 */
-	public static function frontend_context( $with_themes = true ) {
+	public static function frontend_context( $with_themes = true, $wp = null ) {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
 		$path = self::strip_home( (string) wp_parse_url( $uri, PHP_URL_PATH ) );
+		$vars = ( is_object( $wp ) && isset( $wp->query_vars ) && is_array( $wp->query_vars ) ) ? $wp->query_vars : null;
 		return array(
-			'path'        => $path,
-			'request_uri' => $uri,
-			'method'      => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
-			'well_known'  => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $uri ),
-			'password'    => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
-			'cookie'      => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
-			'logged_in'   => is_user_logged_in(),
-			'admin'       => is_admin(),
-			'ajax'        => defined( 'DOING_AJAX' ) && DOING_AJAX,
-			'cron'        => defined( 'DOING_CRON' ) && DOING_CRON,
-			'xmlrpc'      => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
-			'rest'        => defined( 'REST_REQUEST' ) && REST_REQUEST,
-			'cli'         => defined( 'WP_CLI' ) && WP_CLI,
+			'path'            => $path,
+			'request_uri'     => $uri,
+			'method'          => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
+			'well_known'      => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $uri ),
+			// With themes only: the handler runs on template_redirect, which
+			// the entry points without themes never reach.
+			'oauth_authorize' => (bool) $with_themes && class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::is_authorize_request(),
+			'password'        => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
+			'cookie'          => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
+			'logged_in'       => is_user_logged_in(),
+			'admin'           => is_admin(),
+			'ajax'            => defined( 'DOING_AJAX' ) && DOING_AJAX,
+			'cron'            => defined( 'DOING_CRON' ) && DOING_CRON,
+			'xmlrpc'          => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
+			'rest'            => defined( 'REST_REQUEST' ) && REST_REQUEST,
+			// The condition of rest_api_loaded() (wp-includes/rest-api.php),
+			// which serves the request on parse_request at priority 10: the
+			// variable WordPress parsed, never the path.
+			'rest_route'      => null !== $vars && ! empty( $vars['rest_route'] ),
+			'cli'             => defined( 'WP_CLI' ) && WP_CLI,
 			// Only with themes: without them the template loader prints
-			// robots.txt and returns to the script, which renders on.
-			'robots'      => (bool) $with_themes && function_exists( 'is_robots' ) && is_robots(),
+			// robots.txt and returns to the script, which renders on. After
+			// the query is_robots() decides; on parse_request the parsed
+			// variable, and only when nothing else was asked for.
+			'robots'          => (bool) $with_themes && ( null === $vars ? function_exists( 'is_robots' ) && is_robots() : self::only_robots( $vars ) ),
 		);
 	}
 
 	/**
-	 * The decision for a front-end request: pass (serve the site), accept (a
-	 * right password was posted: set the cookie and reload), reject (a wrong
-	 * one: the password page again, 401) or challenge (the password page,
-	 * 401). Each exemption is one clause, in the order of the header of this
-	 * file; each has its test. No clause for the consent page: its handler
-	 * ends the request before this gate runs (see the header).
+	 * Does a parsed query ask for robots.txt and nothing else? WP_Query sets
+	 * is_robots when '' !== $qv['robots']; a second variable beside it is
+	 * what a plugin on pre_get_posts answers (/?robots=1&sitemap=1), so it
+	 * is not robots.txt here.
+	 *
+	 * @param array $vars $wp->query_vars.
+	 * @return bool
+	 */
+	private static function only_robots( array $vars ) {
+		return array( 'robots' ) === array_keys( $vars ) && is_scalar( $vars['robots'] ) && '' !== (string) $vars['robots'];
+	}
+
+	/**
+	 * The decision for a front-end request: pass (serve the site), serve (a
+	 * document of AB_MCP_OAuth: hand the request to its handler, which ends
+	 * it), accept (a right password was posted: set the cookie and reload),
+	 * reject (a wrong one: the password page again, 401) or challenge (the
+	 * password page, 401). Each exemption is one clause, in the order of the
+	 * header of this file; each has its test.
 	 *
 	 * @param array $ctx   frontend_context().
 	 * @param array $state state().
@@ -950,8 +1044,16 @@ class AB_MCP_Preview_Protection {
 				return self::decision( 'pass', $kind );
 			}
 		}
+		// A REST request on parse_request: rest_api_loaded() serves it next,
+		// and gate_rest() decides on rest_authentication_errors.
+		if ( ! empty( $ctx['rest_route'] ) ) {
+			return self::decision( 'pass', 'rest_route' );
+		}
 		if ( ! empty( $ctx['well_known'] ) ) {
-			return self::decision( 'pass', 'well_known' );
+			return self::decision( 'serve', 'well_known' );
+		}
+		if ( ! empty( $ctx['oauth_authorize'] ) ) {
+			return self::decision( 'serve', 'oauth_authorize' );
 		}
 		if ( ! empty( $ctx['robots'] ) ) {
 			return self::decision( 'pass', 'robots' );
@@ -974,7 +1076,7 @@ class AB_MCP_Preview_Protection {
 	/**
 	 * One decision.
 	 *
-	 * @param string $action pass | accept | reject | challenge.
+	 * @param string $action pass | serve | accept | reject | challenge.
 	 * @param string $reason Which clause decided.
 	 * @return array{action:string,reason:string}
 	 */
@@ -986,16 +1088,20 @@ class AB_MCP_Preview_Protection {
 	}
 
 	/**
-	 * The front-end gate, on template_redirect. Does nothing while off.
-	 * While on, every answer is marked as not to be cached, whoever gets it:
-	 * a cache that stored the page a visitor with the cookie saw would hand
-	 * it to everyone after.
+	 * The front-end gate: on template_redirect, and from gate_parse_request()
+	 * and the gates of the ways without themes. Does nothing while off. While
+	 * on, every answer is marked as not to be cached, whoever gets it: a
+	 * cache that stored the page a visitor with the cookie saw would hand it
+	 * to everyone after.
 	 *
-	 * @param mixed $with_themes true on template_redirect (the action passes
-	 *                           nothing, so the default); false from the
-	 *                           gates of the ways without themes.
+	 * @param mixed       $with_themes true on template_redirect (the action
+	 *                                 passes nothing, so the default); false
+	 *                                 from the gates of the ways without
+	 *                                 themes; wp_using_themes() from
+	 *                                 gate_parse_request().
+	 * @param object|null $wp          The WP object on parse_request.
 	 */
-	public static function gate_frontend( $with_themes = true ) {
+	public static function gate_frontend( $with_themes = true, $wp = null ) {
 		$state = self::state();
 		if ( ! $state['on'] ) {
 			return;
@@ -1005,10 +1111,15 @@ class AB_MCP_Preview_Protection {
 		}
 		nocache_headers();
 
-		$ctx      = self::frontend_context( true === $with_themes );
+		$ctx      = self::frontend_context( true === $with_themes, $wp );
 		$decision = self::frontend_decision( $ctx, $state, time() );
 		if ( 'pass' === $decision['action'] ) {
 			return;
+		}
+		if ( 'serve' === $decision['action'] ) {
+			// The handler ends every request it serves; one that returns
+			// served nothing, and the password page follows.
+			self::serve( $decision['reason'] );
 		}
 		if ( 'accept' === $decision['action'] ) {
 			$expires = time() + self::COOKIE_DAYS * DAY_IN_SECONDS;
@@ -1026,6 +1137,39 @@ class AB_MCP_Preview_Protection {
 				'exit'     => true,
 			)
 		);
+	}
+
+	/**
+	 * Hand a request to the handler of AB_MCP_OAuth that serves it, as
+	 * template_redirect at priority 0 would later: the two documents below
+	 * /.well-known/ (serve_well_known(), which exits after the JSON) and the
+	 * consent page (handle_authorize(), whose every branch exits or
+	 * wp_die()s). Nothing else is served here; a reason this does not know
+	 * returns, and the gate shows the password page.
+	 *
+	 * @param string $reason The clause that decided: well_known or oauth_authorize.
+	 */
+	private static function serve( $reason ) {
+		if ( ! class_exists( 'AB_MCP_OAuth' ) ) {
+			return;
+		}
+		if ( 'well_known' === $reason ) {
+			AB_MCP_OAuth::serve_well_known();
+		} elseif ( 'oauth_authorize' === $reason ) {
+			AB_MCP_OAuth::handle_authorize();
+		}
+	}
+
+	/**
+	 * The first line, on parse_request at PARSE_PRIORITY: WordPress has
+	 * parsed the request into $wp->query_vars and nothing has answered yet,
+	 * neither rest_api_loaded() at 10 nor the SEO plugins on pre_get_posts.
+	 * Decides for every entry point that runs wp(), with or without themes.
+	 *
+	 * @param object $wp The WP object the action passes.
+	 */
+	public static function gate_parse_request( $wp = null ) {
+		self::gate_frontend( wp_using_themes(), $wp );
 	}
 
 	/**

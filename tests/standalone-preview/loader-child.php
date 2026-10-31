@@ -77,6 +77,7 @@ if ( 'off' === $ab_mode || 'gone' === $ab_mode ) {
 	ok( 10 === has_action( 'wp', array( 'AB_MCP_Preview_Protection', 'gate_without_themes' ) ), 'F the gate of the ways without themes hangs' );
 	ok( 110 === has_filter( 'rest_authentication_errors', array( 'AB_MCP_Preview_Protection', 'gate_rest' ) ), 'G the REST gate hangs' );
 	ok( 1 === has_action( 'template_redirect', array( 'AB_MCP_Preview_Protection', 'gate_frontend' ) ), 'H the front-end gate hangs' );
+	ok( 1 === has_action( 'parse_request', array( 'AB_MCP_Preview_Protection', 'gate_parse_request' ) ), 'H2 the first line on parse_request hangs' );
 	ok( AB_MCP_Preview_Protection::is_on(), 'I and reads the state from the option' );
 }
 echo 0 === $fails ? "LOADER-CHILD ok\n" : "LOADER-CHILD $fails failed\n";

@@ -5181,8 +5181,8 @@ msgstr "Nouveau mot de passe"
 msgid "Switch off"
 msgstr "Désactiver"
 
-msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
-msgstr "Ce qu’elle ne couvre pas : les fichiers sous /wp-content/uploads/ restent accessibles par leur adresse tant que votre hébergeur n’ajoute pas de règle pour ce dossier ; un cache hors PHP (cache de l’hébergeur, CDN) peut continuer d’afficher des pages jusqu’à ce que vous le vidiez là-bas ; le mot de passe partagé n’identifie personne, il convient donc à un site de staging montré à un client, pas à des données confidentielles."
+msgid "What it does not cover: files under /wp-content/uploads/ stay reachable by their address unless your host adds a rule for that folder; a cache outside PHP (a host cache, a CDN) may still show pages until you purge it there; what a plugin answers before WordPress has read the request (payment callbacks such as the wc-api of WooCommerce, downloads such as ?download_file=) and the pingbacks of xmlrpc.php are not held back; the shared password identifies nobody, so it suits a staging site shown to a client, not confidential data."
+msgstr "Ce qu’elle ne couvre pas : les fichiers sous /wp-content/uploads/ restent accessibles par leur adresse tant que votre hébergeur n’ajoute pas de règle pour ce dossier ; un cache hors PHP (cache de l’hébergeur, CDN) peut continuer d’afficher des pages jusqu’à ce que vous le vidiez là-bas ; ce qu’une extension répond avant que WordPress ait lu la requête (retours de paiement comme le wc-api de WooCommerce, téléchargements comme ?download_file=) et les pingbacks de xmlrpc.php ne sont pas retenus ; le mot de passe partagé n’identifie personne, il convient donc à un site de staging montré à un client, pas à des données confidentielles."
 
 msgid "Off: visitors see the site."
 msgstr "Désactivée : les visiteurs voient le site."

@@ -87,11 +87,13 @@ directory. It is the same code WordPress.org ships.
   own (`options_undo_token`).
 - **Preview protection for a staging site** — `wp_set_preview_protection` (and a section on the
   settings page) puts the site behind a shared password for visitors: a password page with HTTP
-  401 instead of every page, feed and search, the public REST API closed to them too, search
-  engine visibility set to discouraged (and written back on switching off), `X-Robots-Tag:
-  noindex`, nothing cached, the page cache emptied. The MCP endpoint, the sign-in, wp-admin, the
-  REST root the hub reads and signed-in users keep working. Not covered, and said so: files under
-  `/wp-content/uploads/`, caches outside PHP, and a shared password identifies nobody.
+  401 instead of every page, feed, search and the sitemaps of SEO plugins, the public REST API
+  closed to them too, search engine visibility set to discouraged (and written back on switching
+  off), `X-Robots-Tag: noindex`, nothing cached, the page cache emptied. The MCP endpoint, the
+  sign-in, wp-admin, the REST root the hub reads and signed-in users keep working. Not covered,
+  and said so: files under `/wp-content/uploads/`, caches outside PHP, what a plugin answers
+  before WordPress has parsed the request (WooCommerce's wc-api, `?download_file=`), pingbacks,
+  and a shared password identifies nobody.
 - **Staging status** — `wp_staging_status` reports the role a person confirmed for the site
   (production or staging; unconfirmed counts as production) with a suggestion from what the site
   shows, never taken as proof, the other site of the pair, the host, the preview protection and a
