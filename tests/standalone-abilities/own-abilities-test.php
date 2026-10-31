@@ -527,12 +527,13 @@ ok( is_wp_error( $res ) && 'denied' === ab_last_log()['status'] && isset( $GLOBA
 AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::ASK );
 $res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'held' ) );
 ok( is_array( $res ) && true === $res['nothing_changed'] && 'staging_first' === $res['held'] && is_string( $res['staging_hint'] ) && 'held' === ab_last_log()['status'] && 'ability' === ab_last_log()['via'], 'E10 the first writing call without a token is held with staging_hint, logged as held via ability' );
-ok( '' === AB_MCP_Auth::current_token_hash() && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'] ) === false, 'E10 no token: nothing is written to a token entry before the acknowledgement' );
+ok( '' === AB_MCP_Auth::current_token_hash() && array() === AB_MCP_Settings::get_tokens() && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'][ (string) get_current_user_id() ][ AB_MCP_Staging_Gate::FIELD_SEEN ] ) && ! isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'][ (string) get_current_user_id() ][ AB_MCP_Staging_Gate::FIELD_ACK ] ), 'E10 no token: nothing in the token store; the account is noted as seen, not as acknowledged' );
 $res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'held', AB_MCP_Staging_Gate::PARAM => true ) );
 ok( is_array( $res ) && ! isset( $res['nothing_changed'] ) && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'][ (string) get_current_user_id() ][ AB_MCP_Staging_Gate::FIELD_ACK ] ), 'E10 the same call with staging_acknowledged runs, and the acknowledgement is kept by the account id' );
 AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::REQUIRE );
 $res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'refused' ) );
-ok( is_wp_error( $res ) && 'ab_mcp_staging_required' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'abilities adapter' ) && 'denied' === ab_last_log()['status'], 'E10 with require, a call without a token is refused and told that the adapter has no connection to release' );
+ok( is_wp_error( $res ) && 'ab_mcp_staging_required' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'releases its account on the settings page' ) && 'denied' === ab_last_log()['status'], 'E10 with require, a call without a token is refused and told that an administrator releases its account on the settings page' );
+ok( false !== AB_MCP_Staging_Gate::release( array( 'kind' => 'user', 'id' => (string) get_current_user_id() ), get_current_user_id() ) && is_array( ab_ability( 'wp_create_post' )->execute( array( 'title' => 'released' ) ) ), 'E10 released by account: the call runs' );
 AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::OFF );
 ab_read();
 

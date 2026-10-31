@@ -17,7 +17,11 @@
  *
  * - role: production or staging, with who confirmed it, when, and where
  *   (SOURCE_FORM on the settings page, SOURCE_HUB from the hub). No role
- *   is «unconfirmed».
+ *   is «unconfirmed». Saving the form on the settings page is a
+ *   confirmation by a person: a part the hub wrote takes the form as its
+ *   source then, with who and when, also when its values stay the same
+ *   («Staging first» with the setting require counts the form only,
+ *   AB_MCP_Staging_Gate::site_exempt()).
  * - pair: the address of the other site and its role (always the other
  *   one: a pair is one production site and one staging site), with who
  *   confirmed it, when and where. A pair needs a confirmed role; a stored
@@ -306,8 +310,11 @@ class AB_MCP_Staging {
 
 	/**
 	 * Confirm the role of this site and the pair, as the settings page and
-	 * the hub do. Nothing is written when anything is wrong; a part that
-	 * stays as it was keeps who confirmed it, when and where.
+	 * the hub do. Nothing is written when anything is wrong. A part that
+	 * stays as it was keeps who confirmed it, when and where, unless the
+	 * settings page saves it over a record of the hub: that is a person's
+	 * confirmation, and the part takes the form as its source, with who and
+	 * when (see the head of this class).
 	 *
 	 * A role of ROLE_UNCONFIRMED takes the confirmed role back (the
 	 * settings page only); a pair needs a confirmed role, so it goes with
@@ -335,13 +342,21 @@ class AB_MCP_Staging {
 		$stored = self::record();
 		$who    = self::who( (int) $user_id, (string) $source );
 
+		// The settings page confirms what the hub wrote: the same value, now
+		// with the form as its source.
+		$confirms  = static function ( $part ) use ( $source ) {
+			return self::SOURCE_FORM === $source && null !== $part && self::SOURCE_FORM !== $part['source'];
+		};
+		$confirmed = false;
+
 		$role_changed = $unconfirm
 			? null !== $stored['role']
 			: ( null === $stored['role'] || $stored['role']['value'] !== $role );
 		if ( $unconfirm ) {
 			unset( $raw['role'] );
-		} elseif ( $role_changed ) {
+		} elseif ( $role_changed || $confirms( $stored['role'] ) ) {
 			$raw['role'] = array_merge( array( 'value' => $role ), $who );
+			$confirmed   = $confirmed || ! $role_changed;
 		}
 
 		// A stored pair exists only with a stored role, and its role is the
@@ -351,7 +366,7 @@ class AB_MCP_Staging {
 		$pair_changed = ! $keep_pair && ( '' !== $url || null !== $stored['pair'] );
 		if ( '' === $url ) {
 			unset( $raw['pair'] );
-		} elseif ( ! $keep_pair ) {
+		} elseif ( ! $keep_pair || $confirms( $stored['pair'] ) ) {
 			$raw['pair'] = array_merge(
 				array(
 					'partner_url'  => $url,
@@ -359,9 +374,10 @@ class AB_MCP_Staging {
 				),
 				$who
 			);
+			$confirmed   = $confirmed || $keep_pair;
 		}
 
-		if ( $role_changed || $pair_changed ) {
+		if ( $role_changed || $pair_changed || $confirmed ) {
 			AB_MCP_Settings::set( self::KEY, $raw );
 		}
 		// A connection that asked «Staging first» to ask no more said so for

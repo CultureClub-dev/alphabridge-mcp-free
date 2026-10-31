@@ -46,7 +46,8 @@
  * the release live in that entry (FIELD_ACK, FIELD_NEVER, FIELD_RELEASE),
  * not in a transient, which an object cache can lose. A call through the
  * WordPress abilities adapter (AB_MCP_Own_Abilities) has no token: it is
- * kept by the id of its account in OPTION, and not exempt.
+ * kept by the id of its account in OPTION, and not exempt; with REQUIRE a
+ * person releases the account on the settings page as a connection.
  *
  * A connection that existed before this version (its entry created before
  * the time this version first loaded, KEY_SINCE) is told that this is new
@@ -133,6 +134,17 @@ class AB_MCP_Staging_Gate {
 	const FIELD_NEVER      = 'staging_ack_never';
 	const FIELD_RELEASE    = 'staging_release_until';
 	const FIELD_RELEASE_BY = 'staging_release_by';
+	/**
+	 * Only in a user's state: when the gate last answered a call of this
+	 * account (held or refused), so that the settings page lists the account
+	 * before it has acknowledged or been released.
+	 */
+	const FIELD_SEEN = 'staging_seen';
+
+	/**
+	 * What the next writing call of a connection meets (would_hold_next()).
+	 */
+	const RUNS = 'runs';
 
 	/**
 	 * The filter over exempt_tools().
@@ -238,7 +250,7 @@ class AB_MCP_Staging_Gate {
 		return array(
 			'type'        => 'string',
 			'enum'        => array( self::REMINDER_WEEK, self::REMINDER_NEVER ),
-			'description' => 'With staging_acknowledged true, once the staging question has come back after 7 days: the person\'s answer. week asks again in a week at the next change (the default); never asks this connection no more, until the setting Staging first or the role of the site changes.',
+			'description' => 'With staging_acknowledged true, once the staging question has come back after 7 days: the person\'s answer. week asks again in a week at the next change (the default); never: this connection is not asked again until the setting Staging first or the role of the site changes.',
 		);
 	}
 
@@ -292,7 +304,8 @@ class AB_MCP_Staging_Gate {
 	 * back: it was given under the setting that is gone.
 	 *
 	 * @param string $value OFF, ASK or REQUIRE.
-	 * @return bool|WP_Error Whether it changed.
+	 * @return false|int|WP_Error false when nothing changed; else how many
+	 *                            «no more» were taken back (0 or more).
 	 */
 	public static function set_setting( $value ) {
 		if ( ! self::is_setting( $value ) ) {
@@ -302,8 +315,7 @@ class AB_MCP_Staging_Gate {
 			return false;
 		}
 		AB_MCP_Settings::set( self::SETTING, $value );
-		self::clear_never_marks();
-		return true;
+		return self::clear_never_marks();
 	}
 
 	/**
@@ -318,30 +330,34 @@ class AB_MCP_Staging_Gate {
 	 * Take every «no more» back, of the connections and of the callers
 	 * without a token. The acknowledgements of the last ACK_DAYS stay: a
 	 * connection that was asked this week is not asked twice.
+	 *
+	 * @return int How many were taken back.
 	 */
 	public static function clear_never_marks() {
 		$tokens  = AB_MCP_Settings::get_tokens();
-		$changed = false;
+		$cleared = 0;
 		foreach ( $tokens as &$entry ) {
 			if ( is_array( $entry ) && array_key_exists( self::FIELD_NEVER, $entry ) ) {
 				unset( $entry[ self::FIELD_NEVER ] );
-				$changed = true;
+				++$cleared;
 			}
 		}
 		unset( $entry );
-		if ( $changed ) {
+		if ( $cleared > 0 ) {
 			update_option( AB_MCP_Settings::OPT_TOKENS, $tokens );
 		}
-		$own = self::own();
+		$own   = self::own();
+		$users = 0;
 		foreach ( $own['users'] as $id => $state ) {
 			if ( is_array( $state ) && array_key_exists( self::FIELD_NEVER, $state ) ) {
 				unset( $own['users'][ $id ][ self::FIELD_NEVER ] );
-				$changed = true;
+				++$users;
 			}
 		}
-		if ( $changed ) {
+		if ( $users > 0 ) {
 			update_option( self::OPTION, $own, false );
 		}
+		return $cleared + $users;
 	}
 
 	/* ----------------------------------------------------------- stamp */
@@ -546,34 +562,70 @@ class AB_MCP_Staging_Gate {
 		if ( ! self::concerns( $name, $def ) ) {
 			return true;
 		}
-		$setting = self::setting();
-		if ( self::OFF === $setting ) {
+		$conn    = self::connection();
+		$state   = self::state( $conn );
+		$outcome = self::would_hold_next( $now, $conn, $state );
+		if ( self::RUNS === $outcome ) {
 			return true;
 		}
-		if ( self::site_exempt( $setting ) ) {
-			return true;
-		}
-		$conn  = self::connection();
-		$state = self::state( $conn );
-		if ( self::REQUIRE === $setting ) {
-			return self::released( $state, $now ) ? true : self::refusal( $conn );
-		}
-		if ( self::acknowledged( $state, $now ) ) {
-			return true;
+		if ( self::REQUIRE === $outcome ) {
+			self::note_seen( $conn, $now );
+			return self::refusal( $conn );
 		}
 		if ( self::is_true( isset( $args[ self::PARAM ] ) ? $args[ self::PARAM ] : null ) ) {
 			$fields = array( self::FIELD_ACK => $now );
 			if ( self::asked_before( $state ) && isset( $args[ self::PARAM_REMINDER ] ) && self::REMINDER_NEVER === $args[ self::PARAM_REMINDER ] ) {
 				$fields[ self::FIELD_NEVER ] = array(
 					'at'      => $now,
-					'setting' => $setting,
+					'setting' => self::ASK,
 					'role'    => AB_MCP_Staging::role(),
 				);
 			}
 			self::save_state( $conn, $fields );
 			return true;
 		}
+		self::note_seen( $conn, $now );
 		return self::held( $conn, $state );
+	}
+
+	/**
+	 * What the next writing call of a connection meets, as the gate decides
+	 * it, so that the server instructions say the same (AB_MCP_REST_Controller::
+	 * instructions()): RUNS (the setting off, the site outside the gate, the
+	 * connection acknowledged or released), ASK (held with staging_hint) or
+	 * REQUIRE (refused until a person releases the connection).
+	 *
+	 * @param int|null   $now   Current time (tests).
+	 * @param array|null $conn  connection(); the current one when null.
+	 * @param array|null $state state(); read when null.
+	 * @return string RUNS, ASK or REQUIRE.
+	 */
+	public static function would_hold_next( $now = null, $conn = null, $state = null ) {
+		$now     = null === $now ? time() : (int) $now;
+		$setting = self::setting();
+		if ( self::OFF === $setting || self::site_exempt( $setting ) ) {
+			return self::RUNS;
+		}
+		$conn  = is_array( $conn ) ? $conn : self::connection();
+		$state = is_array( $state ) ? $state : self::state( $conn );
+		if ( self::REQUIRE === $setting ) {
+			return self::released( $state, $now ) ? self::RUNS : self::REQUIRE;
+		}
+		return self::acknowledged( $state, $now ) ? self::RUNS : self::ASK;
+	}
+
+	/**
+	 * Note that the gate answered a call of an account without a token, so
+	 * that the settings page lists the account with its state and buttons.
+	 * A token entry is listed anyway.
+	 *
+	 * @param array $conn connection().
+	 * @param int   $now  Current time.
+	 */
+	private static function note_seen( array $conn, $now ) {
+		if ( 'user' === $conn['kind'] && (int) $conn['id'] > 0 ) {
+			self::save_state( $conn, array( self::FIELD_SEEN => (int) $now ) );
+		}
 	}
 
 	/**
@@ -637,7 +689,7 @@ class AB_MCP_Staging_Gate {
 			return 'Staging first, again: the week since the last answer is over. ' . $reason
 				. ' Ask the person again whether to set up a staging site now and continue there, saying why and ' . $ways . ' ' . $offer
 				. ' To go ahead on this site, call the same tool again with the same arguments and ' . self::PARAM . ' true, and pass the person\'s choice in ' . self::PARAM_REMINDER
-				. ': ' . self::REMINDER_WEEK . ' asks again in a week, with the next change (no notification); ' . self::REMINDER_NEVER . ' asks this connection no more, until the setting Staging first or the role of the site changes. Without ' . self::PARAM_REMINDER . ', ' . self::REMINDER_WEEK . '.';
+				. ': ' . self::REMINDER_WEEK . ' asks again in a week, with the next change (no notification); ' . self::REMINDER_NEVER . ': this connection is not asked again until the setting Staging first or the role of the site changes. Without ' . self::PARAM_REMINDER . ', ' . self::REMINDER_WEEK . '.';
 		}
 		$opening = $existing
 			? 'New in AlphaBridge MCP ' . self::SINCE_VERSION . ': Staging first. Before the first change, the assistant offers to work on a staging site. '
@@ -650,8 +702,7 @@ class AB_MCP_Staging_Gate {
 	/**
 	 * The refusal with REQUIRE: why, the steps and the link
 	 * (AB_MCP_Guidance::compose()). A call without a token (the abilities
-	 * adapter) has no connection the settings page could release; its
-	 * steps say so.
+	 * adapter) is released the same way, listed by its account.
 	 *
 	 * @param array $conn connection().
 	 * @return WP_Error
@@ -663,7 +714,8 @@ class AB_MCP_Staging_Gate {
 			/* translators: %d: hours a release holds. */
 			$release = sprintf( __( '2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
 		} else {
-			$release = __( '2. This call came through the WordPress abilities adapter, which has no connection the settings page could release: change the site through an AlphaBridge connection an administrator releases there, or an administrator sets Staging first to Ask or Off.', 'alphabridge-mcp' );
+			/* translators: %d: hours a release holds. */
+			$release = sprintf( __( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', 'alphabridge-mcp' ), self::RELEASE_HOURS );
 		}
 		return new WP_Error(
 			'ab_mcp_staging_required',
@@ -674,57 +726,87 @@ class AB_MCP_Staging_Gate {
 	/* --------------------------------------------------------- release */
 
 	/**
-	 * Release a connection to work without staging, for RELEASE_HOURS
-	 * (REQUIRE). A person on the settings page does this; nothing else.
+	 * Is this a connection the settings page can act on: a token entry that
+	 * exists, or an account the gate has seen?
 	 *
-	 * @param string   $hash    Token hash.
+	 * @param array $conn connection().
+	 * @return bool
+	 */
+	public static function known( array $conn ) {
+		if ( 'token' === $conn['kind'] ) {
+			return is_array( AB_MCP_Settings::get_token_by_hash( $conn['id'] ) );
+		}
+		return 'user' === $conn['kind'] && (int) $conn['id'] > 0 && isset( self::user_states()[ (int) $conn['id'] ] );
+	}
+
+	/**
+	 * The name of a connection for the history and the settings page: the
+	 * label of a token entry, the login of an account.
+	 *
+	 * @param array $conn connection().
+	 * @return string
+	 */
+	public static function label( array $conn ) {
+		if ( 'token' === $conn['kind'] ) {
+			$entry = AB_MCP_Settings::get_token_by_hash( $conn['id'] );
+			return is_array( $entry ) && ! empty( $entry['label'] ) ? (string) $entry['label'] : '';
+		}
+		$user = get_user_by( 'id', (int) $conn['id'] );
+		return ( is_object( $user ) && isset( $user->user_login ) ) ? (string) $user->user_login : '#' . (int) $conn['id'];
+	}
+
+	/**
+	 * Release a connection to work without staging, for RELEASE_HOURS
+	 * (REQUIRE): a token entry, or the account of a call through the
+	 * abilities adapter. A person on the settings page does this; nothing
+	 * else.
+	 *
+	 * @param array    $conn    connection().
 	 * @param int      $user_id Who releases.
 	 * @param int|null $now     Current time (tests).
 	 * @return int|false The time the release ends, or false for an unknown connection.
 	 */
-	public static function release( $hash, $user_id, $now = null ) {
-		$now   = null === $now ? time() : (int) $now;
-		$entry = AB_MCP_Settings::get_token_by_hash( (string) $hash );
-		if ( ! is_array( $entry ) ) {
+	public static function release( array $conn, $user_id, $now = null ) {
+		$now = null === $now ? time() : (int) $now;
+		if ( ! self::known( $conn ) ) {
 			return false;
 		}
 		$until = $now + self::RELEASE_HOURS * HOUR_IN_SECONDS;
 		$who   = self::who( (int) $user_id, $now );
-		AB_MCP_Settings::update_token_fields(
-			(string) $hash,
+		self::save_state(
+			$conn,
 			array(
 				self::FIELD_RELEASE    => $until,
 				self::FIELD_RELEASE_BY => $who,
 			)
 		);
-		self::remember( array_merge( array( 'action' => 'release', 'hash' => (string) $hash, 'label' => isset( $entry['label'] ) ? (string) $entry['label'] : '', 'until' => $until ), $who ) );
+		self::remember( array_merge( array( 'action' => 'release', 'kind' => $conn['kind'], 'id' => $conn['id'], 'label' => self::label( $conn ), 'until' => $until ), $who ) );
 		return $until;
 	}
 
 	/**
 	 * Revoke a release before it ends.
 	 *
-	 * @param string   $hash    Token hash.
+	 * @param array    $conn    connection().
 	 * @param int      $user_id Who revokes.
 	 * @param int|null $now     Current time (tests).
 	 * @return bool Whether a release was running.
 	 */
-	public static function revoke( $hash, $user_id, $now = null ) {
-		$now   = null === $now ? time() : (int) $now;
-		$entry = AB_MCP_Settings::get_token_by_hash( (string) $hash );
-		if ( ! is_array( $entry ) ) {
+	public static function revoke( array $conn, $user_id, $now = null ) {
+		$now = null === $now ? time() : (int) $now;
+		if ( ! self::known( $conn ) ) {
 			return false;
 		}
-		$running = self::released( $entry, $now );
-		AB_MCP_Settings::update_token_fields(
-			(string) $hash,
+		$running = self::released( self::state( $conn ), $now );
+		self::save_state(
+			$conn,
 			array(
 				self::FIELD_RELEASE    => null,
 				self::FIELD_RELEASE_BY => null,
 			)
 		);
 		if ( $running ) {
-			self::remember( array_merge( array( 'action' => 'revoke', 'hash' => (string) $hash, 'label' => isset( $entry['label'] ) ? (string) $entry['label'] : '' ), self::who( (int) $user_id, $now ) ) );
+			self::remember( array_merge( array( 'action' => 'revoke', 'kind' => $conn['kind'], 'id' => $conn['id'], 'label' => self::label( $conn ) ), self::who( (int) $user_id, $now ) ) );
 		}
 		return $running;
 	}

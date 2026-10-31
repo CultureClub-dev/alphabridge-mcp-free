@@ -5519,9 +5519,6 @@ msgstr "Non libérée : toute modification est refusée."
 msgid "Work without staging (24 hours)"
 msgstr "Travailler sans staging (24 heures)"
 
-msgid "The abilities adapter has no connection to release."
-msgstr "L’adaptateur des abilities n’a aucune connexion à libérer."
-
 #, php-format
 msgid "Asks no more, since %s."
 msgstr "Ne demande plus, depuis le %s."
@@ -5570,9 +5567,6 @@ msgstr "1. Travailler plutôt sur un site de staging : wp_staging_status montre 
 #, php-format
 msgid "2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
 msgstr "2. Pour modifier ce site malgré tout, un administrateur libère cette connexion sur la page des réglages d’AlphaBridge MCP sous « Staging d’abord » (« Travailler sans staging »), pour %d heures ou jusqu’à révocation. 3. Ou un administrateur y règle « Staging d’abord » sur Demander ou Désactivé."
-
-msgid "2. This call came through the WordPress abilities adapter, which has no connection the settings page could release: change the site through an AlphaBridge connection an administrator releases there, or an administrator sets Staging first to Ask or Off."
-msgstr "2. Cet appel est passé par l’adaptateur des abilities WordPress, qui n’a aucune connexion que la page des réglages pourrait libérer : modifier le site par une connexion AlphaBridge qu’un administrateur y libère, ou un administrateur règle « Staging d’abord » sur Demander ou Désactivé."
 
 msgid "this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses and was not sent; an administrator can add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php"
 msgstr "ce site envoie ses requêtes par un proxy (WP_PROXY_HOST), qui résout lui-même le nom ; la requête n’a donc pas pu être liée aux adresses vérifiées et n’a pas été envoyée ; un administrateur peut ajouter l’hôte à WP_PROXY_BYPASS_HOSTS dans wp-config.php"
@@ -5637,3 +5631,10 @@ msgstr "L’adresse a redirigé plus de %d fois ; rien n’a donc été téléch
 
 msgid "The address redirects to something that is not an http(s) address, so nothing was downloaded. 1. Open it in a browser and use the address of the file itself. 2. Or send the file's content with wp_upload_media."
 msgstr "L’adresse redirige vers quelque chose qui n’est pas une adresse http(s) ; rien n’a donc été téléchargé. 1. Ouvrez-la dans un navigateur et utilisez l’adresse du fichier lui-même. 2. Ou envoyez le contenu du fichier avec wp_upload_media."
+
+msgid "Saved: Staging first."
+msgstr "Enregistré : Staging d’abord."
+
+#, php-format
+msgid "2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for %d hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there."
+msgstr "2. Cet appel est passé par l’adaptateur des abilities WordPress : pour modifier ce site malgré tout, un administrateur libère son compte sur la page des réglages d’AlphaBridge MCP sous « Staging d’abord » (« Travailler sans staging »), pour %d heures ou jusqu’à révocation. 3. Ou un administrateur y règle « Staging d’abord » sur Demander ou Désactivé."

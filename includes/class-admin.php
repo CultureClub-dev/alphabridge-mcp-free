@@ -613,8 +613,9 @@ class AB_MCP_Admin {
 	 * The form «Role of this site» (AB_MCP_Staging): the role, the address
 	 * of the other site and the host, saved together. Nothing is saved when
 	 * anything is wrong; the notice names the first problem. A part that
-	 * stays as it was keeps who confirmed it, when and where, also when the
-	 * hub set it.
+	 * stays as it was keeps who confirmed it, when and where; a part the hub
+	 * set takes this form as its source, a person having confirmed it here
+	 * (AB_MCP_Staging::save()).
 	 */
 	public function handle_staging_record() {
 		$this->guard();
@@ -641,7 +642,8 @@ class AB_MCP_Admin {
 
 	/**
 	 * The setting «Staging first» (AB_MCP_Staging_Gate): off, ask or
-	 * require. A change takes every «ask no more» of the connections back.
+	 * require. A change takes every «ask no more» of the connections back;
+	 * the notice says so only when there was one to take back.
 	 */
 	public function handle_staging_first() {
 		$this->guard();
@@ -651,14 +653,15 @@ class AB_MCP_Admin {
 		if ( is_wp_error( $saved ) ) {
 			$this->redirect( 'staging_first_unknown', AB_MCP_Staging_Gate::ANCHOR );
 		}
-		$this->redirect( 'staging_first_saved', AB_MCP_Staging_Gate::ANCHOR );
+		$this->redirect( is_int( $saved ) && $saved > 0 ? 'staging_first_reset' : 'staging_first_saved', AB_MCP_Staging_Gate::ANCHOR );
 	}
 
 	/**
 	 * One connection under «Staging first» (AB_MCP_Staging_Gate): release
 	 * it to work without staging for 24 hours (require), revoke that, or
 	 * ask it again (ask, after «no more»). The connection is a token entry
-	 * by its hash, or, for the abilities adapter, an account by its id.
+	 * by its hash, or, for the abilities adapter, an account by its id; the
+	 * three actions are the same for both.
 	 */
 	public function handle_staging_connection() {
 		$this->guard();
@@ -666,24 +669,25 @@ class AB_MCP_Admin {
 		$do   = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : '';
 		$hash = isset( $_POST['hash'] ) ? sanitize_text_field( wp_unslash( $_POST['hash'] ) ) : '';
 		$user = isset( $_POST['account'] ) ? absint( wp_unslash( $_POST['account'] ) ) : 0;
-		if ( 'release' === $do && false !== AB_MCP_Staging_Gate::release( $hash, get_current_user_id() ) ) {
-			$this->redirect( 'staging_released', AB_MCP_Staging_Gate::ANCHOR );
-		}
-		if ( 'revoke' === $do && is_array( AB_MCP_Settings::get_token_by_hash( $hash ) ) ) {
-			AB_MCP_Staging_Gate::revoke( $hash, get_current_user_id() );
-			$this->redirect( 'staging_revoked', AB_MCP_Staging_Gate::ANCHOR );
-		}
-		if ( 'ask_again' === $do ) {
-			$conn = '' !== $hash
-				? array(
-					'kind' => 'token',
-					'id'   => $hash,
-				)
-				: array(
-					'kind' => 'user',
-					'id'   => (string) $user,
-				);
-			if ( ( 'token' === $conn['kind'] && is_array( AB_MCP_Settings::get_token_by_hash( $hash ) ) ) || ( 'user' === $conn['kind'] && $user > 0 && isset( AB_MCP_Staging_Gate::user_states()[ $user ] ) ) ) {
+		$conn = '' !== $hash
+			? array(
+				'kind' => 'token',
+				'id'   => $hash,
+			)
+			: array(
+				'kind' => 'user',
+				'id'   => (string) $user,
+			);
+		if ( AB_MCP_Staging_Gate::known( $conn ) ) {
+			if ( 'release' === $do ) {
+				AB_MCP_Staging_Gate::release( $conn, get_current_user_id() );
+				$this->redirect( 'staging_released', AB_MCP_Staging_Gate::ANCHOR );
+			}
+			if ( 'revoke' === $do ) {
+				AB_MCP_Staging_Gate::revoke( $conn, get_current_user_id() );
+				$this->redirect( 'staging_revoked', AB_MCP_Staging_Gate::ANCHOR );
+			}
+			if ( 'ask_again' === $do ) {
 				AB_MCP_Staging_Gate::ask_again( $conn );
 				$this->redirect( 'staging_ask_again', AB_MCP_Staging_Gate::ANCHOR );
 			}
@@ -1325,7 +1329,8 @@ class AB_MCP_Admin {
 	 * with its state and the one button it takes: «Work without staging»
 	 * and «Revoke» (require), «Ask again» (ask, for a connection that said
 	 * «no more»). The abilities adapter has no connection; its callers are
-	 * listed by account where the gate knows them. Plain forms
+	 * listed by account once the gate has answered one of their calls, with
+	 * the same states and buttons. Plain forms
 	 * (handle_staging_first(), handle_staging_connection()).
 	 *
 	 * @return string HTML, escaped.
@@ -1392,17 +1397,11 @@ class AB_MCP_Admin {
 			if ( AB_MCP_Staging_Gate::released( $state, $now ) ) {
 				$by = isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ) && '' !== $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_login'] : '#' . (int) ( isset( $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] ) ? $state[ AB_MCP_Staging_Gate::FIELD_RELEASE_BY ]['user_id'] : 0 );
 				/* translators: 1: date and time, 2: user name. */
-				$text = sprintf( __( 'Released to work without staging until %1$s, by %2$s.', 'alphabridge-mcp' ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_RELEASE ] ), $by );
-				if ( isset( $id['hash'] ) ) {
-					$button = array( 'revoke', __( 'Revoke', 'alphabridge-mcp' ) );
-				}
+				$text   = sprintf( __( 'Released to work without staging until %1$s, by %2$s.', 'alphabridge-mcp' ), self::site_datetime( (int) $state[ AB_MCP_Staging_Gate::FIELD_RELEASE ] ), $by );
+				$button = array( 'revoke', __( 'Revoke', 'alphabridge-mcp' ) );
 			} else {
-				$text = __( 'Not released: every change is refused.', 'alphabridge-mcp' );
-				if ( isset( $id['hash'] ) ) {
-					$button = array( 'release', __( 'Work without staging (24 hours)', 'alphabridge-mcp' ) );
-				} else {
-					$text .= ' ' . __( 'The abilities adapter has no connection to release.', 'alphabridge-mcp' );
-				}
+				$text   = __( 'Not released: every change is refused.', 'alphabridge-mcp' );
+				$button = array( 'release', __( 'Work without staging (24 hours)', 'alphabridge-mcp' ) );
 			}
 		} elseif ( isset( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] ) && is_array( $state[ AB_MCP_Staging_Gate::FIELD_NEVER ] ) ) {
 			/* translators: %s: date and time. */
@@ -2933,7 +2932,8 @@ class AB_MCP_Admin {
 			'preview_off'      => array( 'success', __( 'The preview protection is off: visitors see the site again, and the search engine visibility is back as it was before.', 'alphabridge-mcp' ) ),
 			'staging_saved'    => array( 'success', __( 'Saved: the role of this site, the address of the other site and the host.', 'alphabridge-mcp' ) ),
 			// «Staging first» (AB_MCP_Staging_Gate).
-			'staging_first_saved'        => array( 'success', __( 'Saved: Staging first. Every connection that asked no more is asked again.', 'alphabridge-mcp' ) ),
+			'staging_first_saved'        => array( 'success', __( 'Saved: Staging first.', 'alphabridge-mcp' ) ),
+			'staging_first_reset'        => array( 'success', __( 'Saved: Staging first. Every connection that asked no more is asked again.', 'alphabridge-mcp' ) ),
 			'staging_first_unknown'      => array( 'error', __( 'Nothing was saved: the setting must be off, ask or require.', 'alphabridge-mcp' ) ),
 			'staging_released'           => array( 'success', __( 'Released: this connection may change the site without staging for 24 hours. Revoke it below at any time.', 'alphabridge-mcp' ) ),
 			'staging_revoked'            => array( 'success', __( 'Revoked: this connection is refused again until you release it.', 'alphabridge-mcp' ) ),

@@ -73,7 +73,7 @@ final class StagingWorkflowTest extends TestCase {
 		. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
 		. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
 		. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
-		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here.';
+		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here with staging_acknowledged true.';
 
 	/** What would advertise an edition, as the staging tool's own test reads it, and what would link anything. */
 	const ADVERTISING = '/\bPro\b|Agency|upgrade|licen[cs]e|price|pricing|checkout|freemius|https?:\/\/|alphabridge-mcp\.com/i';

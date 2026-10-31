@@ -336,8 +336,9 @@ final class StagingGateTest extends TestCase {
 		self::assertSame( Gate::ASK, Gate::setting() );
 		self::assertSame( Gate::ASK, AB_MCP_Settings::defaults()[ Gate::SETTING ], 'The default of the plugin.' );
 		self::assertFalse( Gate::set_setting( Gate::ASK ), 'The default again: no change.' );
-		self::assertTrue( Gate::set_setting( Gate::REQUIRE ) );
+		self::assertSame( 0, Gate::set_setting( Gate::REQUIRE ), 'Changed; no «no more» to take back.' );
 		self::assertSame( Gate::REQUIRE, Gate::setting() );
+		self::assertFalse( Gate::set_setting( Gate::REQUIRE ) );
 	}
 
 	public function testAChangeOfTheSettingTakesEveryNoMoreBackButKeepsTheWeek(): void {
@@ -349,7 +350,7 @@ final class StagingGateTest extends TestCase {
 		self::assertFalse( Gate::set_setting( Gate::ASK ), 'Unchanged: ask is the default.' );
 		self::assertArrayHasKey( Gate::FIELD_NEVER, self::entry( $hash ), 'No change, nothing taken back.' );
 
-		self::assertTrue( Gate::set_setting( Gate::REQUIRE ) );
+		self::assertSame( 2, Gate::set_setting( Gate::REQUIRE ), 'Changed, and two «no more» taken back: the connection\'s and the account\'s.' );
 		self::assertArrayNotHasKey( Gate::FIELD_NEVER, self::entry( $hash ), 'The connection\'s «no more» is gone.' );
 		self::assertSame( $now - 100, self::entry( $hash )[ Gate::FIELD_ACK ], 'Its week stays.' );
 		self::assertArrayNotHasKey( Gate::FIELD_NEVER, Gate::user_states()[9], 'The account\'s too.' );
@@ -407,7 +408,7 @@ final class StagingGateTest extends TestCase {
 		$again = Gate::hint( false, true );
 		self::assertStringStartsWith( 'Staging first, again: the week since the last answer is over. This site counts as the production site', $again );
 		self::assertStringContainsString( 'Ask the person again whether to set up a staging site now and continue there, saying why and how:', $again );
-		self::assertStringContainsString( 'pass the person\'s choice in staging_reminder: week asks again in a week, with the next change (no notification); never asks this connection no more, until the setting Staging first or the role of the site changes. Without staging_reminder, week.', $again );
+		self::assertStringContainsString( 'pass the person\'s choice in staging_reminder: week asks again in a week, with the next change (no notification); never: this connection is not asked again until the setting Staging first or the role of the site changes. Without staging_reminder, week.', $again );
 		self::assertStringNotContainsString( 'New in', Gate::hint( true, true ), 'Asked before: nothing is new any more.' );
 	}
 
@@ -664,7 +665,7 @@ final class StagingGateTest extends TestCase {
 		self::assertSame( 'denied', self::last_log()['status'] );
 		self::assertStringContainsString( 'requires staging first', self::last_log()['message'] );
 
-		$until = Gate::release( $hash, 7 );
+		$until = Gate::release( array( 'kind' => 'token', 'id' => $hash ), 7 );
 		self::assertEqualsWithDelta( time() + 24 * HOUR_IN_SECONDS, $until, 5 );
 		self::assertSame( $until, self::entry( $hash )[ Gate::FIELD_RELEASE ] );
 		self::assertSame( 7, self::entry( $hash )[ Gate::FIELD_RELEASE_BY ]['user_id'] );
@@ -674,7 +675,7 @@ final class StagingGateTest extends TestCase {
 		$history = Gate::history();
 		self::assertCount( 1, $history );
 		self::assertSame( 'release', $history[0]['action'] );
-		self::assertSame( $hash, $history[0]['hash'] );
+		self::assertSame( array( 'token', $hash ), array( $history[0]['kind'], $history[0]['id'] ) );
 		self::assertSame( 'ChatGPT', $history[0]['label'] );
 		self::assertSame( $until, $history[0]['until'] );
 		self::assertSame( 7, $history[0]['user_id'] );
@@ -686,22 +687,24 @@ final class StagingGateTest extends TestCase {
 		$def = $this->writer();
 		$now = time();
 
-		Gate::release( $hash, 7, $now );
+		$conn = array( 'kind' => 'token', 'id' => $hash );
+		Gate::release( $conn, 7, $now );
 		self::assertTrue( Gate::gate( 'wp_update_post', $def, array(), $now + 24 * HOUR_IN_SECONDS - 1 ) );
 		self::assertInstanceOf( WP_Error::class, Gate::gate( 'wp_update_post', $def, array(), $now + 24 * HOUR_IN_SECONDS ), 'Exactly 24 hours: over.' );
 
-		Gate::release( $hash, 7, $now );
-		self::assertTrue( Gate::revoke( $hash, 9, $now + 60 ) );
+		Gate::release( $conn, 7, $now );
+		self::assertTrue( Gate::revoke( $conn, 9, $now + 60 ) );
 		self::assertArrayNotHasKey( Gate::FIELD_RELEASE, self::entry( $hash ) );
 		self::assertArrayNotHasKey( Gate::FIELD_RELEASE_BY, self::entry( $hash ) );
 		self::assertInstanceOf( WP_Error::class, $this->call( 'wp_update_post', $def, array() ) );
 		self::assertSame( 0, $this->runs );
 		self::assertSame( array( 'release', 'release', 'revoke' ), array_column( Gate::history(), 'action' ) );
 		self::assertSame( 9, Gate::history()[2]['user_id'] );
-		self::assertFalse( Gate::revoke( $hash, 9, $now + 120 ), 'Nothing running: nothing to revoke, nothing in the history.' );
+		self::assertFalse( Gate::revoke( $conn, 9, $now + 120 ), 'Nothing running: nothing to revoke, nothing in the history.' );
 		self::assertCount( 3, Gate::history() );
-		self::assertFalse( Gate::release( 'no-such-hash', 7 ) );
-		self::assertFalse( Gate::revoke( 'no-such-hash', 7 ) );
+		self::assertFalse( Gate::release( array( 'kind' => 'token', 'id' => 'no-such-hash' ), 7 ) );
+		self::assertFalse( Gate::revoke( array( 'kind' => 'token', 'id' => 'no-such-hash' ), 7 ) );
+		self::assertFalse( Gate::release( array( 'kind' => 'user', 'id' => '42' ), 7 ), 'An account the gate never saw.' );
 	}
 
 	/* ---------------------------------------------------------- no token */
@@ -729,8 +732,123 @@ final class StagingGateTest extends TestCase {
 		$GLOBALS['ab_test_current_user'] = 7;
 		$res = $this->call( 'wp_update_post', $def, array(), 'ability' );
 		self::assertInstanceOf( WP_Error::class, $res );
-		self::assertStringContainsString( '2. This call came through the WordPress abilities adapter, which has no connection the settings page could release:', $res->get_error_message() );
-		self::assertStringNotContainsString( 'Work without staging', $res->get_error_message() );
+		self::assertStringContainsString( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for 24 hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', $res->get_error_message() );
+		self::assertStringNotContainsString( 'releases this connection', $res->get_error_message() );
+		self::assertEqualsWithDelta( time(), Gate::user_states()[7][ Gate::FIELD_SEEN ], 5, 'The refused account is noted, so the settings page lists it.' );
+
+		$conn  = array( 'kind' => 'user', 'id' => '7' );
+		$until = Gate::release( $conn, 9 );
+		self::assertEqualsWithDelta( time() + 24 * HOUR_IN_SECONDS, $until, 5 );
+		self::assertSame( array( 'updated' => true ), $this->call( 'wp_update_post', $def, array(), 'ability' ), 'Released by account: runs.' );
+		self::assertSame( array( 'release', 'user', '7', 'user7', 9 ), array( Gate::history()[0]['action'], Gate::history()[0]['kind'], Gate::history()[0]['id'], Gate::history()[0]['label'], Gate::history()[0]['user_id'] ) );
+		self::assertTrue( Gate::revoke( $conn, 9 ) );
+		self::assertInstanceOf( WP_Error::class, $this->call( 'wp_update_post', $def, array(), 'ability' ), 'Revoked: refused again.' );
+		self::assertSame( 'revoke', Gate::history()[1]['action'] );
+		$GLOBALS['ab_test_current_user'] = 9;
+		self::assertInstanceOf( WP_Error::class, $this->call( 'wp_update_post', $def, array(), 'ability' ), 'Another account is not released.' );
+		self::assertArrayHasKey( 9, Gate::user_states(), 'And noted as seen.' );
+	}
+
+	public function testAHeldCallOfAnAccountIsNotedSoTheSettingsPageListsIt(): void {
+		$def = $this->writer();
+		self::assertSame( array(), Gate::user_states() );
+		$this->call( 'wp_update_post', $def, array( 'title' => 'x' ), 'ability' );
+		self::assertSame( array( Gate::FIELD_SEEN ), array_keys( Gate::user_states()[7] ) );
+		self::assertTrue( Gate::known( array( 'kind' => 'user', 'id' => '7' ) ) );
+		self::assertFalse( Gate::known( array( 'kind' => 'user', 'id' => '9' ) ) );
+		self::assertStringContainsString( '<td>WordPress abilities adapter, account user7</td><td>Asks with the first change.</td>', $this->admin( 'preview_card_html' ) );
+	}
+
+	/* ------------------------------------------------- the instructions */
+
+	/** The server instructions for a registry with the staging tools and one writing tool, as initialize hands them out. */
+	private function instructions(): string {
+		$r = new AB_MCP_Tool_Registry();
+		AB_MCP_Tools_Staging::register( $r );
+		$r->register( 'wp_update_post', array( 'capability' => 'edit_posts', 'readonly' => false ) );
+		return ( new ReflectionMethod( AB_MCP_REST_Controller::class, 'instructions' ) )->invoke( new AB_MCP_REST_Controller( $r ) );
+	}
+
+	const ASK_SENTENCE     = 'Before the first change on this site, call wp_staging_status.';
+	const REQUIRE_SENTENCE = 'This site requires staging first: a writing call is refused until a person releases this connection on the settings page of AlphaBridge MCP under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands, and the prompt staging_workflow has the steps.';
+
+	public function testWouldHoldNextSaysWhatTheGateDecides(): void {
+		$hash = self::connect();
+		$conn = array( 'kind' => 'token', 'id' => $hash );
+		$now  = time();
+		self::assertSame( Gate::ASK, Gate::would_hold_next( $now ) );
+		self::assertSame( Gate::ASK, Gate::would_hold_next( $now, $conn, array() ) );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_ACK => $now - 60 ) );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now ), 'Acknowledged this week.' );
+		self::assertSame( Gate::ASK, Gate::would_hold_next( $now + 7 * DAY_IN_SECONDS ), 'The week is over.' );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_NEVER => array( 'at' => $now ) ) );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now + 400 * DAY_IN_SECONDS ), 'No more.' );
+		Gate::ask_again( $conn );
+		Gate::set_setting( Gate::OFF );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now ) );
+		Gate::set_setting( Gate::REQUIRE );
+		self::assertSame( Gate::REQUIRE, Gate::would_hold_next( $now ) );
+		Gate::release( $conn, 7, $now );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now + 23 * HOUR_IN_SECONDS ) );
+		self::assertSame( Gate::REQUIRE, Gate::would_hold_next( $now + 24 * HOUR_IN_SECONDS ) );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_STAGING, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now + 48 * HOUR_IN_SECONDS ), 'The staging site.' );
+		Gate::set_setting( Gate::ASK );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_PRODUCTION, self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now ), 'Paired.' );
+		self::assertSame( Gate::RUNS, Gate::would_hold_next( $now, array( 'kind' => 'user', 'id' => '7' ), array() ), 'For every connection: the site is outside the gate.' );
+	}
+
+	public function testTheInstructionsSayOnlyWhatTheGateWouldDoNext(): void {
+		$hash = self::connect();
+		$conn = array( 'kind' => 'token', 'id' => $hash );
+		$text = $this->instructions();
+		self::assertStringContainsString( self::ASK_SENTENCE, $text, 'Ask, not acknowledged: the question.' );
+		self::assertStringContainsString( 'If the person declines, go ahead here with staging_acknowledged true.', $text, 'With the way to go ahead.' );
+		self::assertStringNotContainsString( self::REQUIRE_SENTENCE, $text );
+
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_ACK => time() ) );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'Acknowledged this week: not a word, the gate holds nothing.' );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_ACK => time() - 8 * DAY_IN_SECONDS ) );
+		self::assertStringContainsString( self::ASK_SENTENCE, $this->instructions(), 'The week is over: the question again.' );
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_NEVER => array( 'at' => time() ) ) );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'No more.' );
+		Gate::ask_again( $conn );
+
+		Gate::set_setting( Gate::OFF );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'Off.' );
+
+		Gate::set_setting( Gate::REQUIRE );
+		$text = $this->instructions();
+		self::assertStringContainsString( self::REQUIRE_SENTENCE, $text );
+		self::assertStringNotContainsString( self::ASK_SENTENCE, $text );
+		self::assertLessThan( strpos( $text, ' NOT ON THIS SITE' ), strpos( $text, self::REQUIRE_SENTENCE ), 'Where the ask sentence stands.' );
+		Gate::release( $conn, 7 );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'Released: not a word.' );
+
+		Gate::set_setting( Gate::ASK );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_STAGING, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'The staging site itself.' );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_PRODUCTION, self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'Paired.' );
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_UNCONFIRMED, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
+
+		self::scope( 'read' );
+		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'offered() stays the precondition: a connection that only reads.' );
+	}
+
+	public function testSavingTheFormConfirmsWhatTheHubWroteAndLiftsRequire(): void {
+		self::connect();
+		Gate::set_setting( Gate::REQUIRE );
+		$def = $this->writer();
+		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_STAGING, 'https://www.example.org', AB_MCP_Staging::ROLE_PRODUCTION, 9, AB_MCP_Staging::SOURCE_HUB );
+		self::assertInstanceOf( WP_Error::class, $this->call( 'wp_update_post', $def, array() ), 'From the hub: refused.' );
+
+		$saved = AB_MCP_Staging::save( AB_MCP_Staging::ROLE_STAGING, 'https://www.example.org', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), $saved, 'The same values.' );
+		self::assertSame( array( 'form', 7 ), array( AB_MCP_Staging::record()['role']['source'], AB_MCP_Staging::record()['role']['user_id'] ) );
+		self::assertSame( array( 'form', 7 ), array( AB_MCP_Staging::record()['pair']['source'], AB_MCP_Staging::record()['pair']['user_id'] ) );
+		self::assertSame( array( 'updated' => true ), $this->call( 'wp_update_post', $def, array() ), 'Confirmed on the settings page: the site stands outside the gate.' );
 	}
 
 	/* ------------------------------------------------------------ drafts */
@@ -827,13 +945,17 @@ final class StagingGateTest extends TestCase {
 		$html = $this->admin( 'preview_card_html' );
 		self::assertStringContainsString( '<td>Claude</td><td>Not released: every change is refused.</td><td class="ab-actions"><form', $html );
 		self::assertStringContainsString( '<input type="hidden" name="do" value="release"><input type="hidden" name="hash" value="' . $hash . '"><button class="ab-btn ab-btn--ghost ab-btn--sm">Work without staging (24 hours)</button>', $html );
-		self::assertStringContainsString( 'account user9</td><td>Not released: every change is refused. The abilities adapter has no connection to release.</td><td class="ab-actions"></td>', $html );
+		self::assertStringContainsString( 'account user9</td><td>Not released: every change is refused.</td><td class="ab-actions"><form', $html, 'The account of the abilities adapter: the same state and button.' );
+		self::assertStringContainsString( '<input type="hidden" name="do" value="release"><input type="hidden" name="account" value="9"><button class="ab-btn ab-btn--ghost ab-btn--sm">Work without staging (24 hours)</button>', $html );
 
-		Gate::release( $hash, 7 );
+		Gate::release( array( 'kind' => 'token', 'id' => $hash ), 7 );
+		Gate::release( array( 'kind' => 'user', 'id' => '9' ), 7 );
 		$html = $this->admin( 'preview_card_html' );
 		self::assertStringContainsString( '<td>Claude</td><td>Released to work without staging until ', $html );
 		self::assertStringContainsString( ', by user7.</td>', $html );
 		self::assertStringContainsString( '<input type="hidden" name="do" value="revoke"><input type="hidden" name="hash" value="' . $hash . '"><button class="ab-btn ab-btn--ghost ab-btn--sm">Revoke</button>', $html );
+		self::assertStringContainsString( 'account user9</td><td>Released to work without staging until ', $html );
+		self::assertStringContainsString( '<input type="hidden" name="do" value="revoke"><input type="hidden" name="account" value="9"><button class="ab-btn ab-btn--ghost ab-btn--sm">Revoke</button>', $html );
 
 		Gate::set_setting( Gate::OFF );
 		self::assertStringNotContainsString( 'ab-staging-first__table', $this->admin( 'preview_card_html' ), 'Off: no table.' );
@@ -842,9 +964,20 @@ final class StagingGateTest extends TestCase {
 	public function testTheSettingFormSavesBehindItsNonceAndTheCapability(): void {
 		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'require' ), 'nonce-ab_mcp_staging_first' );
 		self::assertSame( 'redirect', $exit->kind );
-		self::assertStringContainsString( 'ab_notice=staging_first_saved', $exit->detail );
+		self::assertStringContainsString( 'ab_notice=staging_first_saved', $exit->detail, 'Changed, nothing to take back: the plain notice.' );
 		self::assertStringEndsWith( '#ab-staging-first', $exit->detail );
 		self::assertSame( Gate::REQUIRE, Gate::setting() );
+
+		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'require' ), 'nonce-ab_mcp_staging_first' );
+		self::assertStringContainsString( 'ab_notice=staging_first_saved', $exit->detail, 'Unchanged: the plain notice, not «asked again».' );
+
+		$hash = self::connect();
+		AB_MCP_Settings::update_token_fields( $hash, array( Gate::FIELD_NEVER => array( 'at' => time() ) ) );
+		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'ask' ), 'nonce-ab_mcp_staging_first' );
+		self::assertStringContainsString( 'ab_notice=staging_first_reset', $exit->detail, 'Changed and one «no more» taken back: says so.' );
+		self::assertArrayNotHasKey( Gate::FIELD_NEVER, self::entry( $hash ) );
+		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'require' ), 'nonce-ab_mcp_staging_first' );
+		self::assertStringContainsString( 'ab_notice=staging_first_saved', $exit->detail );
 
 		$exit = $this->submit( 'handle_staging_first', array( 'staging_first' => 'maybe' ), 'nonce-ab_mcp_staging_first' );
 		self::assertStringContainsString( 'ab_notice=staging_first_unknown', $exit->detail );
@@ -885,6 +1018,14 @@ final class StagingGateTest extends TestCase {
 		self::assertStringContainsString( 'ab_notice=staging_ask_again', $exit->detail );
 		self::assertArrayNotHasKey( Gate::FIELD_NEVER, Gate::user_states()[9] );
 
+		$exit = $this->submit( 'handle_staging_connection', array( 'do' => 'release', 'account' => '9' ), 'nonce-ab_mcp_staging_connection' );
+		self::assertStringContainsString( 'ab_notice=staging_released', $exit->detail, 'The account of the abilities adapter is released the same way.' );
+		self::assertTrue( Gate::released( Gate::user_states()[9], time() ) );
+		self::assertSame( 7, Gate::user_states()[9][ Gate::FIELD_RELEASE_BY ]['user_id'] );
+		$exit = $this->submit( 'handle_staging_connection', array( 'do' => 'revoke', 'account' => '9' ), 'nonce-ab_mcp_staging_connection' );
+		self::assertStringContainsString( 'ab_notice=staging_revoked', $exit->detail );
+		self::assertFalse( Gate::released( Gate::user_states()[9], time() ) );
+
 		foreach ( array(
 			array( 'do' => 'release', 'hash' => 'unknown' ),
 			array( 'do' => 'revoke', 'hash' => 'unknown' ),
@@ -907,7 +1048,8 @@ final class StagingGateTest extends TestCase {
 
 	public function testTheNoticesTheHooksAndTheLogWord(): void {
 		foreach ( array(
-			'staging_first_saved'        => 'Saved: Staging first. Every connection that asked no more is asked again.',
+			'staging_first_saved'        => 'Saved: Staging first.',
+			'staging_first_reset'        => 'Saved: Staging first. Every connection that asked no more is asked again.',
 			'staging_first_unknown'      => 'Nothing was saved: the setting must be off, ask or require.',
 			'staging_released'           => 'Released: this connection may change the site without staging for 24 hours.',
 			'staging_revoked'            => 'Revoked: this connection is refused again until you release it.',
