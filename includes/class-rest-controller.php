@@ -1122,6 +1122,20 @@ class AB_MCP_REST_Controller {
 		if ( class_exists( 'AB_MCP_Ability_Switches', false ) && AB_MCP_Ability_Switches::here( $this->registry ) ) {
 			$instructions .= AB_MCP_Ability_Broker::instructions();
 		}
+		// The way to a staging site (free since 4.15.0), while the tool that
+		// reports it is on and the connection can write (AB_MCP_Staging::
+		// offered(), the same condition as the prompt staging_workflow):
+		// before the first change the assistant asks the person whether to
+		// work on staging first, always with the reason and the way, and
+		// offers to set it up. Instructions are followed as a rule, not
+		// always; they cannot make an assistant ask.
+		if ( AB_MCP_Staging::offered( $this->registry ) ) {
+			$instructions .= ' Before the first change on this site, call wp_staging_status. Unless it reports the role staging or a pair,'
+				. ' ask the person whether to work on staging first, always saying why (a change here is visible to visitors at once;'
+				. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
+				. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
+				. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here.';
+		}
 
 		// Without the tools of AlphaBridge MCP Pro: what is not on this site,
 		// so an assistant can tell the person instead of failing silently.
@@ -1234,11 +1248,14 @@ class AB_MCP_REST_Controller {
 	 *   arguments   (array)   Optional [ { name, description, required } ].
 	 *   text        (string)  The prompt body; {{arg}} placeholders are filled
 	 *                         from the caller's arguments on prompts/get.
+	 * The second argument of the filter (since 4.15.0) is the registry of the
+	 * tools this server answers with, so a prompt can come only with the
+	 * tools it names.
 	 *
 	 * @return array<int,array>
 	 */
 	private function prompts() {
-		$prompts = apply_filters( 'ab_mcp_prompts', array() );
+		$prompts = apply_filters( 'ab_mcp_prompts', array(), $this->registry );
 		return is_array( $prompts ) ? array_values( $prompts ) : array();
 	}
 

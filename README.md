@@ -98,7 +98,9 @@ directory. It is the same code WordPress.org ships.
   checklist with the next step. On request (`check_partner`) it asks the other site whether
   AlphaBridge MCP answers there, only at public addresses and tied to them. The role, the other site and the
   host are set on the settings page or, for both sites at once, by the hub over
-  `alphabridge/v1/staging-pair`.
+  `alphabridge/v1/staging-pair`. Before the first change, the server instructions have an assistant that
+  can write and may use the tool call it and ask the person whether to work on staging first, saying why and how; the prompt
+  `staging_workflow` has the steps.
 - **OAuth 2.1 with PKCE** — connect from Claude without copying tokens; the consent screen is
   your own login-protected site and offers Read only, Content and Full access, each described in
   one sentence, with Full preselected; the switch for write access on the site decides whether

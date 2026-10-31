@@ -38,7 +38,7 @@ $GLOBALS['ab_test_writes']     = array();
 $GLOBALS['ab_test_transients'] = array();
 /** @var array<string,int> $ab_test_transient_ttl */
 $GLOBALS['ab_test_transient_ttl'] = array();
-/** @var array<string,array<int,array{fn:callable,prio:int}>> $ab_test_filters */
+/** @var array<string,array<int,array{fn:callable,prio:int,args:int}>> $ab_test_filters */
 $GLOBALS['ab_test_filters']    = array();
 /** @var array<int,object> $ab_test_users */
 $GLOBALS['ab_test_users']      = array();
@@ -194,9 +194,12 @@ function delete_transient( $key ) {
 /* -------------------------------------------------------------- filter API */
 
 function add_filter( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
+	// apply_filters() below passes every argument; args records how many
+	// WordPress would pass, for a test that needs more than the first.
 	$GLOBALS['ab_test_filters'][ $hook ][] = array(
 		'fn'   => $callback,
 		'prio' => $priority,
+		'args' => (int) $accepted_args,
 	);
 	usort(
 		$GLOBALS['ab_test_filters'][ $hook ],

@@ -916,7 +916,7 @@ class AB_MCP_Staging {
 				? sprintf( __( '1. Create a staging copy of this site with the staging function in the control panel of %s. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' ), $host['name'] )
 				: __( '1. Create a staging copy of this site: with the staging function of your host, if it has one, or with a staging plugin from the WordPress plugin directory. 2. Install and activate AlphaBridge MCP on the copy. 3. Enter the address of the copy on the settings page of this site at Staging, and the address of this site on the copy.', 'alphabridge-mcp' );
 			$item             = self::item( 'staging_connected', $title, false, __( 'No staging site is known for this site yet.', 'alphabridge-mcp' ), $steps );
-			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to texts, pages, posts and media alone, work in drafts and previews, and publish once the person has approved them.', 'alphabridge-mcp' );
+			$item['fallback'] = __( 'If neither the host nor a plugin can make a copy: for changes to posts and pages alone, work in drafts and previews, and publish once the person has approved them; media, menus and settings take effect at once, so they need a staging site.', 'alphabridge-mcp' );
 			$items[]          = $item;
 		} else {
 			$items[] = self::staging_item( $title, $pair['partner_url'], $check );
@@ -1056,6 +1056,46 @@ class AB_MCP_Staging {
 			? sprintf( __( 'The staging way is in place: this site is the protected staging site of %s. Make the changes here and show them with the preview password; carry them over to the production site one at a time once they are approved.', 'alphabridge-mcp' ), $other )
 			/* translators: %s: address of the staging site. */
 			: sprintf( __( 'The staging way is in place: the staging site %s answers and is paired with this site. Make the changes there and carry them over to this site one at a time once they are approved.', 'alphabridge-mcp' ), $other );
+	}
+
+	/**
+	 * Whether the assistant of this connection is asked to offer the way to
+	 * a staging site: the sentence in the server instructions and the
+	 * prompt staging_workflow, under the same condition. wp_staging_status
+	 * has to be in the registry the server answers with, and the account
+	 * of the connection has to be allowed to call it, by the same check the
+	 * call makes (AB_MCP_Security::permits(): its capability manage_options,
+	 * its switch, write access and the token's access level), or the
+	 * sentence would ask for a call that is refused. And the connection has
+	 * to be able to change something: write access on, and at least one
+	 * writing tool that tools/list shows this connection (its switch on,
+	 * and allowed for the access level of the token,
+	 * AB_MCP_Tool_Registry::scope_allows()). For a connection that only
+	 * reads, the question would be about a change it cannot make.
+	 *
+	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
+	 * @return bool
+	 */
+	public static function offered( $registry ) {
+		if ( ! $registry instanceof AB_MCP_Tool_Registry ) {
+			return false;
+		}
+		$def = $registry->get( 'wp_staging_status' );
+		if ( ! is_array( $def ) || true !== AB_MCP_Security::permits( 'wp_staging_status', $def ) ) {
+			return false;
+		}
+		if ( ! AB_MCP_Site_Mode::is_full() ) {
+			return false;
+		}
+		$scope = AB_MCP_Auth::current_scope();
+		foreach ( $registry->all() as $name => $tool ) {
+			if ( ! AB_MCP_Tool_Registry::is_read_only( $name, $tool )
+				&& AB_MCP_Settings::is_tool_enabled( $name, $tool )
+				&& AB_MCP_Tool_Registry::scope_allows( $scope, $name, $tool ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/* ------------------------------------------------------- REST route */
