@@ -106,7 +106,8 @@
  *   xmlrpc.php run no wp(), so neither parse_request nor template_redirect
  *   fires there; the checks on the request constants are kept all the
  *   same, each with its test, so a later change of the hooks cannot lock
- *   them by accident.
+ *   them by accident. admin-ajax.php and admin-post.php have a gate of
+ *   their own on admin_init (below).
  *
  * Where WordPress gives content out without template_redirect (measured on
  * the core, 31.10.2026), the gate hangs a second time:
@@ -157,10 +158,37 @@
  *   template loader answers is_robots() first, it does not matter any more.
  * - Embeds (/embed/, ?embed=true), previews (?p=…&preview=true) and the
  *   feeds of index.php load the template loader with themes and so pass
- *   template_redirect. wp-comments-post.php and the nopriv actions of
- *   admin-ajax.php print no content of the site; xmlrpc.php is open by
- *   design (its reads need a login). Files under /wp-content/ never reach
- *   PHP.
+ *   template_redirect. wp-comments-post.php prints no content of the site.
+ *   xmlrpc.php stays open: its reads need a login, and pingback.ping, which
+ *   needs none, answers no visitor's browser; a signed-in XML-RPC client
+ *   carries no cookie, so a lock there would hit the clients and spare
+ *   nobody. Files under /wp-content/ never reach PHP.
+ *
+ * admin-ajax.php and admin-post.php run no wp() either, and their nopriv
+ * actions (wp_ajax_nopriv_*, admin_post_nopriv_*) are where plugins and
+ * themes print content for visitors: «load more» and endless scrolling, an
+ * AJAX search with titles and excerpts, the cart fragments of a shop. The
+ * core's own nopriv actions print none (measured on the core, 31.10.2026),
+ * and an earlier version of this header said so of all of them, measured
+ * on the core alone. So a gate of its own hangs on admin_init at priority 1
+ * (gate_admin(), ADMIN_PRIORITY), the action both scripts fire before they
+ * dispatch the action: after a handler a plugin put at 0 on purpose, before
+ * the plugins at the default priority 10, where handlers on admin_init print
+ * downloads and exports. It decides only while AJAX runs (wp_doing_ajax())
+ * or the script is admin-post.php ($pagenow): the pages of wp-admin send a
+ * visitor to the login themselves (admin_decision()). A signed-in user and
+ * a cookie holder pass, so the AJAX a page makes from the browser after the
+ * password was entered works; so do the two nopriv actions of the core by
+ * name, heartbeat and generate-password (the password suggestion of the
+ * reset form on wp-login.php), which print no content of the site
+ * (CORE_NOPRIV). Everyone else: for AJAX «0» with 401, as admin-ajax.php
+ * answers an action nobody handles; for admin-post.php the password page,
+ * whose form posts to the home page, since this gate takes no password.
+ * AlphaBridge has no nopriv action of its own (tests/StagingCardTest.php
+ * holds that) and the connection check asks neither script. The clause ajax
+ * of frontend_decision() stays: it is for the front-end gates, which never
+ * run for these scripts. WooCommerce's ?wc-ajax= (template_redirect at 0)
+ * goes through wp() and meets the first line on parse_request.
  * - robots.txt: with blog_public 0 WordPress answers Disallow: /, which a
  *   crawler reads only if the file is not behind the password.
  * - A visitor with a valid cookie, also for the REST calls a page makes
@@ -255,6 +283,21 @@ class AB_MCP_Preview_Protection {
 	const TEMPLATE_PRIORITY = 1;
 
 	/**
+	 * Priority on admin_init, which admin-ajax.php and admin-post.php fire
+	 * before they dispatch the action: after a handler at 0, before the
+	 * plugins at the default priority 10, where handlers on admin_init print
+	 * downloads and exports.
+	 */
+	const ADMIN_PRIORITY = 1;
+
+	/**
+	 * The nopriv actions of the core (admin-ajax.php) a visitor keeps:
+	 * heartbeat and generate-password (the password suggestion of the reset
+	 * form on wp-login.php); neither prints content of the site.
+	 */
+	const CORE_NOPRIV = array( 'heartbeat', 'generate-password' );
+
+	/**
 	 * Priority on rest_authentication_errors: after WordPress's
 	 * rest_application_password_check_errors (90) and
 	 * rest_cookie_check_errors (100), so is_user_logged_in() is settled.
@@ -303,6 +346,7 @@ class AB_MCP_Preview_Protection {
 		add_action( 'template_redirect', array( __CLASS__, 'gate_frontend' ), self::TEMPLATE_PRIORITY );
 		add_action( 'wp', array( __CLASS__, 'gate_without_themes' ) );
 		add_action( 'wp_loaded', array( __CLASS__, 'gate_script' ) );
+		add_action( 'admin_init', array( __CLASS__, 'gate_admin' ), self::ADMIN_PRIORITY );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'gate_rest' ), self::REST_PRIORITY );
 		add_filter( 'rest_index', array( __CLASS__, 'index' ), 10, 2 );
 		add_filter( 'rest_send_nocache_headers', array( __CLASS__, 'nocache' ) );
@@ -1194,6 +1238,85 @@ class AB_MCP_Preview_Protection {
 		if ( isset( $GLOBALS['pagenow'] ) && 'wp-links-opml.php' === $GLOBALS['pagenow'] ) {
 			self::gate_frontend( false );
 		}
+	}
+
+	/* ------------------------------------------- admin-ajax.php, admin-post.php */
+
+	/**
+	 * What the gate on admin_init decides on, read from the request.
+	 *
+	 * @return array{ajax:bool,post:bool,action:string,logged_in:bool,cookie:string}
+	 */
+	public static function admin_context() {
+		return array(
+			'ajax'      => function_exists( 'wp_doing_ajax' ) && wp_doing_ajax(),
+			'post'      => isset( $GLOBALS['pagenow'] ) && 'admin-post.php' === $GLOBALS['pagenow'],
+			'action'    => isset( $_REQUEST['action'] ) && is_string( $_REQUEST['action'] ) ? (string) $_REQUEST['action'] : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only, as admin-ajax.php reads it.
+			'logged_in' => is_user_logged_in(),
+			'cookie'    => isset( $_COOKIE[ self::COOKIE ] ) && is_string( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '',
+		);
+	}
+
+	/**
+	 * The decision for admin-ajax.php and admin-post.php: pass, or challenge
+	 * (401). Only there: the pages of wp-admin send a visitor to the login
+	 * themselves. A signed-in user, a cookie holder and the two nopriv
+	 * actions of the core pass; everyone else is challenged. Each clause has
+	 * its test.
+	 *
+	 * @param array $ctx   admin_context().
+	 * @param array $state state().
+	 * @param int   $now   Unix time.
+	 * @return array{action:string,reason:string}
+	 */
+	public static function admin_decision( array $ctx, array $state, $now ) {
+		if ( empty( $state['on'] ) ) {
+			return self::decision( 'pass', 'off' );
+		}
+		if ( empty( $ctx['ajax'] ) && empty( $ctx['post'] ) ) {
+			return self::decision( 'pass', 'admin' );
+		}
+		if ( ! empty( $ctx['logged_in'] ) ) {
+			return self::decision( 'pass', 'logged_in' );
+		}
+		$hash = isset( $state['hash'] ) ? (string) $state['hash'] : '';
+		if ( self::cookie_valid( isset( $ctx['cookie'] ) ? $ctx['cookie'] : '', $hash, $now ) ) {
+			return self::decision( 'pass', 'cookie' );
+		}
+		if ( ! empty( $ctx['ajax'] ) && isset( $ctx['action'] ) && in_array( $ctx['action'], self::CORE_NOPRIV, true ) ) {
+			return self::decision( 'pass', 'core' );
+		}
+		return self::decision( 'challenge', 'anonymous' );
+	}
+
+	/**
+	 * The gate on admin_init for the nopriv actions of admin-ajax.php and
+	 * admin-post.php, where plugins print content for visitors. For AJAX the
+	 * answer is «0» with 401, as admin-ajax.php answers an action nobody
+	 * handles; for admin-post.php the password page, with its form posting
+	 * to the home page, where the front-end gate takes the password.
+	 */
+	public static function gate_admin() {
+		$state = self::state();
+		if ( ! $state['on'] ) {
+			return;
+		}
+		$ctx      = self::admin_context();
+		$decision = self::admin_decision( $ctx, $state, time() );
+		if ( 'pass' === $decision['action'] ) {
+			return;
+		}
+		if ( $ctx['ajax'] ) {
+			wp_die( '0', '', array( 'response' => 401 ) );
+		}
+		wp_die(
+			self::page_html( false, '/' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside page_html().
+			esc_html__( 'Preview', 'alphabridge-mcp' ),
+			array(
+				'response' => 401,
+				'exit'     => true,
+			)
+		);
 	}
 
 	/**

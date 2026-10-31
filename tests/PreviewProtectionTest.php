@@ -33,6 +33,13 @@
  *   ?ab_mcp_oauth=0, an array and the entry points without themes get the
  *   password page; robots passes with themes only and only when robots is
  *   the only parsed variable. The gates on template_redirect and wp stay.
+ * - admin-ajax.php and admin-post.php have a gate of their own on admin_init
+ *   (priority 1): a nopriv action of a plugin that prints content prints
+ *   nothing for a visitor without login and cookie and answers 401 («0» for
+ *   AJAX, the password page for admin-post.php, its form posting to the
+ *   home page); off, signed in or with a valid cookie it runs; the two
+ *   nopriv actions of the core (heartbeat, generate-password) pass, on
+ *   admin-ajax.php only; the pages of wp-admin are not this gate's business.
  * - While on, every front-end answer is marked DONOTCACHEPAGE and carries
  *   X-Robots-Tag: noindex, nofollow.
  * - The REST gate passes an error of WordPress's own checks through, passes
@@ -162,10 +169,15 @@ final class PreviewProtectionTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		$_GET    = array();
-		$_POST   = array();
-		$_COOKIE = array();
-		unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'], $GLOBALS['wp'] );
+		$_GET     = array();
+		$_POST    = array();
+		$_COOKIE  = array();
+		$_REQUEST = array();
+		unset( $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD'], $GLOBALS['wp'], $GLOBALS['pagenow'] );
+		$GLOBALS['ab_test_logged_in']    = false;
+		$GLOBALS['ab_test_is_admin']     = false;
+		$GLOBALS['ab_test_is_robots']    = false;
+		$GLOBALS['ab_test_using_themes'] = true;
 		self::scope( 'full' );
 		self::cleanMuDir();
 	}
@@ -1085,6 +1097,223 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context( true, $wp ), $state, time() ), AB_MCP_Preview_Protection::frontend_decision( AB_MCP_Preview_Protection::frontend_context(), $state, time() ) );
 	}
 
+	/* ------------------------------------- admin-ajax.php and admin-post.php */
+
+	/**
+	 * A plugin that prints content for visitors over the nopriv ways: «load
+	 * more» on admin-ajax.php (and the same action for signed-in users, as
+	 * plugins register both), a form's thank-you page on admin-post.php.
+	 * Each records what it printed and ends the request as such a handler
+	 * does. Returns a reader of what was printed.
+	 */
+	private static function noprivPlugin(): \Closure {
+		$printed = array();
+		foreach ( array( 'wp_ajax_nopriv_load_more', 'wp_ajax_load_more' ) as $hook ) {
+			add_action(
+				$hook,
+				static function () use ( &$printed ): void {
+					$printed[] = '<article><h2>Secret post</h2><p>Not public yet.</p></article>';
+					throw new AbTestExit( 'ajax', 'load_more' );
+				}
+			);
+		}
+		foreach ( array( 'admin_post_nopriv_contact_form', 'admin_post_contact_form' ) as $hook ) {
+			add_action(
+				$hook,
+				static function () use ( &$printed ): void {
+					$printed[] = 'thank-you page with the theme';
+					throw new AbTestExit( 'admin_post', 'contact_form' );
+				}
+			);
+		}
+		return static function () use ( &$printed ): array {
+			return $printed;
+		};
+	}
+
+	/**
+	 * admin-ajax.php as WordPress runs it: admin_init, then the action, the
+	 * nopriv one for a visitor.
+	 */
+	private static function adminAjax( string $action ): void {
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-ajax.php';
+		$_REQUEST['action']            = $action;
+		do_action( 'admin_init' );
+		do_action( ( is_user_logged_in() ? 'wp_ajax_' : 'wp_ajax_nopriv_' ) . $action );
+	}
+
+	/** admin-post.php as WordPress runs it: admin_init, then the action. */
+	private static function adminPost( string $action ): void {
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = false;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		$_REQUEST['action']            = $action;
+		do_action( 'admin_init' );
+		do_action( ( is_user_logged_in() ? 'admin_post_' : 'admin_post_nopriv_' ) . $action );
+	}
+
+	public function testANoprivAjaxActionOfAPluginPrintsNothingForAVisitor(): void {
+		// Plugins and themes print content over wp_ajax_nopriv_*: «load
+		// more», endless scrolling, an AJAX search with titles and excerpts,
+		// the cart fragments of a shop. The core's own nopriv actions print
+		// none, which an earlier header took for all of them.
+		$printed = self::noprivPlugin();
+		AB_MCP_Preview_Protection::hook();
+
+		// Off: the plugin answers as always.
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		self::assertCount( 1, $printed() );
+
+		// On, a visitor: «0» with 401, as admin-ajax.php answers an action
+		// nobody handles; the plugin never runs.
+		$this->on();
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( '0', $exit->detail, 'No content, not even the password page.' );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		self::assertCount( 1, $printed(), 'Nothing more was printed.' );
+
+		// Signed in: runs (the AJAX of wp-admin and of a page a member reads).
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		// With the cookie: runs (the AJAX a page makes after the password).
+		$hash                                         = AB_MCP_Preview_Protection::state()['hash'];
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $hash, time() + 100 );
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'ajax', $exit->kind );
+		}
+		self::assertCount( 3, $printed() );
+		// An expired cookie does not.
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( $hash, time() - 1 );
+		try {
+			self::adminAjax( 'load_more' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+		}
+		$_COOKIE = array();
+
+		// The two nopriv actions of the core keep answering a visitor: the
+		// heartbeat and the password suggestion of the reset form.
+		foreach ( AB_MCP_Preview_Protection::CORE_NOPRIV as $core ) {
+			self::adminAjax( $core );
+			self::assertSame( 'core', AB_MCP_Preview_Protection::admin_decision( AB_MCP_Preview_Protection::admin_context(), AB_MCP_Preview_Protection::state(), time() )['reason'], $core );
+		}
+		self::assertSame( array( 'heartbeat', 'generate-password' ), AB_MCP_Preview_Protection::CORE_NOPRIV, 'Exactly the two of admin-ajax.php (measured on the core, 31.10.2026).' );
+		self::assertCount( 3, $printed() );
+	}
+
+	public function testAdminPostForAVisitorIsThePasswordPageWhoseFormPostsToTheHomePage(): void {
+		$printed = self::noprivPlugin();
+		AB_MCP_Preview_Protection::hook();
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'Off: as always.' );
+		}
+
+		$this->on();
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+			self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+			self::assertStringContainsString( 'name="' . AB_MCP_Preview_Protection::FIELD . '"', $exit->detail, 'The password page.' );
+			self::assertStringContainsString( 'action="https://example.test/"', $exit->detail, 'Its form posts to the home page, where the front-end gate takes the password; this gate takes none.' );
+		}
+		self::assertCount( 1, $printed() );
+
+		// The names of the core's AJAX actions open nothing here: the clause
+		// is for admin-ajax.php.
+		try {
+			self::adminPost( 'heartbeat' );
+			self::fail( 'Nothing answered.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'die', $exit->kind );
+		}
+
+		$GLOBALS['ab_test_logged_in'] = true;
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'Signed in: runs.' );
+		}
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		try {
+			self::adminPost( 'contact_form' );
+			self::fail( 'The plugin did not run.' );
+		} catch ( AbTestExit $exit ) {
+			self::assertSame( 'admin_post', $exit->kind, 'With the cookie: runs.' );
+		}
+		self::assertCount( 3, $printed() );
+	}
+
+	public function testThePagesOfWpAdminAreNotThisGatesBusiness(): void {
+		// wp-admin sends a visitor to the login itself; the gate decides only
+		// while AJAX runs or the script is admin-post.php.
+		$this->on();
+		$state                       = AB_MCP_Preview_Protection::state();
+		$GLOBALS['ab_test_is_admin'] = true;
+		foreach ( array( 'index.php', 'admin.php', 'edit.php', 'wp-login.php' ) as $pagenow ) {
+			$GLOBALS['pagenow'] = $pagenow;
+			$ctx                = AB_MCP_Preview_Protection::admin_context();
+			self::assertFalse( $ctx['ajax'] );
+			self::assertFalse( $ctx['post'] );
+			self::assertSame( array( 'action' => 'pass', 'reason' => 'admin' ), AB_MCP_Preview_Protection::admin_decision( $ctx, $state, time() ), $pagenow );
+			self::assertNull( AB_MCP_Preview_Protection::gate_admin(), $pagenow );
+		}
+		unset( $GLOBALS['pagenow'] );
+		self::assertNull( AB_MCP_Preview_Protection::gate_admin(), 'No script name at all.' );
+		// Off: nothing, wherever.
+		AB_MCP_Preview_Protection::disable( 7, AB_MCP_Preview_Protection::SOURCE_TOOL );
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		self::assertSame( array( 'action' => 'pass', 'reason' => 'off' ), AB_MCP_Preview_Protection::admin_decision( AB_MCP_Preview_Protection::admin_context(), AB_MCP_Preview_Protection::state(), time() ) );
+		self::assertNull( AB_MCP_Preview_Protection::gate_admin() );
+	}
+
+	public function testTheAdminContextReadsTheRequest(): void {
+		$ctx = AB_MCP_Preview_Protection::admin_context();
+		self::assertSame( array( 'ajax' => false, 'post' => false, 'action' => '', 'logged_in' => false, 'cookie' => '' ), $ctx );
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		$_REQUEST['action']            = array( 'heartbeat' );
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = '1|abc';
+		$GLOBALS['ab_test_logged_in']                 = true;
+		$ctx                                          = AB_MCP_Preview_Protection::admin_context();
+		self::assertTrue( $ctx['ajax'] );
+		self::assertTrue( $ctx['post'] );
+		self::assertSame( '', $ctx['action'], 'An array is no action name.' );
+		self::assertSame( '1|abc', $ctx['cookie'] );
+		self::assertTrue( $ctx['logged_in'] );
+		$_REQUEST['action'] = 'heartbeat';
+		self::assertSame( 'heartbeat', AB_MCP_Preview_Protection::admin_context()['action'] );
+	}
+
 	public function testTheBookmarksScriptMeetsTheGateOnWpLoaded(): void {
 		// wp-links-opml.php loads WordPress without wp() and prints the
 		// bookmarks as OPML; no action of the request but wp_loaded is left.
@@ -1140,6 +1369,10 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertGreaterThan( 0, AB_MCP_Preview_Protection::PARSE_PRIORITY, 'After handlers at 0.' );
 		// The second line stays.
 		self::assertSame( 1, has_action( 'template_redirect', array( AB_MCP_Preview_Protection::class, 'gate_frontend' ) ) );
+		// admin-ajax.php and admin-post.php: admin_init at 1, after a handler
+		// at 0, before the plugins at the default priority 10.
+		self::assertSame( 1, has_action( 'admin_init', array( AB_MCP_Preview_Protection::class, 'gate_admin' ) ) );
+		self::assertSame( 1, AB_MCP_Preview_Protection::ADMIN_PRIORITY );
 		self::assertGreaterThan( 0, AB_MCP_Preview_Protection::TEMPLATE_PRIORITY, 'After the well-known documents and the consent page (priority 0).' );
 		self::assertLessThan( 10, AB_MCP_Preview_Protection::TEMPLATE_PRIORITY, 'Before redirect_canonical.' );
 		self::assertSame( 110, has_filter( 'rest_authentication_errors', array( AB_MCP_Preview_Protection::class, 'gate_rest' ) ) );
