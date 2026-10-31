@@ -19,7 +19,8 @@
  * menu item, settings the widget would not store, a form the tool does not
  * write); the answer says why there is no point; saved_fields shows what the
  * reader shows and compares the rest; a deletion says it is not undoable; no
- * answer about a widget point shows a credential.
+ * answer about a widget point shows a credential; a widget value sent back as
+ * [REDACTED] keeps the stored one, and its point is the row before.
  *
  * Run:  php tests/standalone/undo-terms-widgets-test.php
  */
@@ -1101,6 +1102,18 @@ $out = ab_undo( $res['undo'] );
 ok( 'changed_since' === $out['blocked'][0]['reason'] && false === strpos( (string) wp_json_encode( $out ), 'GEHEIM' ), 'F24 nor in a refusal' );
 $out = ab_undo( $res['undo'], array( 'force' => true ) );
 ok( 'GEHEIM-KEY' === get_option( 'widget_feed' )[2]['api_key'] && 'GEHEIM-SECRET' === get_option( 'widget_feed' )[2]['auth']['client_secret'] && false === strpos( (string) wp_json_encode( $out ), 'GEHEIM' ), 'F25 the restore puts the credentials back, and its answer shows none' );
+
+/* a value wp_get_widgets shows as [REDACTED] (AB_MCP_Redactor), sent back or left out */
+reset_all();
+update_option( 'widget_text', array( 2 => array( 'title' => 'Feed', 'feed' => array( 'accessToken' => 'GEHEIM-AT', 'count' => 5 ) ), '_multiwidget' => 1 ) );
+update_option( 'sidebars_widgets', array( 'sidebar-1' => array( 'text-2' ), 'array_version' => 3 ) );
+$before = ab_raw( 'widget_text' );
+$res    = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'feed' => array( 'accessToken' => '[REDACTED]', 'count' => 10 ) ) ) );
+ok( ab_token( $res ) && array( 'accessToken' => 'GEHEIM-AT', 'count' => 10 ) === get_option( 'widget_text' )[2]['feed'] && ! isset( $res['saved_differs'] ), 'F25a [REDACTED] sent back: the stored token stays, the write is as asked, with a token' );
+ok( $before === AB_MCP_Undo::claim( $res['undo'] )['data']['rows']['widget_text']['value'], 'F25b the point holds the row before the write' );
+ok( 1 === ab_undo( $res['undo'] )['undone'] && $before === ab_raw( 'widget_text' ), 'F25c wp_undo puts it back byte for byte' );
+$res = AB_MCP_Tools_Widgets::update_widget( array( 'id' => 'text-2', 'settings' => array( 'feed' => array( 'count' => 11 ) ) ) );
+ok( ab_token( $res ) && array( 'count' => 11, 'accessToken' => 'GEHEIM-AT' ) === get_option( 'widget_text' )[2]['feed'], 'F25d left out of a nested field: kept, as a key wp_get_widgets leaves out' );
 
 /* the rule of the tools, asked again */
 reset_all();

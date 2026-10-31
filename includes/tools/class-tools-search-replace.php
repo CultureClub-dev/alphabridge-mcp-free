@@ -91,16 +91,16 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 
 	/**
 	 * The credential-like meta keys the free core refuses, as data — the
-	 * same two lists is_sensitive_meta_key() carries in code, so they can be
-	 * turned into SQL. A key that is only skipped in PHP, after the prefilter
+	 * two lists of AB_MCP_Redactor, the rule is_sensitive_meta_key() applies,
+	 * so they can be turned into SQL. A key that is only skipped in PHP, after the prefilter
 	 * compared the value, has already answered whether the value contains the
 	 * needle: through the row count, the limit, the truncated flag. The
 	 * exclusion therefore has to happen before any LIKE, against the name as
 	 * PHP normalises it. The test proves the lists and the core function agree
 	 * on a corpus of keys.
 	 */
-	const SENSITIVE_META_EXACT   = array( 'token', 'tokens', 'secret', 'secrets', 'password', 'passwords', 'passphrase', 'passphrases', 'passcode', 'passcodes', 'pwd', 'pwds', 'otp', 'otps', 'credential', 'credentials' );
-	const SENSITIVE_META_NEEDLES = array( 'api_key', 'apikey', 'api-key', 'api_token', 'api_secret', 'access_key', 'access_token', 'secret_key', 'secret_token', 'private_key', 'client_secret', 'consumer_key', 'consumer_secret', 'refresh_token', 'auth_token', 'bearer_token', 'license_key', 'oauth', '_token', '_secret', '_password', 'passwd', 'smtp_pass' );
+	const SENSITIVE_META_EXACT   = AB_MCP_Redactor::CREDENTIAL_EXACT;
+	const SENSITIVE_META_NEEDLES = AB_MCP_Redactor::CREDENTIAL_NEEDLES;
 
 	/**
 	 * Option names update_option() writes elsewhere (wp-includes/option.php,

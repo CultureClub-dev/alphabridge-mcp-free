@@ -74,7 +74,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_get_error_log',
 			array(
-				'description' => 'Return the last lines of wp-content/debug.log, where WordPress writes PHP errors, warnings and notices when WP_DEBUG_LOG is on, for diagnosing failures. Read-only; returns available, lines (the count returned) and log (the lines as one text). Without a readable file there it answers available=false with a message, not an error; a log written to another path is not read. The log can hold file paths, queries and data plugins wrote into it. Requires manage_options and runs only with write access on.',
+				'description' => 'Return the last lines of wp-content/debug.log, where WordPress writes PHP errors, warnings and notices when WP_DEBUG_LOG is on, for diagnosing failures. Read-only; returns available, lines (the count returned) and log (the lines as one text). Without a readable file there it answers available=false with a message, not an error; a log written to another path is not read. The log can hold file paths, queries and data plugins wrote into it; credentials in it read as [REDACTED]: the values of pairs such as password=…, token=… or api_key=… and of Authorization headers, such pairs in JSON at any level of escaping, entries under such names in PHP dumps (print_r, var_dump also as Xdebug HTML, var_export), private keys in PEM form and Bearer tokens. Other free text stays as it is; redacted then names log. Requires manage_options and runs only with write access on.',
 				'capability'  => 'manage_options',
 				// Mighty: a log holds paths, queries and whatever plugins wrote
 				// into it, which the site mode Read keeps closed until Full.
