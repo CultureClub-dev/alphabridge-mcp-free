@@ -68,7 +68,7 @@ class AB_MCP_Admin {
 
 	/**
 	 * The page under Settings that carried the whole screen before 4.16.0
-	 * («Settings → AlphaBridge MCP»). It stays registered, out of the menu,
+	 * (options-general.php?page=alphabridge-mcp). It stays registered, out of the menu,
 	 * so its address leads on to «AI Connection» (forward_old_page()).
 	 */
 	const OLD_PAGE = 'alphabridge-mcp';
@@ -559,7 +559,7 @@ class AB_MCP_Admin {
 	 */
 	private function mode_notice_html( $elsewhere ) {
 		$html  = '<div class="notice notice-warning ab-mode-notice"><p><strong>' . esc_html__( 'AlphaBridge MCP now only reads on this site.', 'alphabridge-mcp' ) . '</strong> ';
-		$html .= esc_html__( 'Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of Settings → AlphaBridge MCP, at the site owner\'s own risk.', 'alphabridge-mcp' ) . '</p>';
+		$html .= esc_html__( 'Since this update every site starts with write access off: AI assistants can read content, media, terms, comments, settings and the structure of the site; every tool that creates, changes or deletes is refused, and so are the reading tools noted “only with write access” under Fine-tuning, which read code, files, the database, logs or credentials. To let them write again, an administrator switches on write access at the top of AlphaBridge → AI Connection, at the site owner\'s own risk.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<p>' . esc_html__( 'Switching on write access switches every tool on; afterwards you can switch single tools off under Fine-tuning.', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p class="ab-mode-notice__actions">';
 		if ( $elsewhere ) {
@@ -2009,7 +2009,7 @@ class AB_MCP_Admin {
 		}
 		$labels = self::staging_role_labels();
 		$where  = static function ( array $part ) {
-			return AB_MCP_Staging::SOURCE_HUB === $part['source'] ? __( 'in the hub', 'alphabridge-mcp' ) : __( 'on the settings page', 'alphabridge-mcp' );
+			return AB_MCP_Staging::SOURCE_HUB === $part['source'] ? __( 'in the hub', 'alphabridge-mcp' ) : __( 'on the page AlphaBridge → Staging', 'alphabridge-mcp' );
 		};
 		$who    = static function ( array $part ) {
 			return '' !== $part['user_login'] ? $part['user_login'] : '#' . $part['user_id'];

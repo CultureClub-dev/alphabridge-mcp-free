@@ -73,7 +73,7 @@ final class ConsentScopesTest extends TestCase {
 
 		self::assertSame( 1, $note->length );
 		self::assertSame( AB_MCP_Site_Mode::consent_text(), trim( $note->item( 0 )->textContent ) );
-		self::assertSame( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of Settings → AlphaBridge MCP.', AB_MCP_Site_Mode::consent_text() );
+		self::assertSame( 'Whatever access level you choose, the switch for write access on this site decides whether AI assistants may write; it is off right now, so the connection only reads until an administrator switches it on at the top of AlphaBridge → AI Connection.', AB_MCP_Site_Mode::consent_text() );
 		self::assertSame( 1, preg_match_all( '/[.!?](\s|$)/', AB_MCP_Site_Mode::consent_text() ), 'One sentence.' );
 		// Above the choice, so it is read before the access level.
 		self::assertSame( 0, $x->query( '//*[contains(@class, "mode-read")]/preceding::input[@name="ab_scope"]' )->length );

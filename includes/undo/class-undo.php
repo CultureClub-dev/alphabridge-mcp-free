@@ -321,7 +321,7 @@ class AB_MCP_Undo {
 		if ( ! self::enabled() ) {
 			return new WP_Error(
 				'ab_mcp_undo_disabled',
-				__( 'Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning, unless the ab_mcp_undo_enabled filter turns it off in code.', 'alphabridge-mcp' ),
+				__( 'Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning, unless the ab_mcp_undo_enabled filter turns it off in code.', 'alphabridge-mcp' ),
 				array( 'reason' => 'switched_off' )
 			);
 		}
@@ -629,7 +629,7 @@ class AB_MCP_Undo {
 		if ( ! self::enabled() ) {
 			return new WP_Error(
 				'ab_mcp_undo_disabled',
-				__( 'Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' ),
+				__( 'Undo is switched off on this site, so no undo point would be recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' ),
 				array( 'reason' => 'switched_off' )
 			);
 		}
@@ -657,7 +657,7 @@ class AB_MCP_Undo {
 		if ( ! self::enabled() ) {
 			return new WP_Error(
 				'ab_mcp_undo_disabled',
-				__( 'Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' ),
+				__( 'Undo is switched off on this site, so no undo point was recorded. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' ),
 				array( 'reason' => 'switched_off' )
 			);
 		}
@@ -901,7 +901,7 @@ class AB_MCP_Undo {
 			return $entry;
 		}
 		if ( time() > self::expires_of( $entry ) ) {
-			return new WP_Error( 'ab_mcp_undo_expired', __( 'This undo point has expired. Undo points are kept for up to 7 days (with AlphaBridge MCP Pro for the window set under Settings › AlphaBridge MCP); this change can no longer be undone with it. An earlier version of a post can still come back with wp_restore_revision.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_undo_expired', __( 'This undo point has expired. Undo points are kept for up to 7 days (with AlphaBridge MCP Pro for the window set under AlphaBridge › Staging); this change can no longer be undone with it. An earlier version of a post can still come back with wp_restore_revision.', 'alphabridge-mcp' ) );
 		}
 
 		if ( null !== $entry['inline'] ) {

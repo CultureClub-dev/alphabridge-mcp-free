@@ -1,7 +1,7 @@
 <?php
 /**
- * The approvals of the abilities of other plugins on Settings › AlphaBridge
- * MCP: which abilities the plugins of this site register, and which of them
+ * The approvals of the abilities of other plugins on AlphaBridge › AI
+ * Connection: which abilities the plugins of this site register, and which of them
  * an administrator approved for wp_run_ability.
  *
  * No ability is approved until an administrator switches it on here, and

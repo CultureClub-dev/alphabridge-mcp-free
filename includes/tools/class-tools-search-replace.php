@@ -1568,7 +1568,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		}
 		$data = $token->get_error_data();
 		if ( 'ab_mcp_undo_disabled' === $token->get_error_code() && is_array( $data ) && isset( $data['reason'] ) && 'switched_off' === $data['reason'] ) {
-			self::$run['warnings'][]         = __( 'Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' );
+			self::$run['warnings'][]         = __( 'Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' );
 			self::$run['raw']['locs'][ $id ] = array();
 			return true;
 		}
@@ -1781,7 +1781,7 @@ class AB_MCP_Tools_Search_Replace extends AB_MCP_Tools_Base {
 		}
 		$data = $token->get_error_data();
 		if ( 'ab_mcp_undo_disabled' === $token->get_error_code() && is_array( $data ) && isset( $data['reason'] ) && 'switched_off' === $data['reason'] ) {
-			self::$run['warnings'][] = __( 'Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under Settings › AlphaBridge MCP › Fine-tuning.', 'alphabridge-mcp' );
+			self::$run['warnings'][] = __( 'Undo is switched off on this site, so these changes have no way back. An administrator switches it on with the wp_undo tool under AlphaBridge › AI Connection › Fine-tuning.', 'alphabridge-mcp' );
 			return;
 		}
 		/* translators: 1: post id, 2: the reason, with its way */

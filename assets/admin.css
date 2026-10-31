@@ -1,7 +1,7 @@
 /*
- * AlphaBridge MCP — Settings › AlphaBridge MCP.
+ * AlphaBridge MCP — AlphaBridge › AI Connection and AlphaBridge › Staging.
  *
- * Loaded on that screen only (AB_MCP_Admin::enqueue_assets()); every rule of
+ * Loaded on these screens only (AB_MCP_Admin::enqueue_assets()); every rule of
  * the page is scoped to .ab-mcp, the class of its wrap. The Pro box
  * (AB_MCP_Admin::pro_box_html()) follows at the end; the Pro add-on's own boxes
  * reuse its classes. Nothing here loads from outside.

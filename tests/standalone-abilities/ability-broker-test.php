@@ -1413,7 +1413,7 @@ ok( false !== strpos( $ins, 'WooCommerce' ) && false !== strpos( $ins, 'Elemento
 ok( false === strpos( $ins, 'unless an administrator switched it off' ), 'Q1 and they do not say that every ability runs' );
 $GLOBALS['ab_toolstate']['wp_run_ability'] = false;
 $ins = AB_MCP_Ability_Broker::instructions();
-ok( false !== strpos( $ins, 'running them (wp_run_ability) is switched off' ) && false !== strpos( $ins, 'Settings → AlphaBridge MCP → Fine-tuning (http://x/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_run_ability)' ) && false !== strpos( $ins, 'tell them that kindly' ) && false === strpos( $ins, 'undo point' ), 'Q2 with wp_run_ability switched off: that running is off, where to switch it on, with the link, and to tell the person kindly' );
+ok( false !== strpos( $ins, 'running them (wp_run_ability) is switched off' ) && false !== strpos( $ins, 'AlphaBridge → AI Connection → Fine-tuning (http://x/wp-admin/admin.php?page=alphabridge-connection#ab-tool-wp_run_ability)' ) && false !== strpos( $ins, 'tell them that kindly' ) && false === strpos( $ins, 'undo point' ), 'Q2 with wp_run_ability switched off: that running is off, where to switch it on, with the link, and to tell the person kindly' );
 $GLOBALS['ab_toolstate']['wp_list_abilities'] = false;
 $GLOBALS['ab_toolstate']['wp_run_ability']    = false;
 ok( '' === AB_MCP_Ability_Broker::instructions(), 'Q3 with both tools off, no sentence' );
@@ -1430,7 +1430,7 @@ if ( ! class_exists( 'AB_MCP_Site_Mode', false ) ) {
 		public static function is_full() { return 'full' === $GLOBALS['ab_site_mode']; }
 		public static function allows( $name, array $def ) { return self::is_full() || 'wp_list_abilities' === $name; }
 		public static function refusal( $name ) {
-			return new WP_Error( 'ab_mcp_read_mode', AB_MCP_Guidance::compose( sprintf( 'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.', $name ), 'To allow it, an administrator can switch on write access at the top of Settings → AlphaBridge MCP and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.', AB_MCP_Guidance::settings_url( 'ab-mode' ) ) );
+			return new WP_Error( 'ab_mcp_read_mode', AB_MCP_Guidance::compose( sprintf( 'Write access is off on this site, so the tool "%s" did not run: it changes the site, and with write access off AI assistants only read.', $name ), 'To allow it, an administrator can switch on write access at the top of AlphaBridge → AI Connection and confirm the notice there; that is at the site owner\'s own risk, and a current backup is advised.', AB_MCP_Guidance::settings_url( 'ab-mode' ) ) );
 		}
 	}
 }

@@ -472,7 +472,7 @@ $r       = AB_MCP_Plugin::instance()->registry;
 $keep    = $r->get( 'wp_get_post' );
 $r->register( 'wp_get_post', array_merge( $keep, array( 'capability' => null ) ) );
 $res = ab_ability( 'wp_get_post' )->check_permissions( array( 'id' => 7 ) );
-ok( is_wp_error( $res ) && 'ab_mcp_own_ability_not_offered' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'Settings → AlphaBridge MCP' ), 'D9 a tool that has no capability any more is refused (the check at the call)' );
+ok( is_wp_error( $res ) && 'ab_mcp_own_ability_not_offered' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'AlphaBridge → AI Connection' ), 'D9 a tool that has no capability any more is refused (the check at the call)' );
 $res = ab_ability( 'wp_get_post' )->execute( array( 'id' => 7 ) );
 ok( is_wp_error( $res ), 'D9 and does not run' );
 $r->register( 'wp_get_post', array_merge( $keep, array( 'callback' => array( 'AB_Test_Pro_Content', 'get_post' ) ) ) );
@@ -487,7 +487,7 @@ AB_MCP_Settings::set( AB_MCP_Own_Abilities::SETTING, false );
 $res  = ab_ability( 'wp_get_post' )->check_permissions( array( 'id' => 7 ) );
 $res2 = AB_MCP_Own_Abilities::execute( 'wp_get_post', array( 'id' => 7 ) );
 ok( is_wp_error( $res ) && 'ab_mcp_own_abilities_off' === $res->get_error_code() && is_wp_error( $res2 ) && 'ab_mcp_own_abilities_off' === $res2->get_error_code(), 'D11 switched off after the registration: refused, run or not' );
-ok( false !== strpos( $res->get_error_message(), 'Settings → AlphaBridge MCP → Fine-tuning' ) && false !== strpos( $res->get_error_message(), '#ab-own-abilities' ), 'D11 with the way to the switch' );
+ok( false !== strpos( $res->get_error_message(), 'AlphaBridge → AI Connection → Fine-tuning' ) && false !== strpos( $res->get_error_message(), '#ab-own-abilities' ), 'D11 with the way to the switch' );
 AB_MCP_Settings::set( AB_MCP_Own_Abilities::SETTING, true );
 
 /* ---------------------------------------------------- E: the execute callback */
@@ -532,7 +532,7 @@ $res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'held', AB_MCP
 ok( is_array( $res ) && ! isset( $res['nothing_changed'] ) && isset( get_option( AB_MCP_Staging_Gate::OPTION )['users'][ (string) get_current_user_id() ][ AB_MCP_Staging_Gate::FIELD_ACK ] ), 'E10 the same call with staging_acknowledged runs, and the acknowledgement is kept by the account id' );
 AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::REQUIRE );
 $res = ab_ability( 'wp_create_post' )->execute( array( 'title' => 'refused' ) );
-ok( is_wp_error( $res ) && 'ab_mcp_staging_required' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'releases its account on the settings page' ) && 'denied' === ab_last_log()['status'], 'E10 with require, a call without a token is refused and told that an administrator releases its account on the settings page' );
+ok( is_wp_error( $res ) && 'ab_mcp_staging_required' === $res->get_error_code() && false !== strpos( $res->get_error_message(), 'releases its account on the page AlphaBridge → Staging' ) && 'denied' === ab_last_log()['status'], 'E10 with require, a call without a token is refused and told that an administrator releases its account on the page AlphaBridge → Staging' );
 ok( false !== AB_MCP_Staging_Gate::release( array( 'kind' => 'user', 'id' => (string) get_current_user_id() ), get_current_user_id() ) && is_array( ab_ability( 'wp_create_post' )->execute( array( 'title' => 'released' ) ) ), 'E10 released by account: the call runs' );
 AB_MCP_Settings::set( AB_MCP_Staging_Gate::SETTING, AB_MCP_Staging_Gate::OFF );
 ab_read();

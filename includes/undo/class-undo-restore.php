@@ -177,7 +177,7 @@ class AB_MCP_Undo_Restore {
 						),
 						sprintf(
 							/* translators: %s: name of the full access level */
-							__( 'To allow it, run the undo on a connection whose access level includes that tool ("%s" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under Settings › AlphaBridge MCP.', 'alphabridge-mcp' ),
+							__( 'To allow it, run the undo on a connection whose access level includes that tool ("%s" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under AlphaBridge › AI Connection.', 'alphabridge-mcp' ),
 							self::scope_label( 'full' )
 						),
 						AB_MCP_Guidance::settings_url( 'ab-connections' )
@@ -200,7 +200,7 @@ class AB_MCP_Undo_Restore {
 						),
 						sprintf(
 							/* translators: %s: name of the full access level */
-							__( 'To allow it, run the undo on a connection whose access level includes that tool ("%s" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under Settings › AlphaBridge MCP.', 'alphabridge-mcp' ),
+							__( 'To allow it, run the undo on a connection whose access level includes that tool ("%s" includes every tool): connect the app again and choose it on the consent screen, or have an administrator create such a connection under AlphaBridge › AI Connection.', 'alphabridge-mcp' ),
 							self::scope_label( 'full' )
 						),
 						AB_MCP_Guidance::settings_url( 'ab-connections' )

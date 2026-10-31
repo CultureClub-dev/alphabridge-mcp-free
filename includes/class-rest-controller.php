@@ -462,7 +462,7 @@ class AB_MCP_REST_Controller {
 		if ( ! $user_id ) {
 			return new WP_Error(
 				'ab_mcp_unauthorized',
-				__( 'Invalid or missing bearer token. Send the connection\'s token as "Authorization: Bearer …" or connect again; an administrator manages connections under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ),
+				__( 'Invalid or missing bearer token. Send the connection\'s token as "Authorization: Bearer …" or connect again; an administrator manages connections under AlphaBridge → AI Connection.', 'alphabridge-mcp' ),
 				array( 'status' => 401 )
 			);
 		}
@@ -534,7 +534,7 @@ class AB_MCP_REST_Controller {
 					/* translators: %s: name of the access level, e.g. Read only */
 					sprintf( __( 'This connection has the access level "%s", which does not include setting the staging pair.', 'alphabridge-mcp' ), isset( $labels[ $scope ] ) ? $labels[ $scope ] : $scope ),
 					/* translators: %s: name of the widest access level */
-					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ), $labels['full'] ),
+					sprintf( __( 'To allow it, connect the app again and choose the access level "%s" on the consent screen, or have an administrator create a connection with that access level under AlphaBridge → AI Connection.', 'alphabridge-mcp' ), $labels['full'] ),
 					AB_MCP_Guidance::settings_url( 'ab-connections' )
 				),
 				array( 'status' => 403 )
@@ -1149,7 +1149,7 @@ class AB_MCP_REST_Controller {
 					. ' connecting an existing staging site, or ' . AB_MCP_Staging::drafts_in_instructions() . '; its checklist has the steps), and offer to set up'
 					. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here with staging_acknowledged true.';
 			} elseif ( AB_MCP_Staging_Gate::REQUIRE === $next ) {
-				$instructions .= ' This site requires staging first: a writing call is refused until a person releases this connection on the settings page of AlphaBridge MCP'
+				$instructions .= ' This site requires staging first: a writing call is refused until a person releases this connection on the page AlphaBridge → Staging'
 					. ' under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands,'
 					. ' and the prompt staging_workflow has the steps.';
 			}

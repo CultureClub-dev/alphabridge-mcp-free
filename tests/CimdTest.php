@@ -114,7 +114,7 @@ final class CimdTest extends TestCase {
 		self::assertArrayHasKey( 'registration_endpoint', AB_MCP_OAuth::metadata() );
 		self::assertStringContainsString( 'register', $this->refusal(), 'The refusal names the way that still works.' );
 		// The switch sits under ChatGPT on the connect card.
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → ChatGPT → "Switch the direct sign-in off"', $this->refusal() );
+		self::assertStringContainsString( 'AlphaBridge → AI Connection → ChatGPT → "Switch the direct sign-in off"', $this->refusal() );
 		self::assertFalse( AB_MCP_OAuth::get_client( self::URL ) );
 		self::assertSame( 0, $this->fetches() );
 	}
@@ -124,9 +124,9 @@ final class CimdTest extends TestCase {
 		self::assertSame( 0, substr_count( $readme, 'AlphaBridge MCP → Connect from Claude' ), 'The switch is inside "Your connections".' );
 		self::assertSame( 1, substr_count( $readme, 'Settings → AlphaBridge MCP → Your connections → «Connect from Claude (OAuth, advanced)» → «Accept apps with a metadata document»' ), 'The changelog of 4.4.0, as it was.' );
 		// The FAQ names the way as the settings page shows it today.
-		self::assertStringContainsString( 'Settings → AlphaBridge MCP → ChatGPT → "Switch the direct sign-in off"', $readme );
+		self::assertStringContainsString( 'AlphaBridge → AI Connection → ChatGPT → "Switch the direct sign-in off"', $readme );
 		// External services names the switch by its label on the settings page.
-		self::assertStringContainsString( 'You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin\'s settings page.', $readme );
+		self::assertStringContainsString( 'You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin\'s page AlphaBridge → AI Connection.', $readme );
 	}
 
 	public function testTheFilterHasTheLastWordOverTheSetting(): void {
@@ -547,7 +547,7 @@ final class CimdTest extends TestCase {
 		$message = $this->refusal();
 		self::assertStringContainsString( 'timed out', $message );
 		self::assertStringContainsString( 'switch the direct sign-in off', $message, 'The refusal names the link that lets such an app connect by registering.' );
-		self::assertStringContainsString( 'under Settings → AlphaBridge MCP → ChatGPT', $message );
+		self::assertStringContainsString( 'under AlphaBridge → AI Connection → ChatGPT', $message );
 	}
 
 	/**

@@ -70,14 +70,14 @@ Claude asks only for your site's address. It then works on your site in the brow
 ChatGPT on Plus, Pro, Business, Enterprise and Edu adds your site as a plugin:
 
 1. In ChatGPT, open Plugins, choose Add, then add a custom MCP server.
-2. Paste your site's MCP address from Settings → AlphaBridge MCP as the server URL and choose OAuth.
+2. Paste your site's MCP address from AlphaBridge → AI Connection as the server URL and choose OAuth.
 3. Approve on your own site.
 
-The plugin's settings page walks you through the same steps and checks that ChatGPT can sign in.
+The plugin's page AlphaBridge → AI Connection walks you through the same steps and checks that ChatGPT can sign in.
 
 = Connect Claude Code, Cursor, Codex and other MCP clients =
 
-Clients that sign in with OAuth need only your site's MCP address. For the others, create a connection under Settings → AlphaBridge MCP: Cursor gets a ready-made config, Claude Code a ready-made command, and every other client the address and a key for this one connection. This works for Claude Code, Cursor, Codex, VS Code, Windsurf and your own scripts. Each connection gets full access, content only or read only, and a connection you create in the plugin can also get an expiry.
+Clients that sign in with OAuth need only your site's MCP address. For the others, create a connection under AlphaBridge → AI Connection: Cursor gets a ready-made config, Claude Code a ready-made command, and every other client the address and a key for this one connection. This works for Claude Code, Cursor, Codex, VS Code, Windsurf and your own scripts. Each connection gets full access, content only or read only, and a connection you create in the plugin can also get an expiry.
 
 = What your AI can do with the free plugin =
 
@@ -114,7 +114,7 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 * **Read-only until you switch it on.** Out of the box the AI can only read. One switch, "Write access for AI assistants", lets it create, change and delete. One click turns it off again.
 * **Your WordPress rights apply.** Every connection acts as a real WordPress user. What that user may not do, the AI cannot do.
 * **Rules per connection.** Give each app full access, content only or read only. A connection you create in the plugin can also get an expiry. Switching write access on turns every tool on. Each connection keeps its access level. Single tools or whole groups can be switched off.
-* **A clear log.** The plugin keeps the latest 200 tool calls with time and status, and the settings page shows the newest. A limit of 120 requests a minute stops runaway request bursts.
+* **A clear log.** The plugin keeps the latest 200 tool calls with time and status, and the page AlphaBridge → AI Connection shows the newest. A limit of 120 requests a minute stops runaway request bursts.
 * **Answers that help.** When AlphaBridge refuses a request, it says why and what to do next.
 * **No telemetry.** The plugin sends no telemetry and contacts no outside service on its own.
 
@@ -143,9 +143,9 @@ Claude, ChatGPT and the other names mentioned belong to their respective owners.
 
 1. In WordPress, go to Plugins → Add New Plugin, search for "AlphaBridge MCP", install and activate it.
 2. Claude: open [AlphaBridge MCP for WordPress in Claude's directory](https://claude.ai/directory/alphabridge) and click Connect. Enter your site's address and approve on your own site's login-protected consent screen. There is no endpoint or token to copy. To connect without the hub, add your endpoint as a custom connector instead.
-3. ChatGPT: open Plugins, choose Add, then add a custom MCP server. Paste your site's MCP address from Settings → AlphaBridge MCP as the server URL, choose OAuth and approve on your site.
-4. Cursor, Claude Code and other clients: under Settings → AlphaBridge MCP, create a connection. Cursor gets a ready-made config and Claude Code a ready-made command.
-5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields and the error log, switch on "Write access for AI assistants" at the top of Settings → AlphaBridge MCP. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
+3. ChatGPT: open Plugins, choose Add, then add a custom MCP server. Paste your site's MCP address from AlphaBridge → AI Connection as the server URL, choose OAuth and approve on your site.
+4. Cursor, Claude Code and other clients: under AlphaBridge → AI Connection, create a connection. Cursor gets a ready-made config and Claude Code a ready-made command.
+5. Assistants only read until you allow more. To let them create, change and delete, and read user profile fields and the error log, switch on "Write access for AI assistants" at the top of AlphaBridge → AI Connection. Changes then take effect immediately and not everything can be undone. You switch it on at your own risk, so keep a current backup. Switching it on asks you to agree to the Terms of Use.
 
 == Frequently Asked Questions ==
 
@@ -185,7 +185,7 @@ Some hosts run a firewall that refuses any request with a web address in the app
 1. In the app, remove the connector for this site and add it again. The sign-in now goes through.
 2. If it still fails, add the connector once more, this time with this address instead of your site's: https://connect.alphabridge-mcp.com/mcp. When you click Authenticate, the free AlphaBridge hub asks for your site's address. Enter it and approve on your site as usual.
 
-If the site did not notice the firewall (some let requests from the site's own server pass), switch the direct sign-in off by hand: Settings → AlphaBridge MCP → ChatGPT → "Switch the direct sign-in off", then add the connector again.
+If the site did not notice the firewall (some let requests from the site's own server pass), switch the direct sign-in off by hand: AlphaBridge → AI Connection → ChatGPT → "Switch the direct sign-in off", then add the connector again.
 
 = A proxy has trouble with the newer MCP revision =
 The site answers apps in MCP revision 2026-07-28 and keeps the older revisions for apps that ask for them. If a proxy in front of the site cannot handle the newer one, a developer switches it off with `add_filter( 'ab_mcp_modern_protocol', '__return_false' );` in a small plugin, or by setting `modern_protocol` to false in the option `ab_mcp_options`; the site then answers in the older revisions only.
@@ -216,7 +216,7 @@ A short review on WordPress.org helps other site owners find the plugin: [write 
 AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four things reach beyond your site, each only when you start them:
 
 * **The hub, optional.** If you connect through the hub at connect.alphabridge-mcp.com, the free service of AlphaBridge MCP that links your sites to Claude and ChatGPT, it calls your site to set up the connection and to pass on the tool calls you make. It keeps your site's access key encrypted and passes content through without storing it. [Terms](https://connect.alphabridge-mcp.com/legal/terms) and [privacy notice](https://connect.alphabridge-mcp.com/legal/privacy).
-* **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin's settings page.
+* **The app you connect.** Some apps, such as ChatGPT, identify themselves with a small public file. While you approve such an app on your site, your site fetches that file from the app's address. The request carries no content, cookies or tokens from your site. You can switch this off under ChatGPT → "Switch the direct sign-in off" on the plugin's page AlphaBridge → AI Connection.
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 * **The other site of a staging pair.** The tool wp_staging_status with check_partner=true asks the address entered as the other site of the pair whether AlphaBridge MCP answers there. The request carries no content, cookies or tokens from your site.
 
@@ -224,6 +224,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 
 = 4.16.0 =
 * **AlphaBridge has a menu of its own.** The plugin sits in the WordPress menu as «AlphaBridge», right below Settings, with two pages: «AI Connection» carries what the settings page carried, and «Staging» the card «Staging» with the role of the site, the preview protection and Staging first. The address of the settings page under Settings leads to «AI Connection» with all its parameters, so bookmarks and older links keep working, and every address the plugin gives out (in the answers to assistants, in the plugin list, in its notices and after a form) leads straight to the page it names. Add-ons hang their boxes on `ab_mcp_admin_boxes_connection` and `ab_mcp_admin_boxes_staging`; `ab_mcp_admin_main_boxes` keeps its place on «AI Connection».
+* **The texts name the new menu.** Notices, refusals, the consent screen, the checklist of «Staging», the instructions to assistants, the tool descriptions and the prompt `staging_workflow` now say «AlphaBridge → AI Connection» or «AlphaBridge → Staging», wherever the setting they name now is, in all nine languages of the plugin.
 * **Plugins and themes switch as in wp-admin.** Activating, deactivating, deleting and updating plugins and themes, installing them, switching the theme (an undo of it included), updating WordPress and running another plugin's ability with `wp_run_ability` now load the WordPress admin files their routines expect, as wp-admin does. The deactivation of a cache plugin such as WP Super Cache, which writes its rules into `.htaccess` with functions of these files, now goes through; before, it ended with an internal error and the plugin stayed active.
 
 = 4.15.0 =
@@ -511,7 +512,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 == Upgrade Notice ==
 
 = 4.16.0 =
-Activating, deactivating, deleting and updating plugins and themes load the admin files their routines expect, as wp-admin does: the deactivation of a cache plugin such as WP Super Cache no longer ends with an internal error. No setting changes.
+AlphaBridge has a menu of its own below Settings, with «AI Connection» and «Staging»; old links lead there. Plugins and themes load the admin files wp-admin loads: deactivating WP Super Cache no longer ends with an internal error. No setting changes.
 
 = 4.15.0 =
 Staging first: before the first change on a site that counts as the production site, the assistant offers a staging site, with the reason and the way; Ask by default, Off and Require on the settings page. New too: preview protection for a staging site (wp_set_preview_protection), wp_staging_status.

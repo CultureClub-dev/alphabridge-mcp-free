@@ -656,9 +656,9 @@ final class StagingGateTest extends TestCase {
 		self::assertSame( 'ab_mcp_staging_required', $res->get_error_code() );
 		self::assertSame( 'tool', $res->get_error_data()[ AB_MCP_REST_Controller::RUN_KIND ] );
 		$msg = $res->get_error_message();
-		self::assertStringStartsWith( 'Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the settings page.', $msg );
+		self::assertStringStartsWith( 'Nothing ran: this site requires staging first. It counts as the production site, where a change is visible to visitors at once, and a change here needs a release by a person on the page AlphaBridge → Staging.', $msg );
 		self::assertStringContainsString( '1. Work on a staging site instead: wp_staging_status shows where the site stands and the next step, and the prompt staging_workflow has the steps.', $msg );
-		self::assertStringContainsString( '2. To change this site anyway, an administrator releases this connection on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for 24 hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', $msg );
+		self::assertStringContainsString( '2. To change this site anyway, an administrator releases this connection on the page AlphaBridge → Staging under Staging first («Work without staging»), for 24 hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', $msg );
 		self::assertStringContainsString( 'Direct link: ' . AB_MCP_Guidance::settings_url( 'ab-staging-first' ), $msg );
 		self::assertStringEndsWith( AB_MCP_Guidance::HANDOVER, $msg );
 		self::assertSame( 0, $this->runs );
@@ -732,7 +732,7 @@ final class StagingGateTest extends TestCase {
 		$GLOBALS['ab_test_current_user'] = 7;
 		$res = $this->call( 'wp_update_post', $def, array(), 'ability' );
 		self::assertInstanceOf( WP_Error::class, $res );
-		self::assertStringContainsString( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the settings page of AlphaBridge MCP under Staging first («Work without staging»), for 24 hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', $res->get_error_message() );
+		self::assertStringContainsString( '2. This call came through the WordPress abilities adapter: to change this site anyway, an administrator releases its account on the page AlphaBridge → Staging under Staging first («Work without staging»), for 24 hours or until revoked. 3. Or an administrator sets Staging first to Ask or Off there.', $res->get_error_message() );
 		self::assertStringNotContainsString( 'releases this connection', $res->get_error_message() );
 		self::assertEqualsWithDelta( time(), Gate::user_states()[7][ Gate::FIELD_SEEN ], 5, 'The refused account is noted, so the settings page lists it.' );
 
@@ -770,7 +770,7 @@ final class StagingGateTest extends TestCase {
 	}
 
 	const ASK_SENTENCE     = 'Before the first change on this site, call wp_staging_status.';
-	const REQUIRE_SENTENCE = 'This site requires staging first: a writing call is refused until a person releases this connection on the settings page of AlphaBridge MCP under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands, and the prompt staging_workflow has the steps.';
+	const REQUIRE_SENTENCE = 'This site requires staging first: a writing call is refused until a person releases this connection on the page AlphaBridge → Staging under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands, and the prompt staging_workflow has the steps.';
 
 	public function testWouldHoldNextSaysWhatTheGateDecides(): void {
 		$hash = self::connect();

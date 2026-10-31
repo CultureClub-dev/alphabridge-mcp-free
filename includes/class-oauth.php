@@ -539,7 +539,7 @@ class AB_MCP_OAuth {
 
 		if ( self::is_cimd_client_id( $client_id ) ) {
 			if ( ! self::cimd_enabled() ) {
-				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under Settings → AlphaBridge MCP → ChatGPT → "Switch the direct sign-in off", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_cimd_off', __( 'This site does not accept apps that identify themselves with a metadata document (switched off under AlphaBridge → AI Connection → ChatGPT → "Switch the direct sign-in off", by WP_HTTP_BLOCK_EXTERNAL or by the ab_mcp_oauth_cimd filter). The app can register with the site instead.', 'alphabridge-mcp' ) );
 			}
 			return self::cimd_client( $client_id );
 		}
@@ -1168,7 +1168,7 @@ class AB_MCP_OAuth {
 			'ab_mcp_cimd',
 			sprintf(
 				/* translators: 1: host name, 2: what is wrong with the document, a clause starting in lower case. */
-				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under Settings → AlphaBridge MCP → ChatGPT; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
+				__( 'The app identifies itself with a metadata document on %1$s, and this site cannot use it: %2$s. If the document is at fault, the app\'s maker can fix it. Until then, or if this site cannot reach other servers, an administrator can switch the direct sign-in off under AlphaBridge → AI Connection → ChatGPT; an app that can register with the site then does that instead.', 'alphabridge-mcp' ),
 				'' !== $host ? $host : substr( $url, 0, 200 ),
 				$problem
 			)
@@ -2154,7 +2154,7 @@ class AB_MCP_OAuth {
 			<input type="hidden" name="resource" value="<?php echo esc_attr( (string) $get['resource'] ); ?>"><?php endif; ?>
 		<input type="hidden" name="state" value="<?php echo esc_attr( $state ); ?>">
 		<?php echo self::scope_choices_html( $scopes, $default_scope ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside scope_choices_html(). ?>
-		<p class="scope-hint"><?php esc_html_e( 'You can revoke this connection at any time under Settings → AlphaBridge MCP.', 'alphabridge-mcp' ); ?></p>
+		<p class="scope-hint"><?php esc_html_e( 'You can revoke this connection at any time under AlphaBridge → AI Connection.', 'alphabridge-mcp' ); ?></p>
 		<div class="actions">
 			<button type="submit" class="allow" name="ab_allow" value="1"><?php esc_html_e( 'Allow', 'alphabridge-mcp' ); ?></button>
 			<button type="submit" class="deny" name="ab_deny" value="1"><?php esc_html_e( 'Cancel', 'alphabridge-mcp' ); ?></button>
