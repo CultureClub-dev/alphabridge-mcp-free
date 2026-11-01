@@ -170,7 +170,7 @@ final class AB_MCP_Store_Budget {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
-		return AB_MCP_Protected_Store::locked(
+		return AB_MCP_Protected_Store::writing(
 			$root,
 			static function () use ( $root, $run_id, $bytes ) {
 				$book = self::without_closed( self::read_bookings( $root ) );
@@ -228,7 +228,7 @@ final class AB_MCP_Store_Budget {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
-		return AB_MCP_Protected_Store::locked(
+		return AB_MCP_Protected_Store::writing(
 			$root,
 			static function () use ( $root, $run_id ) {
 				$book = self::read_bookings( $root );
@@ -252,17 +252,6 @@ final class AB_MCP_Store_Budget {
 	public static function bookings() {
 		$root = AB_MCP_Protected_Store::root();
 		return is_wp_error( $root ) ? $root : self::read_bookings( $root );
-	}
-
-	/**
-	 * The bookings in a folder of the store (whether one still holds any:
-	 * AB_MCP_Protected_Store, before it leaves a place).
-	 *
-	 * @param string $root Folder of the store.
-	 * @return array<int,array{bytes:int,booked:int,user_id:int}>
-	 */
-	public static function booked( $root ) {
-		return self::read_bookings( $root );
 	}
 
 	/**

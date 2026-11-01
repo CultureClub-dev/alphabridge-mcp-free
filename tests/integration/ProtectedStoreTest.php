@@ -13,7 +13,10 @@
  *   serves the test files, which reads no .htaccess: no proof, and nothing
  *   is written; a server that refuses the folder (the router as Apache)
  *   gives the proof, which is made again after a day and when a guard file
- *   is missing;
+ *   is missing; a check that fails takes the proof back;
+ * - the place chosen stays bound while it can be used, and a request that
+ *   chose a place another request has left writes nothing there;
+ * - no link on the way from the folder of the store to a file is followed;
  * - without the document root only a proof of the last day counts;
  * - two installations side by side (sites A and B in one parent folder)
  *   each use, clean and uninstall only their own folder; a copy that kept
@@ -300,7 +303,7 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( realpath( ABSPATH ), $owner['abspath'] );
 		self::assertSame( hash( 'sha256', DB_NAME . '|' . AB_MCP_IT_Sites::prefix( 'a' ) ), $owner['database'] );
 		self::assertSame( AB_MCP_IT_Sites::url( 'a' ), $owner['address'] );
-		self::assertSame( array( '.htaccess', 'index.php', 'owner.json', 'web.config' ), self::tree( self::outside( $id ) ) );
+		self::assertSame( array( '.htaccess', 'index.php', 'owner.json', 'store.lock', 'web.config' ), self::tree( self::outside( $id ) ), 'The binding was noted under the lock of the place.' );
 		foreach ( AB_MCP_Protected_Store::AREAS as $area ) {
 			self::assertDirectoryExists( self::outside( $id ) . '/' . $area );
 		}
@@ -631,8 +634,7 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Protected_Store::files( 'backups', $gid3 ) );
 	}
 
-	public function testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty(): void {
-		global $wpdb;
+	public function testABoundPlaceStaysWhileItCanBeUsedAlsoWhenItIsEmpty(): void {
 		// The uploads first: the folder beside WordPress is in the web root.
 		$_SERVER['DOCUMENT_ROOT'] = self::root();
 		self::apache( 'a', true );
@@ -644,30 +646,90 @@ final class ProtectedStoreTest extends TestCase {
 		$put     = AB_MCP_Protected_Store::put( 'backups', $backup, 'post-1', 'old content' );
 		$package = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
 
-		// The place beside WordPress could be used now; the uploads keep groups.
+		// The place beside WordPress could be used now; the uploads stay bound.
 		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
 		AB_MCP_Protected_Store::forget();
 		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
 		self::assertSame( $uploads, AB_MCP_Protected_Store::root() );
 		self::assertSame( 'old content', AB_MCP_Protected_Store::get( 'backups', $backup, 'post-1', $put['sha256'] ), 'The backup is found where it was written.' );
 		self::assertSame( array( $package ), array_column( AB_MCP_Protected_Store::groups( 'in' ), 'gid' ), 'The packages are counted where they are.' );
-		self::assertFileDoesNotExist( self::outside( $id ), 'Nothing made beside WordPress while the uploads are bound.' );
 
-		// A booking of a run keeps the place as well.
+		// Also with nothing left in them: a bound place is left only when it
+		// cannot be used.
 		self::assertTrue( AB_MCP_Protected_Store::remove( 'backups', $backup ) );
 		self::assertTrue( AB_MCP_Protected_Store::remove( 'in', $package ) );
-		$wpdb->insert( AB_MCP_Sync_Schema::table( 'runs' ), array( 'run_id' => 5, 'type' => 'push', 'state' => 'open' ) );
-		self::assertIsArray( AB_MCP_Store_Budget::book( 5, 10 ) );
 		AB_MCP_Protected_Store::forget();
 		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		self::assertIsString( AB_MCP_Protected_Store::open( 'reports' ) );
+		self::assertFileDoesNotExist( self::outside( $id ), 'Nothing made beside WordPress while the uploads are bound.' );
+	}
 
-		// Once nothing is kept there, the store moves beside WordPress, and stays.
-		self::assertTrue( AB_MCP_Store_Budget::release( 5 ) );
+	public function testAWriterWhosePlaceIsNoLongerBoundWritesNothing(): void {
+		// This request (the test process) binds the uploads and keeps them.
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( AB_MCP_Test_Sync_Fetcher::for_sites() )['where'] );
+		$id      = AB_MCP_Protected_Store::install_id();
+		$uploads = self::in_uploads( 'a', $id );
+		$backup  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		$tree    = self::tree( $uploads );
+
+		// Another request finds the uploads unusable (a guard file is gone,
+		// and its own self-check through AB_MCP_Outbound cannot ask the local
+		// site) and moves the store beside WordPress.
+		unlink( $uploads . '/web.config' );
+		$other = self::probe( 'a', array( 'action' => 'proof' ) )['ok'];
+		self::assertSame( 'outside', $other['where'] );
+		self::assertSame( array( 'uploads' => 'self_unreachable' ), $other['findings'] );
+
+		// This request still has the uploads in hand: it writes nothing there.
+		$tree = array_values( array_diff( self::tree( $uploads ), array( 'web.config' ) ) );
+		foreach ( array(
+			AB_MCP_Protected_Store::put( 'backups', $backup, 'post-1', 'x' ),
+			AB_MCP_Protected_Store::open( 'reports' ),
+			AB_MCP_Protected_Store::bind( 'backups', $backup, 4 ),
+			AB_MCP_Store_Budget::book( 3, 10 ),
+		) as $i => $res ) {
+			self::assertInstanceOf( \WP_Error::class, $res, "call $i" );
+			self::assertSame( 'ab_mcp_store_moved', $res->get_error_code(), "call $i" );
+		}
+		self::assertSame( $tree, array_values( array_diff( self::tree( $uploads ), array( 'web.config' ) ) ), 'Nothing written in the old place.' );
+
+		// Asked again, it finds the store where it is now.
 		AB_MCP_Protected_Store::forget();
-		self::assertSame( 'outside', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
-		self::assertSame( self::outside( $id ), AB_MCP_Protected_Store::root() );
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		self::assertSame( 'outside', AB_MCP_Protected_Store::proof()['where'] );
+		self::assertIsString( AB_MCP_Protected_Store::open( 'reports' ) );
+	}
+
+	public function testAFailedCheckTakesTheProofBackAlsoForARequestWithoutTheDocumentRoot(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		$id = AB_MCP_Protected_Store::install_id();
+
+		// Within the day the check is made again (a guard is gone) and fails.
+		self::apache( 'a', false );
+		unlink( self::in_uploads( 'a', $id ) . '/web.config' );
 		AB_MCP_Protected_Store::forget();
-		self::assertSame( 'outside', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		$proof = AB_MCP_Protected_Store::proof( $fetcher );
+		self::assertFalse( $proof['available'] );
+		self::assertSame( 'served', $proof['findings']['uploads'] );
+
+		// The youngest finding counts: a request without the document root
+		// does not use the uploads on the proof of before.
+		unset( $_SERVER['DOCUMENT_ROOT'] );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'no_document_root', AB_MCP_Protected_Store::proof()['reason'] );
+
+		// Only a check of a web request that passes gives the proof back.
+		self::apache( 'a', true );
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::assertTrue( AB_MCP_Protected_Store::proof( $fetcher, true )['available'] );
+		unset( $_SERVER['DOCUMENT_ROOT'] );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof()['where'] );
 	}
 
 	public function testABoundPlaceThatCannotBeUsedAnyMoreIsLeft(): void {

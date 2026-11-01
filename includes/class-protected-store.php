@@ -28,9 +28,13 @@
  * The place chosen is bound (the option OPTION_PROOF): the next requests use
  * it while it can be used, so get() and the budgets never look into another
  * folder than the one that holds the groups. Another place is taken only
- * when the bound one cannot be used any more, or when the uploads are bound,
- * nothing is kept in them (no group within its time, no booking) and the
- * place beside WordPress can be used now.
+ * when the bound one cannot be used any more. The binding changes under the
+ * lock of the place bound so far (commit()), and every writer checks under
+ * the lock of its place that the place is still the bound one (writing()):
+ * a request that chose a place before another one moved the store writes
+ * nothing there. The youngest finding counts: a web request that finds the
+ * bound place unusable takes its proof back, so a request without the
+ * document root does not use it either until a web request proves it again.
  *
  * Only a request that knows the document root (the web server sets
  * DOCUMENT_ROOT) chooses the place. A request without it (WP-CLI, a cron job
@@ -488,7 +492,7 @@ final class AB_MCP_Protected_Store {
 			'label'    => $label,
 		);
 		$id     = self::install_id();
-		$result = self::locked(
+		$result = self::writing(
 			$root,
 			static function () use ( $root, $id, $entry ) {
 				self::sweep( $root, $id, time() );
@@ -546,7 +550,7 @@ final class AB_MCP_Protected_Store {
 			return $root;
 		}
 		$id = self::install_id();
-		return self::locked(
+		return self::writing(
 			$root,
 			static function () use ( $root, $id, $area, $gid, $name, $payload ) {
 				$found = self::group( $root, $area, self::group_name( $area, $gid, $id ), $gid );
@@ -700,7 +704,7 @@ final class AB_MCP_Protected_Store {
 			return $root;
 		}
 		$id = self::install_id();
-		return self::locked(
+		return self::writing(
 			$root,
 			static function () use ( $root, $id, $area, $gid, $run_id ) {
 				$found = self::group( $root, $area, self::group_name( $area, $gid, $id ), $gid );
@@ -840,6 +844,31 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * The lock of a folder of the store for a writer: under it, the folder
+	 * must still be the place bound (read from the table, past every cache),
+	 * or nothing is written. A request that chose its place before another
+	 * request moved the store gets the refusal instead of writing where no
+	 * later request looks.
+	 *
+	 * @param string   $root Folder of the store.
+	 * @param callable $fn   What writes.
+	 * @return mixed What $fn returns, or WP_Error.
+	 */
+	public static function writing( $root, callable $fn ) {
+		return self::locked(
+			$root,
+			static function () use ( $root, $fn ) {
+				$id    = self::install_id( false );
+				$where = array_search( $root, self::candidates( $id ), true );
+				if ( false === $where || self::bound_now( $id ) !== $where ) {
+					return new WP_Error( 'ab_mcp_store_moved', 'The protected store is no longer in the place this request chose: another request moved it, because that place could not be used any more. Nothing was written. Call it again.' );
+				}
+				return $fn();
+			}
+		);
+	}
+
+	/**
 	 * Uninstall: the folders of this installation, each only where its
 	 * ownership manifest is this installation's, the parent beside WordPress
 	 * when nothing else is in it, and the daily event. The options go with
@@ -870,7 +899,7 @@ final class AB_MCP_Protected_Store {
 	 * @param bool        $may_renew Whether a foreign folder may renew the id.
 	 * @return array
 	 */
-	private static function decide( $fetcher, $force, $may_renew ) {
+	private static function decide( $fetcher, $force, $may_renew, $again = true ) {
 		$id = self::install_id();
 		if ( '' === $id ) {
 			return self::verdict( null, 'no_id', array() );
@@ -913,22 +942,53 @@ final class AB_MCP_Protected_Store {
 				$detail          = $tried['detail'];
 				continue;
 			}
-			// The bound uploads are left for the place beside WordPress only
-			// while nothing is kept in them.
-			if ( 'uploads' === $where && 'uploads' === $bound && self::empty_place( $paths['uploads'], $id ) ) {
-				$outside = self::try_place( 'outside', $paths, $docroot, $id, $check, $fetcher, $force );
-				if ( 'ok' === $outside['state'] ) {
-					$where = 'outside';
-					$tried = $outside;
-					$found = array();
-				}
+			// The bound place, or another one because the bound one cannot
+			// be used: under the lock of the place bound so far.
+			if ( true !== self::commit( $id, $paths, $bound, $where, $tried['proved'], $check ) ) {
+				return $again ? self::decide( $fetcher, $force, $may_renew, false ) : self::verdict( null, 'moved', $found );
 			}
-			self::store_record( $id, $where, $tried['proved'], $check );
 			return self::verdict( $where, null, $found, $tried['proved'] );
 		}
-		// No place: the binding stays for the next request.
-		self::store_record( $id, $bound, $proved, $check );
+		// No place. The binding stays for the next request, without a proof:
+		// the youngest finding counts, also for a request without the
+		// document root.
+		self::commit( $id, $paths, $bound, $bound, 0, $check );
 		return self::verdict( null, 'none', $found, 0, $detail );
+	}
+
+	/**
+	 * Note a proof and the place it binds, under the lock of the place bound
+	 * so far (its writers wait for it, writing()), or of the new place where
+	 * none is bound or the old one cannot be locked. False where the binding
+	 * in the table is no longer the one this request started from: another
+	 * request moved the store meanwhile.
+	 *
+	 * @param string      $id     Id.
+	 * @param array       $paths  candidates().
+	 * @param string|null $expect The place bound when this request read it.
+	 * @param string|null $bound  The place to bind.
+	 * @param int         $proved When it was proved (0: no proof).
+	 * @param array|null  $check  The last self-check of the uploads.
+	 * @return bool
+	 */
+	private static function commit( $id, array $paths, $expect, $bound, $proved, $check ) {
+		$write = static function () use ( $id, $expect, $bound, $proved, $check ) {
+			if ( self::bound_now( $id ) !== $expect ) {
+				return false;
+			}
+			self::store_record( $id, $bound, $proved, $check );
+			return true;
+		};
+		foreach ( array( $expect, $bound ) as $where ) {
+			if ( null !== $where && isset( $paths[ $where ] ) && self::owns( $paths[ $where ], $id ) ) {
+				$done = self::locked( $paths[ $where ], $write );
+				if ( ! is_wp_error( $done ) ) {
+					return $done;
+				}
+			}
+		}
+		// Neither folder can be locked, so neither has a writer.
+		return $write();
 	}
 
 	/**
@@ -961,30 +1021,6 @@ final class AB_MCP_Protected_Store {
 			);
 		}
 		return self::uploads( $paths['uploads'], $id, $check, $fetcher, $force );
-	}
-
-	/**
-	 * Whether nothing is kept in a folder of the store: no group within its
-	 * time or of a run that is not closed, no booking, and every area a real
-	 * folder (what a linked area holds is not known).
-	 *
-	 * @param string $root Folder.
-	 * @param string $id   Id.
-	 * @return bool
-	 */
-	private static function empty_place( $root, $id ) {
-		$open = AB_MCP_Sync_Schema::open_runs();
-		foreach ( self::AREAS as $area ) {
-			if ( null === self::way( $root, array( $area ) ) ) {
-				return false;
-			}
-			foreach ( self::entries( $root, $id, $area ) as $entry ) {
-				if ( self::kept( $entry, time(), $open ) ) {
-					return false;
-				}
-			}
-		}
-		return array() === AB_MCP_Store_Budget::booked( $root );
 	}
 
 	/**
@@ -1307,6 +1343,9 @@ final class AB_MCP_Protected_Store {
 		if ( 'no_id' === $reason ) {
 			return 'There is no protected store, so nothing is exported, imported or taken over: the id of this installation (the option ab_mcp_install_id) could not be stored. Ask the host to check that the database user of WordPress may write to the options table, then try again.';
 		}
+		if ( 'moved' === $reason ) {
+			return 'There is no protected store in this request, so nothing is exported, imported or taken over: another request moved the store just now. Call it again.';
+		}
 		if ( 'no_document_root' === $reason ) {
 			return 'There is no protected store in this request, so nothing is exported, imported or taken over: the request does not know the document root of the web server, so it cannot check that the folder beside WordPress lies outside the web root, and no proof of a web request of the last 24 hours is there. Call it again over the web, through the MCP endpoint or in wp-admin.';
 		}
@@ -1327,7 +1366,7 @@ final class AB_MCP_Protected_Store {
 	 * @return array{bound:string|null,proved:int,check:array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null}|null
 	 */
 	private static function record( $id ) {
-		$rec = get_option( self::OPTION_PROOF, null );
+		$rec = self::stored_record();
 		if ( ! is_array( $rec ) || ! isset( $rec['id'] ) || $id !== $rec['id'] ) {
 			return null;
 		}
@@ -1346,6 +1385,30 @@ final class AB_MCP_Protected_Store {
 			'proved' => isset( $rec['proved'] ) ? (int) $rec['proved'] : 0,
 			'check'  => $check,
 		);
+	}
+
+	/**
+	 * The place bound now for an id, read from the table past every cache:
+	 * what commit() and writing() decide by.
+	 *
+	 * @param string $id Id.
+	 * @return string|null
+	 */
+	private static function bound_now( $id ) {
+		$rec = self::record( (string) $id );
+		return null === $rec ? null : $rec['bound'];
+	}
+
+	/**
+	 * The stored record as it is in the table (not from the option cache of
+	 * this request, which another request may have changed since).
+	 *
+	 * @return mixed
+	 */
+	private static function stored_record() {
+		global $wpdb;
+		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", self::OPTION_PROOF ) );
+		return null === $value ? null : maybe_unserialize( $value );
 	}
 
 	/**

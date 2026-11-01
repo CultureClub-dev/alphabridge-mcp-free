@@ -6,7 +6,7 @@
  * the check made again after a day and for a missing guard, the atomic
  * write and the read against the hash, a file written once and a package
  * within what it declared (counted from its files too), no link on the way
- * to a file, the bound place, the budgets and their lock, what a run that is
+ * to a file, the bound place and its writers, the budgets and their lock, what a run that is
  * not closed keeps, the booking with free space and test write, a copy's
  * own id, the uninstall of the own folder only; and the shared file
  * functions the undo store uses.
@@ -260,35 +260,26 @@ return array(
 		'file'    => 'includes/class-protected-store.php',
 		'search'  => "\$order  = 'uploads' === \$bound ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );",
 		'replace' => "\$order  = array( 'outside', 'uploads' );",
-		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
-		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+		'run'     => $it( 'testABoundPlaceStaysWhileItCanBeUsedAlsoWhenItIsEmpty' ),
+		'expect'  => '/testABoundPlaceStaysWhileItCanBeUsedAlsoWhenItIsEmpty/',
 	),
 	array(
-		'id'      => 'store/leave-only-empty',
-		'clause'  => 'decide(): bound uploads are left for the place beside WordPress only when nothing is kept in them',
+		'id'      => 'store/writer-checks-binding',
+		'clause'  => 'writing(): under its lock a writer checks that its place is still the bound one',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "if ( 'uploads' === \$where && 'uploads' === \$bound && self::empty_place( \$paths['uploads'], \$id ) ) {",
-		'replace' => "if ( 'uploads' === \$where && 'uploads' === \$bound ) {",
-		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
-		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+		'search'  => 'if ( false === $where || self::bound_now( $id ) !== $where ) {',
+		'replace' => 'if ( false === $where ) {',
+		'run'     => $it( 'testAWriterWhosePlaceIsNoLongerBoundWritesNothing' ),
+		'expect'  => '/testAWriterWhosePlaceIsNoLongerBoundWritesNothing/',
 	),
 	array(
-		'id'      => 'store/empty-groups',
-		'clause'  => 'empty_place(): a group within its time keeps the place',
+		'id'      => 'store/failed-takes-proof-back',
+		'clause'  => 'decide(): a web request that finds no usable place takes the proof of the bound one back',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "\t\t\t\tif ( self::kept( \$entry, time(), \$open ) ) {\n\t\t\t\t\treturn false;",
-		'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;",
-		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
-		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
-	),
-	array(
-		'id'      => 'store/empty-bookings',
-		'clause'  => 'empty_place(): a booking keeps the place',
-		'file'    => 'includes/class-protected-store.php',
-		'search'  => 'return array() === AB_MCP_Store_Budget::booked( $root );',
-		'replace' => 'return true;',
-		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
-		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+		'search'  => 'self::commit( $id, $paths, $bound, $bound, 0, $check );',
+		'replace' => 'self::commit( $id, $paths, $bound, $bound, $proved, $check );',
+		'run'     => $it( 'testAFailedCheckTakesTheProofBackAlsoForARequestWithoutTheDocumentRoot' ),
+		'expect'  => '/testAFailedCheckTakesTheProofBackAlsoForARequestWithoutTheDocumentRoot/',
 	),
 	array(
 		'id'      => 'store/held-counts',
