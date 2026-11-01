@@ -127,7 +127,7 @@ Where a builder shows its own data and the WordPress content is only a copy, as 
 
 = More with Pro =
 
-AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 137 tools on your site:
+AlphaBridge MCP Pro is a separate add-on. Everything in the free plugin plus the Pro tools, 140 tools on your site:
 
 * **Code with a safety net.** Edit theme and plugin files and PHP snippets. After each edit of active PHP code, Pro tests the site and puts the old version back if the test finds a fatal PHP error.
 * **Undo for files and code.** Theme and plugin files, PHP snippets and options come back with one sentence too; undo points expire after 7 days by default, adjustable from 1 to 30 days.
