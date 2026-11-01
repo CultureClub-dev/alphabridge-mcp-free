@@ -54,11 +54,17 @@ $ab_it_held = static function () {
 		return null;
 	}
 	$try = proc_open(
-		array( PHP_BINARY, '-n', '-r', 'exit( ( $h = fopen( $argv[1], "c" ) ) && flock( $h, LOCK_EX | LOCK_NB ) ? 0 : 1 );', $root . '/' . AB_MCP_Protected_Store::LOCK_FILE ),
+		// Exit 0: taken, so not held; 1: it would block, so held; 2: the file
+		// could not be opened or flock() failed otherwise, which proves nothing.
+		array( PHP_BINARY, '-n', '-r', '$h = @fopen( $argv[1], "r" ); if ( ! $h ) { exit( 2 ); } $b = 0; if ( flock( $h, LOCK_EX | LOCK_NB, $b ) ) { exit( 0 ); } exit( 1 === $b ? 1 : 2 );', $root . '/' . AB_MCP_Protected_Store::LOCK_FILE ),
 		array(),
 		$pipes
 	);
-	return is_resource( $try ) ? 1 === proc_close( $try ) : null;
+	if ( ! is_resource( $try ) ) {
+		return null;
+	}
+	$code = proc_close( $try );
+	return 2 === $code ? null : 1 === $code;
 };
 if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
 	$ab_it_sync = $ab_it_in['sync'];
