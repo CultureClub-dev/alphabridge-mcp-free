@@ -1727,6 +1727,9 @@ final class AB_MCP_Protected_Store {
 						if ( $entry['run_id'] > 0 && ( $now - $entry['created'] ) >= self::keep( $area ) ) {
 							++$kept;
 						}
+						// The temp files of writes into it that were cut off
+						// go all the same: held() does not count them.
+						self::drop_group_tmp( $root, $area, $m[1], $now );
 						continue;
 					}
 					self::remove_group( $root, $area, $m[1] );
@@ -1751,14 +1754,37 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * A temp file of an interrupted write, older than TMP_AGE, goes.
+	 * A temp file of an interrupted write, older than TMP_AGE, goes (a link
+	 * is removed itself, by its own time).
 	 *
 	 * @param string $path File.
 	 * @param int    $now  Time.
 	 */
 	private static function drop_old_tmp( $path, $now ) {
-		if ( ( is_file( $path ) || is_link( $path ) ) && ( $now - (int) @filemtime( $path ) ) >= self::TMP_AGE ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false !== $stat && 0040000 !== ( $stat['mode'] & 0170000 ) && ( $now - (int) $stat['mtime'] ) >= self::TMP_AGE ) {
 			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		}
+	}
+
+	/**
+	 * The old temp files in the folder of a group the clean-up keeps, reached
+	 * only through the plain way to it (way()).
+	 *
+	 * @param string $root Folder of the store.
+	 * @param string $area Area.
+	 * @param string $name Name of the group on disk.
+	 * @param int    $now  Time.
+	 */
+	private static function drop_group_tmp( $root, $area, $name, $now ) {
+		$dir = self::way( $root, array( $area, $name ) );
+		if ( null === $dir ) {
+			return;
+		}
+		foreach ( (array) scandir( $dir ) as $file ) {
+			if ( '.tmp' === substr( (string) $file, -4 ) ) {
+				self::drop_old_tmp( $dir . '/' . $file, $now );
+			}
 		}
 	}
 

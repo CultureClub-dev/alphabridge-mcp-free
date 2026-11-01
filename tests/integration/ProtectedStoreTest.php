@@ -973,6 +973,20 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( $tree, self::tree( $uploads ), 'Nothing written.' );
 	}
 
+	public function testTheCleanUpTakesOldTempFilesAlsoOutOfAGroupItKeeps(): void {
+		$id  = AB_MCP_Protected_Store::install_id();
+		$gid = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'backups', $gid, 'post-1', 'kept' ) );
+		$dir = self::group_dir( (string) AB_MCP_Protected_Store::root(), 'backups', $gid, $id );
+		// What a write cut off leaves: its temp file, which held() does not count.
+		file_put_contents( $dir . '/post-2.0a1b2c3d.tmp', 'half a backup' );
+		touch( $dir . '/post-2.0a1b2c3d.tmp', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
+		file_put_contents( $dir . '/post-3.0a1b2c3d.tmp', 'being written now' );
+		AB_MCP_Protected_Store::cleanup();
+		self::assertSame( array( 'post-1', 'post-3.0a1b2c3d.tmp' ), self::tree( $dir ), 'The old temp file went, the group, its file and a fresh temp file stay.' );
+		self::assertSame( array( $gid ), array_column( AB_MCP_Protected_Store::groups( 'backups' ), 'gid' ) );
+	}
+
 	public function testAFileThatWasNotCountedStillCountsAgainstThePackage(): void {
 		$id  = AB_MCP_Protected_Store::install_id();
 		$gid = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
@@ -988,18 +1002,52 @@ final class ProtectedStoreTest extends TestCase {
 
 	/* ------------------------------------------------------------ budgets */
 
+	/**
+	 * Two requests to site A that open a group at once, made to overlap
+	 * between the count and the creation (the sync of the probe): each
+	 * waits after its count until the other has begun and has counted as
+	 * well, or two seconds have passed. Without the lock both count before
+	 * either creates; with it the second waits at the lock. Both must have
+	 * seen the other begin, or the overlap was not there and the case
+	 * proves nothing.
+	 *
+	 * @param string $area   Area.
+	 * @param string $filter The limit read after the count.
+	 * @return string[] The two outcomes, sorted ('ok' or the error code).
+	 */
+	private static function open_at_once( string $area, string $filter ): array {
+		$dir = self::root() . '/run/store-sync-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $dir, 0700 );
+		try {
+			$open = static fn( string $me, string $other ): array => array(
+				'action' => 'open',
+				'area'   => $area,
+				'meta'   => array( 'declared' => 100 ),
+				'sync'   => array(
+					'dir'    => $dir,
+					'me'     => $me,
+					'other'  => $other,
+					'filter' => $filter,
+				),
+			);
+			$both = self::at_once( array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ) );
+		} finally {
+			foreach ( (array) glob( $dir . '/*' ) as $file ) {
+				unlink( (string) $file );
+			}
+			rmdir( $dir );
+		}
+		self::assertSame( array( true, true ), array_column( $both, 'saw' ), 'The two requests overlapped: each saw the other begin.' );
+		$codes = array_map( static fn( $r ) => is_array( $r ) && isset( $r['ok'] ) ? 'ok' : ( $r['error'] ?? 'no answer' ), $both );
+		sort( $codes );
+		return $codes;
+	}
+
 	public function testThreeExportsPerAccountHoldWithTwoRequestsAtOnce(): void {
 		foreach ( array( 1, 2 ) as $n ) {
 			self::assertIsString( AB_MCP_Protected_Store::open( 'out', array( 'declared' => 100, 'label' => 'export-' . $n ) ) );
 		}
-		$delay = array(
-			'filter' => AB_MCP_Store_Budget::FILTER_EXPORTS,
-			'us'     => 1500000,
-		);
-		$open  = array( 'action' => 'open', 'area' => 'out', 'meta' => array( 'declared' => 100 ), 'delay' => $delay );
-		$both  = self::at_once( array( array( 'a', $open ), array( 'a', $open ) ) );
-		$codes = array_map( static fn( $r ) => is_array( $r ) && isset( $r['ok'] ) ? 'ok' : ( $r['error'] ?? 'no answer' ), $both );
-		sort( $codes );
+		$codes = self::open_at_once( 'out', AB_MCP_Store_Budget::FILTER_EXPORTS );
 		self::assertSame( array( 'ab_mcp_store_quota', 'ok' ), $codes, 'Counted under the lock: one passes, the other sees three.' );
 		AB_MCP_Protected_Store::forget();
 		$mine = array_filter( AB_MCP_Protected_Store::groups( 'out' ), static fn( array $g ): bool => self::admin( 'a' ) === $g['user_id'] );
@@ -1010,19 +1058,8 @@ final class ProtectedStoreTest extends TestCase {
 		foreach ( range( 1, 4 ) as $n ) {
 			self::assertIsString( AB_MCP_Protected_Store::open( 'in', array( 'declared' => 100 ) ) );
 		}
-		$open  = array(
-			'action' => 'open',
-			'area'   => 'in',
-			'meta'   => array( 'declared' => 100 ),
-			'delay'  => array(
-				'filter' => AB_MCP_Store_Budget::FILTER_PACKAGES,
-				'us'     => 1500000,
-			),
-		);
-		$both  = self::at_once( array( array( 'a', $open ), array( 'a', $open ) ) );
-		$codes = array_map( static fn( $r ) => is_array( $r ) && isset( $r['ok'] ) ? 'ok' : ( $r['error'] ?? 'no answer' ), $both );
-		sort( $codes );
-		self::assertSame( array( 'ab_mcp_store_quota', 'ok' ), $codes );
+		$codes = self::open_at_once( 'in', AB_MCP_Store_Budget::FILTER_PACKAGES );
+		self::assertSame( array( 'ab_mcp_store_quota', 'ok' ), $codes, 'Counted under the lock: one passes, the other sees five.' );
 		AB_MCP_Protected_Store::forget();
 		self::assertCount( 5, AB_MCP_Protected_Store::groups( 'in' ) );
 		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Protected_Store::open( 'out', array( 'declared' => 1 ) )->get_error_code(), 'Exports and imports together.' );

@@ -7,10 +7,7 @@
  * knows nothing of it.
  *
  * POST, JSON: { action, user, area?, meta?, gid?, name?, payload? (base64),
- * sha256?, now?, delay?: { filter, us } }. delay hooks a filter the store
- * reads under its lock (the limits of AB_MCP_Store_Budget, read after the
- * count) and sleeps there, so that two requests at the same time overlap
- * where only the lock keeps them apart.
+ * sha256?, now?, sync?: { dir, me, other, filter } } (sync: below).
  *
  * Answers JSON: { ok: result } or { error: code, message, data }.
  *
@@ -27,12 +24,36 @@ define( 'WP_USE_THEMES', false );
 require __DIR__ . '/wp-load.php';
 
 wp_set_current_user( isset( $ab_it_in['user'] ) ? (int) $ab_it_in['user'] : 0 );
-if ( ! empty( $ab_it_in['delay']['filter'] ) ) {
-	$ab_it_us = (int) $ab_it_in['delay']['us'];
+
+// Two requests that open a group at the same time, made to overlap where
+// only the store's lock keeps them apart: each hooks the limit the store
+// reads after its count and before it creates (AB_MCP_Store_Budget reads
+// its limits there, as Pro does), notes there that it has counted, and
+// waits until the other request has begun (it notes that right before it
+// calls open()) and then until the other has counted as well, at most
+// SYNC_COUNTED seconds. Without the lock both count before either creates;
+// with it the other waits at the lock, has not counted, and counts after
+// this one created. 'saw' in the answer says the other had begun.
+const AB_IT_SYNC_BEGUN   = 30;
+const AB_IT_SYNC_COUNTED = 2;
+$GLOBALS['ab_it_saw'] = null;
+if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
+	$ab_it_sync = $ab_it_in['sync'];
 	add_filter(
-		(string) $ab_it_in['delay']['filter'],
-		static function ( $value ) use ( $ab_it_us ) {
-			usleep( $ab_it_us );
+		(string) $ab_it_sync['filter'],
+		static function ( $value ) use ( $ab_it_sync ) {
+			$dir = (string) $ab_it_sync['dir'];
+			touch( $dir . '/' . $ab_it_sync['me'] . '-counted' );
+			foreach ( array( 'begun' => AB_IT_SYNC_BEGUN, 'counted' => AB_IT_SYNC_COUNTED ) as $what => $seconds ) {
+				$until = microtime( true ) + $seconds;
+				while ( ! file_exists( $dir . '/' . $ab_it_sync['other'] . '-' . $what ) && microtime( true ) < $until ) {
+					usleep( 10000 );
+					clearstatcache();
+				}
+				if ( 'begun' === $what ) {
+					$GLOBALS['ab_it_saw'] = file_exists( $dir . '/' . $ab_it_sync['other'] . '-begun' );
+				}
+			}
 			return $value;
 		}
 	);
@@ -51,6 +72,12 @@ switch ( (string) $ab_it_in['action'] ) {
 		}
 		break;
 	case 'open':
+		if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
+			// The proof of this request first, so that open() goes straight
+			// to the lock after the note.
+			AB_MCP_Protected_Store::root();
+			touch( $ab_it_in['sync']['dir'] . '/' . $ab_it_in['sync']['me'] . '-begun' );
+		}
 		$ab_it_out = AB_MCP_Protected_Store::open( $ab_it_area, isset( $ab_it_in['meta'] ) ? (array) $ab_it_in['meta'] : array() );
 		break;
 	case 'put':
@@ -78,6 +105,10 @@ echo wp_json_encode(
 			'error'   => $ab_it_out->get_error_code(),
 			'message' => $ab_it_out->get_error_message(),
 			'data'    => $ab_it_out->get_error_data(),
+			'saw'     => $GLOBALS['ab_it_saw'],
 		)
-		: array( 'ok' => $ab_it_out )
+		: array(
+			'ok'  => $ab_it_out,
+			'saw' => $GLOBALS['ab_it_saw'],
+		)
 );

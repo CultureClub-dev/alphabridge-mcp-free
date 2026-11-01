@@ -484,6 +484,15 @@ return array(
 		'expect'  => '/testTheCleanUpKeepsWhatARunThatIsNotClosedHolds/',
 	),
 	array(
+		'id'      => 'store/sweep-group-tmp',
+		'clause'  => 'sweep(): old temp files go also from a group the clean-up keeps',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\t\t\t\t\t\tself::drop_group_tmp( \$root, \$area, \$m[1], \$now );\n",
+		'replace' => "\t\t\t\t\t\t// (no clean-up of temp files)\n",
+		'run'     => $it( 'testTheCleanUpTakesOldTempFilesAlsoOutOfAGroupItKeeps' ),
+		'expect'  => '/testTheCleanUpTakesOldTempFilesAlsoOutOfAGroupItKeeps/',
+	),
+	array(
 		'id'      => 'store/sweep-removes',
 		'clause'  => 'sweep(): a group past its time goes',
 		'file'    => 'includes/class-protected-store.php',
