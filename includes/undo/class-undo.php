@@ -31,6 +31,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Naming, compression and the atomic write and verified read of the snapshot
+// files, shared with the protected store of the takeover (Z8).
+require_once dirname( __DIR__ ) . '/class-payload-file.php';
+
 /**
  * Class AB_MCP_Undo
  */
@@ -1801,7 +1805,7 @@ class AB_MCP_Undo {
 	 * @return string Basename (no directory).
 	 */
 	private static function payload_name( $token ) {
-		return sha1( $token . '|' . wp_salt( 'auth' ) ) . '.bin';
+		return AB_MCP_Payload_File::name( $token, wp_salt( 'auth' ) );
 	}
 
 	/**
@@ -1813,11 +1817,7 @@ class AB_MCP_Undo {
 	 * @return string
 	 */
 	private static function compress( $payload ) {
-		if ( ! function_exists( 'gzencode' ) ) {
-			return $payload;
-		}
-		$blob = gzencode( $payload, 6 );
-		return ( false === $blob ) ? $payload : $blob;
+		return AB_MCP_Payload_File::compress( $payload );
 	}
 
 	/**
@@ -1842,12 +1842,7 @@ class AB_MCP_Undo {
 		// Write to a sibling temp file and rename into place: an interrupted
 		// write must never leave a half-written snapshot that later reads as a
 		// valid-looking file. rename() within one directory is atomic.
-		$tmp = $path . '.' . bin2hex( self::random_bytes( 4 ) ) . '.tmp';
-		if ( false === file_put_contents( $tmp, $blob ) ) { // phpcs:ignore
-			return new WP_Error( 'ab_mcp_undo_write', __( 'Could not store the undo snapshot. The uploads folder must be writable and have free space; the host can check it.', 'alphabridge-mcp' ) );
-		}
-		if ( ! @rename( $tmp, $path ) ) { // phpcs:ignore
-			@unlink( $tmp ); // phpcs:ignore
+		if ( ! AB_MCP_Payload_File::write( $path, $blob ) ) {
 			return new WP_Error( 'ab_mcp_undo_write', __( 'Could not store the undo snapshot. The uploads folder must be writable and have free space; the host can check it.', 'alphabridge-mcp' ) );
 		}
 		// sha256 over the RAW (uncompressed) payload, so a corrupted or truncated
@@ -1878,44 +1873,31 @@ class AB_MCP_Undo {
 		if ( ! is_file( $path ) ) {
 			return new WP_Error( 'ab_mcp_undo_missing', __( 'The undo snapshot file is missing. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 		}
-		// Check the size on disk BEFORE reading: a tampered file must not be
-		// pulled into memory first and rejected afterwards. What record()
-		// writes is never larger than the stored limit; the margin covers
-		// files written before the limit was measured after compression, when
-		// an incompressible snapshot could exceed it by the gzip overhead.
-		$on_disk = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		if ( false === $on_disk || $on_disk > ( self::snapshot_max() + 64 * KB_IN_BYTES ) ) {
-			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot file has an implausible size. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
-		}
-		$blob = file_get_contents( $path ); // phpcs:ignore
-		if ( false === $blob ) {
-			return new WP_Error( 'ab_mcp_undo_read', __( 'Could not read the undo snapshot. Try again; if it keeps failing, wp_undo_discard removes this undo point.', 'alphabridge-mcp' ) );
-		}
-		$raw     = $blob;
-		$raw_max = self::raw_max();
-		if ( function_exists( 'gzdecode' ) && "\x1f\x8b" === substr( $blob, 0, 2 ) ) {
-			// The length cap is passed INTO gzdecode: a crafted stream that
-			// would expand far beyond it fails right here instead of being
-			// inflated in full and measured afterwards. One byte over the cap,
-			// so "exactly at the cap" and "past it" stay apart — without
-			// running past PHP_INT_MAX when a filter sets the cap that high.
-			$decoded = @gzdecode( $blob, ( $raw_max < PHP_INT_MAX ) ? $raw_max + 1 : PHP_INT_MAX ); // phpcs:ignore
-			if ( false !== $decoded ) {
-				$raw = $decoded;
+		// The size on disk is checked BEFORE reading (AB_MCP_Payload_File::read()).
+		// What record() writes is never larger than the stored limit; the
+		// margin covers files written before the limit was measured after
+		// compression, when an incompressible snapshot could exceed it by the
+		// gzip overhead. The raw ceiling bounds the inflation: a snapshot can
+		// never legitimately be larger than the uncompressed cap that was
+		// applied when it was written, and a compressed file that expands
+		// past it is a decompression bomb. The hash is not optional: an entry
+		// without one never passes valid_entry(), so reaching here without a
+		// hash means the caller bypassed the index — refused rather than
+		// trusting the bytes.
+		$raw = AB_MCP_Payload_File::read( $path, $sha, self::snapshot_max() + 64 * KB_IN_BYTES, self::raw_max() );
+		if ( is_wp_error( $raw ) ) {
+			switch ( $raw->get_error_code() ) {
+				case 'missing':
+					return new WP_Error( 'ab_mcp_undo_missing', __( 'The undo snapshot file is missing. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+				case 'size':
+					return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot file has an implausible size. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+				case 'read':
+					return new WP_Error( 'ab_mcp_undo_read', __( 'Could not read the undo snapshot. Try again; if it keeps failing, wp_undo_discard removes this undo point.', 'alphabridge-mcp' ) );
+				case 'large':
+					return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot is larger than any snapshot this plugin writes. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
+				default:
+					return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot failed its integrity check. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 			}
-		}
-		// A snapshot can never legitimately be larger than the uncompressed
-		// cap that was applied when it was written. Anything bigger did not
-		// come from here, and a compressed file that expands past it is a
-		// decompression bomb.
-		if ( strlen( $raw ) > $raw_max ) {
-			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot is larger than any snapshot this plugin writes. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
-		}
-		// The hash is not optional. An entry without one never passes
-		// valid_entry(), so reaching here without a hash means the caller
-		// bypassed the index — refuse rather than trust the bytes.
-		if ( ! preg_match( '/^[0-9a-f]{64}\z/', (string) $sha ) || ! hash_equals( (string) $sha, hash( 'sha256', $raw ) ) ) {
-			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot failed its integrity check. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 		}
 		return $raw;
 	}
@@ -2224,18 +2206,7 @@ class AB_MCP_Undo {
 	 * @return string
 	 */
 	private static function random_bytes( $n ) {
-		if ( function_exists( 'random_bytes' ) ) {
-			try {
-				return random_bytes( $n );
-			} catch ( \Exception $e ) {
-				// fall through
-			}
-		}
-		$out = '';
-		for ( $i = 0; $i < $n; $i++ ) {
-			$out .= chr( wp_rand( 0, 255 ) );
-		}
-		return $out;
+		return AB_MCP_Payload_File::random_bytes( $n );
 	}
 
 	/**

@@ -32,6 +32,8 @@ if ( ! function_exists( 'dbDelta' ) ) {
  */
 final class AbTestSyncWpdb {
 	public $prefix     = 'wp_';
+	/** The options table, which the protected store reads its id from (Z8). */
+	public $options    = 'wp_options';
 	public $last_error = '';
 	public $insert_id  = 0;
 	/** @var string[] Every query, in order. */

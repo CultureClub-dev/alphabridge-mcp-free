@@ -159,9 +159,11 @@ purge)
 	[ -f "$marker" ] || { echo "local: $root has no $(basename "$marker")" >&2; exit 1; }
 	# Only the entries this suite creates are removed, each after checking by
 	# identity (-ef, so no spelling or alias of a path gets past it) that it
-	# holds neither the checkout nor the home directory; the directory itself
+	# holds neither the checkout nor the home directory (ab-mcp-store is the
+	# protected store the plugin of both sites keeps beside their WordPress
+	# folders, ProtectedStoreTest); the directory itself
 	# goes with rmdir, which keeps it, and says so, if anything else is in it.
-	for entry in db run log site-a site-b state.json; do
+	for entry in db run log site-a site-b state.json ab-mcp-store; do
 		[ -e "$root/$entry" ] || [ -L "$root/$entry" ] || continue
 		if holds "$root/$entry" "$repo" || holds "$root/$entry" "$HOME"; then
 			echo "local: will not remove $root/$entry, it holds the checkout or the home directory" >&2

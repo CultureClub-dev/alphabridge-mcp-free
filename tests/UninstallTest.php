@@ -52,6 +52,16 @@ final class UninstallTest extends TestCase {
 		// The user meta of a folded card «Staging» (AB_MCP_Admin::STAGING_CARD_FOLDED,
 		// free since 4.15.0), removed from every user (testTheFoldOfTheStagingCardGoesFromEveryUser).
 		'ab_mcp_staging_card_folded',
+		// The protected store of the takeover (Z8): the WP-Cron event of its
+		// clean-up (AB_MCP_Protected_Store::CRON), cleared on uninstall
+		// (testTheStateOfTheUpdateToolsGoesOnEverySiteAndTheNetwork), and the
+		// filters of its retention and budgets (BACKUP_DAYS_FILTER,
+		// AB_MCP_Store_Budget::FILTER_*).
+		'ab_mcp_store_cleanup',
+		'ab_mcp_staging_backup_days',
+		'ab_mcp_store_max_packages',
+		'ab_mcp_store_max_bytes',
+		'ab_mcp_store_max_exports',
 	);
 
 	public static function setUpBeforeClass(): void {
@@ -292,7 +302,10 @@ final class UninstallTest extends TestCase {
 		}
 		self::assertSame( array( 'akismet/akismet.php' ), $GLOBALS['ab_test_site_options']['auto_update_plugins'], 'WordPress\'s own list stays.' );
 		self::assertFalse( self::stored( \AB_MCP_Change_Lock::OPTION ) );
-		self::assertSame( array( array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 1 ), array( \AB_MCP_Update_Log::RESUME, 2 ) ), $GLOBALS['ab_test_cleared_hooks'], 'The event goes on every site.' );
+		// With the daily clean-up of the protected store (Z8), which goes
+		// before the options of each site.
+		$store = \AB_MCP_Protected_Store::CRON;
+		self::assertSame( array( array( $store, 1 ), array( \AB_MCP_Update_Log::RESUME, 1 ), array( $store, 1 ), array( \AB_MCP_Update_Log::RESUME, 1 ), array( $store, 2 ), array( \AB_MCP_Update_Log::RESUME, 2 ) ), $GLOBALS['ab_test_cleared_hooks'], 'The events go on every site.' );
 	}
 
 	public function testAutomaticUpdatesAlphaBridgeSwitchedOffGoBackOnBeforeTheHoldsGo(): void {

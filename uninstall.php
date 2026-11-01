@@ -59,7 +59,22 @@ $ab_mcp_options = array(
 	'ab_mcp_site_address_journal',
 	// The version of the tables of the takeover (Z8, AB_MCP_Sync_Schema::OPTION).
 	'ab_mcp_staging_db_version',
+	// The protected store of the takeover (Z8): the id of this installation
+	// and the record of the store's last proof
+	// (AB_MCP_Protected_Store::OPTION_ID, ::OPTION_PROOF).
+	'ab_mcp_install_id',
+	'ab_mcp_store_proof',
 );
+
+// The protected store of the takeover (Z8): the folders of this installation
+// (beside the WordPress folder, or in the uploads), each removed only where
+// its ownership manifest is this installation's, so an installation beside
+// this one keeps its folder; and the daily clean-up. Before the options go:
+// the id names the folder.
+require_once __DIR__ . '/includes/class-protected-store.php';
+$ab_mcp_store_files = static function () {
+	AB_MCP_Protected_Store::uninstall();
+};
 
 // The tables of the takeover (Z8): object pairs, runs and their steps
 // (AB_MCP_Sync_Schema::TABLES), of the current site. On a network there are
@@ -140,6 +155,7 @@ if ( defined( 'WPMU_PLUGIN_DIR' ) && is_file( WPMU_PLUGIN_DIR . '/alphabridge-pr
 }
 
 $ab_mcp_preview_blog_public();
+$ab_mcp_store_files();
 foreach ( $ab_mcp_options as $ab_mcp_option ) {
 	delete_option( $ab_mcp_option );
 }
@@ -173,6 +189,7 @@ if ( is_multisite() ) {
 	foreach ( $ab_mcp_sites as $ab_mcp_site_id ) {
 		switch_to_blog( $ab_mcp_site_id );
 		$ab_mcp_preview_blog_public();
+		$ab_mcp_store_files();
 		foreach ( $ab_mcp_options as $ab_mcp_option ) {
 			delete_option( $ab_mcp_option );
 		}
