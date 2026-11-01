@@ -3,8 +3,8 @@
  * The check for credentials before anything is compared or packed (Z8,
  * decision 9 of the plan of 01.11.2026): over the unpacked value of the
  * smallest unit of its own (an option, a meta row, a widget instance),
- * recursively — serialized values, nested arrays, JSON in a text, lists of
- * name and value — by the names AB_MCP_Redactor::redacts_key() redacts
+ * recursively — serialized values, nested arrays, JSON in a text (a JSON
+ * string literal too), lists of name and value — by the names AB_MCP_Redactor::redacts_key() redacts
  * (normalised: accessToken, client-secret and API_KEY alike).
  *
  * The answer per unit:
@@ -13,9 +13,10 @@
  * - mixed: a field inside it is one; the unit locks its object
  *   (*:credential_field), with the paths of those fields (names, never a
  *   value);
- * - unreadable: the value does not unpack (an object, a reference, broken),
- *   so nothing says what it holds; the canonical form locks it already
- *   (*:php_object, *:unreadable_value);
+ * - unreadable: the value does not unpack (an object, a reference, broken,
+ *   nested deeper than MAX_DEPTH or MAX_LAYERS), so nothing says what it
+ *   holds; it locks its object (*:php_object, *:unreadable_value): what is
+ *   not read to its end is never clean;
  * - clean.
  * Values are never looked at, only names: nothing here reads or returns
  * what a credential holds.
@@ -48,7 +49,8 @@ final class AB_MCP_Sync_Credentials {
 	 *                             serialized) or already unpacked.
 	 * @param string[]|null $extra The names a site redacts on top
 	 *                             (AB_MCP_Redactor::extra_keys() when null).
-	 * @return array{state:string,fields:string[]}
+	 * @return array{state:string,fields:string[],why?:string} why, for an
+	 *               unreadable unit: php_object or unreadable_value.
 	 */
 	public static function unit( $name, $value, $extra = null ) {
 		$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();
@@ -59,11 +61,13 @@ final class AB_MCP_Sync_Credentials {
 			);
 		}
 		$fields   = array();
-		$readable = self::walk( $value, '', $extra, $fields, 0, 0 );
+		$why      = 'unreadable_value';
+		$readable = self::walk( $value, '', $extra, $fields, 0, 0, $why );
 		if ( ! $readable ) {
 			return array(
 				'state'  => 'unreadable',
 				'fields' => array(),
+				'why'    => $why,
 			);
 		}
 		return array(
@@ -74,7 +78,8 @@ final class AB_MCP_Sync_Credentials {
 
 	/**
 	 * Note the answer of unit() in an accumulator of AB_MCP_Sync_Canon, and
-	 * lock the object for a mixed unit.
+	 * lock the object for a mixed unit and for one that could not be read to
+	 * its end (fail closed: what is not read is never clean).
 	 *
 	 * @param array  $acc   Accumulator.
 	 * @param string $kind  Kind.
@@ -94,6 +99,9 @@ final class AB_MCP_Sync_Credentials {
 			);
 			AB_MCP_Sync_Canon::lock( $acc, $kind, 'credential_field', $at );
 		}
+		if ( 'unreadable' === $check['state'] ) {
+			AB_MCP_Sync_Canon::lock( $acc, $kind, isset( $check['why'] ) ? $check['why'] : 'unreadable_value', $at );
+		}
 		return true;
 	}
 
@@ -104,24 +112,33 @@ final class AB_MCP_Sync_Credentials {
 	 * @param string[] $fields Paths of credential fields found.
 	 * @param int      $depth  Depth.
 	 * @param int      $layers Texts unpacked above.
+	 * @param string   $why    Set to php_object or unreadable_value when
+	 *                         it could not be read.
 	 * @return bool Whether all of it could be read.
 	 */
-	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers ) {
+	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why ) {
 		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH || $layers > AB_MCP_Sync_Canon::MAX_LAYERS ) {
+			$why = 'unreadable_value';
 			return false;
 		}
 		if ( is_string( $value ) ) {
 			if ( is_serialized( $value ) ) {
 				$read = AB_MCP_Sync_Canon::unserialized( $value );
-				return $read['ok'] && self::walk( $read['value'], $path, $extra, $fields, $depth, $layers + 1 );
+				if ( ! $read['ok'] ) {
+					$why = $read['why'];
+					return false;
+				}
+				return self::walk( $read['value'], $path, $extra, $fields, $depth, $layers + 1, $why );
 			}
 			$json = self::json( $value );
 			if ( false === $json ) {
+				$why = 'unreadable_value';
 				return false;
 			}
-			return null === $json || self::walk( $json, $path, $extra, $fields, $depth, $layers + 1 );
+			return null === $json || self::walk( $json, $path, $extra, $fields, $depth, $layers + 1, $why );
 		}
 		if ( is_object( $value ) ) {
+			$why = 'php_object';
 			return false;
 		}
 		if ( ! is_array( $value ) ) {
@@ -139,7 +156,7 @@ final class AB_MCP_Sync_Credentials {
 				$fields[] = $sub;
 				continue;
 			}
-			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers ) ) {
+			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why ) ) {
 				return false;
 			}
 		}
@@ -147,22 +164,13 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * A text that is a JSON object or list, decoded; null for any other text;
-	 * false for JSON nested deeper than json_decode() reads (it could hide a
-	 * name).
+	 * A text that is JSON, decoded (AB_MCP_Sync_Canon::json_text()); the walk
+	 * goes on in what it returns, within MAX_DEPTH and MAX_LAYERS.
 	 *
 	 * @param string $text Text.
-	 * @return array|null|false
+	 * @return array|string|null|false
 	 */
-	private static function json( $text ) {
-		$trim = ltrim( $text );
-		if ( '' === $trim || ( '{' !== $trim[0] && '[' !== $trim[0] ) ) {
-			return null;
-		}
-		$value = json_decode( $text, true, 512 );
-		if ( JSON_ERROR_DEPTH === json_last_error() ) {
-			return false;
-		}
-		return is_array( $value ) ? $value : null;
+	public static function json( $text ) {
+		return AB_MCP_Sync_Canon::json_text( $text );
 	}
 }

@@ -28,8 +28,9 @@
  * - A key of a stored array that begins with "~" gets one more "~", so no
  *   stored value reads as a marker.
  * - JSON with sorted keys (lists keep their order, a {"~set":[…]} is sorted
- *   by its items), floats as {"~f":"…"}, bytes that are not UTF-8 as
- *   {"~b":"<base64>"}; SHA-256 of that JSON.
+ *   by its items), floats as {"~f":"<the 64 bits as hex>"} (independent of
+ *   serialize_precision), bytes that are not UTF-8 as {"~b":"<base64>"};
+ *   SHA-256 of that JSON.
  * - The version is part of every form: a form of another version never
  *   hashes alike, and version_refusal() refuses to compare it.
  *
@@ -401,6 +402,41 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
+	 * Whether a stored value holds an object, a reference or a record the
+	 * walk of AB_MCP_Replace_Engine::carries_record() does not understand:
+	 * what maybe_unserialize() would turn into an object of any class (and
+	 * so run its __wakeup() or __unserialize()). Such a value never reaches a
+	 * function of WordPress that unserializes it.
+	 *
+	 * @param string|null $raw As stored.
+	 * @return bool
+	 */
+	public static function holds_record( $raw ) {
+		$raw = (string) $raw;
+		return is_serialized( $raw ) && self::engine()->carries_record( trim( $raw ) );
+	}
+
+	/**
+	 * A text that is JSON, decoded: an object or list, or a JSON string
+	 * literal (JSON encoded once more: the text it holds); null for any other
+	 * text; false for JSON nested deeper than json_decode() reads.
+	 *
+	 * @param string $text Text.
+	 * @return array|string|null|false
+	 */
+	public static function json_text( $text ) {
+		$trim = ltrim( (string) $text );
+		if ( '' === $trim || ( '{' !== $trim[0] && '[' !== $trim[0] && '"' !== $trim[0] ) ) {
+			return null;
+		}
+		$value = json_decode( (string) $text, true, 512 );
+		if ( JSON_ERROR_DEPTH === json_last_error() ) {
+			return false;
+		}
+		return is_array( $value ) || is_string( $value ) ? $value : null;
+	}
+
+	/**
 	 * A stored value unpacked, as WordPress reads it (maybe_unserialize()
 	 * without classes), or null with the reason when it cannot be.
 	 *
@@ -573,7 +609,13 @@ final class AB_MCP_Sync_Canon {
 			return 1 === preg_match( '//u', $value ) ? $value : array( '~b' => base64_encode( $value ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- bytes JSON cannot carry.
 		}
 		if ( is_float( $value ) ) {
-			return array( '~f' => var_export( $value, true ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- the shortest exact form of the float.
+			// The 64 bits of the float, not a decimal text: var_export() and
+			// json_encode() write a float by serialize_precision, so two sites
+			// with other settings wrote one value two ways, and a low setting
+			// wrote two values one way. The bits are the value WordPress reads
+			// from the stored text (unserialize() or the JSON of a block)
+			// and writes back, on every site alike.
+			return array( '~f' => bin2hex( pack( 'E', $value ) ) );
 		}
 		if ( ! is_array( $value ) ) {
 			return $value;

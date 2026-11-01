@@ -52,16 +52,23 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	}
 
 	/**
-	 * The canonical form of one object.
+	 * The canonical form of one object: the same (kind, ref) the inventory
+	 * gives it.
 	 *
-	 * @param mixed $object array( 'ref' => ref, 'source' => AB_MCP_Sync_Inventory::source() ).
+	 * @param mixed $object array( 'kind' => pair kind (pair_kinds(); the
+	 *                      kind itself when left out), 'ref' => ref,
+	 *                      'source' => AB_MCP_Sync_Inventory::source() ).
 	 * @return array|WP_Error The result of AB_MCP_Sync_Canon::finish(), with the form.
 	 */
 	public function canonical( $object ) {
 		if ( ! is_array( $object ) || ! isset( $object['ref'], $object['source'] ) || ! is_array( $object['source'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_object_invalid', 'canonical() takes array( \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			return new WP_Error( 'ab_mcp_sync_object_invalid', 'canonical() takes array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
 		}
-		$result = $this->read( (string) $object['ref'], $object['source'] );
+		$pair = isset( $object['kind'] ) ? (string) $object['kind'] : $this->kind();
+		if ( ! in_array( $pair, $this->pair_kinds(), true ) ) {
+			return new WP_Error( 'ab_mcp_sync_object_invalid', sprintf( 'The kind %1$s has no objects of the pair kind %2$s. Use one of %3$s.', $this->kind(), $pair, implode( ', ', $this->pair_kinds() ) ) );
+		}
+		$result = $this->read( (string) $object['ref'], $object['source'], $pair );
 		if ( null === $result ) {
 			return new WP_Error( 'ab_mcp_sync_object_missing', sprintf( 'The %1$s %2$s is not on this site. Use the inventory to see which objects are.', $this->kind(), (string) $object['ref'] ), array( 'ref' => (string) $object['ref'] ) );
 		}
@@ -69,13 +76,25 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	}
 
 	/**
+	 * The pair kinds of this kind's objects: the kind of the inventory
+	 * objects, with one form of ref each that inventory(), canonical() and
+	 * read() understand alike.
+	 *
+	 * @return string[]
+	 */
+	public function pair_kinds() {
+		return array( $this->kind() );
+	}
+
+	/**
 	 * One object, read and canonical.
 	 *
-	 * @param string $ref    Ref.
+	 * @param string $ref    Ref, as the inventory gives it.
 	 * @param array  $source Source.
+	 * @param string $pair   Pair kind (pair_kinds()).
 	 * @return array|WP_Error|null Null when it is not there.
 	 */
-	abstract protected function read( $ref, array $source );
+	abstract protected function read( $ref, array $source, $pair );
 
 	/** {@inheritdoc} */
 	public function export( array $refs ) {
@@ -321,21 +340,26 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	public function inventory( $source, $cursor ) {
 		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		while ( true ) {
 			$ids = AB_MCP_Sync_Rows::post_ids( null, $after, self::PAGE );
 			if ( null === $ids ) {
 				return AB_MCP_Sync_Inventory::unreadable( 'posts' );
 			}
 			foreach ( $ids as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'after' => $after ) );
 				}
 				$after  = $row['ID'];
+				++$seen;
 				$answer = AB_MCP_Sync_Kinds::post_type( $row['post_type'] );
 				if ( 'post' !== $answer['kind'] && ! ( null === $answer['kind'] && 'locked' === $answer['status'] ) ) {
 					continue;
 				}
-				$result = $this->read( (string) $row['ID'], $source );
+				$result = $this->read( (string) $row['ID'], $source, 'post' );
 				if ( is_array( $result ) ) {
 					$objects[] = AB_MCP_Sync_Inventory::entry( $result );
 				}
@@ -347,7 +371,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/** {@inheritdoc} */
-	protected function read( $ref, array $source ) {
+	protected function read( $ref, array $source, $pair ) {
 		$id  = (int) $ref;
 		$row = AB_MCP_Sync_Rows::post( $id );
 		if ( false === $row ) {
@@ -461,16 +485,21 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	public function inventory( $source, $cursor ) {
 		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		while ( true ) {
 			$rows = AB_MCP_Sync_Rows::terms( null, $after, self::PAGE );
 			if ( null === $rows ) {
 				return AB_MCP_Sync_Inventory::unreadable( 'terms' );
 			}
 			foreach ( $rows as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'after' => $after ) );
 				}
 				$after  = (int) $row['term_taxonomy_id'];
+				++$seen;
 				$answer = AB_MCP_Sync_Kinds::taxonomy( $row['taxonomy'] );
 				if ( 'term' !== $answer['kind'] && ! ( null === $answer['kind'] && 'locked' === $answer['status'] ) ) {
 					continue;
@@ -484,7 +513,7 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/** {@inheritdoc} */
-	protected function read( $ref, array $source ) {
+	protected function read( $ref, array $source, $pair ) {
 		$row = self::term_row( (int) $ref );
 		if ( false === $row ) {
 			return null;
@@ -605,6 +634,11 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		return array( 'post_type:nav_menu_item', 'taxonomy:nav_menu', 'theme_mod:nav_menu_locations' );
 	}
 
+	/** @return string[] A menu (ref: its term id) and a menu item (ref: its post id). */
+	public function pair_kinds() {
+		return array( 'menu', 'menu_item' );
+	}
+
 	/**
 	 * The menus, then their items.
 	 *
@@ -616,16 +650,21 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		$part    = is_array( $cursor ) && isset( $cursor['part'] ) && 'items' === $cursor['part'] ? 'items' : 'menus';
 		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		while ( 'menus' === $part ) {
 			$rows = AB_MCP_Sync_Rows::terms( array( 'nav_menu' ), $after, self::PAGE );
 			if ( null === $rows ) {
 				return AB_MCP_Sync_Inventory::unreadable( 'terms' );
 			}
 			foreach ( $rows as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'part' => 'menus', 'after' => $after ) );
 				}
 				$after     = (int) $row['term_taxonomy_id'];
+				++$seen;
 				$objects[] = AB_MCP_Sync_Inventory::entry( $this->form( $row, $source ) );
 			}
 			if ( count( $rows ) < self::PAGE ) {
@@ -639,10 +678,11 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				return AB_MCP_Sync_Inventory::unreadable( 'posts' );
 			}
 			foreach ( $ids as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'part' => 'items', 'after' => $after ) );
 				}
 				$after  = $row['ID'];
+				++$seen;
 				$result = $this->item( $row['ID'], $source );
 				if ( is_array( $result ) ) {
 					$objects[] = AB_MCP_Sync_Inventory::entry( $result );
@@ -655,15 +695,16 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 	}
 
 	/**
-	 * A menu by its term id, or an item by 'item:<post id>'.
+	 * A menu by its term id, or (pair kind menu_item) an item by its post id.
 	 *
 	 * @param string $ref    Ref.
 	 * @param array  $source Source.
+	 * @param string $pair   menu or menu_item.
 	 * @return array|null
 	 */
-	protected function read( $ref, array $source ) {
-		if ( 0 === strpos( (string) $ref, 'item:' ) ) {
-			return $this->item( (int) substr( (string) $ref, 5 ), $source );
+	protected function read( $ref, array $source, $pair ) {
+		if ( 'menu_item' === $pair ) {
+			return $this->item( (int) $ref, $source );
 		}
 		$row = AB_MCP_Sync_Rows::term( (int) $ref, 'nav_menu' );
 		if ( false === $row ) {
@@ -718,7 +759,7 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		$ctx  = $source['ctx'];
 		$meta = AB_MCP_Sync_Rows::meta( 'post', (int) $id );
 		$tax  = AB_MCP_Sync_Rows::object_terms( (int) $id );
-		$ref  = 'item:' . (int) $id;
+		$ref  = (string) (int) $id;
 		if ( null === $row || null === $meta || null === $tax ) {
 			$acc['unread'][] = 'menu_item';
 			return AB_MCP_Sync_Canon::finish( 'menu_item', $ref, array(), array(), $acc );
@@ -845,20 +886,25 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 			return 'array_version' !== $k;
 		} ) );
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		foreach ( $names as $i => $name ) {
 			if ( $i < $done ) {
 				continue;
 			}
-			if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+			if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 				return array( 'objects' => $objects, 'cursor' => array( 'after' => $i ) );
 			}
-			$objects[] = AB_MCP_Sync_Inventory::entry( $this->read( (string) $name, $source ) );
+			$objects[] = AB_MCP_Sync_Inventory::entry( $this->read( (string) $name, $source, 'widget_area' ) );
+			++$seen;
 		}
 		return array( 'objects' => $objects, 'cursor' => null );
 	}
 
 	/** {@inheritdoc} */
-	protected function read( $ref, array $source ) {
+	protected function read( $ref, array $source, $pair ) {
 		$acc   = AB_MCP_Sync_Canon::acc();
 		$ctx   = $source['ctx'];
 		$areas = self::option_array( 'sidebars_widgets' );
@@ -971,17 +1017,22 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 	public function inventory( $source, $cursor ) {
 		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		while ( true ) {
 			$ids = AB_MCP_Sync_Rows::post_ids( array( 'custom_css' ), $after, self::PAGE );
 			if ( null === $ids ) {
 				return AB_MCP_Sync_Inventory::unreadable( 'posts' );
 			}
 			foreach ( $ids as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'after' => $after ) );
 				}
 				$after  = $row['ID'];
-				$result = $this->read( 'post:' . $row['ID'], $source );
+				++$seen;
+				$result = $this->post_form( (int) $row['ID'], $source );
 				if ( is_array( $result ) ) {
 					$objects[] = AB_MCP_Sync_Inventory::entry( $result );
 				}
@@ -993,15 +1044,44 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
-	 * The CSS of a post ('post:<id>'), its ref the stylesheet when the theme
-	 * mods of that stylesheet name the post, '<stylesheet>@<id>' when not.
+	 * The CSS by its ref: the stylesheet, for the post the theme mods of that
+	 * stylesheet name (custom_css_post_id); '<stylesheet>@<id>' for a CSS post
+	 * of that stylesheet they do not name.
 	 *
 	 * @param string $ref    Ref.
 	 * @param array  $source Source.
+	 * @param string $pair   custom_css.
 	 * @return array|null
 	 */
-	protected function read( $ref, array $source ) {
-		$id  = 0 === strpos( (string) $ref, 'post:' ) ? (int) substr( (string) $ref, 5 ) : 0;
+	protected function read( $ref, array $source, $pair ) {
+		$ref = (string) $ref;
+		$at  = strrpos( $ref, '@' );
+		if ( false !== $at && preg_match( '/^\d+\z/', substr( $ref, $at + 1 ) ) ) {
+			$id     = (int) substr( $ref, $at + 1 );
+			$result = $this->post_form( $id, $source );
+		} else {
+			$mods = self::option_array( 'theme_mods_' . $ref );
+			if ( null === $mods ) {
+				$acc             = AB_MCP_Sync_Canon::acc();
+				$acc['unread'][] = 'theme_mods';
+				return AB_MCP_Sync_Canon::finish( 'custom_css', $ref, array(), array(), $acc );
+			}
+			$id     = isset( $mods['custom_css_post_id'] ) ? (int) $mods['custom_css_post_id'] : 0;
+			$result = $id > 0 ? $this->post_form( $id, $source ) : null;
+		}
+		// The ref names the object only as the inventory names it now.
+		return is_array( $result ) && $result['ref'] === $ref ? $result : null;
+	}
+
+	/**
+	 * The CSS of a custom_css post, with its ref.
+	 *
+	 * @param int   $id     Post id.
+	 * @param array $source Source.
+	 * @return array|null
+	 */
+	private function post_form( $id, array $source ) {
+		$id  = (int) $id;
 		$row = $id > 0 ? AB_MCP_Sync_Rows::post( $id ) : false;
 		if ( false === $row || ( is_array( $row ) && 'custom_css' !== $row['post_type'] ) ) {
 			return null;
@@ -1009,7 +1089,7 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 		$acc = AB_MCP_Sync_Canon::acc();
 		if ( null === $row ) {
 			$acc['unread'][] = 'posts';
-			return AB_MCP_Sync_Canon::finish( 'custom_css', (string) $ref, array(), array(), $acc );
+			return AB_MCP_Sync_Canon::finish( 'custom_css', '@' . $id, array(), array(), $acc );
 		}
 		$mods = self::option_array( 'theme_mods_' . $row['post_name'] );
 		if ( null === $mods ) {
@@ -1054,6 +1134,17 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
+	 * An option (ref: its name) and a key of theme mods no kind takes over
+	 * (ref: '<stylesheet>/<key>'; '<stylesheet>' for a row of theme mods that
+	 * does not unpack). A stylesheet is a folder name and holds no "/".
+	 *
+	 * @return string[]
+	 */
+	public function pair_kinds() {
+		return array( 'option', 'theme_mod' );
+	}
+
+	/**
 	 * Every option row but group B and those of the widget kind.
 	 *
 	 * @param mixed      $source AB_MCP_Sync_Inventory::source().
@@ -1063,16 +1154,21 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	public function inventory( $source, $cursor ) {
 		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
 		$objects = array();
+		// Rows read in this call: the budget is asked after each, whether
+		// it gave an object or not, so a long run of rows no object comes
+		// from ends in time as well, and the cursor goes on past them.
+		$seen    = 0;
 		while ( true ) {
 			$rows = AB_MCP_Sync_Rows::options( $after, self::PAGE );
 			if ( null === $rows ) {
 				return AB_MCP_Sync_Inventory::unreadable( 'options' );
 			}
 			foreach ( $rows as $row ) {
-				if ( array() !== $objects && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
 					return array( 'objects' => $objects, 'cursor' => array( 'after' => $after ) );
 				}
 				$after = $row['option_id'];
+				++$seen;
 				foreach ( $this->entries( $row, $source ) as $entry ) {
 					$objects[] = $entry;
 				}
@@ -1084,7 +1180,10 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/** {@inheritdoc} */
-	protected function read( $ref, array $source ) {
+	protected function read( $ref, array $source, $pair ) {
+		if ( 'theme_mod' === $pair ) {
+			return $this->theme_mod( (string) $ref, $source );
+		}
 		$row = AB_MCP_Sync_Rows::option( (string) $ref );
 		if ( false === $row ) {
 			return null;
@@ -1094,7 +1193,7 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 			$acc['unread'][] = 'options';
 			return AB_MCP_Sync_Canon::finish( 'option', (string) $ref, array( 'name' => (string) $ref ), array(), $acc );
 		}
-		$class = AB_MCP_Sync_Option_Schema::classify( (string) $ref );
+		$class = AB_MCP_Sync_Option_Schema::classify( (string) $ref, $row['value'] );
 		// A row of another kind (widgets) or of fields (theme mods) is not
 		// one object of this kind.
 		if ( 'owner' === $class['status'] && ( 'fields' === $class['owner']['status'] || ( null !== $class['owner']['kind'] && 'z8' === $class['owner']['status'] ) ) ) {
@@ -1112,14 +1211,18 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	 * @return array[]
 	 */
 	protected function entries( array $row, array $source ) {
-		$class = AB_MCP_Sync_Option_Schema::classify( $row['name'] );
+		$class = AB_MCP_Sync_Option_Schema::classify( $row['name'], $row['value'] );
 		if ( 'excluded' === $class['status'] ) {
 			return array();
 		}
 		if ( 'owner' === $class['status'] ) {
 			$owner = $class['owner'];
 			if ( 'fields' === $owner['status'] ) {
-				return $this->theme_mods( $row, $source );
+				$out = array();
+				foreach ( $this->theme_mods( $row, $source ) as $result ) {
+					$out[] = null === $result['hash'] ? $result : AB_MCP_Sync_Inventory::entry( $result );
+				}
+				return $out;
 			}
 			if ( null !== $owner['kind'] && 'z8' === $owner['status'] ) {
 				return array();
@@ -1169,21 +1272,23 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
-	 * One entry per key of a theme mods row that no kind takes over (locked
-	 * Z8d; the positions and the CSS post belong to menu and custom_css).
+	 * One result per key of a theme mods row that no kind takes over (locked
+	 * Z8d; the positions and the CSS post belong to menu and custom_css), of
+	 * the pair kind theme_mod, with its form.
 	 *
 	 * @param array $row    Row.
 	 * @param array $source Source.
 	 * @return array[]
 	 */
 	protected function theme_mods( array $row, array $source ) {
-		$acc  = AB_MCP_Sync_Canon::acc();
-		$read = AB_MCP_Sync_Canon::unserialized( $row['value'] );
+		$stylesheet = substr( (string) $row['name'], strlen( 'theme_mods_' ) );
+		$acc        = AB_MCP_Sync_Canon::acc();
+		$read       = AB_MCP_Sync_Canon::unserialized( $row['value'] );
 		if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-			AB_MCP_Sync_Canon::lock( $acc, 'option', $read['ok'] ? 'unreadable_value' : $read['why'], 'option' );
-			$result           = AB_MCP_Sync_Canon::finish( 'option', $row['name'], array( 'name' => $row['name'] ), array( 'name' => $row['name'], 'value' => AB_MCP_Sync_Canon::text( $row['value'], $source['ctx'] ) ), $acc );
+			AB_MCP_Sync_Canon::lock( $acc, 'option', $read['ok'] ? 'unreadable_value' : $read['why'], 'theme_mods' );
+			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $stylesheet, array( 'name' => $row['name'] ), array( 'name' => $row['name'], 'value' => AB_MCP_Sync_Canon::text( $row['value'], $source['ctx'] ) ), $acc );
 			$result['status'] = 'locked';
-			return array( AB_MCP_Sync_Inventory::entry( $result ) );
+			return array( $result );
 		}
 		$out = array();
 		foreach ( $read['value'] as $key => $value ) {
@@ -1192,7 +1297,7 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 				continue;
 			}
 			$acc            = AB_MCP_Sync_Canon::acc();
-			$ref            = $row['name'] . ':' . $key;
+			$ref            = $stylesheet . '/' . $key;
 			$acc['locks'][] = array(
 				'key'    => $answer['key'],
 				'stage'  => $answer['stage'],
@@ -1200,14 +1305,41 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 				'at'     => 'theme_mod',
 			);
 			if ( ! AB_MCP_Sync_Credentials::note( $acc, 'option', 'theme_mod:' . $key, AB_MCP_Sync_Credentials::unit( (string) $key, $value ) ) ) {
-				$out[] = $this->bare( $ref, array( 'status' => 'b9', 'key' => $answer['key'], 'stage' => null, 'reason' => null ) );
+				$out[] = array( 'kind' => 'theme_mod' ) + $this->bare( $ref, array( 'status' => 'b9', 'key' => $answer['key'], 'stage' => null, 'reason' => null ) );
 				continue;
 			}
-			$result           = AB_MCP_Sync_Canon::finish( 'option', $ref, array( 'name' => $row['name'], 'theme_mod' => (string) $key ), array( 'name' => $row['name'], 'theme_mod' => (string) $key, 'value' => AB_MCP_Sync_Canon::structure( $value, $source['ctx'], $acc, 'option', 'theme_mod:' . $key ) ), $acc );
+			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $ref, array( 'name' => $row['name'], 'theme_mod' => (string) $key ), array( 'name' => $row['name'], 'theme_mod' => (string) $key, 'value' => AB_MCP_Sync_Canon::structure( $value, $source['ctx'], $acc, 'option', 'theme_mod:' . $key ) ), $acc );
 			$result['status'] = 'locked';
-			$out[]            = AB_MCP_Sync_Inventory::entry( $result );
+			$out[]            = $result;
 		}
 		return $out;
+	}
+
+	/**
+	 * One key of theme mods by its ref, as theme_mods() lists it.
+	 *
+	 * @param string $ref    '<stylesheet>/<key>' or '<stylesheet>'.
+	 * @param array  $source Source.
+	 * @return array|null
+	 */
+	protected function theme_mod( $ref, array $source ) {
+		$slash      = strpos( $ref, '/' );
+		$stylesheet = false === $slash ? $ref : substr( $ref, 0, $slash );
+		$row        = AB_MCP_Sync_Rows::option( 'theme_mods_' . $stylesheet );
+		if ( false === $row || '' === $stylesheet ) {
+			return null;
+		}
+		if ( null === $row ) {
+			$acc             = AB_MCP_Sync_Canon::acc();
+			$acc['unread'][] = 'options';
+			return AB_MCP_Sync_Canon::finish( 'theme_mod', $ref, array(), array(), $acc );
+		}
+		foreach ( $this->theme_mods( array( 'name' => 'theme_mods_' . $stylesheet, 'value' => $row['value'] ), $source ) as $result ) {
+			if ( $result['ref'] === $ref ) {
+				return $result;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -1264,6 +1396,26 @@ final class AB_MCP_Sync_Db_Kinds {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * The kind whose objects are of a pair kind (an object of the inventory
+	 * names its pair kind as 'kind').
+	 *
+	 * @param string $pair Pair kind.
+	 * @return AB_MCP_Sync_Db_Kind|null
+	 */
+	public static function for_pair( $pair ) {
+		$kinds = self::all();
+		if ( is_wp_error( $kinds ) ) {
+			return null;
+		}
+		foreach ( $kinds as $kind ) {
+			if ( in_array( (string) $pair, $kind->pair_kinds(), true ) ) {
+				return $kind;
+			}
+		}
+		return null;
 	}
 
 	/**

@@ -197,6 +197,29 @@ final class SyncMediaListTest extends TestCase {
 		self::assertSame( 'unsafe', $list['problems'][0]['problem'] );
 	}
 
+	public function testTheReverseMapGoesOnPastAPageTheReaderCuts(): void {
+		global $wpdb;
+		$rows = array();
+		for ( $i = 0; $i < 501; $i++ ) {
+			$rows[] = $wpdb->prepare( "('attachment', 'inherit', %s, '', '', '', '', '')", "seite-$i" );
+		}
+		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_type, post_status, post_title, post_content, post_excerpt, to_ping, pinged, post_content_filtered) VALUES " . implode( ', ', $rows ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$ids  = array_map( 'intval', $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' ORDER BY ID" ) );
+		$meta = array();
+		foreach ( $ids as $id ) {
+			$meta[] = $wpdb->prepare( "(%d, '_wp_attached_file', %s)", $id, "2026/11/seite-$id.jpg" );
+		}
+		$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES " . implode( ', ', $meta ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		self::assertCount( 501, $ids );
+
+		$first = AB_MCP_Sync_Media::reverse( 0, 1000 );
+		self::assertCount( 500, $first['paths'], 'A page of the reader holds at most 500.' );
+		self::assertNotNull( $first['cursor'], 'A full page of the reader is no end, whatever was asked.' );
+		$second = AB_MCP_Sync_Media::reverse( (int) $first['cursor'], 1000 );
+		self::assertCount( 1, $second['paths'] );
+		self::assertNull( $second['cursor'] );
+	}
+
 	public function testAPathTwoAttachmentsNameLocksBoth(): void {
 		$first  = $this->image( 'kanon-geteilt' );
 		$second = $this->image( 'kanon-zwei' );

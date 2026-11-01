@@ -46,6 +46,9 @@ final class SyncCredentialsTest extends TestCase {
 			'an object'                     => array( 'acme', 'O:8:"stdClass":1:{s:5:"token";s:1:"y";}', 'unreadable', array() ),
 			'a broken value'                => array( 'acme', 'a:1:{i:0;i:1;i:1;i:2;}', 'unreadable', array() ),
 			'an int key'                    => array( 'acme', serialize( array( 0 => 'x' ) ), 'clean', array() ),
+			'a JSON string literal'         => array( 'acme', json_encode( json_encode( array( 'api_key' => 'y' ) ) ), 'mixed', array( 'api_key' ) ),
+			'JSON literal in serialized'    => array( 'acme', serialize( array( 'raw' => json_encode( json_encode( array( 'nested' => array( 'clientSecret' => 'y' ) ) ) ) ) ), 'mixed', array( 'raw.nested.clientSecret' ) ),
+			'a plain JSON string literal'   => array( 'acme', '"nur Text"', 'clean', array() ),
 		);
 	}
 
@@ -60,6 +63,26 @@ final class SyncCredentialsTest extends TestCase {
 	public function testTooDeepJsonIsUnreadable(): void {
 		$json = str_repeat( '[', 600 ) . str_repeat( ']', 600 );
 		self::assertSame( 'unreadable', AB_MCP_Sync_Credentials::unit( 'acme', $json )['state'] );
+	}
+
+	public function testWhatIsNotReadToItsEndLocksAndIsNeverClean(): void {
+		// 66 nested arrays, the name of a credential at the bottom: deeper
+		// than the walk reads (MAX_DEPTH 64), within what json_decode() reads.
+		$deep = '{"api_key":"y"}';
+		for ( $i = 0; $i < 66; $i++ ) {
+			$deep = '[' . $deep . ']';
+		}
+		self::assertIsArray( json_decode( $deep, true ) );
+		$check = AB_MCP_Sync_Credentials::unit( 'acme', $deep );
+		self::assertSame( 'unreadable', $check['state'] );
+		$acc = AB_MCP_Sync_Canon::acc();
+		self::assertTrue( AB_MCP_Sync_Credentials::note( $acc, 'post', 'meta:acme', $check ) );
+		self::assertSame( array( '*:unreadable_value' ), array_column( $acc['locks'], 'key' ) );
+		self::assertSame( 'meta:acme', $acc['locks'][0]['at'] );
+
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Credentials::note( $acc, 'post', 'meta:obj', AB_MCP_Sync_Credentials::unit( 'obj', 'O:8:"stdClass":1:{s:5:"token";s:1:"y";}' ) );
+		self::assertSame( array( '*:php_object' ), array_column( $acc['locks'], 'key' ), 'An object locks as one.' );
 	}
 
 	public function testANameASiteRedactsOnTopCounts(): void {

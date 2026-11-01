@@ -7,10 +7,14 @@
  * (includes/builders/signatures.php), Z8c widens the list.
  *
  * detect_all() is asked with the post as its row holds it (not as
- * get_post() filters it). Its markers in meta go through get_post_meta(),
- * which a filter can change; so the same markers are asked of the stored
- * meta rows as well (stored_markers()), and either answer locks. Nothing a
- * filter does can take a lock away, only add one.
+ * get_post() filters it), and only for a post whose stored meta rows hold
+ * no object: its markers in meta go through get_post_meta(), whose
+ * maybe_unserialize() makes an object of any class it finds (and runs its
+ * __wakeup()). A post with such a row is locked (*:php_object) without
+ * asking detect_all(). The markers are asked of the stored meta rows as well
+ * (stored_markers(), unpacked without classes), since a filter can change
+ * what get_post_meta() reads; either answer locks. Nothing a filter does can
+ * take a lock away, only add one.
  *
  * @package AlphaBridge_MCP
  */
@@ -37,7 +41,7 @@ final class AB_MCP_Sync_Builder_Lock {
 	 */
 	public static function locked( array $row, array $meta ) {
 		$out = array();
-		foreach ( AB_MCP_Builders::detect_all( self::post( $row ) ) as $found ) {
+		foreach ( self::checkable( $meta ) ? AB_MCP_Builders::detect_all( self::post( $row ) ) : array() as $found ) {
 			if ( ! in_array( (string) $found['id'], self::RELEASED, true ) ) {
 				$out[ (string) $found['id'] ] = array(
 					'id'          => (string) $found['id'],
@@ -68,11 +72,30 @@ final class AB_MCP_Sync_Builder_Lock {
 	 * @return array The builders.
 	 */
 	public static function note( array &$acc, array $row, array $meta ) {
+		if ( ! self::checkable( $meta ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, 'post', 'php_object', 'builder' );
+		}
 		$builders = self::locked( $row, $meta );
 		foreach ( $builders as $builder ) {
 			AB_MCP_Sync_Canon::lock( $acc, 'post', 'builder', 'builder:' . $builder['id'] );
 		}
 		return $builders;
+	}
+
+	/**
+	 * Whether detect_all() may read the meta of a post: no stored row holds
+	 * an object, a reference or a record (AB_MCP_Sync_Canon::holds_record()).
+	 *
+	 * @param array $meta Meta rows.
+	 * @return bool
+	 */
+	public static function checkable( array $meta ) {
+		foreach ( $meta as $row ) {
+			if ( AB_MCP_Sync_Canon::holds_record( $row['value'] ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

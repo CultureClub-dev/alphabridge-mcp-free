@@ -75,9 +75,10 @@ final class UninstallTest extends TestCase {
 		// an option declared in a class no other test loads must count too.
 		$root = dirname( __DIR__ );
 		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ), glob( $root . '/includes/lifecycle/*.php' ), glob( $root . '/includes/sync/*.php' ) ) as $file ) {
-			// The upgraders extend WordPress's, loaded only with them; they
-			// declare no option.
-			if ( 'class-update-upgraders.php' === basename( $file ) ) {
+			// The upgraders extend WordPress's, loaded only with them, and so
+			// does the reader of HTML of the takeover (WP_HTML_Tag_Processor);
+			// they declare no option.
+			if ( in_array( basename( $file ), array( 'class-update-upgraders.php', 'class-sync-html.php' ), true ) ) {
 				continue;
 			}
 			require_once $file;

@@ -239,11 +239,12 @@ final class AB_MCP_Sync_Media {
 	 * attachments of this site.
 	 *
 	 * @param int $after Attachment id the page before ended with.
-	 * @param int $limit Attachments at most.
+	 * @param int $limit Attachments at most (AB_MCP_Sync_Rows::page_size()).
 	 * @return array{paths:array<string,int[]>,cursor:int|null}|null
 	 */
 	public static function reverse( $after, $limit ) {
-		$ids = AB_MCP_Sync_Rows::post_ids( array( 'attachment' ), (int) $after, (int) $limit );
+		$limit = AB_MCP_Sync_Rows::page_size( $limit );
+		$ids   = AB_MCP_Sync_Rows::post_ids( array( 'attachment' ), (int) $after, $limit );
 		if ( null === $ids ) {
 			return null;
 		}
@@ -270,7 +271,7 @@ final class AB_MCP_Sync_Media {
 		}
 		return array(
 			'paths'  => $paths,
-			'cursor' => count( $ids ) < max( 1, (int) $limit ) ? null : $last,
+			'cursor' => count( $ids ) < $limit ? null : $last,
 		);
 	}
 

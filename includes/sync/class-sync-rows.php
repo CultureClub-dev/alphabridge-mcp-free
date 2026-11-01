@@ -393,10 +393,22 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * The rows a page of the inventory readers really holds at most for an
+	 * asked limit: a caller that ends its cursor on a short page compares
+	 * with this, not with what it asked.
+	 *
 	 * @param int $limit Asked.
 	 * @return int Between 1 and MAX_PAGE.
 	 */
-	private static function limit( $limit ) {
+	public static function page_size( $limit ) {
 		return max( 1, min( self::MAX_PAGE, (int) $limit ) );
+	}
+
+	/**
+	 * @param int $limit Asked.
+	 * @return int page_size().
+	 */
+	private static function limit( $limit ) {
+		return self::page_size( $limit );
 	}
 }
