@@ -83,6 +83,8 @@ final class SyncSafeCallsTest extends TestCase {
 		'->set_bookmark'                       => 'WP_HTML_Tag_Processor.',
 		'->release_bookmark'                   => 'WP_HTML_Tag_Processor.',
 		'->get_updated_html'                   => 'WP_HTML_Tag_Processor.',
+		'->get_tag'                            => 'WP_HTML_Tag_Processor.',
+		'->get_attribute_names_with_prefix'    => 'WP_HTML_Tag_Processor.',
 		'->parse'                              => 'WP_Block_Parser: parses the text it is given.',
 		'->get_error_code'                     => 'WP_Error.',
 		'->get_error_message'                  => 'WP_Error.',

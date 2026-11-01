@@ -38,7 +38,7 @@ final class SyncHtmlRefsTest extends TestCase {
 	public static function schemas(): array {
 		return array(
 			'core/image id and class'      => array( '<!-- wp:image {"id":12} --><figure><img class="wp-image-12"/></figure><!-- /wp:image -->', array( 'post:12@c:core/image.id', 'post:12@c:core/image:html:class' ) ),
-			'core/gallery ids, data-id'    => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery.ids.0', 'post:12@c:core/gallery:html:class', 'post:12@c:core/gallery:html:data_id', 'post:13@c:core/gallery.ids.1' ) ),
+			'core/gallery ids, data-id'    => array( '<!-- wp:gallery {"ids":[12,13]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery.ids.0', 'post:12@c:core/gallery:html:class', 'post:12@c:core/gallery:html:data_id', 'post:13@c:core/gallery.ids.1' ) ),
 			'core/cover'                   => array( '<!-- wp:cover {"id":7} --><div><img class="wp-block-cover__image-background wp-image-7"/></div><!-- /wp:cover -->', array( 'post:7@c:core/cover.id', 'post:7@c:core/cover:html:class' ) ),
 			'core/media-text'              => array( '<!-- wp:media-text {"mediaId":8} --><div><img class="wp-image-8 size-full"/></div><!-- /wp:media-text -->', array( 'post:8@c:core/media-text.mediaId', 'post:8@c:core/media-text:html:class' ) ),
 			'caption with its image'       => array( '[caption id="attachment_15" width="300"]<img class="wp-image-15"/> Text[/caption]', array( 'post:15@c:html:html:class', 'post:15@c:html:shortcode:caption.id' ) ),
@@ -78,7 +78,7 @@ final class SyncHtmlRefsTest extends TestCase {
 	public static function rewrites(): array {
 		return array(
 			'image'    => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" class="wp-image-12"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg" class="wp-image-120"/></figure><!-- /wp:image -->' ),
-			'gallery'  => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img data-id="120" class="wp-image-120"/></figure><!-- /wp:gallery -->' ),
+			'gallery'  => array( '<!-- wp:gallery {"ids":[12,13]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,130]} --><figure><img data-id="120" class="wp-image-120"/></figure><!-- /wp:gallery -->' ),
 			'caption'  => array( '[caption id="attachment_12"]<img class="alignnone wp-image-12 size-full"/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img class="alignnone wp-image-120 size-full"/>[/caption] [gallery ids="120,130"]' ),
 			'freeform' => array( '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://staging.test/a.jpg" class="wp-image-12"/></p><!-- /wp:freeform --></div><!-- /wp:group -->', '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://www.live.test/a.jpg" class="wp-image-120"/></p><!-- /wp:freeform --></div><!-- /wp:group -->' ),
 			'only ids' => array( '<p><img data-class="photo" src="https://cdn.test/a.jpg" class="wp-image-13"/></p>', '<p><img data-class="photo" src="https://cdn.test/a.jpg" class="wp-image-130"/></p>' ),
@@ -106,6 +106,12 @@ final class SyncHtmlRefsTest extends TestCase {
 			'another attribute' => array( '<p><img data-class="wp-image-12" src="https://cdn.test/a.jpg" class="wp-image-13"/></p>', 'c:html:img@3' ),
 			'no class token'    => array( '<p><img src="https://cdn.test/wp-image-23.jpg" class="alignnone"/></p>', 'c:html:img@3' ),
 			'a longer token'    => array( '<p><img class="xwp-image-22"/></p>', 'c:html:img@3' ),
+			'the same id twice' => array( '<p><img alt="wp-image-12" class="wp-image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			'two class tokens'  => array( '<p><img class="wp-image-12 wp-image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			'an attribute name' => array( '<p><img wp-image-5 class="wp-image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			'not an image'      => array( '<!-- wp:image {"id":12} --><figure class="wp-image-12"><img class="wp-image-12"/></figure><!-- /wp:image -->', 'c:core/image:img@0' ),
+			'a reference in the class' => array( '<p><img class="wp&#45;image-19"/></p>', 'c:html:img@3' ),
+			'a reference in an alt'    => array( '<p><img alt="wp&#45;image-5" class="wp-image-12" src="a.jpg"></p>', 'c:html:img@3' ),
 		);
 	}
 
@@ -121,7 +127,7 @@ final class SyncHtmlRefsTest extends TestCase {
 		foreach ( array(
 			'<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" alt="Bild" class="wp-image-12"/></figure><!-- /wp:image -->',
 			'<p><img class="alignnone size-full wp-image-16" src="a-300x200.jpg" width="300"/></p>',
-			'<p><img class="wp&#45;image-19"/></p>',
+			'<p><IMG CLASS="WP-IMAGE-18"/></p>',
 		) as $content ) {
 			self::assertSame( array(), self::scan( $content )[2]['locks'], $content );
 		}

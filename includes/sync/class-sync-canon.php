@@ -172,11 +172,30 @@ final class AB_MCP_Sync_Canon {
 			'locks'       => array(),
 			'unread'      => array(),
 			'deep'        => array(),
+			'spelling'    => array(),
 			'credentials' => array(
 				'b9'    => array(),
 				'mixed' => array(),
 			),
 		);
+	}
+
+	/**
+	 * Note a reference stored in a spelling that is not rewritten as the
+	 * core reads it: finish() locks the object there
+	 * (*:reference_spelling); with a kind at once.
+	 *
+	 * @param array       $acc  Accumulator.
+	 * @param string      $at   Where.
+	 * @param string|null $kind Kind, when known.
+	 */
+	public static function spelling( array &$acc, $at, $kind = null ) {
+		if ( null !== $kind ) {
+			self::lock( $acc, $kind, 'reference_spelling', (string) $at );
+		}
+		if ( ! isset( $acc['spelling'] ) || ! in_array( (string) $at, $acc['spelling'], true ) ) {
+			$acc['spelling'][] = (string) $at;
+		}
 	}
 
 	/**
@@ -234,6 +253,9 @@ final class AB_MCP_Sync_Canon {
 	public static function finish( $kind, $ref, array $identity, array $form, array $acc ) {
 		foreach ( isset( $acc['deep'] ) ? $acc['deep'] : array() as $at ) {
 			self::lock( $acc, (string) $kind, 'unreadable_value', $at );
+		}
+		foreach ( isset( $acc['spelling'] ) ? $acc['spelling'] : array() as $at ) {
+			self::lock( $acc, (string) $kind, 'reference_spelling', $at );
 		}
 		$form = array(
 			'canon' => self::VERSION,

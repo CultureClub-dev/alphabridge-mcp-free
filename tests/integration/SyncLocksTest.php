@@ -221,6 +221,19 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( 'b9', $entry['status'] );
 	}
 
+	public function testAKeyOfACredentialLocksWhereverTheTextHoldsIt(): void {
+		self::assertFalse( shortcode_exists( 'ab_it_outer' ) || shortcode_exists( 'ab_it_inner' ), 'Neither tag is registered.' );
+		foreach ( array(
+			'[[ab_it_outer] [ab_it_inner api_key="example-only"] [/ab_it_outer]]',
+			'<!--  wp:paragraph {"api_key":"dummy-secret"} /-->',
+			'<p>Text <!-- token=abc --></p>',
+		) as $content ) {
+			$result = self::canon( 'post', self::post( $content ) );
+			self::assertContains( array( '*:credential_field', 'post_content' ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ), $content );
+			self::assertStringNotContainsString( 'example-only', json_encode( array( $result['credentials'], $result['locks'] ) ) );
+		}
+	}
+
 	public function testTheTextColumnsOfTermsMenuItemsAndCssAreUnitsOfTheCredentialCheck(): void {
 		$mixed = static function ( array $result ): array {
 			return array_column( $result['credentials']['mixed'], 'fields', 'unit' );
