@@ -131,7 +131,109 @@ final class SiteAddressJournalTest extends TestCase {
 		$card = $this->call( 'doctor_card_html' );
 		self::assertStringNotContainsString( 'ab-address-journal', $card );
 		self::assertStringNotContainsString( 'ab_mcp_address_journal', $card );
-		self::assertSame( array( "SELECT option_value FROM wp_options WHERE option_name = 'ab_mcp_site_address_journal' LIMIT 1" ), array_values( array_unique( self::db()->queries ) ), 'The row of the record, by its exact name, value only.' );
+		self::assertSame(
+			array(
+				"SELECT option_value FROM wp_options WHERE option_name = 'ab_mcp_site_address_journal' LIMIT 1",
+				"SELECT COUNT(*) FROM wp_options WHERE option_name = 'ab_mcp_site_address_journal'",
+			),
+			array_values( array_unique( self::db()->queries ) ),
+			'The row of the record, by its exact name, value only; and as get_var() answers null for an empty value too, whether the row is there.'
+		);
+	}
+
+	public function testAnEmptyRowIsARecordNotNone(): void {
+		// wpdb::get_var() answers null for a value '' just as for no row. The
+		// row is there, so the change it stood for is still open: shown as
+		// unreadable, with the button, and the button closes it.
+		self::store( '' );
+		$read = AB_MCP_Site_Address_Journal::read();
+		self::assertIsArray( $read );
+		self::assertFalse( $read['readable'] );
+		self::assertFalse( $read['lookup_failed'] );
+		self::assertSame( hash( 'sha256', '' ), $read['fingerprint'] );
+		self::assertFalse( AB_MCP_Site_Address_Journal::for_site_info()['readable'] );
+		self::assertStringContainsString( 'ab_mcp_address_journal', $this->call( 'doctor_card_html' ) );
+		self::assertSame( 'closed', AB_MCP_Site_Address_Journal::close( hash( 'sha256', '' ) ) );
+		self::assertNull( AB_MCP_Site_Address_Journal::read() );
+	}
+
+	public function testTheCountThatFailsIsAFailedLookupNotNone(): void {
+		self::store( '' );
+		self::db()->fail_count[] = AB_MCP_Site_Address_Journal::OPTION;
+		self::assertTrue( AB_MCP_Site_Address_Journal::read()['lookup_failed'] );
+		self::assertSame( 'kept', AB_MCP_Site_Address_Journal::close( hash( 'sha256', '' ) ) );
+	}
+
+	/**
+	 * The lock of the removal, with core's lock in place (WP_Upgrader, as in
+	 * admin-post.php). The record is read UNDER the lock: a writer that
+	 * rewrote it before the lock was granted has its record kept.
+	 */
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testTheRecordIsReadUnderTheLockAndAnotherWritersRecordStays(): void {
+		self::define_upgrader();
+		$old = self::record( array( 'state' => 'started' ) );
+		$new = self::record();
+		self::store( $old );
+		// Granted only after another request wrote its record.
+		$GLOBALS['ab_test_on_lock'] = static function () use ( $new ): void {
+			self::store( $new );
+		};
+
+		self::assertSame( 'changed', AB_MCP_Site_Address_Journal::close( hash( 'sha256', $old ) ) );
+		self::assertSame( $new, get_option( AB_MCP_Site_Address_Journal::OPTION ), "The other writer's record stays." );
+		self::assertSame( array( 'create_lock', 'release_lock' ), $GLOBALS['ab_test_lock_log'] );
+		self::assertFalse( AB_MCP_Change_Lock::held(), 'Given back.' );
+
+		// The lock granted with nothing written in between: closed, and
+		// the read that decided it came after the lock.
+		$GLOBALS['ab_test_on_lock']  = null;
+		$GLOBALS['ab_test_lock_log'] = array();
+		self::db()->queries          = array();
+		self::assertSame( 'closed', AB_MCP_Site_Address_Journal::close( hash( 'sha256', $new ) ) );
+		self::assertSame( array( 'create_lock', 'release_lock' ), $GLOBALS['ab_test_lock_log'] );
+		self::assertFalse( AB_MCP_Change_Lock::held() );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testALockHeldByAnotherRequestClosesNothing(): void {
+		self::define_upgrader();
+		$raw = self::record();
+		self::store( $raw );
+		$GLOBALS['ab_test_lock_free'] = false;
+
+		self::assertSame( 'busy', AB_MCP_Site_Address_Journal::close( hash( 'sha256', $raw ) ) );
+		self::assertSame( $raw, get_option( AB_MCP_Site_Address_Journal::OPTION ) );
+		self::assertNotContains( 'release_lock', $GLOBALS['ab_test_lock_log'], "Another request's lock is not given back." );
+	}
+
+	/** Core's update lock, as a log: create_lock() runs the test's hook first. */
+	private static function define_upgrader(): void {
+		$GLOBALS['ab_test_lock_log']  = array();
+		$GLOBALS['ab_test_lock_free'] = true;
+		$GLOBALS['ab_test_on_lock']   = null;
+		if ( ! class_exists( 'WP_Upgrader', false ) ) {
+			eval(
+				'class WP_Upgrader {
+					public static function create_lock( $name, $timeout = 3600 ) {
+						$GLOBALS["ab_test_lock_log"][] = "create_lock";
+						if ( ! $GLOBALS["ab_test_lock_free"] ) {
+							return false;
+						}
+						if ( is_callable( $GLOBALS["ab_test_on_lock"] ) ) {
+							( $GLOBALS["ab_test_on_lock"] )();
+						}
+						return true;
+					}
+					public static function release_lock( $name ) {
+						$GLOBALS["ab_test_lock_log"][] = "release_lock";
+						return true;
+					}
+				}'
+			);
+		}
 	}
 
 	public function testTheRecordIsTheRowNotWhatGetOptionReturns(): void {

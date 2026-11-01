@@ -68,8 +68,11 @@
  * (its fingerprint, a page loaded before the writer changed it closes
  * nothing) and not while a change of the site runs under
  * AB_MCP_Change_Lock (its row younger than its TIMEOUT), which an address
- * change holds. A writer that still runs and finds no row to update writes
- * it anew.
+ * change holds. It takes that lock itself and reads the record again under
+ * it, so a writer that takes the lock between the page and the removal
+ * either finds the row gone before it writes, or has changed it and the
+ * removal does not happen. A writer that still runs and finds no row to
+ * update writes it anew.
  *
  * @package AlphaBridge_MCP
  */
@@ -239,21 +242,37 @@ final class AB_MCP_Site_Address_Journal {
 	 *                read or is still there after the removal.
 	 */
 	public static function close( $fingerprint ) {
-		$raw = self::row( self::OPTION );
-		if ( false === $raw ) {
-			return 'kept';
-		}
-		if ( null === $raw ) {
-			return 'gone';
-		}
-		if ( ! is_string( $fingerprint ) || ! hash_equals( self::fingerprint( $raw ), $fingerprint ) ) {
-			return 'changed';
-		}
+		// A running change is told apart first, without taking anything: its
+		// lock row is younger than TIMEOUT. Then the lock is taken for the
+		// removal itself, and the record is read UNDER it. Reading before
+		// taking would leave a gap: a writer that takes the lock and rewrites
+		// the record after the read would have its new record removed for the
+		// fingerprint of the old one, and the open rest it names would vanish.
 		if ( self::change_running() ) {
 			return 'busy';
 		}
-		delete_option( self::OPTION );
-		return null === self::row( self::OPTION ) ? 'closed' : 'kept';
+		$locked = class_exists( 'AB_MCP_Change_Lock' );
+		if ( $locked && true !== AB_MCP_Change_Lock::take() ) {
+			return 'busy';
+		}
+		try {
+			$raw = self::row( self::OPTION );
+			if ( false === $raw ) {
+				return 'kept';
+			}
+			if ( null === $raw ) {
+				return 'gone';
+			}
+			if ( ! is_string( $fingerprint ) || ! hash_equals( self::fingerprint( $raw ), $fingerprint ) ) {
+				return 'changed';
+			}
+			delete_option( self::OPTION );
+			return null === self::row( self::OPTION ) ? 'closed' : 'kept';
+		} finally {
+			if ( $locked ) {
+				AB_MCP_Change_Lock::release();
+			}
+		}
 	}
 
 	/**
@@ -439,6 +458,19 @@ final class AB_MCP_Site_Address_Journal {
 		if ( null === $value && ! empty( $wpdb->last_error ) ) {
 			return false;
 		}
-		return null === $value ? null : (string) $value;
+		if ( null !== $value ) {
+			return (string) $value;
+		}
+		// get_var() answers null for a row whose value is the empty string
+		// just as for no row (class-wpdb.php: '' !== $values[ $x ]), so null
+		// says nothing yet. Asked once more, by count: an empty row is a
+		// record, unreadable, and stays visible with its button — read as
+		// «none», an open change would vanish from the page.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- see above.
+		$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+		if ( null === $count && ! empty( $wpdb->last_error ) ) {
+			return false;
+		}
+		return (int) $count > 0 ? '' : null;
 	}
 }
