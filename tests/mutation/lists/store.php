@@ -5,7 +5,8 @@
  * ownership manifest, the self-check with 403/404 and its control file,
  * the check made again after a day and for a missing guard, the atomic
  * write and the read against the hash, a file written once and a package
- * within what it declared, the budgets and their lock, what a run that is
+ * within what it declared (counted from its files too), no link on the way
+ * to a file, the bound place, the budgets and their lock, what a run that is
  * not closed keeps, the booking with free space and test write, a copy's
  * own id, the uninstall of the own folder only; and the shared file
  * functions the undo store uses.
@@ -82,7 +83,7 @@ return array(
 		'id'      => 'store/renew-copy',
 		'clause'  => 'decide(): a folder of another installation at this id\'s place gives this one a new id',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "if ( 'foreign' === \$outside && \$may_renew ) {",
+		'search'  => "if ( 'foreign' === \$tried['state'] && \$may_renew ) {",
 		'replace' => 'if ( false ) {',
 		'run'     => $it( 'testACopyThatKeptTheIdGetsItsOwnAndLeavesTheOtherFolder' ),
 		'expect'  => '/testACopyThatKeptTheIdGetsItsOwnAndLeavesTheOtherFolder/',
@@ -163,8 +164,8 @@ return array(
 		'id'      => 'store/no-docroot-fresh-only',
 		'clause'  => 'decide(): without the document root only a proof of the last RECHECK seconds counts',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "&& isset( \$paths[ \$record['where'] ] ) && ( time() - \$record['checked'] ) < self::RECHECK ) {",
-		'replace' => "&& isset( \$paths[ \$record['where'] ] ) ) {",
+		'search'  => 'if ( null !== $bound && isset( $paths[ $bound ] ) && ( time() - $proved ) < self::RECHECK ) {',
+		'replace' => 'if ( null !== $bound && isset( $paths[ $bound ] ) ) {',
 		'run'     => $it( 'testWithoutTheDocumentRootOnlyAProofOfTheLastDayCounts' ),
 		'expect'  => '/testWithoutTheDocumentRootOnlyAProofOfTheLastDayCounts/',
 	),
@@ -219,7 +220,7 @@ return array(
 		'id'      => 'store/write-once',
 		'clause'  => 'put(): a file of a group is written once',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "\t\t\t\tif ( file_exists( \$path ) || is_link( \$path ) ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_store_exists',",
+		'search'  => "\t\t\t\tif ( false !== @lstat( \$path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_store_exists',",
 		'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_store_exists',",
 		'run'     => $it( 'testAFileIsWrittenOnceThroughARenameAndReadOnlyWithItsHash' ),
 		'expect'  => '/testAFileIsWrittenOnceThroughARenameAndReadOnlyWithItsHash/',
@@ -228,10 +229,84 @@ return array(
 		'id'      => 'store/over-declared',
 		'clause'  => 'put(): a package takes no more than it declared',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "&& \$entry['used'] + \$bytes > \$entry['declared'] ) {",
+		'search'  => "&& \$used + \$bytes > \$entry['declared'] ) {",
 		'replace' => '&& false ) {',
 		'run'     => $it( 'testAPackageTakesNoMoreThanItDeclared' ),
 		'expect'  => '/testAPackageTakesNoMoreThanItDeclared/',
+	),
+
+	/* -------------------------------- the way, the bound place, the count */
+	array(
+		'id'      => 'store/way-no-link',
+		'clause'  => 'way(): every step below the folder of the store is a real folder (lstat), so a linked area is never used',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\t\t\tif ( ! self::plain( \$path, 'dir' ) ) {\n\t\t\t\treturn null;",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn null;",
+		'run'     => $it( 'testALinkOnTheWayIsNeverFollowed' ),
+		'expect'  => '/testALinkOnTheWayIsNeverFollowed/',
+	),
+	array(
+		'id'      => 'store/get-file-plain',
+		'clause'  => 'get(): a file of a group that is a link is not read',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "if ( false !== @lstat( \$path ) && ! self::plain( \$path, 'file' ) ) {",
+		'replace' => 'if ( false ) {',
+		'run'     => $it( 'testALinkOnTheWayIsNeverFollowed' ),
+		'expect'  => '/testALinkOnTheWayIsNeverFollowed/',
+	),
+	array(
+		'id'      => 'store/bound-first',
+		'clause'  => 'decide(): the bound place is tried first',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\$order  = 'uploads' === \$bound ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );",
+		'replace' => "\$order  = array( 'outside', 'uploads' );",
+		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
+		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+	),
+	array(
+		'id'      => 'store/leave-only-empty',
+		'clause'  => 'decide(): bound uploads are left for the place beside WordPress only when nothing is kept in them',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "if ( 'uploads' === \$where && 'uploads' === \$bound && self::empty_place( \$paths['uploads'], \$id ) ) {",
+		'replace' => "if ( 'uploads' === \$where && 'uploads' === \$bound ) {",
+		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
+		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+	),
+	array(
+		'id'      => 'store/empty-groups',
+		'clause'  => 'empty_place(): a group within its time keeps the place',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\t\t\t\tif ( self::kept( \$entry, time(), \$open ) ) {\n\t\t\t\t\treturn false;",
+		'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;",
+		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
+		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+	),
+	array(
+		'id'      => 'store/empty-bookings',
+		'clause'  => 'empty_place(): a booking keeps the place',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => 'return array() === AB_MCP_Store_Budget::booked( $root );',
+		'replace' => 'return true;',
+		'run'     => $it( 'testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty' ),
+		'expect'  => '/testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty/',
+	),
+	array(
+		'id'      => 'store/held-counts',
+		'clause'  => 'put(): what a package holds is counted from its files as well as from its sidecar',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\$used  = max( \$entry['used'], self::held( \$dir ) );",
+		'replace' => "\$used  = \$entry['used'];",
+		'run'     => $it( 'testAFileThatWasNotCountedStillCountsAgainstThePackage' ),
+		'expect'  => '/testAFileThatWasNotCountedStillCountsAgainstThePackage/',
+	),
+	array(
+		'id'      => 'store/held-isize',
+		'clause'  => 'held(): a gzip file holds the raw bytes its trailer names',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => '$raw   = is_array( $isize ) ? (int) $isize[1] : $size;',
+		'replace' => '$raw   = $size;',
+		'run'     => $it( 'testAFileThatWasNotCountedStillCountsAgainstThePackage' ),
+		'expect'  => '/testAFileThatWasNotCountedStillCountsAgainstThePackage/',
 	),
 
 	/* ----------------------------------------------------------- budgets */

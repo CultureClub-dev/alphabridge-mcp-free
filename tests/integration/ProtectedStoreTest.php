@@ -148,7 +148,7 @@ final class ProtectedStoreTest extends TestCase {
 
 	/** Remove what the store made: the parent beside WordPress and the folders and probes in both uploads. */
 	private static function wipe(): void {
-		$paths = array( self::root() . '/ab-mcp-store' );
+		$paths = array_merge( array( self::root() . '/ab-mcp-store' ), array_map( 'strval', (array) glob( self::root() . '/ab-mcp-store-test-*' ) ) );
 		foreach ( array( 'a', 'b' ) as $key ) {
 			foreach ( array_merge( (array) glob( self::uploads( $key ) . '/ab-mcp-store-*' ), (array) glob( self::uploads( $key ) . '/.ab-mcp-store-*' ), (array) glob( self::uploads( $key ) . '/ab-mcp-probe-*' ) ) as $path ) {
 				$paths[] = (string) $path;
@@ -260,10 +260,25 @@ final class ProtectedStoreTest extends TestCase {
 
 	/** Set the record of the last proof back by some seconds. */
 	private static function age_record( int $seconds ): void {
-		$rec             = get_option( AB_MCP_Protected_Store::OPTION_PROOF );
-		$rec['checked'] -= $seconds;
+		$rec            = get_option( AB_MCP_Protected_Store::OPTION_PROOF );
+		$rec['proved'] -= $seconds;
+		if ( is_array( $rec['check'] ) ) {
+			$rec['check']['checked'] -= $seconds;
+		}
 		update_option( AB_MCP_Protected_Store::OPTION_PROOF, $rec, false );
 		AB_MCP_Protected_Store::forget();
+	}
+
+	/** A folder beside the store, in AB_IT_ROOT (removed by wipe()). */
+	private static function elsewhere( string $name ): string {
+		$dir = self::root() . '/ab-mcp-store-test-' . $name;
+		mkdir( $dir, 0700 );
+		return $dir;
+	}
+
+	/** The on-disk name of a group. */
+	private static function group_dir( string $folder, string $area, string $gid, string $id ): string {
+		return $folder . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, $id, '' );
 	}
 
 	/* -------------------------------------------------------------- place */
@@ -559,6 +574,131 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_over_declared', AB_MCP_Protected_Store::put( 'in', $gid, 'chunk-3', 'x' )->get_error_code() );
 		self::assertSame( array( 'chunk-1', 'chunk-2' ), array_keys( AB_MCP_Protected_Store::files( 'in', $gid ) ) );
 		self::assertSame( 'ab_mcp_store_declare', AB_MCP_Protected_Store::open( 'out' )->get_error_code(), 'A package without a size is not opened.' );
+	}
+
+	public function testALinkOnTheWayIsNeverFollowed(): void {
+		$id    = AB_MCP_Protected_Store::install_id();
+		$store = (string) AB_MCP_Protected_Store::root();
+		$gid   = str_repeat( 'a', 32 );
+
+		// A sidecar and a group folder outside the store, and the area out
+		// of the store a link to them.
+		$outside = self::elsewhere( 'out' );
+		$name    = basename( self::group_dir( $store, 'out', $gid, $id ) );
+		file_put_contents( $outside . '/' . $name . '.json', json_encode( array( 'format' => AB_MCP_Protected_Store::FORMAT, 'gid' => $gid, 'area' => 'out', 'created' => time() - 30 * DAY_IN_SECONDS, 'declared' => 10 ) ) );
+		mkdir( $outside . '/' . $name );
+		file_put_contents( $outside . '/' . $name . '/victim', 'not the store\'s' );
+		$before = self::tree( $outside );
+		rmdir( $store . '/out' );
+		symlink( $outside, $store . '/out' );
+
+		self::assertFalse( AB_MCP_Protected_Store::remove( 'out', $gid ), 'Not removed through the linked area.' );
+		AB_MCP_Protected_Store::cleanup( time() + 60 * DAY_IN_SECONDS );
+		self::assertSame( $before, self::tree( $outside ), 'Nothing outside the store was touched.' );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::groups( 'out' )->get_error_code() );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::put( 'out', $gid, 'x', 'y' )->get_error_code() );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::get( 'out', $gid, 'victim', hash( 'sha256', "not the store's" ) )->get_error_code() );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::files( 'out', $gid )->get_error_code() );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::open( 'out', array( 'declared' => 1 ) )->get_error_code() );
+		self::assertSame( $before, self::tree( $outside ) );
+
+		// A link to another area of the store is no area either.
+		unlink( $store . '/out' );
+		symlink( $store . '/backups', $store . '/out' );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::open( 'out', array( 'declared' => 1 ) )->get_error_code() );
+		self::assertSame( array(), self::tree( $store . '/backups' ), 'Nothing written into the other area.' );
+		unlink( $store . '/out' );
+		mkdir( $store . '/out', 0700 );
+
+		// A group folder that is a link, and a file of a group that is one.
+		$gid2   = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 1 ) );
+		$group  = self::group_dir( $store, 'backups', $gid2, $id );
+		$other  = self::elsewhere( 'group' );
+		file_put_contents( $other . '/post-1', gzencode( 'x' ) );
+		rmdir( $group );
+		symlink( $other, $group );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::put( 'backups', $gid2, 'post-2', 'y' )->get_error_code() );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::get( 'backups', $gid2, 'post-1', hash( 'sha256', 'x' ) )->get_error_code() );
+		self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $gid2 ) );
+		AB_MCP_Protected_Store::cleanup( time() + 60 * DAY_IN_SECONDS );
+		self::assertFalse( is_link( $group ) || file_exists( $group ), 'The clean-up took the link out of the store, itself.' );
+		self::assertSame( array( 'post-1' ), self::tree( $other ), 'And left what it pointed to.' );
+
+		$gid3  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 1 ) );
+		$group = self::group_dir( $store, 'backups', $gid3, $id );
+		symlink( $other . '/post-1', $group . '/post-1' );
+		self::assertSame( 'ab_mcp_store_link', AB_MCP_Protected_Store::get( 'backups', $gid3, 'post-1', hash( 'sha256', 'x' ) )->get_error_code() );
+		self::assertSame( array(), AB_MCP_Protected_Store::files( 'backups', $gid3 ) );
+	}
+
+	public function testABoundPlaceStaysWhileItKeepsSomethingAndIsLeftOnlyEmpty(): void {
+		global $wpdb;
+		// The uploads first: the folder beside WordPress is in the web root.
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		$id      = AB_MCP_Protected_Store::install_id();
+		$uploads = self::in_uploads( 'a', $id );
+		$backup  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		$put     = AB_MCP_Protected_Store::put( 'backups', $backup, 'post-1', 'old content' );
+		$package = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
+
+		// The place beside WordPress could be used now; the uploads keep groups.
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		self::assertSame( $uploads, AB_MCP_Protected_Store::root() );
+		self::assertSame( 'old content', AB_MCP_Protected_Store::get( 'backups', $backup, 'post-1', $put['sha256'] ), 'The backup is found where it was written.' );
+		self::assertSame( array( $package ), array_column( AB_MCP_Protected_Store::groups( 'in' ), 'gid' ), 'The packages are counted where they are.' );
+		self::assertFileDoesNotExist( self::outside( $id ), 'Nothing made beside WordPress while the uploads are bound.' );
+
+		// A booking of a run keeps the place as well.
+		self::assertTrue( AB_MCP_Protected_Store::remove( 'backups', $backup ) );
+		self::assertTrue( AB_MCP_Protected_Store::remove( 'in', $package ) );
+		$wpdb->insert( AB_MCP_Sync_Schema::table( 'runs' ), array( 'run_id' => 5, 'type' => 'push', 'state' => 'open' ) );
+		self::assertIsArray( AB_MCP_Store_Budget::book( 5, 10 ) );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+
+		// Once nothing is kept there, the store moves beside WordPress, and stays.
+		self::assertTrue( AB_MCP_Store_Budget::release( 5 ) );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'outside', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		self::assertSame( self::outside( $id ), AB_MCP_Protected_Store::root() );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'outside', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+	}
+
+	public function testABoundPlaceThatCannotBeUsedAnyMoreIsLeft(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		$id = AB_MCP_Protected_Store::install_id();
+		self::assertIsString( AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) ) );
+
+		// The web server serves the uploads folder now: it is left, groups or not.
+		self::apache( 'a', false );
+		unlink( self::in_uploads( 'a', $id ) . '/web.config' );
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		AB_MCP_Protected_Store::forget();
+		$proof = AB_MCP_Protected_Store::proof( $fetcher );
+		self::assertSame( 'outside', $proof['where'] );
+		self::assertSame( array( 'uploads' => 'served' ), $proof['findings'] );
+	}
+
+	public function testAFileThatWasNotCountedStillCountsAgainstThePackage(): void {
+		$id  = AB_MCP_Protected_Store::install_id();
+		$gid = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
+		// What a request that died between putting a file in place and
+		// counting it leaves: a file the sidecar does not count.
+		$dir = self::group_dir( (string) AB_MCP_Protected_Store::root(), 'in', $gid, $id );
+		file_put_contents( $dir . '/chunk-0', gzencode( '12345678' ) );
+		self::assertSame( 'ab_mcp_store_over_declared', AB_MCP_Protected_Store::put( 'in', $gid, 'chunk-1', '12345' )->get_error_code(), '8 held and 5 more would pass 10.' );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, 'chunk-1', '12' ) );
+		self::assertSame( 10, AB_MCP_Protected_Store::groups( 'in' )[0]['used'], 'The sidecar counts what the files hold.' );
+		self::assertSame( 'ab_mcp_store_over_declared', AB_MCP_Protected_Store::put( 'in', $gid, 'chunk-2', '1' )->get_error_code() );
 	}
 
 	/* ------------------------------------------------------------ budgets */

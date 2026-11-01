@@ -255,6 +255,17 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
+	 * The bookings in a folder of the store (whether one still holds any:
+	 * AB_MCP_Protected_Store, before it leaves a place).
+	 *
+	 * @param string $root Folder of the store.
+	 * @return array<int,array{bytes:int,booked:int,user_id:int}>
+	 */
+	public static function booked( $root ) {
+		return self::read_bookings( $root );
+	}
+
+	/**
 	 * Whether what a package unpacks to stays within UNPACK: null when it
 	 * does, the refusal for the first limit it passes otherwise.
 	 *

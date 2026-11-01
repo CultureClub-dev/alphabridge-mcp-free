@@ -25,6 +25,13 @@
  *  3. Otherwise there is no store: proof() names why and the way, and
  *     nothing is stored (no export, no import, no run).
  *
+ * The place chosen is bound (the option OPTION_PROOF): the next requests use
+ * it while it can be used, so get() and the budgets never look into another
+ * folder than the one that holds the groups. Another place is taken only
+ * when the bound one cannot be used any more, or when the uploads are bound,
+ * nothing is kept in them (no group within its time, no booking) and the
+ * place beside WordPress can be used now.
+ *
  * Only a request that knows the document root (the web server sets
  * DOCUMENT_ROOT) chooses the place. A request without it (WP-CLI, a cron job
  * from the shell) uses a proof a web request made in the last RECHECK
@@ -51,6 +58,12 @@
  * (AB_MCP_Payload_File::name()), so an id seen in an answer names no path. A
  * file is written once, through a temp file renamed into place, compressed,
  * and read only against the SHA-256 put() returned (AB_MCP_Payload_File).
+ * Every read, write and removal goes through way(): from the folder of the
+ * store to the file no step is a link (lstat()), and the end lies under the
+ * folder by device and inode, so neither a linked area nor a linked group
+ * reaches outside it. What a package holds is counted from the files that
+ * are there as well (held()), so a file left by a request that died before
+ * it was counted still counts.
  * Packages and reports are kept a day, backups ab_mcp_staging_backup_days
  * days (BACKUP_DAYS here; Pro sets 30), never pushed out by the undo store;
  * a group bound to a run that is not closed is not cleaned while it is not
@@ -485,11 +498,15 @@ final class AB_MCP_Protected_Store {
 						return $refusal;
 					}
 				}
+				$area_dir = self::way( $root, array( $entry['area'] ) );
+				if ( null === $area_dir ) {
+					return self::unsafe();
+				}
 				$name = self::group_name( $entry['area'], $entry['gid'], $id );
-				$side = $root . '/' . $entry['area'] . '/' . $name . '.json';
+				$side = $area_dir . '/' . $name . '.json';
 				// The sidecar first: a folder without one is an orphan the
 				// clean-up removes, a sidecar without a folder is an empty group.
-				if ( ! self::write_entry( $side, $entry ) || ! @mkdir( $root . '/' . $entry['area'] . '/' . $name, 0700 ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
+				if ( ! self::write_entry( $side, $entry ) || ! @mkdir( $area_dir . '/' . $name, 0700 ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
 					@unlink( $side ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					return new WP_Error( 'ab_mcp_store_write', 'The group could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
 				}
@@ -505,7 +522,9 @@ final class AB_MCP_Protected_Store {
 	/**
 	 * Write one file of a group, once: compressed, through a temp file
 	 * renamed into place, under the lock. A package takes no more than it
-	 * declared.
+	 * declared, counted as the larger of what its sidecar booked and what its
+	 * files hold (held()): a file a request put in place before it died,
+	 * without counting it, still counts.
 	 *
 	 * @param string $area    Area.
 	 * @param string $gid     Group.
@@ -530,26 +549,25 @@ final class AB_MCP_Protected_Store {
 		return self::locked(
 			$root,
 			static function () use ( $root, $id, $area, $gid, $name, $payload ) {
-				$group = self::group_name( $area, $gid, $id );
-				$side  = $root . '/' . $area . '/' . $group . '.json';
-				$dir   = $root . '/' . $area . '/' . $group;
-				$entry = self::read_entry( $side, $area );
-				if ( null === $entry || $gid !== $entry['gid'] || is_link( $dir ) || ! is_dir( $dir ) ) {
-					return self::no_group();
+				$found = self::group( $root, $area, self::group_name( $area, $gid, $id ), $gid );
+				if ( ! is_array( $found ) ) {
+					return $found;
 				}
+				list( $side, $dir, $entry ) = $found;
 				$path = $dir . '/' . $name;
-				if ( file_exists( $path ) || is_link( $path ) ) {
+				if ( false !== @lstat( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					return new WP_Error( 'ab_mcp_store_exists', 'This group holds a file of that name already, and a file of the protected store is written once. Use another name for it.' );
 				}
 				$bytes = strlen( $payload );
-				if ( in_array( $area, self::PACKAGES, true ) && $entry['used'] + $bytes > $entry['declared'] ) {
-					return new WP_Error( 'ab_mcp_store_over_declared', sprintf( 'The package was opened for %1$d bytes and holds %2$d; this file (%3$d bytes) would take it past them. Use a package opened with the size it needs.', $entry['declared'], $entry['used'], $bytes ) );
+				$used  = max( $entry['used'], self::held( $dir ) );
+				if ( in_array( $area, self::PACKAGES, true ) && $used + $bytes > $entry['declared'] ) {
+					return new WP_Error( 'ab_mcp_store_over_declared', sprintf( 'The package was opened for %1$d bytes and holds %2$d; this file (%3$d bytes) would take it past them. Use a package opened with the size it needs.', $entry['declared'], $used, $bytes ) );
 				}
 				$blob = AB_MCP_Payload_File::compress( $payload );
 				if ( ! AB_MCP_Payload_File::write( $path, $blob ) ) {
 					return new WP_Error( 'ab_mcp_store_write', 'The file could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
 				}
-				$entry['used'] += $bytes;
+				$entry['used'] = $used + $bytes;
 				if ( ! self::write_entry( $side, $entry ) ) {
 					@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 					return new WP_Error( 'ab_mcp_store_write', 'The file could not be recorded in the protected store, so it was taken out again. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
@@ -582,11 +600,15 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
-		$dir = $root . '/' . $area . '/' . self::group_name( $area, $gid, self::install_id() );
-		if ( is_link( $dir ) || ! is_dir( $dir ) || is_link( $dir . '/' . $name ) ) {
-			return self::no_group();
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		if ( ! is_array( $found ) ) {
+			return $found;
 		}
-		$raw = AB_MCP_Payload_File::read( $dir . '/' . $name, $sha256, self::FILE_MAX + 65536, self::FILE_MAX );
+		$path = $found[1] . '/' . $name;
+		if ( false !== @lstat( $path ) && ! self::plain( $path, 'file' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			return self::unsafe();
+		}
+		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX );
 		if ( ! is_wp_error( $raw ) ) {
 			return $raw;
 		}
@@ -615,6 +637,9 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
+		if ( null === self::way( $root, array( $area ) ) ) {
+			return self::unsafe();
+		}
 		$out = array();
 		foreach ( self::entries( $root, self::install_id(), $area ) as $entry ) {
 			unset( $entry['format'] );
@@ -640,14 +665,15 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
-		$dir = $root . '/' . $area . '/' . self::group_name( $area, $gid, self::install_id() );
-		if ( is_link( $dir ) || ! is_dir( $dir ) ) {
-			return self::no_group();
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		if ( ! is_array( $found ) ) {
+			return $found;
 		}
+		$dir = $found[1];
 		$out = array();
 		foreach ( (array) scandir( $dir ) as $file ) {
 			$file = (string) $file;
-			if ( self::valid_name( $file ) && is_file( $dir . '/' . $file ) && ! is_link( $dir . '/' . $file ) ) {
+			if ( self::valid_name( $file ) && self::plain( $dir . '/' . $file, 'file' ) ) {
 				$out[ $file ] = (int) filesize( $dir . '/' . $file );
 			}
 		}
@@ -677,11 +703,11 @@ final class AB_MCP_Protected_Store {
 		return self::locked(
 			$root,
 			static function () use ( $root, $id, $area, $gid, $run_id ) {
-				$side  = $root . '/' . $area . '/' . self::group_name( $area, $gid, $id ) . '.json';
-				$entry = self::read_entry( $side, $area );
-				if ( null === $entry || $gid !== $entry['gid'] ) {
-					return self::no_group();
+				$found = self::group( $root, $area, self::group_name( $area, $gid, $id ), $gid );
+				if ( ! is_array( $found ) ) {
+					return $found;
 				}
+				list( $side, , $entry ) = $found;
 				$entry['run_id'] = max( 0, (int) $run_id );
 				return self::write_entry( $side, $entry ) ? true : new WP_Error( 'ab_mcp_store_write', 'The group could not be bound to its run in the protected store. Ask the host to check that the folder is writable, then try again.' );
 			}
@@ -703,11 +729,12 @@ final class AB_MCP_Protected_Store {
 		$removed = false;
 		foreach ( self::own_folders( $id ) as $root ) {
 			$name    = self::group_name( $area, $gid, $id );
-			$entry   = self::read_entry( $root . '/' . $area . '/' . $name . '.json', $area );
 			$removed = self::locked(
 				$root,
-				static function () use ( $root, $area, $name, $entry, $gid ) {
-					if ( null === $entry || $gid !== $entry['gid'] ) {
+				static function () use ( $root, $area, $name, $gid ) {
+					// Under the lock, the whole way checked: a linked area or
+					// group is never followed.
+					if ( ! is_array( self::group( $root, $area, $name, $gid ) ) ) {
 						return false;
 					}
 					self::remove_group( $root, $area, $name );
@@ -850,44 +877,114 @@ final class AB_MCP_Protected_Store {
 		}
 		$paths   = self::candidates( $id );
 		$record  = self::record( $id );
+		$bound   = null === $record ? null : $record['bound'];
+		$proved  = null === $record ? 0 : $record['proved'];
+		$check   = null === $record ? null : $record['check'];
 		$docroot = self::document_root();
 		if ( null === $docroot ) {
 			// Only what a web request proved: this one cannot see whether the
 			// place beside WordPress is outside the web root.
-			if ( is_array( $record ) && $record['ok'] && isset( $paths[ $record['where'] ] ) && ( time() - $record['checked'] ) < self::RECHECK ) {
-				$path = $paths[ $record['where'] ];
-				if ( self::owns( $path, $id ) && is_writable( $path ) && ( 'outside' === $record['where'] || array() === self::guards_missing( $path ) ) ) {
-					return self::verdict( $record['where'], null, array(), $record['checked'] );
+			if ( null !== $bound && isset( $paths[ $bound ] ) && ( time() - $proved ) < self::RECHECK ) {
+				$path = $paths[ $bound ];
+				if ( self::owns( $path, $id ) && is_writable( $path ) && ( 'outside' === $bound || array() === self::guards_missing( $path ) ) ) {
+					return self::verdict( $bound, null, array(), $proved );
 				}
 			}
 			return self::verdict( null, 'no_document_root', array() );
 		}
 
-		$found   = array();
-		$outside = self::outside( $paths['outside'], $docroot, $id );
-		if ( 'foreign' === $outside && $may_renew ) {
-			return self::renewed( $id, $fetcher, $force );
+		// The bound place first, while it can be used: another place would
+		// leave its groups (backups with a valid reference, packages that
+		// count) where get() and the budgets no longer look. Without a bound
+		// place, or where it cannot be used, the order of decision 7.
+		$order  = 'uploads' === $bound ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );
+		$found  = array();
+		$detail = array();
+		foreach ( $order as $where ) {
+			$tried = self::try_place( $where, $paths, $docroot, $id, $check, $fetcher, $force );
+			if ( null !== $tried['check'] ) {
+				$check = $tried['check'];
+			}
+			if ( 'foreign' === $tried['state'] && $may_renew ) {
+				return self::renewed( $id, $fetcher, $force );
+			}
+			if ( 'ok' !== $tried['state'] ) {
+				$found[ $where ] = $tried['state'];
+				$detail          = $tried['detail'];
+				continue;
+			}
+			// The bound uploads are left for the place beside WordPress only
+			// while nothing is kept in them.
+			if ( 'uploads' === $where && 'uploads' === $bound && self::empty_place( $paths['uploads'], $id ) ) {
+				$outside = self::try_place( 'outside', $paths, $docroot, $id, $check, $fetcher, $force );
+				if ( 'ok' === $outside['state'] ) {
+					$where = 'outside';
+					$tried = $outside;
+					$found = array();
+				}
+			}
+			self::store_record( $id, $where, $tried['proved'], $check );
+			return self::verdict( $where, null, $found, $tried['proved'] );
 		}
-		if ( 'ok' === $outside ) {
-			$now = time();
-			self::store_record( $id, 'outside', $now, true, null, array() );
-			return self::verdict( 'outside', null, array(), $now );
-		}
-		$found['outside'] = $outside;
+		// No place: the binding stays for the next request.
+		self::store_record( $id, $bound, $proved, $check );
+		return self::verdict( null, 'none', $found, 0, $detail );
+	}
 
+	/**
+	 * Try one place: 'ok' with the time of its proof, or its finding.
+	 *
+	 * @param string      $where   'outside' or 'uploads'.
+	 * @param array       $paths   candidates().
+	 * @param string      $docroot Resolved document root.
+	 * @param string      $id      Id.
+	 * @param array|null  $check   The last self-check of the uploads.
+	 * @param object|null $fetcher Fetcher.
+	 * @param bool        $force   Self-check now.
+	 * @return array{state:string,proved:int,check:array|null,detail:array}
+	 */
+	private static function try_place( $where, array $paths, $docroot, $id, $check, $fetcher, $force ) {
+		if ( 'outside' === $where ) {
+			return array(
+				'state'  => self::outside( $paths['outside'], $docroot, $id ),
+				'proved' => time(),
+				'check'  => null,
+				'detail' => array(),
+			);
+		}
 		if ( ! isset( $paths['uploads'] ) ) {
-			$found['uploads'] = 'no_uploads';
-			return self::verdict( null, 'none', $found );
+			return array(
+				'state'  => 'no_uploads',
+				'proved' => 0,
+				'check'  => null,
+				'detail' => array(),
+			);
 		}
-		$uploads = self::uploads( $paths['uploads'], $id, $record, $fetcher, $force );
-		if ( 'foreign' === $uploads['state'] && $may_renew ) {
-			return self::renewed( $id, $fetcher, $force );
+		return self::uploads( $paths['uploads'], $id, $check, $fetcher, $force );
+	}
+
+	/**
+	 * Whether nothing is kept in a folder of the store: no group within its
+	 * time or of a run that is not closed, no booking, and every area a real
+	 * folder (what a linked area holds is not known).
+	 *
+	 * @param string $root Folder.
+	 * @param string $id   Id.
+	 * @return bool
+	 */
+	private static function empty_place( $root, $id ) {
+		$open = AB_MCP_Sync_Schema::open_runs();
+		foreach ( self::AREAS as $area ) {
+			if ( null === self::way( $root, array( $area ) ) ) {
+				return false;
+			}
+			foreach ( self::entries( $root, $id, $area ) as $entry ) {
+				if ( self::kept( $entry, time(), $open ) ) {
+					return false;
+				}
+			}
 		}
-		if ( 'ok' === $uploads['state'] ) {
-			return self::verdict( 'uploads', null, $found, $uploads['checked'] );
-		}
-		$found['uploads'] = $uploads['state'];
-		return self::verdict( null, 'none', $found, 0, isset( $uploads['detail'] ) ? $uploads['detail'] : array() );
+		return array() === AB_MCP_Store_Budget::booked( $root );
 	}
 
 	/**
@@ -933,46 +1030,50 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The place in the uploads: made or found, then its proof from the record
-	 * or a self-check now.
+	 * The place in the uploads: made or found, then its proof from the last
+	 * self-check or a self-check now.
 	 *
 	 * @param string      $path    The folder for this id.
 	 * @param string      $id      Id.
-	 * @param array|null  $record  Record of the last proof.
+	 * @param array|null  $check   The last self-check.
 	 * @param object|null $fetcher Fetcher.
 	 * @param bool        $force   Self-check now.
-	 * @return array{state:string,checked?:int,detail?:array}
+	 * @return array{state:string,proved:int,check:array|null,detail:array} check is the new self-check, where one was made.
 	 */
-	private static function uploads( $path, $id, $record, $fetcher, $force ) {
+	private static function uploads( $path, $id, $check, $fetcher, $force ) {
 		// Which guard files are missing, before ensure() writes them again.
 		$missing = ( file_exists( $path ) || is_link( $path ) ) ? self::guards_missing( $path ) : array_keys( self::GUARDS );
 		$state   = self::ensure( $path, $id );
 		if ( 'ok' !== $state ) {
-			return array( 'state' => $state );
+			return array(
+				'state'  => $state,
+				'proved' => 0,
+				'check'  => null,
+				'detail' => array(),
+			);
 		}
 		$now = time();
-		if ( ! $force && ! self::needs_check( $record, 'uploads', $now, array() === $missing ) ) {
-			return $record['ok']
-				? array(
-					'state'   => 'ok',
-					'checked' => (int) $record['checked'],
-				)
-				: array(
-					'state'  => (string) $record['reason'],
-					'detail' => (array) $record['detail'],
-				);
-		}
-		$check = self::self_check( $path, $fetcher );
-		self::store_record( $id, 'uploads', $now, $check['ok'], $check['reason'], $check['detail'] );
-		return $check['ok']
-			? array(
-				'state'   => 'ok',
-				'checked' => $now,
-			)
-			: array(
-				'state'  => (string) $check['reason'],
-				'detail' => $check['detail'],
+		if ( ! $force && ! self::needs_check( $check, 'uploads', $now, array() === $missing ) ) {
+			return array(
+				'state'  => $check['ok'] ? 'ok' : (string) $check['reason'],
+				'proved' => $check['ok'] ? (int) $check['checked'] : 0,
+				'check'  => null,
+				'detail' => (array) $check['detail'],
 			);
+		}
+		$result = self::self_check( $path, $fetcher );
+		return array(
+			'state'  => $result['ok'] ? 'ok' : (string) $result['reason'],
+			'proved' => $result['ok'] ? $now : 0,
+			'check'  => array(
+				'where'   => 'uploads',
+				'checked' => $now,
+				'ok'      => $result['ok'],
+				'reason'  => $result['reason'],
+				'detail'  => $result['detail'],
+			),
+			'detail' => $result['detail'],
+		);
 	}
 
 	/**
@@ -1219,45 +1320,50 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The record of the last proof for an id, or null.
+	 * The record for an id, or null: the place bound (in use), when it was
+	 * last proved, and the last self-check of the uploads.
 	 *
 	 * @param string $id Id.
-	 * @return array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null
+	 * @return array{bound:string|null,proved:int,check:array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null}|null
 	 */
 	private static function record( $id ) {
 		$rec = get_option( self::OPTION_PROOF, null );
-		if ( ! is_array( $rec ) || ! isset( $rec['id'], $rec['where'], $rec['checked'] ) || $id !== $rec['id'] || ! in_array( $rec['where'], array( 'outside', 'uploads' ), true ) ) {
+		if ( ! is_array( $rec ) || ! isset( $rec['id'] ) || $id !== $rec['id'] ) {
 			return null;
 		}
+		$check = null;
+		if ( isset( $rec['check'] ) && is_array( $rec['check'] ) && isset( $rec['check']['checked'] ) ) {
+			$check = array(
+				'where'   => 'uploads',
+				'checked' => (int) $rec['check']['checked'],
+				'ok'      => ! empty( $rec['check']['ok'] ),
+				'reason'  => isset( $rec['check']['reason'] ) ? (string) $rec['check']['reason'] : null,
+				'detail'  => isset( $rec['check']['detail'] ) && is_array( $rec['check']['detail'] ) ? $rec['check']['detail'] : array(),
+			);
+		}
 		return array(
-			'where'   => (string) $rec['where'],
-			'checked' => (int) $rec['checked'],
-			'ok'      => ! empty( $rec['ok'] ),
-			'reason'  => isset( $rec['reason'] ) ? (string) $rec['reason'] : null,
-			'detail'  => isset( $rec['detail'] ) && is_array( $rec['detail'] ) ? $rec['detail'] : array(),
+			'bound'  => ( isset( $rec['bound'] ) && in_array( $rec['bound'], array( 'outside', 'uploads' ), true ) ) ? $rec['bound'] : null,
+			'proved' => isset( $rec['proved'] ) ? (int) $rec['proved'] : 0,
+			'check'  => $check,
 		);
 	}
 
 	/**
-	 * Note a proof.
+	 * Note the bound place, when it was proved, and the last self-check.
 	 *
-	 * @param string      $id      Id.
-	 * @param string      $where   Place.
-	 * @param int         $checked Time.
-	 * @param bool        $ok      Result.
-	 * @param string|null $reason  Finding when it failed.
-	 * @param array       $detail  Statuses or error code.
+	 * @param string      $id     Id.
+	 * @param string|null $bound  Place in use.
+	 * @param int         $proved When it was proved.
+	 * @param array|null  $check  The last self-check of the uploads.
 	 */
-	private static function store_record( $id, $where, $checked, $ok, $reason, array $detail ) {
+	private static function store_record( $id, $bound, $proved, $check ) {
 		update_option(
 			self::OPTION_PROOF,
 			array(
-				'id'      => $id,
-				'where'   => $where,
-				'checked' => (int) $checked,
-				'ok'      => (bool) $ok,
-				'reason'  => $reason,
-				'detail'  => $detail,
+				'id'     => $id,
+				'bound'  => $bound,
+				'proved' => (int) $proved,
+				'check'  => $check,
 			),
 			false
 		);
@@ -1273,7 +1379,11 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function entries( $root, $id, $area ) {
 		$out = array();
-		foreach ( (array) glob( $root . '/' . $area . '/*.json' ) as $side ) {
+		$dir = self::way( $root, array( $area ) );
+		if ( null === $dir ) {
+			return $out;
+		}
+		foreach ( (array) glob( $dir . '/*.json' ) as $side ) {
 			$name  = basename( (string) $side, '.json' );
 			$entry = preg_match( '/^[0-9a-f]{40}\z/', $name ) ? self::read_entry( (string) $side, $area ) : null;
 			if ( null !== $entry && self::group_name( $area, $entry['gid'], $id ) === $name ) {
@@ -1302,14 +1412,14 @@ final class AB_MCP_Protected_Store {
 		$removed = 0;
 		$kept    = 0;
 		foreach ( self::AREAS as $area ) {
-			$dir = $root . '/' . $area;
-			if ( is_link( $dir ) || ! is_dir( $dir ) ) {
+			$dir = self::way( $root, array( $area ) );
+			if ( null === $dir ) {
 				continue;
 			}
 			foreach ( (array) scandir( $dir ) as $file ) {
 				$file = (string) $file;
 				$path = $dir . '/' . $file;
-				if ( preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) && ! is_link( $path ) ) {
+				if ( preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) && self::plain( $path, 'file' ) ) {
 					$entry = self::read_entry( $path, $area );
 					if ( null === $entry || self::group_name( $area, $entry['gid'], $id ) !== $m[1] ) {
 						// Not a sidecar this store wrote: gone after a day.
@@ -1326,7 +1436,7 @@ final class AB_MCP_Protected_Store {
 					}
 					self::remove_group( $root, $area, $m[1] );
 					++$removed;
-				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && ! is_link( $path ) && is_dir( $path ) && ! is_file( $path . '.json' ) && ( $now - (int) @filemtime( $path ) ) >= 86400 ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && self::plain( $path, 'dir' ) && false === @lstat( $path . '.json' ) && ( $now - (int) @filemtime( $path ) ) >= 86400 ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					// A folder without its sidecar (an interrupted removal).
 					self::remove_tree( $path );
 				} elseif ( '.tmp' === substr( $file, -4 ) ) {
@@ -1365,11 +1475,124 @@ final class AB_MCP_Protected_Store {
 	 * @param string $name Name of the group on disk (40 hex).
 	 */
 	private static function remove_group( $root, $area, $name ) {
-		self::remove_tree( $root . '/' . $area . '/' . $name );
-		$side = $root . '/' . $area . '/' . $name . '.json';
-		if ( is_file( $side ) || is_link( $side ) ) {
+		$dir = self::way( $root, array( $area ) );
+		if ( null === $dir ) {
+			return;
+		}
+		// The group's folder only where it is a real folder under the area:
+		// a link there is removed itself, never followed.
+		$group = $dir . '/' . $name;
+		if ( null !== self::way( $root, array( $area, $name ) ) ) {
+			self::remove_tree( $group );
+		} elseif ( is_link( $group ) ) {
+			@unlink( $group ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		}
+		$side = $dir . '/' . $name . '.json';
+		if ( false !== @lstat( $side ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			@unlink( $side ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 		}
+	}
+
+	/**
+	 * A folder below a folder of the store, or null where the way there is
+	 * not plain: the folder of the store and every step below it a real
+	 * folder (lstat(): no link), and the end, resolved, under the folder of
+	 * the store by device and inode (holds()). Every read, write and removal
+	 * goes through it.
+	 *
+	 * @param string   $root  Folder of the store.
+	 * @param string[] $parts Steps below it.
+	 * @return string|null
+	 */
+	private static function way( $root, array $parts ) {
+		$path = $root;
+		if ( ! self::plain( $path, 'dir' ) ) {
+			return null;
+		}
+		foreach ( $parts as $part ) {
+			$path .= '/' . $part;
+			if ( ! self::plain( $path, 'dir' ) ) {
+				return null;
+			}
+		}
+		return self::holds( $root, $path ) ? $path : null;
+	}
+
+	/**
+	 * Whether a path is a real folder or file (lstat(): a link is neither).
+	 *
+	 * @param string $path Path.
+	 * @param string $type 'dir' or 'file'.
+	 * @return bool
+	 */
+	private static function plain( $path, $type ) {
+		$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $stat ) {
+			return false;
+		}
+		return ( 'dir' === $type ? 0040000 : 0100000 ) === ( $stat['mode'] & 0170000 );
+	}
+
+	/**
+	 * A group of an area with every step of the way to it plain: its sidecar,
+	 * its folder and its entry, or the refusal.
+	 *
+	 * @param string $root Folder of the store.
+	 * @param string $area Area.
+	 * @param string $name Name of the group on disk.
+	 * @param string $gid  Group.
+	 * @return array{0:string,1:string,2:array}|WP_Error
+	 */
+	private static function group( $root, $area, $name, $gid ) {
+		$area_dir = self::way( $root, array( $area ) );
+		if ( null === $area_dir ) {
+			return self::unsafe();
+		}
+		$side  = $area_dir . '/' . $name . '.json';
+		$entry = self::plain( $side, 'file' ) ? self::read_entry( $side, $area ) : null;
+		if ( null === $entry || $gid !== $entry['gid'] ) {
+			return self::no_group();
+		}
+		$dir = self::way( $root, array( $area, $name ) );
+		if ( null === $dir ) {
+			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		return array( $side, $dir, $entry );
+	}
+
+	/**
+	 * The raw bytes the files of a group hold: of a gzip file the size its
+	 * trailer names (ISIZE: exact below 4 GiB, and a file holds at most
+	 * FILE_MAX), of another file its size.
+	 *
+	 * @param string $dir Folder of the group.
+	 * @return int
+	 */
+	private static function held( $dir ) {
+		$sum = 0;
+		foreach ( (array) scandir( $dir ) as $file ) {
+			$path = $dir . '/' . $file;
+			if ( ! self::valid_name( (string) $file ) || ! self::plain( $path, 'file' ) ) {
+				continue;
+			}
+			$size   = (int) @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$raw    = $size;
+			$handle = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+			if ( $handle ) {
+				if ( $size >= 18 && "\x1f\x8b" === fread( $handle, 2 ) && 0 === fseek( $handle, -4, SEEK_END ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+					$isize = unpack( 'V', (string) fread( $handle, 4 ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+					$raw   = is_array( $isize ) ? (int) $isize[1] : $size;
+				}
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			}
+			$sum += $raw;
+		}
+		return $sum;
+	}
+
+	/** @return WP_Error */
+	private static function unsafe() {
+		return new WP_Error( 'ab_mcp_store_link', 'A folder or file of the protected store is a link, or lies outside the store, so nothing there is read, written or removed. Ask the host to remove the link from the folder of the store, then try again.' );
 	}
 
 	/**
