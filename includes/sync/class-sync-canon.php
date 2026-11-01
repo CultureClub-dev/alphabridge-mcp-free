@@ -214,6 +214,12 @@ final class AB_MCP_Sync_Canon {
 			'kind'  => (string) $kind,
 		) + $form;
 		$json = self::encode( $form );
+		if ( '' === $json ) {
+			// What JSON cannot hold is no form two sites compare.
+			$acc['unread'][] = 'encode';
+			self::lock( $acc, (string) $kind, 'unreadable_value', 'form' );
+			$json = self::encode( array( 'canon' => self::VERSION, 'kind' => (string) $kind, 'unencodable' => true ) );
+		}
 		return array(
 			'kind'        => (string) $kind,
 			'ref'         => (string) $ref,
@@ -634,13 +640,22 @@ final class AB_MCP_Sync_Canon {
 			);
 			return array( '~set' => array_column( $items, 1 ) );
 		}
-		if ( ! array_is_list( $value ) ) {
-			ksort( $value, SORT_STRING );
+		if ( array_is_list( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = self::prepared( $item );
+			}
+			return $value;
 		}
+		// Keys as values: a key that is no UTF-8 by its bytes in hex behind a
+		// tag of its own ("~k:"), which no stored key carries (those that begin
+		// with "~" have one "~" more, walk()).
+		$out = array();
 		foreach ( $value as $key => $item ) {
-			$value[ $key ] = self::prepared( $item );
+			$name         = is_string( $key ) && 1 !== preg_match( '//u', $key ) ? '~k:' . bin2hex( $key ) : $key;
+			$out[ $name ] = self::prepared( $item );
 		}
-		return $value;
+		ksort( $out, SORT_STRING );
+		return $out;
 	}
 
 	/**

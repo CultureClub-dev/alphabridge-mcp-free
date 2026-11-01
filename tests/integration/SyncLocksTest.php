@@ -161,6 +161,12 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( array( 'meta:ab_it_fields', 'meta:ab_it_json', 'meta:ab_it_literal', 'meta:ab_it_settings' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:credential_field' === $l['key'] ), 'at' ) );
 		self::assertSame( array( 'meta:ab_it_deep' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:unreadable_value' === $l['key'] ), 'at' ), 'Deeper than the check reads: locked, never clean.' );
 
+		// Decision 9 for the attributes of blocks, a released library too.
+		$kadence = self::canon( 'post', self::post( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live_789"}} --><div></div><!-- /wp:kadence/rowlayout -->' ) );
+		self::assertSame( array( array( 'unit' => 'post_content:kadence/rowlayout', 'fields' => array( 'settings.api_key' ) ) ), $kadence['credentials']['mixed'] );
+		self::assertSame( array( '*:credential_field' ), array_column( $kadence['locks'], 'key' ) );
+		self::assertStringNotContainsString( 'sk_live_789', json_encode( array( $kadence['credentials'], $kadence['locks'] ) ) );
+
 		update_option( 'ab_it_service_api_key', 'sk_live_456' );
 		$entry = self::canon( 'option', 'ab_it_service_api_key' );
 		self::assertNull( $entry['hash'], 'A B9 option is never hashed.' );

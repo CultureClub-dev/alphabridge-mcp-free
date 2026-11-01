@@ -22,10 +22,44 @@ use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-builder-lock.php';
 
+/**
+ * A $wpdb with an options table whose rows a test sets (option name =>
+ * value): what the gate of AB_MCP_Sync_Safe reads.
+ */
+final class SyncBuilderLockFakeWpdb {
+	public $options     = 'wp_options';
+	public $last_error  = '';
+	public $last_result = array();
+	/** @var array<string,string> */
+	public $rows = array();
+
+	public function prepare( $query, ...$args ) {
+		return array( $query, $args );
+	}
+
+	public function query( $query ) {
+		$name              = is_array( $query ) && isset( $query[1][0] ) ? (string) $query[1][0] : '';
+		$this->last_result = array();
+		if ( isset( $this->rows[ $name ] ) ) {
+			$this->last_result[] = (object) array( 'option_name' => $name, 'option_value' => $this->rows[ $name ], 'autoload' => 'on' );
+		}
+		return count( $this->last_result );
+	}
+}
+
 final class SyncBuilderLockTest extends TestCase {
+
+	/** @var mixed */
+	private $saved;
 
 	protected function setUp(): void {
 		ab_test_reset();
+		$this->saved     = $GLOBALS['wpdb'] ?? null;
+		$GLOBALS['wpdb'] = new SyncBuilderLockFakeWpdb();
+	}
+
+	protected function tearDown(): void {
+		$GLOBALS['wpdb'] = $this->saved;
 	}
 
 	private static function row( string $content = '' ): array {
@@ -82,6 +116,17 @@ final class SyncBuilderLockTest extends TestCase {
 		$acc = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Builder_Lock::note( $acc, self::row( $content ), self::meta( $meta ) );
 		self::assertSame( array() === $want ? array() : array( 'post:builder' ), array_values( array_unique( array_column( $acc['locks'], 'key' ) ) ) );
+	}
+
+	public function testAnOptionDetectAllReadsWithAnObjectKeepsItFromBeingAsked(): void {
+		$GLOBALS['wpdb']->rows['template'] = 'O:8:"stdClass":0:{}';
+		$row                               = self::row( '<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->' );
+		self::assertSame( array(), AB_MCP_Sync_Builder_Lock::locked( $row, array() ), 'detect_all() was not asked.' );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Builder_Lock::note( $acc, $row, array() );
+		self::assertSame( array( array( '*:php_object', 'builder:options' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+		unset( $GLOBALS['wpdb']->rows['template'] );
+		self::assertSame( array( 'divi5' ), array_column( AB_MCP_Sync_Builder_Lock::locked( $row, array() ), 'id' ), 'Asked once the row is clean.' );
 	}
 
 	public function testAMarkerGetPostMetaDoesNotShowStillLocks(): void {

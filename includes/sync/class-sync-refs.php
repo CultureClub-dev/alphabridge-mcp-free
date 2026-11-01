@@ -34,6 +34,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-credentials.php';
 
 /**
  * Class AB_MCP_Sync_Refs
@@ -78,11 +79,13 @@ final class AB_MCP_Sync_Refs {
 	 * The HTML the save of a block writes from its id: the class
 	 * wp-image-<id> (image, cover and media-text save, wp-includes/js/dist/
 	 * block-library.js:38075, :23940, :43448; the deprecated gallery, :28659,
-	 * with data-id, :28656), and in classic content (no block name) the class
-	 * of get_image_tag() (wp-includes/media.php:408).
+	 * with data-id, :28656), and in classic content the class of
+	 * get_image_tag() (wp-includes/media.php:408): content outside of blocks
+	 * (no block name) and the classic block core/freeform alike.
 	 */
 	const HTML = array(
 		''                => array( 'class' ),
+		'core/freeform'   => array( 'class' ),
 		'core/image'      => array( 'class' ),
 		'core/cover'      => array( 'class' ),
 		'core/media-text' => array( 'class' ),
@@ -726,8 +729,10 @@ final class AB_MCP_Sync_Refs {
 	 *
 	 * @param string $text  Text.
 	 * @param string $block Block name; '' for classic content.
-	 * @return array{cuts:array,tags:array,possible:array} cuts: the ids of
-	 *               shortcodes; tags: AB_MCP_Sync_Html::tags().
+	 * @return array{cuts:array,tags:array,possible:array,shortcodes:array}
+	 *               cuts: the ids of shortcodes; tags: AB_MCP_Sync_Html::tags();
+	 *               shortcodes: each shortcode with its named attributes (the
+	 *               smallest unit of the credential check).
 	 */
 	public static function text_refs( $text, $block ) {
 		$text = (string) $text;
@@ -738,11 +743,13 @@ final class AB_MCP_Sync_Refs {
 			$tags = AB_MCP_Sync_Html::tags( $text, $html );
 		}
 		$possible = array();
-		self::shortcodes( $text, 0, $cuts, $possible, 0 );
+		$units    = array();
+		self::shortcodes( $text, 0, $cuts, $possible, 0, $units );
 		return array(
-			'cuts'     => $cuts,
-			'tags'     => $tags,
-			'possible' => $possible,
+			'cuts'       => $cuts,
+			'tags'       => $tags,
+			'possible'   => $possible,
+			'shortcodes' => $units,
 		);
 	}
 
@@ -800,6 +807,12 @@ final class AB_MCP_Sync_Refs {
 			$name  = isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : null;
 			$attrs = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
 			$where = $at . ':' . ( null === $name ? 'html' : $name );
+			// Decision 9: the attributes of each block are a unit of the
+			// credential check, recursively (JSON and serialized texts in
+			// them as well), released block libraries included.
+			if ( array() !== $attrs ) {
+				AB_MCP_Sync_Credentials::note( $acc, $kind, $where, AB_MCP_Sync_Credentials::unit( '', $attrs ) );
+			}
 			$parts = array();
 			$i     = 0;
 			foreach ( isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array() as $chunk ) {
@@ -872,6 +885,11 @@ final class AB_MCP_Sync_Refs {
 				'value' => $p['value'],
 				'at'    => $at . ':' . $p['at'],
 			);
+		}
+		// Decision 9: the attributes of each shortcode are a unit of the
+		// credential check (a field named like a credential locks).
+		foreach ( $found['shortcodes'] as $unit ) {
+			AB_MCP_Sync_Credentials::note( $acc, $kind, $at . ':shortcode:' . $unit['tag'], AB_MCP_Sync_Credentials::unit( '', $unit['atts'] ) );
 		}
 		return AB_MCP_Sync_Canon::text( $text, $ctx, $cuts );
 	}
@@ -1120,7 +1138,7 @@ final class AB_MCP_Sync_Refs {
 	 * @param array  $possible Possible references found.
 	 * @param int    $depth    Nesting.
 	 */
-	private static function shortcodes( $text, $base, array &$cuts, array &$possible, $depth ) {
+	private static function shortcodes( $text, $base, array &$cuts, array &$possible, $depth, array &$units = array() ) {
 		if ( $depth > 8 || false === strpos( $text, '[' ) || ! preg_match_all( '/\[\/?([A-Za-z0-9_-]+)/', $text, $tags ) ) {
 			return;
 		}
@@ -1145,17 +1163,23 @@ final class AB_MCP_Sync_Refs {
 				},
 				$atts
 			);
+			$named = array();
 			if ( preg_match_all( get_shortcode_atts_regex(), $atts, $pairs, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 				foreach ( $pairs as $pair ) {
 					foreach ( array( 1, 3, 5 ) as $g ) {
 						if ( isset( $pair[ $g ] ) && '' !== $pair[ $g ][0] && -1 !== $pair[ $g ][1] ) {
+							$named[ strtolower( $pair[ $g ][0] ) ] = $pair[ $g + 1 ][0];
 							self::shortcode_attr( $tag, strtolower( $pair[ $g ][0] ), $pair[ $g + 1 ][0], $start + (int) $pair[ $g + 1 ][1], $cuts, $possible );
 						}
 					}
 				}
 			}
+			$units[] = array(
+				'tag'  => $tag,
+				'atts' => $named,
+			);
 			if ( isset( $m[5] ) && '' !== $m[5][0] && -1 !== $m[5][1] ) {
-				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $cuts, $possible, $depth + 1 );
+				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $cuts, $possible, $depth + 1, $units );
 			}
 		}
 	}
@@ -1197,11 +1221,12 @@ final class AB_MCP_Sync_Refs {
 		if ( isset( self::SHORTCODE_PLAIN[ $tag ] ) && in_array( $name, self::SHORTCODE_PLAIN[ $tag ], true ) ) {
 			return;
 		}
-		foreach ( self::numbers( $value ) as $n ) {
-			$possible[] = array(
-				'value' => $n,
-				'at'    => 'shortcode:' . $tag . '.' . $name,
-			);
+		// The same scan as for an attribute of a block: a text of digits, and
+		// JSON or serialized text inside, layer by layer.
+		$found = AB_MCP_Sync_Canon::acc();
+		self::note_possible( $found, $value, 'shortcode:' . $tag . '.' . $name );
+		foreach ( $found['possible'] as $p ) {
+			$possible[] = $p;
 		}
 	}
 

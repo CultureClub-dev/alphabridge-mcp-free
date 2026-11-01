@@ -32,6 +32,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-rows.php';
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-safe.php';
 
 /**
  * Class AB_MCP_Sync_Media
@@ -150,17 +151,30 @@ final class AB_MCP_Sync_Media {
 			}
 			$raw[ $key ] = array() === $values ? '' : $values[0];
 		}
-		$meta    = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
-		$backup  = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
-		$uploads = wp_get_upload_dir();
-		$basedir = isset( $uploads['basedir'] ) ? (string) $uploads['basedir'] : '';
-		$list    = self::paths( $raw['_wp_attached_file'], $meta['ok'] ? $meta['value'] : null, $backup['ok'] ? $backup['value'] : null, $basedir );
+		$basedir = AB_MCP_Sync_Safe::upload_basedir();
+		if ( null === $basedir || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+			// The uploads settings or the file name hold an object (or could
+			// not be read): no folder to list in.
+			return array(
+				'files'    => array(),
+				'problems' => array(
+					array(
+						'path'    => '',
+						'role'    => null === $basedir ? 'uploads' : 'file',
+						'problem' => 'php_object',
+					),
+				),
+			);
+		}
+		$meta   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
+		$backup = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
+		$list   = self::paths( $raw['_wp_attached_file'], $meta['ok'] ? $meta['value'] : null, $backup['ok'] ? $backup['value'] : null, $basedir );
 		foreach ( array( '_wp_attachment_metadata' => $meta, '_wp_attachment_backup_sizes' => $backup ) as $key => $read ) {
 			if ( ! $read['ok'] ) {
 				$list['problems'][] = array(
 					'path'    => '',
 					'role'    => $key,
-					'problem' => 'unreadable',
+					'problem' => 'php_object' === $read['why'] ? 'php_object' : 'unreadable',
 				);
 			}
 		}
@@ -209,7 +223,12 @@ final class AB_MCP_Sync_Media {
 	 */
 	public static function note( array &$acc, array $list ) {
 		foreach ( $list['problems'] as $problem ) {
-			$op = 'missing' === $problem['problem'] ? 'missing_file' : ( 'unreadable' === $problem['problem'] ? 'unreadable_value' : 'unsafe_path' );
+			$ops = array(
+				'missing'    => 'missing_file',
+				'unreadable' => 'unreadable_value',
+				'php_object' => 'php_object',
+			);
+			$op  = isset( $ops[ $problem['problem'] ] ) ? $ops[ $problem['problem'] ] : 'unsafe_path';
 			AB_MCP_Sync_Canon::lock( $acc, 'attachment', $op, 'file:' . $problem['path'] );
 		}
 	}
@@ -240,7 +259,10 @@ final class AB_MCP_Sync_Media {
 	 *
 	 * @param int $after Attachment id the page before ended with.
 	 * @param int $limit Attachments at most (AB_MCP_Sync_Rows::page_size()).
-	 * @return array{paths:array<string,int[]>,cursor:int|null}|null
+	 * @return array{paths:array<string,int[]>,cursor:int|null,complete:bool,unreadable:int[]}|null
+	 *         complete is false when a list could not be read in full (an
+	 *         object, a value that does not unpack, the uploads folder not
+	 *         known): those attachments are in unreadable and name no path.
 	 */
 	public static function reverse( $after, $limit ) {
 		$limit = AB_MCP_Sync_Rows::page_size( $limit );
@@ -248,11 +270,16 @@ final class AB_MCP_Sync_Media {
 		if ( null === $ids ) {
 			return null;
 		}
-		$uploads = wp_get_upload_dir();
-		$basedir = isset( $uploads['basedir'] ) ? (string) $uploads['basedir'] : '';
-		$paths   = array();
-		$last    = null;
+		$basedir    = AB_MCP_Sync_Safe::upload_basedir();
+		$paths      = array();
+		$unreadable = array();
+		$last       = null;
 		foreach ( $ids as $row ) {
+			$last = $row['ID'];
+			if ( null === $basedir ) {
+				$unreadable[] = $row['ID'];
+				continue;
+			}
 			$raw = array();
 			foreach ( self::META_KEYS as $key ) {
 				$values = AB_MCP_Sync_Rows::meta_values( 'post', $row['ID'], $key );
@@ -263,15 +290,22 @@ final class AB_MCP_Sync_Media {
 			}
 			$meta   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
 			$backup = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
-			$list   = self::paths( $raw['_wp_attached_file'], $meta['ok'] ? $meta['value'] : null, $backup['ok'] ? $backup['value'] : null, $basedir );
+			// A list that cannot be read in full names no paths: the map is
+			// incomplete, and the attachment is named so that it locks.
+			if ( ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+				$unreadable[] = $row['ID'];
+				continue;
+			}
+			$list = self::paths( $raw['_wp_attached_file'], $meta['value'], $backup['value'], $basedir );
 			foreach ( $list['files'] as $entry ) {
 				$paths[ $entry['path'] ][] = $row['ID'];
 			}
-			$last = $row['ID'];
 		}
 		return array(
-			'paths'  => $paths,
-			'cursor' => count( $ids ) < $limit ? null : $last,
+			'paths'      => $paths,
+			'cursor'     => count( $ids ) < $limit ? null : $last,
+			'complete'   => array() === $unreadable,
+			'unreadable' => $unreadable,
 		);
 	}
 
@@ -299,9 +333,15 @@ final class AB_MCP_Sync_Media {
 	 * @param array               $acc   Accumulator.
 	 * @param int                 $id    The attachment.
 	 * @param array               $list  Its list (files()).
-	 * @param array<string,int[]> $paths Reverse map of the site.
+	 * @param array<string,int[]> $paths      Reverse map of the site.
+	 * @param int[]               $unreadable The attachments the map could not read.
 	 */
-	public static function note_shared( array &$acc, $id, array $list, array $paths ) {
+	public static function note_shared( array &$acc, $id, array $list, array $paths, array $unreadable = array() ) {
+		// An attachment whose list the reverse map could not read: whether it
+		// shares a path is not known, it locks.
+		if ( in_array( (int) $id, array_map( 'intval', $unreadable ), true ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, 'attachment', 'unreadable_value', 'files' );
+		}
 		foreach ( $list['files'] as $entry ) {
 			$ids = isset( $paths[ $entry['path'] ] ) ? array_values( array_diff( array_map( 'intval', $paths[ $entry['path'] ] ), array( (int) $id ) ) ) : array();
 			if ( array() !== $ids ) {

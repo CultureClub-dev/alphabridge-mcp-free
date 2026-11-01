@@ -111,6 +111,7 @@ final class SyncRefsTest extends TestCase {
 			'a navigation link of custom'  => array( '<!-- wp:navigation-link {"id":47,"kind":"custom"} /-->', array( '47@c:core/navigation-link.id' ) ),
 			'another shortcode'            => array( '[contact-form-7 id="48" title="Kontakt"]', array( '48@c:html:shortcode:contact-form-7.id' ) ),
 			'JSON in a plugin attribute'   => array( '<!-- wp:acme/box {"data":"{\\"post\\":52,\\"inner\\":\\"{\\\\\\"target\\\\\\":53}\\"}"} /-->', array( '52@c:acme/box.data.post', '53@c:acme/box.data.inner.target' ) ),
+			'JSON in a shortcode attribute' => array( '[acme_box data=\'{"post":54,"inner":"{\\"target\\":55}"}\']', array( '54@c:html:shortcode:acme_box.data.post', '55@c:html:shortcode:acme_box.data.inner.target' ) ),
 			'a core shortcode, other attr' => array( '[gallery id="49" columns="3" include="51"]', array( '49@c:html:shortcode:gallery.id', '51@c:html:shortcode:gallery.include' ) ),
 		);
 	}
@@ -119,6 +120,22 @@ final class SyncRefsTest extends TestCase {
 	public function testWholeNumbersWithoutASchemaArePossibleReferences( string $content, array $want ): void {
 		list( , $possible ) = self::scan( $content );
 		self::assertSame( $want, $possible );
+	}
+
+	public function testTheAttributesOfBlocksAndShortcodesAreUnitsOfTheCredentialCheck(): void {
+		foreach ( array(
+			'a released block library' => array( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live"}} --><div></div><!-- /wp:kadence/rowlayout -->', 'c:kadence/rowlayout', array( 'settings.api_key' ) ),
+			'a core block'             => array( '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} --><p>x</p><!-- /wp:paragraph -->', 'c:core/paragraph', array( 'metadata.clientSecret' ) ),
+			'JSON in an attribute'     => array( '<!-- wp:acme/box {"data":"{\\"access_token\\":\\"x\\"}"} /-->', 'c:acme/box', array( 'data.access_token' ) ),
+			'an inner block'           => array( '<!-- wp:group --><div><!-- wp:acme/box {"password":"x"} /--></div><!-- /wp:group -->', 'c:acme/box', array( 'password' ) ),
+			'a shortcode'              => array( '<p>[acme_form api_key="sk_live" title="T"]</p>', 'c:html:shortcode:acme_form', array( 'api_key' ) ),
+		) as $what => list( $content, $unit, $fields ) ) {
+			list( , , , $acc ) = self::scan( $content );
+			self::assertSame( array( array( 'unit' => $unit, 'fields' => $fields ) ), $acc['credentials']['mixed'], $what );
+			self::assertSame( array( '*:credential_field' ), array_column( $acc['locks'], 'key' ), $what );
+		}
+		list( , , , $acc ) = self::scan( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} --><div></div><!-- /wp:kadence/rowlayout -->' );
+		self::assertSame( array(), $acc['locks'], 'A word about a credential is none.' );
 	}
 
 	public function testNumbersInNestedJsonAndSerializedTextsArePossibleReferences(): void {

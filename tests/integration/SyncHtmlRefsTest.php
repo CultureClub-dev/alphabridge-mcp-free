@@ -47,6 +47,7 @@ final class SyncHtmlRefsTest extends TestCase {
 			'names in capitals'            => array( '<p><IMG CLASS="WP-IMAGE-18"/></p>', array( 'post:18@c:html:html:class' ) ),
 			'a character reference'        => array( '<p><img class="wp&#45;image-19"/></p>', array( 'post:19@c:html:html:class' ) ),
 			'data-id in capitals'          => array( '<!-- wp:gallery --><figure><img DATA-ID="20"/></figure><!-- /wp:gallery -->', array( 'post:20@c:core/gallery:html:data_id' ) ),
+			'the classic block in a group' => array( '<!-- wp:group --><div><!-- wp:freeform --><p><img class="alignnone wp-image-26"/></p><!-- /wp:freeform --></div><!-- /wp:group -->', array( 'post:26@c:core/freeform:html:class' ) ),
 			'not data-class'               => array( '<p><img data-class="wp-image-21" class="size-full"/></p>', array() ),
 			'not a longer token'           => array( '<p><img class="xwp-image-22 wp-image-22x"/></p>', array() ),
 			'not a file name'              => array( '<p><img src="https://cdn.test/wp-image-23.jpg" alt="wp-image-23" class="alignnone"/> wp-image-23</p>', array() ),
@@ -77,6 +78,7 @@ final class SyncHtmlRefsTest extends TestCase {
 			'image'    => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" class="wp-image-12"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg" class="wp-image-120"/></figure><!-- /wp:image -->' ),
 			'gallery'  => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img data-id="120" class="wp-image-120"/></figure><!-- /wp:gallery -->' ),
 			'caption'  => array( '[caption id="attachment_12"]<img class="alignnone wp-image-12 size-full"/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img class="alignnone wp-image-120 size-full"/>[/caption] [gallery ids="120,130"]' ),
+			'freeform' => array( '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://staging.test/a.jpg" class="wp-image-12"/></p><!-- /wp:freeform --></div><!-- /wp:group -->', '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://www.live.test/a.jpg" class="wp-image-120"/></p><!-- /wp:freeform --></div><!-- /wp:group -->' ),
 			'only ids' => array( '<p><img data-class="wp-image-12" src="https://cdn.test/wp-image-12.jpg" class="wp-image-13"/></p>', '<p><img data-class="wp-image-12" src="https://cdn.test/wp-image-12.jpg" class="wp-image-130"/></p>' ),
 		);
 	}
