@@ -34,7 +34,8 @@ arguments go to PHPUnit, e.g. `--filter Smoke`), `local.sh down` (data
 stays), `local.sh purge` (removes `AB_IT_ROOT`). The script marks the
 directory with `.ab-integration-root` on first use and refuses a non-empty
 one without it; `purge` removes only the entries the suite creates (`db`,
-`run`, `log`, `site-a`, `site-b`, `state.json`), none that holds the
+`run`, `log`, `site-a`, `site-b`, `state.json`, and `ab-mcp-store`, the
+protected store both sites keep beside their WordPress folders), none that holds the
 checkout or the home directory, and keeps the directory if anything else is
 in it. MariaDB runs with its own
 data directory under `AB_IT_ROOT/db`, `--no-defaults` and
@@ -83,6 +84,12 @@ start` and the suite (or the mutation probes).
   `test-fetcher/switch-in-product-code` hold that.
 - What these sites cannot show: DNS, TLS and streaming between two real
   servers. That is the live probe.
+
+`php -S` reads no `.htaccess`. While `AB_IT_ROOT/run/apache-site-a` (or
+`-site-b`) exists, `bin/router.php` answers 403 below a folder whose
+`.htaccess` denies everyone, as Apache would: the case in which the
+self-check of the protected store succeeds (`ProtectedStoreTest`). Without
+the file the self-check finds its test files served.
 
 The sites' `wp-config.php` adds what a test environment needs and the
 plugin never sees: no mail leaves (`pre_wp_mail`), application passwords

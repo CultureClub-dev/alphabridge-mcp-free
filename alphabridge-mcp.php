@@ -156,6 +156,11 @@ require_once AB_MCP_DIR . 'includes/sync/class-sync-schema.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-kinds.php';
 add_action( 'plugins_loaded', array( 'AB_MCP_Sync_Schema', 'maybe_upgrade' ), 10, 0 );
+// The protected store of the takeover (Z8): packages, reports and the
+// backups of a run, in a folder of this installation outside the web root
+// or, after a self-check, in the uploads; its budgets; its daily clean-up.
+require_once AB_MCP_DIR . 'includes/class-protected-store.php';
+add_action( AB_MCP_Protected_Store::CRON, array( 'AB_MCP_Protected_Store', 'cleanup' ), 10, 0 );
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 

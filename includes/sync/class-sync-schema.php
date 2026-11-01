@@ -143,6 +143,12 @@ final class AB_MCP_Sync_Schema {
 		'steps' => array( 'PRIMARY' ),
 	);
 
+	/**
+	 * The states of a run that is closed (decision 3); every other state
+	 * (open, interrupted, reverting, or one this code does not know) is not.
+	 */
+	const CLOSED = array( 'closed_done', 'closed_findings', 'closed_aborted', 'closed_checked', 'closed_reverted' );
+
 	/** @var array|null What status() found in this request. */
 	private static $status = null;
 
@@ -293,6 +299,29 @@ final class AB_MCP_Sync_Schema {
 			}
 		}
 		return $problems;
+	}
+
+	/**
+	 * The runs of this site that are not closed, by run_id: what the protected
+	 * store keeps for a run (AB_MCP_Protected_Store::sweep()) and what a
+	 * booking counts (AB_MCP_Store_Budget::book()). Null when the table cannot
+	 * be read (no tables, a network, a failed query), so a caller that keeps
+	 * what an open run needs keeps everything rather than nothing.
+	 *
+	 * @return int[]|null
+	 */
+	public static function open_runs() {
+		global $wpdb;
+		if ( ! self::available() ) {
+			return null;
+		}
+		$closed = implode( ', ', array_fill( 0, count( self::CLOSED ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours, the states are placeholders.
+		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT run_id FROM `' . self::table( 'runs' ) . "` WHERE state NOT IN ( $closed ) ORDER BY run_id", self::CLOSED ) );
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $ids ) ) {
+			return null;
+		}
+		return array_values( array_map( 'intval', $ids ) );
 	}
 
 	/**
