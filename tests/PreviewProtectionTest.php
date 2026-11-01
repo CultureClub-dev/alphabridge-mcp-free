@@ -196,6 +196,9 @@ final class PreviewProtectionTest extends TestCase {
 		$GLOBALS['ab_test_using_themes'] = true;
 		self::scope( 'full' );
 		self::cleanMuDir();
+		if ( isset( $GLOBALS['wpdb'] ) && $GLOBALS['wpdb'] instanceof \AbTestSyncWpdb ) {
+			unset( $GLOBALS['wpdb'] );
+		}
 	}
 
 	/** Remove the temporary folder of must-use plugins with whatever a test left in it. */
@@ -216,6 +219,10 @@ final class PreviewProtectionTest extends TestCase {
 	/** The constants uninstall.php runs under, as UninstallTest sets them. */
 	private static function uninstallConstants(): void {
 		require_once __DIR__ . '/uninstall-stubs.php';
+		// Since Z8 uninstall.php drops tables through $wpdb, as WordPress
+		// always has one (UninstallTest checks the statements).
+		require_once __DIR__ . '/sync-stubs.php';
+		$GLOBALS['wpdb'] = new \AbTestSyncWpdb();
 		if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 			\define( 'WP_UNINSTALL_PLUGIN', 'alphabridge-mcp/alphabridge-mcp.php' );
 		}

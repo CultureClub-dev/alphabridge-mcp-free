@@ -147,6 +147,15 @@ require_once AB_MCP_DIR . 'includes/class-staging.php';
 // «Staging first» (free since 4.15.0): the pre-check of a write on a site
 // that counts as the production site, in run_tool(), and its setting.
 require_once AB_MCP_DIR . 'includes/class-staging-gate.php';
+// The takeover from a staging site (Z8): the tables of the object pairs,
+// runs and steps, the pairs, the kinds with their owners and locks, and
+// what is never taken over. The tables are made on activation and, when
+// the stored version is another, on plugins_loaded: also where Pro loads
+// this core itself (on plugins_loaded at priority 0, before this one).
+require_once AB_MCP_DIR . 'includes/sync/class-sync-schema.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-kinds.php';
+add_action( 'plugins_loaded', array( 'AB_MCP_Sync_Schema', 'maybe_upgrade' ), 10, 0 );
 require_once AB_MCP_DIR . 'includes/class-admin.php';
 require_once AB_MCP_DIR . 'includes/class-plugin.php';
 
