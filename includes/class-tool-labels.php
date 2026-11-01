@@ -176,6 +176,7 @@ class AB_MCP_Tool_Labels {
 			'wp_update_site_settings'        => _x( 'Change site settings', 'tool label', 'alphabridge-mcp' ),
 			'wp_update_option'               => _x( 'Set an option', 'tool label', 'alphabridge-mcp' ),
 			'wp_delete_option'               => _x( 'Delete an option', 'tool label', 'alphabridge-mcp' ),
+			'wp_change_site_address'         => _x( 'Change the site address', 'tool label', 'alphabridge-mcp' ),
 			'wp_list_users'                  => _x( 'List users', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_user'                    => _x( 'Read a user', 'tool label', 'alphabridge-mcp' ),
 			'wp_create_user'                 => _x( 'Create a user', 'tool label', 'alphabridge-mcp' ),

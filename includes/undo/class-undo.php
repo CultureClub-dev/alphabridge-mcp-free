@@ -404,7 +404,9 @@ class AB_MCP_Undo {
 			'inline'     => $inline,
 		);
 		// The rest of a page-builder point keeps the state its pages were
-		// left in (set_after()), so a later change is still refused.
+		// left in (set_after()), so a later change is still refused; a point
+		// of a kind of OPTION_AFTER_KINDS keeps the state its options were
+		// left in. Each in the form of its kind (valid_entry()).
 		if ( isset( $rec['after'] ) && is_array( $rec['after'] ) && array() !== $rec['after'] ) {
 			$entry['after'] = $rec['after'];
 			if ( ! self::valid_entry( $entry ) ) {
@@ -555,6 +557,21 @@ class AB_MCP_Undo {
 	 * so the bound is kept close to that.
 	 */
 	const MAX_PARTS = 100;
+
+	/**
+	 * Kinds whose "after" holds options rather than posts (since 4.17.0):
+	 * option name => SHA-256 of the stored value (maybe_serialize()), or null
+	 * where the change left no row. Pro's kinds option (a confirmed write of
+	 * the registration pair) and site_address (home and siteurl), whose
+	 * restore compares today's rows with it and refuses a later change
+	 * (changed_since) unless forced. Every other kind keeps the form of the
+	 * page builders, post id => loc => SHA-256.
+	 *
+	 * Known here although both kinds are Pro's: the index is shared, and an
+	 * entry this plugin read as malformed would be dropped from it — the
+	 * undo point Pro promised gone.
+	 */
+	const OPTION_AFTER_KINDS = array( 'option', 'site_address' );
 
 	/**
 	 * Encode a snapshot and measure it as it would be stored, without
@@ -795,7 +812,7 @@ class AB_MCP_Undo {
 		$post_id = (int) $post_id;
 		$clean   = array();
 		foreach ( $hashes as $loc => $sha ) {
-			if ( ! is_string( $loc ) || '' === $loc || strlen( $loc ) > 255 || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}$/', $sha ) ) {
+			if ( ! is_string( $loc ) || '' === $loc || strlen( $loc ) > 255 || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}\z/', $sha ) ) {
 				return new WP_Error( 'ab_mcp_undo_bad_after', __( 'The state after the change is not in a form an undo point keeps. Check the result of the change before relying on an undo.', 'alphabridge-mcp' ) );
 			}
 			$clean[ $loc ] = $sha;
@@ -1672,7 +1689,7 @@ class AB_MCP_Undo {
 		// A file-backed entry MUST carry its hash. Treating a missing one as
 		// "skip the check" would turn a tampered index into a way of feeding
 		// arbitrary bytes to the restore.
-		if ( $has_payload && ( ! isset( $e['sha256'] ) || ! preg_match( '/^[0-9a-f]{64}$/', (string) $e['sha256'] ) ) ) {
+		if ( $has_payload && ( ! isset( $e['sha256'] ) || ! preg_match( '/^[0-9a-f]{64}\z/', (string) $e['sha256'] ) ) ) {
 			return false;
 		}
 		if ( $has_inline && ! is_string( $e['inline'] ) ) {
@@ -1688,30 +1705,65 @@ class AB_MCP_Undo {
 			foreach ( $e['parts'] as $part ) {
 				if ( ! is_array( $part ) || ! isset( $part['payload'], $part['sha256'], $part['bytes'], $part['stored'] )
 					|| ! preg_match( '/^[0-9a-f]{40}\.bin$/', (string) $part['payload'] )
-					|| ! preg_match( '/^[0-9a-f]{64}$/', (string) $part['sha256'] )
+					|| ! preg_match( '/^[0-9a-f]{64}\z/', (string) $part['sha256'] )
 					|| ( ! is_int( $part['bytes'] ) && ! ctype_digit( (string) $part['bytes'] ) )
 					|| ( ! is_int( $part['stored'] ) && ! ctype_digit( (string) $part['stored'] ) ) ) {
 					return false;
 				}
 			}
 		}
-		// The state after the change, per post: loc => sha256.
+		// The state after the change, in one of two forms, chosen by the kind.
 		if ( array_key_exists( 'after', $e ) ) {
 			if ( ! is_array( $e['after'] ) ) {
 				return false;
 			}
-			foreach ( $e['after'] as $post_id => $hashes ) {
-				if ( ! ctype_digit( (string) $post_id ) || ! is_array( $hashes ) ) {
+			// Options (Pro's option, site_address): option name => sha256 of
+			// the stored value, or null where the change left no row. The
+			// other form is refused here, as this one is for the other kinds:
+			// a restore reads the form its kind has, and one it does not
+			// expect must not reach it.
+			$options = in_array( (string) $e['kind'], self::OPTION_AFTER_KINDS, true );
+			foreach ( $e['after'] as $key => $state ) {
+				if ( $options ) {
+					if ( ! self::valid_after_option_name( $key ) ) {
+						return false;
+					}
+					if ( null !== $state && ( ! is_string( $state ) || ! preg_match( '/^[0-9a-f]{64}\z/', $state ) ) ) {
+						return false;
+					}
+					continue;
+				}
+				// Every other kind: per post, loc => sha256 (the page builders).
+				if ( ! ctype_digit( (string) $key ) || ! is_array( $state ) ) {
 					return false;
 				}
-				foreach ( $hashes as $loc => $sha ) {
-					if ( ! is_string( $loc ) || '' === $loc || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}$/', $sha ) ) {
+				foreach ( $state as $loc => $sha ) {
+					if ( ! is_string( $loc ) || '' === $loc || ! is_string( $sha ) || ! preg_match( '/^[0-9a-f]{64}\z/', $sha ) ) {
 						return false;
 					}
 				}
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * A key of the options form of "after": an option name as the
+	 * option_name column holds one — not empty, at most 191 characters
+	 * (counted as MySQL counts a utf8mb4 column; the bytes where the string is
+	 * not valid UTF-8, which is never fewer). PHP turns a name of digits into
+	 * an integer key, so an integer stands for its digits.
+	 *
+	 * @param int|string $name Key.
+	 * @return bool
+	 */
+	private static function valid_after_option_name( $name ) {
+		$name = (string) $name;
+		if ( '' === $name ) {
+			return false;
+		}
+		$chars = preg_split( '//u', $name, -1, PREG_SPLIT_NO_EMPTY );
+		return ( is_array( $chars ) ? count( $chars ) : strlen( $name ) ) <= 191;
 	}
 
 	/* --------------------------------------------------------------- internals */
@@ -1862,7 +1914,7 @@ class AB_MCP_Undo {
 		// The hash is not optional. An entry without one never passes
 		// valid_entry(), so reaching here without a hash means the caller
 		// bypassed the index — refuse rather than trust the bytes.
-		if ( ! preg_match( '/^[0-9a-f]{64}$/', (string) $sha ) || ! hash_equals( (string) $sha, hash( 'sha256', $raw ) ) ) {
+		if ( ! preg_match( '/^[0-9a-f]{64}\z/', (string) $sha ) || ! hash_equals( (string) $sha, hash( 'sha256', $raw ) ) ) {
 			return new WP_Error( 'ab_mcp_undo_corrupt', __( 'The undo snapshot failed its integrity check. This undo point cannot be used; wp_undo_discard removes it.', 'alphabridge-mcp' ) );
 		}
 		return $raw;

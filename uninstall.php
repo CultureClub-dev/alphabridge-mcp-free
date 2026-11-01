@@ -53,6 +53,10 @@ $ab_mcp_options = array(
 	// the setting and the acknowledgements live in ab_mcp_options and
 	// ab_mcp_tokens, removed above.
 	'ab_mcp_staging_first',
+	// The record of an address change that is not finished (since 4.17.0,
+	// AB_MCP_Site_Address_Journal::OPTION; Pro's wp_change_site_address
+	// writes it, this plugin shows and closes it).
+	'ab_mcp_site_address_journal',
 );
 
 // The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no

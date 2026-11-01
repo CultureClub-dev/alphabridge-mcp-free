@@ -852,4 +852,462 @@ final class OutboundBindingTest extends TestCase {
 	public function testTheAddressOfARedirect( string $location, string $base, ?string $expected ): void {
 		self::assertSame( $expected, AB_MCP_Outbound::absolute_url( $location, $base ) );
 	}
+
+	/* ---------------------------------------- AB_MCP_Outbound::get_bound() */
+
+	/** A new site address whose name points nowhere yet: no test answers it. */
+	const NEW_HOST = 'video2.alphabridge-mcp.com';
+
+	/** @var string[] The hosts looked up (ab_mcp_outbound_addresses), in order. */
+	private array $looked_up = array();
+
+	/**
+	 * WordPress's transport as far as the bound mode reaches it. The bootstrap
+	 * answers wp_remote_get() without the transport's hooks (it is the
+	 * loopback of the firewall check, where nothing is tied), so here the
+	 * answer runs what WP_Http::request() runs before it connects, as the
+	 * bootstrap's wp_safe_remote_get() does: the first hook of the fsockopen
+	 * transport, where an exception of Requests ends the request with
+	 * nothing sent (the call is taken off the record), or http_api_curl on a
+	 * real cURL handle, which with ab_test_http_curl set is then started
+	 * against a refusing proxy on this machine and leaves its verbose log
+	 * ('curl'). Each call also records which function of WordPress sent it
+	 * ('via', from the stack). The hosts looked up are recorded too.
+	 */
+	private function boundTransport(): void {
+		$this->looked_up = array();
+		add_filter(
+			'ab_mcp_outbound_addresses',
+			function ( $found, string $host ) {
+				$this->looked_up[] = $host;
+				return $found;
+			},
+			5,
+			2
+		);
+		$GLOBALS['ab_test_http_answer'] = function ( string $url, array $args ) {
+			$call   = count( $GLOBALS['ab_test_http'] ) - 1;
+			$frames = array_column( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ), 'function' );
+			$GLOBALS['ab_test_http'][ $call ]['via'] = in_array( 'wp_safe_remote_get', $frames, true ) ? 'wp_safe_remote_get' : ( in_array( 'wp_remote_get', $frames, true ) ? 'wp_remote_get' : 'other' );
+			$transport                               = $GLOBALS['ab_test_http_transport'] ?? 'curl';
+			if ( 'fsockopen' === $transport ) {
+				try {
+					do_action_ref_array( 'requests-fsockopen.before_request', array() );
+				} catch ( \WpOrg\Requests\Exception $e ) {
+					array_pop( $GLOBALS['ab_test_http'] );
+					return new WP_Error( 'http_request_failed', $e->getMessage() );
+				}
+			}
+			if ( 'curl' === $transport && function_exists( 'curl_init' ) ) {
+				$handle = curl_init();
+				do_action_ref_array( 'http_api_curl', array( &$handle, $args, $url ) );
+				if ( ! empty( $GLOBALS['ab_test_http_curl'] ) ) {
+					$log = fopen( 'php://temp', 'w+' );
+					curl_setopt_array(
+						$handle,
+						array(
+							CURLOPT_URL               => $url,
+							CURLOPT_PROXY             => 'http://127.0.0.1:9',
+							CURLOPT_VERBOSE           => true,
+							CURLOPT_STDERR            => $log,
+							CURLOPT_RETURNTRANSFER    => true,
+							CURLOPT_CONNECTTIMEOUT_MS => 500,
+							CURLOPT_TIMEOUT_MS        => 1000,
+						)
+					);
+					curl_exec( $handle );
+					rewind( $log );
+					$GLOBALS['ab_test_http'][ $call ]['curl'] = (string) stream_get_contents( $log );
+					fclose( $log );
+				}
+			}
+			$answer = $this->answers[ $url ] ?? ab_test_http_response( 404, 'no such address' );
+			return is_callable( $answer ) ? $answer( $args ) : $answer;
+		};
+	}
+
+	/** get_bound() over the transport above. */
+	private function bound( string $url, array $args = array(), $pin_to = null ) {
+		$this->boundTransport();
+		return AB_MCP_Outbound::get_bound( $url, $args, $pin_to );
+	}
+
+	/** Nothing was sent and no name looked up. */
+	private function assertNotAsked(): void {
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'Nothing was sent.' );
+		self::assertSame( array(), $this->looked_up, 'No name was looked up.' );
+	}
+
+	public function testTheBoundModeSendsThroughWpRemoteGetAndNeverThroughWpSafeRemoteGet(): void {
+		// wp_safe_remote_get() would hand the address to
+		// wp_http_validate_url(), which looks the host up with
+		// gethostbyname() and refuses a name without an A record before the
+		// binding could tie it.
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		$result = $this->bound( $url, array(), array( self::V4 ) );
+		self::assertSame( 'body', wp_remote_retrieve_body( $result ) );
+		self::assertCount( 1, $GLOBALS['ab_test_http'] );
+		self::assertSame( 'wp_remote_get', $GLOBALS['ab_test_http'][0]['via'] );
+	}
+
+	public function testRejectUnsafeUrlsIsFalseWhateverTheCallerSays(): void {
+		// With true, WordPress would look the name up after all
+		// (WP_Http::request(): wp_http_validate_url()).
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		$this->bound( $url, array( 'reject_unsafe_urls' => true, 'timeout' => 7 ), array( self::V4 ) );
+		self::assertFalse( $GLOBALS['ab_test_http'][0]['args']['reject_unsafe_urls'] );
+		self::assertSame( 7, $GLOBALS['ab_test_http'][0]['args']['timeout'], 'The other arguments go with the request.' );
+	}
+
+	public function testA3xxIsTheAnswerAndRedirectionIsZeroWhateverTheCallerSays(): void {
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->redirect( $url, 'https://files.example/elsewhere', 301 );
+		$this->serve( 'https://files.example/elsewhere', 'body', 'text/plain' );
+		$result = $this->bound( $url, array( 'redirection' => 5 ), array( self::V4 ) );
+		self::assertSame( 301, wp_remote_retrieve_response_code( $result ), 'The caller reads the 3xx: a target would be looked up unbound.' );
+		self::assertSame( 'https://files.example/elsewhere', wp_remote_retrieve_header( $result, 'location' ) );
+		self::assertSame( array( $url ), self::urls(), 'Nothing followed.' );
+		self::assertSame( 0, $GLOBALS['ab_test_http'][0]['args']['redirection'] );
+	}
+
+	public function testTheAddressGoesOutExactlyAsGiven(): void {
+		foreach ( array(
+			'https://' . self::NEW_HOST . '/wp/?rest_route=/alphabridge/v1/address-probe&key=a%2Fb&nonce=N+1',
+			'https://' . self::NEW_HOST . '?rest_route=/alphabridge/v1/address-probe',
+			'http://' . self::NEW_HOST . ':8080/a/../b//c',
+			'HTTPS://' . self::NEW_HOST . '/',
+		) as $url ) {
+			$GLOBALS['ab_test_http'] = array();
+			$this->serve( $url, 'body', 'text/plain' );
+			self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ), $url );
+			self::assertSame( array( $url ), self::urls() );
+		}
+	}
+
+	#[RequiresPhpExtension( 'curl' )]
+	public function testWithoutPinToTheRequestIsTiedToEveryAddressOfTheName(): void {
+		$url = 'https://files.example/probe';
+		$this->serve( $url, 'body', 'text/plain' );
+		$GLOBALS['ab_test_http_curl'] = true;
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url ) ) );
+		self::assertStringContainsString( ' files.example:443:' . self::V4 . ',' . self::V6 . ' ', $GLOBALS['ab_test_http'][0]['curl'], 'cURL took the checked addresses, IPv4 and IPv6, and looked nothing up.' );
+		self::assertSame( array( 'files.example' ), $this->looked_up );
+		self::assertFalse( has_action( 'http_api_curl' ), 'Taken off after the request: no other request of the site is tied.' );
+		self::assertFalse( has_action( 'requests-fsockopen.before_request' ) );
+	}
+
+	#[RequiresPhpExtension( 'curl' )]
+	public function testWithPinToTheRequestIsTiedToThoseAddressesAndTheNameIsNotLookedUp(): void {
+		$GLOBALS['ab_test_http_curl'] = true;
+		$url                          = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ), 'A name without an A record is asked: the binding is pin_to.' );
+		self::assertStringContainsString( ' ' . self::NEW_HOST . ':443:' . self::V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+		self::assertSame( array(), $this->looked_up );
+
+		$GLOBALS['ab_test_http'] = array();
+		$this->bound( $url, array(), array( self::V4, self::V6 ) );
+		self::assertStringContainsString( ' ' . self::NEW_HOST . ':443:' . self::V4 . ',' . self::V6 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+
+		// A name that does resolve: still the caller's list, not the AAAA
+		// record DNS would add.
+		$GLOBALS['ab_test_http'] = array();
+		$this->serve( 'https://files.example/', 'body', 'text/plain' );
+		$this->bound( 'https://files.example/', array(), array( self::V4 ) );
+		self::assertStringContainsString( ' files.example:443:' . self::V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+		self::assertStringNotContainsString( self::V6, $GLOBALS['ab_test_http'][0]['curl'] );
+		self::assertSame( array(), $this->looked_up );
+	}
+
+	/** @return array<string,array{0:string,1:int}> An address, and the port its binding carries. */
+	public static function boundPorts(): array {
+		return array(
+			'http, no port'        => array( 'http://' . self::NEW_HOST . '/', 80 ),
+			'https, no port'       => array( 'https://' . self::NEW_HOST . '/', 443 ),
+			'https in capitals'    => array( 'HTTPS://' . self::NEW_HOST . '/', 443 ),
+			'http on 8080'         => array( 'http://' . self::NEW_HOST . ':8080/x', 8080 ),
+			'https on 8443, query' => array( 'https://' . self::NEW_HOST . ':8443?a=1', 8443 ),
+			'http on 443'          => array( 'http://' . self::NEW_HOST . ':443/', 443 ),
+			'https on 80'          => array( 'https://' . self::NEW_HOST . ':80/', 80 ),
+			'the highest port'     => array( 'https://' . self::NEW_HOST . ':65535/', 65535 ),
+			'the lowest port'      => array( 'https://' . self::NEW_HOST . ':1/', 1 ),
+		);
+	}
+
+	#[DataProvider( 'boundPorts' )]
+	#[RequiresPhpExtension( 'curl' )]
+	public function testTheBindingCarriesThePortOfTheAddressOrOfItsScheme( string $url, int $port ): void {
+		$GLOBALS['ab_test_http_curl'] = true;
+		$this->serve( $url, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ) );
+		self::assertStringContainsString( ' ' . self::NEW_HOST . ':' . $port . ':' . self::V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+	}
+
+	/** @return array<string,array{0:string}> */
+	public static function dnsNames(): array {
+		return array(
+			'the new name of the plan' => array( self::NEW_HOST ),
+			'punycode'                 => array( 'xn--bcher-kva.example' ),
+			'hyphens'                  => array( 'a-b.c-d.example' ),
+			'a label of digits first'  => array( '1.example' ),
+			'many labels'              => array( 'a.b.c.d.example' ),
+			'a long top label'         => array( 'shop.xn--p1ai' ),
+		);
+	}
+
+	#[DataProvider( 'dnsNames' )]
+	public function testADnsNameIsTaken( string $host ): void {
+		$url = 'https://' . $host . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ) );
+		self::assertSame( array( $url ), self::urls() );
+	}
+
+	/** @return array<string,array{0:string,1:string}> An address the bound mode refuses before anything, and the code. */
+	public static function boundRefusals(): array {
+		$n = self::NEW_HOST;
+		return array(
+			// 1. The scheme.
+			'ftp'                                   => array( 'ftp://' . $n . '/x', 'ab_mcp_outbound_scheme' ),
+			'a file'                                => array( 'file:///etc/passwd', 'ab_mcp_outbound_scheme' ),
+			'javascript'                            => array( 'javascript:alert(1)', 'ab_mcp_outbound_scheme' ),
+			'no scheme'                             => array( $n . '/x', 'ab_mcp_outbound_scheme' ),
+			'scheme-relative'                       => array( '//' . $n . '/x', 'ab_mcp_outbound_scheme' ),
+			'one slash'                             => array( 'https:/' . $n . '/', 'ab_mcp_outbound_scheme' ),
+			'a space in front'                      => array( ' https://' . $n . '/', 'ab_mcp_outbound_scheme' ),
+			// 2. A user part.
+			'a user'                                => array( 'https://user@' . $n . '/', 'ab_mcp_outbound_userinfo' ),
+			'a user and a password'                 => array( 'https://user:pw@' . $n . '/', 'ab_mcp_outbound_userinfo' ),
+			'an empty user'                         => array( 'https://@' . $n . '/', 'ab_mcp_outbound_userinfo' ),
+			'a backslash: parse_url reads the host behind it' => array( 'https://' . $n . '\\@inside.example/', 'ab_mcp_outbound_userinfo' ),
+			// 2. The host is a DNS name.
+			'IPv4'                                  => array( 'http://127.0.0.1/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv4, octal (libcurl: 127.0.0.1)'      => array( 'http://0177.0.0.1/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv4, one number (libcurl: 127.0.0.1)' => array( 'http://2130706433/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv4, hex (libcurl: 127.0.0.1)'        => array( 'http://0x7f.0.0.1/', 'ab_mcp_outbound_not_dns_name' ),
+			'a public IPv4'                         => array( 'http://' . self::V4 . '/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv6 in brackets'                      => array( 'http://[::1]/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv6 bare'                             => array( 'http://::1/', 'ab_mcp_outbound_not_dns_name' ),
+			'IPv4 inside IPv6'                      => array( 'http://[::ffff:127.0.0.1]/', 'ab_mcp_outbound_not_dns_name' ),
+			'a public IPv6 bare'                    => array( 'http://2606:2800:220:1:248:1893:25c8:1946/', 'ab_mcp_outbound_not_dns_name' ),
+			'localhost, no dot'                     => array( 'http://localhost/', 'ab_mcp_outbound_not_dns_name' ),
+			'a name without a dot'                  => array( 'http://example/', 'ab_mcp_outbound_not_dns_name' ),
+			'the last label a number'               => array( 'http://files.9example/', 'ab_mcp_outbound_not_dns_name' ),
+			'the last label starts with a hyphen'   => array( 'http://files.-example/', 'ab_mcp_outbound_not_dns_name' ),
+			'an underscore'                         => array( 'http://files_x.example/', 'ab_mcp_outbound_not_dns_name' ),
+			'an empty label'                        => array( 'http://files..example/', 'ab_mcp_outbound_not_dns_name' ),
+			'a dot in front'                        => array( 'http://.files.example/', 'ab_mcp_outbound_not_dns_name' ),
+			'a dot at the end'                      => array( 'http://files.example./', 'ab_mcp_outbound_not_dns_name' ),
+			'another script'                        => array( 'http://bücher.example/', 'ab_mcp_outbound_not_dns_name' ),
+			'percent-encoded'                       => array( 'http://%66iles.example/', 'ab_mcp_outbound_not_dns_name' ),
+			'a backslash'                           => array( 'http://files.example\\x/', 'ab_mcp_outbound_not_dns_name' ),
+			'a line break at the end of the host'   => array( "http://files.example\n/x", 'ab_mcp_outbound_not_dns_name' ),
+			'no host'                               => array( 'https:///x', 'ab_mcp_outbound_not_dns_name' ),
+			// 2. Capitals.
+			'a capital'                             => array( 'https://Video2.alphabridge-mcp.com/', 'ab_mcp_outbound_host_case' ),
+			'all capitals'                          => array( 'https://VIDEO2.ALPHABRIDGE-MCP.COM/', 'ab_mcp_outbound_host_case' ),
+			// 2. The port.
+			'port 0'                                => array( 'https://' . $n . ':0/', 'ab_mcp_outbound_port' ),
+			'an empty port'                         => array( 'https://' . $n . ':/', 'ab_mcp_outbound_port' ),
+			'port 65536'                            => array( 'https://' . $n . ':65536/', 'ab_mcp_outbound_port' ),
+			'a port of six digits'                  => array( 'https://' . $n . ':100000/', 'ab_mcp_outbound_port' ),
+			'a leading zero'                        => array( 'https://' . $n . ':08080/', 'ab_mcp_outbound_port' ),
+			'not a number'                          => array( 'https://' . $n . ':80a/', 'ab_mcp_outbound_port' ),
+			'two colons'                            => array( 'https://' . $n . '::80/', 'ab_mcp_outbound_port' ),
+			'a line break after the port'           => array( 'https://' . $n . ":80\n/", 'ab_mcp_outbound_port' ),
+			// 3. A fragment.
+			'a fragment'                            => array( 'https://' . $n . '/#top', 'ab_mcp_outbound_fragment' ),
+			'an empty fragment'                     => array( 'https://' . $n . '#', 'ab_mcp_outbound_fragment' ),
+			'a fragment after a query'              => array( 'https://' . $n . '/?a=1#b', 'ab_mcp_outbound_fragment' ),
+			'a host in the fragment'                => array( 'https://' . $n . '#@inside.example/', 'ab_mcp_outbound_fragment' ),
+		);
+	}
+
+	/** What each refusal tells the caller to do. */
+	const BOUND_STEPS = array(
+		'ab_mcp_outbound_scheme'       => 'Give the address with its scheme, for example https://www.example.com/.',
+		'ab_mcp_outbound_userinfo'     => 'carries a user part (a name before "@" in front of the host). Give the address without it',
+		'ab_mcp_outbound_not_dns_name' => 'its host must be a DNS name such as www.example.com, not an IP address, a number or a name without a dot. Give the address with the domain name of the site',
+		'ab_mcp_outbound_host_case'    => 'Give the host name in lower case, for example https://www.example.com/ (a DNS name does not depend on case).',
+		'ab_mcp_outbound_port'         => 'Give the port as digits after the host',
+		'ab_mcp_outbound_fragment'     => 'carries a fragment (a part after "#"), which a request never sends. Give the address without it.',
+		'ab_mcp_outbound_pin_empty'    => 'Give the public IP addresses of the server, or leave pin_to out',
+		'ab_mcp_outbound_pin_local'    => 'Give only public IPv4 or IPv6 addresses of the server.',
+		'ab_mcp_outbound_unresolved'   => 'its host name has no address. Check the spelling of the host, or give the IP addresses of the server to tie the request to (pin_to).',
+		'ab_mcp_outbound_local'        => 'points to an address that is local or not public. Give a host name whose every address is public',
+	);
+
+	#[DataProvider( 'boundRefusals' )]
+	public function testAnAddressOutsideTheContractIsNotAskedAndSaysWhy( string $url, string $code ): void {
+		$this->serve( $url, 'secret', 'text/plain' );
+		// With pin_to, so nothing but the form decides; without it the
+		// refusal comes before any lookup all the same.
+		foreach ( array( array( self::V4 ), null ) as $pin_to ) {
+			$result = $this->bound( $url, array(), $pin_to );
+			self::assertSame( $code, self::code( $result ) );
+			self::assertStringStartsWith( 'The address was not asked: ', self::message( $result ) );
+			self::assertStringContainsString( self::BOUND_STEPS[ $code ], self::message( $result ) );
+			self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+			$this->assertNotAsked();
+		}
+	}
+
+	/** @return array<string,array{0:mixed,1:string}> */
+	public static function pinRefusals(): array {
+		return array(
+			'an empty list'                  => array( array(), 'ab_mcp_outbound_pin_empty' ),
+			'not a list'                     => array( self::V4, 'ab_mcp_outbound_pin_empty' ),
+			'a private address among them'   => array( array( self::V4, '10.0.0.1' ), 'ab_mcp_outbound_pin_local' ),
+			'this machine'                   => array( array( '127.0.0.1' ), 'ab_mcp_outbound_pin_local' ),
+			'IPv4 mapped into IPv6'          => array( array( '::ffff:127.0.0.1' ), 'ab_mcp_outbound_pin_local' ),
+			'IPv6 loopback'                  => array( array( '::1' ), 'ab_mcp_outbound_pin_local' ),
+			'IPv6 unique local, among'       => array( array( self::V6, 'fd00::1' ), 'ab_mcp_outbound_pin_local' ),
+			'link-local (cloud metadata)'    => array( array( '169.254.169.254' ), 'ab_mcp_outbound_pin_local' ),
+			'a name, not an address'         => array( array( 'files.example' ), 'ab_mcp_outbound_pin_local' ),
+			'IPv6 in brackets'               => array( array( '[' . self::V6 . ']' ), 'ab_mcp_outbound_pin_local' ),
+			'an entry that is not a string'  => array( array( self::V4, array( self::V4 ) ), 'ab_mcp_outbound_pin_local' ),
+			'a number'                       => array( array( 1572395042 ), 'ab_mcp_outbound_pin_local' ),
+		);
+	}
+
+	#[DataProvider( 'pinRefusals' )]
+	public function testPinToHoldsOnlyPublicAddresses( $pin_to, string $code ): void {
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'secret', 'text/plain' );
+		$result = $this->bound( $url, array(), $pin_to );
+		self::assertSame( $code, self::code( $result ) );
+		self::assertStringContainsString( self::BOUND_STEPS[ $code ], self::message( $result ) );
+		self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+		$this->assertNotAsked();
+	}
+
+	/** @return array<string,array{0:string,1:string}> */
+	public static function boundNamesRefused(): array {
+		return array(
+			'a name without an address'      => array( 'nowhere.example', 'ab_mcp_outbound_unresolved' ),
+			'public and private mixed, AAAA' => array( 'mixed.example', 'ab_mcp_outbound_local' ),
+			'IPv4 mapped into IPv6'          => array( 'mapped.example', 'ab_mcp_outbound_local' ),
+			'a private address'              => array( 'inside.example', 'ab_mcp_outbound_local' ),
+			'below localhost'                => array( 'app.localhost', 'ab_mcp_outbound_local' ),
+		);
+	}
+
+	#[DataProvider( 'boundNamesRefused' )]
+	public function testWithoutPinToEveryAddressOfTheNameIsPublic( string $host, string $code ): void {
+		$url = 'https://' . $host . '/';
+		$this->serve( $url, 'secret', 'text/plain' );
+		$result = $this->bound( $url );
+		self::assertSame( $code, self::code( $result ) );
+		self::assertStringContainsString( self::BOUND_STEPS[ $code ], self::message( $result ) );
+		self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'Nothing was sent.' );
+		self::assertSame( 'app.localhost' === $host ? array() : array( $host ), $this->looked_up, 'A name below localhost is local before any lookup.' );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testThroughTheProxyOfWordPressTheBoundModeSendsNothing(): void {
+		self::proxy();
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'secret', 'text/plain' );
+		$result = $this->bound( $url, array(), array( self::V4 ) );
+		self::assertSame( 'ab_mcp_outbound_proxy', self::code( $result ) );
+		self::assertStringContainsString( 'which looks the name up itself', self::message( $result ) );
+		self::assertStringEndsWith( 'Add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php, then try again.', self::message( $result ) );
+		self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+		self::assertSame( array(), $GLOBALS['ab_test_http'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	#[RequiresPhpExtension( 'curl' )]
+	public function testAHostInTheBypassListGoesDirectAndTied(): void {
+		self::proxy( 'localhost, *.alphabridge-mcp.com' );
+		$GLOBALS['ab_test_http_curl'] = true;
+		$url                          = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ) );
+		self::assertStringContainsString( ' ' . self::NEW_HOST . ':443:' . self::V4 . ' ', $GLOBALS['ab_test_http'][0]['curl'] );
+	}
+
+	#[RequiresPhpExtension( 'curl' )]
+	public function testTheBoundModeIgnoresTheProxyOfTheEnvironment(): void {
+		$url = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'body', 'text/plain' );
+		$logs = array();
+		self::probe_environment_proxy( $logs );
+		self::assertSame( 'body', wp_remote_retrieve_body( $this->bound( $url, array(), array( self::V4 ) ) ) );
+		self::assertNoEnvironmentProxy( $logs, 1 );
+	}
+
+	public function testWithoutCurlTheBoundModeSendsNothing(): void {
+		$GLOBALS['ab_test_http_transport'] = 'fsockopen';
+		$url                               = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'secret', 'text/plain' );
+		$result = $this->bound( $url, array(), array( self::V4 ) );
+		self::assertSame( 'ab_mcp_outbound_unbound', self::code( $result ) );
+		self::assertSame( 'Not sent: without cURL the request cannot be tied to the checked addresses. Ask the host to enable the curl extension of PHP, then try again.', self::message( $result ) );
+		self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'Refused before the transport connects.' );
+		self::assertFalse( has_action( 'requests-fsockopen.before_request' ) );
+		self::assertFalse( has_action( 'http_api_curl' ) );
+	}
+
+	public function testAnAnswerThatCameWithoutTheBindingIsDiscarded(): void {
+		// Another transport, or a plugin that answers on pre_http_request:
+		// the hook of cURL never ran.
+		$GLOBALS['ab_test_http_transport'] = 'other';
+		$url                               = 'https://' . self::NEW_HOST . '/';
+		$this->serve( $url, 'secret', 'text/plain' );
+		$result = $this->bound( $url, array(), array( self::V4 ) );
+		self::assertSame( 'ab_mcp_outbound_unbound', self::code( $result ) );
+		self::assertStringStartsWith( 'The answer was discarded: the request went out without cURL', self::message( $result ) );
+		self::assertStringEndsWith( '(the filter pre_http_request); then try again.', self::message( $result ) );
+		self::assertSame( array( 'url' => $url ), $result->get_error_data() );
+	}
+
+	public function testAnErrorOfTheTransportComesBackAsItIs(): void {
+		$url                   = 'https://' . self::NEW_HOST . '/';
+		$this->answers[ $url ] = new WP_Error( 'http_request_failed', 'cURL error 60: SSL certificate problem: unable to get local issuer certificate' );
+		$result                = $this->bound( $url, array(), array( self::V4 ) );
+		self::assertSame( 'http_request_failed', self::code( $result ), 'A TLS error is the caller\'s to read.' );
+		self::assertSame( 'cURL error 60: SSL certificate problem: unable to get local issuer certificate', self::message( $result ) );
+	}
+
+	public function testGetSaysWhatItSaidBeforeWithoutCurl(): void {
+		// The messages of get() moved into SAY_GET when the transport became
+		// one for both modes; what its callers read stays word for word.
+		$this->serve( 'https://files.example/a', 'body', 'text/plain' );
+		$GLOBALS['ab_test_http_transport'] = 'fsockopen';
+		$result                            = AB_MCP_Outbound::get( 'https://files.example/a', array() );
+		self::assertSame( 'ab_mcp_outbound_unbound', self::code( $result ) );
+		self::assertSame( 'Not sent: without cURL the request cannot be tied to the checked addresses.', self::message( $result ) );
+		self::assertSame( array( 'url' => 'https://files.example/a', 'hop' => 0 ), $result->get_error_data() );
+		$GLOBALS['ab_test_http_transport'] = 'other';
+		$result                            = AB_MCP_Outbound::get( 'https://files.example/a', array() );
+		self::assertSame( 'ab_mcp_outbound_unbound', self::code( $result ) );
+		self::assertSame( 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.', self::message( $result ) );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testGetSaysWhatItSaidBeforeBehindTheProxy(): void {
+		self::proxy();
+		$result = AB_MCP_Outbound::get( 'https://files.example/a', array() );
+		self::assertSame( 'ab_mcp_outbound_proxy', self::code( $result ) );
+		self::assertSame( 'The address was not asked: the request would go through the proxy, which looks the name up itself.', self::message( $result ) );
+		self::assertSame( array( 'url' => 'https://files.example/a', 'hop' => 0 ), $result->get_error_data() );
+	}
+
+	public function testGetStillSendsThroughWpSafeRemoteGet(): void {
+		// The other mode is unchanged: every address it fetches goes through
+		// wp_safe_remote_get() as before.
+		$this->boundTransport();
+		$this->serve( 'https://files.example/a', 'body', 'text/plain' );
+		self::assertSame( 'body', wp_remote_retrieve_body( AB_MCP_Outbound::get( 'https://files.example/a', array() ) ) );
+		self::assertSame( 'wp_safe_remote_get', $GLOBALS['ab_test_http'][0]['via'] );
+		self::assertArrayNotHasKey( 'reject_unsafe_urls', $GLOBALS['ab_test_http'][0]['args'], 'wp_safe_remote_get() sets it itself.' );
+	}
 }

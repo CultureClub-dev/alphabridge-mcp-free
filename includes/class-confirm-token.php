@@ -16,10 +16,35 @@
  * person's approval. The answer says so.
  *
  * Definition keys (all optional except `state`):
+ *  - when    callable( array $args ): bool  Whether THIS call needs the
+ *            confirmation (since 4.17.0). Asked first, before `state`: only
+ *            a strict false lets the call run without a token — the tool's
+ *            callback runs at once, `state` and `preview` are not called.
+ *            Anything else (true, a WP_Error, another value, an exception, a
+ *            `when` that cannot be called) asks for the token as without
+ *            `when`: a condition that fails must not open the tool. For a
+ *            tool that confirms only some calls, such as a write of the
+ *            registration pair among all options; the condition has to judge
+ *            the call as the callback will act on it (the option name as
+ *            AB_MCP_Option_Guard::resolve_option() settles it, not as sent).
  *  - state   callable( array $args ): string|WP_Error  Fingerprint of what the
  *            tool would change. WP_Error stops the call before any preview.
  *  - preview callable( array $args ): array|WP_Error    What would happen, in
  *            words and figures, shown with the token.
+ *  - note    string  One sentence the registry adds to the description
+ *            (since 4.17.0): for a tool with `when` in place of the sentence
+ *            «Runs in two steps…», which would claim two steps for every call,
+ *            so it says which calls need the confirmation; for any other tool
+ *            after that sentence.
+ *
+ * THE CONTRACT of a token: it confirms this change (the tool and its
+ * arguments) to this state (what `state` reported for the preview), for this
+ * user and this scope of the connection, for 10 minutes (TTL). It is not used
+ * up: as long as it has not expired, it is accepted again whenever the same
+ * call meets the same state — so after a change was undone and the state of
+ * the preview is back, the same token confirms the same change once more.
+ * Whatever it covers differs, and it is refused. A preview that `state` or
+ * `preview` refuses with a WP_Error gives no token at all.
  *
  * @package AlphaBridge_MCP
  */
@@ -54,11 +79,32 @@ final class AB_MCP_Confirm_Token {
 	}
 
 	/**
+	 * Does a confirm definition confirm only some calls? Only with a `when`
+	 * that can be called: one that cannot is no condition, and gate() asks
+	 * every call for the token.
+	 *
+	 * @param mixed $confirm The `confirm` of a definition.
+	 * @return bool
+	 */
+	public static function conditional( $confirm ) {
+		return is_array( $confirm ) && isset( $confirm['when'] ) && is_callable( $confirm['when'] );
+	}
+
+	/**
 	 * The schema property every confirming tool gets.
 	 *
+	 * @param mixed $confirm The `confirm` of the definition (since 4.17.0; a
+	 *                       caller of before passes none and gets the
+	 *                       sentence of a tool that confirms every call).
 	 * @return array
 	 */
-	public static function schema_property() {
+	public static function schema_property( $confirm = array() ) {
+		if ( self::conditional( $confirm ) ) {
+			return array(
+				'type'        => 'string',
+				'description' => __( 'Confirmation from the preview, for a call that needs one (the description says which): such a call without it changes nothing and answers with a preview and a confirm_token, and the same arguments with that token run the tool; any other call runs at once. A token confirms that change to the state the preview showed: it is valid for 10 minutes, is not used up and is accepted whenever the call meets that same state again, and refused while anything it covers is different.', 'alphabridge-mcp' ),
+			);
+		}
 		return array(
 			'type'        => 'string',
 			'description' => __( 'Confirmation from the preview: a call without it changes nothing and answers with a preview and a confirm_token, and the same arguments with that token run the tool. A token is valid for 10 minutes and only while what it covers is unchanged.', 'alphabridge-mcp' ),
@@ -66,12 +112,48 @@ final class AB_MCP_Confirm_Token {
 	}
 
 	/**
-	 * The sentence added to the description of every confirming tool.
+	 * The sentence added to the description of every confirming tool: for a
+	 * tool that confirms only some calls its own `note` (or, without one, a
+	 * sentence that says only some calls take two steps), since «Runs in two
+	 * steps» would be untrue for the others; for every other tool the
+	 * sentence of before, followed by its `note` where it has one.
 	 *
+	 * @param mixed $confirm The `confirm` of the definition (since 4.17.0; see
+	 *                       schema_property()).
 	 * @return string
 	 */
-	public static function description_note() {
-		return __( 'Runs in two steps: a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it. This guards against a call nobody meant; it does not make the change reversible.', 'alphabridge-mcp' );
+	public static function description_note( $confirm = array() ) {
+		$note = is_array( $confirm ) && isset( $confirm['note'] ) && is_string( $confirm['note'] ) ? trim( $confirm['note'] ) : '';
+		if ( self::conditional( $confirm ) ) {
+			return '' !== $note
+				? $note
+				: __( 'Some calls run in two steps: such a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it; the other calls run at once. This guards against a call nobody meant; it does not make the change reversible.', 'alphabridge-mcp' );
+		}
+		return trim( __( 'Runs in two steps: a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it. This guards against a call nobody meant; it does not make the change reversible.', 'alphabridge-mcp' ) . ' ' . $note );
+	}
+
+	/**
+	 * Does this call need the confirmation? The `when` of the definition,
+	 * read fail closed: only a strict false says no. A `when` that throws
+	 * says yes as well — the call then goes the way of every confirmed call,
+	 * where `state` and `preview` decide — and so does a definition without
+	 * one, or with one that cannot be called.
+	 *
+	 * @param array $confirm The `confirm` of the definition.
+	 * @param array $args    Arguments without the token.
+	 * @return bool
+	 */
+	private static function asks( array $confirm, array $args ) {
+		if ( ! self::conditional( $confirm ) ) {
+			return true;
+		}
+		try {
+			$needed = call_user_func( $confirm['when'], $args );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+			return true;
+		}
+		return false !== $needed;
 	}
 
 	/**
@@ -91,6 +173,13 @@ final class AB_MCP_Confirm_Token {
 		}
 		if ( null === self::canonical( self::without_token( $args ) ) ) {
 			return new WP_Error( 'ab_mcp_confirm_args', __( 'Nothing ran: the arguments hold a value that cannot be written as JSON (a number out of range, for example), so no confirmation can be bound to them. Leave out that value and call again.', 'alphabridge-mcp' ) );
+		}
+		// Before `state`: a call that needs no confirmation runs as it is,
+		// and its `state` — which may refuse what only a confirmed call has
+		// to be refused for, or read what such a call does not touch — is
+		// not asked at all. A token sent along is dropped by the caller.
+		if ( ! self::asks( $def['confirm'], self::without_token( $args ) ) ) {
+			return true;
 		}
 		$state = call_user_func( $def['confirm']['state'], self::without_token( $args ) );
 		if ( is_wp_error( $state ) ) {

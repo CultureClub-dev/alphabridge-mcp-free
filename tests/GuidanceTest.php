@@ -208,7 +208,8 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 39, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0, 12 more since 4.11.0 and 2 more since 4.12.0, and they run here.' );
+		self::assertCount( 40, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0, 12 more since 4.11.0 and 2 more since 4.12.0, and they run here; Pro 4.17.0 adds wp_change_site_address.' );
+		self::assertContains( 'wp_change_site_address', $pro, 'Changing the site address is a tool of Pro (4.17.0).' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );

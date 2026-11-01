@@ -72,13 +72,24 @@ function get_plugins() {
 }
 $GLOBALS['t_active']      = array();
 $GLOBALS['t_deactivated'] = array();
+// What deactivate_plugins() was asked with: silent, network_wide.
+$GLOBALS['t_deact_args']  = array();
+// A hook on the option that puts an entry back (4.17.0, M5).
+$GLOBALS['t_put_back']    = null;
 function is_plugin_active( $p ) { return in_array( $p, $GLOBALS['t_active'], true ); }
+// The site's list as get_option() reads it: the entries of t_active.
+function get_option( $k, $d = false ) { return 'active_plugins' === $k ? $GLOBALS['t_active'] : $d; }
+function admin_url( $p = '' ) { return 'https://example.test/wp-admin/' . $p; }
 // A single site: wp_deactivate_plugin asks for the network's right only on a network.
 function is_multisite() { return false; }
-function deactivate_plugins( $plugins ) {
+function deactivate_plugins( $plugins, $silent = false, $network_wide = null ) {
 	foreach ( (array) $plugins as $p ) {
 		$GLOBALS['t_deactivated'][] = $p;
+		$GLOBALS['t_deact_args'][]  = array( $silent, $network_wide );
 		$GLOBALS['t_active']        = array_values( array_diff( $GLOBALS['t_active'], array( $p ) ) );
+		if ( $GLOBALS['t_put_back'] === $p ) {
+			$GLOBALS['t_active'][] = $p;
+		}
 	}
 }
 $GLOBALS['t_deleted'] = array();
@@ -97,6 +108,7 @@ function wp_get_themes( $args = array() ) {
 function get_stylesheet() { return 'child-theme'; }
 function get_template() { return 'twentytwentyfour'; }
 class AB_MCP_Tool_Registry {}
+require_once AB_MCP_DIR . 'includes/class-guidance.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-base.php';
 require_once AB_MCP_DIR . 'includes/class-lifecycle-confirm.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-install-update.php';
@@ -166,6 +178,45 @@ $r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => '
 ok( ! is_wp_error( $r ) && true === $r['deactivated'] && true === $r['was_active'] && array( 'akismet/akismet.php' ) === $GLOBALS['t_deactivated'] && ! is_plugin_active( 'akismet/akismet.php' ), 'A3 an active plugin is deactivated, was_active true' );
 $r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => 'hello.php' ) );
 ok( ! is_wp_error( $r ) && true === $r['deactivated'] && false === $r['was_active'], 'A4 an inactive plugin: was_active false' );
+ok( array() === array_filter( $GLOBALS['t_deact_args'], static function ( $a ) { return false !== $a[0] || null !== $a[1]; } ), 'A4 an installed plugin is deactivated as before: loud, network_wide null' );
+
+echo "deactivate an entry without its file (4.17.0)\n";
+// On disk: no file for these, and not in get_plugins(); only in the list.
+$gone = array( 'gone/gone.php', 'gone-single.php' );
+// A file without a plugin header: on disk, not in get_plugins(), still loaded by WordPress.
+@mkdir( WP_PLUGIN_DIR . '/headerless', 0755, true );
+file_put_contents( WP_PLUGIN_DIR . '/headerless/headerless.php', "<?php\n" );
+$odd = array( 'a/b/c.php', 'gone/gone.txt', './gone.php', 'gone/../gone.php', '/gone.php', 'gone\\gone.php', 'gone//gone.php', 'C:/gone.php', 'headerless/headerless.php' );
+$GLOBALS['t_active']      = array_merge( array( 'akismet/akismet.php' ), $gone, $odd );
+$GLOBALS['t_deactivated'] = array();
+$GLOBALS['t_deact_args']  = array();
+foreach ( $gone as $p ) {
+	$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => $p ) );
+	ok( ! is_wp_error( $r ) && true === $r['deactivated'] && true === $r['file_missing'] && $p === $r['plugin'] && ! in_array( $p, $GLOBALS['t_active'], true ), "M1 an entry without its file is taken out of the list: $p" );
+}
+ok( array( array( true, false ), array( true, false ) ) === $GLOBALS['t_deact_args'], 'M1 silent, and network_wide false: the network list is not touched' );
+foreach ( $odd as $p ) {
+	$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => $p ) );
+	ok( is_wp_error( $r ) && 'ab_mcp_bad_plugin' === $r->code, "M2 an entry in the list but not of a plugin file's form, or with a file, is refused: $p" );
+}
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => 'never/listed.php' ) );
+ok( is_wp_error( $r ) && 'ab_mcp_bad_plugin' === $r->code, 'M3 a missing file that is not in the list is refused' );
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => 'GONE/gone.php' ) );
+ok( is_wp_error( $r ) && 'ab_mcp_bad_plugin' === $r->code, 'M3 only the entry as the list spells it' );
+ok( array( 'akismet/akismet.php' ) === array_values( array_diff( $GLOBALS['t_active'], $odd ) ) && 2 === count( $GLOBALS['t_deactivated'] ), 'M2 M3 nothing else was handed to deactivate_plugins()' );
+// AlphaBridge's own entry stays refused, even without its file: a drop-in
+// by its name, as AB_MCP_Own_Files judges a file that does not exist.
+$GLOBALS['t_active'][] = 'alphabridge-mcp-owner.php';
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => 'alphabridge-mcp-owner.php' ) );
+ok( is_wp_error( $r ) && 'ab_mcp_deactivate_own' === $r->code && in_array( 'alphabridge-mcp-owner.php', $GLOBALS['t_active'], true ), 'M4 an entry of AlphaBridge without its file is refused as AlphaBridge' );
+// A hook that puts the entry back: not reported as removed.
+$GLOBALS['t_active'][]  = 'gone/gone.php';
+$GLOBALS['t_put_back']  = 'gone/gone.php';
+$r = AB_MCP_Tools_Plugins_Themes_Manage::deactivate_plugin( array( 'plugin' => 'gone/gone.php' ) );
+ok( is_wp_error( $r ) && 'ab_mcp_deactivate_failed' === $r->code && false !== strpos( $r->message, 'wp-admin/plugins.php' ), 'M5 an entry a hook put back is an error with the way, not a success' );
+$GLOBALS['t_put_back']  = null;
+@unlink( WP_PLUGIN_DIR . '/headerless/headerless.php' );
+@rmdir( WP_PLUGIN_DIR . '/headerless' );
 
 echo "install\n";
 $r = AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'no-such-plugin' ) );

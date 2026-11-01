@@ -175,8 +175,8 @@ msgstr "Um token num URL fica exposto mais facilmente através de referrers, reg
 msgid "A valid filename is required: pass a name with its extension, such as \"photo.jpg\"."
 msgstr "É necessário um nome de ficheiro válido: indique um nome com a respetiva extensão, como «photo.jpg»."
 
-msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database."
-msgstr "Os assistentes de IA leem e escrevem: artigos, páginas, plugins, temas, código e a base de dados."
+msgid "AI assistants read and write: posts, pages, plugins, themes, code and the database; the registration settings and the site address only with a confirmation from the preview and with an undo point."
+msgstr "Os assistentes de IA leem e escrevem: artigos, páginas, plugins, temas, código e a base de dados; as definições de registo e o endereço do site só com uma confirmação a partir da pré-visualização e com um ponto de restauro."
 
 msgid "AI assistants read content, media and settings and advise you."
 msgstr "Os assistentes de IA leem conteúdos, multimédia e definições e dão-lhe conselhos."
@@ -5716,3 +5716,170 @@ msgstr "Ligação IA"
 
 msgid "Try changes on a staging copy first: everything this site needs for that is set here."
 msgstr "Experimente primeiro as alterações numa cópia de staging: tudo o que este site precisa para isso define-se aqui."
+
+#, php-format
+msgid "Old address: %s"
+msgstr "Endereço anterior: %s"
+
+#, php-format
+msgid "Old address: %1$s (WordPress Address: %2$s)"
+msgstr "Endereço anterior: %1$s (endereço do WordPress: %2$s)"
+
+#, php-format
+msgid "New address: %s"
+msgstr "Endereço novo: %s"
+
+#, php-format
+msgid "New address: %1$s (WordPress Address: %2$s)"
+msgstr "Endereço novo: %1$s (endereço do WordPress: %2$s)"
+
+#, php-format
+msgid "Started %1$s by %2$s."
+msgstr "Iniciado em %1$s por %2$s."
+
+#, php-format
+msgid "Started %s."
+msgstr "Iniciado em %s."
+
+msgid "Still open:"
+msgstr "Ainda pendente:"
+
+#, php-format
+msgid "Next step: %s"
+msgstr "Próximo passo: %s"
+
+msgid "Check under Settings › General which address the site has now. Close the record once the address is right and nothing is open any more: closing removes only the record and changes nothing on the site."
+msgstr "Verifique em «Definições › Geral» que endereço o site tem agora. Feche o registo quando o endereço estiver certo e não restar nada pendente: fechá-lo só remove o registo e não altera nada no site."
+
+msgid "Close the record"
+msgstr "Fechar o registo"
+
+msgid "The record of the address change was removed. Nothing else on the site was changed."
+msgstr "O registo da alteração de endereço foi removido. Nada mais foi alterado no site."
+
+msgid "There was no record of an address change any more; nothing was changed."
+msgstr "Já não havia nenhum registo de uma alteração de endereço; nada foi alterado."
+
+msgid "Nothing was removed: the record of the address change has changed since this page was loaded. Read it again under “Connection check”, then close it."
+msgstr "Nada foi removido: o registo da alteração de endereço mudou desde que esta página foi carregada. Leia-o novamente em «Verificação da ligação» e depois feche-o."
+
+msgid "Nothing was removed: a change of the site is running right now (an address change, an update or an activation). Try again in a few minutes."
+msgstr "Nada foi removido: está a decorrer neste momento uma alteração do site (uma alteração de endereço, uma atualização ou uma ativação). Tente novamente dentro de alguns minutos."
+
+msgid "The record of the address change could not be removed. Try again; if it stays, the database error log names the cause."
+msgstr "Não foi possível remover o registo da alteração de endereço. Tente novamente; se continuar, o registo de erros da base de dados indica a causa."
+
+msgid "Confirmation from the preview, for a call that needs one (the description says which): such a call without it changes nothing and answers with a preview and a confirm_token, and the same arguments with that token run the tool; any other call runs at once. A token confirms that change to the state the preview showed: it is valid for 10 minutes, is not used up and is accepted whenever the call meets that same state again, and refused while anything it covers is different."
+msgstr "Confirmação a partir da pré-visualização, para uma chamada que precise dela (a descrição indica quais): uma chamada dessas sem ela não altera nada e responde com uma pré-visualização e um confirm_token, e os mesmos argumentos com esse token executam a ferramenta; qualquer outra chamada é executada de imediato. Um token confirma essa alteração sobre o estado que a pré-visualização mostrou: é válido durante 10 minutos, não se gasta e é aceite sempre que a chamada voltar a encontrar esse mesmo estado, e recusado enquanto algo que ele abrange for diferente."
+
+msgid "Some calls run in two steps: such a call without confirm_token changes nothing and returns a preview with a confirm_token, and the same call with that token runs it; the other calls run at once. This guards against a call nobody meant; it does not make the change reversible."
+msgstr "Algumas chamadas executam-se em dois passos: uma chamada dessas sem confirm_token não altera nada e devolve uma pré-visualização com um confirm_token, e a mesma chamada com esse token executa-a; as outras chamadas são executadas de imediato. Isto protege contra uma chamada que ninguém pretendia; não torna a alteração reversível."
+
+msgid "This option is the list of active plugins. Written directly, a plugin that fails to load would stop every request of the site, this connection and wp_undo included, so only the plugin tools change it."
+msgstr "Esta opção é a lista dos plugins ativos. Se fosse escrita diretamente, um plugin que não carregue pararia todos os pedidos do site, incluindo esta ligação e o wp_undo; por isso só as ferramentas de plugins a alteram."
+
+msgid "1. Switch a plugin on with wp_activate_plugin: it checks the site before and after and takes the plugin back where the site does worse. 2. Switch one off with wp_deactivate_plugin, which also removes an entry whose plugin file is missing."
+msgstr "1. Ative um plugin com o wp_activate_plugin: verifica o site antes e depois e retira o plugin se o site funcionar pior. 2. Desative um com o wp_deactivate_plugin, que também remove uma entrada cujo ficheiro de plugin falta."
+
+msgid "This option names the active theme. Written directly, a theme that fails to load would stop every request of the site, and a theme and its parent could end up out of step, so only the theme tool changes it."
+msgstr "Esta opção indica o tema ativo. Se fosse escrita diretamente, um tema que não carregue pararia todos os pedidos do site, e um tema e o seu tema-pai poderiam deixar de corresponder; por isso só a ferramenta de temas a altera."
+
+msgid "Switch the theme with wp_activate_theme: it writes the theme and its parent together, checks the site before and after, takes the switch back where the site does worse and records an undo point."
+msgstr "Mude o tema com o wp_activate_theme: escreve o tema e o seu tema-pai em conjunto, verifica o site antes e depois, reverte a mudança se o site funcionar pior e regista um ponto de restauro."
+
+msgid "This option is the list of plugins active on the whole network of a multisite installation; written as an option of one site, it would change nothing WordPress reads."
+msgstr "Esta opção é a lista dos plugins ativos em toda a rede de uma instalação multisite; escrita como opção de um só site, não alteraria nada do que o WordPress lê."
+
+msgid "Activate a plugin for the whole network with wp_network_activate_plugin; a network administrator deactivates one under Network Admin › Plugins."
+msgstr "Ative um plugin para toda a rede com o wp_network_activate_plugin; um administrador da rede desativa-o em «Administração da rede › Plugins»."
+
+msgid "A network administrator activates and deactivates plugins for the whole network under Network Admin › Plugins."
+msgstr "Um administrador da rede ativa e desativa plugins para toda a rede em «Administração da rede › Plugins»."
+
+msgid "This option holds every scheduled event of the site, and a value in the wrong form would delete them all."
+msgstr "Esta opção contém todos os eventos agendados do site, e um valor com a forma errada eliminá-los-ia todos."
+
+msgid "1. Schedule an event with wp_schedule_cron. 2. Remove one with wp_unschedule_cron. wp_get_cron lists them."
+msgstr "1. Agende um evento com o wp_schedule_cron. 2. Remova um com o wp_unschedule_cron. O wp_get_cron lista-os."
+
+msgid "Scheduled events belong to the plugins that schedule them: change one in the settings of its plugin. wp_get_cron lists them."
+msgstr "Os eventos agendados pertencem aos plugins que os agendam: altere um nas definições do respetivo plugin. O wp_get_cron lista-os."
+
+msgid "This option is part of the address of the site. Changing it takes a check that the new address reaches this site, and a way back where it does not, so it is not written as an option."
+msgstr "Esta opção faz parte do endereço do site. Alterá-la exige verificar que o novo endereço chega a este site, e uma forma de voltar atrás se não chegar; por isso não é escrita como opção."
+
+msgid "Change the address with wp_change_site_address: it checks the new address before and after the change and shows a preview first."
+msgstr "Altere o endereço com o wp_change_site_address: verifica o novo endereço antes e depois da alteração e mostra primeiro uma pré-visualização."
+
+msgid "An administrator changes the WordPress Address and the Site Address under Settings › General."
+msgstr "Um administrador altera o endereço do WordPress e o endereço do site em «Definições › Geral»."
+
+msgid "This option decides whether anyone may register on the site and which role a new account gets, so it is changed only with a confirmation from a preview."
+msgstr "Esta opção decide se qualquer pessoa se pode registar no site e que perfil recebe uma conta nova; por isso só é alterada com uma confirmação a partir de uma pré-visualização."
+
+msgid "Change it with wp_update_option: the first call changes nothing and shows a preview with a confirm_token, and the same call with that token writes it and records an undo point."
+msgstr "Altere-a com o wp_update_option: a primeira chamada não altera nada e mostra uma pré-visualização com um confirm_token, e a mesma chamada com esse token escreve-a e regista um ponto de restauro."
+
+msgid "An administrator changes it under Settings › General (Membership and New User Default Role)."
+msgstr "Um administrador altera-a em «Definições › Geral» (quem se pode registar e o perfil das contas novas)."
+
+msgid "This option belongs to AlphaBridge itself (its connections, settings or records), and no assistant changes it."
+msgstr "Esta opção pertence ao próprio AlphaBridge (as suas ligações, definições ou registos), e nenhum assistente a altera."
+
+msgid "An administrator changes the settings of AlphaBridge on its pages in wp-admin."
+msgstr "Um administrador altera as definições do AlphaBridge nas respetivas páginas do wp-admin."
+
+msgid "This option holds the roles of the site with all their capabilities; one wrong value would take them from every role, administrators included."
+msgstr "Esta opção contém os perfis do site com todas as suas permissões; um único valor errado retirá-las-ia a todos os perfis, incluindo os administradores."
+
+msgid "An administrator gives an account another role under Users; the capabilities of a role itself are changed with a plugin for managing roles."
+msgstr "Um administrador atribui a uma conta outro perfil em «Utilizadores»; as permissões de um perfil em si alteram-se com um plugin de gestão de perfis."
+
+msgid "This option belongs to posting by email, and one of these options holds the password of the mailbox, so no assistant changes them."
+msgstr "Esta opção pertence à publicação por email, e uma destas opções contém a palavra-passe da caixa de correio; por isso nenhum assistente as altera."
+
+msgid "An administrator changes them under Settings › Writing (Post via email)."
+msgstr "Um administrador altera-as em «Definições › Escrita» (Publicar por email)."
+
+msgid "This name is not a setting: WordPress keeps its cache of the options under it and refuses to write it itself. Nothing needs changing here."
+msgstr "Este nome não é uma definição: o WordPress guarda nele a sua cache das opções e recusa-se ele próprio a escrevê-lo. Aqui não há nada a alterar."
+
+msgid "Started and not finished: the change may still be running, or its request ended before the change was completed or taken back."
+msgstr "Iniciada e não concluída: a alteração pode ainda estar a decorrer, ou o respetivo pedido terminou antes de a alteração ser concluída ou revertida."
+
+msgid "Taken back in part: the change failed, and the way back did not complete."
+msgstr "Revertida em parte: a alteração falhou, e a reversão não foi concluída."
+
+msgid "Taken back after an abort: the request ended during the change, and the old address was written back as it ended."
+msgstr "Revertida após uma interrupção: o pedido terminou durante a alteração, e o endereço anterior foi reposto quando terminou."
+
+msgid "Taken back after an abort, but not completely: the request ended during the change, and a step of the way back failed."
+msgstr "Revertida após uma interrupção, mas não por completo: o pedido terminou durante a alteração, e um passo da reversão falhou."
+
+msgid "Finished: the change went through; only its record was not removed."
+msgstr "Concluída: a alteração foi feita; só o respetivo registo não foi removido."
+
+msgid "An address change of this site is not finished."
+msgstr "Uma alteração de endereço deste site não está concluída."
+
+msgid "An address change of this site is not finished, and its record cannot be read, so what is still open is not known."
+msgstr "Uma alteração de endereço deste site não está concluída, e o respetivo registo não pode ser lido, por isso não se sabe o que ainda está pendente."
+
+msgid "Whether an address change of this site is not finished could not be read: the database answered with an error. Try again; if it stays, the database error log names the cause."
+msgstr "Não foi possível ler se uma alteração de endereço deste site não está concluída: a base de dados respondeu com um erro. Tente novamente; se continuar, o registo de erros da base de dados indica a causa."
+
+msgid "Check under Settings › General which address the site has now. An administrator closes the record under “Connection check” on AlphaBridge → AI Connection once the address is right and nothing is open any more; closing removes only the record and changes nothing on the site."
+msgstr "Verifique em «Definições › Geral» que endereço o site tem agora. Um administrador fecha o registo em «Verificação da ligação», em «AlphaBridge → Ligação IA», quando o endereço estiver certo e não restar nada pendente; fechá-lo só remove o registo e não altera nada no site."
+
+msgctxt "tool label"
+msgid "Change the site address"
+msgstr "Alterar o endereço do site"
+
+msgid "The entry of a plugin whose file is missing is still in the list of active plugins: another plugin put it back when it was taken out."
+msgstr "A entrada de um plugin cujo ficheiro falta continua na lista dos plugins ativos: outro plugin voltou a colocá-la quando foi removida."
+
+msgid "Ask an administrator to open the Plugins page in wp-admin, which removes such entries itself, and to check there that the plugin no longer counts as active."
+msgstr "Peça a um administrador que abra a página «Plugins» no wp-admin, que remove ela própria estas entradas, e que verifique aí que o plugin já não conta como ativo."
+
+msgid "The plugin file was missing, so the plugin had not been loaded: only its entry was taken out of the list of active plugins, as the Plugins page of wp-admin does."
+msgstr "O ficheiro do plugin faltava, por isso o plugin não tinha sido carregado: só a sua entrada foi removida da lista dos plugins ativos, como faz a página «Plugins» do wp-admin."

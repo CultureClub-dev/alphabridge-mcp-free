@@ -1323,11 +1323,37 @@ final class SiteModeTest extends TestCase {
 		self::assertSame( '', AB_MCP_Admin::reads_also( null ) );
 	}
 
-	public function testWithProTheOnBoxNamesWhatProWrites(): void {
-		add_filter( 'ab_mcp_site_edition', static fn(): string => 'pro' );
+	/**
+	 * With Pro or its Agency plan the box names what Pro writes, and since
+	 * 4.17.0 (stage 2) the two protected kinds of settings with how they are
+	 * written: the registration settings and the site address, each only
+	 * with a confirmation from the preview and an undo point. The free
+	 * sentence stays as it was and names neither.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public static function editionsWithPro(): array {
+		return array(
+			'pro'    => array( 'pro' ),
+			'agency' => array( 'agency' ),
+		);
+	}
+
+	#[DataProvider( 'editionsWithPro' )]
+	public function testWithProTheOnBoxNamesWhatProWrites( string $edition ): void {
+		add_filter( 'ab_mcp_site_edition', static fn(): string => $edition );
 
 		$x = $this->xpath( $this->admin( 'mode_card_html' ) );
-		self::assertSame( 'AI assistants read and write: posts, pages, plugins, themes, code and the database.', trim( $x->query( '//*[contains(@class, "ab-mode__writes")]' )->item( 0 )->textContent ) );
+		self::assertSame( 'AI assistants read and write: posts, pages, plugins, themes, code and the database; the registration settings and the site address only with a confirmation from the preview and with an undo point.', trim( $x->query( '//*[contains(@class, "ab-mode__writes")]' )->item( 0 )->textContent ) );
+	}
+
+	public function testWithoutProTheOnBoxNamesNeitherTheRegistrationNorTheAddress(): void {
+		foreach ( array( 'free', 'pro_expired', '' ) as $edition ) {
+			add_filter( 'ab_mcp_site_edition', static fn(): string => $edition );
+			$writes = trim( $this->xpath( $this->admin( 'mode_card_html' ) )->query( '//*[contains(@class, "ab-mode__writes")]' )->item( 0 )->textContent );
+			self::assertSame( 'AI assistants read and write: posts, pages, media, terms, comments, menus, widgets, users, site settings, the shop and SEO fields.', $writes, $edition );
+			unset( $GLOBALS['ab_test_filters']['ab_mcp_site_edition'] );
+		}
 	}
 
 	public function testAnAddOnCompletesWhatTheCardSaysReadReads(): void {

@@ -55,13 +55,13 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_deactivate_plugin',
 			array(
-				'description' => 'Deactivate a plugin by its file path as wp_list_plugins lists it (e.g. akismet/akismet.php). The answer says in was_active whether it was active before. AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro, the owner drop-in) is refused here, because deactivating it would end this connection or take tools away from it; it is deactivated in wp-admin under Plugins. wp_activate_plugin is the reverse.',
+				'description' => 'Deactivate a plugin by its file path as wp_list_plugins lists it (e.g. akismet/akismet.php). The answer says in was_active whether it was active before. An entry of the list of active plugins whose plugin file is missing (a folder deleted over FTP, say) is taken out of the list, as the Plugins page of wp-admin does; the answer then has file_missing true. AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro, the owner drop-in) is refused here, because deactivating it would end this connection or take tools away from it; it is deactivated in wp-admin under Plugins. wp_activate_plugin is the reverse.',
 				'capability'  => 'activate_plugins',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'plugin' ),
-					'properties' => array( 'plugin' => array( 'type' => 'string', 'description' => 'Exact identifier of an installed plugin as wp_list_plugins returns it in file, e.g. "akismet/akismet.php". Anything else is refused.' ) ),
+					'properties' => array( 'plugin' => array( 'type' => 'string', 'description' => 'Exact identifier of an installed plugin as wp_list_plugins returns it in file, e.g. "akismet/akismet.php", or of an entry of the list of active plugins whose file is missing. Anything else is refused.' ) ),
 				),
 				'callback'    => array( __CLASS__, 'deactivate_plugin' ),
 			)
@@ -117,13 +117,21 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 	 * them on one by one» is the usual way to find a conflict, and an
 	 * assistant that follows it must not cut itself off halfway.
 	 *
+	 * Since 4.17.0 also an entry of the site's list whose plugin file is
+	 * missing (missing_entry()), which no other way over MCP removes. No undo
+	 * point and no change lock, as for any deactivation by this tool.
+	 *
 	 * @param array $a Args.
 	 * @return array|WP_Error
 	 */
 	public static function deactivate_plugin( $a ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		$plugin = self::s( $a, 'plugin' );
-		if ( '' === $plugin || 0 !== validate_file( $plugin ) || ! array_key_exists( $plugin, get_plugins() ) ) {
+		$plugin    = self::s( $a, 'plugin' );
+		$installed = '' !== $plugin && 0 === validate_file( $plugin ) && array_key_exists( $plugin, get_plugins() );
+		// An entry of the site's list whose plugin file is gone (since
+		// 4.17.0): see missing_entry().
+		$missing = ! $installed && self::missing_entry( $plugin );
+		if ( ! $installed && ! $missing ) {
 			return new WP_Error( 'ab_mcp_bad_plugin', __( 'plugin must be the exact identifier of an installed plugin, e.g. "akismet/akismet.php". wp_list_plugins lists the installed plugins with their identifiers (file).', 'alphabridge-mcp' ) );
 		}
 		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( WP_PLUGIN_DIR . '/' . $plugin ) ) ) {
@@ -131,6 +139,9 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 				'ab_mcp_deactivate_own',
 				__( 'Not deactivated: this is AlphaBridge itself (AlphaBridge MCP, AlphaBridge MCP Pro or the owner drop-in). It is not deactivated through AlphaBridge: that would end this connection or take tools away from it, and only wp-admin brings them back. Nothing was changed. Deactivate it in wp-admin under Plugins.', 'alphabridge-mcp' )
 			);
+		}
+		if ( $missing ) {
+			return self::remove_missing_entry( $plugin );
 		}
 		// deactivate_plugins() takes a plugin active on the network off the
 		// network's list too, so for every site: that takes the network's own
@@ -156,6 +167,86 @@ class AB_MCP_Tools_Plugins_Themes_Manage extends AB_MCP_Tools_Base {
 			'plugin'      => $plugin,
 			'was_active'  => $was_active,
 		) + ( $network ? array( 'network_wide' => true ) : array() );
+	}
+
+	/**
+	 * Is this an entry of the site's list of active plugins whose plugin file
+	 * is gone — a folder deleted over FTP, a plugin removed by its host?
+	 *
+	 * Such an entry is harmless when the site loads (WordPress skips a file
+	 * that does not exist), but it stays in active_plugins until somebody
+	 * opens the Plugins page of wp-admin, which takes it out
+	 * (validate_active_plugins()); over MCP it could not be removed at all
+	 * before 4.17.0, since get_plugins() does not list it. The raw option is
+	 * no way either: active_plugins stays protected (AB_MCP_Option_Guard),
+	 * and its refusal names this tool.
+	 *
+	 * Narrow on purpose, so this opens nothing else: the entry stands in the
+	 * site's list exactly as given, has the form of a plugin file (a PHP
+	 * file in the plugins folder or one folder below, no empty, "." or ".."
+	 * part, no backslash, nothing validate_file() refuses) and its file does
+	 * not exist. A file that exists but has no plugin header is still loaded
+	 * by WordPress on every request and is not taken out of the list here.
+	 * The network's list is not looked at.
+	 *
+	 * @param string $plugin Plugin file as given.
+	 * @return bool
+	 */
+	private static function missing_entry( $plugin ) {
+		if ( 0 !== validate_file( $plugin ) || false !== strpos( $plugin, '\\' ) || '.php' !== substr( $plugin, -4 ) ) {
+			return false;
+		}
+		$parts = explode( '/', $plugin );
+		if ( count( $parts ) > 2 ) {
+			return false;
+		}
+		// validate_file() lets "/x.php", "./x.php" and "x//y.php" pass; a
+		// ".." part it refuses itself.
+		foreach ( $parts as $part ) {
+			if ( '' === $part || '.' === $part ) {
+				return false;
+			}
+		}
+		if ( file_exists( WP_PLUGIN_DIR . '/' . $plugin ) ) {
+			return false;
+		}
+		return in_array( $plugin, (array) get_option( 'active_plugins', array() ), true );
+	}
+
+	/**
+	 * Take an entry without its file out of the site's list, as wp-admin's
+	 * Plugins page does (validate_active_plugins()): deactivate_plugins()
+	 * silent — the plugin's own code never loaded, so it has no deactivation
+	 * routine to run — and with network_wide false, which leaves the
+	 * network's list alone (an entry there is a network administrator's,
+	 * under Network Admin › Plugins). Read back: an entry a hook put back is
+	 * not reported as removed.
+	 *
+	 * @param string $plugin Plugin file.
+	 * @return array|WP_Error
+	 */
+	private static function remove_missing_entry( $plugin ) {
+		// As for every deactivation: hooks of other plugins on the option
+		// may expect wp-admin's files.
+		AB_MCP_Admin_Files::load();
+		deactivate_plugins( array( $plugin ), true, false );
+		if ( in_array( $plugin, (array) get_option( 'active_plugins', array() ), true ) ) {
+			return new WP_Error(
+				'ab_mcp_deactivate_failed',
+				AB_MCP_Guidance::compose(
+					__( 'The entry of a plugin whose file is missing is still in the list of active plugins: another plugin put it back when it was taken out.', 'alphabridge-mcp' ),
+					__( 'Ask an administrator to open the Plugins page in wp-admin, which removes such entries itself, and to check there that the plugin no longer counts as active.', 'alphabridge-mcp' ),
+					admin_url( 'plugins.php' )
+				)
+			);
+		}
+		return array(
+			'deactivated'  => true,
+			'plugin'       => $plugin,
+			'was_active'   => true,
+			'file_missing' => true,
+			'note'         => __( 'The plugin file was missing, so the plugin had not been loaded: only its entry was taken out of the list of active plugins, as the Plugins page of wp-admin does.', 'alphabridge-mcp' ),
+		);
 	}
 
 	/* --------------------------------------------------------------- themes */

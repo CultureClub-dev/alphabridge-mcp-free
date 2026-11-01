@@ -242,6 +242,12 @@
  * /wp-content/uploads/ are delivered by the web server without PHP: the
  * tool and the settings page say both (limits()).
  *
+ * The password page carries X-AB-MCP: preview-protection, the header the
+ * authorization endpoint marks its answer with (there "authorize"), and no
+ * other answer of the protection does (send_mark()): a check of the site
+ * from outside tells this page from a 401 of an HTTP login or another
+ * plugin by it.
+ *
  * Switching on remembers the site's blog_public and sets it to 0, so
  * WordPress itself adds noindex, disables its sitemaps and answers
  * robots.txt with Disallow: /; switching off writes the remembered value
@@ -352,6 +358,16 @@ class AB_MCP_Preview_Protection {
 	 * The value of X-Robots-Tag while the protection is on.
 	 */
 	const ROBOTS = 'noindex, nofollow';
+
+	/**
+	 * The mark of the password page (send_mark()): the header the
+	 * authorization endpoint marks its answer with (AB_MCP_OAuth::MARK_HEADER,
+	 * there with "authorize"), here with MARK. A constant of its own, not a
+	 * reference: the must-use loader loads this class without AB_MCP_OAuth
+	 * (loader_source()), and wp-activate.php shows the password page there.
+	 */
+	const MARK_HEADER = 'X-AB-MCP';
+	const MARK        = 'preview-protection';
 
 	/**
 	 * Id of the section on the settings page.
@@ -1218,6 +1234,7 @@ class AB_MCP_Preview_Protection {
 			wp_safe_redirect( home_url( self::relative( $ctx['request_uri'] ) ), 303 );
 			exit;
 		}
+		self::send_mark();
 		wp_die(
 			self::page_html( 'reject' === $decision['action'], self::relative( $ctx['request_uri'] ) ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside page_html().
 			esc_html__( 'Preview', 'alphabridge-mcp' ),
@@ -1381,6 +1398,7 @@ class AB_MCP_Preview_Protection {
 		if ( $ctx['ajax'] ) {
 			wp_die( '0', '', array( 'response' => 401 ) );
 		}
+		self::send_mark();
 		wp_die(
 			self::page_html( false, '/' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside page_html().
 			esc_html__( 'Preview', 'alphabridge-mcp' ),
@@ -1501,6 +1519,28 @@ class AB_MCP_Preview_Protection {
 		 *
 		 * @param string $line The header line sent.
 		 */
+		do_action( 'ab_mcp_preview_header_sent', $line );
+	}
+
+	/**
+	 * Mark the password page, right before wp_die() sends it with 401:
+	 * MARK_HEADER with MARK, where headers can still be sent. A 401 of the
+	 * home page can also come from an HTTP login in front of the site or the
+	 * error page of another plugin; the check after a change of the site
+	 * address (wp_change_site_address of the Pro add-on) takes a 401 of the
+	 * home page as this site's own only with this mark, and any other 401
+	 * as a failure. Only the password page carries it: not the «0» that
+	 * answers AJAX, not the reload after the right password, not what the
+	 * gates serve or pass. Followed by the action ab_mcp_preview_header_sent
+	 * with the line, as X-Robots-Tag (send_robots_header()).
+	 */
+	private static function send_mark() {
+		if ( headers_sent() ) {
+			return;
+		}
+		$line = self::MARK_HEADER . ': ' . self::MARK;
+		header( $line, true );
+		/** This action is documented in includes/class-preview-protection.php (send_robots_header()). */
 		do_action( 'ab_mcp_preview_header_sent', $line );
 	}
 

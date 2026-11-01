@@ -34,6 +34,13 @@
  * redirects) and the client metadata document of an app that signs in
  * (AB_MCP_OAuth::cimd_fetch(), no redirect).
  *
+ * get_bound() is a second mode, for an address whose name may not point
+ * anywhere yet: the request that proves this server serves a new site
+ * address before the DNS changes (wp_change_site_address of the Pro
+ * add-on), tied to addresses the caller hands over. It leaves out the
+ * lookup of WordPress, so it takes only a DNS name as host and checks the
+ * address itself; its contract is in its docblock.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -49,6 +56,44 @@ class AB_MCP_Outbound {
 	 * knows it again in the WP_Error WordPress makes of it.
 	 */
 	const UNBOUND = 'Not sent: without cURL the request cannot be tied to the checked addresses.';
+
+	/**
+	 * A host as get_bound() takes it: a DNS name. At least one dot, every
+	 * label one character or more of a-z, 0-9 and "-", the last label
+	 * starting with a letter; so no IPv4 address in any spelling (a number
+	 * as the last label, or no dot at all), no name without a dot, no
+	 * bracket and no colon.
+	 * Matched without regard to case: get_bound() refuses capitals on their
+	 * own, with a message that says so. \z, not $: "$" would also match
+	 * before a final line break.
+	 */
+	const DNS_NAME = '/^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*\z/i';
+
+	/**
+	 * A port as get_bound() takes it: 1 to 65535 in digits, no leading zero
+	 * (checked against 65535 as a number besides).
+	 */
+	const PORT = '/^[1-9][0-9]{0,4}\z/';
+
+	/**
+	 * What get() says when the proxy, the missing cURL or an answer that
+	 * came without the binding stops a request (transmit()).
+	 */
+	const SAY_GET = array(
+		'proxy'     => 'The address was not asked: the request would go through the proxy, which looks the name up itself.',
+		'unbound'   => self::UNBOUND,
+		'discarded' => 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.',
+	);
+
+	/**
+	 * The same for get_bound(), each with the step that helps: its caller
+	 * hands the message on (English, as every message of this class).
+	 */
+	const SAY_BOUND = array(
+		'proxy'     => 'The address was not asked: this site sends its requests through a proxy (WP_PROXY_HOST), which looks the name up itself, so the request could not be tied to the checked addresses. Add the host to WP_PROXY_BYPASS_HOSTS in wp-config.php, then try again.',
+		'unbound'   => 'Not sent: without cURL the request cannot be tied to the checked addresses. Ask the host to enable the curl extension of PHP, then try again.',
+		'discarded' => 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses. Ask the host to enable the curl extension of PHP, or look for a plugin that answers outgoing requests itself (the filter pre_http_request); then try again.',
+	);
 
 	/**
 	 * Every IPv4 and IPv6 address of a host name: its A and AAAA records,
@@ -411,6 +456,153 @@ class AB_MCP_Outbound {
 	}
 
 	/**
+	 * GET one address in the bound mode: the host a DNS name, the connection
+	 * tied to the addresses the caller hands over (pin_to) or, without them,
+	 * to those the name resolves to, and the address sent exactly as given.
+	 *
+	 * Why a mode of its own. get() sends through wp_safe_remote_get(), and
+	 * WordPress hands that address to wp_http_validate_url() first, which
+	 * looks the host up with gethostbyname() and refuses a name without an
+	 * A record (wp-includes/http.php) before CURLOPT_RESOLVE could tie it. A
+	 * site that moves to a new name switches its address before the DNS
+	 * changes, and the request that proves this server serves the new name
+	 * must reach it while the name points nowhere yet. So this mode sends
+	 * through wp_remote_get() with reject_unsafe_urls false, which leaves
+	 * the lookup out, and checks everything itself.
+	 *
+	 * The contract, each condition with a refusal of its own (a WP_Error
+	 * whose message says what happened and what to do; data array( 'url' =>
+	 * the address )):
+	 *
+	 * 1. The scheme is http or https (in any case), followed by "//":
+	 *    ab_mcp_outbound_scheme.
+	 * 2. The authority is read from the address as it is written: the text
+	 *    between "//" and the first "/", "?" or "#" (RFC 3986). It may hold a
+	 *    host of a-z, 0-9, "-" and "." and a port of digits, nothing else, so
+	 *    a parser that ends an authority at more characters (the WHATWG URL
+	 *    standard also at "\") or reads a user part differently finds the
+	 *    same host and port: none of them is in it. parse_url(), for one,
+	 *    takes b.example for the host of "https://a.example\@b.example/",
+	 *    behind a user part; here that authority has an "@" and is refused.
+	 *    - No user part (an "@" in the authority): ab_mcp_outbound_userinfo.
+	 *    - The host, up to the first ":", is a DNS name (DNS_NAME): at least
+	 *      one dot, labels of a-z, 0-9 and "-", the last label starting with
+	 *      a letter; no bracket, no colon. Refused with
+	 *      ab_mcp_outbound_not_dns_name: IPv4 and IPv6 addresses
+	 *      (127.0.0.1, [::1], ::1, an IPv4 address inside IPv6 such as
+	 *      [::ffff:127.0.0.1]), every numeric spelling (0177.0.0.1,
+	 *      2130706433, 0x7f.0.0.1), a name without a dot (localhost,
+	 *      example), any other character (a name in another script goes in
+	 *      its xn-- form, which is taken: xn--bcher-kva.example).
+	 *      Nothing is normalized, because the two readers disagree: inet_pton()
+	 *      reads 0177.0.0.1 as 177.0.0.1 and gives false for 2130706433 and
+	 *      0x7f.0.0.1, where libcurl connects to 127.0.0.1 for all three
+	 *      (measured with PHP 8.5 and libcurl 8.22, 01.11.2026); a check on a
+	 *      normalized form could clear another address than the one cURL
+	 *      reaches. A DNS name leaves nothing to read two ways, and it is
+	 *      always bound: resolve_entry() binds nothing for an address as
+	 *      host, this mode never has one.
+	 *    - No capital letter in the host: ab_mcp_outbound_host_case. Requests,
+	 *      the HTTP library of WordPress, writes the host in lower case before
+	 *      cURL gets the address (WpOrg\Requests\Iri::set_host()), while the
+	 *      CURLOPT_RESOLVE entry carries the host as given, and cURL versions
+	 *      that compare the entry as spelled would then miss it and look the
+	 *      name up themselves. Refusing capitals keeps the name checked, the
+	 *      name bound and the name cURL connects to one string. DNS names do
+	 *      not depend on case (RFC 4343): a caller that holds one in capitals
+	 *      passes it in lower case.
+	 *    - The port, where the address names one, is 1 to 65535 in digits
+	 *      without a leading zero (PORT): ab_mcp_outbound_port. Without one,
+	 *      the port of the scheme (80, 443). The CURLOPT_RESOLVE entry carries
+	 *      this port. No list of allowed ports as wp_http_validate_url() keeps
+	 *      one (80, 443, 8080): a site may answer on any port, and every
+	 *      address the request can reach is a checked public one.
+	 * 3. No fragment (a "#" after the authority): ab_mcp_outbound_fragment.
+	 *    A query is fine.
+	 * 4. The addresses the connection is tied to. With $pin_to: a list of at
+	 *    least one IP address (ab_mcp_outbound_pin_empty), each a string and
+	 *    public by AB_MCP_OAuth::is_public_ip(), IPv4 mapped into IPv6
+	 *    included (ab_mcp_outbound_pin_local); the name is not looked up at
+	 *    all. Without: every A and AAAA address of the name (public_addresses(),
+	 *    the filter ab_mcp_outbound_addresses included), at least one
+	 *    (ab_mcp_outbound_unresolved), each public (ab_mcp_outbound_local).
+	 * 5. No proxy: where WordPress would send the request through its proxy
+	 *    (WP_PROXY_HOST, a host not in WP_PROXY_BYPASS_HOSTS), it is not sent
+	 *    (ab_mcp_outbound_proxy); a proxy from the environment of PHP is
+	 *    switched off (curl_options()).
+	 * 6. Nothing without cURL: refused before the fsockopen transport
+	 *    connects, and an answer that came any other way without the binding
+	 *    is discarded (ab_mcp_outbound_unbound).
+	 * 7. 'redirection' is 0 and 'reject_unsafe_urls' false whatever $args
+	 *    say: a 3xx is the answer, for the caller to read; nothing is
+	 *    followed, since a target would be looked up unbound.
+	 * 8. The address goes to wp_remote_get() exactly as given, with every
+	 *    other argument of $args.
+	 *
+	 * @param string        $url    Address.
+	 * @param array         $args   Request arguments of wp_remote_get().
+	 * @param string[]|null $pin_to Public IP addresses to tie the connection
+	 *                              to, checked here; null to tie it to the
+	 *                              addresses the host name resolves to.
+	 * @return array|WP_Error The answer, whatever its status, or WP_Error
+	 *                        with one of the codes above or the transport's
+	 *                        (http_request_failed: a timeout, a TLS error).
+	 */
+	public static function get_bound( $url, array $args = array(), $pin_to = null ) {
+		$url  = (string) $url;
+		$data = array( 'url' => $url );
+		if ( ! preg_match( '~^(https?)://([^/?#]*)(.*)\z~is', $url, $parts ) ) {
+			return new WP_Error( 'ab_mcp_outbound_scheme', 'The address was not asked: it does not start with http:// or https://. Give the address with its scheme, for example https://www.example.com/.', $data );
+		}
+		$scheme    = strtolower( $parts[1] );
+		$authority = $parts[2];
+		if ( false !== strpos( $authority, '@' ) ) {
+			return new WP_Error( 'ab_mcp_outbound_userinfo', 'The address was not asked: it carries a user part (a name before "@" in front of the host). Give the address without it, for example https://www.example.com/.', $data );
+		}
+		$colon = strpos( $authority, ':' );
+		$host  = false === $colon ? $authority : substr( $authority, 0, $colon );
+		$port  = false === $colon ? null : substr( $authority, $colon + 1 );
+		if ( ! preg_match( self::DNS_NAME, $host ) ) {
+			return new WP_Error( 'ab_mcp_outbound_not_dns_name', 'The address was not asked: its host must be a DNS name such as www.example.com, not an IP address, a number or a name without a dot. Give the address with the domain name of the site (a name in another script in its xn-- form).', $data );
+		}
+		if ( strtolower( $host ) !== $host ) {
+			return new WP_Error( 'ab_mcp_outbound_host_case', 'The address was not asked: its host name contains capital letters. Give the host name in lower case, for example https://www.example.com/ (a DNS name does not depend on case).', $data );
+		}
+		if ( null !== $port && ( ! preg_match( self::PORT, $port ) || (int) $port > 65535 ) ) {
+			return new WP_Error( 'ab_mcp_outbound_port', 'The address was not asked: its port is not a number from 1 to 65535. Give the port as digits after the host, for example https://www.example.com:8443/, or leave it out.', $data );
+		}
+		$port = null !== $port ? (int) $port : ( 'https' === $scheme ? 443 : 80 );
+		if ( false !== strpos( $parts[3], '#' ) ) {
+			return new WP_Error( 'ab_mcp_outbound_fragment', 'The address was not asked: it carries a fragment (a part after "#"), which a request never sends. Give the address without it.', $data );
+		}
+
+		if ( null !== $pin_to ) {
+			// The caller's list: every entry a public address, and the name
+			// itself is not looked up.
+			if ( ! is_array( $pin_to ) || array() === $pin_to ) {
+				return new WP_Error( 'ab_mcp_outbound_pin_empty', 'The address was not asked: no address to tie the request to was given (pin_to is empty or not a list). Give the public IP addresses of the server, or leave pin_to out to use the addresses the host name points to.', $data );
+			}
+			// A string each, before checked() reads it as one.
+			$checked = count( array_filter( $pin_to, 'is_string' ) ) === count( $pin_to ) ? self::checked( $pin_to ) : 'local';
+			if ( ! is_array( $checked ) ) {
+				return new WP_Error( 'ab_mcp_outbound_pin_local', 'The address was not asked: an address to tie the request to (pin_to) is not a public IP address. Give only public IPv4 or IPv6 addresses of the server.', $data );
+			}
+		} else {
+			$checked = self::public_addresses( $host );
+			if ( 'unresolved' === $checked ) {
+				return new WP_Error( 'ab_mcp_outbound_unresolved', 'The address was not asked: its host name has no address. Check the spelling of the host, or give the IP addresses of the server to tie the request to (pin_to).', $data );
+			}
+			if ( ! is_array( $checked ) ) {
+				return new WP_Error( 'ab_mcp_outbound_local', 'The address was not asked: its host name points to an address that is local or not public. Give a host name whose every address is public, or the public IP addresses of the server (pin_to).', $data );
+			}
+		}
+
+		// Host and port as checked above, the address untouched.
+		$entry = $host . ':' . $port . ':' . implode( ',', $checked );
+		return self::transmit( 'wp_remote_get', $url, array_merge( $args, array( 'reject_unsafe_urls' => false ) ), $entry, $data, self::SAY_BOUND );
+	}
+
+	/**
 	 * One request, without a redirect: the host checked, the connection
 	 * tied, nothing sent through a proxy or without cURL.
 	 *
@@ -441,16 +633,35 @@ class AB_MCP_Outbound {
 		if ( ! is_array( $checked ) ) {
 			return new WP_Error( 'ab_mcp_outbound_local', 'The address was not asked: it is local or not public.', $data );
 		}
+		// Null for an address as host: nothing is looked up, so there is
+		// nothing to tie; the proxy of the environment is switched off all
+		// the same (curl_options()).
+		return self::transmit( 'wp_safe_remote_get', $url, $args, self::resolve_entry( $url, $checked ), $data, self::SAY_GET );
+	}
+
+	/**
+	 * The request itself, for get() and get_bound(): not through the proxy of
+	 * WordPress, tied by CURLOPT_RESOLVE to the entry on the request's own
+	 * cURL handle (hooked for the call and taken off after it), refused
+	 * before the fsockopen transport connects, and an answer that came
+	 * without the binding discarded. 'redirection' is 0: WordPress follows
+	 * nothing.
+	 *
+	 * @param callable    $send  wp_safe_remote_get (get()) or wp_remote_get (get_bound()).
+	 * @param string      $url   Address.
+	 * @param array       $args  Request arguments.
+	 * @param string|null $entry CURLOPT_RESOLVE entry, or null for an address as host.
+	 * @param array       $data  Data of the plugin's own errors.
+	 * @param string[]    $say   The messages of the refusals: SAY_GET or SAY_BOUND.
+	 * @return array|WP_Error
+	 */
+	private static function transmit( $send, $url, array $args, $entry, array $data, array $say ) {
 		// The same question WP_Http::request() asks before it hands the
 		// request to a proxy.
 		$proxy = new WP_HTTP_Proxy();
 		if ( $proxy->is_enabled() && $proxy->send_through_proxy( $url ) ) {
-			return new WP_Error( 'ab_mcp_outbound_proxy', 'The address was not asked: the request would go through the proxy, which looks the name up itself.', $data );
+			return new WP_Error( 'ab_mcp_outbound_proxy', $say['proxy'], $data );
 		}
-		// Null for an address as host: nothing is looked up, so there is
-		// nothing to tie; the proxy of the environment is switched off all
-		// the same (curl_options()).
-		$entry = self::resolve_entry( $url, $checked );
 		$bound = false;
 		$pin   = static function ( $handle ) use ( $entry, &$bound ) {
 			curl_setopt_array( $handle, self::curl_options( $entry ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array -- the WordPress HTTP API offers no other way to fix the address a name connects to.
@@ -469,16 +680,18 @@ class AB_MCP_Outbound {
 			add_action( 'requests-fsockopen.before_request', $refuse );
 		}
 		try {
-			$response = wp_safe_remote_get( $url, array_merge( $args, array( 'redirection' => 0 ) ) );
+			$response = call_user_func( $send, $url, array_merge( $args, array( 'redirection' => 0 ) ) );
 		} finally {
 			remove_action( 'http_api_curl', $pin );
 			remove_action( 'requests-fsockopen.before_request', $refuse );
 		}
+		// The exception carries UNBOUND whichever mode refused; what the
+		// caller reads is the mode's own message.
 		if ( is_wp_error( $response ) && self::UNBOUND === $response->get_error_message() ) {
-			return new WP_Error( 'ab_mcp_outbound_unbound', self::UNBOUND, $data );
+			return new WP_Error( 'ab_mcp_outbound_unbound', $say['unbound'], $data );
 		}
 		if ( null !== $entry && ! is_wp_error( $response ) && ! $bound ) {
-			return new WP_Error( 'ab_mcp_outbound_unbound', 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.', $data );
+			return new WP_Error( 'ab_mcp_outbound_unbound', $say['discarded'], $data );
 		}
 		return $response;
 	}
