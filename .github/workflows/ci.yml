@@ -127,3 +127,157 @@ jobs:
       # dependencies, Node as the runner ships it.
       - name: Panels, remembered choice, landing on a block
         run: node tests/admin-js-test.mjs
+
+  # The integration suite (Z8, Entscheid 34): two WordPress 7.1.3 sites on
+  # MariaDB under two table prefixes, each served by `php -S` and running the
+  # plugin of this checkout. tests/integration/README.md has the same on a Mac.
+  integration:
+    name: Two WordPress 7.1.3 sites on MariaDB
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: ab_it
+        ports:
+          - 127.0.0.1:3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      AB_IT_WP_CORE: ${{ github.workspace }}/wp-core
+      AB_IT_DB_HOST: 127.0.0.1:3306
+      AB_IT_DB_USER: root
+      AB_IT_DB_PASSWORD: ''
+      AB_IT_DB_NAME: ab_it
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      # WordPress 7.1.3 from its official Git mirror, pinned by the commit of
+      # the tag; its tree and a SHA-256 over every file are checked before
+      # anything runs on it. The same digest of ~/Entwicklung/wp-core-7.1.3
+      # is what the Mac runs (tests/integration/README.md).
+      - uses: actions/checkout@v4
+        with:
+          repository: WordPress/WordPress
+          ref: fc9832bef919c2a08541248db23af90d14ffb082
+          path: wp-core
+          persist-credentials: false
+
+      - name: WordPress is exactly 7.1.3
+        working-directory: wp-core
+        run: |
+          set -e
+          test "$(git rev-parse 'HEAD^{tree}')" = 3cf9bd1d4c80377392a4f3431921683d2633d24c
+          sum=$(find . -type f -not -path './.git/*' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)
+          echo "SHA-256 over the files: $sum"
+          test "$sum" = dbe227baf6382418efdc7c2f5587d2341ab12ffea5a027afc383522f674a8ffc
+          grep -q "^\$wp_version = '7.1.3';" wp-includes/version.php
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, curl, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dev dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Set up and serve the two sites
+        run: |
+          set -e
+          echo "AB_IT_ROOT=$RUNNER_TEMP/ab-it" >> "$GITHUB_ENV"
+          export AB_IT_ROOT="$RUNNER_TEMP/ab-it"
+          php tests/integration/bin/setup.php
+          bash tests/integration/bin/serve.sh start
+
+      - name: Integration suite
+        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox
+
+      - name: Logs of the sites
+        if: failure()
+        run: tail -n 200 "$AB_IT_ROOT"/log/* || true
+
+  # Mutation probes, clause by clause (tests/mutation/run.php): each entry of
+  # tests/mutation/lists/ takes one clause out and expects its tests to fail;
+  # the file is written back and compared byte for byte. The lists of the
+  # heikel/ branches ask the integration suite, so the sites run here too.
+  mutation:
+    name: Every listed clause is held by a test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: ab_it
+        ports:
+          - 127.0.0.1:3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      AB_IT_WP_CORE: ${{ github.workspace }}/wp-core
+      AB_IT_DB_HOST: 127.0.0.1:3306
+      AB_IT_DB_USER: root
+      AB_IT_DB_PASSWORD: ''
+      AB_IT_DB_NAME: ab_it
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: actions/checkout@v4
+        with:
+          repository: WordPress/WordPress
+          ref: fc9832bef919c2a08541248db23af90d14ffb082
+          path: wp-core
+          persist-credentials: false
+
+      - name: WordPress is exactly 7.1.3
+        working-directory: wp-core
+        run: |
+          set -e
+          test "$(git rev-parse 'HEAD^{tree}')" = 3cf9bd1d4c80377392a4f3431921683d2633d24c
+          sum=$(find . -type f -not -path './.git/*' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)
+          test "$sum" = dbe227baf6382418efdc7c2f5587d2341ab12ffea5a027afc383522f674a8ffc
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, curl, sodium, pcntl
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dev dependencies
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Set up and serve the two sites
+        run: |
+          set -e
+          echo "AB_IT_ROOT=$RUNNER_TEMP/ab-it" >> "$GITHUB_ENV"
+          export AB_IT_ROOT="$RUNNER_TEMP/ab-it"
+          php tests/integration/bin/setup.php
+          bash tests/integration/bin/serve.sh start
+
+      - name: Mutation probes
+        run: php tests/mutation/run.php
+
+      - name: The checkout is unchanged
+        if: always()
+        run: |
+          set -e
+          git status --porcelain
+          test -z "$(git status --porcelain)"
