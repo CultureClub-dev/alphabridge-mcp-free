@@ -33,7 +33,10 @@ Step by step: `local.sh up`, then `local.sh test` as often as needed (further
 arguments go to PHPUnit, e.g. `--filter Smoke`), `local.sh down` (data
 stays), `local.sh purge` (removes `AB_IT_ROOT`). The script marks the
 directory with `.ab-integration-root` on first use and refuses a non-empty
-one without it, so `purge` only ever removes a tree it built. MariaDB runs with its own
+one without it; `purge` removes only the entries the suite creates (`db`,
+`run`, `log`, `site-a`, `site-b`, `state.json`), none that holds the
+checkout or the home directory, and keeps the directory if anything else is
+in it. MariaDB runs with its own
 data directory under `AB_IT_ROOT/db`, `--no-defaults` and
 `--skip-grant-tables`, on `127.0.0.1:3407` as in CI; its socket is named
 relative and lands in the data directory, because a socket path may not

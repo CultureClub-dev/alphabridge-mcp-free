@@ -21,11 +21,8 @@
 # after checking its command line; nothing else on the Mac is touched.
 set -euo pipefail
 
-# Physical paths (pwd -P): /tmp and /private/tmp are one tree on macOS, and
-# the guards below compare strings.
 here=$(cd "$(dirname "$0")" && pwd -P)
 repo=$(cd "$here/../../.." && pwd -P)
-home=$(cd "$HOME" && pwd -P)
 root=${AB_IT_ROOT:?set AB_IT_ROOT to a directory for the database and the two sites}
 mkdir -p "$root"
 root=$(cd "$root" && pwd -P)
@@ -108,6 +105,17 @@ down() {
 	db_down
 }
 
+# holds DIR PATH: true when DIR is PATH or one of its parents, by identity.
+holds() {
+	local d
+	d=$(cd "$2" 2>/dev/null && pwd -P) || return 1
+	while :; do
+		[ "$d" -ef "$1" ] && return 0
+		[ "$d" = / ] && return 1
+		d=$(dirname "$d")
+	done
+}
+
 suite() {
 	(cd "$repo" && vendor/bin/phpunit -c tests/integration/phpunit.xml.dist "$@")
 }
@@ -124,18 +132,27 @@ run)
 	;;
 purge)
 	down
-	case "$root" in
-	/ | "$home" | "$repo" | "$repo"/*) echo "local: will not remove $root" >&2; exit 1 ;;
-	esac
-	case "$repo/" in
-	"$root"/*) echo "local: will not remove $root, it holds the checkout" >&2; exit 1 ;;
-	esac
-	case "$home/" in
-	"$root"/*) echo "local: will not remove $root, it holds the home directory" >&2; exit 1 ;;
-	esac
 	[ -f "$marker" ] || { echo "local: $root has no $(basename "$marker")" >&2; exit 1; }
-	rm -rf "$root"
-	echo "local: removed $root"
+	# Only the entries this suite creates are removed, each after checking by
+	# identity (-ef, so no spelling or alias of a path gets past it) that it
+	# holds neither the checkout nor the home directory; the directory itself
+	# goes with rmdir, which keeps it, and says so, if anything else is in it.
+	for entry in db run log site-a site-b state.json; do
+		[ -e "$root/$entry" ] || [ -L "$root/$entry" ] || continue
+		if holds "$root/$entry" "$repo" || holds "$root/$entry" "$HOME"; then
+			echo "local: will not remove $root/$entry, it holds the checkout or the home directory" >&2
+			exit 1
+		fi
+		rm -rf "${root:?}/$entry"
+	done
+	rm -f "$marker"
+	if rmdir "$root" 2>/dev/null; then
+		echo "local: removed $root"
+	else
+		echo "local: removed the suite's entries; $root keeps entries of its own:" >&2
+		ls -A "$root" >&2
+		exit 1
+	fi
 	;;
 *) echo "usage: $0 up|test|down|run|purge" >&2; exit 2 ;;
 esac
