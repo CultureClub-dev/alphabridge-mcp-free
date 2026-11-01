@@ -222,6 +222,16 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 
 == Changelog ==
 
+= 4.17.0 =
+* **Protected options, hardened.** The six keys and salts WordPress reads from the options when `wp-config.php` does not define them (`secure_auth_key`, `secure_auth_salt`, `logged_in_key`, `logged_in_salt`, `nonce_key`, `nonce_salt`), every option whose name contains `_salt`, and `fs_accounts` (the licence keys of Freemius) are now protected like `auth_key`: no option tool writes or deletes them.
+* **A refusal names the way.** An option that is protected is refused with what to do instead, per group: the list of active plugins goes through `wp_activate_plugin` and `wp_deactivate_plugin`, the theme through `wp_activate_theme`, scheduled events, network plugins, the site address and the registration settings through their own tools where the site has them, otherwise the page in wp-admin that changes them; keys, passwords and the options of AlphaBridge itself stay closed.
+* **Confirmations with a condition.** A tool can now ask for the confirmation from its preview for some calls only (the base for changing the registration settings and the site address with AlphaBridge MCP Pro); its description and schema say which calls take two steps. The answer says what a token confirms: this change to the state of the preview, for 10 minutes, accepted again when the call meets that state again.
+* **Undo knows the state an option was left in.** An undo point of a confirmed option change or an address change can carry the state the options were left in, so a restore refuses a later change unless forced; the undo points of the page builders keep their form.
+* **`wp_deactivate_plugin` removes an entry without its file.** An entry of the list of active plugins whose plugin file is missing (a folder deleted over FTP, say) is taken out of the list, as the Plugins page of wp-admin does; the answer has `file_missing: true`.
+* **A bound request for a DNS name.** A new mode of the checked request (`AB_MCP_Outbound::get_bound()`) asks an address whose name may not point anywhere yet, tied to given public addresses or to those the name points to: only a DNS name as host (no IP address in any spelling, no name without a dot), no user part, no fragment, no proxy, no redirect followed and nothing without cURL; each refusal says what to do.
+* **The password page of the preview protection carries a mark.** It is sent with `X-AB-MCP: preview-protection`, so a check from outside tells it from the 401 of an HTTP login or of another plugin.
+* **An address change that is not finished is shown.** While the record of an address change that did not finish stands (`ab_mcp_site_address_journal`, written by AlphaBridge MCP Pro), `wp_site_info` reports it in `alphabridge.open_address_change` and the card «Connection check» on AlphaBridge → AI Connection shows the old and the new address, how far it got, what is still open and the next step, with a button that closes the record; closing changes nothing else. The uninstall removes the record.
+
 = 4.16.0 =
 * **AlphaBridge has a menu of its own.** The plugin sits in the WordPress menu as «AlphaBridge», right below Settings, with two pages: «AI Connection» carries what the settings page carried, and «Staging» the card «Staging» with the role of the site, the preview protection and Staging first. The address of the settings page under Settings leads to «AI Connection» with all its parameters, so bookmarks and older links keep working, and every address the plugin gives out (in the answers to assistants, in the plugin list, in its notices and after a form) leads straight to the page it names. Add-ons hang their boxes on `ab_mcp_admin_boxes_connection` and `ab_mcp_admin_boxes_staging`; `ab_mcp_admin_main_boxes` keeps its place on «AI Connection».
 * **The texts name the new menu.** Notices, refusals, the consent screen, the checklist of «Staging», the instructions to assistants, the tool descriptions and the prompt `staging_workflow` now say «AlphaBridge → AI Connection» or «AlphaBridge → Staging», wherever the setting they name now is, in all nine languages of the plugin.
@@ -510,6 +520,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.17.0 =
+More options are protected (the salts, fs_accounts), and a refusal names the way for each kind of option. wp_deactivate_plugin removes an entry whose plugin file is missing. An address change that did not finish is shown in wp_site_info and on the connection check. No setting changes.
 
 = 4.16.0 =
 AlphaBridge has a menu of its own below Settings, with «AI Connection» and «Staging»; old links lead there. Plugins and themes load the admin files wp-admin loads: deactivating WP Super Cache no longer ends with an internal error. No setting changes.

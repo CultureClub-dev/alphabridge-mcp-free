@@ -54,11 +54,12 @@ class AB_MCP_Guidance {
 	 * 4.11.0 installing, updating and deleting plugins and themes, updating
 	 * WordPress core, and switching plugins and themes on and off; since
 	 * 4.12.0 the abilities of other plugins (wp_list_abilities,
-	 * wp_run_ability).
+	 * wp_run_ability). wp_change_site_address is Pro's since Pro 4.17.0.
 	 */
 	const PRO_TOOLS = array(
 		'wp_blueprint_diff',
 		'wp_blueprint_export',
+		'wp_change_site_address',
 		'wp_create_application_password',
 		'wp_db_execute',
 		'wp_db_query',

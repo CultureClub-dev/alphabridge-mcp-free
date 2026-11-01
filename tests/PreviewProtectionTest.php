@@ -46,6 +46,13 @@
  *   admin-ajax.php only; the pages of wp-admin are not this gate's business.
  * - While on, every front-end answer is marked DONOTCACHEPAGE and carries
  *   X-Robots-Tag: noindex, nofollow.
+ * - The password page, and no other answer of the protection, carries
+ *   X-AB-MCP: preview-protection (the header of the authorization
+ *   endpoint), so a check from outside tells it from any other 401: the
+ *   page for a visitor and after a wrong password, on wp-links-opml.php and
+ *   admin-post.php; not the reload after the right password, a pass, what
+ *   the gates serve, or the «0» of admin-ajax.php. The mark needs no class
+ *   but the three the must-use loader loads.
  * - The REST gate passes an error of WordPress's own checks through, passes
  *   signed-in users, the root /wp-json/ (the namespace index the hub
  *   reads), every route of this plugin's namespace (the MCP endpoint with
@@ -1702,6 +1709,9 @@ final class PreviewProtectionTest extends TestCase {
 		$GLOBALS['ab_test_options']['blog_public'] = '1';
 		self::assertFalse( headers_sent() );
 		$line = 'X-Robots-Tag: noindex, nofollow';
+		// The password page carries the mark besides (send_mark(); its own
+		// test below).
+		$mark = 'X-AB-MCP: preview-protection';
 		$sent = static function ( callable $gate ): array {
 			$GLOBALS['ab_test_actions'] = array();
 			try {
@@ -1719,7 +1729,7 @@ final class PreviewProtectionTest extends TestCase {
 		$this->on();
 		// The password page on parse_request.
 		$GLOBALS['ab_test_die_args'] = array();
-		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
+		self::assertSame( array( $line, $mark ), $sent( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) ) ) );
 		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'], 'The password page followed the header.' );
 		// A pass on parse_request carries it too (WordPress would send the
 		// same again through wp_headers; header() replaces).
@@ -1737,7 +1747,7 @@ final class PreviewProtectionTest extends TestCase {
 		// wp-links-opml.php on wp_loaded.
 		$GLOBALS['pagenow']     = 'wp-links-opml.php';
 		$_SERVER['REQUEST_URI'] = '/wp-links-opml.php';
-		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_script() ) );
+		self::assertSame( array( $line, $mark ), $sent( static fn() => AB_MCP_Preview_Protection::gate_script() ), 'The password page.' );
 		// admin-ajax.php and admin-post.php on admin_init.
 		$GLOBALS['ab_test_is_admin']   = true;
 		$GLOBALS['ab_test_doing_ajax'] = true;
@@ -1747,8 +1757,90 @@ final class PreviewProtectionTest extends TestCase {
 		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
 		$GLOBALS['ab_test_doing_ajax'] = false;
 		$GLOBALS['pagenow']            = 'admin-post.php';
-		self::assertSame( array( $line ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ) );
+		self::assertSame( array( $line, $mark ), $sent( static fn() => AB_MCP_Preview_Protection::gate_admin() ), 'The password page.' );
 		self::assertSame( 401, $GLOBALS['ab_test_die_args']['response'] );
+	}
+
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testOnlyThePasswordPageCarriesTheMark(): void {
+		// The check after a change of the site address (Pro) takes a 401 of
+		// the home page as this site's own only with this mark: an HTTP login
+		// in front of the site or another plugin answers 401 as well. The
+		// header is the one of the authorization endpoint, with a value of
+		// its own.
+		self::assertSame( AB_MCP_OAuth::MARK_HEADER, AB_MCP_Preview_Protection::MARK_HEADER );
+		self::assertSame( 'preview-protection', AB_MCP_Preview_Protection::MARK );
+		ab_test_add_user( 7 );
+		$GLOBALS['ab_test_options']['blog_public'] = '1';
+		self::assertFalse( headers_sent(), 'Nothing printed yet in this process: the gate really sends.' );
+		$mark = 'X-AB-MCP: preview-protection';
+		// How the gate ended (null: it passed) and how often it sent the mark.
+		$run = static function ( callable $gate ) use ( $mark ): array {
+			$GLOBALS['ab_test_actions']  = array();
+			$GLOBALS['ab_test_die_args'] = array();
+			$kind                        = null;
+			try {
+				$gate();
+			} catch ( AbTestExit $exit ) {
+				$kind = $exit->kind . ( 'die' === $exit->kind ? ' ' . $GLOBALS['ab_test_die_args']['response'] : '' );
+			}
+			return array( $kind, count( array_keys( self::sent()['headers'], $mark, true ) ) );
+		};
+		$page = static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'pagename' => 'about' ) ) );
+		$_SERVER['REQUEST_URI'] = '/about/';
+
+		self::assertSame( array( null, 0 ), $run( $page ), 'Off: no mark.' );
+		$password = $this->on();
+		self::assertSame( array( 'die 401', 1 ), $run( $page ), 'The password page for a visitor.' );
+		self::assertSame( array( 'die 401', 1 ), $run( static fn() => AB_MCP_Preview_Protection::gate_frontend() ), 'The same on template_redirect.' );
+
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = 'nope';
+		self::assertSame( array( 'die 401', 1 ), $run( $page ), 'The page again after a wrong password.' );
+		$_POST[ AB_MCP_Preview_Protection::FIELD ] = $password;
+		self::assertSame( array( 'redirect', 0 ), $run( $page ), 'The reload after the right password is no password page.' );
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_POST                     = array();
+
+		$GLOBALS['ab_test_logged_in'] = true;
+		self::assertSame( array( null, 0 ), $run( $page ), 'A signed-in user passes.' );
+		$GLOBALS['ab_test_logged_in'] = false;
+		$_COOKIE[ AB_MCP_Preview_Protection::COOKIE ] = AB_MCP_Preview_Protection::cookie_value( AB_MCP_Preview_Protection::state()['hash'], time() + 100 );
+		self::assertSame( array( null, 0 ), $run( $page ), 'A visitor with the cookie passes.' );
+		$_COOKIE = array();
+
+		self::assertSame( array( 'rest', 0 ), $run( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'rest_route' => '/alphabridge/v1/mcp' ) ) ) ), 'A REST request, served by the REST server.' );
+		self::robotsStub();
+		$_SERVER['REQUEST_URI'] = '/robots.txt';
+		self::assertSame( array( 'robots', 0 ), $run( static fn() => AB_MCP_Preview_Protection::gate_parse_request( self::wp( array( 'robots' => '1' ) ) ) ), 'robots.txt.' );
+
+		$GLOBALS['pagenow']     = 'wp-links-opml.php';
+		$_SERVER['REQUEST_URI'] = '/wp-links-opml.php';
+		self::assertSame( array( 'die 401', 1 ), $run( static fn() => AB_MCP_Preview_Protection::gate_script() ), 'The password page of wp-links-opml.php.' );
+
+		$GLOBALS['ab_test_is_admin']   = true;
+		$GLOBALS['ab_test_doing_ajax'] = true;
+		$GLOBALS['pagenow']            = 'admin-ajax.php';
+		$_REQUEST['action']            = 'load_more';
+		self::assertSame( array( 'die 401', 0 ), $run( static fn() => AB_MCP_Preview_Protection::gate_admin() ), 'The «0» of admin-ajax.php is no password page.' );
+		$GLOBALS['ab_test_doing_ajax'] = false;
+		$GLOBALS['pagenow']            = 'admin-post.php';
+		self::assertSame( array( 'die 401', 1 ), $run( static fn() => AB_MCP_Preview_Protection::gate_admin() ), 'The password page of admin-post.php.' );
+	}
+
+	public function testTheMarkNeedsNoClassButTheThreeTheLoaderLoads(): void {
+		// wp-activate.php shows the password page under the must-use loader,
+		// which loads AB_MCP_Settings, AB_MCP_Page_Cache and this class only:
+		// the mark must not reach for AB_MCP_OAuth (a fatal error there). A
+		// process of its own, since this one has every class loaded
+		// (tests/standalone-preview/mark-child.php).
+		$out  = array();
+		$code = 1;
+		exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( __DIR__ . '/standalone-preview/mark-child.php' ) . ' 2>&1', $out, $code );
+		self::assertSame( 0, $code, implode( ' | ', $out ) );
+		self::assertSame( 'MARK-CHILD ok', end( $out ) );
+		self::assertStringNotContainsString( 'FAIL', implode( "\n", $out ) );
 	}
 
 	public function testXRobotsTagGoesOnEveryAnswerWhileOn(): void {

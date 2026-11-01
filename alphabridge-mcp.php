@@ -3,7 +3,7 @@
  * Plugin Name:       AlphaBridge MCP
  * Plugin URI:        https://www.alphabridge-mcp.com
  * Description:       Connect Claude and other MCP clients directly and securely to WordPress. Native Streamable-HTTP MCP server with tool-group switches.
- * Version:           4.16.0
+ * Version:           4.17.0
  * Requires at least: 6.5
  * Requires PHP:      8.0
  * Author:            AlphaBridge
@@ -28,7 +28,7 @@ if ( defined( 'AB_MCP_VERSION' ) || class_exists( 'AB_MCP_Plugin', false ) ) {
 	return;
 }
 
-define( 'AB_MCP_VERSION', '4.16.0' );
+define( 'AB_MCP_VERSION', '4.17.0' );
 define( 'AB_MCP_FILE', __FILE__ );
 define( 'AB_MCP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AB_MCP_URL', plugin_dir_url( __FILE__ ) );
@@ -88,6 +88,10 @@ require_once AB_MCP_DIR . 'includes/class-redactor.php';
 require_once AB_MCP_DIR . 'includes/class-rest-controller.php';
 // The connection check: the settings card and the tool wp_connection_doctor.
 require_once AB_MCP_DIR . 'includes/class-connection-doctor.php';
+// The record of an address change that is not finished (since 4.17.0):
+// written by Pro's wp_change_site_address, shown by wp_site_info and the
+// card «Connection check», closed there.
+require_once AB_MCP_DIR . 'includes/class-site-address-journal.php';
 // Page builders: recognition and reading; defines AB_MCP_BUILDER_API, which Pro checks.
 require_once AB_MCP_DIR . 'includes/builders/class-builders.php';
 require_once AB_MCP_DIR . 'includes/class-tool-labels.php';

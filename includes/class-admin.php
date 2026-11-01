@@ -136,6 +136,9 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_connection_settings', array( $this, 'handle_connection_settings' ) );
 		add_action( 'admin_post_ab_mcp_firewall_check', array( $this, 'handle_firewall_check' ) );
 		add_action( 'admin_post_ab_mcp_connection_check', array( $this, 'handle_connection_check' ) );
+		// «Close the record» of an address change that is not finished
+		// (since 4.17.0, AB_MCP_Site_Address_Journal), on the same card.
+		add_action( 'admin_post_ab_mcp_address_journal', array( $this, 'handle_address_journal' ) );
 		add_action( 'admin_post_ab_mcp_direct_signin', array( $this, 'handle_direct_signin' ) );
 		add_action( 'admin_post_ab_mcp_audit_clear', array( $this, 'handle_audit_clear' ) );
 		add_action( 'admin_post_ab_mcp_review_dismiss', array( $this, 'handle_review_dismiss' ) );
@@ -683,9 +686,14 @@ class AB_MCP_Admin {
 		if ( '' !== $also ) {
 			$reads .= ' ' . $also;
 		}
+		// Since 4.17.0 the sentence of Pro also names the two protected kinds
+		// of settings its tools write (stage 2): who may register with which
+		// role (wp_update_option) and the address (wp_change_site_address),
+		// each only with the confirmation of a preview and an undo point. The
+		// sentence of the free edition names no tool of Pro.
 		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
 		$writes  = in_array( $edition, array( 'pro', 'agency' ), true )
-			? __( 'AI assistants read and write: posts, pages, plugins, themes, code and the database.', 'alphabridge-mcp' )
+			? __( 'AI assistants read and write: posts, pages, plugins, themes, code and the database; the registration settings and the site address only with a confirmation from the preview and with an undo point.', 'alphabridge-mcp' )
 			: __( 'AI assistants read and write: posts, pages, media, terms, comments, menus, widgets, users, site settings, the shop and SEO fields.', 'alphabridge-mcp' );
 
 		$html .= '<div class="ab-mode__boxes">';
@@ -804,6 +812,22 @@ class AB_MCP_Admin {
 		check_admin_referer( 'ab_mcp_connection_check' );
 		AB_MCP_Connection_Doctor::run_and_store();
 		$this->redirect( 'connection_checked', 'ab-doctor' );
+	}
+
+	/**
+	 * The button «Close the record» of an address change that is not
+	 * finished (AB_MCP_Site_Address_Journal), on the card «Connection check»:
+	 * removes the record the page showed, and nothing else, behind the nonce
+	 * and the capability. The form carries the fingerprint of that record,
+	 * so a page loaded before the record changed closes nothing; while a
+	 * change of the site runs nothing is closed either. Lands on the card
+	 * with what happened.
+	 */
+	public function handle_address_journal() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_address_journal' );
+		$fingerprint = isset( $_POST['entry'] ) ? sanitize_text_field( wp_unslash( $_POST['entry'] ) ) : '';
+		$this->redirect( 'address_journal_' . AB_MCP_Site_Address_Journal::close( $fingerprint ), 'ab-doctor' );
 	}
 
 	/**
@@ -2075,6 +2099,7 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Diagnostics', 'alphabridge-mcp' ) . '</p>';
 		$html .= '<h2 class="ab-card__title">' . esc_html__( 'Connection check', 'alphabridge-mcp' ) . '</h2>';
 		$html .= '<p class="ab-lead">' . esc_html__( 'If an app cannot connect, this check looks for the usual causes and says how to fix each one. The site sends a few requests to itself; nothing is changed.', 'alphabridge-mcp' ) . '</p>';
+		$html .= $this->address_journal_html();
 
 		if ( null === $result ) {
 			$html .= '<p class="ab-direct__status">' . esc_html__( 'Not run yet.', 'alphabridge-mcp' ) . '</p>';
@@ -2115,6 +2140,76 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-settings__save"><button type="submit" class="ab-btn">' . esc_html__( 'Run check', 'alphabridge-mcp' ) . '</button></p>';
 		$html .= '</form></div>';
 
+		return $html;
+	}
+
+	/**
+	 * The notice of an address change that is not finished
+	 * (AB_MCP_Site_Address_Journal), at the top of the card «Connection
+	 * check», or '' while there is none: the old and the new address (the
+	 * WordPress Address beside it where it differs), the state as a
+	 * sentence, when and by whom it started, what is still open, the next
+	 * step, and the button that closes the record (handle_address_journal()).
+	 * A record that cannot be read is named as such, with the same button; a
+	 * lookup that failed says so, without one.
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function address_journal_html() {
+		$entry = AB_MCP_Site_Address_Journal::read();
+		if ( null === $entry ) {
+			return '';
+		}
+		$html = '<div class="ab-callout ab-address-journal" id="ab-address-journal">';
+		if ( $entry['lookup_failed'] ) {
+			return $html . '<p><b>' . esc_html( AB_MCP_Site_Address_Journal::lookup_failed_text() ) . '</b></p></div>';
+		}
+		if ( ! $entry['readable'] ) {
+			$html .= '<p><b>' . esc_html( AB_MCP_Site_Address_Journal::unreadable_text() ) . '</b></p>';
+		} else {
+			$html .= '<p><b>' . esc_html( AB_MCP_Site_Address_Journal::title_text() ) . '</b> ' . esc_html( AB_MCP_Site_Address_Journal::state_text( $entry['state'] ) ) . '</p>';
+			$html .= '<p>' . esc_html(
+				$entry['old']['home'] === $entry['old']['siteurl']
+					/* translators: %s: the address of the site before the change. */
+					? sprintf( __( 'Old address: %s', 'alphabridge-mcp' ), $entry['old']['home'] )
+					/* translators: 1: the address of the site before the change, 2: its WordPress Address. */
+					: sprintf( __( 'Old address: %1$s (WordPress Address: %2$s)', 'alphabridge-mcp' ), $entry['old']['home'], $entry['old']['siteurl'] )
+			) . '<br>' . esc_html(
+				$entry['new']['home'] === $entry['new']['siteurl']
+					/* translators: %s: the address of the site the change writes. */
+					? sprintf( __( 'New address: %s', 'alphabridge-mcp' ), $entry['new']['home'] )
+					/* translators: 1: the address of the site the change writes, 2: its WordPress Address. */
+					: sprintf( __( 'New address: %1$s (WordPress Address: %2$s)', 'alphabridge-mcp' ), $entry['new']['home'], $entry['new']['siteurl'] )
+			) . '</p>';
+			if ( null !== $entry['time'] ) {
+				$user = null !== $entry['user'] ? get_user_by( 'id', $entry['user'] ) : false;
+				$html .= '<p>' . esc_html(
+					$user && isset( $user->display_name ) && '' !== (string) $user->display_name
+						/* translators: 1: date and time, 2: the name of an account. */
+						? sprintf( __( 'Started %1$s by %2$s.', 'alphabridge-mcp' ), self::site_datetime( $entry['time'] ), (string) $user->display_name )
+						/* translators: %s: date and time. */
+						: sprintf( __( 'Started %s.', 'alphabridge-mcp' ), self::site_datetime( $entry['time'] ) )
+				) . '</p>';
+			}
+			if ( array() !== $entry['rest'] ) {
+				$html .= '<p>' . esc_html__( 'Still open:', 'alphabridge-mcp' ) . '</p><ul class="ab-address-journal__rest">';
+				foreach ( $entry['rest'] as $item ) {
+					$html .= '<li>' . esc_html( $item ) . '</li>';
+				}
+				$html .= '</ul>';
+			}
+			if ( null !== $entry['next'] ) {
+				/* translators: %s: the next step, one or more sentences. */
+				$html .= '<p>' . esc_html( sprintf( __( 'Next step: %s', 'alphabridge-mcp' ), $entry['next'] ) ) . '</p>';
+			}
+		}
+		$html .= '<p>' . esc_html__( 'Check under Settings › General which address the site has now. Close the record once the address is right and nothing is open any more: closing removes only the record and changes nothing on the site.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		$html .= wp_nonce_field( 'ab_mcp_address_journal', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_address_journal">';
+		$html .= '<input type="hidden" name="entry" value="' . esc_attr( $entry['fingerprint'] ) . '">';
+		$html .= '<p><button type="submit" class="ab-btn ab-btn--ghost">' . esc_html__( 'Close the record', 'alphabridge-mcp' ) . '</button></p>';
+		$html .= '</form></div>';
 		return $html;
 	}
 
@@ -3441,6 +3536,12 @@ class AB_MCP_Admin {
 			'saved'         => array( 'success', __( 'Saved.', 'alphabridge-mcp' ) ),
 			'checked'       => array( 'success', __( 'Checked. The finding is shown under “How ChatGPT signs in”.', 'alphabridge-mcp' ) ),
 			'connection_checked' => array( 'success', __( 'Checked. The result is shown under “Connection check”.', 'alphabridge-mcp' ) ),
+			// The record of an address change (AB_MCP_Site_Address_Journal::close()).
+			'address_journal_closed'  => array( 'success', __( 'The record of the address change was removed. Nothing else on the site was changed.', 'alphabridge-mcp' ) ),
+			'address_journal_gone'    => array( 'success', __( 'There was no record of an address change any more; nothing was changed.', 'alphabridge-mcp' ) ),
+			'address_journal_changed' => array( 'error', __( 'Nothing was removed: the record of the address change has changed since this page was loaded. Read it again under “Connection check”, then close it.', 'alphabridge-mcp' ) ),
+			'address_journal_busy'    => array( 'error', __( 'Nothing was removed: a change of the site is running right now (an address change, an update or an activation). Try again in a few minutes.', 'alphabridge-mcp' ) ),
+			'address_journal_kept'    => array( 'error', __( 'The record of the address change could not be removed. Try again; if it stays, the database error log names the cause.', 'alphabridge-mcp' ) ),
 			'tools_saved'   => array( 'success', __( 'Saved. Clients may cache the tool list they loaded. If the change is not visible in a connected client, refresh its tool list or reconnect it (Claude: in Connectors, refresh this connector’s tool list or disconnect and connect again; Claude Code: /mcp, then reconnect).', 'alphabridge-mcp' ) ),
 			'token_created' => array( 'success', __( 'Connection created.', 'alphabridge-mcp' ) ),
 			'token_deleted' => array( 'success', __( 'Connection deleted.', 'alphabridge-mcp' ) ),

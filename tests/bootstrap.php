@@ -2022,6 +2022,9 @@ require_once __DIR__ . '/../includes/class-oauth.php';
 require_once __DIR__ . '/../includes/class-redactor.php';
 require_once __DIR__ . '/../includes/class-rest-controller.php';
 require_once __DIR__ . '/../includes/class-connection-doctor.php';
+// The record of an address change that is not finished (4.17.0): the card
+// «Connection check» and wp_site_info show it.
+require_once __DIR__ . '/../includes/class-site-address-journal.php';
 // The staging record (4.15.0): the site contract reports its role.
 require_once __DIR__ . '/../includes/class-staging.php';
 // «Staging first» (4.15.0): the gate in run_tool() and the schema of the writing tools.

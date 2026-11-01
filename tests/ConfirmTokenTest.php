@@ -287,4 +287,230 @@ final class ConfirmTokenTest extends TestCase {
 			self::assertStringContainsString( 'Leave out confirm_token', $no->get_error_message() );
 		}
 	}
+
+	/* ------------------------------------- a tool that confirms some calls (4.17.0) */
+
+	/** @var mixed What `when` answers; a Throwable is thrown instead. */
+	private $needs = true;
+
+	/** @var string[] The callbacks of the definition, in the order they ran. */
+	private array $calls = array();
+
+	/** @var mixed What `preview` answers. */
+	private $preview_answer = array( 'would_write' => true );
+
+	/** @var mixed The `when` of the definition. */
+	private $when = null;
+
+	/** @var array<string,mixed>|null The arguments `when` was given. */
+	private ?array $when_args = null;
+
+	/**
+	 * A tool as Pro's wp_update_option will be: it confirms only the calls
+	 * `when` says need it.
+	 *
+	 * @param array<string,mixed> $extra Further keys of `confirm`.
+	 */
+	private function conditional_registry( array $extra = array() ): AB_MCP_Tool_Registry {
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'settings', 'Settings' );
+		$confirm = array(
+			'when'    => $this->when ?? function ( array $a ) {
+				$this->calls[]   = 'when';
+				$this->when_args = $a;
+				if ( $this->needs instanceof \Throwable ) {
+					throw $this->needs;
+				}
+				return $this->needs;
+			},
+			'state'   => function ( array $a ) {
+				$this->calls[] = 'state';
+				return $this->state;
+			},
+			'preview' => function ( array $a ) {
+				$this->calls[] = 'preview';
+				return $this->preview_answer;
+			},
+		) + $extra;
+		$r->register(
+			'wp_update_option',
+			array(
+				'description' => 'Write an option.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'required'   => array( 'name' ),
+					'properties' => array( 'name' => array( 'type' => 'string' ) ),
+				),
+				'confirm'     => $confirm,
+				'callback'    => function ( array $a ): array {
+					$this->calls[] = 'callback';
+					++$this->runs;
+					return array( 'written' => $a['name'], 'args' => array_keys( $a ) );
+				},
+			)
+		);
+		return $r;
+	}
+
+	/** @param array<string,mixed> $arguments */
+	private function call_conditional( array $arguments, ?AB_MCP_Tool_Registry $r = null ): array {
+		$request = new WP_REST_Request();
+		$request->set_json_params(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'tools/call',
+				'params'  => array( 'name' => 'wp_update_option', 'arguments' => $arguments ),
+			)
+		);
+		return ( new AB_MCP_REST_Controller( $r ?? $this->conditional_registry() ) )->handle( $request )->get_data()['result'];
+	}
+
+	public function testWhenFalseRunsTheToolAtOnceWithoutStateOrPreview(): void {
+		$this->needs = false;
+		$result      = $this->call_conditional( array( 'name' => 'blogname' ) );
+
+		self::assertFalse( $result['isError'] );
+		self::assertSame( 1, $this->runs );
+		self::assertSame( array( 'when', 'callback' ), $this->calls, 'state and preview are not asked at all' );
+		self::assertSame( 'blogname', self::payload( $result )['written'] );
+		self::assertArrayNotHasKey( 'confirm_required', self::payload( $result ) );
+	}
+
+	public function testWhenFalseDropsATokenSentAlongAndHandsWhenTheArgumentsWithoutIt(): void {
+		$this->needs = false;
+		$result      = $this->call_conditional( array( 'name' => 'blogname', 'confirm_token' => '1.' . str_repeat( 'a', 64 ) ) );
+
+		self::assertFalse( $result['isError'] );
+		self::assertSame( array( 'name' ), self::payload( $result )['args'] );
+		self::assertSame( array( 'name' => 'blogname' ), $this->when_args );
+	}
+
+	public function testWhenTrueAsksForTheTokenAsWithoutWhen(): void {
+		$this->needs = true;
+		$first       = self::payload( $this->call_conditional( array( 'name' => 'default_role' ) ) );
+
+		self::assertTrue( $first['confirm_required'] );
+		self::assertSame( 0, $this->runs );
+		self::assertSame( array( 'when', 'state', 'preview' ), $this->calls, 'when is asked before state' );
+
+		$this->calls = array();
+		$second      = $this->call_conditional( array( 'name' => 'default_role', 'confirm_token' => $first['confirm_token'] ) );
+		self::assertFalse( $second['isError'] );
+		self::assertSame( 1, $this->runs );
+		self::assertSame( array( 'when', 'state', 'callback' ), $this->calls );
+	}
+
+	public function testAnythingButAStrictFalseAsksForTheToken(): void {
+		foreach ( array( 0, '', null, '0', 'no', array(), new WP_Error( 'x', 'y' ), 0.0 ) as $answer ) {
+			$this->needs = $answer;
+			$this->calls = array();
+			$p           = self::payload( $this->call_conditional( array( 'name' => 'blogname' ) ) );
+			self::assertTrue( $p['confirm_required'] ?? false, var_export( $answer, true ) );
+			self::assertSame( 0, $this->runs, var_export( $answer, true ) );
+		}
+	}
+
+	public function testAWhenThatThrowsAsksForTheTokenInsteadOfFailing(): void {
+		$this->needs = new \RuntimeException( 'secret path /var/www/x' );
+		$result      = $this->call_conditional( array( 'name' => 'default_role' ) );
+
+		self::assertFalse( $result['isError'] );
+		self::assertTrue( self::payload( $result )['confirm_required'] );
+		self::assertSame( 0, $this->runs );
+		self::assertSame( array( 'when', 'state', 'preview' ), $this->calls );
+	}
+
+	public function testAWhenThatCannotBeCalledIsNoConditionAtAll(): void {
+		$this->when = 'no_such_function_anywhere';
+		$r          = $this->conditional_registry();
+		$result     = $this->call_conditional( array( 'name' => 'blogname' ), $r );
+
+		self::assertTrue( self::payload( $result )['confirm_required'] );
+		self::assertSame( 0, $this->runs );
+		self::assertStringContainsString( 'Runs in two steps', $r->get( 'wp_update_option' )['description'], 'and the description does not claim one' );
+	}
+
+	public function testWhenFalseRunsEvenWhereTheStateWouldRefuse(): void {
+		$this->needs = false;
+		$r           = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'settings', 'Settings' );
+		$r->register(
+			'wp_update_option',
+			array(
+				'confirm'  => array(
+					'when'  => static fn(): bool => false,
+					'state' => static fn(): WP_Error => new WP_Error( 'ab_mcp_blocked', 'Only for the pair.' ),
+				),
+				'callback' => function ( array $a ): string {
+					++$this->runs;
+					return 'ran';
+				},
+			)
+		);
+		self::assertFalse( $this->call_conditional( array( 'name' => 'blogname' ), $r )['isError'] );
+		self::assertSame( 1, $this->runs );
+	}
+
+	public function testAPreviewOrAStateThatRefusesGivesNeitherPreviewNorToken(): void {
+		$this->needs          = true;
+		$this->preview_answer = new WP_Error( 'ab_mcp_probe_failed', 'The new address did not answer.' );
+		$result               = $this->call_conditional( array( 'name' => 'default_role' ) );
+
+		self::assertTrue( $result['isError'] );
+		self::assertStringContainsString( 'did not answer', $result['content'][0]['text'] );
+		self::assertStringNotContainsString( 'confirm_token', $result['content'][0]['text'] );
+		self::assertSame( 0, $this->runs );
+
+		$gate = AB_MCP_Confirm_Token::gate( 't', array( 'confirm' => array( 'state' => static fn(): WP_Error => new WP_Error( 'no', 'No.' ) ) ), array() );
+		self::assertInstanceOf( WP_Error::class, $gate );
+	}
+
+	public function testTheNoteDescribesAConditionalToolInPlaceOfTheTwoSteps(): void {
+		$note = 'Writing users_can_register or default_role runs in two steps; every other option is written at once.';
+		$def  = $this->conditional_registry( array( 'note' => '  ' . $note . ' ' ) )->get( 'wp_update_option' );
+
+		self::assertStringStartsWith( 'Write an option. ' . $note . ' ', $def['description'] );
+		self::assertStringNotContainsString( 'Runs in two steps', $def['description'] );
+		$prop = (array) $def['inputSchema']['properties'];
+		self::assertStringContainsString( 'for a call that needs one', $prop['confirm_token']['description'] );
+		self::assertStringContainsString( 'not used up', $prop['confirm_token']['description'] );
+		self::assertSame( array( 'name' ), $def['inputSchema']['required'], 'The token is never required.' );
+
+		$plain = $this->conditional_registry()->get( 'wp_update_option' );
+		self::assertStringContainsString( 'Some calls run in two steps', $plain['description'], 'Without a note, a sentence that claims two steps only for some calls.' );
+
+		// A tool that confirms every call keeps its sentence, and a note follows it.
+		$r = new AB_MCP_Tool_Registry();
+		$r->set_current_group( 'plugins', 'Plugins' );
+		$r->register( 'wp_delete_noted', array( 'description' => 'Delete.', 'confirm' => array( 'state' => static fn(): string => 's', 'note' => 'The files go too.' ) ) );
+		$noted = $r->get( 'wp_delete_noted' );
+		self::assertStringContainsString( 'Runs in two steps', $noted['description'] );
+		self::assertStringContainsString( 'reversible. The files go too.', $noted['description'] );
+		self::assertStringNotContainsString( 'for a call that needs one', ( (array) $noted['inputSchema']['properties'] )['confirm_token']['description'] );
+		self::assertSame( AB_MCP_Confirm_Token::schema_property(), AB_MCP_Confirm_Token::schema_property( array( 'state' => 'x' ) ), 'A caller of before gets the sentence of before.' );
+		self::assertSame( AB_MCP_Confirm_Token::description_note(), AB_MCP_Confirm_Token::description_note( array( 'state' => 'x', 'note' => 42 ) ) );
+	}
+
+	public function testAChangeThenItsStateBackAndTheSameTokenConfirmsTheSameChangeAgain(): void {
+		// The contract: a token confirms this change to this state for ten
+		// minutes and is not used up. An undo that brings the state of the
+		// preview back makes the same token valid for the same change again.
+		$this->needs = true;
+		$this->state = 'default_role=subscriber|caps=read';
+		$token       = self::payload( $this->call_conditional( array( 'name' => 'default_role' ) ) )['confirm_token'];
+
+		self::assertFalse( $this->call_conditional( array( 'name' => 'default_role', 'confirm_token' => $token ) )['isError'] );
+		self::assertSame( 1, $this->runs );
+
+		$this->state = 'default_role=author|caps=read,edit_posts';   // what the change left
+		$again       = $this->call_conditional( array( 'name' => 'default_role', 'confirm_token' => $token ) );
+		self::assertTrue( $again['isError'] );
+		self::assertStringContainsString( 'what it covers has changed', $again['content'][0]['text'] );
+		self::assertSame( 1, $this->runs );
+
+		$this->state = 'default_role=subscriber|caps=read';           // undone
+		self::assertFalse( $this->call_conditional( array( 'name' => 'default_role', 'confirm_token' => $token ) )['isError'] );
+		self::assertSame( 2, $this->runs );
+	}
 }

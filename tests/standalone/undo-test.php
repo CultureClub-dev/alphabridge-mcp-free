@@ -494,6 +494,68 @@ $pe_after = $pe; $pe_after['after'] = array( 5 => array( 'meta:_elementor_data' 
 ok( AB_MCP_Undo::valid_entry( $pe_after ), 'F7 the state after the change Pro keeps per post is accepted' );
 $pe_after['after'] = array( 5 => array( 'meta:x' => 'kurz' ) );
 ok( ! AB_MCP_Undo::valid_entry( $pe_after ), 'F7 but only with a sha256 per copy' );
+
+// F8 (4.17.0): the options form of "after", for Pro's kinds option and
+// site_address: option name => sha256 of the stored value, or null.
+$sha_a = hash( 'sha256', 'a' );
+$sha_b = hash( 'sha256', 'b' );
+foreach ( array( 'option', 'site_address' ) as $f8_kind ) {
+	$oe          = $good;
+	$oe['kind']  = $f8_kind;
+	$oe['after'] = array( 'home' => $sha_a, 'siteurl' => $sha_b );
+	ok( AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: option names with a sha256 each are accepted" );
+	$oe['after'] = array( 'users_can_register' => $sha_a, 'default_role' => null );
+	ok( AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: null stands for a row the change left out" );
+	$oe['after'] = array( '12' => $sha_a );
+	ok( AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: a name of digits (an integer key) is a name" );
+	$oe['after'] = array( str_repeat( 'ä', 191 ) => $sha_a );
+	ok( AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: 191 characters are counted as characters, not bytes" );
+	$oe['after'] = array( 5 => array( 'meta:_elementor_data' => $sha_a ) );
+	ok( ! AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: the form of the page builders is refused" );
+	foreach ( array(
+		'an empty name'            => array( '' => $sha_a ),
+		'a name of 192 characters' => array( str_repeat( 'a', 192 ) => $sha_a ),
+		'a hash in capitals'       => array( 'home' => strtoupper( $sha_a ) ),
+		'a short hash'             => array( 'home' => 'abc' ),
+		'a hash with a newline'    => array( 'home' => $sha_a . "\n" ),
+		'a number'                 => array( 'home' => 5 ),
+		'false'                    => array( 'home' => false ),
+		'a list'                   => array( 'home' => array( $sha_a ) ),
+	) as $f8_what => $f8_after ) {
+		$oe['after'] = $f8_after;
+		ok( ! AB_MCP_Undo::valid_entry( $oe ), "F8 $f8_kind: refused, $f8_what" );
+	}
+}
+$be          = $pe;
+$be['after'] = array( 'home' => $sha_a );
+ok( ! AB_MCP_Undo::valid_entry( $be ), 'F8 builder_data: the options form is refused' );
+$be          = $good;
+$be['kind']  = 'site_settings';
+$be['after'] = array( 'home' => $sha_a );
+ok( ! AB_MCP_Undo::valid_entry( $be ), 'F8 site_settings (no options kind): the options form is refused' );
+$be['after'] = array( 5 => array( 'meta:_elementor_data' => $sha_a ) );
+ok( AB_MCP_Undo::valid_entry( $be ), 'F8 and every other kind keeps the form of the page builders' );
+$be['after'] = array( 5 => array( 'meta:_elementor_data' => $sha_a . "\n" ) );
+ok( ! AB_MCP_Undo::valid_entry( $be ), 'F8 the form of the page builders refuses a hash with a newline too' );
+$GLOBALS['ab_opts'][ AB_MCP_Undo::OPTION ] = array();
+
+// F9: record_result() keeps the options form for those kinds, and refuses
+// the wrong form with ab_mcp_undo_bad_after, keeping nothing.
+$GLOBALS['ab_uid'] = 7;
+$f9_rec            = ab_pro_opt_rec( 'default_role', 'subscriber' ) + array( 'after' => array( 'default_role' => $sha_a, 'users_can_register' => null ) );
+$f9_tok            = AB_MCP_Undo::record_result( $f9_rec );
+$f9_entry          = is_string( $f9_tok ) ? ab_entry_of( $f9_tok ) : null;
+ok( is_string( $f9_tok ) && is_array( $f9_entry ) && array( 'default_role' => $sha_a, 'users_can_register' => null ) === $f9_entry['after'], 'F9 record_result keeps the options form of an option point' );
+$f9_addr = array( 'tool' => 'wp_change_site_address', 'cap' => 'manage_options', 'kind' => 'site_address', 'summary' => 'address', 'items' => 2, 'data' => array( 'home' => 'https://alt.example', 'siteurl' => 'https://alt.example' ), 'after' => array( 'home' => $sha_a, 'siteurl' => $sha_b ) );
+$f9_tok2 = AB_MCP_Undo::record_result( $f9_addr );
+ok( is_string( $f9_tok2 ) && array( 'home' => $sha_a, 'siteurl' => $sha_b ) === ab_entry_of( $f9_tok2 )['after'], 'F9 and of a site_address point' );
+$f9_count = count( get_option( AB_MCP_Undo::OPTION, array() ) );
+$f9_bad   = AB_MCP_Undo::record_result( ab_pro_opt_rec( 'default_role' ) + array( 'after' => array( 5 => array( 'meta:x' => $sha_a ) ) ) );
+ok( is_wp_error( $f9_bad ) && 'ab_mcp_undo_bad_after' === $f9_bad->get_error_code() && count( get_option( AB_MCP_Undo::OPTION, array() ) ) === $f9_count, 'F9 the builder form on an option point is refused, nothing kept' );
+$f9_bad2 = AB_MCP_Undo::record_result( ab_set_rec( 'blogname' ) + array( 'after' => array( 'blogname' => $sha_a ) ) );
+ok( is_wp_error( $f9_bad2 ) && 'ab_mcp_undo_bad_after' === $f9_bad2->get_error_code(), 'F9 and the options form on a kind of this plugin' );
+AB_MCP_Undo::discard( $f9_tok );
+AB_MCP_Undo::discard( $f9_tok2 );
 $GLOBALS['ab_opts'][ AB_MCP_Undo::OPTION ] = array();
 
 /* ============================== G) Restore: Policy und Rechte */

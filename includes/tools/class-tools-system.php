@@ -24,7 +24,7 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_info',
 			array(
-				'description' => 'Get an overview of the technical environment: WordPress, PHP and MySQL versions, site and home URL, HTTPS, multisite, locale, the active theme\'s name and version, the number of installed plugins and of plugins active on this site (network-activated ones are not counted), WP_MEMORY_LIMIT, the maximum upload size, this plugin\'s MCP endpoint and version, and the number of connections in use. Needs manage_options. Read-only; takes no arguments. wp_site_health adds debug mode, object cache and pending updates; wp_get_site_settings returns title, email, timezone and other settings.',
+				'description' => 'Get an overview of the technical environment: WordPress, PHP and MySQL versions, site and home URL, HTTPS, multisite, locale, the active theme\'s name and version, the number of installed plugins and of plugins active on this site (network-activated ones are not counted), WP_MEMORY_LIMIT, the maximum upload size, this plugin\'s MCP endpoint and version, and the number of connections in use. While an address change of the site is not finished, the block alphabridge also holds open_address_change: the old and the new address (old, new, each with home and siteurl), how far it got (state, state_text), when and by whom it started (started, user), what is still open (rest), the next step (next) and, where it has one, its undo point (undo), or readable false where its record cannot be read; without such a change the key is absent. Needs manage_options. Read-only; takes no arguments. wp_site_health adds debug mode, object cache and pending updates; wp_get_site_settings returns title, email, timezone and other settings.',
 				'capability'  => 'manage_options',
 				'callback'    => array( __CLASS__, 'site_info' ),
 			)
@@ -142,11 +142,29 @@ class AB_MCP_Tools_System extends AB_MCP_Tools_Base {
 			'memory_limit'      => WP_MEMORY_LIMIT,
 			'max_upload_size'   => size_format( wp_max_upload_size() ),
 			'mcp_endpoint'      => rest_url( AB_MCP_REST_NAMESPACE . AB_MCP_REST_ROUTE ),
-			'alphabridge'       => array(
-				'version'          => AB_MCP_VERSION,
-				'connections_used' => count( AB_MCP_Settings::get_tokens() ),
-			),
+			'alphabridge'       => self::alphabridge_block(),
 		);
+	}
+
+	/**
+	 * The block alphabridge of wp_site_info: this plugin's version and the
+	 * connections in use, and, only while an address change of the site is
+	 * not finished (AB_MCP_Site_Address_Journal, since 4.17.0), the key
+	 * open_address_change with what its record says. The record is read as
+	 * its row, so a filter on the option changes nothing here.
+	 *
+	 * @return array
+	 */
+	private static function alphabridge_block() {
+		$block = array(
+			'version'          => AB_MCP_VERSION,
+			'connections_used' => count( AB_MCP_Settings::get_tokens() ),
+		);
+		$open = AB_MCP_Site_Address_Journal::for_site_info();
+		if ( null !== $open ) {
+			$block['open_address_change'] = $open;
+		}
+		return $block;
 	}
 
 	/**
