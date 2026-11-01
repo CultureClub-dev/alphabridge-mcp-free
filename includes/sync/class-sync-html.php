@@ -14,6 +14,9 @@
  * rewriter sets the same attributes to the ids of the other side. Both write
  * through set_attribute(), so a rewritten tag reads alike again.
  *
+ * A class id counts as rewritable only in the spelling of canonical():
+ * otherwise AB_MCP_Sync_Refs locks the object (*:reference_spelling).
+ *
  * Loaded by AB_MCP_Sync_Refs only where a text can hold such a reference.
  *
  * @package AlphaBridge_MCP
@@ -60,10 +63,11 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 			$p->release_bookmark( self::MARK );
 			$raw   = substr( $text, $span->start, $span->length );
 			$out[] = array(
-				'at'  => (int) $span->start,
-				'len' => (int) $span->length,
-				'ids' => $ids,
-				'tag' => self::set_ids(
+				'at'        => (int) $span->start,
+				'len'       => (int) $span->length,
+				'ids'       => $ids,
+				'canonical' => $p->canonical( $raw, $ids ),
+				'tag'       => self::set_ids(
 					$raw,
 					$rules,
 					static function () {
@@ -116,6 +120,33 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 		}
 		$p->put_ids( $rules, $id_for, true );
 		return $p->get_updated_html();
+	}
+
+	/**
+	 * Whether the class id of the tag the processor stands on is in the
+	 * spelling that is rewritten: an img whose stored text holds wp-image-
+	 * exactly once (what wp_filter_content_tags() reads, the first
+	 * wp-image-<digits> of the tag), and that once in the class, decoded as
+	 * well (no other attribute, name or value, holds it). A tag without a
+	 * class id has nothing to rewrite there.
+	 *
+	 * @param string $raw The stored text of the tag.
+	 * @param array  $ids ids().
+	 * @return bool
+	 */
+	private function canonical( $raw, array $ids ) {
+		if ( ! in_array( 'class', array_column( $ids, 'rule' ), true ) ) {
+			return true;
+		}
+		if ( 'IMG' !== $this->get_tag() || 1 !== preg_match_all( '/wp-image-/i', (string) $raw ) ) {
+			return false;
+		}
+		$seen = 0;
+		foreach ( $this->get_attribute_names_with_prefix( '' ) ?? array() as $name ) {
+			$value = $this->get_attribute( $name );
+			$seen += preg_match_all( '/wp-image-/i', (string) $name ) + ( is_string( $value ) ? preg_match_all( '/wp-image-/i', $value ) : 0 );
+		}
+		return 1 === $seen;
 	}
 
 	/**

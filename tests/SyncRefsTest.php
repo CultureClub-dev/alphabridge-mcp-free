@@ -57,7 +57,7 @@ final class SyncRefsTest extends TestCase {
 	public static function schemas(): array {
 		return array(
 			'core/image id'                => array( '<!-- wp:image {"id":12} --><figure><img/></figure><!-- /wp:image -->', array( 'post:12@c:core/image.id' ) ),
-			'core/gallery ids'             => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery.ids.0', 'post:13@c:core/gallery.ids.1' ) ),
+			'core/gallery ids'             => array( '<!-- wp:gallery {"ids":[12,13]} --><figure><img/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery.ids.0', 'post:13@c:core/gallery.ids.1' ) ),
 			'core/cover'                   => array( '<!-- wp:cover {"id":7} --><div><img/></div><!-- /wp:cover -->', array( 'post:7@c:core/cover.id' ) ),
 			'core/media-text'              => array( '<!-- wp:media-text {"mediaId":8} --><div><img/></div><!-- /wp:media-text -->', array( 'post:8@c:core/media-text.mediaId' ) ),
 			'core/file'                    => array( '<!-- wp:file {"id":9} --><div></div><!-- /wp:file -->', array( 'post:9@c:core/file.id' ) ),
@@ -96,9 +96,10 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( '~ref' => 'post', 'id' => 12 ), $block['a']['id'] );
 		self::assertSame( 'large', $block['a']['sizeSlug'] );
 		self::assertSame( array( '~s' => array( '<figure><img src="', array( '~addr' => 'plain' ), '/a.jpg"/> [gallery ids="', array( '~ref' => 'post', 'id' => 12 ), '"]</figure>' ) ), $block['c'][0] );
-		// A text of digits keeps that it was text.
-		list( , , $text ) = self::scan( '<!-- wp:gallery {"ids":["13"]} --><figure></figure><!-- /wp:gallery -->' );
-		self::assertSame( array( '~ref' => 'post', 'id' => 13, 'text' => true ), $text['~blocks'][0]['a']['ids'][0] );
+		// A text of digits is no JSON integer literal: it stays, and locks.
+		list( , , $text, $acc ) = self::scan( '<!-- wp:gallery {"ids":["13"]} --><figure></figure><!-- /wp:gallery -->' );
+		self::assertSame( '13', $text['~blocks'][0]['a']['ids'][0] );
+		self::assertSame( array( '*:reference_spelling' ), array_column( AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'], 'key' ) );
 	}
 
 	/* ------------------------------------------- possible references */
@@ -161,8 +162,10 @@ final class SyncRefsTest extends TestCase {
 			}
 			self::assertSame( array( 'state' => 'mixed', 'fields' => array( $field ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $what );
 		}
-		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!--wp:acme/box {"token":"x"} /-->', array() )['state'], 'Without a space the core reads no block: a comment.' );
+		// Without a space the core reads no block, a comment: its keys are
+		// read all the same, as text (flat()).
 		self::assertNull( $parser->parse( '<!--wp:acme/box {"token":"x"} /-->' )[0]['blockName'] );
+		self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~token' ) ), AB_MCP_Sync_Credentials::unit( '', '<!--wp:acme/box {"token":"x"} /-->', array() ) );
 	}
 
 	public static function spellings(): array {
@@ -173,6 +176,7 @@ final class SyncRefsTest extends TestCase {
 			'the same value twice' => array( '[gallery ids="12" IDS="12"]', 'c:html:shortcode:gallery.ids' ),
 			'other quotes'        => array( '[gallery ids=”12”]', 'c:html:shortcode:gallery.ids' ),
 			'an escaped caption'  => array( '[caption id="attachment_\\65"]Bild[/caption]', 'c:html:shortcode:caption.id' ),
+			'inside [[…]]'        => array( '[[unregistered] [gallery ids="12"] [/unregistered]]', 'c:html:shortcode:gallery.ids' ),
 		);
 	}
 
@@ -190,13 +194,101 @@ final class SyncRefsTest extends TestCase {
 			'[gallery ids="12,13"]'  => '[gallery ids="112,113"]',
 			"[gallery ids='12, 13']" => "[gallery ids='112, 113']",
 			'[gallery ids=12,13]'    => '[gallery ids=112,113]',
-			'[GALLERY IDS="12"]'     => '[GALLERY IDS="112"]',
+			'[gallery IDS="12"]'     => '[gallery IDS="112"]',
 		) as $from => $to ) {
 			list( $refs, , , $acc ) = self::scan( $from );
 			self::assertNotSame( array(), $refs, $from );
 			self::assertSame( array(), $acc['locks'], $from );
 			$out = AB_MCP_Sync_Refs::rewrite_content( $from, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 112, 13 => 113 ) ), array() ) );
 			self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ), $from );
+		}
+	}
+
+	public static function blockNumbers(): array {
+		return array(
+			'a float'            => array( '<!-- wp:block {"ref":12.0} /-->', 'c:core/block.ref' ),
+			'an exponent'        => array( '<!-- wp:block {"ref":1.2e1} /-->', 'c:core/block.ref' ),
+			'minus zero'         => array( '<!-- wp:block {"ref":-0.0} /-->', 'c:core/block.ref' ),
+			'a text'             => array( '<!-- wp:image {"id":"12"} --><figure></figure><!-- /wp:image -->', 'c:core/image.id' ),
+			'a text in a list'   => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure></figure><!-- /wp:gallery -->', 'c:core/gallery.ids.1' ),
+			'a float author'     => array( '<!-- wp:latest-posts {"selectedAuthor":3.0} /-->', 'c:core/latest-posts.selectedAuthor' ),
+			'a float term'       => array( '<!-- wp:query {"query":{"taxQuery":{"category":[4.0]}}} /-->', 'c:core/query.query.taxQuery.category.0' ),
+		);
+	}
+
+	#[DataProvider( 'blockNumbers' )]
+	public function testAnIdOfABlockOnlyAsAJsonIntegerLiteralOtherNumbersLock( string $content, string $at ): void {
+		list( $refs, , , $acc ) = self::scan( $content );
+		self::assertNotContains( 'post:12@' . $at, $refs );
+		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
+		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ), 'term' => array( 4 => 40 ), 'user' => array( 3 => 30 ) ), array() ) );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+		// The integer literal is a reference, rewritten.
+		$int = (string) preg_replace( '/12\.0|1\.2e1|-0\.0|"12"|3\.0|4\.0/', '12', $content );
+		$int = str_replace( '"13"', '13', $int );
+		list( , , , $clean ) = self::scan( $int );
+		self::assertSame( array(), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $clean )['locks'], $int );
+	}
+
+	public function testAShortcodeSchemaOnlyForExactlyItsName(): void {
+		list( $refs, $possible, , $acc ) = self::scan( '[GALLERY ids="12"]' );
+		self::assertSame( array(), $refs, 'A shortcode GALLERY of a plugin has no schema of the core.' );
+		self::assertSame( array( '12@c:html:shortcode:GALLERY.ids' ), $possible, 'Its number is a possible reference.' );
+		self::assertSame( array(), $acc['locks'] );
+		$out = AB_MCP_Sync_Refs::rewrite_content( '[GALLERY ids="12"]', AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array() ) );
+		self::assertSame( '[GALLERY ids="12"]', $out['content'], 'Not rewritten.' );
+	}
+
+	public static function flatKeys(): array {
+		return array(
+			'two spaces before wp:' => array( '<!--  wp:paragraph {"api_key":"dummy-secret"} /-->' ),
+			'an escaped outer tag'  => array( '[[unregistered] [secret api_key="example-only"] [/unregistered]]' ),
+			'an unknown outer tag'  => array( '[outer][inner token="x"][/outer]' ),
+			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
+			'a comment'             => array( '<!-- password=hunter2 -->' ),
+			'a query'               => array( '<a href="https://example.test/?id=1&amp;API_KEY=x">Link</a>' ),
+			'a character reference' => array( '[acme api&#95;key="x"]' ),
+			'a percent escape'      => array( 'https://example.test/?api%5Fkey=x' ),
+			'a JSON escape'         => array( '{"x":"{\\"client_secret\\":1}"}' ),
+			'a JSON unicode escape' => array( '<!-- wp:acme/box {"\\u0061pi_key":"x"} /-->' ),
+			'single quotes'         => array( "<script>var o = { 'access_token': 'x' };</script>" ),
+			'capitals'              => array( 'PASSWORD = "x"' ),
+			'JSON in a comment'     => array( '<!-- {"api_key":"x"} -->' ),
+			'escaped JSON in a script' => array( '<script>var c = "{\\"api_key\\": 1}";</script>' ),
+			'unicode in a comment'  => array( '<!-- {"\\u0061pi_key":"x"} -->' ),
+			'an encoded equals'     => array( 'https://example.test/?api_key%3Dx' ),
+		);
+	}
+
+	#[DataProvider( 'flatKeys' )]
+	public function testEveryKeyOfACredentialInAnySpellingOfTheTextLocks( string $text ): void {
+		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
+		self::assertSame( 'mixed', $check['state'], json_encode( $check ) );
+		self::assertNotSame( array(), $check['fields'] );
+	}
+
+	public function testTheFlatCheckFindsWhatTheStructureDoesNotRead(): void {
+		// No block, no shortcode, no JSON as a whole: only flat() reads them.
+		foreach ( array(
+			'<!-- {"api_key":"x"} -->'                         => 'api_key',
+			'<script>var c = "{\\"api_key\\": 1}";</script>' => 'api_key',
+			'<!-- {"\\u0061pi_key":"x"} -->'                  => 'api_key',
+			'https://example.test/?api_key%3Dx'                => 'api_key',
+		) as $text => $key ) {
+			self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~' . $key ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $text );
+		}
+	}
+
+	public function testWordsAboutCredentialsAndTheirValuesAreNone(): void {
+		foreach ( array(
+			'<input type="password" name="pwd" class="token-field">',
+			'<label for="password">Passwort:</label>',
+			'{"hasPassword":true,"token_count":3}',
+			'a[href] { color: red } input[type="password"] { }',
+			'Das Passwort: geheim. Die Seite = gut.',
+		) as $text ) {
+			self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $text, array() )['state'], $text );
 		}
 	}
 
@@ -302,7 +394,7 @@ final class SyncRefsTest extends TestCase {
 	public static function rewrites(): array {
 		return array(
 			'image'        => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg"/></figure><!-- /wp:image -->' ),
-			'gallery'      => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img/></figure><!-- /wp:gallery -->' ),
+			'gallery'      => array( '<!-- wp:gallery {"ids":[12,13]} --><figure><img/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,130]} --><figure><img/></figure><!-- /wp:gallery -->' ),
 			'block'        => array( '<!-- wp:block {"ref":20} /-->', '<!-- wp:block {"ref":200} /-->' ),
 			'nav link'     => array( '<!-- wp:navigation-link {"id":22,"kind":"post-type","url":"https://staging.test/x/"} /-->', '<!-- wp:navigation-link {"id":220,"kind":"post-type","url":"https://www.live.test/x/"} /-->' ),
 			'query'        => array( '<!-- wp:query {"query":{"author":"1,2","taxQuery":{"include":{"category":[5]}},"exclude":[30]}} --><div></div><!-- /wp:query -->', '<!-- wp:query {"query":{"author":"10,20","taxQuery":{"include":{"category":[50]}},"exclude":[300]}} --><div></div><!-- /wp:query -->' ),

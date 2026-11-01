@@ -10,6 +10,15 @@
  * named and by position) — by the names AB_MCP_Redactor::redacts_key()
  * redacts (normalised: accessToken, client-secret and API_KEY alike).
  *
+ * Besides the structure, flat() reads every text of a unit as it is
+ * stored and as the decodings the core knows give it (stripcslashes() of
+ * shortcode_parse_atts(), HTML character references, percent escapes,
+ * \uXXXX of JSON): every key in the spelling of an attribute or a field
+ * (name=, "name":, 'name':) that redacts_key() names makes the unit mixed,
+ * in a shortcode no registry runs, an escaped [[…]], a tag, a comment
+ * alike. More locks than needed are allowed; a credential overlooked
+ * because the structure was read otherwise than the core reads it is not.
+ *
  * The answer per unit:
  * - b9: the name of the unit is one; the unit is group B9, not compared,
  *   not packed, counted;
@@ -45,6 +54,17 @@ final class AB_MCP_Sync_Credentials {
 	const NAME_KEYS = array( 'name', 'key' );
 
 	/**
+	 * The spellings of a key in a text, independent of its structure: the
+	 * name of an attribute, a shortcode attribute, a query (name=), of a
+	 * field of JSON or of a script ("name":, 'name':).
+	 */
+	const FLAT_KEYS = array(
+		'/([A-Za-z0-9_\x80-\xFF][A-Za-z0-9_\-.:\x80-\xFF]*)\s*=/',
+		'/"([^"\\\\]{1,256})"\s*:/',
+		"/'([^'\\\\]{1,256})'\s*:/",
+	);
+
+	/**
 	 * Check one unit.
 	 *
 	 * @param string        $name  Name of the unit (option name, meta key,
@@ -74,10 +94,89 @@ final class AB_MCP_Sync_Credentials {
 				'why'    => $why,
 			);
 		}
+		$fields = self::merged( $fields );
 		return array(
 			'state'  => array() === $fields ? 'clean' : 'mixed',
 			'fields' => array_slice( array_values( array_unique( $fields ) ), 0, self::MAX_PATHS ),
 		);
+	}
+
+	/**
+	 * The keys flat() finds in a text: the names redacts_key() names.
+	 *
+	 * @param string   $text  Text as stored.
+	 * @param string[] $extra Extra names.
+	 * @return string[]
+	 */
+	public static function flat( $text, array $extra ) {
+		$text = (string) $text;
+		// Without these no decoding gives a key its = or :.
+		if ( false === strpbrk( $text, '=:%&\\' ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( self::decodings( $text ) as $variant ) {
+			foreach ( self::FLAT_KEYS as $pattern ) {
+				if ( preg_match_all( $pattern, $variant, $m ) ) {
+					foreach ( $m[1] as $key ) {
+						if ( AB_MCP_Redactor::redacts_key( (string) $key, $extra ) ) {
+							$out[ strtolower( (string) $key ) ] = (string) $key;
+						}
+					}
+				}
+			}
+		}
+		return array_values( $out );
+	}
+
+	/**
+	 * A text as stored and as each decoding the core knows gives it.
+	 *
+	 * @param string $text Text.
+	 * @return string[]
+	 */
+	private static function decodings( $text ) {
+		$out = array(
+			$text,
+			stripcslashes( $text ),
+			html_entity_decode( $text, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' ),
+			rawurldecode( $text ),
+			(string) preg_replace_callback(
+				'/\\\\u([0-9a-fA-F]{4})/',
+				static function ( $m ) {
+					$code = hexdec( $m[1] );
+					return $code < 0x80 ? chr( $code ) : $m[0];
+				},
+				$text
+			),
+		);
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * The fields of the structure and the keys flat() found beside them:
+	 * a flat key the structure named already is not named twice.
+	 *
+	 * @param string[] $fields Paths; flat keys as …~key.
+	 * @return string[]
+	 */
+	private static function merged( array $fields ) {
+		$named = array();
+		foreach ( $fields as $field ) {
+			if ( false === strpos( $field, '~' ) ) {
+				$parts                               = preg_split( '/[.\]]/', $field );
+				$named[ strtolower( (string) end( $parts ) ) ] = true;
+			}
+		}
+		$out = array();
+		foreach ( $fields as $field ) {
+			$at = strrpos( $field, '~' );
+			if ( false !== $at && isset( $named[ strtolower( substr( $field, $at + 1 ) ) ] ) ) {
+				continue;
+			}
+			$out[] = $field;
+		}
+		return $out;
 	}
 
 	/**
@@ -126,6 +225,9 @@ final class AB_MCP_Sync_Credentials {
 			return false;
 		}
 		if ( is_string( $value ) ) {
+			foreach ( self::flat( $value, $extra ) as $key ) {
+				$fields[] = ( '' === $path ? '' : $path . '.' ) . '~' . $key;
+			}
 			if ( is_serialized( $value ) ) {
 				$read = AB_MCP_Sync_Canon::unserialized( $value );
 				if ( ! $read['ok'] ) {
