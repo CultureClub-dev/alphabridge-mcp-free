@@ -31,12 +31,15 @@
  * when the bound one cannot be used any more.
  *
  * The record of the proof is versioned (rev) and read from the table every
- * time, never from a cache: the place bound, when it was proved (0 where a
- * web request found it unusable or its check failed: the youngest finding
- * counts) and the last self-check. Every change is a new version stored only
- * where the stored one is still the one read (swap(), a conditional UPDATE
- * by its bytes); otherwise it is read again and decided again, so a success
- * never overwrites a younger revocation. A change is stored under the lock
+ * time, never from a cache: the place bound and, for each place, the
+ * youngest success (when its check began and ended) and the youngest
+ * failure (when it ended). A place is proved only by a success whose check
+ * began after the last failure there ended (usable()); a tie counts as not
+ * protected. Every change is a new version stored only where the stored
+ * one is still the one read (swap(), a conditional UPDATE by its bytes);
+ * otherwise it is read again and what this request observed is merged into
+ * it (decide(), merged()): a failure observed is never lost, and a success
+ * older than a failure another request saw is never stored. A change is stored under the lock
  * of the place bound so far, and every writer checks the record afresh
  * under the lock of its place (writing(), admitted()): the place is the
  * bound one and its proof is valid (valid()). Readers check it too. The
@@ -908,16 +911,30 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * Whether a state of the record holds a valid proof of its bound place:
-	 * proved (a failed check or an unusable place takes it back to 0), and
-	 * not older than RECHECK seconds.
+	 * Whether a state of the record holds a valid proof of its bound place
+	 * (usable()).
 	 *
 	 * @param array $state state().
-	 * @param int   $now   Time.
+	 * @param float $now   Time.
 	 * @return bool
 	 */
 	public static function valid( array $state, $now ) {
-		return null !== $state['bound'] && $state['proved'] > 0 && ( $now - $state['proved'] ) < self::RECHECK;
+		return null !== $state['bound'] && self::usable( $state['seen'][ $state['bound'] ], $now );
+	}
+
+	/**
+	 * Whether what is known of a place proves it: a success whose check
+	 * began after the last failure seen there ended (a tie counts as not
+	 * protected), and that ended less than RECHECK seconds ago.
+	 *
+	 * @param array{ok:array|null,fail:array|null} $at What is known of the place.
+	 * @param float                                $now Time.
+	 * @return bool
+	 */
+	public static function usable( array $at, $now ) {
+		return null !== $at['ok']
+			&& ( null === $at['fail'] || $at['ok']['start'] > $at['fail']['end'] )
+			&& ( $now - $at['ok']['end'] ) < self::RECHECK;
 	}
 
 	/**
@@ -944,12 +961,18 @@ final class AB_MCP_Protected_Store {
 	/* ------------------------------------------------------------ internals */
 
 	/**
-	 * Decide where the store is (proof()), from the record as it is in the
-	 * table, and note the outcome as a new version of it (commit()): only
-	 * where the record is still the one read. Where another request changed
-	 * it meanwhile (a proof, a check that failed, another place), it is read
-	 * again and the decision made again, never written over; so a success
-	 * never overwrites a younger revocation.
+	 * Decide where the store is (proof()), and note it as a new version of
+	 * the record (commit()). The rule of a conflict lives here and only here:
+	 *
+	 * 1. What this request observed (a check that passed or failed, a place
+	 *    that cannot be used) is kept over every attempt. Where another
+	 *    request changed the record meanwhile, it is read again and this
+	 *    request's observations are merged into it (merged()) and stored on
+	 *    top: a failure observed here is never lost, also over a success
+	 *    stored meanwhile.
+	 * 2. A success counts only where its check began after the last failure
+	 *    seen at that place ended (usable()); a success that began earlier
+	 *    is not stored at all (merged()). A tie counts as not protected.
 	 *
 	 * @param object|null $fetcher   Fetcher.
 	 * @param bool        $force     Self-check now.
@@ -957,6 +980,8 @@ final class AB_MCP_Protected_Store {
 	 * @return array
 	 */
 	private static function decide( $fetcher, $force, $may_renew ) {
+		// What this request observed, per place: kept over every attempt.
+		$own = array();
 		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
 			$id = self::install_id();
 			if ( '' === $id ) {
@@ -969,31 +994,107 @@ final class AB_MCP_Protected_Store {
 			if ( null === $docroot ) {
 				return self::without_docroot( $state, $paths, $id );
 			}
-			$chosen = self::choose( $state, $paths, $docroot, $id, $fetcher, $force && 0 === $attempt, $may_renew );
-			if ( 'foreign' === $chosen['state'] ) {
+			// The bound place first, while it can be used: another place
+			// would leave its groups where get() and the budgets no longer
+			// look. Without a bound place, or where it cannot be used, the
+			// order of decision 7.
+			$order  = 'uploads' === $state['bound'] ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );
+			$seen   = self::merged( $state['seen'], $own );
+			$chosen = null;
+			$found  = array();
+			foreach ( $order as $where ) {
+				if ( ! isset( $own[ $where ] ) ) {
+					// A check forced is made once: after a conflict this
+					// request keeps what it observed instead.
+					$own[ $where ] = self::observe( $where, $paths, $docroot, $id, $seen[ $where ], $fetcher, $force && 0 === $attempt );
+					$seen          = self::merged( $state['seen'], $own );
+				}
+				if ( 'foreign' === $own[ $where ]['state'] && $may_renew ) {
+					break;
+				}
+				if ( self::usable( $seen[ $where ], microtime( true ) ) ) {
+					$chosen = $where;
+					break;
+				}
+				$found[ $where ] = 'ok' !== $own[ $where ]['state'] ? $own[ $where ]['state'] : ( null !== $seen[ $where ]['fail'] ? $seen[ $where ]['fail']['reason'] : 'served' );
+			}
+			if ( null === $chosen && isset( $where, $own[ $where ] ) && 'foreign' === $own[ $where ]['state'] && $may_renew ) {
 				// A folder of another installation at this id's place: this
 				// one is a copy that kept the id. A new id, and again (once).
 				self::replace_id( $id );
 				self::$id  = null;
 				$may_renew = false;
+				$own       = array();
 				continue;
 			}
 			$next = array(
-				'id'     => $id,
-				'rev'    => $state['rev'] + 1,
-				'bound'  => null === $chosen['where'] ? $state['bound'] : $chosen['where'],
-				// No usable place: the proof of the bound one is taken back.
-				'proved' => null === $chosen['where'] ? 0 : $chosen['proved'],
-				'check'  => $chosen['check'],
+				'id'    => $id,
+				'rev'   => $state['rev'] + 1,
+				'bound' => null === $chosen ? $state['bound'] : $chosen,
+				'seen'  => $seen,
 			);
-			$same = self::same( $state, $next );
-			if ( $same || self::commit( $stored['raw'], $state, $next, $paths, $id ) ) {
-				return null === $chosen['where']
-					? self::verdict( null, 'none', $chosen['found'], 0, $chosen['detail'] )
-					: self::verdict( $chosen['where'], null, $chosen['found'], $same ? $state['proved'] : $next['proved'] );
+			if ( ! self::worth( $state, $next ) || self::commit( $stored['raw'], $state, $next, $paths, $id ) ) {
+				if ( null === $chosen ) {
+					$fail = $seen['uploads']['fail'];
+					return self::verdict( null, 'none', $found, 0, null !== $fail ? $fail['detail'] : array() );
+				}
+				return self::verdict( $chosen, null, $found, (int) $seen[ $chosen ]['ok']['end'] );
 			}
+			// Another request changed the record since it was read: read it
+			// again, merge what this request observed into it, decide again.
 		}
 		return self::verdict( null, 'moved', array() );
+	}
+
+	/**
+	 * What is known of each place, with what this request observed merged
+	 * in: of each kind the youngest; a success only where its check began
+	 * after the last failure seen there ended, so a success that is older
+	 * than a failure another request saw is never stored.
+	 *
+	 * @param array $seen What the record knows, per place.
+	 * @param array $own  What this request observed, per place (observe()).
+	 * @return array
+	 */
+	private static function merged( array $seen, array $own ) {
+		foreach ( $own as $where => $obs ) {
+			$at = $seen[ $where ];
+			if ( isset( $obs['fail'] ) && ( null === $at['fail'] || $obs['fail']['end'] > $at['fail']['end'] ) ) {
+				$at['fail'] = $obs['fail'];
+			}
+			if ( isset( $obs['ok'] ) && ( null === $at['fail'] || $obs['ok']['start'] > $at['fail']['end'] ) && ( null === $at['ok'] || $obs['ok']['start'] > $at['ok']['start'] ) ) {
+				$at['ok'] = $obs['ok'];
+			}
+			$seen[ $where ] = $at;
+		}
+		return $seen;
+	}
+
+	/**
+	 * Whether a new version is worth storing: another place bound, another
+	 * validity of a place, a new check of the uploads, a finding with
+	 * another reason; a success or failure beside WordPress only once an
+	 * hour or RETRY seconds (it is observed by every request), so a request
+	 * that finds all as it was writes nothing.
+	 *
+	 * @param array $state state().
+	 * @param array $next  The new version.
+	 * @return bool
+	 */
+	private static function worth( array $state, array $next ) {
+		if ( $state['bound'] !== $next['bound'] || $state['seen']['uploads'] != $next['seen']['uploads'] ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual -- arrays of scalars, compared by value.
+			return true;
+		}
+		$now = microtime( true );
+		$old = $state['seen']['outside'];
+		$new = $next['seen']['outside'];
+		if ( self::usable( $old, $now ) !== self::usable( $new, $now ) ) {
+			return true;
+		}
+		if ( null !== $new['ok'] && ( null === $old['ok'] || ( $new['ok']['end'] - $old['ok']['end'] ) >= 3600 ) ) {
+			return true;
+		}
+		return null !== $new['fail'] && ( null === $old['fail'] || $new['fail']['reason'] !== $old['fail']['reason'] || ( $new['fail']['end'] - $old['fail']['end'] ) >= self::RETRY );
 	}
 
 	/**
@@ -1007,93 +1108,13 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function without_docroot( array $state, array $paths, $id ) {
 		$bound = $state['bound'];
-		if ( self::valid( $state, time() ) && isset( $paths[ $bound ] ) ) {
+		if ( self::valid( $state, microtime( true ) ) && isset( $paths[ $bound ] ) ) {
 			$path = $paths[ $bound ];
 			if ( self::owns( $path, $id ) && is_writable( $path ) && ( 'outside' === $bound || array() === self::guards_missing( $path ) ) ) {
-				return self::verdict( $bound, null, array(), $state['proved'] );
+				return self::verdict( $bound, null, array(), (int) $state['seen'][ $bound ]['ok']['end'] );
 			}
 		}
 		return self::verdict( null, 'no_document_root', array() );
-	}
-
-	/**
-	 * Choose the place: the bound place first, while it can be used, since
-	 * another place would leave its groups (backups with a valid reference,
-	 * packages that count) where get() and the budgets no longer look;
-	 * without a bound place, or where it cannot be used, the order of
-	 * decision 7.
-	 *
-	 * @param array       $state     state().
-	 * @param array       $paths     candidates().
-	 * @param string      $docroot   Resolved document root.
-	 * @param string      $id        Id.
-	 * @param object|null $fetcher   Fetcher.
-	 * @param bool        $force     Self-check now.
-	 * @param bool        $may_renew Whether a foreign folder ends the choice.
-	 * @return array{state:string,where:string|null,proved:int,check:array|null,found:array,detail:array}
-	 */
-	private static function choose( array $state, array $paths, $docroot, $id, $fetcher, $force, $may_renew ) {
-		$order  = 'uploads' === $state['bound'] ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );
-		$check  = $state['check'];
-		$found  = array();
-		$detail = array();
-		foreach ( $order as $where ) {
-			$tried = self::try_place( $where, $paths, $docroot, $id, $check, $fetcher, $force );
-			if ( null !== $tried['check'] ) {
-				$check = $tried['check'];
-			}
-			if ( 'foreign' === $tried['state'] && $may_renew ) {
-				return array(
-					'state'  => 'foreign',
-					'where'  => null,
-					'proved' => 0,
-					'check'  => $check,
-					'found'  => $found,
-					'detail' => array(),
-				);
-			}
-			if ( 'ok' !== $tried['state'] ) {
-				$found[ $where ] = $tried['state'];
-				$detail          = $tried['detail'];
-				continue;
-			}
-			return array(
-				'state'  => 'ok',
-				'where'  => $where,
-				'proved' => $tried['proved'],
-				'check'  => $check,
-				'found'  => $found,
-				'detail' => array(),
-			);
-		}
-		return array(
-			'state'  => 'none',
-			'where'  => null,
-			'proved' => 0,
-			'check'  => $check,
-			'found'  => $found,
-			'detail' => $detail,
-		);
-	}
-
-	/**
-	 * Whether a new version says nothing the stored one does not: the same
-	 * place, the same check, and the same proof (or, for a place proved
-	 * anew, a proof less than an hour younger than a valid one), so a request
-	 * that finds all as it was writes nothing.
-	 *
-	 * @param array $state state().
-	 * @param array $next  The new version.
-	 * @return bool
-	 */
-	private static function same( array $state, array $next ) {
-		if ( $state['bound'] !== $next['bound'] || $state['check'] != $next['check'] ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual -- arrays of scalars, compared by value.
-			return false;
-		}
-		if ( $state['proved'] === $next['proved'] ) {
-			return true;
-		}
-		return $state['proved'] > 0 && $next['proved'] >= $state['proved'] && ( $next['proved'] - $state['proved'] ) < 3600;
 	}
 
 	/**
@@ -1127,35 +1148,85 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * Try one place: 'ok' with the time of its proof, or its finding.
+	 * Observe one place: beside WordPress, whether it can be used now; in
+	 * the uploads, the folder and then, where the last check is not fresh or
+	 * a guard file is missing, a self-check. A success with the time its
+	 * check began and ended, a failure with the time it ended, or, in the
+	 * uploads within the time of the last check, nothing new.
 	 *
 	 * @param string      $where   'outside' or 'uploads'.
 	 * @param array       $paths   candidates().
 	 * @param string      $docroot Resolved document root.
 	 * @param string      $id      Id.
-	 * @param array|null  $check   The last self-check of the uploads.
+	 * @param array       $at      What is known of the place.
 	 * @param object|null $fetcher Fetcher.
 	 * @param bool        $force   Self-check now.
-	 * @return array{state:string,proved:int,check:array|null,detail:array}
+	 * @return array{state:string,ok?:array,fail?:array}
 	 */
-	private static function try_place( $where, array $paths, $docroot, $id, $check, $fetcher, $force ) {
+	private static function observe( $where, array $paths, $docroot, $id, array $at, $fetcher, $force ) {
+		$start = microtime( true );
 		if ( 'outside' === $where ) {
-			return array(
-				'state'  => self::outside( $paths['outside'], $docroot, $id ),
-				'proved' => time(),
-				'check'  => null,
-				'detail' => array(),
-			);
+			return self::observed( self::outside( $paths['outside'], $docroot, $id ), $start, array() );
 		}
 		if ( ! isset( $paths['uploads'] ) ) {
-			return array(
-				'state'  => 'no_uploads',
-				'proved' => 0,
-				'check'  => null,
-				'detail' => array(),
+			return self::observed( 'no_uploads', $start, array() );
+		}
+		$path = $paths['uploads'];
+		// Which guard files are missing, before ensure() writes them again.
+		$missing = ( file_exists( $path ) || is_link( $path ) ) ? self::guards_missing( $path ) : array_keys( self::GUARDS );
+		$state   = self::ensure( $path, $id );
+		if ( 'ok' !== $state ) {
+			return self::observed( $state, $start, array() );
+		}
+		// The last check, success or failure, decides whether one is due.
+		$last = null;
+		if ( null !== $at['ok'] || null !== $at['fail'] ) {
+			$failed = null !== $at['fail'] && ( null === $at['ok'] || $at['fail']['end'] >= $at['ok']['start'] );
+			$last   = array(
+				'where'   => 'uploads',
+				'checked' => (int) ( $failed ? $at['fail']['end'] : $at['ok']['end'] ),
+				'ok'      => ! $failed,
 			);
 		}
-		return self::uploads( $paths['uploads'], $id, $check, $fetcher, $force );
+		if ( ! $force && ! self::needs_check( $last, 'uploads', time(), array() === $missing ) ) {
+			return array( 'state' => self::usable( $at, microtime( true ) ) ? 'ok' : ( null !== $at['fail'] ? $at['fail']['reason'] : 'served' ) );
+		}
+		$result = self::self_check( $path, $fetcher );
+		return self::observed( $result['ok'] ? 'ok' : (string) $result['reason'], $start, $result['detail'] );
+	}
+
+	/**
+	 * An observation: a success from $start to now, or a failure ending now.
+	 * A foreign folder is no finding of the place (decide() renews the id).
+	 *
+	 * @param string $state  'ok' or the finding.
+	 * @param float  $start  When the observation began.
+	 * @param array  $detail Statuses or error code of a self-check.
+	 * @return array{state:string,ok?:array,fail?:array}
+	 */
+	private static function observed( $state, $start, array $detail ) {
+		$end = microtime( true );
+		if ( 'ok' === $state ) {
+			return array(
+				'state' => 'ok',
+				'ok'    => array(
+					'start'  => (float) $start,
+					'end'    => $end,
+					'detail' => $detail,
+				),
+			);
+		}
+		if ( 'foreign' === $state ) {
+			return array( 'state' => 'foreign' );
+		}
+		return array(
+			'state' => $state,
+			'fail'  => array(
+				'end'    => $end,
+				'reason' => $state,
+				'detail' => $detail,
+			),
+		);
 	}
 
 	/**
@@ -1183,53 +1254,6 @@ final class AB_MCP_Protected_Store {
 			}
 		}
 		return self::ensure( $path, $id );
-	}
-
-	/**
-	 * The place in the uploads: made or found, then its proof from the last
-	 * self-check or a self-check now.
-	 *
-	 * @param string      $path    The folder for this id.
-	 * @param string      $id      Id.
-	 * @param array|null  $check   The last self-check.
-	 * @param object|null $fetcher Fetcher.
-	 * @param bool        $force   Self-check now.
-	 * @return array{state:string,proved:int,check:array|null,detail:array} check is the new self-check, where one was made.
-	 */
-	private static function uploads( $path, $id, $check, $fetcher, $force ) {
-		// Which guard files are missing, before ensure() writes them again.
-		$missing = ( file_exists( $path ) || is_link( $path ) ) ? self::guards_missing( $path ) : array_keys( self::GUARDS );
-		$state   = self::ensure( $path, $id );
-		if ( 'ok' !== $state ) {
-			return array(
-				'state'  => $state,
-				'proved' => 0,
-				'check'  => null,
-				'detail' => array(),
-			);
-		}
-		$now = time();
-		if ( ! $force && ! self::needs_check( $check, 'uploads', $now, array() === $missing ) ) {
-			return array(
-				'state'  => $check['ok'] ? 'ok' : (string) $check['reason'],
-				'proved' => $check['ok'] ? (int) $check['checked'] : 0,
-				'check'  => null,
-				'detail' => (array) $check['detail'],
-			);
-		}
-		$result = self::self_check( $path, $fetcher );
-		return array(
-			'state'  => $result['ok'] ? 'ok' : (string) $result['reason'],
-			'proved' => $result['ok'] ? $now : 0,
-			'check'  => array(
-				'where'   => 'uploads',
-				'checked' => $now,
-				'ok'      => $result['ok'],
-				'reason'  => $result['reason'],
-				'detail'  => $result['detail'],
-			),
-			'detail' => $result['detail'],
-		);
 	}
 
 	/**
@@ -1496,35 +1520,50 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * What a stored record says for an id: its version, the place bound (in
-	 * use), when that place was proved (0: no proof, or taken back), and the
-	 * last self-check of the uploads. A record of another id binds nothing
-	 * and proves nothing, but keeps its version.
+	 * use), and for each place the youngest success (when its check began
+	 * and ended) and the youngest failure (when it ended, why). A record of
+	 * another id binds and proves nothing, but keeps its version.
 	 *
 	 * @param mixed  $rec The stored value.
 	 * @param string $id  Id.
-	 * @return array{rev:int,bound:string|null,proved:int,check:array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null}
+	 * @return array{rev:int,bound:string|null,seen:array<string,array{ok:array|null,fail:array|null}>}
 	 */
 	private static function state( $rec, $id ) {
 		$out = array(
-			'rev'    => ( is_array( $rec ) && isset( $rec['rev'] ) ) ? max( 0, (int) $rec['rev'] ) : 0,
-			'bound'  => null,
-			'proved' => 0,
-			'check'  => null,
+			'rev'   => ( is_array( $rec ) && isset( $rec['rev'] ) ) ? max( 0, (int) $rec['rev'] ) : 0,
+			'bound' => null,
+			'seen'  => array(
+				'outside' => array(
+					'ok'   => null,
+					'fail' => null,
+				),
+				'uploads' => array(
+					'ok'   => null,
+					'fail' => null,
+				),
+			),
 		);
 		if ( ! is_array( $rec ) || ! isset( $rec['id'] ) || '' === (string) $id || $id !== $rec['id'] ) {
 			return $out;
 		}
-		if ( isset( $rec['check'] ) && is_array( $rec['check'] ) && isset( $rec['check']['checked'] ) ) {
-			$out['check'] = array(
-				'where'   => 'uploads',
-				'checked' => (int) $rec['check']['checked'],
-				'ok'      => ! empty( $rec['check']['ok'] ),
-				'reason'  => isset( $rec['check']['reason'] ) ? (string) $rec['check']['reason'] : null,
-				'detail'  => isset( $rec['check']['detail'] ) && is_array( $rec['check']['detail'] ) ? $rec['check']['detail'] : array(),
-			);
+		$out['bound'] = ( isset( $rec['bound'] ) && in_array( $rec['bound'], array( 'outside', 'uploads' ), true ) ) ? $rec['bound'] : null;
+		foreach ( array_keys( $out['seen'] ) as $where ) {
+			$at = ( isset( $rec['seen'][ $where ] ) && is_array( $rec['seen'][ $where ] ) ) ? $rec['seen'][ $where ] : array();
+			if ( isset( $at['ok']['start'], $at['ok']['end'] ) ) {
+				$out['seen'][ $where ]['ok'] = array(
+					'start'  => (float) $at['ok']['start'],
+					'end'    => (float) $at['ok']['end'],
+					'detail' => isset( $at['ok']['detail'] ) && is_array( $at['ok']['detail'] ) ? $at['ok']['detail'] : array(),
+				);
+			}
+			if ( isset( $at['fail']['end'] ) ) {
+				$out['seen'][ $where ]['fail'] = array(
+					'end'    => (float) $at['fail']['end'],
+					'reason' => isset( $at['fail']['reason'] ) ? (string) $at['fail']['reason'] : 'served',
+					'detail' => isset( $at['fail']['detail'] ) && is_array( $at['fail']['detail'] ) ? $at['fail']['detail'] : array(),
+				);
+			}
 		}
-		$out['bound']  = ( isset( $rec['bound'] ) && in_array( $rec['bound'], array( 'outside', 'uploads' ), true ) ) ? $rec['bound'] : null;
-		$out['proved'] = isset( $rec['proved'] ) ? max( 0, (int) $rec['proved'] ) : 0;
 		return $out;
 	}
 

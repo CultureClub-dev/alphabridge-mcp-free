@@ -13,9 +13,10 @@
  *   serves the test files, which reads no .htaccess: no proof, and nothing
  *   is written; a server that refuses the folder (the router as Apache)
  *   gives the proof, which is made again after a day and when a guard file
- *   is missing; a check that fails takes the proof back, and a success
- *   never overwrites a younger revocation; a proof a request keeps is no
- *   release after another request revoked it;
+ *   is missing; a check that fails takes the proof back; of two requests
+ *   at once, a failure seen is never lost to a success stored meanwhile,
+ *   and a success that began before a stored failure is not stored; a
+ *   proof a request keeps is no release after another request revoked it;
  * - the place chosen stays bound while it can be used, and a request that
  *   chose a place another request has left writes nothing there;
  * - no link on the way from the folder of the store to a file is followed;
@@ -265,10 +266,15 @@ final class ProtectedStoreTest extends TestCase {
 
 	/** Set the record of the last proof back by some seconds. */
 	private static function age_record( int $seconds ): void {
-		$rec            = get_option( AB_MCP_Protected_Store::OPTION_PROOF );
-		$rec['proved'] -= $seconds;
-		if ( is_array( $rec['check'] ) ) {
-			$rec['check']['checked'] -= $seconds;
+		$rec = get_option( AB_MCP_Protected_Store::OPTION_PROOF );
+		foreach ( array( 'outside', 'uploads' ) as $where ) {
+			if ( isset( $rec['seen'][ $where ]['ok'] ) ) {
+				$rec['seen'][ $where ]['ok']['start'] -= $seconds;
+				$rec['seen'][ $where ]['ok']['end']   -= $seconds;
+			}
+			if ( isset( $rec['seen'][ $where ]['fail'] ) ) {
+				$rec['seen'][ $where ]['fail']['end'] -= $seconds;
+			}
 		}
 		update_option( AB_MCP_Protected_Store::OPTION_PROOF, $rec, false );
 		AB_MCP_Protected_Store::forget();
@@ -779,28 +785,25 @@ final class ProtectedStoreTest extends TestCase {
 		return (array) unserialize( (string) AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Protected_Store::OPTION_PROOF )['option_value'] );
 	}
 
-	public function testASuccessNeverOverwritesAYoungerRevocation(): void {
+	public function testASuccessThatBeganBeforeAStoredFailureIsNotStored(): void {
 		$_SERVER['DOCUMENT_ROOT'] = self::root();
 		self::apache( 'a', true );
 		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
 		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
 		// Ten seconds ago, so the check made again below is a new finding.
 		self::age_record( 10 );
-		$rev = self::stored_proof()['rev'];
+		$before = self::stored_proof();
 
-		// This request checks again and passes. Between its read of the
-		// record and its write, another request's check fails and takes the
-		// proof back.
+		// This request (A) checks again and passes. Between its read of the
+		// record and its write, another request (B) stores a failure it saw
+		// after A's check had begun.
 		$this->between_proof_write(
 			static function ( array $rec ): array {
 				$rec['rev']++;
-				$rec['proved'] = 0;
-				$rec['check']  = array(
-					'where'   => 'uploads',
-					'checked' => time(),
-					'ok'      => false,
-					'reason'  => 'served',
-					'detail'  => array( 'probes' => array( 200, 200, 200 ) ),
+				$rec['seen']['uploads']['fail'] = array(
+					'end'    => microtime( true ),
+					'reason' => 'served',
+					'detail' => array( 'probes' => array( 200, 200, 200 ) ),
 				);
 				return $rec;
 			}
@@ -808,15 +811,54 @@ final class ProtectedStoreTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		$calls = count( $fetcher->calls );
 		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
-		self::assertSame( $calls + 4, count( $fetcher->calls ), 'This request made its check (and passed it).' );
-		self::assertFalse( $proof['available'], 'The success did not overwrite the revocation: read again, decided again.' );
+		self::assertSame( $calls + 4, count( $fetcher->calls ), 'A made its check, and passed it.' );
+		self::assertFalse( $proof['available'], 'A success that began before the failure ended counts for nothing.' );
 		self::assertSame( 'served', $proof['findings']['uploads'] );
 		$stored = self::stored_proof();
-		self::assertSame( 0, $stored['proved'] );
-		self::assertSame( $rev + 1, $stored['rev'], 'The revocation is the newest version, nothing written over it.' );
+		self::assertSame( $before['rev'] + 1, $stored['rev'], 'A stored nothing: B\'s failure is the newest version.' );
+		self::assertSame( $before['seen']['uploads']['ok'], $stored['seen']['uploads']['ok'], 'A\'s success is not in the record.' );
 		self::assertSame( 'ab_mcp_store_unavailable', AB_MCP_Protected_Store::open( 'reports' )->get_error_code() );
 
 		// Nor does a request without the document root use the uploads.
+		unset( $_SERVER['DOCUMENT_ROOT'] );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'no_document_root', AB_MCP_Protected_Store::proof()['reason'] );
+	}
+
+	public function testAFailureSeenIsNeverLostToASuccessStoredMeanwhile(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		self::age_record( 10 );
+		$before = self::stored_proof();
+		$id     = AB_MCP_Protected_Store::install_id();
+
+		// This request (B) checks again and sees the test files served.
+		// Another request (A), whose check began before B's ended, stores
+		// its success between B's read of the record and B's write.
+		self::apache( 'a', false );
+		$begun = microtime( true );
+		$this->between_proof_write(
+			static function ( array $rec ) use ( $begun ): array {
+				$rec['rev']++;
+				$rec['seen']['uploads']['ok'] = array(
+					'start'  => $begun,
+					'end'    => microtime( true ),
+					'detail' => array( 'probes' => array( 403, 403, 403 ) ),
+				);
+				return $rec;
+			}
+		);
+		AB_MCP_Protected_Store::forget();
+		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
+		self::assertFalse( $proof['available'], 'B\'s failure is not lost to A\'s success.' );
+		self::assertSame( 'served', $proof['findings']['uploads'] );
+		$stored = self::stored_proof();
+		self::assertSame( $before['rev'] + 2, $stored['rev'], 'B read A\'s version again and stored its failure on top.' );
+		self::assertSame( $begun, $stored['seen']['uploads']['ok']['start'], 'A\'s success is kept, and B\'s failure ended after it began.' );
+		self::assertGreaterThan( $begun, $stored['seen']['uploads']['fail']['end'] );
+		self::assertSame( 'ab_mcp_store_unproved', AB_MCP_Protected_Store::admitted( self::in_uploads( 'a', $id ) )->get_error_code(), 'No writer takes the uploads now.' );
 		unset( $_SERVER['DOCUMENT_ROOT'] );
 		AB_MCP_Protected_Store::forget();
 		self::assertSame( 'no_document_root', AB_MCP_Protected_Store::proof()['reason'] );
@@ -847,7 +889,7 @@ final class ProtectedStoreTest extends TestCase {
 			),
 			$other['findings']
 		);
-		self::assertSame( 0, self::stored_proof()['proved'] );
+		self::assertSame( 'ab_mcp_store_unproved', AB_MCP_Protected_Store::admitted( $uploads )->get_error_code() );
 
 		// This request still keeps its proof: no way of it takes it as a release.
 		$tree = self::tree( $uploads );
