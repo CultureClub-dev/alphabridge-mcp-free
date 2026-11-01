@@ -222,15 +222,25 @@ final class ProtectedStoreTest extends TestCase {
 
 	/**
 	 * Requests to the probes at the same time (curl_multi), each answer in
-	 * the order of the requests.
+	 * the order of the requests. With $ready each request after the first is
+	 * sent only once $ready( its index ) says so (at most 30 seconds), while
+	 * the ones before it run.
 	 *
 	 * @param array<int,array{0:string,1:array}> $requests Site and body.
+	 * @param callable|null                      $ready    Whether request i may go.
 	 * @return array[]
 	 */
-	private static function at_once( array $requests ): array {
+	private static function at_once( array $requests, ?callable $ready = null ): array {
 		$multi   = curl_multi_init();
 		$handles = array();
 		foreach ( $requests as $i => $request ) {
+			if ( null !== $ready && $i > 0 ) {
+				$until = microtime( true ) + 30;
+				while ( ! $ready( $i ) && microtime( true ) < $until ) {
+					curl_multi_exec( $multi, $running );
+					curl_multi_select( $multi, 0.01 );
+				}
+			}
 			$body          = $request[1] + array( 'user' => self::admin( $request[0] ) );
 			$handles[ $i ] = curl_init( AB_MCP_IT_Sites::url( $request[0], '/' . self::PROBE ) );
 			curl_setopt_array(
@@ -1008,7 +1018,8 @@ final class ProtectedStoreTest extends TestCase {
 	 * Two requests to site A that open a group at once (the sync of the
 	 * probe). The proof of the store is made by a request of its own first,
 	 * so the two only read it; each notes that it began before WordPress
-	 * loads, before any call of the store. The lock is proved directly: between its count and its
+	 * loads, before any call of the store, and the second is sent only once
+	 * the first has counted. The lock is proved directly: between its count and its
 	 * creation each request has a child process try the lock file of the
 	 * store without waiting, which fails only while the request holds the
 	 * lock; both must hold it. Beside that the order, on the monotonic
@@ -1043,7 +1054,14 @@ final class ProtectedStoreTest extends TestCase {
 					'filter' => $filter,
 				),
 			);
-			$both = self::at_once( array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ) );
+			// The second goes only once the first has counted and waits under
+			// the lock: php -S can give two connections that arrive together
+			// to one worker, which then serves them one after the other (CI,
+			// 01.11.2026), and the case would prove nothing.
+			$both = self::at_once(
+				array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ),
+				static fn( int $i ): bool => is_file( $dir . '/one-counted' )
+			);
 			foreach ( array( 'one', 'two' ) as $me ) {
 				foreach ( array( 'begun', 'loaded', 'rooted', 'counted', 'proceeded', 'held' ) as $what ) {
 					$file               = $dir . '/' . $me . '-' . $what;
