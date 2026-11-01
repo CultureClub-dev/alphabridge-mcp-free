@@ -229,6 +229,7 @@ final class SyncKindsTest extends TestCase {
 			'post:create_with_object_meta' => array( array( 'post' ), 'create_with_object_meta', 'Z8d' ),
 			'*:meta_without_rule'          => array( array( 'post', 'term' ), 'meta_without_rule', 'Z8d' ),
 			'post:builder'                 => array( array( 'post' ), 'builder', 'Z8c' ),
+			'post:builder_unknown'         => array( array( 'post' ), 'builder_unknown', 'Z8c' ),
 			'attachment:replace_file'      => array( array( 'attachment' ), 'replace_file', 'Z8b' ),
 			'attachment:shared_path'       => array( array( 'attachment' ), 'shared_path', 'Z8b' ),
 			'option:unclassified'          => array( array( 'option' ), 'unclassified', 'Z8d' ),
@@ -238,6 +239,7 @@ final class SyncKindsTest extends TestCase {
 			'*:possible_reference'         => array( $all, 'possible_reference', 'Z8d' ),
 			'*:credential_field'           => array( $all, 'credential_field', 'Z8d' ),
 			'attachment:missing_file'      => array( array( 'attachment' ), 'missing_file', 'Z8b' ),
+			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),
 			'option:off_schema'            => array( array( 'option' ), 'off_schema', 'Z8d' ),
 		);

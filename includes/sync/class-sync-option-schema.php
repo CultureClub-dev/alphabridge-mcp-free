@@ -321,8 +321,10 @@ final class AB_MCP_Sync_Option_Schema {
  * The same parts: real_option_name() (trimmed, the two legacy names the
  * core redirects), AB_MCP_Undo::option_row() (the name and the autoload
  * flag of the row the database matches, never its value), the questions of
- * option_write_refused() on the settled name; only the snapshot with
- * get_option() at the end of resolve_option() is left out.
+ * option_write_refused() on the settled name (refused()); only the snapshot
+ * with get_option() at the end of resolve_option() is left out, and the
+ * translated message of the refusal: __() can load a translation, and with
+ * it the locale of the user from the stored rows.
  */
 final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 
@@ -344,9 +346,8 @@ final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 	public static function settle( $given ) {
 		$name = self::real_option_name( $given );
 		for ( $round = 0; $round < 4; $round++ ) {
-			$refused = AB_MCP_Option_Guard::option_write_refused( $name );
-			if ( is_wp_error( $refused ) ) {
-				return $refused;
+			if ( self::refused( $name ) ) {
+				return new WP_Error( 'ab_mcp_blocked', 'The option guard of AlphaBridge MCP refuses this option name, so it is not taken over. An administrator changes it in wp-admin.' );
 			}
 			$row = AB_MCP_Undo::option_row( $name );
 			if ( null === $row ) {
@@ -359,5 +360,17 @@ final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 			$name = $settled;
 		}
 		return new WP_Error( 'ab_mcp_option_unreadable', 'The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' );
+	}
+
+	/**
+	 * Whether option_write_refused() refuses a name, by the same questions
+	 * (refusal() for a write: too long for the column, an invisible
+	 * character, on the list or folding onto it; a write lifts no name).
+	 *
+	 * @param string $name Settled name.
+	 * @return bool
+	 */
+	public static function refused( $name ) {
+		return self::too_long_for_column( $name ) || self::has_invisible_chars( $name ) || self::is_blocked( $name ) || self::folds_onto_blocked( $name );
 	}
 }

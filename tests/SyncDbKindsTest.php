@@ -15,9 +15,12 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Db_Kinds;
 use AB_MCP_Sync_Inventory;
+use AB_MCP_Sync_Kind_Post;
 use AB_MCP_Sync_Kinds;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-db-kinds.php';
@@ -108,5 +111,70 @@ final class SyncDbKindsTest extends TestCase {
 		foreach ( array( 'b9', 'guarded', 'unreachable', 'unreadable' ) as $status ) {
 			self::assertSame( $status, AB_MCP_Sync_Inventory::entry( array( 'status' => $status ) + $base )['status'] );
 		}
+	}
+
+	/* ------------------------------------- credentials in each column */
+
+	/** @return array<string,array{0:string,1:string,2:string}> column, value, field path. */
+	public static function credentialColumns(): array {
+		$values = array(
+			'JSON'                  => array( '{"api_key":"probe"}', 'api_key' ),
+			'serialized'            => array( 'a:1:{s:8:"password";s:5:"probe";}', 'password' ),
+			'a block'               => array( '<!-- wp:acme/box {"token":"probe"} /-->', '[block:acme/box].token' ),
+			'a shortcode'           => array( '[acme secret="probe"]', '[shortcode:acme].secret' ),
+			'a shortcode, escaped'  => array( '[acme data=\'{\\"api_key\\":\\"probe\\"}\']', '[shortcode:acme].data.api_key' ),
+			'a shortcode, position' => array( "[acme '{\"client_secret\":\"probe\"}']", '[shortcode:acme].0.client_secret' ),
+		);
+		$out = array();
+		// Every column of the form a text can stand in (wp-admin/includes/schema.php).
+		foreach ( array( 'post_content', 'post_title', 'post_excerpt', 'post_status', 'comment_status', 'ping_status', 'post_password', 'post_name', 'post_content_filtered', 'post_type', 'post_mime_type' ) as $column ) {
+			foreach ( $values as $what => list( $value, $field ) ) {
+				$out[ $column . ', ' . $what ] = array( $column, $value, $field );
+			}
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'credentialColumns' )]
+	public function testEachColumnOfAPostIsAUnitOfTheCredentialCheck( string $column, string $value, string $field ): void {
+		$row = array(
+			'ID'                    => '7',
+			'post_author'           => '1',
+			'post_date'             => '2026-10-01 10:00:00',
+			'post_date_gmt'         => '2026-10-01 08:00:00',
+			'post_content'          => '',
+			'post_title'            => 'Titel',
+			'post_excerpt'          => '',
+			'post_status'           => 'publish',
+			'comment_status'        => 'open',
+			'ping_status'           => 'open',
+			'post_password'         => '',
+			'post_name'             => 'titel',
+			'to_ping'               => '',
+			'pinged'                => '',
+			'post_modified'         => '2026-10-01 10:00:00',
+			'post_modified_gmt'     => '2026-10-01 08:00:00',
+			'post_content_filtered' => '',
+			'post_parent'           => '0',
+			'guid'                  => 'https://staging.test/?p=7',
+			'menu_order'            => '0',
+			'post_type'             => 'post',
+			'post_mime_type'        => '',
+			'comment_count'         => '0',
+		);
+		$ctx = AB_MCP_Sync_Canon::context(
+			array( 'https://staging.test' ),
+			static function ( int $id ) {
+				return 'user' . $id;
+			}
+		);
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array(), $acc['credentials']['mixed'], 'Clean without the value.' );
+		$row[ $column ] = $value;
+		$acc            = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array( array( 'unit' => $column, 'fields' => array( $field ) ) ), $acc['credentials']['mixed'] );
+		self::assertContains( array( '*:credential_field', $column ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
 	}
 }

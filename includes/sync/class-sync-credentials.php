@@ -2,10 +2,13 @@
 /**
  * The check for credentials before anything is compared or packed (Z8,
  * decision 9 of the plan of 01.11.2026): over the unpacked value of the
- * smallest unit of its own (an option, a meta row, a widget instance),
- * recursively — serialized values, nested arrays, JSON in a text (a JSON
- * string literal too), lists of name and value — by the names AB_MCP_Redactor::redacts_key() redacts
- * (normalised: accessToken, client-secret and API_KEY alike).
+ * smallest unit of its own (an option, a meta row, a widget instance, a
+ * column of a row), recursively — serialized values, nested arrays, JSON in
+ * a text (a JSON string literal too), lists of name and value, and in a
+ * text that is none of these the attributes of its blocks and shortcodes
+ * (AB_MCP_Sync_Refs::embedded(): WP_Block_Parser, shortcode_parse_atts(),
+ * named and by position) — by the names AB_MCP_Redactor::redacts_key()
+ * redacts (normalised: accessToken, client-secret and API_KEY alike).
  *
  * The answer per unit:
  * - b9: the name of the unit is one; the unit is group B9, not compared,
@@ -28,6 +31,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/class-redactor.php';
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-refs.php';
 
 /**
  * Class AB_MCP_Sync_Credentials
@@ -135,7 +139,21 @@ final class AB_MCP_Sync_Credentials {
 				$why = 'unreadable_value';
 				return false;
 			}
-			return null === $json || self::walk( $json, $path, $extra, $fields, $depth, $layers + 1, $why );
+			if ( null !== $json ) {
+				return self::walk( $json, $path, $extra, $fields, $depth, $layers + 1, $why );
+			}
+			// The fields code reads from the text: blocks and shortcodes.
+			$inner = AB_MCP_Sync_Refs::embedded( $value );
+			if ( $inner['deep'] ) {
+				$why = 'unreadable_value';
+				return false;
+			}
+			foreach ( $inner['items'] as $item ) {
+				if ( ! self::walk( $item['value'], ( '' === $path ? '' : $path . '.' ) . '[' . $item['at'] . ']', $extra, $fields, $depth + 1, $layers + 1, $why ) ) {
+					return false;
+				}
+			}
+			return true;
 		}
 		if ( is_object( $value ) ) {
 			$why = 'php_object';

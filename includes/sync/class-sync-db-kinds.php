@@ -416,7 +416,9 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
-	 * The columns of a post row without the excluded ones.
+	 * The columns of a post row without the excluded ones. Each column of
+	 * the form is a unit of the credential check (decision 9: JSON,
+	 * serialized, blocks and shortcodes in it).
 	 *
 	 * @param array $row Row.
 	 * @param array $ctx Context.
@@ -430,6 +432,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 				continue;
 			}
 			$value = $row[ $column ];
+			AB_MCP_Sync_Credentials::note( $acc, 'post', $column, AB_MCP_Sync_Credentials::unit( '', (string) $value ) );
 			switch ( $column ) {
 				case 'post_content':
 					$out[ $column ] = AB_MCP_Sync_Refs::content( $value, $ctx, $acc, 'post', 'post_content' );
@@ -444,6 +447,9 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 							'value' => $p['value'],
 							'at'    => $column . ':' . $p['at'],
 						);
+					}
+					foreach ( $found['deep'] as $deep ) {
+						AB_MCP_Sync_Canon::too_deep( $acc, $column . ':' . $deep, 'post' );
 					}
 					break;
 				case 'post_parent':
@@ -564,7 +570,7 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 		}
 		self::type_lock( $acc, AB_MCP_Sync_Kinds::taxonomy( $row['taxonomy'] ) );
 		$form = array(
-			'row'  => self::term_form( $row, $ctx, $acc ),
+			'row'  => self::term_form( $row, $ctx, $acc, $this->kind() ),
 			'meta' => self::meta_form( $meta, $ctx, $acc, $this->kind(), false ),
 		);
 		$form = $this->more( $row, $form, $acc );
@@ -593,14 +599,19 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
-	 * The columns of a term without the counter.
+	 * The columns of a term without the counter; each text column a unit of
+	 * the credential check (decision 9).
 	 *
-	 * @param array $row Row.
-	 * @param array $ctx Context.
-	 * @param array $acc Accumulator.
+	 * @param array  $row  Row.
+	 * @param array  $ctx  Context.
+	 * @param array  $acc  Accumulator.
+	 * @param string $kind Kind (term or menu).
 	 * @return array
 	 */
-	protected static function term_form( array $row, array $ctx, array &$acc ) {
+	protected static function term_form( array $row, array $ctx, array &$acc, $kind ) {
+		foreach ( array( 'name', 'slug', 'description' ) as $column ) {
+			AB_MCP_Sync_Credentials::note( $acc, (string) $kind, $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
+		}
 		return array(
 			'taxonomy'    => $row['taxonomy'],
 			'name'        => AB_MCP_Sync_Canon::text( $row['name'], $ctx ),
@@ -773,6 +784,7 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		}
 		$cols = array();
 		foreach ( self::ITEM_COLUMNS as $column ) {
+			AB_MCP_Sync_Credentials::note( $acc, 'menu_item', $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
 			$cols[ $column ] = in_array( $column, array( 'post_status', 'menu_order' ), true ) ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx );
 		}
 		$menus = array();
@@ -1097,7 +1109,10 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 			$mods            = array();
 		}
 		$linked = isset( $mods['custom_css_post_id'] ) && (int) $mods['custom_css_post_id'] === $id;
-		$form   = array(
+		foreach ( array( 'post_name', 'post_content', 'post_status' ) as $column ) {
+			AB_MCP_Sync_Credentials::note( $acc, 'custom_css', $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
+		}
+		$form = array(
 			'stylesheet' => $row['post_name'],
 			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], $source['ctx'] ),
 			'status'     => $row['post_status'],

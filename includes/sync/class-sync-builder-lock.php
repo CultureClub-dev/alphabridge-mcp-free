@@ -1,21 +1,24 @@
 <?php
 /**
  * The lock of page builders by their identity (Z8, decision 31 of the plan
- * of 01.11.2026): a post is locked when AB_MCP_Builders::detect_all() names
- * a builder that is not released, whatever its storage class; released in
- * Z8 are only the six block libraries of RELEASED
- * (includes/builders/signatures.php), Z8c widens the list.
+ * of 01.11.2026): a post is locked when it carries the markers of a builder
+ * that is not released, whatever its storage class; released in Z8 are
+ * only the six block libraries of RELEASED (includes/builders/signatures.php),
+ * Z8c widens the list.
  *
- * detect_all() is asked with the post as its row holds it (not as
- * get_post() filters it), and only through AB_MCP_Sync_Safe::builders(),
- * the gate that first finds no object in the post's meta rows and the
- * options detect_all() reads: its markers in meta go through get_post_meta(),
- * whose maybe_unserialize() makes an object of any class it finds (and runs
- * its __wakeup()). A post where the gate refuses is locked (*:php_object)
- * without asking detect_all(). The markers are asked of the stored meta rows as well
- * (stored_markers(), unpacked without classes), since a filter can change
- * what get_post_meta() reads; either answer locks. Nothing a filter does can
- * take a lock away, only add one.
+ * The markers are the signatures of AB_MCP_Builders (signatures.php and the
+ * filter ab_mcp_builder_signatures), matched here on the stored rows as
+ * AB_MCP_Builders::markers_found() matches them on what WordPress reads:
+ * a meta marker on the row with the lowest meta_id (get_post_meta( …, true )),
+ * unpacked without classes; a content marker on post_content as stored. No
+ * function of WordPress reads a value for it (AB_MCP_Builders::detect_all()
+ * reads its markers through get_post_meta(), whose maybe_unserialize()
+ * makes an object of any class it finds). The integration suite holds the
+ * answer against detect_all() for every signature.
+ *
+ * A reader a plugin registers (ab_mcp_builder_adapters) for a builder with
+ * no signature recognises its pages only with its own code: while one is
+ * registered, every post locks (post:builder_unknown).
  *
  * @package AlphaBridge_MCP
  */
@@ -24,7 +27,6 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
 require_once __DIR__ . '/class-sync-canon.php';
-require_once __DIR__ . '/class-sync-safe.php';
 
 /**
  * Class AB_MCP_Sync_Builder_Lock
@@ -38,36 +40,68 @@ final class AB_MCP_Sync_Builder_Lock {
 	 * The builders of a post that are not released.
 	 *
 	 * @param array $row  The post's row (AB_MCP_Sync_Rows::post()).
-	 * @param array $meta Its meta rows (AB_MCP_Sync_Rows::meta()).
+	 * @param array $meta Its meta rows (AB_MCP_Sync_Rows::meta()), by meta_id.
 	 * @return array<int,array{id:string,name:string,detected_by:string[]}>
 	 */
 	public static function locked( array $row, array $meta ) {
 		$out = array();
-		$detected = AB_MCP_Sync_Safe::builders( $row, $meta );
-		foreach ( null === $detected ? array() : $detected as $found ) {
-			if ( ! in_array( (string) $found['id'], self::RELEASED, true ) ) {
-				$out[ (string) $found['id'] ] = array(
-					'id'          => (string) $found['id'],
-					'name'        => (string) $found['name'],
-					'detected_by' => (array) $found['detected_by'],
-				);
+		foreach ( self::detected( $row, $meta ) as $id => $found ) {
+			if ( ! in_array( $id, self::RELEASED, true ) ) {
+				$out[] = $found;
 			}
 		}
-		foreach ( self::stored_markers( $meta ) as $id => $by ) {
-			if ( ! in_array( $id, self::RELEASED, true ) && ! isset( $out[ $id ] ) ) {
-				$sig        = AB_MCP_Builders::signature( $id );
-				$out[ $id ] = array(
-					'id'          => $id,
-					'name'        => is_array( $sig ) && isset( $sig['name'] ) ? (string) $sig['name'] : $id,
-					'detected_by' => $by,
-				);
-			}
-		}
-		return array_values( $out );
+		return $out;
 	}
 
 	/**
-	 * Lock the object of an accumulator for each builder of locked().
+	 * Every builder whose markers the stored rows of a post carry, in the
+	 * order of the signatures.
+	 *
+	 * @param array $row  Row of the post.
+	 * @param array $meta Its meta rows.
+	 * @return array<string,array{id:string,name:string,detected_by:string[]}>
+	 */
+	public static function detected( array $row, array $meta ) {
+		$first = array();
+		foreach ( $meta as $item ) {
+			if ( ! isset( $first[ $item['key'] ] ) ) {
+				$first[ $item['key'] ] = $item['value'];
+			}
+		}
+		$content = isset( $row['post_content'] ) ? (string) $row['post_content'] : '';
+		$out     = array();
+		foreach ( AB_MCP_Builders::signatures() as $id => $sig ) {
+			$found = self::markers( $sig['markers'], $first, $content );
+			if ( array() === $found || ( array() !== $sig['unless'] && array() !== self::markers( $sig['unless'], $first, $content ) ) ) {
+				continue;
+			}
+			$out[ (string) $id ] = array(
+				'id'          => (string) $id,
+				'name'        => (string) $sig['name'],
+				'detected_by' => $found,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * The readers a plugin registers for a builder with no signature here.
+	 *
+	 * @return string[] Their ids.
+	 */
+	public static function unknown() {
+		$out = array();
+		foreach ( AB_MCP_Builders::adapters() as $id => $adapter ) {
+			if ( 'blocks' !== (string) $id && null === AB_MCP_Builders::signature( (string) $id ) ) {
+				$out[] = (string) $id;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Lock the object of an accumulator for each builder of locked(), and
+	 * for each reader of unknown().
 	 *
 	 * @param array $acc  Accumulator.
 	 * @param array $row  Row of the post.
@@ -75,12 +109,8 @@ final class AB_MCP_Sync_Builder_Lock {
 	 * @return array The builders.
 	 */
 	public static function note( array &$acc, array $row, array $meta ) {
-		if ( ! self::checkable( $meta ) ) {
-			AB_MCP_Sync_Canon::lock( $acc, 'post', 'php_object', 'builder' );
-		}
-		// A row the gate could not clear: detect_all() was not asked.
-		if ( '' !== AB_MCP_Sync_Safe::options_refusal( AB_MCP_Sync_Safe::READS['detect_all'] ) ) {
-			AB_MCP_Sync_Canon::lock( $acc, 'post', 'php_object', 'builder:options' );
+		foreach ( self::unknown() as $id ) {
+			AB_MCP_Sync_Canon::lock( $acc, 'post', 'builder_unknown', 'builder:' . $id );
 		}
 		$builders = self::locked( $row, $meta );
 		foreach ( $builders as $builder ) {
@@ -90,54 +120,74 @@ final class AB_MCP_Sync_Builder_Lock {
 	}
 
 	/**
-	 * Whether detect_all() may read the meta of a post: no stored row holds
-	 * an object, a reference or a record (AB_MCP_Sync_Canon::holds_record()).
+	 * The markers of a list a post carries, as the evidence strings of
+	 * AB_MCP_Builders::markers_found().
 	 *
-	 * @param array $meta Meta rows.
-	 * @return bool
+	 * @param array  $markers Normalised markers.
+	 * @param array  $first   Meta key => value of its first row, as stored.
+	 * @param string $content post_content as stored.
+	 * @return string[]
 	 */
-	public static function checkable( array $meta ) {
-		return AB_MCP_Sync_Safe::rows_clean( $meta );
+	private static function markers( array $markers, array $first, $content ) {
+		$found = array();
+		foreach ( $markers as $m ) {
+			if ( isset( $m['meta'] ) ) {
+				$value = self::meta_value( $first, $m['meta'] );
+				if ( isset( $m['equals'] ) ) {
+					$hit = is_scalar( $value ) && (string) $value === $m['equals'];
+				} else {
+					$hit = ! self::is_empty_value( $value )
+						&& ! ( isset( $m['not_in'] ) && is_scalar( $value ) && in_array( (string) $value, $m['not_in'], true ) );
+				}
+				if ( $hit ) {
+					$found[] = 'meta:' . $m['meta'];
+				}
+			} elseif ( isset( $m['content'] ) ) {
+				if ( false !== strpos( $content, $m['content'] ) ) {
+					$found[] = 'content:' . $m['content'];
+				}
+			} elseif ( isset( $m['content_prefix'] ) ) {
+				if ( 0 === strpos( $content, $m['content_prefix'] ) ) {
+					$found[] = 'content:' . $m['content_prefix'];
+				}
+			} elseif ( isset( $m['content_regex'] ) ) {
+				if ( 1 === preg_match( $m['content_regex'], $content ) ) {
+					$found[] = 'content:' . ( '' !== $m['like'] ? $m['like'] : $m['content_regex'] );
+				}
+			}
+		}
+		return $found;
 	}
 
 	/**
-	 * The builders whose meta markers (signatures.php: meta, equals, not_in)
-	 * the stored meta rows carry, as AB_MCP_Builders matches them on the
-	 * values get_post_meta( …, true ) reads (the row with the lowest id).
+	 * A meta value as get_post_meta( …, true ) reads it: '' without a row;
+	 * a stored object, reference or record stands as an object (set, no
+	 * scalar), a value that does not unpack as false, as maybe_unserialize()
+	 * answers for it.
 	 *
-	 * @param array $meta Meta rows, by meta_id.
-	 * @return array<string,string[]> Builder id => markers.
+	 * @param array  $first Meta key => first stored value.
+	 * @param string $key   Meta key.
+	 * @return mixed
 	 */
-	public static function stored_markers( array $meta ) {
-		$first = array();
-		foreach ( $meta as $row ) {
-			if ( ! isset( $first[ $row['key'] ] ) ) {
-				$first[ $row['key'] ] = $row['value'];
-			}
+	private static function meta_value( array $first, $key ) {
+		if ( ! isset( $first[ $key ] ) ) {
+			return '';
 		}
-		$out = array();
-		foreach ( AB_MCP_Builders::signatures() as $id => $sig ) {
-			$found = array();
-			foreach ( isset( $sig['markers'] ) ? (array) $sig['markers'] : array() as $marker ) {
-				if ( ! isset( $marker['meta'] ) || ! isset( $first[ $marker['meta'] ] ) ) {
-					continue;
-				}
-				$read  = AB_MCP_Sync_Canon::unserialized( $first[ $marker['meta'] ] );
-				$value = $read['ok'] ? $read['value'] : $first[ $marker['meta'] ];
-				if ( isset( $marker['equals'] ) ) {
-					$hit = is_scalar( $value ) && (string) $value === (string) $marker['equals'];
-				} else {
-					$empty = null === $value || false === $value || '' === $value || '0' === $value || array() === $value;
-					$hit   = ! $empty && ! ( isset( $marker['not_in'] ) && is_scalar( $value ) && in_array( (string) $value, (array) $marker['not_in'], true ) );
-				}
-				if ( $hit ) {
-					$found[] = 'meta:' . $marker['meta'];
-				}
-			}
-			if ( array() !== $found ) {
-				$out[ (string) $id ] = $found;
-			}
+		$read = AB_MCP_Sync_Canon::unserialized( $first[ $key ] );
+		if ( $read['ok'] ) {
+			return $read['value'];
 		}
-		return $out;
+		return 'php_object' === $read['why'] ? new stdClass() : false;
+	}
+
+	/**
+	 * AB_MCP_Builders::is_empty_value(): missing, '', '0', 0, false or an
+	 * empty array.
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function is_empty_value( $value ) {
+		return null === $value || false === $value || '' === $value || '0' === $value || 0 === $value || array() === $value;
 	}
 }

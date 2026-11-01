@@ -161,6 +161,56 @@ final class SyncMediaPathsTest extends TestCase {
 		self::assertSame( array( 'thumb' => 'link', 'size:x' => 'link', 'size:y' => 'not_file', 'size:z' => 'missing', 'size:w' => 'link' ), array_column( $facts['problems'], 'problem', 'role' ), 'A link that leads nowhere is a link, not a missing file.' );
 	}
 
+	public function testAFileThatCannotBeMeasuredLocksAsUnreadable(): void {
+		$this->dir = sys_get_temp_dir() . '/ab-sync-media-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $this->dir . '/uploads/2026', 0777, true );
+		file_put_contents( $this->dir . '/uploads/2026/a.jpg', 'bild' );
+		file_put_contents( $this->dir . '/uploads/2026/closed.jpg', 'zu' );
+		chmod( $this->dir . '/uploads/2026/closed.jpg', 0000 );
+		self::assertFalse( is_readable( $this->dir . '/uploads/2026/closed.jpg' ), 'Not readable for this user (not root).' );
+		$list  = array(
+			'files'    => array(
+				array( 'path' => '2026/a.jpg', 'roles' => array( 'file' ) ),
+				array( 'path' => '2026/closed.jpg', 'roles' => array( 'thumb' ) ),
+			),
+			'problems' => array(),
+		);
+		$facts = AB_MCP_Sync_Media::facts( $list, $this->dir . '/uploads' );
+		chmod( $this->dir . '/uploads/2026/closed.jpg', 0644 );
+		self::assertSame( array( '2026/a.jpg' ), array_column( $facts['files'], 'path' ), 'No file without its size and hash.' );
+		self::assertSame( array( array( 'path' => '2026/closed.jpg', 'role' => 'thumb', 'problem' => 'unreadable' ) ), $facts['problems'] );
+		$acc = \AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Media::note( $acc, $facts );
+		self::assertSame( array( array( '*:unreadable_value', 'file:2026/closed.jpg' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+	}
+
+	public function testCodeDecidesTheUploadsFolderOnANetworkAndUnderAFilter(): void {
+		ab_test_reset();
+		$GLOBALS['ab_test_multisite'] = true;
+		self::assertSame( array( 'dir' => '', 'problem' => 'by_code', 'cause' => 'multisite' ), AB_MCP_Sync_Media::uploads() );
+		$GLOBALS['ab_test_multisite'] = false;
+		foreach ( AB_MCP_Sync_Media::UPLOAD_HOOKS as $hook ) {
+			ab_test_reset();
+			add_filter( $hook, 'strval' );
+			self::assertSame( array( 'dir' => '', 'problem' => 'by_code', 'cause' => 'filter:' . $hook ), AB_MCP_Sync_Media::uploads(), $hook );
+		}
+		ab_test_reset();
+		self::assertContains( 'option_upload_path', AB_MCP_Sync_Media::UPLOAD_HOOKS );
+		self::assertContains( 'upload_dir', AB_MCP_Sync_Media::UPLOAD_HOOKS );
+	}
+
+	public function testTheUploadsFolderCodeDecidesLocksWithItsCause(): void {
+		$acc = \AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Media::note(
+			$acc,
+			array(
+				'files'    => array(),
+				'problems' => array( array( 'path' => '', 'role' => 'uploads', 'problem' => 'by_code', 'cause' => 'filter:upload_dir' ) ),
+			)
+		);
+		self::assertSame( array( array( 'attachment:uploads_by_code', 'uploads:filter:upload_dir', 'Z8b' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'], $l['stage'] ), $acc['locks'] ) );
+	}
+
 	public function testAPathTwoAttachmentsNameIsShared(): void {
 		self::assertSame( array( 'a/t.jpg' => array( 3, 7 ) ), AB_MCP_Sync_Media::shared( array( 'a/t.jpg' => array( 7, 3, 7 ), 'a/x.jpg' => array( 3 ) ) ) );
 		$acc = \AB_MCP_Sync_Canon::acc();
