@@ -34,21 +34,40 @@ wp_set_current_user( isset( $ab_it_in['user'] ) ? (int) $ab_it_in['user'] : 0 );
 // (at most SYNC_BEGUN seconds) and then until the other has counted as
 // well (at most SYNC_COUNTED seconds), and notes when it went on to
 // create. Each note is a file named <me>-<what> in the folder of the sync
-// holding microtime( true ); the test reads the order from them. Without
-// the lock the other counts within milliseconds, before this one goes on;
-// with it the other waits at the lock and counts only after this one went
-// on and created.
+// holding hrtime( true ) (the monotonic clock of the machine, the same for
+// both processes); the test reads the order from them.
+//
+// The lock itself is proved directly, not by the race: at the same point,
+// between the count and the creation, a child process tries to take the
+// lock file of the store without waiting (flock LOCK_EX | LOCK_NB). It fails
+// exactly when this request holds the lock; that is noted as <me>-held
+// (1 or 0). A process of its own, because flock() between processes is the
+// same on Linux and macOS, whatever PHP uses for a second handle in one.
 const AB_IT_SYNC_BEGUN   = 30;
 const AB_IT_SYNC_COUNTED = 10;
-$ab_it_note = static function ( array $sync, $what ) {
-	file_put_contents( $sync['dir'] . '/' . $sync['me'] . '-' . $what, sprintf( '%.6f', microtime( true ) ) );
+$ab_it_note = static function ( array $sync, $what, $value = null ) {
+	file_put_contents( $sync['dir'] . '/' . $sync['me'] . '-' . $what, null === $value ? (string) hrtime( true ) : (string) $value );
+};
+$ab_it_held = static function () {
+	$root = AB_MCP_Protected_Store::root();
+	if ( is_wp_error( $root ) ) {
+		return null;
+	}
+	$try = proc_open(
+		array( PHP_BINARY, '-n', '-r', 'exit( ( $h = fopen( $argv[1], "c" ) ) && flock( $h, LOCK_EX | LOCK_NB ) ? 0 : 1 );', $root . '/' . AB_MCP_Protected_Store::LOCK_FILE ),
+		array(),
+		$pipes
+	);
+	return is_resource( $try ) ? 1 === proc_close( $try ) : null;
 };
 if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
 	$ab_it_sync = $ab_it_in['sync'];
 	add_filter(
 		(string) $ab_it_sync['filter'],
-		static function ( $value ) use ( $ab_it_sync, $ab_it_note ) {
+		static function ( $value ) use ( $ab_it_sync, $ab_it_note, $ab_it_held ) {
 			$ab_it_note( $ab_it_sync, 'counted' );
+			$held = $ab_it_held();
+			$ab_it_note( $ab_it_sync, 'held', null === $held ? 'unknown' : ( $held ? '1' : '0' ) );
 			foreach ( array( 'begun' => AB_IT_SYNC_BEGUN, 'counted' => AB_IT_SYNC_COUNTED ) as $what => $seconds ) {
 				$until = microtime( true ) + $seconds;
 				while ( ! file_exists( $ab_it_sync['dir'] . '/' . $ab_it_sync['other'] . '-' . $what ) && microtime( true ) < $until ) {

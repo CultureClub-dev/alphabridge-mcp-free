@@ -822,8 +822,10 @@ final class ProtectedStoreTest extends TestCase {
 			3,
 			static function ( array $rec, int $n ) use ( $begun ): array {
 				$rec['rev']++;
+				// Each began before this request's check did (and so
+				// before its failure ended), one millisecond apart.
 				$rec['seen']['uploads']['ok'] = array(
-					'start'  => $begun + $n / 1000,
+					'start'  => $begun - ( 4 - $n ) / 1000,
 					'end'    => microtime( true ),
 					'detail' => array( 'probes' => array( 403, 403, 403 ) ),
 				);
@@ -1003,16 +1005,17 @@ final class ProtectedStoreTest extends TestCase {
 	/* ------------------------------------------------------------ budgets */
 
 	/**
-	 * Two requests to site A that open a group at once, made to overlap
-	 * between the count and the creation (the sync of the probe): each
-	 * notes when it began, counted and went on to create, and after its
-	 * count waits until the other has begun and counted as well, at most
-	 * ten seconds. The order is then read from the notes: the second
-	 * request (the one that counted later) must have begun while the first
-	 * was still waiting, or the case proves nothing and fails as such; and
-	 * it must have counted only after the first went on to create, that is,
-	 * it waited at the lock. Without the lock it counts within milliseconds,
-	 * while the first still waits.
+	 * Two requests to site A that open a group at once (the sync of the
+	 * probe). The lock is proved directly: between its count and its
+	 * creation each request has a child process try the lock file of the
+	 * store without waiting, which fails only while the request holds the
+	 * lock; both must hold it. Beside that the order, on the monotonic
+	 * clock: each notes when it began, counted and went on to create, and
+	 * after its count waits until the other has begun and counted as well,
+	 * at most ten seconds. The second request (the one that counted later)
+	 * must have begun while the first was still waiting, or the case proves
+	 * nothing and fails as such; and it must have counted only after the
+	 * first went on to create.
 	 *
 	 * @param string $area   Area.
 	 * @param string $filter The limit read after the count.
@@ -1036,9 +1039,9 @@ final class ProtectedStoreTest extends TestCase {
 			);
 			$both = self::at_once( array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ) );
 			foreach ( array( 'one', 'two' ) as $me ) {
-				foreach ( array( 'begun', 'counted', 'proceeded' ) as $what ) {
-					$file              = $dir . '/' . $me . '-' . $what;
-					$at[ $me ][ $what ] = is_file( $file ) ? (float) file_get_contents( $file ) : null;
+				foreach ( array( 'begun', 'counted', 'proceeded', 'held' ) as $what ) {
+					$file               = $dir . '/' . $me . '-' . $what;
+					$at[ $me ][ $what ] = is_file( $file ) ? (string) file_get_contents( $file ) : null;
 				}
 			}
 		} finally {
@@ -1048,8 +1051,12 @@ final class ProtectedStoreTest extends TestCase {
 			rmdir( $dir );
 		}
 		foreach ( $at as $me => $notes ) {
-			foreach ( $notes as $what => $time ) {
-				self::assertNotNull( $time, "Request $me noted no '$what'." );
+			foreach ( $notes as $what => $note ) {
+				self::assertNotNull( $note, "Request $me noted no '$what'." );
+			}
+			self::assertSame( '1', $notes['held'], "Request $me did not hold the lock of the store between its count and its creation." );
+			foreach ( array( 'begun', 'counted', 'proceeded' ) as $what ) {
+				$at[ $me ][ $what ] = (int) $notes[ $what ];
 			}
 		}
 		$first  = $at['one']['counted'] <= $at['two']['counted'] ? 'one' : 'two';
