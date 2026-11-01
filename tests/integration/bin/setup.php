@@ -41,6 +41,32 @@ function ab_it_fail( $message ) {
 }
 
 /**
+ * Whether $dir is $path or one of its parents, by identity (device and
+ * inode), so that no spelling or alias of a path gets past the check.
+ *
+ * @param string $dir  Directory that might hold $path.
+ * @param string $path Path to look for.
+ * @return bool
+ */
+function ab_it_holds( $dir, $path ) {
+	$target = @stat( $dir );
+	$at     = realpath( $path );
+	if ( false === $target || false === $at ) {
+		return false;
+	}
+	while ( true ) {
+		$here = @stat( $at );
+		if ( false !== $here && $here['dev'] === $target['dev'] && $here['ino'] === $target['ino'] ) {
+			return true;
+		}
+		if ( '/' === $at ) {
+			return false;
+		}
+		$at = dirname( $at );
+	}
+}
+
+/**
  * An environment variable, or its default.
  *
  * @param string      $name    Name.
@@ -70,8 +96,17 @@ if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 	ab_it_fail( "Cannot create $root." );
 }
 $root = realpath( $root );
-if ( 0 === strpos( $root . '/', $repo . '/' ) ) {
+if ( ab_it_holds( $repo, $root ) ) {
 	ab_it_fail( 'AB_IT_ROOT lies inside the working tree; the plugin directory would contain the sites.' );
+}
+// rsync --delete replaces whatever a site directory holds, so neither may
+// hold the working tree or the home directory (checked before anything runs).
+foreach ( array( 'a', 'b' ) as $key ) {
+	foreach ( array( $repo, (string) getenv( 'HOME' ) ) as $kept ) {
+		if ( '' !== $kept && ab_it_holds( "$root/site-$key", $kept ) ) {
+			ab_it_fail( "$root/site-$key holds $kept; choose another AB_IT_ROOT." );
+		}
+	}
 }
 
 // The core must be the release the plan names, read from its own version file.

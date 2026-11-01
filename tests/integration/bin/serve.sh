@@ -59,21 +59,29 @@ stop() {
 		pid=$(cat "$pidfile")
 		docroot=$(field sites "$key" docroot)
 		if kill -0 "$pid" 2>/dev/null; then
+			# The document root is compared by identity (-ef), not as text.
+			local started
 			command=$(ps -ww -p "$pid" -o command= || true)
 			case "$command" in
-			*"-t $docroot "*)
-				children=$(pgrep -P "$pid" || true)
-				kill "$pid"
-				for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
-				for child in $children; do
-					kill -0 "$child" 2>/dev/null && kill "$child" || true
-				done
-				echo "serve: site $key stopped (pid $pid)"
-				;;
+			*" -S "*" -t "*" $here/router.php"*) started=${command#* -t }; started=${started%% "$here"/router.php*} ;;
 			*)
-				echo "serve: pid $pid is not the server of site $key; left alone" >&2
+				# The PID went to another program: the file is stale.
+				echo "serve: pid $pid is no server of this suite any more; left alone"
+				rm -f "$pidfile"
+				continue
 				;;
 			esac
+			if ! [ "$started" -ef "$docroot" ]; then
+				echo "serve: pid $pid serves $started, not site $key; left alone, $pidfile kept" >&2
+				exit 1
+			fi
+			children=$(pgrep -P "$pid" || true)
+			kill "$pid"
+			for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+			for child in $children; do
+				kill -0 "$child" 2>/dev/null && kill "$child" || true
+			done
+			echo "serve: site $key stopped (pid $pid)"
 		fi
 		rm -f "$pidfile"
 	done

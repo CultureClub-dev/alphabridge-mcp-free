@@ -78,18 +78,30 @@ db_down() {
 	local pid
 	pid=$(cat "$pidfile")
 	if kill -0 "$pid" 2>/dev/null; then
-		case "$(ps -ww -p "$pid" -o command= || true)" in
-		*"--datadir=$datadir "*)
-			kill "$pid"
-			for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
-			if kill -0 "$pid" 2>/dev/null; then
-				echo "local: MariaDB (pid $pid) did not stop" >&2
-				exit 1
-			fi
-			echo "local: MariaDB stopped (pid $pid)"
+		# Its data directory is compared by identity (-ef): another spelling
+		# of AB_IT_ROOT must neither miss this server nor hit another one.
+		local command started
+		command=$(ps -ww -p "$pid" -o command= || true)
+		case "$command" in
+		*mariadbd*" --datadir="*" --port="*) started=${command#* --datadir=}; started=${started%% --port=*} ;;
+		*)
+			# The PID went to another program: the file is stale.
+			echo "local: pid $pid is no MariaDB any more; left alone"
+			rm -f "$pidfile"
+			return 0
 			;;
-		*) echo "local: pid $pid is not this MariaDB; left alone" >&2 ;;
 		esac
+		if ! [ "$started" -ef "$datadir" ]; then
+			echo "local: pid $pid is the MariaDB of $started, not of $datadir; left alone, $pidfile kept" >&2
+			exit 1
+		fi
+		kill "$pid"
+		for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+		if kill -0 "$pid" 2>/dev/null; then
+			echo "local: MariaDB (pid $pid) did not stop" >&2
+			exit 1
+		fi
+		echo "local: MariaDB stopped (pid $pid)"
 	fi
 	rm -f "$pidfile"
 }
