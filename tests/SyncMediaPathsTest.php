@@ -21,6 +21,22 @@ use PHPUnit\Framework\TestCase;
 require_once __DIR__ . '/sync-canon-stubs.php';
 require_once __DIR__ . '/../includes/sync/class-sync-media.php';
 
+/**
+ * A stream wrapper that counts the questions the file system functions ask it.
+ */
+final class SyncMediaProbeStream {
+	/** @var int */
+	public static $asked = 0;
+
+	/** @var resource|null */
+	public $context;
+
+	public function url_stat( $path, $flags ) {
+		++self::$asked;
+		return false;
+	}
+}
+
 final class SyncMediaPathsTest extends TestCase {
 
 	private const BASE = '/srv/site/wp-content/uploads';
@@ -159,6 +175,36 @@ final class SyncMediaPathsTest extends TestCase {
 		$facts = AB_MCP_Sync_Media::facts( $list, $this->dir . '/uploads' );
 		self::assertSame( array( array( 'path' => '2026/a.jpg', 'roles' => array( 'file' ), 'size' => 4, 'sha256' => hash( 'sha256', 'bild' ) ) ), $facts['files'] );
 		self::assertSame( array( 'thumb' => 'link', 'size:x' => 'link', 'size:y' => 'not_file', 'size:z' => 'missing', 'size:w' => 'link' ), array_column( $facts['problems'], 'problem', 'role' ), 'A link that leads nowhere is a link, not a missing file.' );
+	}
+
+	public function testAStoredNameWithASchemeReachesNoStreamWrapper(): void {
+		stream_wrapper_register( 'reviewprobe', SyncMediaProbeStream::class );
+		SyncMediaProbeStream::$asked = 0;
+		try {
+			$meta = array(
+				'file'   => '2026/11/a.jpg',
+				'thumb'  => 'reviewprobe://host/thumb',
+				'sizes'  => array( 'x' => array( 'file' => 'data:,secret' ) ),
+				'source_image' => 'reviewprobe://host/source',
+			);
+			$backup = array( 'full-1' => array( 'file' => 'reviewprobe://host/secret' ) );
+			$out    = AB_MCP_Sync_Media::paths( '2026/11/a.jpg', $meta, $backup, self::BASE );
+			$asked  = SyncMediaProbeStream::$asked;
+			$by_dir = AB_MCP_Sync_Media::paths( '2026/11/a.jpg', array( 'file' => 'reviewprobe://host/dir/a.jpg' ), array( 'full-1' => array( 'file' => 'b.jpg' ) ), self::BASE );
+			$main   = AB_MCP_Sync_Media::paths( 'reviewprobe://host/a.jpg', array(), null, self::BASE );
+			$data   = AB_MCP_Sync_Media::paths( 'data:a.jpg', array(), null, self::BASE );
+			$in_dir = AB_MCP_Sync_Media::paths( '2026/11/a.jpg', array( 'file' => 'data:x/a.jpg' ), array( 'full-1' => array( 'file' => 'b.jpg' ) ), self::BASE );
+			$asked += SyncMediaProbeStream::$asked;
+		} finally {
+			stream_wrapper_unregister( 'reviewprobe' );
+		}
+		self::assertSame( 0, $asked, 'No url_stat() before the lock.' );
+		self::assertSame( array( 'thumb' => 'unsafe', 'size:x' => 'unsafe', 'source_image' => 'unsafe', 'backup:full-1' => 'unsafe' ), array_column( $out['problems'], 'problem', 'role' ) );
+		self::assertSame( array( '2026/11/a.jpg' ), array_column( $out['files'], 'path' ) );
+		self::assertSame( array( 'backup:full-1' => 'unsafe' ), array_column( $by_dir['problems'], 'problem', 'role' ) );
+		self::assertSame( array( 'file' => 'unsafe' ), array_column( $main['problems'], 'problem', 'role' ) );
+		self::assertSame( array( array(), array( 'file' => 'unsafe' ) ), array( $data['files'], array_column( $data['problems'], 'problem', 'role' ) ), 'A scheme without slashes as well.' );
+		self::assertSame( array( array( '2026/11/a.jpg' ), array( 'backup:full-1' => 'unsafe' ) ), array( array_column( $in_dir['files'], 'path' ), array_column( $in_dir['problems'], 'problem', 'role' ) ), 'The file of the metadata, whose dirname the backups stand in.' );
 	}
 
 	public function testAFileThatCannotBeMeasuredLocksAsUnreadable(): void {

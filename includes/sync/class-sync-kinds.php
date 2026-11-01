@@ -255,6 +255,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'A whole number without a known schema equals the staging id of an object in the scope whose live id differs: it may point to that object, and no rule says whether to rewrite it.',
 		),
+		'*:reference_spelling'         => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A reference is stored in a spelling the rewriter does not write back as WordPress reads it (backslash escapes, character references, other quotes, the attribute twice, an image id outside the class): it is not rewritten.',
+		),
 		'*:credential_field'           => array(
 			'stage'  => 'Z8d',
 			'reason' => 'A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go.',

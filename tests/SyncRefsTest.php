@@ -118,6 +118,8 @@ final class SyncRefsTest extends TestCase {
 			'JSON escaped in a shortcode'  => array( '[acme_box data=\'{\\"post\\":56}\']', array( '56@c:html:shortcode:acme_box.data.post' ) ),
 			'by position in a shortcode'   => array( '[acme_box \'{"post":57}\' 58]', array( '57@c:html:shortcode:acme_box.0.post', '58@c:html:shortcode:acme_box.1' ) ),
 			'a core shortcode, other attr' => array( '[gallery id="49" columns="3" include="51"]', array( '49@c:html:shortcode:gallery.id', '51@c:html:shortcode:gallery.include' ) ),
+			'a name with a dot'            => array( '[acme.box id="59"]', array( '59@c:html:shortcode:acme.box.id' ) ),
+			'a name beyond ASCII'          => array( '[äbox id="60"]', array( '60@c:html:shortcode:äbox.id' ) ),
 		);
 	}
 
@@ -143,6 +145,59 @@ final class SyncRefsTest extends TestCase {
 		}
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} --><div></div><!-- /wp:kadence/rowlayout -->', array() )['state'], 'A word about a credential is none.' );
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', 'a[href] { color: red } input[type="password"] { }', array() )['state'], 'CSS with brackets names no field.' );
+	}
+
+	public function testWhatTheCoreParsesAsABlockOrAShortcodeIsReadSo(): void {
+		$parser = new \WP_Block_Parser();
+		foreach ( array(
+			"two spaces"   => array( '<!--  wp:paragraph {"api_key":"dummy-secret"} /-->', '[block:core/paragraph].api_key' ),
+			"a tab"        => array( "<!--\twp:acme/box {\"token\":\"x\"} /-->", '[block:acme/box].token' ),
+			"a line break" => array( "<!--\nwp:acme/box {\"password\":\"x\"}\n/-->", '[block:acme/box].password' ),
+			"a dot"        => array( '[acme.form api_key="x"]', '[shortcode:acme.form].api_key' ),
+			"an umlaut"    => array( '[äform secret="x"]', '[shortcode:äform].secret' ),
+		) as $what => list( $text, $field ) ) {
+			if ( 0 === strpos( $text, '<!--' ) ) {
+				self::assertNotNull( $parser->parse( $text )[0]['blockName'], 'The core reads a block: ' . $what );
+			}
+			self::assertSame( array( 'state' => 'mixed', 'fields' => array( $field ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $what );
+		}
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!--wp:acme/box {"token":"x"} /-->', array() )['state'], 'Without a space the core reads no block: a comment.' );
+		self::assertNull( $parser->parse( '<!--wp:acme/box {"token":"x"} /-->' )[0]['blockName'] );
+	}
+
+	public static function spellings(): array {
+		return array(
+			'octal escapes'       => array( '[gallery ids="\\61\\62"]', 'c:html:shortcode:gallery.ids' ),
+			'a character ref'     => array( '[gallery ids="&#49;2"]', 'c:html:shortcode:gallery.ids' ),
+			'the name twice'      => array( '[gallery ids="12" ids="13"]', 'c:html:shortcode:gallery.ids' ),
+			'the same value twice' => array( '[gallery ids="12" IDS="12"]', 'c:html:shortcode:gallery.ids' ),
+			'other quotes'        => array( '[gallery ids=”12”]', 'c:html:shortcode:gallery.ids' ),
+			'an escaped caption'  => array( '[caption id="attachment_\\65"]Bild[/caption]', 'c:html:shortcode:caption.id' ),
+		);
+	}
+
+	#[DataProvider( 'spellings' )]
+	public function testAReferenceNotStoredInThePlainSpellingLocksAndIsNotRewritten( string $content, string $at ): void {
+		list( $refs, , , $acc ) = self::scan( $content );
+		self::assertSame( array(), $refs, 'No reference is read from the stored digits.' );
+		self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 112, 13 => 113, 5 => 105, 7 => 107 ) ), array() ) );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+	}
+
+	public function testThePlainSpellingsOfTheCoreAreRewritten(): void {
+		foreach ( array(
+			'[gallery ids="12,13"]'  => '[gallery ids="112,113"]',
+			"[gallery ids='12, 13']" => "[gallery ids='112, 113']",
+			'[gallery ids=12,13]'    => '[gallery ids=112,113]',
+			'[GALLERY IDS="12"]'     => '[GALLERY IDS="112"]',
+		) as $from => $to ) {
+			list( $refs, , , $acc ) = self::scan( $from );
+			self::assertNotSame( array(), $refs, $from );
+			self::assertSame( array(), $acc['locks'], $from );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $from, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 112, 13 => 113 ) ), array() ) );
+			self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ), $from );
+		}
 	}
 
 	public function testShortcodesNestedDeeperThanTheyAreReadLock(): void {

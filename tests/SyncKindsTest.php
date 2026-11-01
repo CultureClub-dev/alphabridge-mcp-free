@@ -237,6 +237,7 @@ final class SyncKindsTest extends TestCase {
 			'*:php_object'                 => array( $all, 'php_object', 'Z8d' ),
 			'*:unreadable_value'           => array( $all, 'unreadable_value', 'Z8d' ),
 			'*:possible_reference'         => array( $all, 'possible_reference', 'Z8d' ),
+			'*:reference_spelling'         => array( $all, 'reference_spelling', 'Z8d' ),
 			'*:credential_field'           => array( $all, 'credential_field', 'Z8d' ),
 			'attachment:missing_file'      => array( array( 'attachment' ), 'missing_file', 'Z8b' ),
 			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),

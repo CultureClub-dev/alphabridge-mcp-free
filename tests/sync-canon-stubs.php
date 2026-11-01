@@ -3,8 +3,10 @@
  * What the unit tests of the canonical form need beyond the bootstrap: four
  * path functions of WordPress 7.1.3, each copied unchanged below its line
  * note (wp_basename() from wp-includes/formatting.php, the others from
- * wp-includes/functions.php), for AB_MCP_Sync_Media::paths(). Whether the
- * list is what the core deletes is shown against the real core in the
+ * wp-includes/functions.php): wp_basename() for AB_MCP_Sync_Media::paths(),
+ * path_join() with what it calls for the test that no stored name reaches
+ * a stream wrapper (a mutation puts path_join() back in paths()). Whether
+ * the list is what the core deletes is shown against the real core in the
  * integration suite (SyncMediaListTest).
  *
  * WordPress is free software, licensed under the GNU General Public License,

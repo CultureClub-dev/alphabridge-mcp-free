@@ -20,8 +20,11 @@
  * option upload_path, a network of sites), the attachments lock
  * (attachment:uploads_by_code).
  *
- * PATH RULES: relative, no "..", no absolute start, no NUL, backslash or
- * control character; an existing file is resolved with realpath() under the
+ * PATH RULES: relative, no "..", no absolute start, no scheme of a stream
+ * wrapper, no NUL, backslash or control character, each stored name asked
+ * before any function of a path or of the file system sees it (path_join()
+ * is not called: its path_is_absolute() asks a stream wrapper with
+ * is_dir()); an existing file is resolved with realpath() under the
  * resolved basedir, with no symbolic link on the way, and must be a regular
  * file. A path that breaks a rule locks the attachment
  * (attachment:unsafe_path), a listed file that is not there as well
@@ -45,6 +48,9 @@ final class AB_MCP_Sync_Media {
 
 	/** The keys of the metadata whose text names one file beside the main one. */
 	const COMPANIONS = array( 'original_image', 'source_image', 'animated_video', 'animated_video_poster' );
+
+	/** The scheme of a stream wrapper (s3:, phar:, data:): no path of the uploads. */
+	const SCHEME = '/^[a-z][a-z0-9+.-]*:/i';
 
 	/** The meta keys the list is read from. */
 	const META_KEYS = array( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes' );
@@ -96,19 +102,24 @@ final class AB_MCP_Sync_Media {
 			}
 			$path = trim( (string) $value );
 		}
-		// realpath() in path_join() refuses a NUL with an error.
-		if ( false !== strpos( $path, "\0" ) ) {
+		// Before any function of a path sees it: no NUL, control character
+		// or backslash, no scheme of a stream wrapper (path_is_absolute()
+		// in path_join() would ask the wrapper with is_dir()).
+		if ( self::bad_bytes( $path ) || 1 === preg_match( self::SCHEME, $path ) ) {
 			return self::uploads_problem( 'unsafe', 'upload_path' );
 		}
 		if ( '' === $path || 'wp-content/uploads' === $path ) {
 			$dir = WP_CONTENT_DIR . '/uploads';
 		} elseif ( ! str_starts_with( $path, ABSPATH ) ) {
-			$dir = path_join( ABSPATH, $path );
+			$dir = self::join( ABSPATH, $path );
 		} else {
 			$dir = $path;
 		}
 		if ( defined( 'UPLOADS' ) ) {
 			$dir = ABSPATH . UPLOADS;
+		}
+		if ( 1 === preg_match( self::SCHEME, (string) $dir ) ) {
+			return self::uploads_problem( 'unsafe', 'uploads' );
 		}
 		return array(
 			'dir'     => (string) $dir,
@@ -133,8 +144,9 @@ final class AB_MCP_Sync_Media {
 		$files    = array();
 		$problems = array();
 		// An empty or absolute _wp_attached_file names no file of the
-		// uploads, or a place of this site only.
-		if ( '' === $attached || self::bad_bytes( $attached ) || str_starts_with( $attached, '/' ) || preg_match( '|^.:\\\\|', $attached ) ) {
+		// uploads, or a place of this site only; a scheme, "..", a NUL, a
+		// control character or a backslash none either (plain_name()).
+		if ( ! self::plain_name( $attached ) ) {
 			return array(
 				'files'    => array(),
 				'problems' => array(
@@ -152,8 +164,10 @@ final class AB_MCP_Sync_Media {
 		$meta = is_array( $meta ) ? $meta : array();
 
 		// Each name as the core puts it beside the file (str_replace() of its
-		// name); a name with bytes no path may hold is a problem before any
-		// path function sees it (realpath() refuses a NUL with an error).
+		// name); a name that is not plain (plain_name()) is a problem before
+		// any function of a path or of the file system sees it. The paths
+		// are joined as path_join() joins them (join()), without asking the
+		// file system.
 		$beside = array();
 		if ( ! empty( $meta['thumb'] ) && is_string( $meta['thumb'] ) ) {
 			$beside['thumb'] = $meta['thumb'];
@@ -171,7 +185,7 @@ final class AB_MCP_Sync_Media {
 			}
 		}
 		foreach ( $beside as $role => $name ) {
-			if ( self::bad_bytes( $name ) ) {
+			if ( ! self::plain_name( $name ) ) {
 				$problems[] = array(
 					'path'    => '',
 					'role'    => (string) $role,
@@ -179,16 +193,16 @@ final class AB_MCP_Sync_Media {
 				);
 				continue;
 			}
-			self::add( $files, $problems, path_join( $basedir, str_replace( $base, $name, $file ) ), (string) $role, $basedir );
+			self::add( $files, $problems, self::join( $basedir, str_replace( $base, $name, $file ) ), (string) $role, $basedir );
 		}
 		if ( is_array( $backup ) ) {
 			$dir = isset( $meta['file'] ) && is_string( $meta['file'] ) ? $meta['file'] : '';
-			$dir = self::bad_bytes( $dir ) ? null : dirname( $dir );
+			$dir = self::plain_name( $dir ) ? dirname( $dir ) : null;
 			foreach ( $backup as $name => $size ) {
 				if ( ! is_array( $size ) || ! isset( $size['file'] ) || ! is_string( $size['file'] ) || '' === $size['file'] ) {
 					continue;
 				}
-				if ( null === $dir || self::bad_bytes( $size['file'] ) ) {
+				if ( null === $dir || ! self::plain_name( $size['file'] ) ) {
 					$problems[] = array(
 						'path'    => '',
 						'role'    => 'backup:' . $name,
@@ -196,7 +210,7 @@ final class AB_MCP_Sync_Media {
 					);
 					continue;
 				}
-				self::add( $files, $problems, path_join( $basedir, path_join( $dir, $size['file'] ) ), 'backup:' . $name, $basedir );
+				self::add( $files, $problems, self::join( $basedir, self::join( $dir, $size['file'] ) ), 'backup:' . $name, $basedir );
 			}
 		}
 		self::add( $files, $problems, $file, 'file', $basedir );
@@ -471,6 +485,38 @@ final class AB_MCP_Sync_Media {
 	 */
 	private static function bad_bytes( $text ) {
 		return 1 === preg_match( '/[\x00-\x1F\x7F\\\\]/', (string) $text );
+	}
+
+	/**
+	 * Whether a stored name may go into a path at all: not empty, no scheme
+	 * of a stream wrapper, no NUL, control character or backslash, not
+	 * absolute, no "..". Asked before any function of a path or of the file
+	 * system sees the name.
+	 *
+	 * @param string $name Name as stored.
+	 * @return bool
+	 */
+	private static function plain_name( $name ) {
+		$name = (string) $name;
+		if ( '' === $name || self::bad_bytes( $name ) || '/' === $name[0] || 1 === preg_match( self::SCHEME, $name ) ) {
+			return false;
+		}
+		return ! in_array( '..', explode( '/', $name ), true );
+	}
+
+	/**
+	 * path_join() for paths plain_name() let through, or that start with
+	 * the uploads folder: an absolute path stays, any other is put below
+	 * the base. Without path_is_absolute(), which asks the file system
+	 * (realpath(), is_dir() of a stream).
+	 *
+	 * @param string $base Base.
+	 * @param string $path Path.
+	 * @return string
+	 */
+	private static function join( $base, $path ) {
+		$path = (string) $path;
+		return '' !== $path && '/' === $path[0] ? $path : rtrim( (string) $base, '/' ) . '/' . $path;
 	}
 
 	/**

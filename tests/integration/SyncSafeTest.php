@@ -45,6 +45,22 @@ final class SyncSafeWakeupProbe {
 	}
 }
 
+/**
+ * A stream wrapper that counts the questions the file system functions ask it.
+ */
+final class SyncSafeProbeStream {
+	/** @var int */
+	public static $asked = 0;
+
+	/** @var resource|null */
+	public $context;
+
+	public function url_stat( $path, $flags ) {
+		++self::$asked;
+		return false;
+	}
+}
+
 final class SyncSafeTest extends TestCase {
 
 	protected function setUp(): void {
@@ -229,9 +245,11 @@ final class SyncSafeTest extends TestCase {
 		$cases = array(
 			serialize( new SyncSafeWakeupProbe() ) => 'php_object',
 			'a:1:{i:0;s:1:"x";}'                    => 'unreadable',
-			'a:1:{i:0;s:1:"x"'                      => '',
+			'a:1:{i:0;s:1:"x"'                      => 'unsafe', // Not serialized; "a:" reads as a scheme.
 			's:9:"kaputt";'                         => 'php_object',
 			"wp-content/\0nul"                     => 'unsafe',
+			'wp-content\\anders'                    => 'unsafe',
+			'C:/uploads'                            => 'unsafe',
 		);
 		foreach ( $cases as $value => $problem ) {
 			self::set_option( 'upload_path', (string) $value );
@@ -252,6 +270,21 @@ final class SyncSafeTest extends TestCase {
 		SyncSafeWakeupProbe::$woken = 0;
 		self::assertSame( $clean, AB_MCP_Sync_Media::uploads() );
 		self::assertSame( 0, SyncSafeWakeupProbe::$woken );
+	}
+
+	public function testAnUploadPathOfAStreamWrapperReachesNoWrapper(): void {
+		stream_wrapper_register( 'reviewprobe', SyncSafeProbeStream::class );
+		SyncSafeProbeStream::$asked = 0;
+		try {
+			self::set_option( 'upload_path', 'reviewprobe://host/uploads' );
+			wp_cache_flush();
+			$uploads = AB_MCP_Sync_Media::uploads();
+			$asked   = SyncSafeProbeStream::$asked;
+		} finally {
+			stream_wrapper_unregister( 'reviewprobe' );
+		}
+		self::assertSame( 0, $asked, 'No url_stat() before the lock.' );
+		self::assertSame( array( 'dir' => '', 'problem' => 'unsafe', 'cause' => 'upload_path' ), $uploads );
 	}
 
 	public function testWhereCodeDecidesTheUploadsFolderTheAttachmentsLock(): void {
