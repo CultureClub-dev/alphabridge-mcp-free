@@ -43,10 +43,41 @@ export AB_IT_DB_HOST="127.0.0.1:$db_port" AB_IT_DB_USER=root AB_IT_DB_PASSWORD='
 datadir="$root/db"
 pidfile="$root/run/mariadbd.pid"
 
+# db_pid: the PID of this suite's MariaDB from the PID file, or nothing. The
+# data directory on its command line is compared by identity (-ef), so another
+# spelling of AB_IT_ROOT neither misses this server nor hits another one. A PID
+# that went to another program (after a restart, say) makes the file stale; a
+# MariaDB of another data directory stops the script, its file kept.
+db_pid() {
+	[ -f "$pidfile" ] || return 0
+	local pid command started
+	pid=$(cat "$pidfile")
+	if ! kill -0 "$pid" 2>/dev/null; then
+		rm -f "$pidfile"
+		return 0
+	fi
+	command=$(ps -ww -p "$pid" -o command= || true)
+	case "$command" in
+	*mariadbd*" --datadir="*" --port="*) started=${command#* --datadir=}; started=${started%% --port=*} ;;
+	*)
+		echo "local: pid $pid is no MariaDB any more; its file was stale" >&2
+		rm -f "$pidfile"
+		return 0
+		;;
+	esac
+	if ! [ "$started" -ef "$datadir" ]; then
+		echo "local: pid $pid is the MariaDB of $started, not of $datadir; left alone, $pidfile kept" >&2
+		exit 1
+	fi
+	echo "$pid"
+}
+
 db_up() {
 	mkdir -p "$root/run" "$root/log"
-	if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-		echo "local: MariaDB already runs (pid $(cat "$pidfile"))"
+	local running
+	running=$(db_pid)
+	if [ -n "$running" ]; then
+		echo "local: MariaDB already runs (pid $running)"
 		return
 	fi
 	if lsof -nP -iTCP:"$db_port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -74,35 +105,16 @@ db_up() {
 }
 
 db_down() {
-	[ -f "$pidfile" ] || return 0
 	local pid
-	pid=$(cat "$pidfile")
+	pid=$(db_pid)
+	[ -n "$pid" ] || return 0
+	kill "$pid"
+	for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
 	if kill -0 "$pid" 2>/dev/null; then
-		# Its data directory is compared by identity (-ef): another spelling
-		# of AB_IT_ROOT must neither miss this server nor hit another one.
-		local command started
-		command=$(ps -ww -p "$pid" -o command= || true)
-		case "$command" in
-		*mariadbd*" --datadir="*" --port="*) started=${command#* --datadir=}; started=${started%% --port=*} ;;
-		*)
-			# The PID went to another program: the file is stale.
-			echo "local: pid $pid is no MariaDB any more; left alone"
-			rm -f "$pidfile"
-			return 0
-			;;
-		esac
-		if ! [ "$started" -ef "$datadir" ]; then
-			echo "local: pid $pid is the MariaDB of $started, not of $datadir; left alone, $pidfile kept" >&2
-			exit 1
-		fi
-		kill "$pid"
-		for _ in $(seq 1 60); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "local: MariaDB (pid $pid) did not stop" >&2
-			exit 1
-		fi
-		echo "local: MariaDB stopped (pid $pid)"
+		echo "local: MariaDB (pid $pid) did not stop" >&2
+		exit 1
 	fi
+	echo "local: MariaDB stopped (pid $pid)"
 	rm -f "$pidfile"
 }
 

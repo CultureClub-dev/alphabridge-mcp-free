@@ -102,6 +102,10 @@ if ( ab_it_holds( $repo, $root ) ) {
 // rsync --delete replaces whatever a site directory holds, so neither may
 // hold the working tree or the home directory (checked before anything runs).
 foreach ( array( 'a', 'b' ) as $key ) {
+	// A link would carry rsync --delete to wherever it points.
+	if ( is_link( "$root/site-$key" ) ) {
+		ab_it_fail( "$root/site-$key is a symbolic link; the site directories must be plain directories in AB_IT_ROOT." );
+	}
 	foreach ( array( $repo, (string) getenv( 'HOME' ) ) as $kept ) {
 		if ( '' !== $kept && ab_it_holds( "$root/site-$key", $kept ) ) {
 			ab_it_fail( "$root/site-$key holds $kept; choose another AB_IT_ROOT." );

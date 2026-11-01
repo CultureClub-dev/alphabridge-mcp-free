@@ -26,14 +26,44 @@ field() {
 
 root=$(field root)
 
+# site_pid KEY: the PID of the server of site KEY from its PID file, or
+# nothing. The document root on its command line is compared by identity
+# (-ef); a PID that went to another program makes the file stale; a server of
+# another document root stops the script, its file kept.
+site_pid() {
+	local key=$1 pidfile="$root/run/site-$1.pid" pid docroot command started
+	[ -f "$pidfile" ] || return 0
+	pid=$(cat "$pidfile")
+	if ! kill -0 "$pid" 2>/dev/null; then
+		rm -f "$pidfile"
+		return 0
+	fi
+	docroot=$(field sites "$key" docroot)
+	command=$(ps -ww -p "$pid" -o command= || true)
+	case "$command" in
+	*" -S "*" -t "*" $here/router.php"*) started=${command#* -t }; started=${started%% "$here"/router.php*} ;;
+	*)
+		echo "serve: pid $pid is no server of this suite any more; its file was stale" >&2
+		rm -f "$pidfile"
+		return 0
+		;;
+	esac
+	if ! [ "$started" -ef "$docroot" ]; then
+		echo "serve: pid $pid serves $started, not site $key; left alone, $pidfile kept" >&2
+		exit 1
+	fi
+	echo "$pid"
+}
+
 start() {
 	for key in a b; do
-		local pidfile="$root/run/site-$key.pid" port docroot log
+		local pidfile="$root/run/site-$key.pid" port docroot log running
 		port=$(field sites "$key" port)
 		docroot=$(field sites "$key" docroot)
 		log=$(field sites "$key" server_log)
-		if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-			echo "serve: site $key already runs (pid $(cat "$pidfile"))"
+		running=$(site_pid "$key")
+		if [ -n "$running" ]; then
+			echo "serve: site $key already runs (pid $running)"
 			continue
 		fi
 		PHP_CLI_SERVER_WORKERS=4 php -d opcache.enable=0 -d opcache.enable_cli=0 \
@@ -54,36 +84,17 @@ start() {
 
 stop() {
 	for key in a b; do
-		local pidfile="$root/run/site-$key.pid" pid docroot command children
-		[ -f "$pidfile" ] || continue
-		pid=$(cat "$pidfile")
-		docroot=$(field sites "$key" docroot)
-		if kill -0 "$pid" 2>/dev/null; then
-			# The document root is compared by identity (-ef), not as text.
-			local started
-			command=$(ps -ww -p "$pid" -o command= || true)
-			case "$command" in
-			*" -S "*" -t "*" $here/router.php"*) started=${command#* -t }; started=${started%% "$here"/router.php*} ;;
-			*)
-				# The PID went to another program: the file is stale.
-				echo "serve: pid $pid is no server of this suite any more; left alone"
-				rm -f "$pidfile"
-				continue
-				;;
-			esac
-			if ! [ "$started" -ef "$docroot" ]; then
-				echo "serve: pid $pid serves $started, not site $key; left alone, $pidfile kept" >&2
-				exit 1
-			fi
-			children=$(pgrep -P "$pid" || true)
-			kill "$pid"
-			for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
-			for child in $children; do
-				kill -0 "$child" 2>/dev/null && kill "$child" || true
-			done
-			echo "serve: site $key stopped (pid $pid)"
-		fi
-		rm -f "$pidfile"
+		local pid children
+		pid=$(site_pid "$key")
+		[ -n "$pid" ] || continue
+		children=$(pgrep -P "$pid" || true)
+		kill "$pid"
+		for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
+		for child in $children; do
+			kill -0 "$child" 2>/dev/null && kill "$child" || true
+		done
+		echo "serve: site $key stopped (pid $pid)"
+		rm -f "$root/run/site-$key.pid"
 	done
 }
 
