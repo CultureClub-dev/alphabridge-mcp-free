@@ -1005,11 +1005,14 @@ final class ProtectedStoreTest extends TestCase {
 	/**
 	 * Two requests to site A that open a group at once, made to overlap
 	 * between the count and the creation (the sync of the probe): each
-	 * waits after its count until the other has begun and has counted as
-	 * well, or two seconds have passed. Without the lock both count before
-	 * either creates; with it the second waits at the lock. Both must have
-	 * seen the other begin, or the overlap was not there and the case
-	 * proves nothing.
+	 * notes when it began, counted and went on to create, and after its
+	 * count waits until the other has begun and counted as well, at most
+	 * ten seconds. The order is then read from the notes: the second
+	 * request (the one that counted later) must have begun while the first
+	 * was still waiting, or the case proves nothing and fails as such; and
+	 * it must have counted only after the first went on to create, that is,
+	 * it waited at the lock. Without the lock it counts within milliseconds,
+	 * while the first still waits.
 	 *
 	 * @param string $area   Area.
 	 * @param string $filter The limit read after the count.
@@ -1018,6 +1021,7 @@ final class ProtectedStoreTest extends TestCase {
 	private static function open_at_once( string $area, string $filter ): array {
 		$dir = self::root() . '/run/store-sync-' . bin2hex( random_bytes( 4 ) );
 		mkdir( $dir, 0700 );
+		$at  = array();
 		try {
 			$open = static fn( string $me, string $other ): array => array(
 				'action' => 'open',
@@ -1031,13 +1035,27 @@ final class ProtectedStoreTest extends TestCase {
 				),
 			);
 			$both = self::at_once( array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ) );
+			foreach ( array( 'one', 'two' ) as $me ) {
+				foreach ( array( 'begun', 'counted', 'proceeded' ) as $what ) {
+					$file              = $dir . '/' . $me . '-' . $what;
+					$at[ $me ][ $what ] = is_file( $file ) ? (float) file_get_contents( $file ) : null;
+				}
+			}
 		} finally {
 			foreach ( (array) glob( $dir . '/*' ) as $file ) {
 				unlink( (string) $file );
 			}
 			rmdir( $dir );
 		}
-		self::assertSame( array( true, true ), array_column( $both, 'saw' ), 'The two requests overlapped: each saw the other begin.' );
+		foreach ( $at as $me => $notes ) {
+			foreach ( $notes as $what => $time ) {
+				self::assertNotNull( $time, "Request $me noted no '$what'." );
+			}
+		}
+		$first  = $at['one']['counted'] <= $at['two']['counted'] ? 'one' : 'two';
+		$second = 'one' === $first ? 'two' : 'one';
+		self::assertLessThan( $at[ $first ]['proceeded'], $at[ $second ]['begun'], 'No overlap: the second request began only after the first had stopped waiting, so this case proves nothing.' );
+		self::assertGreaterThan( $at[ $first ]['proceeded'], $at[ $second ]['counted'], 'The second request counted before the first went on to create: nothing kept it from counting the same groups.' );
 		$codes = array_map( static fn( $r ) => is_array( $r ) && isset( $r['ok'] ) ? 'ok' : ( $r['error'] ?? 'no answer' ), $both );
 		sort( $codes );
 		return $codes;
