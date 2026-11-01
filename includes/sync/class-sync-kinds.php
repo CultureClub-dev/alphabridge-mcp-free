@@ -222,6 +222,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8c',
 			'reason' => 'A document of a page builder other than the six released block libraries.',
 		),
+		'post:builder_unknown'         => array(
+			'stage'  => 'Z8c',
+			'reason' => 'A plugin registers a reader for a page builder that has no signature here; which posts it built only that reader\'s code tells, so no post is taken over while it is registered.',
+		),
 		'attachment:replace_file'      => array(
 			'stage'  => 'Z8b',
 			'reason' => 'A different file at the path on the live site would be replaced.',
@@ -258,6 +262,10 @@ final class AB_MCP_Sync_Kinds {
 		'attachment:missing_file'      => array(
 			'stage'  => 'Z8b',
 			'reason' => 'A file of the attachment\'s file list is not there.',
+		),
+		'attachment:uploads_by_code'   => array(
+			'stage'  => 'Z8b',
+			'reason' => 'Code decides where the uploads lie (a filter on upload_dir or on the option upload_path, as offload plugins add, or a network of sites): the files are neither compared nor taken over.',
 		),
 		'attachment:unsafe_path'       => array(
 			'stage'  => 'Z8b',

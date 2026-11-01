@@ -143,6 +143,7 @@ final class SyncCanonFormTest extends TestCase {
 		}
 		self::value( $deep, $acc );
 		self::assertSame( array( '*:unreadable_value' ), array_column( $acc['locks'], 'key' ) );
+		self::assertFalse( AB_MCP_Sync_Canon::finish( 'option', 'x', array(), array(), $acc )['complete'], 'Not read to its end: not complete.' );
 
 		$layered = 'x';
 		for ( $i = 0; $i < AB_MCP_Sync_Canon::MAX_LAYERS + 1; $i++ ) {
@@ -150,6 +151,17 @@ final class SyncCanonFormTest extends TestCase {
 		}
 		self::value( $layered, $acc );
 		self::assertSame( array( '*:unreadable_value' ), array_column( $acc['locks'], 'key' ) );
+		self::assertFalse( AB_MCP_Sync_Canon::finish( 'option', 'x', array(), array(), $acc )['complete'] );
+	}
+
+	public function testAPlaceTooDeepWithoutAKindLocksWhenTheObjectIsFinished(): void {
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::too_deep( $acc, 'meta:x' );
+		AB_MCP_Sync_Canon::too_deep( $acc, 'meta:x' );
+		self::assertSame( array(), $acc['locks'] );
+		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
+		self::assertSame( array( array( '*:unreadable_value', 'meta:x' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ) );
+		self::assertSame( array( 'depth:meta:x' ), $result['unread'] );
 	}
 
 	/* --------------------------------------------------------- encoding */

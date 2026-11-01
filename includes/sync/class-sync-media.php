@@ -12,8 +12,13 @@
  * The paths are worked out as the core does (the same str_replace() of the
  * file name, the backups beside the dirname of the metadata's file), from
  * the stored meta rows and not through get_attached_file() or
- * wp_get_attachment_metadata(), whose filters replace values; the uploads
- * folder is wp_get_upload_dir()'s, the one the core deletes in.
+ * wp_get_attachment_metadata(), whose filters replace values. The uploads
+ * folder is the basedir the core deletes in, worked out by uploads() from
+ * the stored row of upload_path and the constants as _wp_upload_dir() does
+ * (wp-includes/functions.php:2467-2497, 2544): no function of WordPress reads a
+ * value for it. Where code decides it (a filter on upload_dir or on the
+ * option upload_path, a network of sites), the attachments lock
+ * (attachment:uploads_by_code).
  *
  * PATH RULES: relative, no "..", no absolute start, no NUL, backslash or
  * control character; an existing file is resolved with realpath() under the
@@ -32,7 +37,6 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-rows.php';
 require_once __DIR__ . '/class-sync-canon.php';
-require_once __DIR__ . '/class-sync-safe.php';
 
 /**
  * Class AB_MCP_Sync_Media
@@ -44,6 +48,74 @@ final class AB_MCP_Sync_Media {
 
 	/** The meta keys the list is read from. */
 	const META_KEYS = array( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes' );
+
+	/**
+	 * The hooks through which code changes the basedir of wp_upload_dir():
+	 * its filter, and the filters get_option() and wp_load_alloptions() run
+	 * on the option upload_path (wp-includes/option.php).
+	 */
+	const UPLOAD_HOOKS = array( 'upload_dir', 'pre_option_upload_path', 'pre_option', 'default_option_upload_path', 'option_upload_path', 'pre_wp_load_alloptions', 'pre_cache_alloptions', 'alloptions' );
+
+	/**
+	 * The uploads folder of this site as wp_upload_dir() gives its basedir,
+	 * worked out from the stored row of upload_path and the constants as
+	 * _wp_upload_dir() of WordPress 7.1.3 does on a single site: an empty
+	 * upload_path or wp-content/uploads is WP_CONTENT_DIR/uploads, a path
+	 * that does not start with ABSPATH is joined to it, UPLOADS replaces
+	 * all of it. The value of the row is read raw and unpacked without
+	 * classes; get_option() would trim it after maybe_unserialize().
+	 *
+	 * @return array{dir:string,problem:string,cause:string} problem: '' (dir
+	 *         is the folder), by_code (cause names the hook, or multisite),
+	 *         php_object, unreadable or unsafe (cause upload_path).
+	 */
+	public static function uploads() {
+		if ( is_multisite() ) {
+			return self::uploads_problem( 'by_code', 'multisite' );
+		}
+		foreach ( self::UPLOAD_HOOKS as $hook ) {
+			if ( has_filter( $hook ) ) {
+				return self::uploads_problem( 'by_code', 'filter:' . $hook );
+			}
+		}
+		$row = AB_MCP_Sync_Rows::option( 'upload_path' );
+		if ( null === $row ) {
+			return self::uploads_problem( 'unreadable', 'upload_path' );
+		}
+		$path = '';
+		if ( is_array( $row ) ) {
+			$read = AB_MCP_Sync_Canon::unserialized( $row['value'] );
+			if ( ! $read['ok'] && 'php_object' === $read['why'] ) {
+				return self::uploads_problem( 'php_object', 'upload_path' );
+			}
+			// A text that does not unpack is false for maybe_unserialize(),
+			// '' for trim(); an array is no path (trim() refuses it).
+			$value = $read['ok'] ? $read['value'] : false;
+			if ( ! is_scalar( $value ) && null !== $value ) {
+				return self::uploads_problem( 'unreadable', 'upload_path' );
+			}
+			$path = trim( (string) $value );
+		}
+		// realpath() in path_join() refuses a NUL with an error.
+		if ( false !== strpos( $path, "\0" ) ) {
+			return self::uploads_problem( 'unsafe', 'upload_path' );
+		}
+		if ( '' === $path || 'wp-content/uploads' === $path ) {
+			$dir = WP_CONTENT_DIR . '/uploads';
+		} elseif ( ! str_starts_with( $path, ABSPATH ) ) {
+			$dir = path_join( ABSPATH, $path );
+		} else {
+			$dir = $path;
+		}
+		if ( defined( 'UPLOADS' ) ) {
+			$dir = ABSPATH . UPLOADS;
+		}
+		return array(
+			'dir'     => (string) $dir,
+			'problem' => '',
+			'cause'   => '',
+		);
+	}
 
 	/**
 	 * The paths of an attachment's files as wp_delete_attachment_files() works
@@ -151,16 +223,29 @@ final class AB_MCP_Sync_Media {
 			}
 			$raw[ $key ] = array() === $values ? '' : $values[0];
 		}
-		$basedir = AB_MCP_Sync_Safe::upload_basedir();
-		if ( null === $basedir || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
-			// The uploads settings or the file name hold an object (or could
-			// not be read): no folder to list in.
+		$uploads = self::uploads();
+		if ( '' !== $uploads['problem'] ) {
+			// No folder to list in.
 			return array(
 				'files'    => array(),
 				'problems' => array(
 					array(
 						'path'    => '',
-						'role'    => null === $basedir ? 'uploads' : 'file',
+						'role'    => 'uploads',
+						'problem' => $uploads['problem'],
+						'cause'   => $uploads['cause'],
+					),
+				),
+			);
+		}
+		$basedir = $uploads['dir'];
+		if ( AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+			return array(
+				'files'    => array(),
+				'problems' => array(
+					array(
+						'path'    => '',
+						'role'    => 'file',
 						'problem' => 'php_object',
 					),
 				),
@@ -203,12 +288,21 @@ final class AB_MCP_Sync_Media {
 				);
 				continue;
 			}
-			$full    = $root . '/' . $entry['path'];
-			$size    = filesize( $full );
-			$hash    = hash_file( 'sha256', $full );
+			$full = $root . '/' . $entry['path'];
+			$size = @filesize( $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed measurement is answered below.
+			$hash = @hash_file( 'sha256', $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- as above.
+			// A file that cannot be measured is not known: it locks.
+			if ( false === $size || false === $hash ) {
+				$list['problems'][] = array(
+					'path'    => $entry['path'],
+					'role'    => implode( ',', $entry['roles'] ),
+					'problem' => 'unreadable',
+				);
+				continue;
+			}
 			$files[] = $entry + array(
-				'size'   => false === $size ? null : (int) $size,
-				'sha256' => false === $hash ? null : $hash,
+				'size'   => (int) $size,
+				'sha256' => $hash,
 			);
 		}
 		$list['files'] = $files;
@@ -229,7 +323,12 @@ final class AB_MCP_Sync_Media {
 				'php_object' => 'php_object',
 			);
 			$op  = isset( $ops[ $problem['problem'] ] ) ? $ops[ $problem['problem'] ] : 'unsafe_path';
-			AB_MCP_Sync_Canon::lock( $acc, 'attachment', $op, 'file:' . $problem['path'] );
+			$at  = 'file:' . $problem['path'];
+			if ( 'uploads' === $problem['role'] ) {
+				$op = 'by_code' === $problem['problem'] ? 'uploads_by_code' : $op;
+				$at = 'uploads:' . ( isset( $problem['cause'] ) ? $problem['cause'] : '' );
+			}
+			AB_MCP_Sync_Canon::lock( $acc, 'attachment', $op, $at );
 		}
 	}
 
@@ -270,13 +369,14 @@ final class AB_MCP_Sync_Media {
 		if ( null === $ids ) {
 			return null;
 		}
-		$basedir    = AB_MCP_Sync_Safe::upload_basedir();
+		$uploads    = self::uploads();
+		$basedir    = $uploads['dir'];
 		$paths      = array();
 		$unreadable = array();
 		$last       = null;
 		foreach ( $ids as $row ) {
 			$last = $row['ID'];
-			if ( null === $basedir ) {
+			if ( '' !== $uploads['problem'] ) {
 				$unreadable[] = $row['ID'];
 				continue;
 			}
@@ -351,6 +451,19 @@ final class AB_MCP_Sync_Media {
 	}
 
 	/* ---------------------------------------------------------- private */
+
+	/**
+	 * @param string $problem Problem.
+	 * @param string $cause   Cause.
+	 * @return array{dir:string,problem:string,cause:string}
+	 */
+	private static function uploads_problem( $problem, $cause ) {
+		return array(
+			'dir'     => '',
+			'problem' => (string) $problem,
+			'cause'   => (string) $cause,
+		);
+	}
 
 	/**
 	 * @param string $text Part of a path.

@@ -2,11 +2,12 @@
 /**
  * The builder release list of the takeover (AB_MCP_Sync_Builder_Lock, Z8
  * decision 31): released are exactly the six block libraries; every other
- * builder detect_all() names locks the post, and so does a meta marker of
- * the stored rows that get_post_meta() does not show (a filter can add a
- * lock, never take one). The marker rules of signatures.php: the value
- * read as the core reads it (the row with the lowest id), equals, not_in,
- * empty values. Against WordPress itself in tests/integration/SyncLocksTest.php.
+ * builder whose markers the stored rows carry locks the post. The markers
+ * of signatures.php matched on the rows as AB_MCP_Builders matches them on
+ * what WordPress reads: the value of the row with the lowest id, unpacked
+ * without classes, equals, not_in, empty values, unless; no database and no
+ * get_post_meta() is asked. Against detect_all() itself for every signature
+ * in tests/integration/SyncLocksTest.php.
  *
  * @package AlphaBridge_MCP
  */
@@ -15,37 +16,14 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Builders;
 use AB_MCP_Sync_Builder_Lock;
 use AB_MCP_Sync_Canon;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-builder-lock.php';
-
-/**
- * A $wpdb with an options table whose rows a test sets (option name =>
- * value): what the gate of AB_MCP_Sync_Safe reads.
- */
-final class SyncBuilderLockFakeWpdb {
-	public $options     = 'wp_options';
-	public $last_error  = '';
-	public $last_result = array();
-	/** @var array<string,string> */
-	public $rows = array();
-
-	public function prepare( $query, ...$args ) {
-		return array( $query, $args );
-	}
-
-	public function query( $query ) {
-		$name              = is_array( $query ) && isset( $query[1][0] ) ? (string) $query[1][0] : '';
-		$this->last_result = array();
-		if ( isset( $this->rows[ $name ] ) ) {
-			$this->last_result[] = (object) array( 'option_name' => $name, 'option_value' => $this->rows[ $name ], 'autoload' => 'on' );
-		}
-		return count( $this->last_result );
-	}
-}
+require_once __DIR__ . '/FakeBuilderAdapter.php';
 
 final class SyncBuilderLockTest extends TestCase {
 
@@ -54,12 +32,15 @@ final class SyncBuilderLockTest extends TestCase {
 
 	protected function setUp(): void {
 		ab_test_reset();
+		AB_MCP_Builders::reset();
+		// No database: the lock reads only the rows it is given.
 		$this->saved     = $GLOBALS['wpdb'] ?? null;
-		$GLOBALS['wpdb'] = new SyncBuilderLockFakeWpdb();
+		$GLOBALS['wpdb'] = null;
 	}
 
 	protected function tearDown(): void {
 		$GLOBALS['wpdb'] = $this->saved;
+		AB_MCP_Builders::reset();
 	}
 
 	private static function row( string $content = '' ): array {
@@ -105,6 +86,13 @@ final class SyncBuilderLockTest extends TestCase {
 			'divi 5 in the content'     => array( '<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->', array(), array( 'divi5' ) ),
 			'kadence in the content'    => array( '<!-- wp:kadence/rowlayout --><div></div><!-- /wp:kadence/rowlayout -->', array(), array() ),
 			'core blocks'               => array( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->', array(), array() ),
+			'elementor as an int zero'  => array( '', array( array( '_elementor_edit_mode', 'i:0;' ) ), array() ),
+			'elementor with an object'  => array( '', array( array( '_elementor_edit_mode', 'O:8:"stdClass":0:{}' ) ), array( 'elementor' ) ),
+			'elementor broken'          => array( '', array( array( '_elementor_edit_mode', 'a:1:{s:1:"x";}' ) ), array() ),
+			'divi 4 equals an object'   => array( '', array( array( '_et_pb_use_builder', 'O:8:"stdClass":0:{}' ) ), array() ),
+			'divi 4 serialized on'      => array( '', array( array( '_et_pb_use_builder', 's:2:"on";' ) ), array( 'divi4' ) ),
+			'divi 4 in the content'     => array( '[et_pb_section][/et_pb_section]', array(), array( 'divi4' ) ),
+			'divi 4 unless divi 5'      => array( '[et_pb_section][/et_pb_section]<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->', array(), array( 'divi5' ) ),
 		);
 	}
 
@@ -118,22 +106,30 @@ final class SyncBuilderLockTest extends TestCase {
 		self::assertSame( array() === $want ? array() : array( 'post:builder' ), array_values( array_unique( array_column( $acc['locks'], 'key' ) ) ) );
 	}
 
-	public function testAnOptionDetectAllReadsWithAnObjectKeepsItFromBeingAsked(): void {
-		$GLOBALS['wpdb']->rows['template'] = 'O:8:"stdClass":0:{}';
-		$row                               = self::row( '<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->' );
-		self::assertSame( array(), AB_MCP_Sync_Builder_Lock::locked( $row, array() ), 'detect_all() was not asked.' );
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Builder_Lock::note( $acc, $row, array() );
-		self::assertSame( array( array( '*:php_object', 'builder:options' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
-		unset( $GLOBALS['wpdb']->rows['template'] );
-		self::assertSame( array( 'divi5' ), array_column( AB_MCP_Sync_Builder_Lock::locked( $row, array() ), 'id' ), 'Asked once the row is clean.' );
-	}
-
 	public function testAMarkerGetPostMetaDoesNotShowStillLocks(): void {
 		// The stand-in's get_post_meta() knows no meta of post 5 at all:
-		// what detect_all() reads, here as under a filter, is empty.
+		// what WordPress would read, here as under a filter, is empty.
 		self::assertSame( array(), get_post_meta( 5, '_et_pb_use_builder' ) );
 		self::assertSame( array( 'divi4' ), array_column( AB_MCP_Sync_Builder_Lock::locked( self::row(), self::meta( array( array( '_et_pb_use_builder', 'on' ) ) ) ), 'id' ) );
-		self::assertSame( array( 'divi4' => array( 'meta:_et_pb_use_builder' ) ), AB_MCP_Sync_Builder_Lock::stored_markers( self::meta( array( array( '_et_pb_use_builder', 'on' ) ) ) ) );
+		self::assertSame( array( 'meta:_et_pb_use_builder' ), AB_MCP_Sync_Builder_Lock::detected( self::row(), self::meta( array( array( '_et_pb_use_builder', 'on' ) ) ) )['divi4']['detected_by'] );
+	}
+
+	public function testAReaderWithoutASignatureLocksEveryPost(): void {
+		add_filter(
+			'ab_mcp_builder_adapters',
+			static function ( array $list ): array {
+				$list[] = new FakeBuilderAdapter( 'acme-builder' );
+				return $list;
+			}
+		);
+		AB_MCP_Builders::reset();
+		self::assertSame( array( 'acme-builder' ), AB_MCP_Sync_Builder_Lock::unknown() );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Builder_Lock::note( $acc, self::row( '<p>Text</p>' ), array() );
+		self::assertSame( array( array( 'post:builder_unknown', 'builder:acme-builder', 'Z8c' ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'], $l['stage'] ), $acc['locks'] ) );
+	}
+
+	public function testTheReadersOfThisPluginAllHaveASignature(): void {
+		self::assertSame( array(), AB_MCP_Sync_Builder_Lock::unknown() );
 	}
 }

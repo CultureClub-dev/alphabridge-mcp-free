@@ -34,7 +34,6 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-canon.php';
-require_once __DIR__ . '/class-sync-credentials.php';
 
 /**
  * Class AB_MCP_Sync_Refs
@@ -206,6 +205,9 @@ final class AB_MCP_Sync_Refs {
 	/** How deep blocks may nest. */
 	const MAX_NESTING = 64;
 
+	/** How deep shortcodes inside one another are read. */
+	const MAX_SHORTCODE_NESTING = 8;
+
 	/* ============================================================ canon */
 
 	/**
@@ -251,8 +253,13 @@ final class AB_MCP_Sync_Refs {
 		} else {
 			$inner = AB_MCP_Sync_Canon::json_text( $value );
 		}
-		if ( is_array( $inner ) || is_string( $inner ) ) {
-			self::note_tree( $acc, $inner, (string) $at, $layers + 1, 0 );
+		if ( false === $inner ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $at );
+			return;
+		}
+		// Deeper than it is read: the text's own place is incomplete.
+		if ( ( is_array( $inner ) || is_string( $inner ) ) && ! self::note_tree( $acc, $inner, (string) $at, $layers + 1, 0 ) ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $at );
 		}
 	}
 
@@ -264,18 +271,22 @@ final class AB_MCP_Sync_Refs {
 	 * @param string $at     Where.
 	 * @param int    $layers Texts unpacked above.
 	 * @param int    $depth  Depth.
+	 * @return bool Whether it is read to its end (not deeper than MAX_DEPTH).
 	 */
 	private static function note_tree( array &$acc, $value, $at, $layers, $depth ) {
 		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
-			return;
+			return false;
 		}
 		if ( ! is_array( $value ) ) {
 			self::note_possible( $acc, $value, $at, $layers );
-			return;
+			return true;
 		}
 		foreach ( $value as $key => $item ) {
-			self::note_tree( $acc, $item, $at . '.' . $key, $layers, $depth + 1 );
+			if ( ! self::note_tree( $acc, $item, $at . '.' . $key, $layers, $depth + 1 ) ) {
+				return false;
+			}
 		}
+		return true;
 	}
 
 	/**
@@ -729,10 +740,11 @@ final class AB_MCP_Sync_Refs {
 	 *
 	 * @param string $text  Text.
 	 * @param string $block Block name; '' for classic content.
-	 * @return array{cuts:array,tags:array,possible:array,shortcodes:array}
+	 * @return array{cuts:array,tags:array,possible:array,shortcodes:array,deep:string[]}
 	 *               cuts: the ids of shortcodes; tags: AB_MCP_Sync_Html::tags();
-	 *               shortcodes: each shortcode with its named attributes (the
-	 *               smallest unit of the credential check).
+	 *               shortcodes: each shortcode with its attributes as
+	 *               shortcode_parse_atts() reads them, named and by position;
+	 *               deep: the places nested deeper than they are read.
 	 */
 	public static function text_refs( $text, $block ) {
 		$text = (string) $text;
@@ -744,13 +756,40 @@ final class AB_MCP_Sync_Refs {
 		}
 		$possible = array();
 		$units    = array();
-		self::shortcodes( $text, 0, $cuts, $possible, 0, $units );
+		$deep     = array();
+		self::shortcodes( $text, 0, $cuts, $possible, 0, $units, $deep );
 		return array(
 			'cuts'       => $cuts,
 			'tags'       => $tags,
 			'possible'   => $possible,
 			'shortcodes' => $units,
+			'deep'       => $deep,
 		);
+	}
+
+	/**
+	 * What a text carries that code reads as fields of its own (decision 9):
+	 * the attributes of each block, as the core's WP_Block_Parser reads
+	 * them, and of each shortcode, in classic text and in the HTML of the
+	 * blocks, as shortcode_parse_atts() reads them (named and by position).
+	 * The walk of AB_MCP_Sync_Credentials goes on in them.
+	 *
+	 * @param string $text Text.
+	 * @return array{items:array<int,array{at:string,value:array}>,deep:bool}
+	 */
+	public static function embedded( $text ) {
+		$text = (string) $text;
+		$out  = array(
+			'items' => array(),
+			'deep'  => false,
+		);
+		if ( false !== strpos( $text, '<!-- wp:' ) ) {
+			$parser = new WP_Block_Parser();
+			self::embedded_blocks( $parser->parse( $text ), $out, 0 );
+		} elseif ( false !== strpos( $text, '[' ) ) {
+			self::embedded_shortcodes( $text, $out );
+		}
+		return $out;
 	}
 
 	/**
@@ -799,7 +838,7 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function canon_blocks( array $blocks, array $ctx, array &$acc, $kind, $at, $depth ) {
 		if ( $depth > self::MAX_NESTING ) {
-			AB_MCP_Sync_Canon::lock( $acc, $kind, 'unreadable_value', $at );
+			AB_MCP_Sync_Canon::too_deep( $acc, $at, $kind );
 			return array();
 		}
 		$out = array();
@@ -807,12 +846,6 @@ final class AB_MCP_Sync_Refs {
 			$name  = isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : null;
 			$attrs = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
 			$where = $at . ':' . ( null === $name ? 'html' : $name );
-			// Decision 9: the attributes of each block are a unit of the
-			// credential check, recursively (JSON and serialized texts in
-			// them as well), released block libraries included.
-			if ( array() !== $attrs ) {
-				AB_MCP_Sync_Credentials::note( $acc, $kind, $where, AB_MCP_Sync_Credentials::unit( '', $attrs ) );
-			}
 			$parts = array();
 			$i     = 0;
 			foreach ( isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array() as $chunk ) {
@@ -886,10 +919,8 @@ final class AB_MCP_Sync_Refs {
 				'at'    => $at . ':' . $p['at'],
 			);
 		}
-		// Decision 9: the attributes of each shortcode are a unit of the
-		// credential check (a field named like a credential locks).
-		foreach ( $found['shortcodes'] as $unit ) {
-			AB_MCP_Sync_Credentials::note( $acc, $kind, $at . ':shortcode:' . $unit['tag'], AB_MCP_Sync_Credentials::unit( '', $unit['atts'] ) );
+		foreach ( $found['deep'] as $deep ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':' . $deep, $kind );
 		}
 		return AB_MCP_Sync_Canon::text( $text, $ctx, $cuts );
 	}
@@ -1132,14 +1163,25 @@ final class AB_MCP_Sync_Refs {
 	 * The shortcodes of a text, with their nested ones: references of
 	 * SHORTCODES as cuts, every other whole number of an attribute possible.
 	 *
+	 * The attributes are read as the shortcode reads them, with the core's
+	 * shortcode_parse_atts() (stripcslashes(), the values by position as
+	 * well); the cuts of SHORTCODES come from the same pairs found with
+	 * their offsets in the stored text.
+	 *
 	 * @param string $text     Text.
 	 * @param int    $base     Offset of $text in the whole.
 	 * @param array  $cuts     Cuts found.
 	 * @param array  $possible Possible references found.
 	 * @param int    $depth    Nesting.
+	 * @param array  $units    Each shortcode: tag, atts.
+	 * @param array  $deep     Places nested deeper than MAX_SHORTCODE_NESTING.
 	 */
-	private static function shortcodes( $text, $base, array &$cuts, array &$possible, $depth, array &$units = array() ) {
-		if ( $depth > 8 || false === strpos( $text, '[' ) || ! preg_match_all( '/\[\/?([A-Za-z0-9_-]+)/', $text, $tags ) ) {
+	private static function shortcodes( $text, $base, array &$cuts, array &$possible, $depth, array &$units, array &$deep ) {
+		if ( false === strpos( $text, '[' ) || ! preg_match_all( '/\[\/?([A-Za-z0-9_-]+)/', $text, $tags ) ) {
+			return;
+		}
+		if ( $depth > self::MAX_SHORTCODE_NESTING ) {
+			$deep[] = 'shortcode@' . $base;
 			return;
 		}
 		$names = array_values( array_unique( $tags[1] ) );
@@ -1163,38 +1205,53 @@ final class AB_MCP_Sync_Refs {
 				},
 				$atts
 			);
-			$named = array();
+			$typed = array();
 			if ( preg_match_all( get_shortcode_atts_regex(), $atts, $pairs, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 				foreach ( $pairs as $pair ) {
 					foreach ( array( 1, 3, 5 ) as $g ) {
-						if ( isset( $pair[ $g ] ) && '' !== $pair[ $g ][0] && -1 !== $pair[ $g ][1] ) {
-							$named[ strtolower( $pair[ $g ][0] ) ] = $pair[ $g + 1 ][0];
-							self::shortcode_attr( $tag, strtolower( $pair[ $g ][0] ), $pair[ $g + 1 ][0], $start + (int) $pair[ $g + 1 ][1], $cuts, $possible );
+						if ( isset( $pair[ $g ] ) && '' !== $pair[ $g ][0] && -1 !== $pair[ $g ][1] && self::shortcode_cut( $tag, strtolower( $pair[ $g ][0] ), $pair[ $g + 1 ][0], $start + (int) $pair[ $g + 1 ][1], $cuts ) ) {
+							$typed[ strtolower( $pair[ $g ][0] ) ] = true;
 						}
+					}
+				}
+			}
+			// Every attribute as the shortcode reads it: a whole number in
+			// one without a schema is possible, named or by position.
+			$parsed = shortcode_parse_atts( (string) $m[3][0] );
+			$parsed = is_array( $parsed ) ? $parsed : array();
+			foreach ( $parsed as $name => $value ) {
+				if ( ! isset( $typed[ $name ] ) && ! ( isset( self::SHORTCODE_PLAIN[ $tag ] ) && in_array( $name, self::SHORTCODE_PLAIN[ $tag ], true ) ) ) {
+					$found = AB_MCP_Sync_Canon::acc();
+					self::note_possible( $found, $value, 'shortcode:' . $tag . '.' . $name );
+					foreach ( $found['possible'] as $p ) {
+						$possible[] = $p;
+					}
+					foreach ( $found['deep'] as $d ) {
+						$deep[] = $d;
 					}
 				}
 			}
 			$units[] = array(
 				'tag'  => $tag,
-				'atts' => $named,
+				'atts' => $parsed,
 			);
 			if ( isset( $m[5] ) && '' !== $m[5][0] && -1 !== $m[5][1] ) {
-				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $cuts, $possible, $depth + 1, $units );
+				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $cuts, $possible, $depth + 1, $units, $deep );
 			}
 		}
 	}
 
 	/**
-	 * One attribute of a shortcode.
+	 * A reference of SHORTCODES in one attribute, as a cut.
 	 *
-	 * @param string $tag      Tag.
-	 * @param string $name     Attribute.
-	 * @param string $value    Value.
-	 * @param int    $at       Offset of the value.
-	 * @param array  $cuts     Cuts.
-	 * @param array  $possible Possible references.
+	 * @param string $tag   Tag.
+	 * @param string $name  Attribute.
+	 * @param string $value Value as stored.
+	 * @param int    $at    Offset of the value.
+	 * @param array  $cuts  Cuts.
+	 * @return bool Whether the attribute is a reference of SHORTCODES.
 	 */
-	private static function shortcode_attr( $tag, $name, $value, $at, array &$cuts, array &$possible ) {
+	private static function shortcode_cut( $tag, $name, $value, $at, array &$cuts ) {
 		$type = isset( self::SHORTCODES[ $tag ][ $name ] ) ? self::SHORTCODES[ $tag ][ $name ] : '';
 		if ( 'post_list' === $type && preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $hit ) {
@@ -1206,7 +1263,7 @@ final class AB_MCP_Sync_Refs {
 					'role'  => 'shortcode:' . $tag . '.' . $name,
 				);
 			}
-			return;
+			return true;
 		}
 		if ( 'attachment_id' === $type && preg_match( '/^attachment_(\d+)\z/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
 			$cuts[] = array(
@@ -1216,17 +1273,65 @@ final class AB_MCP_Sync_Refs {
 				'id'    => (int) $m[1][0],
 				'role'  => 'shortcode:' . $tag . '.' . $name,
 			);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * The attributes of blocks for embedded(), and the shortcodes in their
+	 * HTML.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @param array $out    Answer of embedded().
+	 * @param int   $depth  Nesting.
+	 */
+	private static function embedded_blocks( array $blocks, array &$out, $depth ) {
+		if ( $depth > self::MAX_NESTING ) {
+			$out['deep'] = true;
 			return;
 		}
-		if ( isset( self::SHORTCODE_PLAIN[ $tag ] ) && in_array( $name, self::SHORTCODE_PLAIN[ $tag ], true ) ) {
-			return;
+		foreach ( $blocks as $block ) {
+			$name = isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : 'html';
+			if ( isset( $block['attrs'] ) && is_array( $block['attrs'] ) && array() !== $block['attrs'] ) {
+				$out['items'][] = array(
+					'at'    => 'block:' . $name,
+					'value' => $block['attrs'],
+				);
+			}
+			foreach ( isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array() as $chunk ) {
+				if ( is_string( $chunk ) ) {
+					self::embedded_shortcodes( $chunk, $out );
+				}
+			}
+			if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				self::embedded_blocks( $block['innerBlocks'], $out, $depth + 1 );
+			}
 		}
-		// The same scan as for an attribute of a block: a text of digits, and
-		// JSON or serialized text inside, layer by layer.
-		$found = AB_MCP_Sync_Canon::acc();
-		self::note_possible( $found, $value, 'shortcode:' . $tag . '.' . $name );
-		foreach ( $found['possible'] as $p ) {
-			$possible[] = $p;
+	}
+
+	/**
+	 * The shortcodes of a text for embedded().
+	 *
+	 * @param string $text Text.
+	 * @param array  $out  Answer of embedded().
+	 */
+	private static function embedded_shortcodes( $text, array &$out ) {
+		$cuts     = array();
+		$possible = array();
+		$units    = array();
+		$deep     = array();
+		self::shortcodes( (string) $text, 0, $cuts, $possible, 0, $units, $deep );
+		foreach ( $units as $unit ) {
+			if ( array() !== $unit['atts'] ) {
+				$out['items'][] = array(
+					'at'    => 'shortcode:' . $unit['tag'],
+					'value' => $unit['atts'],
+				);
+			}
+		}
+		if ( array() !== $deep ) {
+			$out['deep'] = true;
 		}
 	}
 

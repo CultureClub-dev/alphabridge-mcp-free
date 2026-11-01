@@ -259,6 +259,10 @@ return array(
 			'why'  => 'Documents of page builders other than the six block libraries follow with Z8c.',
 			'plan' => 'Entscheid 31',
 		),
+		'post:builder_unknown'         => array(
+			'why'  => 'A reader for a builder without a signature recognises its pages only with its own code, which reads stored values unchecked: every post waits while one is registered.',
+			'plan' => 'Entscheid 31; Entscheid 11',
+		),
 		'attachment:replace_file'      => array(
 			'why'  => 'No file is overwritten in Z8; another file at the path locks the attachment.',
 			'plan' => 'Entscheid 26',
@@ -296,6 +300,11 @@ return array(
 		'attachment:missing_file'      => array(
 			'why'  => 'A listed file that is missing cannot be packed or compared.',
 			'plan' => 'Entscheid 26 (gelistete, aber fehlende Datei sperrt)',
+		),
+		'attachment:uploads_by_code'   => array(
+			'why'  => 'The uploads folder is worked out from the stored rows as _wp_upload_dir() does it; where a filter or a network decides it, only code knows, and the files lock.',
+			'core' => array( array( 'wp-includes/functions.php', 2429, "\$uploads = apply_filters( 'upload_dir', \$cache[ \$key ] );" ) ),
+			'plan' => 'Entscheid 26; Entscheid 11',
 		),
 		'attachment:unsafe_path'       => array(
 			'why'  => 'Only relative paths under the uploads, without links on the way, to regular files.',

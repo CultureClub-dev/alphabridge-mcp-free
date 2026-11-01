@@ -18,6 +18,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Credentials;
 use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -111,7 +112,11 @@ final class SyncRefsTest extends TestCase {
 			'a navigation link of custom'  => array( '<!-- wp:navigation-link {"id":47,"kind":"custom"} /-->', array( '47@c:core/navigation-link.id' ) ),
 			'another shortcode'            => array( '[contact-form-7 id="48" title="Kontakt"]', array( '48@c:html:shortcode:contact-form-7.id' ) ),
 			'JSON in a plugin attribute'   => array( '<!-- wp:acme/box {"data":"{\\"post\\":52,\\"inner\\":\\"{\\\\\\"target\\\\\\":53}\\"}"} /-->', array( '52@c:acme/box.data.post', '53@c:acme/box.data.inner.target' ) ),
-			'JSON in a shortcode attribute' => array( '[acme_box data=\'{"post":54,"inner":"{\\"target\\":55}"}\']', array( '54@c:html:shortcode:acme_box.data.post', '55@c:html:shortcode:acme_box.data.inner.target' ) ),
+			// As stored: shortcode_parse_atts() takes one level of
+			// backslashes (stripcslashes()), the JSON inside the next.
+			'JSON in a shortcode attribute' => array( '[acme_box data=\'{"post":54,"inner":"{\\\\\\"target\\\\\\":55}"}\']', array( '54@c:html:shortcode:acme_box.data.post', '55@c:html:shortcode:acme_box.data.inner.target' ) ),
+			'JSON escaped in a shortcode'  => array( '[acme_box data=\'{\\"post\\":56}\']', array( '56@c:html:shortcode:acme_box.data.post' ) ),
+			'by position in a shortcode'   => array( '[acme_box \'{"post":57}\' 58]', array( '57@c:html:shortcode:acme_box.0.post', '58@c:html:shortcode:acme_box.1' ) ),
 			'a core shortcode, other attr' => array( '[gallery id="49" columns="3" include="51"]', array( '49@c:html:shortcode:gallery.id', '51@c:html:shortcode:gallery.include' ) ),
 		);
 	}
@@ -122,20 +127,55 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( $want, $possible );
 	}
 
-	public function testTheAttributesOfBlocksAndShortcodesAreUnitsOfTheCredentialCheck(): void {
+	public function testTheAttributesOfBlocksAndShortcodesAreFieldsOfTheCredentialCheck(): void {
 		foreach ( array(
-			'a released block library' => array( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live"}} --><div></div><!-- /wp:kadence/rowlayout -->', 'c:kadence/rowlayout', array( 'settings.api_key' ) ),
-			'a core block'             => array( '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} --><p>x</p><!-- /wp:paragraph -->', 'c:core/paragraph', array( 'metadata.clientSecret' ) ),
-			'JSON in an attribute'     => array( '<!-- wp:acme/box {"data":"{\\"access_token\\":\\"x\\"}"} /-->', 'c:acme/box', array( 'data.access_token' ) ),
-			'an inner block'           => array( '<!-- wp:group --><div><!-- wp:acme/box {"password":"x"} /--></div><!-- /wp:group -->', 'c:acme/box', array( 'password' ) ),
-			'a shortcode'              => array( '<p>[acme_form api_key="sk_live" title="T"]</p>', 'c:html:shortcode:acme_form', array( 'api_key' ) ),
-		) as $what => list( $content, $unit, $fields ) ) {
-			list( , , , $acc ) = self::scan( $content );
-			self::assertSame( array( array( 'unit' => $unit, 'fields' => $fields ) ), $acc['credentials']['mixed'], $what );
-			self::assertSame( array( '*:credential_field' ), array_column( $acc['locks'], 'key' ), $what );
+			'a released block library' => array( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live"}} --><div></div><!-- /wp:kadence/rowlayout -->', array( '[block:kadence/rowlayout].settings.api_key' ) ),
+			'a core block'             => array( '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} --><p>x</p><!-- /wp:paragraph -->', array( '[block:core/paragraph].metadata.clientSecret' ) ),
+			'JSON in an attribute'     => array( '<!-- wp:acme/box {"data":"{\\"access_token\\":\\"x\\"}"} /-->', array( '[block:acme/box].data.access_token' ) ),
+			'an inner block'           => array( '<!-- wp:group --><div><!-- wp:acme/box {"password":"x"} /--></div><!-- /wp:group -->', array( '[block:acme/box].password' ) ),
+			'a shortcode'              => array( '<p>[acme_form api_key="sk_live" title="T"]</p>', array( '[shortcode:acme_form].api_key' ) ),
+			'a shortcode in a block'   => array( '<!-- wp:paragraph --><p>[acme_form token="x"]</p><!-- /wp:paragraph -->', array( '[shortcode:acme_form].token' ) ),
+			'JSON by position'         => array( "[acme '{\"api_key\":\"probe\"}']", array( '[shortcode:acme].0.api_key' ) ),
+			'JSON escaped as stored'   => array( '[acme data=\'{\\"api_key\\":\\"probe\\"}\']', array( '[shortcode:acme].data.api_key' ) ),
+			'a nested shortcode'       => array( '[acme_box][acme_form secret="x"][/acme_box]', array( '[shortcode:acme_form].secret' ) ),
+		) as $what => list( $content, $fields ) ) {
+			self::assertSame( array( 'state' => 'mixed', 'fields' => $fields ), AB_MCP_Sync_Credentials::unit( '', $content, array() ), $what );
 		}
-		list( , , , $acc ) = self::scan( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} --><div></div><!-- /wp:kadence/rowlayout -->' );
-		self::assertSame( array(), $acc['locks'], 'A word about a credential is none.' );
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} --><div></div><!-- /wp:kadence/rowlayout -->', array() )['state'], 'A word about a credential is none.' );
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', 'a[href] { color: red } input[type="password"] { }', array() )['state'], 'CSS with brackets names no field.' );
+	}
+
+	public function testShortcodesNestedDeeperThanTheyAreReadLock(): void {
+		$nest = static function ( int $n ): string {
+			$open  = '';
+			$close = '';
+			for ( $i = 1; $i <= $n; $i++ ) {
+				$open .= '[acme_' . $i . ']';
+				$close = '[/acme_' . $i . ']' . $close;
+			}
+			return $open . 'x' . $close;
+		};
+		$text = $nest( 10 );
+		list( , , , $acc ) = self::scan( $text );
+		self::assertContains( '*:unreadable_value', array_column( $acc['locks'], 'key' ) );
+		self::assertNotSame( array(), $acc['unread'], 'Not complete.' );
+		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
+		self::assertFalse( $result['complete'] );
+		self::assertSame( array( 'state' => 'unreadable', 'fields' => array(), 'why' => 'unreadable_value' ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), 'The credential check is not read to its end either.' );
+		list( , , , $acc ) = self::scan( $nest( 9 ) );
+		self::assertSame( array(), $acc['locks'], 'Nine deep are read.' );
+	}
+
+	public function testJsonInAnAttributeDeeperThanItIsReadLocks(): void {
+		// Objects: a "]" would end the shortcode.
+		$json = '1';
+		for ( $i = 0; $i < AB_MCP_Sync_Canon::MAX_DEPTH + 2; $i++ ) {
+			$json = '{"a":' . $json . '}';
+		}
+		list( , $possible, , $acc ) = self::scan( "[acme_box data='" . $json . "']" );
+		self::assertSame( array(), $possible );
+		self::assertSame( array( '*:unreadable_value' ), array_column( $acc['locks'], 'key' ), 'The numbers below are not read: locked.' );
+		self::assertFalse( AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['complete'] );
 	}
 
 	public function testNumbersInNestedJsonAndSerializedTextsArePossibleReferences(): void {

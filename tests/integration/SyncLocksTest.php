@@ -128,6 +128,52 @@ final class SyncLocksTest extends TestCase {
 		}
 	}
 
+	public function testTheMarkersAreMatchedOnTheRowsAsDetectAllMatchesThem(): void {
+		global $wpdb;
+		// Meta values as stored, for each meta marker of every signature.
+		$values   = array( 'on', 'true', 'builder', 'active', 'enabled', 'bricks', 'off', '', '0', 'i:0;', 'i:1;', 'b:0;', 'a:0:{}', 'a:1:{i:0;i:1;}', 's:2:"on";', 'a:1:{s:1:"x";}', '{"tree_json_string":""}', '{"tree_json_string":"{}"}' );
+		$contents = array( '', '<p>Text</p>', '[vc_row][vc_column]x[/vc_column][/vc_row]', '[et_pb_section][/et_pb_section]', '<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->', '[et_pb_section][/et_pb_section]<!-- wp:divi/section --><div></div><!-- /wp:divi/section -->', '<!-- wp:divi/layout {"x":1} /-->', '[section][row][col]x[/col][/row][/section]', '[fusion_builder_container][/fusion_builder_container]', '[av_section][/av_section]', '<!-- wp:kadence/rowlayout --><div></div><!-- /wp:kadence/rowlayout -->' );
+		$keys     = array();
+		foreach ( \AB_MCP_Builders::signatures() as $sig ) {
+			foreach ( array_merge( $sig['markers'], $sig['unless'] ) as $m ) {
+				if ( isset( $m['meta'] ) ) {
+					$keys[ $m['meta'] ] = true;
+				}
+				if ( isset( $m['content'] ) ) {
+					$contents[] = '<div>' . $m['content'] . '</div>';
+				}
+				if ( isset( $m['content_prefix'] ) ) {
+					$contents[] = $m['content_prefix'] . 'x';
+				}
+			}
+		}
+		$cases = array();
+		foreach ( array_unique( $contents ) as $content ) {
+			$cases[] = array( $content, array() );
+		}
+		foreach ( array_keys( $keys ) as $key ) {
+			foreach ( $values as $value ) {
+				$cases[] = array( '', array( array( $key, $value ) ) );
+			}
+			$cases[] = array( '', array( array( $key, '' ), array( $key, 'on' ) ) );
+		}
+		$seen = array();
+		foreach ( $cases as list( $content, $meta ) ) {
+			$id = self::post( $content );
+			foreach ( $meta as list( $key, $value ) ) {
+				$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $id, 'meta_key' => $key, 'meta_value' => $value ) );
+			}
+			wp_cache_delete( $id, 'post_meta' );
+			$want = array_column( \AB_MCP_Builders::detect_all( get_post( $id ) ), 'id' );
+			$have = array_keys( \AB_MCP_Sync_Builder_Lock::detected( \AB_MCP_Sync_Rows::post( $id ), \AB_MCP_Sync_Rows::meta( 'post', $id ) ) );
+			self::assertSame( $want, $have, wp_json_encode( array( $content, $meta ) ) );
+			foreach ( $want as $builder ) {
+				$seen[ $builder ] = true;
+			}
+		}
+		self::assertGreaterThan( 25, count( $seen ), 'Most signatures were matched at least once: ' . implode( ', ', array_keys( $seen ) ) );
+	}
+
 	/* ------------------------------------------------------ credentials */
 
 	public function testANameOfACredentialIsB9AndAFieldInsideLocks(): void {
@@ -140,6 +186,8 @@ final class SyncLocksTest extends TestCase {
 				'ab_it_fields'     => array( array( 'name' => 'smtp_pass', 'value' => 'pw' ), array( 'name' => 'title', 'value' => 'ok' ) ),
 				'ab_it_harmless'   => array( 'hasPassword' => true, 'token_count' => 3 ),
 				'ab_it_deep'       => str_repeat( '[', 66 ) . '{"api_key":"y"}' . str_repeat( ']', 66 ),
+				// Shortcodes ten deep: only the credential check reads them.
+				'ab_it_nested'     => '[s1][s2][s3][s4][s5][s6][s7][s8][s9][s10 token="y"][/s10][/s9][/s8][/s7][/s6][/s5][/s4][/s3][/s2][/s1]',
 				'ab_it_literal'    => json_encode( json_encode( array( 'api_key' => 'y' ) ) ),
 			)
 		);
@@ -159,11 +207,11 @@ final class SyncLocksTest extends TestCase {
 			$mixed
 		);
 		self::assertSame( array( 'meta:ab_it_fields', 'meta:ab_it_json', 'meta:ab_it_literal', 'meta:ab_it_settings' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:credential_field' === $l['key'] ), 'at' ) );
-		self::assertSame( array( 'meta:ab_it_deep' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:unreadable_value' === $l['key'] ), 'at' ), 'Deeper than the check reads: locked, never clean.' );
+		self::assertSame( array( 'meta:ab_it_deep', 'meta:ab_it_nested' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:unreadable_value' === $l['key'] ), 'at' ), 'Deeper than the check reads: locked, never clean.' );
 
 		// Decision 9 for the attributes of blocks, a released library too.
 		$kadence = self::canon( 'post', self::post( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live_789"}} --><div></div><!-- /wp:kadence/rowlayout -->' ) );
-		self::assertSame( array( array( 'unit' => 'post_content:kadence/rowlayout', 'fields' => array( 'settings.api_key' ) ) ), $kadence['credentials']['mixed'] );
+		self::assertSame( array( array( 'unit' => 'post_content', 'fields' => array( '[block:kadence/rowlayout].settings.api_key' ) ) ), $kadence['credentials']['mixed'] );
 		self::assertSame( array( '*:credential_field' ), array_column( $kadence['locks'], 'key' ) );
 		self::assertStringNotContainsString( 'sk_live_789', json_encode( array( $kadence['credentials'], $kadence['locks'] ) ) );
 
@@ -171,6 +219,24 @@ final class SyncLocksTest extends TestCase {
 		$entry = self::canon( 'option', 'ab_it_service_api_key' );
 		self::assertNull( $entry['hash'], 'A B9 option is never hashed.' );
 		self::assertSame( 'b9', $entry['status'] );
+	}
+
+	public function testTheTextColumnsOfTermsMenuItemsAndCssAreUnitsOfTheCredentialCheck(): void {
+		$mixed = static function ( array $result ): array {
+			return array_column( $result['credentials']['mixed'], 'fields', 'unit' );
+		};
+		$term = wp_insert_term( 'Begriff', 'category', array( 'description' => '[acme_form api_key="sk_live_1"]' ) );
+		self::assertSame( array( 'description' => array( '[shortcode:acme_form].api_key' ) ), $mixed( self::canon( 'term', $term['term_id'] ) ) );
+		$menu = wp_create_nav_menu( 'Menü Zugang' );
+		self::assertSame( array(), $mixed( self::canon( 'menu', $menu ) ) );
+		wp_update_term( $menu, 'nav_menu', array( 'description' => '{"client_secret":"x"}' ) );
+		self::assertSame( array( 'description' => array( 'client_secret' ) ), $mixed( self::canon( 'menu', $menu ) ) );
+		$item = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Link', 'menu-item-url' => 'https://example.test/', 'menu-item-status' => 'publish', 'menu-item-description' => '<!-- wp:acme/box {"token":"x"} /-->' ) );
+		self::assertSame( array( 'post_content' => array( '[block:acme/box].token' ) ), $mixed( self::canon( 'menu_item', $item ) ) );
+		wp_update_custom_css_post( '/* [acme_css password="x"] */ body{color:red}' );
+		$css = self::canon( 'custom_css', get_stylesheet() );
+		self::assertSame( array( 'post_content' => array( '[shortcode:acme_css].password' ) ), $mixed( $css ) );
+		self::assertContains( '*:credential_field', array_column( $css['locks'], 'key' ) );
 	}
 
 	/* ----------------------------------------------- possible reference */
@@ -231,7 +297,7 @@ final class SyncLocksTest extends TestCase {
 		wp_cache_delete( $id, 'post_meta' );
 		$result = self::canon( 'post', $id );
 		self::assertFalse( class_exists( 'AB_IT_Canon_Exploding', false ) );
-		self::assertSame( array( 'builder', 'meta:ab_it_object', 'meta:ab_it_reference' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The rows, and the builders that could not be asked.' );
+		self::assertSame( array( 'meta:ab_it_object', 'meta:ab_it_reference' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The rows.' );
 	}
 
 	/* ------------------------------------- no object made on the way */
@@ -241,7 +307,7 @@ final class SyncLocksTest extends TestCase {
 		SyncWakeupProbe::$woken = 0;
 		$payload                = serialize( new SyncWakeupProbe() );
 		$id                     = self::post( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' );
-		// A marker detect_all() reads through get_post_meta(), holding an object.
+		// A marker WordPress reads through get_post_meta(), holding an object.
 		$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $id, 'meta_key' => '_elementor_edit_mode', 'meta_value' => $payload ) );
 		$wpdb->insert( $wpdb->options, array( 'option_name' => 'ab_it_object_option', 'option_value' => $payload, 'autoload' => 'off' ) );
 		wp_cache_delete( $id, 'post_meta' );
@@ -249,7 +315,8 @@ final class SyncLocksTest extends TestCase {
 
 		$result = self::canon( 'post', $id );
 		self::assertSame( 0, SyncWakeupProbe::$woken, 'The canonical form of the post made no object.' );
-		self::assertContains( 'builder', array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The builders could not be asked: locked.' );
+		self::assertContains( 'meta:_elementor_edit_mode', array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The marker holds an object: locked.' );
+		self::assertSame( array( 'elementor' ), self::builders( $result ), 'An object is set, as get_post_meta() would read it: the marker counts.' );
 
 		$class = AB_MCP_Sync_Option_Schema::classify( 'ab_it_object_option' );
 		self::assertSame( 0, SyncWakeupProbe::$woken, 'Classifying the option made no object.' );

@@ -24,7 +24,9 @@
  *   reference or a record the walk of AB_MCP_Replace_Engine::carries_record()
  *   does not understand, that does not unpack, or that nests deeper than
  *   MAX_DEPTH locks its object (*:php_object, *:unreadable_value): it is
- *   kept as text for the hash and never taken over.
+ *   kept as text for the hash and never taken over. Whatever is not read
+ *   to its end for its depth (too_deep()) makes the object incomplete as
+ *   well (complete false, unread names the place).
  * - A key of a stored array that begins with "~" gets one more "~", so no
  *   stored value reads as a marker.
  * - JSON with sorted keys (lists keep their order, a {"~set":[…]} is sorted
@@ -169,11 +171,32 @@ final class AB_MCP_Sync_Canon {
 			'possible'    => array(),
 			'locks'       => array(),
 			'unread'      => array(),
+			'deep'        => array(),
 			'credentials' => array(
 				'b9'    => array(),
 				'mixed' => array(),
 			),
 		);
+	}
+
+	/**
+	 * Note a place that nests deeper than it is read (MAX_DEPTH,
+	 * MAX_LAYERS, AB_MCP_Sync_Refs::MAX_NESTING): the object is incomplete,
+	 * and finish() locks it there (*:unreadable_value); with a kind at once.
+	 *
+	 * @param array       $acc  Accumulator.
+	 * @param string      $at   Where.
+	 * @param string|null $kind Kind, when known.
+	 */
+	public static function too_deep( array &$acc, $at, $kind = null ) {
+		$at = (string) $at;
+		if ( null !== $kind ) {
+			self::lock( $acc, $kind, 'unreadable_value', $at );
+		}
+		if ( ! isset( $acc['deep'] ) || ! in_array( $at, $acc['deep'], true ) ) {
+			$acc['deep'][]   = $at;
+			$acc['unread'][] = 'depth:' . $at;
+		}
 	}
 
 	/**
@@ -209,6 +232,9 @@ final class AB_MCP_Sync_Canon {
 	 *               possible, locks, credentials, complete, unread.
 	 */
 	public static function finish( $kind, $ref, array $identity, array $form, array $acc ) {
+		foreach ( isset( $acc['deep'] ) ? $acc['deep'] : array() as $at ) {
+			self::lock( $acc, (string) $kind, 'unreadable_value', $at );
+		}
 		$form = array(
 			'canon' => self::VERSION,
 			'kind'  => (string) $kind,
@@ -558,7 +584,7 @@ final class AB_MCP_Sync_Canon {
 			return self::text( $raw, $ctx );
 		}
 		if ( $layer >= self::MAX_LAYERS ) {
-			self::lock( $acc, $kind, 'unreadable_value', $at );
+			self::too_deep( $acc, $at, $kind );
 			return self::text( $raw, $ctx );
 		}
 		$read = self::unserialized( $raw );
@@ -583,7 +609,7 @@ final class AB_MCP_Sync_Canon {
 	 */
 	private static function walk( $value, array $ctx, array &$acc, $kind, $at, $path, $layer, $depth, $leaf ) {
 		if ( $depth > self::MAX_DEPTH ) {
-			self::lock( $acc, $kind, 'unreadable_value', $at );
+			self::too_deep( $acc, $at, $kind );
 			return null;
 		}
 		if ( is_string( $value ) ) {

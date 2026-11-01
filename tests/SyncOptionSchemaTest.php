@@ -18,6 +18,7 @@ use AB_MCP_Option_Guard;
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Exclusions;
 use AB_MCP_Sync_Kinds;
+use AB_MCP_Sync_Option_Name;
 use AB_MCP_Sync_Option_Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -81,5 +82,17 @@ final class SyncOptionSchemaTest extends TestCase {
 
 		self::assertSame( 'home', AB_MCP_Sync_Option_Schema::canonical( AB_MCP_Sync_Option_Schema::CORE['page_on_front'], 'home', $ctx, $acc ) );
 		self::assertSame( array( 'option:off_schema' ), array_column( $acc['locks'], 'key' ) );
+	}
+
+	public function testTheRefusalAsksWhatTheGuardAsksWithoutItsTranslatedMessage(): void {
+		$names = array( 'blogname', 'blogdescription', 'siteurl', 'home', 'active_plugins', 'mailserver_pass', 'my_api_key', 'acme_token', 'ab_mcp_pro_deploy', 'ab_mcp_pro_déploy', 'actiue_plugins', 'auth_salt', 'wp_user_roles', "blog\u{200B}name", str_repeat( 'a', 192 ), str_repeat( 'a', 191 ), 'widget_text', 'theme_mods_twentytwentyfive' );
+		$refused = 0;
+		foreach ( $names as $name ) {
+			$guard = is_wp_error( AB_MCP_Option_Guard::option_write_refused( $name ) );
+			self::assertSame( $guard, AB_MCP_Sync_Option_Name::refused( $name ), $name );
+			$refused += $guard ? 1 : 0;
+		}
+		self::assertGreaterThan( 5, $refused, 'Both answers are asked.' );
+		self::assertLessThan( count( $names ), $refused );
 	}
 }
