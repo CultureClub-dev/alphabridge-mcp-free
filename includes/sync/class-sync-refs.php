@@ -5,11 +5,17 @@
  *
  * A REFERENCE is rewritten only where its schema is known from its name,
  * its path and the type it points to:
- * - attributes of core blocks (BLOCKS), the class wp-image-<id> and the
- *   data-id the save of a core block writes from such an id (HTML), and
- *   the same class in classic content (get_image_tag());
+ * - attributes of core blocks (BLOCKS), the class wp-image-<id> of an
+ *   image in the HTML of every block and of classic content, where the
+ *   core reads it, and the data-id of the gallery (HTML);
  * - the attributes of core shortcodes (SHORTCODES): gallery and playlist
- *   ids, caption id="attachment_<id>";
+ *   ids, caption id="attachment_<id>", decoded as shortcode_parse_atts()
+ *   decodes them;
+ * - only in the plain spelling: a reference whose stored text is not the
+ *   value WordPress reads (escapes, character references, other quotes,
+ *   the attribute twice, an image whose first wp-image-<id> is not its
+ *   class token) locks its object (*:reference_spelling) and is not
+ *   rewritten;
  * - the fields of the kinds' own rows (menu item meta by _menu_item_type,
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
@@ -75,20 +81,17 @@ final class AB_MCP_Sync_Refs {
 	);
 
 	/**
-	 * The HTML the save of a block writes from its id: the class
-	 * wp-image-<id> (image, cover and media-text save, wp-includes/js/dist/
-	 * block-library.js:38075, :23940, :43448; the deprecated gallery, :28659,
-	 * with data-id, :28656), and in classic content the class of
-	 * get_image_tag() (wp-includes/media.php:408): content outside of blocks
-	 * (no block name) and the classic block core/freeform alike.
+	 * The HTML with an id besides the class of an image: the data-id of the
+	 * deprecated gallery (wp-includes/js/dist/block-library.js:28656). The
+	 * class wp-image-<id> is read in the HTML of every block and of content
+	 * outside blocks (html_rules()): the save of image, cover, media-text
+	 * and the deprecated gallery writes it (block-library.js:38075, :23940,
+	 * :43448, :28659), get_image_tag() in classic content
+	 * (wp-includes/media.php:408), and the core reads it wherever an image
+	 * stands in the content (wp_filter_content_tags(), media.php:2009).
 	 */
 	const HTML = array(
-		''                => array( 'class' ),
-		'core/freeform'   => array( 'class' ),
-		'core/image'      => array( 'class' ),
-		'core/cover'      => array( 'class' ),
-		'core/media-text' => array( 'class' ),
-		'core/gallery'    => array( 'class', 'data_id' ),
+		'core/gallery' => array( 'data_id' ),
 	);
 
 	/**
@@ -207,6 +210,9 @@ final class AB_MCP_Sync_Refs {
 
 	/** How deep shortcodes inside one another are read. */
 	const MAX_SHORTCODE_NESTING = 8;
+
+	/** The names of shortcodes as do_shortcode() finds them (wp-includes/shortcodes.php:255). */
+	const SHORTCODE_NAMES = '@\[([^<>&/\[\]\x00-\x20=]++)@';
 
 	/* ============================================================ canon */
 
@@ -744,26 +750,27 @@ final class AB_MCP_Sync_Refs {
 	 *               cuts: the ids of shortcodes; tags: AB_MCP_Sync_Html::tags();
 	 *               shortcodes: each shortcode with its attributes as
 	 *               shortcode_parse_atts() reads them, named and by position;
-	 *               deep: the places nested deeper than they are read.
+	 *               deep: the places nested deeper than they are read;
+	 *               spelling: the references stored in a spelling that is
+	 *               not rewritten as the core reads it (shortcode_ref(),
+	 *               image_spelling()).
 	 */
 	public static function text_refs( $text, $block ) {
 		$text = (string) $text;
-		$cuts = array();
 		$tags = array();
 		$html = self::html_rules( $block );
 		if ( array() !== $html && self::html_api( $text, $html ) ) {
 			$tags = AB_MCP_Sync_Html::tags( $text, $html );
 		}
-		$possible = array();
-		$units    = array();
-		$deep     = array();
-		self::shortcodes( $text, 0, $cuts, $possible, 0, $units, $deep );
+		$found = self::found();
+		self::shortcodes( $text, 0, 0, $found );
 		return array(
-			'cuts'       => $cuts,
+			'cuts'       => $found['cuts'],
 			'tags'       => $tags,
-			'possible'   => $possible,
-			'shortcodes' => $units,
-			'deep'       => $deep,
+			'possible'   => $found['possible'],
+			'shortcodes' => $found['units'],
+			'deep'       => $found['deep'],
+			'spelling'   => array_merge( $found['spelling'], '~shortcodes' === $block ? array() : self::image_spelling( $text, $tags ) ),
 		);
 	}
 
@@ -783,12 +790,11 @@ final class AB_MCP_Sync_Refs {
 			'items' => array(),
 			'deep'  => false,
 		);
-		if ( false !== strpos( $text, '<!-- wp:' ) ) {
-			$parser = new WP_Block_Parser();
-			self::embedded_blocks( $parser->parse( $text ), $out, 0 );
-		} elseif ( false !== strpos( $text, '[' ) ) {
-			self::embedded_shortcodes( $text, $out );
-		}
+		// The core's parser on every text, without a test of ours before
+		// it: what it reads as a block (its comment delimiters in every
+		// spelling it takes) is read here, the rest as freeform text.
+		$parser = new WP_Block_Parser();
+		self::embedded_blocks( $parser->parse( $text ), $out, 0 );
 		return $out;
 	}
 
@@ -797,7 +803,10 @@ final class AB_MCP_Sync_Refs {
 	 * @return string[] The rules of HTML for the block.
 	 */
 	private static function html_rules( $block ) {
-		return isset( self::HTML[ $block ] ) ? self::HTML[ $block ] : array();
+		if ( '~shortcodes' === $block ) {
+			return array();
+		}
+		return array_merge( array( 'class' ), isset( self::HTML[ $block ] ) ? self::HTML[ $block ] : array() );
 	}
 
 	/**
@@ -921,6 +930,9 @@ final class AB_MCP_Sync_Refs {
 		}
 		foreach ( $found['deep'] as $deep ) {
 			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':' . $deep, $kind );
+		}
+		foreach ( $found['spelling'] as $place ) {
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'reference_spelling', $at . ':' . $place );
 		}
 		return AB_MCP_Sync_Canon::text( $text, $ctx, $cuts );
 	}
@@ -1163,25 +1175,27 @@ final class AB_MCP_Sync_Refs {
 	 * The shortcodes of a text, with their nested ones: references of
 	 * SHORTCODES as cuts, every other whole number of an attribute possible.
 	 *
-	 * The attributes are read as the shortcode reads them, with the core's
-	 * shortcode_parse_atts() (stripcslashes(), the values by position as
-	 * well); the cuts of SHORTCODES come from the same pairs found with
-	 * their offsets in the stored text.
+	 * Read as the core reads them: the names as do_shortcode() finds them
+	 * (SHORTCODE_NAMES, every name, registered or not), the attributes with
+	 * the core's shortcode_parse_atts() (stripcslashes(), the values by
+	 * position as well). A reference of SHORTCODES is the decoded value; it
+	 * is cut only where it is stored in the plain spelling (plain_ref(): the
+	 * stored text is the decoded one, the name once), else its place is
+	 * noted in spelling and the object locks (*:reference_spelling).
 	 *
-	 * @param string $text     Text.
-	 * @param int    $base     Offset of $text in the whole.
-	 * @param array  $cuts     Cuts found.
-	 * @param array  $possible Possible references found.
-	 * @param int    $depth    Nesting.
-	 * @param array  $units    Each shortcode: tag, atts.
-	 * @param array  $deep     Places nested deeper than MAX_SHORTCODE_NESTING.
+	 * @param string $text  Text.
+	 * @param int    $base  Offset of $text in the whole.
+	 * @param int    $depth Nesting.
+	 * @param array  $found cuts, possible, units (each shortcode: tag,
+	 *                      atts), deep (places nested deeper than
+	 *                      MAX_SHORTCODE_NESTING), spelling.
 	 */
-	private static function shortcodes( $text, $base, array &$cuts, array &$possible, $depth, array &$units, array &$deep ) {
-		if ( false === strpos( $text, '[' ) || ! preg_match_all( '/\[\/?([A-Za-z0-9_-]+)/', $text, $tags ) ) {
+	private static function shortcodes( $text, $base, $depth, array &$found ) {
+		if ( false === strpos( $text, '[' ) || ! preg_match_all( self::SHORTCODE_NAMES, $text, $tags ) ) {
 			return;
 		}
 		if ( $depth > self::MAX_SHORTCODE_NESTING ) {
-			$deep[] = 'shortcode@' . $base;
+			$found['deep'][] = 'shortcode@' . $base;
 			return;
 		}
 		$names = array_values( array_unique( $tags[1] ) );
@@ -1205,82 +1219,135 @@ final class AB_MCP_Sync_Refs {
 				},
 				$atts
 			);
-			$typed = array();
+			// The named pairs as stored, with their offsets.
+			$stored = array();
 			if ( preg_match_all( get_shortcode_atts_regex(), $atts, $pairs, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 				foreach ( $pairs as $pair ) {
 					foreach ( array( 1, 3, 5 ) as $g ) {
-						if ( isset( $pair[ $g ] ) && '' !== $pair[ $g ][0] && -1 !== $pair[ $g ][1] && self::shortcode_cut( $tag, strtolower( $pair[ $g ][0] ), $pair[ $g + 1 ][0], $start + (int) $pair[ $g + 1 ][1], $cuts ) ) {
-							$typed[ strtolower( $pair[ $g ][0] ) ] = true;
+						if ( isset( $pair[ $g ] ) && '' !== $pair[ $g ][0] && -1 !== $pair[ $g ][1] ) {
+							$stored[ strtolower( $pair[ $g ][0] ) ][] = array( $pair[ $g + 1 ][0], $start + (int) $pair[ $g + 1 ][1] );
 						}
 					}
 				}
 			}
-			// Every attribute as the shortcode reads it: a whole number in
-			// one without a schema is possible, named or by position.
+			// Every attribute as the shortcode reads it.
 			$parsed = shortcode_parse_atts( (string) $m[3][0] );
 			$parsed = is_array( $parsed ) ? $parsed : array();
 			foreach ( $parsed as $name => $value ) {
-				if ( ! isset( $typed[ $name ] ) && ! ( isset( self::SHORTCODE_PLAIN[ $tag ] ) && in_array( $name, self::SHORTCODE_PLAIN[ $tag ], true ) ) ) {
-					$found = AB_MCP_Sync_Canon::acc();
-					self::note_possible( $found, $value, 'shortcode:' . $tag . '.' . $name );
-					foreach ( $found['possible'] as $p ) {
-						$possible[] = $p;
-					}
-					foreach ( $found['deep'] as $d ) {
-						$deep[] = $d;
-					}
+				$type = is_string( $name ) && isset( self::SHORTCODES[ $tag ][ $name ] ) ? self::SHORTCODES[ $tag ][ $name ] : '';
+				$read = '' === $type ? 'other' : self::shortcode_ref( $tag, $name, $type, (string) $value, isset( $stored[ $name ] ) ? $stored[ $name ] : array(), $found );
+				if ( 'other' !== $read || ( isset( self::SHORTCODE_PLAIN[ $tag ] ) && in_array( $name, self::SHORTCODE_PLAIN[ $tag ], true ) ) ) {
+					continue;
+				}
+				// A whole number in an attribute without a schema is possible,
+				// named or by position.
+				$acc = AB_MCP_Sync_Canon::acc();
+				self::note_possible( $acc, $value, 'shortcode:' . $tag . '.' . $name );
+				foreach ( $acc['possible'] as $p ) {
+					$found['possible'][] = $p;
+				}
+				foreach ( $acc['deep'] as $d ) {
+					$found['deep'][] = $d;
 				}
 			}
-			$units[] = array(
+			$found['units'][] = array(
 				'tag'  => $tag,
 				'atts' => $parsed,
 			);
 			if ( isset( $m[5] ) && '' !== $m[5][0] && -1 !== $m[5][1] ) {
-				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $cuts, $possible, $depth + 1, $units, $deep );
+				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $depth + 1, $found );
 			}
 		}
 	}
 
 	/**
-	 * A reference of SHORTCODES in one attribute, as a cut.
+	 * A reference of SHORTCODES, from its decoded value: cut at its stored
+	 * place where the spelling is plain, noted in spelling where it is not.
 	 *
-	 * @param string $tag   Tag.
-	 * @param string $name  Attribute.
-	 * @param string $value Value as stored.
-	 * @param int    $at    Offset of the value.
-	 * @param array  $cuts  Cuts.
-	 * @return bool Whether the attribute is a reference of SHORTCODES.
+	 * @param string $tag    Tag.
+	 * @param string $name   Attribute.
+	 * @param string $type   post_list or attachment_id.
+	 * @param string $value  Decoded (shortcode_parse_atts()).
+	 * @param array  $stored The pairs of this name as stored: [ value, offset ].
+	 * @param array  $found  See shortcodes().
+	 * @return string cut, spelling, or other (no reference: a value of another
+	 *                kind, possible as any other).
 	 */
-	private static function shortcode_cut( $tag, $name, $value, $at, array &$cuts ) {
-		$type = isset( self::SHORTCODES[ $tag ][ $name ] ) ? self::SHORTCODES[ $tag ][ $name ] : '';
-		if ( 'post_list' === $type && preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $m[0] as $hit ) {
-				$cuts[] = array(
-					'at'    => $at + (int) $hit[1],
-					'len'   => strlen( $hit[0] ),
-					'space' => 'post',
-					'id'    => (int) $hit[0],
-					'role'  => 'shortcode:' . $tag . '.' . $name,
-				);
-			}
-			return true;
+	private static function shortcode_ref( $tag, $name, $type, $value, array $stored, array &$found ) {
+		$role = 'shortcode:' . $tag . '.' . $name;
+		$ref  = 'post_list' === $type ? 1 === preg_match( '/\d/', $value ) : 1 === preg_match( '/^attachment_\d+\z/', $value );
+		if ( ! $ref ) {
+			return 'other';
 		}
-		if ( 'attachment_id' === $type && preg_match( '/^attachment_(\d+)\z/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-			$cuts[] = array(
-				'at'    => $at + (int) $m[1][1],
-				'len'   => strlen( $m[1][0] ),
+		if ( 1 !== count( $stored ) || $stored[0][0] !== $value || ! self::plain_ref( $type, $value ) ) {
+			$found['spelling'][] = $role;
+			return 'spelling';
+		}
+		preg_match_all( '/\d+/', $value, $hits, PREG_OFFSET_CAPTURE );
+		foreach ( $hits[0] as $hit ) {
+			$found['cuts'][] = array(
+				'at'    => $stored[0][1] + (int) $hit[1],
+				'len'   => strlen( $hit[0] ),
 				'space' => 'post',
-				'id'    => (int) $m[1][0],
-				'role'  => 'shortcode:' . $tag . '.' . $name,
+				'id'    => (int) $hit[0],
+				'role'  => $role,
 			);
-			return true;
 		}
-		return false;
+		return 'cut';
+	}
+
+	/**
+	 * Whether a reference of SHORTCODES is in the spelling the core writes:
+	 * ids separated by commas (and spaces), attachment_<id>.
+	 *
+	 * @param string $type  post_list or attachment_id.
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	private static function plain_ref( $type, $value ) {
+		return 'post_list' === $type ? 1 === preg_match( '/^ *\d+(?: *, *\d+)* *\z/', $value ) : 1 === preg_match( '/^attachment_\d+\z/', $value );
+	}
+
+	/**
+	 * The img tags whose id the core reads otherwise than the HTML rules
+	 * here: wp_filter_content_tags() takes the first wp-image-<digits>
+	 * anywhere in the stored tag (wp-includes/media.php:1994, :2009), the
+	 * rules only a token of the class, decoded. Where the two do not name
+	 * the same id, the id is not rewritten as the core reads it.
+	 *
+	 * @param string $text Text.
+	 * @param array  $tags AB_MCP_Sync_Html::tags() of it.
+	 * @return string[] Places (img@offset).
+	 */
+	private static function image_spelling( $text, array $tags ) {
+		if ( false === stripos( $text, 'wp-image-' ) || ! preg_match_all( '/<(img|iframe)\s[^>]+>/', $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			return array();
+		}
+		$ours = array();
+		foreach ( $tags as $tag ) {
+			foreach ( $tag['ids'] as $id ) {
+				if ( 'class' === $id['rule'] ) {
+					$ours[ (int) $tag['at'] ] = (int) $id['id'];
+					break;
+				}
+			}
+		}
+		$out = array();
+		foreach ( $all as $m ) {
+			if ( 'img' !== $m[1][0] || ! preg_match( '/wp-image-([0-9]+)/i', $m[0][0], $id ) || 0 === (int) $id[1] ) {
+				continue;
+			}
+			$at = (int) $m[0][1];
+			if ( ! isset( $ours[ $at ] ) || (int) $id[1] !== $ours[ $at ] ) {
+				$out[] = 'img@' . $at;
+			}
+		}
+		return $out;
 	}
 
 	/**
 	 * The attributes of blocks for embedded(), and the shortcodes in their
-	 * HTML.
+	 * HTML (freeform text included).
 	 *
 	 * @param array $blocks Parsed blocks.
 	 * @param array $out    Answer of embedded().
@@ -1317,12 +1384,9 @@ final class AB_MCP_Sync_Refs {
 	 * @param array  $out  Answer of embedded().
 	 */
 	private static function embedded_shortcodes( $text, array &$out ) {
-		$cuts     = array();
-		$possible = array();
-		$units    = array();
-		$deep     = array();
-		self::shortcodes( (string) $text, 0, $cuts, $possible, 0, $units, $deep );
-		foreach ( $units as $unit ) {
+		$found = self::found();
+		self::shortcodes( (string) $text, 0, 0, $found );
+		foreach ( $found['units'] as $unit ) {
 			if ( array() !== $unit['atts'] ) {
 				$out['items'][] = array(
 					'at'    => 'shortcode:' . $unit['tag'],
@@ -1330,9 +1394,22 @@ final class AB_MCP_Sync_Refs {
 				);
 			}
 		}
-		if ( array() !== $deep ) {
+		if ( array() !== $found['deep'] ) {
 			$out['deep'] = true;
 		}
+	}
+
+	/**
+	 * @return array What shortcodes() collects.
+	 */
+	private static function found() {
+		return array(
+			'cuts'     => array(),
+			'possible' => array(),
+			'units'    => array(),
+			'deep'     => array(),
+			'spelling' => array(),
+		);
 	}
 
 	/**
@@ -1358,6 +1435,16 @@ final class AB_MCP_Sync_Refs {
 			if ( isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
 				foreach ( $block['innerContent'] as $i => $chunk ) {
 					if ( is_string( $chunk ) ) {
+						// What is not rewritten as the core reads it writes nothing.
+						$read = self::text_refs( $chunk, $name );
+						foreach ( array( 'spelling' => $read['spelling'], 'depth' => $read['deep'] ) as $space => $places ) {
+							if ( array() !== $places ) {
+								$plan['missing'][] = array(
+									'space' => $space,
+									'id'    => 0,
+								);
+							}
+						}
 						$html = self::html_rules( $name );
 						if ( array() !== $html && self::html_api( $chunk, $html ) ) {
 							$chunk = AB_MCP_Sync_Html::rewrite(

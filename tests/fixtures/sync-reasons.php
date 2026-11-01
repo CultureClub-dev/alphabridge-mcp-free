@@ -293,6 +293,11 @@ return array(
 			'why'  => 'A whole number without a schema that equals the staging id of an object in the scope with another live id may be a reference no rule rewrites.',
 			'plan' => 'Entscheid 12 (möglicher Verweis)',
 		),
+		'*:reference_spelling'         => array(
+			'why'  => 'Where the stored text is not the spelling of the value WordPress reads (shortcode_parse_atts() takes backslash escapes, wp_filter_content_tags() the first wp-image-<id> of a tag), a rewrite of the stored digits would not be what WordPress reads: locked, not rewritten.',
+			'core' => array( array( 'wp-includes/media.php', 2009, "preg_match( '/wp-image-([0-9]+)/i', \$tag, \$class_id )" ) ),
+			'plan' => 'Entscheid 12 (Verweise nur mit bekanntem Schema)',
+		),
 		'*:credential_field'           => array(
 			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
 			'plan' => 'Entscheid 9',

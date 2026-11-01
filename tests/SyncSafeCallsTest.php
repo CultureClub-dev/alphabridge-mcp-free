@@ -42,7 +42,6 @@ final class SyncSafeCallsTest extends TestCase {
 		// Functions of WordPress: parsers and calculators.
 		'is_serialized'                        => 'Reads the text it is given (wp-includes/functions.php).',
 		'is_wp_error'                          => 'instanceof WP_Error.',
-		'path_join'                            => 'Joins two paths; path_is_absolute() asks the file system for a stream, no stored value.',
 		'wp_basename'                          => 'A string function (wp-includes/formatting.php).',
 		'serialize_blocks'                     => 'Writes the blocks it is given.',
 		'get_shortcode_regex'                  => 'With the tag names given, the pattern only; $shortcode_tags is not read.',

@@ -48,6 +48,8 @@ final class SyncHtmlRefsTest extends TestCase {
 			'a character reference'        => array( '<p><img class="wp&#45;image-19"/></p>', array( 'post:19@c:html:html:class' ) ),
 			'data-id in capitals'          => array( '<!-- wp:gallery --><figure><img DATA-ID="20"/></figure><!-- /wp:gallery -->', array( 'post:20@c:core/gallery:html:data_id' ) ),
 			'the classic block in a group' => array( '<!-- wp:group --><div><!-- wp:freeform --><p><img class="alignnone wp-image-26"/></p><!-- /wp:freeform --></div><!-- /wp:group -->', array( 'post:26@c:core/freeform:html:class' ) ),
+			'an image in a paragraph'      => array( '<!-- wp:paragraph --><p>Text <img class="wp-image-7" src="x.jpg"> Text</p><!-- /wp:paragraph -->', array( 'post:7@c:core/paragraph:html:class' ) ),
+			'a caption in a paragraph'     => array( '<!-- wp:paragraph --><p>[caption id="attachment_9"]<img class="wp-image-9"/>[/caption]</p><!-- /wp:paragraph -->', array( 'post:9@c:core/paragraph:html:class', 'post:9@c:core/paragraph:shortcode:caption.id' ) ),
 			'not data-class'               => array( '<p><img data-class="wp-image-21" class="size-full"/></p>', array() ),
 			'not a longer token'           => array( '<p><img class="xwp-image-22 wp-image-22x"/></p>', array() ),
 			'not a file name'              => array( '<p><img src="https://cdn.test/wp-image-23.jpg" alt="wp-image-23" class="alignnone"/> wp-image-23</p>', array() ),
@@ -79,7 +81,7 @@ final class SyncHtmlRefsTest extends TestCase {
 			'gallery'  => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img data-id="120" class="wp-image-120"/></figure><!-- /wp:gallery -->' ),
 			'caption'  => array( '[caption id="attachment_12"]<img class="alignnone wp-image-12 size-full"/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img class="alignnone wp-image-120 size-full"/>[/caption] [gallery ids="120,130"]' ),
 			'freeform' => array( '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://staging.test/a.jpg" class="wp-image-12"/></p><!-- /wp:freeform --></div><!-- /wp:group -->', '<!-- wp:group --><div><!-- wp:freeform --><p><img src="https://www.live.test/a.jpg" class="wp-image-120"/></p><!-- /wp:freeform --></div><!-- /wp:group -->' ),
-			'only ids' => array( '<p><img data-class="wp-image-12" src="https://cdn.test/wp-image-12.jpg" class="wp-image-13"/></p>', '<p><img data-class="wp-image-12" src="https://cdn.test/wp-image-12.jpg" class="wp-image-130"/></p>' ),
+			'only ids' => array( '<p><img data-class="photo" src="https://cdn.test/a.jpg" class="wp-image-13"/></p>', '<p><img data-class="photo" src="https://cdn.test/a.jpg" class="wp-image-130"/></p>' ),
 		);
 	}
 
@@ -96,5 +98,32 @@ final class SyncHtmlRefsTest extends TestCase {
 		$out  = AB_MCP_Sync_Refs::rewrite_content( '<!-- wp:image {"id":77} --><figure><img class="wp-image-77"/></figure><!-- /wp:image -->', $plan );
 		self::assertSame( array( array( 'space' => 'post', 'id' => 77 ), array( 'space' => 'post', 'id' => 77 ) ), $out['missing'] );
 		self::assertStringContainsString( 'class="wp-image-77"', $out['content'] );
+	}
+
+	public static function imageSpellings(): array {
+		return array(
+			'a file name first' => array( '<!-- wp:image {"id":12} --><figure><img src="https://cdn.test/wp-image-5.jpg" class="wp-image-12"/></figure><!-- /wp:image -->', 'c:core/image:img@8' ),
+			'another attribute' => array( '<p><img data-class="wp-image-12" src="https://cdn.test/a.jpg" class="wp-image-13"/></p>', 'c:html:img@3' ),
+			'no class token'    => array( '<p><img src="https://cdn.test/wp-image-23.jpg" class="alignnone"/></p>', 'c:html:img@3' ),
+			'a longer token'    => array( '<p><img class="xwp-image-22"/></p>', 'c:html:img@3' ),
+		);
+	}
+
+	#[DataProvider( 'imageSpellings' )]
+	public function testAnImageIdTheCoreReadsOtherwiseThanTheRulesLocks( string $content, string $at ): void {
+		list( , , $acc ) = self::scan( $content );
+		self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 5 => 50, 7 => 70, 12 => 120, 13 => 130, 22 => 220, 23 => 230 ) ), array() ) );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+	}
+
+	public function testWhereTheCoreAndTheRulesReadTheSameIdNothingLocks(): void {
+		foreach ( array(
+			'<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" alt="Bild" class="wp-image-12"/></figure><!-- /wp:image -->',
+			'<p><img class="alignnone size-full wp-image-16" src="a-300x200.jpg" width="300"/></p>',
+			'<p><img class="wp&#45;image-19"/></p>',
+		) as $content ) {
+			self::assertSame( array(), self::scan( $content )[2]['locks'], $content );
+		}
 	}
 }
