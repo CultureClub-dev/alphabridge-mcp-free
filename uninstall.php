@@ -57,7 +57,18 @@ $ab_mcp_options = array(
 	// AB_MCP_Site_Address_Journal::OPTION; Pro's wp_change_site_address
 	// writes it, this plugin shows and closes it).
 	'ab_mcp_site_address_journal',
+	// The version of the tables of the takeover (Z8, AB_MCP_Sync_Schema::OPTION).
+	'ab_mcp_staging_db_version',
 );
+
+// The tables of the takeover (Z8): object pairs, runs and their steps
+// (AB_MCP_Sync_Schema::TABLES), of the current site. On a network there are
+// none; a site that was a single site before may still have them, so they
+// go on every site as well.
+require_once __DIR__ . '/includes/sync/class-sync-schema.php';
+$ab_mcp_sync_tables = static function () {
+	AB_MCP_Sync_Schema::uninstall();
+};
 
 // The WP-Cron event of the update tools (AB_MCP_Update_Log::RESUME), no
 // option: once the plugin is gone nothing would take it off. Per site, as it
@@ -134,6 +145,7 @@ foreach ( $ab_mcp_options as $ab_mcp_option ) {
 }
 $ab_mcp_undo_files();
 $ab_mcp_cron();
+$ab_mcp_sync_tables();
 
 // Whether a user folded the card «Staging» on the settings page
 // (AB_MCP_Admin::STAGING_CARD_FOLDED, free since 4.15.0): user meta, of every
@@ -166,6 +178,7 @@ if ( is_multisite() ) {
 		}
 		$ab_mcp_undo_files();
 		$ab_mcp_cron();
+		$ab_mcp_sync_tables();
 		restore_current_blog();
 	}
 }

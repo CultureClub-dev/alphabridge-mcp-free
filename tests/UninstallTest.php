@@ -27,6 +27,8 @@ use AB_MCP_Review_Notice;
 use AB_MCP_Settings;
 
 require_once __DIR__ . '/uninstall-stubs.php';
+// uninstall.php drops the tables of the takeover through $wpdb (Z8).
+require_once __DIR__ . '/sync-stubs.php';
 
 final class UninstallTest extends TestCase {
 
@@ -62,7 +64,7 @@ final class UninstallTest extends TestCase {
 		// Every class the plugin ships, not only the ones the bootstrap needs:
 		// an option declared in a class no other test loads must count too.
 		$root = dirname( __DIR__ );
-		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ), glob( $root . '/includes/lifecycle/*.php' ) ) as $file ) {
+		foreach ( array_merge( glob( $root . '/includes/*.php' ), glob( $root . '/includes/tools/*.php' ), glob( $root . '/includes/undo/*.php' ), glob( $root . '/includes/lifecycle/*.php' ), glob( $root . '/includes/sync/*.php' ) ) as $file ) {
 			// The upgraders extend WordPress's, loaded only with them; they
 			// declare no option.
 			if ( 'class-update-upgraders.php' === basename( $file ) ) {
@@ -75,10 +77,13 @@ final class UninstallTest extends TestCase {
 	protected function setUp(): void {
 		ab_test_reset();
 		$this->removeProFile();
+		// Since Z8 uninstall.php drops tables, through $wpdb (recorded here).
+		$GLOBALS['wpdb'] = new \AbTestSyncWpdb();
 	}
 
 	protected function tearDown(): void {
 		$this->removeProFile();
+		unset( $GLOBALS['wpdb'] );
 	}
 
 	/**
@@ -311,6 +316,42 @@ final class UninstallTest extends TestCase {
 		self::assertSame( array( 'akismet/akismet.php', 'bad/bad.php' ), $GLOBALS['ab_test_site_options']['auto_update_plugins'] );
 		self::assertSame( array( 'listed', 'shaky' ), $GLOBALS['ab_test_site_options']['auto_update_themes'], 'Once on the list, not twice.' );
 		self::assertArrayNotHasKey( \AB_MCP_Update_Log::HOLDS, $GLOBALS['ab_test_site_options'] );
+	}
+
+	public function testTheTablesOfTheTakeoverGoOnEverySiteAndNotWhileProIsInstalled(): void {
+		// Z8: the object pairs, runs and steps are tables of their own
+		// (AB_MCP_Sync_Schema::TABLES), dropped with the version option.
+		// On a network there are none, but a site that was a single site
+		// before may have them, so every site is asked. That the statement
+		// drops the tables of MariaDB is tests/integration/SyncSchemaTest.php.
+		$drops = static function (): array {
+			return array_values( array_filter( $GLOBALS['wpdb']->queries, static fn( $q ) => 0 === strpos( $q, 'DROP TABLE' ) ) );
+		};
+		$expected = array();
+		foreach ( \AB_MCP_Sync_Schema::TABLES as $table ) {
+			$expected[] = 'DROP TABLE IF EXISTS `wp_' . $table . '`';
+		}
+		update_option( \AB_MCP_Sync_Schema::OPTION, '1' );
+
+		$this->runUninstall();
+
+		self::assertSame( $expected, $drops() );
+		self::assertFalse( self::stored( \AB_MCP_Sync_Schema::OPTION ) );
+
+		$GLOBALS['wpdb']              = new \AbTestSyncWpdb();
+		$GLOBALS['ab_test_multisite'] = true;
+		$GLOBALS['ab_test_sites']     = array( 1, 2 );
+		$this->runUninstall();
+		self::assertSame( array_merge( $expected, $expected, $expected ), $drops(), 'The current site, then each site of the network.' );
+
+		$GLOBALS['wpdb']              = new \AbTestSyncWpdb();
+		$GLOBALS['ab_test_multisite'] = false;
+		mkdir( dirname( WP_PLUGIN_DIR . self::PRO_FILE ), 0777, true );
+		file_put_contents( WP_PLUGIN_DIR . self::PRO_FILE, '<?php' );
+		update_option( \AB_MCP_Sync_Schema::OPTION, '1' );
+		$this->runUninstall();
+		self::assertSame( array(), $drops(), 'Pro shares the core and keeps the tables.' );
+		self::assertSame( '1', get_option( \AB_MCP_Sync_Schema::OPTION ) );
 	}
 
 	public function testNothingIsDeletedWhileProIsStillInstalled(): void {

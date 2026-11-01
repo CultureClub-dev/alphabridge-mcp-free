@@ -257,6 +257,10 @@ final class AB_MCP_Plugin {
 		AB_MCP_Settings::install_defaults();
 		AB_MCP_Staging_Gate::stamp();
 		AB_MCP_Audit_Log::install_table();
+		// The tables of the takeover (Z8); none on a network. A failed
+		// attempt before is tried again here.
+		require_once AB_MCP_DIR . 'includes/sync/class-sync-schema.php';
+		AB_MCP_Sync_Schema::install();
 		// A preview protection left on across a deactivation takes the
 		// search engine visibility again (free since 4.15.0), on every site
 		// when activated for the network.
