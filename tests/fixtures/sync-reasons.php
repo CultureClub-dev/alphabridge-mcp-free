@@ -276,6 +276,36 @@ return array(
 			'why'  => 'Objects that need each other cannot be made visible together; measured in Z11c, then an item of its own.',
 			'plan' => 'Entscheid 14 und 16; Folgen für spätere Etappen',
 		),
+		'*:php_object'                 => array(
+			'why'  => 'A value with an object, a reference or a record is read only with its class; the walk of the replace engine refuses it before unserialize().',
+			'plugin' => array( array( 'includes/class-replace-engine.php', 532, 'public function carries_record( $text ) {' ) ),
+			'plan' => 'Entscheid 11 (unvollständige Klasse sperrt)',
+		),
+		'*:unreadable_value'           => array(
+			'why'  => 'A value that does not unpack is read by WordPress as false; one that nests deeper than MAX_DEPTH is not read to the end.',
+			'plan' => 'Entscheid 11',
+		),
+		'*:possible_reference'         => array(
+			'why'  => 'A whole number without a schema that equals the staging id of an object in the scope with another live id may be a reference no rule rewrites.',
+			'plan' => 'Entscheid 12 (möglicher Verweis)',
+		),
+		'*:credential_field'           => array(
+			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
+			'plan' => 'Entscheid 9',
+		),
+		'attachment:missing_file'      => array(
+			'why'  => 'A listed file that is missing cannot be packed or compared.',
+			'plan' => 'Entscheid 26 (gelistete, aber fehlende Datei sperrt)',
+		),
+		'attachment:unsafe_path'       => array(
+			'why'  => 'Only relative paths under the uploads, without links on the way, to regular files.',
+			'plan' => 'Entscheid 26 (Pfade)',
+		),
+		'option:off_schema'            => array(
+			'why'  => 'A core option whose value breaks its rule (sanitize_option() writes another) is not written as it is.',
+			'core' => array( array( 'wp-includes/formatting.php', 4923, 'function sanitize_option( $option, $value ) {' ) ),
+			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
+		),
 	),
 
 	/* ------------------------------------------------------- exclusions */
@@ -361,6 +391,36 @@ return array(
 			'core' => array( array( 'wp-admin/includes/upgrade.php', 87, "update_option( 'fresh_site', 1, false );" ), array( 'wp-includes/functions.php', 4811, "update_option( 'fresh_site', '0', false );" ) ),
 			'plan' => 'Konzept 3',
 		),
+		'option:upload_path'                     => array(
+			'why'  => 'Where the uploads of each site lie on its disk (B6): another value on the live site moves where WordPress looks for its media.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 471, "'upload_path'" ), array( 'wp-includes/functions.php', 2469, "\$upload_path = trim( get_option( 'upload_path' ) );" ) ),
+			'plan' => 'Konzept 3; Entscheid 27',
+		),
+		'option:upload_url_path'                 => array(
+			'why'  => 'The address of the uploads of each site (B6).',
+			'core' => array( array( 'wp-admin/includes/schema.php', 484, "'upload_url_path'" ), array( 'wp-includes/functions.php', 2480, "\$url = get_option( 'upload_url_path' );" ) ),
+			'plan' => 'Konzept 3; Entscheid 27',
+		),
+		'option:finished_splitting_shared_terms' => array(
+			'why'  => 'Whether the core has split its shared terms on this site, written by the core itself.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 528, "'finished_splitting_shared_terms'" ), array( 'wp-includes/taxonomy.php', 4422, "update_option( 'finished_splitting_shared_terms', true );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:admin_email_lifespan'            => array(
+			'why'  => 'When the core asks the administrator of this site again to confirm the address (B6).',
+			'core' => array( array( 'wp-admin/includes/schema.php', 542, "'admin_email_lifespan'" ), array( 'wp-login.php', 623, "update_option( 'admin_email_lifespan', time() + \$remind_interval );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:auto_plugin_theme_update_emails' => array(
+			'why'  => 'The mails about failed automatic updates this site sent, noted by the core.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 547, "'auto_plugin_theme_update_emails'" ), array( 'wp-admin/includes/class-plugin-upgrader.php', 445, "update_option( 'auto_plugin_theme_update_emails', \$past_failure_emails );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:wp_force_deactivated_plugins'    => array(
+			'why'  => 'The plugins the core deactivated on this site during an update of the core.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 559, "'wp_force_deactivated_plugins'" ), array( 'wp-admin/includes/update-core.php', 2174, "update_option( 'wp_force_deactivated_plugins', \$deactivated_plugins, false );" ) ),
+			'plan' => 'Entscheid 27',
+		),
 		'option_prefix:_transient_'              => array(
 			'why'  => 'Transients are caches (B5).',
 			'core' => array( array( 'wp-includes/option.php', 1545, "'_transient_' . \$transient;" ) ),
@@ -422,6 +482,11 @@ return array(
 			'core' => array( array( 'wp-includes/post.php', 8245, "add_post_meta( \$post_id, '_pingme', '1', true );" ) ),
 			'plugin' => array( array( 'includes/tools/class-duplicate-meta.php', 48, "'_pingme'" ) ),
 			'plan' => 'Konzept 3',
+		),
+		'post_meta:_trackbackme'                 => array(
+			'why'  => 'A trackback job of the core not yet run, set when a post with addresses to ping is published.',
+			'core' => array( array( 'wp-includes/post.php', 8251, "add_post_meta( \$post_id, '_trackbackme', '1' );" ), array( 'wp-includes/comment.php', 3338, "delete_post_meta( \$trackback, '_trackbackme' );" ) ),
+			'plan' => 'Entscheid 11 (Folgedaten der Kern-Haken)',
 		),
 		'post_meta_prefix:_wp_trash_meta_'       => array(
 			'why'  => 'What the trash keeps to restore a post: its status, the time, the status of its comments.',

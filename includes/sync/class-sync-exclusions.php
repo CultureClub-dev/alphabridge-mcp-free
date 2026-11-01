@@ -29,12 +29,15 @@ final class AB_MCP_Sync_Exclusions {
 
 	/**
 	 * Options of group B: the identity of the site (B6: its addresses, its
-	 * visibility, its administrator's address), the instances of WP-Cron
-	 * (B5), what WordPress works out or notes for itself (the rewrite
-	 * rules, recently activated plugins and edited files, the uninstall
-	 * hooks of plugins, the database version, whether the site is fresh).
+	 * visibility, its administrator's address, where it keeps its uploads),
+	 * the instances of WP-Cron (B5), what WordPress works out or notes for
+	 * itself (the rewrite rules, recently activated plugins and edited
+	 * files, the uninstall hooks of plugins, the database version, whether
+	 * the site is fresh, the end of the term splitting, the next check of
+	 * the administrator's address, the mails about failed updates, the
+	 * plugins the core deactivated).
 	 */
-	const OPTIONS = array( 'siteurl', 'home', 'blog_public', 'admin_email', 'cron', 'rewrite_rules', 'recently_activated', 'recently_edited', 'uninstall_plugins', 'db_version', 'initial_db_version', 'fresh_site' );
+	const OPTIONS = array( 'siteurl', 'home', 'blog_public', 'admin_email', 'cron', 'rewrite_rules', 'recently_activated', 'recently_edited', 'uninstall_plugins', 'db_version', 'initial_db_version', 'fresh_site', 'upload_path', 'upload_url_path', 'finished_splitting_shared_terms', 'admin_email_lifespan', 'auto_plugin_theme_update_emails', 'wp_force_deactivated_plugins' );
 
 	/**
 	 * Option names that begin so: transients (B5) and the options of this
@@ -51,10 +54,10 @@ final class AB_MCP_Sync_Exclusions {
 	/**
 	 * Post meta that records an object's life on one site rather than its
 	 * content: who edits it now and who did last, its former slugs and
-	 * dates, the slug it had before the trash, the enclosure and pingback
-	 * jobs not yet run.
+	 * dates, the slug it had before the trash, the enclosure, pingback and
+	 * trackback jobs not yet run.
 	 */
-	const POST_META_KEYS = array( '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date', '_wp_desired_post_slug', '_encloseme', '_pingme' );
+	const POST_META_KEYS = array( '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date', '_wp_desired_post_slug', '_encloseme', '_pingme', '_trackbackme' );
 
 	/**
 	 * Post meta keys that begin so: the state the trash keeps, oEmbed caches

@@ -238,6 +238,35 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z11c',
 			'reason' => 'Objects that need each other cannot be made visible together in WordPress; how often that happens is measured first.',
 		),
+		// What the canonical form finds in an object (branch 4).
+		'*:php_object'                 => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A stored value holds a PHP object, a reference or a record that is read only with the code of its class; it is neither compared nor taken over without that class.',
+		),
+		'*:unreadable_value'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A stored value looks serialized but does not unpack, or nests deeper than it is read: nothing says what it holds.',
+		),
+		'*:possible_reference'         => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A whole number without a known schema equals the staging id of an object in the scope whose live id differs: it may point to that object, and no rule says whether to rewrite it.',
+		),
+		'*:credential_field'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go.',
+		),
+		'attachment:missing_file'      => array(
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the attachment\'s file list is not there.',
+		),
+		'attachment:unsafe_path'       => array(
+			'stage'  => 'Z8b',
+			'reason' => 'A path of the attachment\'s file list is not a plain relative path under the uploads, or a link or no regular file lies on the way.',
+		),
+		'option:off_schema'            => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The stored value of a core option does not keep the rule of its schema.',
+		),
 	);
 
 	/** @var array<string,AB_MCP_Sync_Kind> The registered kinds, by name, in order of registration. */
