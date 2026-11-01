@@ -21,11 +21,14 @@
 # after checking its command line; nothing else on the Mac is touched.
 set -euo pipefail
 
-here=$(cd "$(dirname "$0")" && pwd)
-repo=$(cd "$here/../../.." && pwd)
+# Physical paths (pwd -P): /tmp and /private/tmp are one tree on macOS, and
+# the guards below compare strings.
+here=$(cd "$(dirname "$0")" && pwd -P)
+repo=$(cd "$here/../../.." && pwd -P)
+home=$(cd "$HOME" && pwd -P)
 root=${AB_IT_ROOT:?set AB_IT_ROOT to a directory for the database and the two sites}
 mkdir -p "$root"
-root=$(cd "$root" && pwd)
+root=$(cd "$root" && pwd -P)
 export AB_IT_ROOT="$root"
 # The marker says this directory belongs to the suite: a fresh, empty one
 # gets it, any other is refused, so purge never removes a foreign tree.
@@ -122,12 +125,12 @@ run)
 purge)
 	down
 	case "$root" in
-	/ | "$HOME" | "$repo" | "$repo"/*) echo "local: will not remove $root" >&2; exit 1 ;;
+	/ | "$home" | "$repo" | "$repo"/*) echo "local: will not remove $root" >&2; exit 1 ;;
 	esac
 	case "$repo/" in
 	"$root"/*) echo "local: will not remove $root, it holds the checkout" >&2; exit 1 ;;
 	esac
-	case "$HOME/" in
+	case "$home/" in
 	"$root"/*) echo "local: will not remove $root, it holds the home directory" >&2; exit 1 ;;
 	esac
 	[ -f "$marker" ] || { echo "local: $root has no $(basename "$marker")" >&2; exit 1; }
