@@ -191,6 +191,20 @@ final class SyncCanonFormTest extends TestCase {
 		self::assertSame( AB_MCP_Sync_Canon::encode( self::value( 'd:0.1;' ) ), AB_MCP_Sync_Canon::encode( self::value( 'd:0.10;' ) ), 'The same value in other digits.' );
 	}
 
+	public function testAKeyThatIsNoUtf8IsKeptByItsBytes(): void {
+		$ff = self::value( serialize( array( "\xff" => 1 ) ) );
+		$fe = self::value( serialize( array( "\xfe" => 1 ) ) );
+		self::assertNotSame( '', AB_MCP_Sync_Canon::encode( $ff ) );
+		self::assertNotSame( AB_MCP_Sync_Canon::hash( $ff ), AB_MCP_Sync_Canon::hash( $fe ) );
+		self::assertNotSame( AB_MCP_Sync_Canon::hash( $ff ), AB_MCP_Sync_Canon::hash( self::value( serialize( array( 'ff' => 1 ) ) ) ) );
+		self::assertNotSame( AB_MCP_Sync_Canon::hash( $ff ), AB_MCP_Sync_Canon::hash( self::value( serialize( array( '~k:ff' => 1 ) ) ) ), 'A stored key with the tag is no such key.' );
+		self::assertSame( '{"~php":{"~k:ff":1}}', AB_MCP_Sync_Canon::encode( $ff ) );
+		// What JSON cannot hold at all locks and leaves the object incomplete.
+		$acc    = AB_MCP_Sync_Canon::acc();
+		$result = AB_MCP_Sync_Canon::finish( 'option', 'x', array(), array( 'value' => INF ), $acc );
+		self::assertSame( '{"canon":"canon/1","kind":"option","value":{"~f":"' . bin2hex( pack( 'E', INF ) ) . '"}}', AB_MCP_Sync_Canon::encode( $result['form'] ), 'A float of any value has its bits.' );
+	}
+
 	public function testTheVersionIsPartOfEveryFormAndAnotherIsRefused(): void {
 		$acc    = AB_MCP_Sync_Canon::acc();
 		$result = AB_MCP_Sync_Canon::finish( 'option', 'blogname', array(), array( 'value' => 'x' ), $acc );

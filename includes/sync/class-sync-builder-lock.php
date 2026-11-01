@@ -7,11 +7,12 @@
  * (includes/builders/signatures.php), Z8c widens the list.
  *
  * detect_all() is asked with the post as its row holds it (not as
- * get_post() filters it), and only for a post whose stored meta rows hold
- * no object: its markers in meta go through get_post_meta(), whose
- * maybe_unserialize() makes an object of any class it finds (and runs its
- * __wakeup()). A post with such a row is locked (*:php_object) without
- * asking detect_all(). The markers are asked of the stored meta rows as well
+ * get_post() filters it), and only through AB_MCP_Sync_Safe::builders(),
+ * the gate that first finds no object in the post's meta rows and the
+ * options detect_all() reads: its markers in meta go through get_post_meta(),
+ * whose maybe_unserialize() makes an object of any class it finds (and runs
+ * its __wakeup()). A post where the gate refuses is locked (*:php_object)
+ * without asking detect_all(). The markers are asked of the stored meta rows as well
  * (stored_markers(), unpacked without classes), since a filter can change
  * what get_post_meta() reads; either answer locks. Nothing a filter does can
  * take a lock away, only add one.
@@ -23,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-safe.php';
 
 /**
  * Class AB_MCP_Sync_Builder_Lock
@@ -41,7 +43,8 @@ final class AB_MCP_Sync_Builder_Lock {
 	 */
 	public static function locked( array $row, array $meta ) {
 		$out = array();
-		foreach ( self::checkable( $meta ) ? AB_MCP_Builders::detect_all( self::post( $row ) ) : array() as $found ) {
+		$detected = AB_MCP_Sync_Safe::builders( $row, $meta );
+		foreach ( null === $detected ? array() : $detected as $found ) {
 			if ( ! in_array( (string) $found['id'], self::RELEASED, true ) ) {
 				$out[ (string) $found['id'] ] = array(
 					'id'          => (string) $found['id'],
@@ -75,6 +78,10 @@ final class AB_MCP_Sync_Builder_Lock {
 		if ( ! self::checkable( $meta ) ) {
 			AB_MCP_Sync_Canon::lock( $acc, 'post', 'php_object', 'builder' );
 		}
+		// A row the gate could not clear: detect_all() was not asked.
+		if ( '' !== AB_MCP_Sync_Safe::options_refusal( AB_MCP_Sync_Safe::READS['detect_all'] ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, 'post', 'php_object', 'builder:options' );
+		}
 		$builders = self::locked( $row, $meta );
 		foreach ( $builders as $builder ) {
 			AB_MCP_Sync_Canon::lock( $acc, 'post', 'builder', 'builder:' . $builder['id'] );
@@ -90,12 +97,7 @@ final class AB_MCP_Sync_Builder_Lock {
 	 * @return bool
 	 */
 	public static function checkable( array $meta ) {
-		foreach ( $meta as $row ) {
-			if ( AB_MCP_Sync_Canon::holds_record( $row['value'] ) ) {
-				return false;
-			}
-		}
-		return true;
+		return AB_MCP_Sync_Safe::rows_clean( $meta );
 	}
 
 	/**
@@ -137,17 +139,5 @@ final class AB_MCP_Sync_Builder_Lock {
 			}
 		}
 		return $out;
-	}
-
-	/**
-	 * A post object from the stored row, for detect_all().
-	 *
-	 * @param array $row Row.
-	 * @return WP_Post|object
-	 */
-	private static function post( array $row ) {
-		$data     = (object) $row;
-		$data->ID = (int) $row['ID'];
-		return class_exists( 'WP_Post' ) ? new WP_Post( $data ) : $data;
 	}
 }

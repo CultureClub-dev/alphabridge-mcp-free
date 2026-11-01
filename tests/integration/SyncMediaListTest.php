@@ -220,6 +220,34 @@ final class SyncMediaListTest extends TestCase {
 		self::assertNull( $second['cursor'] );
 	}
 
+	public function testAListTheReverseMapCannotReadLeavesItIncompleteAndLocks(): void {
+		global $wpdb;
+		$good = $this->image( 'kanon-lesbar' );
+		$bad  = $this->image( 'kanon-kaputt' );
+		// The metadata of the second does not unpack (a count that does not
+		// match): its thumb, which the first names as well, is not seen.
+		$meta          = wp_get_attachment_metadata( $good );
+		$dir           = dirname( get_attached_file( $good ) );
+		$this->put( "$dir/kanon-geteilt-zwei.jpg", 'thumb' );
+		$meta['thumb'] = 'kanon-geteilt-zwei.jpg';
+		wp_update_attachment_metadata( $good, $meta );
+		$wpdb->update( $wpdb->postmeta, array( 'meta_value' => 'a:1:{s:5:"thumb";s:22:"kanon-geteilt-zwei.jpg";i:1;i:2;}' ), array( 'post_id' => $bad, 'meta_key' => '_wp_attachment_metadata' ) );
+		wp_cache_flush();
+
+		$map = AB_MCP_Sync_Media::reverse( 0, 100 );
+		self::assertFalse( $map['complete'], 'Not every list could be read.' );
+		self::assertSame( array( $bad ), $map['unreadable'] );
+		foreach ( $map['paths'] as $ids ) {
+			self::assertNotContains( $bad, $ids, 'An unreadable list names no path.' );
+		}
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Media::note_shared( $acc, $bad, AB_MCP_Sync_Media::files( $bad ), $map['paths'], $map['unreadable'] );
+		self::assertContains( '*:unreadable_value', array_column( $acc['locks'], 'key' ), 'The attachment whose list is not known locks.' );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Media::note( $acc, AB_MCP_Sync_Media::files( $bad ) );
+		self::assertContains( '*:unreadable_value', array_column( $acc['locks'], 'key' ) );
+	}
+
 	public function testAPathTwoAttachmentsNameLocksBoth(): void {
 		$first  = $this->image( 'kanon-geteilt' );
 		$second = $this->image( 'kanon-zwei' );

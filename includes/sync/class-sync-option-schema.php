@@ -26,7 +26,9 @@
  * - refs: a serialized list of post ids.
  *
  * classify() answers for one stored option row, in this order: group B,
- * another owner, the option guard on the resolved name, the schema, and the
+ * another owner, the option guard on the settled name (settled as
+ * resolve_option() does, without reading a value: AB_MCP_Sync_Option_Name),
+ * the schema, and the
  * rest «Option eines Plugins, nicht eingeordnet (Z8d)» (LOCKS
  * option:unclassified).
  *
@@ -177,7 +179,8 @@ final class AB_MCP_Sync_Option_Schema {
 	 * What the takeover does with one stored option row.
 	 *
 	 * @param string      $name The name exactly as the row has it.
-	 * @param string|null $raw  The value as the row holds it; read when null.
+	 * @param string|null $raw  The value as the row holds it (not needed to
+	 *                          classify it; kept for the callers).
 	 * @return array status: core (with schema), excluded (group B), owner
 	 *               (another kind, or locked there), guarded (the option
 	 *               guard refuses it; reason: its way), unreachable (WordPress
@@ -194,29 +197,11 @@ final class AB_MCP_Sync_Option_Schema {
 		if ( 'option' !== $owner['kind'] || 'z8' !== $owner['status'] ) {
 			return self::answer( 'owner', $owner['key'], $owner['stage'], $owner['reason'] ) + array( 'owner' => $owner );
 		}
-		if ( null === $raw ) {
-			$row = AB_MCP_Sync_Rows::option( $name );
-			if ( null === $row ) {
-				return self::answer( 'unreadable', 'option:' . $name, null, 'The option could not be read. Try again; if it keeps failing, the database error log names the cause.' );
-			}
-			$raw = false === $row ? '' : $row['value'];
-		}
-		// resolve_option() reads the value of the row it settles on with
-		// get_option(), whose maybe_unserialize() makes an object of any
-		// class. A row that holds one is settled here by its name alone: a
-		// stored name WordPress acts on as it is settles on its own row, and
-		// the guard asks the name the same questions there.
-		if ( AB_MCP_Sync_Canon::holds_record( $raw ) ) {
-			$real = AB_MCP_Sync_Option_Name::real( $name );
-			if ( $real !== $name ) {
-				$resolved = array( 'name' => $real );
-			} else {
-				$refused  = AB_MCP_Option_Guard::option_write_refused( $name );
-				$resolved = is_wp_error( $refused ) ? $refused : array( 'name' => $name );
-			}
-		} else {
-			$resolved = AB_MCP_Option_Guard::resolve_option( $name );
-		}
+		// The name is settled as resolve_option() settles it, without reading
+		// a value: resolve_option() reads the value of the row it lands on
+		// with get_option(), whose maybe_unserialize() makes an object of any
+		// class — of another row than this one, where the name is an alias.
+		$resolved = AB_MCP_Sync_Option_Name::settle( $name );
 		if ( is_wp_error( $resolved ) ) {
 			if ( 'ab_mcp_option_unreadable' === $resolved->get_error_code() ) {
 				return self::answer( 'unreadable', 'option:' . $name, null, $resolved->get_error_message() );
@@ -331,17 +316,48 @@ final class AB_MCP_Sync_Option_Schema {
 }
 
 /**
- * Class AB_MCP_Sync_Option_Name: the name WordPress acts on for a name, as
- * the option guard settles it (AB_MCP_Option_Guard::real_option_name():
- * trimmed, the two legacy names the core redirects), without reading a row.
+ * Class AB_MCP_Sync_Option_Name: the row a name addresses, settled as
+ * AB_MCP_Option_Guard::resolve_option() settles it, without reading a value.
+ * The same parts: real_option_name() (trimmed, the two legacy names the
+ * core redirects), AB_MCP_Undo::option_row() (the name and the autoload
+ * flag of the row the database matches, never its value), the questions of
+ * option_write_refused() on the settled name; only the snapshot with
+ * get_option() at the end of resolve_option() is left out.
  */
 final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 
 	/**
 	 * @param string $name Name.
-	 * @return string
+	 * @return string The name WordPress acts on.
 	 */
 	public static function real( $name ) {
 		return self::real_option_name( $name );
+	}
+
+	/**
+	 * The name of the row a name addresses.
+	 *
+	 * @param string $given Name.
+	 * @return array|WP_Error array( 'name' => settled name ), or the refusal
+	 *                        of the guard, or ab_mcp_option_unreadable.
+	 */
+	public static function settle( $given ) {
+		$name = self::real_option_name( $given );
+		for ( $round = 0; $round < 4; $round++ ) {
+			$refused = AB_MCP_Option_Guard::option_write_refused( $name );
+			if ( is_wp_error( $refused ) ) {
+				return $refused;
+			}
+			$row = AB_MCP_Undo::option_row( $name );
+			if ( null === $row ) {
+				return new WP_Error( 'ab_mcp_option_unreadable', 'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' );
+			}
+			$settled = is_array( $row ) ? self::real_option_name( $row['name'] ) : $name;
+			if ( $settled === $name ) {
+				return array( 'name' => $name );
+			}
+			$name = $settled;
+		}
+		return new WP_Error( 'ab_mcp_option_unreadable', 'The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' );
 	}
 }
