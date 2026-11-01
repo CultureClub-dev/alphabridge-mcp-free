@@ -164,9 +164,31 @@ final class SyncCanonFormTest extends TestCase {
 			$seen[ AB_MCP_Sync_Canon::encode( array( $v ) ) ] = true;
 		}
 		self::assertCount( 9, $seen );
-		self::assertSame( '[{"~f":"0.1"}]', AB_MCP_Sync_Canon::encode( array( 0.1 ) ) );
+		self::assertSame( '[{"~f":"' . bin2hex( pack( 'E', 0.1 ) ) . '"}]', AB_MCP_Sync_Canon::encode( array( 0.1 ) ) );
 		self::assertSame( '[{"~b":"' . base64_encode( "\xff\xfe" ) . '"}]', AB_MCP_Sync_Canon::encode( array( "\xff\xfe" ) ) );
 		self::assertSame( hash( 'sha256', '[1]' ), AB_MCP_Sync_Canon::hash( array( 1 ) ) );
+	}
+
+	public function testAFloatIsItsBitsWhateverSerializePrecisionSays(): void {
+		$saved = ini_get( 'serialize_precision' );
+		try {
+			$forms = array();
+			foreach ( array( '-1', '17', '3' ) as $precision ) {
+				ini_set( 'serialize_precision', $precision );
+				$forms[ $precision ] = array(
+					AB_MCP_Sync_Canon::encode( self::value( 'd:0.1;' ) ),
+					AB_MCP_Sync_Canon::encode( array( 1.2341 ) ),
+					AB_MCP_Sync_Canon::encode( array( 1.2342 ) ),
+				);
+			}
+		} finally {
+			ini_set( 'serialize_precision', (string) $saved );
+		}
+		self::assertSame( $forms['-1'], $forms['17'], 'Alike under every setting.' );
+		self::assertSame( $forms['-1'], $forms['3'] );
+		self::assertNotSame( $forms['3'][1], $forms['3'][2], 'Two values stay two values under a low setting.' );
+		self::assertSame( AB_MCP_Sync_Canon::encode( array( '~php' => 0.1 ) ), $forms['-1'][0], 'A float of a serialized value is the value WordPress reads.' );
+		self::assertSame( AB_MCP_Sync_Canon::encode( self::value( 'd:0.1;' ) ), AB_MCP_Sync_Canon::encode( self::value( 'd:0.10;' ) ), 'The same value in other digits.' );
 	}
 
 	public function testTheVersionIsPartOfEveryFormAndAnotherIsRefused(): void {

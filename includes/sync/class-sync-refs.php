@@ -90,15 +90,6 @@ final class AB_MCP_Sync_Refs {
 	);
 
 	/**
-	 * The patterns of HTML; the last group is the id. The class only inside
-	 * a class attribute: "wp-image-12" in the name of a file is no id.
-	 */
-	const HTML_PATTERNS = array(
-		'class'   => '/\bclass=(["\'])(?:(?!\1).)*?\bwp-image-(\d+)\b/s',
-		'data_id' => '/\bdata-id=(["\'])(\d+)\1/',
-	);
-
-	/**
 	 * Core shortcodes with references: attribute => what it is.
 	 * gallery and playlist ids (wp-includes/media.php:2834, :3201),
 	 * caption id="attachment_<id>" (wp-admin/includes/media.php:220).
@@ -234,16 +225,53 @@ final class AB_MCP_Sync_Refs {
 	/**
 	 * Note a whole number without a schema (decision 12).
 	 *
-	 * @param array  $acc   Accumulator.
-	 * @param mixed  $value Value.
-	 * @param string $at    Where.
+	 * @param array  $acc    Accumulator.
+	 * @param mixed  $value  Value.
+	 * @param string $at     Where.
+	 * @param int    $layers Texts unpacked above.
 	 */
-	public static function note_possible( array &$acc, $value, $at ) {
+	public static function note_possible( array &$acc, $value, $at, $layers = 0 ) {
 		foreach ( self::numbers( $value ) as $n ) {
 			$acc['possible'][] = array(
 				'value' => $n,
 				'at'    => (string) $at,
 			);
+		}
+		// A text that holds a value of its own (serialized, JSON, a JSON
+		// string literal): its numbers as well, layer by layer.
+		if ( ! is_string( $value ) || $layers >= AB_MCP_Sync_Canon::MAX_LAYERS ) {
+			return;
+		}
+		if ( is_serialized( $value ) ) {
+			$read  = AB_MCP_Sync_Canon::unserialized( $value );
+			$inner = $read['ok'] ? $read['value'] : null;
+		} else {
+			$inner = AB_MCP_Sync_Canon::json_text( $value );
+		}
+		if ( is_array( $inner ) || is_string( $inner ) ) {
+			self::note_tree( $acc, $inner, (string) $at, $layers + 1, 0 );
+		}
+	}
+
+	/**
+	 * The numbers of a value unpacked from a text, as possible references.
+	 *
+	 * @param array  $acc    Accumulator.
+	 * @param mixed  $value  Value.
+	 * @param string $at     Where.
+	 * @param int    $layers Texts unpacked above.
+	 * @param int    $depth  Depth.
+	 */
+	private static function note_tree( array &$acc, $value, $at, $layers, $depth ) {
+		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
+			return;
+		}
+		if ( ! is_array( $value ) ) {
+			self::note_possible( $acc, $value, $at, $layers );
+			return;
+		}
+		foreach ( $value as $key => $item ) {
+			self::note_tree( $acc, $item, $at . '.' . $key, $layers, $depth + 1 );
 		}
 	}
 
@@ -280,38 +308,9 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function possible_leaf( array &$acc, $at ) {
 		return static function ( $value, $path ) use ( &$acc, $at ) {
-			$where = '' === $path ? $at : $at . '.' . $path;
-			self::note_possible( $acc, $value, $where );
-			// A JSON object or list in a text: its numbers as well.
-			if ( is_string( $value ) && preg_match( '/^\s*[\[{]/', $value ) ) {
-				$json = json_decode( $value, true, 64 );
-				if ( is_array( $json ) ) {
-					self::note_json( $acc, $json, $where, 0 );
-				}
-			}
+			self::note_possible( $acc, $value, '' === $path ? $at : $at . '.' . $path );
 			return null;
 		};
-	}
-
-	/**
-	 * The whole numbers of a decoded JSON value, as possible references.
-	 *
-	 * @param array  $acc   Accumulator.
-	 * @param mixed  $value Value.
-	 * @param string $at    Where.
-	 * @param int    $depth Depth.
-	 */
-	private static function note_json( array &$acc, $value, $at, $depth ) {
-		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
-			return;
-		}
-		if ( ! is_array( $value ) ) {
-			self::note_possible( $acc, $value, $at );
-			return;
-		}
-		foreach ( $value as $key => $item ) {
-			self::note_json( $acc, $item, $at . '.' . $key, $depth + 1 );
-		}
 	}
 
 	/**
@@ -720,37 +719,64 @@ final class AB_MCP_Sync_Refs {
 	/* ======================================================== the text */
 
 	/**
-	 * The references with a schema in a text of HTML: the classes and data-id
-	 * of HTML for the block, and the core shortcodes. Shortcodes of other
-	 * tags, and attributes of core ones without a schema, give possible
-	 * references.
+	 * The references with a schema in a text of HTML: the tags with the class
+	 * token or data-id of HTML for the block (AB_MCP_Sync_Html, the HTML API
+	 * of the core), and the core shortcodes. Shortcodes of other tags, and
+	 * attributes of core ones without a schema, give possible references.
 	 *
 	 * @param string $text  Text.
 	 * @param string $block Block name; '' for classic content.
-	 * @return array{cuts:array,possible:array}
+	 * @return array{cuts:array,tags:array,possible:array} cuts: the ids of
+	 *               shortcodes; tags: AB_MCP_Sync_Html::tags().
 	 */
 	public static function text_refs( $text, $block ) {
 		$text = (string) $text;
 		$cuts = array();
-		foreach ( isset( self::HTML[ $block ] ) ? self::HTML[ $block ] : array() as $rule ) {
-			if ( preg_match_all( self::HTML_PATTERNS[ $rule ], $text, $m, PREG_OFFSET_CAPTURE ) ) {
-				foreach ( $m[2] as $hit ) {
-					$cuts[] = array(
-						'at'    => (int) $hit[1],
-						'len'   => strlen( $hit[0] ),
-						'space' => 'post',
-						'id'    => (int) $hit[0],
-						'role'  => 'html:' . $rule,
-					);
-				}
-			}
+		$tags = array();
+		$html = self::html_rules( $block );
+		if ( array() !== $html && self::html_api( $text, $html ) ) {
+			$tags = AB_MCP_Sync_Html::tags( $text, $html );
 		}
 		$possible = array();
 		self::shortcodes( $text, 0, $cuts, $possible, 0 );
 		return array(
 			'cuts'     => $cuts,
+			'tags'     => $tags,
 			'possible' => $possible,
 		);
+	}
+
+	/**
+	 * @param string $block Block name; '' for classic content.
+	 * @return string[] The rules of HTML for the block.
+	 */
+	private static function html_rules( $block ) {
+		return isset( self::HTML[ $block ] ) ? self::HTML[ $block ] : array();
+	}
+
+	/**
+	 * Whether the HTML API is to read a text: only where it can find a
+	 * reference, and loaded only then.
+	 *
+	 * @param string   $text  Text.
+	 * @param string[] $rules Rules.
+	 * @return bool
+	 */
+	private static function html_api( $text, array $rules ) {
+		$text = (string) $text;
+		if ( false === strpos( $text, '<' ) ) {
+			return false;
+		}
+		// The class token or the attribute name as letters, or a character
+		// reference that could spell one: without any of them the HTML API
+		// finds no reference, and is not loaded.
+		$may = false !== strpos( $text, '&' )
+			|| ( in_array( 'class', $rules, true ) && false !== stripos( $text, 'wp-image-' ) )
+			|| ( in_array( 'data_id', $rules, true ) && false !== stripos( $text, 'data-id' ) );
+		if ( $may ) {
+			require_once __DIR__ . '/class-sync-html.php';
+		}
+		return $may;
 	}
 
 	/* ========================================================== private */
@@ -806,6 +832,28 @@ final class AB_MCP_Sync_Refs {
 	private static function canon_html( $text, $block, array $ctx, array &$acc, $kind, $at ) {
 		$found = self::text_refs( $text, $block );
 		$cuts  = array();
+		// A tag with references as the core writes it with each id set to
+		// a placeholder, its addresses neutral, and the ids as markers.
+		foreach ( $found['tags'] as $tag ) {
+			$refs = array();
+			foreach ( $tag['ids'] as $id ) {
+				$refs[]        = AB_MCP_Sync_Canon::ref( 'post', $id['id'] );
+				$acc['refs'][] = array(
+					'space'    => 'post',
+					'id'       => $id['id'],
+					'at'       => $at . ':html:' . $id['rule'],
+					'strength' => 'strong',
+				);
+			}
+			$cuts[] = array(
+				'at'     => $tag['at'],
+				'len'    => $tag['len'],
+				'marker' => array(
+					'~tag' => AB_MCP_Sync_Canon::text( $tag['tag'], $ctx ),
+					'refs' => $refs,
+				),
+			);
+		}
 		foreach ( $found['cuts'] as $cut ) {
 			$cuts[]        = array(
 				'at'     => $cut['at'],
@@ -1180,7 +1228,19 @@ final class AB_MCP_Sync_Refs {
 			if ( isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
 				foreach ( $block['innerContent'] as $i => $chunk ) {
 					if ( is_string( $chunk ) ) {
-						$found                      = self::text_refs( $chunk, $name );
+						$html = self::html_rules( $name );
+						if ( array() !== $html && self::html_api( $chunk, $html ) ) {
+							$chunk = AB_MCP_Sync_Html::rewrite(
+								$chunk,
+								$html,
+								static function ( $id ) use ( &$plan ) {
+									return self::mapped_id( $plan, 'post', $id );
+								},
+								$changed
+							);
+						}
+						// The shortcodes of the text, its tags done above.
+						$found                       = self::text_refs( $chunk, '~shortcodes' );
 						$block['innerContent'][ $i ] = self::rewrite_text( $chunk, $plan, $found['cuts'], $changed );
 					}
 				}

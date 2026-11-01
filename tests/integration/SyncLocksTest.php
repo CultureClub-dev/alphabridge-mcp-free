@@ -25,8 +25,22 @@ use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
 use AB_MCP_Sync_Db_Kinds;
 use AB_MCP_Sync_Inventory;
+use AB_MCP_Sync_Option_Schema;
 use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\TestCase;
+
+/**
+ * A class whose __wakeup() counts: what makes an object of a stored value
+ * runs it.
+ */
+final class SyncWakeupProbe {
+	/** @var int */
+	public static $woken = 0;
+
+	public function __wakeup() {
+		++self::$woken;
+	}
+}
 
 final class SyncLocksTest extends TestCase {
 
@@ -40,20 +54,24 @@ final class SyncLocksTest extends TestCase {
 		AB_MCP_IT_Sites::reset( 'a' );
 	}
 
-	private static function canon( string $kind, $ref ): array {
-		foreach ( AB_MCP_Sync_Db_Kinds::all() as $candidate ) {
-			if ( $candidate->kind() === $kind ) {
-				$result = $candidate->canonical(
-					array(
-						'ref'    => (string) $ref,
-						'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
-					)
-				);
-				self::assertIsArray( $result );
-				return $result;
-			}
-		}
-		self::fail( "No kind $kind." );
+	/** The canonical result of an object by its pair kind and ref, as the inventory names it. */
+	private static function canon( string $pair, $ref ): array {
+		$result = self::canonical( $pair, $ref );
+		self::assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
+		return $result;
+	}
+
+	/** @return array|\WP_Error */
+	private static function canonical( string $pair, $ref ) {
+		$kind = AB_MCP_Sync_Db_Kinds::for_pair( $pair );
+		self::assertNotNull( $kind, "No kind has $pair." );
+		return $kind->canonical(
+			array(
+				'kind'   => $pair,
+				'ref'    => (string) $ref,
+				'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+			)
+		);
 	}
 
 	private static function post( string $content, array $meta = array() ): int {
@@ -121,6 +139,8 @@ final class SyncLocksTest extends TestCase {
 				'ab_it_json'       => '{"service":{"access_token":"abc"}}',
 				'ab_it_fields'     => array( array( 'name' => 'smtp_pass', 'value' => 'pw' ), array( 'name' => 'title', 'value' => 'ok' ) ),
 				'ab_it_harmless'   => array( 'hasPassword' => true, 'token_count' => 3 ),
+				'ab_it_deep'       => str_repeat( '[', 66 ) . '{"api_key":"y"}' . str_repeat( ']', 66 ),
+				'ab_it_literal'    => json_encode( json_encode( array( 'api_key' => 'y' ) ) ),
 			)
 		);
 		$result = self::canon( 'post', $id );
@@ -133,11 +153,13 @@ final class SyncLocksTest extends TestCase {
 			array(
 				'meta:ab_it_fields'   => array( '0.smtp_pass' ),
 				'meta:ab_it_json'     => array( 'service.access_token' ),
+				'meta:ab_it_literal'  => array( 'api_key' ),
 				'meta:ab_it_settings' => array( 'clientSecret' ),
 			),
 			$mixed
 		);
-		self::assertSame( array( 'meta:ab_it_fields', 'meta:ab_it_json', 'meta:ab_it_settings' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:credential_field' === $l['key'] ), 'at' ) );
+		self::assertSame( array( 'meta:ab_it_fields', 'meta:ab_it_json', 'meta:ab_it_literal', 'meta:ab_it_settings' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:credential_field' === $l['key'] ), 'at' ) );
+		self::assertSame( array( 'meta:ab_it_deep' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:unreadable_value' === $l['key'] ), 'at' ), 'Deeper than the check reads: locked, never clean.' );
 
 		update_option( 'ab_it_service_api_key', 'sk_live_456' );
 		$entry = self::canon( 'option', 'ab_it_service_api_key' );
@@ -154,6 +176,7 @@ final class SyncLocksTest extends TestCase {
 			array(
 				'ab_it_related' => (string) $target,
 				'ab_it_json'    => '{"box":{"post":' . $target . '}}',
+				'ab_it_nested'  => json_encode( array( 'outer' => json_encode( array( 'target' => $target ) ) ) ),
 			)
 		);
 		$result = self::canon( 'post', $id );
@@ -163,12 +186,13 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( $target, $values['post_content:core/paragraph:shortcode:contact-form-7.id'] );
 		self::assertSame( $target, $values['meta:ab_it_related'] );
 		self::assertSame( $target, $values['meta:ab_it_json.box.post'], 'A number in JSON in a meta value.' );
-		self::assertCount( 5, $result['possible'], 'Not the number in the text, not the level of the core heading.' );
+		self::assertSame( $target, $values['meta:ab_it_nested.outer.target'], 'A number in JSON in a JSON text in a meta value.' );
+		self::assertCount( 6, $result['possible'], 'Not the number in the text, not the level of the core heading.' );
 
 		// Staging id $target, live id another: locked; the same id: not.
 		$locked = AB_MCP_Sync_Refs::lock_possible( $result, array( 'post' => array( $target => $target + 1000 ) ) );
 		self::assertContains( '*:possible_reference', array_column( $locked['locks'], 'key' ) );
-		self::assertCount( 4, $locked['possible_hits'] );
+		self::assertCount( 5, $locked['possible_hits'] );
 		$new = AB_MCP_Sync_Refs::lock_possible( $result, array( 'post' => array( $target => null ) ) );
 		self::assertContains( '*:possible_reference', array_column( $new['locks'], 'key' ), 'An object without a live id yet.' );
 		$same = AB_MCP_Sync_Refs::lock_possible( $result, array( 'post' => array( $target => $target ), 'term' => array( 3 => 3 ) ) );
@@ -201,7 +225,37 @@ final class SyncLocksTest extends TestCase {
 		wp_cache_delete( $id, 'post_meta' );
 		$result = self::canon( 'post', $id );
 		self::assertFalse( class_exists( 'AB_IT_Canon_Exploding', false ) );
-		self::assertSame( array( 'meta:ab_it_object', 'meta:ab_it_reference' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ) );
+		self::assertSame( array( 'builder', 'meta:ab_it_object', 'meta:ab_it_reference' ), array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The rows, and the builders that could not be asked.' );
+	}
+
+	/* ------------------------------------- no object made on the way */
+
+	public function testNoStoredObjectIsMadeOnTheWayItLocksInstead(): void {
+		global $wpdb;
+		SyncWakeupProbe::$woken = 0;
+		$payload                = serialize( new SyncWakeupProbe() );
+		$id                     = self::post( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' );
+		// A marker detect_all() reads through get_post_meta(), holding an object.
+		$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $id, 'meta_key' => '_elementor_edit_mode', 'meta_value' => $payload ) );
+		$wpdb->insert( $wpdb->options, array( 'option_name' => 'ab_it_object_option', 'option_value' => $payload, 'autoload' => 'off' ) );
+		wp_cache_delete( $id, 'post_meta' );
+		wp_cache_delete( 'notoptions', 'options' );
+
+		$result = self::canon( 'post', $id );
+		self::assertSame( 0, SyncWakeupProbe::$woken, 'The canonical form of the post made no object.' );
+		self::assertContains( 'builder', array_column( array_filter( $result['locks'], static fn( $l ) => '*:php_object' === $l['key'] ), 'at' ), 'The builders could not be asked: locked.' );
+
+		$class = AB_MCP_Sync_Option_Schema::classify( 'ab_it_object_option' );
+		self::assertSame( 0, SyncWakeupProbe::$woken, 'Classifying the option made no object.' );
+		self::assertSame( 'unclassified', $class['status'] );
+		$option = self::canon( 'option', 'ab_it_object_option' );
+		self::assertContains( '*:php_object', array_column( $option['locks'], 'key' ) );
+		AB_MCP_Sync_Inventory::run( AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ) );
+		self::assertSame( 0, SyncWakeupProbe::$woken, 'The whole inventory made no object.' );
+
+		// The way WordPress reads it would have made one.
+		get_post_meta( $id, '_elementor_edit_mode', true );
+		self::assertSame( 1, SyncWakeupProbe::$woken, 'The probe counts.' );
 	}
 
 	/* ------------------------------------------------ menu and widgets */
@@ -226,9 +280,9 @@ final class SyncLocksTest extends TestCase {
 			}
 			return $out;
 		};
-		self::assertSame( array( 'menu' => 'term:' . $menu, 'meta:_menu_item_object_id' => 'post:' . $page ), $refs( self::canon( 'menu', 'item:' . $top ) ) );
-		self::assertSame( array( 'menu' => 'term:' . $menu, 'meta:_menu_item_menu_item_parent' => 'post:' . $top, 'meta:_menu_item_object_id' => 'term:' . $cat['term_id'] ), $refs( self::canon( 'menu', 'item:' . $sub ) ) );
-		$custom = self::canon( 'menu', 'item:' . $link );
+		self::assertSame( array( 'menu' => 'term:' . $menu, 'meta:_menu_item_object_id' => 'post:' . $page ), $refs( self::canon( 'menu_item', $top ) ) );
+		self::assertSame( array( 'menu' => 'term:' . $menu, 'meta:_menu_item_menu_item_parent' => 'post:' . $top, 'meta:_menu_item_object_id' => 'term:' . $cat['term_id'] ), $refs( self::canon( 'menu_item', $sub ) ) );
+		$custom = self::canon( 'menu_item', $link );
 		$meta   = array_column( $custom['form']['meta'], 1, 0 );
 		self::assertSame( array( '~ref' => 'self' ), $meta['_menu_item_object_id'], 'A custom link names itself.' );
 		self::assertSame( array( '~s' => array( array( '~addr' => 'plain' ), '/kontakt/' ) ), $meta['_menu_item_url'] );
@@ -273,12 +327,13 @@ final class SyncLocksTest extends TestCase {
 		self::assertCount( 1, $css );
 		self::assertSame( $stylesheet, $css[0]['ref'], 'Its identity is the stylesheet the theme mods name it for.' );
 		self::assertSame( array( 'stylesheet' => $stylesheet, 'post' => $post->ID, 'linked' => true ), $css[0]['identity'] );
-		$form = self::canon( 'custom_css', 'post:' . $post->ID )['form'];
+		$form = self::canon( 'custom_css', $stylesheet )['form'];
 		self::assertSame( array( '~s' => array( 'body{background:url(', array( '~addr' => 'plain' ), '/bg.png)}' ) ), $form['css'] );
 		self::assertNotContains( 'post:' . $post->ID, array_map( static fn( $o ) => $o['kind'] . ':' . $o['ref'], $all['objects'] ), 'Not a post of the post kind.' );
 		// A CSS post the theme mods do not name keeps its id in the ref.
 		set_theme_mod( 'custom_css_post_id', -1 );
-		$again = self::canon( 'custom_css', 'post:' . $post->ID );
+		$again = self::canon( 'custom_css', $stylesheet . '@' . $post->ID );
 		self::assertSame( $stylesheet . '@' . $post->ID, $again['ref'] );
+		self::assertInstanceOf( \WP_Error::class, self::canonical( 'custom_css', $stylesheet ), 'The stylesheet names no CSS while the theme mods name none.' );
 	}
 }

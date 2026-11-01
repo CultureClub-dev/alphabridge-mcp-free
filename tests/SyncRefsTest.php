@@ -1,8 +1,9 @@
 <?php
 /**
  * References with a schema and possible references (AB_MCP_Sync_Refs, Z8
- * decision 12), one case per schema: the attributes of the core blocks,
- * the HTML their save writes from an id, the core shortcodes; whole numbers
+ * decision 12), one case per schema: the attributes of the core blocks
+ * and the core shortcodes (the HTML their save writes from an id is read
+ * with the HTML API of the core: tests/integration/SyncHtmlRefsTest.php); whole numbers
  * without a schema noted, plain numbers of the core not; the lock of a
  * possible reference in both ID spaces; the rewriter for every schema, the
  * addresses included, and nothing changed where nothing is to change.
@@ -54,10 +55,10 @@ final class SyncRefsTest extends TestCase {
 
 	public static function schemas(): array {
 		return array(
-			'core/image id and class'      => array( '<!-- wp:image {"id":12} --><figure><img class="wp-image-12"/></figure><!-- /wp:image -->', array( 'post:12@c:core/image:html:class', 'post:12@c:core/image.id' ) ),
-			'core/gallery ids, data-id'    => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery:html:class', 'post:12@c:core/gallery:html:data_id', 'post:12@c:core/gallery.ids.0', 'post:13@c:core/gallery.ids.1' ) ),
-			'core/cover'                   => array( '<!-- wp:cover {"id":7} --><div><img class="wp-image-7"/></div><!-- /wp:cover -->', array( 'post:7@c:core/cover:html:class', 'post:7@c:core/cover.id' ) ),
-			'core/media-text'              => array( '<!-- wp:media-text {"mediaId":8} --><div><img class="wp-image-8 size-full"/></div><!-- /wp:media-text -->', array( 'post:8@c:core/media-text:html:class', 'post:8@c:core/media-text.mediaId' ) ),
+			'core/image id'                => array( '<!-- wp:image {"id":12} --><figure><img/></figure><!-- /wp:image -->', array( 'post:12@c:core/image.id' ) ),
+			'core/gallery ids'             => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img/></figure><!-- /wp:gallery -->', array( 'post:12@c:core/gallery.ids.0', 'post:13@c:core/gallery.ids.1' ) ),
+			'core/cover'                   => array( '<!-- wp:cover {"id":7} --><div><img/></div><!-- /wp:cover -->', array( 'post:7@c:core/cover.id' ) ),
+			'core/media-text'              => array( '<!-- wp:media-text {"mediaId":8} --><div><img/></div><!-- /wp:media-text -->', array( 'post:8@c:core/media-text.mediaId' ) ),
 			'core/file'                    => array( '<!-- wp:file {"id":9} --><div></div><!-- /wp:file -->', array( 'post:9@c:core/file.id' ) ),
 			'core/video'                   => array( '<!-- wp:video {"id":10} --><figure></figure><!-- /wp:video -->', array( 'post:10@c:core/video.id' ) ),
 			'core/audio'                   => array( '<!-- wp:audio {"id":11} --><figure></figure><!-- /wp:audio -->', array( 'post:11@c:core/audio.id' ) ),
@@ -74,9 +75,7 @@ final class SyncRefsTest extends TestCase {
 			'core/latest-posts'            => array( '<!-- wp:latest-posts {"selectedAuthor":2,"categories":[{"id":5,"value":"Kat"}],"postsToShow":4} /-->', array( 'user:user2@c:core/latest-posts.selectedAuthor', 'term:5@c:core/latest-posts.categories.0.id' ) ),
 			'shortcode gallery'            => array( '<p>[gallery ids="12, 13"]</p>', array( 'post:12@c:html:shortcode:gallery.ids', 'post:13@c:html:shortcode:gallery.ids' ) ),
 			'shortcode playlist'           => array( '[playlist ids=\'14\']', array( 'post:14@c:html:shortcode:playlist.ids' ) ),
-			'shortcode caption'            => array( '[caption id="attachment_15" width="300"]<img class="wp-image-15"/> Text[/caption]', array( 'post:15@c:html:html:class', 'post:15@c:html:shortcode:caption.id' ) ),
-			'classic image'                => array( '<p><img class="alignnone size-full wp-image-16"/></p>', array( 'post:16@c:html:html:class' ) ),
-			'classic image, single quotes' => array( "<p><img src='a.jpg' class='wp-image-17 size-full'/></p>", array( 'post:17@c:html:html:class' ) ),
+			'shortcode caption'            => array( '[caption id="attachment_15" width="300"]<img/> Text[/caption]', array( 'post:15@c:html:shortcode:caption.id' ) ),
 		);
 	}
 
@@ -90,12 +89,12 @@ final class SyncRefsTest extends TestCase {
 	}
 
 	public function testTheFormHoldsTheMarkersNotTheIds(): void {
-		list( , , $form ) = self::scan( '<!-- wp:image {"id":12,"sizeSlug":"large"} --><figure><img src="https://staging.test/a.jpg" class="wp-image-12"/></figure><!-- /wp:image -->' );
+		list( , , $form ) = self::scan( '<!-- wp:image {"id":12,"sizeSlug":"large"} --><figure><img src="https://staging.test/a.jpg"/> [gallery ids="12"]</figure><!-- /wp:image -->' );
 		$block = $form['~blocks'][0];
 		self::assertSame( 'core/image', $block['b'] );
 		self::assertSame( array( '~ref' => 'post', 'id' => 12 ), $block['a']['id'] );
 		self::assertSame( 'large', $block['a']['sizeSlug'] );
-		self::assertSame( array( '~s' => array( '<figure><img src="', array( '~addr' => 'plain' ), '/a.jpg" class="wp-image-', array( '~ref' => 'post', 'id' => 12 ), '"/></figure>' ) ), $block['c'][0] );
+		self::assertSame( array( '~s' => array( '<figure><img src="', array( '~addr' => 'plain' ), '/a.jpg"/> [gallery ids="', array( '~ref' => 'post', 'id' => 12 ), '"]</figure>' ) ), $block['c'][0] );
 		// A text of digits keeps that it was text.
 		list( , , $text ) = self::scan( '<!-- wp:gallery {"ids":["13"]} --><figure></figure><!-- /wp:gallery -->' );
 		self::assertSame( array( '~ref' => 'post', 'id' => 13, 'text' => true ), $text['~blocks'][0]['a']['ids'][0] );
@@ -111,6 +110,7 @@ final class SyncRefsTest extends TestCase {
 			'a core attribute of no list'  => array( '<!-- wp:image {"id":12,"acmeLink":46} --><figure></figure><!-- /wp:image -->', array( '46@c:core/image.acmeLink' ) ),
 			'a navigation link of custom'  => array( '<!-- wp:navigation-link {"id":47,"kind":"custom"} /-->', array( '47@c:core/navigation-link.id' ) ),
 			'another shortcode'            => array( '[contact-form-7 id="48" title="Kontakt"]', array( '48@c:html:shortcode:contact-form-7.id' ) ),
+			'JSON in a plugin attribute'   => array( '<!-- wp:acme/box {"data":"{\\"post\\":52,\\"inner\\":\\"{\\\\\\"target\\\\\\":53}\\"}"} /-->', array( '52@c:acme/box.data.post', '53@c:acme/box.data.inner.target' ) ),
 			'a core shortcode, other attr' => array( '[gallery id="49" columns="3" include="51"]', array( '49@c:html:shortcode:gallery.id', '51@c:html:shortcode:gallery.include' ) ),
 		);
 	}
@@ -121,10 +121,21 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( $want, $possible );
 	}
 
+	public function testNumbersInNestedJsonAndSerializedTextsArePossibleReferences(): void {
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$leaf = AB_MCP_Sync_Refs::possible_leaf( $acc, 'meta:x' );
+		AB_MCP_Sync_Canon::value( '{"outer":"{\\"target\\":12}"}', AB_MCP_Sync_Canon::context( array() ), $acc, 'post', 'meta:x', $leaf );
+		AB_MCP_Sync_Canon::value( json_encode( json_encode( array( 'id' => 13 ) ) ), AB_MCP_Sync_Canon::context( array() ), $acc, 'post', 'meta:y', AB_MCP_Sync_Refs::possible_leaf( $acc, 'meta:y' ) );
+		AB_MCP_Sync_Canon::value( serialize( array( 'json' => '[14,{"a":"15"}]' ) ), AB_MCP_Sync_Canon::context( array() ), $acc, 'post', 'meta:z', AB_MCP_Sync_Refs::possible_leaf( $acc, 'meta:z' ) );
+		self::assertSame(
+			array( 'meta:x.outer.target' => 12, 'meta:y.id' => 13, 'meta:z.json.0' => 14, 'meta:z.json.1.a' => 15 ),
+			array_column( $acc['possible'], 'value', 'at' )
+		);
+	}
+
 	public function testPlainNumbersOfTheCoreAndNumbersInTextAreNone(): void {
 		foreach ( array(
 			'[video width="640" height="360" mp4="a.mp4"][/video] [embed width="500" height="300"]https://example.test/v[/embed]',
-			'<p><img src="https://cdn.test/wp-image-12.jpg" class="alignnone"/> wp-image-12</p>',
 			'<!-- wp:heading {"level":2} --><h2>Kapitel 12</h2><!-- /wp:heading -->',
 			'<!-- wp:columns {"style":{"spacing":{"blockGap":{"left":"12"}}}} --><div></div><!-- /wp:columns -->',
 			'<!-- wp:group {"layout":{"type":"grid","columnCount":3}} --><div></div><!-- /wp:group -->',
@@ -178,13 +189,13 @@ final class SyncRefsTest extends TestCase {
 
 	public static function rewrites(): array {
 		return array(
-			'image'        => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" class="wp-image-12"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg" class="wp-image-120"/></figure><!-- /wp:image -->' ),
-			'gallery'      => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img data-id="12" class="wp-image-12"/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img data-id="120" class="wp-image-120"/></figure><!-- /wp:gallery -->' ),
+			'image'        => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg"/></figure><!-- /wp:image -->' ),
+			'gallery'      => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure><img/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,"130"]} --><figure><img/></figure><!-- /wp:gallery -->' ),
 			'block'        => array( '<!-- wp:block {"ref":20} /-->', '<!-- wp:block {"ref":200} /-->' ),
 			'nav link'     => array( '<!-- wp:navigation-link {"id":22,"kind":"post-type","url":"https://staging.test/x/"} /-->', '<!-- wp:navigation-link {"id":220,"kind":"post-type","url":"https://www.live.test/x/"} /-->' ),
 			'query'        => array( '<!-- wp:query {"query":{"author":"1,2","taxQuery":{"include":{"category":[5]}},"exclude":[30]}} --><div></div><!-- /wp:query -->', '<!-- wp:query {"query":{"author":"10,20","taxQuery":{"include":{"category":[50]}},"exclude":[300]}} --><div></div><!-- /wp:query -->' ),
 			'latest posts' => array( '<!-- wp:latest-posts {"selectedAuthor":2,"categories":[{"id":6,"value":"T"}]} /-->', '<!-- wp:latest-posts {"selectedAuthor":20,"categories":[{"id":60,"value":"T"}]} /-->' ),
-			'shortcodes'   => array( '[caption id="attachment_12"]<img class="wp-image-12"/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img class="wp-image-120"/>[/caption] [gallery ids="120,130"]' ),
+			'shortcodes'   => array( '[caption id="attachment_12"]<img/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img/>[/caption] [gallery ids="120,130"]' ),
 			'json address' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/y"} /-->', '<!-- wp:acme/x {"u":"https://www.live.test/y"} /-->' ),
 		);
 	}
@@ -203,9 +214,9 @@ final class SyncRefsTest extends TestCase {
 		self::assertFalse( $out['changed'] );
 		self::assertSame( $raw, $out['content'] );
 
-		$out = AB_MCP_Sync_Refs::rewrite_content( '<!-- wp:image {"id":77} --><figure><img class="wp-image-77"/></figure><!-- /wp:image -->', self::plan() );
+		$out = AB_MCP_Sync_Refs::rewrite_content( '<!-- wp:image {"id":77} --><figure><img/></figure><!-- /wp:image -->[gallery ids="77"]', self::plan() );
 		self::assertSame( array( array( 'space' => 'post', 'id' => 77 ), array( 'space' => 'post', 'id' => 77 ) ), $out['missing'] );
-		self::assertStringContainsString( 'wp-image-77', $out['content'], 'Nothing guessed.' );
+		self::assertStringContainsString( 'ids="77"', $out['content'], 'Nothing guessed.' );
 		// An address that only begins like the other one stays.
 		$out = AB_MCP_Sync_Refs::rewrite_content( '<p>https://staging.test.evil.com/ und https://staging.test:8443/</p>', self::plan() );
 		self::assertFalse( $out['changed'] );
@@ -245,7 +256,7 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( 'attachment_id' => 120, 'url' => 'https://www.live.test/a.jpg', 'width' => 12 ), AB_MCP_Sync_Refs::rewrite_widget( 'media_image', array( 'attachment_id' => 12, 'url' => 'https://staging.test/a.jpg', 'width' => 12 ), $plan, $changed ) );
 		self::assertSame( array( 'ids' => array( 120, 130 ) ), AB_MCP_Sync_Refs::rewrite_widget( 'media_gallery', array( 'ids' => array( 12, 13 ) ), $plan, $changed ) );
 		self::assertSame( array( 'exclude' => '120, 130' ), AB_MCP_Sync_Refs::rewrite_widget( 'pages', array( 'exclude' => '12, 13' ), $plan, $changed ) );
-		self::assertSame( array( 'content' => '<!-- wp:image {"id":120} --><figure><img class="wp-image-120"/></figure><!-- /wp:image -->' ), AB_MCP_Sync_Refs::rewrite_widget( 'block', array( 'content' => '<!-- wp:image {"id":12} --><figure><img class="wp-image-12"/></figure><!-- /wp:image -->' ), $plan, $changed ) );
+		self::assertSame( array( 'content' => '<!-- wp:image {"id":120} --><figure><img/></figure><!-- /wp:image -->' ), AB_MCP_Sync_Refs::rewrite_widget( 'block', array( 'content' => '<!-- wp:image {"id":12} --><figure><img/></figure><!-- /wp:image -->' ), $plan, $changed ) );
 		self::assertSame( array( 'post' => 12 ), AB_MCP_Sync_Refs::rewrite_widget( 'acme_box', array( 'post' => 12 ), $plan, $changed ), 'A widget of no schema keeps its numbers.' );
 		self::assertSame( array(), $plan['missing'] );
 

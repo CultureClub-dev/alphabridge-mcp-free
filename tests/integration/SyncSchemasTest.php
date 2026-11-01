@@ -99,6 +99,70 @@ final class SyncSchemasTest extends TestCase {
 		self::assertContains( 'group B', $reasons['initial_db_version'] );
 	}
 
+	/**
+	 * Each value of a choice, with the place of the core that writes it
+	 * (file, line, text on that line).
+	 */
+	private const CHOICES = array(
+		'default_comment_status' => array(
+			'open'   => array( 'wp-admin/options-discussion.php', 59, 'name="default_comment_status" type="checkbox" id="default_comment_status" value="open"' ),
+			'closed' => array( 'wp-includes/formatting.php', 4984, "\$value = 'closed';" ),
+		),
+		'default_ping_status'    => array(
+			'open'   => array( 'wp-admin/options-discussion.php', 55, 'name="default_ping_status" type="checkbox" id="default_ping_status" value="open"' ),
+			'closed' => array( 'wp-includes/formatting.php', 4984, "\$value = 'closed';" ),
+		),
+		'show_on_front'          => array(
+			'posts' => array( 'wp-admin/options-reading.php', 93, 'name="show_on_front" type="radio" value="posts"' ),
+			'page'  => array( 'wp-admin/options-reading.php', 98, 'name="show_on_front" type="radio" value="page"' ),
+		),
+		'avatar_rating'          => array(
+			'G'  => array( 'wp-admin/options-discussion.php', 241, "'G'  => __(" ),
+			'PG' => array( 'wp-admin/options-discussion.php', 243, "'PG' => __(" ),
+			'R'  => array( 'wp-admin/options-discussion.php', 245, "'R'  => __(" ),
+			'X'  => array( 'wp-admin/options-discussion.php', 247, "'X'  => __(" ),
+		),
+		'default_comments_page'  => array(
+			'newest' => array( 'wp-admin/options-discussion.php', 138, '<option value="newest"' ),
+			'oldest' => array( 'wp-admin/options-discussion.php', 139, '<option value="oldest"' ),
+		),
+		'comment_order'          => array(
+			'asc'  => array( 'wp-admin/options-discussion.php', 145, '<option value="asc"' ),
+			'desc' => array( 'wp-admin/options-discussion.php', 146, '<option value="desc"' ),
+		),
+		'auto_update_core_dev'   => array(
+			'enabled' => array( 'wp-admin/includes/schema.php', 550, "'auto_update_core_dev'            => 'enabled'," ),
+		),
+		'auto_update_core_minor' => array(
+			'enabled' => array( 'wp-admin/includes/schema.php', 551, "'auto_update_core_minor'          => 'enabled'," ),
+		),
+		'auto_update_core_major' => array(
+			'enabled'  => array( 'wp-admin/update-core.php', 1311, "update_site_option( 'auto_update_core_major', 'enabled' );" ),
+			'disabled' => array( 'wp-admin/update-core.php', 1314, "update_site_option( 'auto_update_core_major', 'disabled' );" ),
+			'unset'    => array( 'wp-admin/includes/upgrade.php', 2279, "update_option( 'auto_update_core_major', 'unset' );" ),
+		),
+	);
+
+	public function testEachValueOfAChoiceIsOneTheCoreWrites(): void {
+		$choices = array();
+		foreach ( AB_MCP_Sync_Option_Schema::CORE as $name => $schema ) {
+			if ( 'choice' === $schema['type'] ) {
+				$choices[ $name ] = $schema['values'];
+			}
+		}
+		self::assertSame( array_keys( self::CHOICES ), array_keys( $choices ), 'A list of places for each choice of the schema.' );
+		foreach ( self::CHOICES as $name => $values ) {
+			self::assertSame( array_keys( $values ), $choices[ $name ], "$name: exactly the values the core writes." );
+			foreach ( $values as $value => list( $file, $line, $text ) ) {
+				$lines = file( ABSPATH . $file );
+				self::assertStringContainsString( $text, (string) ( $lines[ $line - 1 ] ?? '' ), "$name $value: $file:$line" );
+			}
+		}
+		// The checkbox left empty is stored as closed, never as ''.
+		update_option( 'default_comment_status', '' );
+		self::assertSame( 'closed', \AB_MCP_IT_Sites::option_row( 'a', 'default_comment_status' )['option_value'] );
+	}
+
 	public function testEveryOtherOptionIsLockedAsUnclassified(): void {
 		add_option( 'ab_it_plugin_setting', 'x' );
 		$class = AB_MCP_Sync_Option_Schema::classify( 'ab_it_plugin_setting' );

@@ -14,7 +14,10 @@
  * TYPES (the rule follows sanitize_option(), wp-includes/formatting.php:4923):
  * - int: a whole number of digits (absint);
  * - flag: '', '0' or '1';
- * - choice: one of the values listed;
+ * - choice: one of the values listed, exactly the values the core writes
+ *   (populate_options(), the settings screens and their sanitize_option(),
+ *   the upgrade; the integration suite holds each against its place in the
+ *   core);
  * - text: any text; addresses neutral;
  * - number: a number as text (gmt_offset);
  * - rewrite: a text of the permalink settings; writing it needs the rewrite
@@ -58,11 +61,11 @@ final class AB_MCP_Sync_Option_Schema {
 		),
 		'default_comment_status'       => array(
 			'type'   => 'choice',
-			'values' => array( 'open', 'closed', '' ),
+			'values' => array( 'open', 'closed' ),
 		),
 		'default_ping_status'          => array(
 			'type'   => 'choice',
-			'values' => array( 'open', 'closed', '' ),
+			'values' => array( 'open', 'closed' ),
 		),
 		'default_pingback_flag'        => array( 'type' => 'flag' ),
 		'posts_per_page'               => array( 'type' => 'int' ),
@@ -109,10 +112,7 @@ final class AB_MCP_Sync_Option_Schema {
 		'avatar_default'               => array( 'type' => 'text' ),
 		'large_size_w'                 => array( 'type' => 'int' ),
 		'large_size_h'                 => array( 'type' => 'int' ),
-		'image_default_link_type'      => array(
-			'type'   => 'choice',
-			'values' => array( 'none', 'file', 'post', 'custom', '' ),
-		),
+		'image_default_link_type'      => array( 'type' => 'text' ),
 		'image_default_size'           => array( 'type' => 'text' ),
 		'image_default_align'          => array( 'type' => 'text' ),
 		'close_comments_for_old_posts' => array( 'type' => 'flag' ),
@@ -159,15 +159,15 @@ final class AB_MCP_Sync_Option_Schema {
 		'comment_previously_approved'  => array( 'type' => 'flag' ),
 		'auto_update_core_dev'         => array(
 			'type'   => 'choice',
-			'values' => array( 'enabled', 'unset' ),
+			'values' => array( 'enabled' ),
 		),
 		'auto_update_core_minor'       => array(
 			'type'   => 'choice',
-			'values' => array( 'enabled', 'unset' ),
+			'values' => array( 'enabled' ),
 		),
 		'auto_update_core_major'       => array(
 			'type'   => 'choice',
-			'values' => array( 'enabled', 'unset' ),
+			'values' => array( 'enabled', 'disabled', 'unset' ),
 		),
 		'wp_attachment_pages_enabled'  => array( 'type' => 'flag' ),
 		'wp_notes_notify'              => array( 'type' => 'flag' ),
@@ -176,7 +176,8 @@ final class AB_MCP_Sync_Option_Schema {
 	/**
 	 * What the takeover does with one stored option row.
 	 *
-	 * @param string $name The name exactly as the row has it.
+	 * @param string      $name The name exactly as the row has it.
+	 * @param string|null $raw  The value as the row holds it; read when null.
 	 * @return array status: core (with schema), excluded (group B), owner
 	 *               (another kind, or locked there), guarded (the option
 	 *               guard refuses it; reason: its way), unreachable (WordPress
@@ -184,7 +185,7 @@ final class AB_MCP_Sync_Option_Schema {
 	 *               Z8d), unreadable (the guard could not look it up); key,
 	 *               stage, reason.
 	 */
-	public static function classify( $name ) {
+	public static function classify( $name, $raw = null ) {
 		$name  = (string) $name;
 		$owner = AB_MCP_Sync_Kinds::option( $name );
 		if ( 'excluded' === $owner['status'] ) {
@@ -193,7 +194,29 @@ final class AB_MCP_Sync_Option_Schema {
 		if ( 'option' !== $owner['kind'] || 'z8' !== $owner['status'] ) {
 			return self::answer( 'owner', $owner['key'], $owner['stage'], $owner['reason'] ) + array( 'owner' => $owner );
 		}
-		$resolved = AB_MCP_Option_Guard::resolve_option( $name );
+		if ( null === $raw ) {
+			$row = AB_MCP_Sync_Rows::option( $name );
+			if ( null === $row ) {
+				return self::answer( 'unreadable', 'option:' . $name, null, 'The option could not be read. Try again; if it keeps failing, the database error log names the cause.' );
+			}
+			$raw = false === $row ? '' : $row['value'];
+		}
+		// resolve_option() reads the value of the row it settles on with
+		// get_option(), whose maybe_unserialize() makes an object of any
+		// class. A row that holds one is settled here by its name alone: a
+		// stored name WordPress acts on as it is settles on its own row, and
+		// the guard asks the name the same questions there.
+		if ( AB_MCP_Sync_Canon::holds_record( $raw ) ) {
+			$real = AB_MCP_Sync_Option_Name::real( $name );
+			if ( $real !== $name ) {
+				$resolved = array( 'name' => $real );
+			} else {
+				$refused  = AB_MCP_Option_Guard::option_write_refused( $name );
+				$resolved = is_wp_error( $refused ) ? $refused : array( 'name' => $name );
+			}
+		} else {
+			$resolved = AB_MCP_Option_Guard::resolve_option( $name );
+		}
 		if ( is_wp_error( $resolved ) ) {
 			if ( 'ab_mcp_option_unreadable' === $resolved->get_error_code() ) {
 				return self::answer( 'unreadable', 'option:' . $name, null, $resolved->get_error_message() );
@@ -304,5 +327,21 @@ final class AB_MCP_Sync_Option_Schema {
 			'stage'  => $stage,
 			'reason' => $reason,
 		);
+	}
+}
+
+/**
+ * Class AB_MCP_Sync_Option_Name: the name WordPress acts on for a name, as
+ * the option guard settles it (AB_MCP_Option_Guard::real_option_name():
+ * trimmed, the two legacy names the core redirects), without reading a row.
+ */
+final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
+
+	/**
+	 * @param string $name Name.
+	 * @return string
+	 */
+	public static function real( $name ) {
+		return self::real_option_name( $name );
 	}
 }

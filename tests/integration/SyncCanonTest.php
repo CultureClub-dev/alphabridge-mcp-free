@@ -431,7 +431,7 @@ final class SyncCanonTest extends TestCase {
 			self::assertTrue( null === $object['hash'] || 1 === preg_match( '/^[0-9a-f]{64}\z/', $object['hash'] ) );
 		}
 		self::assertSame( count( $keys ), count( array_unique( $keys ) ) );
-		foreach ( array( 'post:' . $page, 'menu:' . $menu, 'menu_item:item:' . $item, 'option:blogname', 'widget_area:sidebar-1' ) as $want ) {
+		foreach ( array( 'post:' . $page, 'menu:' . $menu, 'menu_item:' . $item, 'option:blogname', 'widget_area:sidebar-1' ) as $want ) {
 			self::assertContains( $want, $keys );
 		}
 		$menu_entry = $all['objects'][ array_search( 'menu:' . $menu, $keys, true ) ];
@@ -464,6 +464,85 @@ final class SyncCanonTest extends TestCase {
 		} while ( null !== $cursor && $calls < 1000 );
 		self::assertGreaterThan( 10, $calls );
 		self::assertSame( $keys, $parts );
+	}
+
+	public function testEveryRefOfTheInventoryCanBeReadByItsKind(): void {
+		global $wpdb;
+		self::post( array( 'post_title' => 'Ein Post' ) );
+		$wpdb->insert( $wpdb->posts, array( 'post_type' => 'acme_product', 'post_title' => 'Produkt', 'post_status' => 'publish', 'post_name' => 'produkt', 'post_content' => '', 'post_excerpt' => '', 'to_ping' => '', 'pinged' => '', 'post_content_filtered' => '' ) );
+		wp_insert_term( 'Kategorie', 'category' );
+		$menu = wp_create_nav_menu( 'Menü' );
+		$page = self::post( array( 'post_type' => 'page', 'post_title' => 'Ziel' ) );
+		wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'post_type', 'menu-item-object' => 'page', 'menu-item-object-id' => $page, 'menu-item-status' => 'publish' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $menu ) );
+		set_theme_mod( 'header_textcolor', '000000' );
+		update_option( 'widget_text', array( 2 => array( 'title' => 'T', 'text' => 'x' ), '_multiwidget' => 1 ) );
+		update_option( 'sidebars_widgets', array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-2' ), 'array_version' => 3 ) );
+		wp_update_custom_css_post( 'body{color:red}' );
+		// A second CSS post of the stylesheet (left by an older save); the
+		// core gives it another slug, so it goes in as a row.
+		$wpdb->insert( $wpdb->posts, array( 'post_type' => 'custom_css', 'post_name' => get_stylesheet(), 'post_title' => get_stylesheet(), 'post_content' => 'p{}', 'post_status' => 'publish', 'post_excerpt' => '', 'to_ping' => '', 'pinged' => '', 'post_content_filtered' => '' ) );
+		add_option( 'theme_mods_kaputt', 'kein Array' );
+		add_option( 'ab_it_plugin_setting', 'x' );
+		add_option( 'ab_it_service_api_key', 'geheim' );
+
+		$all = AB_MCP_Sync_Inventory::run( AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ) );
+		self::assertNull( $all['cursor'] );
+		$kinds = array();
+		foreach ( $all['objects'] as $object ) {
+			$kinds[ $object['kind'] ] = true;
+			$kind                     = AB_MCP_Sync_Db_Kinds::for_pair( $object['kind'] );
+			self::assertNotNull( $kind, $object['kind'] );
+			$again = $kind->canonical(
+				array(
+					'kind'   => $object['kind'],
+					'ref'    => $object['ref'],
+					'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+				)
+			);
+			$what  = $object['kind'] . ' ' . $object['ref'];
+			self::assertIsArray( $again, $what . ( is_wp_error( $again ) ? ': ' . $again->get_error_message() : '' ) );
+			self::assertSame( $object['ref'], $again['ref'], $what );
+			self::assertSame( $object['hash'], $again['hash'], $what );
+			self::assertSame( $object['status'], null === $again['hash'] ? $again['status'] : AB_MCP_Sync_Inventory::entry( $again )['status'], $what );
+		}
+		foreach ( array( 'post', 'term', 'menu', 'menu_item', 'widget_area', 'custom_css', 'option', 'theme_mod' ) as $pair ) {
+			self::assertArrayHasKey( $pair, $kinds, "The inventory has objects of $pair." );
+		}
+		$css = array_column( array_filter( $all['objects'], static fn( $o ) => 'custom_css' === $o['kind'] ), 'ref' );
+		sort( $css );
+		self::assertCount( 2, $css );
+		self::assertSame( get_stylesheet(), $css[0], 'The CSS the theme mods name, by its stylesheet.' );
+		self::assertMatchesRegularExpression( '/^' . preg_quote( get_stylesheet(), '/' ) . '@\d+\z/', $css[1], 'Another, by stylesheet and id.' );
+	}
+
+	public function testTheBudgetHoldsAlsoOverRowsThatGiveNoObject(): void {
+		global $wpdb;
+		$parent = self::post( array( 'post_title' => 'Mit Revisionen' ) );
+		$first  = 0;
+		for ( $i = 0; $i < 40; $i++ ) {
+			$wpdb->insert( $wpdb->posts, array( 'post_type' => 'revision', 'post_parent' => $parent, 'post_title' => "Revision $i", 'post_status' => 'inherit', 'post_name' => "$parent-revision-v1-$i", 'post_content' => '', 'post_excerpt' => '', 'to_ping' => '', 'pinged' => '', 'post_content_filtered' => '' ) );
+			$first = $first ?: (int) $wpdb->insert_id;
+		}
+		$last = self::post( array( 'post_title' => 'Danach' ) );
+		$kind = self::kind( 'post' );
+		// A budget used up from the start: each call reads one row and goes on.
+		$source             = AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() );
+		$source['deadline'] = 0.0;
+		$part               = $kind->inventory( $source, array( 'after' => $first - 1 ) );
+		self::assertSame( array(), $part['objects'], 'A revision gives no object.' );
+		self::assertSame( array( 'after' => $first ), $part['cursor'], 'One row read, then the budget: the cursor goes past it.' );
+		$cursor  = $part['cursor'];
+		$objects = array();
+		$calls   = 1;
+		while ( null !== $cursor && $calls < 500 ) {
+			$part    = $kind->inventory( $source, $cursor );
+			$objects = array_merge( $objects, array_column( $part['objects'], 'ref' ) );
+			$cursor  = $part['cursor'];
+			++$calls;
+		}
+		self::assertSame( array( (string) $last ), $objects );
+		self::assertGreaterThanOrEqual( 40, $calls, 'Each row in its own call.' );
 	}
 
 	public function testTheOwnAddressesAreTheRowsNotTheFilteredOptions(): void {
