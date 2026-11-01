@@ -251,7 +251,11 @@ final class AB_MCP_Store_Budget {
 	 */
 	public static function bookings() {
 		$root = AB_MCP_Protected_Store::root();
-		return is_wp_error( $root ) ? $root : self::read_bookings( $root );
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$admitted = AB_MCP_Protected_Store::admitted( $root );
+		return true === $admitted ? self::read_bookings( $root ) : $admitted;
 	}
 
 	/**

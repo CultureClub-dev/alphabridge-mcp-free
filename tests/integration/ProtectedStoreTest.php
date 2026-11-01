@@ -13,7 +13,9 @@
  *   serves the test files, which reads no .htaccess: no proof, and nothing
  *   is written; a server that refuses the folder (the router as Apache)
  *   gives the proof, which is made again after a day and when a guard file
- *   is missing; a check that fails takes the proof back;
+ *   is missing; a check that fails takes the proof back, and a success
+ *   never overwrites a younger revocation; a proof a request keeps is no
+ *   release after another request revoked it;
  * - the place chosen stays bound while it can be used, and a request that
  *   chose a place another request has left writes nothing there;
  * - no link on the way from the folder of the store to a file is followed;
@@ -748,6 +750,122 @@ final class ProtectedStoreTest extends TestCase {
 		$proof = AB_MCP_Protected_Store::proof( $fetcher );
 		self::assertSame( 'outside', $proof['where'] );
 		self::assertSame( array( 'uploads' => 'served' ), $proof['findings'] );
+	}
+
+	/**
+	 * Change the stored record of the proof on a connection of its own the
+	 * moment before this request sends its own change of it: another request
+	 * that writes between the read and the write.
+	 *
+	 * @param callable $change The stored value in, the other request's out.
+	 */
+	private function between_proof_write( callable $change ): void {
+		$other  = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$table  = AB_MCP_IT_Sites::table( 'a', 'options' );
+		$done   = false;
+		$filter = static function ( $query ) use ( $other, $table, $change, &$done ) {
+			if ( ! $done && 0 === strpos( (string) $query, 'UPDATE ' . $table . ' SET option_value' ) && false !== strpos( (string) $query, "'" . AB_MCP_Protected_Store::OPTION_PROOF . "'" ) ) {
+				$done = true;
+				$raw  = (string) $other->get_var( $other->prepare( "SELECT option_value FROM `$table` WHERE option_name = %s", AB_MCP_Protected_Store::OPTION_PROOF ) );
+				$other->query( $other->prepare( "UPDATE `$table` SET option_value = %s WHERE option_name = %s", serialize( $change( unserialize( $raw ) ) ), AB_MCP_Protected_Store::OPTION_PROOF ) );
+			}
+			return $query;
+		};
+		$this->filter( 'query', $filter );
+	}
+
+	/** The record of the proof of site A, as it is in the table. */
+	private static function stored_proof(): array {
+		return (array) unserialize( (string) AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Protected_Store::OPTION_PROOF )['option_value'] );
+	}
+
+	public function testASuccessNeverOverwritesAYoungerRevocation(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		// Ten seconds ago, so the check made again below is a new finding.
+		self::age_record( 10 );
+		$rev = self::stored_proof()['rev'];
+
+		// This request checks again and passes. Between its read of the
+		// record and its write, another request's check fails and takes the
+		// proof back.
+		$this->between_proof_write(
+			static function ( array $rec ): array {
+				$rec['rev']++;
+				$rec['proved'] = 0;
+				$rec['check']  = array(
+					'where'   => 'uploads',
+					'checked' => time(),
+					'ok'      => false,
+					'reason'  => 'served',
+					'detail'  => array( 'probes' => array( 200, 200, 200 ) ),
+				);
+				return $rec;
+			}
+		);
+		AB_MCP_Protected_Store::forget();
+		$calls = count( $fetcher->calls );
+		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
+		self::assertSame( $calls + 4, count( $fetcher->calls ), 'This request made its check (and passed it).' );
+		self::assertFalse( $proof['available'], 'The success did not overwrite the revocation: read again, decided again.' );
+		self::assertSame( 'served', $proof['findings']['uploads'] );
+		$stored = self::stored_proof();
+		self::assertSame( 0, $stored['proved'] );
+		self::assertSame( $rev + 1, $stored['rev'], 'The revocation is the newest version, nothing written over it.' );
+		self::assertSame( 'ab_mcp_store_unavailable', AB_MCP_Protected_Store::open( 'reports' )->get_error_code() );
+
+		// Nor does a request without the document root use the uploads.
+		unset( $_SERVER['DOCUMENT_ROOT'] );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'no_document_root', AB_MCP_Protected_Store::proof()['reason'] );
+	}
+
+	public function testAProofKeptInARequestIsNoReleaseAfterAnotherRevokedIt(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( AB_MCP_Test_Sync_Fetcher::for_sites() )['where'] );
+		$id      = AB_MCP_Protected_Store::install_id();
+		$uploads = self::in_uploads( 'a', $id );
+		$backup  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		$put     = AB_MCP_Protected_Store::put( 'backups', $backup, 'post-1', 'kept' );
+		self::assertIsArray( $put );
+
+		// Another request (site A over HTTP) checks again and fails: a guard
+		// file is gone, its check through AB_MCP_Outbound cannot ask the
+		// local site, and beside WordPress nothing can be made. It takes the
+		// proof back and binds no other place.
+		unlink( $uploads . '/web.config' );
+		mkdir( self::root() . '/ab-mcp-store', 0555 );
+		$other = self::probe( 'a', array( 'action' => 'proof' ) )['ok'];
+		self::assertFalse( $other['available'] );
+		self::assertSame(
+			array(
+				'uploads' => 'self_unreachable',
+				'outside' => 'not_writable',
+			),
+			$other['findings']
+		);
+		self::assertSame( 0, self::stored_proof()['proved'] );
+
+		// This request still keeps its proof: no way of it takes it as a release.
+		$tree = self::tree( $uploads );
+		foreach ( array(
+			'put'      => AB_MCP_Protected_Store::put( 'backups', $backup, 'post-2', 'x' ),
+			'open'     => AB_MCP_Protected_Store::open( 'reports' ),
+			'bind'     => AB_MCP_Protected_Store::bind( 'backups', $backup, 4 ),
+			'book'     => AB_MCP_Store_Budget::book( 3, 10 ),
+			'release'  => AB_MCP_Store_Budget::release( 3 ),
+			'bookings' => AB_MCP_Store_Budget::bookings(),
+			'get'      => AB_MCP_Protected_Store::get( 'backups', $backup, 'post-1', $put['sha256'] ),
+			'groups'   => AB_MCP_Protected_Store::groups( 'backups' ),
+			'files'    => AB_MCP_Protected_Store::files( 'backups', $backup ),
+		) as $way => $res ) {
+			self::assertInstanceOf( \WP_Error::class, $res, $way );
+			self::assertSame( 'ab_mcp_store_unproved', $res->get_error_code(), $way );
+		}
+		self::assertSame( $tree, self::tree( $uploads ), 'Nothing written.' );
 	}
 
 	public function testAFileThatWasNotCountedStillCountsAgainstThePackage(): void {

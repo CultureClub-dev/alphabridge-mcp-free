@@ -28,13 +28,20 @@
  * The place chosen is bound (the option OPTION_PROOF): the next requests use
  * it while it can be used, so get() and the budgets never look into another
  * folder than the one that holds the groups. Another place is taken only
- * when the bound one cannot be used any more. The binding changes under the
- * lock of the place bound so far (commit()), and every writer checks under
- * the lock of its place that the place is still the bound one (writing()):
- * a request that chose a place before another one moved the store writes
- * nothing there. The youngest finding counts: a web request that finds the
- * bound place unusable takes its proof back, so a request without the
- * document root does not use it either until a web request proves it again.
+ * when the bound one cannot be used any more.
+ *
+ * The record of the proof is versioned (rev) and read from the table every
+ * time, never from a cache: the place bound, when it was proved (0 where a
+ * web request found it unusable or its check failed: the youngest finding
+ * counts) and the last self-check. Every change is a new version stored only
+ * where the stored one is still the one read (swap(), a conditional UPDATE
+ * by its bytes); otherwise it is read again and decided again, so a success
+ * never overwrites a younger revocation. A change is stored under the lock
+ * of the place bound so far, and every writer checks the record afresh
+ * under the lock of its place (writing(), admitted()): the place is the
+ * bound one and its proof is valid (valid()). Readers check it too. The
+ * proof a request keeps (proof()) is a hint where to look, never the
+ * release.
  *
  * Only a request that knows the document root (the web server sets
  * DOCUMENT_ROOT) chooses the place. A request without it (WP-CLI, a cron job
@@ -203,7 +210,9 @@ final class AB_MCP_Protected_Store {
 	/* ------------------------------------------------------- place and proof */
 
 	/**
-	 * Whether the store can be used in this request.
+	 * Whether the store can be used, as this request found it: a hint for a
+	 * caller (no export, no import, no run without it), never the release
+	 * of a write, which every writer and reader checks afresh (admitted()).
 	 *
 	 * @param object|null $fetcher See proof().
 	 * @return bool
@@ -604,6 +613,10 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
 		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
 		if ( ! is_array( $found ) ) {
 			return $found;
@@ -641,6 +654,10 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
 		if ( null === self::way( $root, array( $area ) ) ) {
 			return self::unsafe();
 		}
@@ -668,6 +685,10 @@ final class AB_MCP_Protected_Store {
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
 			return $root;
+		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
 		}
 		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
 		if ( ! is_array( $found ) ) {
@@ -844,11 +865,11 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The lock of a folder of the store for a writer: under it, the folder
-	 * must still be the place bound (read from the table, past every cache),
-	 * or nothing is written. A request that chose its place before another
-	 * request moved the store gets the refusal instead of writing where no
-	 * later request looks.
+	 * The lock of a folder of the store for a writer, and under it the record
+	 * of the proof read afresh from the table (admitted()): the proof this
+	 * request keeps is a hint only, never the release. A request that chose
+	 * its place before another request moved the store, or took its proof
+	 * back, writes nothing.
 	 *
 	 * @param string   $root Folder of the store.
 	 * @param callable $fn   What writes.
@@ -858,14 +879,45 @@ final class AB_MCP_Protected_Store {
 		return self::locked(
 			$root,
 			static function () use ( $root, $fn ) {
-				$id    = self::install_id( false );
-				$where = array_search( $root, self::candidates( $id ), true );
-				if ( false === $where || self::bound_now( $id ) !== $where ) {
-					return new WP_Error( 'ab_mcp_store_moved', 'The protected store is no longer in the place this request chose: another request moved it, because that place could not be used any more. Nothing was written. Call it again.' );
-				}
-				return $fn();
+				$admitted = self::admitted( $root );
+				return true === $admitted ? $fn() : $admitted;
 			}
 		);
+	}
+
+	/**
+	 * Whether a folder may be used now, by the record as it is in the table:
+	 * it is the place bound for this installation's id, and that place holds
+	 * a valid proof (valid()). Writers ask under the lock of the folder
+	 * (writing()), readers before they read.
+	 *
+	 * @param string $root Folder of the store.
+	 * @return true|WP_Error
+	 */
+	public static function admitted( $root ) {
+		$id    = self::install_id( false );
+		$where = array_search( $root, self::candidates( $id ), true );
+		$state = self::state( self::stored()['rec'], $id );
+		if ( false === $where || $where !== $state['bound'] ) {
+			return new WP_Error( 'ab_mcp_store_moved', 'The protected store is no longer in the place this request chose: another request moved it, because that place could not be used any more. Nothing was read or written. Call it again.' );
+		}
+		if ( ! self::valid( $state, time() ) ) {
+			return new WP_Error( 'ab_mcp_store_unproved', 'The protection of the store is not proved any more: a later check failed, or the last proof is older than a day. Nothing was read or written. Call it again over the web, through the MCP endpoint or in wp-admin: that request checks the store anew.' );
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a state of the record holds a valid proof of its bound place:
+	 * proved (a failed check or an unusable place takes it back to 0), and
+	 * not older than RECHECK seconds.
+	 *
+	 * @param array $state state().
+	 * @param int   $now   Time.
+	 * @return bool
+	 */
+	public static function valid( array $state, $now ) {
+		return null !== $state['bound'] && $state['proved'] > 0 && ( $now - $state['proved'] ) < self::RECHECK;
 	}
 
 	/**
@@ -892,41 +944,97 @@ final class AB_MCP_Protected_Store {
 	/* ------------------------------------------------------------ internals */
 
 	/**
-	 * Decide where the store is (proof()).
+	 * Decide where the store is (proof()), from the record as it is in the
+	 * table, and note the outcome as a new version of it (commit()): only
+	 * where the record is still the one read. Where another request changed
+	 * it meanwhile (a proof, a check that failed, another place), it is read
+	 * again and the decision made again, never written over; so a success
+	 * never overwrites a younger revocation.
 	 *
 	 * @param object|null $fetcher   Fetcher.
 	 * @param bool        $force     Self-check now.
 	 * @param bool        $may_renew Whether a foreign folder may renew the id.
 	 * @return array
 	 */
-	private static function decide( $fetcher, $force, $may_renew, $again = true ) {
-		$id = self::install_id();
-		if ( '' === $id ) {
-			return self::verdict( null, 'no_id', array() );
-		}
-		$paths   = self::candidates( $id );
-		$record  = self::record( $id );
-		$bound   = null === $record ? null : $record['bound'];
-		$proved  = null === $record ? 0 : $record['proved'];
-		$check   = null === $record ? null : $record['check'];
-		$docroot = self::document_root();
-		if ( null === $docroot ) {
-			// Only what a web request proved: this one cannot see whether the
-			// place beside WordPress is outside the web root.
-			if ( null !== $bound && isset( $paths[ $bound ] ) && ( time() - $proved ) < self::RECHECK ) {
-				$path = $paths[ $bound ];
-				if ( self::owns( $path, $id ) && is_writable( $path ) && ( 'outside' === $bound || array() === self::guards_missing( $path ) ) ) {
-					return self::verdict( $bound, null, array(), $proved );
-				}
+	private static function decide( $fetcher, $force, $may_renew ) {
+		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+			$id = self::install_id();
+			if ( '' === $id ) {
+				return self::verdict( null, 'no_id', array() );
 			}
-			return self::verdict( null, 'no_document_root', array() );
+			$paths   = self::candidates( $id );
+			$stored  = self::stored();
+			$state   = self::state( $stored['rec'], $id );
+			$docroot = self::document_root();
+			if ( null === $docroot ) {
+				return self::without_docroot( $state, $paths, $id );
+			}
+			$chosen = self::choose( $state, $paths, $docroot, $id, $fetcher, $force && 0 === $attempt, $may_renew );
+			if ( 'foreign' === $chosen['state'] ) {
+				// A folder of another installation at this id's place: this
+				// one is a copy that kept the id. A new id, and again (once).
+				self::replace_id( $id );
+				self::$id  = null;
+				$may_renew = false;
+				continue;
+			}
+			$next = array(
+				'id'     => $id,
+				'rev'    => $state['rev'] + 1,
+				'bound'  => null === $chosen['where'] ? $state['bound'] : $chosen['where'],
+				// No usable place: the proof of the bound one is taken back.
+				'proved' => null === $chosen['where'] ? 0 : $chosen['proved'],
+				'check'  => $chosen['check'],
+			);
+			$same = self::same( $state, $next );
+			if ( $same || self::commit( $stored['raw'], $state, $next, $paths, $id ) ) {
+				return null === $chosen['where']
+					? self::verdict( null, 'none', $chosen['found'], 0, $chosen['detail'] )
+					: self::verdict( $chosen['where'], null, $chosen['found'], $same ? $state['proved'] : $next['proved'] );
+			}
 		}
+		return self::verdict( null, 'moved', array() );
+	}
 
-		// The bound place first, while it can be used: another place would
-		// leave its groups (backups with a valid reference, packages that
-		// count) where get() and the budgets no longer look. Without a bound
-		// place, or where it cannot be used, the order of decision 7.
-		$order  = 'uploads' === $bound ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );
+	/**
+	 * A request without the document root uses only what a web request
+	 * proved: the bound place with a valid proof (valid()).
+	 *
+	 * @param array  $state state().
+	 * @param array  $paths candidates().
+	 * @param string $id    Id.
+	 * @return array
+	 */
+	private static function without_docroot( array $state, array $paths, $id ) {
+		$bound = $state['bound'];
+		if ( self::valid( $state, time() ) && isset( $paths[ $bound ] ) ) {
+			$path = $paths[ $bound ];
+			if ( self::owns( $path, $id ) && is_writable( $path ) && ( 'outside' === $bound || array() === self::guards_missing( $path ) ) ) {
+				return self::verdict( $bound, null, array(), $state['proved'] );
+			}
+		}
+		return self::verdict( null, 'no_document_root', array() );
+	}
+
+	/**
+	 * Choose the place: the bound place first, while it can be used, since
+	 * another place would leave its groups (backups with a valid reference,
+	 * packages that count) where get() and the budgets no longer look;
+	 * without a bound place, or where it cannot be used, the order of
+	 * decision 7.
+	 *
+	 * @param array       $state     state().
+	 * @param array       $paths     candidates().
+	 * @param string      $docroot   Resolved document root.
+	 * @param string      $id        Id.
+	 * @param object|null $fetcher   Fetcher.
+	 * @param bool        $force     Self-check now.
+	 * @param bool        $may_renew Whether a foreign folder ends the choice.
+	 * @return array{state:string,where:string|null,proved:int,check:array|null,found:array,detail:array}
+	 */
+	private static function choose( array $state, array $paths, $docroot, $id, $fetcher, $force, $may_renew ) {
+		$order  = 'uploads' === $state['bound'] ? array( 'uploads', 'outside' ) : array( 'outside', 'uploads' );
+		$check  = $state['check'];
 		$found  = array();
 		$detail = array();
 		foreach ( $order as $where ) {
@@ -935,60 +1043,87 @@ final class AB_MCP_Protected_Store {
 				$check = $tried['check'];
 			}
 			if ( 'foreign' === $tried['state'] && $may_renew ) {
-				return self::renewed( $id, $fetcher, $force );
+				return array(
+					'state'  => 'foreign',
+					'where'  => null,
+					'proved' => 0,
+					'check'  => $check,
+					'found'  => $found,
+					'detail' => array(),
+				);
 			}
 			if ( 'ok' !== $tried['state'] ) {
 				$found[ $where ] = $tried['state'];
 				$detail          = $tried['detail'];
 				continue;
 			}
-			// The bound place, or another one because the bound one cannot
-			// be used: under the lock of the place bound so far.
-			if ( true !== self::commit( $id, $paths, $bound, $where, $tried['proved'], $check ) ) {
-				return $again ? self::decide( $fetcher, $force, $may_renew, false ) : self::verdict( null, 'moved', $found );
-			}
-			return self::verdict( $where, null, $found, $tried['proved'] );
+			return array(
+				'state'  => 'ok',
+				'where'  => $where,
+				'proved' => $tried['proved'],
+				'check'  => $check,
+				'found'  => $found,
+				'detail' => array(),
+			);
 		}
-		// No place. The binding stays for the next request, without a proof:
-		// the youngest finding counts, also for a request without the
-		// document root.
-		self::commit( $id, $paths, $bound, $bound, 0, $check );
-		return self::verdict( null, 'none', $found, 0, $detail );
+		return array(
+			'state'  => 'none',
+			'where'  => null,
+			'proved' => 0,
+			'check'  => $check,
+			'found'  => $found,
+			'detail' => $detail,
+		);
 	}
 
 	/**
-	 * Note a proof and the place it binds, under the lock of the place bound
-	 * so far (its writers wait for it, writing()), or of the new place where
-	 * none is bound or the old one cannot be locked. False where the binding
-	 * in the table is no longer the one this request started from: another
-	 * request moved the store meanwhile.
+	 * Whether a new version says nothing the stored one does not: the same
+	 * place, the same check, and the same proof (or, for a place proved
+	 * anew, a proof less than an hour younger than a valid one), so a request
+	 * that finds all as it was writes nothing.
 	 *
-	 * @param string      $id     Id.
-	 * @param array       $paths  candidates().
-	 * @param string|null $expect The place bound when this request read it.
-	 * @param string|null $bound  The place to bind.
-	 * @param int         $proved When it was proved (0: no proof).
-	 * @param array|null  $check  The last self-check of the uploads.
+	 * @param array $state state().
+	 * @param array $next  The new version.
 	 * @return bool
 	 */
-	private static function commit( $id, array $paths, $expect, $bound, $proved, $check ) {
-		$write = static function () use ( $id, $expect, $bound, $proved, $check ) {
-			if ( self::bound_now( $id ) !== $expect ) {
-				return false;
-			}
-			self::store_record( $id, $bound, $proved, $check );
+	private static function same( array $state, array $next ) {
+		if ( $state['bound'] !== $next['bound'] || $state['check'] != $next['check'] ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual -- arrays of scalars, compared by value.
+			return false;
+		}
+		if ( $state['proved'] === $next['proved'] ) {
 			return true;
+		}
+		return $state['proved'] > 0 && $next['proved'] >= $state['proved'] && ( $next['proved'] - $state['proved'] ) < 3600;
+	}
+
+	/**
+	 * Store a new version of the record where the stored one is still the
+	 * one read (swap()), under the lock of the place bound so far: its
+	 * writers check the record under that lock (writing()), so none of them
+	 * writes between the change and its end. Without a bound place, or where
+	 * its folder cannot be locked (then none of its writers can write), under
+	 * the lock of the new place or none.
+	 *
+	 * @param string|null $raw   The stored value read (null: no row).
+	 * @param array       $state state() of it.
+	 * @param array       $next  The new version.
+	 * @param array       $paths candidates().
+	 * @param string      $id    Id.
+	 * @return bool Whether it was stored.
+	 */
+	private static function commit( $raw, array $state, array $next, array $paths, $id ) {
+		$swap = static function () use ( $raw, $next ) {
+			return self::swap( $raw, $next );
 		};
-		foreach ( array( $expect, $bound ) as $where ) {
-			if ( null !== $where && isset( $paths[ $where ] ) && self::owns( $paths[ $where ], $id ) ) {
-				$done = self::locked( $paths[ $where ], $write );
+		foreach ( array_unique( array_filter( array( $state['bound'], $next['bound'] ) ) ) as $where ) {
+			if ( isset( $paths[ $where ] ) && self::owns( $paths[ $where ], $id ) ) {
+				$done = self::locked( $paths[ $where ], $swap );
 				if ( ! is_wp_error( $done ) ) {
 					return $done;
 				}
 			}
 		}
-		// Neither folder can be locked, so neither has a writer.
-		return $write();
+		return $swap();
 	}
 
 	/**
@@ -1021,21 +1156,6 @@ final class AB_MCP_Protected_Store {
 			);
 		}
 		return self::uploads( $paths['uploads'], $id, $check, $fetcher, $force );
-	}
-
-	/**
-	 * A folder of another installation stands at this id's place: this one is
-	 * a copy that kept the id. It takes a new id and decides again (once).
-	 *
-	 * @param string      $id      Id found.
-	 * @param object|null $fetcher Fetcher.
-	 * @param bool        $force   Self-check now.
-	 * @return array
-	 */
-	private static function renewed( $id, $fetcher, $force ) {
-		self::replace_id( $id );
-		self::$id = null;
-		return self::decide( $fetcher, $force, false );
 	}
 
 	/**
@@ -1359,20 +1479,43 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The record for an id, or null: the place bound (in use), when it was
-	 * last proved, and the last self-check of the uploads.
+	 * The record of the proof as it is in the table (never from the option
+	 * cache of this request, which another request may have changed since):
+	 * its raw value, for the condition of swap(), and the value.
 	 *
-	 * @param string $id Id.
-	 * @return array{bound:string|null,proved:int,check:array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null}|null
+	 * @return array{raw:string|null,rec:mixed}
 	 */
-	private static function record( $id ) {
-		$rec = self::stored_record();
-		if ( ! is_array( $rec ) || ! isset( $rec['id'] ) || $id !== $rec['id'] ) {
-			return null;
+	private static function stored() {
+		global $wpdb;
+		$raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", self::OPTION_PROOF ) );
+		return array(
+			'raw' => null === $raw ? null : (string) $raw,
+			'rec' => null === $raw ? null : maybe_unserialize( (string) $raw ),
+		);
+	}
+
+	/**
+	 * What a stored record says for an id: its version, the place bound (in
+	 * use), when that place was proved (0: no proof, or taken back), and the
+	 * last self-check of the uploads. A record of another id binds nothing
+	 * and proves nothing, but keeps its version.
+	 *
+	 * @param mixed  $rec The stored value.
+	 * @param string $id  Id.
+	 * @return array{rev:int,bound:string|null,proved:int,check:array{where:string,checked:int,ok:bool,reason:string|null,detail:array}|null}
+	 */
+	private static function state( $rec, $id ) {
+		$out = array(
+			'rev'    => ( is_array( $rec ) && isset( $rec['rev'] ) ) ? max( 0, (int) $rec['rev'] ) : 0,
+			'bound'  => null,
+			'proved' => 0,
+			'check'  => null,
+		);
+		if ( ! is_array( $rec ) || ! isset( $rec['id'] ) || '' === (string) $id || $id !== $rec['id'] ) {
+			return $out;
 		}
-		$check = null;
 		if ( isset( $rec['check'] ) && is_array( $rec['check'] ) && isset( $rec['check']['checked'] ) ) {
-			$check = array(
+			$out['check'] = array(
 				'where'   => 'uploads',
 				'checked' => (int) $rec['check']['checked'],
 				'ok'      => ! empty( $rec['check']['ok'] ),
@@ -1380,56 +1523,33 @@ final class AB_MCP_Protected_Store {
 				'detail'  => isset( $rec['check']['detail'] ) && is_array( $rec['check']['detail'] ) ? $rec['check']['detail'] : array(),
 			);
 		}
-		return array(
-			'bound'  => ( isset( $rec['bound'] ) && in_array( $rec['bound'], array( 'outside', 'uploads' ), true ) ) ? $rec['bound'] : null,
-			'proved' => isset( $rec['proved'] ) ? (int) $rec['proved'] : 0,
-			'check'  => $check,
-		);
+		$out['bound']  = ( isset( $rec['bound'] ) && in_array( $rec['bound'], array( 'outside', 'uploads' ), true ) ) ? $rec['bound'] : null;
+		$out['proved'] = isset( $rec['proved'] ) ? max( 0, (int) $rec['proved'] ) : 0;
+		return $out;
 	}
 
 	/**
-	 * The place bound now for an id, read from the table past every cache:
-	 * what commit() and writing() decide by.
+	 * Replace the stored record by a new version, only where it is still the
+	 * raw value read (a conditional UPDATE by its bytes; INSERT IGNORE where
+	 * there was no row): exactly one row changed, or nothing was written.
 	 *
-	 * @param string $id Id.
-	 * @return string|null
+	 * @param string|null $raw  The stored value read (null: no row).
+	 * @param array       $next The new version.
+	 * @return bool
 	 */
-	private static function bound_now( $id ) {
-		$rec = self::record( (string) $id );
-		return null === $rec ? null : $rec['bound'];
-	}
-
-	/**
-	 * The stored record as it is in the table (not from the option cache of
-	 * this request, which another request may have changed since).
-	 *
-	 * @return mixed
-	 */
-	private static function stored_record() {
+	private static function swap( $raw, array $next ) {
 		global $wpdb;
-		$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", self::OPTION_PROOF ) );
-		return null === $value ? null : maybe_unserialize( $value );
-	}
-
-	/**
-	 * Note the bound place, when it was proved, and the last self-check.
-	 *
-	 * @param string      $id     Id.
-	 * @param string|null $bound  Place in use.
-	 * @param int         $proved When it was proved.
-	 * @param array|null  $check  The last self-check of the uploads.
-	 */
-	private static function store_record( $id, $bound, $proved, $check ) {
-		update_option(
-			self::OPTION_PROOF,
-			array(
-				'id'     => $id,
-				'bound'  => $bound,
-				'proved' => (int) $proved,
-				'check'  => $check,
-			),
-			false
-		);
+		$value = serialize( $next ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as update_option() stores an array.
+		if ( null === $raw ) {
+			$done = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, %s )", self::OPTION_PROOF, $value, self::no_autoload() ) );
+		} else {
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST( option_value AS BINARY ) = CAST( %s AS BINARY )", $value, self::OPTION_PROOF, $raw ) );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( self::OPTION_PROOF, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		return 1 === $done;
 	}
 
 	/**
@@ -1817,7 +1937,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function insert_id( $id ) {
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, %s )", self::OPTION_ID, $id, function_exists( 'wp_autoload_values_to_autoload' ) ? 'off' : 'no' ) );
+		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, %s )", self::OPTION_ID, $id, self::no_autoload() ) );
 		self::forget_cached_id();
 	}
 
@@ -1831,6 +1951,16 @@ final class AB_MCP_Protected_Store {
 		global $wpdb;
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST( option_value AS BINARY ) = %s", self::new_id(), self::OPTION_ID, $old ) );
 		self::forget_cached_id();
+	}
+
+	/**
+	 * The autoload value of a row that is not loaded with every request:
+	 * 'off' since WordPress 6.6, 'no' before.
+	 *
+	 * @return string
+	 */
+	private static function no_autoload() {
+		return function_exists( 'wp_autoload_values_to_autoload' ) ? 'off' : 'no';
 	}
 
 	/**
