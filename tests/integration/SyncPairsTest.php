@@ -489,15 +489,15 @@ final class SyncPairsTest extends TestCase {
 		$pair   = self::make( array( 'kind' => 'widget_area', 'live_ref' => 'area', 'staging_ref' => 'a' ) );
 		$id     = $pair['id'];
 		$before = AB_MCP_Sync_Pairs::snapshot( $id );
-		AB_MCP_Sync_Pairs::set_state( $id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( $before ) );
+		$step   = AB_MCP_Sync_Pairs::rebase( $id, array( 'canon' => 'canon/1', 'base_live' => self::h( 'step' ), 'base_staging' => self::h( 'step s' ), 'base_origin' => 'push' ), AB_MCP_Sync_Pairs::snapshot_hash( $before ) );
 		self::between( 'UPDATE ' . $table . ' SET', "UPDATE `$table` SET staging_ref = 'a ' WHERE id = $id" );
 		self::assertError( 'ab_mcp_staging_pair_changed', AB_MCP_Sync_Pairs::restore( $id, $before, self::now( $id ) ) );
 		self::stop_between();
-		self::assertSame( 'unclear', self::row( $id )['state'], 'Not put back over the other change.' );
+		self::assertSame( $step['base_live'], self::row( $id )['base_live'], 'Not put back over the other change.' );
 		self::assertSame( 'a ', self::row( $id )['staging_ref'] );
 	}
 
-	public function testRestoreNeitherRemovesAPairNorEndsResidualNorTakesAForeignSnapshot(): void {
+	public function testRestoreNeitherRemovesAPairNorEndsResidualOrUnclearNorTakesAForeignSnapshot(): void {
 		$pair   = self::make();
 		$id     = $pair['id'];
 		$before = AB_MCP_Sync_Pairs::snapshot( $id );
@@ -513,6 +513,15 @@ final class SyncPairsTest extends TestCase {
 		$error = self::assertError( 'ab_mcp_staging_pair_transition', AB_MCP_Sync_Pairs::restore( $id, $before, self::now( $id ) ) );
 		self::assertSame( array( 'from' => 'residual', 'to' => 'restore' ), $error->get_error_data() );
 		self::assertSame( 'residual', self::row( $id )['state'] );
+
+		// Nor does unclear: an earlier active snapshot does not lift it.
+		$unclear = self::make( array( 'live_ref' => '14', 'staging_ref' => '36' ) );
+		$uid     = $unclear['id'];
+		$active  = AB_MCP_Sync_Pairs::snapshot( $uid );
+		AB_MCP_Sync_Pairs::set_state( $uid, 'unclear', self::now( $uid ) );
+		$error = self::assertError( 'ab_mcp_staging_pair_transition', AB_MCP_Sync_Pairs::restore( $uid, $active, self::now( $uid ) ) );
+		self::assertSame( array( 'from' => 'unclear', 'to' => 'restore' ), $error->get_error_data() );
+		self::assertSame( 'unclear', self::row( $uid )['state'] );
 
 		// The snapshot of another pair, a broken one, one with deleted.
 		$other = self::make( array( 'live_ref' => '13', 'staging_ref' => '35' ) );

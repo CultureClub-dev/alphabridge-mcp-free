@@ -362,8 +362,8 @@ final class AB_MCP_Sync_Pairs {
 
 	/**
 	 * Put a pair back to a snapshot, only when it is still in the state the
-	 * caller left it in ($expected), and not out of residual (rule 0: only a
-	 * confirmed new alignment ends it). A pair a run made has no snapshot
+	 * caller left it in ($expected), and never out of residual or unclear
+	 * (rule 0 and decision 14: only a confirmed new alignment ends them). A pair a run made has no snapshot
 	 * before it and is never removed here: it becomes residual instead.
 	 *
 	 * @param int         $id       Pair id.
@@ -379,8 +379,10 @@ final class AB_MCP_Sync_Pairs {
 		if ( ! is_array( $raw ) ) {
 			return $raw;
 		}
-		if ( 'residual' === $raw['state'] ) {
-			return self::transition_refused( 'residual', 'restore' );
+		// Neither residual (rule 0) nor unclear ends here: both wait for the
+		// confirmed new alignment, realign().
+		if ( in_array( $raw['state'], array( 'residual', 'unclear' ), true ) ) {
+			return self::transition_refused( $raw['state'], 'restore' );
 		}
 		$set = self::parse_snapshot( $before );
 		if ( is_wp_error( $set ) ) {
