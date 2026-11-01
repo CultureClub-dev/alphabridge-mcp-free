@@ -309,6 +309,15 @@ return array(
 		'expect'  => '/testAFailureSeenIsNeverLostToASuccessStoredMeanwhile/',
 	),
 	array(
+		'id'      => 'store/failure-written-unconditionally',
+		'clause'  => 'decide(): where the conditional attempts are spent, a failure seen is stored without a condition',
+		'file'    => 'includes/class-protected-store.php',
+		'search'  => "\t\t\t\tself::revoke( \$id, \$paths, \$own );\n",
+		'replace' => "\t\t\t\t// (no revocation)\n",
+		'run'     => $it( 'testAFailureWinsAlsoAfterEveryConditionalAttemptLost' ),
+		'expect'  => '/testAFailureWinsAlsoAfterEveryConditionalAttemptLost/',
+	),
+	array(
 		'id'      => 'store/rule2-success-after-failure',
 		'clause'  => 'usable(): a success counts only where its check began after the last failure there ended',
 		'file'    => 'includes/class-protected-store.php',

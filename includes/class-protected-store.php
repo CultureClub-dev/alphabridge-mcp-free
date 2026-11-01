@@ -38,8 +38,10 @@
  * protected. Every change is a new version stored only where the stored
  * one is still the one read (swap(), a conditional UPDATE by its bytes);
  * otherwise it is read again and what this request observed is merged into
- * it (decide(), merged()): a failure observed is never lost, and a success
- * older than a failure another request saw is never stored. A change is stored under the lock
+ * it (decide(), merged()): a failure observed is never lost (where the
+ * conditional attempts are spent, it is stored without a condition,
+ * revoke()), and a success older than a failure another request saw is
+ * never stored. A change is stored under the lock
  * of the place bound so far, and every writer checks the record afresh
  * under the lock of its place (writing(), admitted()): the place is the
  * bound one and its proof is valid (valid()). Readers check it too. The
@@ -1043,7 +1045,57 @@ final class AB_MCP_Protected_Store {
 			// Another request changed the record since it was read: read it
 			// again, merge what this request observed into it, decide again.
 		}
+		// The conditional attempts are spent. A failure this request saw
+		// wins all the same: it is stored without a condition (revoke()), as
+		// a revocation may displace every older success. Only a success
+		// gives up after conflicts.
+		foreach ( $own as $obs ) {
+			if ( isset( $obs['fail'] ) ) {
+				self::revoke( $id, $paths, $own );
+				$fail = self::merged( $state['seen'], $own )['uploads']['fail'];
+				return self::verdict( null, 'none', $found, 0, null !== $fail ? $fail['detail'] : array() );
+			}
+		}
 		return self::verdict( null, 'moved', array() );
+	}
+
+	/**
+	 * Store the failures this request saw without a condition: on the record
+	 * read afresh, with its version + 1 and its binding, under the lock of
+	 * the place bound (its writers check the record under it). Only for a
+	 * request whose conditional attempts are spent (decide()).
+	 *
+	 * @param string $id    Id.
+	 * @param array  $paths candidates().
+	 * @param array  $own   What this request observed, per place.
+	 * @return bool Whether it was stored.
+	 */
+	private static function revoke( $id, array $paths, array $own ) {
+		$fails = array();
+		foreach ( $own as $where => $obs ) {
+			if ( isset( $obs['fail'] ) ) {
+				$fails[ $where ] = array( 'fail' => $obs['fail'] );
+			}
+		}
+		$write = static function () use ( $id, $fails ) {
+			$state = self::state( self::stored()['rec'], $id );
+			return self::overwrite(
+				array(
+					'id'    => $id,
+					'rev'   => $state['rev'] + 1,
+					'bound' => $state['bound'],
+					'seen'  => self::merged( $state['seen'], $fails ),
+				)
+			);
+		};
+		$bound = self::state( self::stored()['rec'], $id )['bound'];
+		if ( null !== $bound && isset( $paths[ $bound ] ) && self::owns( $paths[ $bound ], $id ) ) {
+			$done = self::locked( $paths[ $bound ], $write );
+			if ( ! is_wp_error( $done ) ) {
+				return $done;
+			}
+		}
+		return $write();
 	}
 
 	/**
@@ -1565,6 +1617,27 @@ final class AB_MCP_Protected_Store {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Store a version of the record without a condition: only for a
+	 * revocation (revoke()), which may displace every older success.
+	 *
+	 * @param array $next The version.
+	 * @return bool
+	 */
+	private static function overwrite( array $next ) {
+		global $wpdb;
+		$value = serialize( $next ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as update_option() stores an array.
+		$done  = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s", $value, self::OPTION_PROOF ) );
+		if ( 1 !== $done ) {
+			$done = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( %s, %s, %s )", self::OPTION_PROOF, $value, self::no_autoload() ) );
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( self::OPTION_PROOF, 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
+		return 1 === $done;
 	}
 
 	/**

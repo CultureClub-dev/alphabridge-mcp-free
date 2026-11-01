@@ -15,7 +15,8 @@
  *   gives the proof, which is made again after a day and when a guard file
  *   is missing; a check that fails takes the proof back; of two requests
  *   at once, a failure seen is never lost to a success stored meanwhile,
- *   and a success that began before a stored failure is not stored; a
+ *   and a success that began before a stored failure is not stored, also
+ *   after every conditional attempt was lost; a
  *   proof a request keeps is no release after another request revoked it;
  * - the place chosen stays bound while it can be used, and a request that
  *   chose a place another request has left writes nothing there;
@@ -778,6 +779,68 @@ final class ProtectedStoreTest extends TestCase {
 			return $query;
 		};
 		$this->filter( 'query', $filter );
+	}
+
+	/**
+	 * Before each of the next $times changes this request sends of the
+	 * record of the proof, another request stores its own on a connection
+	 * of its own ($change gets the stored value and the count).
+	 *
+	 * @param int      $times  How often.
+	 * @param callable $change The stored value and the count in, the other request's out.
+	 */
+	private function before_proof_writes( int $times, callable $change ): void {
+		$other  = new \wpdb( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );
+		$table  = AB_MCP_IT_Sites::table( 'a', 'options' );
+		$count  = 0;
+		$filter = static function ( $query ) use ( $other, $table, $change, $times, &$count ) {
+			if ( $count < $times && 0 === strpos( (string) $query, 'UPDATE ' . $table . ' SET option_value' ) && false !== strpos( (string) $query, "'" . AB_MCP_Protected_Store::OPTION_PROOF . "'" ) ) {
+				++$count;
+				$raw = (string) $other->get_var( $other->prepare( "SELECT option_value FROM `$table` WHERE option_name = %s", AB_MCP_Protected_Store::OPTION_PROOF ) );
+				$other->query( $other->prepare( "UPDATE `$table` SET option_value = %s WHERE option_name = %s", serialize( $change( unserialize( $raw ), $count ) ), AB_MCP_Protected_Store::OPTION_PROOF ) );
+			}
+			return $query;
+		};
+		$this->filter( 'query', $filter );
+	}
+
+	public function testAFailureWinsAlsoAfterEveryConditionalAttemptLost(): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( 'a', true );
+		$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+		self::assertSame( 'uploads', AB_MCP_Protected_Store::proof( $fetcher )['where'] );
+		self::age_record( 10 );
+		$before = self::stored_proof();
+		$id     = AB_MCP_Protected_Store::install_id();
+
+		// Four checks at once: this request sees the test files served; three
+		// others, which began before, store their successes, each between
+		// this request's read of the record and its write.
+		self::apache( 'a', false );
+		$begun = microtime( true );
+		$this->before_proof_writes(
+			3,
+			static function ( array $rec, int $n ) use ( $begun ): array {
+				$rec['rev']++;
+				$rec['seen']['uploads']['ok'] = array(
+					'start'  => $begun + $n / 1000,
+					'end'    => microtime( true ),
+					'detail' => array( 'probes' => array( 403, 403, 403 ) ),
+				);
+				return $rec;
+			}
+		);
+		AB_MCP_Protected_Store::forget();
+		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
+		self::assertFalse( $proof['available'] );
+		self::assertSame( 'none', $proof['reason'], 'Not given up as moved: the failure was stored.' );
+		$stored = self::stored_proof();
+		self::assertSame( $before['rev'] + 4, $stored['rev'], 'Three successes, then the revocation on top of them.' );
+		self::assertGreaterThan( $stored['seen']['uploads']['ok']['start'], $stored['seen']['uploads']['fail']['end'], 'The failure ended after the last success began.' );
+		self::assertSame( 'ab_mcp_store_unproved', AB_MCP_Protected_Store::admitted( self::in_uploads( 'a', $id ) )->get_error_code(), 'valid() is false.' );
+		unset( $_SERVER['DOCUMENT_ROOT'] );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( 'no_document_root', AB_MCP_Protected_Store::proof()['reason'] );
 	}
 
 	/** The record of the proof of site A, as it is in the table. */
