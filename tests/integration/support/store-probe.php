@@ -20,15 +20,29 @@ if ( ! is_array( $ab_it_in ) || empty( $ab_it_in['action'] ) ) {
 	exit;
 }
 
+// A request of the sync (below) notes when it began before anything else:
+// before WordPress loads and before any call of the store, so that nothing
+// the store does on the way (a proof it writes under its lock, say) can put
+// the note off. 'loaded' and 'rooted' say how far it had come, for the
+// message of a failed case.
+$ab_it_note = static function ( array $sync, $what, $value = null ) {
+	file_put_contents( $sync['dir'] . '/' . $sync['me'] . '-' . $what, null === $value ? (string) hrtime( true ) : (string) $value );
+};
+if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
+	$ab_it_note( $ab_it_in['sync'], 'begun' );
+}
+
 define( 'WP_USE_THEMES', false );
 require __DIR__ . '/wp-load.php';
+if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
+	$ab_it_note( $ab_it_in['sync'], 'loaded' );
+}
 
 wp_set_current_user( isset( $ab_it_in['user'] ) ? (int) $ab_it_in['user'] : 0 );
 
 // Two requests that open a group at the same time, made to overlap where
-// only the store's lock keeps them apart. Each notes when it began (right
-// before it calls open(), its proof already in hand, so it goes straight
-// to the lock), and hooks the limit the store reads after its count and
+// only the store's lock keeps them apart. Each notes when it began (above),
+// and hooks the limit the store reads after its count and
 // before it creates (AB_MCP_Store_Budget reads its limits there, as Pro
 // does): there it notes when it counted, waits until the other has begun
 // (at most SYNC_BEGUN seconds) and then until the other has counted as
@@ -45,9 +59,6 @@ wp_set_current_user( isset( $ab_it_in['user'] ) ? (int) $ab_it_in['user'] : 0 );
 // same on Linux and macOS, whatever PHP uses for a second handle in one.
 const AB_IT_SYNC_BEGUN   = 30;
 const AB_IT_SYNC_COUNTED = 10;
-$ab_it_note = static function ( array $sync, $what, $value = null ) {
-	file_put_contents( $sync['dir'] . '/' . $sync['me'] . '-' . $what, null === $value ? (string) hrtime( true ) : (string) $value );
-};
 $ab_it_held = static function () {
 	$root = AB_MCP_Protected_Store::root();
 	if ( is_wp_error( $root ) ) {
@@ -101,10 +112,8 @@ switch ( (string) $ab_it_in['action'] ) {
 		break;
 	case 'open':
 		if ( ! empty( $ab_it_in['sync']['dir'] ) ) {
-			// The proof of this request first, so that open() goes straight
-			// to the lock after the note.
 			AB_MCP_Protected_Store::root();
-			$ab_it_note( $ab_it_in['sync'], 'begun' );
+			$ab_it_note( $ab_it_in['sync'], 'rooted' );
 		}
 		$ab_it_out = AB_MCP_Protected_Store::open( $ab_it_area, isset( $ab_it_in['meta'] ) ? (array) $ab_it_in['meta'] : array() );
 		break;

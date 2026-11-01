@@ -1006,7 +1006,9 @@ final class ProtectedStoreTest extends TestCase {
 
 	/**
 	 * Two requests to site A that open a group at once (the sync of the
-	 * probe). The lock is proved directly: between its count and its
+	 * probe). The proof of the store is made by a request of its own first,
+	 * so the two only read it; each notes that it began before WordPress
+	 * loads, before any call of the store. The lock is proved directly: between its count and its
 	 * creation each request has a child process try the lock file of the
 	 * store without waiting, which fails only while the request holds the
 	 * lock; both must hold it. Beside that the order, on the monotonic
@@ -1022,6 +1024,10 @@ final class ProtectedStoreTest extends TestCase {
 	 * @return string[] The two outcomes, sorted ('ok' or the error code).
 	 */
 	private static function open_at_once( string $area, string $filter ): array {
+		// The proof as a web request makes it, before the two: then neither
+		// writes it, and neither waits for the other's lock on the way.
+		self::assertTrue( self::probe( 'a', array( 'action' => 'proof' ) )['ok']['available'] );
+		$rev = self::stored_proof()['rev'];
 		$dir = self::root() . '/run/store-sync-' . bin2hex( random_bytes( 4 ) );
 		mkdir( $dir, 0700 );
 		$at  = array();
@@ -1039,7 +1045,7 @@ final class ProtectedStoreTest extends TestCase {
 			);
 			$both = self::at_once( array( array( 'a', $open( 'one', 'two' ) ), array( 'a', $open( 'two', 'one' ) ) ) );
 			foreach ( array( 'one', 'two' ) as $me ) {
-				foreach ( array( 'begun', 'counted', 'proceeded', 'held' ) as $what ) {
+				foreach ( array( 'begun', 'loaded', 'rooted', 'counted', 'proceeded', 'held' ) as $what ) {
 					$file               = $dir . '/' . $me . '-' . $what;
 					$at[ $me ][ $what ] = is_file( $file ) ? (string) file_get_contents( $file ) : null;
 				}
@@ -1055,14 +1061,24 @@ final class ProtectedStoreTest extends TestCase {
 				self::assertNotNull( $note, "Request $me noted no '$what'." );
 			}
 			self::assertSame( '1', $notes['held'], "Request $me did not hold the lock of the store between its count and its creation." );
-			foreach ( array( 'begun', 'counted', 'proceeded' ) as $what ) {
+			foreach ( array( 'begun', 'loaded', 'rooted', 'counted', 'proceeded' ) as $what ) {
 				$at[ $me ][ $what ] = (int) $notes[ $what ];
 			}
 		}
 		$first  = $at['one']['counted'] <= $at['two']['counted'] ? 'one' : 'two';
 		$second = 'one' === $first ? 'two' : 'one';
-		self::assertLessThan( $at[ $first ]['proceeded'], $at[ $second ]['begun'], 'No overlap: the second request began only after the first had stopped waiting, so this case proves nothing.' );
-		self::assertGreaterThan( $at[ $first ]['proceeded'], $at[ $second ]['counted'], 'The second request counted before the first went on to create: nothing kept it from counting the same groups.' );
+		// Where each request was, in ms after the first began, for a failure.
+		$zero  = min( $at['one']['begun'], $at['two']['begun'] );
+		$times = array();
+		foreach ( array( 'first' => $first, 'second' => $second ) as $role => $me ) {
+			foreach ( array( 'begun', 'loaded', 'rooted', 'counted', 'proceeded' ) as $what ) {
+				$times[] = sprintf( '%s %s %.1f', $role, $what, ( $at[ $me ][ $what ] - $zero ) / 1e6 );
+			}
+		}
+		$times[] = 'record of the proof: rev ' . $rev . ' before, ' . self::stored_proof()['rev'] . ' after';
+		$times   = ' (' . implode( '; ', $times ) . ')';
+		self::assertLessThan( $at[ $first ]['proceeded'], $at[ $second ]['begun'], 'No overlap: the second request began only after the first had stopped waiting, so this case proves nothing' . $times );
+		self::assertGreaterThan( $at[ $first ]['proceeded'], $at[ $second ]['counted'], 'The second request counted before the first went on to create: nothing kept it from counting the same groups' . $times );
 		$codes = array_map( static fn( $r ) => is_array( $r ) && isset( $r['ok'] ) ? 'ok' : ( $r['error'] ?? 'no answer' ), $both );
 		sort( $codes );
 		return $codes;
