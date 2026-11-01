@@ -25,13 +25,15 @@ stays off), PHP with mysqli, rsync, curl and a WordPress 7.1.3 core at
 `~/Entwicklung/wp-core-7.1.3` (or `AB_IT_WP_CORE`).
 
 ```sh
-export AB_IT_ROOT=~/tmp/ab-it          # any directory outside the working tree
+export AB_IT_ROOT=~/tmp/ab-it          # new or empty, outside the working tree
 tests/integration/bin/local.sh run      # MariaDB, both sites, the suite, all stopped again
 ```
 
 Step by step: `local.sh up`, then `local.sh test` as often as needed (further
 arguments go to PHPUnit, e.g. `--filter Smoke`), `local.sh down` (data
-stays), `local.sh purge` (removes `AB_IT_ROOT`). MariaDB runs with its own
+stays), `local.sh purge` (removes `AB_IT_ROOT`). The script marks the
+directory with `.ab-integration-root` on first use and refuses a non-empty
+one without it, so `purge` only ever removes a tree it built. MariaDB runs with its own
 data directory under `AB_IT_ROOT/db`, `--no-defaults` and
 `--skip-grant-tables`, on `127.0.0.1:3407` as in CI; its socket is named
 relative and lands in the data directory, because a socket path may not

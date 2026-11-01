@@ -338,18 +338,22 @@ if ( array() === $ab_lists ) {
 	sort( $ab_lists );
 }
 
+// Without signal handling a SIGTERM would leave a mutated file behind (the
+// shutdown function does not run then), so no mutation starts without it.
+if ( ! function_exists( 'pcntl_async_signals' ) || ! function_exists( 'pcntl_signal' ) ) {
+	fwrite( STDERR, "mutation: needs the pcntl extension to write files back on SIGINT/SIGTERM; nothing changed.\n" );
+	exit( 2 );
+}
 register_shutdown_function( array( 'AB_Mutation_Run', 'restore_pending' ) );
-if ( function_exists( 'pcntl_async_signals' ) ) {
-	pcntl_async_signals( true );
-	foreach ( array( SIGINT, SIGTERM, SIGHUP ) as $ab_signal ) {
-		pcntl_signal(
-			$ab_signal,
-			static function () {
-				fwrite( STDERR, "mutation: interrupted; writing the files back.\n" );
-				exit( AB_Mutation_Run::restore_pending() ? 130 : 3 );
-			}
-		);
-	}
+pcntl_async_signals( true );
+foreach ( array( SIGINT, SIGTERM, SIGHUP ) as $ab_signal ) {
+	pcntl_signal(
+		$ab_signal,
+		static function () {
+			fwrite( STDERR, "mutation: interrupted; writing the files back.\n" );
+			exit( AB_Mutation_Run::restore_pending() ? 130 : 3 );
+		}
+	);
 }
 
 $ab_run       = new AB_Mutation_Run( $ab_root );

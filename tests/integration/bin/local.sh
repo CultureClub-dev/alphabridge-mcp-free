@@ -27,6 +27,16 @@ root=${AB_IT_ROOT:?set AB_IT_ROOT to a directory for the database and the two si
 mkdir -p "$root"
 root=$(cd "$root" && pwd)
 export AB_IT_ROOT="$root"
+# The marker says this directory belongs to the suite: a fresh, empty one
+# gets it, any other is refused, so purge never removes a foreign tree.
+marker="$root/.ab-integration-root"
+if [ ! -f "$marker" ]; then
+	if [ -n "$(ls -A "$root")" ]; then
+		echo "local: $root is not empty and has no $(basename "$marker"); choose an empty directory" >&2
+		exit 1
+	fi
+	: >"$marker"
+fi
 export AB_IT_WP_CORE=${AB_IT_WP_CORE:-$HOME/Entwicklung/wp-core-7.1.3}
 db_port=${AB_IT_DB_PORT:-3407}
 export AB_IT_DB_HOST="127.0.0.1:$db_port" AB_IT_DB_USER=root AB_IT_DB_PASSWORD=''
@@ -114,6 +124,13 @@ purge)
 	case "$root" in
 	/ | "$HOME" | "$repo" | "$repo"/*) echo "local: will not remove $root" >&2; exit 1 ;;
 	esac
+	case "$repo/" in
+	"$root"/*) echo "local: will not remove $root, it holds the checkout" >&2; exit 1 ;;
+	esac
+	case "$HOME/" in
+	"$root"/*) echo "local: will not remove $root, it holds the home directory" >&2; exit 1 ;;
+	esac
+	[ -f "$marker" ] || { echo "local: $root has no $(basename "$marker")" >&2; exit 1; }
 	rm -rf "$root"
 	echo "local: removed $root"
 	;;

@@ -142,7 +142,7 @@ jobs:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
           MARIADB_DATABASE: ab_it
         ports:
-          - 3306:3306
+          - 127.0.0.1:3306:3306
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=30
@@ -221,7 +221,7 @@ jobs:
           MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
           MARIADB_DATABASE: ab_it
         ports:
-          - 3306:3306
+          - 127.0.0.1:3306:3306
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=30
@@ -257,7 +257,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mysqli, curl, sodium
+          extensions: mysqli, curl, sodium, pcntl
           coverage: none
           tools: composer:v2
 
