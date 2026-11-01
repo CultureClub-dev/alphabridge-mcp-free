@@ -209,10 +209,42 @@ final class SiteAddressJournalTest extends TestCase {
 		self::assertNotContains( 'release_lock', $GLOBALS['ab_test_lock_log'], "Another request's lock is not given back." );
 	}
 
-	/** Core's update lock, as a log: create_lock() runs the test's hook first. */
+	/**
+	 * With core's lock, a lock row of '' or of no time is refused, not taken
+	 * over: create_lock() bails on a value that reads as false, and a string
+	 * that is no number compares greater than any time. Closing then answers
+	 * busy and keeps the record — the safe side.
+	 */
+	#[RunInSeparateProcess]
+	#[PreserveGlobalState( false )]
+	public function testCoresLockRefusesALockRowOfNoTimeAndTheRecordStays(): void {
+		self::define_upgrader();
+		$GLOBALS['ab_test_lock_core'] = true;
+		foreach ( array( '', 'not a time' ) as $lock ) {
+			$raw = self::record();
+			self::store( $raw );
+			update_option( AB_MCP_Change_Lock::OPTION, $lock );
+			self::assertSame( 'busy', AB_MCP_Site_Address_Journal::close( hash( 'sha256', $raw ) ), var_export( $lock, true ) );
+			self::assertSame( $raw, get_option( AB_MCP_Site_Address_Journal::OPTION ) );
+		}
+		// An expired lock row of a time is taken over, as core does.
+		$raw = self::record();
+		self::store( $raw );
+		update_option( AB_MCP_Change_Lock::OPTION, (string) ( time() - AB_MCP_Change_Lock::TIMEOUT - 1 ) );
+		self::assertSame( 'closed', AB_MCP_Site_Address_Journal::close( hash( 'sha256', $raw ) ) );
+		self::assertFalse( get_option( AB_MCP_Change_Lock::OPTION ), 'Given back.' );
+	}
+
+	/**
+	 * Core's update lock, as a log: create_lock() runs the test's hook first.
+	 * With ab_test_lock_core it decides as core 7.1.3 does
+	 * (class-wp-upgrader.php create_lock(): a row that reads as false bails,
+	 * a row newer than the timeout bails, an older one is taken over).
+	 */
 	private static function define_upgrader(): void {
 		$GLOBALS['ab_test_lock_log']  = array();
 		$GLOBALS['ab_test_lock_free'] = true;
+		$GLOBALS['ab_test_lock_core'] = false;
 		$GLOBALS['ab_test_on_lock']   = null;
 		if ( ! class_exists( 'WP_Upgrader', false ) ) {
 			eval(
@@ -222,6 +254,15 @@ final class SiteAddressJournalTest extends TestCase {
 						if ( ! $GLOBALS["ab_test_lock_free"] ) {
 							return false;
 						}
+						if ( $GLOBALS["ab_test_lock_core"] ) {
+							$held = get_option( $name . ".lock", null );
+							if ( null !== $held ) {
+								if ( ! $held || $held > ( time() - $timeout ) ) {
+									return false;
+								}
+							}
+							update_option( $name . ".lock", time(), false );
+						}
 						if ( is_callable( $GLOBALS["ab_test_on_lock"] ) ) {
 							( $GLOBALS["ab_test_on_lock"] )();
 						}
@@ -229,6 +270,9 @@ final class SiteAddressJournalTest extends TestCase {
 					}
 					public static function release_lock( $name ) {
 						$GLOBALS["ab_test_lock_log"][] = "release_lock";
+						if ( $GLOBALS["ab_test_lock_core"] ) {
+							delete_option( $name . ".lock" );
+						}
 						return true;
 					}
 				}'
@@ -616,7 +660,11 @@ final class SiteAddressJournalTest extends TestCase {
 		}
 	}
 
-	public function testALockOlderThanItsTimeoutOrNotATimeStopsNothing(): void {
+	public function testALockRowOlderThanItsTimeoutOrNotATimeIsNoRunningChange(): void {
+		// The check before the lock: such a row is no change that runs. Here
+		// without core's lock (no WP_Upgrader), so the close goes through;
+		// what core's lock itself makes of '' and 'not a time' is the test
+		// below.
 		foreach ( array( (string) ( time() - AB_MCP_Change_Lock::TIMEOUT - 1 ), (string) ( time() - AB_MCP_Change_Lock::TIMEOUT ), 'not a time', '' ) as $lock ) {
 			$raw = self::record();
 			self::store( $raw );
