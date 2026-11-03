@@ -14,8 +14,10 @@
  * - only in the plain spelling: a reference whose stored text is not the
  *   value WordPress reads (escapes, character references, other quotes,
  *   the attribute twice, an image whose first wp-image-<id> is not its
- *   class token) locks its object (*:reference_spelling) and is not
- *   rewritten;
+ *   class token, a shortcode across block delimiters) or whose id is not
+ *   in the one spelling of AB_MCP_Sync_Canon::id_spelling() (every place
+ *   the core reads an id) locks its object (*:reference_spelling) and is
+ *   not rewritten;
  * - the fields of the kinds' own rows (menu item meta by _menu_item_type,
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
@@ -214,6 +216,16 @@ final class AB_MCP_Sync_Refs {
 	/** The names of shortcodes as do_shortcode() finds them (wp-includes/shortcodes.php:255). */
 	const SHORTCODE_NAMES = '@\[([^<>&/\[\]\x00-\x20=]++)@';
 
+	/** A block delimiter as WP_Block_Parser reads it (wp-includes/class-wp-block-parser.php:248). */
+	const BLOCK_DELIMITER = '/<!--\s+(?P<closer>\/)?wp:(?P<namespace>[a-z][a-z0-9_-]*\/)?(?P<name>[a-z][a-z0-9_-]*)\s+(?P<attrs>{(?:(?:[^}]+|}+(?=})|(?!}\s+\/?-->).)*+)?}\s+)?(?P<void>\/)?-->/s';
+
+	/**
+	 * A block delimiter, or the beginning of one, between a "[" and the next
+	 * "]": do_blocks() joins the texts around it before do_shortcode() reads
+	 * them, so a shortcode can stand there that no text of a block holds.
+	 */
+	const SHORTCODE_ACROSS_BLOCKS = '/\[[^\]]*<!--\s+\/?wp:/';
+
 	/* ============================================================ canon */
 
 	/**
@@ -229,8 +241,14 @@ final class AB_MCP_Sync_Refs {
 	 * @return array
 	 */
 	public static function content( $raw, array $ctx, array &$acc, $kind, $at ) {
+		$raw = (string) $raw;
+		// A shortcode across block delimiters is read in no text of a block:
+		// not canonical (principle B).
+		if ( preg_match( self::SHORTCODE_ACROSS_BLOCKS, $raw, $m, PREG_OFFSET_CAPTURE ) ) {
+			AB_MCP_Sync_Canon::spelling( $acc, $at . ':shortcode@' . (int) $m[0][1], $kind );
+		}
 		$parser = new WP_Block_Parser();
-		return array( '~blocks' => self::canon_blocks( $parser->parse( (string) $raw ), $ctx, $acc, $kind, $at, 0 ) );
+		return array( '~blocks' => self::canon_blocks( $parser->parse( $raw ), $ctx, $acc, $kind, $at, 0 ) );
 	}
 
 	/**
@@ -436,6 +454,12 @@ final class AB_MCP_Sync_Refs {
 	public static function rewrite_content( $raw, array $plan ) {
 		$raw             = (string) $raw;
 		$plan['missing'] = array();
+		if ( preg_match( self::SHORTCODE_ACROSS_BLOCKS, $raw ) ) {
+			$plan['missing'][] = array(
+				'space' => 'spelling',
+				'id'    => 0,
+			);
+		}
 		$parser          = new WP_Block_Parser();
 		$blocks          = $parser->parse( $raw );
 		$changed         = false;
@@ -712,18 +736,8 @@ final class AB_MCP_Sync_Refs {
 					return self::rewrite_id( 'term' === $type ? 'term' : 'post', $value, $plan, $changed );
 				}
 				if ( 'post_text' === $type && is_string( $value ) ) {
-					$cuts = array();
-					if ( preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-						foreach ( $m[0] as $hit ) {
-							$cuts[] = array(
-								'at'    => (int) $hit[1],
-								'len'   => strlen( $hit[0] ),
-								'space' => 'post',
-								'id'    => (int) $hit[0],
-							);
-						}
-					}
-					return self::rewrite_text( $value, $plan, $cuts, $changed );
+					// As wp_list_pages() reads it: wp_parse_id_list().
+					return self::rewrite_text( $value, $plan, self::id_cuts( $value, '/[\s,]+/', 'post', $plan ), $changed );
 				}
 				if ( 'content' === $type && is_string( $value ) ) {
 					$out             = self::rewrite_content( $value, $plan );
@@ -892,6 +906,10 @@ final class AB_MCP_Sync_Refs {
 		foreach ( $found['tags'] as $tag ) {
 			$refs = array();
 			foreach ( $tag['ids'] as $id ) {
+				// An id in another spelling is no marker; canonical() locks it.
+				if ( null === $id['id'] ) {
+					continue;
+				}
 				$refs[]        = AB_MCP_Sync_Canon::ref( 'post', $id['id'] );
 				$acc['refs'][] = array(
 					'space'    => 'post',
@@ -1044,15 +1062,18 @@ final class AB_MCP_Sync_Refs {
 					return $out;
 				}
 				if ( is_string( $value ) ) {
+					// As the core splits it: explode( ',' ), intval() each.
 					$cuts = array();
-					if ( preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-						foreach ( $m[0] as $hit ) {
-							$cuts[] = array(
-								'at'     => (int) $hit[1],
-								'len'    => strlen( $hit[0] ),
-								'marker' => AB_MCP_Sync_Canon::user( (int) $hit[0], $ctx, $acc, $at ),
-							);
+					foreach ( AB_MCP_Sync_Canon::id_tokens( $value, '/,/' ) as $token ) {
+						if ( null === $token['id'] ) {
+							AB_MCP_Sync_Canon::spelling( $acc, $at );
+							continue;
 						}
+						$cuts[] = array(
+							'at'     => $token['at'],
+							'len'    => $token['len'],
+							'marker' => AB_MCP_Sync_Canon::user( $token['id'], $ctx, $acc, $at ),
+						);
 					}
 					return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts );
 				}
@@ -1113,13 +1134,10 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
-	 * An id of a block attribute as a marker, only in its canonical spelling:
-	 * a JSON integer literal (an int from the parser). Another number the
-	 * core takes for the attribute (its block.json types are number and
-	 * integer, rest_validate_value_from_schema() takes every is_numeric()
-	 * value: 12.0, 1.2e1, -0, "12") names the same post and is not
-	 * rewritten: the object locks (*:reference_spelling). 0, a negative
-	 * whole number and what is no number stay as they are.
+	 * An id of a block attribute as a marker, only in the spelling of
+	 * AB_MCP_Sync_Canon::id_spelling() (a text of digits keeps that it was
+	 * text); another form the core may read as a number locks the object
+	 * (*:reference_spelling); what holds no id stays as it is.
 	 *
 	 * @param string $space post or term.
 	 * @param mixed  $value Value.
@@ -1128,34 +1146,25 @@ final class AB_MCP_Sync_Refs {
 	 * @return mixed
 	 */
 	private static function canon_id( $space, $value, array &$acc, $at ) {
-		if ( self::other_number( $value ) ) {
+		$id = AB_MCP_Sync_Canon::id_spelling( $value );
+		if ( null === $id ) {
 			AB_MCP_Sync_Canon::spelling( $acc, $at );
-			return $value;
 		}
-		if ( ! is_int( $value ) || $value <= 0 ) {
+		if ( ! $id ) {
 			return $value;
 		}
 		$acc['refs'][] = array(
 			'space'    => $space,
-			'id'       => $value,
+			'id'       => $id,
 			'at'       => (string) $at,
 			'strength' => 'strong',
 		);
-		return AB_MCP_Sync_Canon::ref( $space, $value );
+		return AB_MCP_Sync_Canon::ref( $space, $id ) + ( is_string( $value ) ? array( 'text' => true ) : array() );
 	}
 
 	/**
-	 * Whether a value of a block attribute is a number the core takes in
-	 * another spelling than a JSON integer literal (canon_id()).
+	 * A user of a block attribute, as canon_id() an id.
 	 *
-	 * @param mixed $value Value.
-	 * @return bool
-	 */
-	private static function other_number( $value ) {
-		return is_float( $value ) || ( is_string( $value ) && is_numeric( $value ) );
-	}
-
-	/**
 	 * @param mixed  $value User id.
 	 * @param array  $ctx   Context.
 	 * @param array  $acc   Accumulator.
@@ -1163,14 +1172,15 @@ final class AB_MCP_Sync_Refs {
 	 * @return mixed
 	 */
 	private static function canon_user( $value, array $ctx, array &$acc, $at ) {
-		if ( self::other_number( $value ) ) {
+		$id = AB_MCP_Sync_Canon::id_spelling( $value );
+		if ( null === $id ) {
 			AB_MCP_Sync_Canon::spelling( $acc, $at );
+		}
+		if ( ! $id ) {
 			return $value;
 		}
-		if ( ! is_int( $value ) || $value <= 0 ) {
-			return $value;
-		}
-		return AB_MCP_Sync_Canon::user( $value, $ctx, $acc, $at );
+		$marker = AB_MCP_Sync_Canon::user( $id, $ctx, $acc, $at );
+		return is_array( $marker ) && is_string( $value ) ? $marker + array( 'text' => true ) : $marker;
 	}
 
 	/**
@@ -1204,9 +1214,10 @@ final class AB_MCP_Sync_Refs {
 	 * SHORTCODES only for exactly its name), the attributes with
 	 * the core's shortcode_parse_atts() (stripcslashes(), the values by
 	 * position as well). A reference of SHORTCODES is the decoded value; it
-	 * is cut only where it is stored in the plain spelling (plain_ref(): the
-	 * stored text is the decoded one, the name once), else its place is
-	 * noted in spelling and the object locks (*:reference_spelling).
+	 * is cut only where it is stored in the plain spelling (the stored text
+	 * is the decoded one, the name once, each id as shortcode_ids() reads
+	 * it in the spelling of AB_MCP_Sync_Canon::id_spelling()), else its
+	 * place is noted in spelling and the object locks (*:reference_spelling).
 	 *
 	 * @param string $text  Text.
 	 * @param int    $base  Offset of $text in the whole.
@@ -1308,21 +1319,20 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function shortcode_ref( $tag, $name, $type, $value, array $stored, array &$found ) {
 		$role = 'shortcode:' . $tag . '.' . $name;
-		$ref  = 'post_list' === $type ? 1 === preg_match( '/\d/', $value ) : 1 === preg_match( '/^attachment_\d+\z/', $value );
-		if ( ! $ref ) {
+		$ids  = self::shortcode_ids( $type, $value );
+		if ( array() === $ids ) {
 			return 'other';
 		}
-		if ( 1 !== count( $stored ) || $stored[0][0] !== $value || ! self::plain_ref( $type, $value ) ) {
+		if ( 1 !== count( $stored ) || $stored[0][0] !== $value || in_array( null, array_column( $ids, 'id' ), true ) ) {
 			$found['spelling'][] = $role;
 			return 'spelling';
 		}
-		preg_match_all( '/\d+/', $value, $hits, PREG_OFFSET_CAPTURE );
-		foreach ( $hits[0] as $hit ) {
+		foreach ( $ids as $hit ) {
 			$found['cuts'][] = array(
-				'at'    => $stored[0][1] + (int) $hit[1],
-				'len'   => strlen( $hit[0] ),
+				'at'    => $stored[0][1] + $hit['at'],
+				'len'   => $hit['len'],
 				'space' => 'post',
-				'id'    => (int) $hit[0],
+				'id'    => $hit['id'],
 				'role'  => $role,
 			);
 		}
@@ -1330,15 +1340,31 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
-	 * Whether a reference of SHORTCODES is in the spelling the core writes:
-	 * ids separated by commas (and spaces), attachment_<id>.
+	 * The ids of a reference of SHORTCODES as the core reads them, by
+	 * AB_MCP_Sync_Canon::id_tokens(): the ids of gallery and playlist as
+	 * wp_parse_id_list() (both shortcodes pass them to get_posts() as
+	 * include, wp-includes/post.php:2650), the caption's id after
+	 * attachment_.
 	 *
 	 * @param string $type  post_list or attachment_id.
-	 * @param string $value Value.
-	 * @return bool
+	 * @param string $value Decoded (shortcode_parse_atts()).
+	 * @return array<int,array{at:int,len:int,id:int|null}> Offsets in $value.
 	 */
-	private static function plain_ref( $type, $value ) {
-		return 'post_list' === $type ? 1 === preg_match( '/^ *\d+(?: *, *\d+)* *\z/', $value ) : 1 === preg_match( '/^attachment_\d+\z/', $value );
+	private static function shortcode_ids( $type, $value ) {
+		if ( 'post_list' === $type ) {
+			return AB_MCP_Sync_Canon::id_tokens( $value, '/[\s,]+/' );
+		}
+		if ( 0 !== strpos( $value, 'attachment_' ) ) {
+			return array();
+		}
+		$id = AB_MCP_Sync_Canon::id_spelling( (string) substr( $value, 11 ) );
+		return 0 === $id ? array() : array(
+			array(
+				'at'  => 11,
+				'len' => strlen( $value ) - 11,
+				'id'  => $id,
+			),
+		);
 	}
 
 	/**
@@ -1363,7 +1389,7 @@ final class AB_MCP_Sync_Refs {
 		$class = array_column( $tags, 'canonical', 'at' );
 		if ( preg_match_all( '/<(img|iframe)\s[^>]+>/', $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $all as $m ) {
-				if ( 'img' === $m[1][0] && 1 === preg_match( '/wp-image-[0-9]/i', $m[0][0] ) && ! isset( $class[ $m[0][1] ] ) ) {
+				if ( 'img' === $m[1][0] && 1 === preg_match( '/wp-image-([0-9]+)/i', $m[0][0], $core ) && 0 !== AB_MCP_Sync_Canon::id_spelling( $core[1] ) && ! isset( $class[ $m[0][1] ] ) ) {
 					$class[ $m[0][1] ] = false;
 				}
 			}
@@ -1552,43 +1578,33 @@ final class AB_MCP_Sync_Refs {
 			case 'post':
 			case 'term':
 			case 'user':
-				return self::rewrite_block_id( $type, $value, $plan, $changed );
+				return self::rewrite_id( $type, $value, $plan, $changed );
 			case 'by_kind':
 				$kind = isset( $attrs['kind'] ) ? (string) $attrs['kind'] : '';
 				if ( 'post-type' === $kind ) {
-					return self::rewrite_block_id( 'post', $value, $plan, $changed );
+					return self::rewrite_id( 'post', $value, $plan, $changed );
 				}
 				if ( 'taxonomy' === $kind ) {
-					return self::rewrite_block_id( 'term', $value, $plan, $changed );
+					return self::rewrite_id( 'term', $value, $plan, $changed );
 				}
 				return $value;
 			case 'post_list':
 				if ( ! is_array( $value ) ) {
-					return self::rewrite_block_id( 'post', $value, $plan, $changed );
+					return self::rewrite_id( 'post', $value, $plan, $changed );
 				}
 				foreach ( $value as $i => $item ) {
-					$value[ $i ] = self::rewrite_block_id( 'post', $item, $plan, $changed );
+					$value[ $i ] = self::rewrite_id( 'post', $item, $plan, $changed );
 				}
 				return $value;
 			case 'user_any':
 				if ( is_array( $value ) ) {
 					foreach ( $value as $i => $item ) {
-						$value[ $i ] = self::rewrite_block_id( 'user', $item, $plan, $changed );
+						$value[ $i ] = self::rewrite_id( 'user', $item, $plan, $changed );
 					}
 					return $value;
 				}
 				if ( is_string( $value ) ) {
-					$cuts = array();
-					if ( preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-						foreach ( $m[0] as $hit ) {
-							$cuts[] = array(
-								'at'    => (int) $hit[1],
-								'len'   => strlen( $hit[0] ),
-								'space' => 'user',
-								'id'    => (int) $hit[0],
-							);
-						}
-					}
+					$cuts = self::id_cuts( $value, '/,/', 'user', $plan );
 					// The ids only: an author list holds no address.
 					$sub             = array(
 						'subs'    => array(),
@@ -1598,7 +1614,7 @@ final class AB_MCP_Sync_Refs {
 					$plan['missing'] = $sub['missing'];
 					return $out;
 				}
-				return self::rewrite_block_id( 'user', $value, $plan, $changed );
+				return self::rewrite_id( 'user', $value, $plan, $changed );
 			case 'tax_query':
 				if ( ! is_array( $value ) ) {
 					return $value;
@@ -1619,7 +1635,7 @@ final class AB_MCP_Sync_Refs {
 				}
 				foreach ( $value as $i => $item ) {
 					if ( is_array( $item ) && isset( $item['id'] ) ) {
-						$value[ $i ]['id'] = self::rewrite_block_id( 'term', $item['id'], $plan, $changed );
+						$value[ $i ]['id'] = self::rewrite_id( 'term', $item['id'], $plan, $changed );
 					}
 				}
 				return $value;
@@ -1635,39 +1651,20 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function rewrite_terms( $ids, array &$plan, &$changed ) {
 		if ( ! is_array( $ids ) ) {
-			return self::rewrite_block_id( 'term', $ids, $plan, $changed );
+			return self::rewrite_id( 'term', $ids, $plan, $changed );
 		}
 		foreach ( $ids as $i => $id ) {
-			$ids[ $i ] = self::rewrite_block_id( 'term', $id, $plan, $changed );
+			$ids[ $i ] = self::rewrite_id( 'term', $id, $plan, $changed );
 		}
 		return $ids;
 	}
 
 	/**
-	 * An id of a block attribute, rewritten only as a JSON integer literal
-	 * (canon_id()); another number writes nothing (missing: spelling).
-	 *
-	 * @param string $space   post, term or user.
-	 * @param mixed  $value   Value.
-	 * @param array  $plan    plan().
-	 * @param bool   $changed Set when anything changed.
-	 * @return mixed
-	 */
-	private static function rewrite_block_id( $space, $value, array &$plan, &$changed ) {
-		if ( self::other_number( $value ) ) {
-			$plan['missing'][] = array(
-				'space' => 'spelling',
-				'id'    => 0,
-			);
-			return $value;
-		}
-		return is_int( $value ) ? self::rewrite_id( $space, $value, $plan, $changed ) : $value;
-	}
-
-	/**
 	 * An id of the other side in the type it had (an int stays an int, a
-	 * text of digits a text): the fields of the kinds' own rows store ids as
-	 * text (meta values, options).
+	 * text of digits a text: the fields of the kinds' own rows store ids as
+	 * text), only in the spelling of AB_MCP_Sync_Canon::id_spelling();
+	 * another form writes nothing (missing: spelling), what holds no id
+	 * stays.
 	 *
 	 * @param string $space   post, term or user.
 	 * @param mixed  $value   Value.
@@ -1676,10 +1673,17 @@ final class AB_MCP_Sync_Refs {
 	 * @return mixed
 	 */
 	private static function rewrite_id( $space, $value, array &$plan, &$changed ) {
-		if ( ! ( is_int( $value ) || ( is_string( $value ) && preg_match( '/^\d+\z/', $value ) ) ) || (int) $value <= 0 ) {
+		$id = AB_MCP_Sync_Canon::id_spelling( $value );
+		if ( null === $id ) {
+			$plan['missing'][] = array(
+				'space' => 'spelling',
+				'id'    => 0,
+			);
+		}
+		if ( ! $id ) {
 			return $value;
 		}
-		$id = self::mapped_id( $plan, $space, (int) $value );
+		$id = self::mapped_id( $plan, $space, $id );
 		if ( null === $id ) {
 			return $value;
 		}
@@ -1688,6 +1692,37 @@ final class AB_MCP_Sync_Refs {
 			$changed = true;
 		}
 		return $new;
+	}
+
+	/**
+	 * The cuts of rewrite_text() for a text list of ids, split as the core
+	 * splits it (AB_MCP_Sync_Canon::id_tokens()); an item in another
+	 * spelling writes nothing (missing: spelling).
+	 *
+	 * @param string $text  Text.
+	 * @param string $split See AB_MCP_Sync_Canon::id_tokens().
+	 * @param string $space post or user.
+	 * @param array  $plan  plan().
+	 * @return array
+	 */
+	private static function id_cuts( $text, $split, $space, array &$plan ) {
+		$cuts = array();
+		foreach ( AB_MCP_Sync_Canon::id_tokens( $text, $split ) as $token ) {
+			if ( null === $token['id'] ) {
+				$plan['missing'][] = array(
+					'space' => 'spelling',
+					'id'    => 0,
+				);
+				continue;
+			}
+			$cuts[] = array(
+				'at'    => $token['at'],
+				'len'   => $token['len'],
+				'space' => $space,
+				'id'    => $token['id'],
+			);
+		}
+		return $cuts;
 	}
 
 	/**

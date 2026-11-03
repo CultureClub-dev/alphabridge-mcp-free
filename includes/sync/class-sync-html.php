@@ -124,31 +124,44 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
-	 * Whether the class id of the tag the processor stands on is in the
-	 * spelling that is rewritten; null where the tag has no class id (there
-	 * is nothing to rewrite in its class). The spelling: an img whose stored
-	 * text holds wp-image- exactly once, there in the class attribute the
-	 * HTML API reads (the first of that name: a later one is a duplicate it
-	 * passes over, the pattern of wp_filter_content_tags() does not), and
-	 * whose attribute values decoded hold it no more than that once. The
-	 * core reads the first wp-image-<digits> of the stored tag: in this
-	 * spelling the id of the class, or none.
+	 * Whether the ids of the tag the processor stands on are in the spelling
+	 * that is rewritten; null where they are and the tag has no class id
+	 * (there is nothing to rewrite in its class). Each id in the spelling of
+	 * AB_MCP_Sync_Canon::id_spelling(), a data-id without a character
+	 * reference as stored. The class id: an img whose stored text holds
+	 * wp-image- only in the class attribute the HTML API reads (the first
+	 * of that name: a later one is a duplicate it passes over, the pattern
+	 * of wp_filter_content_tags() does not), followed by the digits of the
+	 * id as stored, and whose attribute values decoded hold it once. Then
+	 * the stored text holds it exactly once. The core reads the first
+	 * wp-image-<digits> of the stored tag: in this spelling the id of the
+	 * class, or none.
 	 *
 	 * @param string $raw The stored text of the tag.
 	 * @param array  $ids ids().
 	 * @return bool|null
 	 */
 	private function canonical( $raw, array $ids ) {
-		if ( ! in_array( 'class', array_column( $ids, 'rule' ), true ) ) {
+		$raw = (string) $raw;
+		foreach ( $ids as $id ) {
+			if ( null === $id['id'] || ( 'data_id' === $id['rule'] && self::stored_reference( $raw, self::DATA_ID ) ) ) {
+				return false;
+			}
+		}
+		$class = array_values( array_filter( $ids, static fn( $id ) => 'class' === $id['rule'] ) );
+		if ( array() === $class ) {
 			return null;
 		}
-		if ( 'IMG' !== $this->get_tag() || 1 !== preg_match_all( '/wp-image-/i', (string) $raw ) ) {
+		// The core reads the digits after the first wp-image- as stored: the
+		// class id, digit for digit (no character reference among them).
+		if ( 'IMG' !== $this->get_tag() || 1 !== preg_match( '/wp-image-([0-9]*)/i', $raw, $core ) || (string) $class[0]['id'] !== $core[1] ) {
 			return false;
 		}
 		// Without the class the HTML API reads, no wp-image- is left: not in
-		// a name, not in a duplicate attribute. (Were the class not set, the
-		// text would keep its wp-image-.)
-		$p = new self( (string) $raw );
+		// a name, not in a duplicate attribute (were the class not set, the
+		// text would keep its wp-image-). So the stored tag holds wp-image-
+		// in that class only, and there once: twice would be counted below.
+		$p = new self( $raw );
 		$p->next_tag();
 		$p->set_attribute( 'class', '' );
 		if ( false !== stripos( $p->get_updated_html(), 'wp-image-' ) ) {
@@ -162,33 +175,62 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
+	 * Whether an attribute of a tag holds a character reference as stored:
+	 * set_attribute() replaces it (and only it) with a text without one.
+	 *
+	 * @param string $raw  The stored text of the tag.
+	 * @param string $name Attribute.
+	 * @return bool
+	 */
+	private static function stored_reference( $raw, $name ) {
+		$p = new self( $raw );
+		$p->next_tag();
+		$p->set_attribute( $name, '' );
+		return substr_count( $raw, '&' ) !== substr_count( $p->get_updated_html(), '&' );
+	}
+
+	/**
 	 * The ids of the tag the processor stands on.
 	 *
 	 * @param string[] $rules class, data_id.
-	 * @return array<int,array{rule:string,id:int}>
+	 * @return array<int,array{rule:string,id:int|null}> id null: in another
+	 *               spelling (AB_MCP_Sync_Canon::id_spelling()); a token
+	 *               that holds no id is none.
 	 */
 	private function ids( array $rules ) {
 		$out = array();
 		if ( in_array( 'class', $rules, true ) ) {
 			foreach ( $this->class_list() ?? array() as $token ) {
-				if ( preg_match( self::CLASS_TOKEN, (string) $token, $m ) && strlen( ltrim( $m[1], '0' ) ) <= 18 ) {
+				if ( preg_match( self::CLASS_TOKEN, (string) $token, $m ) && self::holds_id( $m[1] ) ) {
 					$out[] = array(
 						'rule' => 'class',
-						'id'   => (int) $m[1],
+						'id'   => AB_MCP_Sync_Canon::id_spelling( $m[1] ),
 					);
 				}
 			}
 		}
 		if ( in_array( 'data_id', $rules, true ) ) {
 			$value = $this->get_attribute( self::DATA_ID );
-			if ( is_string( $value ) && preg_match( '/^\d{1,18}\z/', $value ) ) {
+			if ( self::holds_id( $value ) ) {
 				$out[] = array(
 					'rule' => 'data_id',
-					'id'   => (int) $value,
+					'id'   => AB_MCP_Sync_Canon::id_spelling( $value ),
 				);
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether the digits of a class token or the text of a data-id hold an
+	 * id, in its spelling or in another (AB_MCP_Sync_Canon::id_spelling()
+	 * is not 0): ids() names them, put_ids() sets them.
+	 *
+	 * @param mixed $value Digits or the value of data-id.
+	 * @return bool
+	 */
+	private static function holds_id( $value ) {
+		return is_string( $value ) && 0 !== AB_MCP_Sync_Canon::id_spelling( $value );
 	}
 
 	/**
@@ -207,7 +249,7 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 				$tokens = preg_split( '/[ \t\n\f\r]+/', $class, -1, PREG_SPLIT_NO_EMPTY );
 				$new    = false;
 				foreach ( $tokens as $i => $token ) {
-					if ( preg_match( self::CLASS_TOKEN, $token, $m ) ) {
+					if ( preg_match( self::CLASS_TOKEN, $token, $m ) && self::holds_id( $m[1] ) ) {
 						$id = call_user_func( $id_for, (int) $m[1] );
 						if ( null !== $id && 'wp-image-' . $id !== $token ) {
 							$tokens[ $i ] = 'wp-image-' . $id;
@@ -223,7 +265,7 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 		}
 		if ( in_array( 'data_id', $rules, true ) ) {
 			$value = $this->get_attribute( self::DATA_ID );
-			if ( is_string( $value ) && preg_match( '/^\d{1,18}\z/', $value ) ) {
+			if ( self::holds_id( $value ) ) {
 				$id = call_user_func( $id_for, (int) $value );
 				if ( null !== $id && ( (string) $id !== $value || $always ) ) {
 					$this->set_attribute( self::DATA_ID, (string) $id );

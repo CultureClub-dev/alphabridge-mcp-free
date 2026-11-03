@@ -207,26 +207,33 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	}
 
 	/**
-	 * An id column or value as a reference marker, 0 or empty as it is.
+	 * An id column or value as a reference marker, only in the spelling of
+	 * AB_MCP_Sync_Canon::id_spelling(); another form locks the object
+	 * (*:reference_spelling); 0 or empty as it is.
 	 *
 	 * @param string $space    post or term.
-	 * @param string $raw      Value as stored.
+	 * @param mixed  $raw      Value as stored (a text; an int or a float in
+	 *                         an unpacked value).
 	 * @param array  $acc      Accumulator.
 	 * @param string $at       Where.
 	 * @param string $strength strong or weak (decision 16).
 	 * @return mixed
 	 */
 	protected static function id_ref( $space, $raw, array &$acc, $at, $strength = 'strong' ) {
-		if ( ! preg_match( '/^\d+\z/', (string) $raw ) || (int) $raw <= 0 ) {
-			return (string) $raw;
+		$id = AB_MCP_Sync_Canon::id_spelling( $raw );
+		if ( null === $id ) {
+			AB_MCP_Sync_Canon::spelling( $acc, $at );
+		}
+		if ( ! $id ) {
+			return is_int( $raw ) || is_string( $raw ) ? (string) $raw : $raw;
 		}
 		$acc['refs'][] = array(
 			'space'    => $space,
-			'id'       => (int) $raw,
+			'id'       => $id,
 			'at'       => (string) $at,
 			'strength' => $strength,
 		);
-		return AB_MCP_Sync_Canon::ref( $space, (int) $raw );
+		return AB_MCP_Sync_Canon::ref( $space, $id );
 	}
 
 	/**
@@ -456,6 +463,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 					$out[ $column ] = self::id_ref( 'post', $value, $acc, 'post_parent' );
 					break;
 				case 'post_author':
+					// A column BIGINT UNSIGNED: its digits are in the spelling of an id.
 					$out[ $column ] = AB_MCP_Sync_Canon::user( (int) $value, $ctx, $acc, 'post_author' );
 					break;
 				default:
@@ -746,7 +754,12 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		}
 		$locations = array();
 		foreach ( isset( $mods['nav_menu_locations'] ) && is_array( $mods['nav_menu_locations'] ) ? $mods['nav_menu_locations'] : array() as $location => $menu ) {
-			if ( (int) $menu === (int) $row['term_id'] && (int) $menu > 0 ) {
+			$id = AB_MCP_Sync_Canon::id_spelling( $menu );
+			if ( null === $id ) {
+				// Which menu the core takes, the positions say in another
+				// spelling: every menu locks.
+				AB_MCP_Sync_Canon::spelling( $acc, 'locations.' . $location );
+			} elseif ( $id > 0 && $id === (int) $row['term_id'] ) {
 				$locations[] = (string) $location;
 			}
 		}
@@ -977,19 +990,22 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 			$field = explode( '.', (string) $path )[0];
 			$type  = isset( $schema[ $field ] ) ? $schema[ $field ] : '';
 			$where = $at . '.' . $path;
-			if ( ( 'post' === $type || 'term' === $type || 'post_list' === $type ) && ( is_int( $value ) || is_string( $value ) ) ) {
-				return self::id_ref( 'term' === $type ? 'term' : 'post', (string) $value, $acc, $where );
+			if ( ( 'post' === $type || 'term' === $type || 'post_list' === $type ) && is_scalar( $value ) ) {
+				return self::id_ref( 'term' === $type ? 'term' : 'post', $value, $acc, $where );
 			}
 			if ( 'post_text' === $type && is_string( $value ) ) {
+				// As wp_list_pages() reads it: wp_parse_id_list().
 				$cuts = array();
-				if ( preg_match_all( '/\d+/', $value, $m, PREG_OFFSET_CAPTURE ) ) {
-					foreach ( $m[0] as $hit ) {
-						$cuts[] = array(
-							'at'     => (int) $hit[1],
-							'len'    => strlen( $hit[0] ),
-							'marker' => self::id_ref( 'post', $hit[0], $acc, $where ),
-						);
+				foreach ( AB_MCP_Sync_Canon::id_tokens( $value, '/[\s,]+/' ) as $token ) {
+					if ( null === $token['id'] ) {
+						AB_MCP_Sync_Canon::spelling( $acc, $where );
+						continue;
 					}
+					$cuts[] = array(
+						'at'     => $token['at'],
+						'len'    => $token['len'],
+						'marker' => self::id_ref( 'post', $token['id'], $acc, $where ),
+					);
 				}
 				return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts );
 			}

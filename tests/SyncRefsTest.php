@@ -96,10 +96,12 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( '~ref' => 'post', 'id' => 12 ), $block['a']['id'] );
 		self::assertSame( 'large', $block['a']['sizeSlug'] );
 		self::assertSame( array( '~s' => array( '<figure><img src="', array( '~addr' => 'plain' ), '/a.jpg"/> [gallery ids="', array( '~ref' => 'post', 'id' => 12 ), '"]</figure>' ) ), $block['c'][0] );
-		// A text of digits is no JSON integer literal: it stays, and locks.
+		// A text of exactly the digits is an id as well, and keeps that it was text.
 		list( , , $text, $acc ) = self::scan( '<!-- wp:gallery {"ids":["13"]} --><figure></figure><!-- /wp:gallery -->' );
-		self::assertSame( '13', $text['~blocks'][0]['a']['ids'][0] );
-		self::assertSame( array( '*:reference_spelling' ), array_column( AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'], 'key' ) );
+		self::assertSame( array( '~ref' => 'post', 'id' => 13, 'text' => true ), $text['~blocks'][0]['a']['ids'][0] );
+		list( , , $author ) = self::scan( '<!-- wp:latest-posts {"selectedAuthor":"2"} /-->' );
+		self::assertSame( array( '~ref' => 'user', 'login' => 'user2', 'text' => true ), $author['~blocks'][0]['a']['selectedAuthor'] );
+		self::assertSame( array(), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'] );
 	}
 
 	/* ------------------------------------------- possible references */
@@ -177,6 +179,10 @@ final class SyncRefsTest extends TestCase {
 			'other quotes'        => array( '[gallery ids=”12”]', 'c:html:shortcode:gallery.ids' ),
 			'an escaped caption'  => array( '[caption id="attachment_\\65"]Bild[/caption]', 'c:html:shortcode:caption.id' ),
 			'inside [[…]]'        => array( '[[unregistered] [gallery ids="12"] [/unregistered]]', 'c:html:shortcode:gallery.ids' ),
+			// Read by wp_parse_id_list() (absint()) as 12, written otherwise.
+			'a leading zero'      => array( '[gallery ids="012,13"]', 'c:html:shortcode:gallery.ids' ),
+			'a sign'              => array( '[playlist ids="-12"]', 'c:html:shortcode:playlist.ids' ),
+			'a caption with a leading zero' => array( '[caption id="attachment_012"]Bild[/caption]', 'c:html:shortcode:caption.id' ),
 		);
 	}
 
@@ -195,6 +201,8 @@ final class SyncRefsTest extends TestCase {
 			"[gallery ids='12, 13']" => "[gallery ids='112, 113']",
 			'[gallery ids=12,13]'    => '[gallery ids=112,113]',
 			'[gallery IDS="12"]'     => '[gallery IDS="112"]',
+			// wp_parse_id_list() splits at spaces as well.
+			'[gallery ids="12 13"]'  => '[gallery ids="112 113"]',
 		) as $from => $to ) {
 			list( $refs, , , $acc ) = self::scan( $from );
 			self::assertNotSame( array(), $refs, $from );
@@ -206,29 +214,76 @@ final class SyncRefsTest extends TestCase {
 
 	public static function blockNumbers(): array {
 		return array(
-			'a float'            => array( '<!-- wp:block {"ref":12.0} /-->', 'c:core/block.ref' ),
-			'an exponent'        => array( '<!-- wp:block {"ref":1.2e1} /-->', 'c:core/block.ref' ),
-			'minus zero'         => array( '<!-- wp:block {"ref":-0.0} /-->', 'c:core/block.ref' ),
-			'a text'             => array( '<!-- wp:image {"id":"12"} --><figure></figure><!-- /wp:image -->', 'c:core/image.id' ),
-			'a text in a list'   => array( '<!-- wp:gallery {"ids":[12,"13"]} --><figure></figure><!-- /wp:gallery -->', 'c:core/gallery.ids.1' ),
-			'a float author'     => array( '<!-- wp:latest-posts {"selectedAuthor":3.0} /-->', 'c:core/latest-posts.selectedAuthor' ),
-			'a float term'       => array( '<!-- wp:query {"query":{"taxQuery":{"category":[4.0]}}} /-->', 'c:core/query.query.taxQuery.category.0' ),
+			// The content, where it locks, the same in the spelling of the id.
+			'a float'              => array( '<!-- wp:block {"ref":12.0} /-->', 'c:core/block.ref', '<!-- wp:block {"ref":12} /-->' ),
+			'an exponent'          => array( '<!-- wp:block {"ref":1.2e1} /-->', 'c:core/block.ref', '<!-- wp:block {"ref":12} /-->' ),
+			'true'                 => array( '<!-- wp:block {"ref":true} /-->', 'c:core/block.ref', '<!-- wp:block {"ref":12} /-->' ),
+			'a leading zero'       => array( '<!-- wp:image {"id":"012"} --><figure></figure><!-- /wp:image -->', 'c:core/image.id', '<!-- wp:image {"id":"12"} --><figure></figure><!-- /wp:image -->' ),
+			'a sign'               => array( '<!-- wp:image {"id":"+12"} --><figure></figure><!-- /wp:image -->', 'c:core/image.id', '<!-- wp:image {"id":"12"} --><figure></figure><!-- /wp:image -->' ),
+			'a space'              => array( '<!-- wp:gallery {"ids":[12," 13"]} --><figure></figure><!-- /wp:gallery -->', 'c:core/gallery.ids.1', '<!-- wp:gallery {"ids":[12,"13"]} --><figure></figure><!-- /wp:gallery -->' ),
+			'a float author'       => array( '<!-- wp:latest-posts {"selectedAuthor":3.0} /-->', 'c:core/latest-posts.selectedAuthor', '<!-- wp:latest-posts {"selectedAuthor":3} /-->' ),
+			'a float term'         => array( '<!-- wp:query {"query":{"taxQuery":{"category":[4.0]}}} /-->', 'c:core/query.query.taxQuery.category.0', '<!-- wp:query {"query":{"taxQuery":{"category":[4]}}} /-->' ),
+			// Codex, round 6: intval(), then absint() in WP_Query, reads 12.
+			'a negative exclude'   => array( '<!-- wp:query {"query":{"inherit":false,"exclude":[-12]}} --><div></div><!-- /wp:query -->', 'c:core/query.query.exclude.0', '<!-- wp:query {"query":{"inherit":false,"exclude":[12]}} --><div></div><!-- /wp:query -->' ),
+			'a negative parent'    => array( '<!-- wp:query {"query":{"inherit":false,"parents":[-12]}} --><div></div><!-- /wp:query -->', 'c:core/query.query.parents.0', '<!-- wp:query {"query":{"inherit":false,"parents":[12]}} --><div></div><!-- /wp:query -->' ),
+			// Codex, round 6: intval( "1e1" ) is 10; explode( "," ) keeps the space.
+			'an exponent author'   => array( '<!-- wp:query {"query":{"inherit":false,"author":"1e1"}} --><div></div><!-- /wp:query -->', 'c:core/query.query.author', '<!-- wp:query {"query":{"inherit":false,"author":"10"}} --><div></div><!-- /wp:query -->' ),
+			'a space in an author list' => array( '<!-- wp:query {"query":{"inherit":false,"author":"1, 2"}} --><div></div><!-- /wp:query -->', 'c:core/query.query.author', '<!-- wp:query {"query":{"inherit":false,"author":"1,2"}} --><div></div><!-- /wp:query -->' ),
 		);
 	}
 
 	#[DataProvider( 'blockNumbers' )]
-	public function testAnIdOfABlockOnlyAsAJsonIntegerLiteralOtherNumbersLock( string $content, string $at ): void {
+	public function testAnIdOfABlockOnlyInItsSpellingOtherFormsLock( string $content, string $at, string $canonical ): void {
 		list( $refs, , , $acc ) = self::scan( $content );
 		self::assertNotContains( 'post:12@' . $at, $refs );
 		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
 		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ) );
-		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ), 'term' => array( 4 => 40 ), 'user' => array( 3 => 30 ) ), array() ) );
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ), 'term' => array( 4 => 40 ), 'user' => array( 1 => 2, 2 => 20, 3 => 30, 10 => 110 ) ), array() );
+		$out  = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
 		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
-		// The integer literal is a reference, rewritten.
-		$int = (string) preg_replace( '/12\.0|1\.2e1|-0\.0|"12"|3\.0|4\.0/', '12', $content );
-		$int = str_replace( '"13"', '13', $int );
-		list( , , , $clean ) = self::scan( $int );
-		self::assertSame( array(), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $clean )['locks'], $int );
+		// In the spelling of the id it is a reference, rewritten.
+		list( , , , $clean ) = self::scan( $canonical );
+		self::assertSame( array(), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $clean )['locks'], $canonical );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $canonical, $plan );
+		self::assertSame( array( array(), true ), array( $out['missing'], $out['changed'] ), $canonical );
+	}
+
+	public function testWhatHoldsNoIdIsNoReference(): void {
+		foreach ( array(
+			'<!-- wp:block {"ref":0} /-->',
+			'<!-- wp:block {"ref":-0.0} /-->',
+			'<!-- wp:image {"id":"0"} --><figure></figure><!-- /wp:image -->',
+			'<!-- wp:image {"id":""} --><figure></figure><!-- /wp:image -->',
+			'<!-- wp:query {"query":{"author":""}} --><div></div><!-- /wp:query -->',
+			// The caption's id names an attachment only after attachment_.
+			'[caption id="figure-number-12"]Bild[/caption]',
+		) as $content ) {
+			list( $refs, , , $acc ) = self::scan( $content );
+			self::assertSame( array( array(), array() ), array( $refs, $acc['locks'] ), $content );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
+			self::assertSame( array( array(), false ), array( $out['missing'], $out['changed'] ), $content );
+		}
+	}
+
+	public static function shortcodesAcrossBlocks(): array {
+		return array(
+			// Codex, round 6: do_blocks() makes [gallery ids="12"] of it.
+			'the attribute in a block' => array( '[gallery <!-- wp:paragraph -->ids="12"<!-- /wp:paragraph -->]', 'c:shortcode@0' ),
+			'the name split'           => array( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->[<!-- wp:paragraph /-->gallery ids="12"]', 'c:shortcode@51' ),
+			'a closer between'         => array( '<!-- wp:paragraph --><p>[gallery </p><!-- /wp:paragraph -->ids="12"]', 'c:shortcode@24' ),
+		);
+	}
+
+	#[DataProvider( 'shortcodesAcrossBlocks' )]
+	public function testAShortcodeAcrossBlockDelimitersLocks( string $content, string $at ): void {
+		list( $refs, , , $acc ) = self::scan( $content );
+		self::assertSame( array(), $refs, 'No text of a block holds the shortcode.' );
+		self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+		// Brackets closed before the delimiter: nothing locks.
+		list( , , , $clean ) = self::scan( '<!-- wp:paragraph --><p>[gallery ids="12"] [x]</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>y</p><!-- /wp:paragraph -->' );
+		self::assertSame( array(), $clean['locks'] );
 	}
 
 	public function testAShortcodeSchemaOnlyForExactlyItsName(): void {
@@ -262,6 +317,9 @@ final class SyncRefsTest extends TestCase {
 			'an encoded equals'     => array( '/?api_key%3Dx' ),
 			'an equals as a reference' => array( '/?api_key&#61;x' ),
 			'an escaped equals'     => array( '<!-- api_key\\u003dx -->' ),
+			// Codex, round 6: do_blocks() joins it to [acme api_key="example-only"].
+			'a key split by a block' => array( '[acme api_<!-- wp:paragraph /-->key="example-only"]' ),
+			'a key split by two delimiters' => array( '[acme to<!-- wp:paragraph -->ken="x"<!-- /wp:paragraph -->]' ),
 		);
 	}
 
@@ -281,9 +339,25 @@ final class SyncRefsTest extends TestCase {
 			'/?api_key%3Dx'                                    => 'api_key',
 			'/?api_key&#61;x'                                  => 'api_key',
 			'<!-- api_key\\u003dx -->'                          => 'api_key',
+			'[acme api_<!-- wp:paragraph /-->key="example-only"]' => 'api_key',
 		) as $text => $key ) {
 			self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~' . $key ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $text );
 		}
+	}
+
+	public function testATextThatCannotBeJoinedIsUnreadable(): void {
+		// Without the joined text (a PCRE error) nothing says what it holds.
+		$jit   = ini_get( 'pcre.jit' );
+		$limit = ini_get( 'pcre.backtrack_limit' );
+		ini_set( 'pcre.jit', '0' );
+		ini_set( 'pcre.backtrack_limit', '1' );
+		try {
+			$check = AB_MCP_Sync_Credentials::unit( '', '<!-- wp:acme/box {"title":"' . str_repeat( 'x', 200 ) . '"} /--> a=1', array() );
+		} finally {
+			ini_set( 'pcre.backtrack_limit', (string) $limit );
+			ini_set( 'pcre.jit', (string) $jit );
+		}
+		self::assertSame( array( 'state' => 'unreadable', 'fields' => array(), 'why' => 'unreadable_value' ), $check );
 	}
 
 	public function testWordsAboutCredentialsAndTheirValuesAreNone(): void {

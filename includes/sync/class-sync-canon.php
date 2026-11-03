@@ -302,6 +302,68 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
+	 * How a stored id is read, for every place the core reads one (intval(),
+	 * absint(), (int), the items of wp_parse_id_list() and of an author list,
+	 * wp-image-<digits>, the attributes of blocks and shortcodes, the fields
+	 * of the kinds' own rows): the id where it is stored in the one spelling
+	 * that is rewritten, a JSON integer literal or a text of exactly the
+	 * digits [1-9][0-9]* (at most 18); 0 where it holds no id (0, -0, empty,
+	 * false, null, a text without a digit from 1 to 9); null for every other
+	 * form, which the core may read as a number other than 0 (a sign, an
+	 * exponent, a fraction, leading zeros, spaces, a float, a character
+	 * reference, digits mixed with other characters, more than 18 digits,
+	 * true, a list): the object locks (*:reference_spelling) and nothing is
+	 * rewritten (principle B).
+	 *
+	 * @param mixed $value Value as stored (decoded JSON in a block attribute).
+	 * @return int|null
+	 */
+	public static function id_spelling( $value ) {
+		if ( is_int( $value ) ) {
+			return $value > 0 ? $value : ( 0 === $value ? 0 : null );
+		}
+		if ( is_string( $value ) ) {
+			if ( 1 === preg_match( '/^[1-9][0-9]{0,17}\z/', $value ) ) {
+				return (int) $value;
+			}
+			return 1 === preg_match( '/[1-9]/', $value ) ? null : 0;
+		}
+		if ( is_float( $value ) ) {
+			return 0.0 === abs( $value ) ? 0 : null;
+		}
+		if ( null === $value || false === $value || array() === $value ) {
+			return 0;
+		}
+		return null;
+	}
+
+	/**
+	 * The ids of a text list as the core splits it, each with its offset and
+	 * id_spelling(); the items without an id (0) are left out.
+	 *
+	 * @param string $text  Text.
+	 * @param string $split The pattern of the separator: '/,/' as explode()
+	 *                      splits an author list, '/[\s,]+/' as
+	 *                      wp_parse_list() splits the list of
+	 *                      wp_parse_id_list().
+	 * @return array<int,array{at:int,len:int,id:int|null}>
+	 */
+	public static function id_tokens( $text, $split ) {
+		$out = array();
+		foreach ( preg_split( $split, (string) $text, -1, PREG_SPLIT_OFFSET_CAPTURE ) as $part ) {
+			$id = self::id_spelling( $part[0] );
+			if ( 0 !== $id ) {
+				$out[] = array(
+					'at'  => (int) $part[1],
+					'len' => strlen( $part[0] ),
+					'id'  => $id,
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * A reference to a user, by login (the identity of an author on both
 	 * sides, decision 25).
 	 *

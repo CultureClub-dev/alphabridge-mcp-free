@@ -253,6 +253,37 @@ final class AB_MCP_Sync_Option_Schema {
 	}
 
 	/**
+	 * An id of a core option as a marker, only in the spelling of
+	 * AB_MCP_Sync_Canon::id_spelling(); another form locks the option
+	 * (*:reference_spelling); 0 as it is.
+	 *
+	 * @param string     $space post or term.
+	 * @param int|string $id    As stored.
+	 * @param string     $at    Where.
+	 * @param array      $acc   Accumulator.
+	 * @param bool       $text  Whether a text of digits keeps that it was
+	 *                          text (an item of a list; an option of one id
+	 *                          is always text).
+	 * @return mixed
+	 */
+	private static function ref( $space, $id, $at, array &$acc, $text ) {
+		$n = AB_MCP_Sync_Canon::id_spelling( $id );
+		if ( null === $n ) {
+			AB_MCP_Sync_Canon::spelling( $acc, $at );
+		}
+		if ( ! $n ) {
+			return $id;
+		}
+		$acc['refs'][] = array(
+			'space'    => $space,
+			'id'       => $n,
+			'at'       => $at,
+			'strength' => 'strong',
+		);
+		return AB_MCP_Sync_Canon::ref( $space, $n ) + ( $text && is_string( $id ) ? array( 'text' => true ) : array() );
+	}
+
+	/**
 	 * The canonical value of a core option by its type: references as
 	 * markers, texts with the addresses neutral. A value that breaks its
 	 * rule locks the option (option:off_schema) and is kept as stored.
@@ -270,28 +301,13 @@ final class AB_MCP_Sync_Option_Schema {
 			return AB_MCP_Sync_Canon::value( $raw, $ctx, $acc, 'option', 'option_value' );
 		}
 		if ( 'ref' === $schema['type'] ) {
-			if ( (int) $raw <= 0 ) {
-				return $raw;
-			}
-			$acc['refs'][] = array(
-				'space'    => $schema['space'],
-				'id'       => (int) $raw,
-				'at'       => 'option_value',
-				'strength' => 'strong',
-			);
-			return AB_MCP_Sync_Canon::ref( $schema['space'], (int) $raw );
+			return self::ref( $schema['space'], $raw, 'option_value', $acc, false );
 		}
 		if ( 'refs' === $schema['type'] ) {
 			$read = AB_MCP_Sync_Canon::unserialized( $raw );
 			$out  = array();
 			foreach ( $read['value'] as $i => $id ) {
-				$acc['refs'][] = array(
-					'space'    => $schema['space'],
-					'id'       => (int) $id,
-					'at'       => 'option_value.' . $i,
-					'strength' => 'strong',
-				);
-				$out[]         = AB_MCP_Sync_Canon::ref( $schema['space'], (int) $id ) + ( is_string( $id ) ? array( 'text' => true ) : array() );
+				$out[] = self::ref( $schema['space'], $id, 'option_value.' . $i, $acc, true );
 			}
 			return array( '~php' => $out );
 		}

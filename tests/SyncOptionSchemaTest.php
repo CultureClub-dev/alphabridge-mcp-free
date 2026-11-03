@@ -20,10 +20,12 @@ use AB_MCP_Sync_Exclusions;
 use AB_MCP_Sync_Kinds;
 use AB_MCP_Sync_Option_Name;
 use AB_MCP_Sync_Option_Schema;
+use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-option-schema.php';
+require_once __DIR__ . '/../includes/sync/class-sync-refs.php';
 
 final class SyncOptionSchemaTest extends TestCase {
 
@@ -82,6 +84,20 @@ final class SyncOptionSchemaTest extends TestCase {
 
 		self::assertSame( 'home', AB_MCP_Sync_Option_Schema::canonical( AB_MCP_Sync_Option_Schema::CORE['page_on_front'], 'home', $ctx, $acc ) );
 		self::assertSame( array( 'option:off_schema' ), array_column( $acc['locks'], 'key' ) );
+	}
+
+	public function testAnIdOfAnOptionInAnotherSpellingLocks(): void {
+		// (int) reads 12 from both: the digits fit the type, not the spelling of an id.
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ) );
+		$acc = AB_MCP_Sync_Canon::acc();
+		self::assertSame( '012', AB_MCP_Sync_Option_Schema::canonical( AB_MCP_Sync_Option_Schema::CORE['page_on_front'], '012', $ctx, $acc ) );
+		self::assertSame( array( '~php' => array( '012' ) ), AB_MCP_Sync_Option_Schema::canonical( AB_MCP_Sync_Option_Schema::CORE['sticky_posts'], serialize( array( '012' ) ), $ctx, $acc ) );
+		self::assertSame( array(), $acc['refs'] );
+		self::assertSame( array( '*:reference_spelling', '*:reference_spelling' ), array_column( AB_MCP_Sync_Canon::finish( 'option', 'page_on_front', array(), array(), $acc )['locks'], 'key' ) );
+		$plan    = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array() );
+		$changed = false;
+		self::assertSame( '012', AB_MCP_Sync_Refs::rewrite_option( AB_MCP_Sync_Option_Schema::CORE['page_on_front'], '012', $plan, $changed ) );
+		self::assertSame( array( 'spelling' ), array_column( $plan['missing'], 'space' ) );
 	}
 
 	public function testTheRefusalAsksWhatTheGuardAsksWithoutItsTranslatedMessage(): void {

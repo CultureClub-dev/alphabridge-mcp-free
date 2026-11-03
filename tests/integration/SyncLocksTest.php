@@ -387,6 +387,39 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( array( 'nav_menu', 'media_image', 'acme_box' ), array_column( $area['form']['instances'], 'base' ) );
 	}
 
+	public function testAnIdOfARowInAnotherSpellingLocks(): void {
+		// (int) and absint() read 12 from each; only 12 is rewritten.
+		$locks = static function ( array $result ): array {
+			$out = array();
+			foreach ( $result['locks'] as $lock ) {
+				if ( '*:reference_spelling' === $lock['key'] ) {
+					$out[] = $lock['at'];
+				}
+			}
+			return $out;
+		};
+		$page = self::post( '<!-- wp:paragraph --><p>Bild</p><!-- /wp:paragraph -->', array( '_thumbnail_id' => '012' ) );
+		self::assertSame( array( 'meta:_thumbnail_id' ), $locks( self::canon( 'post', $page ) ) );
+
+		$menu = wp_create_nav_menu( 'Positionen' );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => '0' . $menu ) );
+		self::assertSame( array( 'locations.primary' ), $locks( self::canon( 'menu', $menu ) ) );
+
+		update_option( 'widget_media_image', array( 2 => array( 'attachment_id' => (float) $page ), '_multiwidget' => 1 ) );
+		update_option( 'widget_pages', array( 5 => array( 'title' => 'Seiten', 'exclude' => '7, 1e1' ), '_multiwidget' => 1 ) );
+		update_option( 'sidebars_widgets', array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'media_image-2', 'pages-5' ), 'array_version' => 3 ) );
+		self::assertSame( array( 'widget:media_image-2.attachment_id', 'widget:pages-5.exclude' ), $locks( self::canon( 'widget_area', 'sidebar-1' ) ) );
+
+		// In the spelling of an id nothing locks.
+		update_post_meta( $page, '_thumbnail_id', '12' );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $menu ) );
+		update_option( 'widget_media_image', array( 2 => array( 'attachment_id' => $page ), '_multiwidget' => 1 ) );
+		update_option( 'widget_pages', array( 5 => array( 'title' => 'Seiten', 'exclude' => '7, 10' ), '_multiwidget' => 1 ) );
+		self::assertSame( array(), $locks( self::canon( 'post', $page ) ) );
+		self::assertSame( array(), $locks( self::canon( 'menu', $menu ) ) );
+		self::assertSame( array(), $locks( self::canon( 'widget_area', 'sidebar-1' ) ) );
+	}
+
 	/* ------------------------------------------- types of the table */
 
 	public function testAPostTypeOfAPluginIsListedWithItsLock(): void {

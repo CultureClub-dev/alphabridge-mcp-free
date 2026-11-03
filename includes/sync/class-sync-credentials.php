@@ -102,11 +102,13 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * The keys flat() finds in a text: the names redacts_key() names.
+	 * The keys flat() finds in a text: the names redacts_key() names, in the
+	 * text as stored and as do_blocks() joins it (without its block
+	 * delimiters), each with the decodings of decodings().
 	 *
 	 * @param string   $text  Text as stored.
 	 * @param string[] $extra Extra names.
-	 * @return string[]
+	 * @return string[]|null Null where the text could not be joined.
 	 */
 	public static function flat( $text, array $extra ) {
 		$text = (string) $text;
@@ -114,8 +116,20 @@ final class AB_MCP_Sync_Credentials {
 		if ( false === strpbrk( $text, '=:%&\\' ) ) {
 			return array();
 		}
+		$texts = array( $text );
+		if ( false !== strpos( $text, '<!--' ) ) {
+			$joined = preg_replace( AB_MCP_Sync_Refs::BLOCK_DELIMITER, '', $text );
+			if ( ! is_string( $joined ) ) {
+				return null;
+			}
+			$texts[] = $joined;
+		}
+		$variants = array();
+		foreach ( $texts as $one ) {
+			$variants = array_merge( $variants, self::decodings( $one ) );
+		}
 		$out = array();
-		foreach ( self::decodings( $text ) as $variant ) {
+		foreach ( array_unique( $variants ) as $variant ) {
 			foreach ( self::FLAT_KEYS as $pattern ) {
 				if ( preg_match_all( $pattern, $variant, $m ) ) {
 					foreach ( $m[1] as $key ) {
@@ -225,7 +239,12 @@ final class AB_MCP_Sync_Credentials {
 			return false;
 		}
 		if ( is_string( $value ) ) {
-			foreach ( self::flat( $value, $extra ) as $key ) {
+			$flat = self::flat( $value, $extra );
+			if ( null === $flat ) {
+				$why = 'unreadable_value';
+				return false;
+			}
+			foreach ( $flat as $key ) {
 				$fields[] = ( '' === $path ? '' : $path . '.' ) . '~' . $key;
 			}
 			if ( is_serialized( $value ) ) {
