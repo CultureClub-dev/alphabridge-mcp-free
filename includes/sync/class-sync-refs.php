@@ -510,15 +510,19 @@ final class AB_MCP_Sync_Refs {
 	 * @return string
 	 */
 	public static function rewrite_text( $text, array &$plan, array $cuts, &$changed ) {
-		$text = (string) $text;
-		$all  = array();
-		foreach ( AB_MCP_Sync_Canon::address_cuts( $text, $plan ) as $cut ) {
+		$text      = (string) $text;
+		$all       = array();
+		$addresses = AB_MCP_Sync_Canon::address_cuts( $text, $plan );
+		foreach ( $addresses as $cut ) {
 			$hit = substr( $text, $cut['at'], $cut['len'] );
 			if ( isset( $plan['subs'][ $hit ] ) ) {
 				$all[] = array( 'at' => $cut['at'], 'len' => $cut['len'], 'with' => $plan['subs'][ $hit ] );
 			}
-			// The ids of its query (a short link: ?p=, ?cat= …).
-			foreach ( AB_MCP_Sync_Canon::query_ids( $text, $cut['at'] + $cut['len'] ) as $query ) {
+		}
+		// The ids of the queries of the sites' addresses (a short link: ?p=,
+		// ?cat= …, with the host or without it).
+		foreach ( AB_MCP_Sync_Canon::query_starts( $text, $plan, $addresses ) as $start ) {
+			foreach ( AB_MCP_Sync_Canon::query_ids( $text, $start ) as $query ) {
 				if ( null === $query['id'] ) {
 					$plan['missing'][] = array(
 						'space' => 'spelling',

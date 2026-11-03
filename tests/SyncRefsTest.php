@@ -588,6 +588,57 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( array(), array() ), array( $refs, $acc['locks'] ) );
 	}
 
+	public static function relativeShortLinks(): array {
+		return array(
+			// The browser resolves them against the site: addresses of it.
+			'from the root'        => array( '<p><a href="/?p=12">x</a></p>', '<p><a href="/?p=120">x</a></p>' ),
+			'a path from the root' => array( '<p><a href="/blog/?page_id=13">x</a></p>', '<p><a href="/blog/?page_id=130">x</a></p>' ),
+			'only a query'         => array( '<p><a href="?p=12">x</a></p>', '<p><a href="?p=120">x</a></p>' ),
+			'relative to the path' => array( "<p><a href=\"./?p=12\">x</a> <a href='index.php?p=13'>y</a> <img src=?attachment_id=12></p>", "<p><a href=\"./?p=120\">x</a> <a href='index.php?p=130'>y</a> <img src=?attachment_id=120></p>" ),
+			'without the scheme'   => array( '<p><a href="//staging.test/?p=12">x</a></p>', '<p><a href="//staging.test/?p=120">x</a></p>' ),
+		);
+	}
+
+	#[DataProvider( 'relativeShortLinks' )]
+	public function testAShortLinkWithoutTheHostIsAReference( string $content, string $to ): void {
+		list( $refs, , , $acc ) = self::scan( $content );
+		self::assertNotSame( array(), $refs );
+		self::assertSame( array(), $acc['locks'] );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
+		self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ) );
+	}
+
+	public function testAnAddressWithoutTheHostOutsideTheSitesIsNone(): void {
+		foreach ( array(
+			'<p><a href="//other.test/?p=12">x</a></p>',
+			'<p><a href="mailto:a@b.test?p=12">x</a> <a href="#?p=12">y</a></p>',
+			'<p>Siehe ?p=12 und /?p=12 im Text.</p>',
+			'<p><a data-href="/?p=12">x</a></p>',
+		) as $content ) {
+			list( $refs, , , $acc ) = self::scan( $content );
+			self::assertSame( array( array(), array() ), array( $refs, $acc['locks'] ), $content );
+			self::assertSame( $content, AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['content'], $content );
+		}
+	}
+
+	public function testAPathFromTheRootCountsOnlyUnderTheFolderOfTheSite(): void {
+		$ctx  = AB_MCP_Sync_Canon::context( array( 'https://staging.test/blog' ), static fn( $id ) => 'user' . $id );
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array( 'https://staging.test/blog' => 'https://www.live.test' ) );
+		foreach ( array(
+			'<p><a href="/blog/?p=12">x</a></p>'               => true,
+			'<p><a href="/blog?p=12">x</a></p>'                => true,
+			'<p><a href="//staging.test/blog/?p=12">x</a></p>' => true,
+			'<p><a href="/?p=12">x</a></p>'                    => false,
+			'<p><a href="/blogx/?p=12">x</a></p>'              => false,
+			'<p><a href="//staging.test/?p=12">x</a></p>'      => false,
+		) as $content => $site ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+			self::assertSame( $site ? array( 12 ) : array(), array_column( $acc['refs'], 'id' ), $content );
+			self::assertSame( $site, false !== strpos( AB_MCP_Sync_Refs::rewrite_content( $content, $plan )['content'], 'p=120' ), $content );
+		}
+	}
+
 	public function testAShortLinkInAStoredValueIsAReference(): void {
 		$acc  = AB_MCP_Sync_Canon::acc();
 		$form = AB_MCP_Sync_Canon::value( serialize( array( 'url' => 'https://staging.test/?page_id=12' ) ), self::ctx(), $acc, 'post', 'meta:_link' );

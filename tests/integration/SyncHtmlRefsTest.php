@@ -176,6 +176,10 @@ final class SyncHtmlRefsTest extends TestCase {
 			self::assertSame( array(), $acc['locks'], $and );
 			$out = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
 			self::assertSame( array( '<p><a href="https://www.live.test/index.php?preview=true' . $and . 'page_id=130' . $and . 'pp=14">x</a></p>', array() ), array( $out['content'], $out['missing'] ), $and );
+			// Without the host, as the browser resolves it against the site.
+			$content = '<p><a href="/index.php?preview=true' . $and . 'page_id=13">x</a></p>';
+			self::assertSame( array( 'post:13@c:html?page_id' ), self::scan( $content )[0], $and );
+			self::assertSame( '<p><a href="/index.php?preview=true' . $and . 'page_id=130">x</a></p>', AB_MCP_Sync_Refs::rewrite_content( $content, $plan )['content'], $and );
 		}
 	}
 

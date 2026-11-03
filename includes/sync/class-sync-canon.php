@@ -107,11 +107,16 @@ final class AB_MCP_Sync_Canon {
 	 */
 	public static function context( array $addresses, $users = null ) {
 		$forms = array();
+		$sites = array();
 		foreach ( $addresses as $address ) {
 			$address = rtrim( trim( (string) $address ), '/' );
-			if ( ! preg_match( '#^https?://[^/\s]+#i', $address ) ) {
+			if ( ! preg_match( '#^https?://([^/\s]+)(.*)#i', $address, $parts ) ) {
 				continue;
 			}
+			$sites[] = array(
+				'host' => strtolower( $parts[1] ),
+				'path' => $parts[2],
+			);
 			foreach ( AB_MCP_Replace_Engine::needles( $address ) as $needle ) {
 				if ( ! isset( $forms[ $needle['needle'] ] ) ) {
 					$forms[ $needle['needle'] ] = $needle['form'];
@@ -132,6 +137,7 @@ final class AB_MCP_Sync_Canon {
 		return array(
 			'pattern' => array() === $alts ? '' : '#(?:' . implode( '|', $alts ) . ')' . self::BOUNDARY . '#',
 			'forms'   => $forms,
+			'sites'   => $sites,
 			'users'   => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
 		);
 	}
@@ -385,6 +391,89 @@ final class AB_MCP_Sync_Canon {
 	const QUERY_LISTS = array( 'cat', 'author' );
 
 	/**
+	 * An attribute of HTML whose value is an address the browser resolves
+	 * against the page, with the offset of its value.
+	 */
+	const URL_ATTRIBUTE = '/(?<![A-Za-z0-9_:\-])(?:href|src|action|formaction|cite|poster|data|background)\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))/i';
+
+	/**
+	 * Where the path and query of an address of the sites begin in a text:
+	 * after each address of the context (address_cuts()), and at the value
+	 * of an attribute of an address (URL_ATTRIBUTE) that the browser
+	 * resolves to one without its host (own_relative()).
+	 *
+	 * @param string $text      Text.
+	 * @param array  $ctx       Context.
+	 * @param array  $addresses address_cuts() of the text.
+	 * @return int[]
+	 */
+	public static function query_starts( $text, array $ctx, array $addresses ) {
+		$out = array();
+		foreach ( $addresses as $address ) {
+			$out[] = $address['at'] + $address['len'];
+		}
+		if ( preg_match_all( self::URL_ATTRIBUTE, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $m[1] as $value ) {
+				if ( self::own_relative( $value[0], $ctx ) ) {
+					$out[] = (int) $value[1];
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an address without its host is one of the sites as the
+	 * browser resolves it: with a path from the root ("/…", not "//") only
+	 * under the path of a site's address (an install in a folder); "//host…"
+	 * only with the host of a site and a path under its path; relative to
+	 * the page ("?p=", "./", "index.php") always, the page being one of the
+	 * site. An address with a scheme is none (address_cuts() reads the
+	 * sites' own); a fragment holds no query (query_ids() stops at "#").
+	 *
+	 * @param string $value The value of an attribute, as stored.
+	 * @param array  $ctx   Context.
+	 * @return bool
+	 */
+	private static function own_relative( $value, array $ctx ) {
+		if ( preg_match( '#^[A-Za-z][A-Za-z0-9+.\-]*:#', $value ) ) {
+			return false;
+		}
+		$sites = isset( $ctx['sites'] ) ? $ctx['sites'] : array();
+		if ( 0 === strpos( $value, '//' ) ) {
+			preg_match( '#^//([^/?\#\\\\]*)(.*)#s', $value, $parts );
+			foreach ( $sites as $site ) {
+				if ( strtolower( $parts[1] ) === $site['host'] && self::under( $parts[2], $site['path'] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		if ( 0 === strpos( $value, '/' ) ) {
+			foreach ( $sites as $site ) {
+				if ( self::under( $value, $site['path'] ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a path from the root, with its query, lies under the path of a
+	 * site: the path, then "/" or the query (a path without a query holds no
+	 * id of query_ids()).
+	 *
+	 * @param string $path Path and query.
+	 * @param string $base The path of the site ('' at the root).
+	 * @return bool
+	 */
+	private static function under( $path, $base ) {
+		return 1 === preg_match( '#^' . preg_quote( $base, '#' ) . '[/?]#', $path );
+	}
+
+	/**
 	 * The ids in the query of an address, which ends at $end in a text: its
 	 * path and its query in the encodings of the forms of an address (a
 	 * slash also as \/ of JSON, "&" also as &amp;, &#038; and &), each
@@ -487,9 +576,10 @@ final class AB_MCP_Sync_Canon {
 	 * A text: as it is, or {"~s":[…]} with the addresses neutral and the
 	 * given cuts replaced by their markers.
 	 *
-	 * The ids in the query of an address of the context (query_ids(), the
-	 * short links of WordPress: ?p=, ?page_id=, ?cat=, ?author= …) are
-	 * references, noted in $acc; one in another spelling locks the object.
+	 * The ids in the query of an address of the sites (query_starts(),
+	 * query_ids(): the short links of WordPress, ?p=, ?page_id=, ?cat=,
+	 * ?author= …, with the host or without it) are references, noted in
+	 * $acc; one in another spelling locks the object.
 	 *
 	 * @param string     $text Text.
 	 * @param array      $ctx  Context.
@@ -504,8 +594,8 @@ final class AB_MCP_Sync_Canon {
 		$theirs    = $cuts;
 		$cuts      = array_merge( $cuts, $addresses );
 		$acc       = is_array( $acc ) ? $acc : self::acc();
-		foreach ( $addresses as $address ) {
-			foreach ( self::query_ids( $text, $address['at'] + $address['len'] ) as $query ) {
+		foreach ( self::query_starts( $text, $ctx, $addresses ) as $start ) {
+			foreach ( self::query_ids( $text, $start ) as $query ) {
 				// In a cut of the caller (a tag with its own form) it is read there.
 				foreach ( $theirs as $cut ) {
 					if ( $query['at'] >= $cut['at'] && $query['at'] < $cut['at'] + $cut['len'] ) {
