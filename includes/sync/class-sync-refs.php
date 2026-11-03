@@ -21,7 +21,9 @@
  * - the fields of the kinds' own rows (menu item meta by _menu_item_type,
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
- * - the addresses of the sites, in every form of the replace engine.
+ * - the addresses of the sites, in every form of the replace engine, and
+ *   the ids of their short links (?p=, ?page_id=, ?attachment_id=, ?cat=,
+ *   ?author=: AB_MCP_Sync_Canon::query_ids());
  * Blocks are read with the core's WP_Block_Parser (what parse_blocks()
  * runs, without the filter block_parser_class that would let a plugin
  * replace it) and written back with serialize_blocks().
@@ -239,21 +241,18 @@ final class AB_MCP_Sync_Refs {
 	const BLOCK_DELIMITER = '/<!--\s+(?P<closer>\/)?wp:(?P<namespace>[a-z][a-z0-9_-]*\/)?(?P<name>[a-z][a-z0-9_-]*)\s+(?P<attrs>{(?:(?:[^}]+|}+(?=})|(?!}\s+\/?-->).)*+)?}\s+)?(?P<void>\/)?-->/s';
 
 	/**
-	 * The beginning of a block delimiter (looser than BLOCK_DELIMITER: more
-	 * locks are allowed, none missed).
+	 * A shortcode tag in the text do_blocks() joins: a "[" with a name as
+	 * do_shortcode() finds it (SHORTCODE_NAMES), or "[/" and one, to the
+	 * next "]".
 	 */
-	const DELIMITER_START = '/<!--\s+\/?wp:/';
+	const JOINED_SHORTCODE = '/\[\/?[^<>&\/\[\]\x00-\x20=][^\]]*\]/';
 
 	/**
-	 * A block delimiter, or the beginning of one, between a "[" and the next
-	 * "]" (a shortcode) or between a "<" and the next ">" (a tag as the
-	 * pattern of wp_filter_content_tags() reads it, and a "<" that only the
-	 * delimiter keeps from beginning a tag): do_blocks() joins the texts
-	 * around it before do_shortcode() and the filters of the content read
-	 * them, so a shortcode or a tag can stand there that no text of a block
-	 * holds.
+	 * A tag in the text do_blocks() joins, as the syntax of HTML begins one
+	 * (a "<" and a letter, "/", "!" or "?") and the pattern of
+	 * wp_filter_content_tags() ends it: to the next ">".
 	 */
-	const ACROSS_BLOCKS = '/\[[^\]]*<!--\s+\/?wp:|<[^>]*<!--\s+\/?wp:/';
+	const JOINED_TAG = '/<[A-Za-z\/!?][^>]*>/';
 
 	/* ============================================================ canon */
 
@@ -517,6 +516,20 @@ final class AB_MCP_Sync_Refs {
 			$hit = substr( $text, $cut['at'], $cut['len'] );
 			if ( isset( $plan['subs'][ $hit ] ) ) {
 				$all[] = array( 'at' => $cut['at'], 'len' => $cut['len'], 'with' => $plan['subs'][ $hit ] );
+			}
+			// The ids of its query (a short link: ?p=, ?cat= …).
+			foreach ( AB_MCP_Sync_Canon::query_ids( $text, $cut['at'] + $cut['len'] ) as $query ) {
+				if ( null === $query['id'] ) {
+					$plan['missing'][] = array(
+						'space' => 'spelling',
+						'id'    => 0,
+					);
+					continue;
+				}
+				$id = self::mapped_id( $plan, $query['space'], $query['id'] );
+				if ( null !== $id ) {
+					$all[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => (string) $id );
+				}
 			}
 		}
 		foreach ( $cuts as $cut ) {
@@ -843,26 +856,94 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
-	 * Where a shortcode or a tag stands across block delimiters in post
-	 * content (ACROSS_BLOCKS; a tag as the HTML API reads it as well, whose
-	 * quoted values may hold a ">"), or null.
+	 * A text as do_blocks() joins it before do_shortcode() and the filters
+	 * of the content read it: without its block delimiters (BLOCK_DELIMITER),
+	 * with its joints (where a delimiter stood: at in the joined text, raw
+	 * after the delimiter in the stored one).
 	 *
-	 * @param string $raw Post content as stored.
-	 * @return string|null shortcode@offset or tag@offset.
+	 * @param string $text Text.
+	 * @return array{text:string,joints:array<int,array{at:int,raw:int}>}|null
+	 *               Null where the pattern fails (a PCRE error).
 	 */
-	private static function across_blocks( $raw ) {
-		if ( preg_match( self::ACROSS_BLOCKS, $raw, $m, PREG_OFFSET_CAPTURE ) ) {
-			return ( '[' === $m[0][0][0] ? 'shortcode@' : 'tag@' ) . (int) $m[0][1];
-		}
-		// The pattern stops at the first ">"; the HTML API ends a tag there
-		// as well, unless the ">" stands in a quoted value. Only then can a
-		// tag it reads hold a delimiter the pattern did not see.
-		if ( ! preg_match( '/=\s*(?:"[^"]*|\'[^\']*)>/', $raw ) || ! preg_match( self::DELIMITER_START, $raw ) ) {
+	public static function joined( $text ) {
+		$text = (string) $text;
+		if ( false === preg_match_all( self::BLOCK_DELIMITER, $text, $d, PREG_OFFSET_CAPTURE ) ) {
 			return null;
 		}
-		require_once __DIR__ . '/class-sync-html.php';
-		$at = AB_MCP_Sync_Html::tag_holding( $raw, self::DELIMITER_START );
-		return null === $at ? null : 'tag@' . $at;
+		$out    = '';
+		$joints = array();
+		$pos    = 0;
+		foreach ( $d[0] as $m ) {
+			$out     .= substr( $text, $pos, $m[1] - $pos );
+			$pos      = $m[1] + strlen( $m[0] );
+			$joints[] = array(
+				'at'  => strlen( $out ),
+				'raw' => $pos,
+			);
+		}
+		return array(
+			'text'   => $out . substr( $text, $pos ),
+			'joints' => $joints,
+		);
+	}
+
+	/**
+	 * Where a shortcode tag or a tag of the joined text (joined()) holds a
+	 * joint, or null: no text of a block holds it, so it is not canonical
+	 * (principle B). A tag as the HTML API reads it as well, past a ">" in
+	 * a quoted value; only such a value makes it longer than JOINED_TAG.
+	 *
+	 * @param string $raw Post content as stored.
+	 * @return string|null shortcode@offset or tag@offset (stored), joined@0
+	 *                     where the text cannot be joined.
+	 */
+	private static function across_blocks( $raw ) {
+		$joined = self::joined( $raw );
+		if ( null === $joined ) {
+			return 'joined@0';
+		}
+		if ( array() === $joined['joints'] ) {
+			return null;
+		}
+		$text  = $joined['text'];
+		$units = array();
+		foreach ( array( 'shortcode' => self::JOINED_SHORTCODE, 'tag' => self::JOINED_TAG ) as $kind => $pattern ) {
+			preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE );
+			foreach ( $m[0] as $unit ) {
+				$units[] = array( $kind, (int) $unit[1], (int) $unit[1] + strlen( $unit[0] ) );
+			}
+		}
+		if ( preg_match( '/=\s*(?:"[^"]*|\'[^\']*)>/', $text ) ) {
+			require_once __DIR__ . '/class-sync-html.php';
+			foreach ( AB_MCP_Sync_Html::tag_spans( $text ) as $span ) {
+				$units[] = array( 'tag', $span[0], $span[1] );
+			}
+		}
+		foreach ( $units as $unit ) {
+			foreach ( $joined['joints'] as $joint ) {
+				if ( $joint['at'] > $unit[1] && $joint['at'] < $unit[2] ) {
+					return $unit[0] . '@' . self::stored_offset( $joined['joints'], $unit[1] );
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The offset in the stored text of an offset in the joined one.
+	 *
+	 * @param array $joints joined() joints.
+	 * @param int   $at     Offset in the joined text.
+	 * @return int
+	 */
+	private static function stored_offset( array $joints, $at ) {
+		$raw = $at;
+		foreach ( $joints as $joint ) {
+			if ( $joint['at'] <= $at ) {
+				$raw = $at - $joint['at'] + $joint['raw'];
+			}
+		}
+		return $raw;
 	}
 
 	/**
@@ -975,7 +1056,7 @@ final class AB_MCP_Sync_Refs {
 				'at'     => $tag['at'],
 				'len'    => $tag['len'],
 				'marker' => array(
-					'~tag' => AB_MCP_Sync_Canon::text( $tag['tag'], $ctx ),
+					'~tag' => AB_MCP_Sync_Canon::text( $tag['tag'], $ctx, array(), $acc, $at . ':html' ),
 					'refs' => $refs,
 				),
 			);
@@ -1005,7 +1086,7 @@ final class AB_MCP_Sync_Refs {
 		foreach ( $found['spelling'] as $place ) {
 			AB_MCP_Sync_Canon::spelling( $acc, $at . ':' . $place, $kind );
 		}
-		return AB_MCP_Sync_Canon::text( $text, $ctx, $cuts );
+		return AB_MCP_Sync_Canon::text( $text, $ctx, $cuts, $acc, $at );
 	}
 
 	/**
@@ -1066,7 +1147,7 @@ final class AB_MCP_Sync_Refs {
 		if ( ! self::is_plain( $block, $path ) ) {
 			self::note_possible( $acc, $value, $at . '.' . $path );
 		}
-		return is_string( $value ) ? AB_MCP_Sync_Canon::text( $value, $ctx ) : $value;
+		return is_string( $value ) ? AB_MCP_Sync_Canon::text( $value, $ctx, array(), $acc, $at . '.' . $path ) : $value;
 	}
 
 	/**
@@ -1128,7 +1209,7 @@ final class AB_MCP_Sync_Refs {
 							'marker' => AB_MCP_Sync_Canon::user( $token['id'], $ctx, $acc, $at ),
 						);
 					}
-					return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts );
+					return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts, $acc, $at );
 				}
 				return self::canon_user( $value, $ctx, $acc, $at );
 			case 'tax_query':
@@ -1158,7 +1239,7 @@ final class AB_MCP_Sync_Refs {
 						$item['id'] = self::canon_id( 'term', $item['id'], $acc, $at . '.' . $i . '.id' );
 						foreach ( $item as $field => $v ) {
 							if ( 'id' !== $field && is_string( $v ) ) {
-								$item[ $field ] = AB_MCP_Sync_Canon::text( $v, $ctx );
+								$item[ $field ] = AB_MCP_Sync_Canon::text( $v, $ctx, array(), $acc, $at . '.' . $i . '.' . $field );
 							}
 						}
 					}

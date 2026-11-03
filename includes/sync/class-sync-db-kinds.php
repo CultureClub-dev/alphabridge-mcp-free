@@ -448,7 +448,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 				case 'post_excerpt':
 				case 'post_content_filtered':
 					$found          = AB_MCP_Sync_Refs::text_refs( $value, '' );
-					$out[ $column ] = AB_MCP_Sync_Canon::text( $value, $ctx );
+					$out[ $column ] = AB_MCP_Sync_Canon::text( $value, $ctx, array(), $acc, $column );
 					foreach ( $found['possible'] as $p ) {
 						$acc['possible'][] = array(
 							'value' => $p['value'],
@@ -622,10 +622,10 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 		}
 		return array(
 			'taxonomy'    => $row['taxonomy'],
-			'name'        => AB_MCP_Sync_Canon::text( $row['name'], $ctx ),
+			'name'        => AB_MCP_Sync_Canon::text( $row['name'], $ctx, array(), $acc, 'name' ),
 			'slug'        => $row['slug'],
 			'term_group'  => $row['term_group'],
-			'description' => AB_MCP_Sync_Canon::text( $row['description'], $ctx ),
+			'description' => AB_MCP_Sync_Canon::text( $row['description'], $ctx, array(), $acc, 'description' ),
 			'parent'      => self::id_ref( 'term', $row['parent'], $acc, 'parent' ),
 		);
 	}
@@ -798,7 +798,7 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		$cols = array();
 		foreach ( self::ITEM_COLUMNS as $column ) {
 			AB_MCP_Sync_Credentials::note( $acc, 'menu_item', $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
-			$cols[ $column ] = in_array( $column, array( 'post_status', 'menu_order' ), true ) ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx );
+			$cols[ $column ] = in_array( $column, array( 'post_status', 'menu_order' ), true ) ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx, array(), $acc, $column );
 		}
 		$menus = array();
 		foreach ( $tax as $term ) {
@@ -1007,7 +1007,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 						'marker' => self::id_ref( 'post', $token['id'], $acc, $where ),
 					);
 				}
-				return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts );
+				return AB_MCP_Sync_Canon::text( $value, $ctx, $cuts, $acc, $where );
 			}
 			if ( 'content' === $type && is_string( $value ) ) {
 				return AB_MCP_Sync_Refs::content( $value, $ctx, $acc, 'widget_area', $where );
@@ -1130,7 +1130,7 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 		}
 		$form = array(
 			'stylesheet' => $row['post_name'],
-			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], $source['ctx'] ),
+			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], $source['ctx'], array(), $acc, 'css' ),
 			'status'     => $row['post_status'],
 		);
 		return AB_MCP_Sync_Canon::finish(
@@ -1317,7 +1317,7 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 		$read       = AB_MCP_Sync_Canon::unserialized( $row['value'] );
 		if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
 			AB_MCP_Sync_Canon::lock( $acc, 'option', $read['ok'] ? 'unreadable_value' : $read['why'], 'theme_mods' );
-			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $stylesheet, array( 'name' => $row['name'] ), array( 'name' => $row['name'], 'value' => AB_MCP_Sync_Canon::text( $row['value'], $source['ctx'] ) ), $acc );
+			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $stylesheet, array( 'name' => $row['name'] ), array( 'name' => $row['name'], 'value' => AB_MCP_Sync_Canon::text( $row['value'], $source['ctx'], array(), $acc, 'value' ) ), $acc );
 			$result['status'] = 'locked';
 			return array( $result );
 		}

@@ -57,6 +57,8 @@ final class SyncHtmlRefsTest extends TestCase {
 			'not data-ids'                 => array( '<!-- wp:gallery --><figure><img data-ids="25"/></figure><!-- /wp:gallery -->', array() ),
 			'not wp-image-0'               => array( '<p><img class="wp-image-0"/></p>', array() ),
 			'not data-id 0'                => array( '<!-- wp:gallery --><figure><img data-id="0"/></figure><!-- /wp:gallery -->', array() ),
+			// A short link in a tag with an id: read once, in the form of the tag.
+			'a short link in a tag'        => array( '<p><img class="wp-image-12" src="https://staging.test/?attachment_id=13"/></p>', array( 'post:12@c:html:html:class', 'post:13@c:html:html?attachment_id' ) ),
 		);
 	}
 
@@ -162,6 +164,19 @@ final class SyncHtmlRefsTest extends TestCase {
 		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
 		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array() ) );
 		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+	}
+
+	public function testTheIdsOfAShortLinkAfterAnHtmlAmpersandAreReferences(): void {
+		// The query as an HTML attribute holds it: &amp; between the variables.
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 13 => 130 ) ), array( 'https://staging.test' => 'https://www.live.test' ) );
+		foreach ( array( '&amp;', '&#038;', '&' ) as $and ) {
+			$content = '<p><a href="https://staging.test/index.php?preview=true' . $and . 'page_id=13' . $and . 'pp=14">x</a></p>';
+			list( $refs, , $acc ) = self::scan( $content );
+			self::assertSame( array( 'post:13@c:html?page_id' ), $refs, $and );
+			self::assertSame( array(), $acc['locks'], $and );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
+			self::assertSame( array( '<p><a href="https://www.live.test/index.php?preview=true' . $and . 'page_id=130' . $and . 'pp=14">x</a></p>', array() ), array( $out['content'], $out['missing'] ), $and );
+		}
 	}
 
 	public function testSeveralImagesLockInTheOrderOfTheText(): void {

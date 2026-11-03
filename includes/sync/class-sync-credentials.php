@@ -14,9 +14,11 @@
  * stored and as the decodings the core knows give it (stripcslashes() of
  * shortcode_parse_atts(), HTML character references, percent escapes,
  * \uXXXX of JSON): every key in the spelling of an attribute or a field
- * (name=, "name":, 'name':) that redacts_key() names makes the unit mixed,
- * in a shortcode no registry runs, an escaped [[…]], a tag, a comment
- * alike. More locks than needed are allowed; a credential overlooked
+ * (name=, "name":, 'name':; in code, a script, a style, an event
+ * attribute, a javascript: address or a value of an attribute of a block or
+ * a shortcode, name: as well; the name or id of a field of a form with a
+ * value) that redacts_key() names makes the unit mixed, in a shortcode no
+ * registry runs, an escaped [[…]], a tag, a comment alike. More locks than needed are allowed; a credential overlooked
  * because the structure was read otherwise than the core reads it is not.
  *
  * The answer per unit:
@@ -65,6 +67,28 @@ final class AB_MCP_Sync_Credentials {
 	);
 
 	/**
+	 * A name without quotes before ":" (an object of a script, a property
+	 * of CSS), read only in code (code()): in prose "Passwort: …" is none.
+	 */
+	const CODE_KEY = '/([A-Za-z_$][A-Za-z0-9_$\-]*)\s*:/';
+
+	/**
+	 * The code of a text of HTML: the content of script and style, the value
+	 * of an event attribute (on…), a javascript: address.
+	 */
+	const CODE = array(
+		'#<(?:script|style)\b[^>]*>(.*?)(?:</(?:script|style)\s*>|\z)#is',
+		'#(?<![A-Za-z0-9_\-])on[a-z]+\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s>]+))#i',
+		'#javascript:([^"\'<>]*)#i',
+	);
+
+	/** A tag of HTML with its attributes (a quoted value may hold a ">"). */
+	const TAG = '/<([A-Za-z][^\s\/>]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>/';
+
+	/** An attribute of a tag and its value, quoted or not. */
+	const ATTRIBUTE = '/([^\s"\'>\/=]+)(?:\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+)))?/';
+
+	/**
 	 * Check one unit.
 	 *
 	 * @param string        $name  Name of the unit (option name, meta key,
@@ -104,13 +128,19 @@ final class AB_MCP_Sync_Credentials {
 	/**
 	 * The keys flat() finds in a text: the names redacts_key() names, in the
 	 * text as stored and as do_blocks() joins it (without its block
-	 * delimiters), each with the decodings of decodings().
+	 * delimiters), each with the decodings of decodings(): in the spellings
+	 * of FLAT_KEYS; in code (the text itself where it is the value of an
+	 * attribute of a block or a shortcode, else code()) a name without
+	 * quotes before ":" as well (CODE_KEY); the name or id of a field of a
+	 * form with a value (form_fields()), a pair of name and value as a list
+	 * of them is.
 	 *
 	 * @param string   $text  Text as stored.
 	 * @param string[] $extra Extra names.
+	 * @param bool     $code  Whether the text is code (an attribute value).
 	 * @return string[]|null Null where the text could not be joined.
 	 */
-	public static function flat( $text, array $extra ) {
+	public static function flat( $text, array $extra, $code = false ) {
 		$text = (string) $text;
 		// Without these no decoding gives a key its = or :.
 		if ( false === strpbrk( $text, '=:%&\\' ) ) {
@@ -118,29 +148,89 @@ final class AB_MCP_Sync_Credentials {
 		}
 		$texts = array( $text );
 		if ( false !== strpos( $text, '<!--' ) ) {
-			$joined = preg_replace( AB_MCP_Sync_Refs::BLOCK_DELIMITER, '', $text );
-			if ( ! is_string( $joined ) ) {
+			$joined = AB_MCP_Sync_Refs::joined( $text );
+			if ( null === $joined ) {
 				return null;
 			}
-			$texts[] = $joined;
+			$texts[] = $joined['text'];
 		}
 		$variants = array();
 		foreach ( $texts as $one ) {
 			$variants = array_merge( $variants, self::decodings( $one ) );
 		}
-		$out = array();
+		$found = array();
 		foreach ( array_unique( $variants ) as $variant ) {
 			foreach ( self::FLAT_KEYS as $pattern ) {
 				if ( preg_match_all( $pattern, $variant, $m ) ) {
-					foreach ( $m[1] as $key ) {
-						if ( AB_MCP_Redactor::redacts_key( (string) $key, $extra ) ) {
-							$out[ strtolower( (string) $key ) ] = (string) $key;
-						}
+					$found = array_merge( $found, $m[1] );
+				}
+			}
+			foreach ( $code ? array( $variant ) : self::code( $variant ) as $segment ) {
+				foreach ( self::decodings( $segment ) as $one ) {
+					if ( preg_match_all( self::CODE_KEY, $one, $m ) ) {
+						$found = array_merge( $found, $m[1] );
 					}
 				}
 			}
+			$found = array_merge( $found, self::form_fields( $variant ) );
+		}
+		$out = array();
+		foreach ( $found as $key ) {
+			if ( AB_MCP_Redactor::redacts_key( (string) $key, $extra ) ) {
+				$out[ strtolower( (string) $key ) ] = (string) $key;
+			}
 		}
 		return array_values( $out );
+	}
+
+	/**
+	 * The code of a text of HTML (CODE).
+	 *
+	 * @param string $text Text.
+	 * @return string[]
+	 */
+	private static function code( $text ) {
+		$out = array();
+		foreach ( self::CODE as $pattern ) {
+			if ( preg_match_all( $pattern, $text, $m ) ) {
+				$out = array_merge( $out, $m[1] );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The names of the fields of a form in a text of HTML that hold a value:
+	 * of a tag with a value that is not empty (content of a meta tag), every
+	 * name and id, their references decoded.
+	 *
+	 * @param string $text Text.
+	 * @return string[]
+	 */
+	private static function form_fields( $text ) {
+		if ( false === strpos( $text, '<' ) || ! preg_match_all( self::TAG, $text, $tags, PREG_SET_ORDER ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $tags as $tag ) {
+			$value  = 'meta' === strtolower( $tag[1] ) ? 'content' : 'value';
+			$names  = array();
+			$filled = false;
+			preg_match_all( self::ATTRIBUTE, $tag[2], $all, PREG_SET_ORDER );
+			foreach ( $all as $attr ) {
+				$name = strtolower( $attr[1] );
+				$text = html_entity_decode( isset( $attr[2] ) ? $attr[2] : '', ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' );
+				if ( 'name' === $name || 'id' === $name ) {
+					$names[] = $text;
+				} elseif ( $value === $name && '' !== $text ) {
+					$filled = true;
+				}
+			}
+			if ( $filled ) {
+				$out = array_merge( $out, $names );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -231,15 +321,17 @@ final class AB_MCP_Sync_Credentials {
 	 * @param int      $layers Texts unpacked above.
 	 * @param string   $why    Set to php_object or unreadable_value when
 	 *                         it could not be read.
+	 * @param bool     $code   Inside the attributes of a block or a
+	 *                         shortcode: its texts are code (flat()).
 	 * @return bool Whether all of it could be read.
 	 */
-	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why ) {
+	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why, $code = false ) {
 		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH || $layers > AB_MCP_Sync_Canon::MAX_LAYERS ) {
 			$why = 'unreadable_value';
 			return false;
 		}
 		if ( is_string( $value ) ) {
-			$flat = self::flat( $value, $extra );
+			$flat = self::flat( $value, $extra, $code );
 			if ( null === $flat ) {
 				$why = 'unreadable_value';
 				return false;
@@ -253,7 +345,7 @@ final class AB_MCP_Sync_Credentials {
 					$why = $read['why'];
 					return false;
 				}
-				return self::walk( $read['value'], $path, $extra, $fields, $depth, $layers + 1, $why );
+				return self::walk( $read['value'], $path, $extra, $fields, $depth, $layers + 1, $why, $code );
 			}
 			$json = self::json( $value );
 			if ( false === $json ) {
@@ -261,7 +353,7 @@ final class AB_MCP_Sync_Credentials {
 				return false;
 			}
 			if ( null !== $json ) {
-				return self::walk( $json, $path, $extra, $fields, $depth, $layers + 1, $why );
+				return self::walk( $json, $path, $extra, $fields, $depth, $layers + 1, $why, $code );
 			}
 			// The fields code reads from the text: blocks and shortcodes.
 			$inner = AB_MCP_Sync_Refs::embedded( $value );
@@ -270,7 +362,7 @@ final class AB_MCP_Sync_Credentials {
 				return false;
 			}
 			foreach ( $inner['items'] as $item ) {
-				if ( ! self::walk( $item['value'], ( '' === $path ? '' : $path . '.' ) . '[' . $item['at'] . ']', $extra, $fields, $depth + 1, $layers + 1, $why ) ) {
+				if ( ! self::walk( $item['value'], ( '' === $path ? '' : $path . '.' ) . '[' . $item['at'] . ']', $extra, $fields, $depth + 1, $layers + 1, $why, true ) ) {
 					return false;
 				}
 			}
@@ -295,7 +387,7 @@ final class AB_MCP_Sync_Credentials {
 				$fields[] = $sub;
 				continue;
 			}
-			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why ) ) {
+			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why, $code ) ) {
 				return false;
 			}
 		}

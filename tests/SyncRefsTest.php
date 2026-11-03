@@ -284,6 +284,7 @@ final class SyncRefsTest extends TestCase {
 			'the attribute in a block' => array( '[gallery <!-- wp:paragraph -->ids="12"<!-- /wp:paragraph -->]', 'c:shortcode@0' ),
 			'the name split'           => array( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->[<!-- wp:paragraph /-->gallery ids="12"]', 'c:shortcode@51' ),
 			'a closer between'         => array( '<!-- wp:paragraph --><p>[gallery </p><!-- /wp:paragraph -->ids="12"]', 'c:shortcode@24' ),
+			'a closing tag split'      => array( '[acme_box]Bild[/acme_<!-- wp:html /-->box]', 'c:shortcode@14' ),
 		);
 	}
 
@@ -297,6 +298,25 @@ final class SyncRefsTest extends TestCase {
 		// Brackets closed before the delimiter: nothing locks.
 		list( , , , $clean ) = self::scan( '<!-- wp:paragraph --><p>[gallery ids="12"] [x]</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>y</p><!-- /wp:paragraph -->' );
 		self::assertSame( array(), $clean['locks'] );
+	}
+
+	public static function noUnitAcrossBlocks(): array {
+		return array(
+			// Codex, round 8: no tag, no shortcode begins there.
+			'a less-than sign'         => array( '<!-- wp:html -->2 < 3<!-- /wp:html -->' ),
+			'an open bracket'          => array( '<!-- wp:paragraph --><p>Tippe [ zum Öffnen.</p><!-- /wp:paragraph -->' ),
+			'a tag never closed'       => array( '<!-- wp:html -->a <b<!-- /wp:html -->' ),
+			'a bracket never closed'   => array( '<!-- wp:paragraph --><p>Liste [a</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>b</p><!-- /wp:paragraph -->' ),
+			'a less-than sign, later a greater-than sign' => array( '<!-- wp:html -->2 < 3<!-- /wp:html --><!-- wp:html --> und 4 > 1<!-- /wp:html -->' ),
+			'an open bracket, later a closed one' => array( '<!-- wp:paragraph --><p>Tippe [ zum Öffnen.</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>[x]</p><!-- /wp:paragraph -->' ),
+		);
+	}
+
+	#[DataProvider( 'noUnitAcrossBlocks' )]
+	public function testWhereNoTagOrShortcodeIsJoinedNothingLocks( string $content ): void {
+		list( , , , $acc ) = self::scan( $content );
+		self::assertSame( array(), $acc['locks'] );
+		self::assertSame( array(), AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['missing'] );
 	}
 
 	public function testAShortcodeSchemaOnlyForExactlyItsName(): void {
@@ -333,6 +353,19 @@ final class SyncRefsTest extends TestCase {
 			// Codex, round 6: do_blocks() joins it to [acme api_key="example-only"].
 			'a key split by a block' => array( '[acme api_<!-- wp:paragraph /-->key="example-only"]' ),
 			'a key split by two delimiters' => array( '[acme to<!-- wp:paragraph -->ken="x"<!-- /wp:paragraph -->]' ),
+			// Codex, round 8: a name without quotes in code.
+			'an object in a script'   => array( '<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' ),
+			'a property in a style'   => array( '<style>.x { --api-key: abc; }</style>' ),
+			'an event attribute'      => array( '<button onclick="init({secret: 1})">Los</button>' ),
+			'a javascript: address'   => array( '<a href="javascript:login({password: 1})">x</a>' ),
+			'a shortcode attribute'   => array( '[acme config="{token: 1}"]' ),
+			'a block attribute'       => array( '<!-- wp:acme/x {"js":"{accessToken: 1}"} /-->' ),
+			// Codex, round 8: a field of a form with its value, a pair of name and value.
+			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),
+			'a field by its id'       => array( '<input id="token" value="x">' ),
+			'a meta tag'              => array( '<meta name="client_secret" content="x">' ),
+			// The text decoded as a whole loses the tag (&quot;): the name is decoded alone.
+			'a name as a reference'   => array( '<input title="&quot;a&gt;b&quot;" name="api&#95;key" value="x">' ),
 		);
 	}
 
@@ -353,6 +386,8 @@ final class SyncRefsTest extends TestCase {
 			'/?api_key&#61;x'                                  => 'api_key',
 			'<!-- api_key\\u003dx -->'                          => 'api_key',
 			'[acme api_<!-- wp:paragraph /-->key="example-only"]' => 'api_key',
+			'<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' => 'apiKey',
+			'<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' => 'api_key',
 		) as $text => $key ) {
 			self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~' . $key ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $text );
 		}
@@ -380,6 +415,11 @@ final class SyncRefsTest extends TestCase {
 			'{"hasPassword":true,"token_count":3}',
 			'a[href] { color: red } input[type="password"] { }',
 			'Das Passwort: geheim. Die Seite = gut.',
+			// Prose: a name before ":" outside code, a field of a form without a value.
+			'<p>Das password: geheim, der Token: 123.</p>',
+			'[acme_note]Ihr secret: bleibt hier.[/acme_note]',
+			'<input type="password" name="api_key" value="">',
+			'<script src="app.js"></script><p>Kontakt: info</p>',
 		) as $text ) {
 			self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $text, array() )['state'], $text );
 		}
@@ -506,6 +546,79 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array(), $out['missing'] );
 		self::assertTrue( $out['changed'] );
 		self::assertSame( $to, $out['content'] );
+	}
+
+	public static function shortLinks(): array {
+		return array(
+			// Codex, round 8: WP_Query reads post 12 of ?p=12.
+			'p'                    => array( '<!-- wp:paragraph --><p><a href="https://staging.test/?p=12">Beitrag</a></p><!-- /wp:paragraph -->', array( 'post:12@c:core/paragraph?p' ), '<!-- wp:paragraph --><p><a href="https://www.live.test/?p=120">Beitrag</a></p><!-- /wp:paragraph -->' ),
+			'categories'           => array( '<p><a href="https://staging.test/?cat=5,6">x</a></p>', array( 'term:5@c:html?cat', 'term:6@c:html?cat' ), '<p><a href="https://www.live.test/?cat=50,60">x</a></p>' ),
+			'an author'            => array( '<p>https://staging.test/?author=1</p>', array( 'user:user1@c:html?author' ), '<p>https://www.live.test/?author=10</p>' ),
+			'in a block attribute' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/?attachment_id=12"} /-->', array( 'post:12@c:acme/x.u?attachment_id' ), '<!-- wp:acme/x {"u":"https://www.live.test/?attachment_id=120"} /-->' ),
+			'subpost_id'           => array( '<p>https://staging.test/?subpost_id=12</p>', array( 'post:12@c:html?subpost_id' ), '<p>https://www.live.test/?subpost_id=120</p>' ),
+		);
+	}
+
+	#[DataProvider( 'shortLinks' )]
+	public function testTheIdsOfAShortLinkAreReferences( string $content, array $want, string $to ): void {
+		list( $refs, , , $acc ) = self::scan( $content );
+		self::assertSame( $want, $refs );
+		self::assertSame( array(), $acc['locks'] );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
+		self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ) );
+	}
+
+	public function testAShortLinkInAnotherSpellingOrWithoutCounterpartWritesNothing(): void {
+		foreach ( array(
+			'<p><a href="https://staging.test/?p=012">x</a></p>'   => 'c:html?p',
+			'<p><a href="https://staging.test/?cat=-5">x</a></p>'  => 'c:html?cat',
+			'<p><a href="https://staging.test/?author=1e1">x</a></p>' => 'c:html?author',
+		) as $content => $at ) {
+			list( $refs, , , $acc ) = self::scan( $content );
+			self::assertSame( array(), $refs, $content );
+			$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
+			self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ), $content );
+			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['missing'], 'space' ), $content );
+		}
+		$out = AB_MCP_Sync_Refs::rewrite_content( '<p><a href="https://staging.test/?p=77">x</a></p>', self::plan() );
+		self::assertSame( array( array( 'space' => 'post', 'id' => 77 ) ), $out['missing'] );
+		// Another site's address, a variable that is no id: no reference
+		// (&amp; between the variables: tests/integration/SyncHtmlRefsTest.php).
+		list( $refs, , , $acc ) = self::scan( '<p><a href="https://other.test/?p=12">x</a> <a href="https://staging.test/?paged=2">y</a> https://staging.test/?pp=12</p>' );
+		self::assertSame( array( array(), array() ), array( $refs, $acc['locks'] ) );
+	}
+
+	public function testAShortLinkInAStoredValueIsAReference(): void {
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$form = AB_MCP_Sync_Canon::value( serialize( array( 'url' => 'https://staging.test/?page_id=12' ) ), self::ctx(), $acc, 'post', 'meta:_link' );
+		self::assertSame( array( 'post' ), array_column( $acc['refs'], 'space' ) );
+		self::assertSame( array( 'meta:_link.url?page_id' ), array_column( $acc['refs'], 'at' ) );
+		self::assertSame( array( '~ref' => 'post', 'id' => 12 ), $form['~php']['url']['~s'][2] );
+		$plan    = self::plan();
+		$changed = false;
+		self::assertSame( serialize( array( 'url' => 'https://www.live.test/?page_id=120' ) ), AB_MCP_Sync_Refs::rewrite_value( serialize( array( 'url' => 'https://staging.test/?page_id=12' ) ), $plan, $changed ) );
+		// As JSON stores it: a slash as \/, "&" as \u0026.
+		$json = '{"url":"https:\/\/staging.test\/?preview=1\u0026p=12"}';
+		$acc  = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::value( $json, self::ctx(), $acc, 'post', 'meta:_json' );
+		self::assertSame( array( 'meta:_json?p' ), array_column( $acc['refs'], 'at' ) );
+		self::assertSame( '{"url":"https:\/\/www.live.test\/?preview=1\u0026p=120"}', AB_MCP_Sync_Refs::rewrite_value( $json, $plan, $changed ) );
+	}
+
+	public function testAContentThatCannotBeJoinedLocks(): void {
+		// Without the joined text (a PCRE error) nothing says what do_blocks() makes of it.
+		$jit   = ini_get( 'pcre.jit' );
+		$limit = ini_get( 'pcre.backtrack_limit' );
+		ini_set( 'pcre.jit', '0' );
+		ini_set( 'pcre.backtrack_limit', '1' );
+		try {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Refs::content( '<!-- wp:acme/box {"title":"' . str_repeat( 'x', 200 ) . '"} /-->', self::ctx(), $acc, 'post', 'c' );
+		} finally {
+			ini_set( 'pcre.backtrack_limit', (string) $limit );
+			ini_set( 'pcre.jit', (string) $jit );
+		}
+		self::assertContains( array( '*:reference_spelling', 'c:joined@0' ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
 	}
 
 	public function testWithoutAnythingToChangeTheBytesStayAndAMissingIdIsNamed(): void {

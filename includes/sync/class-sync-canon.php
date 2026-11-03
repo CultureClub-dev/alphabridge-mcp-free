@@ -364,6 +364,76 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
+	 * The query variables WP_Query reads as ids, of those WP takes from an
+	 * address (WP::$public_query_vars, wp-includes/class-wp.php:18): p
+	 * ((int), class-wp-query.php:831-836, :2247), page_id (absint(), :839),
+	 * attachment_id and subpost_id (absint(), :885-889, :2241-2242), cat (a
+	 * list of terms, :846, :1247) and author (a list of users, :847,
+	 * :2398-2400). tag_id and the other private ones are no part of an
+	 * address.
+	 */
+	const QUERY_IDS = array(
+		'p'             => 'post',
+		'page_id'       => 'post',
+		'attachment_id' => 'post',
+		'subpost_id'    => 'post',
+		'cat'           => 'term',
+		'author'        => 'user',
+	);
+
+	/** The variables of QUERY_IDS that hold a list, split as WP_Query splits them (preg_split( '/[,\s]+/' )). */
+	const QUERY_LISTS = array( 'cat', 'author' );
+
+	/**
+	 * The ids in the query of an address, which ends at $end in a text: its
+	 * path and its query in the encodings of the forms of an address (a
+	 * slash also as \/ of JSON, "&" also as &amp;, &#038; and &), each
+	 * value of QUERY_IDS with id_spelling() (a list as id_tokens() splits
+	 * it); values that hold no id are left out.
+	 *
+	 * @param string $text Text.
+	 * @param int    $end  Where the address ends.
+	 * @return array<int,array{at:int,len:int,space:string,id:int|null,var:string}>
+	 */
+	public static function query_ids( $text, $end ) {
+		$text = (string) $text;
+		if ( ! preg_match( '#\G(?:\\\\/|[^\s"\'<>?\#\\\\])*\?#', $text, $m, 0, $end ) ) {
+			return array();
+		}
+		$pos = $end + strlen( $m[0] );
+		$out = array();
+		while ( preg_match( '/\G([^\s"\'<>#&=\\\\]*)(?:=([^\s"\'<>#&\\\\]*))?/', $text, $pair, PREG_OFFSET_CAPTURE, $pos ) ) {
+			$name = $pair[1][0];
+			if ( isset( self::QUERY_IDS[ $name ], $pair[2] ) && -1 !== $pair[2][1] ) {
+				$value = $pair[2][0];
+				$id    = self::id_spelling( $value );
+				$ids   = in_array( $name, self::QUERY_LISTS, true ) ? self::id_tokens( $value, '/[,\s]+/' ) : ( 0 === $id ? array() : array(
+					array(
+						'at'  => 0,
+						'len' => strlen( $value ),
+						'id'  => $id,
+					),
+				) );
+				foreach ( $ids as $one ) {
+					$out[] = array(
+						'at'    => (int) $pair[2][1] + $one['at'],
+						'len'   => $one['len'],
+						'space' => self::QUERY_IDS[ $name ],
+						'id'    => $one['id'],
+						'var'   => $name,
+					);
+				}
+			}
+			$pos += strlen( $pair[0][0] );
+			if ( ! preg_match( '/\G(?:&amp;|&#0*38;|&#x0*26;|\\\\u0026(?:amp;)?|&)/i', $text, $sep, 0, $pos ) ) {
+				break;
+			}
+			$pos += strlen( $sep[0] );
+		}
+		return $out;
+	}
+
+	/**
 	 * A reference to a user, by login (the identity of an author on both
 	 * sides, decision 25).
 	 *
@@ -417,14 +487,54 @@ final class AB_MCP_Sync_Canon {
 	 * A text: as it is, or {"~s":[…]} with the addresses neutral and the
 	 * given cuts replaced by their markers.
 	 *
-	 * @param string $text Text.
-	 * @param array  $ctx  Context.
-	 * @param array  $cuts Cuts of the caller: at (byte offset), len, marker.
+	 * The ids in the query of an address of the context (query_ids(), the
+	 * short links of WordPress: ?p=, ?page_id=, ?cat=, ?author= …) are
+	 * references, noted in $acc; one in another spelling locks the object.
+	 *
+	 * @param string     $text Text.
+	 * @param array      $ctx  Context.
+	 * @param array      $cuts Cuts of the caller: at (byte offset), len, marker.
+	 * @param array|null $acc  Accumulator for the references of the queries.
+	 * @param string     $at   Where the text stands.
 	 * @return string|array
 	 */
-	public static function text( $text, array $ctx, array $cuts = array() ) {
-		$text = (string) $text;
-		$cuts = array_merge( $cuts, self::address_cuts( $text, $ctx ) );
+	public static function text( $text, array $ctx, array $cuts = array(), &$acc = null, $at = '' ) {
+		$text      = (string) $text;
+		$addresses = self::address_cuts( $text, $ctx );
+		$theirs    = $cuts;
+		$cuts      = array_merge( $cuts, $addresses );
+		$acc       = is_array( $acc ) ? $acc : self::acc();
+		foreach ( $addresses as $address ) {
+			foreach ( self::query_ids( $text, $address['at'] + $address['len'] ) as $query ) {
+				// In a cut of the caller (a tag with its own form) it is read there.
+				foreach ( $theirs as $cut ) {
+					if ( $query['at'] >= $cut['at'] && $query['at'] < $cut['at'] + $cut['len'] ) {
+						continue 2;
+					}
+				}
+				$where = $at . '?' . $query['var'];
+				if ( null === $query['id'] ) {
+					self::spelling( $acc, $where );
+					continue;
+				}
+				if ( 'user' === $query['space'] ) {
+					$marker = self::user( $query['id'], $ctx, $acc, $where );
+				} else {
+					$acc['refs'][] = array(
+						'space'    => $query['space'],
+						'id'       => $query['id'],
+						'at'       => $where,
+						'strength' => 'strong',
+					);
+					$marker        = self::ref( $query['space'], $query['id'] );
+				}
+				$cuts[] = array(
+					'at'     => $query['at'],
+					'len'    => $query['len'],
+					'marker' => $marker,
+				);
+			}
+		}
 		if ( array() === $cuts ) {
 			return $text;
 		}
@@ -665,16 +775,16 @@ final class AB_MCP_Sync_Canon {
 					return $hit;
 				}
 			}
-			return self::text( $raw, $ctx );
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
 		}
 		if ( $layer >= self::MAX_LAYERS ) {
 			self::too_deep( $acc, $at, $kind );
-			return self::text( $raw, $ctx );
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
 		}
 		$read = self::unserialized( $raw );
 		if ( ! $read['ok'] ) {
 			self::lock( $acc, $kind, $read['why'], $at );
-			return self::text( $raw, $ctx );
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
 		}
 		return array( '~php' => self::walk( $read['value'], $ctx, $acc, $kind, $at, $path, $layer + 1, 0, $leaf ) );
 	}

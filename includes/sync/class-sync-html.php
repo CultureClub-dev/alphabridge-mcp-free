@@ -81,27 +81,23 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
-	 * The offset of the first tag the HTML API reads whose stored text
-	 * matches a pattern; null where none does.
+	 * The spans of the tags the HTML API reads in a text.
 	 *
-	 * @param string $text    Text.
-	 * @param string $pattern Pattern.
-	 * @return int|null
+	 * @param string $text Text.
+	 * @return array<int,array{0:int,1:int}> Start and end of each.
 	 */
-	public static function tag_holding( $text, $pattern ) {
-		$text = (string) $text;
-		$p    = new self( $text );
+	public static function tag_spans( $text ) {
+		$out = array();
+		$p   = new self( (string) $text );
 		while ( $p->next_tag() ) {
 			if ( ! $p->set_bookmark( self::MARK ) ) {
 				continue;
 			}
 			$span = $p->bookmarks[ self::MARK ];
 			$p->release_bookmark( self::MARK );
-			if ( preg_match( $pattern, substr( $text, $span->start, $span->length ) ) ) {
-				return (int) $span->start;
-			}
+			$out[] = array( (int) $span->start, (int) $span->start + (int) $span->length );
 		}
-		return null;
+		return $out;
 	}
 
 	/**
