@@ -257,7 +257,11 @@ final class SyncRefsTest extends TestCase {
 			'JSON in a comment'     => array( '<!-- {"api_key":"x"} -->' ),
 			'escaped JSON in a script' => array( '<script>var c = "{\\"api_key\\": 1}";</script>' ),
 			'unicode in a comment'  => array( '<!-- {"\\u0061pi_key":"x"} -->' ),
-			'an encoded equals'     => array( 'https://example.test/?api_key%3Dx' ),
+			// Neither = nor : as stored, only decoded: each character of the
+			// test before the decodings (flat()) lets the text through.
+			'an encoded equals'     => array( '/?api_key%3Dx' ),
+			'an equals as a reference' => array( '/?api_key&#61;x' ),
+			'an escaped equals'     => array( '<!-- api_key\\u003dx -->' ),
 		);
 	}
 
@@ -274,7 +278,9 @@ final class SyncRefsTest extends TestCase {
 			'<!-- {"api_key":"x"} -->'                         => 'api_key',
 			'<script>var c = "{\\"api_key\\": 1}";</script>' => 'api_key',
 			'<!-- {"\\u0061pi_key":"x"} -->'                  => 'api_key',
-			'https://example.test/?api_key%3Dx'                => 'api_key',
+			'/?api_key%3Dx'                                    => 'api_key',
+			'/?api_key&#61;x'                                  => 'api_key',
+			'<!-- api_key\\u003dx -->'                          => 'api_key',
 		) as $text => $key ) {
 			self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~' . $key ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $text );
 		}

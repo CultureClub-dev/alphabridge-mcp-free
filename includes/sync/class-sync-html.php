@@ -48,7 +48,8 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	 *
 	 * @param string   $text  Text.
 	 * @param string[] $rules class, data_id.
-	 * @return array<int,array{at:int,len:int,ids:array,tag:string}>
+	 * @return array<int,array{at:int,len:int,ids:array,canonical:bool|null,tag:string}>
+	 *               canonical: canonical().
 	 */
 	public static function tags( $text, array $rules ) {
 		$text = (string) $text;
@@ -124,27 +125,38 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 
 	/**
 	 * Whether the class id of the tag the processor stands on is in the
-	 * spelling that is rewritten: an img whose stored text holds wp-image-
-	 * exactly once (what wp_filter_content_tags() reads, the first
-	 * wp-image-<digits> of the tag), and that once in the class, decoded as
-	 * well (no other attribute, name or value, holds it). A tag without a
-	 * class id has nothing to rewrite there.
+	 * spelling that is rewritten; null where the tag has no class id (there
+	 * is nothing to rewrite in its class). The spelling: an img whose stored
+	 * text holds wp-image- exactly once, there in the class attribute the
+	 * HTML API reads (the first of that name: a later one is a duplicate it
+	 * passes over, the pattern of wp_filter_content_tags() does not), and
+	 * whose attribute values decoded hold it no more than that once. The
+	 * core reads the first wp-image-<digits> of the stored tag: in this
+	 * spelling the id of the class, or none.
 	 *
 	 * @param string $raw The stored text of the tag.
 	 * @param array  $ids ids().
-	 * @return bool
+	 * @return bool|null
 	 */
 	private function canonical( $raw, array $ids ) {
 		if ( ! in_array( 'class', array_column( $ids, 'rule' ), true ) ) {
-			return true;
+			return null;
 		}
 		if ( 'IMG' !== $this->get_tag() || 1 !== preg_match_all( '/wp-image-/i', (string) $raw ) ) {
 			return false;
 		}
+		// Without the class the HTML API reads, no wp-image- is left: not in
+		// a name, not in a duplicate attribute. (Were the class not set, the
+		// text would keep its wp-image-.)
+		$p = new self( (string) $raw );
+		$p->next_tag();
+		$p->set_attribute( 'class', '' );
+		if ( false !== stripos( $p->get_updated_html(), 'wp-image-' ) ) {
+			return false;
+		}
 		$seen = 0;
 		foreach ( $this->get_attribute_names_with_prefix( '' ) ?? array() as $name ) {
-			$value = $this->get_attribute( $name );
-			$seen += preg_match_all( '/wp-image-/i', (string) $name ) + ( is_string( $value ) ? preg_match_all( '/wp-image-/i', $value ) : 0 );
+			$seen += preg_match_all( '/wp-image-/i', (string) $this->get_attribute( $name ) );
 		}
 		return 1 === $seen;
 	}

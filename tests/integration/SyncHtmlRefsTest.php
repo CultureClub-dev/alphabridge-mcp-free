@@ -112,6 +112,14 @@ final class SyncHtmlRefsTest extends TestCase {
 			'not an image'      => array( '<!-- wp:image {"id":12} --><figure class="wp-image-12"><img class="wp-image-12"/></figure><!-- /wp:image -->', 'c:core/image:img@0' ),
 			'a reference in the class' => array( '<p><img class="wp&#45;image-19"/></p>', 'c:html:img@3' ),
 			'a reference in an alt'    => array( '<p><img alt="wp&#45;image-5" class="wp-image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			// The core reads the wp-image- of a later class or alt, the HTML
+			// API only the first of a name; or of a name beside a class that
+			// holds it as a reference.
+			'a duplicate class'        => array( '<p><img class="wp&#45;image-12" class="wp-image-5" src="a.jpg"></p>', 'c:html:img@3' ),
+			'a duplicate alt'          => array( '<p><img alt="Bild" ALT="wp-image-5" class="wp&#45;image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			'a name, the class a reference' => array( '<p><img wp-image-5 class="wp&#45;image-12" src="a.jpg"></p>', 'c:html:img@3' ),
+			// A data-id is no class id: the core reads the file name.
+			'a data-id and a file name' => array( '<!-- wp:gallery {"ids":[12]} --><figure><img data-id="12" src="https://cdn.test/wp-image-5.jpg"/></figure><!-- /wp:gallery -->', 'c:core/gallery:img@8' ),
 		);
 	}
 
@@ -121,6 +129,31 @@ final class SyncHtmlRefsTest extends TestCase {
 		self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
 		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 5 => 50, 7 => 70, 12 => 120, 13 => 130, 22 => 220, 23 => 230 ) ), array() ) );
 		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+	}
+
+	public function testSeveralImagesLockInTheOrderOfTheText(): void {
+		$content = '<p><img src="https://cdn.test/wp-image-5.jpg"><img class="wp&#45;image-12"></p>';
+		list( , , $acc ) = self::scan( $content );
+		self::assertSame(
+			array( 'c:html:img@3', 'c:html:img@' . strpos( $content, '<img class' ) ),
+			array_column( $acc['locks'], 'at' ),
+			'The core reads the first, the rules read the second in another spelling.'
+		);
+	}
+
+	public static function noCoreIds(): array {
+		return array(
+			'an iframe'          => array( '<p><iframe src="https://cdn.test/wp-image-5.html"></iframe></p>' ),
+			'not a number'       => array( '<p><img src="https://cdn.test/wp-image-a.jpg" class="alignnone"/></p>' ),
+			'an img in an iframe tag' => array( '<p><iframe title="<img class=wp-image-5 >" src="https://cdn.test/v"></iframe></p>' ),
+			'a data-id alone'    => array( '<!-- wp:gallery {"ids":[20]} --><figure><img data-id="20" src="https://staging.test/a.jpg"/></figure><!-- /wp:gallery -->' ),
+		);
+	}
+
+	/** The core's pattern finds the iframe, and reads ids only of an img, only wp-image-<digits>; a data-id is no class id. */
+	#[DataProvider( 'noCoreIds' )]
+	public function testWhereTheCoreReadsNoIdNothingLocks( string $content ): void {
+		self::assertSame( array(), self::scan( $content )[2]['locks'] );
 	}
 
 	public function testWhereTheCoreAndTheRulesReadTheSameIdNothingLocks(): void {

@@ -1342,45 +1342,34 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
-	 * The tags whose class id is not rewritten as the core reads it: a class
-	 * id of the rules only in the spelling of AB_MCP_Sync_Html::canonical()
-	 * (an img, wp-image- exactly once in its stored text, there in the
-	 * class, and in no other attribute decoded); an img the core reads an
-	 * id of (wp_filter_content_tags(), the first wp-image-<digits> of the
-	 * stored tag, wp-includes/media.php:1994, :2009) only where the rules
-	 * read a class id of it as well. Where both read one in the canonical
-	 * spelling it is the same occurrence, the same id: the core's text of
-	 * the tag ends at its first ">", so it holds no wp-image- the stored
-	 * tag does not hold.
+	 * The tags whose class id is not rewritten as the core reads it, in the
+	 * order of the text: a tag with a class id outside the spelling of
+	 * AB_MCP_Sync_Html::canonical(), and an img the core reads an id of
+	 * (wp_filter_content_tags(): the first wp-image-<digits> of an img its
+	 * pattern finds, wp-includes/media.php:1994, :2009) where the rules
+	 * read no class id. Where both read one in the canonical spelling it is
+	 * the same occurrence, the same id: canonical() leaves no other
+	 * wp-image- in the stored tag, and the core's text of it is a beginning
+	 * of the stored tag (it ends at the first ">"), so the core reads that
+	 * id or none, never another.
 	 *
 	 * @param string $text Text.
 	 * @param array  $tags AB_MCP_Sync_Html::tags() of it.
 	 * @return string[] Places (img@offset).
 	 */
 	private static function image_spelling( $text, array $tags ) {
-		$ours = array();
-		$out  = array();
-		foreach ( $tags as $tag ) {
-			foreach ( $tag['ids'] as $id ) {
-				if ( 'class' === $id['rule'] ) {
-					$ours[ (int) $tag['at'] ] = (int) $id['id'];
-					if ( empty( $tag['canonical'] ) ) {
-						$out[ (int) $tag['at'] ] = 'img@' . (int) $tag['at'];
-					}
-					break;
-				}
-			}
-		}
-		if ( false !== stripos( $text, 'wp-image-' ) && preg_match_all( '/<(img|iframe)\s[^>]+>/', $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+		// Offset => canonical() of each tag; null (no class id) is no class
+		// id for isset() either.
+		$class = array_column( $tags, 'canonical', 'at' );
+		if ( preg_match_all( '/<(img|iframe)\s[^>]+>/', $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $all as $m ) {
-				$at = (int) $m[0][1];
-				if ( 'img' === $m[1][0] && 1 === preg_match( '/wp-image-[0-9]/i', $m[0][0] ) && ! isset( $ours[ $at ] ) ) {
-					$out[ $at ] = 'img@' . $at;
+				if ( 'img' === $m[1][0] && 1 === preg_match( '/wp-image-[0-9]/i', $m[0][0] ) && ! isset( $class[ $m[0][1] ] ) ) {
+					$class[ $m[0][1] ] = false;
 				}
 			}
 		}
-		ksort( $out );
-		return array_values( $out );
+		ksort( $class );
+		return array_map( static fn( $at ) => 'img@' . $at, array_keys( $class, false, true ) );
 	}
 
 	/**
