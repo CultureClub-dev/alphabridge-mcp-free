@@ -140,19 +140,21 @@ final class SyncRefsTest extends TestCase {
 
 	public function testTheAttributesOfBlocksAndShortcodesAreFieldsOfTheCredentialCheck(): void {
 		foreach ( array(
-			'a released block library' => array( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live"}} --><div></div><!-- /wp:kadence/rowlayout -->', array( '[block:kadence/rowlayout].settings.api_key' ) ),
-			'a core block'             => array( '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} --><p>x</p><!-- /wp:paragraph -->', array( '[block:core/paragraph].metadata.clientSecret' ) ),
+			'a released block library' => array( '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","settings":{"api_key":"sk_live"}} -->Text<!-- /wp:kadence/rowlayout -->', array( '[block:kadence/rowlayout].settings.api_key' ) ),
+			'a core block'             => array( '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} -->x<!-- /wp:paragraph -->', array( '[block:core/paragraph].metadata.clientSecret' ) ),
 			'JSON in an attribute'     => array( '<!-- wp:acme/box {"data":"{\\"access_token\\":\\"x\\"}"} /-->', array( '[block:acme/box].data.access_token' ) ),
-			'an inner block'           => array( '<!-- wp:group --><div><!-- wp:acme/box {"password":"x"} /--></div><!-- /wp:group -->', array( '[block:acme/box].password' ) ),
-			'a shortcode'              => array( '<p>[acme_form api_key="sk_live" title="T"]</p>', array( '[shortcode:acme_form].api_key' ) ),
-			'a shortcode in a block'   => array( '<!-- wp:paragraph --><p>[acme_form token="x"]</p><!-- /wp:paragraph -->', array( '[shortcode:acme_form].token' ) ),
+			'an inner block'           => array( '<!-- wp:group -->Text<!-- wp:acme/box {"password":"x"} /-->Text<!-- /wp:group -->', array( '[block:acme/box].password' ) ),
+			'a shortcode'              => array( 'Text [acme_form api_key="sk_live" title="T"]', array( '[shortcode:acme_form].api_key' ) ),
+			'a shortcode in a block'   => array( '<!-- wp:paragraph -->[acme_form token="x"]<!-- /wp:paragraph -->', array( '[shortcode:acme_form].token' ) ),
 			'JSON by position'         => array( "[acme '{\"api_key\":\"probe\"}']", array( '[shortcode:acme].0.api_key' ) ),
 			'JSON escaped as stored'   => array( '[acme data=\'{\\"api_key\\":\\"probe\\"}\']', array( '[shortcode:acme].data.api_key' ) ),
 			'a nested shortcode'       => array( '[acme_box][acme_form secret="x"][/acme_box]', array( '[shortcode:acme_form].secret' ) ),
 		) as $what => list( $content, $fields ) ) {
 			self::assertSame( array( 'state' => 'mixed', 'fields' => $fields ), AB_MCP_Sync_Credentials::unit( '', $content, array() ), $what );
 		}
-		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} --><div></div><!-- /wp:kadence/rowlayout -->', array() )['state'], 'A word about a credential is none.' );
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '<!-- wp:kadence/rowlayout {"uniqueID":"_a1","hasPassword":true} -->Text<!-- /wp:kadence/rowlayout -->', array() )['state'], 'A word about a credential is none.' );
+		// With its tags, the HTML API reads them: without it, unreadable (SyncCoreReads).
+		self::assertSame( 'unreadable', AB_MCP_Sync_Credentials::unit( '', '<!-- wp:paragraph {"metadata":{"clientSecret":"x"}} --><p>x</p><!-- /wp:paragraph -->', array() )['state'] );
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', 'a[href] { color: red } input[type="password"] { }', array() )['state'], 'CSS with brackets names no field.' );
 	}
 
@@ -328,73 +330,14 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( '[GALLERY ids="12"]', $out['content'], 'Not rewritten.' );
 	}
 
-	public static function flatKeys(): array {
-		return array(
-			'two spaces before wp:' => array( '<!--  wp:paragraph {"api_key":"dummy-secret"} /-->' ),
-			'an escaped outer tag'  => array( '[[unregistered] [secret api_key="example-only"] [/unregistered]]' ),
-			'an unknown outer tag'  => array( '[outer][inner token="x"][/outer]' ),
-			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
-			'a comment'             => array( '<!-- password=hunter2 -->' ),
-			'a query'               => array( '<a href="https://example.test/?id=1&amp;API_KEY=x">Link</a>' ),
-			'a character reference' => array( '[acme api&#95;key="x"]' ),
-			'a percent escape'      => array( 'https://example.test/?api%5Fkey=x' ),
-			'a JSON escape'         => array( '{"x":"{\\"client_secret\\":1}"}' ),
-			'a JSON unicode escape' => array( '<!-- wp:acme/box {"\\u0061pi_key":"x"} /-->' ),
-			'single quotes'         => array( "<script>var o = { 'access_token': 'x' };</script>" ),
-			'capitals'              => array( 'PASSWORD = "x"' ),
-			'JSON in a comment'     => array( '<!-- {"api_key":"x"} -->' ),
-			'escaped JSON in a script' => array( '<script>var c = "{\\"api_key\\": 1}";</script>' ),
-			'unicode in a comment'  => array( '<!-- {"\\u0061pi_key":"x"} -->' ),
-			// Neither = nor : as stored, only decoded: each character of the
-			// test before the decodings (flat()) lets the text through.
-			'an encoded equals'     => array( '/?api_key%3Dx' ),
-			'an equals as a reference' => array( '/?api_key&#61;x' ),
-			'an escaped equals'     => array( '<!-- api_key\\u003dx -->' ),
-			// Codex, round 6: do_blocks() joins it to [acme api_key="example-only"].
-			'a key split by a block' => array( '[acme api_<!-- wp:paragraph /-->key="example-only"]' ),
-			'a key split by two delimiters' => array( '[acme to<!-- wp:paragraph -->ken="x"<!-- /wp:paragraph -->]' ),
-			// Codex, round 8: a name without quotes in code.
-			'an object in a script'   => array( '<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' ),
-			'a property in a style'   => array( '<style>.x { --api-key: abc; }</style>' ),
-			'an event attribute'      => array( '<button onclick="init({secret: 1})">Los</button>' ),
-			'a javascript: address'   => array( '<a href="javascript:login({password: 1})">x</a>' ),
-			'a shortcode attribute'   => array( '[acme config="{token: 1}"]' ),
-			'a block attribute'       => array( '<!-- wp:acme/x {"js":"{accessToken: 1}"} /-->' ),
-			// Codex, round 8: a field of a form with its value, a pair of name and value.
-			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),
-			'a field by its id'       => array( '<input id="token" value="x">' ),
-			'a meta tag'              => array( '<meta name="client_secret" content="x">' ),
-			// The text decoded as a whole loses the tag (&quot;): the name is decoded alone.
-			'a name as a reference'   => array( '<input title="&quot;a&gt;b&quot;" name="api&#95;key" value="x">' ),
-			// Codex, round 9: the whole value of a javascript: address is code.
-			'a javascript: address with a string first' => array( '<a href="javascript:connect(\'service\',{apiKey:\'DEMO_SECRET\'})">Connect</a>' ),
-			'a javascript: address in capitals, spaced' => array( '<a href="  JavaScript:x(1, {token: 1})">x</a>' ),
-			'a javascript: address as references'       => array( '<a href="javascript&colon;x({secret&colon; 1})">x</a>' ),
-			// Codex, round 9: the content of a textarea, the selected option of a select.
-			'a textarea'              => array( '<textarea name="private_key">DEMO_PRIVATE_KEY</textarea>' ),
-			'a select'                => array( '<select id="api_key"><option value="a">A</option><option value="b" selected>B</option></select>' ),
-		);
-	}
-
-	#[DataProvider( 'flatKeys' )]
-	public function testEveryKeyOfACredentialInAnySpellingOfTheTextLocks( string $text ): void {
-		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
-		self::assertSame( 'mixed', $check['state'], json_encode( $check ) );
-		self::assertNotSame( array(), $check['fields'] );
-	}
-
 	public function testTheFlatCheckFindsWhatTheStructureDoesNotRead(): void {
 		// No block, no shortcode, no JSON as a whole: only flat() reads them.
 		foreach ( array(
 			'<!-- {"api_key":"x"} -->'                         => 'api_key',
-			'<script>var c = "{\\"api_key\\": 1}";</script>' => 'api_key',
 			'<!-- {"\\u0061pi_key":"x"} -->'                  => 'api_key',
 			'/?api_key%3Dx'                                    => 'api_key',
-			'/?api_key&#61;x'                                  => 'api_key',
 			'<!-- api_key\\u003dx -->'                          => 'api_key',
 			'[acme api_<!-- wp:paragraph /-->key="example-only"]' => 'api_key',
-			'<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' => 'apiKey',
-			'<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' => 'api_key',
 		) as $text => $key ) {
 			self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~' . $key ) ), AB_MCP_Sync_Credentials::unit( '', $text, array() ), $text );
 		}
@@ -413,27 +356,6 @@ final class SyncRefsTest extends TestCase {
 			ini_set( 'pcre.jit', (string) $jit );
 		}
 		self::assertSame( array( 'state' => 'unreadable', 'fields' => array(), 'why' => 'unreadable_value' ), $check );
-	}
-
-	public function testWordsAboutCredentialsAndTheirValuesAreNone(): void {
-		foreach ( array(
-			'<input type="password" name="pwd" class="token-field">',
-			'<label for="password">Passwort:</label>',
-			'{"hasPassword":true,"token_count":3}',
-			'a[href] { color: red } input[type="password"] { }',
-			'Das Passwort: geheim. Die Seite = gut.',
-			// Prose: a name before ":" outside code, a field of a form without a value.
-			'<p>Das password: geheim, der Token: 123.</p>',
-			'[acme_note]Ihr secret: bleibt hier.[/acme_note]',
-			'<input type="password" name="api_key" value="">',
-			'<script src="app.js"></script><p>Kontakt: info</p>',
-			// Codex, round 9: a label of a block, prose in a shortcode attribute.
-			'<!-- wp:navigation-link {"label":"Password: reset","kind":"custom","url":"/help/"} /-->',
-			'[acme_button label="Token: anfordern"]',
-			'<textarea name="api_key"></textarea><select name="secret"><option value="a">A</option></select>',
-		) as $text ) {
-			self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $text, array() )['state'], $text );
-		}
 	}
 
 	public function testShortcodesNestedDeeperThanTheyAreReadLock(): void {
@@ -537,7 +459,6 @@ final class SyncRefsTest extends TestCase {
 
 	public static function rewrites(): array {
 		return array(
-			'image'        => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg"/></figure><!-- /wp:image -->' ),
 			'gallery'      => array( '<!-- wp:gallery {"ids":[12,13]} --><figure><img/></figure><!-- /wp:gallery -->', '<!-- wp:gallery {"ids":[120,130]} --><figure><img/></figure><!-- /wp:gallery -->' ),
 			'block'        => array( '<!-- wp:block {"ref":20} /-->', '<!-- wp:block {"ref":200} /-->' ),
 			'nav link'     => array( '<!-- wp:navigation-link {"id":22,"kind":"post-type","url":"https://staging.test/x/"} /-->', '<!-- wp:navigation-link {"id":220,"kind":"post-type","url":"https://www.live.test/x/"} /-->' ),
@@ -559,211 +480,6 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( $to, $out['content'] );
 	}
 
-	public static function shortLinks(): array {
-		return array(
-			// Codex, round 8: WP_Query reads post 12 of ?p=12.
-			'p'                    => array( '<!-- wp:paragraph --><p><a href="https://staging.test/?p=12">Beitrag</a></p><!-- /wp:paragraph -->', array( 'post:12@c:core/paragraph?p' ), '<!-- wp:paragraph --><p><a href="https://www.live.test/?p=120">Beitrag</a></p><!-- /wp:paragraph -->' ),
-			'categories'           => array( '<p><a href="https://staging.test/?cat=5,6">x</a></p>', array( 'term:5@c:html?cat', 'term:6@c:html?cat' ), '<p><a href="https://www.live.test/?cat=50,60">x</a></p>' ),
-			'an author'            => array( '<p>https://staging.test/?author=1</p>', array( 'user:user1@c:html?author' ), '<p>https://www.live.test/?author=10</p>' ),
-			'in a block attribute' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/?attachment_id=12"} /-->', array( 'post:12@c:acme/x.u?attachment_id' ), '<!-- wp:acme/x {"u":"https://www.live.test/?attachment_id=120"} /-->' ),
-			'subpost_id'           => array( '<p>https://staging.test/?subpost_id=12</p>', array( 'post:12@c:html?subpost_id' ), '<p>https://www.live.test/?subpost_id=120</p>' ),
-		);
-	}
-
-	#[DataProvider( 'shortLinks' )]
-	public function testTheIdsOfAShortLinkAreReferences( string $content, array $want, string $to ): void {
-		list( $refs, , , $acc ) = self::scan( $content );
-		self::assertSame( $want, $refs );
-		self::assertSame( array(), $acc['locks'] );
-		$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
-		self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ) );
-	}
-
-	public function testAShortLinkInAnotherSpellingOrWithoutCounterpartWritesNothing(): void {
-		foreach ( array(
-			'<p><a href="https://staging.test/?p=012">x</a></p>'   => 'c:html?p',
-			'<p><a href="https://staging.test/?cat=-5">x</a></p>'  => 'c:html?cat',
-			'<p><a href="https://staging.test/?author=1e1">x</a></p>' => 'c:html?author',
-		) as $content => $at ) {
-			list( $refs, , , $acc ) = self::scan( $content );
-			self::assertSame( array(), $refs, $content );
-			$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
-			self::assertSame( array( array( '*:reference_spelling', $at ) ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ), $content );
-			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['missing'], 'space' ), $content );
-		}
-		$out = AB_MCP_Sync_Refs::rewrite_content( '<p><a href="https://staging.test/?p=77">x</a></p>', self::plan() );
-		self::assertSame( array( array( 'space' => 'post', 'id' => 77 ) ), $out['missing'] );
-		// Another site's address, a variable that is no id: no reference
-		// (&amp; between the variables: tests/integration/SyncHtmlRefsTest.php).
-		list( $refs, , , $acc ) = self::scan( '<p><a href="https://other.test/?p=12">x</a> <a href="https://staging.test/?paged=2">y</a> https://staging.test/?pp=12</p>' );
-		self::assertSame( array( array(), array() ), array( $refs, $acc['locks'] ) );
-	}
-
-	public static function safeAddresses(): array {
-		return array(
-			// The safe forms: with the host (also without the scheme), from the root.
-			'from the root'                => array( '<p><a href="/?p=12">x</a></p>', '<p><a href="/?p=120">x</a></p>' ),
-			'a path from the root'         => array( '<p><a href="/blog/?page_id=13">x</a></p>', '<p><a href="/blog/?page_id=130">x</a></p>' ),
-			// Codex, round 9: the host of "//host" is replaced with the id.
-			'without the scheme'           => array( '<p><a href="//staging.test/?p=12">x</a></p>', '<p><a href="//www.live.test/?p=120">x</a></p>' ),
-			// Codex, round 9: the address of a navigation link, and with its id.
-			'a navigation link'            => array( '<!-- wp:navigation-link {"label":"Beitrag","kind":"custom","url":"/?p=12"} /-->', '<!-- wp:navigation-link {"label":"Beitrag","kind":"custom","url":"/?p=120"} /-->' ),
-			'a navigation link and its id' => array( '<!-- wp:navigation-link {"label":"Beitrag","id":12,"kind":"post-type","url":"/?p=12"} /-->', '<!-- wp:navigation-link {"label":"Beitrag","id":120,"kind":"post-type","url":"/?p=120"} /-->' ),
-			'a full address and its id'    => array( '<!-- wp:navigation-link {"label":"Beitrag","id":12,"kind":"post-type","url":"https://staging.test/beitrag/"} /-->', '<!-- wp:navigation-link {"label":"Beitrag","id":120,"kind":"post-type","url":"https://www.live.test/beitrag/"} /-->' ),
-			'an address by its value'      => array( '<!-- wp:acme/x {"target":"/?p=12"} /-->', '<!-- wp:acme/x {"target":"/?p=120"} /-->' ),
-			'a shortcode attribute'        => array( '[acme_button url="/?p=12"]', '[acme_button url="/?p=120"]' ),
-			'spaces before'                => array( '<p><a href=" /?p=12">x</a></p>', '<p><a href=" /?p=120">x</a></p>' ),
-			'in a sentence'                => array( '<p>Mehr unter https://staging.test/?p=12.</p>', '<p>Mehr unter https://www.live.test/?p=120.</p>' ),
-		);
-	}
-
-	#[DataProvider( 'safeAddresses' )]
-	public function testAnAddressInASafeFormIsRewrittenWithItsIds( string $content, string $to ): void {
-		list( , , , $acc ) = self::scan( $content );
-		self::assertSame( array( array(), array() ), array( $acc['locks'], $acc['spelling'] ) );
-		$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() );
-		self::assertSame( array( $to, array() ), array( $out['content'], $out['missing'] ) );
-	}
-
-	public static function unsafeAddresses(): array {
-		return array(
-			// Relative to the page: what it resolves to, the page tells.
-			'only a query'           => array( '<p><a href="?p=12">x</a></p>', 'c:html?p' ),
-			'relative to the path'   => array( '<p><a href="./?p=12">x</a></p>', 'c:html?p' ),
-			'index.php'              => array( "<p><a href='index.php?p=13'>y</a></p>", 'c:html?p' ),
-			'an unquoted source'     => array( '<p><img src=?attachment_id=12></p>', 'c:html?attachment_id' ),
-			'a navigation link'      => array( '<!-- wp:navigation-link {"label":"B","kind":"custom","url":"?p=12"} /-->', 'c:core/navigation-link.url?p' ),
-			// Codex, round 9: a list with a space (the value ends with the quote).
-			'a list with a space'    => array( '<p><a href="https://staging.test/?cat=5, 6">x</a></p>', 'c:html?cat' ),
-			'a list with a plus'     => array( '<p><a href="/?cat=5+6">x</a></p>', 'c:html?cat' ),
-			'a name escaped'         => array( '<p><a href="/?%70=12">x</a></p>', 'c:html?p' ),
-			'a value escaped'        => array( '<p><a href="https://staging.test/?p=%312">x</a></p>', 'c:html?p' ),
-			'a list of a name'       => array( '<p><a href="/?p[]=12">x</a></p>', 'c:html?p' ),
-			'a space before the name' => array( '<p><a href="/?%20p=12">x</a></p>', 'c:html?p' ),
-			'a leading zero'         => array( '<p><a href="/?p=012">x</a></p>', 'c:html?p' ),
-			'a list for one id'      => array( '<p><a href="/?p=12,13">x</a></p>', 'c:html?p' ),
-			'an address by its name' => array( '<!-- wp:acme/x {"buttonUrl":"index.php?p=12"} /-->', 'c:acme/x.buttonUrl?p' ),
-		);
-	}
-
-	#[DataProvider( 'unsafeAddresses' )]
-	public function testAnAddressWithAnIdInAnyOtherFormLocks( string $content, string $at ): void {
-		list( $refs, , , $acc ) = self::scan( $content );
-		self::assertSame( array(), $refs );
-		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
-		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ) );
-		self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['missing'], 'space' ) );
-	}
-
-	public function testAnAddressWithoutTheHostOutsideTheSitesIsNone(): void {
-		foreach ( array(
-			'<p><a href="//other.test/?p=12">x</a></p>',
-			'<p><a href="mailto:a@b.test?p=12">x</a> <a href="#?p=12">y</a></p>',
-			'<p>Siehe ?p=12 und /?p=12 im Text.</p>',
-			'<p><a data-href="/?p=12">x</a></p>',
-		) as $content ) {
-			list( $refs, , , $acc ) = self::scan( $content );
-			self::assertSame( array( array(), array(), array() ), array( $refs, $acc['locks'], $acc['spelling'] ), $content );
-			self::assertSame( $content, AB_MCP_Sync_Refs::rewrite_content( $content, self::plan() )['content'], $content );
-		}
-	}
-
-	public function testFromTheRootOnlyUnderTheFolderOfTheSiteAndWhereBothSitesShareIt(): void {
-		$ctx  = AB_MCP_Sync_Canon::context( array( 'https://staging.test/blog' ), static fn( $id ) => 'user' . $id );
-		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array( 'https://staging.test/blog' => 'https://www.live.test/blog' ) );
-		foreach ( array(
-			'<p><a href="/blog/?p=12">x</a></p>'               => true,
-			'<p><a href="/blog?p=12">x</a></p>'                => true,
-			'<p><a href="//staging.test/blog/?p=12">x</a></p>' => true,
-			'<p><a href="/?p=12">x</a></p>'                    => false,
-			'<p><a href="/blogx/?p=12">x</a></p>'              => false,
-			'<p><a href="//staging.test/?p=12">x</a></p>'      => false,
-		) as $content => $site ) {
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
-			self::assertSame( $site ? array( 12 ) : array(), array_column( $acc['refs'], 'id' ), $content );
-			self::assertSame( $site, false !== strpos( AB_MCP_Sync_Refs::rewrite_content( $content, $plan )['content'], 'p=120' ), $content );
-		}
-		// Another root on the other side: from the root, nothing is rewritten.
-		$moved = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array( 'https://staging.test/blog' => 'https://www.live.test' ) );
-		self::assertSame( array( 'spelling' ), array_column( AB_MCP_Sync_Refs::rewrite_content( '<p><a href="/blog/?p=12">x</a></p>', $moved )['missing'], 'space' ) );
-		$both = AB_MCP_Sync_Canon::context( array( 'https://staging.test/blog', 'https://www.live.test' ), static fn( $id ) => 'user' . $id );
-		$acc  = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( '<p><a href="/blog/?p=12">x</a></p>', $both, $acc, 'post', 'c' );
-		self::assertSame( array( 'c:html?p' ), $acc['spelling'] );
-	}
-
-	public function testAnIdInAnAddressOfTheOtherSiteLocks(): void {
-		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test', 'https://www.live.test' ), static fn( $id ) => 'user' . $id, '', array( 'https://staging.test' ) );
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( '<p><a href="https://www.live.test/?p=120">x</a> <a href="https://www.live.test/archives/120">z</a> <a href="https://staging.test/?p=12">y</a></p>', $ctx, $acc, 'post', 'c' );
-		self::assertSame( array( 12 ), array_column( $acc['refs'], 'id' ) );
-		self::assertSame( array( 'c:html?p', 'c:html%post_id%' ), $acc['spelling'], 'The id space and the permalinks of the other site are not this one\'s.' );
-	}
-
-	public function testTheIdOfANumericPermalinkIsAReference(): void {
-		// Codex, round 9: the permalinks "Numeric" (/archives/%post_id%).
-		$structure = '/archives/%post_id%';
-		$ctx       = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, $structure );
-		$plan      = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array( 'https://staging.test' => 'https://www.live.test' ), $structure );
-		foreach ( array(
-			'<p><a href="https://staging.test/archives/12">x</a></p>'                 => '<p><a href="https://www.live.test/archives/120">x</a></p>',
-			'<p><a href="/archives/12/">x</a></p>'                                     => '<p><a href="/archives/120/">x</a></p>',
-			'<p><a href="https://staging.test/archives/12/attachment/bild/">x</a></p>' => '<p><a href="https://www.live.test/archives/120/attachment/bild/">x</a></p>',
-		) as $from => $to ) {
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Refs::content( $from, $ctx, $acc, 'post', 'c' );
-			self::assertSame( array( array( 12, 'c:html%post_id%' ) ), array_map( static fn( $r ) => array( $r['id'], $r['at'] ), $acc['refs'] ), $from );
-			self::assertSame( array( $to, array() ), array( AB_MCP_Sync_Refs::rewrite_content( $from, $plan )['content'], AB_MCP_Sync_Refs::rewrite_content( $from, $plan )['missing'] ), $from );
-		}
-		foreach ( array( '<p><a href="https://staging.test/archives/%31%32">x</a></p>', '<p><a href="https://staging.test/archives/012">x</a></p>', '<p><a href="archives/12">x</a></p>', '<p><a href="../archives/12">x</a></p>' ) as $content ) {
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
-			self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'], $content );
-		}
-		// Other addresses of the site are none.
-		foreach ( array( '<p><a href="https://staging.test/2026/11/03/beitrag/">x</a> <img src="https://staging.test/wp-content/uploads/2026/11/a.jpg"></p>', '<p><a href="https://staging.test/archives/">x</a></p>' ) as $content ) {
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
-			self::assertSame( array( array(), array() ), array( $acc['refs'], $acc['spelling'] ), $content );
-		}
-	}
-
-	public function testADateArchiveIsNoPostOfThePermalinks(): void {
-		// The rules of the date archives come before the posts': /2026/11/ is a month.
-		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, '/%year%/%post_id%/' );
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( '<p><a href="https://staging.test/2026/11/">x</a> <a href="https://staging.test/2026/123/">y</a></p>', $ctx, $acc, 'post', 'c' );
-		self::assertSame( array( 123 ), array_column( $acc['refs'], 'id' ) );
-		self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'] );
-		// Date permalinks without %post_id%: no id in the path.
-		$dates = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, '/%year%/%monthnum%/%day%/%postname%/' );
-		$acc   = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( '<p><a href="https://staging.test/2026/11/03/beitrag/">x</a></p>', $dates, $acc, 'post', 'c' );
-		self::assertSame( array( array(), array() ), array( $acc['refs'], $acc['spelling'] ) );
-	}
-
-	public function testWithoutThePermalinksASegmentOfDigitsLocks(): void {
-		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, null );
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( '<p><a href="https://staging.test/archives/12">x</a> <a href="https://staging.test/beitrag/">y</a></p>', $ctx, $acc, 'post', 'c' );
-		self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'] );
-	}
-
-	public function testWithoutAStructureGivenThePermalinksAreUnknown(): void {
-		// Not given is not known: only the structure of the row, given, reads
-		// the path exactly; without it a segment of digits locks.
-		$content = '<p><a href="https://staging.test/archives/12">x</a></p>';
-		$acc     = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( $content, AB_MCP_Sync_Canon::context( array( 'https://staging.test' ) ), $acc, 'post', 'c' );
-		self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'] );
-		$addresses = array( 'https://staging.test' => 'https://www.live.test' );
-		self::assertSame( array( 'spelling' ), array_column( AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array(), $addresses ) )['missing'], 'space' ) );
-		// Plain links, given: the path names no id.
-		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array(), $addresses, '' ) );
-		self::assertSame( array( '<p><a href="https://www.live.test/archives/12">x</a></p>', array() ), array( $out['content'], $out['missing'] ) );
-	}
-
 	public function testTheAddressOfACustomMenuItemIsOne(): void {
 		// Codex, round 9: _menu_item_url "/?p=12".
 		$plan    = self::plan();
@@ -771,6 +487,118 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( '/?p=120', AB_MCP_Sync_Refs::rewrite_menu_item_meta( '_menu_item_url', '/?p=12', 'custom', 9, $plan, $changed ) );
 		self::assertSame( 'index.php?p=12', AB_MCP_Sync_Refs::rewrite_menu_item_meta( '_menu_item_url', 'index.php?p=12', 'custom', 9, $plan, $changed ) );
 		self::assertSame( array( 'spelling' ), array_column( $plan['missing'], 'space' ) );
+	}
+
+	/** A resolver as url_to_postid() of the site answers: path => id; by_id whether a structure holds %post_id%. */
+	private static function resolver( array $ids, bool $by_id = true, ?array &$asked = null ): callable {
+		return static function ( $path ) use ( $ids, $by_id, &$asked ) {
+			$asked[] = $path;
+			return array(
+				'id'    => isset( $ids[ $path ] ) ? $ids[ $path ] : 0,
+				'by_id' => $by_id,
+			);
+		};
+	}
+
+	/** The ids and the places that lock of a text, and its rewrite (12 => 120, 13 => 130). */
+	private static function resolved( string $content, ?callable $resolve = null ): array {
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, $resolve );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ) ), array( 'https://staging.test' => 'https://www.live.test' ), $resolve ) );
+		return array( array_column( $acc['refs'], 'id' ), $acc['spelling'], $out['content'], array_column( $out['missing'], 'space' ) );
+	}
+
+	public function testTheResolverOfTheSiteNamesTheIdOfAPath(): void {
+		// Codex, round 10 (6): url_to_postid() of the site, not a structure rebuilt.
+		$asked   = array();
+		$resolve = self::resolver( array( '/archives/12/' => 12, '/archives/13/' => 13, '/archives/12' => 12, '/beitrag/' => 12, '/12/beitrag/' => 12, '/2026/11/beitrag/' => 12 ), true, $asked );
+		foreach ( array(
+			'Siehe https://staging.test/archives/12/ hier'          => 'Siehe https://www.live.test/archives/120/ hier',
+			'Siehe https://staging.test/archives/12 hier'           => 'Siehe https://www.live.test/archives/120 hier',
+			'Siehe https://staging.test/12/beitrag/ hier'           => 'Siehe https://www.live.test/120/beitrag/ hier',
+			'<!-- wp:acme/x {"url":"/archives/12/"} /-->'           => '<!-- wp:acme/x {"url":"/archives/120/"} /-->',
+			'<!-- wp:acme/x {"url":"https:\/\/staging.test\/archives\/12\/"} /-->' => '<!-- wp:acme/x {"url":"https://www.live.test/archives/120/"} /-->',
+		) as $from => $to ) {
+			self::assertSame( array( array( 12 ), array(), $to, array() ), self::resolved( $from, $resolve ), $from );
+		}
+		self::assertContains( '/archives/12/', $asked, 'Asked about the path of the address, without the site.' );
+		// A link by its slug names no id: the host is replaced, and without a
+		// digit in the path the core is not asked.
+		$asked = array();
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/beitrag/ hier', $resolve ) );
+		self::assertSame( array(), $asked );
+		// Digits, but not those of the id: by its slug as well.
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/2026/11/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/2026/11/beitrag/ hier', $resolve ) );
+		// What the core resolves to nothing names nothing (an upload).
+		self::assertSame( array( array(), array() ), array_slice( self::resolved( 'Bild https://staging.test/wp-content/uploads/2026/11/a12.jpg hier', $resolve ), 0, 2 ) );
+	}
+
+	public function testAnIdOfAPathInAnyOtherFormLocks(): void {
+		$asked   = array();
+		$resolve = self::resolver( array( '/archives/13/' => 13, '/archives/012/' => 12, '/2026/11/top-12-tips/' => 12, '/archives/12/' => 12, '/archives/12/012/' => 12, '/archives//12/' => 12, '/archives/12/caf%C3%A9/' => 12 ), true, $asked );
+		foreach ( array(
+			// Codex, round 10 (7): the browser resolves the dot segments, to 13.
+			'Siehe https://staging.test/archives/12/../13/ hier',
+			'Siehe https://staging.test/archives/./13/ hier',
+			'Siehe https://staging.test/archives/012/ hier',
+			// Escaped: the core is asked about the path decoded as well.
+			'Siehe https://staging.test/archives/%31%32/ hier',
+			'Siehe https://staging.test/archives//12/ hier',
+			// The id twice, once in another spelling.
+			'Siehe https://staging.test/archives/12/012/ hier',
+			// An escape elsewhere in the path.
+			'Siehe https://staging.test/archives/12/caf%C3%A9/ hier',
+			// The id among other digits, in no segment of its own.
+			'Siehe https://staging.test/2026/11/top-12-tips/ hier',
+			// The same site in another spelling: never rewritten.
+			'Siehe https://STAGING.test/archives/12/ hier',
+		) as $content ) {
+			list( $refs, $spelling, , $missing ) = self::resolved( $content, $resolve );
+			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $refs, $spelling ), $content );
+			self::assertContains( 'spelling', $missing, $content );
+		}
+		self::assertContains( '/archives/13/', $asked, 'Asked about the path the browser resolves.' );
+		// Digits equal to the id where no structure holds %post_id%: a date.
+		$dates = self::resolver( array( '/2026/12/beitrag/' => 12 ), false );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::resolved( 'Siehe https://staging.test/2026/12/beitrag/ hier', $dates ), 0, 2 ) );
+	}
+
+	public function testWithoutTheHtmlApiATagThatMayHoldAnIdLocks(): void {
+		// The unit suite has no HTML API: what it would read locks.
+		list( $refs, , , $acc ) = self::scan( '<p><img class="wp-image-12"></p>' );
+		self::assertSame( array(), $refs );
+		self::assertContains( array( '*:reference_spelling', 'c:html:tags' ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'] ) );
+		// A tag that may run past its first ">" across a block delimiter.
+		list( , , , $acc ) = self::scan( '[gallery ids="12"]<!-- wp:paragraph --><p title="a>b">x</p><!-- /wp:paragraph -->' );
+		self::assertContains( '*:reference_spelling', array_column( AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'], 'key' ) );
+	}
+
+	public function testTheResolverOfThisSiteIsNotAskedAboutTheOtherSite(): void {
+		// Its ids and its permalinks are not this site's: a segment of digits locks.
+		$resolve = self::resolver( array() );
+		$ctx     = AB_MCP_Sync_Canon::context( array( 'https://staging.test', 'https://www.live.test' ), static fn( $id ) => 'user' . $id, $resolve, array( 'https://staging.test' ) );
+		foreach ( array( 'Siehe https://www.live.test/archives/120 hier', 'Siehe https://WWW.LIVE.TEST/archives/120 hier', 'Siehe https://live.test/archives/120 hier' ) as $content ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+			self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'], $content );
+		}
+	}
+
+	public function testThePortOfASiteIsDefaultOnlyForItsScheme(): void {
+		// http on 443 is another site than http without a port.
+		$ctx = AB_MCP_Sync_Canon::context( array( 'http://staging.test:443' ), static fn( $id ) => 'user' . $id );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::content( 'Siehe http://staging.test/?p=12 hier', $ctx, $acc, 'post', 'c' );
+		self::assertSame( array( array(), array() ), array( $acc['refs'], $acc['spelling'] ) );
+	}
+
+	public function testWithoutTheResolverASegmentOfDigitsLocks(): void {
+		// Not given is not known (the unit suite has no url_to_postid()).
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::resolved( 'Siehe https://staging.test/archives/12 hier' ), 0, 2 ) );
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/beitrag/ hier' ) );
+		// A resolver that answers no id: the path names none.
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/archives/12 hier', array() ), self::resolved( 'Siehe https://staging.test/archives/12 hier', self::resolver( array() ) ) );
 	}
 
 	public function testAShortLinkInAStoredValueIsAReference(): void {
@@ -782,16 +610,16 @@ final class SyncRefsTest extends TestCase {
 		$plan    = self::plan();
 		$changed = false;
 		self::assertSame( serialize( array( 'url' => 'https://www.live.test/?page_id=120' ) ), AB_MCP_Sync_Refs::rewrite_value( serialize( array( 'url' => 'https://staging.test/?page_id=12' ) ), $plan, $changed ) );
-		// As JSON stores it: a slash as \/, "&" as \u0026.
-		$json = '{"url":"https:\/\/staging.test\/?preview=1\u0026p=12"}';
+		// As JSON stores it, a slash as \/: the same (with \u0026: SyncCoreReads).
+		$json = '{"url":"https:\/\/staging.test\/?p=12"}';
 		$acc  = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Canon::value( $json, self::ctx(), $acc, 'post', 'meta:_json' );
 		self::assertSame( array( 'meta:_json?p' ), array_column( $acc['refs'], 'at' ) );
-		self::assertSame( '{"url":"https:\/\/www.live.test\/?preview=1\u0026p=120"}', AB_MCP_Sync_Refs::rewrite_value( $json, $plan, $changed ) );
+		self::assertSame( '{"url":"https:\/\/www.live.test\/?p=120"}', AB_MCP_Sync_Refs::rewrite_value( $json, $plan, $changed ) );
 		// The query only as JSON decodes it (\u003f is the "?"): it locks.
 		$acc = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Canon::value( '{"url":"https:\/\/staging.test\/\u003fp=12"}', self::ctx(), $acc, 'post', 'meta:_json' );
-		self::assertSame( array( array(), array( 'meta:_json?' ) ), array( $acc['refs'], $acc['spelling'] ) );
+		self::assertSame( array( array(), array( 'meta:_json?p' ) ), array( $acc['refs'], $acc['spelling'] ) );
 	}
 
 	public function testAContentThatCannotBeJoinedLocks(): void {

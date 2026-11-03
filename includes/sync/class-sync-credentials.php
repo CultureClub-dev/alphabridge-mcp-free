@@ -12,14 +12,20 @@
  *
  * Besides the structure, flat() reads every text of a unit as it is
  * stored and as the decodings the core knows give it (stripcslashes() of
- * shortcode_parse_atts(), HTML character references, percent escapes,
- * \uXXXX of JSON): every key in the spelling of an attribute or a field
- * (name=, "name":, 'name':; in code, a script, a style, an event
- * attribute, a javascript: address or a value of an attribute of a block or
- * a shortcode, name: as well; the name or id of a field of a form with a
- * value) that redacts_key() names makes the unit mixed, in a shortcode no
- * registry runs, an escaped [[…]], a tag, a comment alike. More locks than needed are allowed; a credential overlooked
- * because the structure was read otherwise than the core reads it is not.
+ * shortcode_parse_atts(), HTML character references as WP_HTML_Decoder
+ * decodes them, percent escapes, \uXXXX of JSON): every key in the
+ * spelling of an attribute or a field (name=, "name":, 'name':) that
+ * redacts_key() names makes the unit mixed, in a shortcode no registry
+ * runs, an escaped [[…]], a tag, a comment alike. The tags are read by the
+ * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt: in code
+ * (script, style, an event attribute, a javascript: address as the URL
+ * parser reads it, a value of an attribute of a block or a shortcode with
+ * "{" or "=>") name: as well; the name or id of a field of a form (input,
+ * textarea, select, option, button, meta), with a value or without. Where
+ * a text holds a tag the HTML API cannot read (the unit suite, an
+ * unfinished tag) the unit is unreadable. More locks than needed are
+ * allowed; a credential overlooked because the structure was read
+ * otherwise than the core reads it is not.
  *
  * The answer per unit:
  * - b9: the name of the unit is one; the unit is group B9, not compared,
@@ -72,20 +78,14 @@ final class AB_MCP_Sync_Credentials {
 	 */
 	const CODE_KEY = '/([A-Za-z_$][A-Za-z0-9_$\-]*)\s*:/';
 
-	/** The content of script and style: code (code()). */
-	const SCRIPT = '#<(?:script|style)\b[^>]*>(.*?)(?:</(?:script|style)\s*>|\z)#is';
-
 	/**
-	 * What makes the value of an attribute of a block or a shortcode code:
-	 * a brace, a parenthesis, a semicolon, "=>" or "=" between names.
+	 * What makes the value of an attribute of a block or a shortcode code: a
+	 * brace or "=>". Parentheses and colons alone are prose.
 	 */
-	const LOOKS_LIKE_CODE = '/[{(;]|=>|\w\s*=\s*\w/';
+	const LOOKS_LIKE_CODE = '/[{]|=>/';
 
-	/** A tag of HTML with its attributes (a quoted value may hold a ">"). */
-	const TAG = '/<([A-Za-z][^\s\/>]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>/';
-
-	/** An attribute of a tag and its value, quoted or not. */
-	const ATTRIBUTE = '/([^\s"\'>\/=]+)(?:\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+)))?/';
+	/** The tags of a form whose name or id names its field. */
+	const FORM_TAGS = array( 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'META' );
 
 	/**
 	 * Check one unit.
@@ -130,14 +130,15 @@ final class AB_MCP_Sync_Credentials {
 	 * delimiters), each with the decodings of decodings(): in the spellings
 	 * of FLAT_KEYS; in code (the text itself where it is the value of an
 	 * attribute of a block or a shortcode and looks like code,
-	 * LOOKS_LIKE_CODE; else code()) a name without quotes before ":" as
-	 * well (CODE_KEY); the name or id of a field of a form with a value
-	 * (form_fields()), a pair of name and value as a list of them is.
+	 * LOOKS_LIKE_CODE; else what html() reads as code) a name without
+	 * quotes before ":" as well (CODE_KEY); the name or id of a field of a
+	 * form (html()), with a value or without.
 	 *
 	 * @param string   $text  Text as stored.
 	 * @param string[] $extra Extra names.
 	 * @param bool     $code  Whether the text is code (an attribute value).
-	 * @return string[]|null Null where the text could not be joined.
+	 * @return string[]|null Null where the text could not be joined or its
+	 *                       tags could not be read (html()).
 	 */
 	public static function flat( $text, array $extra, $code = false ) {
 		$text = (string) $text;
@@ -153,25 +154,37 @@ final class AB_MCP_Sync_Credentials {
 			}
 			$texts[] = $joined['text'];
 		}
-		$variants = array();
-		foreach ( $texts as $one ) {
-			$variants = array_merge( $variants, self::decodings( $one ) );
-		}
 		$found = array();
-		foreach ( array_unique( $variants ) as $variant ) {
-			foreach ( self::FLAT_KEYS as $pattern ) {
-				if ( preg_match_all( $pattern, $variant, $m ) ) {
-					$found = array_merge( $found, $m[1] );
-				}
+		$code  = $code && preg_match( self::LOOKS_LIKE_CODE, $text );
+		foreach ( $texts as $one ) {
+			$variants = self::decodings( $one );
+			if ( null === $variants ) {
+				return null;
 			}
-			foreach ( $code && preg_match( self::LOOKS_LIKE_CODE, $variant ) ? array( $variant ) : self::code( $variant ) as $segment ) {
-				foreach ( self::decodings( $segment ) as $one ) {
-					if ( preg_match_all( self::CODE_KEY, $one, $m ) ) {
+			foreach ( $variants as $variant ) {
+				foreach ( self::FLAT_KEYS as $pattern ) {
+					if ( preg_match_all( $pattern, $variant, $m ) ) {
 						$found = array_merge( $found, $m[1] );
 					}
 				}
 			}
-			$found = array_merge( $found, self::form_fields( $variant ) );
+			// The tags as the browser parses the stored text, once.
+			$html = self::html( $one );
+			if ( null === $html ) {
+				return null;
+			}
+			foreach ( $code ? array_merge( array( $one ), $html['code'] ) : $html['code'] as $segment ) {
+				$variants = self::decodings( $segment );
+				if ( null === $variants ) {
+					return null;
+				}
+				foreach ( $variants as $variant ) {
+					if ( preg_match_all( self::CODE_KEY, $variant, $m ) ) {
+						$found = array_merge( $found, $m[1] );
+					}
+				}
+			}
+			$found = array_merge( $found, $html['fields'] );
 		}
 		$out = array();
 		foreach ( $found as $key ) {
@@ -183,100 +196,74 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * The code of a text of HTML: the content of script and style, and of
-	 * every tag the whole value of an event attribute (on…) and of an
-	 * attribute that is a javascript: address, decoded as the browser reads
-	 * it.
+	 * What the HTML API of the core reads in a text: its code (the content
+	 * of script and style; of every tag the whole value of an event
+	 * attribute, on…, and of an attribute that is a javascript: address as
+	 * the URL parser reads it) and the names of its fields of a form (name
+	 * and id of FORM_TAGS, with a value or without). Null where the text holds
+	 * a tag and the HTML API is not there or cannot read it to its end: what
+	 * is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return string[]
+	 * @return array{code:string[],fields:string[]}|null
 	 */
-	private static function code( $text ) {
-		$out = preg_match_all( self::SCRIPT, $text, $m ) ? $m[1] : array();
-		foreach ( self::tags( $text ) as $tag ) {
-			foreach ( $tag['attrs'] as $attr ) {
-				if ( 0 === strpos( $attr[0], 'on' ) || preg_match( '/^\s*javascript:/i', $attr[1] ) ) {
-					$out[] = $attr[1];
-				}
-			}
+	private static function html( $text ) {
+		$out = array(
+			'code'   => array(),
+			'fields' => array(),
+		);
+		if ( ! preg_match( '/<[A-Za-z]/', $text ) ) {
+			return $out;
 		}
-		return $out;
-	}
-
-	/**
-	 * The names of the fields of a form in a text of HTML that hold a value,
-	 * every name and id of: a tag with a value that is not empty (content of
-	 * a meta tag), a textarea with a content, a select with an option
-	 * selected.
-	 *
-	 * @param string $text Text.
-	 * @return string[]
-	 */
-	private static function form_fields( $text ) {
-		$out = array();
-		foreach ( self::tags( $text ) as $tag ) {
-			$value  = 'meta' === $tag['name'] ? 'content' : 'value';
-			$names  = array();
-			$filled = false;
-			foreach ( $tag['attrs'] as $attr ) {
-				if ( 'name' === $attr[0] || 'id' === $attr[0] ) {
-					$names[] = $attr[1];
-				} elseif ( $value === $attr[0] && '' !== $attr[1] ) {
-					$filled = true;
-				}
-			}
-			// Its content is the value of a textarea, its option of a select.
-			if ( 'textarea' === $tag['name'] || 'select' === $tag['name'] ) {
-				$rest   = (string) substr( $text, $tag['end'] );
-				$close  = stripos( $rest, '</' . $tag['name'] );
-				$inner  = false === $close ? $rest : substr( $rest, 0, $close );
-				$filled = 'textarea' === $tag['name'] ? '' !== trim( $inner ) : 1 === preg_match( '/<option\b[^>]*\sselected\b/i', $inner );
-			}
-			if ( $filled ) {
-				$out = array_merge( $out, $names );
-			}
+		if ( ! class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			return null;
 		}
-		return $out;
-	}
-
-	/**
-	 * The tags of a text of HTML: each with its name (lower case), its
-	 * attributes (name in lower case, value decoded) and where it ends.
-	 *
-	 * @param string $text Text.
-	 * @return array<int,array{name:string,attrs:array<int,array{0:string,1:string}>,end:int}>
-	 */
-	private static function tags( $text ) {
-		if ( false === strpos( $text, '<' ) || ! preg_match_all( self::TAG, $text, $tags, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
-			return array();
+		require_once __DIR__ . '/class-sync-html.php';
+		$tags = AB_MCP_Sync_Html::tag_list( $text );
+		if ( null === $tags ) {
+			return null;
 		}
-		$out = array();
 		foreach ( $tags as $tag ) {
-			$attrs = array();
-			preg_match_all( self::ATTRIBUTE, $tag[2][0], $all, PREG_SET_ORDER );
-			foreach ( $all as $attr ) {
-				$attrs[] = array( strtolower( $attr[1] ), html_entity_decode( isset( $attr[2] ) ? $attr[2] : '', ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' ) );
+			if ( 'SCRIPT' === $tag['tag'] || 'STYLE' === $tag['tag'] ) {
+				$out['code'][] = (string) $tag['text'];
 			}
-			$out[] = array(
-				'name'  => strtolower( $tag[1][0] ),
-				'attrs' => $attrs,
-				'end'   => (int) $tag[0][1] + strlen( $tag[0][0] ),
-			);
+			foreach ( $tag['attrs'] as $name => $value ) {
+				if ( ! is_string( $value ) ) {
+					continue;
+				}
+				if ( 0 === strpos( $name, 'on' ) ) {
+					$out['code'][] = $value;
+				}
+				// The URL parser drops tabs and line breaks, and C0 and spaces before.
+				$url = ltrim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
+				if ( 0 === stripos( $url, 'javascript:' ) ) {
+					$out['code'][] = $url;
+				}
+				if ( ( 'name' === $name || 'id' === $name ) && in_array( $tag['tag'], self::FORM_TAGS, true ) ) {
+					$out['fields'][] = $value;
+				}
+			}
 		}
 		return $out;
 	}
 
 	/**
-	 * A text as stored and as each decoding the core knows gives it.
+	 * A text as stored and as each decoding the core knows gives it; null
+	 * where it holds a character reference and WP_HTML_Decoder of the core
+	 * is not there to decode it.
 	 *
 	 * @param string $text Text.
-	 * @return string[]
+	 * @return string[]|null
 	 */
 	private static function decodings( $text ) {
+		if ( false !== strpos( $text, '&' ) && ! class_exists( 'WP_HTML_Decoder' ) ) {
+			return null;
+		}
 		$out = array(
 			$text,
 			stripcslashes( $text ),
-			html_entity_decode( $text, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' ),
+			// As the HTML parser of the core decodes (references without ";" too).
+			false === strpos( $text, '&' ) ? $text : WP_HTML_Decoder::decode_attribute( $text ),
 			rawurldecode( $text ),
 			(string) preg_replace_callback(
 				'/\\\\u([0-9a-fA-F]{4})/',

@@ -104,18 +104,18 @@ final class AB_MCP_Sync_Canon {
 	 * @param callable|null $users     function( int $id ): string|false|null,
 	 *                                 the login; AB_MCP_Sync_Rows::user_login()
 	 *                                 when null.
-	 * @param string|null   $permalink The permalink structure of the site
-	 *                                 whose content is read, as its row
-	 *                                 holds it ('' for plain links); null,
-	 *                                 the default, where it is not known:
-	 *                                 then a segment of digits in an
+	 * @param callable|null $resolve   function( string $path ): int, the id
+	 *                                 url_to_postid() of the site whose
+	 *                                 content is read gives for a path of it;
+	 *                                 null, the default, where it cannot be
+	 *                                 asked: then a segment of digits in an
 	 *                                 address of the sites locks
 	 *                                 (AB_MCP_Sync_Urls).
 	 * @param string[]|null $own       The addresses of that site, of
 	 *                                 $addresses; null: all of them.
 	 * @return array
 	 */
-	public static function context( array $addresses, $users = null, $permalink = null, $own = null ) {
+	public static function context( array $addresses, $users = null, $resolve = null, $own = null ) {
 		$forms  = array();
 		$owners = array();
 		$sites  = array();
@@ -127,15 +127,17 @@ final class AB_MCP_Sync_Canon {
 		);
 		foreach ( $addresses as $address ) {
 			$address = rtrim( trim( (string) $address ), '/' );
-			if ( ! preg_match( '#^https?:(//([^/\s]+)(.*))#i', $address, $parts ) ) {
+			if ( ! preg_match( '#^(https?):(//([^/\s]+)(.*))#i', $address, $parts ) ) {
 				continue;
 			}
 			$sites[] = array(
-				'host' => strtolower( $parts[2] ),
-				'path' => $parts[3],
+				'scheme' => strtolower( $parts[1] ),
+				'host'   => strtolower( $parts[3] ),
+				'path'   => $parts[4],
+				'own'    => null === $mine || in_array( $address, $mine, true ),
 			);
 			// With its scheme and without it ("//host/path").
-			foreach ( array( $address, $parts[1] ) as $spelling ) {
+			foreach ( array( $address, $parts[2] ) as $spelling ) {
 				foreach ( AB_MCP_Replace_Engine::needles( $spelling ) as $needle ) {
 					if ( ! isset( $forms[ $needle['needle'] ] ) ) {
 						$forms[ $needle['needle'] ] = $needle['form'];
@@ -161,7 +163,7 @@ final class AB_MCP_Sync_Canon {
 			'owners'    => $owners,
 			'sites'     => $sites,
 			'one_root'  => count( array_unique( array_column( $sites, 'path' ) ) ) <= 1,
-			'permalink' => $permalink,
+			'resolve'   => is_callable( $resolve ) ? $resolve : null,
 			'users'     => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
 		);
 	}
@@ -448,9 +450,10 @@ final class AB_MCP_Sync_Canon {
 	 * given cuts replaced by their markers.
 	 *
 	 * The ids the addresses of the sites name (AB_MCP_Sync_Urls::ids(): the
-	 * short links of WordPress, ?p=, ?page_id=, ?cat=, ?author= …, and the
-	 * %post_id% of the permalinks) are references, noted in $acc; one in a
-	 * form that is not rewritten locks the object.
+	 * short links of WordPress, ?p=, ?page_id=, ?cat=, ?author= …, as
+	 * parse_str() reads them, and the id url_to_postid() gives for a path)
+	 * are references, noted in $acc; one in a form that is not rewritten
+	 * locks the object.
 	 *
 	 * @param string     $text  Text.
 	 * @param array      $ctx   Context.

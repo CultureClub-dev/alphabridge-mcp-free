@@ -401,15 +401,22 @@ final class SyncLocksTest extends TestCase {
 	}
 
 	public function testThePermalinksAndTheOwnAddressesOfTheSiteDecide(): void {
-		// From the rows of this site: the structure "Numeric" and its own address.
-		update_option( 'permalink_structure', '/archives/%post_id%' );
-		$target = self::post( '<!-- wp:paragraph --><p>Ziel</p><!-- /wp:paragraph -->' );
+		global $wp_rewrite;
+		// This site resolves its paths (url_to_postid()) under the structure
+		// "Numeric", and knows its own address.
+		$wp_rewrite->set_permalink_structure( '/archives/%post_id%' );
+		$wp_rewrite->flush_rules( false );
+		// A post: under /archives/%post_id% the core resolves posts, not pages.
+		$target = wp_insert_post( array( 'post_title' => 'Ziel', 'post_status' => 'publish', 'post_type' => 'post' ), true );
+		self::assertIsInt( $target );
 		$page   = self::post( '<!-- wp:paragraph --><p><a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $target . '">x</a> <a href="' . AB_MCP_IT_Sites::url( 'b' ) . '/?p=5">y</a></p><!-- /wp:paragraph -->' );
 		$result = self::canon( 'post', $page );
 		self::assertContains( $target, array_column( array_filter( $result['refs'], static fn( $r ) => 'post' === $r['space'] ), 'id' ), 'The id of the own permalink.' );
 		$spelling = array_column( array_filter( $result['locks'], static fn( $l ) => '*:reference_spelling' === $l['key'] ), 'at' );
 		self::assertCount( 1, $spelling, 'The id of an address of the other site: ' . implode( ', ', $spelling ) );
 		self::assertStringEndsWith( '?p', $spelling[0] );
+		AB_MCP_IT_Sites::reset( 'a' );
+		$wp_rewrite->init();
 	}
 
 	public function testAnIdOfARowInAnotherSpellingLocks(): void {

@@ -199,7 +199,7 @@ final class SyncHtmlRefsTest extends TestCase {
 		}
 		// The query only decoded: "&#63;" is the "?" the browser reads.
 		list( $refs, , $acc ) = self::scan( '<p><a href="https://staging.test/&#63;p=12">x</a></p>' );
-		self::assertSame( array( array(), array( 'c:html?' ) ), array( $refs, $acc['spelling'] ) );
+		self::assertSame( array( array(), array( 'c:html?p' ) ), array( $refs, $acc['spelling'] ) );
 	}
 
 	public function testSeveralImagesLockInTheOrderOfTheText(): void {

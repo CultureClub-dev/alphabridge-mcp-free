@@ -1,29 +1,30 @@
 <?php
 /**
  * The addresses of the sites that name an object by its id (Z8, decision
- * 12; the line of the plan: an unsafe way is locked where it shows). One
- * rule for every place an address stands: rewritten is only what is on a
- * short list of safe forms; everything else that can be a reference by id
- * locks the object (*:reference_spelling).
+ * 12; the line of the plan: an unsafe way is locked where it shows). The
+ * core reads, nothing is rebuilt: the HTML API reads tags and the values of
+ * their attributes, WP_HTML_Decoder decodes, parse_str() reads a query as
+ * PHP gives it to WordPress, url_to_postid() of the site whose content it
+ * is resolves a path. Rewritten is only an id whose stored form is exactly
+ * the one these readings give; every other form that names or may name an
+ * id locks the object (*:reference_spelling).
  *
- * Found: every address of the sites in a text, with its host (address_cuts()
- * of AB_MCP_Sync_Canon, also without the scheme), and without it where an
- * address stands (the value of an attribute of HTML that holds one,
- * URL_ATTRIBUTE; the whole text where it is one: an attribute of a block,
- * _menu_item_url). Whether it names an object by id the core decides: a
- * query variable WP_Query reads as an id (QUERY_IDS), or the %post_id% of
- * the permalinks of the site whose content it is, in the path.
+ * Where an address stands: with the host of a site (address_cuts() of
+ * AB_MCP_Sync_Canon, also "//host"), in the value of an attribute of HTML
+ * (with the host or without it), as a whole value (an attribute of a block,
+ * _menu_item_url), and in another spelling of a site's host (capitals, the
+ * default port: the same site, locked, never a foreign address).
  *
- * Safe, so rewritten: an address with its host (the host is replaced with
- * it) or from the root of a site whose sites all share that root; the query
- * variable stored exactly by its name, its value exactly the digits of an
- * id (AB_MCP_Sync_Canon::id_spelling(); a list as cat=5,6, without spaces),
- * followed by a separator of the query or the end of the address; the id of
- * the path in the raw digits where the structure puts it, and not in a
- * place a date archive takes first. Everything else that names or may name
- * an id locks: an address relative to the page, a character reference or a
- * percent escape in the name or value, a value of another spelling, a
- * structure that could not be read, an address of the other site.
+ * Safe, so rewritten: an address with the host of a site (the host is
+ * replaced with it) or from a root both sites share; in an attribute, the
+ * attribute stored exactly as set_attribute() writes its value; each
+ * variable of QUERY_IDS that parse_str() reads stored once, exactly by its
+ * name, with exactly the digits of its id (a list of them at commas); the
+ * id url_to_postid() gives as exactly one raw segment of digits of a path
+ * without dot segments, double slashes or percent escapes. Everything else
+ * that names or may name an id locks: an address relative to the page, a
+ * spelling the readings do not share, a path the core cannot be asked
+ * about (then a segment of digits), an address of the other site.
  *
  * @package AlphaBridge_MCP
  */
@@ -57,27 +58,19 @@ final class AB_MCP_Sync_Urls {
 	const QUERY_LISTS = array( 'cat', 'author' );
 
 	/**
-	 * An attribute of HTML (or of a shortcode) whose value is an address the
-	 * browser resolves against the page, with the offset of its value.
+	 * The attributes of HTML (and of shortcodes) whose value is an address the
+	 * browser resolves against the page.
 	 */
-	const URL_ATTRIBUTE = '/(?<![A-Za-z0-9_:\-])(?:href|src|action|formaction|cite|poster|data|background|url|link)\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))/i';
+	const URL_ATTRIBUTES = array( 'href', 'src', 'action', 'formaction', 'cite', 'poster', 'data', 'background', 'url', 'link' );
 
-	/** A quoted value of an attribute, with its offset. */
-	const QUOTED = '/[A-Za-z_:][A-Za-z0-9_:.\-]*\s*=\s*(?|"([^"]*)"|\'([^\']*)\')/';
-
-	/** The separators of a query in the forms of an address: &, &amp;, &#38;, &#x26;, \u0026 of JSON. */
+	/** The separators of a query as stored: &, &amp;, &#38;, &#x26;, \u0026 of JSON. */
 	const SEPARATOR = '/&amp;|&#0*38;|&#x0*26;|\\\\u0026|&(?!#|[A-Za-z0-9]+;)/i';
 
-	/** The patterns of the tags of a permalink structure (WP_Rewrite::$rewritereplace, class-wp-rewrite.php:281-313). */
-	const TAGS = array(
-		'%year%'     => '[0-9]{4}',
-		'%monthnum%' => '[0-9]{1,2}',
-		'%day%'      => '[0-9]{1,2}',
-		'%hour%'     => '[0-9]{1,2}',
-		'%minute%'   => '[0-9]{1,2}',
-		'%second%'   => '[0-9]{1,2}',
-		'%post_id%'  => '([0-9]+)',
-	);
+	/** A host with an optional port after "//" (also \/\/ of JSON): a spelling of an address. */
+	const HOST = '#(?:(https?):)?(?://|\\\\/\\\\/)([A-Za-z0-9.\-]+(?::[0-9]+)?)#i';
+
+	/** The same at the beginning of an address, with its scheme and its host and port. */
+	const HOST_AT_START = '#^(?:(https?):)?(?://|\\\\/\\\\/)([^/?\#\\\\]*)#i';
 
 	/**
 	 * The ids the addresses of the sites in a text name.
@@ -92,308 +85,496 @@ final class AB_MCP_Sync_Urls {
 	 */
 	public static function ids( $text, array $ctx, array $addresses, $whole = false ) {
 		$text = (string) $text;
-		// An address in a quoted value ends with the value (a space inside it
-		// is part of it); in prose at the first space.
-		$spans = array();
-		if ( preg_match_all( self::QUOTED, $text, $q, PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $q[1] as $value ) {
-				$spans[] = array( (int) $value[1], (int) $value[1] + strlen( $value[0] ) );
+		$out  = array();
+		$done = array();
+		// In the values of the attributes of tags, as the HTML API reads them.
+		if ( preg_match( '/<[A-Za-z]/', $text ) ) {
+			$tags = null;
+			if ( class_exists( 'WP_HTML_Tag_Processor' ) ) {
+				require_once __DIR__ . '/class-sync-html.php';
+				$tags = AB_MCP_Sync_Html::tag_list( $text );
+			}
+			if ( null === $tags ) {
+				// Without the HTML API, or where it cannot read to the end,
+				// nothing tells where a value ends: where an address may stand
+				// in one, it locks.
+				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . ')\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
+			}
+			foreach ( $tags as $tag ) {
+				$raw = substr( $text, $tag['at'], $tag['len'] );
+				foreach ( $tag['attrs'] as $name => $value ) {
+					if ( ! is_string( $value ) || ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) ) {
+						continue;
+					}
+					// Stored as the core writes it: read as stored, rewritten
+					// there; otherwise read decoded, and nothing is rewritten.
+					$span = AB_MCP_Sync_Html::value_span( $raw, $name, $value );
+					$out  = array_merge( $out, null === $span ? self::address( $value, $ctx, null, $text ) : self::address( substr( $raw, $span[0], $span[1] ), $ctx, $tag['at'] + $span[0], $text ) );
+				}
+				$done[] = array( $tag['at'], $tag['at'] + $tag['len'] );
 			}
 		}
-		$out = array();
-		foreach ( $addresses as $address ) {
-			$needle = substr( $text, $address['at'], $address['len'] );
-			$own    = ! isset( $ctx['owners'][ $needle ] ) || $ctx['owners'][ $needle ];
-			$end    = $whole ? strlen( $text ) : null;
-			foreach ( $spans as $span ) {
-				if ( $address['at'] >= $span[0] && $address['at'] < $span[1] ) {
-					$end = $span[1];
+		if ( $whole ) {
+			return array_merge( $out, self::address( $text, $ctx, 0, $text ) );
+		}
+		// In the attributes of shortcodes, as the core reads them: read as
+		// stored where the value is stored as it is read, once.
+		if ( false !== strpos( $text, '[' ) && class_exists( 'AB_MCP_Sync_Refs' ) ) {
+			foreach ( AB_MCP_Sync_Refs::shortcode_units( $text ) as $unit ) {
+				foreach ( $unit['atts'] as $name => $value ) {
+					if ( ! is_string( $name ) || ! is_string( $value ) || ( ! self::names_an_address( $name, $value ) && ! self::names_a_site( $value, $ctx ) ) ) {
+						continue;
+					}
+					$stored = isset( $unit['stored'][ strtolower( $name ) ] ) ? $unit['stored'][ strtolower( $name ) ] : array();
+					foreach ( $stored as $pair ) {
+						$done[] = array( $pair[1], $pair[1] + strlen( $pair[0] ) );
+					}
+					// The one pair of the name, outside [[…]]; address() reads it
+					// as stored only where it is stored as it is read.
+					$out = array_merge( $out, self::address( $value, $ctx, 1 === count( $stored ) && ! $unit['escaped'] ? $stored[0][1] : null, $text ) );
 				}
 			}
-			$out = array_merge( $out, self::url_ids( $text, $address['at'] + $address['len'], $end, $own ? 'host' : 'other', $ctx ) );
 		}
-		$values = $whole ? array( array( $text, 0 ) ) : array();
-		if ( preg_match_all( self::URL_ATTRIBUTE, $text, $m, PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $m[1] as $value ) {
-				$values[] = array( $value[0], (int) $value[1] );
+		// In prose and in texts of no HTML: from each address of the sites to
+		// the first character that ends an address.
+		foreach ( $addresses as $address ) {
+			if ( self::inside( $address['at'], $done ) ) {
+				continue;
 			}
+			preg_match( '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'<>\\\\])*#', $text, $m, 0, $address['at'] + $address['len'] );
+			$url = substr( $text, $address['at'], $address['len'] ) . (string) preg_replace( '/[.,;:!)\]]+\z/', '', $m[0] );
+			$out = array_merge( $out, self::address( $url, $ctx, $address['at'], $text ) );
 		}
-		foreach ( $values as $value ) {
-			// The browser drops the spaces before an address.
-			$at   = $value[1] + strlen( $value[0] ) - strlen( ltrim( $value[0] ) );
-			$form = self::relative_form( ltrim( $value[0] ), $ctx );
-			if ( null !== $form ) {
-				$out = array_merge( $out, self::url_ids( $text, $at, $value[1] + strlen( $value[0] ), $form, $ctx ) );
+		// Another spelling of a site's host outside tags: the same site.
+		if ( preg_match_all( self::HOST, $text, $hosts, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $hosts[0] as $host ) {
+				if ( self::inside( (int) $host[1], $done ) || self::at_cut( (int) $host[1], $addresses ) ) {
+					continue;
+				}
+				preg_match( '#\G[^\s"\'<>]*#', $text, $m, 0, (int) $host[1] );
+				$out = array_merge( $out, self::address( $m[0], $ctx, null, $text ) );
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * The form of an address without its host: root (from the root of a
-	 * site, "/…" under its path), page (relative to the page: "?p=", "./",
-	 * "index.php"), or null where it is no address of the sites without its
-	 * host (with a scheme or "//": address_cuts() reads the sites' own).
+	 * The ids of one address.
 	 *
-	 * @param string $value Value, as stored.
-	 * @param array  $ctx   Context.
-	 * @return string|null
+	 * @param string   $url  The address: as stored at $at, or, where $at
+	 *                       is null, as it is read (decoded).
+	 * @param array    $ctx  Context.
+	 * @param int|null $at   Where it stands in the text as stored; null where
+	 *                       it is not stored so (nothing is rewritten).
+	 * @param string   $text The text.
+	 * @return array See ids().
 	 */
-	private static function relative_form( $value, array $ctx ) {
-		if ( preg_match( '#^[A-Za-z][A-Za-z0-9+.\-]*:#', $value ) || 0 === strpos( $value, '//' ) ) {
+	private static function address( $url, array $ctx, $at, $text ) {
+		$read = self::read( $url, $ctx );
+		if ( null === $read ) {
+			return array();
+		}
+		$at = $read['safe'] && null !== $at && substr( $text, $at, strlen( $url ) ) === $url ? $at : null;
+		return array_merge( self::query_ids( $url, $read['query'], $at ), self::path_ids( $url, $read, $ctx, $at ) );
+	}
+
+	/**
+	 * What an address is: its form, where its path and its query stand.
+	 *
+	 * @param string $url Address.
+	 * @param array  $ctx Context.
+	 * @return array{form:string,own:bool,safe:bool,path:int,end:int,query:int|null}|null
+	 *               Null where it is no address of the sites; own: of the
+	 *               site whose content it is.
+	 */
+	private static function read( $url, array $ctx ) {
+		$lead = ltrim( $url, "\x00..\x20" );
+		$skip = strlen( $url ) - strlen( $lead );
+		$form = null;
+		$path = $skip;
+		// The exact spelling of an address of the context (the longest), its
+		// path after it; else another spelling of a site's host.
+		$exact = false;
+		foreach ( isset( $ctx['forms'] ) ? array_keys( $ctx['forms'] ) : array() as $needle ) {
+			if ( ( false === $exact || strlen( $needle ) > strlen( $exact ) ) && 1 === preg_match( '#^' . preg_quote( (string) $needle, '#' ) . AB_MCP_Sync_Canon::BOUNDARY . '#', $lead ) ) {
+				$exact = (string) $needle;
+			}
+		}
+		$own = true;
+		if ( false !== $exact ) {
+			$own  = ! isset( $ctx['owners'][ $exact ] ) || $ctx['owners'][ $exact ];
+			$form = $own ? 'host' : 'other';
+			$path = $skip + strlen( $exact );
+		} elseif ( preg_match( self::HOST_AT_START, $lead, $m ) ) {
+			$site = self::site( $m[2], strtolower( $m[1] ), $ctx );
+			if ( null === $site ) {
+				return null;
+			}
+			$own  = $site['own'];
+			$form = 'variant';
+			$path = $skip + strlen( $m[0] );
+		} elseif ( preg_match( '#^[A-Za-z][A-Za-z0-9+.\-]*:#', $lead ) ) {
 			return null;
+		} elseif ( 0 === strpos( $lead, '/' ) ) {
+			foreach ( isset( $ctx['sites'] ) ? $ctx['sites'] : array() as $site ) {
+				if ( 1 === preg_match( '#^' . preg_quote( $site['path'], '#' ) . '(?:[/?]|\z)#', $lead ) ) {
+					$form = 'root';
+					$path = $skip + strlen( $site['path'] );
+					break;
+				}
+			}
+			if ( null === $form ) {
+				return null;
+			}
+		} else {
+			$form = 'page';
 		}
-		if ( 0 !== strpos( $value, '/' ) ) {
-			return 'page';
-		}
+		$hash = preg_match( '/(?<!&)#/', $url, $h, PREG_OFFSET_CAPTURE, $path ) ? (int) $h[0][1] : strlen( $url );
+		$mark = strpos( substr( $url, 0, $hash ), '?', $path );
+		return array(
+			'form'  => $form,
+			'own'   => $own,
+			// Rewritten only with the host, or from a root both sites share.
+			'safe'  => 'host' === $form || ( 'root' === $form && ! empty( $ctx['one_root'] ) ),
+			'path'  => $path,
+			'end'   => false === $mark ? $hash : $mark,
+			'query' => false === $mark ? null : $mark + 1,
+		);
+	}
+
+	/**
+	 * The site of a host as an address spells it, or null: compared in lower
+	 * case, without the default port of its scheme and, as url_to_postid()
+	 * compares hosts, without "www.".
+	 *
+	 * @param string $host   Host with its port, as written.
+	 * @param string $scheme http, https or '' (without one).
+	 * @param array  $ctx    Context.
+	 * @return array|null
+	 */
+	private static function site( $host, $scheme, array $ctx ) {
 		foreach ( isset( $ctx['sites'] ) ? $ctx['sites'] : array() as $site ) {
-			if ( 1 === preg_match( '#^' . preg_quote( $site['path'], '#' ) . '(?:[/?]|\z)#', $value ) ) {
-				return 'root:' . $site['path'];
+			if ( self::bare_host( $host, $scheme ) === self::bare_host( $site['host'], $site['scheme'] ) ) {
+				return $site;
 			}
 		}
 		return null;
 	}
 
 	/**
-	 * The ids of one address, from where its path begins.
-	 *
-	 * @param string   $text  Text.
-	 * @param int      $start Where the path begins (after the host and the
-	 *                        path of the site, or the value of an address
-	 *                        without its host).
-	 * @param int|null $end   Where the address ends (the end of its value);
-	 *                        null in prose: at the first character that
-	 *                        ends an address, without the punctuation of a
-	 *                        sentence.
-	 * @param string   $form  host, other (an address of the other site),
-	 *                        page, root:<path of the site>.
-	 * @param array    $ctx   Context.
-	 * @return array See ids().
+	 * @param string $host   Host with its port.
+	 * @param string $scheme http, https or '' (both default ports).
+	 * @return string In lower case, without the default port and "www.".
 	 */
-	private static function url_ids( $text, $start, $end, $form, array $ctx ) {
-		if ( null === $end ) {
-			preg_match( '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'<>\\\\])*#', $text, $m, 0, $start );
-			$url = (string) preg_replace( '/[.;:!)\]]+\z/', '', $m[0] );
-		} else {
-			$url = (string) substr( $text, $start, $end - $start );
+	private static function bare_host( $host, $scheme ) {
+		$host = strtolower( $host );
+		if ( preg_match( '/^(.*):([0-9]+)\z/', $host, $m ) && ( ( 'https' !== $scheme && '80' === $m[2] ) || ( 'http' !== $scheme && '443' === $m[2] ) ) ) {
+			$host = $m[1];
 		}
-		// The fragment: a "#" that begins no character reference.
-		$url  = preg_match( '/(?<!&)#/', $url, $hash, PREG_OFFSET_CAPTURE ) ? substr( $url, 0, $hash[0][1] ) : $url;
-		$mark = strpos( $url, '?' );
-		$path = false === $mark ? $url : substr( $url, 0, $mark );
-		$root = 0 === strpos( $form, 'root:' );
-		// Rewritten only with the host, or from a root all sites share.
-		$safe = 'host' === $form || ( $root && ! empty( $ctx['one_root'] ) );
-		$out  = false === $mark ? array() : self::query_ids( (string) substr( $url, $mark + 1 ), $start + $mark + 1, $safe );
-		// Decoded (character references, \u of JSON), the address may name
-		// more ids than as stored ("&#63;p=12"): then it locks.
-		if ( self::id_pairs( self::decoded( $url ) ) > self::id_pairs( $url ) ) {
-			$out[] = array(
-				'at'    => $start,
-				'len'   => strlen( $url ),
-				'space' => 'post',
-				'id'    => null,
-				'what'  => '?',
-			);
-		}
-		$rel  = $root ? (string) substr( $path, strlen( substr( $form, 5 ) ) ) : $path;
-		// The permalinks of the other site: not known here.
-		$ctx = 'other' === $form ? array( 'permalink' => null ) + $ctx : $ctx;
-		return array_merge( $out, self::path_ids( $rel, $start + strlen( $path ) - strlen( $rel ), 'page' === $form || 'other' === $form ? false : $safe, 'page' === $form, $ctx ) );
+		return (string) preg_replace( '/^www\./', '', $host );
 	}
 
 	/**
-	 * The ids of a query (QUERY_IDS): each variable, in any spelling the core
-	 * decodes, names ids; stored exactly by its name, its value each id in
-	 * the spelling of AB_MCP_Sync_Canon::id_spelling() (a list split at
-	 * commas only), it is rewritten where $safe, else it locks.
+	 * The ids of the query of an address as the core reads it: every
+	 * reading the stored form may have (as stored, decoded as HTML by
+	 * WP_HTML_Decoder, decoded as JSON) through parse_str(). Rewritten only
+	 * where every reading names the same variables of QUERY_IDS, each from
+	 * one pair stored exactly as name=value with the value of its ids in
+	 * their spelling (AB_MCP_Sync_Canon::id_spelling(), a list at commas).
 	 *
-	 * @param string $query The query, as stored (without "?").
-	 * @param int    $at    Its offset in the text.
-	 * @param bool   $safe  Whether the form of the address is rewritten.
+	 * @param string   $url   Address.
+	 * @param int|null $start Where its query begins in it, or null.
+	 * @param int|null $at    Where the address stands in the text, where it is
+	 *                        rewritten; null where it is not.
 	 * @return array See ids().
 	 */
-	private static function query_ids( $query, $at, $safe ) {
+	private static function query_ids( $url, $start, $at ) {
+		$readings = self::readings( $url );
+		if ( null === $readings ) {
+			return array( self::lock( (int) $at, strlen( $url ), '?' ) );
+		}
+		$named = array();
+		foreach ( $readings as $reading ) {
+			// The query of the URL standard: after the first "?" before the
+			// first "#" (a fragment holds none).
+			$hash = strpos( $reading, '#' );
+			$head = false === $hash ? $reading : (string) substr( $reading, 0, $hash );
+			$q    = strpos( $head, '?' );
+			if ( false === $q ) {
+				continue;
+			}
+			parse_str( (string) substr( $head, $q + 1 ), $vars );
+			foreach ( array_keys( $vars ) as $name ) {
+				if ( isset( self::QUERY_IDS[ $name ] ) ) {
+					$named[ $name ] = true;
+				}
+			}
+		}
+		if ( array() === $named ) {
+			return array();
+		}
 		$out = array();
-		foreach ( preg_split( self::SEPARATOR, $query, -1, PREG_SPLIT_OFFSET_CAPTURE ) as $pair ) {
-			$var = self::id_var( $pair[0] );
-			if ( null === $var ) {
+		foreach ( array_keys( $named ) as $var ) {
+			$pair = null === $start || null === $at ? null : self::exact_pair( $url, $start, $var );
+			if ( null === $pair ) {
+				$out[] = self::lock( (int) $at, strlen( $url ), '?' . $var );
 				continue;
 			}
-			$item = array(
-				'at'    => $at + (int) $pair[1],
-				'len'   => strlen( $pair[0] ),
-				'space' => self::QUERY_IDS[ $var ],
-				'id'    => null,
-				'what'  => '?' . $var,
-			);
-			$eq = strpos( $pair[0], '=' );
-			if ( ! $safe || false === $eq || substr( $pair[0], 0, $eq ) !== $var ) {
-				$out[] = $item;
-				continue;
-			}
-			$value = (string) substr( $pair[0], $eq + 1 );
-			$id    = AB_MCP_Sync_Canon::id_spelling( $value );
-			$ids   = in_array( $var, self::QUERY_LISTS, true ) ? AB_MCP_Sync_Canon::id_tokens( $value, '/,/' ) : ( 0 === $id ? array() : array(
-				array(
-					'at'  => 0,
-					'len' => strlen( $value ),
-					'id'  => $id,
-				),
-			) );
-			// A list only where each of its ids is in its spelling.
-			if ( in_array( null, array_column( $ids, 'id' ), true ) ) {
-				$out[] = $item;
-				continue;
-			}
-			foreach ( $ids as $token ) {
+			foreach ( $pair['ids'] as $token ) {
 				$out[] = array(
-					'at'  => $item['at'] + strlen( $var ) + 1 + $token['at'],
-					'len' => $token['len'],
-					'id'  => $token['id'],
-				) + $item;
+					'at'    => $at + $pair['at'] + $token['at'],
+					'len'   => $token['len'],
+					'space' => self::QUERY_IDS[ $var ],
+					'id'    => $token['id'],
+					'what'  => '?' . $var,
+				);
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * How many pairs of the query of an address name a variable of
-	 * QUERY_IDS (id_var()).
+	 * The one pair of a query stored exactly as var=value: of the pairs as
+	 * stored (SEPARATOR), the only one parse_str() reads as $var in every
+	 * reading, its name exactly $var, its value the ids in their spelling.
 	 *
-	 * @param string $url Address, from its path on.
-	 * @return int
+	 * @param string $url   Address.
+	 * @param int    $start Where its query begins.
+	 * @param string $var   Variable.
+	 * @return array{at:int,ids:array}|null
 	 */
-	private static function id_pairs( $url ) {
-		$mark = strpos( $url, '?' );
-		if ( false === $mark ) {
-			return 0;
+	private static function exact_pair( $url, $start, $var ) {
+		$hash  = preg_match( '/(?<!&)#/', $url, $h, PREG_OFFSET_CAPTURE, $start ) ? (int) $h[0][1] : strlen( $url );
+		$found = null;
+		$count = 0;
+		foreach ( preg_split( self::SEPARATOR, (string) substr( $url, $start, $hash - $start ), -1, PREG_SPLIT_OFFSET_CAPTURE ) as $pair ) {
+			$readings = self::readings( $pair[0] );
+			$names    = false;
+			foreach ( null === $readings ? array( $pair[0] ) : $readings as $reading ) {
+				parse_str( $reading, $vars );
+				$names = $names || array_key_exists( $var, $vars );
+			}
+			if ( ! $names ) {
+				continue;
+			}
+			++$count;
+			$found = $pair;
 		}
-		$n = 0;
-		foreach ( preg_split( self::SEPARATOR, (string) substr( $url, $mark + 1 ) ) as $pair ) {
-			$n += null === self::id_var( $pair ) ? 0 : 1;
+		if ( 1 !== $count || 0 !== strpos( $found[0], $var . '=' ) ) {
+			return null;
 		}
-		return $n;
+		$value = (string) substr( $found[0], strlen( $var ) + 1 );
+		$id    = AB_MCP_Sync_Canon::id_spelling( $value );
+		$ids   = in_array( $var, self::QUERY_LISTS, true ) ? AB_MCP_Sync_Canon::id_tokens( $value, '/,/' ) : ( 0 === $id ? array() : array(
+			array(
+				'at'  => 0,
+				'len' => strlen( $value ),
+				'id'  => $id,
+			),
+		) );
+		// One id of the pair in another spelling: none of it is rewritten.
+		if ( array() === $ids || in_array( null, array_column( $ids, 'id' ), true ) ) {
+			return null;
+		}
+		foreach ( $ids as $i => $token ) {
+			$ids[ $i ]['at'] += strlen( $var ) + 1;
+		}
+		return array(
+			'at'  => $start + (int) $found[1],
+			'ids' => $ids,
+		);
 	}
 
 	/**
-	 * An address as the browser and JSON decode it: character references
-	 * and \u escapes, a slash of JSON.
+	 * The readings of a stored text: as stored, as JSON decodes it, as HTML
+	 * decodes it (WP_HTML_Decoder::decode_text_node() of the core, which
+	 * decodes at least what an attribute decodes); null where it holds a
+	 * character reference and the decoder of the core is not there.
 	 *
-	 * @param string $url Address.
-	 * @return string
+	 * @param string $text Text.
+	 * @return string[]|null
 	 */
-	private static function decoded( $url ) {
+	private static function readings( $text ) {
 		$json = (string) preg_replace_callback(
 			'/\\\\u([0-9a-fA-F]{4})/',
 			static function ( $m ) {
 				$code = hexdec( $m[1] );
 				return $code < 0x80 ? chr( $code ) : $m[0];
 			},
-			str_replace( '\\/', '/', $url )
+			str_replace( '\\/', '/', $text )
 		);
-		return html_entity_decode( $json, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-	}
-
-	/**
-	 * The variable of QUERY_IDS a pair of a query names, in any spelling the
-	 * core decodes (character references, percent escapes, \u of JSON, the
-	 * brackets of a list, spaces before), or null.
-	 *
-	 * @param string $pair The pair, as stored.
-	 * @return string|null
-	 */
-	private static function id_var( $pair ) {
-		$html = html_entity_decode( $pair, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-		foreach ( array( $pair, $html, rawurldecode( $pair ), rawurldecode( $html ), json_decode( '"' . str_replace( '"', '', $pair ) . '"' ) ) as $read ) {
-			$name = ltrim( (string) preg_replace( '/[=\[].*\z/s', '', (string) $read ) );
-			if ( isset( self::QUERY_IDS[ $name ] ) ) {
-				return $name;
+		$out = array( $text, $json );
+		if ( false !== strpos( $json, '&' ) ) {
+			if ( ! class_exists( 'WP_HTML_Decoder' ) ) {
+				return null;
 			}
+			// As a text decodes: an attribute decodes no more (a reference
+			// without ";" before a letter or "=" stays there).
+			$out[] = WP_HTML_Decoder::decode_text_node( $json );
 		}
-		return null;
+		return array_values( array_unique( $out ) );
 	}
 
 	/**
-	 * The id of the path of an address by the permalinks of the site
-	 * (%post_id%, as the core reads it), from the root of the site.
+	 * The id of the path of an address of the site whose content it is, as
+	 * url_to_postid() there resolves it (ctx resolve: id, and by_id whether
+	 * a permalink structure of the site holds %post_id%). The path names that
+	 * id where a run of its digits stands in it (a link by a slug does not);
+	 * rewritten only where the permalinks name posts by their ids and the id
+	 * is the one run of its value, exactly one raw segment, in a path without
+	 * dot segments, double slashes or percent escapes. Without the resolver
+	 * (another site, or none given) a segment of digits locks; an address
+	 * relative to the page names no id of its path.
 	 *
-	 * @param string $path The path, as stored, from the root of the site.
-	 * @param int    $at   Its offset in the text.
-	 * @param bool   $safe Whether the form of the address is rewritten.
-	 * @param bool   $page The path is relative to the page.
-	 * @param array  $ctx  Context: permalink, the structure of the site
-	 *                     (null or missing where it is not known).
+	 * @param string   $url  Address.
+	 * @param array    $read read().
+	 * @param array    $ctx  Context.
+	 * @param int|null $at   Where it stands in the text, where it is
+	 *                       rewritten; null where it is not.
 	 * @return array See ids().
 	 */
-	private static function path_ids( $path, $at, $safe, $page, array $ctx ) {
-		$structure = isset( $ctx['permalink'] ) ? $ctx['permalink'] : null;
-		$lock      = array(
-			array(
-				'at'    => $at,
-				'len'   => strlen( $path ),
-				'space' => 'post',
-				'id'    => null,
-				'what'  => '%post_id%',
-			),
-		);
-		$decoded   = array_unique( array( $path, rawurldecode( $path ), html_entity_decode( $path, ENT_QUOTES | ENT_HTML5, 'UTF-8' ), str_replace( '\\/', '/', $path ) ) );
-		if ( null === $structure ) {
-			// Which digits the permalinks read, nothing tells: a segment of digits locks.
-			foreach ( $decoded as $read ) {
-				if ( preg_match( '#(?:^|/)[0-9]+(?:/|\z)#', $read ) ) {
-					return $lock;
-				}
-			}
+	private static function path_ids( $url, array $read, array $ctx, $at ) {
+		if ( 'page' === $read['form'] ) {
 			return array();
 		}
-		if ( false === strpos( (string) $structure, '%post_id%' ) ) {
+		$path    = (string) substr( $url, $read['path'], $read['end'] - $read['path'] );
+		$plain   = str_replace( '\\/', '/', $path );
+		$resolve = $read['own'] && 'other' !== $read['form'] && isset( $ctx['resolve'] ) && is_callable( $ctx['resolve'] ) ? $ctx['resolve'] : null;
+		if ( null === $resolve ) {
+			return preg_match( '#(?:^|/)[0-9]+(?:/|\z)#', $plain ) ? array( self::lock( (int) $at, strlen( $url ), '%post_id%' ) ) : array();
+		}
+		// Without a digit the path names no id: the core is not asked (it
+		// reads options and posts the way of WordPress).
+		if ( ! preg_match( '/[0-9]/', rawurldecode( $plain ) ) ) {
 			return array();
 		}
-		$pattern = '#^/?' . self::structure_pattern( (string) $structure ) . '(?=/|\z)#';
-		$found   = false;
-		foreach ( $decoded as $read ) {
-			$found = $found || ( $page ? 1 === preg_match( '#[0-9]#', $read ) : 1 === preg_match( $pattern, $read ) );
+		// As stored, and decoded where it holds escapes: WP::parse_request()
+		// matches its rules against both.
+		$got = call_user_func( $resolve, self::normal_path( $plain ) );
+		$id  = is_array( $got ) && isset( $got['id'] ) ? (int) $got['id'] : 0;
+		if ( $id <= 0 && false !== strpos( $plain, '%' ) ) {
+			$got = call_user_func( $resolve, self::normal_path( rawurldecode( $plain ) ) );
+			$id  = is_array( $got ) && isset( $got['id'] ) ? (int) $got['id'] : 0;
 		}
-		if ( ! $found ) {
+		preg_match_all( '/[0-9]+/', rawurldecode( $plain ), $runs );
+		$runs = array_keys( array_map( 'intval', $runs[0] ), $id, true );
+		if ( $id <= 0 || array() === $runs ) {
 			return array();
 		}
-		// Rewritten only in the raw digits, and not where a date archive
-		// (year, month, day) reads them first: its rules come before the
-		// posts' (WP_Rewrite::rewrite_rules()).
-		if ( ! $safe || 1 !== preg_match( $pattern, $path, $m, PREG_OFFSET_CAPTURE ) || preg_match( '#^/?[0-9]{4}(?:/[0-9]{1,2}){0,2}/?\z#', $m[0][0] ) ) {
-			return $lock;
+		// The one run of its value, exactly one raw segment, in a plain path.
+		$segments = explode( '/', $path );
+		$hits     = array_keys( $segments, (string) $id, true );
+		if ( null === $at || empty( $got['by_id'] ) || 1 !== count( $runs ) || array() === $hits || preg_match( '#(?:^|/)\.\.?(?:/|\z)|//|%#', $path ) ) {
+			return array( self::lock( (int) $at, strlen( $url ), '%post_id%' ) );
 		}
-		$id = AB_MCP_Sync_Canon::id_spelling( $m[1][0] );
+		$offset = strlen( implode( '/', array_slice( $segments, 0, $hits[0] ) ) ) + ( $hits[0] > 0 ? 1 : 0 );
 		return array(
 			array(
-				'at'    => $at + (int) $m[1][1],
-				'len'   => strlen( $m[1][0] ),
+				'at'    => $at + $read['path'] + $offset,
+				'len'   => strlen( (string) $id ),
 				'space' => 'post',
-				'id'    => 0 === $id ? null : $id,
+				'id'    => $id,
 				'what'  => '%post_id%',
 			),
 		);
 	}
 
 	/**
-	 * A permalink structure as a pattern: the tags of TAGS by theirs, every
-	 * other tag one segment, the rest as it stands.
+	 * A path with its dot segments removed, as the browser resolves it
+	 * (RFC 3986, 5.2.4).
 	 *
-	 * @param string $structure Structure, as stored.
+	 * @param string $path Path.
 	 * @return string
 	 */
-	private static function structure_pattern( $structure ) {
-		$out = '';
-		foreach ( preg_split( '/(%[A-Za-z0-9_-]+%)/', trim( $structure, '/' ), -1, PREG_SPLIT_DELIM_CAPTURE ) as $part ) {
-			if ( isset( self::TAGS[ $part ] ) ) {
-				$out .= self::TAGS[ $part ];
-			} elseif ( preg_match( '/^%[A-Za-z0-9_-]+%\z/', $part ) ) {
-				$out .= '[^/]+';
-			} else {
-				$out .= preg_quote( $part, '#' );
+	private static function normal_path( $path ) {
+		$out = array();
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '..' === $segment ) {
+				array_pop( $out );
+			} elseif ( '.' !== $segment ) {
+				$out[] = $segment;
 			}
 		}
-		return $out;
+		return implode( '/', $out );
+	}
+
+	/**
+	 * Whether a value of an attribute of a block or a shortcode is an address
+	 * (the plan, round 9): by its name (url, href, link, src, or a name that
+	 * ends in Url, Href, Link, Src) or by its beginning (http:, https:, //,
+	 * /, ?, ./).
+	 *
+	 * @param string $name  Name of the attribute.
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	public static function names_an_address( $name, $value ) {
+		return 1 === preg_match( '/^(?:url|href|link|src)\z|(?:Url|URL|Href|Link|Src)\z/', (string) $name ) || 1 === preg_match( '#^(?:https?:|//|/|\?|\./)#i', (string) $value );
+	}
+
+	/**
+	 * Whether a value of an attribute holds an address of the sites (also in
+	 * another spelling of a host).
+	 *
+	 * @param string $value Value.
+	 * @param array  $ctx   Context.
+	 * @return bool
+	 */
+	private static function names_a_site( $value, array $ctx ) {
+		if ( ! preg_match_all( self::HOST, $value, $m, PREG_SET_ORDER ) ) {
+			return false;
+		}
+		foreach ( $m as $host ) {
+			if ( null !== self::site( $host[2], strtolower( $host[1] ), $ctx ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * @param int   $at    Offset.
+	 * @param array $spans Spans.
+	 * @return bool Whether it lies in one.
+	 */
+	private static function inside( $at, array $spans ) {
+		foreach ( $spans as $span ) {
+			if ( $at >= $span[0] && $at < $span[1] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * @param int   $at        Offset.
+	 * @param array $addresses address_cuts().
+	 * @return bool Whether an address of the context stands there, or covers it.
+	 */
+	private static function at_cut( $at, array $addresses ) {
+		foreach ( $addresses as $address ) {
+			if ( $at >= $address['at'] && $at < $address['at'] + $address['len'] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A place that locks.
+	 *
+	 * @param int    $at   Offset.
+	 * @param int    $len  Length.
+	 * @param string $what What.
+	 * @return array
+	 */
+	private static function lock( $at, $len, $what ) {
+		return array(
+			'at'    => (int) $at,
+			'len'   => (int) $len,
+			'space' => 'post',
+			'id'    => null,
+			'what'  => $what,
+		);
 	}
 }

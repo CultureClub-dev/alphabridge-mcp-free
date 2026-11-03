@@ -41,6 +41,9 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	/** The name of the bookmark that gives a tag's span. */
 	const MARK = 'ab_mcp_sync_tag';
 
+	/** What value_span() puts in place of a value to see the HTML API read it there. */
+	const PROBE = 'ab-mcp-sync-probe';
+
 	/**
 	 * The tags of a text that hold references: each with its span, its ids in
 	 * the order of the tag (class tokens, then data-id) and the tag as the
@@ -78,6 +81,83 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * The tags of a text as the HTML API reads them: each opener with its
+	 * span, its name, its attributes (decoded as the browser decodes them:
+	 * get_attribute()) and, for script, style and textarea, its text. Null
+	 * where the text ends in a token the HTML API cannot finish: what follows
+	 * is not read.
+	 *
+	 * @param string $text Text.
+	 * @return array<int,array{at:int,len:int,tag:string,attrs:array<string,string|true>,text:string|null}>|null
+	 */
+	public static function tag_list( $text ) {
+		$text = (string) $text;
+		$out  = array();
+		$p    = new self( $text );
+		while ( $p->next_token() ) {
+			if ( '#tag' !== $p->get_token_type() || $p->is_tag_closer() || ! $p->set_bookmark( self::MARK ) ) {
+				continue;
+			}
+			$span = $p->bookmarks[ self::MARK ];
+			$p->release_bookmark( self::MARK );
+			$attrs = array();
+			foreach ( $p->get_attribute_names_with_prefix( '' ) ?? array() as $name ) {
+				$value = $p->get_attribute( $name );
+				if ( is_string( $value ) || true === $value ) {
+					$attrs[ $name ] = $value;
+				}
+			}
+			$tag   = (string) $p->get_tag();
+			$out[] = array(
+				'at'    => (int) $span->start,
+				'len'   => (int) $span->length,
+				'tag'   => $tag,
+				'attrs' => $attrs,
+				'text'  => in_array( $tag, array( 'SCRIPT', 'STYLE', 'TEXTAREA' ), true ) ? (string) $p->get_modifiable_text() : null,
+			);
+		}
+		return $p->paused_at_incomplete_token() ? null : $out;
+	}
+
+	/**
+	 * Where the value of an attribute stands in the stored text of its tag,
+	 * only where it is stored in double quotes in a spelling the core writes
+	 * (set_attribute(), esc_attr(), or the value itself where nothing needs
+	 * escaping), and only where the HTML API reads that span as the value:
+	 * with the span replaced, get_attribute() gives the replacement (not a
+	 * spelling inside another attribute). Null for every other spelling.
+	 *
+	 * @param string $raw   The stored text of the tag.
+	 * @param string $name  Attribute (lower case).
+	 * @param string $value Its value, decoded.
+	 * @return array{0:int,1:int}|null Offset and length of the value in $raw.
+	 */
+	public static function value_span( $raw, $name, $value ) {
+		$raw = (string) $raw;
+		$q   = new self( '<a>' );
+		$q->next_tag();
+		$q->set_attribute( $name, $value );
+		$lead      = '<a ' . $name . '="';
+		$written   = $q->get_updated_html();
+		$spellings = array( $value, esc_attr( $value ) );
+		if ( 0 === strpos( $written, $lead ) && '">' === substr( $written, -2 ) ) {
+			$spellings[] = (string) substr( $written, strlen( $lead ), -2 );
+		}
+		foreach ( array_unique( $spellings ) as $spelling ) {
+			$at = strpos( $raw, ' ' . $name . '="' . $spelling . '"' );
+			if ( false === $at ) {
+				continue;
+			}
+			$at += strlen( $name ) + 3;
+			$p   = new self( substr_replace( $raw, self::PROBE, $at, strlen( $spelling ) ) );
+			if ( $p->next_tag() && self::PROBE === $p->get_attribute( $name ) ) {
+				return array( $at, strlen( $spelling ) );
+			}
+		}
+		return null;
 	}
 
 	/**

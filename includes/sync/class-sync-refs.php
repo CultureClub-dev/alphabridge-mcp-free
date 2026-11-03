@@ -22,9 +22,10 @@
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
  * - the addresses of the sites, in every form of the replace engine, with
- *   their scheme or without it, and the ids they name (short links, the
- *   %post_id% of the permalinks), on the short list of safe forms of
- *   AB_MCP_Sync_Urls; every other form of such an id locks;
+ *   their scheme or without it, and the ids they name as the core reads
+ *   them (short links through parse_str(), paths through url_to_postid()),
+ *   where the stored form is exactly the one the core reads
+ *   (AB_MCP_Sync_Urls); every other form of such an id locks;
  * Blocks are read with the core's WP_Block_Parser (what parse_blocks()
  * runs, without the filter block_parser_class that would let a plugin
  * replace it) and written back with serialize_blocks().
@@ -443,14 +444,13 @@ final class AB_MCP_Sync_Refs {
 	 *                         id there ).
 	 * @param array       $addresses address here => address there (home =>
 	 *                               home, siteurl => siteurl).
-	 * @param string|null $permalink The permalink structure of the site
-	 *                               whose content is rewritten, as its row
-	 *                               holds it; null, the default, where it
-	 *                               is not known
+	 * @param callable|null $resolve The resolver of the site whose content is
+	 *                               rewritten (url_to_postid() there); null,
+	 *                               the default, where it cannot be asked
 	 *                               (AB_MCP_Sync_Canon::context()).
 	 * @return array
 	 */
-	public static function plan( array $map, array $addresses, $permalink = null ) {
+	public static function plan( array $map, array $addresses, $resolve = null ) {
 		$subs  = array();
 		$pairs = array();
 		foreach ( $addresses as $from => $to ) {
@@ -478,7 +478,7 @@ final class AB_MCP_Sync_Refs {
 			static function () {
 				return false;
 			},
-			$permalink
+			$resolve
 		);
 		// From the root, an address is rewritten only where both sides share it.
 		$ctx['one_root'] = count( array_unique( array_column( AB_MCP_Sync_Canon::context( array_merge( array_keys( $addresses ), array_values( $addresses ) ) )['sites'], 'path' ) ) ) <= 1;
@@ -840,10 +840,15 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function text_refs( $text, $block ) {
 		$text = (string) $text;
-		$tags = array();
-		$html = self::html_rules( $block );
-		if ( array() !== $html && self::html_api( $text, $html ) ) {
+		$tags   = array();
+		$unread = array();
+		$html   = self::html_rules( $block );
+		$api    = array() === $html ? false : self::html_api( $text, $html );
+		if ( true === $api ) {
 			$tags = AB_MCP_Sync_Html::tags( $text, $html );
+		} elseif ( null === $api ) {
+			// Where the HTML API would read and is not there: locked.
+			$unread[] = 'tags';
 		}
 		$found = self::found();
 		self::shortcodes( $text, 0, 0, $found );
@@ -853,7 +858,7 @@ final class AB_MCP_Sync_Refs {
 			'possible'   => $found['possible'],
 			'shortcodes' => $found['units'],
 			'deep'       => $found['deep'],
-			'spelling'   => array_merge( $found['spelling'], '~shortcodes' === $block ? array() : self::image_spelling( $text, $tags ) ),
+			'spelling'   => array_merge( $found['spelling'], $unread, '~shortcodes' === $block || null === $api ? array() : self::image_spelling( $text, $tags ) ),
 		);
 	}
 
@@ -939,7 +944,11 @@ final class AB_MCP_Sync_Refs {
 				$units[] = array( $kind, (int) $unit[1], (int) $unit[1] + strlen( $unit[0] ) );
 			}
 		}
-		if ( preg_match( '/=\s*(?:"[^"]*|\'[^\']*)>/', $text ) ) {
+		if ( preg_match( '/=\s*(?:"[^"]*|\'[^\']*)>/', $text, $quoted, PREG_OFFSET_CAPTURE ) ) {
+			// Where a tag may run past its first ">", only the HTML API tells.
+			if ( ! class_exists( 'WP_HTML_Tag_Processor' ) ) {
+				return 'tag@' . self::stored_offset( $joined['joints'], (int) $quoted[0][1] );
+			}
 			require_once __DIR__ . '/class-sync-html.php';
 			foreach ( AB_MCP_Sync_Html::tag_spans( $text ) as $span ) {
 				$units[] = array( 'tag', $span[0], $span[1] );
@@ -985,11 +994,12 @@ final class AB_MCP_Sync_Refs {
 
 	/**
 	 * Whether the HTML API is to read a text: only where it can find a
-	 * reference, and loaded only then.
+	 * reference, and loaded only then; null where it is to read and is not
+	 * there (the unit suite).
 	 *
 	 * @param string   $text  Text.
 	 * @param string[] $rules Rules.
-	 * @return bool
+	 * @return bool|null
 	 */
 	private static function html_api( $text, array $rules ) {
 		$text = (string) $text;
@@ -1002,10 +1012,14 @@ final class AB_MCP_Sync_Refs {
 		$may = false !== strpos( $text, '&' )
 			|| ( in_array( 'class', $rules, true ) && false !== stripos( $text, 'wp-image-' ) )
 			|| ( in_array( 'data_id', $rules, true ) && false !== stripos( $text, 'data-id' ) );
-		if ( $may ) {
-			require_once __DIR__ . '/class-sync-html.php';
+		if ( ! $may ) {
+			return false;
 		}
-		return $may;
+		if ( ! class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			return null;
+		}
+		require_once __DIR__ . '/class-sync-html.php';
+		return true;
 	}
 
 	/* ========================================================== private */
@@ -1455,8 +1469,10 @@ final class AB_MCP_Sync_Refs {
 				}
 			}
 			$found['units'][] = array(
-				'tag'  => $tag,
-				'atts' => $parsed,
+				'tag'     => $tag,
+				'atts'    => $parsed,
+				'stored'  => $stored,
+				'escaped' => $escaped,
 			);
 			if ( isset( $m[5] ) && '' !== $m[5][0] && -1 !== $m[5][1] ) {
 				self::shortcodes( $m[5][0], $base + (int) $m[5][1], $depth + 1, $found, $escaped );
@@ -1597,6 +1613,21 @@ final class AB_MCP_Sync_Refs {
 				self::embedded_blocks( $block['innerBlocks'], $out, $depth + 1 );
 			}
 		}
+	}
+
+	/**
+	 * The shortcodes of a text as the core reads them (get_shortcode_regex(),
+	 * shortcode_parse_atts()), nested and inside [[…]] as well: each with its
+	 * tag, its attributes decoded, the named pairs as stored (name => list
+	 * of value as stored and its offset), and whether it stands in [[…]].
+	 *
+	 * @param string $text Text.
+	 * @return array<int,array{tag:string,atts:array,stored:array,escaped:bool}>
+	 */
+	public static function shortcode_units( $text ) {
+		$found = self::found();
+		self::shortcodes( (string) $text, 0, 0, $found );
+		return $found['units'];
 	}
 
 	/**
@@ -1744,8 +1775,7 @@ final class AB_MCP_Sync_Refs {
 	 * @return bool
 	 */
 	private static function is_address( $path, $value ) {
-		$name = (string) substr( (string) strrchr( '.' . $path, '.' ), 1 );
-		return 1 === preg_match( '/^(?:url|href|link|src)\z|(?:Url|URL|Href|Link|Src)\z/', $name ) || 1 === preg_match( '#^(?:https?:|//|/|\?|\./)#i', (string) $value );
+		return AB_MCP_Sync_Urls::names_an_address( (string) substr( (string) strrchr( '.' . $path, '.' ), 1 ), (string) $value );
 	}
 
 	/**
