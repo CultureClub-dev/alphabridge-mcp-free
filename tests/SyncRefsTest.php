@@ -77,6 +77,12 @@ final class SyncRefsTest extends TestCase {
 			'shortcode gallery'            => array( '<p>[gallery ids="12, 13"]</p>', array( 'post:12@c:html:shortcode:gallery.ids', 'post:13@c:html:shortcode:gallery.ids' ) ),
 			'shortcode playlist'           => array( '[playlist ids=\'14\']', array( 'post:14@c:html:shortcode:playlist.ids' ) ),
 			'shortcode caption'            => array( '[caption id="attachment_15" width="300"]<img/> Text[/caption]', array( 'post:15@c:html:shortcode:caption.id' ) ),
+			// Codex, round 7: gallery_shortcode() reads include, exclude and id as well.
+			'shortcode gallery include'    => array( '[gallery include="12 13"]', array( 'post:12@c:html:shortcode:gallery.include', 'post:13@c:html:shortcode:gallery.include' ) ),
+			'shortcode gallery exclude, id' => array( '[gallery id="49" exclude="52"]', array( 'post:49@c:html:shortcode:gallery.id', 'post:52@c:html:shortcode:gallery.exclude' ) ),
+			'shortcode playlist include, id' => array( '[playlist id="7" include="12,13" exclude="14"]', array( 'post:7@c:html:shortcode:playlist.id', 'post:12@c:html:shortcode:playlist.include', 'post:13@c:html:shortcode:playlist.include', 'post:14@c:html:shortcode:playlist.exclude' ) ),
+			// Codex, round 7: render_block_core_avatar() reads a user.
+			'core/avatar userId'           => array( '<!-- wp:avatar {"userId":45,"isLink":true} /-->', array( 'user:user45@c:core/avatar.userId' ) ),
 		);
 	}
 
@@ -110,7 +116,7 @@ final class SyncRefsTest extends TestCase {
 		return array(
 			'a block of a plugin'          => array( '<!-- wp:acme/box {"post":40,"n":"41","list":"42,43","label":"Seite 2","ratio":1.5} /-->', array( '40@c:acme/box.post', '41@c:acme/box.n', '42@c:acme/box.list', '43@c:acme/box.list' ) ),
 			'nested in a plugin block'     => array( '<!-- wp:acme/box {"items":[{"id":44}]} /-->', array( '44@c:acme/box.items.0.id' ) ),
-			'an unmapped core id'          => array( '<!-- wp:avatar {"userId":45,"size":96} /-->', array( '45@c:core/avatar.userId' ) ),
+			'an unmapped core id'          => array( '<!-- wp:page-list-item {"id":45} /-->', array( '45@c:core/page-list-item.id' ) ),
 			'a core attribute of no list'  => array( '<!-- wp:image {"id":12,"acmeLink":46} --><figure></figure><!-- /wp:image -->', array( '46@c:core/image.acmeLink' ) ),
 			'a navigation link of custom'  => array( '<!-- wp:navigation-link {"id":47,"kind":"custom"} /-->', array( '47@c:core/navigation-link.id' ) ),
 			'another shortcode'            => array( '[contact-form-7 id="48" title="Kontakt"]', array( '48@c:html:shortcode:contact-form-7.id' ) ),
@@ -120,7 +126,7 @@ final class SyncRefsTest extends TestCase {
 			'JSON in a shortcode attribute' => array( '[acme_box data=\'{"post":54,"inner":"{\\\\\\"target\\\\\\":55}"}\']', array( '54@c:html:shortcode:acme_box.data.post', '55@c:html:shortcode:acme_box.data.inner.target' ) ),
 			'JSON escaped in a shortcode'  => array( '[acme_box data=\'{\\"post\\":56}\']', array( '56@c:html:shortcode:acme_box.data.post' ) ),
 			'by position in a shortcode'   => array( '[acme_box \'{"post":57}\' 58]', array( '57@c:html:shortcode:acme_box.0.post', '58@c:html:shortcode:acme_box.1' ) ),
-			'a core shortcode, other attr' => array( '[gallery id="49" columns="3" include="51"]', array( '49@c:html:shortcode:gallery.id', '51@c:html:shortcode:gallery.include' ) ),
+			'a core shortcode, other attr' => array( '[gallery link="49" columns="3" size="51"]', array( '49@c:html:shortcode:gallery.link', '51@c:html:shortcode:gallery.size' ) ),
 			'a name with a dot'            => array( '[acme.box id="59"]', array( '59@c:html:shortcode:acme.box.id' ) ),
 			'a name beyond ASCII'          => array( '[äbox id="60"]', array( '60@c:html:shortcode:äbox.id' ) ),
 		);
@@ -183,6 +189,9 @@ final class SyncRefsTest extends TestCase {
 			'a leading zero'      => array( '[gallery ids="012,13"]', 'c:html:shortcode:gallery.ids' ),
 			'a sign'              => array( '[playlist ids="-12"]', 'c:html:shortcode:playlist.ids' ),
 			'a caption with a leading zero' => array( '[caption id="attachment_012"]Bild[/caption]', 'c:html:shortcode:caption.id' ),
+			// Codex, round 7: (int) reads 10.
+			'an exponent as the gallery id' => array( '[gallery id="1e1"]', 'c:html:shortcode:gallery.id' ),
+			'a leading zero in exclude' => array( '[playlist exclude="012"]', 'c:html:shortcode:playlist.exclude' ),
 		);
 	}
 
@@ -203,6 +212,9 @@ final class SyncRefsTest extends TestCase {
 			'[gallery IDS="12"]'     => '[gallery IDS="112"]',
 			// wp_parse_id_list() splits at spaces as well.
 			'[gallery ids="12 13"]'  => '[gallery ids="112 113"]',
+			'[gallery include="12 13"]'  => '[gallery include="112 113"]',
+			'[playlist include="12 13"]' => '[playlist include="112 113"]',
+			'[gallery exclude="12,13" id="12"]' => '[gallery exclude="112,113" id="112"]',
 		) as $from => $to ) {
 			list( $refs, , , $acc ) = self::scan( $from );
 			self::assertNotSame( array(), $refs, $from );
@@ -222,6 +234,7 @@ final class SyncRefsTest extends TestCase {
 			'a sign'               => array( '<!-- wp:image {"id":"+12"} --><figure></figure><!-- /wp:image -->', 'c:core/image.id', '<!-- wp:image {"id":"12"} --><figure></figure><!-- /wp:image -->' ),
 			'a space'              => array( '<!-- wp:gallery {"ids":[12," 13"]} --><figure></figure><!-- /wp:gallery -->', 'c:core/gallery.ids.1', '<!-- wp:gallery {"ids":[12,"13"]} --><figure></figure><!-- /wp:gallery -->' ),
 			'a float author'       => array( '<!-- wp:latest-posts {"selectedAuthor":3.0} /-->', 'c:core/latest-posts.selectedAuthor', '<!-- wp:latest-posts {"selectedAuthor":3} /-->' ),
+			'a float avatar'       => array( '<!-- wp:avatar {"userId":45.0} /-->', 'c:core/avatar.userId', '<!-- wp:avatar {"userId":45} /-->' ),
 			'a float term'         => array( '<!-- wp:query {"query":{"taxQuery":{"category":[4.0]}}} /-->', 'c:core/query.query.taxQuery.category.0', '<!-- wp:query {"query":{"taxQuery":{"category":[4]}}} /-->' ),
 			// Codex, round 6: intval(), then absint() in WP_Query, reads 12.
 			'a negative exclude'   => array( '<!-- wp:query {"query":{"inherit":false,"exclude":[-12]}} --><div></div><!-- /wp:query -->', 'c:core/query.query.exclude.0', '<!-- wp:query {"query":{"inherit":false,"exclude":[12]}} --><div></div><!-- /wp:query -->' ),
@@ -238,7 +251,7 @@ final class SyncRefsTest extends TestCase {
 		self::assertNotContains( 'post:12@' . $at, $refs );
 		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
 		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ) );
-		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ), 'term' => array( 4 => 40 ), 'user' => array( 1 => 2, 2 => 20, 3 => 30, 10 => 110 ) ), array() );
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ), 'term' => array( 4 => 40 ), 'user' => array( 1 => 2, 2 => 20, 3 => 30, 10 => 110, 45 => 450 ) ), array() );
 		$out  = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
 		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
 		// In the spelling of the id it is a reference, rewritten.
@@ -465,7 +478,7 @@ final class SyncRefsTest extends TestCase {
 			array(
 				'post' => array( 12 => 120, 13 => 130, 20 => 200, 22 => 220, 30 => 300 ),
 				'term' => array( 5 => 50, 6 => 60 ),
-				'user' => array( 1 => 10, 2 => 20 ),
+				'user' => array( 1 => 10, 2 => 20, 45 => 450 ),
 			),
 			array( 'https://staging.test' => 'https://www.live.test' )
 		);
@@ -479,6 +492,9 @@ final class SyncRefsTest extends TestCase {
 			'nav link'     => array( '<!-- wp:navigation-link {"id":22,"kind":"post-type","url":"https://staging.test/x/"} /-->', '<!-- wp:navigation-link {"id":220,"kind":"post-type","url":"https://www.live.test/x/"} /-->' ),
 			'query'        => array( '<!-- wp:query {"query":{"author":"1,2","taxQuery":{"include":{"category":[5]}},"exclude":[30]}} --><div></div><!-- /wp:query -->', '<!-- wp:query {"query":{"author":"10,20","taxQuery":{"include":{"category":[50]}},"exclude":[300]}} --><div></div><!-- /wp:query -->' ),
 			'latest posts' => array( '<!-- wp:latest-posts {"selectedAuthor":2,"categories":[{"id":6,"value":"T"}]} /-->', '<!-- wp:latest-posts {"selectedAuthor":20,"categories":[{"id":60,"value":"T"}]} /-->' ),
+			// Codex, round 7: the user of an avatar, as an author.
+			'avatar'       => array( '<!-- wp:avatar {"userId":45,"isLink":true} /-->', '<!-- wp:avatar {"userId":450,"isLink":true} /-->' ),
+			'avatar text'  => array( '<!-- wp:avatar {"userId":"45"} /-->', '<!-- wp:avatar {"userId":"450"} /-->' ),
 			'shortcodes'   => array( '[caption id="attachment_12"]<img/>[/caption] [gallery ids="12,13"]', '[caption id="attachment_120"]<img/>[/caption] [gallery ids="120,130"]' ),
 			'json address' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/y"} /-->', '<!-- wp:acme/x {"u":"https://www.live.test/y"} /-->' ),
 		);

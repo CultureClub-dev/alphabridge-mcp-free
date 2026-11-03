@@ -146,6 +146,24 @@ final class SyncHtmlRefsTest extends TestCase {
 		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
 	}
 
+	public static function tagsAcrossBlocks(): array {
+		return array(
+			// Codex, round 7: do_blocks() joins the class to wp-image-12.
+			'a class split by a block'       => array( '<!-- wp:image {"id":12} --><figure><img class="wp-image-1<!-- wp:html /-->2" src="a.jpg"></figure><!-- /wp:image -->', 'c:tag@35' ),
+			// The HTML API reads the tag past the ">" in a quoted value.
+			'a ">" in a quoted value before' => array( '<!-- wp:image {"id":12} --><figure><img alt="a>b" class="wp-image-1<!-- wp:html /-->2" src="a.jpg"></figure><!-- /wp:image -->', 'c:tag@35' ),
+			'a tag beginning split'          => array( '<!-- wp:paragraph --><p><<!-- wp:html /-->img class="wp-image-12" src="a.jpg"></p><!-- /wp:paragraph -->', 'c:tag@24' ),
+		);
+	}
+
+	#[DataProvider( 'tagsAcrossBlocks' )]
+	public function testATagAcrossBlockDelimitersLocks( string $content, string $at ): void {
+		list( , , $acc ) = self::scan( $content );
+		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120 ) ), array() ) );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), 'The rewriter writes nothing.' );
+	}
+
 	public function testSeveralImagesLockInTheOrderOfTheText(): void {
 		$content = '<p><img src="https://cdn.test/wp-image-5.jpg"><img class="wp&#45;image-12"></p>';
 		list( , , $acc ) = self::scan( $content );
@@ -177,6 +195,8 @@ final class SyncHtmlRefsTest extends TestCase {
 			'<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg" alt="Bild" class="wp-image-12"/></figure><!-- /wp:image -->',
 			'<p><img class="alignnone size-full wp-image-16" src="a-300x200.jpg" width="300"/></p>',
 			'<p><IMG CLASS="WP-IMAGE-18"/></p>',
+			// A ">" in a quoted value, and no delimiter in the tag.
+			'<!-- wp:image {"id":12} --><figure><img alt="a>b" class="wp-image-12" src="a.jpg"></figure><!-- /wp:image -->',
 		) as $content ) {
 			self::assertSame( array(), self::scan( $content )[2]['locks'], $content );
 		}

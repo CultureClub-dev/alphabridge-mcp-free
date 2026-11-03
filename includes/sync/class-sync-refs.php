@@ -8,16 +8,16 @@
  * - attributes of core blocks (BLOCKS), the class wp-image-<id> of an
  *   image in the HTML of every block and of classic content, where the
  *   core reads it, and the data-id of the gallery (HTML);
- * - the attributes of core shortcodes (SHORTCODES): gallery and playlist
- *   ids, caption id="attachment_<id>", decoded as shortcode_parse_atts()
- *   decodes them;
+ * - the attributes of core shortcodes (SHORTCODES): ids, include, exclude
+ *   and id of gallery and playlist, caption id="attachment_<id>", decoded
+ *   as shortcode_parse_atts() decodes them;
  * - only in the plain spelling: a reference whose stored text is not the
  *   value WordPress reads (escapes, character references, other quotes,
  *   the attribute twice, an image whose first wp-image-<id> is not its
- *   class token, a shortcode across block delimiters) or whose id is not
- *   in the one spelling of AB_MCP_Sync_Canon::id_spelling() (every place
- *   the core reads an id) locks its object (*:reference_spelling) and is
- *   not rewritten;
+ *   class token, a shortcode or a tag across block delimiters) or whose
+ *   id is not in the one spelling of AB_MCP_Sync_Canon::id_spelling()
+ *   (every place the core reads an id) locks its object
+ *   (*:reference_spelling) and is not rewritten;
  * - the fields of the kinds' own rows (menu item meta by _menu_item_type,
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
@@ -80,6 +80,11 @@ final class AB_MCP_Sync_Refs {
 			'selectedAuthor' => 'user',
 			'categories'     => 'term_objects',
 		),
+		// render_block_core_avatar() hands it to get_avatar() and
+		// get_the_author_meta() (wp-includes/blocks/avatar.php:36-37); the
+		// only other user ids of the core blocks are selectedAuthor and the
+		// author of core/query (their block.json in 7.1.3).
+		'core/avatar'             => array( 'userId' => 'user' ),
 	);
 
 	/**
@@ -98,12 +103,27 @@ final class AB_MCP_Sync_Refs {
 
 	/**
 	 * Core shortcodes with references: attribute => what it is.
-	 * gallery and playlist ids (wp-includes/media.php:2834, :3201),
-	 * caption id="attachment_<id>" (wp-admin/includes/media.php:220).
+	 * gallery_shortcode() and wp_playlist_shortcode() read ids, include and
+	 * exclude as lists of attachments (ids becomes include, get_posts()
+	 * passes include and exclude to wp_parse_id_list(): wp-includes/
+	 * media.php:2839, :2887, :2905, :3206, :3261, :3270, post.php:2650,
+	 * :2654) and id as the post whose attachments they show ((int),
+	 * media.php:2882, :3246); caption id="attachment_<id>"
+	 * (wp-admin/includes/media.php:220).
 	 */
 	const SHORTCODES = array(
-		'gallery'  => array( 'ids' => 'post_list' ),
-		'playlist' => array( 'ids' => 'post_list' ),
+		'gallery'  => array(
+			'ids'     => 'post_list',
+			'include' => 'post_list',
+			'exclude' => 'post_list',
+			'id'      => 'post',
+		),
+		'playlist' => array(
+			'ids'     => 'post_list',
+			'include' => 'post_list',
+			'exclude' => 'post_list',
+			'id'      => 'post',
+		),
 		'caption'  => array( 'id' => 'attachment_id' ),
 	);
 
@@ -196,7 +216,6 @@ final class AB_MCP_Sync_Refs {
 	 * core is in exactly one of PLAIN_NUMBERS, BLOCKS and UNMAPPED.
 	 */
 	const UNMAPPED = array(
-		'core/avatar'         => array( 'userId' ),
 		'core/page-list-item' => array( 'id' ),
 		'core/playlist-track' => array( 'id' ),
 	);
@@ -220,11 +239,21 @@ final class AB_MCP_Sync_Refs {
 	const BLOCK_DELIMITER = '/<!--\s+(?P<closer>\/)?wp:(?P<namespace>[a-z][a-z0-9_-]*\/)?(?P<name>[a-z][a-z0-9_-]*)\s+(?P<attrs>{(?:(?:[^}]+|}+(?=})|(?!}\s+\/?-->).)*+)?}\s+)?(?P<void>\/)?-->/s';
 
 	/**
-	 * A block delimiter, or the beginning of one, between a "[" and the next
-	 * "]": do_blocks() joins the texts around it before do_shortcode() reads
-	 * them, so a shortcode can stand there that no text of a block holds.
+	 * The beginning of a block delimiter (looser than BLOCK_DELIMITER: more
+	 * locks are allowed, none missed).
 	 */
-	const SHORTCODE_ACROSS_BLOCKS = '/\[[^\]]*<!--\s+\/?wp:/';
+	const DELIMITER_START = '/<!--\s+\/?wp:/';
+
+	/**
+	 * A block delimiter, or the beginning of one, between a "[" and the next
+	 * "]" (a shortcode) or between a "<" and the next ">" (a tag as the
+	 * pattern of wp_filter_content_tags() reads it, and a "<" that only the
+	 * delimiter keeps from beginning a tag): do_blocks() joins the texts
+	 * around it before do_shortcode() and the filters of the content read
+	 * them, so a shortcode or a tag can stand there that no text of a block
+	 * holds.
+	 */
+	const ACROSS_BLOCKS = '/\[[^\]]*<!--\s+\/?wp:|<[^>]*<!--\s+\/?wp:/';
 
 	/* ============================================================ canon */
 
@@ -242,10 +271,11 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function content( $raw, array $ctx, array &$acc, $kind, $at ) {
 		$raw = (string) $raw;
-		// A shortcode across block delimiters is read in no text of a block:
-		// not canonical (principle B).
-		if ( preg_match( self::SHORTCODE_ACROSS_BLOCKS, $raw, $m, PREG_OFFSET_CAPTURE ) ) {
-			AB_MCP_Sync_Canon::spelling( $acc, $at . ':shortcode@' . (int) $m[0][1], $kind );
+		// A shortcode or a tag across block delimiters is read in no text of
+		// a block: not canonical (principle B).
+		$across = self::across_blocks( $raw );
+		if ( null !== $across ) {
+			AB_MCP_Sync_Canon::spelling( $acc, $at . ':' . $across, $kind );
 		}
 		$parser = new WP_Block_Parser();
 		return array( '~blocks' => self::canon_blocks( $parser->parse( $raw ), $ctx, $acc, $kind, $at, 0 ) );
@@ -454,7 +484,7 @@ final class AB_MCP_Sync_Refs {
 	public static function rewrite_content( $raw, array $plan ) {
 		$raw             = (string) $raw;
 		$plan['missing'] = array();
-		if ( preg_match( self::SHORTCODE_ACROSS_BLOCKS, $raw ) ) {
+		if ( null !== self::across_blocks( $raw ) ) {
 			$plan['missing'][] = array(
 				'space' => 'spelling',
 				'id'    => 0,
@@ -810,6 +840,29 @@ final class AB_MCP_Sync_Refs {
 		$parser = new WP_Block_Parser();
 		self::embedded_blocks( $parser->parse( $text ), $out, 0 );
 		return $out;
+	}
+
+	/**
+	 * Where a shortcode or a tag stands across block delimiters in post
+	 * content (ACROSS_BLOCKS; a tag as the HTML API reads it as well, whose
+	 * quoted values may hold a ">"), or null.
+	 *
+	 * @param string $raw Post content as stored.
+	 * @return string|null shortcode@offset or tag@offset.
+	 */
+	private static function across_blocks( $raw ) {
+		if ( preg_match( self::ACROSS_BLOCKS, $raw, $m, PREG_OFFSET_CAPTURE ) ) {
+			return ( '[' === $m[0][0][0] ? 'shortcode@' : 'tag@' ) . (int) $m[0][1];
+		}
+		// The pattern stops at the first ">"; the HTML API ends a tag there
+		// as well, unless the ">" stands in a quoted value. Only then can a
+		// tag it reads hold a delimiter the pattern did not see.
+		if ( ! preg_match( '/=\s*(?:"[^"]*|\'[^\']*)>/', $raw ) || ! preg_match( self::DELIMITER_START, $raw ) ) {
+			return null;
+		}
+		require_once __DIR__ . '/class-sync-html.php';
+		$at = AB_MCP_Sync_Html::tag_holding( $raw, self::DELIMITER_START );
+		return null === $at ? null : 'tag@' . $at;
 	}
 
 	/**
@@ -1310,7 +1363,7 @@ final class AB_MCP_Sync_Refs {
 	 *
 	 * @param string $tag    Tag.
 	 * @param string $name   Attribute.
-	 * @param string $type   post_list or attachment_id.
+	 * @param string $type   post_list, post or attachment_id.
 	 * @param string $value  Decoded (shortcode_parse_atts()).
 	 * @param array  $stored The pairs of this name as stored: [ value, offset ].
 	 * @param array  $found  See shortcodes().
@@ -1341,18 +1394,27 @@ final class AB_MCP_Sync_Refs {
 
 	/**
 	 * The ids of a reference of SHORTCODES as the core reads them, by
-	 * AB_MCP_Sync_Canon::id_tokens(): the ids of gallery and playlist as
-	 * wp_parse_id_list() (both shortcodes pass them to get_posts() as
-	 * include, wp-includes/post.php:2650), the caption's id after
-	 * attachment_.
+	 * AB_MCP_Sync_Canon::id_tokens() and ::id_spelling(): a list as
+	 * wp_parse_id_list() splits it, one id as (int) reads all of it, the
+	 * caption's id after attachment_.
 	 *
-	 * @param string $type  post_list or attachment_id.
+	 * @param string $type  post_list, post or attachment_id.
 	 * @param string $value Decoded (shortcode_parse_atts()).
 	 * @return array<int,array{at:int,len:int,id:int|null}> Offsets in $value.
 	 */
 	private static function shortcode_ids( $type, $value ) {
 		if ( 'post_list' === $type ) {
 			return AB_MCP_Sync_Canon::id_tokens( $value, '/[\s,]+/' );
+		}
+		if ( 'post' === $type ) {
+			$id = AB_MCP_Sync_Canon::id_spelling( $value );
+			return 0 === $id ? array() : array(
+				array(
+					'at'  => 0,
+					'len' => strlen( $value ),
+					'id'  => $id,
+				),
+			);
 		}
 		if ( 0 !== strpos( $value, 'attachment_' ) ) {
 			return array();
