@@ -38,8 +38,12 @@ final class AB_MCP_Sync_Inventory {
 	 * @return array ctx, deadline.
 	 */
 	public static function source( array $addresses, $budget = self::BUDGET, $users = null ) {
+		// The permalinks of this site and its own addresses, from the rows
+		// (AB_MCP_Sync_Urls): what could not be read locks where it counts.
+		$row = AB_MCP_Sync_Rows::option( 'permalink_structure' );
+		$own = AB_MCP_Sync_Canon::own_addresses();
 		return array(
-			'ctx'      => AB_MCP_Sync_Canon::context( $addresses, $users ),
+			'ctx'      => AB_MCP_Sync_Canon::context( $addresses, $users, is_array( $row ) ? (string) $row['value'] : ( false === $row ? '' : null ), null === $own ? array() : $own ),
 			'deadline' => self::now() + max( 0, (float) $budget ),
 		);
 	}

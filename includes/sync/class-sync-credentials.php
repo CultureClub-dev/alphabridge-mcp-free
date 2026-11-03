@@ -72,15 +72,14 @@ final class AB_MCP_Sync_Credentials {
 	 */
 	const CODE_KEY = '/([A-Za-z_$][A-Za-z0-9_$\-]*)\s*:/';
 
+	/** The content of script and style: code (code()). */
+	const SCRIPT = '#<(?:script|style)\b[^>]*>(.*?)(?:</(?:script|style)\s*>|\z)#is';
+
 	/**
-	 * The code of a text of HTML: the content of script and style, the value
-	 * of an event attribute (on…), a javascript: address.
+	 * What makes the value of an attribute of a block or a shortcode code:
+	 * a brace, a parenthesis, a semicolon, "=>" or "=" between names.
 	 */
-	const CODE = array(
-		'#<(?:script|style)\b[^>]*>(.*?)(?:</(?:script|style)\s*>|\z)#is',
-		'#(?<![A-Za-z0-9_\-])on[a-z]+\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s>]+))#i',
-		'#javascript:([^"\'<>]*)#i',
-	);
+	const LOOKS_LIKE_CODE = '/[{(;]|=>|\w\s*=\s*\w/';
 
 	/** A tag of HTML with its attributes (a quoted value may hold a ">"). */
 	const TAG = '/<([A-Za-z][^\s\/>]*)((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>/';
@@ -130,10 +129,10 @@ final class AB_MCP_Sync_Credentials {
 	 * text as stored and as do_blocks() joins it (without its block
 	 * delimiters), each with the decodings of decodings(): in the spellings
 	 * of FLAT_KEYS; in code (the text itself where it is the value of an
-	 * attribute of a block or a shortcode, else code()) a name without
-	 * quotes before ":" as well (CODE_KEY); the name or id of a field of a
-	 * form with a value (form_fields()), a pair of name and value as a list
-	 * of them is.
+	 * attribute of a block or a shortcode and looks like code,
+	 * LOOKS_LIKE_CODE; else code()) a name without quotes before ":" as
+	 * well (CODE_KEY); the name or id of a field of a form with a value
+	 * (form_fields()), a pair of name and value as a list of them is.
 	 *
 	 * @param string   $text  Text as stored.
 	 * @param string[] $extra Extra names.
@@ -165,7 +164,7 @@ final class AB_MCP_Sync_Credentials {
 					$found = array_merge( $found, $m[1] );
 				}
 			}
-			foreach ( $code ? array( $variant ) : self::code( $variant ) as $segment ) {
+			foreach ( $code && preg_match( self::LOOKS_LIKE_CODE, $variant ) ? array( $variant ) : self::code( $variant ) as $segment ) {
 				foreach ( self::decodings( $segment ) as $one ) {
 					if ( preg_match_all( self::CODE_KEY, $one, $m ) ) {
 						$found = array_merge( $found, $m[1] );
@@ -184,51 +183,85 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * The code of a text of HTML (CODE).
+	 * The code of a text of HTML: the content of script and style, and of
+	 * every tag the whole value of an event attribute (on…) and of an
+	 * attribute that is a javascript: address, decoded as the browser reads
+	 * it.
 	 *
 	 * @param string $text Text.
 	 * @return string[]
 	 */
 	private static function code( $text ) {
-		$out = array();
-		foreach ( self::CODE as $pattern ) {
-			if ( preg_match_all( $pattern, $text, $m ) ) {
-				$out = array_merge( $out, $m[1] );
+		$out = preg_match_all( self::SCRIPT, $text, $m ) ? $m[1] : array();
+		foreach ( self::tags( $text ) as $tag ) {
+			foreach ( $tag['attrs'] as $attr ) {
+				if ( 0 === strpos( $attr[0], 'on' ) || preg_match( '/^\s*javascript:/i', $attr[1] ) ) {
+					$out[] = $attr[1];
+				}
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * The names of the fields of a form in a text of HTML that hold a value:
-	 * of a tag with a value that is not empty (content of a meta tag), every
-	 * name and id, their references decoded.
+	 * The names of the fields of a form in a text of HTML that hold a value,
+	 * every name and id of: a tag with a value that is not empty (content of
+	 * a meta tag), a textarea with a content, a select with an option
+	 * selected.
 	 *
 	 * @param string $text Text.
 	 * @return string[]
 	 */
 	private static function form_fields( $text ) {
-		if ( false === strpos( $text, '<' ) || ! preg_match_all( self::TAG, $text, $tags, PREG_SET_ORDER ) ) {
-			return array();
-		}
 		$out = array();
-		foreach ( $tags as $tag ) {
-			$value  = 'meta' === strtolower( $tag[1] ) ? 'content' : 'value';
+		foreach ( self::tags( $text ) as $tag ) {
+			$value  = 'meta' === $tag['name'] ? 'content' : 'value';
 			$names  = array();
 			$filled = false;
-			preg_match_all( self::ATTRIBUTE, $tag[2], $all, PREG_SET_ORDER );
-			foreach ( $all as $attr ) {
-				$name = strtolower( $attr[1] );
-				$text = html_entity_decode( isset( $attr[2] ) ? $attr[2] : '', ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' );
-				if ( 'name' === $name || 'id' === $name ) {
-					$names[] = $text;
-				} elseif ( $value === $name && '' !== $text ) {
+			foreach ( $tag['attrs'] as $attr ) {
+				if ( 'name' === $attr[0] || 'id' === $attr[0] ) {
+					$names[] = $attr[1];
+				} elseif ( $value === $attr[0] && '' !== $attr[1] ) {
 					$filled = true;
 				}
+			}
+			// Its content is the value of a textarea, its option of a select.
+			if ( 'textarea' === $tag['name'] || 'select' === $tag['name'] ) {
+				$rest   = (string) substr( $text, $tag['end'] );
+				$close  = stripos( $rest, '</' . $tag['name'] );
+				$inner  = false === $close ? $rest : substr( $rest, 0, $close );
+				$filled = 'textarea' === $tag['name'] ? '' !== trim( $inner ) : 1 === preg_match( '/<option\b[^>]*\sselected\b/i', $inner );
 			}
 			if ( $filled ) {
 				$out = array_merge( $out, $names );
 			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The tags of a text of HTML: each with its name (lower case), its
+	 * attributes (name in lower case, value decoded) and where it ends.
+	 *
+	 * @param string $text Text.
+	 * @return array<int,array{name:string,attrs:array<int,array{0:string,1:string}>,end:int}>
+	 */
+	private static function tags( $text ) {
+		if ( false === strpos( $text, '<' ) || ! preg_match_all( self::TAG, $text, $tags, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $tags as $tag ) {
+			$attrs = array();
+			preg_match_all( self::ATTRIBUTE, $tag[2][0], $all, PREG_SET_ORDER );
+			foreach ( $all as $attr ) {
+				$attrs[] = array( strtolower( $attr[1] ), html_entity_decode( isset( $attr[2] ) ? $attr[2] : '', ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8' ) );
+			}
+			$out[] = array(
+				'name'  => strtolower( $tag[1][0] ),
+				'attrs' => $attrs,
+				'end'   => (int) $tag[0][1] + strlen( $tag[0][0] ),
+			);
 		}
 		return $out;
 	}

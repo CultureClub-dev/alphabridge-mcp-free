@@ -44,6 +44,7 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/class-replace-engine.php';
 require_once __DIR__ . '/class-sync-kinds.php';
 require_once __DIR__ . '/class-sync-rows.php';
+require_once __DIR__ . '/class-sync-urls.php';
 
 /**
  * Class AB_MCP_Sync_Canon
@@ -103,23 +104,40 @@ final class AB_MCP_Sync_Canon {
 	 * @param callable|null $users     function( int $id ): string|false|null,
 	 *                                 the login; AB_MCP_Sync_Rows::user_login()
 	 *                                 when null.
+	 * @param string|null   $permalink The permalink structure of the site
+	 *                                 whose content is read, as stored (''
+	 *                                 for plain links); null where it could
+	 *                                 not be read (AB_MCP_Sync_Urls).
+	 * @param string[]|null $own       The addresses of that site, of
+	 *                                 $addresses; null: all of them.
 	 * @return array
 	 */
-	public static function context( array $addresses, $users = null ) {
-		$forms = array();
-		$sites = array();
+	public static function context( array $addresses, $users = null, $permalink = '', $own = null ) {
+		$forms  = array();
+		$owners = array();
+		$sites  = array();
+		$mine   = null === $own ? null : array_map(
+			static function ( $a ) {
+				return rtrim( trim( (string) $a ), '/' );
+			},
+			$own
+		);
 		foreach ( $addresses as $address ) {
 			$address = rtrim( trim( (string) $address ), '/' );
-			if ( ! preg_match( '#^https?://([^/\s]+)(.*)#i', $address, $parts ) ) {
+			if ( ! preg_match( '#^https?:(//([^/\s]+)(.*))#i', $address, $parts ) ) {
 				continue;
 			}
 			$sites[] = array(
-				'host' => strtolower( $parts[1] ),
-				'path' => $parts[2],
+				'host' => strtolower( $parts[2] ),
+				'path' => $parts[3],
 			);
-			foreach ( AB_MCP_Replace_Engine::needles( $address ) as $needle ) {
-				if ( ! isset( $forms[ $needle['needle'] ] ) ) {
-					$forms[ $needle['needle'] ] = $needle['form'];
+			// With its scheme and without it ("//host/path").
+			foreach ( array( $address, $parts[1] ) as $spelling ) {
+				foreach ( AB_MCP_Replace_Engine::needles( $spelling ) as $needle ) {
+					if ( ! isset( $forms[ $needle['needle'] ] ) ) {
+						$forms[ $needle['needle'] ] = $needle['form'];
+					}
+					$owners[ $needle['needle'] ] = ( isset( $owners[ $needle['needle'] ] ) && $owners[ $needle['needle'] ] ) || null === $mine || in_array( $address, $mine, true );
 				}
 			}
 		}
@@ -135,10 +153,13 @@ final class AB_MCP_Sync_Canon {
 			$alts[] = preg_quote( (string) $needle, '#' );
 		}
 		return array(
-			'pattern' => array() === $alts ? '' : '#(?:' . implode( '|', $alts ) . ')' . self::BOUNDARY . '#',
-			'forms'   => $forms,
-			'sites'   => $sites,
-			'users'   => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
+			'pattern'   => array() === $alts ? '' : '#(?:' . implode( '|', $alts ) . ')' . self::BOUNDARY . '#',
+			'forms'     => $forms,
+			'owners'    => $owners,
+			'sites'     => $sites,
+			'one_root'  => count( array_unique( array_column( $sites, 'path' ) ) ) <= 1,
+			'permalink' => $permalink,
+			'users'     => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
 		);
 	}
 
@@ -370,159 +391,6 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
-	 * The query variables WP_Query reads as ids, of those WP takes from an
-	 * address (WP::$public_query_vars, wp-includes/class-wp.php:18): p
-	 * ((int), class-wp-query.php:831-836, :2247), page_id (absint(), :839),
-	 * attachment_id and subpost_id (absint(), :885-889, :2241-2242), cat (a
-	 * list of terms, :846, :1247) and author (a list of users, :847,
-	 * :2398-2400). tag_id and the other private ones are no part of an
-	 * address.
-	 */
-	const QUERY_IDS = array(
-		'p'             => 'post',
-		'page_id'       => 'post',
-		'attachment_id' => 'post',
-		'subpost_id'    => 'post',
-		'cat'           => 'term',
-		'author'        => 'user',
-	);
-
-	/** The variables of QUERY_IDS that hold a list, split as WP_Query splits them (preg_split( '/[,\s]+/' )). */
-	const QUERY_LISTS = array( 'cat', 'author' );
-
-	/**
-	 * An attribute of HTML whose value is an address the browser resolves
-	 * against the page, with the offset of its value.
-	 */
-	const URL_ATTRIBUTE = '/(?<![A-Za-z0-9_:\-])(?:href|src|action|formaction|cite|poster|data|background)\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))/i';
-
-	/**
-	 * Where the path and query of an address of the sites begin in a text:
-	 * after each address of the context (address_cuts()), and at the value
-	 * of an attribute of an address (URL_ATTRIBUTE) that the browser
-	 * resolves to one without its host (own_relative()).
-	 *
-	 * @param string $text      Text.
-	 * @param array  $ctx       Context.
-	 * @param array  $addresses address_cuts() of the text.
-	 * @return int[]
-	 */
-	public static function query_starts( $text, array $ctx, array $addresses ) {
-		$out = array();
-		foreach ( $addresses as $address ) {
-			$out[] = $address['at'] + $address['len'];
-		}
-		if ( preg_match_all( self::URL_ATTRIBUTE, $text, $m, PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $m[1] as $value ) {
-				if ( self::own_relative( $value[0], $ctx ) ) {
-					$out[] = (int) $value[1];
-				}
-			}
-		}
-		return $out;
-	}
-
-	/**
-	 * Whether an address without its host is one of the sites as the
-	 * browser resolves it: with a path from the root ("/…", not "//") only
-	 * under the path of a site's address (an install in a folder); "//host…"
-	 * only with the host of a site and a path under its path; relative to
-	 * the page ("?p=", "./", "index.php") always, the page being one of the
-	 * site. An address with a scheme is none (address_cuts() reads the
-	 * sites' own); a fragment holds no query (query_ids() stops at "#").
-	 *
-	 * @param string $value The value of an attribute, as stored.
-	 * @param array  $ctx   Context.
-	 * @return bool
-	 */
-	private static function own_relative( $value, array $ctx ) {
-		if ( preg_match( '#^[A-Za-z][A-Za-z0-9+.\-]*:#', $value ) ) {
-			return false;
-		}
-		$sites = isset( $ctx['sites'] ) ? $ctx['sites'] : array();
-		if ( 0 === strpos( $value, '//' ) ) {
-			preg_match( '#^//([^/?\#\\\\]*)(.*)#s', $value, $parts );
-			foreach ( $sites as $site ) {
-				if ( strtolower( $parts[1] ) === $site['host'] && self::under( $parts[2], $site['path'] ) ) {
-					return true;
-				}
-			}
-			return false;
-		}
-		if ( 0 === strpos( $value, '/' ) ) {
-			foreach ( $sites as $site ) {
-				if ( self::under( $value, $site['path'] ) ) {
-					return true;
-				}
-			}
-			return false;
-		}
-		return true;
-	}
-
-	/**
-	 * Whether a path from the root, with its query, lies under the path of a
-	 * site: the path, then "/" or the query (a path without a query holds no
-	 * id of query_ids()).
-	 *
-	 * @param string $path Path and query.
-	 * @param string $base The path of the site ('' at the root).
-	 * @return bool
-	 */
-	private static function under( $path, $base ) {
-		return 1 === preg_match( '#^' . preg_quote( $base, '#' ) . '[/?]#', $path );
-	}
-
-	/**
-	 * The ids in the query of an address, which ends at $end in a text: its
-	 * path and its query in the encodings of the forms of an address (a
-	 * slash also as \/ of JSON, "&" also as &amp;, &#038; and &), each
-	 * value of QUERY_IDS with id_spelling() (a list as id_tokens() splits
-	 * it); values that hold no id are left out.
-	 *
-	 * @param string $text Text.
-	 * @param int    $end  Where the address ends.
-	 * @return array<int,array{at:int,len:int,space:string,id:int|null,var:string}>
-	 */
-	public static function query_ids( $text, $end ) {
-		$text = (string) $text;
-		if ( ! preg_match( '#\G(?:\\\\/|[^\s"\'<>?\#\\\\])*\?#', $text, $m, 0, $end ) ) {
-			return array();
-		}
-		$pos = $end + strlen( $m[0] );
-		$out = array();
-		while ( preg_match( '/\G([^\s"\'<>#&=\\\\]*)(?:=([^\s"\'<>#&\\\\]*))?/', $text, $pair, PREG_OFFSET_CAPTURE, $pos ) ) {
-			$name = $pair[1][0];
-			if ( isset( self::QUERY_IDS[ $name ], $pair[2] ) && -1 !== $pair[2][1] ) {
-				$value = $pair[2][0];
-				$id    = self::id_spelling( $value );
-				$ids   = in_array( $name, self::QUERY_LISTS, true ) ? self::id_tokens( $value, '/[,\s]+/' ) : ( 0 === $id ? array() : array(
-					array(
-						'at'  => 0,
-						'len' => strlen( $value ),
-						'id'  => $id,
-					),
-				) );
-				foreach ( $ids as $one ) {
-					$out[] = array(
-						'at'    => (int) $pair[2][1] + $one['at'],
-						'len'   => $one['len'],
-						'space' => self::QUERY_IDS[ $name ],
-						'id'    => $one['id'],
-						'var'   => $name,
-					);
-				}
-			}
-			$pos += strlen( $pair[0][0] );
-			if ( ! preg_match( '/\G(?:&amp;|&#0*38;|&#x0*26;|\\\\u0026(?:amp;)?|&)/i', $text, $sep, 0, $pos ) ) {
-				break;
-			}
-			$pos += strlen( $sep[0] );
-		}
-		return $out;
-	}
-
-	/**
 	 * A reference to a user, by login (the identity of an author on both
 	 * sides, decision 25).
 	 *
@@ -576,54 +444,53 @@ final class AB_MCP_Sync_Canon {
 	 * A text: as it is, or {"~s":[…]} with the addresses neutral and the
 	 * given cuts replaced by their markers.
 	 *
-	 * The ids in the query of an address of the sites (query_starts(),
-	 * query_ids(): the short links of WordPress, ?p=, ?page_id=, ?cat=,
-	 * ?author= …, with the host or without it) are references, noted in
-	 * $acc; one in another spelling locks the object.
+	 * The ids the addresses of the sites name (AB_MCP_Sync_Urls::ids(): the
+	 * short links of WordPress, ?p=, ?page_id=, ?cat=, ?author= …, and the
+	 * %post_id% of the permalinks) are references, noted in $acc; one in a
+	 * form that is not rewritten locks the object.
 	 *
-	 * @param string     $text Text.
-	 * @param array      $ctx  Context.
-	 * @param array      $cuts Cuts of the caller: at (byte offset), len, marker.
-	 * @param array|null $acc  Accumulator for the references of the queries.
-	 * @param string     $at   Where the text stands.
+	 * @param string     $text  Text.
+	 * @param array      $ctx   Context.
+	 * @param array      $cuts  Cuts of the caller: at (byte offset), len, marker.
+	 * @param array|null $acc   Accumulator for the references of the addresses.
+	 * @param string     $at    Where the text stands.
+	 * @param bool       $whole The whole text is an address.
 	 * @return string|array
 	 */
-	public static function text( $text, array $ctx, array $cuts = array(), &$acc = null, $at = '' ) {
+	public static function text( $text, array $ctx, array $cuts = array(), &$acc = null, $at = '', $whole = false ) {
 		$text      = (string) $text;
 		$addresses = self::address_cuts( $text, $ctx );
 		$theirs    = $cuts;
 		$cuts      = array_merge( $cuts, $addresses );
 		$acc       = is_array( $acc ) ? $acc : self::acc();
-		foreach ( self::query_starts( $text, $ctx, $addresses ) as $start ) {
-			foreach ( self::query_ids( $text, $start ) as $query ) {
-				// In a cut of the caller (a tag with its own form) it is read there.
-				foreach ( $theirs as $cut ) {
-					if ( $query['at'] >= $cut['at'] && $query['at'] < $cut['at'] + $cut['len'] ) {
-						continue 2;
-					}
+		foreach ( AB_MCP_Sync_Urls::ids( $text, $ctx, $addresses, $whole ) as $query ) {
+			// In a cut of the caller (a tag with its own form) it is read there.
+			foreach ( $theirs as $cut ) {
+				if ( $query['at'] >= $cut['at'] && $query['at'] < $cut['at'] + $cut['len'] ) {
+					continue 2;
 				}
-				$where = $at . '?' . $query['var'];
-				if ( null === $query['id'] ) {
-					self::spelling( $acc, $where );
-					continue;
-				}
-				if ( 'user' === $query['space'] ) {
-					$marker = self::user( $query['id'], $ctx, $acc, $where );
-				} else {
-					$acc['refs'][] = array(
-						'space'    => $query['space'],
-						'id'       => $query['id'],
-						'at'       => $where,
-						'strength' => 'strong',
-					);
-					$marker        = self::ref( $query['space'], $query['id'] );
-				}
-				$cuts[] = array(
-					'at'     => $query['at'],
-					'len'    => $query['len'],
-					'marker' => $marker,
-				);
 			}
+			$where = $at . $query['what'];
+			if ( null === $query['id'] ) {
+				self::spelling( $acc, $where );
+				continue;
+			}
+			if ( 'user' === $query['space'] ) {
+				$marker = self::user( $query['id'], $ctx, $acc, $where );
+			} else {
+				$acc['refs'][] = array(
+					'space'    => $query['space'],
+					'id'       => $query['id'],
+					'at'       => $where,
+					'strength' => 'strong',
+				);
+				$marker        = self::ref( $query['space'], $query['id'] );
+			}
+			$cuts[] = array(
+				'at'     => $query['at'],
+				'len'    => $query['len'],
+				'marker' => $marker,
+			);
 		}
 		if ( array() === $cuts ) {
 			return $text;

@@ -183,6 +183,25 @@ final class SyncHtmlRefsTest extends TestCase {
 		}
 	}
 
+	public function testAnIdBesideACharacterReferenceLocks(): void {
+		// Codex, round 9: the HTML API reads ?p=12 of ?p=1&#50;, a pattern 1.
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => array( 1 => 10, 12 => 120 ) ), array( 'https://staging.test' => 'https://www.live.test' ) );
+		foreach ( array(
+			'<p><a href="https://staging.test/?p=1&#50;">x</a></p>',
+			'<p><a href="https://staging.test/?p=&#49;&#50;">x</a></p>',
+			'<p><a href="/?p&#61;12">x</a></p>',
+			'<p><a href="/?&#112;=12">x</a></p>',
+		) as $content ) {
+			list( $refs, , $acc ) = self::scan( $content );
+			self::assertSame( array(), $refs, $content );
+			self::assertSame( array( 'c:html?p' ), $acc['spelling'], $content );
+			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $content, $plan )['missing'], 'space' ), $content );
+		}
+		// The query only decoded: "&#63;" is the "?" the browser reads.
+		list( $refs, , $acc ) = self::scan( '<p><a href="https://staging.test/&#63;p=12">x</a></p>' );
+		self::assertSame( array( array(), array( 'c:html?' ) ), array( $refs, $acc['spelling'] ) );
+	}
+
 	public function testSeveralImagesLockInTheOrderOfTheText(): void {
 		$content = '<p><img src="https://cdn.test/wp-image-5.jpg"><img class="wp&#45;image-12"></p>';
 		list( , , $acc ) = self::scan( $content );

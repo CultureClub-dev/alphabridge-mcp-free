@@ -387,6 +387,31 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( array( 'nav_menu', 'media_image', 'acme_box' ), array_column( $area['form']['instances'], 'base' ) );
 	}
 
+	public function testTheAddressOfACustomMenuItemNamesItsId(): void {
+		// Codex, round 9: _menu_item_url "/?p=<id>" opens that post.
+		$page = self::post( '<!-- wp:paragraph --><p>Ziel</p><!-- /wp:paragraph -->' );
+		$menu = wp_create_nav_menu( 'Kurzlinks' );
+		$root = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Beitrag', 'menu-item-url' => '/?p=' . $page, 'menu-item-status' => 'publish' ) );
+		$item = self::canon( 'menu_item', $root );
+		self::assertContains( array( 'post', $page, 'meta:_menu_item_url?p' ), array_map( static fn( $r ) => array( $r['space'], $r['id'], $r['at'] ), $item['refs'] ) );
+		self::assertSame( array(), $item['locks'] );
+		// Relative to the page: it locks.
+		$page_rel = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Hier', 'menu-item-url' => '?p=' . $page, 'menu-item-status' => 'publish' ) );
+		self::assertContains( array( '*:reference_spelling', 'meta:_menu_item_url?p' ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), self::canon( 'menu_item', $page_rel )['locks'] ) );
+	}
+
+	public function testThePermalinksAndTheOwnAddressesOfTheSiteDecide(): void {
+		// From the rows of this site: the structure "Numeric" and its own address.
+		update_option( 'permalink_structure', '/archives/%post_id%' );
+		$target = self::post( '<!-- wp:paragraph --><p>Ziel</p><!-- /wp:paragraph -->' );
+		$page   = self::post( '<!-- wp:paragraph --><p><a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $target . '">x</a> <a href="' . AB_MCP_IT_Sites::url( 'b' ) . '/?p=5">y</a></p><!-- /wp:paragraph -->' );
+		$result = self::canon( 'post', $page );
+		self::assertContains( $target, array_column( array_filter( $result['refs'], static fn( $r ) => 'post' === $r['space'] ), 'id' ), 'The id of the own permalink.' );
+		$spelling = array_column( array_filter( $result['locks'], static fn( $l ) => '*:reference_spelling' === $l['key'] ), 'at' );
+		self::assertCount( 1, $spelling, 'The id of an address of the other site: ' . implode( ', ', $spelling ) );
+		self::assertStringEndsWith( '?p', $spelling[0] );
+	}
+
 	public function testAnIdOfARowInAnotherSpellingLocks(): void {
 		// (int) and absint() read 12 from each; only 12 is rewritten.
 		$locks = static function ( array $result ): array {

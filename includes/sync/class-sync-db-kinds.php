@@ -854,6 +854,9 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 	 */
 	public static function item_meta( $key, $raw, $type, $id, array $ctx, array &$acc ) {
 		switch ( $key ) {
+			case '_menu_item_url':
+				// The whole value is an address (AB_MCP_Sync_Urls).
+				return AB_MCP_Sync_Canon::text( $raw, $ctx, array(), $acc, 'meta:' . $key, true );
 			case '_menu_item_menu_item_parent':
 				return self::id_ref( 'post', $raw, $acc, 'meta:' . $key );
 			case '_menu_item_object_id':

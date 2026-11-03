@@ -21,9 +21,10 @@
  * - the fields of the kinds' own rows (menu item meta by _menu_item_type,
  *   core options, menu positions, the core widgets with ids: the kinds and
  *   WIDGETS here);
- * - the addresses of the sites, in every form of the replace engine, and
- *   the ids of their short links (?p=, ?page_id=, ?attachment_id=, ?cat=,
- *   ?author=: AB_MCP_Sync_Canon::query_ids());
+ * - the addresses of the sites, in every form of the replace engine, with
+ *   their scheme or without it, and the ids they name (short links, the
+ *   %post_id% of the permalinks), on the short list of safe forms of
+ *   AB_MCP_Sync_Urls; every other form of such an id locks;
  * Blocks are read with the core's WP_Block_Parser (what parse_blocks()
  * runs, without the filter block_parser_class that would let a plugin
  * replace it) and written back with serialize_blocks().
@@ -440,18 +441,29 @@ final class AB_MCP_Sync_Refs {
 	 * @param array $map       space (post, term) => array( id here => id
 	 *                         there ); user => array( user id here => user
 	 *                         id there ).
-	 * @param array $addresses address here => address there (home => home,
-	 *                         siteurl => siteurl).
+	 * @param array       $addresses address here => address there (home =>
+	 *                               home, siteurl => siteurl).
+	 * @param string|null $permalink The permalink structure of the site
+	 *                               whose content is rewritten
+	 *                               (AB_MCP_Sync_Canon::context()).
 	 * @return array
 	 */
-	public static function plan( array $map, array $addresses ) {
-		$subs = array();
+	public static function plan( array $map, array $addresses, $permalink = '' ) {
+		$subs  = array();
+		$pairs = array();
 		foreach ( $addresses as $from => $to ) {
 			$from = rtrim( trim( (string) $from ), '/' );
 			$to   = rtrim( trim( (string) $to ), '/' );
 			if ( '' === $from || '' === $to ) {
 				continue;
 			}
+			$pairs[ $from ] = $to;
+			// Without the scheme as well: the host of "//host/…" is replaced.
+			if ( preg_match( '#^https?:(//.+)#i', $from, $f ) && preg_match( '#^https?:(//.+)#i', $to, $t ) ) {
+				$pairs[ $f[1] ] = $t[1];
+			}
+		}
+		foreach ( $pairs as $from => $to ) {
 			foreach ( AB_MCP_Replace_Engine::FORMS as $form ) {
 				$needle = AB_MCP_Replace_Engine::encode( $form, $from );
 				if ( '' !== $needle && ! isset( $subs[ $needle ] ) ) {
@@ -459,9 +471,15 @@ final class AB_MCP_Sync_Refs {
 				}
 			}
 		}
-		$ctx            = AB_MCP_Sync_Canon::context( array_keys( $addresses ), static function () {
-			return false;
-		} );
+		$ctx             = AB_MCP_Sync_Canon::context(
+			array_keys( $addresses ),
+			static function () {
+				return false;
+			},
+			$permalink
+		);
+		// From the root, an address is rewritten only where both sides share it.
+		$ctx['one_root'] = count( array_unique( array_column( AB_MCP_Sync_Canon::context( array_merge( array_keys( $addresses ), array_values( $addresses ) ) )['sites'], 'path' ) ) ) <= 1;
 		$ctx['subs']    = $subs;
 		$ctx['map']     = $map;
 		$ctx['missing'] = array();
@@ -507,9 +525,10 @@ final class AB_MCP_Sync_Refs {
 	 * @param array  $plan    plan(), with 'missing' collected.
 	 * @param array  $cuts    Ref cuts: at, len, space, id.
 	 * @param bool   $changed Set when anything changed.
+	 * @param bool   $whole   The whole text is an address.
 	 * @return string
 	 */
-	public static function rewrite_text( $text, array &$plan, array $cuts, &$changed ) {
+	public static function rewrite_text( $text, array &$plan, array $cuts, &$changed, $whole = false ) {
 		$text      = (string) $text;
 		$all       = array();
 		$addresses = AB_MCP_Sync_Canon::address_cuts( $text, $plan );
@@ -519,21 +538,19 @@ final class AB_MCP_Sync_Refs {
 				$all[] = array( 'at' => $cut['at'], 'len' => $cut['len'], 'with' => $plan['subs'][ $hit ] );
 			}
 		}
-		// The ids of the queries of the sites' addresses (a short link: ?p=,
-		// ?cat= …, with the host or without it).
-		foreach ( AB_MCP_Sync_Canon::query_starts( $text, $plan, $addresses ) as $start ) {
-			foreach ( AB_MCP_Sync_Canon::query_ids( $text, $start ) as $query ) {
-				if ( null === $query['id'] ) {
-					$plan['missing'][] = array(
-						'space' => 'spelling',
-						'id'    => 0,
-					);
-					continue;
-				}
-				$id = self::mapped_id( $plan, $query['space'], $query['id'] );
-				if ( null !== $id ) {
-					$all[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => (string) $id );
-				}
+		// The ids the sites' addresses name (AB_MCP_Sync_Urls), in their safe
+		// forms; every other form writes nothing.
+		foreach ( AB_MCP_Sync_Urls::ids( $text, $plan, $addresses, $whole ) as $query ) {
+			if ( null === $query['id'] ) {
+				$plan['missing'][] = array(
+					'space' => 'spelling',
+					'id'    => 0,
+				);
+				continue;
+			}
+			$id = self::mapped_id( $plan, $query['space'], $query['id'] );
+			if ( null !== $id ) {
+				$all[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => (string) $id );
 			}
 		}
 		foreach ( $cuts as $cut ) {
@@ -719,6 +736,9 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function rewrite_menu_item_meta( $key, $raw, $type, $self, array &$plan, &$changed ) {
 		$raw = (string) $raw;
+		if ( '_menu_item_url' === $key ) {
+			return self::rewrite_text( $raw, $plan, array(), $changed, true );
+		}
 		if ( '_menu_item_menu_item_parent' === $key ) {
 			return (string) self::rewrite_id( 'post', $raw, $plan, $changed );
 		}
@@ -1151,7 +1171,7 @@ final class AB_MCP_Sync_Refs {
 		if ( ! self::is_plain( $block, $path ) ) {
 			self::note_possible( $acc, $value, $at . '.' . $path );
 		}
-		return is_string( $value ) ? AB_MCP_Sync_Canon::text( $value, $ctx, array(), $acc, $at . '.' . $path ) : $value;
+		return is_string( $value ) ? AB_MCP_Sync_Canon::text( $value, $ctx, array(), $acc, $at . '.' . $path, self::is_address( $path, $value ) ) : $value;
 	}
 
 	/**
@@ -1709,7 +1729,21 @@ final class AB_MCP_Sync_Refs {
 			}
 			return $value;
 		}
-		return is_string( $value ) ? self::rewrite_text( $value, $plan, array(), $changed ) : $value;
+		return is_string( $value ) ? self::rewrite_text( $value, $plan, array(), $changed, self::is_address( (string) $path, $value ) ) : $value;
+	}
+
+	/**
+	 * Whether an attribute of a block holds an address: by its name (url,
+	 * href, link, src, or a name ending so) or by its value (beginning with
+	 * http, //, /, ? or ./).
+	 *
+	 * @param string $path  Path in the attributes.
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	private static function is_address( $path, $value ) {
+		$name = (string) substr( (string) strrchr( '.' . $path, '.' ), 1 );
+		return 1 === preg_match( '/^(?:url|href|link|src)\z|(?:Url|URL|Href|Link|Src)\z/', $name ) || 1 === preg_match( '#^(?:https?:|//|/|\?|\./)#i', (string) $value );
 	}
 
 	/**
