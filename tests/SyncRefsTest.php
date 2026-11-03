@@ -750,6 +750,20 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'] );
 	}
 
+	public function testWithoutAStructureGivenThePermalinksAreUnknown(): void {
+		// Not given is not known: only the structure of the row, given, reads
+		// the path exactly; without it a segment of digits locks.
+		$content = '<p><a href="https://staging.test/archives/12">x</a></p>';
+		$acc     = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::content( $content, AB_MCP_Sync_Canon::context( array( 'https://staging.test' ) ), $acc, 'post', 'c' );
+		self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'] );
+		$addresses = array( 'https://staging.test' => 'https://www.live.test' );
+		self::assertSame( array( 'spelling' ), array_column( AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array(), $addresses ) )['missing'], 'space' ) );
+		// Plain links, given: the path names no id.
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array(), $addresses, '' ) );
+		self::assertSame( array( '<p><a href="https://www.live.test/archives/12">x</a></p>', array() ), array( $out['content'], $out['missing'] ) );
+	}
+
 	public function testTheAddressOfACustomMenuItemIsOne(): void {
 		// Codex, round 9: _menu_item_url "/?p=12".
 		$plan    = self::plan();

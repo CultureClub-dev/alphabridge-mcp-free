@@ -105,14 +105,17 @@ final class AB_MCP_Sync_Canon {
 	 *                                 the login; AB_MCP_Sync_Rows::user_login()
 	 *                                 when null.
 	 * @param string|null   $permalink The permalink structure of the site
-	 *                                 whose content is read, as stored (''
-	 *                                 for plain links); null where it could
-	 *                                 not be read (AB_MCP_Sync_Urls).
+	 *                                 whose content is read, as its row
+	 *                                 holds it ('' for plain links); null,
+	 *                                 the default, where it is not known:
+	 *                                 then a segment of digits in an
+	 *                                 address of the sites locks
+	 *                                 (AB_MCP_Sync_Urls).
 	 * @param string[]|null $own       The addresses of that site, of
 	 *                                 $addresses; null: all of them.
 	 * @return array
 	 */
-	public static function context( array $addresses, $users = null, $permalink = '', $own = null ) {
+	public static function context( array $addresses, $users = null, $permalink = null, $own = null ) {
 		$forms  = array();
 		$owners = array();
 		$sites  = array();

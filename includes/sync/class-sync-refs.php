@@ -444,11 +444,13 @@ final class AB_MCP_Sync_Refs {
 	 * @param array       $addresses address here => address there (home =>
 	 *                               home, siteurl => siteurl).
 	 * @param string|null $permalink The permalink structure of the site
-	 *                               whose content is rewritten
+	 *                               whose content is rewritten, as its row
+	 *                               holds it; null, the default, where it
+	 *                               is not known
 	 *                               (AB_MCP_Sync_Canon::context()).
 	 * @return array
 	 */
-	public static function plan( array $map, array $addresses, $permalink = '' ) {
+	public static function plan( array $map, array $addresses, $permalink = null ) {
 		$subs  = array();
 		$pairs = array();
 		foreach ( $addresses as $from => $to ) {

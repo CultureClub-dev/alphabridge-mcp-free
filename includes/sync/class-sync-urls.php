@@ -323,11 +323,11 @@ final class AB_MCP_Sync_Urls {
 	 * @param bool   $safe Whether the form of the address is rewritten.
 	 * @param bool   $page The path is relative to the page.
 	 * @param array  $ctx  Context: permalink, the structure of the site
-	 *                     (null where it could not be read).
+	 *                     (null or missing where it is not known).
 	 * @return array See ids().
 	 */
 	private static function path_ids( $path, $at, $safe, $page, array $ctx ) {
-		$structure = array_key_exists( 'permalink', $ctx ) ? $ctx['permalink'] : '';
+		$structure = isset( $ctx['permalink'] ) ? $ctx['permalink'] : null;
 		$lock      = array(
 			array(
 				'at'    => $at,
