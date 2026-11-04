@@ -239,6 +239,7 @@ final class SyncKindsTest extends TestCase {
 			'*:possible_reference'         => array( $all, 'possible_reference', 'Z8d' ),
 			'*:reference_spelling'         => array( $all, 'reference_spelling', 'Z8d' ),
 			'*:credential_field'           => array( $all, 'credential_field', 'Z8d' ),
+			'*:script'                     => array( $all, 'script', 'Z8d' ),
 			'attachment:missing_file'      => array( array( 'attachment' ), 'missing_file', 'Z8b' ),
 			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),

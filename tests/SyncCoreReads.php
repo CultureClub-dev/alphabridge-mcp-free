@@ -82,12 +82,10 @@ trait SyncCoreReads {
 			'a percent escape'      => array( 'https://example.test/?api%5Fkey=x' ),
 			'a JSON escape'         => array( '{"x":"{\\"client_secret\\":1}"}' ),
 			'a JSON unicode escape' => array( '<!-- wp:acme/box {"\\u0061pi_key":"x"} /-->' ),
-			'single quotes'         => array( "<script>var o = { 'access_token': 'x' };</script>" ),
 			'single quotes in a text' => array( "Konfiguration {'client_secret': 'x'}" ),
 			'escaped JSON in a comment' => array( '<!-- {\\"api_key\\":1} -->' ),
 			'capitals'              => array( 'PASSWORD = "x"' ),
 			'JSON in a comment'     => array( '<!-- {"api_key":"x"} -->' ),
-			'escaped JSON in a script' => array( '<script>var c = "{\\"api_key\\": 1}";</script>' ),
 			'unicode in a comment'  => array( '<!-- {"\\u0061pi_key":"x"} -->' ),
 			// Neither = nor : as stored, only decoded.
 			'an encoded equals'     => array( '/?api_key%3Dx' ),
@@ -97,8 +95,13 @@ trait SyncCoreReads {
 			'a key split by a block' => array( '[acme api_<!-- wp:paragraph /-->key="example-only"]' ),
 			'a key split by two delimiters' => array( '[acme to<!-- wp:paragraph -->ken="x"<!-- /wp:paragraph -->]' ),
 			// Codex, round 8: a name without quotes in code.
-			'an object in a script'   => array( '<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' ),
 			'a property in a style'   => array( '<style>.x { --api-key: abc; }</style>' ),
+			// Codex, round 13: a script of JSON is read as JSON.
+			'a key in JSON-LD'        => array( '<script type="application/ld+json">{"@type":"Thing","api_key":"x"}</script>' ),
+			'a key in a JSON string in JSON-LD' => array( '<script type="application/json">{"a":"{\\"token\\":1}"}</script>' ),
+			'a word in an event attribute' => array( "<button onclick=\"cfg['api_key']=1\">Los</button>" ),
+			'a part of a word in an event attribute' => array( "<button onclick=\"open('password-reset')\">Los</button>" ),
+			'an escaped word in a javascript: address' => array( "<a href=\"javascript:x('api%5Fkey')\">x</a>" ),
 			'an event attribute'      => array( '<button onclick="init({secret: 1})">Los</button>' ),
 			'a javascript: address'   => array( '<a href="javascript:login({password: 1})">x</a>' ),
 			'a shortcode attribute'   => array( '[acme config="{token: 1}"]' ),
@@ -133,6 +136,32 @@ trait SyncCoreReads {
 		);
 	}
 
+	public static function scripts(): array {
+		return array(
+			// Codex, round 13 (A2): JavaScript no parser reads locks the unit.
+			'a key in brackets'       => array( '<script>window.config = {}; window.config["api_key"] = "demo-secret";</script>' ),
+			'single quotes'           => array( "<script>var o = { 'access_token': 'x' };</script>" ),
+			'escaped JSON in a script' => array( '<script>var c = "{\\"api_key\\": 1}";</script>' ),
+			'an object in a script'   => array( '<script>window.service = {apiKey: "EXAMPLE_SECRET"};</script>' ),
+			'an address in a script'  => array( '<script>location.href="/?p=12";</script>' ),
+			'an escaped id in a script' => array( '<script>const u="https://staging.test/archives/\\u0031\\u0032/";</script>' ),
+			'a script embed'          => array( '<script src="https://cdn.test/app.js"></script><p>Kontakt: info</p>' ),
+			'a script without = or :' => array( '<script>alert(1)</script>' ),
+			'a module'                => array( '<script type="module">import a from "./a.js";</script>' ),
+			'a JavaScript type'       => array( '<script type="text/javascript; charset=utf-8">x()</script>' ),
+			'an old language'         => array( '<script language="JavaScript">x()</script>' ),
+			// A script of JSON that is no JSON, or nested deeper than read.
+			'JSON-LD not JSON'        => array( '<script type="application/ld+json">{"url": /?p=12}</script>', 'unreadable_value' ),
+			'JSON-LD too deep'        => array( '<script type="application/ld+json">' . str_repeat( '[', 70 ) . str_repeat( ']', 70 ) . '</script>', 'unreadable_value' ),
+		);
+	}
+
+	#[DataProvider( 'scripts' )]
+	public function testAScriptOfJavaScriptLocksTheUnit( string $text, string $why = 'script' ): void {
+		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
+		self::assertSame( array( 'unreadable', self::core() ? $why : 'unreadable_value' ), array( $check['state'], $check['why'] ?? null ), (string) json_encode( $check ) );
+	}
+
 	#[DataProvider( 'credentialKeys' )]
 	public function testEveryKeyOfACredentialInAnySpellingLocks( string $text ): void {
 		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
@@ -153,7 +182,6 @@ trait SyncCoreReads {
 			'prose'                     => array( 'Das Passwort: geheim. Die Seite = gut.' ),
 			'a name before ":" in prose' => array( '<p>Das password: geheim, der Token: 123.</p>' ),
 			'prose in a shortcode'      => array( '[acme_note]Ihr secret: bleibt hier.[/acme_note]' ),
-			'a script without code'     => array( '<script src="app.js"></script><p>Kontakt: info</p>' ),
 			// Codex, round 9: a label of a block, prose in a shortcode attribute.
 			'a label of a block'        => array( '<!-- wp:navigation-link {"label":"Password: reset","kind":"custom","url":"/help/"} /-->' ),
 			'prose in an attribute'     => array( '[acme_button label="Token: anfordern"]' ),
@@ -162,6 +190,10 @@ trait SyncCoreReads {
 			'an attribute with parentheses' => array( '[acme_button label="Token: anfordern (kostenlos)"]' ),
 			'an attribute with a semicolon' => array( '[acme_note text="Secret: siehe Hilfe; danke (2026)"]' ),
 			'a block attribute with an equals' => array( '<!-- wp:acme/x {"hint":"Token: a = b (Beispiel)"} /-->' ),
+			// Codex, round 13: JSON-LD and data blocks are no JavaScript.
+			'JSON-LD with an address' => array( '<script type="application/ld+json">{"@type":"Article","url":"https://staging.test/?p=12"}</script>' ),
+			'a template'                => array( '<script type="text/template"><p>{{ token }}</p></script>' ),
+			'an event attribute'        => array( '<button onclick="toggle(this)">Mehr</button>' ),
 			// A tag written as text is none: the browser parses the stored text once.
 			'an escaped tag'            => array( '&lt;input name="api_key"&gt;' ),
 			// Only the fields of a form: an anchor or a box of that name is none.
@@ -193,11 +225,14 @@ trait SyncCoreReads {
 			'in a block attribute' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/?attachment_id=12"} /-->', array( 'post:12@c:acme/x.u?attachment_id' ), '<!-- wp:acme/x {"u":"https://www.live.test/?attachment_id=120"} /-->' ),
 			'subpost_id'           => array( 'Siehe https://staging.test/?subpost_id=12 hier', array( 'post:12@c:html?subpost_id' ), 'Siehe https://www.live.test/?subpost_id=120 hier' ),
 			// Codex, round 11 (3): the content of script and textarea is text.
-			'in a script'          => array( '<script type="application/ld+json">{"url":"https://staging.test/?p=12"}</script>', array( 'post:12@c:html?p' ), '<script type="application/ld+json">{"url":"https://www.live.test/?p=120"}</script>' ),
+			'in a script'          => array( '<script type="application/ld+json">{"position":"2","url":"https://staging.test/?p=12"}</script>', array( 'post:12@c:html?p' ), '<script type="application/ld+json">{"position":"2","url":"https://www.live.test/?p=120"}</script>' ),
 			'in a textarea'        => array( '<textarea>https://staging.test/?p=12</textarea>', array( 'post:12@c:html?p' ), '<textarea>https://www.live.test/?p=120</textarea>' ),
 			// Codex, round 12 (4): url(…) and a template string.
 			'in a style'           => array( '<style>body{background:url(https://staging.test/?p=12)}</style>', array( 'post:12@c:html?p' ), '<style>body{background:url(https://www.live.test/?p=120)}</style>' ),
 			'in a template string' => array( '<script>const u=`https://staging.test/?p=12`;</script>', array( 'post:12@c:html?p' ), '<script>const u=`https://www.live.test/?p=120`;</script>' ),
+			// Codex, round 13 (B1): single quotes as the core writes them.
+			'in single quotes'     => array( "<p><a href='https://staging.test/?p=12'>Beitrag</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?p=120'>Beitrag</a></p>" ),
+			'in single quotes with an ampersand' => array( "<p><a href='https://staging.test/?a=1&amp;p=12'>x</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?a=1&amp;p=120'>x</a></p>" ),
 			'escaped JSON in a script' => array( '<script>var u = "https:\\/\\/staging.test\\/?p=12";</script>', array( 'post:12@c:html?p' ), '<script>var u = "https:\\/\\/www.live.test\\/?p=120";</script>' ),
 			'after an ampersand'   => array( '<p><a href="https://staging.test/?preview=1&amp;p=12">x</a></p>', array( 'post:12@c:html?p' ), '<p><a href="https://www.live.test/?preview=1&amp;p=120">x</a></p>' ),
 			'after an ampersand in prose' => array( 'Siehe https://staging.test/?preview=1&p=12 hier', array( 'post:12@c:html?p' ), 'Siehe https://www.live.test/?preview=1&p=120 hier' ),
@@ -290,7 +325,7 @@ trait SyncCoreReads {
 			// spelling inside another attribute, the name twice, a reference
 			// without ";" in a text.
 			'an unfinished tag'      => array( '<p><a href="/?p=12">x</a> <a href="/?p=13"', 'c:html:tags' ),
-			'the spelling in another attribute' => array( "<p><a title=' href=\"/?p=12\"' href='/?p=12'>x</a></p>", 'c:html?p' ),
+			'the spelling in another attribute' => array( "<p><a title=' href=\"/?p=12\"' href=/?p=12>x</a></p>", 'c:html?p' ),
 			'the name twice'         => array( '<p><a href="https://staging.test/?p=12&amp;p=13">x</a></p>', 'c:html?p' ),
 			'a reference without ";" in a text' => array( '<p>https://staging.test/?x=1&ampp=12</p>', 'c:html?p' ),
 			'a reference in a text'  => array( '<p>https://staging.test/?p=1&#50;</p>', 'c:html?p' ),
@@ -300,6 +335,11 @@ trait SyncCoreReads {
 			'an escape in a shortcode' => array( '[acme_button url="/\\?p=12"]', 'c:html?p' ),
 			// Codex, round 11 (3): a textarea decodes its references; read so, locked.
 			'in a textarea with a reference' => array( '<textarea>https://staging.test/?a=1&amp;p=12</textarea>', 'c:html?p' ),
+			// Codex, round 13: JavaScript in an attribute with an address of the sites.
+			'an address in an event attribute' => array( "<p><button onclick=\"location.href='https://staging.test/?p=12'\">x</button></p>", 'c:html:script' ),
+			'a host in another spelling in an event attribute' => array( "<p><button onclick=\"go('https://STAGING.test/?p=12')\">x</button></p>", 'c:html:script' ),
+			'an address in a javascript: address' => array( "<p><a href=\"javascript:location='https://staging.test/archives/12/'\">x</a></p>", 'c:html:script' ),
+			'a relative address in JSON-LD' => array( '<script type="application/ld+json">{"@type":"Article","url":"/?p=12"}</script>', 'c:html?p' ),
 			'in a title'             => array( '<title>https://staging.test/?a=&#49;&amp;p=12</title>', 'c:html?p' ),
 			// Codex, round 11 (4): relative to the page, a segment of digits.
 			'digits relative to the page' => array( '<p><a href="../12/">Beitrag</a></p>', 'c:html%post_id%' ),

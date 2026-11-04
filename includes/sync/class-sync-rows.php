@@ -78,24 +78,80 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
-	 * Whether a page (or an attachment) of a name exists, for the verbose
-	 * rules of pages (AB_MCP_Sync_Urls::route()): get_page_by_path() of the
-	 * core finds a page only among those with the name of the last part of
-	 * its path. Asked of the rows, without the cache; only for a name of
-	 * letters, digits, "-" and "_" (a slug as sanitize_title() leaves it,
-	 * compared without case as the column is): any other name is not known.
+	 * Whether the page of a path exists as WP::parse_request() takes it for
+	 * a verbose rule of pages (AB_MCP_Sync_Urls::route()), from the rows,
+	 * without the cache: the search of get_page_by_path() (the parts of the
+	 * path as rawurlencode( urldecode() ) writes them, %2F a slash, %20 a
+	 * space, in lower case as post_name holds an encoded slug; the pages and
+	 * attachments of those names; the one whose names up its parents are the
+	 * parts, from the last, a page before an attachment), then the status
+	 * WP::parse_request() refuses (neither public, protected nor private,
+	 * and excluded from search). A part sanitize_title_for_query() would
+	 * write otherwise (a space, a dot, a capital letter in an escape …) is
+	 * not known.
 	 *
-	 * @param string $part The last part of the path of the page.
-	 * @return bool|null Null when it is not known.
+	 * @param string $path The path of the page, as the rule matched it.
+	 * @return bool|null Null where it is not known.
 	 */
-	public static function page_named( $part ) {
+	public static function page_path( $path ) {
 		global $wpdb;
-		if ( ! self::has( array( 'posts' ) ) || ! preg_match( '/^[A-Za-z0-9_-]+\z/', (string) $part ) ) {
+		if ( ! self::has( array( 'posts' ) ) || ! function_exists( 'get_post_status_object' ) ) {
 			return null;
 		}
-		$name = strtolower( (string) $part );
-		$rows = self::select( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_type IN ( 'page', 'attachment' ) LIMIT 1", $name ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from $wpdb.
-		return null === $rows ? null : array() !== $rows;
+		$path  = str_replace( array( '%2F', '%20' ), array( '/', ' ' ), rawurlencode( urldecode( (string) $path ) ) );
+		$parts = array();
+		foreach ( explode( '/', trim( $path, '/' ) ) as $part ) {
+			$part = (string) preg_replace_callback(
+				'/%[0-9A-F]{2}/',
+				static function ( $m ) {
+					return strtolower( $m[0] );
+				},
+				$part
+			);
+			if ( ! preg_match( '/^(?:[a-z0-9_-]|%[0-9a-f]{2})+\z/', $part ) ) {
+				return null;
+			}
+			$parts[] = $part;
+		}
+		$rows = self::select( "SELECT ID, post_name, post_parent, post_type, post_status FROM {$wpdb->posts} WHERE post_name IN ('" . implode( "','", $parts ) . "') AND post_type IN ( 'page', 'attachment' )" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the parts hold only [a-z0-9_%-], table from $wpdb.
+		if ( null === $rows ) {
+			return null;
+		}
+		$pages = array();
+		foreach ( $rows as $row ) {
+			$pages[ (int) $row['ID'] ] = $row;
+		}
+		$back  = array_reverse( $parts );
+		$found = null;
+		foreach ( $pages as $page ) {
+			if ( $page['post_name'] !== $back[0] ) {
+				continue;
+			}
+			$count = 0;
+			$p     = $page;
+			while ( 0 !== (int) $p['post_parent'] && isset( $pages[ (int) $p['post_parent'] ] ) ) {
+				++$count;
+				$parent = $pages[ (int) $p['post_parent'] ];
+				if ( ! isset( $back[ $count ] ) || $parent['post_name'] !== $back[ $count ] ) {
+					break;
+				}
+				$p = $parent;
+			}
+			if ( 0 === (int) $p['post_parent'] && count( $back ) === $count + 1 && $p['post_name'] === $back[ $count ] ) {
+				$found = $page;
+				if ( 'page' === $page['post_type'] ) {
+					break;
+				}
+			}
+		}
+		if ( null === $found ) {
+			return false;
+		}
+		$status = get_post_status_object( (string) $found['post_status'] );
+		if ( null === $status ) {
+			return null;
+		}
+		return ! ( ! $status->public && ! $status->protected && ! $status->private && $status->exclude_from_search );
 	}
 
 	/**

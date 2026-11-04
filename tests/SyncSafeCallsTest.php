@@ -48,6 +48,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'get_shortcode_atts_regex'             => 'The pattern only.',
 		'shortcode_parse_atts'                 => 'Parses the text it is given (stripcslashes(), the pattern of get_shortcode_atts_regex()).',
 		'has_filter'                           => 'Asks the hooks registered in this request, code, no stored value.',
+		'get_post_status_object'               => 'The post statuses registered in this request, code, no stored value.',
 		'is_multisite'                         => 'The constants MULTISITE and SUBDOMAIN_INSTALL.',
 		// Static methods of this plugin outside includes/sync/.
 		'AB_MCP_Builders::signatures'          => 'signatures.php and the filter ab_mcp_builder_signatures; no post and no option.',

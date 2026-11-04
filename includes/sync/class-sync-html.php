@@ -44,6 +44,12 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	/** The elements whose content the HTML API reads as text (raw text and RCDATA). */
 	const TEXT_ELEMENTS = array( 'IFRAME', 'NOEMBED', 'NOFRAMES', 'SCRIPT', 'STYLE', 'TEXTAREA', 'TITLE', 'XMP' );
 
+	/**
+	 * The JavaScript MIME type essences of the HTML standard, and module: a
+	 * script of one of these types runs.
+	 */
+	const JS_TYPES = array( 'application/ecmascript', 'application/javascript', 'application/x-ecmascript', 'application/x-javascript', 'text/ecmascript', 'text/javascript', 'text/javascript1.0', 'text/javascript1.1', 'text/javascript1.2', 'text/javascript1.3', 'text/javascript1.4', 'text/javascript1.5', 'text/jscript', 'text/livescript', 'text/x-ecmascript', 'text/x-javascript', 'module' );
+
 	/** What value_span() puts in place of a value to see the HTML API read it there. */
 	const PROBE = 'ab-mcp-sync-probe';
 
@@ -126,11 +132,33 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
+	 * What a script is by its type, as the HTML standard reads it: js (no
+	 * type, an empty one, or the language of an old script, a JavaScript
+	 * MIME type or module, its parameters aside: it runs), json (a JSON type,
+	 * importmap, speculationrules: data in JSON), data (any other: not run).
+	 *
+	 * @param array $attrs Of tag_list().
+	 * @return string js, json or data.
+	 */
+	public static function script_kind( array $attrs ) {
+		$type = isset( $attrs['type'] ) && is_string( $attrs['type'] ) ? $attrs['type'] : '';
+		if ( '' === trim( $type ) && isset( $attrs['language'] ) && is_string( $attrs['language'] ) && '' !== trim( $attrs['language'] ) ) {
+			$type = 'text/' . $attrs['language'];
+		}
+		$type = strtolower( trim( $type, " \t\n\f\r" ) );
+		$base = trim( (string) strtok( $type . ';', ';' ) );
+		if ( '' === $type || in_array( $base, self::JS_TYPES, true ) ) {
+			return 'js';
+		}
+		return 'importmap' === $base || 'speculationrules' === $base || preg_match( '#[/+]json\z#', $base ) ? 'json' : 'data';
+	}
+
+	/**
 	 * Where the value of an attribute stands in the stored text of its tag,
-	 * only where it is stored in double quotes in a spelling the core writes
-	 * (the value itself where nothing needs escaping, as esc_attr() and as
-	 * esc_url() escape it, in UTF-8), and only where the HTML API reads that
-	 * span as the value:
+	 * only where it is stored in double or single quotes in a spelling the
+	 * core writes (the value itself where nothing needs escaping, as
+	 * esc_attr() and as esc_url() escape it, in UTF-8), and only where the
+	 * HTML API reads that span as the value:
 	 * with the span replaced, get_attribute() gives the replacement (not a
 	 * spelling inside another attribute). Null for every other spelling.
 	 *
@@ -145,14 +173,16 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 		// As stored, as esc_attr() writes it (&amp;), as esc_url() writes it
 		// (&#038;); made without a function that reads an option.
 		foreach ( array_unique( array( (string) $value, $escaped, str_replace( '&amp;', '&#038;', $escaped ) ) ) as $spelling ) {
-			$at = strpos( $raw, ' ' . $name . '="' . $spelling . '"' );
-			if ( false === $at ) {
-				continue;
-			}
-			$at += strlen( $name ) + 3;
-			$p   = new self( substr_replace( $raw, self::PROBE, $at, strlen( $spelling ) ) );
-			if ( $p->next_tag() && self::PROBE === $p->get_attribute( $name ) ) {
-				return array( $at, strlen( $spelling ) );
+			foreach ( array( '"', "'" ) as $quote ) {
+				$at = strpos( $raw, ' ' . $name . '=' . $quote . $spelling . $quote );
+				if ( false === $at ) {
+					continue;
+				}
+				$at += strlen( $name ) + 3;
+				$p   = new self( substr_replace( $raw, self::PROBE, $at, strlen( $spelling ) ) );
+				if ( $p->next_tag() && self::PROBE === $p->get_attribute( $name ) ) {
+					return array( $at, strlen( $spelling ) );
+				}
 			}
 		}
 		return null;

@@ -597,7 +597,7 @@ final class SyncRefsTest extends TestCase {
 			return 'handbuch' === $name;
 		};
 		self::assertSame( array( array( 12 ), array(), 'Siehe https://www.live.test/parent/child/120/ hier', array() ), self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ) );
-		self::assertContains( 'child', $asked, 'The last part of the path of the page.' );
+		self::assertContains( 'parent/child', $asked, 'The whole path of the page (get_page_by_path()).' );
 		// Codex, round 12 (7): a page of that name exists: the search ends
 		// there, pagename=handbuch&page=2, no id.
 		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/handbuch/2/ hier', array() ), self::routed( 'Siehe https://staging.test/handbuch/2/ hier', $category ) );
@@ -637,6 +637,13 @@ final class SyncRefsTest extends TestCase {
 		}
 		// Without a digit: free.
 		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/caf%2Ee/beitrag/ hier', $numeric ), 0, 2 ) );
+	}
+
+	public function testTheEscapesOfJsonInAPathAreRead(): void {
+		// Codex, round 13 (A4): \u0031\u0032 is 12 to JSON and JavaScript.
+		$numeric = self::rules( '/archives/%post_id%/' );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( '{"url":"https:\\/\\/staging.test\\/archives\\/\\u0031\\u0032\\/"}', $numeric ), 0, 2 ) );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'u="https://staging.test/archives/\\u0031\\u0032/"', $numeric ), 0, 2 ) );
 	}
 
 	public function testAnAddressEndsWhereScriptAndStyleEndIt(): void {

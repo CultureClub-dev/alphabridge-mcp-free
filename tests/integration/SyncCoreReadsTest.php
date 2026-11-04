@@ -144,6 +144,27 @@ final class SyncCoreReadsTest extends TestCase {
 		$b      = self::post( 'zwei', array( 'post_category' => array( $child['term_id'] ) ) );
 		$read   = self::read( self::link( '/parent/child/' . $b . '/' ), array( $b => $b + 1000 ) );
 		self::assertSame( array( array( $b ), self::there( '/parent/child/' . ( $b + 1000 ) . '/' ) ), array( $read['refs'], $read['content'] ) );
+		// Codex, round 13 (A1): a page /child/, but no page /parent/child/:
+		// the whole path decides, the post rule holds.
+		self::post( 'child', array( 'post_type' => 'page' ) );
+		$read = self::read( self::link( '/parent/child/' . $b . '/' ), array( $b => $b + 1000 ) );
+		self::assertSame( array( array( $b ), self::there( '/parent/child/' . ( $b + 1000 ) . '/' ) ), array( $read['refs'], $read['content'] ), 'No page parent/child.' );
+		// A page /parent/child/ (child under parent): the page, page=N.
+		$top = self::post( 'parent', array( 'post_type' => 'page' ) );
+		self::post( 'child', array( 'post_type' => 'page', 'post_parent' => $top ) );
+		$read = self::read( self::link( '/parent/child/' . $b . '/' ), array( $b => $b + 1000 ) );
+		self::assertSame( array( array(), array(), self::there( '/parent/child/' . $b . '/' ) ), array( $read['refs'], $read['spelling'], $read['content'] ), 'The page parent/child.' );
+		// As get_page_by_path(): the page of the last part, each parent of
+		// the part before it; a/c/c is no page of a/b/c, e/e none of e/k.
+		$a  = self::post( 'aa', array( 'post_type' => 'page' ) );
+		$c1 = self::post( 'cc', array( 'post_type' => 'page', 'post_parent' => $a ) );
+		self::post( 'cc', array( 'post_type' => 'page', 'post_parent' => $c1 ) );
+		$e = self::post( 'ee', array( 'post_type' => 'page' ) );
+		self::post( 'ee', array( 'post_type' => 'page', 'post_parent' => $e ) );
+		foreach ( array( '/aa/bb/cc/', '/ee/kk/' ) as $path ) {
+			$read = self::read( self::link( $path . $b . '/' ), array( $b => $b + 1000 ) );
+			self::assertSame( array( $b ), $read['refs'], 'No page ' . $path . ': the post.' );
+		}
 	}
 
 	public function testANumberOfAPostIsNoDateArchiveWhereTheCoreReadsAPost(): void {
@@ -200,12 +221,52 @@ final class SyncCoreReadsTest extends TestCase {
 		// there: pagename=handbuch&page=2, no id.
 		$read = self::read( self::link( '/handbuch/2/' ), array( 2 => 200 ) );
 		self::assertSame( array( array(), array(), self::there( '/handbuch/2/' ) ), array( $read['refs'], $read['spelling'], $read['content'] ), 'The page handbuch exists.' );
-		// A name the rows are not asked about (not a plain slug): page or
-		// post, not known: locks.
-		global $wpdb;
-		$wpdb->update( $wpdb->posts, array( 'post_name' => 'caf%c3%a9' ), array( 'ID' => self::post( 'cafe', array( 'post_type' => 'page' ) ) ) );
-		$read = self::read( self::link( '/caf%C3%A9/2/' ), array( 2 => 200 ) );
+		// Codex, round 13 (B2): an encoded slug, as post_name holds it.
+		self::post( '東京', array( 'post_type' => 'page', 'post_content' => 'Eins<!--nextpage-->Zwei' ) );
+		foreach ( array( '/%e6%9d%b1%e4%ba%ac/2/', '/%E6%9D%B1%E4%BA%AC/2/' ) as $path ) {
+			$read = self::read( self::link( $path ), array( 2 => 200 ) );
+			self::assertSame( array( array(), array(), self::there( $path ) ), array( $read['refs'], $read['spelling'], $read['content'] ), $path );
+		}
+		// A part the core would write otherwise (a dot): not known, locks.
+		$read = self::read( self::link( '/hand.buch/2/' ), array( 2 => 200 ) );
 		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'Not known.' );
+		// A status WP::parse_request() refuses (auto-draft: internal, out of
+		// search): the page is none, the post rule holds: p=2.
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'auto-draft' ), array( 'ID' => self::post( 'entwurf', array( 'post_type' => 'page' ) ) ) );
+		$read = self::read( self::link( '/entwurf/2/' ), array( 2 => 200 ) );
+		self::assertSame( array( array( 2 ), self::there( '/entwurf/200/' ) ), array( $read['refs'], $read['content'] ), 'The post rule: p=2.' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'draft' ), array( 'post_name' => 'entwurf' ) );
+		self::assertSame( array(), self::read( self::link( '/entwurf/2/' ), array( 2 => 200 ) )['refs'], 'A draft is taken: the page, page=2.' );
+	}
+
+	public function testAScriptInAPostLocksItWithItsReason(): void {
+		// Codex, round 13: a script of JavaScript in content, *:script.
+		$this->permalinks( '/archives/%post_id%/' );
+		$page   = self::post( 'skript', array( 'post_type' => 'page', 'post_content' => '<!-- wp:html --><script>location.href="/?p=12";</script><!-- /wp:html -->' ) );
+		$kind   = \AB_MCP_Sync_Db_Kinds::for_pair( 'post' );
+		$result = $kind->canonical(
+			array(
+				'kind'   => 'post',
+				'ref'    => (string) $page,
+				'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+			)
+		);
+		self::assertIsArray( $result );
+		$lock = array_values( array_filter( $result['locks'], static fn( $l ) => '*:script' === $l['key'] ) );
+		self::assertCount( 1, $lock );
+		self::assertSame( 'Z8d', $lock[0]['stage'] );
+		self::assertStringContainsString( 'by hand', $lock[0]['reason'] );
+		// JSON-LD is no script of JavaScript: nothing locks it so.
+		$json   = self::post( 'daten', array( 'post_type' => 'page', 'post_content' => '<!-- wp:html --><script type="application/ld+json">{"@type":"Article","url":"' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=12"}</script><!-- /wp:html -->' ) );
+		$result = $kind->canonical(
+			array(
+				'kind'   => 'post',
+				'ref'    => (string) $json,
+				'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+			)
+		);
+		self::assertSame( array(), array_values( array_filter( $result['locks'], static fn( $l ) => '*:script' === $l['key'] ) ) );
 	}
 
 	public function testAnotherCharsetThanUtf8IsNotRead(): void {

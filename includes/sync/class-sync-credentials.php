@@ -17,11 +17,14 @@
  * spelling of an attribute or a field (name=, "name":, 'name':) that
  * redacts_key() names makes the unit mixed, in a shortcode no registry
  * runs, an escaped [[…]], a tag, a comment alike. The tags are read by the
- * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt: in code
- * (script, style, an event attribute, a javascript: address as the URL
- * parser reads it, a value of an attribute of a block or a shortcode with
- * "{" or "=>") name: as well; the name or id of a field of a form (input,
- * textarea, select, option, button, meta), with a value or without. Where
+ * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt. A script
+ * of JavaScript locks the unit (*:script: no parser of the core reads it,
+ * it is taken over by hand); a script of JSON is read as JSON, its fields
+ * as any. In an event attribute and a javascript: address every word that
+ * names a credential counts; in style and in a value of an attribute of a
+ * block or a shortcode with "{" or "=>" name: as well; the name or id of a
+ * field of a form (input, textarea, select, option, button, meta), with a
+ * value or without. Where
  * a text holds a tag the HTML API cannot read (the unit suite, an
  * unfinished tag) the unit is unreadable. More locks than needed are
  * allowed; a credential overlooked because the structure was read
@@ -36,7 +39,8 @@
  * - unreadable: the value does not unpack (an object, a reference, broken,
  *   nested deeper than MAX_DEPTH or MAX_LAYERS), so nothing says what it
  *   holds; it locks its object (*:php_object, *:unreadable_value): what is
- *   not read to its end is never clean;
+ *   not read to its end is never clean; or it holds a script of JavaScript
+ *   (*:script);
  * - clean.
  * Values are never looked at, only names: nothing here reads or returns
  * what a credential holds.
@@ -73,10 +77,18 @@ final class AB_MCP_Sync_Credentials {
 	);
 
 	/**
-	 * A name without quotes before ":" (an object of a script, a property
-	 * of CSS), read only in code (code()): in prose "Passwort: …" is none.
+	 * A name without quotes before ":" (a property of CSS, an object in the
+	 * value of an attribute of a block or a shortcode that looks like code):
+	 * in prose "Passwort: …" is none.
 	 */
 	const CODE_KEY = '/([A-Za-z_$][A-Za-z0-9_$\-]*)\s*:/';
+
+	/**
+	 * A word of JavaScript in an event attribute or a javascript: address
+	 * (for a part of it too, at "-"): no parser reads JavaScript, so any word
+	 * that names a credential locks.
+	 */
+	const WORD = '/[A-Za-z0-9_$\-]+/';
 
 	/**
 	 * What makes the value of an attribute of a block or a shortcode code: a
@@ -137,13 +149,19 @@ final class AB_MCP_Sync_Credentials {
 	 * @param string   $text  Text as stored.
 	 * @param string[] $extra Extra names.
 	 * @param bool     $code  Whether the text is code (an attribute value).
-	 * @return string[]|null Null where the text could not be joined or its
-	 *                       tags could not be read (html()).
+	 * @param string   $why   Set to script where the text holds a script of
+	 *                        JavaScript, else to unreadable_value or
+	 *                        php_object where it returns null.
+	 * @return string[]|null Null where the text could not be joined, its
+	 *                       tags could not be read (html()), or it holds a
+	 *                       script of JavaScript.
 	 */
-	public static function flat( $text, array $extra, $code = false ) {
+	public static function flat( $text, array $extra, $code = false, &$why = null ) {
+		$why  = 'unreadable_value';
 		$text = (string) $text;
-		// Without these no decoding gives a key its = or :.
-		if ( false === strpbrk( $text, '=:%&\\' ) ) {
+		// Without these no decoding gives a key its = or :, and no tag (a
+		// script) stands in it.
+		if ( false === strpbrk( $text, '=:%&\\<' ) ) {
 			return array();
 		}
 		$texts = array( $text );
@@ -173,6 +191,31 @@ final class AB_MCP_Sync_Credentials {
 			if ( null === $html ) {
 				return null;
 			}
+			// JavaScript no parser reads: a script of it locks the unit.
+			if ( $html['script'] ) {
+				$why = 'script';
+				return null;
+			}
+			// A script of JSON must be JSON, within MAX_DEPTH; its keys are
+			// read in the text as stored and decoded (FLAT_KEYS).
+			foreach ( $html['json'] as $json ) {
+				json_decode( $json, true, AB_MCP_Sync_Canon::MAX_DEPTH + 1 );
+				if ( JSON_ERROR_NONE !== json_last_error() ) {
+					return null;
+				}
+			}
+			foreach ( $html['words'] as $segment ) {
+				$variants = self::decodings( $segment );
+				if ( null === $variants ) {
+					return null;
+				}
+				foreach ( $variants as $variant ) {
+					preg_match_all( self::WORD, $variant, $m );
+					foreach ( $m[0] as $word ) {
+						$found = array_merge( $found, array( $word ), explode( '-', $word ) );
+					}
+				}
+			}
 			foreach ( $code ? array_merge( array( $one ), $html['code'] ) : $html['code'] as $segment ) {
 				$variants = self::decodings( $segment );
 				if ( null === $variants ) {
@@ -196,21 +239,26 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * What the HTML API of the core reads in a text: its code (the content
-	 * of script and style; of every tag the whole value of an event
+	 * What the HTML API of the core reads in a text: whether it holds a
+	 * script of JavaScript (AB_MCP_Sync_Html::script_kind(): no parser reads
+	 * it, the unit locks, *:script); the content of a script of JSON (read
+	 * as JSON); the content of style (code); the words of every event
 	 * attribute, on…, and of an attribute that is a javascript: address as
-	 * the URL parser reads it) and the names of its fields of a form (name
-	 * and id of FORM_TAGS, with a value or without). Null where the text holds
-	 * a tag and the HTML API is not there or cannot read it to its end: what
-	 * is not read is never clean.
+	 * the URL parser reads it (WORD); the names of its fields of a form
+	 * (name and id of FORM_TAGS, with a value or without). Null where the
+	 * text holds a tag and the HTML API is not there or cannot read it to
+	 * its end: what is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return array{code:string[],fields:string[]}|null
+	 * @return array{code:string[],words:string[],json:string[],fields:string[],script:bool}|null
 	 */
 	private static function html( $text ) {
 		$out = array(
 			'code'   => array(),
+			'words'  => array(),
+			'json'   => array(),
 			'fields' => array(),
+			'script' => false,
 		);
 		if ( ! preg_match( '/<[A-Za-z]/', $text ) ) {
 			return $out;
@@ -224,7 +272,15 @@ final class AB_MCP_Sync_Credentials {
 			return null;
 		}
 		foreach ( $tags as $tag ) {
-			if ( 'SCRIPT' === $tag['tag'] || 'STYLE' === $tag['tag'] ) {
+			if ( 'SCRIPT' === $tag['tag'] ) {
+				$kind = AB_MCP_Sync_Html::script_kind( $tag['attrs'] );
+				if ( 'js' === $kind ) {
+					$out['script'] = true;
+				} elseif ( 'json' === $kind ) {
+					$out['json'][] = (string) $tag['text'];
+				}
+			}
+			if ( 'STYLE' === $tag['tag'] ) {
 				$out['code'][] = (string) $tag['text'];
 			}
 			foreach ( $tag['attrs'] as $name => $value ) {
@@ -232,12 +288,12 @@ final class AB_MCP_Sync_Credentials {
 					continue;
 				}
 				if ( 0 === strpos( $name, 'on' ) ) {
-					$out['code'][] = $value;
+					$out['words'][] = $value;
 				}
 				// The URL parser drops tabs and line breaks, and C0 and spaces before.
 				$url = ltrim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
 				if ( 0 === stripos( $url, 'javascript:' ) ) {
-					$out['code'][] = $url;
+					$out['words'][] = $url;
 				}
 				if ( ( 'name' === $name || 'id' === $name ) && in_array( $tag['tag'], self::FORM_TAGS, true ) ) {
 					$out['fields'][] = $value;
@@ -351,9 +407,8 @@ final class AB_MCP_Sync_Credentials {
 			return false;
 		}
 		if ( is_string( $value ) ) {
-			$flat = self::flat( $value, $extra, $code );
+			$flat = self::flat( $value, $extra, $code, $why );
 			if ( null === $flat ) {
-				$why = 'unreadable_value';
 				return false;
 			}
 			foreach ( $flat as $key ) {

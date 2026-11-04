@@ -107,12 +107,23 @@ final class AB_MCP_Sync_Urls {
 				// Without the HTML API, or where it cannot read to the end,
 				// nothing tells where a value ends: where an address may stand
 				// in one, it locks.
-				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . ')\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
+				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/<script\b|(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . ')\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
 			}
 			foreach ( $tags as $tag ) {
 				$raw = substr( $text, $tag['at'], $tag['len'] );
 				foreach ( $tag['attrs'] as $name => $value ) {
-					if ( ! is_string( $value ) || ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) ) {
+					if ( ! is_string( $value ) ) {
+						continue;
+					}
+					// JavaScript (an event attribute, a javascript: address) no
+					// parser reads: an address of the sites in it locks.
+					if ( 0 === strpos( $name, 'on' ) || 0 === stripos( ltrim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" ), 'javascript:' ) ) {
+						if ( array() !== AB_MCP_Sync_Canon::address_cuts( $value, $ctx ) || self::names_a_site( $value, $ctx ) ) {
+							$out[] = self::lock( $tag['at'], $tag['len'], ':script' );
+						}
+						continue;
+					}
+					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
 						continue;
 					}
 					// Stored as the core writes it: read as stored, rewritten
@@ -169,10 +180,40 @@ final class AB_MCP_Sync_Urls {
 		$closer = strripos( $raw, '</' . strtolower( $tag['tag'] ) );
 		$start  = false === $closer ? -1 : $closer - strlen( $tag['text'] );
 		if ( $start > 0 && substr( $raw, $start, strlen( $tag['text'] ) ) === $tag['text'] ) {
+			// A script of JSON: its addresses without the host as values
+			// (those with it are read as prose, rewritten there), locked.
+			if ( 'SCRIPT' === $tag['tag'] && 'json' === AB_MCP_Sync_Html::script_kind( $tag['attrs'] ) ) {
+				$out = array_merge( $out, self::json_ids( json_decode( $tag['text'], true ), $ctx, '' ) );
+			}
 			return array( array( $tag['at'], $tag['at'] + $start ), array( $tag['at'] + $closer, $end ) );
 		}
 		$out = array_merge( $out, self::prose( $tag['text'], $ctx, AB_MCP_Sync_Canon::address_cuts( $tag['text'], $ctx ), array(), false ) );
 		return array( array( $tag['at'], $end ) );
+	}
+
+	/**
+	 * The ids of the addresses without a host in the values of JSON (a
+	 * value named or beginning as an address, names_an_address()), read
+	 * decoded: locked. An address with the host is read in the stored text.
+	 *
+	 * @param mixed  $value Decoded JSON.
+	 * @param array  $ctx   Context.
+	 * @param string $key   The key of the value.
+	 * @return array See ids().
+	 */
+	private static function json_ids( $value, array $ctx, $key ) {
+		$out = array();
+		if ( is_array( $value ) ) {
+			foreach ( $value as $k => $item ) {
+				$out = array_merge( $out, self::json_ids( $item, $ctx, (string) $k ) );
+			}
+			return $out;
+		}
+		if ( ! is_string( $value ) || ! self::names_an_address( $key, $value ) ) {
+			return $out;
+		}
+		$read = self::read( $value, $ctx );
+		return null !== $read && in_array( $read['form'], array( 'root', 'page' ), true ) ? self::address( $value, $ctx, null, $value ) : $out;
 	}
 
 	/**
@@ -478,6 +519,24 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
+	 * A text with the escapes of JSON for ASCII decoded (\/, \uXXXX below
+	 * 0x80), as JSON.parse() and json_decode() read them.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function json_unescaped( $text ) {
+		return (string) preg_replace_callback(
+			'/\\\\u([0-9a-fA-F]{4})/',
+			static function ( $m ) {
+				$code = hexdec( $m[1] );
+				return $code < 0x80 ? chr( $code ) : $m[0];
+			},
+			str_replace( '\\/', '/', (string) $text )
+		);
+	}
+
+	/**
 	 * The readings of a stored text: as stored, as JSON decodes it, as HTML
 	 * decodes it (WP_HTML_Decoder::decode_text_node() of the core, which
 	 * decodes at least what an attribute decodes); null where it holds a
@@ -487,15 +546,8 @@ final class AB_MCP_Sync_Urls {
 	 * @return string[]|null
 	 */
 	private static function readings( $text ) {
-		$json = (string) preg_replace_callback(
-			'/\\\\u([0-9a-fA-F]{4})/',
-			static function ( $m ) {
-				$code = hexdec( $m[1] );
-				return $code < 0x80 ? chr( $code ) : $m[0];
-			},
-			str_replace( '\\/', '/', $text )
-		);
-		$out = array( $text, $json );
+		$json = self::json_unescaped( $text );
+		$out  = array( $text, $json );
 		if ( false !== strpos( $json, '&' ) ) {
 			if ( ! class_exists( 'WP_HTML_Decoder' ) ) {
 				return null;
@@ -527,7 +579,8 @@ final class AB_MCP_Sync_Urls {
 	 */
 	private static function path_ids( $url, array $read, array $ctx, $at ) {
 		$path  = (string) substr( $url, $read['path'], $read['end'] - $read['path'] );
-		$plain = str_replace( '\\/', '/', $path );
+		// As JSON (in a script, a block attribute stored raw) gives it.
+		$plain = self::json_unescaped( $path );
 		// An encoded dot, slash or backslash makes other segments of it (the
 		// browser and WP::parse_request() decode it): with a digit, it locks.
 		if ( preg_match( '/%(?:2e|2f|5c)/i', $plain ) ) {
@@ -596,7 +649,7 @@ final class AB_MCP_Sync_Urls {
 	 * permalink_structure whether the rules of pages are verbose and whether
 	 * the permalinks hold index.php (WP_Rewrite::init(),
 	 * using_index_permalinks()), and the reader of the pages of a name
-	 * (AB_MCP_Sync_Rows::page_named()). Plain permalinks (the structure
+	 * (AB_MCP_Sync_Rows::page_path()). Plain permalinks (the structure
 	 * empty): no rule routes a path. Null where they cannot be read: a
 	 * segment of digits locks.
 	 *
@@ -613,7 +666,7 @@ final class AB_MCP_Sync_Urls {
 				'rules'   => array(),
 				'verbose' => false,
 				'index'   => false,
-				'pages'   => array( 'AB_MCP_Sync_Rows', 'page_named' ),
+				'pages'   => array( 'AB_MCP_Sync_Rows', 'page_path' ),
 			);
 		}
 		$row  = AB_MCP_Sync_Rows::option( 'rewrite_rules' );
@@ -630,7 +683,7 @@ final class AB_MCP_Sync_Urls {
 			'rules'   => $read['value'],
 			'verbose' => 1 === preg_match( '/^[^%]*%(?:postname|category|tag|author)%/', $structure ),
 			'index'   => 1 === preg_match( '#^/*index\.php#', $structure ),
-			'pages'   => array( 'AB_MCP_Sync_Rows', 'page_named' ),
+			'pages'   => array( 'AB_MCP_Sync_Rows', 'page_path' ),
 		);
 	}
 
@@ -642,10 +695,11 @@ final class AB_MCP_Sync_Urls {
 	 * its slashes; each rule as "#^rule#" against it, else against it
 	 * decoded; the first that matches gives the query (WP_MatchesMapRegex::
 	 * apply(), read by parse_str()). A verbose rule of pages holds only
-	 * where get_page_by_path() finds the page: where no page has the name of
-	 * its last part (routes pages) the search goes on, where one has it the
-	 * search ends there; where that is not known it goes on, and where the
-	 * rules that may hold put ids in other places, it locks.
+	 * where get_page_by_path() finds the page of its path, of a status
+	 * WP::parse_request() takes (routes pages): where there is none the
+	 * search goes on, where there is one it ends there; where that is not
+	 * known it goes on, and where the rules that may hold put ids in other
+	 * places, it locks.
 	 *
 	 * @param array  $routes routes().
 	 * @param string $path   Path, its dot segments resolved.
@@ -672,8 +726,7 @@ final class AB_MCP_Sync_Urls {
 			// the rules that may hold are compared.
 			$known = true;
 			if ( $routes['verbose'] && preg_match( '/pagename=\$matches\[([0-9]+)\]/', $query, $page ) && isset( $m[ (int) $page[1] ] ) ) {
-				$parts = explode( '/', trim( (string) $m[ (int) $page[1] ][0], '/' ) );
-				$named = isset( $routes['pages'] ) && is_callable( $routes['pages'] ) ? call_user_func( $routes['pages'], (string) end( $parts ) ) : null;
+				$named = isset( $routes['pages'] ) && is_callable( $routes['pages'] ) ? call_user_func( $routes['pages'], (string) $m[ (int) $page[1] ][0] ) : null;
 				if ( false === $named ) {
 					continue;
 				}

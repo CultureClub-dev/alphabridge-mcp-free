@@ -302,6 +302,10 @@ return array(
 			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
 			'plan' => 'Entscheid 9',
 		),
+		'*:script'                     => array(
+			'why'  => 'JavaScript in content has no parser in the core: ids, addresses and credentials in it are not read, so the unit is taken over by hand (Codex, round 13).',
+			'plan' => 'Entscheid 9, Entscheid 12',
+		),
 		'attachment:missing_file'      => array(
 			'why'  => 'A listed file that is missing cannot be packed or compared.',
 			'plan' => 'Entscheid 26 (gelistete, aber fehlende Datei sperrt)',
