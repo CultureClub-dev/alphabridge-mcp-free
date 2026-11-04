@@ -170,11 +170,15 @@ final class AB_MCP_Sync_Credentials {
 	 *                        JavaScript, else to unreadable_value or
 	 *                        php_object where it returns null.
 	 * @param bool     $css   Whether the text is CSS (read as style).
+	 * @param bool     $image Whether the text is an SVG image (a data: of
+	 *                        CSS): read as content of HTML, but no tag
+	 *                        outside the list locks and no script (an image
+	 *                        runs none).
 	 * @return string[]|null Null where the text could not be joined, its
 	 *                       tags could not be read (html()), or it holds a
 	 *                       script of JavaScript.
 	 */
-	public static function flat( $text, array $extra, $code = false, &$why = null, $css = false ) {
+	public static function flat( $text, array $extra, $code = false, &$why = null, $css = false, $image = false ) {
 		$why  = 'unreadable_value';
 		$text = (string) $text;
 		// Without these no decoding gives a key its = or :, and no tag (a
@@ -205,18 +209,19 @@ final class AB_MCP_Sync_Credentials {
 				}
 			}
 			// The tags as the browser parses the stored text, once; CSS holds
-			// none (custom_css goes out through strip_tags()).
+			// none (custom_css goes out through wp_custom_css_cb() into the
+			// modifiable text of a style element: its text as text).
 			$html = self::html( $css ? '' : $one );
 			if ( null === $html ) {
 				return null;
 			}
 			// JavaScript no parser reads: a script of it locks the unit.
-			if ( $html['script'] ) {
+			if ( $html['script'] && ! $image ) {
 				$why = 'script';
 				return null;
 			}
 			// A tag or an attribute outside the list of the core locks it.
-			if ( $html['outside'] ) {
+			if ( $html['outside'] && ! $image ) {
 				$why = 'html_outside_kses';
 				return null;
 			}
@@ -261,7 +266,7 @@ final class AB_MCP_Sync_Credentials {
 			foreach ( array_merge( $css ? array( $one ) : array(), $html['code'] ) as $style ) {
 				$read = AB_MCP_Sync_Css::read( $style );
 				foreach ( $read['data'] as $url ) {
-					$keys = self::data_keys( $url );
+					$keys = self::data_keys( $url, $extra, $why );
 					if ( null === $keys ) {
 						return null;
 					}
@@ -502,23 +507,32 @@ final class AB_MCP_Sync_Credentials {
 
 	/**
 	 * The keys in what an address data: of CSS holds (an image of
-	 * AB_MCP_Sync_Css::DATA_IMAGES, decoded): read as a text, in the
-	 * spellings of FLAT_KEYS and CODE_KEY (an SVG, its CSS), with the
-	 * decodings; null where it is no such image, does not decode or a
-	 * decoding is not there.
+	 * AB_MCP_Sync_Css::DATA_IMAGES, decoded): an SVG read as content of
+	 * HTML is (flat() as an image: its fields, its JSON as JSON, its CSS;
+	 * its text is text); a raster image as a text (FLAT_KEYS, with the
+	 * decodings). Null where it is no such image, does not decode or is not
+	 * read to its end.
 	 *
-	 * @param string $url The address.
+	 * @param string   $url   The address.
+	 * @param string[] $extra Extra names.
+	 * @param string   $why   Set where it returns null.
 	 * @return string[]|null
 	 */
-	private static function data_keys( $url ) {
-		$content = AB_MCP_Sync_Css::data( $url );
-		$variants = null === $content ? null : self::decodings( $content );
+	private static function data_keys( $url, array $extra, &$why ) {
+		$data = AB_MCP_Sync_Css::data( $url );
+		if ( null === $data ) {
+			return null;
+		}
+		if ( 'image/svg+xml' === $data['type'] ) {
+			return self::flat( $data['content'], $extra, false, $why, false, true );
+		}
+		$variants = self::decodings( $data['content'] );
 		if ( null === $variants ) {
 			return null;
 		}
 		$found = array();
 		foreach ( $variants as $variant ) {
-			foreach ( array_merge( self::FLAT_KEYS, array( self::CODE_KEY ) ) as $pattern ) {
+			foreach ( self::FLAT_KEYS as $pattern ) {
 				if ( preg_match_all( $pattern, $variant, $m ) ) {
 					$found = array_merge( $found, $m[1] );
 				}

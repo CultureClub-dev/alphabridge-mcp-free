@@ -98,9 +98,11 @@ final class AB_MCP_Sync_Refs {
 	 * url (the background support of the editor, wp-includes/js/dist/
 	 * block-editor.js:79893, backgroundImage: { url, id: media.id, source });
 	 * the server reads only its url (wp-includes/block-supports/
-	 * background.php:78). Read and rewritten as BLOCKS, with the url, only
-	 * beside a url of this site (background_url()); else it locks. Global
-	 * styles: AB_MCP_Sync_Urls::background_ids().
+	 * background.php:78). A local attachment, read and rewritten as BLOCKS
+	 * through the map of the attachments whatever host its url names (a
+	 * CDN, from the root); the url by the rules of the addresses. Without a
+	 * url beside it (the editor writes both) it locks. The same at any depth
+	 * of JSON (json_tree(): global styles).
 	 */
 	const SUPPORT_IDS = array( 'style.background.backgroundImage.id' => 'background' );
 
@@ -556,8 +558,14 @@ final class AB_MCP_Sync_Refs {
 			}
 		}
 		// The ids the sites' addresses name (AB_MCP_Sync_Urls), in their safe
-		// forms; every other form writes nothing.
+		// forms; every other form writes nothing. Stored JSON is written whole
+		// (json_rewrite()), nothing inside it one by one.
+		$json = array();
 		foreach ( AB_MCP_Sync_Urls::ids( $text, $css ? array( 'css' => true ) + $plan : $plan, $addresses, $whole ) as $query ) {
+			if ( isset( $query['json'] ) ) {
+				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => self::json_rewrite( $query['json'], $plan ) );
+				continue;
+			}
 			if ( null === $query['id'] ) {
 				$plan['missing'][] = array(
 					'space' => 'spelling',
@@ -576,6 +584,10 @@ final class AB_MCP_Sync_Refs {
 				$all[] = array( 'at' => $cut['at'], 'len' => $cut['len'], 'with' => (string) $id );
 			}
 		}
+		foreach ( $json as $span ) {
+			$all = array_filter( $all, static fn( $cut ) => $cut['at'] < $span['at'] || $cut['at'] >= $span['at'] + $span['len'] );
+		}
+		$all = array_merge( $all, $json );
 		if ( array() === $all ) {
 			return $text;
 		}
@@ -1202,12 +1214,39 @@ final class AB_MCP_Sync_Refs {
 		if ( ! self::is_plain( $block, $path ) ) {
 			self::note_possible( $acc, $value, $at . '.' . $path );
 		}
-		if ( ! is_string( $value ) ) {
-			return $value;
-		}
-		// The value of a key css is CSS (AB_MCP_Sync_Css), never a whole address.
+		return is_string( $value ) ? self::leaf_canon( $value, $path, $ctx, $acc, $at ) : $value;
+	}
+
+	/**
+	 * A text of the attributes of a block or of stored JSON: by
+	 * AB_MCP_Sync_Canon::text(), the value of a key css as CSS
+	 * (AB_MCP_Sync_Css), never a whole address; else a whole address by its
+	 * key or its beginning (is_address()).
+	 *
+	 * @param string $value Text.
+	 * @param string $path  Its path.
+	 * @param array  $ctx   Context.
+	 * @param array  $acc   Accumulator.
+	 * @param string $at    Where.
+	 * @return string|array
+	 */
+	private static function leaf_canon( $value, $path, array $ctx, array &$acc, $at ) {
 		$css = self::is_css( $path );
 		return AB_MCP_Sync_Canon::text( $value, $css ? array( 'css' => true ) + $ctx : $ctx, array(), $acc, $at . '.' . $path, ! $css && self::is_address( $path, $value ) );
+	}
+
+	/**
+	 * A text of leaf_canon() rewritten.
+	 *
+	 * @param string $value   Text.
+	 * @param string $path    Its path.
+	 * @param array  $plan    plan().
+	 * @param bool   $changed Set when anything changed.
+	 * @return string
+	 */
+	private static function leaf_rewrite( $value, $path, array &$plan, &$changed ) {
+		$css = self::is_css( (string) $path );
+		return self::rewrite_text( $value, $plan, array(), $changed, ! $css && self::is_address( (string) $path, $value ), $css );
 	}
 
 	/**
@@ -1224,7 +1263,7 @@ final class AB_MCP_Sync_Refs {
 	private static function canon_ref( $type, $value, array $attrs, array $ctx, array &$acc, $at ) {
 		switch ( $type ) {
 			case 'background':
-				if ( ! self::background_url( $attrs, $ctx ) ) {
+				if ( ! self::background_url( $attrs ) ) {
 					AB_MCP_Sync_Canon::spelling( $acc, $at );
 					return $value;
 				}
@@ -1788,7 +1827,173 @@ final class AB_MCP_Sync_Refs {
 			}
 			return $value;
 		}
-		return is_string( $value ) ? self::rewrite_text( $value, $plan, array(), $changed, ! self::is_css( (string) $path ) && self::is_address( (string) $path, $value ), self::is_css( (string) $path ) ) : $value;
+		return is_string( $value ) ? self::leaf_rewrite( $value, (string) $path, $plan, $changed ) : $value;
+	}
+
+	/**
+	 * The canonical form of stored JSON (AB_MCP_Sync_Json::read()): where it
+	 * is a producer's spelling, the data as json_tree() reads it, with the
+	 * producer; else the text as it is, and every id or address in it locks
+	 * (no position in the text is mapped to the data).
+	 *
+	 * @param array  $json Of AB_MCP_Sync_Json::read().
+	 * @param array  $ctx  Context.
+	 * @param array  $acc  Accumulator.
+	 * @param string $at   Where.
+	 * @return string|array
+	 */
+	public static function json_canon( array $json, array $ctx, array &$acc, $at ) {
+		$sub   = AB_MCP_Sync_Canon::acc();
+		$found = false;
+		$tree  = self::json_tree( $json['value'], '', $ctx, $sub, $at . ':json', 0, $found );
+		if ( null === $json['producer'] ) {
+			if ( $found ) {
+				AB_MCP_Sync_Canon::spelling( $acc, $at . ':json' );
+			}
+			return $json['raw'];
+		}
+		foreach ( $sub as $key => $list ) {
+			$acc[ $key ] = 'credentials' === $key ? $acc[ $key ] : array_merge( $acc[ $key ], $list );
+		}
+		return array(
+			'~json' => $json['producer'],
+			'v'     => $tree,
+		);
+	}
+
+	/**
+	 * Stored JSON with its ids and addresses rewritten: the data changed
+	 * (json_rewrite_tree()) and written again as its producer writes it;
+	 * not a producer's spelling, it is kept as it is, and an id or address
+	 * in it is noted missing (spelling).
+	 *
+	 * @param array $json Of AB_MCP_Sync_Json::read().
+	 * @param array $plan plan(), with 'missing' collected.
+	 * @return string
+	 */
+	public static function json_rewrite( array $json, array &$plan ) {
+		if ( null === $json['producer'] ) {
+			$probe   = $plan;
+			$changed = false;
+			self::json_rewrite_tree( $json['value'], '', $probe, $changed );
+			if ( $changed || count( $probe['missing'] ) > count( $plan['missing'] ) ) {
+				$plan['missing'][] = array(
+					'space' => 'spelling',
+					'id'    => 0,
+				);
+			}
+			return $json['raw'];
+		}
+		$changed = false;
+		return AB_MCP_Sync_Json::encode( self::json_rewrite_tree( $json['value'], '', $plan, $changed ), $json['producer'] );
+	}
+
+	/**
+	 * Decoded JSON in its canonical form, as the attributes of a block are
+	 * read: each text by AB_MCP_Sync_Canon::text() (CSS under a key css, a
+	 * whole address by its key or its beginning), the attachment id of a
+	 * background image (…background.backgroundImage.id, SUPPORT_IDS) a
+	 * reference beside its url; an object as {"~o": …}. $found is set where
+	 * anything is an address, an id or locks, and for a key that names a
+	 * site (keys are not rewritten).
+	 *
+	 * @param mixed  $value Decoded (objects).
+	 * @param string $path  Path of $value.
+	 * @param array  $ctx   Context.
+	 * @param array  $acc   Accumulator.
+	 * @param string $at    Where.
+	 * @param int    $depth Depth.
+	 * @param bool   $found Set when an address or an id stands in it.
+	 * @return mixed
+	 */
+	private static function json_tree( $value, $path, array $ctx, array &$acc, $at, $depth, &$found ) {
+		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
+			AB_MCP_Sync_Canon::spelling( $acc, $at );
+			$found = true;
+			return null;
+		}
+		if ( is_string( $value ) ) {
+			$form  = self::leaf_canon( $value, $path, $ctx, $acc, $at );
+			$found = $found || ! is_string( $form );
+			return $form;
+		}
+		if ( ! is_object( $value ) && ! is_array( $value ) ) {
+			return $value;
+		}
+		$out = array();
+		foreach ( is_object( $value ) ? get_object_vars( $value ) : $value as $key => $item ) {
+			$key  = (string) $key;
+			$sub  = '' === $path ? $key : $path . '.' . $key;
+			$name = '' !== $key && '~' === $key[0] ? '~' . $key : $key;
+			if ( array() !== AB_MCP_Sync_Canon::address_cuts( $key, $ctx ) ) {
+				AB_MCP_Sync_Canon::spelling( $acc, $at . '.' . $sub );
+				$found = true;
+			}
+			if ( 'id' === $key && self::is_background( $path ) ) {
+				$found = true;
+				if ( isset( $value->url ) && is_string( $value->url ) ) {
+					$out[ $name ] = self::canon_id( 'post', $item, $acc, $at . '.' . $sub );
+					continue;
+				}
+				AB_MCP_Sync_Canon::spelling( $acc, $at . '.' . $sub );
+			}
+			$out[ $name ] = self::json_tree( $item, $sub, $ctx, $acc, $at, $depth + 1, $found );
+		}
+		return is_object( $value ) ? array( '~o' => $out ) : $out;
+	}
+
+	/**
+	 * Decoded JSON with what json_tree() reads rewritten (the texts by
+	 * rewrite_text(), the attachment id of a background image beside its
+	 * url by the map of the attachments).
+	 *
+	 * @param mixed  $value   Decoded (objects).
+	 * @param string $path    Path of $value.
+	 * @param array  $plan    plan().
+	 * @param bool   $changed Set when anything changed.
+	 * @return mixed
+	 */
+	private static function json_rewrite_tree( $value, $path, array &$plan, &$changed ) {
+		if ( is_string( $value ) ) {
+			return self::leaf_rewrite( $value, $path, $plan, $changed );
+		}
+		if ( ! is_object( $value ) && ! is_array( $value ) ) {
+			return $value;
+		}
+		$items = is_object( $value ) ? get_object_vars( $value ) : $value;
+		foreach ( $items as $key => $item ) {
+			$sub = '' === $path ? (string) $key : $path . '.' . $key;
+			if ( array() !== AB_MCP_Sync_Canon::address_cuts( (string) $key, $plan ) ) {
+				$plan['missing'][] = array(
+					'space' => 'spelling',
+					'id'    => 0,
+				);
+			}
+			if ( 'id' === (string) $key && self::is_background( $path ) ) {
+				if ( isset( $items['url'] ) && is_string( $items['url'] ) ) {
+					$items[ $key ] = self::rewrite_id( 'post', $item, $plan, $changed );
+					continue;
+				}
+				$plan['missing'][] = array(
+					'space' => 'spelling',
+					'id'    => 0,
+				);
+			}
+			$items[ $key ] = self::json_rewrite_tree( $item, $sub, $plan, $changed );
+		}
+		return is_object( $value ) ? (object) $items : $items;
+	}
+
+	/**
+	 * Whether a path of JSON is a background image of the block supports
+	 * (…background.backgroundImage), at any depth: global styles, theme.json,
+	 * blocks.*, elements.*.
+	 *
+	 * @param string $path Path.
+	 * @return bool
+	 */
+	private static function is_background( $path ) {
+		return 1 === preg_match( '/(?:^|\.)background\.backgroundImage\z/', (string) $path );
 	}
 
 	/**
@@ -1827,7 +2032,7 @@ final class AB_MCP_Sync_Refs {
 	private static function rewrite_ref( $type, $value, array $attrs, array &$plan, &$changed ) {
 		switch ( $type ) {
 			case 'background':
-				if ( ! self::background_url( $attrs, $plan ) ) {
+				if ( ! self::background_url( $attrs ) ) {
 					$plan['missing'][] = array(
 						'space' => 'spelling',
 						'id'    => 0,
@@ -1986,17 +2191,15 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
-	 * Whether the background image of a block has its attachment id beside
-	 * a url of this site (AB_MCP_Sync_Urls::own_address()): only so are id
-	 * and url rewritten together.
+	 * Whether the background image of a block has a url beside its
+	 * attachment id, as the editor writes them together.
 	 *
 	 * @param array $attrs Attributes.
-	 * @param array $ctx   Context (or plan()).
 	 * @return bool
 	 */
-	private static function background_url( array $attrs, array $ctx ) {
+	private static function background_url( array $attrs ) {
 		$keys = array( 'style', 'background', 'backgroundImage', 'url' );
-		return self::has_path( $attrs, $keys ) && AB_MCP_Sync_Urls::own_address( self::get_path( $attrs, $keys ), $ctx );
+		return self::has_path( $attrs, $keys ) && is_string( self::get_path( $attrs, $keys ) );
 	}
 
 	/**

@@ -12,11 +12,16 @@
  *   read the text with them as well (it is taken over as it is);
  * - the addresses of the text: the argument of every url(…), the string of
  *   every @import "…" and the strings of image-set(…), where they stand
- *   in the stored text;
+ *   in the stored text (rewritten there in their canonical form); every
+ *   other string (a custom property: --bild:"/?attachment_id=12" reaches
+ *   image-set(var(--bild)) as an address), read only;
  * - what locks in any context: a backslash outside of strings and
- *   comments (an escape in a name, a function or an at-rule: u\72l(,
- *   image-s\65t(, @imp\6Frt), a comment inside such an address, a
- *   backslash in it, a url( or an @import not read so;
+ *   comments in the name of a function (an identifier right before "("),
+ *   of an at-rule, or in the value of a declaration (u\72l(, image-s\65t(,
+ *   @imp\6Frt, color:re\64); in a selector (the prelude of a style rule,
+ *   before "{": .md\:flex, .w-1\/2) and the name of a property it is free;
+ *   a comment inside an address, a backslash in it, a url( or an @import
+ *   not read so;
  * - data: as such an address: data() decodes an image (DATA_IMAGES), the
  *   callers check what it holds; any other is not read;
  * - the text with the escapes of CSS decoded (unescaped()): the callers
@@ -52,33 +57,38 @@ final class AB_MCP_Sync_Css {
 	 * Read a text of CSS.
 	 *
 	 * @param string $css As stored.
-	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,lock:bool,data:string[]}
+	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,strings:string[],lock:bool,data:string[]}
 	 *               plain: without its comments; decoded: plain with its
 	 *               escapes decoded; comments: where each stood in plain;
 	 *               urls: the addresses and where they stand in the
-	 *               stored text; lock: a backslash outside of strings, an
-	 *               address not read to its end (a comment or a backslash
-	 *               in it, a url( or an @import not read); data: the
-	 *               addresses that are data: (for data()).
+	 *               stored text; strings: every other string; lock: a
+	 *               backslash where it is no part of a selector or a
+	 *               property name (escapes()), an address not read to its
+	 *               end (a comment or a backslash in it, a url( or an
+	 *               @import not read); data: the addresses that are data:
+	 *               (for data()).
 	 */
 	public static function read( $css ) {
 		$css      = (string) $css;
 		$plain    = '';
 		$comments = array();
 		$quote    = '';
-		$lock     = false;
+		$masked   = '';
+		$escapes  = array();
 		$n        = strlen( $css );
 		for ( $i = 0; $i < $n; ) {
 			$c = $css[ $i ];
 			// An escape: the character after it (a line break, CR LF as one)
 			// closes no string and starts no comment.
 			if ( '\\' === $c ) {
-				// Outside of a string: an escape in a name, a function, an
-				// at-rule (u\72l(, @imp\6Frt) locks.
-				$lock   = $lock || '' === $quote;
-				$len    = "\r\n" === substr( $css, $i + 1, 2 ) ? 3 : 2;
-				$plain .= substr( $css, $i, $len );
-				$i     += $len;
+				$len = "\r\n" === substr( $css, $i + 1, 2 ) ? 3 : 2;
+				// Outside of a string: where it stands, escapes() decides.
+				if ( '' === $quote ) {
+					$escapes[] = strlen( $plain );
+				}
+				$plain  .= substr( $css, $i, $len );
+				$masked .= '' === $quote ? substr( $css, $i, $len ) : str_repeat( '_', strlen( substr( $css, $i, $len ) ) );
+				$i      += $len;
 				continue;
 			}
 			if ( '' !== $quote ) {
@@ -95,9 +105,12 @@ final class AB_MCP_Sync_Css {
 				$i         += $len;
 				continue;
 			}
-			$plain .= $c;
+			// The text outside of strings (each character of a string as _).
+			$masked .= '' !== $quote && $c !== $quote ? '_' : $c;
+			$plain  .= $c;
 			++$i;
 		}
+		$lock = self::escapes( $masked, $escapes );
 		$data  = array();
 		$found = array();
 		if ( preg_match_all( self::URL, $plain, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
@@ -148,14 +161,63 @@ final class AB_MCP_Sync_Css {
 			);
 		}
 		ksort( $urls );
+		// Every other string: read only (a custom property reaches
+		// image-set(var(…)) as an address).
+		$strings = array();
+		if ( preg_match_all( self::STRING, $plain, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			$targets = array_flip( array_column( $found, 1 ) );
+			foreach ( $all as $m ) {
+				if ( ! isset( $targets[ (int) $m[1][1] ] ) ) {
+					$strings[] = (string) $m[1][0];
+				}
+			}
+		}
 		return array(
 			'plain'    => $plain,
 			'decoded'  => self::unescaped( $plain ),
 			'comments' => array_column( $comments, 0 ),
 			'urls'     => array_values( $urls ),
+			'strings'  => $strings,
 			'lock'     => $lock,
 			'data'     => $data,
 		);
+	}
+
+	/**
+	 * Whether a backslash outside of strings and comments locks: in the name
+	 * of a function (an identifier right before "("), of an at-rule, or in
+	 * the value of a declaration (after its first ":", up to ";", "{" or
+	 * "}"). In a selector (text before "{" that is no at-rule) and in the
+	 * name of a property it is free.
+	 *
+	 * @param string $masked  The text without comments, its strings as _.
+	 * @param int[]  $escapes Where a backslash stands outside of strings.
+	 * @return bool
+	 */
+	private static function escapes( $masked, array $escapes ) {
+		if ( array() === $escapes ) {
+			return false;
+		}
+		// An escaped name of a function or of an at-rule.
+		if ( preg_match_all( '/@?(?:[A-Za-z0-9_\-]|\\\\(?:[0-9a-fA-F]{1,6}\s?|.))+\(|@(?:[A-Za-z0-9_\-]|\\\\(?:[0-9a-fA-F]{1,6}\s?|.))+/s', $masked, $names ) ) {
+			foreach ( $names[0] as $name ) {
+				if ( false !== strpos( $name, '\\' ) && ( '(' === substr( $name, -1 ) || '@' === $name[0] ) ) {
+					return true;
+				}
+			}
+		}
+		// In the value of a declaration: a part between {, }, ; that is no
+		// prelude (not ended by "{"), after its first ":".
+		foreach ( $escapes as $at ) {
+			$start = max( strrpos( substr( $masked, 0, $at ), '{' ), strrpos( substr( $masked, 0, $at ), '}' ), strrpos( substr( $masked, 0, $at ), ';' ) );
+			$start = false === $start ? 0 : $start + 1;
+			$end   = strcspn( $masked, '{};', $at ) + $at;
+			$part  = (string) substr( $masked, $start, $end - $start );
+			if ( '{' !== substr( $masked, $end, 1 ) && '@' !== substr( ltrim( $part ), 0, 1 ) && $start + (int) strpos( $part, ':' ) < $at ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -166,7 +228,7 @@ final class AB_MCP_Sync_Css {
 	 * where it does not decode.
 	 *
 	 * @param string $url The address.
-	 * @return string|null
+	 * @return array{type:string,content:string}|null
 	 */
 	public static function data( $url ) {
 		$url = trim( str_replace( array( "\t", "\n", "\r" ), '', (string) $url ), "\x00..\x20" );
@@ -178,11 +240,13 @@ final class AB_MCP_Sync_Css {
 			return null;
 		}
 		$body = rawurldecode( $m[2] );
-		if ( 'base64' !== end( $params ) ) {
-			return $body;
+		if ( 'base64' === end( $params ) ) {
+			$body = base64_decode( $body, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- what the browser decodes, read.
 		}
-		$bytes = base64_decode( $body, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- what the browser decodes, read.
-		return false === $bytes ? null : $bytes;
+		return false === $body ? null : array(
+			'type'    => $params[0],
+			'content' => $body,
+		);
 	}
 
 	/**

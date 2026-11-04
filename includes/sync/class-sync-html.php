@@ -145,12 +145,11 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
-	 * The JSON of an attribute where the core or the browser reads it as
-	 * JSON: data-* (dataset, JSON.parse() of a script) and data-wp-* (the
-	 * Interactivity API, without the namespace before "::" as
-	 * extract_directive_value() takes it off, class-wp-interactivity-api.php
-	 * :899) whose value then begins with [ or {. Null for every other
-	 * attribute (title, alt, aria-*: text).
+	 * The JSON of an attribute where the core reads it as JSON: data-wp-*,
+	 * the directives of the Interactivity API (extract_directive_value(),
+	 * class-wp-interactivity-api.php:899: the namespace before "::" off,
+	 * then json_decode()), whose value then begins with [ or {. Null for
+	 * every other attribute (data-tippy-content, title, alt: text).
 	 *
 	 * @param string $name  Attribute (lower case).
 	 * @param string $value Its value, decoded.
@@ -158,10 +157,10 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	 */
 	public static function json_value( $name, $value ) {
 		$value = (string) $value;
-		if ( 0 === strpos( (string) $name, 'data-wp-' ) && 1 === preg_match( '/^([\w\-_\/]+)::./', $value ) ) {
+		if ( 1 === preg_match( '/^([\w\-_\/]+)::./', $value ) ) {
 			$value = explode( '::', $value, 2 )[1];
 		}
-		return 0 === strpos( (string) $name, 'data-' ) && 1 === preg_match( '/^\s*[\[{]/', $value ) ? $value : null;
+		return 0 === strpos( (string) $name, 'data-wp-' ) && 1 === preg_match( '/^\s*[\[{]/', $value ) ? $value : null;
 	}
 
 	/**

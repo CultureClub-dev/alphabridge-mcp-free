@@ -664,7 +664,9 @@ final class SyncRefsTest extends TestCase {
 	public function testTheEscapesOfJsonInAPathAreRead(): void {
 		// Codex, round 13 (A4): \u0031\u0032 is 12 to JSON and JavaScript.
 		$numeric = self::rules( '/archives/%post_id%/' );
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( '{"url":"https:\\/\\/staging.test\\/archives\\/\\u0031\\u0032\\/"}', $numeric ), 0, 2 ) );
+		// Stored JSON by its round trip (Codex, round 19): \u0031 is no
+		// spelling of a producer, so it locks whole.
+		self::assertSame( array( array(), array( 'c:html:json' ) ), array_slice( self::routed( '{"url":"https:\\/\\/staging.test\\/archives\\/\\u0031\\u0032\\/"}', $numeric ), 0, 2 ) );
 		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'u="https://staging.test/archives/\\u0031\\u0032/"', $numeric ), 0, 2 ) );
 	}
 
@@ -740,12 +742,13 @@ final class SyncRefsTest extends TestCase {
 		$json = '{"url":"https:\/\/staging.test\/?p=12"}';
 		$acc  = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Canon::value( $json, self::ctx(), $acc, 'post', 'meta:_json' );
-		self::assertSame( array( 'meta:_json?p' ), array_column( $acc['refs'], 'at' ) );
+		self::assertSame( array( 'meta:_json:json.url?p' ), array_column( $acc['refs'], 'at' ) );
 		self::assertSame( '{"url":"https:\/\/www.live.test\/?p=120"}', AB_MCP_Sync_Refs::rewrite_value( $json, $plan, $changed ) );
-		// The query only as JSON decodes it (\u003f is the "?"): it locks.
+		// The query only as JSON decodes it (\u003f is the "?", no spelling
+		// of a producer): it locks.
 		$acc = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Canon::value( '{"url":"https:\/\/staging.test\/\u003fp=12"}', self::ctx(), $acc, 'post', 'meta:_json' );
-		self::assertSame( array( array(), array( 'meta:_json?p' ) ), array( $acc['refs'], $acc['spelling'] ) );
+		self::assertSame( array( array(), array( 'meta:_json:json' ) ), array( $acc['refs'], $acc['spelling'] ) );
 	}
 
 	public function testAContentThatCannotBeJoinedLocks(): void {

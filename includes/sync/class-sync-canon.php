@@ -478,6 +478,15 @@ final class AB_MCP_Sync_Canon {
 					continue 2;
 				}
 			}
+			// Stored JSON: its canonical form by its round trip.
+			if ( isset( $query['json'] ) ) {
+				$cuts[] = array(
+					'at'     => $query['at'],
+					'len'    => $query['len'],
+					'marker' => AB_MCP_Sync_Refs::json_canon( $query['json'], $ctx, $acc, $at ),
+				);
+				continue;
+			}
 			$where = $at . $query['what'];
 			if ( null === $query['id'] ) {
 				self::spelling( $acc, $where );

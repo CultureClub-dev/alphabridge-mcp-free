@@ -32,6 +32,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-css.php';
+require_once __DIR__ . '/class-sync-json.php';
 
 /**
  * Class AB_MCP_Sync_Urls
@@ -97,8 +98,21 @@ final class AB_MCP_Sync_Urls {
 		$text = (string) $text;
 		$out  = array();
 		$done = array();
+		// A text of JSON (global styles, theme.json, a meta value): one span,
+		// read by its round trip (AB_MCP_Sync_Json, AB_MCP_Sync_Refs::
+		// json_canon()), nothing in it one by one; deeper than json_decode()
+		// reads, it locks.
+		$json = AB_MCP_Sync_Json::read( $text );
+		if ( false === $json ) {
+			return array( self::lock( 0, strlen( $text ), ':json' ) );
+		}
+		if ( null !== $json ) {
+			return array( self::json_hit( 0, $json ) );
+		}
 		// In the values of the attributes of tags, as the HTML API reads them;
-		// CSS holds no tags (custom_css goes out through strip_tags()).
+		// CSS holds no tags (custom_css goes out through wp_custom_css_cb()
+		// into the modifiable text of a style element,
+		// WP_HTML_Tag_Processor::set_modifiable_text(): its text as text).
 		if ( empty( $ctx['css'] ) && preg_match( '/<[A-Za-z]/', $text ) ) {
 			$tags = null;
 			// The HTML API reads UTF-8: a site in another charset is not read.
@@ -130,12 +144,12 @@ final class AB_MCP_Sync_Urls {
 						$out = array_merge( $out, self::css_ids( $raw, $value, $ctx, $tag['at'] ) );
 						continue;
 					}
-					// JSON in an attribute as the core or the browser reads it
-					// (data-*, data-wp-context with its namespace): its
-					// addresses value by value; not JSON, it locks.
+					// JSON in an attribute as the core reads it (data-wp-*, its
+					// namespace before "::" off): by its round trip; not JSON,
+					// it locks.
 					$json = AB_MCP_Sync_Html::json_value( $name, $value );
 					if ( null !== $json ) {
-						$out = array_merge( $out, self::json_attribute( $raw, $name, $value, $json, $ctx, $tag['at'], $text ) );
+						$out = array_merge( $out, self::json_attribute( $raw, $name, $value, $json, $ctx, $tag['at'] ) );
 						continue;
 					}
 					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
@@ -155,15 +169,6 @@ final class AB_MCP_Sync_Urls {
 		// A text that is CSS (custom_css): its url(…) and escapes as CSS.
 		if ( ! empty( $ctx['css'] ) ) {
 			$out = array_merge( $out, self::css( $text, $ctx, 0, $text, true ) );
-		}
-		// A text of JSON (global styles, theme.json): the value of each key
-		// css as CSS; deeper than json_decode() reads, it locks.
-		$json = AB_MCP_Sync_Canon::json_text( $text );
-		if ( false === $json ) {
-			$out[] = self::lock( 0, strlen( $text ), ':json' );
-		}
-		if ( is_array( $json ) ) {
-			$out = array_merge( $out, self::json_css( $json, $ctx, false ), self::background_ids( $text, $json, $ctx ) );
 		}
 		// In the attributes of shortcodes, as the core reads them: read as
 		// stored where the value is stored as it is read, once.
@@ -208,11 +213,12 @@ final class AB_MCP_Sync_Urls {
 		$closer = strripos( $raw, '</' . strtolower( $tag['tag'] ) );
 		$start  = false === $closer ? -1 : $closer - strlen( $tag['text'] );
 		if ( $start > 0 && substr( $raw, $start, strlen( $tag['text'] ) ) === $tag['text'] ) {
-			// A script of JSON: its addresses without the host as values
-			// (those with it are read as prose, rewritten there), locked.
+			// A script of JSON: its content by its round trip, as a span;
+			// what is no JSON of an object or a list locks.
 			if ( 'SCRIPT' === $tag['tag'] && AB_MCP_Sync_Html::is_data_script( $tag['attrs'] ) ) {
-				$json = json_decode( $tag['text'], true );
-				$out  = array_merge( $out, JSON_ERROR_NONE === json_last_error() ? self::json_ids( $json, $ctx, '' ) : array( self::lock( $tag['at'], $tag['len'], ':json' ) ) );
+				$json  = AB_MCP_Sync_Json::read( $tag['text'] );
+				$out[] = is_array( $json ) ? self::json_hit( $tag['at'] + $start, $json ) : self::lock( $tag['at'], $tag['len'], ':json' );
+				return array( array( $tag['at'], $end ) );
 			}
 			// Style: CSS (url(…) without a host, its escapes).
 			if ( 'STYLE' === $tag['tag'] ) {
@@ -258,11 +264,13 @@ final class AB_MCP_Sync_Urls {
 	 * as AB_MCP_Sync_Css::read() reads it (without its comments): the
 	 * addresses of url(…), @import and image-set(…) without the host, read
 	 * as any address (root: rewritten as stored where safe, relative to the
-	 * page: page_ids(), a query with ids locks). The text locks where it
-	 * holds a backslash outside of strings, where an address is not read to
-	 * its end (a comment or a backslash in it, a url( or an @import not read
-	 * so), where it hides one (css_hides()), and where a data: is not free
-	 * (data_free()).
+	 * page: page_ids(), a query with ids locks). The text locks where a
+	 * backslash stands in the name of a function or an at-rule or in a value
+	 * (AB_MCP_Sync_Css::escapes()), where an address is not read to its end
+	 * (a comment or a backslash in it, a url( or an @import not read so),
+	 * where it hides one (css_hides()), where a data: is not free
+	 * (data_free()), and where any other string holds an address of the
+	 * sites with an id.
 	 *
 	 * @param string $css    CSS.
 	 * @param array  $ctx    Context.
@@ -281,6 +289,15 @@ final class AB_MCP_Sync_Urls {
 				return array( self::lock( $base, strlen( $css ), ':css' ) );
 			}
 		}
+		// Any other string (a custom property reaches image-set(var(…)) as an
+		// address): an address of the sites with an id in it locks; it is
+		// rewritten only in url(), image-set() and @import.
+		foreach ( $read['strings'] as $string ) {
+			$hits = self::prose( $string, $ctx, AB_MCP_Sync_Canon::address_cuts( $string, $ctx ), array(), false );
+			if ( array() !== $hits || ( self::names_an_address( '', $string ) && array() !== self::address( $string, $ctx, null, $string ) ) ) {
+				return array( self::lock( $base, strlen( $css ), ':css' ) );
+			}
+		}
 		$out = array();
 		foreach ( $read['urls'] as $url ) {
 			$found = '' === $url['url'] ? null : self::read( $url['url'], $ctx );
@@ -295,20 +312,30 @@ final class AB_MCP_Sync_Urls {
 	/**
 	 * Whether an address data: of CSS is free: an image of
 	 * AB_MCP_Sync_Css::DATA_IMAGES that decodes, and what it holds names no
-	 * site and holds no address with an id (read as a text: its tags, its
-	 * CSS). It cannot be rewritten in place: any hit locks.
+	 * site; an SVG holds no address with an id and nothing that locks, read
+	 * as content of HTML is (AB_MCP_Sync_Canon::text(): its tags by the HTML
+	 * API, its CSS, its JSON). It cannot be rewritten in place: any hit
+	 * locks.
 	 *
 	 * @param string $url The address.
 	 * @param array  $ctx Context.
 	 * @return bool
 	 */
 	private static function data_free( $url, array $ctx ) {
-		$content = AB_MCP_Sync_Css::data( $url );
-		if ( null === $content ) {
+		$data = AB_MCP_Sync_Css::data( $url );
+		if ( null === $data ) {
 			return false;
 		}
 		$text = array_diff_key( $ctx, array( 'css' => true ) );
-		return ! self::names_a_site( $content, $text ) && array() === self::ids( $content, $text, AB_MCP_Sync_Canon::address_cuts( $content, $text ) );
+		if ( self::names_a_site( $data['content'], $text ) ) {
+			return false;
+		}
+		if ( 'image/svg+xml' !== $data['type'] ) {
+			return true;
+		}
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::text( $data['content'], $text, array(), $acc, 'data' );
+		return array() === $acc['refs'] && array() === $acc['spelling'];
 	}
 
 	/**
@@ -373,204 +400,52 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * The ids of the addresses in an attribute that holds JSON as the core
-	 * or the browser reads it (AB_MCP_Sync_Html::json_value(): data-*, the
-	 * Interactivity API with its namespace): every string value read as an
-	 * address where it begins as one or its key names one
-	 * (names_an_address()), as prose where it names a site elsewhere in it.
-	 * Rewritten only where the string stands in the stored attribute exactly
-	 * once, without escapes or with every "/" as "\/" as
-	 * wp_interactivity_data_wp_context() writes it (interactivity-api.php
-	 * :104, wp_json_encode() without JSON_UNESCAPED_SLASHES), the ids in
-	 * that spelling; any other escape, or not stored so, an id locks. What
-	 * json_decode() does not read locks.
+	 * JSON in an attribute as the core reads it (AB_MCP_Sync_Html::
+	 * json_value(): data-wp-*): a span read by its round trip
+	 * (AB_MCP_Sync_Json), where the attribute is stored as it is read; else
+	 * read only (an id or an address in it locks, json_canon()). What is no
+	 * JSON of an object or a list locks.
 	 *
 	 * @param string $raw   The tag as stored.
 	 * @param string $name  The attribute.
 	 * @param string $value Its value as the HTML API reads it.
 	 * @param string $json  The JSON in it (json_value()).
 	 * @param array  $ctx   Context.
-	 * @param int    $base  Where the tag stands in $text.
-	 * @param string $text  The text.
+	 * @param int    $base  Where the tag stands in the text.
 	 * @return array See ids().
 	 */
-	private static function json_attribute( $raw, $name, $value, $json, array $ctx, $base, $text ) {
-		$data = json_decode( $json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() ) {
+	private static function json_attribute( $raw, $name, $value, $json, array $ctx, $base ) {
+		$read = AB_MCP_Sync_Json::read( $json );
+		if ( ! is_array( $read ) ) {
 			return array( self::lock( $base, strlen( $raw ), ':json' ) );
 		}
 		$span = AB_MCP_Sync_Html::value_span( $raw, $name, $value );
-		$out  = array();
-		foreach ( self::json_strings( $data, '' ) as $leaf ) {
-			list( $key, $string ) = $leaf;
-			if ( ! self::names_an_address( $key, $string ) ) {
-				$out = array_merge( $out, self::names_a_site( $string, $ctx ) ? self::prose( $string, $ctx, AB_MCP_Sync_Canon::address_cuts( $string, $ctx ), array(), false ) : array() );
-				continue;
-			}
-			$plain   = '"' . $string . '"';
-			$slashed = '"' . str_replace( '/', '\/', $string ) . '"';
-			$count   = substr_count( $value, $plain ) + substr_count( $value, $slashed );
-			$spelled = false !== strpos( $value, $plain ) ? $plain : $slashed;
-			$at      = null !== $span && 1 === $count ? $base + $span[0] + (int) strpos( $value, $spelled ) : null;
-			// Stored so in the text, or read decoded (locked).
-			if ( null === $at || substr( $text, $at, strlen( $spelled ) ) !== $spelled ) {
-				$out = array_merge( $out, self::address( $string, $ctx, null, $string ) );
-				continue;
-			}
-			// The ids as read in the string, where they stand in its spelling.
-			foreach ( self::address( $string, $ctx, 0, $string ) as $hit ) {
-				$hit['at'] = $at + 1 + $hit['at'] + ( $spelled === $plain ? 0 : substr_count( (string) substr( $string, 0, $hit['at'] ), '/' ) );
-				$out[]     = $hit;
-			}
+		if ( null !== $span && substr( $raw, $span[0], $span[1] ) === $value ) {
+			return array( self::json_hit( $base + $span[0] + strlen( $value ) - strlen( $json ), $read ) );
 		}
-		return $out;
+		$read['producer'] = null;
+		$acc              = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::json_canon( $read, $ctx, $acc, '' );
+		return array() === $acc['spelling'] ? array() : array( self::lock( $base, strlen( $raw ), ':json' ) );
 	}
 
 	/**
-	 * The strings of decoded JSON with their keys.
+	 * A span of stored JSON as a hit of ids(): AB_MCP_Sync_Canon::text()
+	 * and AB_MCP_Sync_Refs::rewrite_text() read and write it whole.
 	 *
-	 * @param mixed  $value Decoded JSON.
-	 * @param string $key   Its key.
-	 * @return array<int,array{0:string,1:string}>
+	 * @param int   $at   Where it stands.
+	 * @param array $json Of AB_MCP_Sync_Json::read().
+	 * @return array
 	 */
-	private static function json_strings( $value, $key ) {
-		if ( is_string( $value ) ) {
-			return array( array( (string) $key, $value ) );
-		}
-		$out = array();
-		foreach ( is_array( $value ) ? $value : array() as $k => $item ) {
-			$out = array_merge( $out, self::json_strings( $item, (string) $k ) );
-		}
-		return $out;
-	}
-
-	/**
-	 * The CSS of decoded JSON: every string under a key css, at any depth
-	 * below it too (styles.css, styles.blocks.*.css, css.desktop), read
-	 * decoded: an id there locks (the addresses with the host are read as
-	 * prose in the stored text).
-	 *
-	 * @param mixed $value Decoded JSON.
-	 * @param array $ctx   Context.
-	 * @param bool  $css   Under a key css.
-	 * @return array See ids().
-	 */
-	private static function json_css( $value, array $ctx, $css ) {
-		if ( is_string( $value ) ) {
-			return $css ? self::css( $value, $ctx, 0, $value, false ) : array();
-		}
-		$out = array();
-		foreach ( is_array( $value ) ? $value : array() as $key => $item ) {
-			$out = array_merge( $out, self::json_css( $item, $ctx, $css || 'css' === $key ) );
-		}
-		return $out;
-	}
-
-	/**
-	 * The attachment ids of the background images of a text of JSON (global
-	 * styles, theme.json: …background.backgroundImage.id at any depth,
-	 * under blocks.* and elements.* too, as the background support of the
-	 * editor writes it beside the url), a reference as in the attributes of
-	 * a block (AB_MCP_Sync_Refs::SUPPORT_IDS). Rewritten where every key id
-	 * of the JSON stands in the text as "id": in the order json_decode()
-	 * reads them (no key twice, none escaped), this one a whole number of
-	 * JSON above 0 (an integer literal is its one spelling), beside a url of
-	 * this site (own_address()); every other background image with an id
-	 * locks.
-	 *
-	 * @param string $text The JSON as stored.
-	 * @param array  $json Decoded.
-	 * @param array  $ctx  Context.
-	 * @return array See ids().
-	 */
-	private static function background_ids( $text, array $json, array $ctx ) {
-		$ids = array();
-		self::json_id_leaves( $json, array(), $ids );
-		preg_match_all( '/"id"\s*:\s*(-?[0-9.eE+]*)/', $text, $raw, PREG_OFFSET_CAPTURE );
-		$out = array();
-		foreach ( $ids as $i => $leaf ) {
-			if ( ! $leaf['background'] ) {
-				continue;
-			}
-			$spelled = count( $raw[1] ) === count( $ids ) ? $raw[1][ $i ] : null;
-			if ( null !== $spelled && (int) $spelled[0] === $leaf['id'] && $leaf['id'] > 0 && self::own_address( $leaf['url'], $ctx ) ) {
-				$out[] = array(
-					'at'    => (int) $spelled[1],
-					'len'   => strlen( $spelled[0] ),
-					'space' => 'post',
-					'id'    => $leaf['id'],
-					'what'  => ':backgroundImage.id',
-				);
-				continue;
-			}
-			$out[] = self::lock( 0, strlen( $text ), ':backgroundImage.id' );
-		}
-		return $out;
-	}
-
-	/**
-	 * Every value under a key id of decoded JSON, in the order of the text,
-	 * whether it is the id of a background image (…background.backgroundImage)
-	 * and the url beside it.
-	 *
-	 * @param mixed    $value Decoded JSON.
-	 * @param string[] $path  The keys above it.
-	 * @param array    $ids   Collected: id, background, url.
-	 * @return void
-	 */
-	private static function json_id_leaves( $value, array $path, array &$ids ) {
-		if ( ! is_array( $value ) ) {
-			return;
-		}
-		foreach ( $value as $key => $item ) {
-			if ( 'id' === $key ) {
-				$ids[] = array(
-					'id'         => $item,
-					'background' => array( 'background', 'backgroundImage' ) === array_slice( $path, -2 ),
-					'url'        => isset( $value['url'] ) ? $value['url'] : null,
-				);
-			}
-			self::json_id_leaves( $item, array_merge( $path, array( (string) $key ) ), $ids );
-		}
-	}
-
-	/**
-	 * Whether an address is one of this site with its host, as the url of a
-	 * background image beside its attachment id must be to be rewritten
-	 * with it.
-	 *
-	 * @param mixed $url Address.
-	 * @param array $ctx Context.
-	 * @return bool
-	 */
-	public static function own_address( $url, array $ctx ) {
-		$read = is_string( $url ) ? self::read( $url, $ctx ) : null;
-		return null !== $read && 'host' === $read['form'];
-	}
-
-	/**
-	 * The ids of the addresses without a host in the values of JSON (a
-	 * value named or beginning as an address, names_an_address()), read
-	 * decoded: locked. An address with the host is read in the stored text.
-	 *
-	 * @param mixed  $value Decoded JSON.
-	 * @param array  $ctx   Context.
-	 * @param string $key   The key of the value.
-	 * @return array See ids().
-	 */
-	private static function json_ids( $value, array $ctx, $key ) {
-		$out = array();
-		if ( is_array( $value ) ) {
-			foreach ( $value as $k => $item ) {
-				$out = array_merge( $out, self::json_ids( $item, $ctx, (string) $k ) );
-			}
-			return $out;
-		}
-		if ( ! is_string( $value ) || ! self::names_an_address( $key, $value ) ) {
-			return $out;
-		}
-		$read = self::read( $value, $ctx );
-		return null !== $read && in_array( $read['form'], array( 'root', 'page' ), true ) ? self::address( $value, $ctx, null, $value ) : $out;
+	private static function json_hit( $at, array $json ) {
+		return array(
+			'at'    => (int) $at,
+			'len'   => strlen( $json['raw'] ),
+			'space' => 'json',
+			'id'    => null,
+			'what'  => ':json',
+			'json'  => $json,
+		);
 	}
 
 	/**

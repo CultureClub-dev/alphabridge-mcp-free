@@ -382,8 +382,13 @@ final class SyncCoreReadsTest extends TestCase {
 			);
 		};
 		$posts  = static fn( array $result ): array => array_column( array_filter( $result['refs'], static fn( $r ) => 'post' === $r['space'] ), 'id' );
-		$locked = $canon( $styles( array( 'css' => '.x{background:url(/?p=' . $post . ')}' ) ) );
-		self::assertSame( array( array(), array( '*:reference_spelling' ) ), array( $posts( $locked ), self::keys( $locked['locks'] ) ) );
+		// Codex, round 19 (1): written as its producer writes it, read by its
+		// round trip: the address of the CSS a reference.
+		$read = $canon( $styles( array( 'css' => '.x{background:url(/?p=' . $post . ')}' ) ) );
+		self::assertSame( array( array( $post ), array() ), array( $posts( $read ), self::keys( $read['locks'] ) ) );
+		$id   = $styles( array( 'background' => array( 'backgroundImage' => array( 'url' => 'https://cdn.test/bg.jpg', 'id' => $post, 'source' => 'file' ) ) ) );
+		$read = $canon( $id );
+		self::assertSame( array( array( $post ), array() ), array( $posts( $read ), self::keys( $read['locks'] ) ), 'The attachment of a background image, on a CDN.' );
 		$locked = $canon( $styles( array( 'blocks' => array( 'core/paragraph' => array( 'css' => '.x{--api/**/-key:demo-secret}' ) ) ) ) );
 		self::assertSame( array( '*:credential_field' ), self::keys( $locked['locks'] ) );
 		$free = $canon( $styles( array( 'background' => array( 'backgroundImage' => array( 'url' => AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/bg.jpg' ) ), 'css' => '.x{background:url(' . AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/a.png)}' ) ) );
@@ -411,9 +416,10 @@ final class SyncCoreReadsTest extends TestCase {
 				self::assertSame( array( array( $a ), array(), '<div data-wp-interactive="acme" ' . $to . '><a data-wp-bind--href="context.url">x</a></div>', array() ), array( $read['refs'], $read['spelling'], $read['content'], $read['missing'] ), $attr );
 			}
 		}
-		// Every other escape of the helper (& as \u0026): locked.
-		$read = self::read( '<div ' . wp_interactivity_data_wp_context( array( 'url' => '/?a=1&p=' . $a ) ) . '>x</div>', array( $a => $a + 1000 ) );
-		self::assertSame( array( array(), array( 'c:html?p' ) ), array( $read['refs'], $read['spelling'] ) );
+		// Codex, round 19 (B-3): & as \u0026 is the helper's spelling as well,
+		// read and written again by its round trip.
+		$read = self::read( '<div ' . wp_interactivity_data_wp_context( array( 'url' => '/?p=' . $a . '&foo=bar' ), 'acme/store' ) . '>x</div>', array( $a => $a + 1000 ) );
+		self::assertSame( array( array( $a ), array(), '<div ' . wp_interactivity_data_wp_context( array( 'url' => '/?p=' . ( $a + 1000 ) . '&foo=bar' ), 'acme/store' ) . '>x</div>' ), array( $read['refs'], $read['spelling'], $read['content'] ) );
 		self::assertSame( 'mixed', \AB_MCP_Sync_Credentials::unit( '', '<div ' . wp_interactivity_data_wp_context( array( array( 'name' => 'api_key', 'value' => 'demo-secret' ) ), 'acme/store' ) . '></div>', array() )['state'] );
 	}
 
