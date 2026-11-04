@@ -604,7 +604,7 @@ trait SyncCoreReads {
 		foreach ( array(
 			'{ "styles": { "css": ".x{background:url(/?p=12)}" } }',
 			'{"styles":{"css":"a{}","css":".x{background:url(/?p=12)}"}}',
-			'{"styles":{"\u0063ss":".x{background:url(https://staging.test/a.png)}"}}',
+			'{"styles":{"\u0063ss":".x{background:url(https://staging.test/?p=12)}"}}',
 		) as $json ) {
 			list( $refs, $acc ) = self::reads_scan( $json );
 			self::assertSame( array( array(), array( 'c:html:json' ) ), array( $refs, $acc['spelling'] ), $json );
@@ -777,6 +777,8 @@ trait SyncCoreReads {
 			'in single quotes'     => array( "<p><a href='https://staging.test/?p=12'>Beitrag</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?p=120'>Beitrag</a></p>" ),
 			'in single quotes with an ampersand' => array( "<p><a href='https://staging.test/?a=1&amp;p=12'>x</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?a=1&amp;p=120'>x</a></p>" ),
 			'escaped JSON in a script' => array( '<script>var u = "https:\\/\\/staging.test\\/?p=12";</script>', array( 'post:12@c:html?p' ), '<script>var u = "https:\\/\\/www.live.test\\/?p=120";</script>' ),
+			// CI, round 20: \u0026 of JSON in JavaScript separates as & does.
+			'in a script with an ampersand of JSON' => array( '<script>var u = "https:\\/\\/staging.test\\/?preview=1\\u0026p=12";</script>', array( 'post:12@c:html?p' ), '<script>var u = "https:\\/\\/www.live.test\\/?preview=1\\u0026p=120";</script>' ),
 			'after an ampersand'   => array( '<p><a href="https://staging.test/?preview=1&amp;p=12">x</a></p>', array( 'post:12@c:html?p' ), '<p><a href="https://www.live.test/?preview=1&amp;p=120">x</a></p>' ),
 			'after an ampersand in prose' => array( 'Siehe https://staging.test/?preview=1&p=12 hier', array( 'post:12@c:html?p' ), 'Siehe https://www.live.test/?preview=1&p=120 hier' ),
 			'in another attribute' => array( '<p><span data-target="https://staging.test/?p=12">x</span></p>', array( 'post:12@c:html?p' ), '<p><span data-target="https://www.live.test/?p=120">x</span></p>' ),
@@ -1038,6 +1040,48 @@ trait SyncCoreReads {
 	public function testWhatIsNotReadToItsEndIsUnreadable( string $text ): void {
 		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
 		self::assertSame( array( 'unreadable', 'unreadable_value' ), array( $check['state'], $check['why'] ?? null ), $text );
+	}
+
+	public function testIndentedJsonTakesOverItsHostOnly(): void {
+		// Codex, round 20 (B-1): JSON written by hand (indented, no producer's
+		// spelling): a host stored literally in a string value is replaced,
+		// every other byte stays; an id, an escaped host, a host in a key lock.
+		$ld   = static fn( string $url, string $key = 'url' ): string => "<script type=\"application/ld+json\">\n{\n  \"@type\": \"Organization\",\n  \"" . $key . "\": \"" . $url . "\"\n}\n</script>";
+		// In a meta value: the same.
+		$meta = "{\n  \"logo\": \"https://staging.test/logo.png\"\n}";
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$form = AB_MCP_Sync_Canon::value( $meta, self::reads_ctx(), $acc, 'meta', 'm' );
+		self::assertSame( array(), $acc['spelling'] );
+		self::assertSame( array( '~s' => array( array( '~s' => array( "{\n  \"logo\": \"", AB_MCP_Sync_Canon::address_cuts( 'https://staging.test', self::reads_ctx() )[0]['marker'], "/logo.png\"\n}" ) ) ) ), $form, 'The host neutral, the rest as it is.' );
+		$plan    = self::reads_plan();
+		$changed = false;
+		self::assertSame( str_replace( 'staging.test', 'www.live.test', $meta ), AB_MCP_Sync_Refs::rewrite_value( $meta, $plan, $changed ) );
+		$free = $ld( 'https://staging.test/ueber-uns/' );
+		if ( self::closed( $free ) ) {
+			self::assertLockedWithoutTheCore( $free );
+			return;
+		}
+		foreach ( array( $free, $ld( 'Mehr unter https://staging.test/ueber-uns/ und https://staging.test/team/' ), $ld( 'https:\\/\\/staging.test\\/ueber-uns\\/' ), str_replace( '"@type": "Organization",', '"@type": "Organization",' . "\n  " . '"name": "Masse 18\\" \\\\ Zoll",', $free ) ) as $content ) {
+			list( $refs, $acc ) = self::reads_scan( $content );
+			self::assertSame( array( array(), array() ), array( $refs, $acc['spelling'] ), $content );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
+			self::assertSame( array( str_replace( 'staging.test', 'www.live.test', $content ), array() ), array( $out['content'], $out['missing'] ), $content );
+		}
+		foreach ( array(
+			$ld( 'https://staging.test/?p=12' ),
+			$ld( 'https://staging\\u002etest/ueber-uns/' ),
+			$ld( 'https://staging.test/ueber-uns/', 'https://staging.test/ueber-uns/' ),
+			$ld( '/?p=12' ),
+			$ld( '?p=12' ),
+		) as $content ) {
+			list( $refs, $acc ) = self::reads_scan( $content );
+			self::assertSame( array( array(), array( 'c:html:json' ) ), array( $refs, $acc['spelling'] ), $content );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
+			self::assertSame( array( $content, array( 'spelling' ) ), array( $out['content'], array_column( $out['missing'], 'space' ) ), $content );
+		}
+		// Not stored as it is read in an attribute: locked.
+		list( , $acc ) = self::reads_scan( '<div data-wp-context="{ &quot;logo&quot;: &quot;https://staging.test/logo.png&quot; }">x</div>' );
+		self::assertSame( array( 'c:html:json' ), $acc['spelling'] );
 	}
 
 	public function testAShortLinkInJsonAfterAnAmpersandIsAReference(): void {

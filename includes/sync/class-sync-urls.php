@@ -423,10 +423,12 @@ final class AB_MCP_Sync_Urls {
 		if ( null !== $span && substr( $raw, $span[0], $span[1] ) === $value ) {
 			return array( self::json_hit( $base + $span[0] + strlen( $value ) - strlen( $json ), $read ) );
 		}
+		// Not stored as it is read: nothing in it is taken over, an id or a
+		// host locks.
 		$read['producer'] = null;
 		$acc              = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::json_canon( $read, $ctx, $acc, '' );
-		return array() === $acc['spelling'] ? array() : array( self::lock( $base, strlen( $raw ), ':json' ) );
+		$form             = AB_MCP_Sync_Refs::json_canon( $read, $ctx, $acc, '' );
+		return array() === $acc['spelling'] && 1 === count( $form['~s'] ) ? array() : array( self::lock( $base, strlen( $raw ), ':json' ) );
 	}
 
 	/**

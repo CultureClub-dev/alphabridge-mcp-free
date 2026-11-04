@@ -83,6 +83,31 @@ final class AB_MCP_Sync_Json {
 	}
 
 	/**
+	 * The spans of the strings of a text of JSON json_decode() reads (each
+	 * with its quotes), as a tokenizer of JSON bounds them: from " to the
+	 * next " no backslash escapes.
+	 *
+	 * @param string $raw JSON as stored.
+	 * @return array<int,array{0:int,1:int}> Offset and length.
+	 */
+	public static function string_spans( $raw ) {
+		$raw = (string) $raw;
+		$out = array();
+		$n   = strlen( $raw );
+		for ( $i = 0; $i < $n; $i++ ) {
+			if ( '"' !== $raw[ $i ] ) {
+				continue;
+			}
+			$start = $i;
+			for ( ++$i; $i < $n && '"' !== $raw[ $i ]; $i++ ) {
+				$i += '\\' === $raw[ $i ] ? 1 : 0;
+			}
+			$out[] = array( $start, $i + 1 - $start );
+		}
+		return $out;
+	}
+
+	/**
 	 * Data written as a producer writes it.
 	 *
 	 * @param mixed  $value    Decoded JSON.

@@ -1833,8 +1833,11 @@ final class AB_MCP_Sync_Refs {
 	/**
 	 * The canonical form of stored JSON (AB_MCP_Sync_Json::read()): where it
 	 * is a producer's spelling, the data as json_tree() reads it, with the
-	 * producer; else the text as it is, and every id or address in it locks
-	 * (no position in the text is mapped to the data).
+	 * producer. Else (written by hand, indented: Codex, round 20, B-1) the
+	 * text as it is: an id in it, a key that names a site or anything else
+	 * that locks locks it; a host of a site is taken over neutral only where
+	 * it stands literally in a string value (json_host_cuts()), else it
+	 * locks.
 	 *
 	 * @param array  $json Of AB_MCP_Sync_Json::read().
 	 * @param array  $ctx  Context.
@@ -1843,14 +1846,23 @@ final class AB_MCP_Sync_Refs {
 	 * @return string|array
 	 */
 	public static function json_canon( array $json, array $ctx, array &$acc, $at ) {
-		$sub   = AB_MCP_Sync_Canon::acc();
-		$found = false;
-		$tree  = self::json_tree( $json['value'], '', $ctx, $sub, $at . ':json', 0, $found );
+		$sub  = AB_MCP_Sync_Canon::acc();
+		$tree = self::json_tree( $json['value'], '', $ctx, $sub, $at . ':json', 0 );
 		if ( null === $json['producer'] ) {
-			if ( $found ) {
+			$cuts = self::json_host_cuts( $json['raw'], $ctx );
+			if ( null === $cuts || array() !== array_merge( $sub['refs'], $sub['spelling'] ) ) {
 				AB_MCP_Sync_Canon::spelling( $acc, $at . ':json' );
+				return $json['raw'];
 			}
-			return $json['raw'];
+			$parts = array();
+			$pos   = 0;
+			foreach ( $cuts as $cut ) {
+				$parts[] = substr( $json['raw'], $pos, $cut['at'] - $pos );
+				$parts[] = $cut['marker'];
+				$pos     = $cut['at'] + $cut['len'];
+			}
+			$parts[] = substr( $json['raw'], $pos );
+			return array( '~s' => $parts );
 		}
 		foreach ( $sub as $key => $list ) {
 			$acc[ $key ] = 'credentials' === $key ? $acc[ $key ] : array_merge( $acc[ $key ], $list );
@@ -1863,9 +1875,11 @@ final class AB_MCP_Sync_Refs {
 
 	/**
 	 * Stored JSON with its ids and addresses rewritten: the data changed
-	 * (json_rewrite_tree()) and written again as its producer writes it;
-	 * not a producer's spelling, it is kept as it is, and an id or address
-	 * in it is noted missing (spelling).
+	 * (json_rewrite_tree()) and written again as its producer writes it.
+	 * Not a producer's spelling: an id in it, or a host not stored literally
+	 * in a string value, is noted missing (spelling) and it is kept as it is;
+	 * else only the hosts stored literally in its string values are replaced,
+	 * every other byte as it was.
 	 *
 	 * @param array $json Of AB_MCP_Sync_Json::read().
 	 * @param array $plan plan(), with 'missing' collected.
@@ -1873,19 +1887,58 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function json_rewrite( array $json, array &$plan ) {
 		if ( null === $json['producer'] ) {
-			$probe   = $plan;
-			$changed = false;
+			// The ids alone: a probe without the hosts to replace.
+			$probe         = $plan;
+			$probe['subs'] = array();
+			$changed       = false;
 			self::json_rewrite_tree( $json['value'], '', $probe, $changed );
-			if ( $changed || count( $probe['missing'] ) > count( $plan['missing'] ) ) {
+			$cuts = self::json_host_cuts( $json['raw'], $plan );
+			if ( null === $cuts || $changed || count( $probe['missing'] ) > count( $plan['missing'] ) ) {
 				$plan['missing'][] = array(
 					'space' => 'spelling',
 					'id'    => 0,
 				);
+				return $json['raw'];
 			}
-			return $json['raw'];
+			$raw = $json['raw'];
+			foreach ( array_reverse( $cuts ) as $cut ) {
+				$hit = substr( $raw, $cut['at'], $cut['len'] );
+				if ( isset( $plan['subs'][ $hit ] ) ) {
+					$raw = substr_replace( $raw, $plan['subs'][ $hit ], $cut['at'], $cut['len'] );
+				}
+			}
+			return $raw;
 		}
 		$changed = false;
 		return AB_MCP_Sync_Json::encode( self::json_rewrite_tree( $json['value'], '', $plan, $changed ), $json['producer'] );
+	}
+
+	/**
+	 * Where the hosts of the sites stand in the strings of a stored text of
+	 * JSON (AB_MCP_Sync_Json::string_spans(); a key that names a site locks
+	 * in json_tree() already), as AB_MCP_Sync_Canon::address_cuts() finds
+	 * them; null where a string holds an address of a site that is not
+	 * stored so (a \u escape or another one in the host: what it decodes to
+	 * holds more of them).
+	 *
+	 * @param string $raw JSON as stored.
+	 * @param array  $ctx Context (or plan()).
+	 * @return array|null address_cuts(), at their place in $raw.
+	 */
+	private static function json_host_cuts( $raw, array $ctx ) {
+		$out = array();
+		foreach ( AB_MCP_Sync_Json::string_spans( $raw ) as $span ) {
+			$inner = (string) substr( $raw, $span[0] + 1, $span[1] - 2 );
+			$cuts  = AB_MCP_Sync_Canon::address_cuts( $inner, $ctx );
+			if ( count( $cuts ) !== count( AB_MCP_Sync_Canon::address_cuts( (string) json_decode( '"' . $inner . '"' ), $ctx ) ) ) {
+				return null;
+			}
+			foreach ( $cuts as $cut ) {
+				$cut['at'] += $span[0] + 1;
+				$out[]      = $cut;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1893,9 +1946,8 @@ final class AB_MCP_Sync_Refs {
 	 * read: each text by AB_MCP_Sync_Canon::text() (CSS under a key css, a
 	 * whole address by its key or its beginning), the attachment id of a
 	 * background image (…background.backgroundImage.id, SUPPORT_IDS) a
-	 * reference beside its url; an object as {"~o": …}. $found is set where
-	 * anything is an address, an id or locks, and for a key that names a
-	 * site (keys are not rewritten).
+	 * reference beside its url; an object as {"~o": …}. A key that names a
+	 * site locks (keys are not rewritten).
 	 *
 	 * @param mixed  $value Decoded (objects).
 	 * @param string $path  Path of $value.
@@ -1903,19 +1955,15 @@ final class AB_MCP_Sync_Refs {
 	 * @param array  $acc   Accumulator.
 	 * @param string $at    Where.
 	 * @param int    $depth Depth.
-	 * @param bool   $found Set when an address or an id stands in it.
 	 * @return mixed
 	 */
-	private static function json_tree( $value, $path, array $ctx, array &$acc, $at, $depth, &$found ) {
+	private static function json_tree( $value, $path, array $ctx, array &$acc, $at, $depth ) {
 		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
 			AB_MCP_Sync_Canon::spelling( $acc, $at );
-			$found = true;
 			return null;
 		}
 		if ( is_string( $value ) ) {
-			$form  = self::leaf_canon( $value, $path, $ctx, $acc, $at );
-			$found = $found || ! is_string( $form );
-			return $form;
+			return self::leaf_canon( $value, $path, $ctx, $acc, $at );
 		}
 		if ( ! is_object( $value ) && ! is_array( $value ) ) {
 			return $value;
@@ -1927,17 +1975,15 @@ final class AB_MCP_Sync_Refs {
 			$name = '' !== $key && '~' === $key[0] ? '~' . $key : $key;
 			if ( array() !== AB_MCP_Sync_Canon::address_cuts( $key, $ctx ) ) {
 				AB_MCP_Sync_Canon::spelling( $acc, $at . '.' . $sub );
-				$found = true;
 			}
 			if ( 'id' === $key && self::is_background( $path ) ) {
-				$found = true;
 				if ( isset( $value->url ) && is_string( $value->url ) ) {
 					$out[ $name ] = self::canon_id( 'post', $item, $acc, $at . '.' . $sub );
 					continue;
 				}
 				AB_MCP_Sync_Canon::spelling( $acc, $at . '.' . $sub );
 			}
-			$out[ $name ] = self::json_tree( $item, $sub, $ctx, $acc, $at, $depth + 1, $found );
+			$out[ $name ] = self::json_tree( $item, $sub, $ctx, $acc, $at, $depth + 1 );
 		}
 		return is_object( $value ) ? array( '~o' => $out ) : $out;
 	}
