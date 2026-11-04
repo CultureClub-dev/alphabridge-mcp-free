@@ -300,11 +300,39 @@ final class SyncCoreReadsTest extends TestCase {
 		// A row that holds no text: not known, locked.
 		update_option( 'upload_url_path', array( 'x' ) );
 		self::assertSame( 'unreadable', \AB_MCP_Sync_Credentials::unit( '', '<object data="https://media.test/files/a.pdf" type="application/pdf"></object>', array() )['state'] );
+		self::assertNull( \AB_MCP_Sync_Rows::uploads_url() );
 		delete_option( 'upload_url_path' );
 		update_option( 'upload_path', 'media' );
 		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', '<object data="' . AB_MCP_IT_Sites::url( 'a' ) . '/media/a.pdf" type="application/pdf"></object>', array() )['state'], 'upload_path under siteurl.' );
 		update_option( 'upload_path', ABSPATH . 'wp-content/uploads' );
 		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'], 'An absolute directory: the uploads of WP_CONTENT_URL.' );
+		// Codex, round 17 (B1): an absolute directory outside ABSPATH, as
+		// path_join() leaves it: the uploads of WP_CONTENT_URL as well.
+		update_option( 'upload_path', '/srv/shared/uploads' );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'], 'upload_path=/srv/shared/uploads' );
+		update_option( 'upload_path', './media' );
+		self::assertSame( 'unreadable', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'], 'Relative: under siteurl.' );
+		// As _wp_upload_dir() of the core makes it, for each spelling; siteurl
+		// as get_option() gives it (WP_SITEURL of the site, not its row).
+		$siteurl = get_option( 'siteurl' );
+		$wpdb    = $GLOBALS['wpdb'];
+		$wpdb->update( $wpdb->options, array( 'option_value' => 'https://row.test' ), array( 'option_name' => 'siteurl' ) );
+		try {
+			foreach ( array( '', '0', ' wp-content/uploads ', 'media', 'media/files/', './media', '../shared', '/srv/shared/uploads', '\\\\srv\\uploads', 'C:\\uploads', 'C:/uploads', ABSPATH . 'wp-content/uploads' ) as $path ) {
+				foreach ( array( '', '0', 'https://media.test/files/' ) as $url ) {
+					update_option( 'upload_path', $path );
+					update_option( 'upload_url_path', $url );
+					self::assertSame( rtrim( _wp_upload_dir()['baseurl'], '/' ), \AB_MCP_Sync_Rows::uploads_url(), 'upload_path=' . $path . ' upload_url_path=' . $url );
+				}
+			}
+		} finally {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $siteurl ), array( 'option_name' => 'siteurl' ) );
+		}
+		// A stream: only the file system tells whether it is absolute.
+		update_option( 'upload_path', 'php://memory' );
+		self::assertNull( \AB_MCP_Sync_Rows::uploads_url() );
+		delete_option( 'upload_path' );
+		delete_option( 'upload_url_path' );
 	}
 
 	public function testAdditionalCssIsReadAsCss(): void {
@@ -326,6 +354,47 @@ final class SyncCoreReadsTest extends TestCase {
 		wp_update_custom_css_post( 'q::before { content: "\\201C"; } body { background: url("/?p=' . $post . '"); }' );
 		$result = $canon();
 		self::assertSame( array( array( $post ), array() ), array( array_column( $result['refs'], 'id' ), array_column( $result['locks'], 'key' ) ) );
+		// Codex, round 17 (A3, A4, A7): comments, data:, @import "…".
+		wp_update_custom_css_post( '@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");' );
+		self::assertSame( array( '*:reference_spelling', '*:unreadable_value' ), self::keys( $canon()['locks'] ) );
+		wp_update_custom_css_post( '.x{--api-key/**/:demo-secret}' );
+		self::assertSame( array( '*:credential_field' ), self::keys( $canon()['locks'] ) );
+		wp_update_custom_css_post( "/* Kopfzeile */\nq::before { content: \"\\201C\"; } /* Ende */\n@import \"/?p=" . $post . "\";" );
+		$result = $canon();
+		self::assertSame( array( array( $post ), array() ), array( array_column( $result['refs'], 'id' ), array_column( $result['locks'], 'key' ) ) );
+	}
+
+	public function testGlobalStylesAreReadAsCss(): void {
+		// Codex, round 17 (A2): the CSS of global styles (wp_global_styles,
+		// its key css) as CSS; an absolute address of an image is free.
+		$this->permalinks( '/archives/%post_id%/' );
+		$post   = self::post( 'ziel' );
+		$styles = static function ( array $styles ): int {
+			return self::post( 'wp-global-styles-' . wp_generate_password( 6, false ), array( 'post_type' => 'wp_global_styles', 'post_content' => wp_slash( (string) wp_json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => $styles ) ) ) ) );
+		};
+		$canon  = static function ( int $id ): array {
+			return \AB_MCP_Sync_Db_Kinds::for_pair( 'post' )->canonical(
+				array(
+					'kind'   => 'post',
+					'ref'    => (string) $id,
+					'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+				)
+			);
+		};
+		$posts  = static fn( array $result ): array => array_column( array_filter( $result['refs'], static fn( $r ) => 'post' === $r['space'] ), 'id' );
+		$locked = $canon( $styles( array( 'css' => '.x{background:url(/?p=' . $post . ')}' ) ) );
+		self::assertSame( array( array(), array( '*:reference_spelling' ) ), array( $posts( $locked ), self::keys( $locked['locks'] ) ) );
+		$locked = $canon( $styles( array( 'blocks' => array( 'core/paragraph' => array( 'css' => '.x{--api/**/-key:demo-secret}' ) ) ) ) );
+		self::assertSame( array( '*:credential_field' ), self::keys( $locked['locks'] ) );
+		$free = $canon( $styles( array( 'background' => array( 'backgroundImage' => array( 'url' => AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/bg.jpg' ) ), 'css' => '.x{background:url(' . AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/a.png)}' ) ) );
+		self::assertSame( array( array(), array() ), array( $posts( $free ), self::keys( $free['locks'] ) ) );
+	}
+
+	/** @return string[] The keys of the locks, each once, sorted. */
+	private static function keys( array $locks ): array {
+		$keys = array_values( array_unique( array_column( $locks, 'key' ) ) );
+		sort( $keys );
+		return $keys;
 	}
 
 	public function testAnotherCharsetThanUtf8IsNotRead(): void {

@@ -26,8 +26,10 @@
  * embed, base …). A script of JSON is read as JSON, its fields as any
  * structure. In style, a style attribute and in a value of an
  * attribute of a block or a shortcode with "{" or "=>" name: counts as
- * well; the name or id of a field of a form (input, textarea, select,
- * option, button, meta), with a value or without. Where
+ * well (CSS as AB_MCP_Sync_Css reads it: without its comments, decoded;
+ * data: as an address of it is not read); the name or id of a field of a
+ * form (input, textarea, select, option, button, meta), with a value or
+ * without. Where
  * a text holds a tag the HTML API cannot read (the unit suite, an
  * unfinished tag) the unit is unreadable. More locks than needed are
  * allowed; a credential overlooked because the structure was read
@@ -56,6 +58,7 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/class-redactor.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-refs.php';
+require_once __DIR__ . '/class-sync-css.php';
 
 /**
  * Class AB_MCP_Sync_Credentials
@@ -218,12 +221,11 @@ final class AB_MCP_Sync_Credentials {
 			}
 			// A script of JSON is read as JSON, as any structure (walk(): keys,
 			// lists of name and value, nested, within MAX_DEPTH); so is the
-			// value of an attribute that is JSON of an array or an object.
-			foreach ( array_merge( $html['json'], $html['values'] ) as $i => $json ) {
+			// value of an attribute that begins with [ or {. What json_decode()
+			// does not read (deeper than it reads, no JSON) is not read: never
+			// clean.
+			foreach ( array_merge( $html['json'], $html['values'] ) as $json ) {
 				$value = json_decode( $json, true );
-				if ( $i >= count( $html['json'] ) && ! is_array( $value ) ) {
-					continue;
-				}
 				if ( JSON_ERROR_NONE !== json_last_error() ) {
 					return null;
 				}
@@ -235,13 +237,29 @@ final class AB_MCP_Sync_Credentials {
 					$found[] = ltrim( (string) $field, '~' );
 				}
 			}
-			foreach ( array_merge( $code || $css ? array( $one ) : array(), $html['code'] ) as $segment ) {
+			// Code: the text where it is the value of an attribute that looks
+			// like code. CSS (the text where it is CSS, style, every style
+			// attribute) as AB_MCP_Sync_Css reads it: without its comments, and
+			// decoded; data: as an address of it is not read; a name its escapes
+			// give that the text without them does not hold counts as a key.
+			$segments = $code ? array( $one ) : array();
+			foreach ( array_merge( $css ? array( $one ) : array(), $html['code'] ) as $style ) {
+				$read = AB_MCP_Sync_Css::read( $style );
+				if ( $read['data'] ) {
+					return null;
+				}
+				$segments[] = $read['plain'];
+				if ( $read['decoded'] !== $read['plain'] ) {
+					$found = array_merge( $found, array_diff( self::words( $read['decoded'] ), self::words( $read['plain'] ) ) );
+				}
+			}
+			foreach ( $segments as $segment ) {
 				$variants = self::decodings( $segment );
 				if ( null === $variants ) {
 					return null;
 				}
 				// CSS reads its escapes (\2d, \-): the name as CSS reads it.
-				$variants[] = AB_MCP_Sync_Urls::css_unescaped( $segment );
+				$variants[] = AB_MCP_Sync_Css::unescaped( $segment );
 				foreach ( $variants as $variant ) {
 					if ( preg_match_all( self::CODE_KEY, $variant, $m ) ) {
 						$found = array_merge( $found, $m[1] );
@@ -448,6 +466,16 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
+	 * The words of a text (letters, digits, _ and -), each once.
+	 *
+	 * @param string $text Text.
+	 * @return string[]
+	 */
+	private static function words( $text ) {
+		return preg_match_all( '/[A-Za-z0-9_\-\x80-\xFF]+/', (string) $text, $m ) ? array_values( array_unique( $m[0] ) ) : array();
+	}
+
+	/**
 	 * The fields of the structure and the keys flat() found beside them:
 	 * a flat key the structure named already is not named twice.
 	 *
@@ -539,8 +567,8 @@ final class AB_MCP_Sync_Credentials {
 	 *                         it could not be read.
 	 * @param bool     $code   Inside the attributes of a block or a
 	 *                         shortcode: its texts are code (flat()).
-	 * @param bool     $css    The text is CSS (custom_css, the value of a
-	 *                         key css, as global styles store it).
+	 * @param bool     $css    The text is CSS (custom_css, every value under
+	 *                         a key css, as global styles store it).
 	 * @return bool Whether all of it could be read.
 	 */
 	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why, $code = false, $css = false ) {
@@ -604,7 +632,7 @@ final class AB_MCP_Sync_Credentials {
 				$fields[] = $sub;
 				continue;
 			}
-			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why, $code, 'css' === $key ) ) {
+			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why, $code, $css || 'css' === $key ) ) {
 				return false;
 			}
 		}

@@ -785,8 +785,10 @@ final class AB_MCP_Sync_Canon {
 		}
 		$out = array();
 		foreach ( $value as $key => $item ) {
-			$name         = is_string( $key ) && '' !== $key && '~' === $key[0] ? '~' . $key : $key;
-			$out[ $name ] = self::walk( $item, $ctx, $acc, $kind, $at, '' === $path ? (string) $key : $path . '.' . $key, $layer, $depth + 1, $leaf );
+			$name = is_string( $key ) && '' !== $key && '~' === $key[0] ? '~' . $key : $key;
+			// Every value under a key css is CSS (AB_MCP_Sync_Css).
+			$sub          = 'css' === $key ? array( 'css' => true ) + $ctx : $ctx;
+			$out[ $name ] = self::walk( $item, $sub, $acc, $kind, $at, '' === $path ? (string) $key : $path . '.' . $key, $layer, $depth + 1, $leaf );
 		}
 		return $out;
 	}

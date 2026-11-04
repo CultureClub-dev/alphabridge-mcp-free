@@ -79,34 +79,53 @@ final class AB_MCP_Sync_Rows {
 
 	/**
 	 * The address of the uploads of this site, from its rows, as
-	 * _wp_upload_dir() makes it (wp-includes/functions.php), its base only:
-	 * upload_url_path where it is set; else WP_CONTENT_URL/uploads where
-	 * upload_path is empty, wp-content/uploads or an absolute directory;
-	 * else siteurl with upload_path (the folder of a site of a network and
-	 * UPLOADS lie under it or elsewhere: a PDF there is not taken, it
-	 * locks). Null where siteurl cannot be read: not known. A row that holds
-	 * no address (a serialized value) is no base of a PDF either.
+	 * _wp_upload_dir() of the core makes it (wp-includes/functions.php
+	 * 7.1.3, :2467-2496), its base only:
+	 * - upload_path trimmed; empty ("" or "0") or wp-content/uploads: the
+	 *   directory WP_CONTENT_DIR/uploads; not under ABSPATH: path_join(
+	 *   ABSPATH, upload_path), which leaves an absolute path as it is
+	 *   (path_is_absolute(): "/", "\" or a drive with "\" at its start);
+	 *   under ABSPATH (absolute too): upload_path itself;
+	 * - upload_url_path where it is set (not "" or "0"); else
+	 *   WP_CONTENT_URL/uploads where upload_path is empty, wp-content/uploads
+	 *   or the directory itself (absolute: upload_path=/srv/shared/uploads
+	 *   gives …/wp-content/uploads); else siteurl/upload_path;
+	 * - UPLOADS where it is defined: siteurl/UPLOADS;
+	 * siteurl as get_option() gives it (WP_SITEURL where it is defined,
+	 * _config_wp_siteurl()). Null where it is not known: a row not read, a
+	 * row that holds no text (a serialized value), a stream as upload_path
+	 * (whether it is absolute, only the file system tells), a network (the
+	 * folder of each site).
 	 *
 	 * @return string|null Without a slash at its end.
 	 */
 	public static function uploads_url() {
 		$rows = array();
 		foreach ( array( 'siteurl', 'upload_path', 'upload_url_path' ) as $name ) {
-			// A row not read is empty; without siteurl nothing is known.
-			$row           = self::option( $name );
-			$rows[ $name ] = is_array( $row ) ? trim( (string) $row['value'] ) : '';
+			// A row that is not there is empty (get_option() gives false); one
+			// not read, or one that holds no text, is not known.
+			$row = self::option( $name );
+			if ( null === $row || ( is_array( $row ) && is_serialized( (string) $row['value'] ) ) ) {
+				return null;
+			}
+			$rows[ $name ] = is_array( $row ) ? (string) $row['value'] : '';
 		}
-		if ( '' === $rows['siteurl'] ) {
+		$siteurl = defined( 'WP_SITEURL' ) ? rtrim( (string) WP_SITEURL, '/\\' ) : $rows['siteurl'];
+		$path    = trim( $rows['upload_path'] );
+		if ( false !== strpos( $path, '://' ) || is_multisite() ) {
 			return null;
 		}
-		$content = defined( 'WP_CONTENT_URL' ) ? (string) WP_CONTENT_URL : rtrim( $rows['siteurl'], '/' ) . '/wp-content';
-		$path    = $rows['upload_path'];
-		if ( '' !== $rows['upload_url_path'] ) {
-			$url = $rows['upload_url_path'];
-		} elseif ( '' === $path || 'wp-content/uploads' === $path || ( defined( 'ABSPATH' ) && 0 === strpos( $path, (string) ABSPATH ) ) ) {
-			$url = $content . '/uploads';
-		} else {
-			$url = rtrim( $rows['siteurl'], '/' ) . '/' . $path;
+		// upload_path === $dir of _wp_upload_dir(): empty, wp-content/uploads,
+		// or absolute (path_join() leaves it as it is; under ABSPATH is
+		// absolute as well).
+		$content_dir = '' === $path || '0' === $path || 'wp-content/uploads' === $path || '/' === $path[0] || '\\' === $path[0] || 1 === preg_match( '#^[a-zA-Z]:\\\\#', $path );
+		$url = $rows['upload_url_path'];
+		if ( '' === $url || '0' === $url ) {
+			$content = defined( 'WP_CONTENT_URL' ) ? (string) WP_CONTENT_URL : $siteurl . '/wp-content';
+			$url     = $content_dir ? $content . '/uploads' : rtrim( $siteurl, '/\\' ) . '/' . $path;
+		}
+		if ( defined( 'UPLOADS' ) ) {
+			$url = rtrim( $siteurl, '/\\' ) . '/' . UPLOADS;
 		}
 		return rtrim( $url, '/' );
 	}

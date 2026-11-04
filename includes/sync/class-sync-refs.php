@@ -540,9 +540,10 @@ final class AB_MCP_Sync_Refs {
 	 * @param array  $cuts    Ref cuts: at, len, space, id.
 	 * @param bool   $changed Set when anything changed.
 	 * @param bool   $whole   The whole text is an address.
+	 * @param bool   $css     The text is CSS (the value of a key css).
 	 * @return string
 	 */
-	public static function rewrite_text( $text, array &$plan, array $cuts, &$changed, $whole = false ) {
+	public static function rewrite_text( $text, array &$plan, array $cuts, &$changed, $whole = false, $css = false ) {
 		$text      = (string) $text;
 		$all       = array();
 		$addresses = AB_MCP_Sync_Canon::address_cuts( $text, $plan );
@@ -554,7 +555,7 @@ final class AB_MCP_Sync_Refs {
 		}
 		// The ids the sites' addresses name (AB_MCP_Sync_Urls), in their safe
 		// forms; every other form writes nothing.
-		foreach ( AB_MCP_Sync_Urls::ids( $text, $plan, $addresses, $whole ) as $query ) {
+		foreach ( AB_MCP_Sync_Urls::ids( $text, $css ? array( 'css' => true ) + $plan : $plan, $addresses, $whole ) as $query ) {
 			if ( null === $query['id'] ) {
 				$plan['missing'][] = array(
 					'space' => 'spelling',
@@ -696,7 +697,7 @@ final class AB_MCP_Sync_Refs {
 			}
 		}
 		if ( is_string( $value ) ) {
-			return is_serialized( $value ) ? self::rewrite_value( $value, $plan, $changed, $leaf ) : self::rewrite_text( $value, $plan, array(), $changed );
+			return is_serialized( $value ) ? self::rewrite_value( $value, $plan, $changed, $leaf ) : self::rewrite_text( $value, $plan, array(), $changed, false, self::is_css( (string) $path ) );
 		}
 		return $value;
 	}
@@ -1199,7 +1200,12 @@ final class AB_MCP_Sync_Refs {
 		if ( ! self::is_plain( $block, $path ) ) {
 			self::note_possible( $acc, $value, $at . '.' . $path );
 		}
-		return is_string( $value ) ? AB_MCP_Sync_Canon::text( $value, $ctx, array(), $acc, $at . '.' . $path, self::is_address( $path, $value ) ) : $value;
+		if ( ! is_string( $value ) ) {
+			return $value;
+		}
+		// The value of a key css is CSS (AB_MCP_Sync_Css), never a whole address.
+		$css = self::is_css( $path );
+		return AB_MCP_Sync_Canon::text( $value, $css ? array( 'css' => true ) + $ctx : $ctx, array(), $acc, $at . '.' . $path, ! $css && self::is_address( $path, $value ) );
 	}
 
 	/**
@@ -1774,7 +1780,7 @@ final class AB_MCP_Sync_Refs {
 			}
 			return $value;
 		}
-		return is_string( $value ) ? self::rewrite_text( $value, $plan, array(), $changed, self::is_address( (string) $path, $value ) ) : $value;
+		return is_string( $value ) ? self::rewrite_text( $value, $plan, array(), $changed, ! self::is_css( (string) $path ) && self::is_address( (string) $path, $value ), self::is_css( (string) $path ) ) : $value;
 	}
 
 	/**
@@ -1788,6 +1794,18 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function is_address( $path, $value ) {
 		return AB_MCP_Sync_Urls::names_an_address( (string) substr( (string) strrchr( '.' . $path, '.' ), 1 ), (string) $value );
+	}
+
+	/**
+	 * Whether a value holds CSS by its path: under a key css (global styles
+	 * and theme.json: styles.css, styles.blocks.*.css; an attribute of a
+	 * block).
+	 *
+	 * @param string $path Path of the value.
+	 * @return bool
+	 */
+	public static function is_css( $path ) {
+		return in_array( 'css', explode( '.', (string) $path ), true );
 	}
 
 	/**

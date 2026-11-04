@@ -31,6 +31,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-sync-css.php';
+
 /**
  * Class AB_MCP_Sync_Urls
  */
@@ -77,9 +79,6 @@ final class AB_MCP_Sync_Urls {
 	 */
 	const EXTENT = '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'`()<>{}|^\\\\])*#';
 
-	/** The url(…) of CSS: its address, quoted or not. */
-	const CSS_URL = '#url\(\s*(?|"([^"]*)"|\'([^\']*)\'|([^)\s"\']*))\s*\)#i';
-
 	/** The same at the beginning of an address, with its scheme and its host and port. */
 	const HOST_AT_START = '#^(?:(https?):)?(?://|\\\\/\\\\/)([^/?\#\\\\]*)#i';
 
@@ -109,8 +108,9 @@ final class AB_MCP_Sync_Urls {
 			if ( null === $tags ) {
 				// Without the HTML API, or where it cannot read to the end,
 				// nothing tells where a value ends: where an address may stand
-				// in one, it locks.
-				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/<(?:script|style)\b|(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . '|style)\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
+				// in one (also in JSON of a value, or behind a reference), it
+				// locks.
+				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/<(?:script|style)\b|(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . '|style)\s*=|=\s*["\']?\s*[\[{&]/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
 			}
 			foreach ( $tags as $tag ) {
 				$raw = substr( $text, $tag['at'], $tag['len'] );
@@ -127,6 +127,12 @@ final class AB_MCP_Sync_Urls {
 					// one by one, as stored where it is stored as read.
 					if ( 'style' === $name ) {
 						$out = array_merge( $out, self::css_ids( $raw, $value, $ctx, $tag['at'] ) );
+						continue;
+					}
+					// JSON in an attribute (data-wp-context): its addresses
+					// value by value; not JSON, it locks.
+					if ( preg_match( '/^\s*[\[{]/', $value ) ) {
+						$out = array_merge( $out, self::json_attribute( $raw, $name, $value, $ctx, $tag['at'], $text ) );
 						continue;
 					}
 					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
@@ -146,6 +152,15 @@ final class AB_MCP_Sync_Urls {
 		// A text that is CSS (custom_css): its url(…) and escapes as CSS.
 		if ( ! empty( $ctx['css'] ) ) {
 			$out = array_merge( $out, self::css( $text, $ctx, 0, $text, true ) );
+		}
+		// A text of JSON (global styles, theme.json): the value of each key
+		// css as CSS; deeper than json_decode() reads, it locks.
+		$json = AB_MCP_Sync_Canon::json_text( $text );
+		if ( false === $json ) {
+			$out[] = self::lock( 0, strlen( $text ), ':json' );
+		}
+		if ( is_array( $json ) ) {
+			$out = array_merge( $out, self::json_css( $json, $ctx ) );
 		}
 		// In the attributes of shortcodes, as the core reads them: read as
 		// stored where the value is stored as it is read, once.
@@ -193,7 +208,8 @@ final class AB_MCP_Sync_Urls {
 			// A script of JSON: its addresses without the host as values
 			// (those with it are read as prose, rewritten there), locked.
 			if ( 'SCRIPT' === $tag['tag'] && AB_MCP_Sync_Html::is_data_script( $tag['attrs'] ) ) {
-				$out = array_merge( $out, self::json_ids( json_decode( $tag['text'], true ), $ctx, '' ) );
+				$json = json_decode( $tag['text'], true );
+				$out  = array_merge( $out, JSON_ERROR_NONE === json_last_error() ? self::json_ids( $json, $ctx, '' ) : array( self::lock( $tag['at'], $tag['len'], ':json' ) ) );
 			}
 			// Style: CSS (url(…) without a host, its escapes).
 			if ( 'STYLE' === $tag['tag'] ) {
@@ -209,7 +225,10 @@ final class AB_MCP_Sync_Urls {
 	 * The ids of the addresses in the CSS of a style attribute, as in style
 	 * (prose(): each address of the sites up to EXTENT, url(…) ending it):
 	 * read in the stored value and rewritten there where it is stored as
-	 * the HTML API reads it (value_span()), else read decoded, locked.
+	 * the HTML API reads it (value_span()), else read decoded, locked. The
+	 * CSS itself (AB_MCP_Sync_Css) is read in the stored value only where it
+	 * is the decoded one byte for byte: a quote written as a reference
+	 * (&quot;) would make a string of CSS a comment; else decoded, locked.
 	 *
 	 * @param string $raw   The stored text of the tag.
 	 * @param string $value The value, decoded.
@@ -224,7 +243,7 @@ final class AB_MCP_Sync_Urls {
 		}
 		$css = (string) substr( $raw, $span[0], $span[1] );
 		$out = array();
-		foreach ( array_merge( self::prose( $css, $ctx, AB_MCP_Sync_Canon::address_cuts( $css, $ctx ), array(), true ), self::css( $css, $ctx, 0, $css, true ) ) as $hit ) {
+		foreach ( array_merge( self::prose( $css, $ctx, AB_MCP_Sync_Canon::address_cuts( $css, $ctx ), array(), true ), $css === $value ? self::css( $css, $ctx, 0, $css, true ) : self::css( $value, $ctx, 0, $value, false ) ) as $hit ) {
 			$hit['at'] += $base + $span[0];
 			$out[]      = $hit;
 		}
@@ -232,12 +251,14 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * What CSS holds beside the addresses with a host (those prose() reads):
-	 * the addresses of url(…) without the host, read as any address
-	 * (root: rewritten as stored where safe, relative to the page: page_ids(),
-	 * a query with ids locks); and where the escapes of CSS (\2d, \-)
-	 * decoded give more addresses of the sites than the stored text, it
-	 * locks (css_unescaped()).
+	 * What CSS holds beside the addresses with a host (those prose() reads),
+	 * as AB_MCP_Sync_Css::read() reads it (without its comments): the
+	 * addresses of url(…), @import and image-set(…) without the host, read
+	 * as any address (root: rewritten as stored where safe, relative to the
+	 * page: page_ids(), a query with ids locks). The text locks where an
+	 * address is not read to its end (a comment or a backslash in it, a url(
+	 * or an @import not read so), where one is data:, and where it hides one
+	 * (css_hides()).
 	 *
 	 * @param string $css    CSS.
 	 * @param array  $ctx    Context.
@@ -247,54 +268,154 @@ final class AB_MCP_Sync_Urls {
 	 * @return array See ids().
 	 */
 	private static function css( $css, array $ctx, $base, $text, $stored ) {
-		$out   = array();
-		$plain = self::css_unescaped( $css );
-		if ( $plain !== $css && ( count( AB_MCP_Sync_Canon::address_cuts( $plain, $ctx ) ) > count( AB_MCP_Sync_Canon::address_cuts( $css, $ctx ) ) || ( self::names_a_site( $plain, $ctx ) && ! self::names_a_site( $css, $ctx ) ) ) ) {
-			$out[] = self::lock( $base, strlen( $css ), ':css' );
+		$read = AB_MCP_Sync_Css::read( $css );
+		if ( $read['lock'] || $read['data'] || self::css_hides( $read, $ctx ) ) {
+			return array( self::lock( $base, strlen( $css ), ':css' ) );
 		}
-		if ( preg_match_all( self::CSS_URL, $css, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $all as $m ) {
-				$url  = (string) $m[1][0];
-				$read = '' === $url ? null : self::read( $url, $ctx );
-				if ( null === $read || ! in_array( $read['form'], array( 'root', 'page' ), true ) ) {
-					continue;
-				}
-				$out = array_merge( $out, self::address( $url, $ctx, $stored ? $base + (int) $m[1][1] : null, $text ) );
+		$out = array();
+		foreach ( $read['urls'] as $url ) {
+			$found = '' === $url['url'] ? null : self::read( $url['url'], $ctx );
+			if ( null === $found || ! in_array( $found['form'], array( 'root', 'page' ), true ) ) {
+				continue;
 			}
+			$out = array_merge( $out, self::address( $url['url'], $ctx, $stored ? $base + $url['at'] : null, $text ) );
 		}
 		return $out;
 	}
 
 	/**
-	 * A text of CSS with its escapes decoded as CSS reads them: a backslash
-	 * with one to six hex digits and one white space after them, the code
-	 * point (0, a surrogate or past U+10FFFF: U+FFFD); a backslash before a
-	 * line break, nothing; before any other character, that character.
+	 * Whether CSS hides an address of the sites: a comment inside one (the
+	 * characters before and after it, without a space, a quote, a bracket or
+	 * a separator, give an address of a site), or escapes whose text decoded
+	 * holds more url(, @import, addresses of a site, segments of digits after
+	 * "/" or variables of an id after "?" than the text without them
+	 * (an escape that gives none of these, \201C, is free).
+	 *
+	 * @param array $read AB_MCP_Sync_Css::read().
+	 * @param array $ctx  Context.
+	 * @return bool
+	 */
+	private static function css_hides( array $read, array $ctx ) {
+		foreach ( $read['comments'] as $at ) {
+			$left  = preg_match( '#[^\s"\'`()<>{}|^;,]+\z#', (string) substr( $read['plain'], 0, $at ), $l ) ? $l[0] : '';
+			$right = preg_match( '#\G[^\s"\'`()<>{}|^;,]+#', $read['plain'], $r, 0, $at ) ? $r[0] : '';
+			if ( '' !== $left && '' !== $right && self::css_counts( $left . $right, $ctx )['sites'] > 0 ) {
+				return true;
+			}
+		}
+		$plain = self::css_counts( $read['plain'], $ctx );
+		foreach ( self::css_counts( $read['decoded'], $ctx ) as $what => $count ) {
+			if ( $count > $plain[ $what ] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * What in CSS makes an address: url(, @import, the hosts of a site in
+	 * any spelling (HOST, site()), the segments of digits after "/", the
+	 * variables of QUERY_IDS after "?" as parse_str() reads them.
 	 *
 	 * @param string $css CSS.
-	 * @return string
+	 * @param array  $ctx Context.
+	 * @return array<string,int>
 	 */
-	public static function css_unescaped( $css ) {
-		if ( false === strpos( (string) $css, '\\' ) ) {
-			return (string) $css;
+	private static function css_counts( $css, array $ctx ) {
+		$sites = 0;
+		if ( preg_match_all( self::HOST, $css, $hosts, PREG_SET_ORDER ) ) {
+			foreach ( $hosts as $host ) {
+				$sites += null === self::site( $host[2], strtolower( $host[1] ), $ctx ) ? 0 : 1;
+			}
 		}
-		return (string) preg_replace_callback(
-			'/\\\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|(\r\n|[\n\r\f])|(.))/su',
-			static function ( $m ) {
-				if ( isset( $m[3] ) && '' !== $m[3] ) {
-					return $m[3];
-				}
-				if ( isset( $m[2] ) && '' !== $m[2] ) {
-					return '';
-				}
-				$code = hexdec( $m[1] );
-				if ( 0 === $code || ( $code >= 0xD800 && $code <= 0xDFFF ) || $code > 0x10FFFF ) {
-					$code = 0xFFFD;
-				}
-				return mb_chr( (int) $code, 'UTF-8' );
-			},
-			(string) $css
+		$ids = 0;
+		if ( preg_match_all( '#\?([^\s"\'`()<>{}]*)#', $css, $queries ) ) {
+			foreach ( $queries[1] as $query ) {
+				parse_str( $query, $vars );
+				$ids += count( array_intersect_key( $vars, self::QUERY_IDS ) );
+			}
+		}
+		return array(
+			'url'    => (int) preg_match_all( '#url\(#i', $css ),
+			'import' => (int) preg_match_all( '#@import#i', $css ),
+			'sites'  => $sites,
+			'digits' => (int) preg_match_all( '#/[0-9]+(?![^/?\#\s"\'),;}])#', $css ),
+			'ids'    => $ids,
 		);
+	}
+
+	/**
+	 * The ids of the addresses in an attribute that holds JSON (the
+	 * Interactivity API: data-wp-context): every string value read as an
+	 * address where it begins as one or its key names one
+	 * (names_an_address()), as prose where it names a site elsewhere in it.
+	 * Rewritten only where the string stands in the attribute exactly once
+	 * as JSON writes it without escapes, and the attribute is stored so
+	 * there (value_span(), address() compares the stored text); else read
+	 * decoded, an id locks. What json_decode() does not read locks.
+	 *
+	 * @param string $raw   The tag as stored.
+	 * @param string $name  The attribute.
+	 * @param string $value Its value as the HTML API reads it.
+	 * @param array  $ctx   Context.
+	 * @param int    $base  Where the tag stands in $text.
+	 * @param string $text  The text.
+	 * @return array See ids().
+	 */
+	private static function json_attribute( $raw, $name, $value, array $ctx, $base, $text ) {
+		$json = json_decode( $value, true );
+		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			return array( self::lock( $base, strlen( $raw ), ':json' ) );
+		}
+		$span = AB_MCP_Sync_Html::value_span( $raw, $name, $value );
+		$out  = array();
+		foreach ( self::json_strings( $json, '' ) as $leaf ) {
+			list( $key, $string ) = $leaf;
+			if ( ! self::names_an_address( $key, $string ) ) {
+				$out = array_merge( $out, self::names_a_site( $string, $ctx ) ? self::prose( $string, $ctx, AB_MCP_Sync_Canon::address_cuts( $string, $ctx ), array(), false ) : array() );
+				continue;
+			}
+			// address() checks that the address stands so in the stored text.
+			$quoted = '"' . $string . '"';
+			$at     = null !== $span && 1 === substr_count( $value, $quoted ) ? $base + $span[0] + strpos( $value, $quoted ) + 1 : null;
+			$out    = array_merge( $out, self::address( $string, $ctx, $at, $text ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The strings of decoded JSON with their keys.
+	 *
+	 * @param mixed  $value Decoded JSON.
+	 * @param string $key   Its key.
+	 * @return array<int,array{0:string,1:string}>
+	 */
+	private static function json_strings( $value, $key ) {
+		if ( is_string( $value ) ) {
+			return array( array( (string) $key, $value ) );
+		}
+		$out = array();
+		foreach ( is_array( $value ) ? $value : array() as $k => $item ) {
+			$out = array_merge( $out, self::json_strings( $item, (string) $k ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The CSS under every key css of decoded JSON (styles.css,
+	 * styles.blocks.*.css), read decoded: an id there locks (the addresses
+	 * with the host are read as prose in the stored text).
+	 *
+	 * @param mixed $value Decoded JSON.
+	 * @param array $ctx   Context.
+	 * @return array See ids().
+	 */
+	private static function json_css( $value, array $ctx ) {
+		$out = array();
+		foreach ( is_array( $value ) ? $value : array() as $key => $item ) {
+			$out = array_merge( $out, 'css' === $key && is_string( $item ) ? self::css( $item, $ctx, 0, $item, false ) : self::json_css( $item, $ctx ) );
+		}
+		return $out;
 	}
 
 	/**
@@ -921,17 +1042,17 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * Whether a value of an attribute of a block or a shortcode is an address
-	 * (the plan, round 9): by its name (url, href, link, src, or a name that
-	 * ends in Url, Href, Link, Src) or by its beginning (http:, https:, //,
-	 * /, ?, ./).
+	 * Whether a value of an attribute of a block or a shortcode (or of JSON)
+	 * is an address (the plan, round 9): by its name (url, href, link, src,
+	 * or a name that ends in Url, Href, Link, Src) or by its beginning
+	 * (http:, https:, //, /, ?, ./, ../).
 	 *
 	 * @param string $name  Name of the attribute.
 	 * @param string $value Value.
 	 * @return bool
 	 */
 	public static function names_an_address( $name, $value ) {
-		return 1 === preg_match( '/^(?:url|href|link|src)\z|(?:Url|URL|Href|Link|Src)\z/', (string) $name ) || 1 === preg_match( '#^(?:https?:|//|/|\?|\./)#i', (string) $value );
+		return 1 === preg_match( '/^(?:url|href|link|src)\z|(?:Url|URL|Href|Link|Src)\z/', (string) $name ) || 1 === preg_match( '#^(?:https?:|//|/|\?|\.\.?/)#i', (string) $value );
 	}
 
 	/**
