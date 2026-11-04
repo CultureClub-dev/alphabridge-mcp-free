@@ -602,11 +602,9 @@ trait SyncCoreReads {
 			'A-4 a key twice with an address'           => array( '{"url":"https://staging.test/?p=12","url":"x"}', 'value', 'raw' ),
 			'A-4 a root address dropped'                => array( '{"src":"/?p=12","src":"x"}', 'value', 'raw' ),
 			'A-4 dropped in a block attribute'          => array( '<!-- wp:acme/x {"u":"/?p=12","u":"x"} /-->', 'content', 'raw' ),
-			'A-5 the JSON of Fancybox'                  => array( '<a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a>', 'content', 'raw' ),
-			'A-5 as references'                         => array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&quot;}">x</a>', 'content', 'raw' ),
 			'A-5 percent-encoded'                       => array( '<a data-options="%7B%22src%22%3A%22%2F%3Fp%3D12%22%7D">x</a>', 'content', 'raw/percent' ),
 			'A-5 a data-src with a short link'          => array( '<img data-src="/?attachment_id=12" alt="">', 'content', 'raw' ),
-			'A-5 one read beside one not'               => array( '<a href="/?p=12" data-options=\'{"src":"/?p=13"}\'>x</a>', 'content', 'raw' ),
+			'A-5 one read beside one not'               => array( '<a href="/?p=12" data-target="/?p=13">x</a>', 'content', 'raw' ),
 			'a title with a short link'                 => array( '<p title="/?p=12">x</p>', 'content', 'raw' ),
 			'base64 in a meta value'                    => array( base64_encode( '{"src":"/?p=12"}' ), 'value', 'raw/base64' ),
 			'base64 inside serialized'                  => array( serialize( array( 'b' => base64_encode( '<a href="/?p=12">' ) ) ), 'value', 'raw/base64' ),
@@ -617,8 +615,24 @@ trait SyncCoreReads {
 			'an SVG with a link, percent-encoded'       => array( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $svg_link ) . '")}', 'css', 'raw/data' ),
 			'an SVG with style in url()'                => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<style>a{background:url(/?p=12)}</style>' ) ) . ')}', 'css', 'raw/data' ),
 			'an SVG with an address in a style attribute' => array( '<p style="mask-image:url(\'data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot;><a href=&quot;/?p=12&quot;/></svg>\')">x</p>', 'content', 'raw' ),
-			'an address in the value of a query variable' => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', 'value', 'raw/percent' ),
 			'a JSON escape of the slash'                => array( '<p title="\\/?p=12">x</p>', 'content', 'raw/json' ),
+			// Codex, round 21 (A-1): a query wherever it stands, relative to
+			// the page.
+			'A-1 index.php in a title'                  => array( '<p title="index.php?p=12">x</p>', 'content', 'raw' ),
+			'A-1 ./ in base64'                          => array( base64_encode( './?p=12' ), 'value', 'raw/base64' ),
+			'A-1 ../ in a data: text'                   => array( 'data:text/plain;base64,' . base64_encode( '../?p=12' ), 'value', 'raw/data' ),
+			'A-1 a query after letters in prose'        => array( 'siehe seite?p=12', 'value', 'raw' ),
+			'A-1 in a data attribute of a plugin, no JSON' => array( '<a data-target="index.php?p=12">x</a>', 'content', 'raw' ),
+			// Codex, round 21 (A-2): a reference read in the text never covers
+			// one in a layer taken out of it.
+			'A-2 a data: document beside a link read'   => array( '<a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-src="data:text/html;base64,' . base64_encode( '<a href="https://staging.test/?p=13">target</a>' ) . '">open</a>', 'content', 'raw/data' ),
+			'A-2 the same id hidden beside one read'    => array( '<a href="/?p=12">normal</a><a data-src="data:text/html;base64,' . base64_encode( '<a href="/?p=12">x</a>' ) . '">open</a>', 'content', 'raw/data' ),
+			'A-2 base64 beside a link read'             => array( '<p><a href="https://staging.test/?p=12">x</a> ' . base64_encode( '{"src":"/?p=13"}' ) . '</p>', 'content', 'raw/base64' ),
+			'A-2 a copy in the text beside one read'    => array( '<a href="/?p=12">x</a><p title="/?p=12">y</p>', 'content', 'raw' ),
+			// Codex, round 21 (B-1): the JSON of a data-* attribute no producer
+			// of the core writes so is a text: an address with an id locks.
+			'B-1 data-options with &amp;'               => array( '<a data-fancybox data-options=\'{"src":"/?p=12&amp;x=1","type":"iframe"}\'>Details</a>', 'content', 'raw' ),
+			'B-1 data-options indented'                 => array( '<a data-fancybox data-options=\'{ "src": "/?p=12" }\'>Details</a>', 'content', 'raw' ),
 			'a character reference in a query'          => array( '<p title="/&#63;p=12">x</p>', 'content', 'raw' ),
 			'a short link as character references'      => array( '<p title="&#47;&#63;p=12">x</p>', 'content', 'raw/html' ),
 			'a query without a slash'                   => array( '{"x":"?p=12","x":1}', 'value', 'raw' ),
@@ -670,6 +684,22 @@ trait SyncCoreReads {
 			'an SVG with a field, in a variable'          => array( '.x{--m:"data:image/svg+xml;base64,' . base64_encode( self::svg( '<input name="api_key" value="x"/>' ) ) . '"}', 'css', 'raw/data', 'api_key' ),
 			'an SVG with a property of CSS'               => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<style>:root{--client-secret:1}</style>' ) ) . ')}', 'css', 'raw/data', 'client_secret' ),
 			'camel case in a dropped value'               => array( '{"x":{"name":"accessToken","value":"s"},"x":0}', 'value', 'raw', 'access_token' ),
+			// Codex, round 21 (A-3): a text in another charset, by its charset or BOM.
+			'A-3 UTF-16 by its charset'                   => array( 'a{background-image:url(data:image/svg+xml;charset=utf-16;base64,' . base64_encode( "\xff\xfe" . mb_convert_encoding( '<?xml version="1.0" encoding="UTF-16"?><svg xmlns="http://www.w3.org/2000/svg"><metadata><script type="application/json">{"api_key":"demo-secret"}</script></metadata></svg>', 'UTF-16LE', 'UTF-8' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-3 UTF-16BE by its BOM'                     => array( 'a{mask:url(' . 'data:image/svg+xml;base64,' . base64_encode( "\xfe\xff" . mb_convert_encoding( self::svg( '<script>var cfg={token:"demo-secret"}</script>' ), 'UTF-16BE', 'UTF-8' ) ) . ')}', 'css', 'raw/data', 'token' ),
+			'A-3 ISO-8859-1 in a data: text'              => array( 'data:text/plain;charset=iso-8859-1;base64,' . base64_encode( "caf\xe9 api_key=demo-secret" ), 'value', 'raw/data', 'api_key' ),
+			'A-3 UTF-16 in base64 by its BOM'             => array( base64_encode( "\xff\xfe" . mb_convert_encoding( 'client_secret=demo-secret', 'UTF-16LE', 'UTF-8' ) ), 'value', 'raw/base64', 'client_secret' ),
+			// Codex, round 21 (A-4): the spellings of JavaScript.
+			'A-4 \\u{5f} in the name'                     => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg={api\\u{5f}key:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data/js', 'api_key' ),
+			'A-4 \\x5f in the name'                       => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg={api\\x5fkey:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data/js', 'api_key' ),
+			'A-4 a comment before the colon'              => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg = {api_key/*a*/:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data/code', 'api_key' ),
+			'A-4 a comment to the end of the line'        => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( "<script>var cfg = {\n  api_key // Hinweis\n  : \"demo-secret\"\n};</script>" ) ) . ')}', 'css', 'raw/data/code', 'api_key' ),
+			'A-4 a template literal as the name'          => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>cfg[`api_key`] = "demo-secret";</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-4 a template literal as the value'         => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>cfg[`api_key`] = `${secret}`;</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			// Codex, round 21 (A-5): a value with white space before it.
+			'A-5 a space before the value'                => array( base64_encode( '{"api_key":" demo-secret"}' ), 'value', 'raw/base64', 'api_key' ),
+			'A-5 a tab before the value, in an SVG'       => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<metadata><script type="application/json">{"api_key":"' . "\t" . 'demo-secret"}</script></metadata>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-5 a line break before the value'           => array( base64_encode( "token=\n demo-secret" ), 'value', 'raw/base64', 'token' ),
 		);
 	}
 
@@ -714,6 +744,16 @@ trait SyncCoreReads {
 			'an image read'                     => array( '<figure class="wp-block-image"><img src="https://staging.test/wp-content/uploads/2024/05/a.jpg" class="wp-image-12" alt=""/></figure>', 'content' ),
 			'srcset'                            => array( '<img src="https://staging.test/a.jpg" srcset="https://staging.test/a-300x200.jpg 300w, https://staging.test/a.jpg 1024w" alt="">', 'content' ),
 			'a login link without an id'        => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F', 'value' ),
+			'a login link with an encoded short link' => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', 'value' ),
+			// Codex, round 21 (B-2): a route of another web application.
+			'B-2 a route of another web application' => array( '<a href="https://catalog.example/#/search?p=12">Seite 12 im Katalog</a>', 'content' ),
+			'B-2 in prose'                      => array( 'Siehe https://catalog.example/#/search?p=12 und https://cdn.example.org/x/?attachment_id=3.', 'value' ),
+			'B-2 a menu link'                   => array( '//catalog.example/#/items/12', 'value' ),
+			// Codex, round 21 (B-1): the JSON of Fancybox read by its round trip.
+			'B-1 the JSON of Fancybox'          => array( '<a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a>', 'content' ),
+			'B-1 as references'                 => array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&quot;}">x</a>', 'content' ),
+			'B-1 absolute'                      => array( '<a data-options=\'{"src":"https://staging.test/?p=12"}\'>x</a>', 'content' ),
+			'a comment of code in prose'        => array( 'Preis: 1/2 // kein Kommentar, /* auch nicht */ https://staging.test/?p=12 gelesen', 'value' ),
 			'fractions, dates, calc'            => array( 'Preis: 1/2 Tag am 05/12/2024, siehe /2024/05/ und calc(100%/3), 16/9.', 'value' ),
 			'CSS with slashes'                  => array( 'a{grid-area:1 / 2 / 3 / 4;font:12px/1.5 Arial;aspect-ratio:16/9;background:url(/img/12.png)}', 'css' ),
 			'base64 of a word'                  => array( 'Kontaktformular Datenschutzerklaerung Veranstaltungskalender', 'value' ),
@@ -727,6 +767,54 @@ trait SyncCoreReads {
 	public function testTheNetLeavesTheOrdinaryFree( string $raw, string $as ): void {
 		list( $locks ) = self::net_read( $raw, $as, self::net_ctx() );
 		self::assertSame( array(), preg_grep( '/^\*:unread_/', $locks ), $raw . ' ' . json_encode( $locks ) );
+	}
+
+	public function testTheJsonOfADataAttributeIsReadByItsRoundTrip(): void {
+		// Codex, round 21 (B-1): the JSON of a plugin in a data-* attribute
+		// (Fancybox data-options), where a producer of the core writes it so
+		// byte for byte, as it is or as esc_attr() writes it: read as
+		// data-wp-* is, rewritten and written back in that spelling. What no
+		// producer writes so is a text (the net locks an address with an id
+		// in it, netReferences()); a text that only begins with [ is one.
+		$cases = array(
+			array( '<a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a>', 'post:12@c:html:json.src?p', '<a data-fancybox data-options=\'{"src":"/?p=120","type":"iframe"}\'>Details</a>' ),
+			array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&quot;}">x</a>', 'post:12@c:html:json.src?p', '<a data-options="{&quot;src&quot;:&quot;/?p=120&quot;}">x</a>' ),
+			array( '<a data-options=\'{"src":"https://staging.test/?p=12"}\'>x</a>', 'post:12@c:html:json.src?p', '<a data-options=\'{"src":"https://www.live.test/?p=120"}\'>x</a>' ),
+			array( '<div data-wp-context="{&quot;url&quot;:&quot;/?p=12&quot;}">x</div>', 'post:12@c:html:json.url?p', '<div data-wp-context="{&quot;url&quot;:&quot;/?p=120&quot;}">x</div>' ),
+			array( '<div data-config=\'[{"href":"/?page_id=12"}]\'>x</div>', 'post:12@c:html:json.0.href?page_id', '<div data-config=\'[{"href":"/?page_id=120"}]\'>x</div>' ),
+		);
+		foreach ( $cases as $case ) {
+			list( $content, $ref, $rewritten ) = $case;
+			if ( self::closed( $content ) ) {
+				self::assertLockedWithoutTheCore( $content );
+				continue;
+			}
+			list( $refs, $acc ) = self::reads_scan( $content );
+			self::assertSame( array( array( $ref ), array() ), array( $refs, $acc['spelling'] ), $content );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
+			self::assertSame( array( $rewritten, array() ), array( $out['content'], $out['missing'] ), $content );
+		}
+		// Relative to the page: locked by the reader, not rewritten.
+		$page = '<a data-fancybox data-options=\'{"src":"index.php?p=12","type":"iframe"}\'>Details</a>';
+		if ( ! self::closed( $page ) ) {
+			list( $refs, $acc ) = self::reads_scan( $page );
+			self::assertSame( array( array(), array( 'c:html:json.src?p' ) ), array( $refs, $acc['spelling'] ) );
+			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $page, self::reads_plan() )['missing'], 'space' ) );
+		}
+		// No producer writes it so: a text, nothing read, nothing rewritten.
+		foreach ( array(
+			'<a data-options=\'{"src":"/?p=12&amp;x=1"}\'>x</a>',
+			'<a data-options=\'{ "src": "/?p=12" }\'>x</a>',
+			'<span data-tippy-content="[Strg+K] Suche öffnen">Suche</span>',
+			'<span data-x="{nicht JSON">x</span>',
+		) as $text ) {
+			if ( self::closed( $text ) ) {
+				continue;
+			}
+			list( $refs, $acc ) = self::reads_scan( $text );
+			self::assertSame( array( array(), array() ), array( $refs, $acc['spelling'] ), $text );
+			self::assertSame( $text, AB_MCP_Sync_Refs::rewrite_content( $text, self::reads_plan() )['content'], $text );
+		}
 	}
 
 	public function testTheNetReadsNoDeeperThanItsDepth(): void {
@@ -1098,7 +1186,6 @@ trait SyncCoreReads {
 			'data in an import'    => array( '<style>@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");</style>', 'c:html:css' ),
 			// Codex, round 17 (A6): in JSON of an attribute, not stored as JSON writes it.
 			'a slash escaped once in the context' => array( '<div data-wp-context=\'{"url":"\\/blog/?p=12"}\'>x</div>', 'c:html:json' ),
-			'the context as references' => array( '<div data-wp-context="{&quot;url&quot;:&quot;/?p=12&quot;}">x</div>', 'c:html:json' ),
 			'the same address in both spellings in the context' => array( '<div data-wp-context=\'{"a":"/?p=12","b":"\\/?p=12"}\'>x</div>', 'c:html:json' ),
 			'a key twice in the context' => array( '<div data-wp-context=\'{"url":"/?p=12","url":"/?p=13"}\'>x</div>', 'c:html:json' ),
 			'a context that is no JSON' => array( '<div data-wp-context=\'{"url":"/?p=12"\'>x</div>', 'c:html:json' ),

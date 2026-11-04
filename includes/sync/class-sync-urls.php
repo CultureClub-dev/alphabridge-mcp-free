@@ -146,11 +146,22 @@ final class AB_MCP_Sync_Urls {
 					}
 					// JSON in an attribute as the core reads it (data-wp-*, its
 					// namespace before "::" off): by its round trip; not JSON,
-					// it locks.
+					// it locks. The JSON of a plugin in any other data-* (Codex,
+					// round 21, B-1): by its round trip where a producer of the
+					// core writes it so, else a text (the net locks an address
+					// with an id in it).
 					$json = AB_MCP_Sync_Html::json_value( $name, $value );
 					if ( null !== $json ) {
-						$out = array_merge( $out, self::json_attribute( $raw, $name, $value, $json, $ctx, $tag['at'] ) );
+						$out = array_merge( $out, self::json_attribute( $raw, $name, $value, $json, $ctx, $tag['at'], true ) );
 						continue;
+					}
+					$json = AB_MCP_Sync_Html::data_json( $name, $value );
+					if ( null !== $json ) {
+						$hits = self::json_attribute( $raw, $name, $value, $json, $ctx, $tag['at'], false );
+						if ( null !== $hits ) {
+							$out = array_merge( $out, $hits );
+							continue;
+						}
 					}
 					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
 						continue;
@@ -324,17 +335,22 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * How many ids one address names, as address() reads it where it stands
-	 * (rewritable where it is safe, else locked): the count the net over the
-	 * raw value (AB_MCP_Sync_Net) compares with what ids() read.
+	 * The (space, id) pairs one address names, as address() reads it where
+	 * it stands (rewritable where it is safe, else locked: its id "?"): what
+	 * the net over the raw value (AB_MCP_Sync_Net) compares with the pairs
+	 * ids() read (AB_MCP_Sync_Canon::text(), addressed).
 	 *
 	 * @param string $url The address, to the end of an address (EXTENT).
 	 * @param array  $ctx Context.
-	 * @return int
+	 * @return string[] space:id, as often as named.
 	 */
-	public static function ids_in( $url, array $ctx ) {
+	public static function pairs( $url, array $ctx ) {
 		$url = (string) $url;
-		return count( self::address( $url, $ctx, 0, $url ) );
+		$out = array();
+		foreach ( self::address( $url, $ctx, 0, $url ) as $hit ) {
+			$out[] = $hit['space'] . ':' . ( null === $hit['id'] ? '?' : $hit['id'] );
+		}
+		return $out;
 	}
 
 	/**
@@ -399,28 +415,44 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * JSON in an attribute as the core reads it (AB_MCP_Sync_Html::
-	 * json_value(): data-wp-*): a span read by its round trip
-	 * (AB_MCP_Sync_Json), where the attribute is stored as it is read; else
-	 * read only (an id or an address in it locks, json_canon()). What is no
-	 * JSON of an object or a list locks.
+	 * JSON in an attribute: a span read by its round trip (AB_MCP_Sync_Json),
+	 * where the attribute is stored as it is read, as it is or as esc_attr()
+	 * writes it (&quot;, &#039;: written back so, AB_MCP_Sync_Refs::
+	 * rewrite_text()). Strict (data-wp-*, as the core reads it): what is no
+	 * JSON of an object or a list locks, and what is not stored as it is
+	 * read is read only (an id or an address in it locks, json_canon()).
+	 * Loose (the JSON of a plugin in another data-*): what no producer of
+	 * the core writes so, or is no JSON, is a text (null: the net reads it).
 	 *
-	 * @param string $raw   The tag as stored.
-	 * @param string $name  The attribute.
-	 * @param string $value Its value as the HTML API reads it.
-	 * @param string $json  The JSON in it (json_value()).
-	 * @param array  $ctx   Context.
-	 * @param int    $base  Where the tag stands in the text.
-	 * @return array See ids().
+	 * @param string $raw    The tag as stored.
+	 * @param string $name   The attribute.
+	 * @param string $value  Its value as the HTML API reads it.
+	 * @param string $json   The JSON in it (json_value(), data_json()).
+	 * @param array  $ctx    Context.
+	 * @param int    $base   Where the tag stands in the text.
+	 * @param bool   $strict As the core reads it (data-wp-*).
+	 * @return array|null See ids(); null where a loose value is a text.
 	 */
-	private static function json_attribute( $raw, $name, $value, $json, array $ctx, $base ) {
+	private static function json_attribute( $raw, $name, $value, $json, array $ctx, $base, $strict ) {
 		$read = AB_MCP_Sync_Json::read( $json );
 		if ( ! is_array( $read ) ) {
-			return array( self::lock( $base, strlen( $raw ), ':json' ) );
+			return $strict ? array( self::lock( $base, strlen( $raw ), ':json' ) ) : null;
 		}
 		$span = AB_MCP_Sync_Html::value_span( $raw, $name, $value );
-		if ( null !== $span && substr( $raw, $span[0], $span[1] ) === $value ) {
-			return array( self::json_hit( $base + $span[0] + strlen( $value ) - strlen( $json ), $read ) );
+		if ( null !== $span && null !== $read['producer'] ) {
+			$stored  = (string) substr( $raw, $span[0], $span[1] );
+			$escaped = htmlspecialchars( $value, ENT_QUOTES, 'UTF-8', false );
+			if ( $stored === $value ) {
+				return array( self::json_hit( $base + $span[0] + strlen( $value ) - strlen( $json ), $read, null ) );
+			}
+			if ( $stored === $escaped && $value === $json ) {
+				$hit        = self::json_hit( $base + $span[0], $read, 'attr' );
+				$hit['len'] = strlen( $escaped );
+				return array( $hit );
+			}
+		}
+		if ( ! $strict ) {
+			return null;
 		}
 		// Not stored as it is read: nothing in it is taken over, an id or a
 		// host locks.
@@ -434,11 +466,13 @@ final class AB_MCP_Sync_Urls {
 	 * A span of stored JSON as a hit of ids(): AB_MCP_Sync_Canon::text()
 	 * and AB_MCP_Sync_Refs::rewrite_text() read and write it whole.
 	 *
-	 * @param int   $at   Where it stands.
-	 * @param array $json Of AB_MCP_Sync_Json::read().
+	 * @param int         $at   Where it stands.
+	 * @param array       $json Of AB_MCP_Sync_Json::read().
+	 * @param string|null $esc  How the span is stored: null as it is, attr as
+	 *                          esc_attr() writes it.
 	 * @return array
 	 */
-	private static function json_hit( $at, array $json ) {
+	private static function json_hit( $at, array $json, $esc = null ) {
 		return array(
 			'at'    => (int) $at,
 			'len'   => strlen( $json['raw'] ),
@@ -446,6 +480,7 @@ final class AB_MCP_Sync_Urls {
 			'id'    => null,
 			'what'  => ':json',
 			'json'  => $json,
+			'esc'   => $esc,
 		);
 	}
 

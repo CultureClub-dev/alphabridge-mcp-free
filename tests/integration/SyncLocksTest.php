@@ -349,8 +349,9 @@ final class SyncLocksTest extends TestCase {
 	public function testTheNetLocksAHiddenReferenceInEveryUnit(): void {
 		// The net over the raw value (AB_MCP_Sync_Net; Thomas, 04.11.2026)
 		// runs at the end of every unit a kind canonicalizes: an address with
-		// an id no reader read (the JSON of a plugin in data-*, a short link
-		// in prose, base64, a string of CSS) locks the object at the unit.
+		// an id no reader read (a data: document beside a link read, Codex
+		// round 21 A-2; a short link in prose, base64, a string of CSS) locks
+		// the object at the unit.
 		$hidden = base64_encode( '{"src":"/?p=12"}' );
 		$net    = static function ( array $result ): array {
 			$out = array();
@@ -365,7 +366,7 @@ final class SyncLocksTest extends TestCase {
 		$page = wp_insert_post(
 			array(
 				'post_title'   => 'Siehe /?p=12',
-				'post_content' => '<!-- wp:html --><a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a><!-- /wp:html -->',
+				'post_content' => '<!-- wp:html --><a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-src="data:text/html;base64,' . base64_encode( '<a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=13">target</a>' ) . '">open</a><!-- /wp:html -->',
 				'post_status'  => 'publish',
 				'post_type'    => 'page',
 			),
@@ -373,7 +374,7 @@ final class SyncLocksTest extends TestCase {
 		);
 		self::assertIsInt( $page );
 		add_post_meta( $page, 'acme_hidden', $hidden );
-		self::assertSame( array( 'meta:acme_hidden:net:raw/base64', 'post_content:net:raw', 'post_title:net:raw' ), $net( self::canon( 'post', $page ) ) );
+		self::assertSame( array( 'meta:acme_hidden:net:raw/base64', 'post_content:net:raw/data', 'post_title:net:raw' ), $net( self::canon( 'post', $page ) ) );
 
 		$term = wp_insert_term( 'Versteckt', 'category', array( 'description' => 'Hinweis ' . $hidden ) );
 		self::assertSame( array( 'description:net:raw/base64' ), $net( self::canon( 'term', $term['term_id'] ) ) );

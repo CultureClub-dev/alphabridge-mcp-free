@@ -149,7 +149,8 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	 * the directives of the Interactivity API (extract_directive_value(),
 	 * class-wp-interactivity-api.php:899: the namespace before "::" off,
 	 * then json_decode()), whose value then begins with [ or {. Null for
-	 * every other attribute (data-tippy-content, title, alt: text).
+	 * every other attribute (data-tippy-content, title, alt: text; the JSON
+	 * of a plugin in another data-*: data_json()).
 	 *
 	 * @param string $name  Attribute (lower case).
 	 * @param string $value Its value, decoded.
@@ -161,6 +162,21 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 			$value = explode( '::', $value, 2 )[1];
 		}
 		return 0 === strpos( (string) $name, 'data-wp-' ) && 1 === preg_match( '/^\s*[\[{]/', $value ) ? $value : null;
+	}
+
+	/**
+	 * The value of a data-* attribute of a plugin that may be JSON (Codex,
+	 * round 21, B-1: Fancybox data-options). Whether it is JSON of an object
+	 * or a list a producer of the core writes decides its round trip
+	 * (AB_MCP_Sync_Urls::ids(), which asks json_value() first: data-wp-*
+	 * never comes here); else it is a text. Null for every other attribute.
+	 *
+	 * @param string $name  Attribute (lower case).
+	 * @param string $value Its value, decoded.
+	 * @return string|null
+	 */
+	public static function data_json( $name, $value ) {
+		return 0 === strpos( (string) $name, 'data-' ) ? (string) $value : null;
 	}
 
 	/**

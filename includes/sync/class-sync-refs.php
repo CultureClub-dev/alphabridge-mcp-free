@@ -563,7 +563,10 @@ final class AB_MCP_Sync_Refs {
 		$json = array();
 		foreach ( AB_MCP_Sync_Urls::ids( $text, $css ? array( 'css' => true ) + $plan : $plan, $addresses, $whole ) as $query ) {
 			if ( isset( $query['json'] ) ) {
-				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => self::json_rewrite( $query['json'], $plan ) );
+				// Written back as it is stored: as it is, or as esc_attr()
+				// writes it in an attribute (AB_MCP_Sync_Urls::json_attribute()).
+				$with   = self::json_rewrite( $query['json'], $plan );
+				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => isset( $query['esc'] ) && 'attr' === $query['esc'] ? htmlspecialchars( $with, ENT_QUOTES, 'UTF-8', false ) : $with );
 				continue;
 			}
 			if ( null === $query['id'] ) {

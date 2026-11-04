@@ -1,6 +1,6 @@
 <?php
 /**
- * The net over the raw value (Codex, rounds 18 to 20; Thomas, 04.11.2026):
+ * The net over the raw value (Codex, rounds 18 to 21; Thomas, 04.11.2026):
  * one check that knows no format, run at the end of every unit (a stored
  * value that is canonicalized: a column, a meta row, an option, a widget
  * instance, a key of theme mods, the CSS of a stylesheet) after its
@@ -16,73 +16,100 @@
  * UNFOLD (layers()): from the raw value every layer of text, without
  * understanding a format: the raw text; its decodings (character
  * references as WP_HTML_Decoder decodes a text node, the escapes of JSON
- * (\/, \uXXXX), of C (stripcslashes(), what shortcode_parse_atts() takes),
- * of CSS (AB_MCP_Sync_Css::unescaped()), percent escapes); every data:
- * address decoded (base64 and percent, of any type); every span of base64
- * of MIN_BASE64 characters or more whose bytes are UTF-8; each of these
- * again (a decoded string may hold a data: address of its own), to
- * MAX_DEPTH derivations from the raw text and MAX_LAYERS layers of one unit.
- * Beyond, the unit is not read to its end (AB_MCP_Sync_Canon::too_deep():
- * *:unreadable_value, incomplete). Without WP_HTML_Decoder no character
- * reference is decoded here: a text with one fails closed in the credential
- * check already (AB_MCP_Sync_Credentials::decodings()).
+ * (\/, \uXXXX), of JavaScript (\u{XXXX}, \uXXXX, \xHH), of C
+ * (stripcslashes(), what shortcode_parse_atts() takes), of CSS
+ * (AB_MCP_Sync_Css::unescaped()), percent escapes, and the text without
+ * the comments of code (/*…*‍/ and //… to the end of the line, its strings
+ * respected)); every data: address decoded (base64 and percent, of any
+ * type: a text type, or one with a charset, read as UTF-8 by its BOM or
+ * charset (utf8(): UTF-16, UTF-32, ISO-8859-1, Windows-1252), and a body
+ * that is then no UTF-8 or holds a null byte is not read: the unit locks
+ * (*:unreadable_value); any other type is bytes); every span of base64 of
+ * MIN_BASE64 characters or more whose bytes are a text (UTF-8, or by a BOM
+ * UTF-16 or UTF-32; one with a BOM that is then no text locks the unit);
+ * each of these again (a decoded string may
+ * hold a data: address of its own), to MAX_DEPTH derivations from the raw
+ * text and MAX_LAYERS layers of one unit. Beyond, the unit is not read to
+ * its end (AB_MCP_Sync_Canon::too_deep(): *:unreadable_value, incomplete).
+ * A layer taken out of the text (a data: address, base64, and every
+ * decoding of such a layer) is EXTRACTED: no reader of the core read it.
+ * Without WP_HTML_Decoder no character reference is decoded here: a text
+ * with one fails closed in the credential check already
+ * (AB_MCP_Sync_Credentials::decodings()). Without a function that
+ * transcodes (mb_convert_encoding(), iconv()) a body in another charset is
+ * not read: the unit locks.
  *
  * COUNT, in every layer:
- * - references(): every address of the sites that names an object by its
- *   id, read as AB_MCP_Sync_Urls reads one address (ids_in(): the query
- *   variables of WP_Query through parse_str(), the paths through the
- *   rewrite rules of the site, WP_MatchesMapRegex), rewritable or locked.
- *   An address stands with a host (AB_MCP_Sync_Urls::HOST: with its scheme
- *   or without, also \/\/ of JSON, so every form of a site's address the
- *   replace engine knows and every other spelling of a site's host) or
- *   root-relative (START: a "/" or "?" after a character that stands in no
- *   address: a quote, a space, a bracket, "=", ":", ",", ";" or the start
- *   of the text), each to the end of an address (AB_MCP_Sync_Urls::EXTENT,
- *   as the prose is read). An address without a digit from 1 to 9 names no
- *   object and is not asked; an address of a site without an id counts for
- *   nothing.
+ * - references(): the (space, id) pairs the addresses of a layer name, read
+ *   as AB_MCP_Sync_Urls reads one address (pairs(): the query variables of
+ *   WP_Query through parse_str(), the paths through the rewrite rules of the
+ *   site, WP_MatchesMapRegex), an id in a spelling that is not read as "?".
+ *   First the address tokens: from every host (AB_MCP_Sync_Urls::HOST: with
+ *   its scheme or without, also \/\/ of JSON) to the end of an address
+ *   (AB_MCP_Sync_Urls::EXTENT, as the prose is read); a token with a host of
+ *   no site names nothing, whatever follows its "#" (a route of another web
+ *   application); a token with a host of a site names what the reader reads
+ *   in it. Outside the tokens: every root-relative address (START: a "/"
+ *   after a character that stands in no address and continues no word),
+ *   its path by the rules of the site and its query; and every query from a
+ *   "?" or "&" wherever it stands (index.php?p=12, ./?p=12, a?p=12), read
+ *   as the query of an address relative to the page (locked by the reader:
+ *   "?"). An address without a digit from 1 to 9 names no object and is not
+ *   asked; a site's address without an id names nothing.
  * - credentials(): every name AB_MCP_Sync_Credentials::names_credential()
  *   names with a value beside it: name=value (also name']=value, name =>
- *   value), "name":value, 'name':value, in code (name:value right after
- *   "{", or after "," or ";" where a "{" is open before it: the object of
- *   a script, a block of CSS, also --name), at the start of the text
- *   name:"value" with the value in quotes, and a name as the value of a
- *   field name or key with a field value or secret within WINDOW bytes. A
- *   name without a value, a word in prose ("design tokens", "Token: x",
- *   «Name, Token: "abc"» outside of braces) counts for nothing.
+ *   value, with ", ' or ` around the name), "name":value, 'name':value,
+ *   `name`:value, in code (name:value right after "{", or after "," or ";"
+ *   where a "{" is open before it: the object of a script, a block of CSS,
+ *   also --name), at the start of the text name:"value" with the value in
+ *   quotes, and a name as the value of a field name or key with a field
+ *   value or secret within WINDOW bytes. A value is what is not empty after
+ *   its white space is trimmed (" demo" is one). A name without a value, a
+ *   word in prose ("design tokens", "Token: x", «Name, Token: "abc"» outside
+ *   of braces) counts for nothing.
  *
- * COMPARE (check()): the structured readers of the unit noted every id of
- * an address they read (AB_MCP_Sync_Canon::text(): $acc['addressed'],
- * rewritten or locked) and every field of a credential
- * (credentials.mixed). Where a layer counts more ids than they read, and
- * no lock of the unit stands yet, the unit locks (*:unread_reference, at
- * <unit>:net:<layer>); where a layer holds the name of a credential they
- * did not name, and the unit is readable, it locks (*:unread_credential),
- * the name noted among the credentials, never a value. A unit the readers
- * locked is not taken over: there the net adds nothing for the references.
- * A unit they could not read (an object, a script, HTML outside the list
- * of kses, nested deeper than read) is never clean: there it adds nothing
- * for the credentials.
+ * COMPARE (check()): the structured readers of the unit noted every (space,
+ * id) pair of an address they read (AB_MCP_Sync_Canon::text():
+ * $acc['addressed'], rewritten or locked) and every field of a credential
+ * (credentials.mixed). In the raw text and its decodings, a pair counted
+ * more often than they read it locks the unit (*:unread_reference, at
+ * <unit>:net:<layer>); in an extracted layer every pair locks it, as no
+ * reader read there (a reference read in the text never covers one in a
+ * data: address). Where a layer holds the name of a credential they did not
+ * name, and the unit is readable, it locks (*:unread_credential), the name
+ * noted among the credentials, never a value. A unit the readers locked is
+ * not taken over: there the net adds nothing for the references. A unit
+ * they could not read (an object, a script, HTML outside the list of kses,
+ * nested deeper than read) is never clean: there it adds nothing for the
+ * credentials.
  *
  * The net only locks. Rewriting stays with the structured readers, in the
- * spellings they read as the core reads them.
+ * spellings they read as the core reads them (the JSON of a data-*
+ * attribute among them, by its round trip: AB_MCP_Sync_Urls::ids()).
  *
  * KNOWN LIMITS (group C of the rounds: rare spellings that lock, never
  * free):
- * - the JSON of a plugin in a data-* attribute other than data-wp-* holds
- *   an address with an id (Fancybox data-options): locked, not rewritten
- *   (the core reads no JSON there; which plugin does, only its code says);
  * - a key twice in JSON whose dropped value holds an address with an id or
  *   a credential: locked;
+ * - the JSON of a data-* attribute that no producer of the core writes so
+ *   (indented, "&" literal) with an address with an id: locked, not
+ *   rewritten;
  * - a string of CSS (a custom property) with an address with an id: locked,
  *   rewritten only in url(), image-set() and @import;
  * - an address with an id in a title, an alt, a tooltip, a comment of HTML,
- *   in the value of a query variable (?redirect_to=/?p=12, also
- *   percent-encoded) or in prose as a root-relative path the rules of the
- *   site route to an object: locked, not rewritten;
+ *   a query relative to the page (index.php?p=12, also in prose) or in prose
+ *   as a root-relative path the rules of the site route to an object:
+ *   locked, not rewritten;
  * - a credential with its value in a layer no reader of the core reads
  *   (base64, a data: address of any type, an SVG image, a script of an
- *   image): locked.
+ *   image, in another charset): locked;
+ * - a body of a data: address of a text type in a charset it does not
+ *   declare and that no BOM gives: not read, locked.
+ * And what is neither read nor locked: a script of an image that builds the
+ * name of a credential at run time (a template literal with ${…}, a
+ * concatenation): only literal spellings are read, an image runs no
+ * script; a span of base64 whose bytes are no text in UTF-8 and carry no
+ * BOM (a binary, a text in a charset it does not declare) is bytes.
  *
  * @package AlphaBridge_MCP
  */
@@ -112,12 +139,18 @@ final class AB_MCP_Sync_Net {
 	const WINDOW = 256;
 
 	/**
-	 * Where a root-relative address or a query may begin: a "/" or "?"
-	 * after a character that stands in no address and continues no word
-	 * (a backslash escapes it in JSON: that address stands in the layer of
-	 * the escapes of JSON decoded).
+	 * Where a root-relative address may begin: a "/" after a character that
+	 * stands in no address and continues no word (a backslash escapes it in
+	 * JSON: that address stands in the layer of the escapes of JSON decoded).
 	 */
-	const START = '#(?<![A-Za-z0-9_.~%\-/?\\\\])[/?]#';
+	const START = '#(?<![A-Za-z0-9_.~%\-/?\\\\])/#';
+
+	/**
+	 * Where a query may begin: a "?" or "&", whatever stands before it,
+	 * except the "/" JSON escapes (\/?p=12: a root-relative address, read
+	 * in the layer of the escapes of JSON decoded).
+	 */
+	const QUERY = '#(?<!\\\\/)[?&]#';
 
 	/** A span of base64: the alphabet and its padding, MIN_BASE64 or more in all (base64_spans()). */
 	const BASE64 = '#(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{8,}={0,2}(?![A-Za-z0-9+/=])#';
@@ -125,14 +158,18 @@ final class AB_MCP_Sync_Net {
 	/** A data: address up to its ",": its type and parameters before it. */
 	const DATA = '#data:([^,"\'()<>\s]{0,256}),#i';
 
+	/** The types of a data: address whose body is a text (an empty type is text/plain). */
+	const TEXT_TYPES = '#^(?:text/|[^/]+/(?:[^+]+\+)?(?:xml|json|javascript|ecmascript|css|html)\z)#';
+
 	/** A name as a key is spelled: as FLAT_KEYS of the credential check reads one. */
 	const NAME = '[A-Za-z0-9_\x80-\xFF][A-Za-z0-9_\-.\x80-\xFF]{0,255}';
 
 	/**
-	 * A value beside a name: in quotes a character after the quote, else a
-	 * character that ends no value (a space, "&", ";", ",", a bracket, ">").
+	 * A value beside a name: in quotes (", ' or `) a character after the
+	 * quote and the white space after it, else a character that ends no
+	 * value (a space, "&", ";", ",", a bracket, ">").
 	 */
-	const VALUE = '(?:["\'][^"\'\s]|[^\s"\'&;,)}\]>])';
+	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'&;,)}\]>])';
 
 	/**
 	 * The locks of the readers that make a unit one that is never clean
@@ -174,8 +211,8 @@ final class AB_MCP_Sync_Net {
 		$text = self::text( $raw );
 		// What the readers of the unit found: their locks (a reference in
 		// another spelling, noted for finish() or locked at once; a unit
-		// never clean), the ids of the addresses they read, the names of the
-		// credentials they named.
+		// never clean), the pairs of the addresses they read, the names of
+		// the credentials they named.
 		$locked     = count( $acc['spelling'] ) > $mark['spelling'];
 		$unreadable = false;
 		foreach ( array_slice( $acc['locks'], $mark['locks'] ) as $lock ) {
@@ -189,7 +226,7 @@ final class AB_MCP_Sync_Net {
 		if ( $unreadable ) {
 			return;
 		}
-		$read  = count( $acc['addressed'] ) - $mark['addressed'];
+		$read  = array_count_values( array_slice( $acc['addressed'], $mark['addressed'] ) );
 		$named = array();
 		foreach ( array_slice( $acc['credentials']['mixed'], $mark['mixed'] ) as $mixed ) {
 			foreach ( $mixed['fields'] as $field ) {
@@ -200,12 +237,21 @@ final class AB_MCP_Sync_Net {
 		}
 		$extra  = AB_MCP_Redactor::extra_keys();
 		$deep   = false;
-		$layers = self::layers( $text, $deep );
+		$unread = array();
+		$layers = self::layers( $text, $deep, $unread );
 		foreach ( $layers as $layer ) {
-			list( $path, $one ) = $layer;
-			if ( ! $locked && self::references( $one, $ctx ) > $read ) {
-				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_reference', $at . ':net:' . $path );
-				$locked = true;
+			list( $path, $one, $extracted ) = $layer;
+			if ( ! $locked ) {
+				foreach ( array_count_values( self::references( $one, $ctx ) ) as $pair => $count ) {
+					// Taken out of the text, no reader read it: every pair is
+					// unread; in the text and its decodings, every pair beyond
+					// what they read.
+					if ( $extracted || $count > ( isset( $read[ $pair ] ) ? $read[ $pair ] : 0 ) ) {
+						AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_reference', $at . ':net:' . $path );
+						$locked = true;
+						break;
+					}
+				}
 			}
 			if ( $unreadable ) {
 				continue;
@@ -225,6 +271,11 @@ final class AB_MCP_Sync_Net {
 				$unreadable = true;
 			}
 		}
+		// A body that is no text in UTF-8: not read, never clean.
+		foreach ( $unread as $path ) {
+			AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
+			$acc['unread'][] = 'charset:' . $at . ':net:' . $path;
+		}
 		if ( $deep ) {
 			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':net', (string) $kind );
 		}
@@ -234,47 +285,57 @@ final class AB_MCP_Sync_Net {
 
 	/**
 	 * The layers of text a stored value holds (see the header), each with
-	 * the path of its derivation (raw, raw/html, raw/data/base64 …).
+	 * the path of its derivation (raw, raw/html, raw/data/base64 …) and
+	 * whether it is extracted (taken out of the text: data:, base64).
 	 *
-	 * @param string $text The raw text.
-	 * @param bool   $deep Set where a derivation beyond MAX_DEPTH or beyond
-	 *                     MAX_LAYERS was not followed.
-	 * @return array<int,array{0:string,1:string}>
+	 * @param string   $text   The raw text.
+	 * @param bool     $deep   Set where a derivation beyond MAX_DEPTH or
+	 *                         beyond MAX_LAYERS was not followed.
+	 * @param string[] $unread The paths of the layers that hold a body that
+	 *                         is no text in UTF-8 (not read).
+	 * @return array<int,array{0:string,1:string,2:bool}>
 	 */
-	public static function layers( $text, &$deep = false ) {
-		$deep = false;
-		$seen = array();
-		$out  = array();
-		self::unfold( (string) $text, 'raw', 0, $seen, $out, $deep );
+	public static function layers( $text, &$deep = false, &$unread = array() ) {
+		$deep   = false;
+		$unread = array();
+		$seen   = array();
+		$out    = array();
+		self::unfold( (string) $text, 'raw', false, 0, $seen, $out, $deep, $unread );
 		return $out;
 	}
 
 	/**
-	 * @param string $text  A layer.
-	 * @param string $path  Its derivation.
-	 * @param int    $depth Derivations from the raw text.
-	 * @param array  $seen  The layers read, by their hash.
-	 * @param array  $out   The layers.
-	 * @param bool   $deep  See layers().
+	 * @param string   $text      A layer.
+	 * @param string   $path      Its derivation.
+	 * @param bool     $extracted Whether it is taken out of the text.
+	 * @param int      $depth     Derivations from the raw text.
+	 * @param array    $seen      The layers read, by their hash.
+	 * @param array    $out       The layers.
+	 * @param bool     $deep      See layers().
+	 * @param string[] $unread    See layers().
 	 */
-	private static function unfold( $text, $path, $depth, array &$seen, array &$out, &$deep ) {
+	private static function unfold( $text, $path, $extracted, $depth, array &$seen, array &$out, &$deep, array &$unread ) {
 		if ( count( $out ) >= self::MAX_LAYERS ) {
 			$deep = true;
 			return;
 		}
 		$seen[ hash( 'sha256', $text ) ] = true;
-		$out[]                           = array( $path, $text );
+		$out[]                           = array( $path, $text, $extracted );
 		// What the text holds first (a data: address, base64), its decodings
 		// after: a lock names the nearer layer.
 		$more = array();
-		foreach ( self::data_bodies( $text ) as $body ) {
-			$more[] = array( $path . '/data', $body );
+		$bad  = false;
+		foreach ( self::data_bodies( $text, $bad ) as $body ) {
+			$more[] = array( $path . '/data', $body, true );
 		}
-		foreach ( self::base64_spans( $text ) as $span ) {
-			$more[] = array( $path . '/base64', $span );
+		foreach ( self::base64_spans( $text, $bad ) as $span ) {
+			$more[] = array( $path . '/base64', $span, true );
 		}
 		foreach ( self::decoded( $text ) as $name => $variant ) {
-			$more[] = array( $path . '/' . $name, $variant );
+			$more[] = array( $path . '/' . $name, $variant, $extracted );
+		}
+		if ( $bad ) {
+			$unread[] = $path;
 		}
 		// A layer read already (a decoding that changed nothing among them)
 		// is read once, and is no derivation at the depth.
@@ -286,12 +347,13 @@ final class AB_MCP_Sync_Net {
 				$deep = true;
 				return;
 			}
-			self::unfold( $next[1], $next[0], $depth + 1, $seen, $out, $deep );
+			self::unfold( $next[1], $next[0], $next[2], $depth + 1, $seen, $out, $deep, $unread );
 		}
 	}
 
 	/**
-	 * A text as each decoding the core knows gives it, by its name.
+	 * A text as each decoding the core, JSON, JavaScript, C and CSS know
+	 * gives it, by its name; and without the comments of code.
 	 *
 	 * @param string $text Text.
 	 * @return array<string,string>
@@ -303,11 +365,79 @@ final class AB_MCP_Sync_Net {
 		}
 		if ( false !== strpos( $text, '\\' ) ) {
 			$out['json']    = AB_MCP_Sync_Urls::json_unescaped( $text );
+			$out['js']      = self::js_unescaped( $text );
 			$out['slashes'] = stripcslashes( $text );
 			$out['css']     = AB_MCP_Sync_Css::unescaped( $text );
 		}
 		if ( false !== strpos( $text, '%' ) ) {
 			$out['percent'] = rawurldecode( $text );
+		}
+		if ( false !== strpos( $text, '/*' ) || false !== strpos( $text, '//' ) ) {
+			$out['code'] = self::uncommented( $text );
+		}
+		return $out;
+	}
+
+	/**
+	 * A text with the escapes of JavaScript decoded: \u{XXXX}, \uXXXX (any
+	 * code point), \xHH.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function js_unescaped( $text ) {
+		return (string) preg_replace_callback(
+			'/\\\\u\{([0-9a-fA-F]{1,6})\}|\\\\u([0-9a-fA-F]{4})|\\\\x([0-9a-fA-F]{2})/',
+			static function ( $m ) {
+				if ( isset( $m[3] ) && '' !== $m[3] ) {
+					return chr( hexdec( $m[3] ) );
+				}
+				$code = hexdec( '' !== $m[1] ? $m[1] : $m[2] );
+				if ( ( $code >= 0xD800 && $code <= 0xDFFF ) || $code > 0x10FFFF ) {
+					return $m[0];
+				}
+				return $code < 0x80 ? chr( $code ) : (string) mb_chr( (int) $code, 'UTF-8' );
+			},
+			$text
+		);
+	}
+
+	/**
+	 * A text without the comments of code (/*…*‍/, //… to the end of the
+	 * line), its strings respected (between ", ' or `, an escaped character
+	 * part of one, " and ' ended by a line break as well), as
+	 * AB_MCP_Sync_Css::read() reads the comments of CSS.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function uncommented( $text ) {
+		$out   = '';
+		$quote = '';
+		$n     = strlen( $text );
+		for ( $i = 0; $i < $n; ) {
+			$c = $text[ $i ];
+			if ( '\\' === $c ) {
+				$out .= substr( $text, $i, 2 );
+				$i   += 2;
+				continue;
+			}
+			if ( '' !== $quote ) {
+				if ( $c === $quote || ( '`' !== $quote && ( "\n" === $c || "\r" === $c ) ) ) {
+					$quote = '';
+				}
+			} elseif ( '"' === $c || "'" === $c || '`' === $c ) {
+				$quote = $c;
+			} elseif ( '/' === $c && '*' === substr( $text, $i + 1, 1 ) ) {
+				$end = strpos( $text, '*/', $i + 2 );
+				$i   = false === $end ? $n : $end + 2;
+				continue;
+			} elseif ( '/' === $c && '/' === substr( $text, $i + 1, 1 ) ) {
+				$i += strcspn( $text, "\n\r", $i );
+				continue;
+			}
+			$out .= $c;
+			++$i;
 		}
 		return $out;
 	}
@@ -315,15 +445,19 @@ final class AB_MCP_Sync_Net {
 	/**
 	 * What the data: addresses of a text hold, decoded as the browser
 	 * decodes them (the body percent-decoded, then base64 where its
-	 * parameters say so), of any type; a body that does not decode is no
-	 * layer (its bytes stand in the text). The body ends at the quote the
-	 * address stands in, else at a space, a quote or ")".
+	 * parameters say so), of any type: a text type, or one with a charset,
+	 * as UTF-8 by its BOM or charset (utf8()); a body that is then no text
+	 * is not read ($bad: the unit locks). Any other type is bytes. A body
+	 * that does not decode is no layer (its bytes stand in the text). The
+	 * body ends at the quote the address stands in, else at a space, a quote
+	 * or ")".
 	 *
 	 * @param string $text Text.
+	 * @param bool   $bad  Set where a body of a text type is no text in UTF-8.
 	 * @return string[]
 	 */
-	private static function data_bodies( $text ) {
-		if ( false === stripos( $text, 'data:' ) || ! preg_match_all( self::DATA, $text, $m, PREG_OFFSET_CAPTURE | PREG_SET_ORDER ) ) {
+	private static function data_bodies( $text, &$bad ) {
+		if ( ! preg_match_all( self::DATA, $text, $m, PREG_OFFSET_CAPTURE | PREG_SET_ORDER ) ) {
 			return array();
 		}
 		$out = array();
@@ -336,25 +470,44 @@ final class AB_MCP_Sync_Net {
 			} else {
 				$end = $start + strcspn( $text, " \t\n\r\f\"')", $start );
 			}
-			$body   = rawurldecode( (string) substr( $text, $start, $end - $start ) );
-			$params = array_map( 'trim', explode( ';', strtolower( (string) $hit[1][0] ) ) );
+			$body    = rawurldecode( (string) substr( $text, $start, $end - $start ) );
+			$params  = array_map( 'trim', explode( ';', strtolower( (string) $hit[1][0] ) ) );
+			$charset = null;
+			foreach ( $params as $param ) {
+				if ( 0 === strpos( $param, 'charset=' ) ) {
+					$charset = trim( substr( $param, 8 ), '"\' ' );
+				}
+			}
 			if ( in_array( 'base64', $params, true ) ) {
 				$body = base64_decode( $body, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- what the browser decodes, read.
 			}
-			if ( is_string( $body ) && '' !== $body ) {
-				$out[ hash( 'sha256', $body ) ] = $body;
+			if ( ! is_string( $body ) || '' === $body ) {
+				continue;
 			}
+			// A text: in UTF-8, or not read.
+			if ( null !== $charset || 1 === preg_match( self::TEXT_TYPES, $params[0] ) ) {
+				$body = self::utf8( $body, $charset );
+				if ( null === $body ) {
+					$bad = true;
+					continue;
+				}
+			}
+			$out[ hash( 'sha256', $body ) ] = $body;
 		}
 		return array_values( $out );
 	}
 
 	/**
-	 * The spans of base64 in a text (BASE64) whose bytes are UTF-8.
+	 * The spans of base64 in a text (BASE64) whose bytes are a text: UTF-8,
+	 * or UTF-16 or UTF-32 by a BOM (utf8()); one with a BOM that is then no
+	 * text is not read ($bad); bytes that are no text (a binary) are no
+	 * layer.
 	 *
 	 * @param string $text Text.
+	 * @param bool   $bad  Set where a span with a BOM is no text in UTF-8.
 	 * @return string[]
 	 */
-	private static function base64_spans( $text ) {
+	private static function base64_spans( $text, &$bad ) {
 		if ( ! preg_match_all( self::BASE64, $text, $m ) ) {
 			return array();
 		}
@@ -364,11 +517,118 @@ final class AB_MCP_Sync_Net {
 				continue;
 			}
 			$bytes = base64_decode( $span, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- a layer of text, read.
-			if ( is_string( $bytes ) && '' !== $bytes && 1 === preg_match( '//u', $bytes ) ) {
-				$out[ hash( 'sha256', $bytes ) ] = $bytes;
+			if ( ! is_string( $bytes ) || '' === $bytes ) {
+				continue;
 			}
+			$utf8 = self::utf8( $bytes, null );
+			if ( null === $utf8 ) {
+				if ( null !== self::bom( $bytes ) ) {
+					$bad = true;
+				}
+				continue;
+			}
+			$out[ hash( 'sha256', $utf8 ) ] = $utf8;
 		}
 		return array_values( $out );
+	}
+
+	/**
+	 * Bytes as a text in UTF-8: by their BOM (UTF-8, UTF-16LE/BE,
+	 * UTF-32LE/BE), else by the charset given (UTF-16 as the Encoding
+	 * Standard reads the label: little-endian; ISO-8859-1, Windows-1252, the
+	 * labels of UTF-8 and ASCII as they are), else as they are; null where
+	 * they are no text in UTF-8 after that (a null byte, invalid bytes, a
+	 * charset that is not known), or where no function transcodes
+	 * (mb_convert_encoding(), iconv(): fail closed).
+	 *
+	 * @param string      $bytes   Bytes.
+	 * @param string|null $charset The charset declared, in lower case, or null.
+	 * @return string|null
+	 */
+	public static function utf8( $bytes, $charset ) {
+		$bom = self::bom( $bytes );
+		if ( null !== $bom ) {
+			$from  = $bom[0];
+			$bytes = (string) substr( $bytes, $bom[1] );
+		} elseif ( null !== $charset && '' !== $charset ) {
+			$labels = array(
+				'utf-8'        => 'UTF-8',
+				'utf8'         => 'UTF-8',
+				'us-ascii'     => 'UTF-8',
+				'ascii'        => 'UTF-8',
+				'utf-16'       => 'UTF-16LE',
+				'utf-16le'     => 'UTF-16LE',
+				'utf-16be'     => 'UTF-16BE',
+				'utf-32'       => 'UTF-32LE',
+				'utf-32le'     => 'UTF-32LE',
+				'utf-32be'     => 'UTF-32BE',
+				'iso-8859-1'   => 'ISO-8859-1',
+				'latin1'       => 'ISO-8859-1',
+				'l1'           => 'ISO-8859-1',
+				'windows-1252' => 'Windows-1252',
+				'cp1252'       => 'Windows-1252',
+			);
+			if ( ! isset( $labels[ $charset ] ) ) {
+				return self::is_text( $bytes ) ? $bytes : null;
+			}
+			$from = $labels[ $charset ];
+		} else {
+			return self::is_text( $bytes ) ? $bytes : null;
+		}
+		if ( 'UTF-8' === $from ) {
+			return self::is_text( $bytes ) ? $bytes : null;
+		}
+		$text = self::transcoded( $bytes, $from );
+		return null !== $text && self::is_text( $text ) ? $text : null;
+	}
+
+	/**
+	 * @param string $bytes Bytes.
+	 * @return array{0:string,1:int}|null The charset a BOM gives and its length.
+	 */
+	private static function bom( $bytes ) {
+		foreach ( array(
+			"\xFF\xFE\x00\x00" => 'UTF-32LE',
+			"\x00\x00\xFE\xFF" => 'UTF-32BE',
+			"\xFF\xFE"         => 'UTF-16LE',
+			"\xFE\xFF"         => 'UTF-16BE',
+			"\xEF\xBB\xBF"     => 'UTF-8',
+		) as $mark => $charset ) {
+			if ( 0 === strncmp( $bytes, $mark, strlen( $mark ) ) ) {
+				return array( $charset, strlen( $mark ) );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * @param string $bytes Bytes.
+	 * @param string $from  Charset.
+	 * @return string|null In UTF-8; null where no function transcodes or it fails.
+	 */
+	private static function transcoded( $bytes, $from ) {
+		if ( function_exists( 'mb_convert_encoding' ) ) {
+			// Bytes that are no text of the charset give no text (the
+			// conversion would put a "?" in their place).
+			if ( ! mb_check_encoding( $bytes, $from ) ) {
+				return null;
+			}
+			$out = @mb_convert_encoding( $bytes, 'UTF-8', $from ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a charset the extension does not know gives null below.
+			return is_string( $out ) ? $out : null;
+		}
+		if ( function_exists( 'iconv' ) ) {
+			$out = @iconv( $from, 'UTF-8', $bytes ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- as above.
+			return is_string( $out ) ? $out : null;
+		}
+		return null;
+	}
+
+	/**
+	 * @param string $bytes Bytes.
+	 * @return bool Whether they are a text: UTF-8 without a null byte.
+	 */
+	private static function is_text( $bytes ) {
+		return false === strpos( $bytes, "\0" ) && 1 === preg_match( '//u', $bytes );
 	}
 
 	/**
@@ -400,50 +660,102 @@ final class AB_MCP_Sync_Net {
 	/* ------------------------------------------------------------- count */
 
 	/**
-	 * How many ids the addresses of a layer name (see the header).
+	 * The (space, id) pairs the addresses of a layer name (see the header),
+	 * as space:id, an id in a spelling that is not read as space:?; a pair
+	 * as often as it is named.
 	 *
 	 * @param string $text A layer.
 	 * @param array  $ctx  Context.
-	 * @return int
+	 * @return string[]
 	 */
 	public static function references( $text, array $ctx ) {
 		$text = (string) $text;
 		// Without a digit from 1 to 9 no address names an object: not asked
-		// (the readers answer 0 for each; this spares the asking).
+		// (the readers answer nothing for each; this spares the asking).
 		if ( ! preg_match( '/[1-9]/', $text ) ) {
-			return 0;
+			return array();
 		}
-		// Every host (HOST: with its scheme or without, also \/\/ of JSON:
-		// every form of a site's address the replace engine knows), and
-		// every root-relative start (START) outside a host.
-		$hosts = array();
+		$pairs = array();
+		$spans = array();
+		// The address tokens first: from every host to the end of an
+		// address, read whole (a host of no site names nothing, whatever
+		// follows its "#").
 		if ( preg_match_all( AB_MCP_Sync_Urls::HOST, $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $host ) {
-				$hosts[ (int) $host[1] ] = strlen( $host[0] );
+				$at = (int) $host[1];
+				if ( self::inside( $at, $spans ) ) {
+					continue;
+				}
+				$url     = self::extent( $text, $at );
+				$spans[] = array( $at, $at + strlen( $url ) );
+				$pairs   = array_merge( $pairs, self::pairs( $url, $ctx ) );
 			}
 		}
-		$starts = array_keys( $hosts );
+		// Outside the tokens: every root-relative address, with its path and
+		// its query.
 		if ( preg_match_all( self::START, $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $start ) {
 				$at = (int) $start[1];
-				foreach ( $hosts as $host_at => $len ) {
-					if ( $at >= $host_at && $at < $host_at + $len ) {
-						continue 2;
-					}
+				if ( self::inside( $at, $spans ) ) {
+					continue;
 				}
-				$starts[] = $at;
+				$url     = self::extent( $text, $at );
+				$spans[] = array( $at, $at + strlen( $url ) );
+				$pairs   = array_merge( $pairs, self::pairs( $url, $ctx ) );
 			}
 		}
-		$count = 0;
-		foreach ( $starts as $at ) {
-			preg_match( AB_MCP_Sync_Urls::EXTENT, $text, $m, 0, $at );
-			$url = (string) preg_replace( '/[.,;:!)\]]+\z/', '', $m[0] );
-			if ( ! preg_match( '/[1-9]/', $url ) ) {
-				continue;
+		// And every query, whatever stands before its "?" or "&": read as the
+		// query of an address relative to the page.
+		if ( preg_match_all( self::QUERY, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $m[0] as $start ) {
+				$at = (int) $start[1];
+				if ( self::inside( $at, $spans ) ) {
+					continue;
+				}
+				$query = self::extent( $text, $at );
+				if ( false === strpos( $query, '=' ) ) {
+					continue;
+				}
+				$pairs = array_merge( $pairs, self::pairs( '?' . substr( $query, 1 ), $ctx ) );
 			}
-			$count += AB_MCP_Sync_Urls::ids_in( $url, $ctx );
 		}
-		return $count;
+		return $pairs;
+	}
+
+	/**
+	 * @param string $url An address, to its end.
+	 * @param array  $ctx Context.
+	 * @return string[] Its pairs (AB_MCP_Sync_Urls::pairs()); none without a digit from 1 to 9.
+	 */
+	private static function pairs( $url, array $ctx ) {
+		return preg_match( '/[1-9]/', $url ) ? AB_MCP_Sync_Urls::pairs( $url, $ctx ) : array();
+	}
+
+	/**
+	 * An address from an offset to its end (AB_MCP_Sync_Urls::EXTENT), the
+	 * punctuation after it none of it (as the prose is read).
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Offset.
+	 * @return string
+	 */
+	private static function extent( $text, $at ) {
+		preg_match( AB_MCP_Sync_Urls::EXTENT, $text, $m, 0, $at );
+		return (string) preg_replace( '/[.,;:!)\]]+\z/', '', $m[0] );
+	}
+
+	/**
+	 * @param int   $at    Offset.
+	 * @param array $spans Spans (start, end).
+	 * @return bool Whether it lies in one.
+	 */
+	private static function inside( $at, array $spans ) {
+		foreach ( $spans as $span ) {
+			if ( $at >= $span[0] && $at < $span[1] ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -458,10 +770,10 @@ final class AB_MCP_Sync_Net {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
-			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\']?\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
-			'/["\'](' . self::NAME . ')["\']\s*:\s*' . self::VALUE . '/',
+			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\'`]?\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
+			'/["\'`](' . self::NAME . ')["\'`]\s*:\s*' . self::VALUE . '/',
 			'/\{\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/',
-			'/^\s*(' . self::NAME . ')\s*:\s*["\'][^"\'\s]/',
+			'/^\s*(' . self::NAME . ')\s*:\s*["\'`]\s*[^"\'`\s]/',
 		) as $pattern ) {
 			if ( preg_match_all( $pattern, $text, $m ) ) {
 				$found = array_merge( $found, $m[1] );
@@ -479,11 +791,11 @@ final class AB_MCP_Sync_Net {
 		}
 		// A name as the value of a field name or key, a field value or
 		// secret beside it.
-		if ( preg_match_all( '/(?<![A-Za-z0-9_])(?:name|key)["\']?\s*[:=]>?\s*["\']?(' . self::NAME . ')/i', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+		if ( preg_match_all( '/(?<![A-Za-z0-9_])(?:name|key)["\'`]?\s*[:=]>?\s*["\'`]?(' . self::NAME . ')/i', $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[1] as $hit ) {
 				$from   = max( 0, (int) $hit[1] - self::WINDOW );
 				$window = (string) substr( $text, $from, (int) $hit[1] - $from + strlen( $hit[0] ) + self::WINDOW );
-				if ( preg_match( '/(?<![A-Za-z0-9_])(?:value|secret)["\']?\s*[:=]>?\s*' . self::VALUE . '/i', $window ) ) {
+				if ( preg_match( '/(?<![A-Za-z0-9_])(?:value|secret)["\'`]?\s*[:=]>?\s*' . self::VALUE . '/i', $window ) ) {
 					$found[] = $hit[0];
 				}
 			}
