@@ -378,6 +378,10 @@ try {
 if ( null !== $ab_only ) {
 	$ab_entries = array_values( array_filter( $ab_entries, static fn( $e ) => $e['id'] === $ab_only ) );
 }
+if ( array() === $ab_entries ) {
+	fwrite( STDERR, "mutation: no entry to run.\n" );
+	exit( 2 );
+}
 if ( null !== $ab_shard ) {
 	$ab_entries = array_values(
 		array_filter(
@@ -386,9 +390,10 @@ if ( null !== $ab_shard ) {
 			ARRAY_FILTER_USE_KEY
 		)
 	);
-}
-if ( array() === $ab_entries ) {
-	fwrite( STDERR, "mutation: no entry to run.\n" );
-	exit( 2 );
+	// Fewer entries than shards leaves this one empty: the others run them all.
+	if ( array() === $ab_entries ) {
+		echo "shard {$ab_shard[0]}/{$ab_shard[1]} has no entry; the other shards run them all\n";
+		exit( 0 );
+	}
 }
 exit( $ab_run->run( $ab_entries ) );
