@@ -65,6 +65,26 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * Whether a page (or an attachment) of a name exists, for the verbose
+	 * rules of pages (AB_MCP_Sync_Urls::route()): get_page_by_path() of the
+	 * core finds a page only among those with the name of the last part of
+	 * its path, made as it makes it (rawurlencode( urldecode() ),
+	 * sanitize_title_for_query()). Asked of the rows, without the cache.
+	 *
+	 * @param string $part The last part of the path of the page.
+	 * @return bool|null Null when the rows cannot be read.
+	 */
+	public static function page_named( $part ) {
+		global $wpdb;
+		if ( ! self::has( array( 'posts' ) ) ) {
+			return null;
+		}
+		$name = sanitize_title_for_query( str_replace( '%20', ' ', rawurlencode( urldecode( (string) $part ) ) ) );
+		$rows = self::select( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_type IN ( 'page', 'attachment' ) LIMIT 1", $name ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from $wpdb.
+		return null === $rows ? null : array() !== $rows;
+	}
+
+	/**
 	 * The posts of some types after an id, oldest id first: the pages of the
 	 * inventory.
 	 *

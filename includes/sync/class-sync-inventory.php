@@ -38,23 +38,15 @@ final class AB_MCP_Sync_Inventory {
 	 * @return array ctx, deadline.
 	 */
 	public static function source( array $addresses, $budget = self::BUDGET, $users = null ) {
-		// The core of this site resolves its paths (url_to_postid()); its own
-		// addresses from the rows (AB_MCP_Sync_Urls). What cannot be read
-		// locks where it counts.
+		// The rewrite rules of this site route its paths, and its own
+		// addresses, both from its rows (AB_MCP_Sync_Urls). What cannot be
+		// read locks where it counts.
 		$own = AB_MCP_Sync_Canon::own_addresses();
 		return array(
 			'ctx'      => AB_MCP_Sync_Canon::context(
 				$addresses,
 				$users,
-				function_exists( 'url_to_postid' ) ? static function ( $path ) {
-					global $wp_rewrite;
-					return array(
-						'id'    => url_to_postid( home_url( $path ) ),
-						// Where the structure of the posts names no id, digits equal
-						// to it are none to rewrite (a year): they lock.
-						'by_id' => false !== strpos( (string) $wp_rewrite->permalink_structure, '%post_id%' ),
-					);
-				} : null,
+				AB_MCP_Sync_Urls::routes(),
 				null === $own ? array() : $own
 			),
 			'deadline' => self::now() + max( 0, (float) $budget ),

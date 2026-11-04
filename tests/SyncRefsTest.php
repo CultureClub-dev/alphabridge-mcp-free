@@ -489,81 +489,6 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( 'spelling' ), array_column( $plan['missing'], 'space' ) );
 	}
 
-	/** A resolver as url_to_postid() of the site answers: path => id; by_id whether a structure holds %post_id%. */
-	private static function resolver( array $ids, bool $by_id = true, ?array &$asked = null ): callable {
-		return static function ( $path ) use ( $ids, $by_id, &$asked ) {
-			$asked[] = $path;
-			return array(
-				'id'    => isset( $ids[ $path ] ) ? $ids[ $path ] : 0,
-				'by_id' => $by_id,
-			);
-		};
-	}
-
-	/** The ids and the places that lock of a text, and its rewrite (12 => 120, 13 => 130). */
-	private static function resolved( string $content, ?callable $resolve = null ): array {
-		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, $resolve );
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
-		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130 ) ), array( 'https://staging.test' => 'https://www.live.test' ), $resolve ) );
-		return array( array_column( $acc['refs'], 'id' ), $acc['spelling'], $out['content'], array_column( $out['missing'], 'space' ) );
-	}
-
-	public function testTheResolverOfTheSiteNamesTheIdOfAPath(): void {
-		// Codex, round 10 (6): url_to_postid() of the site, not a structure rebuilt.
-		$asked   = array();
-		$resolve = self::resolver( array( '/archives/12/' => 12, '/archives/13/' => 13, '/archives/12' => 12, '/beitrag/' => 12, '/12/beitrag/' => 12, '/2026/11/beitrag/' => 12 ), true, $asked );
-		foreach ( array(
-			'Siehe https://staging.test/archives/12/ hier'          => 'Siehe https://www.live.test/archives/120/ hier',
-			'Siehe https://staging.test/archives/12 hier'           => 'Siehe https://www.live.test/archives/120 hier',
-			'Siehe https://staging.test/12/beitrag/ hier'           => 'Siehe https://www.live.test/120/beitrag/ hier',
-			'<!-- wp:acme/x {"url":"/archives/12/"} /-->'           => '<!-- wp:acme/x {"url":"/archives/120/"} /-->',
-			'<!-- wp:acme/x {"url":"https:\/\/staging.test\/archives\/12\/"} /-->' => '<!-- wp:acme/x {"url":"https://www.live.test/archives/120/"} /-->',
-		) as $from => $to ) {
-			self::assertSame( array( array( 12 ), array(), $to, array() ), self::resolved( $from, $resolve ), $from );
-		}
-		self::assertContains( '/archives/12/', $asked, 'Asked about the path of the address, without the site.' );
-		// A link by its slug names no id: the host is replaced, and without a
-		// digit in the path the core is not asked.
-		$asked = array();
-		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/beitrag/ hier', $resolve ) );
-		self::assertSame( array(), $asked );
-		// Digits, but not those of the id: by its slug as well.
-		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/2026/11/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/2026/11/beitrag/ hier', $resolve ) );
-		// What the core resolves to nothing names nothing (an upload).
-		self::assertSame( array( array(), array() ), array_slice( self::resolved( 'Bild https://staging.test/wp-content/uploads/2026/11/a12.jpg hier', $resolve ), 0, 2 ) );
-	}
-
-	public function testAnIdOfAPathInAnyOtherFormLocks(): void {
-		$asked   = array();
-		$resolve = self::resolver( array( '/archives/13/' => 13, '/archives/012/' => 12, '/2026/11/top-12-tips/' => 12, '/archives/12/' => 12, '/archives/12/012/' => 12, '/archives//12/' => 12, '/archives/12/caf%C3%A9/' => 12 ), true, $asked );
-		foreach ( array(
-			// Codex, round 10 (7): the browser resolves the dot segments, to 13.
-			'Siehe https://staging.test/archives/12/../13/ hier',
-			'Siehe https://staging.test/archives/./13/ hier',
-			'Siehe https://staging.test/archives/012/ hier',
-			// Escaped: the core is asked about the path decoded as well.
-			'Siehe https://staging.test/archives/%31%32/ hier',
-			'Siehe https://staging.test/archives//12/ hier',
-			// The id twice, once in another spelling.
-			'Siehe https://staging.test/archives/12/012/ hier',
-			// An escape elsewhere in the path.
-			'Siehe https://staging.test/archives/12/caf%C3%A9/ hier',
-			// The id among other digits, in no segment of its own.
-			'Siehe https://staging.test/2026/11/top-12-tips/ hier',
-			// The same site in another spelling: never rewritten.
-			'Siehe https://STAGING.test/archives/12/ hier',
-		) as $content ) {
-			list( $refs, $spelling, , $missing ) = self::resolved( $content, $resolve );
-			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $refs, $spelling ), $content );
-			self::assertContains( 'spelling', $missing, $content );
-		}
-		self::assertContains( '/archives/13/', $asked, 'Asked about the path the browser resolves.' );
-		// Digits equal to the id where no structure holds %post_id%: a date.
-		$dates = self::resolver( array( '/2026/12/beitrag/' => 12 ), false );
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::resolved( 'Siehe https://staging.test/2026/12/beitrag/ hier', $dates ), 0, 2 ) );
-	}
-
 	public function testWithoutTheHtmlApiATagThatMayHoldAnIdLocks(): void {
 		// The unit suite has no HTML API: what it would read locks.
 		list( $refs, , , $acc ) = self::scan( '<p><img class="wp-image-12"></p>' );
@@ -574,15 +499,136 @@ final class SyncRefsTest extends TestCase {
 		self::assertContains( '*:reference_spelling', array_column( AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'], 'key' ) );
 	}
 
-	public function testTheResolverOfThisSiteIsNotAskedAboutTheOtherSite(): void {
+	/**
+	 * Rewrite rules as WordPress 7.1.3 writes them for a structure (a part of
+	 * each, in their order; the whole lists: tests/integration/SyncCoreReadsTest.php).
+	 */
+	private static function rules( string $structure ): array {
+		$page  = array( '(.?.+?)/page/?([0-9]{1,})/?$' => 'index.php?pagename=$matches[1]&paged=$matches[2]', '(.?.+?)(?:/([0-9]+))?/?$' => 'index.php?pagename=$matches[1]&page=$matches[2]' );
+		$dates = array( '([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})/?$' => 'index.php?year=$matches[1]&monthnum=$matches[2]&day=$matches[3]', '([0-9]{4})/([0-9]{1,2})/?$' => 'index.php?year=$matches[1]&monthnum=$matches[2]', '([0-9]{4})/?$' => 'index.php?year=$matches[1]' );
+		switch ( $structure ) {
+			case '/archives/%post_id%/':
+				return array( 'rules' => array( 'archives/date/([0-9]{4})/?$' => 'index.php?year=$matches[1]', 'archives/[0-9]+/attachment/([^/]+)/?$' => 'index.php?attachment=$matches[1]', 'archives/([0-9]+)(?:/([0-9]+))?/?$' => 'index.php?p=$matches[1]&page=$matches[2]' ) + $page, 'verbose' => false, 'index' => false );
+			case '/%year%/%postname%/':
+				return array( 'rules' => $dates + array( '([0-9]{4})/([^/]+)(?:/([0-9]+))?/?$' => 'index.php?year=$matches[1]&name=$matches[2]&page=$matches[3]' ) + $page, 'verbose' => false, 'index' => false );
+			case '/%category%/%post_id%/':
+				return array( 'rules' => $page + array( '(.+?)/([0-9]+)(?:/([0-9]+))?/?$' => 'index.php?category_name=$matches[1]&p=$matches[2]&page=$matches[3]' ), 'verbose' => true, 'index' => false );
+			case '/index.php/archives/%post_id%/':
+				return array( 'rules' => array( 'index.php/archives/([0-9]+)(?:/([0-9]+))?/?$' => 'index.php?p=$matches[1]&page=$matches[2]' ), 'verbose' => false, 'index' => true );
+		}
+		return array( 'rules' => array( 'go/([0-9]+)/?$' => 'index.php?page_id=5' ), 'verbose' => false, 'index' => false );
+	}
+
+	/** The ids and the places that lock of a text, and its rewrite (12 => 120, 13 => 130). */
+	private static function routed( string $content, ?array $routes ): array {
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, $routes );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, AB_MCP_Sync_Refs::plan( array( 'post' => array( 12 => 120, 13 => 130, 2 => 200 ) ), array( 'https://staging.test' => 'https://www.live.test' ), $routes ) );
+		return array( array_column( $acc['refs'], 'id' ), $acc['spelling'], $out['content'], array_column( $out['missing'], 'space' ) );
+	}
+
+	public function testTheRulesOfTheSiteTellWhichDigitsAreAnId(): void {
+		// Codex, round 11: the variable the rule fills, not the digits.
+		$numeric = self::rules( '/archives/%post_id%/' );
+		foreach ( array(
+			'Siehe https://staging.test/archives/12/ hier'          => 'Siehe https://www.live.test/archives/120/ hier',
+			'Siehe https://staging.test/archives/12 hier'           => 'Siehe https://www.live.test/archives/120 hier',
+			'Siehe https://staging.test/archives/12/2/ hier'        => 'Siehe https://www.live.test/archives/120/2/ hier',
+			'<!-- wp:acme/x {"url":"/archives/12/"} /-->'           => '<!-- wp:acme/x {"url":"/archives/120/"} /-->',
+		) as $from => $to ) {
+			self::assertSame( array( array( 12 ), array(), $to, array() ), self::routed( $from, $numeric ), $from );
+		}
+		// Other variables are no ids: a part of a page, a year, a date archive.
+		foreach ( array(
+			'Siehe https://staging.test/handbuch/2/ hier',
+			'Siehe https://staging.test/handbuch/page/2/ hier',
+			'Siehe https://staging.test/archives/date/2026/ hier',
+			'Siehe https://staging.test/archives/0/ hier',
+			'Siehe https://staging.test/wp-content/uploads/2026/11/a12.jpg hier',
+			// Spaces before: read as the URL parser reads it, an address of the site.
+			'<!-- wp:acme/x {"url":" https:\/\/staging.test\/handbuch\/2\/"} /-->',
+		) as $content ) {
+			self::assertSame( array( array(), array(), str_replace( array( 'staging.test', 'https:\/\/', '\/' ), array( 'www.live.test', 'https://', '/' ), $content ), array() ), self::routed( $content, $numeric ), $content );
+		}
+		// The first rule decides where the rules of pages are not verbose.
+		$extra                                = $numeric;
+		$extra['rules']['extra/([0-9]+)/?$'] = 'index.php?p=$matches[1]';
+		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/extra/12/ hier', $extra ), 0, 2 ) );
+		$years = self::rules( '/%year%/%postname%/' );
+		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/2026/beitrag/ hier', $years ), 0, 2 ), 'The year of a post is no id.' );
+		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/2026/11/ hier', $years ), 0, 2 ), 'A month.' );
+		// The permalinks with index.php: the rule as stored.
+		self::assertSame( array( 12 ), self::routed( 'Siehe https://staging.test/index.php/archives/12/ hier', self::rules( '/index.php/archives/%post_id%/' ) )[0] );
+		// Plain permalinks: no rule routes a path.
+		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/archives/12/ hier', array( 'rules' => array(), 'verbose' => false, 'index' => false ) ), 0, 2 ) );
+	}
+
+	public function testAnIdOfAPathInAnyOtherFormLocks(): void {
+		$numeric = self::rules( '/archives/%post_id%/' );
+		foreach ( array(
+			// Codex, round 10: the browser resolves the dot segments, to 13.
+			'Siehe https://staging.test/archives/12/../13/ hier',
+			'Siehe https://staging.test/archives/./13/ hier',
+			// Another spelling of the id (absint() reads 12).
+			'Siehe https://staging.test/archives/012/ hier',
+			// Escaped: the rule matches the path decoded (WP::parse_request()).
+			'Siehe https://staging.test/archives/%31%32/ hier',
+			'Siehe https://staging.test/archives/12/%32/ hier',
+			// index.php/ the core takes out where the permalinks do not hold it.
+			'Siehe https://staging.test/index.php/archives/12/ hier',
+			// The same site in another spelling: never rewritten.
+			'Siehe https://STAGING.test/archives/12/ hier',
+		) as $content ) {
+			list( $refs, $spelling, , $missing ) = self::routed( $content, $numeric );
+			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $refs, $spelling ), $content );
+			self::assertContains( 'spelling', $missing, $content );
+		}
+		// A fixed id of a rule, no digits of the path: locks.
+		self::assertSame( array( 'c:html%post_id%' ), self::routed( 'Siehe https://staging.test/go/7/ hier', self::rules( 'custom' ) )[1] );
+	}
+
+	public function testAVerboseRuleOfPagesHoldsWhereThePageExists(): void {
+		// Codex, round 10 (6): /parent/child/12/ under /%category%/%post_id%/.
+		$asked             = array();
+		$category          = self::rules( '/%category%/%post_id%/' );
+		$category['pages'] = static function ( $name ) use ( &$asked ) {
+			$asked[] = $name;
+			return 'handbuch' === $name;
+		};
+		self::assertSame( array( array( 12 ), array(), 'Siehe https://www.live.test/parent/child/120/ hier', array() ), self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ) );
+		self::assertContains( 'child', $asked, 'The last part of the path of the page.' );
+		// A page of that name exists: page or post, only the core knows.
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'Siehe https://staging.test/handbuch/2/ hier', $category ), 0, 2 ) );
+		// Escapes or double slashes where the rule matches as stored.
+		foreach ( array( 'Siehe https://staging.test/caf%C3%A9/12/ hier', 'Siehe https://staging.test/parent//12/ hier' ) as $content ) {
+			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( $content, $category ), 0, 2 ), $content );
+		}
+		// Without a digit in the path the rules are not searched, no page asked.
+		$asked = array();
+		self::routed( 'Siehe https://staging.test/beitrag/ hier', $category );
+		self::assertSame( array(), $asked );
+		// The pages not to be asked: the same.
+		unset( $category['pages'] );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ), 0, 2 ) );
+	}
+
+	public function testTheRulesOfThisSiteAreNotAskedAboutTheOtherSite(): void {
 		// Its ids and its permalinks are not this site's: a segment of digits locks.
-		$resolve = self::resolver( array() );
-		$ctx     = AB_MCP_Sync_Canon::context( array( 'https://staging.test', 'https://www.live.test' ), static fn( $id ) => 'user' . $id, $resolve, array( 'https://staging.test' ) );
-		foreach ( array( 'Siehe https://www.live.test/archives/120 hier', 'Siehe https://WWW.LIVE.TEST/archives/120 hier', 'Siehe https://live.test/archives/120 hier' ) as $content ) {
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test', 'https://www.live.test' ), static fn( $id ) => 'user' . $id, array( 'rules' => array(), 'verbose' => false, 'index' => false ), array( 'https://staging.test' ) );
+		foreach ( array( 'Siehe https://www.live.test/archives/120 hier', 'Siehe https://WWW.LIVE.TEST/archives/120 hier', 'Siehe https://live.test/archives/120 hier', 'Siehe https://www.live.test/archives/%31%32%30 hier' ) as $content ) {
 			$acc = AB_MCP_Sync_Canon::acc();
 			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
 			self::assertSame( array( 'c:html%post_id%' ), $acc['spelling'], $content );
 		}
+	}
+
+	public function testWithoutTheRulesASegmentOfDigitsLocks(): void {
+		// Not known (another site, the row not read): as stored or decoded.
+		foreach ( array( 'Siehe https://staging.test/archives/12 hier', 'Siehe https://staging.test/%31%32/ hier' ) as $content ) {
+			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( $content, null ), 0, 2 ), $content );
+		}
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/beitrag/ hier', array() ), self::routed( 'Siehe https://staging.test/beitrag/ hier', null ) );
 	}
 
 	public function testThePortOfASiteIsDefaultOnlyForItsScheme(): void {
@@ -591,14 +637,6 @@ final class SyncRefsTest extends TestCase {
 		$acc = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Refs::content( 'Siehe http://staging.test/?p=12 hier', $ctx, $acc, 'post', 'c' );
 		self::assertSame( array( array(), array() ), array( $acc['refs'], $acc['spelling'] ) );
-	}
-
-	public function testWithoutTheResolverASegmentOfDigitsLocks(): void {
-		// Not given is not known (the unit suite has no url_to_postid()).
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::resolved( 'Siehe https://staging.test/archives/12 hier' ), 0, 2 ) );
-		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/beitrag/ hier', array() ), self::resolved( 'Siehe https://staging.test/beitrag/ hier' ) );
-		// A resolver that answers no id: the path names none.
-		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/archives/12 hier', array() ), self::resolved( 'Siehe https://staging.test/archives/12 hier', self::resolver( array() ) ) );
 	}
 
 	public function testAShortLinkInAStoredValueIsAReference(): void {

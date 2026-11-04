@@ -23,7 +23,8 @@
  *   WIDGETS here);
  * - the addresses of the sites, in every form of the replace engine, with
  *   their scheme or without it, and the ids they name as the core reads
- *   them (short links through parse_str(), paths through url_to_postid()),
+ *   them (short links through parse_str(), paths through the rewrite rules
+ *   of the site),
  *   where the stored form is exactly the one the core reads
  *   (AB_MCP_Sync_Urls); every other form of such an id locks;
  * Blocks are read with the core's WP_Block_Parser (what parse_blocks()
@@ -444,13 +445,14 @@ final class AB_MCP_Sync_Refs {
 	 *                         id there ).
 	 * @param array       $addresses address here => address there (home =>
 	 *                               home, siteurl => siteurl).
-	 * @param callable|null $resolve The resolver of the site whose content is
-	 *                               rewritten (url_to_postid() there); null,
-	 *                               the default, where it cannot be asked
+	 * @param array|null  $routes    The rewrite rules of the site whose
+	 *                               content is rewritten (AB_MCP_Sync_Urls::
+	 *                               routes() there); null, the default,
+	 *                               where they are not known
 	 *                               (AB_MCP_Sync_Canon::context()).
 	 * @return array
 	 */
-	public static function plan( array $map, array $addresses, $resolve = null ) {
+	public static function plan( array $map, array $addresses, $routes = null ) {
 		$subs  = array();
 		$pairs = array();
 		foreach ( $addresses as $from => $to ) {
@@ -478,7 +480,7 @@ final class AB_MCP_Sync_Refs {
 			static function () {
 				return false;
 			},
-			$resolve
+			$routes
 		);
 		// From the root, an address is rewritten only where both sides share it.
 		$ctx['one_root'] = count( array_unique( array_column( AB_MCP_Sync_Canon::context( array_merge( array_keys( $addresses ), array_values( $addresses ) ) )['sites'], 'path' ) ) ) <= 1;

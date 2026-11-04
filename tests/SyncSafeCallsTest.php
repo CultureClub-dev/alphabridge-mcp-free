@@ -49,6 +49,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'shortcode_parse_atts'                 => 'Parses the text it is given (stripcslashes(), the pattern of get_shortcode_atts_regex()).',
 		'has_filter'                           => 'Asks the hooks registered in this request, code, no stored value.',
 		'esc_attr'                             => 'Escapes the text it is given (wp-includes/formatting.php).',
+		'sanitize_title_for_query'             => 'Makes the name of a page of the text it is given, as get_page_by_path() does.',
 		'is_multisite'                         => 'The constants MULTISITE and SUBDOMAIN_INSTALL.',
 		// Static methods of this plugin outside includes/sync/.
 		'AB_MCP_Builders::signatures'          => 'signatures.php and the filter ab_mcp_builder_signatures; no post and no option.',
@@ -93,6 +94,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'->paused_at_incomplete_token'         => 'WP_HTML_Tag_Processor.',
 		'WP_HTML_Decoder::decode_attribute'    => 'The HTML API: decodes the text it is given as an attribute value.',
 		'WP_HTML_Decoder::decode_text_node'    => 'The HTML API: decodes the text it is given as text.',
+		'WP_MatchesMapRegex::apply'            => 'Puts the matches it is given into the query of a rewrite rule.',
 		'->parse'                              => 'WP_Block_Parser: parses the text it is given.',
 		'->get_error_code'                     => 'WP_Error.',
 		'->get_error_message'                  => 'WP_Error.',
@@ -110,10 +112,6 @@ final class SyncSafeCallsTest extends TestCase {
 	private const EXCEPTIONS = array(
 		'class-sync-canon.php'  => array(
 			'unserialize' => array( 1, 'unserialized(): after carries_record() refused every object, enum, reference and record, with allowed_classes => false.' ),
-		),
-		'class-sync-inventory.php' => array(
-			'url_to_postid' => array( 1, 'source(): the resolver of the paths of this site (Codex, round 10): the id the core resolves an address to, as WordPress itself does (rewrite rules, WP_Query); compared with the digits of the path, never stored or compared as a value.' ),
-			'home_url'      => array( 1, 'source(): the address url_to_postid() is asked about, as it compares it with home_url() itself.' ),
 		),
 		'class-sync-schema.php' => array(
 			'get_option'    => array( 2, 'maybe_upgrade() and status(): the version of the tables, a string this plugin writes itself and compares with VERSION; no value of a site the takeover compares.' ),

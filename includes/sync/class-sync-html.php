@@ -41,6 +41,9 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	/** The name of the bookmark that gives a tag's span. */
 	const MARK = 'ab_mcp_sync_tag';
 
+	/** The elements whose content the HTML API reads as text (raw text and RCDATA). */
+	const TEXT_ELEMENTS = array( 'IFRAME', 'NOEMBED', 'NOFRAMES', 'SCRIPT', 'STYLE', 'TEXTAREA', 'TITLE', 'XMP' );
+
 	/** What value_span() puts in place of a value to see the HTML API read it there. */
 	const PROBE = 'ab-mcp-sync-probe';
 
@@ -86,7 +89,7 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	/**
 	 * The tags of a text as the HTML API reads them: each opener with its
 	 * span, its name, its attributes (decoded as the browser decodes them:
-	 * get_attribute()) and, for script, style and textarea, its text. Null
+	 * get_attribute()) and, for TEXT_ELEMENTS, its text. Null
 	 * where the text ends in a token the HTML API cannot finish: what follows
 	 * is not read.
 	 *
@@ -116,7 +119,7 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 				'len'   => (int) $span->length,
 				'tag'   => $tag,
 				'attrs' => $attrs,
-				'text'  => in_array( $tag, array( 'SCRIPT', 'STYLE', 'TEXTAREA' ), true ) ? (string) $p->get_modifiable_text() : null,
+				'text'  => in_array( $tag, self::TEXT_ELEMENTS, true ) ? (string) $p->get_modifiable_text() : null,
 			);
 		}
 		return $p->paused_at_incomplete_token() ? null : $out;

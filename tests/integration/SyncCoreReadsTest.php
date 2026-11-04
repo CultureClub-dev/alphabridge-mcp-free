@@ -3,10 +3,10 @@
  * The cases of SyncCoreReads read by the core of WordPress 7.1.3: the HTML
  * API, WP_HTML_Decoder, parse_str(); here the answer of each case itself
  * (in the unit suite those with a tag or a character reference fail
- * closed). And the paths as url_to_postid() of this site resolves them
- * under the permalink structures of the core (Codex, round 10: no
- * structure rebuilt): the id where its digits stand in the path,
- * rewritten only as one plain segment, with %post_id% in the structure.
+ * closed). And the paths as the rewrite rules of this site, from its rows,
+ * route them under the permalink structures of the core (Codex, round 11:
+ * the search of url_to_postid() over the rules, no query): digits a rule
+ * puts into p, page_id … name that object, digits in page, year … none.
  *
  * @package AlphaBridge_MCP
  */
@@ -87,7 +87,7 @@ final class SyncCoreReadsTest extends TestCase {
 		$source = AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() );
 		$acc    = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Refs::content( $content, $source['ctx'], $acc, 'post', 'c' );
-		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => $map ), array( AB_MCP_IT_Sites::url( 'a' ) => 'https://www.live.test' ), $source['ctx']['resolve'] );
+		$plan = AB_MCP_Sync_Refs::plan( array( 'post' => $map ), array( AB_MCP_IT_Sites::url( 'a' ) => 'https://www.live.test' ), $source['ctx']['routes'] );
 		$out  = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
 		return array(
 			'refs'     => array_column( $acc['refs'], 'id' ),
@@ -168,18 +168,81 @@ final class SyncCoreReadsTest extends TestCase {
 		self::assertSame( array( array(), array(), self::there( '/2026/11/03/beitrag/' ), array() ), array( $read['refs'], $read['spelling'], $read['content'], $read['missing'] ) );
 	}
 
-	public function testDigitsOfADatePermalinkThatEqualTheIdLock(): void {
-		// No structure holds %post_id%: digits equal to the id are no place
-		// to rewrite it (a year 2026 of post 2026), they lock.
+	public function testTheYearOfAPostIsNoIdWhereItEqualsOne(): void {
+		// The rule puts 2026 into year, not into p: no id, even of post 2026.
 		$this->permalinks( '/%year%/%postname%/' );
 		$post = self::post( 'jahr', array( 'import_id' => 2026, 'post_date' => '2026-11-03 10:00:00' ) );
 		self::assertSame( 2026, $post );
 		$read = self::read( self::link( '/2026/jahr/' ), array( 2026 => 3026 ) );
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ) );
+		self::assertSame( array( array(), array(), self::there( '/2026/jahr/' ) ), array( $read['refs'], $read['spelling'], $read['content'] ) );
 		// A link by its slug names no id: the host is replaced, nothing locks.
 		$other = self::post( 'anderer', array( 'post_date' => '2026-11-03 10:00:00' ) );
 		$read  = self::read( self::link( '/2026/anderer/' ), array( $other => $other + 1000 ) );
 		self::assertSame( array( array(), array(), self::there( '/2026/anderer/' ) ), array( $read['refs'], $read['spelling'], $read['content'] ) );
+	}
+
+	public function testAPartOfAPageIsNoId(): void {
+		// Codex, round 11 (2): /handbuch/2/ is the second part of the page,
+		// page=2, also where a post or the page has that id.
+		$this->permalinks( '/archives/%post_id%/' );
+		$page = self::post( 'handbuch', array( 'post_type' => 'page', 'import_id' => 2002, 'post_content' => 'Eins<!--nextpage-->Zwei' ) );
+		self::assertSame( 2002, $page, 'The id is free on the test site.' );
+		foreach ( array( '/handbuch/2/', '/handbuch/2002/' ) as $path ) {
+			$read = self::read( self::link( $path ), array( 2 => 200, 2002 => 3002 ) );
+			self::assertSame( array( array(), array(), self::there( $path ), array() ), array( $read['refs'], $read['spelling'], $read['content'], $read['missing'] ), $path );
+		}
+		// The verbose rules of pages hold where the page exists.
+		$this->permalinks( '/%postname%/%post_id%/' );
+		$post = self::post( 'beitrag' );
+		$read = self::read( self::link( '/beitrag/' . $post . '/' ), array( $post => $post + 1000 ) );
+		self::assertSame( array( array( $post ), self::there( '/beitrag/' . ( $post + 1000 ) . '/' ) ), array( $read['refs'], $read['content'] ), 'No page beitrag: the post.' );
+		$read = self::read( self::link( '/handbuch/2/' ), array( 2 => 200 ) );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'The page handbuch exists: page or post, only the core knows.' );
+	}
+
+	public function testRowsThatCannotBeReadAreNotKnown(): void {
+		global $wpdb;
+		$table         = $wpdb->options;
+		$wpdb->options = $table . '_ab_it_missing';
+		$suppress      = $wpdb->suppress_errors( true );
+		try {
+			$routes = \AB_MCP_Sync_Urls::routes();
+		} finally {
+			$wpdb->options = $table;
+			$wpdb->suppress_errors( $suppress );
+		}
+		self::assertNull( $routes, 'Not read is not known: a segment of digits locks.' );
+	}
+
+	public function testUnderPlainPermalinksNoPathNamesAnId(): void {
+		$this->permalinks( '' );
+		$a    = self::post( 'eins' );
+		$read = self::read( self::link( '/2026/11/photo' . $a . '.jpg' ) . self::link( '/archives/' . $a . '/' ), array( $a => $a + 1000 ) );
+		self::assertSame( array( array(), array() ), array( $read['refs'], $read['spelling'] ) );
+	}
+
+	public function testThePermalinksWithIndexPhp(): void {
+		$this->permalinks( '/index.php/archives/%post_id%/' );
+		$a    = self::post( 'eins' );
+		$read = self::read( self::link( '/index.php/archives/' . $a . '/' ), array( $a => $a + 1000 ) );
+		self::assertSame( array( array( $a ), self::there( '/index.php/archives/' . ( $a + 1000 ) . '/' ) ), array( $read['refs'], $read['content'] ) );
+	}
+
+	public function testWithoutTheRowOfTheRulesADigitLocks(): void {
+		global $wpdb;
+		$this->permalinks( '/archives/%post_id%/' );
+		$a = self::post( 'eins' );
+		foreach ( array( serialize( array() ), serialize( array( 'archives/([0-9]+)/?$' => array( 'p' ) ) ) ) as $rules ) {
+			$wpdb->update( $wpdb->options, array( 'option_value' => $rules ), array( 'option_name' => 'rewrite_rules' ) );
+			$read = self::read( self::link( '/archives/' . $a . '/' ), array( $a => $a + 1000 ) );
+			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'Rules not read: ' . $rules );
+		}
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'rewrite_rules' ) );
+		$read = self::read( self::link( '/archives/' . $a . '/' ), array( $a => $a + 1000 ) );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'Not read is not known.' );
+		$wpdb->insert( $wpdb->options, array( 'option_name' => 'rewrite_rules', 'option_value' => serialize( array( 'archives/([0-9]+)/?$' => new \stdClass() ) ), 'autoload' => 'off' ) );
+		$read = self::read( self::link( '/archives/' . $a . '/' ), array( $a => $a + 1000 ) );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'An object in the rules: not read.' );
 	}
 
 	public function testAnotherSpellingOfThisSiteIsTheSameSiteAndLocks(): void {

@@ -192,6 +192,10 @@ trait SyncCoreReads {
 			'an author in prose'   => array( 'Autor: https://staging.test/?author=1', array( 'user:user1@c:html?author' ), 'Autor: https://www.live.test/?author=10' ),
 			'in a block attribute' => array( '<!-- wp:acme/x {"u":"https:\/\/staging.test\/?attachment_id=12"} /-->', array( 'post:12@c:acme/x.u?attachment_id' ), '<!-- wp:acme/x {"u":"https://www.live.test/?attachment_id=120"} /-->' ),
 			'subpost_id'           => array( 'Siehe https://staging.test/?subpost_id=12 hier', array( 'post:12@c:html?subpost_id' ), 'Siehe https://www.live.test/?subpost_id=120 hier' ),
+			// Codex, round 11 (3): the content of script and textarea is text.
+			'in a script'          => array( '<script type="application/ld+json">{"url":"https://staging.test/?p=12"}</script>', array( 'post:12@c:html?p' ), '<script type="application/ld+json">{"url":"https://www.live.test/?p=120"}</script>' ),
+			'in a textarea'        => array( '<textarea>https://staging.test/?p=12</textarea>', array( 'post:12@c:html?p' ), '<textarea>https://www.live.test/?p=120</textarea>' ),
+			'escaped JSON in a script' => array( '<script>var u = "https:\\/\\/staging.test\\/?p=12";</script>', array( 'post:12@c:html?p' ), '<script>var u = "https:\\/\\/www.live.test\\/?p=120";</script>' ),
 			'after an ampersand'   => array( '<p><a href="https://staging.test/?preview=1&amp;p=12">x</a></p>', array( 'post:12@c:html?p' ), '<p><a href="https://www.live.test/?preview=1&amp;p=120">x</a></p>' ),
 			'after an ampersand in prose' => array( 'Siehe https://staging.test/?preview=1&p=12 hier', array( 'post:12@c:html?p' ), 'Siehe https://www.live.test/?preview=1&p=120 hier' ),
 			'in another attribute' => array( '<p><span data-target="https://staging.test/?p=12">x</span></p>', array( 'post:12@c:html?p' ), '<p><span data-target="https://www.live.test/?p=120">x</span></p>' ),
@@ -221,7 +225,6 @@ trait SyncCoreReads {
 			'a full address and its id'    => array( '<!-- wp:navigation-link {"label":"Beitrag","id":12,"kind":"post-type","url":"https://staging.test/beitrag/"} /-->', '<!-- wp:navigation-link {"label":"Beitrag","id":120,"kind":"post-type","url":"https://www.live.test/beitrag/"} /-->' ),
 			'an address by its value'      => array( '<!-- wp:acme/x {"target":"/?p=12"} /-->', '<!-- wp:acme/x {"target":"/?p=120"} /-->' ),
 			'a shortcode attribute'        => array( '[acme_button url="/?p=12"]', '[acme_button url="/?p=120"]' ),
-			'spaces before'                => array( '<p><a href=" /?p=12">x</a></p>', '<p><a href=" /?p=120">x</a></p>' ),
 			'in a sentence'                => array( 'Mehr unter https://staging.test/?p=12.', 'Mehr unter https://www.live.test/?p=120.' ),
 			'an image and its address'     => array( '<!-- wp:image {"id":12} --><figure><img src="https://staging.test/a.jpg"/></figure><!-- /wp:image -->', '<!-- wp:image {"id":120} --><figure><img src="https://www.live.test/a.jpg"/></figure><!-- /wp:image -->' ),
 		);
@@ -291,6 +294,21 @@ trait SyncCoreReads {
 			'inside [[…]]'           => array( '[[outer] [acme_button url="/?p=12"] [/outer]]', 'c:html?p' ),
 			'the same attribute twice' => array( '[acme_button url="/?p=12" url="/?p=12"]', 'c:html?p' ),
 			'an escape in a shortcode' => array( '[acme_button url="/\\?p=12"]', 'c:html?p' ),
+			// Codex, round 11 (3): a textarea decodes its references; read so, locked.
+			'in a textarea with a reference' => array( '<textarea>https://staging.test/?a=1&amp;p=12</textarea>', 'c:html?p' ),
+			'in a title'             => array( '<title>https://staging.test/?a=&#49;&amp;p=12</title>', 'c:html?p' ),
+			// Codex, round 11 (4): relative to the page, a segment of digits.
+			'digits relative to the page' => array( '<p><a href="../12/">Beitrag</a></p>', 'c:html%post_id%' ),
+			'digits relative in a block attribute' => array( '<!-- wp:acme/x {"url":"../12/"} /-->', 'c:acme/x.url%post_id%' ),
+			'escaped digits relative to the page' => array( '<p><a href="archives/%31%32">x</a></p>', 'c:html%post_id%' ),
+			// Codex, round 11 (6): as the URL parser reads it (tab, line break, spaces).
+			'a tab in the name'      => array( '<p><a href="/?pa&#9;ge_id=12">x</a></p>', 'c:html?page_id' ),
+			'a line break in the name' => array( '<p><a href="/?p&#10;=12">x</a></p>', 'c:html?p' ),
+			'spaces before'          => array( '<p><a href=" /?p=12">x</a></p>', 'c:html?p' ),
+			'spaces in a block attribute' => array( '<!-- wp:acme/x {"url":" /?p=12 "} /-->', 'c:acme/x.url?p' ),
+			'a tab in a shortcode attribute' => array( "[acme_button url=\"/?p=1\t2\"]", 'c:html?p' ),
+			'a tab in a name in a shortcode attribute' => array( "[acme_button url=\"/?pa\tge_id=12\"]", 'c:html?page_id' ),
+			'a space after in a block attribute' => array( '<!-- wp:acme/x {"url":"/?p=12 "} /-->', 'c:acme/x.url?p' ),
 		);
 	}
 
@@ -318,6 +336,10 @@ trait SyncCoreReads {
 			'a variable that is no id' => array( '<p><a href="https://staging.test/?paged=2">y</a> https://staging.test/?pp=12</p>' ),
 			'a fragment in a block attribute' => array( '<!-- wp:acme/x {"url":"#?p=12"} /-->' ),
 			'an escaped shortcode'   => array( '[[acme_button url="/?p=12"]]' ),
+			// Codex, round 11 (7): 0 and empty name no object.
+			'all categories'         => array( '<p><a href="/?cat=0">Alle Kategorien</a></p>' ),
+			'no author, no post'     => array( 'Siehe https://staging.test/?author= und https://staging.test/?p=0 und https://staging.test/?cat=0,-0' ),
+			'no page in a block attribute' => array( '<!-- wp:acme/x {"url":"/?page_id=0"} /-->' ),
 			// Codex, round 10 (9): a file relative to the page names no object.
 			'a file relative to the page'    => array( '<p><img src="photo2.jpg"></p>' ),
 			'an upload relative to the page' => array( '<p><img src="wp-content/uploads/2026/11/photo.jpg"></p>' ),

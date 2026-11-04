@@ -104,18 +104,17 @@ final class AB_MCP_Sync_Canon {
 	 * @param callable|null $users     function( int $id ): string|false|null,
 	 *                                 the login; AB_MCP_Sync_Rows::user_login()
 	 *                                 when null.
-	 * @param callable|null $resolve   function( string $path ): int, the id
-	 *                                 url_to_postid() of the site whose
-	 *                                 content is read gives for a path of it;
-	 *                                 null, the default, where it cannot be
-	 *                                 asked: then a segment of digits in an
-	 *                                 address of the sites locks
-	 *                                 (AB_MCP_Sync_Urls).
+	 * @param array|null    $routes    AB_MCP_Sync_Urls::routes() of the site
+	 *                                 whose content is read: its rewrite
+	 *                                 rules from its rows; null, the default,
+	 *                                 where they are not known: then a
+	 *                                 segment of digits in an address of the
+	 *                                 sites locks.
 	 * @param string[]|null $own       The addresses of that site, of
 	 *                                 $addresses; null: all of them.
 	 * @return array
 	 */
-	public static function context( array $addresses, $users = null, $resolve = null, $own = null ) {
+	public static function context( array $addresses, $users = null, $routes = null, $own = null ) {
 		$forms  = array();
 		$owners = array();
 		$sites  = array();
@@ -163,7 +162,7 @@ final class AB_MCP_Sync_Canon {
 			'owners'    => $owners,
 			'sites'     => $sites,
 			'one_root'  => count( array_unique( array_column( $sites, 'path' ) ) ) <= 1,
-			'resolve'   => is_callable( $resolve ) ? $resolve : null,
+			'routes'    => is_array( $routes ) ? $routes : null,
 			'users'     => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
 		);
 	}
@@ -451,7 +450,8 @@ final class AB_MCP_Sync_Canon {
 	 *
 	 * The ids the addresses of the sites name (AB_MCP_Sync_Urls::ids(): the
 	 * short links of WordPress, ?p=, ?page_id=, ?cat=, ?author= …, as
-	 * parse_str() reads them, and the id url_to_postid() gives for a path)
+	 * parse_str() reads them, and the ids the rewrite rules of the site take
+	 * from a path)
 	 * are references, noted in $acc; one in a form that is not rewritten
 	 * locks the object.
 	 *

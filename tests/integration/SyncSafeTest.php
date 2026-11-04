@@ -69,9 +69,11 @@ final class SyncSafeTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		global $wp_rewrite;
 		AB_MCP_IT_Sites::reset( 'a' );
 		wp_cache_flush();
 		wp_upload_dir( null, false, true );
+		$wp_rewrite->init();
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -169,8 +171,14 @@ final class SyncSafeTest extends TestCase {
 	}
 
 	public function testAStaleOptionsCacheWithObjectsOverCleanRowsWakesNothing(): void {
+		global $wp_rewrite;
 		$payload = serialize( new SyncSafeWakeupProbe() );
-		$post    = wp_insert_post( array( 'post_title' => 'Seite', 'post_status' => 'publish', 'post_type' => 'page', 'post_content' => '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' ) );
+		// Codex, round 11 (1): a path of digits under numeric permalinks is
+		// routed by the rules of the row, no WP_Query (sticky_posts) is asked.
+		$wp_rewrite->set_permalink_structure( '/archives/%post_id%/' );
+		$wp_rewrite->flush_rules( false );
+		$target  = wp_insert_post( array( 'post_title' => 'Ziel', 'post_status' => 'publish', 'post_type' => 'post' ) );
+		$post    = wp_insert_post( array( 'post_title' => 'Seite', 'post_status' => 'publish', 'post_type' => 'page', 'post_content' => '<!-- wp:paragraph --><p><a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $target . '/">x</a></p><!-- /wp:paragraph -->' ) );
 		$att     = wp_insert_post( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild', 'post_mime_type' => 'image/jpeg' ) );
 		add_post_meta( $att, '_wp_attached_file', '2026/11/bild.jpg' );
 		add_post_meta( $post, '_elementor_edit_mode', 'builder' );
