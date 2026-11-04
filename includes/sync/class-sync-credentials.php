@@ -204,8 +204,9 @@ final class AB_MCP_Sync_Credentials {
 					}
 				}
 			}
-			// The tags as the browser parses the stored text, once.
-			$html = self::html( $one );
+			// The tags as the browser parses the stored text, once; CSS holds
+			// none (custom_css goes out through strip_tags()).
+			$html = self::html( $css ? '' : $one );
 			if ( null === $html ) {
 				return null;
 			}
@@ -221,9 +222,21 @@ final class AB_MCP_Sync_Credentials {
 			}
 			// A script of JSON is read as JSON, as any structure (walk(): keys,
 			// lists of name and value, nested, within MAX_DEPTH); so is the
-			// value of an attribute that begins with [ or {. What json_decode()
-			// does not read (deeper than it reads, no JSON) is not read: never
-			// clean.
+			// value of an attribute the core or the browser reads as JSON
+			// (AB_MCP_Sync_Html::json_value()). What json_decode() does not
+			// read there (deeper than it reads, no JSON) is not read: never
+			// clean. Any other value with [ or { is text, read as a text is
+			// (AB_MCP_Sync_Canon::json_text(): JSON as JSON, deeper than it
+			// reads unreadable, else text).
+			foreach ( $html['texts'] as $text_value ) {
+				$value = AB_MCP_Sync_Canon::json_text( $text_value );
+				if ( false === $value ) {
+					return null;
+				}
+				if ( is_array( $value ) ) {
+					$html['values'][] = $text_value;
+				}
+			}
 			foreach ( array_merge( $html['json'], $html['values'] ) as $json ) {
 				$value = json_decode( $json, true );
 				if ( JSON_ERROR_NONE !== json_last_error() ) {
@@ -239,15 +252,22 @@ final class AB_MCP_Sync_Credentials {
 			}
 			// Code: the text where it is the value of an attribute that looks
 			// like code. CSS (the text where it is CSS, style, every style
-			// attribute) as AB_MCP_Sync_Css reads it: without its comments, and
-			// decoded; data: as an address of it is not read; a name its escapes
-			// give that the text without them does not hold counts as a key.
+			// attribute) as stored, with its comments (taken over as it is),
+			// and as AB_MCP_Sync_Css reads it: without them, and decoded; what
+			// a data: image holds as a text (data_keys()), any other data: is
+			// not read; a name its escapes give that the text without them
+			// does not hold counts as a key.
 			$segments = $code ? array( $one ) : array();
 			foreach ( array_merge( $css ? array( $one ) : array(), $html['code'] ) as $style ) {
 				$read = AB_MCP_Sync_Css::read( $style );
-				if ( $read['data'] ) {
-					return null;
+				foreach ( $read['data'] as $url ) {
+					$keys = self::data_keys( $url );
+					if ( null === $keys ) {
+						return null;
+					}
+					$found = array_merge( $found, $keys );
 				}
+				$segments[] = $style;
 				$segments[] = $read['plain'];
 				if ( $read['decoded'] !== $read['plain'] ) {
 					$found = array_merge( $found, array_diff( self::words( $read['decoded'] ), self::words( $read['plain'] ) ) );
@@ -292,7 +312,7 @@ final class AB_MCP_Sync_Credentials {
 	 * its end: what is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return array{code:string[],json:string[],values:string[],fields:string[],script:bool,outside:bool}|null
+	 * @return array{code:string[],json:string[],values:string[],texts:string[],fields:string[],script:bool,outside:bool}|null
 	 */
 	private static function html( $text ) {
 		global $allowedposttags;
@@ -300,6 +320,7 @@ final class AB_MCP_Sync_Credentials {
 			'code'    => array(),
 			'json'    => array(),
 			'values'  => array(),
+			'texts'   => array(),
 			'fields'  => array(),
 			'script'  => false,
 			'outside' => false,
@@ -351,9 +372,13 @@ final class AB_MCP_Sync_Credentials {
 				if ( 'style' === $name ) {
 					$out['code'][] = $value;
 				}
-				// A value that may be JSON (data-config='[…]'), read as JSON.
-				if ( preg_match( '/^\s*[\[{]/', $value ) ) {
-					$out['values'][] = $value;
+				// JSON as the core or the browser reads it (data-config='[…]',
+				// data-wp-context='ns::{…}'); another value with [ or { is a text.
+				$json = AB_MCP_Sync_Html::json_value( (string) $name, $value );
+				if ( null !== $json ) {
+					$out['values'][] = $json;
+				} elseif ( preg_match( '/^\s*[\[{]/', $value ) ) {
+					$out['texts'][] = $value;
 				}
 				// An embedded document (data:), and object with data but a PDF
 				// of the uploads as the core takes it (pdf_object()): outside.
@@ -473,6 +498,33 @@ final class AB_MCP_Sync_Credentials {
 	 */
 	private static function words( $text ) {
 		return preg_match_all( '/[A-Za-z0-9_\-\x80-\xFF]+/', (string) $text, $m ) ? array_values( array_unique( $m[0] ) ) : array();
+	}
+
+	/**
+	 * The keys in what an address data: of CSS holds (an image of
+	 * AB_MCP_Sync_Css::DATA_IMAGES, decoded): read as a text, in the
+	 * spellings of FLAT_KEYS and CODE_KEY (an SVG, its CSS), with the
+	 * decodings; null where it is no such image, does not decode or a
+	 * decoding is not there.
+	 *
+	 * @param string $url The address.
+	 * @return string[]|null
+	 */
+	private static function data_keys( $url ) {
+		$content = AB_MCP_Sync_Css::data( $url );
+		$variants = null === $content ? null : self::decodings( $content );
+		if ( null === $variants ) {
+			return null;
+		}
+		$found = array();
+		foreach ( $variants as $variant ) {
+			foreach ( array_merge( self::FLAT_KEYS, array( self::CODE_KEY ) ) as $pattern ) {
+				if ( preg_match_all( $pattern, $variant, $m ) ) {
+					$found = array_merge( $found, $m[1] );
+				}
+			}
+		}
+		return $found;
 	}
 
 	/**

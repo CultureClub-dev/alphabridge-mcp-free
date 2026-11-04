@@ -6,18 +6,22 @@
  * css of global styles or of JSON like theme.json, blocks.*.css as well)
  * is read here, for the credentials (AB_MCP_Sync_Credentials::flat()) and
  * for the addresses (AB_MCP_Sync_Urls) alike:
- * - the comments outside of strings removed first (a string between " or
- *   ' with its escapes, ended by a line break as in CSS; an escaped
- *   character starts neither); everything is checked on the text without
- *   them;
+ * - the comments outside of strings removed for the addresses and the
+ *   properties (a string between " or ' with its escapes, ended by a line
+ *   break as in CSS; an escaped character starts neither); the credentials
+ *   read the text with them as well (it is taken over as it is);
  * - the addresses of the text: the argument of every url(…), the string of
  *   every @import "…" and the strings of image-set(…), where they stand
  *   in the stored text;
- * - what locks in any context: a comment inside such an address, a
+ * - what locks in any context: a backslash outside of strings and
+ *   comments (an escape in a name, a function or an at-rule: u\72l(,
+ *   image-s\65t(, @imp\6Frt), a comment inside such an address, a
  *   backslash in it, a url( or an @import not read so;
- * - data: as such an address (the content it holds is not read);
+ * - data: as such an address: data() decodes an image (DATA_IMAGES), the
+ *   callers check what it holds; any other is not read;
  * - the text with the escapes of CSS decoded (unescaped()): the callers
- *   lock where it holds more than the text without them.
+ *   lock where it holds more than the text without them (escapes in
+ *   strings, content:"\201C").
  *
  * @package AlphaBridge_MCP
  */
@@ -41,29 +45,37 @@ final class AB_MCP_Sync_Css {
 	/** A string of CSS. */
 	const STRING = '#(?|"([^"]*)"|\'([^\']*)\')#';
 
+	/** The types of data: whose content is read (images; any other locks). */
+	const DATA_IMAGES = array( 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/svg+xml' );
+
 	/**
 	 * Read a text of CSS.
 	 *
 	 * @param string $css As stored.
-	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,lock:bool,data:bool}
+	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,lock:bool,data:string[]}
 	 *               plain: without its comments; decoded: plain with its
 	 *               escapes decoded; comments: where each stood in plain;
 	 *               urls: the addresses and where they stand in the
-	 *               stored text; lock: an address not read to its end
-	 *               (a comment or a backslash in it, a url( or an @import
-	 *               not read); data: data: as an address.
+	 *               stored text; lock: a backslash outside of strings, an
+	 *               address not read to its end (a comment or a backslash
+	 *               in it, a url( or an @import not read); data: the
+	 *               addresses that are data: (for data()).
 	 */
 	public static function read( $css ) {
 		$css      = (string) $css;
 		$plain    = '';
 		$comments = array();
 		$quote    = '';
+		$lock     = false;
 		$n        = strlen( $css );
 		for ( $i = 0; $i < $n; ) {
 			$c = $css[ $i ];
 			// An escape: the character after it (a line break, CR LF as one)
 			// closes no string and starts no comment.
 			if ( '\\' === $c ) {
+				// Outside of a string: an escape in a name, a function, an
+				// at-rule (u\72l(, @imp\6Frt) locks.
+				$lock   = $lock || '' === $quote;
 				$len    = "\r\n" === substr( $css, $i + 1, 2 ) ? 3 : 2;
 				$plain .= substr( $css, $i, $len );
 				$i     += $len;
@@ -86,8 +98,7 @@ final class AB_MCP_Sync_Css {
 			$plain .= $c;
 			++$i;
 		}
-		$lock  = false;
-		$data  = false;
+		$data  = array();
 		$found = array();
 		if ( preg_match_all( self::URL, $plain, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $all as $m ) {
@@ -129,7 +140,7 @@ final class AB_MCP_Sync_Css {
 			}
 			// As the URL parser reads it: without tabs and line breaks, trimmed.
 			if ( 0 === stripos( trim( str_replace( array( "\t", "\n", "\r" ), '', $url ), "\x00..\x20" ), 'data:' ) ) {
-				$data = true;
+				$data[] = $url;
 			}
 			$urls[ $at ] = array(
 				'url' => $url,
@@ -145,6 +156,33 @@ final class AB_MCP_Sync_Css {
 			'lock'     => $lock,
 			'data'     => $data,
 		);
+	}
+
+	/**
+	 * What an address data: of CSS holds, as the browser decodes it (the
+	 * fetch standard: its type before the first ",", base64 as its last
+	 * parameter, the body percent-decoded, then base64, white space
+	 * skipped as base64_decode() skips it): only an image of DATA_IMAGES. Null for any other type and
+	 * where it does not decode.
+	 *
+	 * @param string $url The address.
+	 * @return string|null
+	 */
+	public static function data( $url ) {
+		$url = trim( str_replace( array( "\t", "\n", "\r" ), '', (string) $url ), "\x00..\x20" );
+		if ( 1 !== preg_match( '#^data:([^,]*),(.*)\z#is', $url, $m ) ) {
+			return null;
+		}
+		$params = array_map( 'trim', explode( ';', strtolower( $m[1] ) ) );
+		if ( ! in_array( $params[0], self::DATA_IMAGES, true ) ) {
+			return null;
+		}
+		$body = rawurldecode( $m[2] );
+		if ( 'base64' !== end( $params ) ) {
+			return $body;
+		}
+		$bytes = base64_decode( $body, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- what the browser decodes, read.
+		return false === $bytes ? null : $bytes;
 	}
 
 	/**

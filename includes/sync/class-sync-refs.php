@@ -98,9 +98,11 @@ final class AB_MCP_Sync_Refs {
 	 * url (the background support of the editor, wp-includes/js/dist/
 	 * block-editor.js:79893, backgroundImage: { url, id: media.id, source });
 	 * the server reads only its url (wp-includes/block-supports/
-	 * background.php:78). Read and rewritten as BLOCKS, with the url.
+	 * background.php:78). Read and rewritten as BLOCKS, with the url, only
+	 * beside a url of this site (background_url()); else it locks. Global
+	 * styles: AB_MCP_Sync_Urls::background_ids().
 	 */
-	const SUPPORT_IDS = array( 'style.background.backgroundImage.id' => 'post' );
+	const SUPPORT_IDS = array( 'style.background.backgroundImage.id' => 'background' );
 
 	/**
 	 * The HTML with an id besides the class of an image: the data-id of the
@@ -1221,6 +1223,12 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function canon_ref( $type, $value, array $attrs, array $ctx, array &$acc, $at ) {
 		switch ( $type ) {
+			case 'background':
+				if ( ! self::background_url( $attrs, $ctx ) ) {
+					AB_MCP_Sync_Canon::spelling( $acc, $at );
+					return $value;
+				}
+				return self::canon_id( 'post', $value, $acc, $at );
 			case 'post':
 			case 'term':
 				return self::canon_id( $type, $value, $acc, $at );
@@ -1818,6 +1826,15 @@ final class AB_MCP_Sync_Refs {
 	 */
 	private static function rewrite_ref( $type, $value, array $attrs, array &$plan, &$changed ) {
 		switch ( $type ) {
+			case 'background':
+				if ( ! self::background_url( $attrs, $plan ) ) {
+					$plan['missing'][] = array(
+						'space' => 'spelling',
+						'id'    => 0,
+					);
+					return $value;
+				}
+				return self::rewrite_id( 'post', $value, $plan, $changed );
 			case 'post':
 			case 'term':
 			case 'user':
@@ -1966,6 +1983,20 @@ final class AB_MCP_Sync_Refs {
 			);
 		}
 		return $cuts;
+	}
+
+	/**
+	 * Whether the background image of a block has its attachment id beside
+	 * a url of this site (AB_MCP_Sync_Urls::own_address()): only so are id
+	 * and url rewritten together.
+	 *
+	 * @param array $attrs Attributes.
+	 * @param array $ctx   Context (or plan()).
+	 * @return bool
+	 */
+	private static function background_url( array $attrs, array $ctx ) {
+		$keys = array( 'style', 'background', 'backgroundImage', 'url' );
+		return self::has_path( $attrs, $keys ) && AB_MCP_Sync_Urls::own_address( self::get_path( $attrs, $keys ), $ctx );
 	}
 
 	/**

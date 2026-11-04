@@ -397,6 +397,26 @@ final class SyncCoreReadsTest extends TestCase {
 		return $keys;
 	}
 
+	public function testTheContextAsTheCoreWritesItIsRewritten(): void {
+		// Codex, round 18 (A3, B2): the output of the helper of the core, each
+		// / as \/, with a namespace and without, relative and absolute.
+		$this->permalinks( '/archives/%post_id%/' );
+		$a = self::post( 'eins' );
+		foreach ( array( '', 'acme/store' ) as $ns ) {
+			foreach ( array( '/?p=' . $a, AB_MCP_IT_Sites::url( 'a' ) . '/?p=' . $a, AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $a . '/' ) as $url ) {
+				$attr = wp_interactivity_data_wp_context( array( 'url' => $url, 'open' => false ), $ns );
+				self::assertStringContainsString( '\\/', $attr, 'The core writes / as \\/.' );
+				$read = self::read( '<div data-wp-interactive="acme" ' . $attr . '><a data-wp-bind--href="context.url">x</a></div>', array( $a => $a + 1000 ) );
+				$to   = wp_interactivity_data_wp_context( array( 'url' => str_replace( array( AB_MCP_IT_Sites::url( 'a' ), (string) $a ), array( 'https://www.live.test', (string) ( $a + 1000 ) ), $url ), 'open' => false ), $ns );
+				self::assertSame( array( array( $a ), array(), '<div data-wp-interactive="acme" ' . $to . '><a data-wp-bind--href="context.url">x</a></div>', array() ), array( $read['refs'], $read['spelling'], $read['content'], $read['missing'] ), $attr );
+			}
+		}
+		// Every other escape of the helper (& as \u0026): locked.
+		$read = self::read( '<div ' . wp_interactivity_data_wp_context( array( 'url' => '/?a=1&p=' . $a ) ) . '>x</div>', array( $a => $a + 1000 ) );
+		self::assertSame( array( array(), array( 'c:html?p' ) ), array( $read['refs'], $read['spelling'] ) );
+		self::assertSame( 'mixed', \AB_MCP_Sync_Credentials::unit( '', '<div ' . wp_interactivity_data_wp_context( array( array( 'name' => 'api_key', 'value' => 'demo-secret' ) ), 'acme/store' ) . '></div>', array() )['state'] );
+	}
+
 	public function testAnotherCharsetThanUtf8IsNotRead(): void {
 		// Codex, round 12 (1): the charset from its row; not UTF-8, not read.
 		$this->permalinks( '/archives/%post_id%/' );

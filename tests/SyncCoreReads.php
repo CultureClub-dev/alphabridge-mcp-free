@@ -113,6 +113,11 @@ trait SyncCoreReads {
 			// Codex, round 17 (A3): read without the comments of CSS.
 			'a comment before the colon in style' => array( '<style>.x{--api-key/**/:demo-secret}</style>' ),
 			'a comment in a style attribute' => array( '<div style="--client-secret/* Hinweis */ : 1">x</div>' ),
+			// Codex, round 18 (A1, A3, B1): a credential in a comment of style;
+			// the context of a block with its namespace; JSON in a title as text.
+			'a credential in a comment of style' => array( '<style>/* token: abc */ p{color:red}</style>' ),
+			'a context with a namespace' => array( '<div data-wp-context=\'acme/store::{"name":"api_key","value":"demo-secret"}\'></div>' ),
+			'JSON in a title'      => array( '<p title=\'[{"name":"api_key","value":"x"}]\'>x</p>' ),
 			// Codex, round 14 (A1): the same structure as JSON of a meta value.
 			'a pair of name and value in JSON' => array( '<script type="application/json">[{"name":"api_key","value":"demo-secret"}]</script>' ),
 			'a pair by its key in JSON-LD' => array( '<script type="application/ld+json">{"x":[{"key":"token","value":"x"}]}</script>' ),
@@ -242,6 +247,10 @@ trait SyncCoreReads {
 			// Codex, round 17 (A6): the context of a block without an address.
 			'an interactive block with a context' => array( '<div data-wp-interactive="acme" data-wp-context=\'{"open":false,"label":"Mehr","count":2}\'><button data-wp-on--click="actions.toggle">Mehr</button></div>' ),
 			'CSS with an escape'   => array( '<style>q::before{content:"\\201C"}</style><p style="font-family:&quot;A\\2c B&quot;">x</p>' ),
+			// Codex, round 18 (B1): a title is text, also with a bracket.
+			'a value with a bracket' => array( '<p title="[Hinweis] Text" aria-label="[1]">x</p><img src="https://staging.test/a.jpg" alt="{x">' ),
+			// Codex, round 18 (B3): the mask of the image block of the core.
+			'an SVG mask'          => array( '<style>.is-style-circle-mask img{mask-image:url(\'data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50"/></svg>\')}</style>' ),
 			// Codex, round 17 (A3): comments and an escape that hides nothing.
 			'CSS with comments'    => array( '<style>/* Zitat */ q::before{content:"\\201C"} /* Ende */ a{background:url(https://staging.test/a.png)}</style>' ),
 			'details'       => array( '<details class="wp-block-details"><summary>a</summary><p>b</p></details>' ),
@@ -361,6 +370,14 @@ trait SyncCoreReads {
 			self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', $css, array(), true )['state'], $css );
 		}
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '/* Kopfzeile */ q::before{content:"\\201C"} /* Ende */', array(), true )['state'] );
+		// Codex, round 18 (A1): the credentials read the comments as well (the
+		// text is taken over as it is), with the rule of names and values.
+		foreach ( array( "/* api_key: sk_live_EXAMPLE */\nbody { color: red }", '/* client_secret=geheim */ a{color:red}' ) as $css ) {
+			self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', $css, array(), true )['state'], $css );
+		}
+		foreach ( array( '/* design tokens */ a{color:red}', '/* Hinweis: Passwortfeld unten */ a{color:red}' ) as $css ) {
+			self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $css, array(), true )['state'], $css );
+		}
 		$ctx  = array( 'css' => true ) + self::reads_ctx();
 		$read = static function ( string $css ) use ( $ctx ): array {
 			$acc = AB_MCP_Sync_Canon::acc();
@@ -378,6 +395,7 @@ trait SyncCoreReads {
 		// What a comment holds is none: to its end, to the end of the text,
 		// after a string a line break ended.
 		self::assertSame( array( array(), array() ), $read( 'a{color:red} /* b{background:url(/?p=12)}' ) );
+		self::assertSame( array( array(), array() ), $read( "a::after{content:\"<a href='/?p=12'>\"}" ), 'CSS holds no tags.' );
 		foreach ( array( "\n", "\r", "\f" ) as $break ) {
 			self::assertSame( array( array(), array() ), $read( 'a{content:"x' . $break . '/*"} b{background:url(/?p=12)} c{content:"*/"}' ), (string) json_encode( $break ) );
 		}
@@ -388,13 +406,19 @@ trait SyncCoreReads {
 	}
 
 	public function testEscapesInCssThatGiveAnAddressLock(): void {
-		// Codex, round 17 (A1): escapes that give url(, @import, an address, a
-		// segment of digits or an id after "?"; a backslash in an address.
+		// Codex, round 17 (A1), round 18 (A4): a backslash outside of strings
+		// and comments (a name, a function, an at-rule); in a string, escapes
+		// that give an address, a segment of digits or an id after "?"; a
+		// backslash in an address.
 		$ctx = array( 'css' => true ) + self::reads_ctx();
 		foreach ( array(
 			'a{background:u\\72l(/?p=12)}',
 			'a{background:U\\52L(/?page_id=13)}',
 			'@\\69mport "/?p=12";',
+			'@imp\\6Frt "/?p=12";',
+			'a{background-image:image-s\\65t("/?p=12" 1x)}',
+			'.md\\:flex{display:flex}',
+			'.x{--api\\-key:1}',
 			'a{background:url(/?p=1\\32)}',
 			'a{background:url("/?p=1\\32")}',
 			'a{background:url(https://staging.test/?p=1\\32)}',
@@ -449,19 +473,54 @@ trait SyncCoreReads {
 		}
 	}
 
-	public function testDataAsAnAddressOfCssIsNotRead(): void {
-		// Codex, round 17 (A4): data: in url(…) or @import locks.
+	public function testDataAsAnAddressOfCssIsReadAsAnImage(): void {
+		// Codex, round 17 (A4), round 18 (B3): data: in url(…), @import or
+		// image-set(…): an image decoded and read; any other type, or one that
+		// does not decode, locks.
+		$ctx  = array( 'css' => true ) + self::reads_ctx();
+		$read = static function ( string $css ) use ( $ctx ): array {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Canon::text( $css, $ctx, array(), $acc, 'css' );
+			$check = AB_MCP_Sync_Credentials::unit( '', $css, array(), true );
+			return array( $check['state'], $check['why'] ?? null, $acc['spelling'] );
+		};
 		foreach ( array(
 			'@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");',
 			'@import "data:text/css,:root{--x:1}";',
-			'a{background:url( DATA:image/png;base64,AAAA )}',
-			'a{background-image:image-set("data:image/png;base64,AAAA" 1x)}',
+			'a{background:url(data:text/html,x)}',
+			'a{background:url(data:,x)}',
+			'a{background:url( DATA:image/png;base64,!!!! )}',
+			'a{background-image:image-set("data:image/svg+xml;base64,%%" 1x)}',
 		) as $css ) {
-			$check = AB_MCP_Sync_Credentials::unit( '', $css, array(), true );
-			self::assertSame( array( 'unreadable', 'unreadable_value' ), array( $check['state'], $check['why'] ?? null ), $css );
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Canon::text( $css, array( 'css' => true ) + self::reads_ctx(), array(), $acc, 'css' );
-			self::assertSame( array( 'css:css' ), $acc['spelling'], $css );
+			self::assertSame( array( 'unreadable', 'unreadable_value', array( 'css:css' ) ), $read( $css ), $css );
+		}
+		// The mask of the image block of the core (blocks/image/style.css:177),
+		// percent-encoded, base64: free.
+		$svg = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50"/></svg>';
+		foreach ( array(
+			"img{mask-image:url('data:image/svg+xml;utf8," . $svg . "')}",
+			'img{mask-image:url("data:image/svg+xml,' . rawurlencode( $svg ) . '")}',
+			'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( $svg ) . ')}',
+			'a{background:url( DATA:image/png;base64,iVBORw0KGgo= )}',
+			'a{background:url(data:Image/PNG;base64,iVBORw0KGgo=)}',
+			'a{background:url("data:image/png;base64,iVBO Rw0K Ggo=")}',
+			'a{background-image:image-set("data:image/webp;base64,UklGRg==" 1x, "data:image/avif;base64,AAAA" 2x)}',
+			'a{background:url(data:image/gif;base64,R0lGODlh) , url(data:image/jpeg;base64,/9j/4A==)}',
+		) as $css ) {
+			self::assertSame( array( 'clean', null, array() ), $read( $css ), $css );
+		}
+		// An SVG with an address of the sites or with a credential: locked.
+		foreach ( array(
+			'<svg xmlns="http://www.w3.org/2000/svg"><a href="/?p=12"><circle r="1"/></a></svg>',
+			'<svg xmlns="http://www.w3.org/2000/svg"><image href="https://staging.test/a.png"/></svg>',
+			'<svg xmlns="http://www.w3.org/2000/svg"><style>a{background:url(/?p=12)}</style></svg>',
+		) as $bad ) {
+			self::assertContains( 'css:css', $read( "a{mask:url('data:image/svg+xml;base64," . base64_encode( $bad ) . "')}" )[2], $bad );
+			self::assertContains( 'css:css', $read( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $bad ) . '")}' )[2], $bad );
+		}
+		foreach ( array( '<svg xmlns="http://www.w3.org/2000/svg" api_key="demo-secret"/>', '<svg xmlns="http://www.w3.org/2000/svg"><style>:root{--client-secret:1}</style></svg>' ) as $bad ) {
+			self::assertSame( 'mixed', $read( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $bad ) . '")}' )[0], $bad );
+			self::assertSame( 'mixed', $read( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( $bad ) . ')}' )[0], $bad );
 		}
 	}
 
@@ -514,10 +573,60 @@ trait SyncCoreReads {
 		// value under css.
 		self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', $styles( array( 'blocks' => array( 'core/paragraph' => array( 'css' => '.x{--api/**/-key:1}' ) ) ) ), array() )['state'] );
 		self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', $styles( array( 'css' => array( 'print' => '.x{--api/**/-key:1}' ) ) ), array() )['state'] );
+		// Codex, round 18 (A5): the whole subtree under css, in JSON as
+		// serialized (stored as JSON it is read decoded: locked).
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::value( '{"css":{"desktop":"a{background:url(/?p=12)}"}}', self::reads_ctx(), $acc, 'meta', 'm' );
+		self::assertSame( array( 'm?p' ), $acc['spelling'] );
+		$plan    = self::reads_plan();
+		$changed = false;
+		AB_MCP_Sync_Refs::rewrite_value( '{"css":{"desktop":"a{background:url(/?p=12)}"}}', $plan, $changed );
+		self::assertContains( 'spelling', array_column( $plan['missing'], 'space' ) );
+		self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', '{"css":{"desktop":{"print":".x{--api/**/-key:1}"}}}', array() )['state'] );
 		// JSON deeper than json_decode() reads: locked.
 		list( , $acc ) = self::reads_scan( str_repeat( '[', 513 ) . '"x"' . str_repeat( ']', 513 ) );
 		self::assertSame( array( 'c:html:json' ), $acc['spelling'] );
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'] );
+	}
+
+	public function testTheBackgroundImageOfGlobalStylesIsAReference(): void {
+		// Codex, round 18 (A2): …background.backgroundImage.id at any depth, as
+		// in the attributes of a block, beside a url of the site.
+		$styles = static fn( array $styles, int $flags = 0 ): string => (string) json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => $styles ), $flags );
+		$image  = static fn( $id, $url = 'https://staging.test/wp-content/uploads/bg.jpg' ): array => array( 'background' => array( 'backgroundImage' => array_filter( array( 'url' => $url, 'id' => $id, 'source' => 'file' ), static fn( $v ) => null !== $v ) ) );
+		foreach ( array(
+			$styles( $image( 12 ) ),
+			$styles( array( 'blocks' => array( 'core/group' => $image( 12 ) ) ), JSON_PRETTY_PRINT ),
+			$styles( array( 'elements' => array( 'link' => $image( 12 ) ), 'blocks' => array( 'core/cover' => array( 'id' => 'x' ) ) ), JSON_UNESCAPED_SLASHES ),
+		) as $json ) {
+			list( $refs, $acc ) = self::reads_scan( $json );
+			self::assertSame( array( array( 'post:12@c:html:backgroundImage.id' ), array() ), array( $refs, $acc['spelling'] ), $json );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $json, self::reads_plan() );
+			self::assertSame( array( str_replace( array( 'staging.test', ':12' ), array( 'www.live.test', ':120' ), str_replace( ': 12', ': 120', $json ) ), array() ), array( $out['content'], $out['missing'] ), $json );
+		}
+		// Not beside a url of the site, not a whole number, escaped, twice: locked.
+		foreach ( array(
+			$styles( $image( 12, null ) ),
+			$styles( $image( 12, 'https://cdn.test/bg.jpg' ) ),
+			$styles( $image( 12, '/wp-content/uploads/bg.jpg' ) ),
+			$styles( $image( '12' ) ),
+			$styles( $image( 0 ) ),
+			$styles( $image( array( 'x' => 12 ) ) ),
+			str_replace( '"id":12', '"id":12.0', $styles( $image( 12 ) ) ),
+			str_replace( '"id":12', '"id":1.2e1', $styles( $image( 12 ) ) ),
+			str_replace( '"id":12', '"\u0069d":12', $styles( $image( 12 ) ) ),
+			str_replace( '"id":12', '"id":12,"id":12', $styles( $image( 12 ) ) ),
+		) as $json ) {
+			list( $refs, $acc ) = self::reads_scan( $json );
+			self::assertSame( array( array(), array( 'c:html:backgroundImage.id' ) ), array( $refs, $acc['spelling'] ), $json );
+			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $json, self::reads_plan() )['missing'], 'space' ), $json );
+		}
+		// In a block: the same rule.
+		list( $refs, $acc ) = self::reads_scan( '<!-- wp:group {"style":{"background":{"backgroundImage":{"url":"https://cdn.test/bg.jpg","id":12}}}} /-->' );
+		self::assertSame( array( array(), array( 'c:core/group.style.background.backgroundImage.id' ) ), array( $refs, $acc['spelling'] ) );
+		list( $refs, $acc ) = self::reads_scan( '<!-- wp:group {"style":{"background":{"backgroundImage":{"id":12}}}} /-->' );
+		self::assertSame( array( array(), array( 'c:core/group.style.background.backgroundImage.id' ) ), array( $refs, $acc['spelling'] ) );
+		self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( '<!-- wp:group {"style":{"background":{"backgroundImage":{"id":12}}}} /-->', self::reads_plan() )['missing'], 'space' ) );
 	}
 
 	public function testATagTheHtmlApiCannotFinishIsUnreadable(): void {
@@ -559,6 +668,11 @@ trait SyncCoreReads {
 			'in another attribute' => array( '<p><span data-target="https://staging.test/?p=12">x</span></p>', array( 'post:12@c:html?p' ), '<p><span data-target="https://www.live.test/?p=120">x</span></p>' ),
 			// Codex, round 17 (A6): JSON in an attribute, value by value.
 			'in the context of a block' => array( '<div data-wp-interactive="acme" data-wp-context=\'{"url":"/?p=12"}\'><a data-wp-bind--href="context.url">Öffnen</a></div>', array( 'post:12@c:html?p' ), '<div data-wp-interactive="acme" data-wp-context=\'{"url":"/?p=120"}\'><a data-wp-bind--href="context.url">Öffnen</a></div>' ),
+			// Codex, round 18 (A3, B2): with its namespace; each / as \/ as the
+			// core writes it (wp_interactivity_data_wp_context()).
+			'in the context with a namespace' => array( '<div data-wp-context=\'acme/store::{"url":"/?p=12"}\'>x</div>', array( 'post:12@c:html?p' ), '<div data-wp-context=\'acme/store::{"url":"/?p=120"}\'>x</div>' ),
+			'in the context as the core writes it' => array( '<div data-wp-context=\'acme/store::{"url":"\\/?p=12"}\'>x</div>', array( 'post:12@c:html?p' ), '<div data-wp-context=\'acme/store::{"url":"\\/?p=120"}\'>x</div>' ),
+			'absolute in the context as the core writes it' => array( '<div data-wp-context=\'{"url":"https:\\/\\/staging.test\\/archiv\\/?p=12"}\'>x</div>', array( 'post:12@c:html?p' ), '<div data-wp-context=\'{"url":"https:\\/\\/www.live.test\\/archiv\\/?p=120"}\'>x</div>' ),
 			'deeper in the context of a block' => array( '<div data-wp-context=\'{"items":[{"link":"https://staging.test/?page_id=13","n":2}]}\'>x</div>', array( 'post:13@c:html?page_id' ), '<div data-wp-context=\'{"items":[{"link":"https://www.live.test/?page_id=130","n":2}]}\'>x</div>' ),
 			// Codex, round 17 (A7): @import "…" and image-set(…) as url(…).
 			'an import'            => array( '<style>@import "/?p=12";</style>', array( 'post:12@c:html?p' ), '<style>@import "/?p=120";</style>' ),
@@ -699,10 +813,15 @@ trait SyncCoreReads {
 			// Codex, round 17 (A4): data: in CSS.
 			'data in an import'    => array( '<style>@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");</style>', 'c:html:css' ),
 			// Codex, round 17 (A6): in JSON of an attribute, not stored as JSON writes it.
-			'an escaped slash in the context' => array( '<div data-wp-context=\'{"url":"\\/?p=12"}\'>x</div>', 'c:html?p' ),
+			'another escape in the context' => array( '<div data-wp-context=\'{"url":"\\/?a=1\\u0026p=12"}\'>x</div>', 'c:html?p' ),
+			'a slash escaped once in the context' => array( '<div data-wp-context=\'{"url":"\\/blog/?p=12"}\'>x</div>', 'c:html?p' ),
 			'the context as references' => array( '<div data-wp-context="{&quot;url&quot;:&quot;/?p=12&quot;}">x</div>', 'c:html?p' ),
+			'the same address in both spellings in the context' => array( '<div data-wp-context=\'{"a":"/?p=12","b":"\\/?p=12"}\'>x</div>', 'c:html?p' ),
 			'the same address twice in the context' => array( '<div data-wp-context=\'{"a":"/?p=12","b":"/?p=12"}\'>x</div>', 'c:html?p' ),
 			'a context that is no JSON' => array( '<div data-wp-context=\'{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
+			'a context with a namespace that is no JSON' => array( '<div data-wp-context=\'acme::{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
+			// Codex, round 18 (B3): an SVG with an address in data: of CSS.
+			'an SVG with an address' => array( '<p style="mask-image:url(\'data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot;><a href=&quot;/?p=12&quot;/></svg>\')">x</p>', 'c:html:css' ),
 			'a site in a text of the context' => array( '<div data-wp-context=\'{"html":"Mehr: https://staging.test/?p=12"}\'>x</div>', 'c:html?p' ),
 			// Codex, round 17 (6): a script of JSON that is no JSON.
 			'JSON-LD that is no JSON' => array( '<script type="application/ld+json">{"url": /?p=12}</script>', 'c:html:json' ),
@@ -748,6 +867,8 @@ trait SyncCoreReads {
 			'a file relative to the page'    => array( '<p><img src="photo2.jpg"></p>' ),
 			'an upload relative to the page' => array( '<p><img src="wp-content/uploads/2026/11/photo.jpg"></p>' ),
 			// Codex, round 17 (A6): the context of a block without an address.
+			'a title with a bracket' => array( '<p title="[Hinweis] /?p=12">x</p>' ),
+			'a namespace on another data attribute' => array( '<div data-x=\'acme::{"url":"/?p=12"}\'>x</div>' ),
 			'a context without an address' => array( '<div data-wp-interactive="acme" data-wp-context=\'{"open":false,"label":"Mehr","count":2,"step":"12"}\'><button data-wp-on--click="actions.toggle">Mehr</button></div>' ),
 			// Codex, round 17 (A3): comments, an escape that hides nothing.
 			'CSS with comments and an escape' => array( '<style>/* Zitat */ q::before{content:"\\201C"} /* Bild */ a{background:url(https://staging.test/a.png)}</style>' ),
@@ -783,12 +904,15 @@ trait SyncCoreReads {
 		return array(
 			// Codex, round 17 (A4): data: as an address of CSS.
 			'data in an import in style' => array( '<style>@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");</style>' ),
-			'data in a style attribute' => array( '<p style="background:url(DATA:image/png;base64,AAAA)">x</p>' ),
+			'data in a style attribute' => array( '<p style="background:url(DATA:text/css,x)">x</p>' ),
 			// Codex, round 17 (A5): JSON json_decode() does not read.
 			'JSON deeper than it is read' => array( "<div data-config='" . str_repeat( '[', 513 ) . '{"name":"api_key","value":"demo-secret"}' . str_repeat( ']', 513 ) . "'></div>" ),
 			'JSON not finished'    => array( "<div data-config='{\"name\":\"api_key\",\"value\":\"x\"'></div>" ),
-			'a value with a bracket' => array( '<p title="[Hinweis] Text">x</p>' ),
-			'a value with a brace' => array( '<p data-x="{nicht JSON">x</p>' ),
+			'a data attribute with a brace' => array( '<p data-x="{nicht JSON">x</p>' ),
+			'a title deeper than it is read' => array( '<p title="' . str_repeat( '[', 513 ) . str_repeat( ']', 513 ) . '">x</p>' ),
+			// Codex, round 18 (B3): data: that is no image, or does not decode.
+			'data of another type' => array( '<p style="background:url(data:text/html,x)">x</p>' ),
+			'data that does not decode' => array( '<p style="background:url(data:image/png;base64,!!)">x</p>' ),
 		);
 	}
 
