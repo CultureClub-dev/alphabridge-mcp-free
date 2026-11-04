@@ -115,12 +115,9 @@ final class AB_MCP_Sync_Urls {
 					if ( ! is_string( $value ) ) {
 						continue;
 					}
-					// JavaScript (an event attribute, a javascript: address) no
-					// parser reads: an address of the sites in it locks.
-					if ( 0 === strpos( $name, 'on' ) || 0 === stripos( ltrim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" ), 'javascript:' ) ) {
-						if ( array() !== AB_MCP_Sync_Canon::address_cuts( $value, $ctx ) || self::names_a_site( $value, $ctx ) ) {
-							$out[] = self::lock( $tag['at'], $tag['len'], ':script' );
-						}
+					// JavaScript (an event attribute) is no address: the unit
+					// locks for it (*:script, AB_MCP_Sync_Credentials).
+					if ( 0 === strpos( $name, 'on' ) ) {
 						continue;
 					}
 					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
@@ -182,7 +179,7 @@ final class AB_MCP_Sync_Urls {
 		if ( $start > 0 && substr( $raw, $start, strlen( $tag['text'] ) ) === $tag['text'] ) {
 			// A script of JSON: its addresses without the host as values
 			// (those with it are read as prose, rewritten there), locked.
-			if ( 'SCRIPT' === $tag['tag'] && 'json' === AB_MCP_Sync_Html::script_kind( $tag['attrs'] ) ) {
+			if ( 'SCRIPT' === $tag['tag'] && AB_MCP_Sync_Html::is_data_script( $tag['attrs'] ) ) {
 				$out = array_merge( $out, self::json_ids( json_decode( $tag['text'], true ), $ctx, '' ) );
 			}
 			return array( array( $tag['at'], $tag['at'] + $start ), array( $tag['at'] + $closer, $end ) );

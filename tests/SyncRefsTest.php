@@ -614,6 +614,28 @@ final class SyncRefsTest extends TestCase {
 		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ), 0, 2 ) );
 	}
 
+	public function testTheBackgroundImageOfABlockIsAnAttachment(): void {
+		// Codex, round 14 (A3): the background support writes the attachment
+		// id beside the url; both are rewritten, or the content is not.
+		$group = '<!-- wp:group {"style":{"background":{"backgroundImage":{"url":"https://staging.test/wp-content/uploads/bg.jpg","id":12,"source":"file","title":"bg"},"backgroundSize":"cover"}}} --><div class="wp-block-group"></div><!-- /wp:group -->';
+		list( $refs, , , $acc ) = self::scan( $group );
+		self::assertSame( array( 'post:12@c:core/group.style.background.backgroundImage.id' ), $refs );
+		self::assertSame( array(), $acc['locks'] );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $group, self::plan() );
+		self::assertSame( array( '<!-- wp:group {"style":{"background":{"backgroundImage":{"url":"https://www.live.test/wp-content/uploads/bg.jpg","id":120,"source":"file","title":"bg"},"backgroundSize":"cover"}}} --><div class="wp-block-group"></div><!-- /wp:group -->', array() ), array( $out['content'], $out['missing'] ) );
+		// Any block with the support, of the core or not.
+		list( $refs ) = self::scan( '<!-- wp:acme/box {"style":{"background":{"backgroundImage":{"url":"https://staging.test/a.jpg","id":13}}}} /-->' );
+		self::assertSame( array( 'post:13@c:acme/box.style.background.backgroundImage.id' ), $refs );
+		// Another spelling of the id locks; one without counterpart writes nothing.
+		list( , , , $acc ) = self::scan( '<!-- wp:group {"style":{"background":{"backgroundImage":{"url":"https://staging.test/a.jpg","id":"012"}}}} /-->' );
+		self::assertContains( array( '*:reference_spelling', 'c:core/group.style.background.backgroundImage.id' ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc )['locks'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( '<!-- wp:group {"style":{"background":{"backgroundImage":{"url":"https://staging.test/a.jpg","id":77}}}} /-->', self::plan() );
+		self::assertSame( array( array( 'space' => 'post', 'id' => 77 ) ), $out['missing'] );
+		// A url of theme.json (a string) holds no id.
+		list( $refs, $possible ) = self::scan( '<!-- wp:group {"style":{"background":{"backgroundImage":"https://staging.test/a.jpg","backgroundSize":"12px"}}} /-->' );
+		self::assertSame( array( array(), array() ), array( $refs, $possible ) );
+	}
+
 	public function testTheValueParseStrGivesInTheEndDecides(): void {
 		// Codex, round 12 (6): p=$matches[1]&p=0 sets p to 0, no id.
 		$rules = array( 'rules' => array( 'go/([0-9]+)/?$' => 'index.php?p=$matches[1]&p=0', 'to/([0-9]+)/?$' => 'index.php?p=0&p=$matches[1]', 'at/([0-9]+)/?$' => 'index.php?p=7&p=0&page_id=$matches[1]&page_id=7', 'pre/([0-9]+)/?$' => 'index.php?p=x$matches[1]' ), 'verbose' => false, 'index' => false );

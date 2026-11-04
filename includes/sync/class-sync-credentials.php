@@ -17,14 +17,14 @@
  * spelling of an attribute or a field (name=, "name":, 'name':) that
  * redacts_key() names makes the unit mixed, in a shortcode no registry
  * runs, an escaped [[…]], a tag, a comment alike. The tags are read by the
- * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt. A script
- * of JavaScript locks the unit (*:script: no parser of the core reads it,
- * it is taken over by hand); a script of JSON is read as JSON, its fields
- * as any. In an event attribute and a javascript: address every word that
- * names a credential counts; in style and in a value of an attribute of a
- * block or a shortcode with "{" or "=>" name: as well; the name or id of a
- * field of a form (input, textarea, select, option, button, meta), with a
- * value or without. Where
+ * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt.
+ * JavaScript locks the unit (*:script: no parser of the core reads it, it
+ * is taken over by hand): every script but one of JSON on a short list, an
+ * event attribute, a javascript: address. A script of JSON is read as
+ * JSON, its fields as any structure. In style and in a value of an
+ * attribute of a block or a shortcode with "{" or "=>" name: counts as
+ * well; the name or id of a field of a form (input, textarea, select,
+ * option, button, meta), with a value or without. Where
  * a text holds a tag the HTML API cannot read (the unit suite, an
  * unfinished tag) the unit is unreadable. More locks than needed are
  * allowed; a credential overlooked because the structure was read
@@ -83,12 +83,6 @@ final class AB_MCP_Sync_Credentials {
 	 */
 	const CODE_KEY = '/([A-Za-z_$][A-Za-z0-9_$\-]*)\s*:/';
 
-	/**
-	 * A word of JavaScript in an event attribute or a javascript: address
-	 * (for a part of it too, at "-"): no parser reads JavaScript, so any word
-	 * that names a credential locks.
-	 */
-	const WORD = '/[A-Za-z0-9_$\-]+/';
 
 	/**
 	 * What makes the value of an attribute of a block or a shortcode code: a
@@ -196,24 +190,19 @@ final class AB_MCP_Sync_Credentials {
 				$why = 'script';
 				return null;
 			}
-			// A script of JSON must be JSON, within MAX_DEPTH; its keys are
-			// read in the text as stored and decoded (FLAT_KEYS).
+			// A script of JSON is read as JSON, as any structure (walk(): keys,
+			// lists of name and value, nested, within MAX_DEPTH).
 			foreach ( $html['json'] as $json ) {
-				json_decode( $json, true, AB_MCP_Sync_Canon::MAX_DEPTH + 1 );
+				$value = json_decode( $json, true );
 				if ( JSON_ERROR_NONE !== json_last_error() ) {
 					return null;
 				}
-			}
-			foreach ( $html['words'] as $segment ) {
-				$variants = self::decodings( $segment );
-				if ( null === $variants ) {
+				$fields = array();
+				if ( ! self::walk( $value, '', $extra, $fields, 0, 1, $why ) ) {
 					return null;
 				}
-				foreach ( $variants as $variant ) {
-					preg_match_all( self::WORD, $variant, $m );
-					foreach ( $m[0] as $word ) {
-						$found = array_merge( $found, array( $word ), explode( '-', $word ) );
-					}
+				foreach ( $fields as $field ) {
+					$found[] = ltrim( (string) substr( (string) strrchr( '.' . $field, '.' ), 1 ), '~' );
 				}
 			}
 			foreach ( $code ? array_merge( array( $one ), $html['code'] ) : $html['code'] as $segment ) {
@@ -239,23 +228,22 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
-	 * What the HTML API of the core reads in a text: whether it holds a
-	 * script of JavaScript (AB_MCP_Sync_Html::script_kind(): no parser reads
-	 * it, the unit locks, *:script); the content of a script of JSON (read
-	 * as JSON); the content of style (code); the words of every event
-	 * attribute, on…, and of an attribute that is a javascript: address as
-	 * the URL parser reads it (WORD); the names of its fields of a form
-	 * (name and id of FORM_TAGS, with a value or without). Null where the
+	 * What the HTML API of the core reads in a text: whether it holds
+	 * JavaScript, which no parser of the core reads (a script not on the
+	 * list of AB_MCP_Sync_Html::is_data_script(), an event attribute on…, a
+	 * javascript: address): the unit locks, *:script; the content of a
+	 * script of JSON (read as JSON); the content of style (code); the names
+	 * of its fields of a form (name and id of FORM_TAGS, with a value or
+	 * without). Null where the
 	 * text holds a tag and the HTML API is not there or cannot read it to
 	 * its end: what is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return array{code:string[],words:string[],json:string[],fields:string[],script:bool}|null
+	 * @return array{code:string[],json:string[],fields:string[],script:bool}|null
 	 */
 	private static function html( $text ) {
 		$out = array(
 			'code'   => array(),
-			'words'  => array(),
 			'json'   => array(),
 			'fields' => array(),
 			'script' => false,
@@ -272,12 +260,12 @@ final class AB_MCP_Sync_Credentials {
 			return null;
 		}
 		foreach ( $tags as $tag ) {
+			// Data in JSON on the list, every other script runs.
 			if ( 'SCRIPT' === $tag['tag'] ) {
-				$kind = AB_MCP_Sync_Html::script_kind( $tag['attrs'] );
-				if ( 'js' === $kind ) {
-					$out['script'] = true;
-				} elseif ( 'json' === $kind ) {
+				if ( AB_MCP_Sync_Html::is_data_script( $tag['attrs'] ) ) {
 					$out['json'][] = (string) $tag['text'];
+				} else {
+					$out['script'] = true;
 				}
 			}
 			if ( 'STYLE' === $tag['tag'] ) {
@@ -287,13 +275,11 @@ final class AB_MCP_Sync_Credentials {
 				if ( ! is_string( $value ) ) {
 					continue;
 				}
-				if ( 0 === strpos( $name, 'on' ) ) {
-					$out['words'][] = $value;
-				}
-				// The URL parser drops tabs and line breaks, and C0 and spaces before.
-				$url = ltrim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
-				if ( 0 === stripos( $url, 'javascript:' ) ) {
-					$out['words'][] = $url;
+				// An event attribute and a javascript: address (as the URL
+				// parser reads it: without tabs and line breaks, C0 and spaces
+				// trimmed) are JavaScript as well.
+				if ( 0 === strpos( $name, 'on' ) || 0 === stripos( trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" ), 'javascript:' ) ) {
+					$out['script'] = true;
 				}
 				if ( ( 'name' === $name || 'id' === $name ) && in_array( $tag['tag'], self::FORM_TAGS, true ) ) {
 					$out['fields'][] = $value;

@@ -93,6 +93,16 @@ final class AB_MCP_Sync_Refs {
 	);
 
 	/**
+	 * The ids the block supports of the core write into the attributes of any
+	 * block that has them: the background image, its attachment id beside its
+	 * url (the background support of the editor, wp-includes/js/dist/
+	 * block-editor.js:79893, backgroundImage: { url, id: media.id, source });
+	 * the server reads only its url (wp-includes/block-supports/
+	 * background.php:78). Read and rewritten as BLOCKS, with the url.
+	 */
+	const SUPPORT_IDS = array( 'style.background.backgroundImage.id' => 'post' );
+
+	/**
 	 * The HTML with an id besides the class of an image: the data-id of the
 	 * deprecated gallery (wp-includes/js/dist/block-library.js:28656). The
 	 * class wp-image-<id> is read in the HTML of every block and of content
@@ -225,7 +235,7 @@ final class AB_MCP_Sync_Refs {
 		'core/playlist-track' => array( 'id' ),
 	);
 
-	/** Attributes of every block that the block supports of the core fill with plain values. */
+	/** Attributes of every block that the block supports of the core fill with plain values (their ids: SUPPORT_IDS). */
 	const SUPPORTS = array( 'style', 'layout' );
 
 	/** The paging of core/query (block.json default of query), plain numbers. */
@@ -1144,7 +1154,7 @@ final class AB_MCP_Sync_Refs {
 	 * @return array
 	 */
 	private static function canon_attrs( $block, array $attrs, array $ctx, array &$acc, $kind, $at ) {
-		$schema = isset( self::BLOCKS[ $block ] ) ? self::BLOCKS[ $block ] : array();
+		$schema = ( isset( self::BLOCKS[ $block ] ) ? self::BLOCKS[ $block ] : array() ) + self::SUPPORT_IDS;
 		$out    = self::canon_leaves( $block, $attrs, '', $schema, $ctx, $acc, $kind, $at, 0 );
 		foreach ( $schema as $path => $type ) {
 			$keys = explode( '.', $path );
@@ -1733,7 +1743,7 @@ final class AB_MCP_Sync_Refs {
 	 * @return array
 	 */
 	private static function rewrite_attrs( $block, array $attrs, array &$plan, &$changed ) {
-		$schema = isset( self::BLOCKS[ $block ] ) ? self::BLOCKS[ $block ] : array();
+		$schema = ( isset( self::BLOCKS[ $block ] ) ? self::BLOCKS[ $block ] : array() ) + self::SUPPORT_IDS;
 		$out    = self::rewrite_leaves( $attrs, '', $schema, $plan, $changed );
 		foreach ( $schema as $path => $type ) {
 			$keys = explode( '.', $path );
