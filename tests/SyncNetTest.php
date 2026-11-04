@@ -124,27 +124,40 @@ final class SyncNetTest extends TestCase {
 		) as $raw => $want ) {
 			self::assertSame( $want, self::layers( $raw )['raw/data'] ?? null, $raw );
 		}
-		// Codex, round 23 (A-2, A-3): no header where an address begins, a
-		// parameter twice: not read, the layer named (the unit locks);
-		// "data:" in prose begins no address.
+		// Codex, round 23 (A-2, A-3), round 24 (A-2, B-1): no header, a
+		// parameter twice, a type that is none after the tabs and line
+		// breaks are removed: not read, and where the address stands as an
+		// address (an attribute, url(), a value of JSON) the layer is named
+		// (the unit locks); "data:" in prose or in a text node begins none.
 		foreach ( array(
 			'a bracket in the header'        => 'data:text/plain;name=(x,Geheim',
-			'a bracket in the header of an SVG' => "url('data:image/svg+xml;name=(x;charset=utf-16le;base64," . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ) . "')",
-			'a line break in the header'     => "data:text/plain;name=\"x\ny\",Geheim",
+			'a bracket in the header of an SVG' => 'data:image/svg+xml;name=(x;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ),
 			'no "," within HEAD bytes'       => 'data:text/plain;name="' . str_repeat( 'x', 600 ) . '",Geheim',
 			'charset twice'                  => 'data:image/svg+xml;charset=utf-16le;charset=utf-16be;base64,' . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ),
 			'a parameter twice'              => 'data:text/plain;name=a;name=b,Geheim',
 			'a parameter twice in any case'  => 'data:text/plain;Name=a;NAME=b,Geheim',
+			'a space in the type'            => 'data:image/svg+x ml;base64,' . base64_encode( '<svg/>' ),
+			'a bracket in the type'          => 'data:image/svg+x(ml;base64,' . base64_encode( '<svg/>' ),
+			'a type without a slash'         => 'data:svg;base64,' . base64_encode( '<svg/>' ),
 		) as $label => $raw ) {
-			$layers = self::layers( $raw, $deep, $unread );
-			self::assertArrayNotHasKey( 'raw/data', $layers, $label );
-			self::assertSame( array( 'raw' ), $unread, $label );
+			foreach ( array( "url('%s')", 'url(%s)', 'src="%s"', "src='%s'", 'srcset=%s', '{"src":"%s"}', '["%s"]', '@import "%s";', 'image-set("%s" 1x)' ) as $context ) {
+				$layers = self::layers( sprintf( $context, $raw ), $deep, $unread );
+				self::assertArrayNotHasKey( 'raw/data', $layers, $label );
+				self::assertSame( array( 'raw' ), $unread, $label . ' in ' . $context );
+			}
+			foreach ( array( '<p>%s</p>', 'Siehe %s dort', '%s' ) as $context ) {
+				$layers = self::layers( sprintf( $context, $raw ), $deep, $unread );
+				self::assertArrayNotHasKey( 'raw/data', $layers, $label );
+				self::assertSame( array(), $unread, $label . ' in ' . $context );
+			}
 		}
-		foreach ( array( 'Data: siehe (Tabelle 3)', "Metadata:\n2024, ohne Typ", 'data:x' ) as $raw ) {
+		foreach ( array( '<p>Data: CSV/JSON</p>', '<p>Data: text/plain (UTF-8)</p>', 'Data: siehe (Tabelle 3)', "Metadata:\n2024, ohne Typ", 'data:x', 'Felder: data: image/png (Bild), name' ) as $raw ) {
 			$layers = self::layers( $raw, $deep, $unread );
 			self::assertSame( array(), $unread, $raw );
 		}
-		self::assertArrayNotHasKey( 'raw/data', self::layers( "data:text/plain;name=\"x\ny\",Geheim" ), 'A line break in the header: no address.' );
+		// A tab or a line break in the header is none (the URL parser removes it).
+		self::assertSame( 'Geheim', self::layers( "data:text/plain;name=\"x\ny\",Geheim" )['raw/data'] ?? null );
+		self::assertSame( 'Geheim', self::layers( "data:text/pl\tain;ba\nse64," . base64_encode( 'Geheim' ) )['raw/data'] ?? null );
 		self::assertArrayNotHasKey( 'raw/data', self::layers( 'data:text/plain;name="' . str_repeat( 'x', 600 ) . '",Geheim' ), 'No "," within the header: no address.' );
 		$layers = self::layers( 'a data:text/plain;base64,!!!! b data:text/plain, c' );
 		self::assertArrayNotHasKey( 'raw/data', $layers, 'What does not decode, and an empty body, is no layer.' );
@@ -179,6 +192,7 @@ final class SyncNetTest extends TestCase {
 			'XML by its first bytes, the type in capitals' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), 'IMAGE/SVG+XML', $xml ),
 			'XML by its first bytes, the type with spaces around it' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), ' text/xml ', $xml ),
 			'a BOM without a type (text/plain)' => array( "\xFF\xFE" . mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), '', $svg ),
+			'XML by its first bytes, a tab in the type' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), "image/svg+x\tml", $xml ),
 		) as $label => $case ) {
 			$layers = self::layers( 'data:' . $case[1] . ';base64,' . base64_encode( $case[0] ), $deep, $unread );
 			self::assertSame( $case[2], $layers['raw/data'] ?? null, $label );
@@ -336,6 +350,9 @@ final class SyncNetTest extends TestCase {
 			'wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F' => array( 'post:?' ),
 			// Codex, round 23 (A-5, A-6): userinfo, an escape in the host.
 			'https://viewer@staging.test/?p=12'                            => array( 'post:?' ),
+			'https://_user:demo-secret@staging.test/?p=12'                 => array( 'post:?' ),
+			'https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12'     => array( 'post:?' ),
+			'mailto:?body=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12%20und%20https%3A%2F%2Fstaging.test%2F%3Fpage_id%3D13' => array( 'post:12', 'post:13' ),
 			'https://staging.test%2Eother.test/?p=12'                      => array( 'post:?' ),
 			'https://www.live.test/?p=12'                                  => array( 'post:?' ),
 			'/?u=https%3A%2F%2Fwww.live.test%2F%3Fp%3D12'                  => array( 'post:?' ),
@@ -444,6 +461,33 @@ final class SyncNetTest extends TestCase {
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable ), $text );
 			self::assertTrue( $undecidable, $text );
 		}
+		// Codex, round 24 (A-1): in a layer of code every "/" that is no
+		// division after an operand (an identifier that is no keyword, a
+		// number, ")", "]", the end of a string) may begin a literal.
+		foreach ( array(
+			'const c={x:1+/}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:void /}/,api_key:"demo-secret"};',
+			'const c={x:typeof /}/,api_key:"demo-secret"};',
+			'const c={x:1-/}/.test("x"),api_key:"demo-secret"};',
+		) as $text ) {
+			$undecidable = false;
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
+			self::assertTrue( $undecidable, $text );
+			$undecidable = false;
+			AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable );
+			self::assertFalse( $undecidable, 'Not in the text itself: ' . $text );
+		}
+		foreach ( array(
+			'x = 6/2, token:"x"',
+			'x = a / b, token:"x"',
+			'x = (1)/2 + y[0]/3, token:"x"',
+			'x = "a"/2, token:"x"',
+			'x = a /2/ b, token:"x"',
+		) as $text ) {
+			$undecidable = false;
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
+			self::assertFalse( $undecidable, $text );
+		}
 		foreach ( array(
 			'a = b / c, token:"x"',
 			'a = b / c / d, token:"x"',
@@ -542,12 +586,31 @@ final class SyncNetTest extends TestCase {
 		// encoded twice, the readers read nothing, the net names the layer.
 		list( $locks, $acc ) = self::check( 'https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12' );
 		self::assertSame( array( array(), array( 'post:12' ) ), array( $locks, $acc['addressed'] ) );
-		list( $locks ) = self::check( 'https://twitter.com/intent/tweet?url=https%253A%252F%252Fstaging.test%252F%253Fp%253D12' );
-		self::assertSame( array( '*:unread_reference@u:net:raw/percent' ), $locks );
+		list( $locks, $acc ) = self::check( 'https://twitter.com/intent/tweet?url=https%253A%252F%252Fstaging.test%252F%253Fp%253D12' );
+		self::assertSame( array( array(), array( 'u?url' ) ), array( $locks, $acc['spelling'] ), 'Encoded twice: the readers lock (Codex, round 24, A-6).' );
+		// Codex, round 24 (A-6): a text with an address of the sites by the
+		// same round trip; (A-5) a relative target under a host of no site.
+		list( $locks, $acc ) = self::check( 'https://twitter.com/intent/tweet?text=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12' );
+		self::assertSame( array( array(), array( 'post:12' ) ), array( $locks, $acc['addressed'] ) );
+		list( $locks, $acc ) = self::check( 'https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12' );
+		self::assertSame( array( array(), array( 'u?redirect_to' ) ), array( $locks, $acc['spelling'] ) );
 		// Codex, round 23 (A-4): the braces of code undecidable: never clean.
 		list( $locks, $acc ) = self::check( 'var cfg={r:/}/,api_key:"demo-secret"};' );
 		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		self::assertSame( array( 'code:u:net:raw' ), $acc['unread'] );
+		// Codex, round 24 (A-1): after an operator, in the layer of code.
+		list( $locks, $acc ) = self::check( 'const c={x:1+/}/.test("x"),api_key:"demo-secret"};' );
+		self::assertSame( array( '*:unreadable_value@u:net:raw/code' ), $locks );
+		list( $locks ) = self::check( 'a{background:url(/x.png)} b{--brand:"x"}, Token: "abc"' );
+		self::assertSame( array(), $locks, 'CSS: url(/x) is no literal; a name after "," outside the blocks is prose.' );
+		list( $locks ) = self::check( 'a{background:url(/x.png); --api-key:"x"}' );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks, 'The name in its block counted.' );
+		// Codex, round 24 (B-1): a header that is none in an attribute locks,
+		// in a text node not.
+		list( $locks ) = self::check( '<img src="data:image/svg+x(ml;base64,' . base64_encode( '<svg/>' ) . '" alt="">' );
+		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
+		list( $locks ) = self::check( '<p>Data: CSV/JSON</p> <p>Data: text/plain (UTF-8)</p>' );
+		self::assertSame( array(), $locks );
 		// Codex, round 21 (A-2): in a layer taken out of the text every pair
 		// is unread, the one the readers read in the text as well.
 		list( $locks ) = self::check( 'https://staging.test/?p=12 ' . base64_encode( 'https://staging.test/?p=13' ) );

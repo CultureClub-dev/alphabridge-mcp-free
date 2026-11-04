@@ -275,6 +275,10 @@ trait SyncCoreReads {
 			'srcset and sizes'   => array( '<img src="a.jpg" srcset="a-300.jpg 300w, a.jpg 1024w" sizes="(max-width: 600px) 100vw, 50vw" alt="">' ),
 			'a data: GIF in srcset' => array( '<img src="a.jpg" srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7 1x, a.jpg 2x" alt="">' ),
 			'a source with srcset' => array( '<picture><source srcset="a.webp 1x, a@2x.webp 2x" type="image/webp" media="(min-width: 600px)"><img src="a.jpg" alt=""></picture>' ),
+			// Codex, round 24 (B-2): lazysizes; (B-1) a format in prose.
+			'a lazy loader'       => array( '<picture class="lazy" data-sizes="auto"><source data-srcset="a.webp 1x, a2.webp 2x" type="image/webp" class="lazy"><img class="lazyload" data-src="a.jpg" data-srcset="a-300.jpg 300w" alt=""></picture>' ),
+			'a lazy loader with a data: GIF' => array( '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="a.jpg" data-srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7 1x, a.jpg 2x" alt="">' ),
+			'a format in prose'   => array( '<p>Data: CSV/JSON</p><p>Data: text/plain (UTF-8)</p>' ),
 			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
 		);
 	}
@@ -617,7 +621,6 @@ trait SyncCoreReads {
 			'A-1 a variable in a style attribute'       => array( '<div style="--bild:\'/?attachment_id=12\'">x</div>', 'content', 'raw' ),
 			'A-4 dropped in a block attribute'          => array( '<!-- wp:acme/x {"u":"/?p=12","u":"x"} /-->', 'content', 'raw' ),
 			'A-5 percent-encoded'                       => array( '<a data-options="%7B%22src%22%3A%22%2F%3Fp%3D12%22%7D">x</a>', 'content', 'raw/percent' ),
-			'A-5 a data-src with a short link'          => array( '<img data-src="/?attachment_id=12" alt="">', 'content', 'raw' ),
 			'A-5 one read beside one not'               => array( '<a href="/?p=12" data-target="/?p=13">x</a>', 'content', 'raw' ),
 			'a title with a short link'                 => array( '<p title="/?p=12">x</p>', 'content', 'raw' ),
 			'base64 in a meta value'                    => array( base64_encode( '{"src":"/?p=12"}' ), 'value', 'raw/base64' ),
@@ -639,8 +642,8 @@ trait SyncCoreReads {
 			'A-1 in a data attribute of a plugin, no JSON' => array( '<a data-target="index.php?p=12">x</a>', 'content', 'raw' ),
 			// Codex, round 21 (A-2): a reference read in the text never covers
 			// one in a layer taken out of it.
-			'A-2 a data: document beside a link read'   => array( '<a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-src="data:text/html;base64,' . base64_encode( '<a href="https://staging.test/?p=13">target</a>' ) . '">open</a>', 'content', 'raw/data' ),
-			'A-2 the same id hidden beside one read'    => array( '<a href="/?p=12">normal</a><a data-src="data:text/html;base64,' . base64_encode( '<a href="/?p=12">x</a>' ) . '">open</a>', 'content', 'raw/data' ),
+			'A-2 a data: document beside a link read'   => array( '<a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-options="data:text/html;base64,' . base64_encode( '<a href="https://staging.test/?p=13">target</a>' ) . '">open</a>', 'content', 'raw/data' ),
+			'A-2 the same id hidden beside one read'    => array( '<a href="/?p=12">normal</a><a data-options="data:text/html;base64,' . base64_encode( '<a href="/?p=12">x</a>' ) . '">open</a>', 'content', 'raw/data' ),
 			'A-2 base64 beside a link read'             => array( '<p><a href="https://staging.test/?p=12">x</a> ' . base64_encode( '{"src":"/?p=13"}' ) . '</p>', 'content', 'raw/base64' ),
 			'A-2 a copy in the text beside one read'    => array( '<a href="/?p=12">x</a><p title="/?p=12">y</p>', 'content', 'raw' ),
 			// Codex, round 21 (B-1): the JSON of a data-* attribute no producer
@@ -1147,17 +1150,26 @@ trait SyncCoreReads {
 			'a share link with the text first' => array( 'https://twitter.com/intent/tweet?text=Lesen&url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?url?p' ), 'https://twitter.com/intent/tweet?text=Lesen&url=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
 			'a mailto with the address in its body' => array( '<p><a href="mailto:?subject=Tipp&amp;body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Mailen</a></p>', array( 'post:12@c:html?body?p' ), '<p><a href="mailto:?subject=Tipp&amp;body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Mailen</a></p>' ),
 			'a share link as urlencode() writes it' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fcat%3D5%2C6%23~', array( 'term:5@c:html?url?cat', 'term:6@c:html?url?cat' ), 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2F%3Fcat%3D50%2C60%23~' ),
-			'a root-relative value in a link of another site' => array( 'Siehe //other.test/?u=%2F%3Fp%3D12 dort.', array( 'post:12@c:html?u?p' ), 'Siehe //other.test/?u=%2F%3Fp%3D120 dort.' ),
 			'a login link without an id, its host inside rewritten' => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F', array(), 'https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2Fkontakt%2F' ),
 			'a share link without an id, its host inside rewritten' => array( '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2Fkontakt%2F">Teilen</a></p>', array(), '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2Fkontakt%2F">Teilen</a></p>' ),
 			'a mailto in prose' => array( 'Mailen: mailto:?body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?body?p' ), 'Mailen: mailto:?body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			// Codex, round 24 (A-6): a share text with an address of the sites in it, by the same round trip.
+			'a mailto with a text and a permalink' => array( '<p><a href="mailto:?body=Lesen%3A%20https%3A%2F%2Fstaging.test%2Fkontakt%2F">Mail</a></p>', array(), '<p><a href="mailto:?body=Lesen%3A%20https%3A%2F%2Fwww.live.test%2Fkontakt%2F">Mail</a></p>' ),
+			'a share text of Twitter with a permalink and an id' => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?text?p' ), 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'two addresses in a share text' => array( 'Mailen: mailto:?body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12%20und%20https%3A%2F%2Fstaging.test%2Fkontakt%2F', array( 'post:12@c:html?body?p' ), 'Mailen: mailto:?body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120%20und%20https%3A%2F%2Fwww.live.test%2Fkontakt%2F' ),
+			'a share text as urlencode() writes it' => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?text?p' ), 'Teilen: https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'a text with a root-relative address in a query value' => array( 'Siehe https://staging.test/?u=Lesen%3A%20%2F%3Fp%3D12', array( 'post:12@c:html?u?p' ), 'Siehe https://www.live.test/?u=Lesen%3A%20%2F%3Fp%3D120' ),
+			'a space after a query value' => array( 'Siehe https://staging.test/?u=%2F%3Fp%3D12%20', array( 'post:12@c:html?u?p' ), 'Siehe https://www.live.test/?u=%2F%3Fp%3D120%20' ),
+			// Codex, round 24 (B-2): the markup of a lazy loader.
+			'a data-src with a short link' => array( '<img data-src="/?attachment_id=12" alt="">', array( 'post:12@c:html?attachment_id' ), '<img data-src="/?attachment_id=120" alt="">' ),
+			'a lazy loader with data-src and data-srcset' => array( '<picture><source data-srcset="/?p=12 1x, /?page_id=13 2x" type="image/webp"><img class="lazyload" data-src="/?p=12" alt=""></picture>', array( 'post:12@c:html?p', 'post:13@c:html?page_id', 'post:12@c:html?p' ), '<picture><source data-srcset="/?p=120 1x, /?page_id=130 2x" type="image/webp"><img class="lazyload" data-src="/?p=120" alt=""></picture>' ),
 			'a candidate of srcset ending with a comma' => array( '<img src="/?p=12" srcset="/?p=12, /?page_id=13 2x" alt="">', array( 'post:12@c:html?p', 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<img src="/?p=120" srcset="/?p=120, /?page_id=130 2x" alt="">' ),
 			// Codex, round 23 (B-1): a text node with character references: the
 			// address found where it stands, as it is or as esc_html() writes it.
 			'a reference before the address in a text node' => array( '<p>A &amp; B /?p=12</p>', array( 'post:12@c:html?p' ), '<p>A &amp; B /?p=120</p>' ),
 			'a reference inside the address in a text node' => array( '<p>/?p=12&amp;x=1</p>', array( 'post:12@c:html?p' ), '<p>/?p=120&amp;x=1</p>' ),
 			'a reference inside, the id after it' => array( '<p>Siehe /?x=1&amp;p=12 und /?page_id=13.</p>', array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<p>Siehe /?x=1&amp;p=120 und /?page_id=130.</p>' ),
-			'a less-than before two addresses' => array( '<p>Preis &lt; 5: /?p=12, dann /?p=12</p>', array( 'post:12@c:html?p', 'post:12@c:html?p' ), '<p>Preis &lt; 5: /?p=120, dann /?p=120</p>' ),
+			'a less-than before two different addresses' => array( '<p>Preis &lt; 5: /?p=12, dann /?page_id=13</p>', array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<p>Preis &lt; 5: /?p=120, dann /?page_id=130</p>' ),
 			// Codex, round 23 (B-2): the candidates of srcset, each an address.
 			'a candidate of srcset with an id' => array( '<img src="https://staging.test/a.jpg" srcset="https://staging.test/?p=12 300w, https://staging.test/a.jpg 1024w" alt="">', array( 'post:12@c:html?p' ), '<img src="https://www.live.test/a.jpg" srcset="https://www.live.test/?p=120 300w, https://www.live.test/a.jpg 1024w" alt="">' ),
 			'a candidate of srcset of a source' => array( '<picture><source srcset="/?p=12 1x,/?page_id=13 2x" type="image/webp"><img src="/?p=12" alt=""></picture>', array( 'post:12@c:html?p', 'post:13@c:html?page_id', 'post:12@c:html?p' ), '<picture><source srcset="/?p=120 1x,/?page_id=130 2x" type="image/webp"><img src="/?p=120" alt=""></picture>' ),
@@ -1325,8 +1337,23 @@ trait SyncCoreReads {
 			'userinfo with a password in prose' => array( 'Siehe https://viewer:pw@staging.test/?p=12', 'c:html:userinfo' ),
 			'userinfo before a host of no site' => array( 'Siehe https://viewer@other.test/?p=12', 'c:html:userinfo' ),
 			'userinfo in a share link' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fviewer%40staging.test%2F%3Fp%3D12', 'c:html?url:userinfo' ),
-			// Codex, round 23 (A-1): an id inside not read as stored, a share link in JSON no producer writes.
-			'a space inside a query value' => array( 'Siehe https://staging.test/?u=%2F%3Fp%3D12%20', 'c:html?u?p' ),
+			// Codex, round 24 (A-5): a target relative to the root or the page under a host of no site names its objects.
+			'a root-relative value in a link of another site' => array( 'Siehe //other.test/?u=%2F%3Fp%3D12 dort.', 'c:html?u' ),
+			'a login of another site with a relative target' => array( '<p><a href="https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12">Login</a></p>', 'c:html?redirect_to' ),
+			'a login of another site with a target relative to the page' => array( '<p><a href="https://other.test/wp-login.php?redirect_to=index.php%3Fp%3D12">Login</a></p>', 'c:html?redirect_to' ),
+			'a share text of another site with a relative address' => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20%2F%3Fp%3D12%20auf%20https%3A%2F%2Fstaging.test', 'c:html?text' ),
+			// Codex, round 24 (A-6): a share text encoded twice.
+			'a share text encoded twice' => array( '<p><a href="mailto:?body=Lesen%253A%2520https%253A%252F%252Fstaging.test%252Fkontakt%252F">Mail</a></p>', 'c:html?body' ),
+			// Codex, round 24 (A-3): userinfo of any spelling, without a digit.
+			'userinfo with an underscore and a password in prose' => array( 'Adresse: https://_user:demo-secret@staging.test/', 'c:html:userinfo' ),
+			'a password alone before the host' => array( '<p>https://:demo-secret@staging.test/</p>', 'c:html:userinfo' ),
+			// Codex, round 24 (A-4): the place of an address in a node with references must be the one.
+			'an address of references and the same one of another site' => array( '<p>&#47;&#63;p&#61;12 https://other.test/?p=12</p>', 'c:html?p' ),
+			'an address of named references and the same one of another site' => array( '<p>&sol;&quest;p&equals;12 https://other.test/?p=12</p>', 'c:html?p' ),
+			'the same address twice in a node with a reference' => array( '<p>Preis &lt; 5: /?p=12, dann /?p=12</p>', 'c:html?p' ),
+			'an address of references found inside a word' => array( '<p>&#47;?p=12 siehe x/?p=12</p>', 'c:html?p' ),
+			'an address of references found inside the query of another address' => array( '<p>&#47;&#63;p&#61;12 https://other.test/?u=/?p=12</p>', 'c:html?p' ),
+			// Codex, round 23 (A-1): a share link in JSON no producer writes.
 			'a share link in JSON of no producer' => array( '{ "url": "https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12" }', 'c:html:json' ),
 			// Codex, round 23 (A-6): "%" in the host, after the host of a site.
 			'an escape after the host' => array( '<p><a href="https://staging.test%2Eother.test/?p=12">x</a></p>', 'c:html:host' ),
@@ -1382,6 +1409,9 @@ trait SyncCoreReads {
 			// Codex, round 23 (A-1): a share link without an address of the sites.
 			'a share link of another site' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fother.test%2F%3Fp%3D12' ),
 			'a share link with a text only' => array( 'Teilen: https://twitter.com/intent/tweet?text=Beitrag+12' ),
+			// Codex, round 24 (A-3): "@" of a mailto is no userinfo (no "//").
+			'a mailto with a name'     => array( '<p><a href="mailto:info@staging.test?subject=Beitrag%2012">Mail</a> an info@staging.test</p>' ),
+			'a data: SVG with a bracket in a text node' => array( '<p>Beispiel: data:image/svg+x(ml;base64,AAAA</p>' ),
 			// Codex, round 11 (7): 0 and empty name no object.
 			'all categories'         => array( '<p><a href="/?cat=0">Alle Kategorien</a></p>' ),
 			'no author, no post'     => array( 'Siehe https://staging.test/?author= und https://staging.test/?p=0 und https://staging.test/?cat=0,-0' ),

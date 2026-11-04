@@ -151,6 +151,17 @@ final class AB_MCP_Sync_Net {
 	/** How long the header of a data: address may be (data_header()). */
 	const HEAD = 512;
 
+	/** The keywords of JavaScript after which a "/" begins a RegExp literal, not a division (regexp_literal()). */
+	const KEYWORDS = array( 'return', 'typeof', 'void', 'delete', 'in', 'instanceof', 'new', 'throw', 'case', 'do', 'else', 'yield', 'await', 'of' );
+
+	/**
+	 * Where a data: address stands as an address (Codex, round 24, B-1): in
+	 * the value of an attribute, in url(), @import or image-set() of CSS, or
+	 * as a string value of JSON; "data:" in a text node or in prose begins
+	 * none (a header that is none locks only here).
+	 */
+	const DATA_CONTEXT = '#(?:url\(\s*|@import\s+|image-set\(\s*|=\s*|[:\[,]\s*(?=["\']))["\']?\s*\z#i';
+
 	/** The types of a data: address whose body is a text. */
 	const TEXT_TYPES = '#^(?:text/|[^/]+/(?:[^+]+\+)?(?:xml|json|javascript|ecmascript|css|html)\z)#';
 
@@ -287,7 +298,7 @@ final class AB_MCP_Sync_Net {
 			}
 			$new         = array();
 			$undecidable = false;
-			foreach ( self::credentials( $one, $extra, $undecidable ) as $name ) {
+			foreach ( self::credentials( $one, $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {
 				if ( ! isset( $named[ $name ] ) ) {
 					$new[ $name ] = '~' . $name;
 				}
@@ -375,9 +386,15 @@ final class AB_MCP_Sync_Net {
 			$unread[] = $path;
 		}
 		// A layer read already (a decoding that changed nothing among them)
-		// is read once, and is no derivation at the depth.
+		// is read once, and is no derivation at the depth. The layer of code
+		// of a text is read as code even where no comment changed it (the
+		// braces counted with the rule of code there; Codex, round 24, A-1),
+		// as a leaf: nothing is derived from it.
 		foreach ( $more as $next ) {
 			if ( isset( $seen[ hash( 'sha256', $next[1] ) ] ) ) {
+				if ( '/code' === substr( $next[0], -5 ) && count( $out ) < self::MAX_LAYERS ) {
+					$out[] = array( $next[0], $next[1], $extracted );
+				}
 				continue;
 			}
 			if ( $depth >= self::MAX_DEPTH ) {
@@ -409,7 +426,10 @@ final class AB_MCP_Sync_Net {
 		if ( false !== strpos( $text, '%' ) ) {
 			$out['percent'] = rawurldecode( $text );
 		}
-		if ( false !== strpos( $text, '/*' ) || false !== strpos( $text, '//' ) ) {
+		// Code: the text without its comments; made for a text with braces
+		// as well (Codex, round 24, A-1: the braces of code are counted there
+		// with every "/" that may begin a RegExp literal).
+		if ( false !== strpos( $text, '/*' ) || false !== strpos( $text, '//' ) || false !== strpos( $text, '{' ) ) {
 			$out['code'] = self::uncommented( $text );
 		}
 		return $out;
@@ -481,16 +501,36 @@ final class AB_MCP_Sync_Net {
 
 	/**
 	 * Whether a text of code (its strings blanked) holds a RegExp literal of
-	 * JavaScript (the strings and comments blanked): a "/" where no operand
-	 * stands before it (after =, (, ",", :, [, !, &, |, ?, {, }, ; or
-	 * return, or at the start of a line), closed by a "/" on the same line
-	 * (Codex, round 23, A-4). Its braces are none; the count cannot tell.
+	 * JavaScript (the strings and comments blanked), closed by a "/" on
+	 * the same line: in a layer of code every "/" that is not a division
+	 * after an operand – an identifier that is no keyword, a number, ")",
+	 * "]" or the end of a string right before it (Codex, round 24, A-1);
+	 * elsewhere a "/" after =, (, ",", :, [, !, &, |, ?, {, }, ; or return,
+	 * or at the start of a line (Codex, round 23, A-4). Its braces are
+	 * none; the count cannot tell.
 	 *
 	 * @param string $text Text.
+	 * @param bool   $code Whether the text is a layer of code.
 	 * @return bool
 	 */
-	private static function regexp_literal( $text ) {
-		return 1 === preg_match( '#(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text );
+	private static function regexp_literal( $text, $code = false ) {
+		if ( ! $code ) {
+			return 1 === preg_match( '#(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text );
+		}
+		if ( ! preg_match_all( '#(^|\S)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			return false;
+		}
+		foreach ( $m[1] as $before ) {
+			$c = (string) $before[0];
+			if ( '' === $c || ! preg_match( '/[A-Za-z0-9_$)\]"\'`]/', $c ) ) {
+				return true;
+			}
+			// An identifier right before it: a keyword is no operand.
+			if ( preg_match( '/[A-Za-z0-9_$]/', $c ) && preg_match( '/([A-Za-z_$][A-Za-z0-9_$]*)\z/', substr( $text, 0, (int) $before[1] + 1 ), $w ) && in_array( $w[1], self::KEYWORDS, true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -564,18 +604,15 @@ final class AB_MCP_Sync_Net {
 		$out = array();
 		foreach ( $m[0] as $hit ) {
 			$head = self::data_header( $text, (int) $hit[1] + 5 );
-			// No header where a data: address begins (Codex, round 23, A-2:
-			// a bracket, a line break, no "," within HEAD bytes – a type, or
-			// none before ";" or ","; "data:" in prose begins none), or a
-			// parameter twice (A-3): not read, the unit locks.
-			if ( null === $head ) {
-				if ( preg_match( '#\G\s*(?:[A-Za-z0-9!\#$&^_.+\-]+/|[;,])#', $text, $x, 0, (int) $hit[1] + 5 ) ) {
+			// No header (Codex, round 23, A-2: a bracket, no "," within HEAD
+			// bytes), a parameter twice (A-3) or a type that is none after
+			// the tabs and line breaks are removed (round 24, A-2): not read,
+			// and where the address stands as an address (DATA_CONTEXT;
+			// round 24, B-1) the unit locks.
+			if ( null === $head || false === $head ) {
+				if ( preg_match( self::DATA_CONTEXT, (string) substr( $text, 0, (int) $hit[1] ) ) ) {
 					$bad = true;
 				}
-				continue;
-			}
-			if ( false === $head ) {
-				$bad = true;
 				continue;
 			}
 			$start = $head['body'];
@@ -614,11 +651,13 @@ final class AB_MCP_Sync_Net {
 	 * backslash escapes a character in it), white space around them
 	 * allowed, in any order; "base64" as the last token says the body is
 	 * base64 (the fetch standard); an empty type is text/plain. The header
-	 * ends at the first "," outside a quoted string; a line break, a
-	 * bracket or a quote of HTML in it, or no "," within HEAD bytes, is no
-	 * header (null). A parameter twice is false (Codex, round 23, A-3: the
-	 * standard keeps the first, the net decides nothing). Names and the
-	 * type in lower case, a value as written.
+	 * ends at the first "," outside a quoted string; a bracket or a quote
+	 * of HTML in it, or no "," within HEAD bytes, is no header (null). Tabs
+	 * and line breaks are removed first, as the URL parser removes them
+	 * (Codex, round 24, A-2); a type that is then none (white space, a
+	 * control character, no "/") is false, as is a parameter twice (Codex,
+	 * round 23, A-3: the standard keeps the first, the net decides
+	 * nothing). Names and the type in lower case, a value as written.
 	 *
 	 * @param string $text Text.
 	 * @param int    $at   Where the header begins (after "data:").
@@ -628,14 +667,16 @@ final class AB_MCP_Sync_Net {
 		$n      = min( strlen( $text ), $at + self::HEAD );
 		$quoted = false;
 		$end    = null;
+		$head   = '';
 		for ( $i = $at; $i < $n; $i++ ) {
 			$c = $text[ $i ];
-			if ( "\n" === $c || "\r" === $c ) {
-				return null;
+			if ( "\t" === $c || "\n" === $c || "\r" === $c ) {
+				continue;
 			}
+			$head .= $c;
 			if ( $quoted ) {
 				if ( '\\' === $c ) {
-					++$i;
+					$head .= (string) substr( $text, ++$i, 1 );
 				} elseif ( '"' === $c ) {
 					$quoted = false;
 				}
@@ -653,14 +694,16 @@ final class AB_MCP_Sync_Net {
 		if ( null === $end ) {
 			return null;
 		}
+		$head   = (string) substr( $head, 0, -1 );
 		$parts  = array();
 		$part   = '';
 		$quoted = false;
-		for ( $i = $at; $i < $end; $i++ ) {
-			$c = $text[ $i ];
+		$m      = strlen( $head );
+		for ( $i = 0; $i < $m; $i++ ) {
+			$c = $head[ $i ];
 			if ( $quoted ) {
-				if ( '\\' === $c && $i + 1 < $end ) {
-					$part .= $text[ ++$i ];
+				if ( '\\' === $c && $i + 1 < $m ) {
+					$part .= $head[ ++$i ];
 					continue;
 				}
 				$quoted = '"' !== $c;
@@ -680,6 +723,9 @@ final class AB_MCP_Sync_Net {
 		}
 		$parts[] = $part;
 		$type    = strtolower( trim( (string) array_shift( $parts ) ) );
+		if ( '' !== $type && ! preg_match( '#^[A-Za-z0-9!\#$&^_.+\-]+/[A-Za-z0-9!\#$&^_.+\-]+\z#', $type ) ) {
+			return false;
+		}
 		$params  = array();
 		$base64  = false;
 		foreach ( $parts as $i => $param ) {
@@ -977,7 +1023,7 @@ final class AB_MCP_Sync_Net {
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
 	 * @return string[]
 	 */
-	public static function credentials( $text, array $extra, &$undecidable = null ) {
+	public static function credentials( $text, array $extra, &$undecidable = null, $code = false ) {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
@@ -1003,7 +1049,7 @@ final class AB_MCP_Sync_Net {
 				$open   = substr_count( $before, '{' ) - substr_count( $before, '}' );
 				if ( $open > 0 ) {
 					$found[] = $hit[0];
-				} elseif ( $open < 0 || self::regexp_literal( $before ) ) {
+				} elseif ( $open < 0 || self::regexp_literal( $before, $code ) ) {
 					$undecidable = true;
 				}
 			}

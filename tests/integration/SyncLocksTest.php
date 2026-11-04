@@ -366,7 +366,7 @@ final class SyncLocksTest extends TestCase {
 		$page = wp_insert_post(
 			array(
 				'post_title'   => 'Siehe index.php?p=12',
-				'post_content' => '<!-- wp:html --><a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-src="data:text/html;base64,' . base64_encode( '<a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=13">target</a>' ) . '">open</a><!-- /wp:html -->',
+				'post_content' => '<!-- wp:html --><a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-options="data:text/html;base64,' . base64_encode( '<a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=13">target</a>' ) . '">open</a><!-- /wp:html -->',
 				'post_status'  => 'publish',
 				'post_type'    => 'page',
 			),

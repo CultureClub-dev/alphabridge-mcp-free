@@ -64,13 +64,16 @@ final class AB_MCP_Sync_Urls {
 	 * The attributes of HTML (and of shortcodes) whose value is an address the
 	 * browser resolves against the page.
 	 */
-	const URL_ATTRIBUTES = array( 'href', 'src', 'srcset', 'action', 'formaction', 'cite', 'poster', 'data', 'background', 'url', 'link' );
+	const URL_ATTRIBUTES = array( 'href', 'src', 'srcset', 'data-src', 'data-srcset', 'action', 'formaction', 'cite', 'poster', 'data', 'background', 'url', 'link' );
+
+	/** The attributes whose value is a srcset: candidates, each an address (srcset_candidates(); Codex, round 23 B-2, round 24 B-2). */
+	const SRCSET_ATTRIBUTES = array( 'srcset', 'data-srcset' );
 
 	/** The separators of a query as stored: &, &amp;, &#38;, &#x26;, \u0026 of JSON. */
 	const SEPARATOR = '/&amp;|&#0*38;|&#x0*26;|\\\\u0026|&(?!#|[A-Za-z0-9]+;)/i';
 
 	/** A host with an optional port after "//" (also \/\/ of JSON): a spelling of an address. */
-	const HOST = '#(?:(https?):)?(?://|\\\\/\\\\/)([A-Za-z0-9.\-]+(?::[0-9]+)?)#i';
+	const HOST = '#(?:(https?):)?(?://|\\\\/\\\\/)(?:[^\s/?\#@"\'<>\\\\]*@)?([A-Za-z0-9.\-]+(?::[0-9]+)?)#i';
 
 	/**
 	 * How far an address goes in a text: up to the first character that
@@ -195,7 +198,7 @@ final class AB_MCP_Sync_Urls {
 					// one, each an address.
 					$span   = AB_MCP_Sync_Html::value_span( $raw, $name, $value );
 					$stored = null === $span ? null : substr( $raw, $span[0], $span[1] );
-					if ( 'srcset' === $name ) {
+					if ( in_array( $name, self::SRCSET_ATTRIBUTES, true ) ) {
 						foreach ( self::srcset_candidates( null === $stored ? $value : $stored ) as $candidate ) {
 							$out = array_merge( $out, self::address( $candidate[0], $ctx, null === $stored ? null : $tag['at'] + $span[0] + $candidate[1], $text ) );
 						}
@@ -248,10 +251,12 @@ final class AB_MCP_Sync_Urls {
 	 * to the end of an address (EXTENT, the punctuation after it none of
 	 * it). Rewritten where it stands in the stored node (Codex, round 23,
 	 * B-1): as it is, or as esc_html() writes it (&amp; for &; the stored
-	 * spelling is read then, as an attribute is); a node with character
-	 * references is searched for it, in order. An address that stands in
-	 * the node only decoded (&#47;?p=12) is read decoded (locked). What
-	 * stands in a span read already (a shortcode) is not read again.
+	 * spelling is read then, as an attribute is). In a node with character
+	 * references its place must be the one (Codex, round 24, A-4): found
+	 * once, where an address begins (ROOT) and inside no other address;
+	 * else – not found (&#47;?p=12), found twice, found inside another
+	 * address – read decoded (locked). What stands in a span read already
+	 * (a shortcode) is not read again.
 	 *
 	 * @param string $node The text of the node, as the HTML API reads it.
 	 * @param array  $ctx  Context.
@@ -266,16 +271,19 @@ final class AB_MCP_Sync_Urls {
 			return array();
 		}
 		$stored = (string) substr( $text, $base, $len );
-		$cursor = 0;
 		// An address with a host (prose() reads it) holds no root-relative
-		// start of its own.
-		$hosts = array();
-		if ( preg_match_all( self::HOST, $node, $h, PREG_OFFSET_CAPTURE ) ) {
-			foreach ( $h[0] as $host ) {
-				preg_match( self::EXTENT, $node, $e, 0, (int) $host[1] );
-				$hosts[] = array( (int) $host[1], (int) $host[1] + strlen( $e[0] ) );
+		// start of its own; in the stored node the same spans.
+		$hosts  = array();
+		$tokens = array();
+		foreach ( array( array( $node, &$hosts ), array( $stored, &$tokens ) ) as $pair ) {
+			if ( preg_match_all( self::HOST, $pair[0], $h, PREG_OFFSET_CAPTURE ) ) {
+				foreach ( $h[0] as $host ) {
+					preg_match( self::EXTENT, $pair[0], $e, 0, (int) $host[1] );
+					$pair[1][] = array( (int) $host[1], (int) $host[1] + strlen( $e[0] ) );
+				}
 			}
 		}
+		unset( $pair );
 		$out = array();
 		foreach ( $m[0] as $start ) {
 			$at = (int) $start[1];
@@ -295,20 +303,18 @@ final class AB_MCP_Sync_Urls {
 				continue;
 			}
 			// In a node with character references: the address as it is, or
-			// as esc_html() writes it, the next one after the last found.
-			$found = null;
+			// as esc_html() writes it, at the one place that begins an
+			// address of its own.
+			$found = array();
 			foreach ( array_unique( array( $url, htmlspecialchars( $url, ENT_QUOTES, 'UTF-8', false ) ) ) as $spelling ) {
-				$where = strpos( $stored, $spelling, $cursor );
-				if ( false !== $where && ( null === $found || $where < $found[0] ) ) {
-					$found = array( $where, $spelling );
+				$where = strpos( $stored, $spelling );
+				while ( false !== $where ) {
+					$found[] = array( $where, $spelling );
+					$where   = strpos( $stored, $spelling, $where + 1 );
 				}
 			}
-			if ( null === $found ) {
-				$out = array_merge( $out, self::address( $url, $ctx, null, $text ) );
-				continue;
-			}
-			$cursor = $found[0] + strlen( $found[1] );
-			$out    = array_merge( $out, self::address( $found[1], $ctx, $base + $found[0], $text ) );
+			$one = 1 === count( $found ) && ! self::inside( $found[0][0], $tokens ) && preg_match( self::ROOT, $stored, $r, PREG_OFFSET_CAPTURE, $found[0][0] ) && (int) $r[0][1] === $found[0][0] ? $found[0] : null;
+			$out = array_merge( $out, null === $one ? self::address( $url, $ctx, null, $text ) : self::address( $one[1], $ctx, $base + $one[0], $text ) );
 		}
 		return $out;
 	}
@@ -455,11 +461,11 @@ final class AB_MCP_Sync_Urls {
 	 * @param array  $ctx Context.
 	 * @return string[] space:id, as often as named.
 	 */
-	public static function pairs( $url, array $ctx ) {
+	public static function pairs( $url, array $ctx, $whole = true ) {
 		$out = array();
-		foreach ( self::hits_of( $url, $ctx ) as $hit ) {
+		foreach ( $whole ? self::hits_of( $url, $ctx ) : self::ids( $url, $ctx, AB_MCP_Sync_Canon::address_cuts( $url, $ctx ) ) as $hit ) {
 			if ( isset( $hit['enc'] ) ) {
-				$out = array_merge( $out, self::pairs( $hit['enc']['text'], $ctx ) );
+				$out = array_merge( $out, self::pairs( $hit['enc']['text'], $ctx, $hit['enc']['whole'] ) );
 				continue;
 			}
 			$out[] = $hit['space'] . ':' . ( null === $hit['id'] ? '?' : $hit['id'] );
@@ -692,7 +698,7 @@ final class AB_MCP_Sync_Urls {
 		}
 		$out = 'foreign' === $read['form'] ? array() : array_merge( self::query_ids( $url, $read['query'], $at ), self::path_ids( $url, $read, $ctx, $at ) );
 		if ( null !== $read['query'] ) {
-			$out = array_merge( $out, self::query_values( $url, $read['query'], $at, $ctx, $depth, 'page' === $read['form'] ) );
+			$out = array_merge( $out, self::query_values( $url, $read['query'], $at, $ctx, $depth, 'page' === $read['form'], 'foreign' === $read['form'] ) );
 		}
 		return $out;
 	}
@@ -733,15 +739,25 @@ final class AB_MCP_Sync_Urls {
 	 * none of this; a value stored as it is in an address relative to the
 	 * page is read where it stands (ROOT), not here.
 	 *
-	 * @param string   $url   Address.
-	 * @param int      $start Where its query begins.
-	 * @param int|null $at    Where the address stands, where it is rewritten.
-	 * @param array    $ctx   Context.
-	 * @param int      $depth How many query values above it.
-	 * @param bool     $page  Whether the address is relative to the page.
+	 * A value that is no address by itself but holds an address of the
+	 * sites (a share text: body=Lesen%3A%20https%3A%2F%2F…; Codex, round
+	 * 24, A-6) is read as a text by the same round trip ("whole" false:
+	 * the hosts and the addresses in it as in prose). Under a host of no
+	 * site (Codex, round 24, A-5) a target relative to the root or the page
+	 * – an address, or one in a text – names the objects of that site:
+	 * locked. A value encoded twice (the address of a site in it after a
+	 * second decoding only) is read by nobody: locked.
+	 *
+	 * @param string   $url     Address.
+	 * @param int      $start   Where its query begins.
+	 * @param int|null $at      Where the address stands, where it is rewritten.
+	 * @param array    $ctx     Context.
+	 * @param int      $depth   How many query values above it.
+	 * @param bool     $page    Whether the address is relative to the page.
+	 * @param bool     $foreign Whether the address is of no site.
 	 * @return array See ids().
 	 */
-	private static function query_values( $url, $start, $at, array $ctx, $depth, $page = false ) {
+	private static function query_values( $url, $start, $at, array $ctx, $depth, $page = false, $foreign = false ) {
 		$out   = array();
 		$hash  = preg_match( '/(?<!&)#/', $url, $h, PREG_OFFSET_CAPTURE, $start ) ? (int) $h[0][1] : strlen( $url );
 		$query = (string) substr( $url, $start, $hash - $start );
@@ -757,13 +773,32 @@ final class AB_MCP_Sync_Urls {
 			$name    = (string) substr( $pair[0], 0, $eq );
 			$value   = (string) substr( $pair[0], $eq + 1 );
 			$decoded = urldecode( $value );
-			if ( ! self::names_an_address( '', $decoded ) && false === strpos( $decoded, '?' ) ) {
-				continue;
+			$what    = '?' . $name;
+			// One address (no white space in it): as it begins, or with a
+			// query; else a text.
+			$whole = ! preg_match( '/\s/', $decoded ) && ( self::names_an_address( '', $decoded ) || false !== strpos( $decoded, '?' ) );
+			if ( ! $whole ) {
+				// A text: with an address of the sites in it, or a
+				// root-relative one, or one that a second decoding shows
+				// (encoded twice: locked).
+				$twice = urldecode( $decoded );
+				if ( $twice !== $decoded && self::names_a_site( $twice, $ctx ) && ! self::names_a_site( $decoded, $ctx ) ) {
+					$out[] = self::lock( (int) $at, strlen( $url ), $what );
+					continue;
+				}
+				if ( ! self::names_a_site( $decoded, $ctx ) && ! self::root_in_text( $decoded ) ) {
+					continue;
+				}
 			}
-			$inner = self::read( $decoded, $ctx );
-			$what  = '?' . $name;
+			$inner = $whole ? self::read( $decoded, $ctx ) : null;
 			if ( $depth >= self::MAX_QUERY_DEPTH ) {
 				$out[] = self::lock( (int) $at, strlen( $url ), $what . '?' );
+				continue;
+			}
+			// Of a host of no site, a target relative to its root or its
+			// page (an address, or one in a text): locked.
+			if ( $foreign && ( null !== $inner ? in_array( $inner['form'], array( 'root', 'page' ), true ) : self::root_in_text( $decoded ) ) ) {
+				$out[] = self::lock( (int) $at, strlen( $url ), $what );
 				continue;
 			}
 			// The one encoding that writes the decoded value as it is stored.
@@ -777,10 +812,11 @@ final class AB_MCP_Sync_Urls {
 			if ( $page && 'plain' === $encoder ) {
 				continue;
 			}
-			// What the address inside names, read as any address; without an
-			// id in it and without the host of a site, nothing is rewritten.
-			$hits = self::hits( $decoded, $inner, $ctx, 0, $depth + 1 );
-			if ( array() === $hits && ! ( $inner['own'] && 'host' === $inner['form'] ) ) {
+			// What the address inside names, read as any address (a text as
+			// prose); without an id in it and without the host of a site,
+			// nothing is rewritten.
+			$hits = $whole ? self::hits( $decoded, $inner, $ctx, 0, $depth + 1 ) : self::ids( $decoded, $ctx, AB_MCP_Sync_Canon::address_cuts( $decoded, $ctx ) );
+			if ( array() === $hits && ! ( $whole ? $inner['own'] && 'host' === $inner['form'] : self::names_a_site( $decoded, $ctx ) ) ) {
 				continue;
 			}
 			if ( null === $encoder || null === $at ) {
@@ -802,10 +838,37 @@ final class AB_MCP_Sync_Urls {
 				'enc'   => array(
 					'encoder' => $encoder,
 					'text'    => $decoded,
+					'whole'   => $whole,
 				),
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether a text holds a root-relative address with a digit outside its
+	 * addresses with a host (as text_ids() reads one).
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	private static function root_in_text( $text ) {
+		if ( ! preg_match_all( self::ROOT, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			return false;
+		}
+		$hosts = array();
+		if ( preg_match_all( self::HOST, $text, $h, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $h[0] as $host ) {
+				preg_match( self::EXTENT, $text, $e, 0, (int) $host[1] );
+				$hosts[] = array( (int) $host[1], (int) $host[1] + strlen( $e[0] ) );
+			}
+		}
+		foreach ( $m[0] as $start ) {
+			if ( ! self::inside( (int) $start[1], $hosts ) && preg_match( self::EXTENT, $text, $e, 0, (int) $start[1] ) && preg_match( '/[1-9]/', $e[0] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

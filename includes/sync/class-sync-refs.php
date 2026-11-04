@@ -573,7 +573,7 @@ final class AB_MCP_Sync_Refs {
 			// 23, A-1): decoded, rewritten as one address (its host and its
 			// ids), written back in the encoding it is stored in.
 			if ( isset( $query['enc'] ) ) {
-				$with   = self::rewrite_text( $query['enc']['text'], $plan, array(), $changed, true );
+				$with   = self::rewrite_text( $query['enc']['text'], $plan, array(), $changed, $query['enc']['whole'] );
 				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => 'plain' === $query['enc']['encoder'] ? $with : call_user_func( $query['enc']['encoder'], $with ) );
 				continue;
 			}

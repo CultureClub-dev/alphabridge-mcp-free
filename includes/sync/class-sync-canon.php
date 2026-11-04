@@ -502,7 +502,7 @@ final class AB_MCP_Sync_Canon {
 					'len'    => $query['len'],
 					'marker' => array(
 						'~enc' => $query['enc']['encoder'],
-						'v'    => self::text( $query['enc']['text'], $ctx, array(), $acc, $at . $query['what'], true ),
+						'v'    => self::text( $query['enc']['text'], $ctx, array(), $acc, $at . $query['what'], $query['enc']['whole'] ),
 					),
 				);
 				continue;

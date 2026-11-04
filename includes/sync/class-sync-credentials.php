@@ -119,7 +119,7 @@ final class AB_MCP_Sync_Credentials {
 	const FORM_TAGS = array( 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'META' );
 
 	/** The attributes that show an image or a poster: a raster image in data: is inside there (raster_data()). */
-	const RASTER_ATTRIBUTES = array( 'src', 'srcset', 'poster' );
+	const RASTER_ATTRIBUTES = array( 'src', 'srcset', 'data-src', 'data-srcset', 'poster' );
 
 	/**
 	 * Responsive images beside the list of kses (Codex, round 23, B-2): the
@@ -127,12 +127,14 @@ final class AB_MCP_Sync_Credentials {
 	 * source at all; stored responsive HTML (an import, an HTML block, a
 	 * builder) is ordinary, and the browser reads these attributes. srcset
 	 * is read as addresses (AB_MCP_Sync_Urls::srcset_candidates()), sizes
-	 * is a text.
+	 * is a text. picture and source with class and data-* as well (Codex,
+	 * round 24, B-2: the markup of a lazy loader, data-src and data-srcset
+	 * read as src and srcset).
 	 */
 	const RESPONSIVE = array(
 		'img'     => array( 'srcset', 'sizes' ),
-		'picture' => array( 'class', 'id', 'style' ),
-		'source'  => array( 'src', 'srcset', 'sizes', 'type', 'media', 'width', 'height' ),
+		'picture' => array( 'class', 'id', 'style', 'data-*' ),
+		'source'  => array( 'src', 'srcset', 'sizes', 'type', 'media', 'width', 'height', 'class', 'id', 'data-*' ),
 	);
 
 	/** The raster images of a data: address: type => its magic bytes and where they stand (WebP: RIFF…WEBP). */
@@ -414,7 +416,7 @@ final class AB_MCP_Sync_Credentials {
 				// inside (the net reads its bytes).
 				$url = trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
 				// Each candidate of srcset as src (Codex, round 23, B-2).
-				$urls = 'srcset' === $name ? array_column( AB_MCP_Sync_Urls::srcset_candidates( $url ), 0 ) : array( $url );
+				$urls = in_array( $name, AB_MCP_Sync_Urls::SRCSET_ATTRIBUTES, true ) ? array_column( AB_MCP_Sync_Urls::srcset_candidates( $url ), 0 ) : array( $url );
 				foreach ( $urls as $one ) {
 					if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $one, 'data:' ) && ! ( in_array( $name, self::RASTER_ATTRIBUTES, true ) && self::raster_data( $one ) ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $one ) ) ) {
 						$out['outside'] = true;
