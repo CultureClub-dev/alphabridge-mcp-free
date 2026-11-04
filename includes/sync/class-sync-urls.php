@@ -120,6 +120,12 @@ final class AB_MCP_Sync_Urls {
 					if ( 0 === strpos( $name, 'on' ) ) {
 						continue;
 					}
+					// CSS of a style attribute as that of style: its addresses
+					// one by one, as stored where it is stored as read.
+					if ( 'style' === $name ) {
+						$out = array_merge( $out, self::css_ids( $raw, $value, $ctx, $tag['at'] ) );
+						continue;
+					}
 					if ( ! in_array( $name, self::URL_ATTRIBUTES, true ) && ! self::names_a_site( $value, $ctx ) ) {
 						continue;
 					}
@@ -186,6 +192,32 @@ final class AB_MCP_Sync_Urls {
 		}
 		$out = array_merge( $out, self::prose( $tag['text'], $ctx, AB_MCP_Sync_Canon::address_cuts( $tag['text'], $ctx ), array(), false ) );
 		return array( array( $tag['at'], $end ) );
+	}
+
+	/**
+	 * The ids of the addresses in the CSS of a style attribute, as in style
+	 * (prose(): each address of the sites up to EXTENT, url(…) ending it):
+	 * read in the stored value and rewritten there where it is stored as
+	 * the HTML API reads it (value_span()), else read decoded, locked.
+	 *
+	 * @param string $raw   The stored text of the tag.
+	 * @param string $value The value, decoded.
+	 * @param array  $ctx   Context.
+	 * @param int    $base  Where the tag stands in the text.
+	 * @return array See ids().
+	 */
+	private static function css_ids( $raw, $value, array $ctx, $base ) {
+		$span = AB_MCP_Sync_Html::value_span( $raw, 'style', $value );
+		if ( null === $span ) {
+			return self::prose( $value, $ctx, AB_MCP_Sync_Canon::address_cuts( $value, $ctx ), array(), false );
+		}
+		$css = (string) substr( $raw, $span[0], $span[1] );
+		$out = array();
+		foreach ( self::prose( $css, $ctx, AB_MCP_Sync_Canon::address_cuts( $css, $ctx ), array(), true ) as $hit ) {
+			$hit['at'] += $base + $span[0];
+			$out[]      = $hit;
+		}
+		return $out;
 	}
 
 	/**

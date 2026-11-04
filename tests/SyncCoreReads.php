@@ -75,7 +75,6 @@ trait SyncCoreReads {
 			'two spaces before wp:' => array( '<!--  wp:paragraph {"api_key":"dummy-secret"} /-->' ),
 			'an escaped outer tag'  => array( '[[unregistered] [secret api_key="example-only"] [/unregistered]]' ),
 			'an unknown outer tag'  => array( '[outer][inner token="x"][/outer]' ),
-			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
 			'a comment'             => array( '<!-- password=hunter2 -->' ),
 			'a query'               => array( '<a href="https://example.test/?id=1&amp;API_KEY=x">Link</a>' ),
 			'a character reference' => array( '[acme api&#95;key="x"]' ),
@@ -98,6 +97,13 @@ trait SyncCoreReads {
 			'a property in a style'   => array( '<style>.x { --api-key: abc; }</style>' ),
 			// Codex, round 13: a script of JSON is read as JSON.
 			'a key in JSON-LD'        => array( '<script type="application/ld+json">{"@type":"Thing","api_key":"x"}</script>' ),
+			// Codex, round 15: a name with a dot, whole and in its parts.
+			'a name with a dot'       => array( '<script type="application/json">[{"name":"api_key.v1","value":"demo-secret"}]</script>' ),
+			'a dot before the name'   => array( '<script type="application/json">[{"name":"v1.token","value":"x"}]</script>' ),
+			// Codex, round 15: the CSS of a style attribute as that of style.
+			'a textarea by its id'    => array( '<textarea id="api_key">x</textarea>' ),
+			'a property in a style attribute' => array( '<div style="--api-key: demo-secret">x</div>' ),
+			'a property in a style attribute, spaced' => array( '<p style="color:red; --client-secret :x">x</p>' ),
 			// Codex, round 14 (A1): the same structure as JSON of a meta value.
 			'a pair of name and value in JSON' => array( '<script type="application/json">[{"name":"api_key","value":"demo-secret"}]</script>' ),
 			'a pair by its key in JSON-LD' => array( '<script type="application/ld+json">{"x":[{"key":"token","value":"x"}]}</script>' ),
@@ -107,25 +113,14 @@ trait SyncCoreReads {
 			'a block attribute'       => array( '<!-- wp:acme/x {"js":"{accessToken: 1}"} /-->' ),
 			'an arrow in an attribute' => array( '[acme run="() => login(secret: 1)"]' ),
 			// Codex, round 8: a field of a form.
-			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),
-			'a field by its id'       => array( '<input id="token" value="x">' ),
-			'a meta tag'              => array( '<meta name="client_secret" content="x">' ),
-			'a name as a reference'   => array( '<input title="&quot;a&gt;b&quot;" name="api&#95;key" value="x">' ),
 			'a textarea'              => array( '<textarea name="private_key">DEMO_PRIVATE_KEY</textarea>' ),
-			'a select'                => array( '<select id="api_key"><option value="a">A</option><option value="b" selected>B</option></select>' ),
 			// Codex, round 10 (1): a reference without ";", as the HTML API decodes it.
 			'a reference without a semicolon' => array( '<textarea name="api&#95key">DEMO_SECRET</textarea>' ),
-			'a reference without a semicolon in an input' => array( '<input name="api&#95key" value="DEMO_SECRET">' ),
 			// Codex, round 10 (2): the URL parser drops tabs and line breaks.
 			// Codex, round 10 (3): every field by its name, with a value or without.
-			'a ">" in an attribute of an option' => array( '<select name="api_key"><option title="a>b" value="DEMO_SECRET" selected>Key</option></select>' ),
 			'a wrong end tag in a textarea'      => array( '<textarea name="private_key"></textareax>DEMO_SECRET</textarea>' ),
-			'a select without selected'          => array( '<select name="api_key"><option value="DEMO_SECRET">Key</option></select>' ),
-			'an empty field'                     => array( '<input type="password" name="api_key" value="">' ),
 			'an empty textarea'                  => array( '<textarea name="api_key"></textarea>' ),
 			'a button'                           => array( '<button name="token" value="x">Los</button>' ),
-			'an option by its id'                => array( '<select><option id="client_secret">x</option></select>' ),
-			'the field of the login form'        => array( '<input type="password" name="pwd" class="token-field">' ),
 		);
 	}
 
@@ -173,6 +168,70 @@ trait SyncCoreReads {
 		);
 	}
 
+	public static function outsideKses(): array {
+		return array(
+			// Codex, round 15: tags and attributes outside the list of kses.
+			'srcdoc'                  => array( '<iframe srcdoc="&lt;script>window[\'api\'+\'_key\']=\'demo-secret\';&lt;/script>"></iframe>' ),
+			'srcdoc without a script' => array( '<iframe src="https://www.youtube.com/embed/x" srcdoc="&lt;p>x&lt;/p>"></iframe>' ),
+			'SVG with xlink:href'     => array( '<svg xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="/?p=12"><text x="0" y="15">Beitrag</text></a></svg>' ),
+			'xlink:href on a link'    => array( '<a xlink:href="/?p=12">Beitrag</a>' ),
+			'embed'                   => array( '<embed src="https://cdn.test/a.swf">' ),
+			'base'                    => array( '<base href="https://staging.test/">' ),
+			'meta http-equiv'         => array( '<meta http-equiv="refresh" content="0;url=https://staging.test/?p=12">' ),
+			'an attribute of no list' => array( '<a href="https://example.test" ping="https://cdn.test/p">x</a>' ),
+			'srcset'                  => array( '<img src="a.jpg" srcset="a-300.jpg 300w" alt="">' ),
+			'a tag of a plugin'       => array( '<acme-widget data-x="1"></acme-widget>' ),
+			'an input'                => array( '<input type="text" name="q">' ),
+			// Fields of a form outside the list (input, select, option, meta).
+			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
+			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),
+			'a field by its id'       => array( '<input id="token" value="x">' ),
+			'a meta tag'              => array( '<meta name="client_secret" content="x">' ),
+			'a name as a reference'   => array( '<input title="&quot;a&gt;b&quot;" name="api&#95;key" value="x">' ),
+			'a select'                => array( '<select id="api_key"><option value="a">A</option><option value="b" selected>B</option></select>' ),
+			'a reference without a semicolon in an input' => array( '<input name="api&#95key" value="DEMO_SECRET">' ),
+			'a ">" in an attribute of an option' => array( '<select name="api_key"><option title="a>b" value="DEMO_SECRET" selected>Key</option></select>' ),
+			'a select without selected'          => array( '<select name="api_key"><option value="DEMO_SECRET">Key</option></select>' ),
+			'an empty field'                     => array( '<input type="password" name="api_key" value="">' ),
+			'an option by its id'                => array( '<select><option id="client_secret">x</option></select>' ),
+			'the field of the login form'        => array( '<input type="password" name="pwd" class="token-field">' ),
+			'a field of another name'   => array( '<input type="text" name="login" class="token-field">' ),
+		);
+	}
+
+	#[DataProvider( 'outsideKses' )]
+	public function testHtmlOutsideTheListOfKsesLocksTheUnit( string $text ): void {
+		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
+		self::assertSame( array( 'unreadable', self::core() ? 'html_outside_kses' : 'unreadable_value' ), array( $check['state'], $check['why'] ?? null ), (string) json_encode( $check ) );
+	}
+
+	public static function blockOutput(): array {
+		return array(
+			// What the blocks of the core store, and an embed: inside the list.
+			'a paragraph'   => array( '<p class="has-text-align-center">x <strong>y</strong> <em>z</em> <a href="https://example.test" target="_blank" rel="noreferrer noopener">a</a><br>b</p>' ),
+			'an image'      => array( '<figure class="wp-block-image size-large is-resized"><img src="https://staging.test/wp-content/uploads/a.jpg" alt="Bild" class="wp-image-12" style="aspect-ratio:1;object-fit:cover" width="300" height="300"/><figcaption class="wp-element-caption">Text</figcaption></figure>' ),
+			'a gallery'     => array( '<figure class="wp-block-gallery has-nested-images columns-default is-cropped"><figure class="wp-block-image size-large"><img data-id="12" src="https://staging.test/a.jpg" alt="" class="wp-image-12"/></figure></figure>' ),
+			'columns'       => array( '<div class="wp-block-columns are-vertically-aligned-top"><div class="wp-block-column" style="flex-basis:66.66%"><p>x</p></div></div>' ),
+			'a table'       => array( '<figure class="wp-block-table"><table class="has-fixed-layout"><thead><tr><th>a</th></tr></thead><tbody><tr><td>b</td></tr></tbody><tfoot><tr><td>c</td></tr></tfoot></table><figcaption class="wp-element-caption">t</figcaption></figure>' ),
+			'buttons'       => array( '<div class="wp-block-buttons"><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.test" target="_blank" rel="noreferrer noopener">Los</a></div></div>' ),
+			'a quote'       => array( '<blockquote class="wp-block-quote"><p>x</p><cite>y</cite></blockquote>' ),
+			'a list'        => array( '<ul class="wp-block-list"><li>a<ol><li>b</li></ol></li></ul>' ),
+			'a group with a background' => array( '<div class="wp-block-group has-background" style="background-image:url(\'https://staging.test/wp-content/uploads/bg.jpg\');background-size:cover"><p>x</p></div>' ),
+			'an embed'      => array( '<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio"><div class="wp-block-embed__wrapper">' . "\n" . 'https://www.youtube.com/watch?v=x' . "\n" . '</div></figure>' ),
+			'a YouTube iframe' => array( '<iframe width="560" height="315" src="https://www.youtube.com/embed/x" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>' ),
+			'a cover'       => array( '<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><img class="wp-block-cover__image-background wp-image-7" alt="" src="https://staging.test/a.jpg" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><p>x</p></div></div>' ),
+			'a video'       => array( '<figure class="wp-block-video"><video controls src="https://staging.test/a.mp4"></video></figure>' ),
+			'a file'        => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a id="wp-block-file--media-1" href="https://staging.test/a.pdf">a</a><a href="https://staging.test/a.pdf" class="wp-block-file__button wp-element-button" download aria-describedby="wp-block-file--media-1">Herunterladen</a></div>' ),
+			'details'       => array( '<details class="wp-block-details"><summary>a</summary><p>b</p></details>' ),
+			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
+		);
+	}
+
+	#[DataProvider( 'blockOutput' )]
+	public function testTheOutputOfTheBlocksIsInsideTheList( string $text ): void {
+		self::assertSame( self::closed( $text ) ? 'unreadable' : 'clean', AB_MCP_Sync_Credentials::unit( '', $text, array() )['state'], $text );
+	}
+
 	#[DataProvider( 'scripts' )]
 	public function testAScriptOfJavaScriptLocksTheUnit( string $text, string $why = 'script' ): void {
 		$check = AB_MCP_Sync_Credentials::unit( '', $text, array() );
@@ -192,7 +251,6 @@ trait SyncCoreReads {
 
 	public static function credentialProse(): array {
 		return array(
-			'a field of another name'   => array( '<input type="text" name="login" class="token-field">' ),
 			'a label'                   => array( '<label for="password">Passwort:</label>' ),
 			'words in JSON'             => array( '{"hasPassword":true,"token_count":3}' ),
 			'CSS'                       => array( 'a[href] { color: red } input[type="password"] { }' ),
@@ -221,6 +279,12 @@ trait SyncCoreReads {
 		self::assertSame( self::closed( $text ) ? 'unreadable' : 'clean', AB_MCP_Sync_Credentials::unit( '', $text, array() )['state'], $text );
 	}
 
+	public function testANameWithADotIsReadWholeAndInItsParts(): void {
+		// Codex, round 15: an extra name of the site with a dot, whole.
+		self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~my.hidden', 'my.hidden' ) ), AB_MCP_Sync_Credentials::unit( '', '{"my.hidden":"x"}', array( 'my.hidden' ) ) );
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '{"my.other":"x"}', array( 'my.hidden' ) )['state'] );
+	}
+
 	public function testATagTheHtmlApiCannotFinishIsUnreadable(): void {
 		// What follows an unfinished tag is not read: never clean.
 		foreach ( array( '<p>Text</p><input name="api_key"', '<p>Text <a href="javascript:x({token: 1})" ' ) as $text ) {
@@ -245,6 +309,9 @@ trait SyncCoreReads {
 			// Codex, round 12 (4): url(…) and a template string.
 			'in a style'           => array( '<style>body{background:url(https://staging.test/?p=12)}</style>', array( 'post:12@c:html?p' ), '<style>body{background:url(https://www.live.test/?p=120)}</style>' ),
 			'in a template string' => array( '<script>const u=`https://staging.test/?p=12`;</script>', array( 'post:12@c:html?p' ), '<script>const u=`https://www.live.test/?p=120`;</script>' ),
+			// Codex, round 15: the addresses of a style attribute one by one.
+			'in a style attribute' => array( '<p style="background-image:url(https://staging.test/?p=12)">x</p>', array( 'post:12@c:html?p' ), '<p style="background-image:url(https://www.live.test/?p=120)">x</p>' ),
+			'two in a style attribute' => array( "<div style=\"background:url('https://staging.test/?p=12'),url(https://staging.test/?page_id=13)\">x</div>", array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), "<div style=\"background:url('https://www.live.test/?p=120'),url(https://www.live.test/?page_id=130)\">x</div>" ),
 			// Codex, round 13 (B1): single quotes as the core writes them.
 			'in single quotes'     => array( "<p><a href='https://staging.test/?p=12'>Beitrag</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?p=120'>Beitrag</a></p>" ),
 			'in single quotes with an ampersand' => array( "<p><a href='https://staging.test/?a=1&amp;p=12'>x</a></p>", array( 'post:12@c:html?p' ), "<p><a href='https://www.live.test/?a=1&amp;p=120'>x</a></p>" ),
@@ -353,6 +420,7 @@ trait SyncCoreReads {
 			// Codex, round 11 (3): a textarea decodes its references; read so, locked.
 			'in a textarea with a reference' => array( '<textarea>https://staging.test/?a=1&amp;p=12</textarea>', 'c:html?p' ),
 			// Codex, round 13: JavaScript in an attribute with an address of the sites.
+			'a style attribute read decoded' => array( '<p style="background:url(https://staging.test/?p=1&#50;)">x</p>', 'c:html?p' ),
 			'a relative address in JSON-LD' => array( '<script type="application/ld+json">{"@type":"Article","url":"/?p=12"}</script>', 'c:html?p' ),
 			'in a title'             => array( '<title>https://staging.test/?a=&#49;&amp;p=12</title>', 'c:html?p' ),
 			// Codex, round 11 (4): relative to the page, a segment of digits.

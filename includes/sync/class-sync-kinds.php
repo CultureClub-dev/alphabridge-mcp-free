@@ -263,6 +263,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go.',
 		),
+		'*:html_outside_kses'          => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The value holds HTML outside the list of tags and attributes WordPress lets through in posts (kses), such as srcdoc, SVG, embed or base: what it names is not read, so it is taken over by hand only.',
+		),
 		'*:script'                     => array(
 			'stage'  => 'Z8d',
 			'reason' => 'The value holds a script of JavaScript, which no parser of WordPress reads: what it names (ids, addresses, credentials) is not known, so it is taken over by hand only.',

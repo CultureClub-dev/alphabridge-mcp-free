@@ -302,6 +302,10 @@ return array(
 			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
 			'plan' => 'Entscheid 9',
 		),
+		'*:html_outside_kses'          => array(
+			'why'  => 'HTML outside the list of kses (srcdoc, SVG, embed, base …) holds what no reader of the core reads here: locked, taken over by hand (Codex, round 15).',
+			'plan' => 'Entscheid 9, Entscheid 12',
+		),
 		'*:script'                     => array(
 			'why'  => 'JavaScript in content has no parser in the core: ids, addresses and credentials in it are not read, so the unit is taken over by hand (Codex, round 13).',
 			'plan' => 'Entscheid 9, Entscheid 12',

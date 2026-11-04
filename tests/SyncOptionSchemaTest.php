@@ -50,7 +50,10 @@ final class SyncOptionSchemaTest extends TestCase {
 
 	public static function rules(): array {
 		return array(
-			'int'           => array( 'posts_per_page', array( '10', '0' ), array( '-1', '1.5', '', 'zehn' ) ),
+			'int'           => array( 'start_of_week', array( '1', '0' ), array( '-1', '1.5', '', 'zehn' ) ),
+			// Codex, round 15: sanitize_option() keeps -1 (all posts).
+			'int and -1'    => array( 'posts_per_page', array( '10', '0', '-1' ), array( '-2', '-0', '1.5', '', 'zehn' ) ),
+			'int and -1 of the feed' => array( 'posts_per_rss', array( '10', '-1' ), array( '-2', ' -1' ) ),
 			'flag'          => array( 'use_smilies', array( '', '0', '1' ), array( '2', 'on', 'true' ) ),
 			'choice'        => array( 'show_on_front', array( 'posts', 'page' ), array( 'Page', '', 'home' ) ),
 			'number'        => array( 'gmt_offset', array( '0', '5.5', '-3' ), array( 'UTC+1', '' ) ),

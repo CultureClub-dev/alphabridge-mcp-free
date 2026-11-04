@@ -20,8 +20,11 @@
  * HTML API of the core (WP_HTML_Tag_Processor), nothing rebuilt.
  * JavaScript locks the unit (*:script: no parser of the core reads it, it
  * is taken over by hand): every script but one of JSON on a short list, an
- * event attribute, a javascript: address. A script of JSON is read as
- * JSON, its fields as any structure. In style and in a value of an
+ * event attribute, a javascript: address. Every other tag and attribute
+ * must be on the list of the core ($allowedposttags of kses.php, and iframe
+ * for embeds), else the unit locks (*:html_outside_kses: srcdoc, SVG,
+ * embed, base …). A script of JSON is read as JSON, its fields as any
+ * structure. In style, a style attribute and in a value of an
  * attribute of a block or a shortcode with "{" or "=>" name: counts as
  * well; the name or id of a field of a form (input, textarea, select,
  * option, button, meta), with a value or without. Where
@@ -89,6 +92,22 @@ final class AB_MCP_Sync_Credentials {
 	 * brace or "=>". Parentheses and colons alone are prose.
 	 */
 	const LOOKS_LIKE_CODE = '/[{]|=>/';
+
+	/**
+	 * The attributes of iframe beside the list of kses (which has no iframe):
+	 * the ones of an ordinary embed (a video of a platform), without srcdoc.
+	 */
+	const IFRAME = array( 'src', 'width', 'height', 'title', 'allow', 'allowfullscreen', 'frameborder', 'loading', 'referrerpolicy', 'name', 'class', 'id', 'style' );
+
+	/**
+	 * The tags read here beside the list of kses, with their attributes: a
+	 * script of JSON (AB_MCP_Sync_Html::is_data_script(), read as JSON) and
+	 * style (its CSS read as code, its addresses as prose).
+	 */
+	const READ_TAGS = array(
+		'script' => array( 'type', 'id', 'class' ),
+		'style'  => array( 'media', 'id', 'class' ),
+	);
 
 	/** The tags of a form whose name or id names its field. */
 	const FORM_TAGS = array( 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'META' );
@@ -190,6 +209,11 @@ final class AB_MCP_Sync_Credentials {
 				$why = 'script';
 				return null;
 			}
+			// A tag or an attribute outside the list of the core locks it.
+			if ( $html['outside'] ) {
+				$why = 'html_outside_kses';
+				return null;
+			}
 			// A script of JSON is read as JSON, as any structure (walk(): keys,
 			// lists of name and value, nested, within MAX_DEPTH).
 			foreach ( $html['json'] as $json ) {
@@ -202,7 +226,7 @@ final class AB_MCP_Sync_Credentials {
 					return null;
 				}
 				foreach ( $fields as $field ) {
-					$found[] = ltrim( (string) substr( (string) strrchr( '.' . $field, '.' ), 1 ), '~' );
+					$found[] = ltrim( (string) $field, '~' );
 				}
 			}
 			foreach ( $code ? array_merge( array( $one ), $html['code'] ) : $html['code'] as $segment ) {
@@ -220,7 +244,7 @@ final class AB_MCP_Sync_Credentials {
 		}
 		$out = array();
 		foreach ( $found as $key ) {
-			if ( AB_MCP_Redactor::redacts_key( (string) $key, $extra ) ) {
+			if ( self::names_credential( (string) $key, $extra ) ) {
 				$out[ strtolower( (string) $key ) ] = (string) $key;
 			}
 		}
@@ -232,21 +256,26 @@ final class AB_MCP_Sync_Credentials {
 	 * JavaScript, which no parser of the core reads (a script not on the
 	 * list of AB_MCP_Sync_Html::is_data_script(), an event attribute on…, a
 	 * javascript: address): the unit locks, *:script; the content of a
-	 * script of JSON (read as JSON); the content of style (code); the names
-	 * of its fields of a form (name and id of FORM_TAGS, with a value or
+	 * script of JSON (read as JSON); the content of style and the value of
+	 * every style attribute (code); whether a tag or an attribute stands
+	 * outside the list of the core (the global $allowedposttags of kses.php,
+	 * iframe with IFRAME): the unit locks, *:html_outside_kses; the names of
+	 * its fields of a form (name and id of FORM_TAGS, with a value or
 	 * without). Null where the
 	 * text holds a tag and the HTML API is not there or cannot read it to
 	 * its end: what is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return array{code:string[],json:string[],fields:string[],script:bool}|null
+	 * @return array{code:string[],json:string[],fields:string[],script:bool,outside:bool}|null
 	 */
 	private static function html( $text ) {
+		global $allowedposttags;
 		$out = array(
-			'code'   => array(),
-			'json'   => array(),
-			'fields' => array(),
-			'script' => false,
+			'code'    => array(),
+			'json'    => array(),
+			'fields'  => array(),
+			'script'  => false,
+			'outside' => false,
 		);
 		if ( ! preg_match( '/<[A-Za-z]/', $text ) ) {
 			return $out;
@@ -271,9 +300,29 @@ final class AB_MCP_Sync_Credentials {
 			if ( 'STYLE' === $tag['tag'] ) {
 				$out['code'][] = (string) $tag['text'];
 			}
+			// The tags and attributes of the list of the core, the global
+			// $allowedposttags of kses.php as it stands (no filter is asked:
+			// a filter may read options), iframe with IFRAME, READ_TAGS.
+			$tag_name = strtolower( $tag['tag'] );
+			$allowed  = is_array( $allowedposttags ) && isset( $allowedposttags[ $tag_name ] ) && is_array( $allowedposttags[ $tag_name ] ) ? $allowedposttags[ $tag_name ] : null;
+			if ( 'iframe' === $tag_name ) {
+				$allowed = array_fill_keys( self::IFRAME, true );
+			} elseif ( isset( self::READ_TAGS[ $tag_name ] ) ) {
+				$allowed = array_fill_keys( self::READ_TAGS[ $tag_name ], true );
+			}
+			if ( null === $allowed ) {
+				$out['outside'] = true;
+			}
 			foreach ( $tag['attrs'] as $name => $value ) {
+				if ( null !== $allowed && ! self::kses_attribute( $allowed, (string) $name ) ) {
+					$out['outside'] = true;
+				}
 				if ( ! is_string( $value ) ) {
 					continue;
+				}
+				// The CSS of a style attribute as that of style.
+				if ( 'style' === $name ) {
+					$out['code'][] = $value;
 				}
 				// An event attribute and a javascript: address (as the URL
 				// parser reads it: without tabs and line breaks, C0 and spaces
@@ -287,6 +336,39 @@ final class AB_MCP_Sync_Credentials {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether a name names a credential (redacts_key()): the whole name or
+	 * any of its parts at "." (api_key.v1, v1.token; a path of fields too).
+	 *
+	 * @param string   $name  Name.
+	 * @param string[] $extra Extra names.
+	 * @return bool
+	 */
+	private static function names_credential( $name, array $extra ) {
+		foreach ( array_merge( array( (string) $name ), explode( '.', (string) $name ) ) as $part ) {
+			if ( AB_MCP_Redactor::redacts_key( ltrim( $part, '~' ), $extra ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether kses lets an attribute of a tag through, by its name as
+	 * wp_kses_attr_check() reads it: listed (not ''), or data-… where the tag
+	 * takes data-* (wp-includes/kses.php, the pattern of a data attribute).
+	 *
+	 * @param array  $allowed The attributes of the tag.
+	 * @param string $name    The attribute, in lower case.
+	 * @return bool
+	 */
+	private static function kses_attribute( array $allowed, $name ) {
+		if ( isset( $allowed[ $name ] ) && '' !== $allowed[ $name ] && false !== $allowed[ $name ] ) {
+			return true;
+		}
+		return 0 === strpos( $name, 'data-' ) && ! empty( $allowed['data-*'] ) && 1 === preg_match( '/^data(?:-[a-z0-9_]+)+$/', $name );
 	}
 
 	/**
@@ -438,13 +520,13 @@ final class AB_MCP_Sync_Credentials {
 		}
 		// A list of name and value: the name is the field.
 		foreach ( self::NAME_KEYS as $key ) {
-			if ( isset( $value[ $key ] ) && is_string( $value[ $key ] ) && array_key_exists( 'value', $value ) && AB_MCP_Redactor::redacts_key( $value[ $key ], $extra ) ) {
+			if ( isset( $value[ $key ] ) && is_string( $value[ $key ] ) && array_key_exists( 'value', $value ) && self::names_credential( $value[ $key ], $extra ) ) {
 				$fields[] = ( '' === $path ? '' : $path . '.' ) . $value[ $key ];
 			}
 		}
 		foreach ( $value as $key => $item ) {
 			$sub = '' === $path ? (string) $key : $path . '.' . $key;
-			if ( is_string( $key ) && AB_MCP_Redactor::redacts_key( $key, $extra ) ) {
+			if ( is_string( $key ) && self::names_credential( $key, $extra ) ) {
 				$fields[] = $sub;
 				continue;
 			}

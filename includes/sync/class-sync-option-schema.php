@@ -55,7 +55,11 @@ final class AB_MCP_Sync_Option_Schema {
 		'use_smilies'                  => array( 'type' => 'flag' ),
 		'require_name_email'           => array( 'type' => 'flag' ),
 		'comments_notify'              => array( 'type' => 'flag' ),
-		'posts_per_rss'                => array( 'type' => 'int' ),
+		// sanitize_option() keeps -1, all posts (wp-includes/formatting.php:4969-4977).
+		'posts_per_rss'                => array(
+			'type' => 'int',
+			'also' => array( '-1' ),
+		),
 		'rss_use_excerpt'              => array( 'type' => 'flag' ),
 		'default_category'             => array(
 			'type'  => 'ref',
@@ -70,7 +74,10 @@ final class AB_MCP_Sync_Option_Schema {
 			'values' => array( 'open', 'closed' ),
 		),
 		'default_pingback_flag'        => array( 'type' => 'flag' ),
-		'posts_per_page'               => array( 'type' => 'int' ),
+		'posts_per_page'               => array(
+			'type' => 'int',
+			'also' => array( '-1' ),
+		),
 		'date_format'                  => array( 'type' => 'text' ),
 		'time_format'                  => array( 'type' => 'text' ),
 		'links_updated_date_format'    => array( 'type' => 'text' ),
@@ -230,7 +237,7 @@ final class AB_MCP_Sync_Option_Schema {
 		switch ( $schema['type'] ) {
 			case 'int':
 			case 'ref':
-				return 1 === preg_match( '/^\d+\z/', $raw );
+				return 1 === preg_match( '/^\d+\z/', $raw ) || ( isset( $schema['also'] ) && in_array( $raw, $schema['also'], true ) );
 			case 'flag':
 				return in_array( $raw, array( '', '0', '1' ), true );
 			case 'choice':
