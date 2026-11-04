@@ -78,7 +78,9 @@ start` and the suite (or the mutation probes).
 - `AB_MCP_IT_Sync_Steps::run( $site, $steps )` runs steps on a site in a
   process of its own (`bin/sync-site.php`: insert posts, meta, terms,
   options, then the canonical form or the inventory), so that each site
-  computes its canonical form with its own WordPress.
+  computes its canonical form with its own WordPress. The same way site B
+  acts as the staging site of the trust (Z8 branch 5): its role and pair
+  confirmed, its key, its pairing code, a manifest it signs.
 - The other site of a pair is reached through `AB_MCP_Test_Sync_Fetcher`
   (`::for_sites()`), handed to the code under test the way that code takes
   its fetcher. The production way, `AB_MCP_Outbound::get()`, refuses the

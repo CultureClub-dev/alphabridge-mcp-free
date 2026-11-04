@@ -53,6 +53,10 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-preview-protection.php';
 require_once __DIR__ . '/class-outbound.php';
+// The key of a staging source and the anchor of a production site follow
+// the record (Z8, decision 4): save() and remove_pair() hand them on.
+require_once __DIR__ . '/sync/class-sync-key.php';
+require_once __DIR__ . '/sync/class-sync-anchor.php';
 
 /**
  * Class AB_MCP_Staging
@@ -409,6 +413,23 @@ class AB_MCP_Staging {
 		// the site as it was; with another role it is asked again.
 		if ( $role_changed && class_exists( 'AB_MCP_Staging_Gate' ) ) {
 			AB_MCP_Staging_Gate::on_role_changed();
+		}
+		// The key of a staging source and the anchor of a production site
+		// (Z8, decision 4). A person who confirms the role staging site (the
+		// role written now, as a new role or as the form's confirmation of
+		// the hub's) gives the site a new source id and key, which the
+		// production site has to confirm anew; a site with any other role
+		// keeps none. Another pair takes the anchor of the old one away (a
+		// new role never keeps the pair, see above).
+		if ( self::ROLE_STAGING === $role ) {
+			if ( $role_changed || $confirms( $stored['role'] ) ) {
+				AB_MCP_Sync_Key::renew();
+			}
+		} else {
+			AB_MCP_Sync_Key::forget();
+		}
+		if ( $pair_changed ) {
+			AB_MCP_Sync_Anchor::forget();
 		}
 		return array(
 			'role_changed' => $role_changed,
@@ -1311,7 +1332,8 @@ class AB_MCP_Staging {
 
 	/**
 	 * Remove the stored pair, also one that reads as no pair (a broken
-	 * record), and nothing else of the record.
+	 * record), and nothing else of the record; with it the anchor of the
+	 * key of that pair's staging site (Z8, decision 4).
 	 *
 	 * @return bool Whether a pair was in force.
 	 */
@@ -1322,6 +1344,7 @@ class AB_MCP_Staging {
 			unset( $raw['pair'] );
 			AB_MCP_Settings::set( self::KEY, $raw );
 		}
+		AB_MCP_Sync_Anchor::forget();
 		return $had;
 	}
 

@@ -276,6 +276,25 @@ class AB_MCP_REST_Controller {
 			)
 		);
 
+		// The key of a staging site (Z8, decision 4): its public part, to
+		// anyone, so that the production site fetches it over https before a
+		// person confirms it there (AB_MCP_Sync_Anchor); no tool, no token,
+		// nothing written. A site that is not a confirmed staging site with a
+		// key answers 404 (AB_MCP_Sync_Key::rest_key()). The preview
+		// protection leaves the namespace open
+		// (AB_MCP_Preview_Protection::rest_exempt()).
+		register_rest_route(
+			AB_MCP_REST_NAMESPACE,
+			AB_MCP_Sync_Key::ROUTE,
+			array(
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( 'AB_MCP_Sync_Key', 'rest_key' ),
+					'permission_callback' => '__return_true',
+				),
+			)
+		);
+
 		// DELETE is answered before WordPress looks for a handler, not by a
 		// handler of its own: WordPress lists every handler of a route in the
 		// Allow header of each response (rest_send_allow_header), so a DELETE

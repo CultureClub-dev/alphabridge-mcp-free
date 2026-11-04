@@ -64,6 +64,13 @@ $ab_mcp_options = array(
 	// (AB_MCP_Protected_Store::OPTION_ID, ::OPTION_PROOF).
 	'ab_mcp_install_id',
 	'ab_mcp_store_proof',
+	// The trust of the takeover (Z8, decision 4): the key of a staging
+	// source, its public part and its private key
+	// (AB_MCP_Sync_Key::OPTION_SOURCE, ::OPTION_SECRET), and the anchor of a
+	// production site (AB_MCP_Sync_Anchor::OPTION).
+	'ab_mcp_sync_source',
+	'ab_mcp_sync_secret',
+	'ab_mcp_sync_anchor',
 );
 
 // The protected store of the takeover (Z8): the folders of this installation

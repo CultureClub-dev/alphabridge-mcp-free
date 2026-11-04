@@ -99,6 +99,15 @@ final class SyncSafeCallsTest extends TestCase {
 		'->get_error_code'                     => 'WP_Error.',
 		'->get_error_message'                  => 'WP_Error.',
 		'->carries_record'                     => 'AB_MCP_Replace_Engine: walks the serialized text without unserialize().',
+		// The trust of the takeover (Z8, decisions 4 and 5): encoders, the
+		// answer of another site, the answer of a route.
+		'AB_MCP_Staging::normalize_url'        => 'A string function over the address it is given (wp_parse_url()); no stored value.',
+		'wp_json_encode'                       => 'Encodes the data it is given.',
+		'wp_remote_retrieve_body'              => 'The body of the answer it is given.',
+		'wp_remote_retrieve_response_code'     => 'The status of the answer it is given.',
+		'AB_MCP_Outbound::get'                 => 'Asks the other site over the network, tied to its checked addresses; no stored value of this site.',
+		'->header'                             => 'WP_REST_Response: a header of the answer.',
+		'new WP_REST_Response'                 => 'An answer object.',
 		// Constructors.
 		'new WP_Block_Parser'                  => 'The parser of the core, without the filter block_parser_class.',
 		'new WP_Error'                         => 'An error object.',
@@ -112,6 +121,27 @@ final class SyncSafeCallsTest extends TestCase {
 	private const EXCEPTIONS = array(
 		'class-sync-canon.php'  => array(
 			'unserialize' => array( 1, 'unserialized(): after carries_record() refused every object, enum, reference and record, with allowed_classes => false.' ),
+		),
+		// The trust of the takeover (Z8, decisions 4 and 5) reads no value it
+		// compares: its own options, the record of the site and its address.
+		'class-sync-anchor.php'   => array(
+			'AB_MCP_Staging::record' => array( 2, 'partner() and pair_print(): the confirmed role and pair of this site, which the anchor belongs to.' ),
+			'get_option'             => array( 1, 'read(): the anchor, an option this class writes itself (OPTION).' ),
+			'update_option'          => array( 1, 'write(): that option, without autoload.' ),
+			'delete_option'          => array( 1, 'forget(): removes it.' ),
+			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
+		),
+		'class-sync-key.php'      => array(
+			'AB_MCP_Staging::role' => array( 4, 'renew(), make(), sign(), answer(): only a confirmed staging site has a key.' ),
+			'get_option'           => array( 2, 'found() and secret(): the key, in the two options this class writes itself.' ),
+			'update_option'        => array( 2, 'renew(): those two options, without autoload.' ),
+			'delete_option'        => array( 2, 'forget(): removes them.' ),
+			'home_url'             => array( 1, 'answer(): the own address the key names.' ),
+		),
+		'class-sync-manifest.php' => array(
+			'AB_MCP_Staging::record' => array( 1, 'sign(): the pair, whose production site a package is for.' ),
+			'AB_MCP_Staging::role'   => array( 1, 'sign(): only the confirmed staging site signs.' ),
+			'home_url'               => array( 2, 'sign() and verify(): the own address, as source and target exactly (decision 5).' ),
 		),
 		'class-sync-schema.php' => array(
 			'get_option'    => array( 2, 'maybe_upgrade() and status(): the version of the tables, a string this plugin writes itself and compares with VERSION; no value of a site the takeover compares.' ),

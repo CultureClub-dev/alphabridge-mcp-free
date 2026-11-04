@@ -10,7 +10,10 @@
  * is the result of that earlier step, "{$name}" inside a text the same as
  * text. Ops: insert_post (args), add_meta (post, key, value), insert_term
  * (name, taxonomy, args), set_terms (post, terms, taxonomy), update_option
- * (name, value), canonical (kind, ref, addresses), inventory (addresses).
+ * (name, value), canonical (kind, ref, addresses), inventory (addresses);
+ * for the trust of the takeover (Z8 branch 5): staging_save (role,
+ * partner_url, partner_role, source; as the administrator), sync_key (the
+ * key of the site), pairing_code, sign_manifest (package).
  * Prints { name: result, … } as JSON.
  *
  * @package AlphaBridge_MCP
@@ -114,6 +117,19 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				$ab_it_out    = array_merge( $ab_it_out, $ab_it_part['objects'] );
 				$ab_it_cursor = $ab_it_part['cursor'];
 			} while ( null !== $ab_it_cursor );
+			break;
+		case 'staging_save':
+			$ab_it_out = AB_MCP_Staging::save( $ab_it_step['role'], $ab_it_step['partner_url'], isset( $ab_it_step['partner_role'] ) ? $ab_it_step['partner_role'] : null, get_current_user_id(), $ab_it_step['source'] );
+			break;
+		case 'sync_key':
+			$ab_it_out = AB_MCP_Sync_Key::current();
+			break;
+		case 'pairing_code':
+			$ab_it_out = AB_MCP_Sync_Key::pairing_code();
+			break;
+		case 'sign_manifest':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-manifest.php';
+			$ab_it_out = AB_MCP_Sync_Manifest::sign( $ab_it_step['package'] );
 			break;
 		default:
 			fwrite( STDERR, "Unknown op {$ab_it_step['op']}.\n" );

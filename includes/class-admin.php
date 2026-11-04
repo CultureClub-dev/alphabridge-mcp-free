@@ -60,6 +60,40 @@ class AB_MCP_Admin {
 	const STAGING_CARD = 'ab-staging-card';
 
 	/**
+	 * Anchor of the key of the staging site in the card «Staging»
+	 * (staging_trust_html(), Z8).
+	 */
+	const STAGING_TRUST = 'ab-staging-trust';
+
+	/**
+	 * What the page says after the forms of the key and the anchor (Z8,
+	 * decision 4): the notice by its code, and for a refusal the code
+	 * without ab_mcp_ behind staging_trust_ (trust_notice()). English, as
+	 * the messages of the takeover, until its interface is translated with
+	 * it (branches 12 and 13 of the plan).
+	 */
+	const TRUST_NOTICES = array(
+		'staging_key_made'                         => array( 'success', 'The key of this staging site was made. Its fingerprint and pairing code are below: confirm it on the page AlphaBridge → Staging of the production site.' ),
+		'staging_key_kept'                         => array( 'success', 'This staging site has its key already; nothing was changed.' ),
+		'staging_anchor_prepared'                  => array( 'success', 'The key of the staging site is prepared, not confirmed. Compare its fingerprint below with the one the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same.' ),
+		'staging_anchor_confirmed'                 => array( 'success', 'The key of the staging site is confirmed: this site reads the packages signed with it.' ),
+		'staging_anchor_unknown'                   => array( 'error', 'Nothing was changed: the action was not to fetch the key, to enter a pairing code or to confirm the key.' ),
+		'staging_trust_sync_key_role'              => array( 'error', 'Nothing was made: only a confirmed staging site has a key. Confirm the role staging site above first.' ),
+		'staging_trust_sync_key_failed'            => array( 'error', 'No key was made: PHP could not make a key on this server. Ask the host to enable the sodium extension of PHP, then try again.' ),
+		'staging_trust_sync_anchor_role'           => array( 'error', 'Nothing was done: only the confirmed production site anchors the key of a staging site. Confirm the role production site above first.' ),
+		'staging_trust_sync_anchor_pair'           => array( 'error', 'Nothing was done: this production site has no staging site paired. Enter the address of the staging site above first.' ),
+		'staging_trust_sync_anchor_not_https'      => array( 'error', 'Nothing was fetched: the key is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code of the staging site instead.' ),
+		'staging_trust_sync_anchor_unreached'      => array( 'error', 'The key could not be fetched: the staging site did not answer this site. Check that it answers (the checklist above), or enter its pairing code instead.' ),
+		'staging_trust_sync_anchor_no_key'         => array( 'error', 'The staging site did not give its key (a redirect is not followed). On the staging site, confirm the role staging site and make its key, and update AlphaBridge MCP there; then fetch again, or enter its pairing code instead.' ),
+		'staging_trust_sync_key_answer'            => array( 'error', 'The staging site answered, but not with a key this site can read. Update AlphaBridge MCP on the staging site, or enter its pairing code instead.' ),
+		'staging_trust_sync_key_code'              => array( 'error', 'The pairing code does not read as the code of a staging site. Copy it again in full from the page AlphaBridge → Staging of the staging site and enter it again.' ),
+		'staging_trust_sync_anchor_site'           => array( 'error', 'Nothing was prepared: the key names another address of the staging site than the one stored here, and the two must be the same exactly. Correct the address on the site that has it wrong, then try again.' ),
+		'staging_trust_sync_anchor_nothing'        => array( 'error', 'There is no prepared key to confirm. Fetch the key, or enter the pairing code of the staging site, first.' ),
+		'staging_trust_sync_anchor_stale'          => array( 'error', 'Not confirmed: the prepared key belongs to another address than the staging site stored now. Fetch the key, or enter the pairing code, again.' ),
+		'staging_trust_sync_anchor_fingerprint'    => array( 'error', 'Not confirmed: the fingerprint is not the one of the prepared key. Load this page again, compare the fingerprint with the one the staging site shows, and confirm again.' ),
+	);
+
+	/**
 	 * The user meta that says this user folded the card «Staging» ('1');
 	 * absent: unfolded. Per user, as WordPress keeps the boxes a user
 	 * closed; uninstall.php removes it from every user.
@@ -156,6 +190,11 @@ class AB_MCP_Admin {
 		// connection. Plain forms.
 		add_action( 'admin_post_ab_mcp_staging_first', array( $this, 'handle_staging_first' ) );
 		add_action( 'admin_post_ab_mcp_staging_connection', array( $this, 'handle_staging_connection' ) );
+		// The key of a staging site and its anchor on the production site
+		// (Z8, decision 4): made, fetched, entered and confirmed by a person
+		// here; a tool or the hub prepares at most. Plain forms.
+		add_action( 'admin_post_ab_mcp_staging_key', array( $this, 'handle_staging_key' ) );
+		add_action( 'admin_post_ab_mcp_staging_anchor', array( $this, 'handle_staging_anchor' ) );
 		// The card «Staging» folded or unfolded: the details element folds
 		// at once, and admin.js keeps the choice for this user over ajax.
 		add_action( 'wp_ajax_ab_mcp_staging_card', array( $this, 'ajax_staging_card' ) );
@@ -934,6 +973,60 @@ class AB_MCP_Admin {
 	}
 
 	/**
+	 * The key of this staging site, made by a person where it has none
+	 * (AB_MCP_Sync_Key::make(): a key that is there stays). Z8, decision 4.
+	 */
+	public function handle_staging_key() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_staging_key' );
+		$made = AB_MCP_Sync_Key::make();
+		if ( is_wp_error( $made ) ) {
+			$this->redirect( self::trust_notice( $made ), self::STAGING_TRUST );
+		}
+		$this->redirect( $made['made'] ? 'staging_key_made' : 'staging_key_kept', self::STAGING_TRUST );
+	}
+
+	/**
+	 * The anchor of the key of the staging site, on the production site
+	 * (AB_MCP_Sync_Anchor, Z8, decision 4): fetch the key over https and
+	 * prepare it, prepare it from the pairing code a person entered, or
+	 * confirm the prepared key with the fingerprint the page showed. Only
+	 * here does a key become active.
+	 */
+	public function handle_staging_anchor() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_staging_anchor' );
+		$do      = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : '';
+		$user_id = get_current_user_id();
+		if ( 'fetch' === $do ) {
+			$result = AB_MCP_Sync_Anchor::prepare_from_partner( $user_id );
+			$done   = 'staging_anchor_prepared';
+		} elseif ( 'code' === $do ) {
+			// The code as entered: AB_MCP_Sync_Key::read_code() takes it only
+			// in the one spelling the staging site writes.
+			$result = AB_MCP_Sync_Anchor::prepare_from_code( isset( $_POST['pairing_code'] ) ? wp_unslash( $_POST['pairing_code'] ) : '', $user_id ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read only in its one spelling by AB_MCP_Sync_Key::read_code().
+			$done   = 'staging_anchor_prepared';
+		} elseif ( 'confirm' === $do ) {
+			$result = AB_MCP_Sync_Anchor::confirm( isset( $_POST['fingerprint'] ) ? sanitize_text_field( wp_unslash( $_POST['fingerprint'] ) ) : '', $user_id );
+			$done   = 'staging_anchor_confirmed';
+		} else {
+			$this->redirect( 'staging_anchor_unknown', self::STAGING_TRUST );
+		}
+		$this->redirect( is_wp_error( $result ) ? self::trust_notice( $result ) : $done, self::STAGING_TRUST );
+	}
+
+	/**
+	 * The notice of a refusal of the key or the anchor: staging_trust_ and
+	 * its code without ab_mcp_ (TRUST_NOTICES).
+	 *
+	 * @param WP_Error $error Refusal.
+	 * @return string
+	 */
+	private static function trust_notice( WP_Error $error ) {
+		return 'staging_trust_' . preg_replace( '/^ab_mcp_/', '', (string) $error->get_error_code() );
+	}
+
+	/**
 	 * AJAX: switch the preview protection on, or set a new password, and
 	 * return the password ONCE, straight to the administrator's browser, as
 	 * a new token is returned. Only the hash is stored.
@@ -1607,6 +1700,7 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-lead">' . esc_html__( 'A staging site is a copy of this site where changes are made and checked first, then carried over to the production site once they are approved. Here you see where this site stands on that way and set what it needs.', 'alphabridge-mcp' ) . '</p>';
 		$html .= $this->staging_checklist_html( $report );
 		$html .= $this->staging_record_html();
+		$html .= $this->staging_trust_html();
 		if ( AB_MCP_Staging::ROLE_STAGING !== $report['role']['value'] ) {
 			$html .= $this->staging_host_html( $report['host'] );
 		}
@@ -1974,6 +2068,93 @@ class AB_MCP_Admin {
 		$html .= '</select></p>';
 		$html .= '<p><button class="ab-btn">' . esc_html__( 'Save', 'alphabridge-mcp' ) . '</button></p>';
 		$html .= '</form></div>';
+		return $html;
+	}
+
+	/**
+	 * The key that lets the production site take changes over from its
+	 * staging site (Z8, decision 4), a part of the card «Staging» below the
+	 * role: on the confirmed staging site its key with the fingerprint and
+	 * the pairing code, or the button that makes it; on the confirmed
+	 * production site paired with a staging site the anchor, confirmed or
+	 * not, a prepared key with its fingerprint and the button that confirms
+	 * it, and the two ways to prepare one (fetch over https, pairing code).
+	 * A key becomes active here and only here (AB_MCP_Sync_Anchor::confirm()).
+	 * The whole interface of the takeover follows with branch 12 of the plan;
+	 * this part is English until it is translated with it (branch 13).
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function staging_trust_html() {
+		$html = '<div class="ab-staging ab-staging-trust" id="' . esc_attr( self::STAGING_TRUST ) . '">';
+		$role = AB_MCP_Staging::role();
+		if ( AB_MCP_Staging::ROLE_STAGING === $role ) {
+			$html .= $this->staging_key_html();
+		} elseif ( AB_MCP_Staging::ROLE_PRODUCTION === $role && ! is_wp_error( AB_MCP_Sync_Anchor::partner() ) ) {
+			$html .= $this->staging_anchor_html( AB_MCP_Sync_Anchor::partner() );
+		} else {
+			$html .= '<h3 class="ab-setting__title">' . esc_html( 'Key for taking changes over' ) . '</h3>';
+			$html .= '<p class="ab-note">' . esc_html( 'Shown here once this site is confirmed as the staging site, or as the production site paired with a staging site.' ) . '</p>';
+		}
+		return $html . '</div>';
+	}
+
+	/**
+	 * The key of this staging site (staging_trust_html()).
+	 *
+	 * @return string HTML, escaped.
+	 */
+	private function staging_key_html() {
+		$html   = '<h3 class="ab-setting__title">' . esc_html( 'Key of this staging site' ) . '</h3>';
+		$answer = AB_MCP_Sync_Key::answer();
+		if ( null === $answer ) {
+			$html .= '<p class="ab-direct__status">' . esc_html( 'This staging site has no key yet. The production site takes changes over only from a staging site whose key a person confirmed there.' ) . '</p>';
+			$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_staging_key', '_wpnonce', true, false );
+			$html .= '<input type="hidden" name="action" value="ab_mcp_staging_key">';
+			$html .= '<p><button class="ab-btn">' . esc_html( 'Make the key' ) . '</button></p></form>';
+			return $html;
+		}
+		$html .= '<p class="ab-direct__status">' . esc_html( 'Fingerprint:' ) . ' <code class="ab-staging-trust__fingerprint">' . esc_html( $answer['fingerprint'] ) . '</code></p>';
+		$html .= '<p class="ab-note">' . esc_html( 'On the production site, fetch this key over https or enter the pairing code below on its page AlphaBridge → Staging, compare the fingerprint it shows with this one, and confirm it there. Confirming the role of this site again makes a new key, which the production site confirms again.' ) . '</p>';
+		$html .= '<p class="ab-field"><label>' . esc_html( 'Pairing code' ) . ' <textarea class="large-text code ab-staging-trust__code" rows="3" readonly>' . esc_textarea( (string) AB_MCP_Sync_Key::pairing_code() ) . '</textarea></label></p>';
+		return $html;
+	}
+
+	/**
+	 * The anchor of the key of the staging site on this production site
+	 * (staging_trust_html()).
+	 *
+	 * @param string $partner Address of the staging site.
+	 * @return string HTML, escaped.
+	 */
+	private function staging_anchor_html( $partner ) {
+		$post     = esc_url( admin_url( 'admin-post.php' ) );
+		$form     = '<form method="post" action="' . $post . '">' . wp_nonce_field( 'ab_mcp_staging_anchor', '_wpnonce', true, false ) . '<input type="hidden" name="action" value="ab_mcp_staging_anchor">';
+		$active   = AB_MCP_Sync_Anchor::active();
+		$prepared = AB_MCP_Sync_Anchor::prepared();
+
+		$html = '<h3 class="ab-setting__title">' . esc_html( 'Key of the staging site' ) . '</h3>';
+		if ( null !== $active ) {
+			$who   = get_user_by( 'id', $active['user_id'] );
+			$html .= '<p class="ab-direct__status">' . esc_html( sprintf( 'Confirmed by %1$s on %2$s: the key of the staging site %3$s with the fingerprint', is_object( $who ) && isset( $who->user_login ) ? (string) $who->user_login : '#' . $active['user_id'], wp_date( 'Y-m-d H:i', $active['at'] ), $partner ) ) . ' <code class="ab-staging-trust__fingerprint">' . esc_html( $active['fingerprint'] ) . '</code>. ' . esc_html( 'This site reads the packages signed with it.' ) . '</p>';
+		} else {
+			$html .= '<p class="ab-direct__status">' . esc_html( sprintf( 'No key of the staging site %s is confirmed here yet, so this site takes nothing over from it.', $partner ) ) . '</p>';
+		}
+		if ( null !== $prepared ) {
+			$html .= '<p class="ab-direct__status">' . esc_html( sprintf( '%1$s on %2$s, not confirmed: the key with the fingerprint', 'route' === $prepared['via'] ? 'Fetched' : 'Entered', wp_date( 'Y-m-d H:i', $prepared['at'] ) ) ) . ' <code class="ab-staging-trust__fingerprint">' . esc_html( $prepared['fingerprint'] ) . '</code>. ' . esc_html( 'Compare it with the fingerprint the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same.' ) . '</p>';
+			$html .= $form . '<input type="hidden" name="do" value="confirm"><input type="hidden" name="fingerprint" value="' . esc_attr( $prepared['fingerprint'] ) . '">';
+			$html .= '<p><button class="ab-btn">' . esc_html( 'Confirm the key' ) . '</button></p></form>';
+		}
+		if ( 0 === strpos( $partner, 'https://' ) ) {
+			$html .= $form . '<input type="hidden" name="do" value="fetch">';
+			$html .= '<p><button class="ab-btn ab-btn--ghost">' . esc_html( 'Fetch the key from the staging site' ) . '</button></p></form>';
+		} else {
+			$html .= '<p class="ab-note">' . esc_html( 'The address of the staging site is not an https:// address, so its key is not fetched from here: enter its pairing code.' ) . '</p>';
+		}
+		$html .= $form . '<input type="hidden" name="do" value="code">';
+		$html .= '<p class="ab-field"><label>' . esc_html( 'Pairing code of the staging site' ) . ' <textarea name="pairing_code" class="large-text code" rows="3"></textarea></label></p>';
+		$html .= '<p><button class="ab-btn ab-btn--ghost">' . esc_html( 'Prepare the key from the code' ) . '</button></p></form>';
+		$html .= '<p class="ab-note">' . esc_html( 'A fetched or entered key is only prepared: this site reads nothing signed with it until a person confirms it here.' ) . '</p>';
 		return $html;
 	}
 
@@ -3572,6 +3753,8 @@ class AB_MCP_Admin {
 			/* translators: %s: what is wrong, one or more sentences. */
 			$map[ 'staging_bad_' . $code ] = array( 'error', sprintf( __( 'Nothing was saved: %s', 'alphabridge-mcp' ), AB_MCP_Staging::problem( $code ) ) );
 		}
+		// The key of a staging site and its anchor (Z8).
+		$map += self::TRUST_NOTICES;
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display-only notice key; no state is changed.
 		$key = sanitize_key( wp_unslash( $_GET['ab_notice'] ) );
 		if ( isset( $map[ $key ] ) ) {
