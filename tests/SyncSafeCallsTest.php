@@ -56,6 +56,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'AB_MCP_Builders::adapters'            => 'Makes the readers (shortcode profiles from files) and the filter ab_mcp_builder_adapters; asks no post.',
 		'AB_MCP_Redactor::extra_keys'          => 'The filter ab_mcp_redact_keys, names only.',
 		'AB_MCP_Redactor::redacts_key'         => 'Compares a name with the lists of names.',
+		'AB_MCP_Redactor::normalize_key'       => 'A string function over a name (accessToken, client-secret and API_KEY alike); no stored value.',
 		'AB_MCP_Replace_Engine::encode'        => 'A string in one of the forms of the replace engine.',
 		'AB_MCP_Replace_Engine::needles'       => 'The forms of a string.',
 		'AB_MCP_Undo::option_row'              => 'SELECT option_name, autoload through $wpdb, never the value.',

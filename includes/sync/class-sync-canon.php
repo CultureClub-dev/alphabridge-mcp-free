@@ -196,7 +196,9 @@ final class AB_MCP_Sync_Canon {
 	 *
 	 * @return array refs (typed references found by their schema), possible
 	 *               (whole numbers without a schema), locks, unread (what
-	 *               could not be read), credentials (decision 9).
+	 *               could not be read), credentials (decision 9), addressed
+	 *               (where text() read an id of an address, rewritten or
+	 *               locked: what AB_MCP_Sync_Net compares its count with).
 	 */
 	public static function acc() {
 		return array(
@@ -206,6 +208,7 @@ final class AB_MCP_Sync_Canon {
 			'unread'      => array(),
 			'deep'        => array(),
 			'spelling'    => array(),
+			'addressed'   => array(),
 			'credentials' => array(
 				'b9'    => array(),
 				'mixed' => array(),
@@ -488,6 +491,9 @@ final class AB_MCP_Sync_Canon {
 				continue;
 			}
 			$where = $at . $query['what'];
+			// Every id of an address read here, rewritten or locked: the
+			// net over the raw value (AB_MCP_Sync_Net) compares its count.
+			$acc['addressed'][] = $where;
 			if ( null === $query['id'] ) {
 				self::spelling( $acc, $where );
 				continue;

@@ -354,9 +354,13 @@ final class SyncCoreReadsTest extends TestCase {
 		wp_update_custom_css_post( 'q::before { content: "\\201C"; } body { background: url("/?p=' . $post . '"); }' );
 		$result = $canon();
 		self::assertSame( array( array( $post ), array() ), array( array_column( $result['refs'], 'id' ), array_column( $result['locks'], 'key' ) ) );
-		// Codex, round 17 (A3, A4, A7): comments, data:, @import "…".
+		// Codex, round 17 (A3, A4, A7): comments, data:, @import "…". The
+		// data: of no image locks the addresses; what it holds (a credential)
+		// the net over the raw value names (Thomas, 04.11.2026).
 		wp_update_custom_css_post( '@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");' );
-		self::assertSame( array( '*:reference_spelling', '*:unreadable_value' ), self::keys( $canon()['locks'] ) );
+		$result = $canon();
+		self::assertSame( array( '*:reference_spelling', '*:unread_credential' ), self::keys( $result['locks'] ) );
+		self::assertSame( array( array( 'unit' => 'css', 'fields' => array( '~api_key' ) ) ), $result['credentials']['mixed'] );
 		wp_update_custom_css_post( '.x{--api-key/**/:demo-secret}' );
 		self::assertSame( array( '*:credential_field' ), self::keys( $canon()['locks'] ) );
 		wp_update_custom_css_post( "/* Kopfzeile */\nq::before { content: \"\\201C\"; } /* Ende */\n@import \"/?p=" . $post . "\";" );

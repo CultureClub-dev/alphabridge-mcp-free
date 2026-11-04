@@ -314,6 +314,14 @@ return array(
 			'why'  => 'JavaScript in content has no parser in the core: ids, addresses and credentials in it are not read, so the unit is taken over by hand (Codex, round 13).',
 			'plan' => 'Entscheid 9, Entscheid 12',
 		),
+		'*:unread_reference'           => array(
+			'why'  => 'The net over the raw value (AB_MCP_Sync_Net) counts in every layer of text (decoded, data:, base64) the addresses of the sites with an id; where the readers of the core read fewer, an address would go to the live site unchanged and name another object there (Codex, rounds 18 to 20: CSS variables, data: images, the JSON of a plugin in data-*, a key twice in JSON).',
+			'plan' => 'Entscheid 12 (Verweise nur mit bekanntem Schema); Thomas 04.11.2026: ein Zähl-Netz über den Rohwert statt je Format eine Regel',
+		),
+		'*:unread_credential'          => array(
+			'why'  => 'The net over the raw value counts in every layer of text the names of credentials with a value beside them; a name the credential check did not name would reach the canonical form unlocked (Codex, rounds 19 and 20: an SVG image with JSON or a script, a dropped value of JSON).',
+			'plan' => 'Entscheid 9; Thomas 04.11.2026: ein Zähl-Netz über den Rohwert statt je Format eine Regel',
+		),
 		'attachment:missing_file'      => array(
 			'why'  => 'A listed file that is missing cannot be packed or compared.',
 			'plan' => 'Entscheid 26 (gelistete, aber fehlende Datei sperrt)',

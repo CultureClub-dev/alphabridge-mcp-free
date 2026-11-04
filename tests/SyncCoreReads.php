@@ -22,8 +22,11 @@ namespace AlphaBridge\Tests;
 
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Credentials;
+use AB_MCP_Sync_Net;
 use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\Attributes\DataProvider;
+
+require_once __DIR__ . '/../includes/sync/class-sync-net.php';
 
 trait SyncCoreReads {
 
@@ -490,10 +493,11 @@ trait SyncCoreReads {
 	}
 
 	public function testDataAsAnAddressOfCssIsReadAsAnImage(): void {
-		// Codex, round 17 (A4), 18 (B3), 19 (A-2, B-4): data: in url(…),
-		// @import or image-set(…): an image decoded; an SVG read as content
-		// of HTML (by the HTML API: locked without it); any other type, or one
-		// that does not decode, locks.
+		// Codex, round 17 (A4), 18 (B3): data: in url(…), @import or
+		// image-set(…): an image decoded, a site named in it locks; any other
+		// type, or one that does not decode, locks. What the image holds
+		// beside a site (an address with an id, a credential) is the net's
+		// (netReferences(), netCredentials()).
 		$ctx  = array( 'css' => true ) + self::reads_ctx();
 		$read = static function ( string $css ) use ( $ctx ): array {
 			$acc = AB_MCP_Sync_Canon::acc();
@@ -509,77 +513,235 @@ trait SyncCoreReads {
 			'a{background:url( DATA:image/png;base64,!!!! )}',
 			'a{background-image:image-set("data:image/svg+xml;base64,%%" 1x)}',
 		) as $css ) {
-			self::assertSame( array( 'unreadable', 'unreadable_value', array( 'css:css' ) ), $read( $css ), $css );
+			self::assertSame( array( 'clean', null, array( 'css:css' ) ), $read( $css ), $css );
 		}
 		// The mask of the image block of the core (blocks/image/style.css:177),
-		// percent-encoded, base64; raster images: free.
+		// percent-encoded, base64; a text of an image, a script of an image
+		// (it runs none); raster images: free for the readers of CSS.
 		$svg = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50"/></svg>';
 		foreach ( array(
 			"img{mask-image:url('data:image/svg+xml;utf8," . $svg . "')}",
 			'img{mask-image:url("data:image/svg+xml,' . rawurlencode( $svg ) . '")}',
 			'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( $svg ) . ')}',
 			'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"><text x="1" y="9">Token: x</text></svg>' ) . ')}',
-		) as $css ) {
-			self::assertSame( array( self::core() ? 'clean' : 'unreadable', self::core() ? null : 'unreadable_value', array() ), $read( $css ), $css );
-		}
-		// A script of an image runs not: free (without the HTML API: locked).
-		$script = 'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"><script>var x = 1;</script><circle r="1" onclick="go()"/></svg>' ) . ')}';
-		self::assertSame( self::core() ? array( 'clean', null, array() ) : array( 'unreadable', 'unreadable_value', array( 'css:css' ) ), $read( $script ) );
-		foreach ( array(
+			'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"><script>var x = 1;</script><circle r="1" onclick="go()"/></svg>' ) . ')}',
 			'a{background:url( DATA:image/png;base64,iVBORw0KGgo= )}',
 			'a{background:url(data:Image/PNG;base64,iVBORw0KGgo=)}',
 			'a{background:url("data:image/png;base64,iVBO Rw0K Ggo=")}',
 			'a{background-image:image-set("data:image/webp;base64,UklGRg==" 1x, "data:image/avif;base64,AAAA" 2x)}',
 			'a{background:url(data:image/gif;base64,R0lGODlh) , url(data:image/jpeg;base64,/9j/4A==)}',
-			'a{background:url(data:image/png;base64,' . base64_encode( "\x89PNG <a href=\"/?p=12\">" ) . ')}',
+			'a{background:url(data:image/png;base64,' . base64_encode( "\x89PNG tEXt api_key=demo-secret" ) . ')}',
 		) as $css ) {
 			self::assertSame( array( 'clean', null, array() ), $read( $css ), $css );
 		}
-		self::assertSame( 'mixed', $read( 'a{background:url(data:image/png;base64,' . base64_encode( "\x89PNG tEXt api_key=demo-secret" ) . ')}' )[0], 'The text of a raster image.' );
-		// An SVG with an address of the sites: locked.
-		foreach ( array(
-			'<svg xmlns="http://www.w3.org/2000/svg"><a href="/?p=12"><circle r="1"/></a></svg>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><image href="https://staging.test/a.png"/></svg>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><style>a{background:url(/?p=12)}</style></svg>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><a href="?p=12"><circle r="1"/></a></svg>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><a href=/?p=12><circle r="1"/></a></svg>',
-		) as $bad ) {
-			self::assertContains( 'css:css', $read( "a{mask:url('data:image/svg+xml;base64," . base64_encode( $bad ) . "')}" )[2], $bad );
-			self::assertContains( 'css:css', $read( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $bad ) . '")}' )[2], $bad );
-		}
-		// An SVG with a credential, its fields, its JSON, its CSS: mixed.
-		foreach ( array(
-			'<svg xmlns="http://www.w3.org/2000/svg" api_key="demo-secret"/>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><style>:root{--client-secret:1}</style></svg>',
-			'<svg xmlns="http://www.w3.org/2000/svg"><metadata><script type="application/json">[{"name":"api_key","value":"demo-secret"}]</script></metadata><circle r="10"/></svg>',
-		) as $bad ) {
-			foreach ( array( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $bad ) . '")}', 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( $bad ) . ')}' ) as $css ) {
-				self::assertSame( self::core() ? 'mixed' : 'unreadable', $read( $css )[0], $bad );
-			}
-		}
+		// An SVG that names a site: locked (its host cannot be replaced in place).
+		$site = '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://staging.test/a.png"/></svg>';
+		self::assertContains( 'css:css', $read( "a{mask:url('data:image/svg+xml;base64," . base64_encode( $site ) . "')}" )[2] );
+		self::assertContains( 'css:css', $read( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $site ) . '")}' )[2] );
 	}
 
-	public function testAStringOfCssWithAnAddressLocks(): void {
-		// Codex, round 19 (A-3): every string (a custom property reaches
-		// image-set(var(…)) as an address) read; an address with an id there
-		// locks, rewritten only in url(), image-set(), @import.
-		$ctx  = array( 'css' => true ) + self::reads_ctx();
-		$read = static function ( string $css ) use ( $ctx ): array {
-			$acc = AB_MCP_Sync_Canon::acc();
-			AB_MCP_Sync_Canon::text( $css, $ctx, array(), $acc, 'css' );
-			return array( array_column( $acc['refs'], 'id' ), $acc['spelling'] );
-		};
-		foreach ( array(
-			'.x{--bild:"/?attachment_id=12";background-image:image-set(var(--bild) 1x)}',
-			".x{--bild:'https://staging.test/?p=12'}",
-			'.x{content:"Mehr: https://staging.test/?page_id=13"}',
-			'.x{--bild:"../12/"}',
-		) as $css ) {
-			self::assertContains( 'css:css', $read( $css )[1], $css );
+	/* ----------------------------------------------------------- the net */
+
+	/**
+	 * A text as a unit of its kind through its readers and the net over the
+	 * raw value (AB_MCP_Sync_Net, as AB_MCP_Sync_Db_Kinds runs it).
+	 *
+	 * @param string $raw  The stored value.
+	 * @param string $as   content (post_content: blocks), css (custom_css)
+	 *                     or value (a meta value).
+	 * @param array  $ctx  Context; reads_ctx() when null.
+	 * @return array{0:string[],1:string[],2:array} The locks as key@at, the
+	 *               names of credentials noted, the accumulator.
+	 */
+	private static function net_read( string $raw, string $as = 'value', ?array $ctx = null ): array {
+		$ctx  = $ctx ?? self::reads_ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		AB_MCP_Sync_Credentials::note( $acc, 'post', 'u', AB_MCP_Sync_Credentials::unit( '', $raw, array(), 'css' === $as ) );
+		if ( 'content' === $as ) {
+			AB_MCP_Sync_Refs::content( $raw, $ctx, $acc, 'post', 'u' );
+		} else {
+			AB_MCP_Sync_Canon::value( $raw, 'css' === $as ? array( 'css' => true ) + $ctx : $ctx, $acc, 'post', 'u' );
 		}
-		foreach ( array( 'a{content:"/"} b{font-family:"Open Sans"} c{content:"12"} d{--bild:"https://staging.test/a.png"}', 'a::before{content:"\\201C"}' ) as $css ) {
-			self::assertSame( array( array(), array() ), $read( $css ), $css );
+		AB_MCP_Sync_Net::check( $acc, $mark, 'post', 'u', $raw, $ctx );
+		$locks = array();
+		foreach ( $acc['locks'] as $lock ) {
+			$locks[] = $lock['key'] . '@' . $lock['at'];
 		}
+		$names = array();
+		foreach ( $acc['credentials']['mixed'] as $mixed ) {
+			$names = array_merge( $names, $mixed['fields'] );
+		}
+		return array( $locks, $names, $acc );
+	}
+
+	/** The context with the plain permalinks of the site: no rule routes a path. */
+	private static function net_ctx(): array {
+		return AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, array( 'rules' => array(), 'verbose' => false, 'index' => false, 'pages' => static fn( $p ) => null ) );
+	}
+
+	private static function svg( string $inner ): string {
+		return '<svg xmlns="http://www.w3.org/2000/svg">' . $inner . '</svg>';
+	}
+
+	/**
+	 * Codex, round 20 (A-1, A-4, A-5) and their variations (Thomas,
+	 * 04.11.2026: thought ahead, not found afterwards): an address with an id
+	 * no reader of the core read, in any layer: the net locks the unit
+	 * (*:unread_reference at u:net:<layer>). A text with a tag fails closed
+	 * without the core (locked by the readers, the net adds nothing).
+	 */
+	public static function netReferences(): array {
+		$svg_link = self::svg( '<a href="/?p=12"><circle r="1"/></a>' );
+		return array(
+			'A-1 an escaped quote before a variable'    => array( '.x{content:"a\\"";--bild:"/?attachment_id=12";background-image:image-set(var(--bild) 1x)}', 'css', 'raw' ),
+			'A-1 in single quotes'                      => array( ".x{content:'a\\'';--bild:'/?attachment_id=12'}", 'css', 'raw' ),
+			'A-1 a variable with a page id'             => array( ".x{--bild:'/?page_id=12'}", 'css', 'raw' ),
+			'A-1 a variable in style of content'        => array( '<style>.x{--bild:"/?attachment_id=12"}</style>', 'content', 'raw' ),
+			'A-1 a variable in a style attribute'       => array( '<div style="--bild:\'/?attachment_id=12\'">x</div>', 'content', 'raw' ),
+			'A-4 a key twice with an address'           => array( '{"url":"https://staging.test/?p=12","url":"x"}', 'value', 'raw' ),
+			'A-4 a root address dropped'                => array( '{"src":"/?p=12","src":"x"}', 'value', 'raw' ),
+			'A-4 dropped in a block attribute'          => array( '<!-- wp:acme/x {"u":"/?p=12","u":"x"} /-->', 'content', 'raw' ),
+			'A-5 the JSON of Fancybox'                  => array( '<a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a>', 'content', 'raw' ),
+			'A-5 as references'                         => array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&quot;}">x</a>', 'content', 'raw' ),
+			'A-5 percent-encoded'                       => array( '<a data-options="%7B%22src%22%3A%22%2F%3Fp%3D12%22%7D">x</a>', 'content', 'raw/percent' ),
+			'A-5 a data-src with a short link'          => array( '<img data-src="/?attachment_id=12" alt="">', 'content', 'raw' ),
+			'A-5 one read beside one not'               => array( '<a href="/?p=12" data-options=\'{"src":"/?p=13"}\'>x</a>', 'content', 'raw' ),
+			'a title with a short link'                 => array( '<p title="/?p=12">x</p>', 'content', 'raw' ),
+			'base64 in a meta value'                    => array( base64_encode( '{"src":"/?p=12"}' ), 'value', 'raw/base64' ),
+			'base64 inside serialized'                  => array( serialize( array( 'b' => base64_encode( '<a href="/?p=12">' ) ) ), 'value', 'raw/base64' ),
+			'a data: text with an address'              => array( 'data:text/plain;base64,' . base64_encode( '/?p=12' ), 'value', 'raw/data' ),
+			'a data: address inside base64'             => array( base64_encode( 'x data:text/plain;base64,' . base64_encode( '/?p=12' ) ), 'value', 'raw/base64/data' ),
+			'an SVG with a link in a variable'          => array( '.x{--m:"data:image/svg+xml;base64,' . base64_encode( $svg_link ) . '"}', 'css', 'raw/data' ),
+			'an SVG with a link in url()'               => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( $svg_link ) . ')}', 'css', 'raw/data' ),
+			'an SVG with a link, percent-encoded'       => array( 'a{mask:url("data:image/svg+xml,' . rawurlencode( $svg_link ) . '")}', 'css', 'raw/data' ),
+			'an SVG with style in url()'                => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<style>a{background:url(/?p=12)}</style>' ) ) . ')}', 'css', 'raw/data' ),
+			'an SVG with an address in a style attribute' => array( '<p style="mask-image:url(\'data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot;><a href=&quot;/?p=12&quot;/></svg>\')">x</p>', 'content', 'raw' ),
+			'an address in the value of a query variable' => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', 'value', 'raw/percent' ),
+			'a JSON escape of the slash'                => array( '<p title="\\/?p=12">x</p>', 'content', 'raw/json' ),
+			'a character reference in a query'          => array( '<p title="/&#63;p=12">x</p>', 'content', 'raw' ),
+			'a short link as character references'      => array( '<p title="&#47;&#63;p=12">x</p>', 'content', 'raw/html' ),
+			'a query without a slash'                   => array( '{"x":"?p=12","x":1}', 'value', 'raw' ),
+		);
+	}
+
+	#[DataProvider( 'netReferences' )]
+	public function testTheNetLocksAnAddressWithAnIdNoReaderRead( string $raw, string $as, string $layer ): void {
+		list( $locks, $names, $acc ) = self::net_read( $raw, $as, self::net_ctx() );
+		if ( self::closed( $raw ) ) {
+			self::assertNotSame( array(), array_merge( $acc['spelling'], array_column( $acc['locks'], 'key' ) ), 'Locked without the core: ' . $raw );
+			return;
+		}
+		self::assertContains( '*:unread_reference@u:net:' . $layer, $locks, $raw . ' ' . json_encode( $locks ) );
+		self::assertNotContains( '*:unread_credential', array_map( static fn( $l ) => explode( '@', $l )[0], $locks ), $raw );
+		self::assertSame( array(), $names );
+	}
+
+	/**
+	 * Codex, round 20 (A-2, A-3, A-4) and their variations: the name of a
+	 * credential with a value beside it that the credential check did not
+	 * name, in any layer: the net locks the unit (*:unread_credential) and
+	 * notes the name, never a value.
+	 */
+	public static function netCredentials(): array {
+		$svg_json = self::svg( '<metadata><script type="application/json">[{"name":"api_key","value":"demo-secret"}]</script></metadata><circle r="10"/>' );
+		$svg_js   = self::svg( '<script>var cfg={api_key:"demo-secret"};</script>' );
+		$svg_on   = self::svg( '<circle r="1" onclick="cfg[\'api_key\']=\'demo-secret\'"/>' );
+		return array(
+			'A-2 an SVG with JSON in a variable, base64'  => array( '.x{--bild:"data:image/svg+xml;base64,' . base64_encode( $svg_json ) . '";background-image:image-set(var(--bild) 1x)}', 'css', 'raw/data', 'api_key' ),
+			'A-2 percent-encoded in a variable'           => array( '.x{--bild:"data:image/svg+xml,' . rawurlencode( $svg_json ) . '"}', 'css', 'raw/data', 'api_key' ),
+			'A-2 in url()'                                => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( $svg_json ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-2 in a style attribute'                    => array( '<div style="--bild:url(data:image/svg+xml;base64,' . base64_encode( $svg_json ) . ')">x</div>', 'content', 'raw/data', 'api_key' ),
+			'A-2 in the css of global styles'             => array( '{"version":3,"isGlobalStylesUserThemeJSON":true,"styles":{"css":".x{--m:url(data:image/svg+xml;base64,' . base64_encode( $svg_json ) . ')}"}}', 'value', 'raw/data', 'api_key' ),
+			'A-3 a script of an SVG image'                => array( 'a{background-image:url(data:image/svg+xml;base64,' . base64_encode( $svg_js ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-3 an event attribute of an SVG image'      => array( 'a{background-image:url(data:image/svg+xml;base64,' . base64_encode( $svg_on ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-3 single quotes in a script'               => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( "<script>var cfg={token:'x'}</script>" ) ) . ')}', 'css', 'raw/data', 'token' ),
+			'A-3 a key after a comma in an object'        => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>init({a:1, client_secret: "x"})</script>' ) ) . ')}', 'css', 'raw/data', 'client_secret' ),
+			'A-4 a key twice with a pair of name and value' => array( '{"x":{"name":"api_key","value":"demo-secret"},"x":0}', 'value', 'raw', 'api_key' ),
+			'A-4 in a block attribute'                    => array( '<!-- wp:acme/x {"x":{"name":"api_key","value":"s"},"x":0} /-->', 'content', 'raw', 'api_key' ),
+			'A-4 in a data attribute of a plugin'         => array( '<div data-config=\'{"x":{"name":"token","value":"s"},"x":1}\'></div>', 'content', 'raw', 'token' ),
+			'A-4 the name as a JSON escape'               => array( '{"x":{"name":"api\\u005fkey","value":"s"},"x":0}', 'value', 'raw/json', 'api_key' ),
+			'base64 in a meta value'                      => array( 'x ' . base64_encode( 'api_key=demo-secret' ) . ' y', 'value', 'raw/base64', 'api_key' ),
+			'a data: text with a pair'                    => array( 'data:text/plain;base64,' . base64_encode( 'api_key=demo-secret' ), 'value', 'raw/data', 'api_key' ),
+			'a data: text in a data attribute'            => array( '<div data-x="data:text/plain;base64,' . base64_encode( '{"token":"x"}' ) . '">x</div>', 'content', 'raw/data', 'token' ),
+			'the text of a raster image'                  => array( 'a{background:url(data:image/png;base64,' . base64_encode( "\x89PNG tEXt api_key=demo-secret" ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'CSS of a data: import in style'              => array( '<style>@import url("data:text/css;base64,' . base64_encode( ':root{--api-key:demo-secret}' ) . '");</style>', 'content', 'raw/data', 'api_key' ),
+			'base64 inside serialized'                    => array( serialize( array( 'b' => base64_encode( '{"name":"token","value":"s"}' ) ) ), 'value', 'raw/base64', 'token' ),
+			'an SVG with a field, in a variable'          => array( '.x{--m:"data:image/svg+xml;base64,' . base64_encode( self::svg( '<input name="api_key" value="x"/>' ) ) . '"}', 'css', 'raw/data', 'api_key' ),
+			'an SVG with a property of CSS'               => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<style>:root{--client-secret:1}</style>' ) ) . ')}', 'css', 'raw/data', 'client_secret' ),
+			'camel case in a dropped value'               => array( '{"x":{"name":"accessToken","value":"s"},"x":0}', 'value', 'raw', 'access_token' ),
+		);
+	}
+
+	#[DataProvider( 'netCredentials' )]
+	public function testTheNetLocksACredentialWithAValueTheCheckDidNotName( string $raw, string $as, string $layer, string $name ): void {
+		list( $locks, $names, $acc ) = self::net_read( $raw, $as, self::net_ctx() );
+		if ( self::closed( $raw ) ) {
+			self::assertNotSame( array(), array_merge( $acc['spelling'], array_column( $acc['locks'], 'key' ) ), 'Locked without the core: ' . $raw );
+			return;
+		}
+		self::assertContains( '*:unread_credential@u:net:' . $layer, $locks, $raw . ' ' . json_encode( $locks ) );
+		self::assertContains( '~' . $name, $names );
+		self::assertStringNotContainsString( 'demo-secret', json_encode( $acc ), 'Never a value.' );
+	}
+
+	/**
+	 * What the net leaves free (Codex, rounds 18 to 20, group B): a site's
+	 * address without an id, words about credentials, Tailwind, a CDN image
+	 * beside a local id, the spelling of the core helper, a tooltip, prose,
+	 * and every address the readers read as well (the counts are equal).
+	 */
+	public static function netFree(): array {
+		return array(
+			'JSON-LD with a site address'       => array( "<script type=\"application/ld+json\">\n{\n  \"@type\": \"Organization\",\n  \"url\": \"https://staging.test/ueber-uns/\"\n}\n</script>", 'content' ),
+			'design tokens'                     => array( '/* design tokens */ a{color:red}', 'css' ),
+			'a text of an SVG image'            => array( 'img{mask-image:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<text x="1" y="9">Token: x</text>' ) ) . ')}', 'css' ),
+			'Tailwind'                          => array( '.md\\:flex{display:flex} .w-1\\/2{width:50%} .sm\\:w-1\\/3{width:33%}', 'css' ),
+			'a CDN image beside a local id'     => array( '<!-- wp:group {"style":{"background":{"backgroundImage":{"id":12,"url":"https://cdn.example.org/uploads/bg.jpg","source":"file"}}}} --><div class="wp-block-group"><p>x</p></div><!-- /wp:group -->', 'content' ),
+			'the core helper with &'            => array( '<div data-wp-context=\'acme/store::{"url":"\/?p=12&foo=bar"}\'></div>', 'content' ),
+			'a tooltip'                         => array( '<span data-tippy-content="[Strg+K] Suche öffnen">Suche</span>', 'content' ),
+			'prose about credentials'           => array( '<p>Das Passwort: geheim, der Token: 123. Felder: Name, Token: "abc" (Secret: "def").</p>', 'content' ),
+			'a label with a quoted value'       => array( 'Token: x', 'value' ),
+			'an address read, with a host'      => array( '<a href="https://staging.test/?p=12">x</a>', 'content' ),
+			'an address read, root-relative'    => array( '<a href="/?p=12">x</a>', 'content' ),
+			'an address read in prose'          => array( 'Link https://staging.test/?p=12 im Text.', 'value' ),
+			'an address read in a string of CSS' => array( ".x{--bild:'https://staging.test/?p=12'} .y{content:\"Mehr: https://staging.test/?page_id=13\"}", 'css' ),
+			'escapes of CSS the readers lock'   => array( '.x{--u:"\\2f archives\\2f 12"}', 'css' ),
+			'a list of ids read'                => array( 'https://staging.test/?cat=1,2,3', 'value' ),
+			'JSON of the core read'             => array( '{"url":"\\/?p=12"}', 'value' ),
+			'JSON in a context read'            => array( '<div data-wp-context=\'{"url":"\\/?p=12"}\'></div>', 'content' ),
+			'a shortcode read'                  => array( '[acme url="https://staging.test/?p=12"]', 'value' ),
+			'an image read'                     => array( '<figure class="wp-block-image"><img src="https://staging.test/wp-content/uploads/2024/05/a.jpg" class="wp-image-12" alt=""/></figure>', 'content' ),
+			'srcset'                            => array( '<img src="https://staging.test/a.jpg" srcset="https://staging.test/a-300x200.jpg 300w, https://staging.test/a.jpg 1024w" alt="">', 'content' ),
+			'a login link without an id'        => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F', 'value' ),
+			'fractions, dates, calc'            => array( 'Preis: 1/2 Tag am 05/12/2024, siehe /2024/05/ und calc(100%/3), 16/9.', 'value' ),
+			'CSS with slashes'                  => array( 'a{grid-area:1 / 2 / 3 / 4;font:12px/1.5 Arial;aspect-ratio:16/9;background:url(/img/12.png)}', 'css' ),
+			'base64 of a word'                  => array( 'Kontaktformular Datenschutzerklaerung Veranstaltungskalender', 'value' ),
+			'base64 of an image'                => array( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'value' ),
+			'a password field named'            => array( '<input type="password" name="pwd" class="token-field">', 'content' ),
+			'a credential the check named'      => array( '{"api_key":"x","x":"' . base64_encode( 'api_key=x' ) . '"}', 'value' ),
+		);
+	}
+
+	#[DataProvider( 'netFree' )]
+	public function testTheNetLeavesTheOrdinaryFree( string $raw, string $as ): void {
+		list( $locks ) = self::net_read( $raw, $as, self::net_ctx() );
+		self::assertSame( array(), preg_grep( '/^\*:unread_/', $locks ), $raw . ' ' . json_encode( $locks ) );
+	}
+
+	public function testTheNetReadsNoDeeperThanItsDepth(): void {
+		// A layer derived beyond MAX_DEPTH: the unit is not read to its end.
+		$deep = '/?p=12';
+		for ( $i = 0; $i < 5; $i++ ) {
+			$deep = 'data:text/plain;base64,' . base64_encode( $deep );
+		}
+		list( $locks, , $acc ) = self::net_read( $deep, 'value', self::net_ctx() );
+		self::assertContains( '*:unreadable_value@u:net', $locks );
+		self::assertContains( 'depth:u:net', $acc['unread'] );
+		$shallow = 'data:text/plain;base64,' . base64_encode( 'data:text/plain;base64,' . base64_encode( '/?p=12' ) );
+		list( $locks ) = self::net_read( $shallow, 'value', self::net_ctx() );
+		self::assertContains( '*:unread_reference@u:net:raw/data/data', $locks );
+		self::assertNotContains( '*:unreadable_value@u:net', $locks );
 	}
 
 	public function testGlobalStylesAreReadAsCss(): void {
@@ -941,8 +1103,11 @@ trait SyncCoreReads {
 			'a key twice in the context' => array( '<div data-wp-context=\'{"url":"/?p=12","url":"/?p=13"}\'>x</div>', 'c:html:json' ),
 			'a context that is no JSON' => array( '<div data-wp-context=\'{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
 			'a context with a namespace that is no JSON' => array( '<div data-wp-context=\'acme::{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
-			// Codex, round 18 (B3): an SVG with an address in data: of CSS.
-			'an SVG with an address' => array( '<p style="mask-image:url(\'data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot;><a href=&quot;/?p=12&quot;/></svg>\')">x</p>', 'c:html:css' ),
+			// Codex, round 17 (A4), 18 (B3): data: that is no image, or does
+			// not decode (an SVG with an address in it: the net, netReferences()).
+			'data in a style attribute'  => array( '<p style="background:url(DATA:text/css,x)">x</p>', 'c:html:css' ),
+			'data of another type'       => array( '<p style="background:url(data:text/html,x)">x</p>', 'c:html:css' ),
+			'data that does not decode'  => array( '<p style="background:url(data:image/png;base64,!!)">x</p>', 'c:html:css' ),
 			// Codex, round 17 (6): a script of JSON that is no JSON.
 			'JSON-LD that is no JSON' => array( '<script type="application/ld+json">{"url": /?p=12}</script>', 'c:html:json' ),
 		);
@@ -1023,16 +1188,12 @@ trait SyncCoreReads {
 
 	public static function unreadableUnits(): array {
 		return array(
-			// Codex, round 17 (A4): data: as an address of CSS.
-			'data in an import in style' => array( '<style>@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");</style>' ),
-			'data in a style attribute' => array( '<p style="background:url(DATA:text/css,x)">x</p>' ),
-			// Codex, round 17 (A5): JSON json_decode() does not read.
+			// Codex, round 17 (A5): JSON json_decode() does not read. (A data:
+			// address of CSS is read by the net, netCredentials(); one that is
+			// no image or does not decode locks the addresses, unsafeAddresses().)
 			'JSON deeper than it is read' => array( "<div data-config='" . str_repeat( '[', 513 ) . '{"name":"api_key","value":"demo-secret"}' . str_repeat( ']', 513 ) . "'></div>" ),
 			'a context not finished' => array( "<div data-wp-context='{\"name\":\"api_key\",\"value\":\"x\"'></div>" ),
 			'a title deeper than it is read' => array( '<p title="' . str_repeat( '[', 513 ) . str_repeat( ']', 513 ) . '">x</p>' ),
-			// Codex, round 18 (B3): data: that is no image, or does not decode.
-			'data of another type' => array( '<p style="background:url(data:text/html,x)">x</p>' ),
-			'data that does not decode' => array( '<p style="background:url(data:image/png;base64,!!)">x</p>' ),
 		);
 	}
 

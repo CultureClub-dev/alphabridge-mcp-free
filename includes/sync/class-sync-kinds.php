@@ -275,6 +275,14 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'The value holds a script of JavaScript, which no parser of WordPress reads: what it names (ids, addresses, credentials) is not known, so it is taken over by hand only.',
 		),
+		'*:unread_reference'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A layer of the stored value (its text decoded, a data: address, base64, a string of CSS, JSON a plugin reads) holds an address of the sites that names an object by its id where no reader of WordPress read it: it would be taken over unchanged and name another object on the live site, so the object is taken over by hand only.',
+		),
+		'*:unread_credential'          => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A layer of the stored value (its text decoded, a data: address, base64, an image, a script of an image, a dropped value of JSON) holds the name of a credential with a value beside it that the credential check did not name: nothing of it is compared or packed, the object is taken over by hand only.',
+		),
 		'attachment:missing_file'      => array(
 			'stage'  => 'Z8b',
 			'reason' => 'A file of the attachment\'s file list is not there.',

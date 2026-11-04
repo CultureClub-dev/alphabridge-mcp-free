@@ -13,8 +13,11 @@
  * - the addresses of the text: the argument of every url(…), the string of
  *   every @import "…" and the strings of image-set(…), where they stand
  *   in the stored text (rewritten there in their canonical form); every
- *   other string (a custom property: --bild:"/?attachment_id=12" reaches
- *   image-set(var(--bild)) as an address), read only;
+ *   string is bounded alike, by the loop of read() and by STR (an escaped
+ *   character is part of it, a line break ends it); any other string (a
+ *   custom property: --bild:"/?attachment_id=12" reaches
+ *   image-set(var(--bild)) as an address) is left to the net over the raw
+ *   value (AB_MCP_Sync_Net), which locks an address with an id in it;
  * - what locks in any context: a backslash outside of strings and
  *   comments in the name of a function (an identifier right before "("),
  *   of an at-rule, or in the value of a declaration (u\72l(, image-s\65t(,
@@ -38,17 +41,26 @@ defined( 'ABSPATH' ) || exit;
  */
 final class AB_MCP_Sync_Css {
 
+	/**
+	 * A string of CSS, bounded as the loop of read() bounds one: between "
+	 * or ', an escaped character (CR LF as one) part of it, ended by its
+	 * quote; a line break ends it before its quote, and such a string is
+	 * none here (its url( or @import is then not read, and locks). The one
+	 * tokenizer of strings: URL, IMPORT, IMAGE_SET and STRING are made of it.
+	 */
+	const STR = '(?|"((?:[^"\\\\\n\r\f]|\\\\(?:\r\n|[\s\S]))*)"|\'((?:[^\'\\\\\n\r\f]|\\\\(?:\r\n|[\s\S]))*)\')';
+
 	/** url(…): its argument, in quotes or without. */
-	const URL = '#url\(\s*(?|"([^"]*)"|\'([^\']*)\'|([^)\s"\']*))\s*\)#i';
+	const URL = '#url\(\s*(?|' . self::STR . '|([^)\s"\']*))\s*\)#i';
 
 	/** @import "…" or '…': the string is the address. */
-	const IMPORT = '#@import\s*(?|"([^"]*)"|\'([^\']*)\')#i';
+	const IMPORT = '#@import\s*' . self::STR . '#i';
 
 	/** image-set(…) to the end of its declaration (its strings whole): each string an address. */
-	const IMAGE_SET = '#image-set\(((?:"[^"]*"|\'[^\']*\'|[^;{}"\'])*)#i';
+	const IMAGE_SET = '#image-set\(((?:' . self::STR . '|[^;{}"\'])*)#i';
 
 	/** A string of CSS. */
-	const STRING = '#(?|"([^"]*)"|\'([^\']*)\')#';
+	const STRING = '#' . self::STR . '#';
 
 	/** The types of data: whose content is read (images; any other locks). */
 	const DATA_IMAGES = array( 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/svg+xml' );
@@ -57,16 +69,15 @@ final class AB_MCP_Sync_Css {
 	 * Read a text of CSS.
 	 *
 	 * @param string $css As stored.
-	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,strings:string[],lock:bool,data:string[]}
+	 * @return array{plain:string,decoded:string,comments:int[],urls:array<int,array{url:string,at:int}>,lock:bool,data:string[]}
 	 *               plain: without its comments; decoded: plain with its
 	 *               escapes decoded; comments: where each stood in plain;
 	 *               urls: the addresses and where they stand in the
-	 *               stored text; strings: every other string; lock: a
-	 *               backslash where it is no part of a selector or a
-	 *               property name (escapes()), an address not read to its
-	 *               end (a comment or a backslash in it, a url( or an
-	 *               @import not read); data: the addresses that are data:
-	 *               (for data()).
+	 *               stored text; lock: a backslash where it is no part of
+	 *               a selector or a property name (escapes()), an address
+	 *               not read to its end (a comment or a backslash in it, a
+	 *               url( or an @import not read); data: the addresses that
+	 *               are data: (for data()).
 	 */
 	public static function read( $css ) {
 		$css      = (string) $css;
@@ -161,23 +172,11 @@ final class AB_MCP_Sync_Css {
 			);
 		}
 		ksort( $urls );
-		// Every other string: read only (a custom property reaches
-		// image-set(var(…)) as an address).
-		$strings = array();
-		if ( preg_match_all( self::STRING, $plain, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
-			$targets = array_flip( array_column( $found, 1 ) );
-			foreach ( $all as $m ) {
-				if ( ! isset( $targets[ (int) $m[1][1] ] ) ) {
-					$strings[] = (string) $m[1][0];
-				}
-			}
-		}
 		return array(
 			'plain'    => $plain,
 			'decoded'  => self::unescaped( $plain ),
 			'comments' => array_column( $comments, 0 ),
 			'urls'     => array_values( $urls ),
-			'strings'  => $strings,
 			'lock'     => $lock,
 			'data'     => $data,
 		);

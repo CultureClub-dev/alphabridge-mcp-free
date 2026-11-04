@@ -344,6 +344,75 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( 1, SyncWakeupProbe::$woken, 'The probe counts.' );
 	}
 
+	/* --------------------------------------------------------- the net */
+
+	public function testTheNetLocksAHiddenReferenceInEveryUnit(): void {
+		// The net over the raw value (AB_MCP_Sync_Net; Thomas, 04.11.2026)
+		// runs at the end of every unit a kind canonicalizes: an address with
+		// an id no reader read (the JSON of a plugin in data-*, a short link
+		// in prose, base64, a string of CSS) locks the object at the unit.
+		$hidden = base64_encode( '{"src":"/?p=12"}' );
+		$net    = static function ( array $result ): array {
+			$out = array();
+			foreach ( $result['locks'] as $lock ) {
+				if ( '*:unread_reference' === $lock['key'] ) {
+					$out[] = $lock['at'];
+				}
+			}
+			sort( $out );
+			return $out;
+		};
+		$page = wp_insert_post(
+			array(
+				'post_title'   => 'Siehe /?p=12',
+				'post_content' => '<!-- wp:html --><a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a><!-- /wp:html -->',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			),
+			true
+		);
+		self::assertIsInt( $page );
+		add_post_meta( $page, 'acme_hidden', $hidden );
+		self::assertSame( array( 'meta:acme_hidden:net:raw/base64', 'post_content:net:raw', 'post_title:net:raw' ), $net( self::canon( 'post', $page ) ) );
+
+		$term = wp_insert_term( 'Versteckt', 'category', array( 'description' => 'Hinweis ' . $hidden ) );
+		self::assertSame( array( 'description:net:raw/base64' ), $net( self::canon( 'term', $term['term_id'] ) ) );
+
+		$menu = wp_create_nav_menu( 'Netz' );
+		$item = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Siehe /?p=12', 'menu-item-url' => 'https://example.test/', 'menu-item-status' => 'publish', 'menu-item-description' => $hidden ) );
+		self::assertSame( array( 'post_content:net:raw/base64', 'post_title:net:raw' ), $net( self::canon( 'menu_item', $item ) ) );
+
+		update_option( 'widget_acme_box', array( 4 => array( 'text' => $hidden ), '_multiwidget' => 1 ) );
+		update_option( 'sidebars_widgets', array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'acme_box-4' ), 'array_version' => 3 ) );
+		self::assertSame( array( 'widget:acme_box-4:net:raw/base64' ), $net( self::canon( 'widget_area', 'sidebar-1' ) ) );
+
+		wp_update_custom_css_post( '.x{--bild:"/?attachment_id=12";background-image:image-set(var(--bild) 1x)}' );
+		self::assertSame( array( 'css:net:raw' ), $net( self::canon( 'custom_css', get_stylesheet() ) ) );
+
+		update_option( 'acme_hidden', $hidden );
+		$option = self::canon( 'option', 'acme_hidden' );
+		self::assertSame( array( 'option_value:net:raw/base64' ), $net( $option ) );
+		self::assertContains( 'option:unclassified', array_column( $option['locks'], 'key' ), 'The lock of the table stands beside it.' );
+
+		set_theme_mod( 'acme_mod', $hidden );
+		self::assertSame( array( 'theme_mod:acme_mod:net:raw/base64' ), $net( self::canon( 'theme_mod', get_stylesheet() . '/acme_mod' ) ) );
+
+		// What the readers read as well is free of the net: the counts are equal.
+		$read = wp_insert_post(
+			array(
+				'post_title'   => 'Gelesen',
+				'post_content' => '<!-- wp:paragraph --><p><a href="/?p=12">Link</a> und <a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?page_id=13">Seite</a></p><!-- /wp:paragraph -->',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			),
+			true
+		);
+		self::assertIsInt( $read );
+		$result = self::canon( 'post', $read );
+		self::assertSame( array(), $net( $result ) );
+		self::assertSame( array( 12, 13 ), array_column( array_filter( $result['refs'], static fn( $r ) => 'post' === $r['space'] ), 'id' ) );
+	}
+
 	/* ------------------------------------------------ menu and widgets */
 
 	public function testMenusTheirItemsAndAWidgetAreaReadByTheirSchemas(): void {

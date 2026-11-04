@@ -33,7 +33,10 @@
  * a text holds a tag the HTML API cannot read (the unit suite, an
  * unfinished tag) the unit is unreadable. More locks than needed are
  * allowed; a credential overlooked because the structure was read
- * otherwise than the core reads it is not.
+ * otherwise than the core reads it is not. What no reader of the core
+ * reads (a data: address, base64, an SVG image with a script) is left to
+ * the net over the raw value (AB_MCP_Sync_Net), which locks the unit for a
+ * name with a value beside it that this check did not name.
  *
  * The answer per unit:
  * - b9: the name of the unit is one; the unit is group B9, not compared,
@@ -170,15 +173,11 @@ final class AB_MCP_Sync_Credentials {
 	 *                        JavaScript, else to unreadable_value or
 	 *                        php_object where it returns null.
 	 * @param bool     $css   Whether the text is CSS (read as style).
-	 * @param bool     $image Whether the text is an SVG image (a data: of
-	 *                        CSS): read as content of HTML, but no tag
-	 *                        outside the list locks and no script (an image
-	 *                        runs none).
 	 * @return string[]|null Null where the text could not be joined, its
 	 *                       tags could not be read (html()), or it holds a
 	 *                       script of JavaScript.
 	 */
-	public static function flat( $text, array $extra, $code = false, &$why = null, $css = false, $image = false ) {
+	public static function flat( $text, array $extra, $code = false, &$why = null, $css = false ) {
 		$why  = 'unreadable_value';
 		$text = (string) $text;
 		// Without these no decoding gives a key its = or :, and no tag (a
@@ -216,12 +215,12 @@ final class AB_MCP_Sync_Credentials {
 				return null;
 			}
 			// JavaScript no parser reads: a script of it locks the unit.
-			if ( $html['script'] && ! $image ) {
+			if ( $html['script'] ) {
 				$why = 'script';
 				return null;
 			}
 			// A tag or an attribute outside the list of the core locks it.
-			if ( $html['outside'] && ! $image ) {
+			if ( $html['outside'] ) {
 				$why = 'html_outside_kses';
 				return null;
 			}
@@ -258,20 +257,13 @@ final class AB_MCP_Sync_Credentials {
 			// Code: the text where it is the value of an attribute that looks
 			// like code. CSS (the text where it is CSS, style, every style
 			// attribute) as stored, with its comments (taken over as it is),
-			// and as AB_MCP_Sync_Css reads it: without them, and decoded; what
-			// a data: image holds as a text (data_keys()), any other data: is
-			// not read; a name its escapes give that the text without them
-			// does not hold counts as a key.
+			// and as AB_MCP_Sync_Css reads it: without them, and decoded (what
+			// a data: address holds is read by the net over the raw value,
+			// AB_MCP_Sync_Net); a name its escapes give that the text without
+			// them does not hold counts as a key.
 			$segments = $code ? array( $one ) : array();
 			foreach ( array_merge( $css ? array( $one ) : array(), $html['code'] ) as $style ) {
-				$read = AB_MCP_Sync_Css::read( $style );
-				foreach ( $read['data'] as $url ) {
-					$keys = self::data_keys( $url, $extra, $why );
-					if ( null === $keys ) {
-						return null;
-					}
-					$found = array_merge( $found, $keys );
-				}
+				$read       = AB_MCP_Sync_Css::read( $style );
 				$segments[] = $style;
 				$segments[] = $read['plain'];
 				if ( $read['decoded'] !== $read['plain'] ) {
@@ -503,42 +495,6 @@ final class AB_MCP_Sync_Credentials {
 	 */
 	private static function words( $text ) {
 		return preg_match_all( '/[A-Za-z0-9_\-\x80-\xFF]+/', (string) $text, $m ) ? array_values( array_unique( $m[0] ) ) : array();
-	}
-
-	/**
-	 * The keys in what an address data: of CSS holds (an image of
-	 * AB_MCP_Sync_Css::DATA_IMAGES, decoded): an SVG read as content of
-	 * HTML is (flat() as an image: its fields, its JSON as JSON, its CSS;
-	 * its text is text); a raster image as a text (FLAT_KEYS, with the
-	 * decodings). Null where it is no such image, does not decode or is not
-	 * read to its end.
-	 *
-	 * @param string   $url   The address.
-	 * @param string[] $extra Extra names.
-	 * @param string   $why   Set where it returns null.
-	 * @return string[]|null
-	 */
-	private static function data_keys( $url, array $extra, &$why ) {
-		$data = AB_MCP_Sync_Css::data( $url );
-		if ( null === $data ) {
-			return null;
-		}
-		if ( 'image/svg+xml' === $data['type'] ) {
-			return self::flat( $data['content'], $extra, false, $why, false, true );
-		}
-		$variants = self::decodings( $data['content'] );
-		if ( null === $variants ) {
-			return null;
-		}
-		$found = array();
-		foreach ( $variants as $variant ) {
-			foreach ( self::FLAT_KEYS as $pattern ) {
-				if ( preg_match_all( $pattern, $variant, $m ) ) {
-					$found = array_merge( $found, $m[1] );
-				}
-			}
-		}
-		return $found;
 	}
 
 	/**

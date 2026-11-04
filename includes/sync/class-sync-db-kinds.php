@@ -34,6 +34,7 @@ require_once __DIR__ . '/class-sync-rows.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-refs.php';
 require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-builder-lock.php';
 require_once __DIR__ . '/class-sync-inventory.php';
@@ -193,7 +194,8 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 			if ( $post && AB_MCP_Sync_Exclusions::post_meta( $row['key'] ) ) {
 				continue;
 			}
-			$at = 'meta:' . $row['key'];
+			$at   = 'meta:' . $row['key'];
+			$mark = AB_MCP_Sync_Net::mark( $acc );
 			if ( ! AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( $row['key'], $row['value'] ) ) ) {
 				continue;
 			}
@@ -201,6 +203,8 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 			if ( null === $value ) {
 				$value = AB_MCP_Sync_Canon::value( $row['value'], $ctx, $acc, $kind, $at, AB_MCP_Sync_Refs::possible_leaf( $acc, $at ) );
 			}
+			// The net over the raw value, after the readers of the unit.
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $row['value'], $ctx );
 			$out[] = array( $row['key'], $value );
 		}
 		return $out;
@@ -439,6 +443,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 				continue;
 			}
 			$value = $row[ $column ];
+			$mark  = AB_MCP_Sync_Net::mark( $acc );
 			AB_MCP_Sync_Credentials::column( $acc, 'post', $column, $value );
 			switch ( $column ) {
 				case 'post_content':
@@ -469,6 +474,8 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 				default:
 					$out[ $column ] = $value;
 			}
+			// The net over the raw value, after the readers of the column.
+			AB_MCP_Sync_Net::check( $acc, $mark, 'post', $column, $value, $ctx );
 		}
 		return $out;
 	}
@@ -617,15 +624,20 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	 * @return array
 	 */
 	protected static function term_form( array $row, array $ctx, array &$acc, $kind ) {
+		$texts = array();
 		foreach ( array( 'name', 'slug', 'description' ) as $column ) {
+			$mark = AB_MCP_Sync_Net::mark( $acc );
 			AB_MCP_Sync_Credentials::column( $acc, (string) $kind, $column, $row[ $column ] );
+			$texts[ $column ] = 'slug' === $column ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx, array(), $acc, $column );
+			// The net over the raw value, after the readers of the column.
+			AB_MCP_Sync_Net::check( $acc, $mark, (string) $kind, $column, $row[ $column ], $ctx );
 		}
 		return array(
 			'taxonomy'    => $row['taxonomy'],
-			'name'        => AB_MCP_Sync_Canon::text( $row['name'], $ctx, array(), $acc, 'name' ),
-			'slug'        => $row['slug'],
+			'name'        => $texts['name'],
+			'slug'        => $texts['slug'],
 			'term_group'  => $row['term_group'],
-			'description' => AB_MCP_Sync_Canon::text( $row['description'], $ctx, array(), $acc, 'description' ),
+			'description' => $texts['description'],
 			'parent'      => self::id_ref( 'term', $row['parent'], $acc, 'parent' ),
 		);
 	}
@@ -797,8 +809,11 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		}
 		$cols = array();
 		foreach ( self::ITEM_COLUMNS as $column ) {
+			$mark = AB_MCP_Sync_Net::mark( $acc );
 			AB_MCP_Sync_Credentials::column( $acc, 'menu_item', $column, $row[ $column ] );
 			$cols[ $column ] = in_array( $column, array( 'post_status', 'menu_order' ), true ) ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx, array(), $acc, $column );
+			// The net over the raw value, after the readers of the column.
+			AB_MCP_Sync_Net::check( $acc, $mark, 'menu_item', $column, $row[ $column ], $ctx );
 		}
 		$menus = array();
 		foreach ( $tax as $term ) {
@@ -964,6 +979,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 			}
 			$settings = isset( $rows[ $base ][ (int) $m[2] ] ) ? $rows[ $base ][ (int) $m[2] ] : null;
 			$at       = 'widget:' . $widget;
+			$mark     = AB_MCP_Sync_Net::mark( $acc );
 			if ( ! AB_MCP_Sync_Credentials::note( $acc, 'widget_area', $at, AB_MCP_Sync_Credentials::unit( $base, $settings ) ) ) {
 				continue;
 			}
@@ -971,6 +987,8 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 				'base'     => $base,
 				'settings' => null === $settings ? array( '~missing' => true ) : AB_MCP_Sync_Canon::structure( $settings, $ctx, $acc, 'widget_area', $at, self::leaf( $base, $ctx, $acc, $at ) ),
 			);
+			// The net over the raw value, after the readers of the instance.
+			AB_MCP_Sync_Net::check( $acc, $mark, 'widget_area', $at, $settings, $ctx );
 		}
 		return AB_MCP_Sync_Canon::finish( 'widget_area', $ref, array( 'area' => $ref ), array( 'area' => $ref, 'instances' => $instances ), $acc );
 	}
@@ -1128,13 +1146,20 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 			$mods            = array();
 		}
 		$linked = isset( $mods['custom_css_post_id'] ) && (int) $mods['custom_css_post_id'] === $id;
+		$css    = null;
 		foreach ( array( 'post_name', 'post_content', 'post_status' ) as $column ) {
+			$mark = AB_MCP_Sync_Net::mark( $acc );
 			// The content is CSS: read as CSS (credentials, url(…), escapes).
 			AB_MCP_Sync_Credentials::column( $acc, 'custom_css', $column, $row[ $column ], 'post_content' === $column );
+			if ( 'post_content' === $column ) {
+				$css = AB_MCP_Sync_Canon::text( $row['post_content'], array( 'css' => true ) + $source['ctx'], array(), $acc, 'css' );
+			}
+			// The net over the raw value, after the readers of the column.
+			AB_MCP_Sync_Net::check( $acc, $mark, 'custom_css', 'post_content' === $column ? 'css' : $column, $row[ $column ], $source['ctx'] );
 		}
 		$form = array(
 			'stylesheet' => $row['post_name'],
-			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], array( 'css' => true ) + $source['ctx'], array(), $acc, 'css' ),
+			'css'        => $css,
 			'status'     => $row['post_status'],
 		);
 		return AB_MCP_Sync_Canon::finish(
@@ -1283,6 +1308,7 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 		// The credential check comes before the guard: a name of a
 		// credential is B9 and counted as such (decision 9).
 		$acc   = AB_MCP_Sync_Canon::acc();
+		$mark  = AB_MCP_Sync_Net::mark( $acc );
 		$check = AB_MCP_Sync_Credentials::unit( $name, in_array( $class['status'], array( 'guarded', 'unreachable', 'unreadable' ), true ) ? '' : $raw );
 		if ( ! AB_MCP_Sync_Credentials::note( $acc, 'option', 'option:' . $name, $check ) ) {
 			return $this->bare( $name, array( 'status' => 'b9' ) + $class );
@@ -1301,6 +1327,8 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 			);
 			$value          = AB_MCP_Sync_Canon::value( $raw, $source['ctx'], $acc, 'option', 'option_value' );
 		}
+		// The net over the raw value, after the readers of the option.
+		AB_MCP_Sync_Net::check( $acc, $mark, 'option', 'option_value', $raw, $source['ctx'] );
 		$result           = AB_MCP_Sync_Canon::finish( 'option', $name, array( 'name' => $name ), array( 'name' => $name, 'value' => $value ), $acc );
 		$result['status'] = $class['status'];
 		return $result;
@@ -1339,11 +1367,15 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 				'reason' => $answer['reason'],
 				'at'     => 'theme_mod',
 			);
+			$mark = AB_MCP_Sync_Net::mark( $acc );
 			if ( ! AB_MCP_Sync_Credentials::note( $acc, 'option', 'theme_mod:' . $key, AB_MCP_Sync_Credentials::unit( (string) $key, $value ) ) ) {
 				$out[] = array( 'kind' => 'theme_mod' ) + $this->bare( $ref, array( 'status' => 'b9', 'key' => $answer['key'], 'stage' => null, 'reason' => null ) );
 				continue;
 			}
-			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $ref, array( 'name' => $row['name'], 'theme_mod' => (string) $key ), array( 'name' => $row['name'], 'theme_mod' => (string) $key, 'value' => AB_MCP_Sync_Canon::structure( $value, $source['ctx'], $acc, 'option', 'theme_mod:' . $key ) ), $acc );
+			$form = AB_MCP_Sync_Canon::structure( $value, $source['ctx'], $acc, 'option', 'theme_mod:' . $key );
+			// The net over the raw value, after the readers of the key.
+			AB_MCP_Sync_Net::check( $acc, $mark, 'option', 'theme_mod:' . $key, $value, $source['ctx'] );
+			$result           = AB_MCP_Sync_Canon::finish( 'theme_mod', $ref, array( 'name' => $row['name'], 'theme_mod' => (string) $key ), array( 'name' => $row['name'], 'theme_mod' => (string) $key, 'value' => $form ), $acc );
 			$result['status'] = 'locked';
 			$out[]            = $result;
 		}

@@ -268,9 +268,12 @@ final class AB_MCP_Sync_Urls {
 	 * backslash stands in the name of a function or an at-rule or in a value
 	 * (AB_MCP_Sync_Css::escapes()), where an address is not read to its end
 	 * (a comment or a backslash in it, a url( or an @import not read so),
-	 * where it hides one (css_hides()), where a data: is not free
-	 * (data_free()), and where any other string holds an address of the
-	 * sites with an id.
+	 * where it hides one (css_hides()) and where a data: is not free
+	 * (data_free()). Any other string (a custom property that reaches
+	 * image-set(var(…)) as an address) is not read here: an address with
+	 * an id in it locks through the net over the raw value
+	 * (AB_MCP_Sync_Net), which reads every string of the text whatever its
+	 * quotes and escapes.
 	 *
 	 * @param string $css    CSS.
 	 * @param array  $ctx    Context.
@@ -289,15 +292,6 @@ final class AB_MCP_Sync_Urls {
 				return array( self::lock( $base, strlen( $css ), ':css' ) );
 			}
 		}
-		// Any other string (a custom property reaches image-set(var(…)) as an
-		// address): an address of the sites with an id in it locks; it is
-		// rewritten only in url(), image-set() and @import.
-		foreach ( $read['strings'] as $string ) {
-			$hits = self::prose( $string, $ctx, AB_MCP_Sync_Canon::address_cuts( $string, $ctx ), array(), false );
-			if ( array() !== $hits || ( self::names_an_address( '', $string ) && array() !== self::address( $string, $ctx, null, $string ) ) ) {
-				return array( self::lock( $base, strlen( $css ), ':css' ) );
-			}
-		}
 		$out = array();
 		foreach ( $read['urls'] as $url ) {
 			$found = '' === $url['url'] ? null : self::read( $url['url'], $ctx );
@@ -312,10 +306,10 @@ final class AB_MCP_Sync_Urls {
 	/**
 	 * Whether an address data: of CSS is free: an image of
 	 * AB_MCP_Sync_Css::DATA_IMAGES that decodes, and what it holds names no
-	 * site; an SVG holds no address with an id and nothing that locks, read
-	 * as content of HTML is (AB_MCP_Sync_Canon::text(): its tags by the HTML
-	 * API, its CSS, its JSON). It cannot be rewritten in place: any hit
-	 * locks.
+	 * site (a host inside it cannot be replaced in place). An address with
+	 * an id or a credential inside it (an SVG with a link, a script, JSON)
+	 * locks through the net over the raw value (AB_MCP_Sync_Net), which
+	 * decodes every data: address of the text.
 	 *
 	 * @param string $url The address.
 	 * @param array  $ctx Context.
@@ -326,16 +320,21 @@ final class AB_MCP_Sync_Urls {
 		if ( null === $data ) {
 			return false;
 		}
-		$text = array_diff_key( $ctx, array( 'css' => true ) );
-		if ( self::names_a_site( $data['content'], $text ) ) {
-			return false;
-		}
-		if ( 'image/svg+xml' !== $data['type'] ) {
-			return true;
-		}
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Canon::text( $data['content'], $text, array(), $acc, 'data' );
-		return array() === $acc['refs'] && array() === $acc['spelling'];
+		return ! self::names_a_site( $data['content'], array_diff_key( $ctx, array( 'css' => true ) ) );
+	}
+
+	/**
+	 * How many ids one address names, as address() reads it where it stands
+	 * (rewritable where it is safe, else locked): the count the net over the
+	 * raw value (AB_MCP_Sync_Net) compares with what ids() read.
+	 *
+	 * @param string $url The address, to the end of an address (EXTENT).
+	 * @param array  $ctx Context.
+	 * @return int
+	 */
+	public static function ids_in( $url, array $ctx ) {
+		$url = (string) $url;
+		return count( self::address( $url, $ctx, 0, $url ) );
 	}
 
 	/**
@@ -754,12 +753,13 @@ final class AB_MCP_Sync_Urls {
 
 	/**
 	 * A text with the escapes of JSON for ASCII decoded (\/, \uXXXX below
-	 * 0x80), as JSON.parse() and json_decode() read them.
+	 * 0x80), as JSON.parse() and json_decode() read them; a layer of the
+	 * net over the raw value as well (AB_MCP_Sync_Net).
 	 *
 	 * @param string $text Text.
 	 * @return string
 	 */
-	private static function json_unescaped( $text ) {
+	public static function json_unescaped( $text ) {
 		return (string) preg_replace_callback(
 			'/\\\\u([0-9a-fA-F]{4})/',
 			static function ( $m ) {
