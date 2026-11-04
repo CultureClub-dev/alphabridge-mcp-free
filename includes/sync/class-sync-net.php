@@ -146,6 +146,14 @@ final class AB_MCP_Sync_Net {
 	 */
 	const QUERY = '#(?<!\\\\/)[?&]#';
 
+	/**
+	 * A query as parse_str() reads one, for "+" to be a space there
+	 * (decoded()): from a "?", or an "&" that begins no character reference
+	 * (&quot; of a style attribute is none), to a "#" or the end of the
+	 * address (a character AB_MCP_Sync_Urls::EXTENT ends it at).
+	 */
+	const QUERY_SPAN = '/(?:\?|&(?!#|[A-Za-z0-9]+;))[^#\s"\'`()<>{}|^\\\\]*/';
+
 	/** A span of base64: the alphabet and its padding, MIN_BASE64 or more in all (base64_spans()). */
 	const BASE64 = '#(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{8,}={0,2}(?![A-Za-z0-9+/=])#';
 
@@ -438,10 +446,10 @@ final class AB_MCP_Sync_Net {
 			$out['css']     = AB_MCP_Sync_Css::unescaped( $text );
 		}
 		if ( false !== strpos( $text, '%' ) ) {
-			// As parse_str() decodes a query and WP::parse_request() the path
-			// it matches against the rules: urldecode(), "+" a space (Codex,
-			// round 25, A-6: a share text as urlencode() writes it).
-			$out['percent'] = urldecode( $text );
+			// "+" a space in a query, as parse_str() decodes it (Codex, round
+			// 25, A-6: a share text as urlencode() writes it), elsewhere
+			// itself (round 26: image/svg+xml, a path).
+			$out['percent'] = rawurldecode( (string) preg_replace_callback( self::QUERY_SPAN, static fn( $m ) => str_replace( '+', ' ', $m[0] ), $text ) );
 		}
 		// Code: the text without its comments; made for a text with braces
 		// as well (Codex, round 24, A-1: the braces of code are counted there
@@ -547,7 +555,8 @@ final class AB_MCP_Sync_Net {
 	 * comments blanked) begins, read token by token in sequence (Codex,
 	 * round 25, A-1: a division before a literal hides none). Decided by
 	 * the token before a "/": after an operand it is a division – an
-	 * identifier that is no keyword (KEYWORDS), a number, "]", the end of a
+	 * identifier that is no keyword (KEYWORDS; of Unicode where the text is
+	 * UTF-8; after "." any name, a property), a number, "]", the end of a
 	 * string, ")" except the one of if, while, for or with
 	 * (PAREN_KEYWORDS), each also with a postfix ++ or -- after it; else it
 	 * begins a literal where another "/" stands on its line (none there: no
@@ -561,25 +570,33 @@ final class AB_MCP_Sync_Net {
 		$i       = 0;
 		$operand = false;
 		$word    = '';
+		$dot     = false;
 		$parens  = array();
+		// Identifiers of Unicode (Codex, round 26: 1 / π / 3) where the text
+		// is UTF-8, else of ASCII.
+		$name = 1 === preg_match( '//u', $text ) ? '/\G[\p{L}_$][\p{L}\p{N}_$]*/u' : '/\G[A-Za-z_$][A-Za-z0-9_$]*/';
 		while ( $i < $n ) {
 			$c = $text[ $i ];
 			if ( ctype_space( $c ) ) {
 				++$i;
 				continue;
 			}
-			$token = $word;
-			$word  = '';
+			$token    = $word;
+			$word     = '';
+			$property = $dot;
+			$dot      = false;
 			// A string (its content blanked): " and ' end at a line break.
 			if ( '"' === $c || "'" === $c || '`' === $c ) {
 				$i      += 2 + strcspn( $text, '`' === $c ? '`' : $c . "\n\r", $i + 1 );
 				$operand = true;
 				continue;
 			}
-			if ( preg_match( '/\G[A-Za-z_$][A-Za-z0-9_$]*/', $text, $m, 0, $i ) ) {
+			// After "." a name is a property, a keyword as well (obj.if(a),
+			// obj.return; Codex, round 26).
+			if ( preg_match( $name, $text, $m, 0, $i ) ) {
 				$i      += strlen( $m[0] );
-				$operand = ! in_array( $m[0], self::KEYWORDS, true );
-				$word    = $m[0];
+				$operand = $property || ! in_array( $m[0], self::KEYWORDS, true );
+				$word    = $property ? '' : $m[0];
 				continue;
 			}
 			if ( preg_match( '/\G[0-9][A-Za-z0-9_.]*/', $text, $m, 0, $i ) ) {
@@ -592,6 +609,8 @@ final class AB_MCP_Sync_Net {
 				// The end tag of HTML around the code (</a>, </code>): no "/"
 				// that begins a literal (as before round 24 in this layer).
 				++$i;
+			} elseif ( '.' === $c ) {
+				$dot = true;
 			} elseif ( '(' === $c ) {
 				$parens[] = in_array( $token, self::PAREN_KEYWORDS, true );
 			} elseif ( ')' === $c ) {

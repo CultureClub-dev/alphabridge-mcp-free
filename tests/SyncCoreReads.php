@@ -859,6 +859,19 @@ trait SyncCoreReads {
 			'B-1 a value of JSON on a line of its own' => array( "{\"a\":1}\n{\"url\":\"data:image/svg+x(ml;base64," . $svg . '"}', 'value', '*:unreadable_value@u:net:raw' ),
 			'B-1 the second candidate of image-set' => array( 'a{background-image:image-set("a.png" 1x, "data:image/svg+x(ml;base64,' . $svg . '" 2x)}', 'css', '*:unreadable_value@u:net:raw' ),
 			'B-1 in url()'                        => array( 'a{mask:url("data:image/svg+x(ml;base64,' . $svg . '")}', 'css', '*:unreadable_value@u:net:raw' ),
+			// Codex, round 26: "+" is a space in a query only (image/svg+xml,
+			// a path keep it); a keyword after "." is a property; identifiers
+			// of Unicode.
+			'an SVG mask, percent-encoded'        => array( 'a{mask:url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E")}', 'css', null ),
+			'an SVG in image-set(), percent-encoded' => array( 'a{background-image:image-set("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E" 1x)}', 'css', null ),
+			'an SVG in base64 beside a percentage' => array( 'a{width:100%;mask:url(data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"/>' ) . ')}', 'css', null ),
+			'an SVG mask in a style attribute'    => array( '<p style="width:100%;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E&quot;)">x</p>', 'content', null ),
+			'an upload with + and %20'            => array( '<p><img src="https://staging.test/wp-content/uploads/a+b%20c.jpg" alt=""></p>', 'content', null ),
+			'a method named if'                   => array( '<pre><code>const o={}; x = obj.if(a) / 2 / 3; label: "x";</code></pre>', 'content', null ),
+			'a method named while'                => array( '<pre><code>const o={}; x = obj.while(a) / 2 / 3; label: "x";</code></pre>', 'content', null ),
+			'a division by π'                     => array( '<pre><code>const o={}; x = 1 / π / 3; label: "x";</code></pre>', 'content', null ),
+			'a division of ä'                     => array( '<pre><code>const o={}; x = ä / 2; label: "x";</code></pre>', 'content', null ),
+			'A-1 if before a literal, still'      => array( '<pre><code>var o={k:(function(){ if (a) /}/.test(b) })(), api_key:"s"};</code></pre>', 'content', '*:unreadable_value@u:net:raw/code' ),
 		);
 	}
 

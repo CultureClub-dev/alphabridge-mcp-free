@@ -75,7 +75,12 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( 'a/bu002fc"d' . chr( 2 ) . 'f e%2Ff', $layers['raw/slashes'], 'stripcslashes(): \\u and an octal escape as C reads them.' );
 		self::assertSame( 'a/bu002fc"d/e%2Ff', $layers['raw/css'], 'AB_MCP_Sync_Css::unescaped(): \\/ and \\" the character, \\u the letter, \\2f the code point.' );
 		self::assertSame( 'a\\/b\\u002fc\\"d\\2f e/f', $layers['raw/percent'] );
-		self::assertSame( 'a b/c', self::layers( 'a+b%2Fc' )['raw/percent'], 'Codex, round 25 (A-6): "+" a space, as parse_str() decodes a query.' );
+		// Codex, round 25 (A-6): "+" a space in a query, as parse_str()
+		// decodes it, from "?" or "&" to "#" or the end of the address;
+		// round 26: elsewhere itself (a media type, a path).
+		self::assertSame( 'img/svg+xml?q=a b/c d+e x&h=i j#f+g', self::layers( 'img/svg+xml?q=a+b%2Fc d+e x&h=i+j#f+g' )['raw/percent'] );
+		self::assertSame( 'a+b/c "?q=x y"+z', self::layers( 'a+b%2Fc "?q=x+y"+z' )['raw/percent'] );
+		self::assertSame( 'url(&quot;data:image/svg+xml,<svg/>&quot;) &#38;b=c+d &amp;e=f+g', self::layers( 'url(&quot;data:image/svg+xml,%3Csvg/%3E&quot;) &#38;b=c+d &amp;e=f+g' )['raw/percent'], 'An "&" that begins a character reference begins no query.' );
 		self::assertArrayHasKey( 'raw/json/percent', $layers, 'Each layer again.' );
 		self::assertArrayNotHasKey( 'raw/percent/percent', $layers, 'A decoding that changes nothing is no layer.' );
 		self::assertSame( array( 'raw' => 'a%b' ), self::layers( 'a%b' ), 'No escape to decode: the text alone.' );
@@ -526,6 +531,7 @@ final class SyncNetTest extends TestCase {
 			'var o={k:[/\\/}/], api_key:"s"};',
 			'x = /a, token: "y"/.test(s)',
 			"x = 'a\n; r = /x/, token:\"y\"",
+			'var o={k:(function(){ a.b; if (a) /}/.test(b) })(), api_key:"s"};',
 		) as $text ) {
 			$undecidable = false;
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
@@ -553,6 +559,16 @@ final class SyncNetTest extends TestCase {
 			'a = 1, token:"x"; r = /}/',
 			'while; (a) / 2 / 3, token:"x"',
 			'<p>Siehe <a href="https://example.test/">hier</a> und <em>dort</em>, Ort: "Zürich"</p>',
+			// Codex, round 26: a property named as a keyword; identifiers of
+			// Unicode (of ASCII where the text is no UTF-8).
+			'x = obj.if(a) / 2 / 3, token:"x"',
+			'x = obj.while (a) / 2 / 3, token:"x"',
+			'x = obj. for(a) / 2 / 3, token:"x"',
+			'x = obj.return / 2 / 3, token:"x"',
+			'x = 1 / π / 3, token:"x"',
+			'x = ä / 2 / 3, token:"x"',
+			'x = straße / 2 / 3, token:"x"',
+			"x = a / b / c, token:\"x\" \xFF",
 		) as $text ) {
 			$undecidable = false;
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
@@ -711,6 +727,11 @@ final class SyncNetTest extends TestCase {
 			'const o={}; let x=4; x++ / 2 / 3; label: "x";',
 			'const o={}; a/b/c; (1)/2/3; 6/2; label: "x";',
 			'<p>Siehe <a href="https://example.test/">hier</a> und <em>dort</em>, Ort: Zürich</p>',
+			// Codex, round 26.
+			'<pre><code>const o={}; x = obj.if(a) / 2 / 3; label: "x";</code></pre>',
+			'<pre><code>const o={}; x = obj.while(a) / 2 / 3; label: "x";</code></pre>',
+			'<pre><code>const o={}; x = 1 / π / 3; label: "x";</code></pre>',
+			'<pre><code>const o={}; x = ä / 2; label: "x";</code></pre>',
 		) as $raw ) {
 			list( $locks ) = self::check( $raw );
 			self::assertSame( array(), $locks, $raw );
@@ -725,6 +746,16 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		list( $locks ) = self::check( '<p>Data: CSV/JSON</p> <p>Data: text/plain (UTF-8)</p>' );
 		self::assertSame( array(), $locks );
+		// Codex, round 26: an SVG as a data: address in CSS keeps its "+"
+		// (image/svg+xml) in the percent layer: free.
+		foreach ( array(
+			'a{mask:url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E")}',
+			'a{background-image:image-set("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E" 1x)}',
+			'a{width:100%;mask:url(data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"/>' ) . ')}',
+		) as $raw ) {
+			list( $locks ) = self::check( $raw );
+			self::assertSame( array(), $locks, $raw );
+		}
 		// Codex, round 25 (B-1): in quotes in prose as well; in a block
 		// attribute (JSON) it locks.
 		list( $locks ) = self::check( '<p>Format: "Data: CSV/JSON"</p> <p>Hinweis: "data: siehe Tabelle"</p>' );

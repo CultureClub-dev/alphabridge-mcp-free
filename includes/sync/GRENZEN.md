@@ -1,6 +1,6 @@
 # Grenzen des Kanonisierers (Z8, Zweig «Kanon»)
 
-Gesammelte Gruppe-C-Grenzen der Codex-Runden 20 bis 25: seltene oder
+Gesammelte Gruppe-C-Grenzen der Codex-Runden 20 bis 26: seltene oder
 konstruierte Schreibweisen, die der Kanonisierer absichtlich sperrt statt
 umschreibt (`*:reference_spelling`, `*:unread_reference`,
 `*:unread_credential`, `*:unreadable_value`). Je Grenze ein Satz mit
@@ -125,10 +125,11 @@ SyncNetTest, SyncCanonFormTest).
   Klammern – sperrt, weil das Netz nicht entscheidet, ob ein Name in einem
   offenen Objekt steht. In der Code-Schicht liest ein Scanner Token für
   Token; ein `/` nach einem Operanden (Bezeichner ausser Schlüsselwörtern,
-  Zahl, `)`, `]`, String-Ende, Postfix `++`/`--`) ist eine Division, der
-  `/` eines HTML-Endtags (`</a>`) beginnt nichts: `a/b/c`, `(1)/2/3`,
-  `x++ / 2 / 3` und Prosa mit `</a> …, Ort: Zürich` bleiben frei
-  (Runden 23–25).
+  auch in Unicode, nach `.` jeder Name als Eigenschaft; Zahl, `)`, `]`,
+  String-Ende, Postfix `++`/`--`) ist eine Division, der `/` eines
+  HTML-Endtags (`</a>`) beginnt nichts: `a/b/c`, `(1)/2/3`, `x++ / 2 / 3`,
+  `obj.if(a) / 2 / 3`, `1 / π / 3` und Prosa mit `</a> …, Ort: Zürich`
+  bleiben frei (Runden 23–26).
 - Dynamisch zusammengesetzte Namen in JavaScript (`${…}`, Verkettung)
   werden nicht als Zugangsdaten erkannt; das ist eine dokumentierte
   Grenze, keine Sperre (Runde 22).
