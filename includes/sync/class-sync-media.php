@@ -1,0 +1,584 @@
+<?php
+/**
+ * The file list of an attachment (Z8, decision 26 of the plan of
+ * 01.11.2026, the list only): exactly the files wp_delete_attachment_files()
+ * knows (wp-includes/post.php:6926-7045 of WordPress 7.1.3) — the file of
+ * _wp_attached_file, the thumb, every size of sizes, original_image,
+ * source_image, animated_video, animated_video_poster and every edit of
+ * _wp_attachment_backup_sizes — each with its path relative to the uploads,
+ * its size and its SHA-256. The integration suite holds the list against the
+ * core function.
+ *
+ * The paths are worked out as the core does (the same str_replace() of the
+ * file name, the backups beside the dirname of the metadata's file), from
+ * the stored meta rows and not through get_attached_file() or
+ * wp_get_attachment_metadata(), whose filters replace values. The uploads
+ * folder is the basedir the core deletes in, worked out by uploads() from
+ * the stored row of upload_path and the constants as _wp_upload_dir() does
+ * (wp-includes/functions.php:2467-2497, 2544): no function of WordPress reads a
+ * value for it. Where code decides it (a filter on upload_dir or on the
+ * option upload_path, a network of sites), the attachments lock
+ * (attachment:uploads_by_code).
+ *
+ * PATH RULES: relative, no "..", no absolute start, no scheme of a stream
+ * wrapper, no NUL, backslash or control character, each stored name asked
+ * before any function of a path or of the file system sees it (path_join()
+ * is not called: its path_is_absolute() asks a stream wrapper with
+ * is_dir()); an existing file is resolved with realpath() under the
+ * resolved basedir, with no symbolic link on the way, and must be a regular
+ * file. A path that breaks a rule locks the attachment
+ * (attachment:unsafe_path), a listed file that is not there as well
+ * (attachment:missing_file). reverse() maps each path to the attachments
+ * whose lists name it: a path two attachments share locks both
+ * (attachment:shared_path; the core itself keeps a thumb another attachment
+ * names, :6932-6936).
+ *
+ * @package AlphaBridge_MCP
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+require_once __DIR__ . '/class-sync-rows.php';
+require_once __DIR__ . '/class-sync-canon.php';
+
+/**
+ * Class AB_MCP_Sync_Media
+ */
+final class AB_MCP_Sync_Media {
+
+	/** The keys of the metadata whose text names one file beside the main one. */
+	const COMPANIONS = array( 'original_image', 'source_image', 'animated_video', 'animated_video_poster' );
+
+	/** The scheme of a stream wrapper (s3:, phar:, data:): no path of the uploads. */
+	const SCHEME = '/^[a-z][a-z0-9+.-]*:/i';
+
+	/** The meta keys the list is read from. */
+	const META_KEYS = array( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes' );
+
+	/**
+	 * The hooks through which code changes the basedir of wp_upload_dir():
+	 * its filter, and the filters get_option() and wp_load_alloptions() run
+	 * on the option upload_path (wp-includes/option.php).
+	 */
+	const UPLOAD_HOOKS = array( 'upload_dir', 'pre_option_upload_path', 'pre_option', 'default_option_upload_path', 'option_upload_path', 'pre_wp_load_alloptions', 'pre_cache_alloptions', 'alloptions' );
+
+	/**
+	 * The uploads folder of this site as wp_upload_dir() gives its basedir,
+	 * worked out from the stored row of upload_path and the constants as
+	 * _wp_upload_dir() of WordPress 7.1.3 does on a single site: an empty
+	 * upload_path or wp-content/uploads is WP_CONTENT_DIR/uploads, a path
+	 * that does not start with ABSPATH is joined to it, UPLOADS replaces
+	 * all of it. The value of the row is read raw and unpacked without
+	 * classes; get_option() would trim it after maybe_unserialize().
+	 *
+	 * @return array{dir:string,problem:string,cause:string} problem: '' (dir
+	 *         is the folder), by_code (cause names the hook, or multisite),
+	 *         php_object, unreadable or unsafe (cause upload_path).
+	 */
+	public static function uploads() {
+		if ( is_multisite() ) {
+			return self::uploads_problem( 'by_code', 'multisite' );
+		}
+		foreach ( self::UPLOAD_HOOKS as $hook ) {
+			if ( has_filter( $hook ) ) {
+				return self::uploads_problem( 'by_code', 'filter:' . $hook );
+			}
+		}
+		$row = AB_MCP_Sync_Rows::option( 'upload_path' );
+		if ( null === $row ) {
+			return self::uploads_problem( 'unreadable', 'upload_path' );
+		}
+		$path = '';
+		if ( is_array( $row ) ) {
+			$read = AB_MCP_Sync_Canon::unserialized( $row['value'] );
+			if ( ! $read['ok'] && 'php_object' === $read['why'] ) {
+				return self::uploads_problem( 'php_object', 'upload_path' );
+			}
+			// A text that does not unpack is false for maybe_unserialize(),
+			// '' for trim(); an array is no path (trim() refuses it).
+			$value = $read['ok'] ? $read['value'] : false;
+			if ( ! is_scalar( $value ) && null !== $value ) {
+				return self::uploads_problem( 'unreadable', 'upload_path' );
+			}
+			$path = trim( (string) $value );
+		}
+		// Before any function of a path sees it: no NUL, control character
+		// or backslash, no scheme of a stream wrapper (path_is_absolute()
+		// in path_join() would ask the wrapper with is_dir()).
+		if ( self::bad_bytes( $path ) || 1 === preg_match( self::SCHEME, $path ) ) {
+			return self::uploads_problem( 'unsafe', 'upload_path' );
+		}
+		if ( '' === $path || 'wp-content/uploads' === $path ) {
+			$dir = WP_CONTENT_DIR . '/uploads';
+		} elseif ( ! str_starts_with( $path, ABSPATH ) ) {
+			$dir = self::join( ABSPATH, $path );
+		} else {
+			$dir = $path;
+		}
+		if ( defined( 'UPLOADS' ) ) {
+			$dir = ABSPATH . UPLOADS;
+		}
+		if ( 1 === preg_match( self::SCHEME, (string) $dir ) ) {
+			return self::uploads_problem( 'unsafe', 'uploads' );
+		}
+		return array(
+			'dir'     => (string) $dir,
+			'problem' => '',
+			'cause'   => '',
+		);
+	}
+
+	/**
+	 * The paths of an attachment's files as wp_delete_attachment_files() works
+	 * them out, relative to the uploads, each with its role.
+	 *
+	 * @param string $attached _wp_attached_file as stored.
+	 * @param mixed  $meta     _wp_attachment_metadata unpacked.
+	 * @param mixed  $backup   _wp_attachment_backup_sizes unpacked.
+	 * @param string $basedir  The uploads folder (wp_get_upload_dir()).
+	 * @return array{files:array<int,array{path:string,roles:string[]}>,problems:array}
+	 */
+	public static function paths( $attached, $meta, $backup, $basedir ) {
+		$basedir  = rtrim( (string) $basedir, '/' );
+		$attached = (string) $attached;
+		$files    = array();
+		$problems = array();
+		// An empty or absolute _wp_attached_file names no file of the
+		// uploads, or a place of this site only; a scheme, "..", a NUL, a
+		// control character or a backslash none either (plain_name()).
+		if ( ! self::plain_name( $attached ) ) {
+			return array(
+				'files'    => array(),
+				'problems' => array(
+					array(
+						'path'    => self::bad_bytes( $attached ) ? '' : $attached,
+						'role'    => 'file',
+						'problem' => 'unsafe',
+					),
+				),
+			);
+		}
+		// get_attached_file(): a relative path is joined to basedir.
+		$file = $basedir . '/' . $attached;
+		$base = wp_basename( $file );
+		$meta = is_array( $meta ) ? $meta : array();
+
+		// Each name as the core puts it beside the file (str_replace() of its
+		// name); a name that is not plain (plain_name()) is a problem before
+		// any function of a path or of the file system sees it. The paths
+		// are joined as path_join() joins them (join()), without asking the
+		// file system.
+		$beside = array();
+		if ( ! empty( $meta['thumb'] ) && is_string( $meta['thumb'] ) ) {
+			$beside['thumb'] = $meta['thumb'];
+		}
+		if ( isset( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+			foreach ( $meta['sizes'] as $size => $info ) {
+				if ( is_array( $info ) && isset( $info['file'] ) && is_string( $info['file'] ) && '' !== $info['file'] ) {
+					$beside[ 'size:' . $size ] = $info['file'];
+				}
+			}
+		}
+		foreach ( self::COMPANIONS as $key ) {
+			if ( ! empty( $meta[ $key ] ) && is_string( $meta[ $key ] ) ) {
+				$beside[ $key ] = $meta[ $key ];
+			}
+		}
+		foreach ( $beside as $role => $name ) {
+			if ( ! self::plain_name( $name ) ) {
+				$problems[] = array(
+					'path'    => '',
+					'role'    => (string) $role,
+					'problem' => 'unsafe',
+				);
+				continue;
+			}
+			self::add( $files, $problems, self::join( $basedir, str_replace( $base, $name, $file ) ), (string) $role, $basedir );
+		}
+		if ( is_array( $backup ) ) {
+			$dir = isset( $meta['file'] ) && is_string( $meta['file'] ) ? $meta['file'] : '';
+			$dir = self::plain_name( $dir ) ? dirname( $dir ) : null;
+			foreach ( $backup as $name => $size ) {
+				if ( ! is_array( $size ) || ! isset( $size['file'] ) || ! is_string( $size['file'] ) || '' === $size['file'] ) {
+					continue;
+				}
+				if ( null === $dir || ! self::plain_name( $size['file'] ) ) {
+					$problems[] = array(
+						'path'    => '',
+						'role'    => 'backup:' . $name,
+						'problem' => 'unsafe',
+					);
+					continue;
+				}
+				self::add( $files, $problems, self::join( $basedir, self::join( $dir, $size['file'] ) ), 'backup:' . $name, $basedir );
+			}
+		}
+		self::add( $files, $problems, $file, 'file', $basedir );
+		return array(
+			'files'    => array_values( $files ),
+			'problems' => $problems,
+		);
+	}
+
+	/**
+	 * The file list of one attachment of this site, from its rows: each file
+	 * with path, roles, size and SHA-256; the problems of the path rules and
+	 * missing files.
+	 *
+	 * @param int $id Attachment id.
+	 * @return array{files:array,problems:array}|null Null when a row could not be read.
+	 */
+	public static function files( $id ) {
+		$raw = array();
+		foreach ( self::META_KEYS as $key ) {
+			$values = AB_MCP_Sync_Rows::meta_values( 'post', (int) $id, $key );
+			if ( null === $values ) {
+				return null;
+			}
+			$raw[ $key ] = array() === $values ? '' : $values[0];
+		}
+		$uploads = self::uploads();
+		if ( '' !== $uploads['problem'] ) {
+			// No folder to list in.
+			return array(
+				'files'    => array(),
+				'problems' => array(
+					array(
+						'path'    => '',
+						'role'    => 'uploads',
+						'problem' => $uploads['problem'],
+						'cause'   => $uploads['cause'],
+					),
+				),
+			);
+		}
+		$basedir = $uploads['dir'];
+		if ( AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+			return array(
+				'files'    => array(),
+				'problems' => array(
+					array(
+						'path'    => '',
+						'role'    => 'file',
+						'problem' => 'php_object',
+					),
+				),
+			);
+		}
+		$meta   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
+		$backup = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
+		$list   = self::paths( $raw['_wp_attached_file'], $meta['ok'] ? $meta['value'] : null, $backup['ok'] ? $backup['value'] : null, $basedir );
+		foreach ( array( '_wp_attachment_metadata' => $meta, '_wp_attachment_backup_sizes' => $backup ) as $key => $read ) {
+			if ( ! $read['ok'] ) {
+				$list['problems'][] = array(
+					'path'    => '',
+					'role'    => $key,
+					'problem' => 'php_object' === $read['why'] ? 'php_object' : 'unreadable',
+				);
+			}
+		}
+		return self::facts( $list, $basedir );
+	}
+
+	/**
+	 * Size and SHA-256 of each listed file, after the rules for an existing
+	 * source: resolved under the resolved basedir, no link on the way, a
+	 * regular file.
+	 *
+	 * @param array  $list    Answer of paths().
+	 * @param string $basedir Uploads folder.
+	 * @return array{files:array,problems:array}
+	 */
+	public static function facts( array $list, $basedir ) {
+		$root  = realpath( (string) $basedir );
+		$files = array();
+		foreach ( $list['files'] as $entry ) {
+			$why = false === $root ? 'missing' : self::source_problem( $root, $entry['path'] );
+			if ( '' !== $why ) {
+				$list['problems'][] = array(
+					'path'    => $entry['path'],
+					'role'    => implode( ',', $entry['roles'] ),
+					'problem' => $why,
+				);
+				continue;
+			}
+			$full = $root . '/' . $entry['path'];
+			$size = @filesize( $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed measurement is answered below.
+			$hash = @hash_file( 'sha256', $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- as above.
+			// A file that cannot be measured is not known: it locks.
+			if ( false === $size || false === $hash ) {
+				$list['problems'][] = array(
+					'path'    => $entry['path'],
+					'role'    => implode( ',', $entry['roles'] ),
+					'problem' => 'unreadable',
+				);
+				continue;
+			}
+			$files[] = $entry + array(
+				'size'   => (int) $size,
+				'sha256' => $hash,
+			);
+		}
+		$list['files'] = $files;
+		return $list;
+	}
+
+	/**
+	 * Lock the attachment of an accumulator for the problems of its list.
+	 *
+	 * @param array $acc  Accumulator.
+	 * @param array $list Answer of files().
+	 */
+	public static function note( array &$acc, array $list ) {
+		foreach ( $list['problems'] as $problem ) {
+			$ops = array(
+				'missing'    => 'missing_file',
+				'unreadable' => 'unreadable_value',
+				'php_object' => 'php_object',
+			);
+			$op  = isset( $ops[ $problem['problem'] ] ) ? $ops[ $problem['problem'] ] : 'unsafe_path';
+			$at  = 'file:' . $problem['path'];
+			if ( 'uploads' === $problem['role'] ) {
+				$op = 'by_code' === $problem['problem'] ? 'uploads_by_code' : $op;
+				$at = 'uploads:' . ( isset( $problem['cause'] ) ? $problem['cause'] : '' );
+			}
+			AB_MCP_Sync_Canon::lock( $acc, 'attachment', $op, $at );
+		}
+	}
+
+	/**
+	 * Whether a relative path keeps the rules of a path in a list: not
+	 * empty, relative, no "..", no NUL, backslash or control character.
+	 *
+	 * @param string $path Path.
+	 * @return bool
+	 */
+	public static function safe_path( $path ) {
+		$path = (string) $path;
+		if ( '' === $path || '/' === $path[0] || preg_match( '/[\x00-\x1F\x7F\\\\]/', $path ) || preg_match( '|^[A-Za-z]:|', $path ) ) {
+			return false;
+		}
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '' === $segment || '.' === $segment || '..' === $segment ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The attachments whose lists name each path, for a page of the
+	 * attachments of this site.
+	 *
+	 * @param int $after Attachment id the page before ended with.
+	 * @param int $limit Attachments at most (AB_MCP_Sync_Rows::page_size()).
+	 * @return array{paths:array<string,int[]>,cursor:int|null,complete:bool,unreadable:int[]}|null
+	 *         complete is false when a list could not be read in full (an
+	 *         object, a value that does not unpack, the uploads folder not
+	 *         known): those attachments are in unreadable and name no path.
+	 */
+	public static function reverse( $after, $limit ) {
+		$limit = AB_MCP_Sync_Rows::page_size( $limit );
+		$ids   = AB_MCP_Sync_Rows::post_ids( array( 'attachment' ), (int) $after, $limit );
+		if ( null === $ids ) {
+			return null;
+		}
+		$uploads    = self::uploads();
+		$basedir    = $uploads['dir'];
+		$paths      = array();
+		$unreadable = array();
+		$last       = null;
+		foreach ( $ids as $row ) {
+			$last = $row['ID'];
+			if ( '' !== $uploads['problem'] ) {
+				$unreadable[] = $row['ID'];
+				continue;
+			}
+			$raw = array();
+			foreach ( self::META_KEYS as $key ) {
+				$values = AB_MCP_Sync_Rows::meta_values( 'post', $row['ID'], $key );
+				if ( null === $values ) {
+					return null;
+				}
+				$raw[ $key ] = array() === $values ? '' : $values[0];
+			}
+			$meta   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
+			$backup = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
+			// A list that cannot be read in full names no paths: the map is
+			// incomplete, and the attachment is named so that it locks.
+			if ( ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+				$unreadable[] = $row['ID'];
+				continue;
+			}
+			$list = self::paths( $raw['_wp_attached_file'], $meta['value'], $backup['value'], $basedir );
+			foreach ( $list['files'] as $entry ) {
+				$paths[ $entry['path'] ][] = $row['ID'];
+			}
+		}
+		return array(
+			'paths'      => $paths,
+			'cursor'     => count( $ids ) < $limit ? null : $last,
+			'complete'   => array() === $unreadable,
+			'unreadable' => $unreadable,
+		);
+	}
+
+	/**
+	 * The paths of a reverse map that more than one attachment names.
+	 *
+	 * @param array<string,int[]> $paths Path => attachments.
+	 * @return array<string,int[]>
+	 */
+	public static function shared( array $paths ) {
+		$out = array();
+		foreach ( $paths as $path => $ids ) {
+			$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
+			if ( count( $ids ) > 1 ) {
+				sort( $ids );
+				$out[ (string) $path ] = $ids;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Lock an attachment for each of its paths another attachment names.
+	 *
+	 * @param array               $acc   Accumulator.
+	 * @param int                 $id    The attachment.
+	 * @param array               $list  Its list (files()).
+	 * @param array<string,int[]> $paths      Reverse map of the site.
+	 * @param int[]               $unreadable The attachments the map could not read.
+	 */
+	public static function note_shared( array &$acc, $id, array $list, array $paths, array $unreadable = array() ) {
+		// An attachment whose list the reverse map could not read: whether it
+		// shares a path is not known, it locks.
+		if ( in_array( (int) $id, array_map( 'intval', $unreadable ), true ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, 'attachment', 'unreadable_value', 'files' );
+		}
+		foreach ( $list['files'] as $entry ) {
+			$ids = isset( $paths[ $entry['path'] ] ) ? array_values( array_diff( array_map( 'intval', $paths[ $entry['path'] ] ), array( (int) $id ) ) ) : array();
+			if ( array() !== $ids ) {
+				AB_MCP_Sync_Canon::lock( $acc, 'attachment', 'shared_path', 'file:' . $entry['path'] );
+			}
+		}
+	}
+
+	/* ---------------------------------------------------------- private */
+
+	/**
+	 * @param string $problem Problem.
+	 * @param string $cause   Cause.
+	 * @return array{dir:string,problem:string,cause:string}
+	 */
+	private static function uploads_problem( $problem, $cause ) {
+		return array(
+			'dir'     => '',
+			'problem' => (string) $problem,
+			'cause'   => (string) $cause,
+		);
+	}
+
+	/**
+	 * @param string $text Part of a path.
+	 * @return bool Whether it holds a NUL, a control character or a backslash.
+	 */
+	private static function bad_bytes( $text ) {
+		return 1 === preg_match( '/[\x00-\x1F\x7F\\\\]/', (string) $text );
+	}
+
+	/**
+	 * Whether a stored name may go into a path at all: not empty, no scheme
+	 * of a stream wrapper, no NUL, control character or backslash, not
+	 * absolute, no "..". Asked before any function of a path or of the file
+	 * system sees the name.
+	 *
+	 * @param string $name Name as stored.
+	 * @return bool
+	 */
+	private static function plain_name( $name ) {
+		$name = (string) $name;
+		if ( '' === $name || self::bad_bytes( $name ) || '/' === $name[0] || 1 === preg_match( self::SCHEME, $name ) ) {
+			return false;
+		}
+		return ! in_array( '..', explode( '/', $name ), true );
+	}
+
+	/**
+	 * path_join() for paths plain_name() let through, or that start with
+	 * the uploads folder: an absolute path stays, any other is put below
+	 * the base. Without path_is_absolute(), which asks the file system
+	 * (realpath(), is_dir() of a stream).
+	 *
+	 * @param string $base Base.
+	 * @param string $path Path.
+	 * @return string
+	 */
+	private static function join( $base, $path ) {
+		$path = (string) $path;
+		return '' !== $path && '/' === $path[0] ? $path : rtrim( (string) $base, '/' ) . '/' . $path;
+	}
+
+	/**
+	 * One file of the list, relative to basedir, once per path with all its
+	 * roles.
+	 *
+	 * @param array  $files    Files by path.
+	 * @param array  $problems Problems.
+	 * @param string $full     Path as the core works it out.
+	 * @param string $role     Role.
+	 * @param string $basedir  Uploads folder.
+	 */
+	private static function add( array &$files, array &$problems, $full, $role, $basedir ) {
+		$full = (string) $full;
+		$rel  = '';
+		if ( '' !== $basedir && 0 === strpos( $full, $basedir . '/' ) ) {
+			$rel = substr( $full, strlen( $basedir ) + 1 );
+			// path_join( '.', … ) of a backup in the uploads folder itself.
+			while ( 0 === strpos( $rel, './' ) ) {
+				$rel = substr( $rel, 2 );
+			}
+		}
+		if ( ! self::safe_path( $rel ) ) {
+			$problems[] = array(
+				'path'    => '' === $rel ? $full : $rel,
+				'role'    => $role,
+				'problem' => 'unsafe',
+			);
+			return;
+		}
+		if ( ! isset( $files[ $rel ] ) ) {
+			$files[ $rel ] = array(
+				'path'  => $rel,
+				'roles' => array(),
+			);
+		}
+		$files[ $rel ]['roles'][] = $role;
+	}
+
+	/**
+	 * Why an existing source breaks the rules: '' when it does not, else
+	 * missing, link or not_file.
+	 *
+	 * @param string $root Resolved basedir.
+	 * @param string $rel  Relative path (safe_path()).
+	 * @return string
+	 */
+	private static function source_problem( $root, $rel ) {
+		$at = $root;
+		foreach ( explode( '/', $rel ) as $segment ) {
+			$at .= '/' . $segment;
+			if ( is_link( $at ) ) {
+				return 'link';
+			}
+			if ( ! file_exists( $at ) ) {
+				return 'missing';
+			}
+		}
+		$real = realpath( $at );
+		if ( false === $real || $real !== $root . '/' . $rel ) {
+			return 'link';
+		}
+		return 'file' === filetype( $real ) ? '' : 'not_file';
+	}
+}

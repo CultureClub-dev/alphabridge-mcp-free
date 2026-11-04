@@ -259,6 +259,10 @@ return array(
 			'why'  => 'Documents of page builders other than the six block libraries follow with Z8c.',
 			'plan' => 'Entscheid 31',
 		),
+		'post:builder_unknown'         => array(
+			'why'  => 'A reader for a builder without a signature recognises its pages only with its own code, which reads stored values unchecked: every post waits while one is registered.',
+			'plan' => 'Entscheid 31; Entscheid 11',
+		),
 		'attachment:replace_file'      => array(
 			'why'  => 'No file is overwritten in Z8; another file at the path locks the attachment.',
 			'plan' => 'Entscheid 26',
@@ -275,6 +279,66 @@ return array(
 		'*:mutual_references'          => array(
 			'why'  => 'Objects that need each other cannot be made visible together; measured in Z11c, then an item of its own.',
 			'plan' => 'Entscheid 14 und 16; Folgen für spätere Etappen',
+		),
+		'*:php_object'                 => array(
+			'why'  => 'A value with an object, a reference or a record is read only with its class; the walk of the replace engine refuses it before unserialize().',
+			'plugin' => array( array( 'includes/class-replace-engine.php', 532, 'public function carries_record( $text ) {' ) ),
+			'plan' => 'Entscheid 11 (unvollständige Klasse sperrt)',
+		),
+		'*:unreadable_value'           => array(
+			'why'  => 'A value that does not unpack is read by WordPress as false; one that nests deeper than MAX_DEPTH is not read to the end.',
+			'plan' => 'Entscheid 11',
+		),
+		'*:possible_reference'         => array(
+			'why'  => 'A whole number without a schema that equals the staging id of an object in the scope with another live id may be a reference no rule rewrites.',
+			'plan' => 'Entscheid 12 (möglicher Verweis)',
+		),
+		'*:reference_spelling'         => array(
+			'why'  => 'Where the stored text is not the spelling of the value WordPress reads (shortcode_parse_atts() takes backslash escapes, wp_filter_content_tags() the first wp-image-<id> of a tag), a rewrite of the stored digits would not be what WordPress reads: locked, not rewritten.',
+			'core' => array( array( 'wp-includes/media.php', 2009, "preg_match( '/wp-image-([0-9]+)/i', \$tag, \$class_id )" ) ),
+			'plan' => 'Entscheid 12 (Verweise nur mit bekanntem Schema)',
+		),
+		'*:credential_field'           => array(
+			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
+			'plan' => 'Entscheid 9',
+		),
+		'post:password_protected'      => array(
+			'why'  => 'The password of a protected post is a credential: the post locks, taken over by hand (Codex, round 16).',
+			'plan' => 'Entscheid 9',
+		),
+		'*:html_outside_kses'          => array(
+			'why'  => 'HTML outside the list of kses (srcdoc, SVG, embed, base …) holds what no reader of the core reads here: locked, taken over by hand (Codex, round 15).',
+			'plan' => 'Entscheid 9, Entscheid 12',
+		),
+		'*:script'                     => array(
+			'why'  => 'JavaScript in content has no parser in the core: ids, addresses and credentials in it are not read, so the unit is taken over by hand (Codex, round 13).',
+			'plan' => 'Entscheid 9, Entscheid 12',
+		),
+		'*:unread_reference'           => array(
+			'why'  => 'The net over the raw value (AB_MCP_Sync_Net) counts in every layer of text (decoded, data:, base64) the addresses of the sites with an id; where the readers of the core read fewer, an address would go to the live site unchanged and name another object there (Codex, rounds 18 to 20: CSS variables, data: images, the JSON of a plugin in data-*, a key twice in JSON).',
+			'plan' => 'Entscheid 12 (Verweise nur mit bekanntem Schema); Thomas 04.11.2026: ein Zähl-Netz über den Rohwert statt je Format eine Regel',
+		),
+		'*:unread_credential'          => array(
+			'why'  => 'The net over the raw value counts in every layer of text the names of credentials with a value beside them; a name the credential check did not name would reach the canonical form unlocked (Codex, rounds 19 and 20: an SVG image with JSON or a script, a dropped value of JSON).',
+			'plan' => 'Entscheid 9; Thomas 04.11.2026: ein Zähl-Netz über den Rohwert statt je Format eine Regel',
+		),
+		'attachment:missing_file'      => array(
+			'why'  => 'A listed file that is missing cannot be packed or compared.',
+			'plan' => 'Entscheid 26 (gelistete, aber fehlende Datei sperrt)',
+		),
+		'attachment:uploads_by_code'   => array(
+			'why'  => 'The uploads folder is worked out from the stored rows as _wp_upload_dir() does it; where a filter or a network decides it, only code knows, and the files lock.',
+			'core' => array( array( 'wp-includes/functions.php', 2429, "\$uploads = apply_filters( 'upload_dir', \$cache[ \$key ] );" ) ),
+			'plan' => 'Entscheid 26; Entscheid 11',
+		),
+		'attachment:unsafe_path'       => array(
+			'why'  => 'Only relative paths under the uploads, without links on the way, to regular files.',
+			'plan' => 'Entscheid 26 (Pfade)',
+		),
+		'option:off_schema'            => array(
+			'why'  => 'A core option whose value breaks its rule (sanitize_option() writes another) is not written as it is.',
+			'core' => array( array( 'wp-includes/formatting.php', 4923, 'function sanitize_option( $option, $value ) {' ) ),
+			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
 	),
 
@@ -361,6 +425,36 @@ return array(
 			'core' => array( array( 'wp-admin/includes/upgrade.php', 87, "update_option( 'fresh_site', 1, false );" ), array( 'wp-includes/functions.php', 4811, "update_option( 'fresh_site', '0', false );" ) ),
 			'plan' => 'Konzept 3',
 		),
+		'option:upload_path'                     => array(
+			'why'  => 'Where the uploads of each site lie on its disk (B6): another value on the live site moves where WordPress looks for its media.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 471, "'upload_path'" ), array( 'wp-includes/functions.php', 2469, "\$upload_path = trim( get_option( 'upload_path' ) );" ) ),
+			'plan' => 'Konzept 3; Entscheid 27',
+		),
+		'option:upload_url_path'                 => array(
+			'why'  => 'The address of the uploads of each site (B6).',
+			'core' => array( array( 'wp-admin/includes/schema.php', 484, "'upload_url_path'" ), array( 'wp-includes/functions.php', 2480, "\$url = get_option( 'upload_url_path' );" ) ),
+			'plan' => 'Konzept 3; Entscheid 27',
+		),
+		'option:finished_splitting_shared_terms' => array(
+			'why'  => 'Whether the core has split its shared terms on this site, written by the core itself.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 528, "'finished_splitting_shared_terms'" ), array( 'wp-includes/taxonomy.php', 4422, "update_option( 'finished_splitting_shared_terms', true );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:admin_email_lifespan'            => array(
+			'why'  => 'When the core asks the administrator of this site again to confirm the address (B6).',
+			'core' => array( array( 'wp-admin/includes/schema.php', 542, "'admin_email_lifespan'" ), array( 'wp-login.php', 623, "update_option( 'admin_email_lifespan', time() + \$remind_interval );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:auto_plugin_theme_update_emails' => array(
+			'why'  => 'The mails about failed automatic updates this site sent, noted by the core.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 547, "'auto_plugin_theme_update_emails'" ), array( 'wp-admin/includes/class-plugin-upgrader.php', 445, "update_option( 'auto_plugin_theme_update_emails', \$past_failure_emails );" ) ),
+			'plan' => 'Entscheid 27',
+		),
+		'option:wp_force_deactivated_plugins'    => array(
+			'why'  => 'The plugins the core deactivated on this site during an update of the core.',
+			'core' => array( array( 'wp-admin/includes/schema.php', 559, "'wp_force_deactivated_plugins'" ), array( 'wp-admin/includes/update-core.php', 2174, "update_option( 'wp_force_deactivated_plugins', \$deactivated_plugins, false );" ) ),
+			'plan' => 'Entscheid 27',
+		),
 		'option_prefix:_transient_'              => array(
 			'why'  => 'Transients are caches (B5).',
 			'core' => array( array( 'wp-includes/option.php', 1545, "'_transient_' . \$transient;" ) ),
@@ -422,6 +516,11 @@ return array(
 			'core' => array( array( 'wp-includes/post.php', 8245, "add_post_meta( \$post_id, '_pingme', '1', true );" ) ),
 			'plugin' => array( array( 'includes/tools/class-duplicate-meta.php', 48, "'_pingme'" ) ),
 			'plan' => 'Konzept 3',
+		),
+		'post_meta:_trackbackme'                 => array(
+			'why'  => 'A trackback job of the core not yet run, set when a post with addresses to ping is published.',
+			'core' => array( array( 'wp-includes/post.php', 8251, "add_post_meta( \$post_id, '_trackbackme', '1' );" ), array( 'wp-includes/comment.php', 3338, "delete_post_meta( \$trackback, '_trackbackme' );" ) ),
+			'plan' => 'Entscheid 11 (Folgedaten der Kern-Haken)',
 		),
 		'post_meta_prefix:_wp_trash_meta_'       => array(
 			'why'  => 'What the trash keeps to restore a post: its status, the time, the status of its comments.',

@@ -222,6 +222,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8c',
 			'reason' => 'A document of a page builder other than the six released block libraries.',
 		),
+		'post:builder_unknown'         => array(
+			'stage'  => 'Z8c',
+			'reason' => 'A plugin registers a reader for a page builder that has no signature here; which posts it built only that reader\'s code tells, so no post is taken over while it is registered.',
+		),
 		'attachment:replace_file'      => array(
 			'stage'  => 'Z8b',
 			'reason' => 'A different file at the path on the live site would be replaced.',
@@ -237,6 +241,63 @@ final class AB_MCP_Sync_Kinds {
 		'*:mutual_references'          => array(
 			'stage'  => 'Z11c',
 			'reason' => 'Objects that need each other cannot be made visible together in WordPress; how often that happens is measured first.',
+		),
+		// What the canonical form finds in an object (branch 4).
+		'*:php_object'                 => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A stored value holds a PHP object, a reference or a record that is read only with the code of its class; it is neither compared nor taken over without that class.',
+		),
+		'*:unreadable_value'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A stored value looks serialized but does not unpack, or nests deeper than it is read: nothing says what it holds.',
+		),
+		'*:possible_reference'         => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A whole number without a known schema equals the staging id of an object in the scope whose live id differs: it may point to that object, and no rule says whether to rewrite it.',
+		),
+		'*:reference_spelling'         => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A reference is stored in a spelling the rewriter does not write back as WordPress reads it (backslash escapes, character references, other quotes, the attribute twice, an image id outside the class): it is not rewritten.',
+		),
+		'*:credential_field'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go.',
+		),
+		'post:password_protected'      => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The post is protected by a password (post_password): the password is a credential, so the post is taken over by hand only.',
+		),
+		'*:html_outside_kses'          => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The value holds HTML outside the list of tags and attributes WordPress lets through in posts (kses), such as srcdoc, SVG, embed or base: what it names is not read, so it is taken over by hand only.',
+		),
+		'*:script'                     => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The value holds a script of JavaScript, which no parser of WordPress reads: what it names (ids, addresses, credentials) is not known, so it is taken over by hand only.',
+		),
+		'*:unread_reference'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A layer of the stored value (its text decoded, a data: address, base64, a string of CSS, JSON a plugin reads) holds an address of the sites that names an object by its id where no reader of WordPress read it: it would be taken over unchanged and name another object on the live site, so the object is taken over by hand only.',
+		),
+		'*:unread_credential'          => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A layer of the stored value (its text decoded, a data: address, base64, an image, a script of an image, a dropped value of JSON) holds the name of a credential with a value beside it that the credential check did not name: nothing of it is compared or packed, the object is taken over by hand only.',
+		),
+		'attachment:missing_file'      => array(
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the attachment\'s file list is not there.',
+		),
+		'attachment:uploads_by_code'   => array(
+			'stage'  => 'Z8b',
+			'reason' => 'Code decides where the uploads lie (a filter on upload_dir or on the option upload_path, as offload plugins add, or a network of sites): the files are neither compared nor taken over.',
+		),
+		'attachment:unsafe_path'       => array(
+			'stage'  => 'Z8b',
+			'reason' => 'A path of the attachment\'s file list is not a plain relative path under the uploads, or a link or no regular file lies on the way.',
+		),
+		'option:off_schema'            => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The stored value of a core option does not keep the rule of its schema.',
 		),
 	);
 

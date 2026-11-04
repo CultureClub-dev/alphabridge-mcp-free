@@ -46,3 +46,8 @@ if ( ! is_plugin_active( AB_MCP_IT_Sites::PLUGIN ) || ! defined( 'AB_MCP_DIR' ) 
 }
 
 require __DIR__ . '/support/class-test-sync-fetcher.php';
+// Steps on a site in a process of its own, for the canonical form (Z8
+// branch 4): each site computes it with its own WordPress.
+require __DIR__ . '/support/class-it-sync-steps.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-media.php';

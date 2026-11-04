@@ -1,0 +1,890 @@
+<?php
+/**
+ * The canonical form canon/1 (Z8, decision 11 of the plan of 01.11.2026):
+ * what the two sides of a takeover compare, built from the rows
+ * (AB_MCP_Sync_Rows), hashed with SHA-256.
+ *
+ * THE RULES OF canon/1:
+ * - Built from the rows, never through the filtered readers of WordPress.
+ * - Without what WordPress writes by itself on each site: the columns and
+ *   the meta, options and post types of AB_MCP_Sync_Exclusions (ids, guid,
+ *   times of the last change, counters, the pingback queue, revisions,
+ *   former slugs and dates). The kinds leave them out (AB_MCP_Sync_Db_Kinds).
+ * - References as typed markers: {"~ref":"post","id":12} in the ID space of
+ *   the site, {"~ref":"term","id":5}, an author as {"~ref":"user","login":…}
+ *   (the same on both sides). mapped() puts the ids of one side into the
+ *   ID space of the other, so that the forms of both can be compared.
+ * - The addresses of both sites in every form the replace engine knows
+ *   (AB_MCP_Replace_Engine::FORMS: plain, json, block_json, html, html_full,
+ *   block_json_html) as {"~addr":<form>}, so that a page with a link to its
+ *   own site hashes alike on staging and live. A string with markers in it
+ *   is {"~s":[text, marker, text, …]}.
+ * - Serialized values unpacked, nested ones too (up to MAX_LAYERS), with no
+ *   class allowed: {"~php":<value>}. A value that holds an object, a
+ *   reference or a record the walk of AB_MCP_Replace_Engine::carries_record()
+ *   does not understand, that does not unpack, or that nests deeper than
+ *   MAX_DEPTH locks its object (*:php_object, *:unreadable_value): it is
+ *   kept as text for the hash and never taken over. Whatever is not read
+ *   to its end for its depth (too_deep()) makes the object incomplete as
+ *   well (complete false, unread names the place).
+ * - A key of a stored array that begins with "~" gets one more "~", so no
+ *   stored value reads as a marker.
+ * - JSON with sorted keys (lists keep their order, a {"~set":[…]} is sorted
+ *   by its items), floats as {"~f":"<the 64 bits as hex>"} (independent of
+ *   serialize_precision), bytes that are not UTF-8 as {"~b":"<base64>"};
+ *   SHA-256 of that JSON.
+ * - The version is part of every form: a form of another version never
+ *   hashes alike, and version_refusal() refuses to compare it.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+require_once dirname( __DIR__ ) . '/class-replace-engine.php';
+require_once __DIR__ . '/class-sync-kinds.php';
+require_once __DIR__ . '/class-sync-rows.php';
+require_once __DIR__ . '/class-sync-urls.php';
+
+/**
+ * Class AB_MCP_Sync_Canon
+ */
+final class AB_MCP_Sync_Canon {
+
+	/** The version of the canonical form both sides must compute. */
+	const VERSION = 'canon/1';
+
+	/** How deep a stored value may nest (AB_MCP_Replace_Engine::MAX_DEPTH). */
+	const MAX_DEPTH = 64;
+
+	/** How many serialized strings inside one another are unpacked (AB_MCP_Replace_Engine::MAX_LAYERS). */
+	const MAX_LAYERS = 12;
+
+	/**
+	 * What may not follow an address for it to be one: a character that
+	 * continues the host or the path segment, a dot or colon followed by one
+	 * (a longer host, a port). "https://a.ch" is not the address in
+	 * "https://a.chx.com" or "https://a.ch:8080".
+	 */
+	const BOUNDARY = '(?![A-Za-z0-9_~%-]|[.:][A-Za-z0-9])';
+
+	/** @var AB_MCP_Replace_Engine|null For carries_record(). */
+	private static $engine = null;
+
+	/* ----------------------------------------------------------- version */
+
+	/**
+	 * The refusal to compare with a side of another version.
+	 *
+	 * @param string $theirs The version the other side computed.
+	 * @return WP_Error|null Null when it is this one.
+	 */
+	public static function version_refusal( $theirs ) {
+		if ( self::VERSION === $theirs ) {
+			return null;
+		}
+		return new WP_Error(
+			'ab_mcp_sync_canon_version',
+			sprintf( 'The other site computes its comparison data as %1$s and this site as %2$s, so the two cannot be compared. Update AlphaBridge MCP on both sites to the same version and try again.', is_string( $theirs ) && '' !== $theirs ? $theirs : 'an unknown version', self::VERSION ),
+			array(
+				'theirs' => is_string( $theirs ) ? $theirs : null,
+				'ours'   => self::VERSION,
+			)
+		);
+	}
+
+	/* ----------------------------------------------------------- context */
+
+	/**
+	 * What a canonical form is computed with: the addresses that are neutral
+	 * and the reader of user logins.
+	 *
+	 * @param string[]      $addresses The addresses of both sites (home and
+	 *                                 siteurl of each), as stored.
+	 * @param callable|null $users     function( int $id ): string|false|null,
+	 *                                 the login; AB_MCP_Sync_Rows::user_login()
+	 *                                 when null.
+	 * @param array|null    $routes    AB_MCP_Sync_Urls::routes() of the site
+	 *                                 whose content is read: its rewrite
+	 *                                 rules from its rows; null, the default,
+	 *                                 where they are not known: then a
+	 *                                 segment of digits in an address of the
+	 *                                 sites locks.
+	 * @param string[]|null $own       The addresses of that site, of
+	 *                                 $addresses; null: all of them.
+	 * @return array
+	 */
+	public static function context( array $addresses, $users = null, $routes = null, $own = null ) {
+		$forms  = array();
+		$owners = array();
+		$sites  = array();
+		$mine   = null === $own ? null : array_map(
+			static function ( $a ) {
+				return rtrim( trim( (string) $a ), '/' );
+			},
+			$own
+		);
+		foreach ( $addresses as $address ) {
+			$address = rtrim( trim( (string) $address ), '/' );
+			if ( ! preg_match( '#^(https?):(//([^/\s]+)(.*))#i', $address, $parts ) ) {
+				continue;
+			}
+			$sites[] = array(
+				'scheme' => strtolower( $parts[1] ),
+				'host'   => strtolower( $parts[3] ),
+				'path'   => $parts[4],
+				'own'    => null === $mine || in_array( $address, $mine, true ),
+			);
+			// With its scheme and without it ("//host/path"). Percent-encoded
+			// (the value of a query variable, redirect_to=https%3A%2F%2F…) it
+			// is no needle: the value is read by its round trip
+			// (AB_MCP_Sync_Urls::query_values(); Codex, round 23, A-1).
+			foreach ( array( $address, $parts[2] ) as $spelling ) {
+				foreach ( AB_MCP_Replace_Engine::needles( $spelling ) as $needle ) {
+					if ( ! isset( $forms[ $needle['needle'] ] ) ) {
+						$forms[ $needle['needle'] ] = $needle['form'];
+					}
+					$owners[ $needle['needle'] ] = ( isset( $owners[ $needle['needle'] ] ) && $owners[ $needle['needle'] ] ) || null === $mine || in_array( $address, $mine, true );
+				}
+			}
+		}
+		$needles = array_keys( $forms );
+		usort(
+			$needles,
+			static function ( $a, $b ) {
+				return strlen( (string) $b ) - strlen( (string) $a );
+			}
+		);
+		$alts = array();
+		foreach ( $needles as $needle ) {
+			$alts[] = preg_quote( (string) $needle, '#' );
+		}
+		return array(
+			'pattern'   => array() === $alts ? '' : '#(?:' . implode( '|', $alts ) . ')' . self::BOUNDARY . '#',
+			'forms'     => $forms,
+			'owners'    => $owners,
+			'sites'     => $sites,
+			'one_root'  => count( array_unique( array_column( $sites, 'path' ) ) ) <= 1,
+			'routes'    => is_array( $routes ) ? $routes : null,
+			// The charset of the HTML (source() reads it from the row).
+			'utf8'      => true,
+			'users'     => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
+		);
+	}
+
+	/**
+	 * The addresses of this site as its rows hold them (home and siteurl),
+	 * not as get_option() filters them.
+	 *
+	 * @return string[]|null Null when a row could not be read.
+	 */
+	public static function own_addresses() {
+		$out = array();
+		foreach ( array( 'home', 'siteurl' ) as $name ) {
+			$row = AB_MCP_Sync_Rows::option( $name );
+			if ( null === $row ) {
+				return null;
+			}
+			if ( is_array( $row ) && '' !== $row['value'] ) {
+				$out[] = $row['value'];
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/* ------------------------------------------------------- accumulator */
+
+	/**
+	 * What the walk over one object collects besides its form.
+	 *
+	 * @return array refs (typed references found by their schema), possible
+	 *               (whole numbers without a schema), locks, unread (what
+	 *               could not be read), credentials (decision 9), addressed
+	 *               (the (space, id) pairs of the addresses text() read,
+	 *               rewritten or locked: what AB_MCP_Sync_Net compares with).
+	 */
+	public static function acc() {
+		return array(
+			'refs'        => array(),
+			'possible'    => array(),
+			'locks'       => array(),
+			'unread'      => array(),
+			'deep'        => array(),
+			'spelling'    => array(),
+			'addressed'   => array(),
+			'credentials' => array(
+				'b9'    => array(),
+				'mixed' => array(),
+			),
+		);
+	}
+
+	/**
+	 * Note a reference stored in a spelling that is not rewritten as the
+	 * core reads it: finish() locks the object there
+	 * (*:reference_spelling); with a kind at once.
+	 *
+	 * @param array       $acc  Accumulator.
+	 * @param string      $at   Where.
+	 * @param string|null $kind Kind, when known.
+	 */
+	public static function spelling( array &$acc, $at, $kind = null ) {
+		if ( null !== $kind ) {
+			self::lock( $acc, $kind, 'reference_spelling', (string) $at );
+		}
+		if ( ! isset( $acc['spelling'] ) || ! in_array( (string) $at, $acc['spelling'], true ) ) {
+			$acc['spelling'][] = (string) $at;
+		}
+	}
+
+	/**
+	 * Note a place that nests deeper than it is read (MAX_DEPTH,
+	 * MAX_LAYERS, AB_MCP_Sync_Refs::MAX_NESTING): the object is incomplete,
+	 * and finish() locks it there (*:unreadable_value); with a kind at once.
+	 *
+	 * @param array       $acc  Accumulator.
+	 * @param string      $at   Where.
+	 * @param string|null $kind Kind, when known.
+	 */
+	public static function too_deep( array &$acc, $at, $kind = null ) {
+		$at = (string) $at;
+		if ( null !== $kind ) {
+			self::lock( $acc, $kind, 'unreadable_value', $at );
+		}
+		if ( ! isset( $acc['deep'] ) || ! in_array( $at, $acc['deep'], true ) ) {
+			$acc['deep'][]   = $at;
+			$acc['unread'][] = 'depth:' . $at;
+		}
+	}
+
+	/**
+	 * Note a lock of AB_MCP_Sync_Kinds::LOCKS on the object.
+	 *
+	 * @param array  $acc  Accumulator.
+	 * @param string $kind Kind.
+	 * @param string $op   The operation of the lock (such as php_object).
+	 * @param string $at   Where in the object.
+	 */
+	public static function lock( array &$acc, $kind, $op, $at ) {
+		$lock = AB_MCP_Sync_Kinds::lock( $kind, $op );
+		if ( null === $lock ) {
+			return;
+		}
+		foreach ( $acc['locks'] as $known ) {
+			if ( $known['key'] === $lock['key'] && $known['at'] === (string) $at ) {
+				return;
+			}
+		}
+		$acc['locks'][] = $lock + array( 'at' => (string) $at );
+	}
+
+	/**
+	 * The result of one object: its form, hash and what the walk found.
+	 *
+	 * @param string $kind     Pair kind (post, term, menu, menu_item, …).
+	 * @param string $ref      The object in the ID space of this site.
+	 * @param array  $identity What identifies it apart from its id.
+	 * @param array  $form     Its canonical form, without version and kind.
+	 * @param array  $acc      Accumulator.
+	 * @return array kind, ref, identity, canon, form, hash, size, refs,
+	 *               possible, locks, credentials, complete, unread.
+	 */
+	public static function finish( $kind, $ref, array $identity, array $form, array $acc ) {
+		foreach ( isset( $acc['deep'] ) ? $acc['deep'] : array() as $at ) {
+			self::lock( $acc, (string) $kind, 'unreadable_value', $at );
+		}
+		foreach ( isset( $acc['spelling'] ) ? $acc['spelling'] : array() as $at ) {
+			self::lock( $acc, (string) $kind, 'reference_spelling', $at );
+		}
+		$form = array(
+			'canon' => self::VERSION,
+			'kind'  => (string) $kind,
+		) + $form;
+		$json = self::encode( $form );
+		if ( '' === $json ) {
+			// What JSON cannot hold is no form two sites compare.
+			$acc['unread'][] = 'encode';
+			self::lock( $acc, (string) $kind, 'unreadable_value', 'form' );
+			$json = self::encode( array( 'canon' => self::VERSION, 'kind' => (string) $kind, 'unencodable' => true ) );
+		}
+		return array(
+			'kind'        => (string) $kind,
+			'ref'         => (string) $ref,
+			'identity'    => $identity,
+			'canon'       => self::VERSION,
+			'form'        => $form,
+			'hash'        => hash( 'sha256', $json ),
+			'size'        => strlen( $json ),
+			'refs'        => $acc['refs'],
+			'possible'    => $acc['possible'],
+			'locks'       => $acc['locks'],
+			'credentials' => $acc['credentials'],
+			'complete'    => array() === $acc['unread'],
+			'unread'      => $acc['unread'],
+		);
+	}
+
+	/* ------------------------------------------------------------ values */
+
+	/**
+	 * A reference to an object of this site.
+	 *
+	 * @param string $space post or term.
+	 * @param int    $id    Id.
+	 * @return array
+	 */
+	public static function ref( $space, $id ) {
+		return array(
+			'~ref' => (string) $space,
+			'id'   => (int) $id,
+		);
+	}
+
+	/**
+	 * How a stored id is read, for every place the core reads one (intval(),
+	 * absint(), (int), the items of wp_parse_id_list() and of an author list,
+	 * wp-image-<digits>, the attributes of blocks and shortcodes, the fields
+	 * of the kinds' own rows): the id where it is stored in the one spelling
+	 * that is rewritten, a JSON integer literal or a text of exactly the
+	 * digits [1-9][0-9]* (at most 18); 0 where it holds no id (0, -0, empty,
+	 * false, null, a text without a digit from 1 to 9); null for every other
+	 * form, which the core may read as a number other than 0 (a sign, an
+	 * exponent, a fraction, leading zeros, spaces, a float, a character
+	 * reference, digits mixed with other characters, more than 18 digits,
+	 * true, a list): the object locks (*:reference_spelling) and nothing is
+	 * rewritten (principle B).
+	 *
+	 * @param mixed $value Value as stored (decoded JSON in a block attribute).
+	 * @return int|null
+	 */
+	public static function id_spelling( $value ) {
+		if ( is_int( $value ) ) {
+			return $value > 0 ? $value : ( 0 === $value ? 0 : null );
+		}
+		if ( is_string( $value ) ) {
+			if ( 1 === preg_match( '/^[1-9][0-9]{0,17}\z/', $value ) ) {
+				return (int) $value;
+			}
+			return 1 === preg_match( '/[1-9]/', $value ) ? null : 0;
+		}
+		if ( is_float( $value ) ) {
+			return 0.0 === abs( $value ) ? 0 : null;
+		}
+		if ( null === $value || false === $value || array() === $value ) {
+			return 0;
+		}
+		return null;
+	}
+
+	/**
+	 * The ids of a text list as the core splits it, each with its offset and
+	 * id_spelling(); the items without an id (0) are left out.
+	 *
+	 * @param string $text  Text.
+	 * @param string $split The pattern of the separator: '/,/' as explode()
+	 *                      splits an author list, '/[\s,]+/' as
+	 *                      wp_parse_list() splits the list of
+	 *                      wp_parse_id_list().
+	 * @return array<int,array{at:int,len:int,id:int|null}>
+	 */
+	public static function id_tokens( $text, $split ) {
+		$out = array();
+		foreach ( preg_split( $split, (string) $text, -1, PREG_SPLIT_OFFSET_CAPTURE ) as $part ) {
+			$id = self::id_spelling( $part[0] );
+			if ( 0 !== $id ) {
+				$out[] = array(
+					'at'  => (int) $part[1],
+					'len' => strlen( $part[0] ),
+					'id'  => $id,
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A reference to a user, by login (the identity of an author on both
+	 * sides, decision 25).
+	 *
+	 * @param int    $id  User id; 0 for none.
+	 * @param array  $ctx Context.
+	 * @param array  $acc Accumulator.
+	 * @param string $at  Where.
+	 * @return array|int The marker, or 0 for no user.
+	 */
+	public static function user( $id, array $ctx, array &$acc, $at ) {
+		$id = (int) $id;
+		if ( $id <= 0 ) {
+			return 0;
+		}
+		$login = call_user_func( $ctx['users'], $id );
+		if ( null === $login ) {
+			$acc['unread'][] = (string) $at;
+			return array(
+				'~ref'   => 'user',
+				'unread' => $id,
+			);
+		}
+		$marker        = false === $login ? array(
+			'~ref'    => 'user',
+			'missing' => $id,
+		) : array(
+			'~ref'  => 'user',
+			'login' => (string) $login,
+		);
+		$acc['refs'][] = array(
+			'space'    => 'user',
+			'id'       => $id,
+			'login'    => false === $login ? null : (string) $login,
+			'at'       => (string) $at,
+			'strength' => 'strong',
+		);
+		return $marker;
+	}
+
+	/**
+	 * Items whose order does not count.
+	 *
+	 * @param array $items Items.
+	 * @return array
+	 */
+	public static function set( array $items ) {
+		return array( '~set' => array_values( $items ) );
+	}
+
+	/**
+	 * A text: as it is, or {"~s":[…]} with the addresses neutral and the
+	 * given cuts replaced by their markers.
+	 *
+	 * The ids the addresses of the sites name (AB_MCP_Sync_Urls::ids(): the
+	 * short links of WordPress, ?p=, ?page_id=, ?cat=, ?author= …, as
+	 * parse_str() reads them, and the ids the rewrite rules of the site take
+	 * from a path)
+	 * are references, noted in $acc; one in a form that is not rewritten
+	 * locks the object.
+	 *
+	 * @param string     $text  Text.
+	 * @param array      $ctx   Context.
+	 * @param array      $cuts  Cuts of the caller: at (byte offset), len, marker.
+	 * @param array|null $acc   Accumulator for the references of the addresses.
+	 * @param string     $at    Where the text stands.
+	 * @param bool       $whole The whole text is an address.
+	 * @return string|array
+	 */
+	public static function text( $text, array $ctx, array $cuts = array(), &$acc = null, $at = '', $whole = false ) {
+		$text      = (string) $text;
+		$addresses = self::address_cuts( $text, $ctx );
+		$theirs    = $cuts;
+		$cuts      = array_merge( $cuts, $addresses );
+		$acc       = is_array( $acc ) ? $acc : self::acc();
+		foreach ( AB_MCP_Sync_Urls::ids( $text, $ctx, $addresses, $whole ) as $query ) {
+			// In a cut of the caller (a tag with its own form) it is read there.
+			foreach ( $theirs as $cut ) {
+				if ( $query['at'] >= $cut['at'] && $query['at'] < $cut['at'] + $cut['len'] ) {
+					continue 2;
+				}
+			}
+			// Stored JSON: its canonical form by its round trip.
+			if ( isset( $query['json'] ) ) {
+				$cuts[] = array(
+					'at'     => $query['at'],
+					'len'    => $query['len'],
+					'marker' => AB_MCP_Sync_Refs::json_canon( $query['json'], $ctx, $acc, $at ),
+				);
+				continue;
+			}
+			// The value of a query variable that is an address (Codex, round
+			// 23, A-1): its canonical form by its round trip, decoded and
+			// read as one address, with the encoding it is stored in.
+			if ( isset( $query['enc'] ) ) {
+				$cuts[] = array(
+					'at'     => $query['at'],
+					'len'    => $query['len'],
+					'marker' => array(
+						'~enc' => $query['enc']['encoder'],
+						'v'    => self::text( $query['enc']['text'], $ctx, array(), $acc, $at . $query['what'], $query['enc']['whole'] ),
+					),
+				);
+				continue;
+			}
+			$where = $at . $query['what'];
+			// Every id of an address read here as its (space, id) pair,
+			// rewritten or locked ("?"): the net over the raw value
+			// (AB_MCP_Sync_Net) compares what it counts with them.
+			$acc['addressed'][] = $query['space'] . ':' . ( null === $query['id'] ? '?' : $query['id'] );
+			if ( null === $query['id'] ) {
+				self::spelling( $acc, $where );
+				continue;
+			}
+			if ( 'user' === $query['space'] ) {
+				$marker = self::user( $query['id'], $ctx, $acc, $where );
+			} else {
+				$acc['refs'][] = array(
+					'space'    => $query['space'],
+					'id'       => $query['id'],
+					'at'       => $where,
+					'strength' => 'strong',
+				);
+				$marker        = self::ref( $query['space'], $query['id'] );
+			}
+			$cuts[] = array(
+				'at'     => $query['at'],
+				'len'    => $query['len'],
+				'marker' => $marker,
+			);
+		}
+		if ( array() === $cuts ) {
+			return $text;
+		}
+		usort(
+			$cuts,
+			static function ( $a, $b ) {
+				return array( $a['at'], $b['len'] ) <=> array( $b['at'], $a['len'] );
+			}
+		);
+		$parts = array();
+		$pos   = 0;
+		foreach ( $cuts as $cut ) {
+			if ( $cut['at'] < $pos ) {
+				continue;
+			}
+			if ( $cut['at'] > $pos ) {
+				$parts[] = substr( $text, $pos, $cut['at'] - $pos );
+			}
+			$parts[] = $cut['marker'];
+			$pos     = $cut['at'] + $cut['len'];
+		}
+		if ( $pos < strlen( $text ) ) {
+			$parts[] = substr( $text, $pos );
+		}
+		return array( '~s' => $parts );
+	}
+
+	/**
+	 * Where the addresses of the context stand in a text.
+	 *
+	 * @param string $text Text.
+	 * @param array  $ctx  Context.
+	 * @return array<int,array{at:int,len:int,marker:array,form:string}>
+	 */
+	public static function address_cuts( $text, array $ctx ) {
+		if ( '' === $ctx['pattern'] || '' === (string) $text ) {
+			return array();
+		}
+		if ( ! preg_match_all( $ctx['pattern'], (string) $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $m[0] as $hit ) {
+			$form  = $ctx['forms'][ $hit[0] ];
+			$out[] = array(
+				'at'     => (int) $hit[1],
+				'len'    => strlen( $hit[0] ),
+				'marker' => array( '~addr' => $form ),
+				'form'   => $form,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * A stored value (meta, option, a widget's settings): unpacked where it is
+	 * serialized, its texts with the addresses neutral. What cannot be
+	 * unpacked locks the object and stays text.
+	 *
+	 * @param string|null $raw   As stored.
+	 * @param array       $ctx   Context.
+	 * @param array       $acc   Accumulator.
+	 * @param string      $kind  Kind, for the locks.
+	 * @param string      $at    Where.
+	 * @param callable    $leaf  Optional: function( $value, string $path ): mixed|null,
+	 *                           the schema of a kind; a non-null answer is the
+	 *                           canonical leaf (a reference, for one).
+	 * @return mixed
+	 */
+	public static function value( $raw, array $ctx, array &$acc, $kind, $at, $leaf = null ) {
+		if ( null === $raw ) {
+			return null;
+		}
+		return self::unpack( (string) $raw, $ctx, $acc, $kind, (string) $at, '', 0, $leaf );
+	}
+
+	/**
+	 * A value already unpacked (the settings of a widget instance out of its
+	 * option): the walk of value() over it.
+	 *
+	 * @param mixed         $value Value.
+	 * @param array         $ctx   Context.
+	 * @param array         $acc   Accumulator.
+	 * @param string        $kind  Kind.
+	 * @param string        $at    Where.
+	 * @param callable|null $leaf  Schema (see value()).
+	 * @return mixed
+	 */
+	public static function structure( $value, array $ctx, array &$acc, $kind, $at, $leaf = null ) {
+		return self::walk( $value, $ctx, $acc, (string) $kind, (string) $at, '', 1, 0, $leaf );
+	}
+
+	/**
+	 * Whether a stored value holds an object, a reference or a record the
+	 * walk of AB_MCP_Replace_Engine::carries_record() does not understand:
+	 * what maybe_unserialize() would turn into an object of any class (and
+	 * so run its __wakeup() or __unserialize()). Such a value never reaches a
+	 * function of WordPress that unserializes it.
+	 *
+	 * @param string|null $raw As stored.
+	 * @return bool
+	 */
+	public static function holds_record( $raw ) {
+		$raw = (string) $raw;
+		return is_serialized( $raw ) && self::engine()->carries_record( trim( $raw ) );
+	}
+
+	/**
+	 * A text that is JSON, decoded: an object or list, or a JSON string
+	 * literal (JSON encoded once more: the text it holds); null for any other
+	 * text; false for JSON nested deeper than json_decode() reads.
+	 *
+	 * @param string $text Text.
+	 * @return array|string|null|false
+	 */
+	public static function json_text( $text ) {
+		$trim = ltrim( (string) $text );
+		if ( '' === $trim || ( '{' !== $trim[0] && '[' !== $trim[0] && '"' !== $trim[0] ) ) {
+			return null;
+		}
+		$value = json_decode( (string) $text, true, 512 );
+		if ( JSON_ERROR_DEPTH === json_last_error() ) {
+			return false;
+		}
+		return is_array( $value ) || is_string( $value ) ? $value : null;
+	}
+
+	/**
+	 * A stored value unpacked, as WordPress reads it (maybe_unserialize()
+	 * without classes), or null with the reason when it cannot be.
+	 *
+	 * @param string $raw As stored.
+	 * @return array{ok:bool,value:mixed,why:string} why: '', php_object or unreadable_value.
+	 */
+	public static function unserialized( $raw ) {
+		$raw = (string) $raw;
+		if ( ! is_serialized( $raw ) ) {
+			return array(
+				'ok'    => true,
+				'value' => $raw,
+				'why'   => '',
+			);
+		}
+		$trimmed = trim( $raw );
+		if ( self::engine()->carries_record( $trimmed ) ) {
+			return array(
+				'ok'    => false,
+				'value' => null,
+				'why'   => 'php_object',
+			);
+		}
+		// carries_record() walks the format and refuses every object,
+		// Serializable, enum and reference record (and anything it does not
+		// understand) before unserialize() sees it; no class is allowed besides.
+		$value = @unserialize( $trimmed, array( 'allowed_classes' => false ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize, WordPress.PHP.NoSilencedErrors.Discouraged -- no class is made; carries_record() refused objects before.
+		if ( false === $value && 'b:0;' !== $trimmed ) {
+			return array(
+				'ok'    => false,
+				'value' => null,
+				'why'   => 'unreadable_value',
+			);
+		}
+		return array(
+			'ok'    => true,
+			'value' => $value,
+			'why'   => '',
+		);
+	}
+
+	/* ---------------------------------------------------------- encoding */
+
+	/**
+	 * The JSON of a form: keys sorted, sets sorted, floats and bytes tagged.
+	 *
+	 * @param mixed $form Form.
+	 * @return string
+	 */
+	public static function encode( $form ) {
+		$json = json_encode( self::prepared( $form ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION, 4096 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- the same bytes on every site, without WordPress' re-encoding.
+		return is_string( $json ) ? $json : '';
+	}
+
+	/**
+	 * @param mixed $form Form.
+	 * @return string SHA-256 of encode().
+	 */
+	public static function hash( $form ) {
+		return hash( 'sha256', self::encode( $form ) );
+	}
+
+	/**
+	 * A form with the ids of its references put into the ID space of the
+	 * other side (decision 10: «beidseitig geändert» compares the mapped
+	 * forms). A reference without a counterpart stays apart from every id
+	 * of the other side.
+	 *
+	 * @param mixed $form Form.
+	 * @param array $map  space => array( id here => id there ).
+	 * @return mixed
+	 */
+	public static function mapped( $form, array $map ) {
+		if ( ! is_array( $form ) ) {
+			return $form;
+		}
+		if ( isset( $form['~ref'], $form['id'] ) && is_string( $form['~ref'] ) ) {
+			$space = $form['~ref'];
+			$id    = (int) $form['id'];
+			unset( $form['id'] );
+			if ( isset( $map[ $space ][ $id ] ) && null !== $map[ $space ][ $id ] ) {
+				return array( 'id' => (int) $map[ $space ][ $id ] ) + $form;
+			}
+			return array( 'unmapped' => $id ) + $form;
+		}
+		foreach ( $form as $key => $item ) {
+			$form[ $key ] = self::mapped( $item, $map );
+		}
+		return $form;
+	}
+
+	/* ----------------------------------------------------------- private */
+
+	/**
+	 * @param string        $raw   Text, maybe serialized.
+	 * @param array         $ctx   Context.
+	 * @param array         $acc   Accumulator.
+	 * @param string        $kind  Kind.
+	 * @param string        $at    Where the value stands.
+	 * @param string        $path  Path inside the value.
+	 * @param int           $layer Serialized strings unpacked above.
+	 * @param callable|null $leaf  Schema.
+	 * @return mixed
+	 */
+	private static function unpack( $raw, array $ctx, array &$acc, $kind, $at, $path, $layer, $leaf ) {
+		if ( ! is_serialized( $raw ) ) {
+			if ( null !== $leaf ) {
+				$hit = call_user_func( $leaf, $raw, $path );
+				if ( null !== $hit ) {
+					return $hit;
+				}
+			}
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
+		}
+		if ( $layer >= self::MAX_LAYERS ) {
+			self::too_deep( $acc, $at, $kind );
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
+		}
+		$read = self::unserialized( $raw );
+		if ( ! $read['ok'] ) {
+			self::lock( $acc, $kind, $read['why'], $at );
+			return self::text( $raw, $ctx, array(), $acc, '' === $path ? $at : $at . '.' . $path );
+		}
+		return array( '~php' => self::walk( $read['value'], $ctx, $acc, $kind, $at, $path, $layer + 1, 0, $leaf ) );
+	}
+
+	/**
+	 * @param mixed         $value Unpacked value.
+	 * @param array         $ctx   Context.
+	 * @param array         $acc   Accumulator.
+	 * @param string        $kind  Kind.
+	 * @param string        $at    Where the value stands.
+	 * @param string        $path  Path inside it.
+	 * @param int           $layer Serialized strings unpacked above.
+	 * @param int           $depth Depth of $value.
+	 * @param callable|null $leaf  Schema.
+	 * @return mixed
+	 */
+	private static function walk( $value, array $ctx, array &$acc, $kind, $at, $path, $layer, $depth, $leaf ) {
+		if ( $depth > self::MAX_DEPTH ) {
+			self::too_deep( $acc, $at, $kind );
+			return null;
+		}
+		if ( is_string( $value ) ) {
+			return self::unpack( $value, $ctx, $acc, $kind, $at, $path, $layer, $leaf );
+		}
+		if ( null !== $leaf && ! is_array( $value ) ) {
+			$hit = call_user_func( $leaf, $value, $path );
+			if ( null !== $hit ) {
+				return $hit;
+			}
+		}
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		$out = array();
+		foreach ( $value as $key => $item ) {
+			$name = is_string( $key ) && '' !== $key && '~' === $key[0] ? '~' . $key : $key;
+			// Every value under a key css is CSS (AB_MCP_Sync_Css).
+			$sub          = 'css' === $key ? array( 'css' => true ) + $ctx : $ctx;
+			$out[ $name ] = self::walk( $item, $sub, $acc, $kind, $at, '' === $path ? (string) $key : $path . '.' . $key, $layer, $depth + 1, $leaf );
+		}
+		return $out;
+	}
+
+	/**
+	 * @param mixed $value Form.
+	 * @return mixed What json_encode() writes alike on every site.
+	 */
+	private static function prepared( $value ) {
+		if ( is_string( $value ) ) {
+			return 1 === preg_match( '//u', $value ) ? $value : array( '~b' => base64_encode( $value ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- bytes JSON cannot carry.
+		}
+		if ( is_float( $value ) ) {
+			// The 64 bits of the float, not a decimal text: var_export() and
+			// json_encode() write a float by serialize_precision, so two sites
+			// with other settings wrote one value two ways, and a low setting
+			// wrote two values one way. The bits are the value WordPress reads
+			// from the stored text (unserialize() or the JSON of a block)
+			// and writes back, on every site alike.
+			return array( '~f' => bin2hex( pack( 'E', $value ) ) );
+		}
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		if ( array( '~set' ) === array_keys( $value ) && is_array( $value['~set'] ) ) {
+			$items = array();
+			foreach ( $value['~set'] as $item ) {
+				$prepared = self::prepared( $item );
+				$items[]  = array( (string) json_encode( $prepared, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION, 4096 ), $prepared ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- see encode().
+			}
+			usort(
+				$items,
+				static function ( $a, $b ) {
+					return strcmp( $a[0], $b[0] );
+				}
+			);
+			return array( '~set' => array_column( $items, 1 ) );
+		}
+		if ( array_is_list( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = self::prepared( $item );
+			}
+			return $value;
+		}
+		// Keys as values: a key that is no UTF-8 by its bytes in hex behind a
+		// tag of its own ("~k:"), which no stored key carries (those that begin
+		// with "~" have one "~" more, walk()).
+		$out = array();
+		foreach ( $value as $key => $item ) {
+			$name         = is_string( $key ) && 1 !== preg_match( '//u', $key ) ? '~k:' . bin2hex( $key ) : $key;
+			$out[ $name ] = self::prepared( $item );
+		}
+		ksort( $out, SORT_STRING );
+		return $out;
+	}
+
+	/**
+	 * @return AB_MCP_Replace_Engine
+	 */
+	private static function engine() {
+		if ( null === self::$engine ) {
+			self::$engine = new AB_MCP_Replace_Engine( 'x', 'x' );
+		}
+		return self::$engine;
+	}
+}

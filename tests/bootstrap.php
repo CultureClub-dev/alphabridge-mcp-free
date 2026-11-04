@@ -2036,6 +2036,9 @@ require_once __DIR__ . '/support/blocks-functions.php';
 // WordPress' shortcode pattern and attribute parser, the yardstick for the
 // shortcode reader (same version, same kind of copy).
 require_once __DIR__ . '/support/shortcodes-functions.php';
+// WordPress' class that puts the matches into the query of a rewrite rule,
+// a fixed copy from 7.1.3: the rule search of AB_MCP_Sync_Urls::route().
+require_once __DIR__ . '/support/class-wp-matchesmapregex.php';
 require_once __DIR__ . '/../includes/builders/class-builders.php';
 require_once __DIR__ . '/../includes/tools/class-tools-content.php';
 require_once __DIR__ . '/../includes/tools/class-tools-builders.php';
