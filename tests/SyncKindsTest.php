@@ -241,6 +241,7 @@ final class SyncKindsTest extends TestCase {
 			'*:credential_field'           => array( $all, 'credential_field', 'Z8d' ),
 			'*:script'                     => array( $all, 'script', 'Z8d' ),
 			'*:html_outside_kses'          => array( $all, 'html_outside_kses', 'Z8d' ),
+			'post:password_protected'      => array( array( 'post' ), 'password_protected', 'Z8d' ),
 			'attachment:missing_file'      => array( array( 'attachment' ), 'missing_file', 'Z8b' ),
 			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),

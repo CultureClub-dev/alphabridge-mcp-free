@@ -127,7 +127,8 @@ final class SyncDbKindsTest extends TestCase {
 		);
 		$out = array();
 		// Every column of the form a text can stand in (wp-admin/includes/schema.php).
-		foreach ( array( 'post_content', 'post_title', 'post_excerpt', 'post_status', 'comment_status', 'ping_status', 'post_password', 'post_name', 'post_content_filtered', 'post_type', 'post_mime_type' ) as $column ) {
+		// post_password is a credential by its name (testAProtectedPostLocks()).
+		foreach ( array( 'post_content', 'post_title', 'post_excerpt', 'post_status', 'comment_status', 'ping_status', 'post_name', 'post_content_filtered', 'post_type', 'post_mime_type' ) as $column ) {
 			foreach ( $values as $what => list( $value, $field ) ) {
 				$out[ $column . ', ' . $what ] = array( $column, $value, $field );
 			}
@@ -137,7 +138,46 @@ final class SyncDbKindsTest extends TestCase {
 
 	#[DataProvider( 'credentialColumns' )]
 	public function testEachColumnOfAPostIsAUnitOfTheCredentialCheck( string $column, string $value, string $field ): void {
-		$row = array(
+		$row = self::post_row();
+		$ctx = AB_MCP_Sync_Canon::context(
+			array( 'https://staging.test' ),
+			static function ( int $id ) {
+				return 'user' . $id;
+			}
+		);
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array(), $acc['credentials']['mixed'], 'Clean without the value.' );
+		$row[ $column ] = $value;
+		$acc            = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array( array( 'unit' => $column, 'fields' => array( $field ) ) ), $acc['credentials']['mixed'] );
+		self::assertContains( array( '*:credential_field', $column ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
+	}
+
+	public function testAProtectedPostLocks(): void {
+		// Codex, round 16 (A2): post_password is a credential by its name.
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ) );
+		$row = self::post_row();
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array(), $acc['locks'], 'Without a password.' );
+		$row['post_password'] = 'demo-secret';
+		$acc                  = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
+		self::assertSame( array( array( 'unit' => 'post_password', 'fields' => array( 'post_password' ) ) ), $acc['credentials']['mixed'] );
+		$lock = array_values( array_filter( $acc['locks'], static fn( $l ) => 'post_password' === $l['at'] ) );
+		self::assertSame( array( 'post:password_protected', 'Z8d' ), array( $lock[0]['key'], $lock[0]['stage'] ) );
+		self::assertStringContainsString( 'by hand', $lock[0]['reason'] );
+		// A column of another kind named so: a field.
+		$acc = AB_MCP_Sync_Canon::acc();
+		\AB_MCP_Sync_Credentials::column( $acc, 'term', 'api_key', 'x' );
+		self::assertSame( array( '*:credential_field' ), array_column( $acc['locks'], 'key' ) );
+	}
+
+	/** A row of a post as the table holds it. */
+	private static function post_row(): array {
+		return array(
 			'ID'                    => '7',
 			'post_author'           => '1',
 			'post_date'             => '2026-10-01 10:00:00',
@@ -162,19 +202,5 @@ final class SyncDbKindsTest extends TestCase {
 			'post_mime_type'        => '',
 			'comment_count'         => '0',
 		);
-		$ctx = AB_MCP_Sync_Canon::context(
-			array( 'https://staging.test' ),
-			static function ( int $id ) {
-				return 'user' . $id;
-			}
-		);
-		$acc = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
-		self::assertSame( array(), $acc['credentials']['mixed'], 'Clean without the value.' );
-		$row[ $column ] = $value;
-		$acc            = AB_MCP_Sync_Canon::acc();
-		AB_MCP_Sync_Kind_Post::row_form( $row, $ctx, $acc );
-		self::assertSame( array( array( 'unit' => $column, 'fields' => array( $field ) ) ), $acc['credentials']['mixed'] );
-		self::assertContains( array( '*:credential_field', $column ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $acc['locks'] ) );
 	}
 }

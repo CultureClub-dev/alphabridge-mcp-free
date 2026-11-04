@@ -439,7 +439,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 				continue;
 			}
 			$value = $row[ $column ];
-			AB_MCP_Sync_Credentials::note( $acc, 'post', $column, AB_MCP_Sync_Credentials::unit( '', (string) $value ) );
+			AB_MCP_Sync_Credentials::column( $acc, 'post', $column, $value );
 			switch ( $column ) {
 				case 'post_content':
 					$out[ $column ] = AB_MCP_Sync_Refs::content( $value, $ctx, $acc, 'post', 'post_content' );
@@ -618,7 +618,7 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	 */
 	protected static function term_form( array $row, array $ctx, array &$acc, $kind ) {
 		foreach ( array( 'name', 'slug', 'description' ) as $column ) {
-			AB_MCP_Sync_Credentials::note( $acc, (string) $kind, $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
+			AB_MCP_Sync_Credentials::column( $acc, (string) $kind, $column, $row[ $column ] );
 		}
 		return array(
 			'taxonomy'    => $row['taxonomy'],
@@ -797,7 +797,7 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 		}
 		$cols = array();
 		foreach ( self::ITEM_COLUMNS as $column ) {
-			AB_MCP_Sync_Credentials::note( $acc, 'menu_item', $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
+			AB_MCP_Sync_Credentials::column( $acc, 'menu_item', $column, $row[ $column ] );
 			$cols[ $column ] = in_array( $column, array( 'post_status', 'menu_order' ), true ) ? $row[ $column ] : AB_MCP_Sync_Canon::text( $row[ $column ], $ctx, array(), $acc, $column );
 		}
 		$menus = array();
@@ -1129,11 +1129,12 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 		}
 		$linked = isset( $mods['custom_css_post_id'] ) && (int) $mods['custom_css_post_id'] === $id;
 		foreach ( array( 'post_name', 'post_content', 'post_status' ) as $column ) {
-			AB_MCP_Sync_Credentials::note( $acc, 'custom_css', $column, AB_MCP_Sync_Credentials::unit( '', (string) $row[ $column ] ) );
+			// The content is CSS: read as CSS (credentials, url(…), escapes).
+			AB_MCP_Sync_Credentials::column( $acc, 'custom_css', $column, $row[ $column ], 'post_content' === $column );
 		}
 		$form = array(
 			'stylesheet' => $row['post_name'],
-			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], $source['ctx'], array(), $acc, 'css' ),
+			'css'        => AB_MCP_Sync_Canon::text( $row['post_content'], array( 'css' => true ) + $source['ctx'], array(), $acc, 'css' ),
 			'status'     => $row['post_status'],
 		);
 		return AB_MCP_Sync_Canon::finish(

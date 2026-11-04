@@ -77,6 +77,9 @@ final class AB_MCP_Sync_Urls {
 	 */
 	const EXTENT = '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'`()<>{}|^\\\\])*#';
 
+	/** The url(…) of CSS: its address, quoted or not. */
+	const CSS_URL = '#url\(\s*(?|"([^"]*)"|\'([^\']*)\'|([^)\s"\']*))\s*\)#i';
+
 	/** The same at the beginning of an address, with its scheme and its host and port. */
 	const HOST_AT_START = '#^(?:(https?):)?(?://|\\\\/\\\\/)([^/?\#\\\\]*)#i';
 
@@ -107,7 +110,7 @@ final class AB_MCP_Sync_Urls {
 				// Without the HTML API, or where it cannot read to the end,
 				// nothing tells where a value ends: where an address may stand
 				// in one, it locks.
-				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/<script\b|(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . ')\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
+				return array() !== $addresses || self::names_a_site( $text, $ctx ) || preg_match( '/<(?:script|style)\b|(?<![A-Za-z0-9_:\-])(?:' . implode( '|', self::URL_ATTRIBUTES ) . '|style)\s*=/i', $text ) ? array( self::lock( 0, strlen( $text ), ':tags' ) ) : array();
 			}
 			foreach ( $tags as $tag ) {
 				$raw = substr( $text, $tag['at'], $tag['len'] );
@@ -139,6 +142,10 @@ final class AB_MCP_Sync_Urls {
 		}
 		if ( $whole ) {
 			return array_merge( $out, self::address( $text, $ctx, 0, $text ) );
+		}
+		// A text that is CSS (custom_css): its url(…) and escapes as CSS.
+		if ( ! empty( $ctx['css'] ) ) {
+			$out = array_merge( $out, self::css( $text, $ctx, 0, $text, true ) );
 		}
 		// In the attributes of shortcodes, as the core reads them: read as
 		// stored where the value is stored as it is read, once.
@@ -188,9 +195,13 @@ final class AB_MCP_Sync_Urls {
 			if ( 'SCRIPT' === $tag['tag'] && AB_MCP_Sync_Html::is_data_script( $tag['attrs'] ) ) {
 				$out = array_merge( $out, self::json_ids( json_decode( $tag['text'], true ), $ctx, '' ) );
 			}
+			// Style: CSS (url(…) without a host, its escapes).
+			if ( 'STYLE' === $tag['tag'] ) {
+				$out = array_merge( $out, self::css( $tag['text'], $ctx, $tag['at'] + $start, $text, true ) );
+			}
 			return array( array( $tag['at'], $tag['at'] + $start ), array( $tag['at'] + $closer, $end ) );
 		}
-		$out = array_merge( $out, self::prose( $tag['text'], $ctx, AB_MCP_Sync_Canon::address_cuts( $tag['text'], $ctx ), array(), false ) );
+		$out = array_merge( $out, self::prose( $tag['text'], $ctx, AB_MCP_Sync_Canon::address_cuts( $tag['text'], $ctx ), array(), false ), 'STYLE' === $tag['tag'] ? self::css( $tag['text'], $ctx, 0, $tag['text'], false ) : array() );
 		return array( array( $tag['at'], $end ) );
 	}
 
@@ -209,15 +220,81 @@ final class AB_MCP_Sync_Urls {
 	private static function css_ids( $raw, $value, array $ctx, $base ) {
 		$span = AB_MCP_Sync_Html::value_span( $raw, 'style', $value );
 		if ( null === $span ) {
-			return self::prose( $value, $ctx, AB_MCP_Sync_Canon::address_cuts( $value, $ctx ), array(), false );
+			return array_merge( self::prose( $value, $ctx, AB_MCP_Sync_Canon::address_cuts( $value, $ctx ), array(), false ), self::css( $value, $ctx, 0, $value, false ) );
 		}
 		$css = (string) substr( $raw, $span[0], $span[1] );
 		$out = array();
-		foreach ( self::prose( $css, $ctx, AB_MCP_Sync_Canon::address_cuts( $css, $ctx ), array(), true ) as $hit ) {
+		foreach ( array_merge( self::prose( $css, $ctx, AB_MCP_Sync_Canon::address_cuts( $css, $ctx ), array(), true ), self::css( $css, $ctx, 0, $css, true ) ) as $hit ) {
 			$hit['at'] += $base + $span[0];
 			$out[]      = $hit;
 		}
 		return $out;
+	}
+
+	/**
+	 * What CSS holds beside the addresses with a host (those prose() reads):
+	 * the addresses of url(…) without the host, read as any address
+	 * (root: rewritten as stored where safe, relative to the page: page_ids(),
+	 * a query with ids locks); and where the escapes of CSS (\2d, \-)
+	 * decoded give more addresses of the sites than the stored text, it
+	 * locks (css_unescaped()).
+	 *
+	 * @param string $css    CSS.
+	 * @param array  $ctx    Context.
+	 * @param int    $base   Where it stands in $text.
+	 * @param string $text   The text it stands in.
+	 * @param bool   $stored Whether it is stored as read (else locked).
+	 * @return array See ids().
+	 */
+	private static function css( $css, array $ctx, $base, $text, $stored ) {
+		$out   = array();
+		$plain = self::css_unescaped( $css );
+		if ( $plain !== $css && ( count( AB_MCP_Sync_Canon::address_cuts( $plain, $ctx ) ) > count( AB_MCP_Sync_Canon::address_cuts( $css, $ctx ) ) || ( self::names_a_site( $plain, $ctx ) && ! self::names_a_site( $css, $ctx ) ) ) ) {
+			$out[] = self::lock( $base, strlen( $css ), ':css' );
+		}
+		if ( preg_match_all( self::CSS_URL, $css, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $all as $m ) {
+				$url  = (string) $m[1][0];
+				$read = '' === $url ? null : self::read( $url, $ctx );
+				if ( null === $read || ! in_array( $read['form'], array( 'root', 'page' ), true ) ) {
+					continue;
+				}
+				$out = array_merge( $out, self::address( $url, $ctx, $stored ? $base + (int) $m[1][1] : null, $text ) );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A text of CSS with its escapes decoded as CSS reads them: a backslash
+	 * with one to six hex digits and one white space after them, the code
+	 * point (0, a surrogate or past U+10FFFF: U+FFFD); a backslash before a
+	 * line break, nothing; before any other character, that character.
+	 *
+	 * @param string $css CSS.
+	 * @return string
+	 */
+	public static function css_unescaped( $css ) {
+		if ( false === strpos( (string) $css, '\\' ) ) {
+			return (string) $css;
+		}
+		return (string) preg_replace_callback(
+			'/\\\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|(\r\n|[\n\r\f])|(.))/su',
+			static function ( $m ) {
+				if ( isset( $m[3] ) && '' !== $m[3] ) {
+					return $m[3];
+				}
+				if ( isset( $m[2] ) && '' !== $m[2] ) {
+					return '';
+				}
+				$code = hexdec( $m[1] );
+				if ( 0 === $code || ( $code >= 0xD800 && $code <= 0xDFFF ) || $code > 0x10FFFF ) {
+					$code = 0xFFFD;
+				}
+				return mb_chr( (int) $code, 'UTF-8' );
+			},
+			(string) $css
+		);
 	}
 
 	/**

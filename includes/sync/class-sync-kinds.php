@@ -263,6 +263,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go.',
 		),
+		'post:password_protected'      => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The post is protected by a password (post_password): the password is a credential, so the post is taken over by hand only.',
+		),
 		'*:html_outside_kses'          => array(
 			'stage'  => 'Z8d',
 			'reason' => 'The value holds HTML outside the list of tags and attributes WordPress lets through in posts (kses), such as srcdoc, SVG, embed or base: what it names is not read, so it is taken over by hand only.',

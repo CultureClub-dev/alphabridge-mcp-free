@@ -121,12 +121,13 @@ final class AB_MCP_Sync_Credentials {
 	 *                             serialized) or already unpacked.
 	 * @param string[]|null $extra The names a site redacts on top
 	 *                             (AB_MCP_Redactor::extra_keys() when null).
+	 * @param bool          $css   Whether the value is CSS (custom_css).
 	 * @return array{state:string,fields:string[],why?:string} why, for an
 	 *               unreadable unit: php_object or unreadable_value.
 	 */
-	public static function unit( $name, $value, $extra = null ) {
+	public static function unit( $name, $value, $extra = null, $css = false ) {
 		$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();
-		if ( AB_MCP_Redactor::redacts_key( (string) $name, $extra ) ) {
+		if ( self::names_credential( (string) $name, $extra ) ) {
 			return array(
 				'state'  => 'b9',
 				'fields' => array(),
@@ -134,7 +135,7 @@ final class AB_MCP_Sync_Credentials {
 		}
 		$fields   = array();
 		$why      = 'unreadable_value';
-		$readable = self::walk( $value, '', $extra, $fields, 0, 0, $why );
+		$readable = self::walk( $value, '', $extra, $fields, 0, 0, $why, false, $css );
 		if ( ! $readable ) {
 			return array(
 				'state'  => 'unreadable',
@@ -165,16 +166,17 @@ final class AB_MCP_Sync_Credentials {
 	 * @param string   $why   Set to script where the text holds a script of
 	 *                        JavaScript, else to unreadable_value or
 	 *                        php_object where it returns null.
+	 * @param bool     $css   Whether the text is CSS (read as style).
 	 * @return string[]|null Null where the text could not be joined, its
 	 *                       tags could not be read (html()), or it holds a
 	 *                       script of JavaScript.
 	 */
-	public static function flat( $text, array $extra, $code = false, &$why = null ) {
+	public static function flat( $text, array $extra, $code = false, &$why = null, $css = false ) {
 		$why  = 'unreadable_value';
 		$text = (string) $text;
 		// Without these no decoding gives a key its = or :, and no tag (a
 		// script) stands in it.
-		if ( false === strpbrk( $text, '=:%&\\<' ) ) {
+		if ( ! $css && false === strpbrk( $text, '=:%&\\<' ) ) {
 			return array();
 		}
 		$texts = array( $text );
@@ -215,9 +217,13 @@ final class AB_MCP_Sync_Credentials {
 				return null;
 			}
 			// A script of JSON is read as JSON, as any structure (walk(): keys,
-			// lists of name and value, nested, within MAX_DEPTH).
-			foreach ( $html['json'] as $json ) {
+			// lists of name and value, nested, within MAX_DEPTH); so is the
+			// value of an attribute that is JSON of an array or an object.
+			foreach ( array_merge( $html['json'], $html['values'] ) as $i => $json ) {
 				$value = json_decode( $json, true );
+				if ( $i >= count( $html['json'] ) && ! is_array( $value ) ) {
+					continue;
+				}
 				if ( JSON_ERROR_NONE !== json_last_error() ) {
 					return null;
 				}
@@ -229,11 +235,13 @@ final class AB_MCP_Sync_Credentials {
 					$found[] = ltrim( (string) $field, '~' );
 				}
 			}
-			foreach ( $code ? array_merge( array( $one ), $html['code'] ) : $html['code'] as $segment ) {
+			foreach ( array_merge( $code || $css ? array( $one ) : array(), $html['code'] ) as $segment ) {
 				$variants = self::decodings( $segment );
 				if ( null === $variants ) {
 					return null;
 				}
+				// CSS reads its escapes (\2d, \-): the name as CSS reads it.
+				$variants[] = AB_MCP_Sync_Urls::css_unescaped( $segment );
 				foreach ( $variants as $variant ) {
 					if ( preg_match_all( self::CODE_KEY, $variant, $m ) ) {
 						$found = array_merge( $found, $m[1] );
@@ -266,13 +274,14 @@ final class AB_MCP_Sync_Credentials {
 	 * its end: what is not read is never clean.
 	 *
 	 * @param string $text Text.
-	 * @return array{code:string[],json:string[],fields:string[],script:bool,outside:bool}|null
+	 * @return array{code:string[],json:string[],values:string[],fields:string[],script:bool,outside:bool}|null
 	 */
 	private static function html( $text ) {
 		global $allowedposttags;
 		$out = array(
 			'code'    => array(),
 			'json'    => array(),
+			'values'  => array(),
 			'fields'  => array(),
 			'script'  => false,
 			'outside' => false,
@@ -324,10 +333,21 @@ final class AB_MCP_Sync_Credentials {
 				if ( 'style' === $name ) {
 					$out['code'][] = $value;
 				}
+				// A value that may be JSON (data-config='[…]'), read as JSON.
+				if ( preg_match( '/^\s*[\[{]/', $value ) ) {
+					$out['values'][] = $value;
+				}
+				// An embedded document (data:), and object with data, whose
+				// rule of the core (_wp_kses_allow_pdf_objects()) reads the
+				// uploads through options: outside.
+				$url = trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
+				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) ) || ( 'object' === $tag_name && 'data' === $name ) ) {
+					$out['outside'] = true;
+				}
 				// An event attribute and a javascript: address (as the URL
 				// parser reads it: without tabs and line breaks, C0 and spaces
 				// trimmed) are JavaScript as well.
-				if ( 0 === strpos( $name, 'on' ) || 0 === stripos( trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" ), 'javascript:' ) ) {
+				if ( 0 === strpos( $name, 'on' ) || 0 === stripos( $url, 'javascript:' ) ) {
 					$out['script'] = true;
 				}
 				if ( ( 'name' === $name || 'id' === $name ) && in_array( $tag['tag'], self::FORM_TAGS, true ) ) {
@@ -346,7 +366,7 @@ final class AB_MCP_Sync_Credentials {
 	 * @param string[] $extra Extra names.
 	 * @return bool
 	 */
-	private static function names_credential( $name, array $extra ) {
+	public static function names_credential( $name, array $extra ) {
 		foreach ( array_merge( array( (string) $name ), explode( '.', (string) $name ) ) as $part ) {
 			if ( AB_MCP_Redactor::redacts_key( ltrim( $part, '~' ), $extra ) ) {
 				return true;
@@ -358,7 +378,8 @@ final class AB_MCP_Sync_Credentials {
 	/**
 	 * Whether kses lets an attribute of a tag through, by its name as
 	 * wp_kses_attr_check() reads it: listed (not ''), or data-… where the tag
-	 * takes data-* (wp-includes/kses.php, the pattern of a data attribute).
+	 * takes data-* (wp-includes/kses.php:1628-1629, its pattern
+	 * /^data-[a-z0-9_-]+$/ on the name in lower case).
 	 *
 	 * @param array  $allowed The attributes of the tag.
 	 * @param string $name    The attribute, in lower case.
@@ -368,7 +389,7 @@ final class AB_MCP_Sync_Credentials {
 		if ( isset( $allowed[ $name ] ) && '' !== $allowed[ $name ] && false !== $allowed[ $name ] ) {
 			return true;
 		}
-		return 0 === strpos( $name, 'data-' ) && ! empty( $allowed['data-*'] ) && 1 === preg_match( '/^data(?:-[a-z0-9_]+)+$/', $name );
+		return 0 === strpos( $name, 'data-' ) && ! empty( $allowed['data-*'] ) && 1 === preg_match( '/^data-[a-z0-9_-]+$/', $name );
 	}
 
 	/**
@@ -428,6 +449,32 @@ final class AB_MCP_Sync_Credentials {
 	}
 
 	/**
+	 * The check of a column of a row: a column named like a credential
+	 * (names_credential(), as a field) that holds a value locks its object
+	 * (post_password: a post protected by a password, *:password_protected;
+	 * else *:credential_field), its value not read further; every other
+	 * column is a unit (unit(), its CSS as CSS where $css).
+	 *
+	 * @param array  $acc    Accumulator.
+	 * @param string $kind   Kind.
+	 * @param string $column Column.
+	 * @param mixed  $value  As stored.
+	 * @param bool   $css    Whether the column holds CSS.
+	 * @return void
+	 */
+	public static function column( array &$acc, $kind, $column, $value, $css = false ) {
+		if ( '' !== (string) $value && self::names_credential( (string) $column, AB_MCP_Redactor::extra_keys() ) ) {
+			$acc['credentials']['mixed'][] = array(
+				'unit'   => (string) $column,
+				'fields' => array( (string) $column ),
+			);
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'post_password' === $column ? 'password_protected' : 'credential_field', $column );
+			return;
+		}
+		self::note( $acc, $kind, $column, self::unit( '', (string) $value, null, $css ) );
+	}
+
+	/**
 	 * Note the answer of unit() in an accumulator of AB_MCP_Sync_Canon, and
 	 * lock the object for a mixed unit and for one that could not be read to
 	 * its end (fail closed: what is not read is never clean).
@@ -467,15 +514,17 @@ final class AB_MCP_Sync_Credentials {
 	 *                         it could not be read.
 	 * @param bool     $code   Inside the attributes of a block or a
 	 *                         shortcode: its texts are code (flat()).
+	 * @param bool     $css    The text is CSS (custom_css, the value of a
+	 *                         key css, as global styles store it).
 	 * @return bool Whether all of it could be read.
 	 */
-	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why, $code = false ) {
+	private static function walk( $value, $path, array $extra, array &$fields, $depth, $layers, &$why, $code = false, $css = false ) {
 		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH || $layers > AB_MCP_Sync_Canon::MAX_LAYERS ) {
 			$why = 'unreadable_value';
 			return false;
 		}
 		if ( is_string( $value ) ) {
-			$flat = self::flat( $value, $extra, $code, $why );
+			$flat = self::flat( $value, $extra, $code, $why, $css );
 			if ( null === $flat ) {
 				return false;
 			}
@@ -530,7 +579,7 @@ final class AB_MCP_Sync_Credentials {
 				$fields[] = $sub;
 				continue;
 			}
-			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why, $code ) ) {
+			if ( ! self::walk( $item, $sub, $extra, $fields, $depth + 1, $layers, $why, $code, 'css' === $key ) ) {
 				return false;
 			}
 		}

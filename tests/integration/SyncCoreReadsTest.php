@@ -269,6 +269,27 @@ final class SyncCoreReadsTest extends TestCase {
 		self::assertSame( array(), array_values( array_filter( $result['locks'], static fn( $l ) => '*:script' === $l['key'] ) ) );
 	}
 
+	public function testAdditionalCssIsReadAsCss(): void {
+		// Codex, round 16 (A5, C1): custom_css with a credential, an address
+		// without a host in url(…).
+		$this->permalinks( '/archives/%post_id%/' );
+		$post   = self::post( 'ziel' );
+		$canon  = static function (): array {
+			return \AB_MCP_Sync_Db_Kinds::for_pair( 'custom_css' )->canonical(
+				array(
+					'kind'   => 'custom_css',
+					'ref'    => get_stylesheet(),
+					'source' => AB_MCP_Sync_Inventory::source( AB_MCP_IT_Sync_Steps::addresses() ),
+				)
+			);
+		};
+		wp_update_custom_css_post( '.x { --api-key: demo-secret; }' );
+		self::assertContains( '*:credential_field', array_column( $canon()['locks'], 'key' ) );
+		wp_update_custom_css_post( 'q::before { content: "\\201C"; } body { background: url("/?p=' . $post . '"); }' );
+		$result = $canon();
+		self::assertSame( array( array( $post ), array() ), array( array_column( $result['refs'], 'id' ), array_column( $result['locks'], 'key' ) ) );
+	}
+
 	public function testAnotherCharsetThanUtf8IsNotRead(): void {
 		// Codex, round 12 (1): the charset from its row; not UTF-8, not read.
 		$this->permalinks( '/archives/%post_id%/' );

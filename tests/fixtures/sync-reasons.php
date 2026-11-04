@@ -302,6 +302,10 @@ return array(
 			'why'  => 'A field with the name of a credential inside a unit makes it mixed: locked until a field rule.',
 			'plan' => 'Entscheid 9',
 		),
+		'post:password_protected'      => array(
+			'why'  => 'The password of a protected post is a credential: the post locks, taken over by hand (Codex, round 16).',
+			'plan' => 'Entscheid 9',
+		),
 		'*:html_outside_kses'          => array(
 			'why'  => 'HTML outside the list of kses (srcdoc, SVG, embed, base …) holds what no reader of the core reads here: locked, taken over by hand (Codex, round 15).',
 			'plan' => 'Entscheid 9, Entscheid 12',

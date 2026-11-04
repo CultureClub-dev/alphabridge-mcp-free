@@ -102,6 +102,12 @@ trait SyncCoreReads {
 			'a dot before the name'   => array( '<script type="application/json">[{"name":"v1.token","value":"x"}]</script>' ),
 			// Codex, round 15: the CSS of a style attribute as that of style.
 			'a textarea by its id'    => array( '<textarea id="api_key">x</textarea>' ),
+			// Codex, round 16 (A3): JSON in an attribute as JSON.
+			'JSON in a data attribute' => array( "<div data-config='[{\"name\":\"api_key\",\"value\":\"demo-secret\"}]'></div>" ),
+			'JSON in a data attribute as references' => array( '<div data-config="[{&quot;name&quot;:&quot;token&quot;,&quot;value&quot;:&quot;x&quot;}]"></div>' ),
+			// Codex, round 16 (A6): the escapes of CSS.
+			'an escaped name in a style attribute' => array( '<div style="--api\\2d key: demo-secret">x</div>' ),
+			'an escaped name in style' => array( '<style>.x{--client\\-secret:1}</style>' ),
 			'a property in a style attribute' => array( '<div style="--api-key: demo-secret">x</div>' ),
 			'a property in a style attribute, spaced' => array( '<p style="color:red; --client-secret :x">x</p>' ),
 			// Codex, round 14 (A1): the same structure as JSON of a meta value.
@@ -182,6 +188,12 @@ trait SyncCoreReads {
 			'srcset'                  => array( '<img src="a.jpg" srcset="a-300.jpg 300w" alt="">' ),
 			'a tag of a plugin'       => array( '<acme-widget data-x="1"></acme-widget>' ),
 			'an input'                => array( '<input type="text" name="q">' ),
+			// Codex, round 16 (A4): an embedded document, object with data.
+			'a data: document in an iframe' => array( '<iframe src="data:text/html;base64,' . base64_encode( '<script>window.api_key="demo-secret"</script>' ) . '"></iframe>' ),
+			'a data: address in capitals' => array( '<a href=" DATA:text/html,x">x</a>' ),
+			'a data: image'           => array( '<img src="data:image/png;base64,AAAA" alt="">' ),
+			'an object of HTML'       => array( '<object type="text/html" data="https://cdn.test/a.html"></object>' ),
+			'the PDF preview of a file block' => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a href="https://staging.test/a.pdf">a</a></div>' ),
 			// Fields of a form outside the list (input, select, option, meta).
 			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
 			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),
@@ -221,7 +233,11 @@ trait SyncCoreReads {
 			'a YouTube iframe' => array( '<iframe width="560" height="315" src="https://www.youtube.com/embed/x" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>' ),
 			'a cover'       => array( '<div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span><img class="wp-block-cover__image-background wp-image-7" alt="" src="https://staging.test/a.jpg" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><p>x</p></div></div>' ),
 			'a video'       => array( '<figure class="wp-block-video"><video controls src="https://staging.test/a.mp4"></video></figure>' ),
-			'a file'        => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a id="wp-block-file--media-1" href="https://staging.test/a.pdf">a</a><a href="https://staging.test/a.pdf" class="wp-block-file__button wp-element-button" download aria-describedby="wp-block-file--media-1">Herunterladen</a></div>' ),
+			'a file'        => array( '<div class="wp-block-file"><a id="wp-block-file--media-1" href="https://staging.test/a.pdf">a</a><a href="https://staging.test/a.pdf" class="wp-block-file__button wp-element-button" download aria-describedby="wp-block-file--media-1">Herunterladen</a></div>' ),
+			// Codex, round 16 (B1): the directives of the Interactivity API.
+			'an interactive block' => array( '<div data-wp-interactive="acme" data-wp-context=\'{"open":false}\'><button data-wp-on--click="actions.open" data-wp-bind--hidden="!state.open">Öffnen</button></div>' ),
+			'a value with a bracket' => array( '<p title="[Hinweis] Text" data-x="{nicht JSON">x</p>' ),
+			'CSS with an escape'   => array( '<style>q::before{content:"\\201C"}</style><p style="font-family:&quot;A\\2c B&quot;">x</p>' ),
 			'details'       => array( '<details class="wp-block-details"><summary>a</summary><p>b</p></details>' ),
 			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
 		);
@@ -283,6 +299,49 @@ trait SyncCoreReads {
 		// Codex, round 15: an extra name of the site with a dot, whole.
 		self::assertSame( array( 'state' => 'mixed', 'fields' => array( '~my.hidden', 'my.hidden' ) ), AB_MCP_Sync_Credentials::unit( '', '{"my.hidden":"x"}', array( 'my.hidden' ) ) );
 		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '{"my.other":"x"}', array( 'my.hidden' ) )['state'] );
+		// Codex, round 16 (A1): the outer name (a meta key) the same way.
+		self::assertSame( 'b9', AB_MCP_Sync_Credentials::unit( 'v1.token', 'demo-secret', array() )['state'] );
+		self::assertSame( 'b9', AB_MCP_Sync_Credentials::unit( 'my.hidden', 'x', array( 'my.hidden' ) )['state'] );
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( 'v1.title', 'x', array() )['state'] );
+	}
+
+	public function testEveryNameGoesThroughTheSameCheck(): void {
+		// One place asks redacts_key(): names_credential(), for every name.
+		$calls = array();
+		foreach ( glob( dirname( __DIR__ ) . '/includes/sync/*.php' ) as $file ) {
+			// Calls, not the names in comments.
+			$count = preg_match_all( '/AB_MCP_Redactor::redacts_key\s*\(\s*[$a-z]/', (string) file_get_contents( $file ) );
+			if ( $count > 0 ) {
+				$calls[ basename( $file ) ] = $count;
+			}
+		}
+		self::assertSame( array( 'class-sync-credentials.php' => 1 ), $calls );
+	}
+
+	public function testCssIsReadAsCss(): void {
+		// Codex, round 16 (A5, A6): custom_css as CSS, its escapes decoded.
+		foreach ( array( '.x { --api-key: demo-secret; }', '.x{--api\\2d key:demo-secret}', '.x { --client\\-secret: 1 }', '.x{--secre\\t:1}' ) as $css ) {
+			self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', $css, array(), true )['state'], $css );
+		}
+		foreach ( array( '.x { color: red }', 'q::before { content: "\\201C"; }', 'p{font-family:"A\\2c B"}' ) as $css ) {
+			self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', $css, array(), true )['state'], $css );
+		}
+		self::assertSame( 'clean', AB_MCP_Sync_Credentials::unit( '', '.x { --api-key: demo-secret; }', array() )['state'], 'Not as CSS: prose.' );
+		// The key css of global styles is CSS.
+		self::assertSame( 'mixed', AB_MCP_Sync_Credentials::unit( '', '{"styles":{"css":".x{--api-key:1}"}}', array() )['state'] );
+		// Addresses: url(…) without a host read, escapes that hide one lock.
+		$ctx = array( 'css' => true ) + self::reads_ctx();
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::text( 'body{background:url("/?p=12")} a{background:url(img/bg2.png)}', $ctx, array(), $acc, 'css' );
+		self::assertSame( array( array( 12 ), array() ), array( array_column( $acc['refs'], 'id' ), $acc['spelling'] ) );
+		foreach ( array( 'a{background:url(../12/)}' => 'css%post_id%', 'a{background:url(https://staging\\2e test/?p=12)}' => 'css:css' ) as $css => $at ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Canon::text( $css, $ctx, array(), $acc, 'css' );
+			self::assertSame( array( $at ), $acc['spelling'], $css );
+		}
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::text( 'q::before{content:"\\201C"} body{background:url(https://staging.test/a.png)}', $ctx, array(), $acc, 'css' );
+		self::assertSame( array(), $acc['spelling'], 'An escape that hides no address.' );
 	}
 
 	public function testATagTheHtmlApiCannotFinishIsUnreadable(): void {
@@ -309,6 +368,9 @@ trait SyncCoreReads {
 			// Codex, round 12 (4): url(…) and a template string.
 			'in a style'           => array( '<style>body{background:url(https://staging.test/?p=12)}</style>', array( 'post:12@c:html?p' ), '<style>body{background:url(https://www.live.test/?p=120)}</style>' ),
 			'in a template string' => array( '<script>const u=`https://staging.test/?p=12`;</script>', array( 'post:12@c:html?p' ), '<script>const u=`https://www.live.test/?p=120`;</script>' ),
+			// Codex, round 16 (C1): url(…) without a host as any address.
+			'a relative address in a style attribute' => array( "<p style=\"background-image:url('/?p=12')\">x</p>", array( 'post:12@c:html?p' ), "<p style=\"background-image:url('/?p=120')\">x</p>" ),
+			'a relative address in style' => array( '<style>body{background:url(/?page_id=13)}</style>', array( 'post:13@c:html?page_id' ), '<style>body{background:url(/?page_id=130)}</style>' ),
 			// Codex, round 15: the addresses of a style attribute one by one.
 			'in a style attribute' => array( '<p style="background-image:url(https://staging.test/?p=12)">x</p>', array( 'post:12@c:html?p' ), '<p style="background-image:url(https://www.live.test/?p=120)">x</p>' ),
 			'two in a style attribute' => array( "<div style=\"background:url('https://staging.test/?p=12'),url(https://staging.test/?page_id=13)\">x</div>", array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), "<div style=\"background:url('https://www.live.test/?p=120'),url(https://www.live.test/?page_id=130)\">x</div>" ),
@@ -420,6 +482,8 @@ trait SyncCoreReads {
 			// Codex, round 11 (3): a textarea decodes its references; read so, locked.
 			'in a textarea with a reference' => array( '<textarea>https://staging.test/?a=1&amp;p=12</textarea>', 'c:html?p' ),
 			// Codex, round 13: JavaScript in an attribute with an address of the sites.
+			'digits relative to the page in CSS' => array( '<p style="background:url(../12/)">x</p>', 'c:html%post_id%' ),
+			'an address hidden by an escape of CSS' => array( '<p style="background:url(https://staging\\2e test/?p=12)">x</p>', 'c:html:css' ),
 			'a style attribute read decoded' => array( '<p style="background:url(https://staging.test/?p=1&#50;)">x</p>', 'c:html?p' ),
 			'a relative address in JSON-LD' => array( '<script type="application/ld+json">{"@type":"Article","url":"/?p=12"}</script>', 'c:html?p' ),
 			'in a title'             => array( '<title>https://staging.test/?a=&#49;&amp;p=12</title>', 'c:html?p' ),
