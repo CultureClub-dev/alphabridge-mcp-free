@@ -65,20 +65,29 @@ final class SyncCanonFormTest extends TestCase {
 		self::assertArrayHasKey( '~addr', $markers[0] );
 	}
 
-	public function testAPercentEncodedAddressIsNeutralAsEitherEncoderWritesIt(): void {
-		// Codex, round 22 (A-1): the value of a query variable, with the
-		// scheme and without it.
+	public function testAPercentEncodedAddressIsReadByItsRoundTripNotAsAnAddressOfItsOwn(): void {
+		// Codex, round 23 (A-1): the value of a query variable is read decoded
+		// as one address (the marker ~enc with its encoding), in an address
+		// of a site and in one of no site alike; the percent-encoded host is
+		// no needle of its own (a text holding only it is no address).
 		foreach ( array( 'rawurlencode', 'urlencode' ) as $encoder ) {
-			foreach ( array( 'https:', '' ) as $scheme ) {
-				$staging = 'wp-login.php?redirect_to=' . call_user_func( $encoder, $scheme . substr( self::STAGING, 6 ) . '/kontakt/?a=1&b=2' );
-				$live    = 'wp-login.php?redirect_to=' . call_user_func( $encoder, $scheme . substr( self::LIVE, 6 ) . '/kontakt/?a=1&b=2' );
+			foreach ( array( self::STAGING . '/wp-login.php?redirect_to=', 'https://twitter.com/intent/tweet?url=' ) as $outer ) {
+				$staging = $outer . call_user_func( $encoder, self::STAGING . '/~kontakt/?a=1' );
+				$live    = $outer . call_user_func( $encoder, self::LIVE . '/~kontakt/?a=1' );
 				$a       = AB_MCP_Sync_Canon::text( $staging, self::ctx() );
 				$b       = AB_MCP_Sync_Canon::text( $live, self::ctx() );
-				self::assertSame( AB_MCP_Sync_Canon::encode( $a ), AB_MCP_Sync_Canon::encode( $b ), $encoder . ' ' . $scheme );
+				self::assertSame( AB_MCP_Sync_Canon::encode( $a ), AB_MCP_Sync_Canon::encode( $b ), $staging );
 				self::assertIsArray( $a, $staging );
-				self::assertSame( 'percent', array_values( array_filter( $a['~s'], 'is_array' ) )[0]['~addr'] ?? null, $staging );
+				$enc = array_values( array_filter( $a['~s'], static fn( $p ) => is_array( $p ) && isset( $p['~enc'] ) ) );
+				self::assertSame( $encoder, $enc[0]['~enc'] ?? null, $staging );
+				self::assertSame( 'plain', array_values( array_filter( $enc[0]['v']['~s'], 'is_array' ) )[0]['~addr'] ?? null, 'The host inside, as an address of the context.' );
 			}
 		}
+		self::assertSame( 'x=' . rawurlencode( self::STAGING ), AB_MCP_Sync_Canon::text( 'x=' . rawurlencode( self::STAGING ), self::ctx() ), 'Not an address by itself.' );
+		$form = AB_MCP_Sync_Canon::text( self::STAGING . '/?u=%2Fkontakt%2F', self::ctx() );
+		self::assertSame( array( '~s' => array( array( '~addr' => 'plain' ), '/?u=%2Fkontakt%2F' ) ), $form, 'A value without an id and without a host: no round trip.' );
+		// Codex, round 23 (A-6): "%" after the host continues it.
+		self::assertSame( self::STAGING . '%2Eother.test/', AB_MCP_Sync_Canon::text( self::STAGING . '%2Eother.test/', self::ctx() ) );
 	}
 
 	public function testOnlyTheAddressItselfIsNeutralNotWhatBeginsLikeIt(): void {

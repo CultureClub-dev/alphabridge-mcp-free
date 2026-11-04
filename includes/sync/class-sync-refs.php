@@ -488,14 +488,6 @@ final class AB_MCP_Sync_Refs {
 					$subs[ $needle ] = AB_MCP_Replace_Engine::encode( $form, $to );
 				}
 			}
-			// Percent-encoded (the value of a query variable; Codex, round
-			// 22, A-1), as AB_MCP_Sync_Canon::context() finds it.
-			foreach ( array( 'rawurlencode', 'urlencode' ) as $encoder ) {
-				$needle = call_user_func( $encoder, $from );
-				if ( ! isset( $subs[ $needle ] ) ) {
-					$subs[ $needle ] = call_user_func( $encoder, $to );
-				}
-			}
 		}
 		$ctx             = AB_MCP_Sync_Canon::context(
 			array_keys( $addresses ),
@@ -575,6 +567,14 @@ final class AB_MCP_Sync_Refs {
 				// writes it in an attribute (AB_MCP_Sync_Urls::json_attribute()).
 				$with   = self::json_rewrite( $query['json'], $plan );
 				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => isset( $query['esc'] ) && 'attr' === $query['esc'] ? htmlspecialchars( $with, ENT_QUOTES, 'UTF-8', false ) : $with );
+				continue;
+			}
+			// The value of a query variable that is an address (Codex, round
+			// 23, A-1): decoded, rewritten as one address (its host and its
+			// ids), written back in the encoding it is stored in.
+			if ( isset( $query['enc'] ) ) {
+				$with   = self::rewrite_text( $query['enc']['text'], $plan, array(), $changed, true );
+				$json[] = array( 'at' => $query['at'], 'len' => $query['len'], 'with' => 'plain' === $query['enc']['encoder'] ? $with : call_user_func( $query['enc']['encoder'], $with ) );
 				continue;
 			}
 			if ( null === $query['id'] ) {
@@ -1944,6 +1944,11 @@ final class AB_MCP_Sync_Refs {
 				return null;
 			}
 			foreach ( AB_MCP_Sync_Urls::hits_of( $decoded, $ctx ) as $hit ) {
+				// A value of its query that is an address in turn (enc): not
+				// read value by value (locked).
+				if ( isset( $hit['enc'] ) ) {
+					return null;
+				}
 				// With "\/" one byte more for every "/" before the id.
 				$hit['at'] += $span[0] + 1 + ( $inner === $decoded ? 0 : substr_count( substr( $decoded, 0, $hit['at'] ), '/' ) );
 				$out[]      = $hit;

@@ -66,7 +66,7 @@ final class AB_MCP_Sync_Canon {
 	 * (a longer host, a port). "https://a.ch" is not the address in
 	 * "https://a.chx.com" or "https://a.ch:8080".
 	 */
-	const BOUNDARY = '(?![A-Za-z0-9_~-]|[.:][A-Za-z0-9])';
+	const BOUNDARY = '(?![A-Za-z0-9_~%-]|[.:][A-Za-z0-9])';
 
 	/** @var AB_MCP_Replace_Engine|null For carries_record(). */
 	private static $engine = null;
@@ -135,18 +135,12 @@ final class AB_MCP_Sync_Canon {
 				'path'   => $parts[4],
 				'own'    => null === $mine || in_array( $address, $mine, true ),
 			);
-			// With its scheme and without it ("//host/path"); percent-encoded
-			// as well (Codex, round 22, A-1: the value of a query variable,
-			// redirect_to=https%3A%2F%2F…), the form "percent".
+			// With its scheme and without it ("//host/path"). Percent-encoded
+			// (the value of a query variable, redirect_to=https%3A%2F%2F…) it
+			// is no needle: the value is read by its round trip
+			// (AB_MCP_Sync_Urls::query_values(); Codex, round 23, A-1).
 			foreach ( array( $address, $parts[2] ) as $spelling ) {
-				$needles = AB_MCP_Replace_Engine::needles( $spelling );
-				foreach ( array_unique( array( rawurlencode( $spelling ), urlencode( $spelling ) ) ) as $encoded ) {
-					$needles[] = array(
-						'form'   => 'percent',
-						'needle' => $encoded,
-					);
-				}
-				foreach ( $needles as $needle ) {
+				foreach ( AB_MCP_Replace_Engine::needles( $spelling ) as $needle ) {
 					if ( ! isset( $forms[ $needle['needle'] ] ) ) {
 						$forms[ $needle['needle'] ] = $needle['form'];
 					}
@@ -496,6 +490,20 @@ final class AB_MCP_Sync_Canon {
 					'at'     => $query['at'],
 					'len'    => $query['len'],
 					'marker' => AB_MCP_Sync_Refs::json_canon( $query['json'], $ctx, $acc, $at ),
+				);
+				continue;
+			}
+			// The value of a query variable that is an address (Codex, round
+			// 23, A-1): its canonical form by its round trip, decoded and
+			// read as one address, with the encoding it is stored in.
+			if ( isset( $query['enc'] ) ) {
+				$cuts[] = array(
+					'at'     => $query['at'],
+					'len'    => $query['len'],
+					'marker' => array(
+						'~enc' => $query['enc']['encoder'],
+						'v'    => self::text( $query['enc']['text'], $ctx, array(), $acc, $at . $query['what'], true ),
+					),
 				);
 				continue;
 			}

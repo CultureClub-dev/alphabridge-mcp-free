@@ -196,7 +196,9 @@ trait SyncCoreReads {
 			'base'                    => array( '<base href="https://staging.test/">' ),
 			'meta http-equiv'         => array( '<meta http-equiv="refresh" content="0;url=https://staging.test/?p=12">' ),
 			'an attribute of no list' => array( '<a href="https://example.test" ping="https://cdn.test/p">x</a>' ),
-			'srcset'                  => array( '<img src="a.jpg" srcset="a-300.jpg 300w" alt="">' ),
+			'a data: SVG in srcset'   => array( '<img src="a.jpg" srcset="data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"/>' ) . ' 1x" alt="">' ),
+			'a source outside its list' => array( '<picture><source srcset="a.jpg" title="x"><img src="a.jpg" alt=""></picture>' ),
+			'a picture outside its list' => array( '<picture title="x"><source srcset="a.jpg"><img src="a.jpg" alt=""></picture>' ),
 			'a tag of a plugin'       => array( '<acme-widget data-x="1"></acme-widget>' ),
 			'an input'                => array( '<input type="text" name="q">' ),
 			// Codex, round 16 (A4): an embedded document, object with data.
@@ -269,6 +271,10 @@ trait SyncCoreReads {
 			'a PNG placeholder beside data-src' => array( '<img src="data:image/png;base64,' . base64_encode( "\x89PNG\r\n\x1a\n\0\0\0\rIHDR" ) . '" data-src="https://staging.test/a.jpg" alt="">' ),
 			'a WebP poster'   => array( '<video poster="data:image/webp;base64,' . base64_encode( "RIFF\0\0\0\0WEBPVP8 " ) . '"></video>' ),
 			'a JPEG and an AVIF' => array( '<img src="data:image/jpeg;base64,' . base64_encode( "\xFF\xD8\xFF\xE0" ) . '" alt=""><img src="data:image/avif;base64,' . base64_encode( "\0\0\0\x1cftypavif" ) . '" alt="">' ),
+			// Codex, round 23 (B-2): responsive images (srcset, sizes; source).
+			'srcset and sizes'   => array( '<img src="a.jpg" srcset="a-300.jpg 300w, a.jpg 1024w" sizes="(max-width: 600px) 100vw, 50vw" alt="">' ),
+			'a data: GIF in srcset' => array( '<img src="a.jpg" srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7 1x, a.jpg 2x" alt="">' ),
+			'a source with srcset' => array( '<picture><source srcset="a.webp 1x, a@2x.webp 2x" type="image/webp" media="(min-width: 600px)"><img src="a.jpg" alt=""></picture>' ),
 			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
 		);
 	}
@@ -1132,6 +1138,29 @@ trait SyncCoreReads {
 			'redirect_to encoded with the host' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Anmelden</a></p>', array( 'post:12@c:html?redirect_to?p' ), '<p><a href="https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Anmelden</a></p>' ),
 			'redirect_to encoded with the host in prose' => array( 'Anmelden: https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?redirect_to?p' ), 'Anmelden: https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
 			'a query value as it is in prose' => array( 'Siehe /?x=/?p=13 dort.', array( 'post:13@c:html?x?p' ), 'Siehe /?x=/?p=130 dort.' ),
+			// Codex, round 23 (A-1): an address of the sites in the value of a
+			// query of an address of no site (a share link), by its round trip:
+			// host and id rewritten, written back in the encoding stored.
+			'a share link of Twitter' => array( '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Teilen</a></p>', array( 'post:12@c:html?url?p' ), '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Teilen</a></p>' ),
+			'a share link of Facebook in prose' => array( 'Teilen: https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?u?p' ), 'Teilen: https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'a share link of LinkedIn' => array( '<p><a href="https://www.linkedin.com/shareArticle?mini=true&amp;url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12&amp;title=Beitrag">Teilen</a></p>', array( 'post:12@c:html?url?p' ), '<p><a href="https://www.linkedin.com/shareArticle?mini=true&amp;url=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120&amp;title=Beitrag">Teilen</a></p>' ),
+			'a share link with the text first' => array( 'https://twitter.com/intent/tweet?text=Lesen&url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?url?p' ), 'https://twitter.com/intent/tweet?text=Lesen&url=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'a mailto with the address in its body' => array( '<p><a href="mailto:?subject=Tipp&amp;body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Mailen</a></p>', array( 'post:12@c:html?body?p' ), '<p><a href="mailto:?subject=Tipp&amp;body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Mailen</a></p>' ),
+			'a share link as urlencode() writes it' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fcat%3D5%2C6%23~', array( 'term:5@c:html?url?cat', 'term:6@c:html?url?cat' ), 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2F%3Fcat%3D50%2C60%23~' ),
+			'a root-relative value in a link of another site' => array( 'Siehe //other.test/?u=%2F%3Fp%3D12 dort.', array( 'post:12@c:html?u?p' ), 'Siehe //other.test/?u=%2F%3Fp%3D120 dort.' ),
+			'a login link without an id, its host inside rewritten' => array( 'https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F', array(), 'https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2Fkontakt%2F' ),
+			'a share link without an id, its host inside rewritten' => array( '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2Fkontakt%2F">Teilen</a></p>', array(), '<p><a href="https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2Fkontakt%2F">Teilen</a></p>' ),
+			'a mailto in prose' => array( 'Mailen: mailto:?body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?body?p' ), 'Mailen: mailto:?body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'a candidate of srcset ending with a comma' => array( '<img src="/?p=12" srcset="/?p=12, /?page_id=13 2x" alt="">', array( 'post:12@c:html?p', 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<img src="/?p=120" srcset="/?p=120, /?page_id=130 2x" alt="">' ),
+			// Codex, round 23 (B-1): a text node with character references: the
+			// address found where it stands, as it is or as esc_html() writes it.
+			'a reference before the address in a text node' => array( '<p>A &amp; B /?p=12</p>', array( 'post:12@c:html?p' ), '<p>A &amp; B /?p=120</p>' ),
+			'a reference inside the address in a text node' => array( '<p>/?p=12&amp;x=1</p>', array( 'post:12@c:html?p' ), '<p>/?p=120&amp;x=1</p>' ),
+			'a reference inside, the id after it' => array( '<p>Siehe /?x=1&amp;p=12 und /?page_id=13.</p>', array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<p>Siehe /?x=1&amp;p=120 und /?page_id=130.</p>' ),
+			'a less-than before two addresses' => array( '<p>Preis &lt; 5: /?p=12, dann /?p=12</p>', array( 'post:12@c:html?p', 'post:12@c:html?p' ), '<p>Preis &lt; 5: /?p=120, dann /?p=120</p>' ),
+			// Codex, round 23 (B-2): the candidates of srcset, each an address.
+			'a candidate of srcset with an id' => array( '<img src="https://staging.test/a.jpg" srcset="https://staging.test/?p=12 300w, https://staging.test/a.jpg 1024w" alt="">', array( 'post:12@c:html?p' ), '<img src="https://www.live.test/a.jpg" srcset="https://www.live.test/?p=120 300w, https://www.live.test/a.jpg 1024w" alt="">' ),
+			'a candidate of srcset of a source' => array( '<picture><source srcset="/?p=12 1x,/?page_id=13 2x" type="image/webp"><img src="/?p=12" alt=""></picture>', array( 'post:12@c:html?p', 'post:13@c:html?page_id', 'post:12@c:html?p' ), '<picture><source srcset="/?p=120 1x,/?page_id=130 2x" type="image/webp"><img src="/?p=120" alt=""></picture>' ),
 			'a query value as it is' => array( '<p><a href="/?x=/?p=13">x</a></p>', array( 'post:13@c:html?x?p' ), '<p><a href="/?x=/?p=130">x</a></p>' ),
 			'a query value as urlencode() writes it' => array( 'Siehe https://staging.test/?x=1&u=%2F%3Fcat%3D5%2C6%26q%3Da+b', array( 'term:5@c:html?u?cat', 'term:6@c:html?u?cat' ), 'Siehe https://www.live.test/?x=1&u=%2F%3Fcat%3D50%2C60%26q%3Da+b' ),
 			'a tilde as urlencode() writes it' => array( 'Siehe https://staging.test/?u=%2F%3Fcat%3D5%2C6%23%7E', array( 'term:5@c:html?u?cat', 'term:6@c:html?u?cat' ), 'Siehe https://www.live.test/?u=%2F%3Fcat%3D50%2C60%23%7E' ),
@@ -1285,10 +1314,27 @@ trait SyncCoreReads {
 			'JSON-LD that is no JSON' => array( '<script type="application/ld+json">{"url": /?p=12}</script>', 'c:html:json' ),
 			// Codex, round 22 (A-1): a query value in an encoding no function
 			// writes (lower case, a mix), relative to the page.
-			'redirect_to in lower case' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=%2f%3fp%3d12">x</a></p>', 'c:html?redirect_to?p' ),
-			'redirect_to mixed' => array( '<p><a href="/?redirect_to=%2F?p%3D12">x</a></p>', 'c:html?redirect_to?p' ),
+			'redirect_to in lower case' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=%2f%3fp%3d12">x</a></p>', 'c:html?redirect_to' ),
+			'redirect_to mixed' => array( '<p><a href="/?redirect_to=%2F?p%3D12">x</a></p>', 'c:html?redirect_to' ),
 			'redirect_to relative to the page' => array( '<p><a href="/?redirect_to=index.php%3Fp%3D12">x</a></p>', 'c:html?redirect_to?p' ),
-			'redirect_to in a link relative to the page' => array( '<p><a href="wp-login.php?redirect_to=%2F%3Fp%3D12">x</a></p>', 'c:html?redirect_to?p' ),
+			'redirect_to in a link relative to the page' => array( '<p><a href="wp-login.php?redirect_to=%2F%3Fp%3D12">x</a></p>', 'c:html?redirect_to' ),
+			// Codex, round 23 (B-2): a "," inside a candidate of srcset is part of its address (as the browser reads it).
+			'a comma inside a candidate of srcset' => array( '<img src="a.jpg" srcset="/?p=12x,/?page_id=13 2x" alt="">', 'c:html?p' ),
+			// Codex, round 23 (A-5): userinfo before the host, of a site or not.
+			'userinfo before the host' => array( '<p><a href="https://viewer@staging.test/?p=12">x</a></p>', 'c:html:userinfo' ),
+			'userinfo with a password in prose' => array( 'Siehe https://viewer:pw@staging.test/?p=12', 'c:html:userinfo' ),
+			'userinfo before a host of no site' => array( 'Siehe https://viewer@other.test/?p=12', 'c:html:userinfo' ),
+			'userinfo in a share link' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fviewer%40staging.test%2F%3Fp%3D12', 'c:html?url:userinfo' ),
+			// Codex, round 23 (A-1): an id inside not read as stored, a share link in JSON no producer writes.
+			'a space inside a query value' => array( 'Siehe https://staging.test/?u=%2F%3Fp%3D12%20', 'c:html?u?p' ),
+			'a share link in JSON of no producer' => array( '{ "url": "https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12" }', 'c:html:json' ),
+			// Codex, round 23 (A-6): "%" in the host, after the host of a site.
+			'an escape after the host' => array( '<p><a href="https://staging.test%2Eother.test/?p=12">x</a></p>', 'c:html:host' ),
+			'an escaped slash after the host in prose' => array( 'Siehe https://staging.test%2F?p=12', 'c:html:host' ),
+			'an escape in a host without a scheme' => array( 'Siehe //staging.test%2eother.test/?p=12', 'c:html:host' ),
+			// Codex, round 23 (B-1): an address that stands in the node only decoded.
+			'an address of references only in a text node' => array( '<p>&#47;?p=12</p>', 'c:html?p' ),
+			'an address with a reference for its digit in a text node' => array( '<p>/?p=1&#50; dort</p>', 'c:html?p' ),
 			// Codex, round 22 (B-2): JSON no producer writes so, value by value;
 			// what is no address by itself, or escaped, locks.
 			'a key twice with an address' => array( '{"url":"https://staging.test/?p=12","url":"x"}', 'c:html:json' ),
@@ -1299,8 +1345,6 @@ trait SyncCoreReads {
 			'an address as part of a longer value' => array( '<a data-options=\'{ "caption": "Mehr: https://staging.test/?p=12" }\'>x</a>', 'c:html:json' ),
 			// The context not stored as it is read (a reference for a digit): read only, an id locks.
 			'the context with a reference for a digit' => array( '<div data-wp-context=\'{"url":"\\/?p=1&#50;"}\'>x</div>', 'c:html:json' ),
-			// Codex, round 22 (B-1): a text node not stored as it is read.
-			'a reference in a text node with an address' => array( '<p>Siehe /?p=12&amp;x=1</p>', 'c:html?p' ),
 			// Codex, round 22 (A-1): deeper than the depth, a value is not read.
 			'a query value three deep' => array( '<p><a href="https://staging.test/?a=' . rawurlencode( '/?b=' . rawurlencode( '/?c=' . rawurlencode( '/?p=12' ) ) ) . '">x</a></p>', 'c:html?a?b?c?' ),
 		);
@@ -1335,7 +1379,9 @@ trait SyncCoreReads {
 			// Codex, round 22 (A-1): a query value that is no address of the sites.
 			'a query value of another host' => array( '<p><a href="/?redirect_to=https%3A%2F%2Fother.test%2F%3Fp%3D12">x</a></p>' ),
 			'a query value of a file' => array( '<p><a href="/?src=%2Fwp-content%2Fuploads%2Fa.jpg">x</a></p>' ),
-			'a query value of a page of another host' => array( 'Siehe //other.test/?u=%2F%3Fp%3D12 dort.' ),
+			// Codex, round 23 (A-1): a share link without an address of the sites.
+			'a share link of another site' => array( 'Teilen: https://twitter.com/intent/tweet?url=https%3A%2F%2Fother.test%2F%3Fp%3D12' ),
+			'a share link with a text only' => array( 'Teilen: https://twitter.com/intent/tweet?text=Beitrag+12' ),
 			// Codex, round 11 (7): 0 and empty name no object.
 			'all categories'         => array( '<p><a href="/?cat=0">Alle Kategorien</a></p>' ),
 			'no author, no post'     => array( 'Siehe https://staging.test/?author= und https://staging.test/?p=0 und https://staging.test/?cat=0,-0' ),
@@ -1484,6 +1530,15 @@ trait SyncCoreReads {
 		}
 		self::assertSame( array( 'meta:_json:json.url?p' ), array_column( $acc['refs'], 'at' ) );
 		self::assertSame( '{"url":"https:\/\/www.live.test\/?preview=1\u0026p=120"}', $out );
+	}
+
+	public function testAnIdInsideAQueryValueNotInTheMapIsMissing(): void {
+		// Codex, round 23 (A-1): what the round trip of a value cannot map is
+		// reported as the value itself would be.
+		$plan = self::reads_plan();
+		$out  = AB_MCP_Sync_Refs::rewrite_content( 'https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D99', $plan );
+		self::assertSame( array( array( 'space' => 'post', 'id' => 99 ) ), $out['missing'] );
+		self::assertSame( 'https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.live.test%2F%3Fp%3D99', $out['content'], 'The host rewritten, the id kept.' );
 	}
 
 	public function testAShortLinkAfterAnAmpersandAsSerializeBlockAttributesWritesIt(): void {

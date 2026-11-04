@@ -121,6 +121,20 @@ final class AB_MCP_Sync_Credentials {
 	/** The attributes that show an image or a poster: a raster image in data: is inside there (raster_data()). */
 	const RASTER_ATTRIBUTES = array( 'src', 'srcset', 'poster' );
 
+	/**
+	 * Responsive images beside the list of kses (Codex, round 23, B-2): the
+	 * core (7.1.3) lists neither srcset nor sizes on img, nor picture and
+	 * source at all; stored responsive HTML (an import, an HTML block, a
+	 * builder) is ordinary, and the browser reads these attributes. srcset
+	 * is read as addresses (AB_MCP_Sync_Urls::srcset_candidates()), sizes
+	 * is a text.
+	 */
+	const RESPONSIVE = array(
+		'img'     => array( 'srcset', 'sizes' ),
+		'picture' => array( 'class', 'id', 'style' ),
+		'source'  => array( 'src', 'srcset', 'sizes', 'type', 'media', 'width', 'height' ),
+	);
+
 	/** The raster images of a data: address: type => its magic bytes and where they stand (WebP: RIFF…WEBP). */
 	const RASTER = array(
 		'image/png'  => array( "\x89PNG", 0 ),
@@ -367,6 +381,9 @@ final class AB_MCP_Sync_Credentials {
 			} elseif ( isset( self::READ_TAGS[ $tag_name ] ) ) {
 				$allowed = array_fill_keys( self::READ_TAGS[ $tag_name ], true );
 			}
+			if ( isset( self::RESPONSIVE[ $tag_name ] ) ) {
+				$allowed = array_fill_keys( self::RESPONSIVE[ $tag_name ], true ) + ( null === $allowed ? array() : $allowed );
+			}
 			if ( null === $allowed ) {
 				$out['outside'] = true;
 			}
@@ -396,8 +413,12 @@ final class AB_MCP_Sync_Credentials {
 				// shown (RASTER_ATTRIBUTES: src, srcset, poster), is an image:
 				// inside (the net reads its bytes).
 				$url = trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
-				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) && ! ( in_array( $name, self::RASTER_ATTRIBUTES, true ) && self::raster_data( $url ) ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $url ) ) ) {
-					$out['outside'] = true;
+				// Each candidate of srcset as src (Codex, round 23, B-2).
+				$urls = 'srcset' === $name ? array_column( AB_MCP_Sync_Urls::srcset_candidates( $url ), 0 ) : array( $url );
+				foreach ( $urls as $one ) {
+					if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $one, 'data:' ) && ! ( in_array( $name, self::RASTER_ATTRIBUTES, true ) && self::raster_data( $one ) ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $one ) ) ) {
+						$out['outside'] = true;
+					}
 				}
 				// An event attribute and a javascript: address (as the URL
 				// parser reads it: without tabs and line breaks, C0 and spaces

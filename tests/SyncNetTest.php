@@ -124,7 +124,26 @@ final class SyncNetTest extends TestCase {
 		) as $raw => $want ) {
 			self::assertSame( $want, self::layers( $raw )['raw/data'] ?? null, $raw );
 		}
-		self::assertArrayNotHasKey( 'raw/data', self::layers( 'data:text/plain;name=(x,Geheim' ), 'A bracket in the header: no address.' );
+		// Codex, round 23 (A-2, A-3): no header where an address begins, a
+		// parameter twice: not read, the layer named (the unit locks);
+		// "data:" in prose begins no address.
+		foreach ( array(
+			'a bracket in the header'        => 'data:text/plain;name=(x,Geheim',
+			'a bracket in the header of an SVG' => "url('data:image/svg+xml;name=(x;charset=utf-16le;base64," . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ) . "')",
+			'a line break in the header'     => "data:text/plain;name=\"x\ny\",Geheim",
+			'no "," within HEAD bytes'       => 'data:text/plain;name="' . str_repeat( 'x', 600 ) . '",Geheim',
+			'charset twice'                  => 'data:image/svg+xml;charset=utf-16le;charset=utf-16be;base64,' . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ),
+			'a parameter twice'              => 'data:text/plain;name=a;name=b,Geheim',
+			'a parameter twice in any case'  => 'data:text/plain;Name=a;NAME=b,Geheim',
+		) as $label => $raw ) {
+			$layers = self::layers( $raw, $deep, $unread );
+			self::assertArrayNotHasKey( 'raw/data', $layers, $label );
+			self::assertSame( array( 'raw' ), $unread, $label );
+		}
+		foreach ( array( 'Data: siehe (Tabelle 3)', "Metadata:\n2024, ohne Typ", 'data:x' ) as $raw ) {
+			$layers = self::layers( $raw, $deep, $unread );
+			self::assertSame( array(), $unread, $raw );
+		}
 		self::assertArrayNotHasKey( 'raw/data', self::layers( "data:text/plain;name=\"x\ny\",Geheim" ), 'A line break in the header: no address.' );
 		self::assertArrayNotHasKey( 'raw/data', self::layers( 'data:text/plain;name="' . str_repeat( 'x', 600 ) . '",Geheim' ), 'No "," within the header: no address.' );
 		$layers = self::layers( 'a data:text/plain;base64,!!!! b data:text/plain, c' );
@@ -308,6 +327,16 @@ final class SyncNetTest extends TestCase {
 			'/?redirect_to=index.php%3Fp%3D12'                             => array( 'post:?' ),
 			'https://staging.test/?a=' . rawurlencode( '/?b=' . rawurlencode( '/?c=' . rawurlencode( '/?p=12' ) ) ) => array( 'post:?' ),
 			'wp-login.php?redirect_to=%2F%3Fp%3D12'                        => array( 'post:?' ),
+			// Codex, round 23 (A-1): in an address of no site as well (a share
+			// link); of the host alone in an address relative to the page,
+			// nothing rewritten: locked.
+			'https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12' => array( 'post:12' ),
+			'mailto:?body=https%3A%2F%2Fstaging.test%2F%3Fcat%3D1%2C2'      => array( 'term:1', 'term:2' ),
+			'https://twitter.com/intent/tweet?text=x&url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12' => array( 'post:?' ),
+			'wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2Fkontakt%2F' => array( 'post:?' ),
+			// Codex, round 23 (A-5, A-6): userinfo, an escape in the host.
+			'https://viewer@staging.test/?p=12'                            => array( 'post:?' ),
+			'https://staging.test%2Eother.test/?p=12'                      => array( 'post:?' ),
 			'https://www.live.test/?p=12'                                  => array( 'post:?' ),
 			'/?u=https%3A%2F%2Fwww.live.test%2F%3Fp%3D12'                  => array( 'post:?' ),
 		) as $text => $pairs ) {
@@ -383,6 +412,9 @@ final class SyncNetTest extends TestCase {
 			'var cfg = {a:"}",api_key:"demo-secret"};'          => array( 'api_key' ),
 			'var cfg = {a:"{",api_key:"demo-secret"};'          => array( 'api_key' ),
 			"var cfg = {a:'}}', b:`}`, token:\"x\"};"          => array( 'token' ),
+			// Codex, round 23 (A-4): the braces of a comment count not.
+			"// a } b\n{x:1, token:\"x\"}"                      => array( 'token' ),
+			"/* } */ {x:1; secret:\"x\"}"                        => array( 'secret' ),
 			'var cfg = {a:"\\"}",api_key:"demo-secret"};'      => array( 'api_key' ),
 			"x = \"\n{ a: 1, api_key: \"demo-secret\" }"       => array( 'api_key' ),
 			// Codex, round 21 (A-5): a value is what is not empty after trim.
@@ -397,6 +429,36 @@ final class SyncNetTest extends TestCase {
 		// No value, or no name: a word in prose, a label, "==", an empty value
 		// (white space alone as well), a name after "," outside of braces, a
 		// name that is none.
+		// Codex, round 23 (A-4): a RegExp literal before the name, or more
+		// braces closed than opened: the count cannot decide (undecidable),
+		// nothing named here; a division, a comment, a "/" that no "/" on
+		// the line closes, are no literal.
+		foreach ( array(
+			'var cfg={r:/}/,api_key:"demo-secret"};',
+			'var cfg={r:/[}]/g,api_key:"demo-secret"};',
+			"var r=/}/;\nvar cfg={a:1}, token:\"x\"",
+			'return /}/, token: "x"',
+			'x = {a:1}}, token:"x"',
+		) as $text ) {
+			$undecidable = false;
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable ), $text );
+			self::assertTrue( $undecidable, $text );
+		}
+		foreach ( array(
+			'a = b / c, token:"x"',
+			'a = b / c / d, token:"x"',
+			'// see /x/' . "\n" . 'Felder: Name, Token: "abc"',
+			'url(/x), Token: "abc"',
+			'x = 1 /* } */, token:"x"',
+			'x = "/}/", token:"x"',
+		) as $text ) {
+			$undecidable = false;
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable ), $text );
+			self::assertFalse( $undecidable, $text );
+		}
+		$undecidable = false;
+		self::assertSame( array( 'api_key' ), AB_MCP_Sync_Net::credentials( 'var cfg={r:/}/,api_key:"demo-secret"}; api_key="x"', $extra, $undecidable ), 'Named elsewhere: named.' );
+		self::assertTrue( $undecidable );
 		foreach ( array(
 			'/* design tokens */',
 			'Token: x',
@@ -468,9 +530,24 @@ final class SyncNetTest extends TestCase {
 		// Another pair beside the one they read: locked.
 		list( $locks ) = self::check( 'https://staging.test/?p=12 und index.php?p=13' );
 		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
+		// CI (round 23): the same pair a second time in a decoding only –
+		// raw, "?p%3D12" names nothing, decoded it names post 12 once more
+		// than the readers read it (each pair as often as they read it).
+		list( $locks, $acc ) = self::check( 'https://staging.test/?p=12 https://staging.test/?p%3D12' );
+		self::assertSame( array( array( '*:unread_reference@u:net:raw/percent' ), array( 'post:12' ) ), array( $locks, $acc['addressed'] ) );
 		// A layer beneath the raw text names the layer.
 		list( $locks ) = self::check( base64_encode( '{"src":"/?p=12"}' ) );
 		self::assertSame( array( '*:unread_reference@u:net:raw/base64' ), $locks );
+		// Codex, round 23 (A-1): a share link read by its round trip, free;
+		// encoded twice, the readers read nothing, the net names the layer.
+		list( $locks, $acc ) = self::check( 'https://twitter.com/intent/tweet?url=https%3A%2F%2Fstaging.test%2F%3Fp%3D12' );
+		self::assertSame( array( array(), array( 'post:12' ) ), array( $locks, $acc['addressed'] ) );
+		list( $locks ) = self::check( 'https://twitter.com/intent/tweet?url=https%253A%252F%252Fstaging.test%252F%253Fp%253D12' );
+		self::assertSame( array( '*:unread_reference@u:net:raw/percent' ), $locks );
+		// Codex, round 23 (A-4): the braces of code undecidable: never clean.
+		list( $locks, $acc ) = self::check( 'var cfg={r:/}/,api_key:"demo-secret"};' );
+		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
+		self::assertSame( array( 'code:u:net:raw' ), $acc['unread'] );
 		// Codex, round 21 (A-2): in a layer taken out of the text every pair
 		// is unread, the one the readers read in the text as well.
 		list( $locks ) = self::check( 'https://staging.test/?p=12 ' . base64_encode( 'https://staging.test/?p=13' ) );

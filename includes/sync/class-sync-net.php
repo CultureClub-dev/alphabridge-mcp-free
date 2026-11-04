@@ -285,11 +285,19 @@ final class AB_MCP_Sync_Net {
 			if ( $unreadable ) {
 				continue;
 			}
-			$new = array();
-			foreach ( self::credentials( $one, $extra ) as $name ) {
+			$new         = array();
+			$undecidable = false;
+			foreach ( self::credentials( $one, $extra, $undecidable ) as $name ) {
 				if ( ! isset( $named[ $name ] ) ) {
 					$new[ $name ] = '~' . $name;
 				}
+			}
+			// The braces of code cannot be counted (a RegExp literal, more
+			// closed than opened; Codex, round 23, A-4): never clean.
+			if ( $undecidable ) {
+				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
+				$acc['unread'][] = 'code:' . $at . ':net:' . $path;
+				$unreadable      = true;
 			}
 			if ( array() !== $new ) {
 				$acc['credentials']['mixed'][] = array(
@@ -472,9 +480,24 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * A text with the content of its strings blanked (a space for each
-	 * byte: the same length), bounded as uncommented() bounds them, for the
-	 * braces of code to be counted outside of strings.
+	 * Whether a text of code (its strings blanked) holds a RegExp literal of
+	 * JavaScript (the strings and comments blanked): a "/" where no operand
+	 * stands before it (after =, (, ",", :, [, !, &, |, ?, {, }, ; or
+	 * return, or at the start of a line), closed by a "/" on the same line
+	 * (Codex, round 23, A-4). Its braces are none; the count cannot tell.
+	 *
+	 * @param string $text Text.
+	 * @return bool
+	 */
+	private static function regexp_literal( $text ) {
+		return 1 === preg_match( '#(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text );
+	}
+
+	/**
+	 * A text with the content of its strings and its comments blanked (a
+	 * space for each byte: the same length), bounded as uncommented()
+	 * bounds them, for the braces of code to be counted outside of strings
+	 * and comments (Codex, round 22 A-4, round 23 A-4).
 	 *
 	 * @param string $text Text.
 	 * @return string
@@ -485,6 +508,19 @@ final class AB_MCP_Sync_Net {
 		$n     = strlen( $text );
 		for ( $i = 0; $i < $n; $i++ ) {
 			$c = $text[ $i ];
+			if ( '' === $quote && '/' === $c && '*' === substr( $text, $i + 1, 1 ) ) {
+				$end  = strpos( $text, '*/', $i + 2 );
+				$end  = false === $end ? $n : $end + 2;
+				$out .= str_repeat( ' ', $end - $i );
+				$i    = $end - 1;
+				continue;
+			}
+			if ( '' === $quote && '/' === $c && '/' === substr( $text, $i + 1, 1 ) ) {
+				$end  = $i + strcspn( $text, "\n\r", $i );
+				$out .= str_repeat( ' ', $end - $i );
+				$i    = $end - 1;
+				continue;
+			}
 			if ( '' !== $quote ) {
 				if ( '\\' === $c ) {
 					$out .= '  ';
@@ -528,7 +564,18 @@ final class AB_MCP_Sync_Net {
 		$out = array();
 		foreach ( $m[0] as $hit ) {
 			$head = self::data_header( $text, (int) $hit[1] + 5 );
+			// No header where a data: address begins (Codex, round 23, A-2:
+			// a bracket, a line break, no "," within HEAD bytes – a type, or
+			// none before ";" or ","; "data:" in prose begins none), or a
+			// parameter twice (A-3): not read, the unit locks.
 			if ( null === $head ) {
+				if ( preg_match( '#\G\s*(?:[A-Za-z0-9!\#$&^_.+\-]+/|[;,])#', $text, $x, 0, (int) $hit[1] + 5 ) ) {
+					$bad = true;
+				}
+				continue;
+			}
+			if ( false === $head ) {
+				$bad = true;
 				continue;
 			}
 			$start = $head['body'];
@@ -569,11 +616,13 @@ final class AB_MCP_Sync_Net {
 	 * base64 (the fetch standard); an empty type is text/plain. The header
 	 * ends at the first "," outside a quoted string; a line break, a
 	 * bracket or a quote of HTML in it, or no "," within HEAD bytes, is no
-	 * header. Names and the type in lower case, a value as written.
+	 * header (null). A parameter twice is false (Codex, round 23, A-3: the
+	 * standard keeps the first, the net decides nothing). Names and the
+	 * type in lower case, a value as written.
 	 *
 	 * @param string $text Text.
 	 * @param int    $at   Where the header begins (after "data:").
-	 * @return array{type:string,params:array<string,string>,base64:bool,body:int}|null
+	 * @return array{type:string,params:array<string,string>,base64:bool,body:int}|null|false
 	 */
 	private static function data_header( $text, $at ) {
 		$n      = min( strlen( $text ), $at + self::HEAD );
@@ -640,7 +689,11 @@ final class AB_MCP_Sync_Net {
 				$base64 = $base64 || ( $i === count( $parts ) - 1 && 'base64' === strtolower( $param ) );
 				continue;
 			}
-			$params[ strtolower( trim( substr( $param, 0, $eq ) ) ) ] = trim( substr( $param, $eq + 1 ) );
+			$key = strtolower( trim( substr( $param, 0, $eq ) ) );
+			if ( isset( $params[ $key ] ) ) {
+				return false;
+			}
+			$params[ $key ] = trim( substr( $param, $eq + 1 ) );
 		}
 		return array(
 			'type'   => '' === $type ? 'text/plain' : $type,
@@ -836,7 +889,12 @@ final class AB_MCP_Sync_Net {
 		// The address tokens first: from every host to the end of an
 		// address, read whole (a host of no site names nothing, whatever
 		// follows its "#").
-		if ( preg_match_all( AB_MCP_Sync_Urls::HOST, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+		// Every host, and an address of SCHEMES (mailto:?body=…; Codex, round
+		// 23, A-1): a host of no site names the values of its query.
+		foreach ( array( AB_MCP_Sync_Urls::HOST, AB_MCP_Sync_Urls::SCHEMES ) as $pattern ) {
+			if ( ! preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+				continue;
+			}
 			foreach ( $m[0] as $host ) {
 				$at = (int) $host[1];
 				if ( self::inside( $at, $spans ) ) {
@@ -919,7 +977,7 @@ final class AB_MCP_Sync_Net {
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
 	 * @return string[]
 	 */
-	public static function credentials( $text, array $extra ) {
+	public static function credentials( $text, array $extra, &$undecidable = null ) {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
@@ -935,13 +993,18 @@ final class AB_MCP_Sync_Net {
 		// In code a name after "," or ";" as well: where a "{" is open before
 		// it (in prose, «Name, Token: "abc"» is none), the braces counted
 		// with the strings blanked (a "}" in a string closes none; Codex,
-		// round 22, A-4).
+		// round 22, A-4). Where the count cannot decide – more closed than
+		// opened, or a RegExp literal before the name, whose braces are
+		// none (Codex, round 23, A-4) – it is undecidable: the net locks.
 		if ( preg_match_all( '/[,;]\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/', $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			$blanked = self::blanked( $text );
 			foreach ( $m[1] as $hit ) {
 				$before = (string) substr( $blanked, 0, (int) $hit[1] );
-				if ( substr_count( $before, '{' ) > substr_count( $before, '}' ) ) {
+				$open   = substr_count( $before, '{' ) - substr_count( $before, '}' );
+				if ( $open > 0 ) {
 					$found[] = $hit[0];
+				} elseif ( $open < 0 || self::regexp_literal( $before ) ) {
+					$undecidable = true;
 				}
 			}
 		}
