@@ -4,7 +4,11 @@
  * Klausel»): each entry takes ONE clause out of the shipped code and expects
  * the tests that hold it to fail.
  *
- *   php tests/mutation/run.php [<list.php> ...] [--only=<id>] [--show]
+ *   php tests/mutation/run.php [<list.php> ...] [--only=<id>] [--shard=<k>/<n>] [--show]
+ *
+ * --shard=k/n runs every n-th entry, starting with the k-th (1 <= k <= n), so
+ * that n jobs together run each entry exactly once (the CI splits the lists
+ * this way to stay inside its time limit).
  *
  * --show prints the end of every red run as well, to see that a mutation
  * was killed for the reason the list names.
@@ -323,10 +327,17 @@ final class AB_Mutation_Run {
 $ab_root  = realpath( dirname( __DIR__, 2 ) );
 $ab_lists = array();
 $ab_only  = null;
+$ab_shard = null;
 $ab_show  = false;
 foreach ( array_slice( $argv, 1 ) as $ab_arg ) {
 	if ( 0 === strpos( $ab_arg, '--only=' ) ) {
 		$ab_only = substr( $ab_arg, 7 );
+	} elseif ( 0 === strpos( $ab_arg, '--shard=' ) ) {
+		if ( ! preg_match( '#^--shard=([1-9][0-9]*)/([1-9][0-9]*)$#D', $ab_arg, $ab_m ) || (int) $ab_m[1] > (int) $ab_m[2] ) {
+			fwrite( STDERR, "mutation: --shard wants k/n with 1 <= k <= n; nothing changed.\n" );
+			exit( 2 );
+		}
+		$ab_shard = array( (int) $ab_m[1], (int) $ab_m[2] );
 	} elseif ( '--show' === $ab_arg ) {
 		$ab_show = true;
 	} else {
@@ -366,6 +377,15 @@ try {
 }
 if ( null !== $ab_only ) {
 	$ab_entries = array_values( array_filter( $ab_entries, static fn( $e ) => $e['id'] === $ab_only ) );
+}
+if ( null !== $ab_shard ) {
+	$ab_entries = array_values(
+		array_filter(
+			$ab_entries,
+			static fn( $i ) => $ab_shard[0] - 1 === $i % $ab_shard[1],
+			ARRAY_FILTER_USE_KEY
+		)
+	);
 }
 if ( array() === $ab_entries ) {
 	fwrite( STDERR, "mutation: no entry to run.\n" );
