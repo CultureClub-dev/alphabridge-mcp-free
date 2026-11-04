@@ -48,8 +48,6 @@ final class SyncSafeCallsTest extends TestCase {
 		'get_shortcode_atts_regex'             => 'The pattern only.',
 		'shortcode_parse_atts'                 => 'Parses the text it is given (stripcslashes(), the pattern of get_shortcode_atts_regex()).',
 		'has_filter'                           => 'Asks the hooks registered in this request, code, no stored value.',
-		'esc_attr'                             => 'Escapes the text it is given (wp-includes/formatting.php).',
-		'sanitize_title_for_query'             => 'Makes the name of a page of the text it is given, as get_page_by_path() does.',
 		'is_multisite'                         => 'The constants MULTISITE and SUBDOMAIN_INSTALL.',
 		// Static methods of this plugin outside includes/sync/.
 		'AB_MCP_Builders::signatures'          => 'signatures.php and the filter ab_mcp_builder_signatures; no post and no option.',
@@ -135,6 +133,11 @@ final class SyncSafeCallsTest extends TestCase {
 		'get_transient', 'get_site_transient', 'get_post', 'get_posts', 'get_term', 'get_terms', 'get_term_by',
 		'wp_get_object_terms', 'get_the_terms', 'wp_get_nav_menu_items', 'get_userdata', 'get_user_by',
 		'home_url', 'site_url', 'get_home_url', 'get_site_url', 'get_bloginfo', 'is_plugin_active', 'maybe_unserialize', 'unserialize',
+		// Functions of the core that read an option (Codex, round 12:
+		// esc_attr() reads blog_charset through the cache) or a stored post.
+		'esc_attr', 'esc_html', 'esc_textarea', 'esc_js', 'esc_xml', 'esc_url', 'esc_url_raw', 'esc_attr_e', 'esc_html_e',
+		'_wp_specialchars', 'wp_check_invalid_utf8', 'wp_kses', 'wp_kses_post', 'wp_kses_data', 'sanitize_title',
+		'sanitize_title_for_query', 'remove_accents', 'url_to_postid', 'get_page_by_path', 'get_permalink',
 		'resolve_option', 'option_snapshot', 'option_write_refused', 'detect_all', 'markers_found', 'signature_active', 'signature_data_version', 'primary',
 	);
 

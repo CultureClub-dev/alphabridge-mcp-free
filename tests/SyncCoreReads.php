@@ -195,6 +195,9 @@ trait SyncCoreReads {
 			// Codex, round 11 (3): the content of script and textarea is text.
 			'in a script'          => array( '<script type="application/ld+json">{"url":"https://staging.test/?p=12"}</script>', array( 'post:12@c:html?p' ), '<script type="application/ld+json">{"url":"https://www.live.test/?p=120"}</script>' ),
 			'in a textarea'        => array( '<textarea>https://staging.test/?p=12</textarea>', array( 'post:12@c:html?p' ), '<textarea>https://www.live.test/?p=120</textarea>' ),
+			// Codex, round 12 (4): url(…) and a template string.
+			'in a style'           => array( '<style>body{background:url(https://staging.test/?p=12)}</style>', array( 'post:12@c:html?p' ), '<style>body{background:url(https://www.live.test/?p=120)}</style>' ),
+			'in a template string' => array( '<script>const u=`https://staging.test/?p=12`;</script>', array( 'post:12@c:html?p' ), '<script>const u=`https://www.live.test/?p=120`;</script>' ),
 			'escaped JSON in a script' => array( '<script>var u = "https:\\/\\/staging.test\\/?p=12";</script>', array( 'post:12@c:html?p' ), '<script>var u = "https:\\/\\/www.live.test\\/?p=120";</script>' ),
 			'after an ampersand'   => array( '<p><a href="https://staging.test/?preview=1&amp;p=12">x</a></p>', array( 'post:12@c:html?p' ), '<p><a href="https://www.live.test/?preview=1&amp;p=120">x</a></p>' ),
 			'after an ampersand in prose' => array( 'Siehe https://staging.test/?preview=1&p=12 hier', array( 'post:12@c:html?p' ), 'Siehe https://www.live.test/?preview=1&p=120 hier' ),
@@ -257,6 +260,7 @@ trait SyncCoreReads {
 			'a name escaped'         => array( '<p><a href="/?%70=12">x</a></p>', 'c:html?p' ),
 			'a value escaped'        => array( '<p><a href="https://staging.test/?p=%312">x</a></p>', 'c:html?p' ),
 			'a list of a name'       => array( '<p><a href="/?p[]=12">x</a></p>', 'c:html?p' ),
+			'a list of a list in prose' => array( 'Siehe https://staging.test/?cat[]=5 hier', 'c:html?cat' ),
 			'a space before the name' => array( '<p><a href="/?%20p=12">x</a></p>', 'c:html?p' ),
 			'a leading zero'         => array( '<p><a href="/?p=012">x</a></p>', 'c:html?p' ),
 			'a leading zero in prose' => array( 'Siehe https://staging.test/?p=012 hier', 'c:html?p' ),
@@ -300,6 +304,9 @@ trait SyncCoreReads {
 			// Codex, round 11 (4): relative to the page, a segment of digits.
 			'digits relative to the page' => array( '<p><a href="../12/">Beitrag</a></p>', 'c:html%post_id%' ),
 			'digits relative in a block attribute' => array( '<!-- wp:acme/x {"url":"../12/"} /-->', 'c:acme/x.url%post_id%' ),
+			// Codex, round 12 (3): an encoded slash makes the segments.
+			'an encoded slash relative to the page' => array( '<p><a href="archives%2F12/">x</a></p>', 'c:html%post_id%' ),
+			'an encoded dot relative in a block attribute' => array( '<!-- wp:acme/x {"url":"%2e%2e/12/"} /-->', 'c:acme/x.url%post_id%' ),
 			'escaped digits relative to the page' => array( '<p><a href="archives/%31%32">x</a></p>', 'c:html%post_id%' ),
 			// Codex, round 11 (6): as the URL parser reads it (tab, line break, spaces).
 			'a tab in the name'      => array( '<p><a href="/?pa&#9;ge_id=12">x</a></p>', 'c:html?page_id' ),
@@ -340,6 +347,11 @@ trait SyncCoreReads {
 			'all categories'         => array( '<p><a href="/?cat=0">Alle Kategorien</a></p>' ),
 			'no author, no post'     => array( 'Siehe https://staging.test/?author= und https://staging.test/?p=0 und https://staging.test/?cat=0,-0' ),
 			'no page in a block attribute' => array( '<!-- wp:acme/x {"url":"/?page_id=0"} /-->' ),
+			// Codex, round 12 (8): also relative and normalized.
+			'all categories relative to the page' => array( '<p><a href="?cat=0">Alle</a> <a href="?author=">Alle</a></p>' ),
+			'no post with spaces'    => array( '<p><a href=" /?p=0 ">x</a></p>' ),
+			'no author in a block attribute relative' => array( '<!-- wp:acme/x {"url":"?author="} /-->' ),
+			'a zero segment relative' => array( '<!-- wp:acme/x {"url":"../0/"} /-->' ),
 			// Codex, round 10 (9): a file relative to the page names no object.
 			'a file relative to the page'    => array( '<p><img src="photo2.jpg"></p>' ),
 			'an upload relative to the page' => array( '<p><img src="wp-content/uploads/2026/11/photo.jpg"></p>' ),

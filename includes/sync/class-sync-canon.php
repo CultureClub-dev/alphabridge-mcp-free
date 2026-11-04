@@ -163,6 +163,8 @@ final class AB_MCP_Sync_Canon {
 			'sites'     => $sites,
 			'one_root'  => count( array_unique( array_column( $sites, 'path' ) ) ) <= 1,
 			'routes'    => is_array( $routes ) ? $routes : null,
+			// The charset of the HTML (source() reads it from the row).
+			'utf8'      => true,
 			'users'     => is_callable( $users ) ? $users : array( 'AB_MCP_Sync_Rows', 'user_login' ),
 		);
 	}

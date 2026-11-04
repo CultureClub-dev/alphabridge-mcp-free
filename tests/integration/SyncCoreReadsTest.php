@@ -196,8 +196,27 @@ final class SyncCoreReadsTest extends TestCase {
 		$post = self::post( 'beitrag' );
 		$read = self::read( self::link( '/beitrag/' . $post . '/' ), array( $post => $post + 1000 ) );
 		self::assertSame( array( array( $post ), self::there( '/beitrag/' . ( $post + 1000 ) . '/' ) ), array( $read['refs'], $read['content'] ), 'No page beitrag: the post.' );
+		// Codex, round 12 (7): the page handbuch exists, the search ends
+		// there: pagename=handbuch&page=2, no id.
 		$read = self::read( self::link( '/handbuch/2/' ), array( 2 => 200 ) );
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'The page handbuch exists: page or post, only the core knows.' );
+		self::assertSame( array( array(), array(), self::there( '/handbuch/2/' ) ), array( $read['refs'], $read['spelling'], $read['content'] ), 'The page handbuch exists.' );
+		// A name the rows are not asked about (not a plain slug): page or
+		// post, not known: locks.
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, array( 'post_name' => 'caf%c3%a9' ), array( 'ID' => self::post( 'cafe', array( 'post_type' => 'page' ) ) ) );
+		$read = self::read( self::link( '/caf%C3%A9/2/' ), array( 2 => 200 ) );
+		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array( $read['refs'], $read['spelling'] ), 'Not known.' );
+	}
+
+	public function testAnotherCharsetThanUtf8IsNotRead(): void {
+		// Codex, round 12 (1): the charset from its row; not UTF-8, not read.
+		$this->permalinks( '/archives/%post_id%/' );
+		$a = self::post( 'eins' );
+		update_option( 'blog_charset', 'ISO-8859-1' );
+		$read = self::read( self::link( '/?p=' . $a ), array( $a => $a + 1000 ) );
+		self::assertSame( array( array(), array( 'c:html:tags' ) ), array( $read['refs'], $read['spelling'] ) );
+		update_option( 'blog_charset', 'utf8' );
+		self::assertSame( array( $a ), self::read( self::link( '/?p=' . $a ), array( $a => $a + 1000 ) )['refs'] );
 	}
 
 	public function testRowsThatCannotBeReadAreNotKnown(): void {

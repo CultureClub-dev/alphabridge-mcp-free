@@ -65,21 +65,35 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * Whether the charset of the site is UTF-8, from its row blog_charset
+	 * (utf8, utf-8 in any case, as _wp_specialchars() takes it): the
+	 * spellings the HTML of the site is read in. False where it is another
+	 * or the row cannot be read.
+	 *
+	 * @return bool
+	 */
+	public static function utf8() {
+		$row = self::option( 'blog_charset' );
+		return is_array( $row ) && in_array( strtolower( trim( (string) $row['value'] ) ), array( 'utf-8', 'utf8' ), true );
+	}
+
+	/**
 	 * Whether a page (or an attachment) of a name exists, for the verbose
 	 * rules of pages (AB_MCP_Sync_Urls::route()): get_page_by_path() of the
 	 * core finds a page only among those with the name of the last part of
-	 * its path, made as it makes it (rawurlencode( urldecode() ),
-	 * sanitize_title_for_query()). Asked of the rows, without the cache.
+	 * its path. Asked of the rows, without the cache; only for a name of
+	 * letters, digits, "-" and "_" (a slug as sanitize_title() leaves it,
+	 * compared without case as the column is): any other name is not known.
 	 *
 	 * @param string $part The last part of the path of the page.
-	 * @return bool|null Null when the rows cannot be read.
+	 * @return bool|null Null when it is not known.
 	 */
 	public static function page_named( $part ) {
 		global $wpdb;
-		if ( ! self::has( array( 'posts' ) ) ) {
+		if ( ! self::has( array( 'posts' ) ) || ! preg_match( '/^[A-Za-z0-9_-]+\z/', (string) $part ) ) {
 			return null;
 		}
-		$name = sanitize_title_for_query( str_replace( '%20', ' ', rawurlencode( urldecode( (string) $part ) ) ) );
+		$name = strtolower( (string) $part );
 		$rows = self::select( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_type IN ( 'page', 'attachment' ) LIMIT 1", $name ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from $wpdb.
 		return null === $rows ? null : array() !== $rows;
 	}

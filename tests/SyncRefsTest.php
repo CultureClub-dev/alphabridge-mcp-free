@@ -598,8 +598,9 @@ final class SyncRefsTest extends TestCase {
 		};
 		self::assertSame( array( array( 12 ), array(), 'Siehe https://www.live.test/parent/child/120/ hier', array() ), self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ) );
 		self::assertContains( 'child', $asked, 'The last part of the path of the page.' );
-		// A page of that name exists: page or post, only the core knows.
-		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'Siehe https://staging.test/handbuch/2/ hier', $category ), 0, 2 ) );
+		// Codex, round 12 (7): a page of that name exists: the search ends
+		// there, pagename=handbuch&page=2, no id.
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/handbuch/2/ hier', array() ), self::routed( 'Siehe https://staging.test/handbuch/2/ hier', $category ) );
 		// Escapes or double slashes where the rule matches as stored.
 		foreach ( array( 'Siehe https://staging.test/caf%C3%A9/12/ hier', 'Siehe https://staging.test/parent//12/ hier' ) as $content ) {
 			self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( $content, $category ), 0, 2 ), $content );
@@ -611,6 +612,64 @@ final class SyncRefsTest extends TestCase {
 		// The pages not to be asked: the same.
 		unset( $category['pages'] );
 		self::assertSame( array( array(), array( 'c:html%post_id%' ) ), array_slice( self::routed( 'Siehe https://staging.test/parent/child/12/ hier', $category ), 0, 2 ) );
+	}
+
+	public function testTheValueParseStrGivesInTheEndDecides(): void {
+		// Codex, round 12 (6): p=$matches[1]&p=0 sets p to 0, no id.
+		$rules = array( 'rules' => array( 'go/([0-9]+)/?$' => 'index.php?p=$matches[1]&p=0', 'to/([0-9]+)/?$' => 'index.php?p=0&p=$matches[1]', 'at/([0-9]+)/?$' => 'index.php?p=7&p=0&page_id=$matches[1]&page_id=7', 'pre/([0-9]+)/?$' => 'index.php?p=x$matches[1]' ), 'verbose' => false, 'index' => false );
+		self::assertSame( array( array(), array(), 'Siehe https://www.live.test/go/12/ hier', array() ), self::routed( 'Siehe https://staging.test/go/12/ hier', $rules ) );
+		self::assertSame( array( array( 12 ), array(), 'Siehe https://www.live.test/to/120/ hier', array() ), self::routed( 'Siehe https://staging.test/to/12/ hier', $rules ), 'The last pair takes the group.' );
+		self::assertSame( array( 'c:html%post_id%' ), self::routed( 'Siehe https://staging.test/at/12/ hier', $rules )[1], 'The last pair a fixed id: locks.' );
+		self::assertSame( array( 'c:html%post_id%' ), self::routed( 'Siehe https://staging.test/pre/12/ hier', $rules )[1], 'A group with more: not the id, locks.' );
+	}
+
+	public function testEncodedDotsAndSlashesInAPathLock(): void {
+		// Codex, round 12 (2): the browser decodes %2e, %2f and %5c.
+		$numeric = self::rules( '/archives/%post_id%/' );
+		foreach ( array(
+			'Siehe https://staging.test/archives/%2e/12/ hier'           => 'c:html%post_id%',
+			'Siehe https://staging.test/archives/%2E%2E/archives/12/ hier' => 'c:html%post_id%',
+			'Siehe https://staging.test/archives%2f12/ hier'             => 'c:html%post_id%',
+			'Siehe https://staging.test/archives%5C12/ hier'             => 'c:html%post_id%',
+			'<!-- wp:acme/x {"url":"archives%2F12/"} /-->'               => 'c:acme/x.url%post_id%',
+		) as $content => $at ) {
+			self::assertSame( array( array(), array( $at ) ), array_slice( self::routed( $content, $numeric ), 0, 2 ), $content );
+		}
+		// Without a digit: free.
+		self::assertSame( array( array(), array() ), array_slice( self::routed( 'Siehe https://staging.test/caf%2Ee/beitrag/ hier', $numeric ), 0, 2 ) );
+	}
+
+	public function testAnAddressEndsWhereScriptAndStyleEndIt(): void {
+		// Codex, round 12 (4): url(…) of CSS, a template string of JS.
+		$numeric = self::rules( '/archives/%post_id%/' );
+		foreach ( array(
+			'body{background:url(https://staging.test/archives/12/)}' => 'body{background:url(https://www.live.test/archives/120/)}',
+			'const u=`https://staging.test/archives/12/`;'            => 'const u=`https://www.live.test/archives/120/`;',
+			'a{b:url(https://staging.test/?p=12)}'                    => 'a{b:url(https://www.live.test/?p=120)}',
+			'x = {u: https://staging.test/?p=12}|y^z'                 => 'x = {u: https://www.live.test/?p=120}|y^z',
+		) as $from => $to ) {
+			self::assertSame( array( array( 12 ), array(), $to, array() ), self::routed( $from, $numeric ), $from );
+		}
+	}
+
+	public function testAHostInAnotherSpellingInTheFolderOfTheSite(): void {
+		// Codex, round 12 (5): the folder of the site taken off as after the exact form.
+		$routes = self::rules( '/archives/%post_id%/' );
+		$ctx    = AB_MCP_Sync_Canon::context( array( 'https://staging.test/blog' ), static fn( $id ) => 'user' . $id, $routes );
+		foreach ( array(
+			'Siehe https://STAGING.test/blog/archives/12/ hier'      => array( 'c:html%post_id%' ),
+			'Siehe https://www.staging.test/blog/?p=12 hier'         => array( 'c:html?p' ),
+			'Siehe https://STAGING.test/archives/12/ hier'           => array( 'c:html%post_id%' ),
+			'Siehe https://STAGING.test/blog/handbuch/2/ hier'       => array(),
+			// Outside the folder the rules of the site route nothing.
+			'Siehe https://STAGING.test/handbuch/2/ hier'            => array( 'c:html%post_id%' ),
+			// It ends as an address does (url(…)).
+			'Siehe url(https://STAGING.test/blog/archives/12) hier'  => array( 'c:html%post_id%' ),
+		) as $content => $want ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+			self::assertSame( array( array(), $want ), array( $acc['refs'], $acc['spelling'] ), $content );
+		}
 	}
 
 	public function testTheRulesOfThisSiteAreNotAskedAboutTheOtherSite(): void {

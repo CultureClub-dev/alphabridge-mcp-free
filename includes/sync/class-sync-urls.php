@@ -69,6 +69,14 @@ final class AB_MCP_Sync_Urls {
 	/** A host with an optional port after "//" (also \/\/ of JSON): a spelling of an address. */
 	const HOST = '#(?:(https?):)?(?://|\\\\/\\\\/)([A-Za-z0-9.\-]+(?::[0-9]+)?)#i';
 
+	/**
+	 * How far an address goes in a text: up to the first character that
+	 * stands in no address as stored and ends one in HTML, CSS and JS
+	 * (spaces, quotes, the backtick, brackets, braces, <, >, |, ^, a
+	 * backslash); the escapes of JSON (\/, \uXXXX) are part of it.
+	 */
+	const EXTENT = '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'`()<>{}|^\\\\])*#';
+
 	/** The same at the beginning of an address, with its scheme and its host and port. */
 	const HOST_AT_START = '#^(?:(https?):)?(?://|\\\\/\\\\/)([^/?\#\\\\]*)#i';
 
@@ -90,7 +98,8 @@ final class AB_MCP_Sync_Urls {
 		// In the values of the attributes of tags, as the HTML API reads them.
 		if ( preg_match( '/<[A-Za-z]/', $text ) ) {
 			$tags = null;
-			if ( class_exists( 'WP_HTML_Tag_Processor' ) ) {
+			// The HTML API reads UTF-8: a site in another charset is not read.
+			if ( class_exists( 'WP_HTML_Tag_Processor' ) && ! empty( $ctx['utf8'] ) ) {
 				require_once __DIR__ . '/class-sync-html.php';
 				$tags = AB_MCP_Sync_Html::tag_list( $text );
 			}
@@ -184,7 +193,7 @@ final class AB_MCP_Sync_Urls {
 			if ( self::inside( $address['at'], $done ) ) {
 				continue;
 			}
-			preg_match( '#\G(?:\\\\/|\\\\u[0-9a-fA-F]{4}|[^\s"\'<>\\\\])*#', $text, $m, 0, $address['at'] + $address['len'] );
+			preg_match( self::EXTENT, $text, $m, 0, $address['at'] + $address['len'] );
 			$url = substr( $text, $address['at'], $address['len'] ) . (string) preg_replace( '/[.,;:!)\]]+\z/', '', $m[0] );
 			$out = array_merge( $out, self::address( $url, $ctx, $stored ? $address['at'] : null, $text ) );
 		}
@@ -193,7 +202,7 @@ final class AB_MCP_Sync_Urls {
 				if ( self::inside( (int) $host[1], $done ) || self::at_cut( (int) $host[1], $addresses ) ) {
 					continue;
 				}
-				preg_match( '#\G[^\s"\'<>]*#', $text, $m, 0, (int) $host[1] );
+				preg_match( self::EXTENT, $text, $m, 0, (int) $host[1] );
 				$out = array_merge( $out, self::address( $m[0], $ctx, null, $text ) );
 			}
 		}
@@ -258,16 +267,20 @@ final class AB_MCP_Sync_Urls {
 			if ( null === $site ) {
 				return null;
 			}
-			$own  = $site['own'];
-			$form = 'variant';
-			$path = strlen( $m[0] );
+			// The folder of the site after the host, as after the exact form;
+			// outside it, the rules of the site do not route the path.
+			$under = self::under( $site, $lead, strlen( $m[0] ) );
+			$own   = $site['own'] && null !== $under;
+			$form  = 'variant';
+			$path  = null === $under ? strlen( $m[0] ) : $under;
 		} elseif ( preg_match( '#^[A-Za-z][A-Za-z0-9+.\-]*:#', $lead ) ) {
 			return null;
 		} elseif ( 0 === strpos( $lead, '/' ) ) {
 			foreach ( isset( $ctx['sites'] ) ? $ctx['sites'] : array() as $site ) {
-				if ( 1 === preg_match( '#^' . preg_quote( $site['path'], '#' ) . '(?:[/?]|\z)#', $lead ) ) {
+				$under = self::under( $site, $lead, 0 );
+				if ( null !== $under ) {
 					$form = 'root';
-					$path = strlen( $site['path'] );
+					$path = $under;
 					break;
 				}
 			}
@@ -288,6 +301,20 @@ final class AB_MCP_Sync_Urls {
 			'end'   => false === $mark ? $hash : $mark,
 			'query' => false === $mark ? null : $mark + 1,
 		);
+	}
+
+	/**
+	 * Where the path of a site ends in an address, at an offset: after the
+	 * folder of the site (its path in the context) where the address goes
+	 * on there with "/", "?", "#" or ends; null where it is outside it.
+	 *
+	 * @param array  $site Of the context.
+	 * @param string $url  Address.
+	 * @param int    $at   Offset of the path.
+	 * @return int|null
+	 */
+	private static function under( array $site, $url, $at ) {
+		return 1 === preg_match( '#^' . preg_quote( $site['path'], '#' ) . '(?:[/?\#]|\z)#', (string) substr( $url, $at ) ) ? $at + strlen( $site['path'] ) : null;
 	}
 
 	/**
@@ -352,8 +379,9 @@ final class AB_MCP_Sync_Urls {
 				continue;
 			}
 			parse_str( (string) substr( $head, $q + 1 ), $vars );
-			foreach ( array_keys( $vars ) as $name ) {
-				if ( isset( self::QUERY_IDS[ $name ] ) ) {
+			foreach ( $vars as $name => $value ) {
+				// 0, -0 and empty name no object (?cat=0, ?author=, ?p=0).
+				if ( isset( self::QUERY_IDS[ $name ] ) && ! self::no_object( (string) $name, $value ) ) {
 					$named[ $name ] = true;
 				}
 			}
@@ -379,6 +407,21 @@ final class AB_MCP_Sync_Urls {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether a value of a variable of QUERY_IDS names no object: 0, -0,
+	 * empty (AB_MCP_Sync_Canon::id_spelling() 0), for a list every item.
+	 *
+	 * @param string $var   Variable.
+	 * @param mixed  $value Its value as parse_str() reads it.
+	 * @return bool
+	 */
+	private static function no_object( $var, $value ) {
+		if ( ! is_string( $value ) ) {
+			return false;
+		}
+		return in_array( $var, self::QUERY_LISTS, true ) ? array() === AB_MCP_Sync_Canon::id_tokens( $value, '/,/' ) : 0 === AB_MCP_Sync_Canon::id_spelling( $value );
 	}
 
 	/**
@@ -485,6 +528,11 @@ final class AB_MCP_Sync_Urls {
 	private static function path_ids( $url, array $read, array $ctx, $at ) {
 		$path  = (string) substr( $url, $read['path'], $read['end'] - $read['path'] );
 		$plain = str_replace( '\\/', '/', $path );
+		// An encoded dot, slash or backslash makes other segments of it (the
+		// browser and WP::parse_request() decode it): with a digit, it locks.
+		if ( preg_match( '/%(?:2e|2f|5c)/i', $plain ) ) {
+			return preg_match( '/[1-9]/', rawurldecode( $plain ) ) ? array( self::lock( (int) $at, strlen( $url ), '%post_id%' ) ) : array();
+		}
 		if ( 'page' === $read['form'] ) {
 			return self::page_ids( $plain, $at, strlen( $url ) );
 		}
@@ -496,18 +544,16 @@ final class AB_MCP_Sync_Urls {
 		$normal = self::normal_path( $plain );
 		$route  = null === $routes ? null : self::route( $routes, $normal );
 		if ( null === $route ) {
-			return preg_match( '#(?:^|/)[0-9]+(?:/|\z)#', rawurldecode( $plain ) ) ? array( self::lock( (int) $at, strlen( $url ), '%post_id%' ) ) : array();
+			return preg_match( '#(?:^|/)0*[1-9][0-9]*(?:/|\z)#', rawurldecode( $plain ) ) ? array( self::lock( (int) $at, strlen( $url ), '%post_id%' ) ) : array();
 		}
 		// As stored: the rule matched the stored path, no dot segments, no
 		// double slashes, no escapes.
 		$stored = null !== $at && $route['stored'] && $normal === $path && ! preg_match( '#//|%#', $path );
 		$out    = array();
 		foreach ( $route['ids'] as $hit ) {
+			// rule_ids() left out what names no object (0); an id in another
+			// spelling (null) locks as well.
 			$id = AB_MCP_Sync_Canon::id_spelling( $hit['raw'] );
-			if ( 0 === $id ) {
-				continue;
-			}
-			// An id in another spelling (null) locks as well.
 			$out[] = ! $stored ? self::lock( (int) $at, strlen( $url ), '%post_id%' ) : array(
 				'at'    => $at + $read['path'] + $hit['at'],
 				'len'   => $hit['len'],
@@ -536,7 +582,7 @@ final class AB_MCP_Sync_Urls {
 			return array();
 		}
 		foreach ( $segments as $segment ) {
-			if ( preg_match( '/^[0-9]+\z/', rawurldecode( $segment ) ) ) {
+			if ( preg_match( '/^0*[1-9][0-9]*\z/', rawurldecode( $segment ) ) ) {
 				return array( self::lock( (int) $at, $len, '%post_id%' ) );
 			}
 		}
@@ -597,8 +643,9 @@ final class AB_MCP_Sync_Urls {
 	 * decoded; the first that matches gives the query (WP_MatchesMapRegex::
 	 * apply(), read by parse_str()). A verbose rule of pages holds only
 	 * where get_page_by_path() finds the page: where no page has the name of
-	 * its last part (routes pages) it does not; else the search goes on, and
-	 * where the rules that may hold put ids in other places, it locks.
+	 * its last part (routes pages) the search goes on, where one has it the
+	 * search ends there; where that is not known it goes on, and where the
+	 * rules that may hold put ids in other places, it locks.
 	 *
 	 * @param array  $routes routes().
 	 * @param string $path   Path, its dot segments resolved.
@@ -620,12 +667,17 @@ final class AB_MCP_Sync_Urls {
 			if ( 1 !== preg_match( '#^' . $match . '#', $request, $m, PREG_OFFSET_CAPTURE ) && 1 !== preg_match( '#^' . $match . '#', urldecode( $request ), $m, PREG_OFFSET_CAPTURE ) ) {
 				continue;
 			}
-			$verbose = $routes['verbose'] && preg_match( '/pagename=\$matches\[([0-9]+)\]/', $query, $page );
-			if ( $verbose && isset( $m[ (int) $page[1] ] ) ) {
+			// A verbose rule of pages: where no page has its name the core goes
+			// on, where one has it the search ends, where that is not known
+			// the rules that may hold are compared.
+			$known = true;
+			if ( $routes['verbose'] && preg_match( '/pagename=\$matches\[([0-9]+)\]/', $query, $page ) && isset( $m[ (int) $page[1] ] ) ) {
 				$parts = explode( '/', trim( (string) $m[ (int) $page[1] ][0], '/' ) );
-				if ( isset( $routes['pages'] ) && is_callable( $routes['pages'] ) && false === call_user_func( $routes['pages'], (string) end( $parts ) ) ) {
+				$named = isset( $routes['pages'] ) && is_callable( $routes['pages'] ) ? call_user_func( $routes['pages'], (string) end( $parts ) ) : null;
+				if ( false === $named ) {
 					continue;
 				}
+				$known = true === $named;
 			}
 			$one = array(
 				'ids'    => self::rule_ids( $query, $m, $lead ),
@@ -638,7 +690,7 @@ final class AB_MCP_Sync_Urls {
 				return null;
 			}
 			$found = null === $found ? $one : $found;
-			if ( ! $verbose ) {
+			if ( $known ) {
 				break;
 			}
 		}
@@ -661,21 +713,24 @@ final class AB_MCP_Sync_Urls {
 	private static function rule_ids( $query, array $m, $lead ) {
 		$query = (string) preg_replace( '!^.+\?!', '', $query );
 		parse_str( WP_MatchesMapRegex::apply( $query, array_column( $m, 0 ) ), $vars );
-		$groups = array();
-		if ( preg_match_all( '/(?:^|&)([^=&]+)=\$matches\[([0-9]+)\](?=&|\z)/', $query, $pairs, PREG_SET_ORDER ) ) {
-			foreach ( $pairs as $pair ) {
-				$groups[ $pair[1] ] = (int) $pair[2];
+		// The last pair of each name gives its value (parse_str()).
+		$last = array();
+		foreach ( explode( '&', $query ) as $pair ) {
+			parse_str( $pair, $one );
+			foreach ( array_keys( $one ) as $name ) {
+				$last[ $name ] = (string) substr( $pair, strpos( $pair, '=' ) + 1 );
 			}
 		}
 		$out = array();
-		foreach ( array_keys( $vars ) as $var ) {
-			if ( ! isset( self::QUERY_IDS[ $var ] ) ) {
+		foreach ( $vars as $var => $value ) {
+			if ( ! isset( self::QUERY_IDS[ $var ] ) || self::no_object( (string) $var, $value ) ) {
 				continue;
 			}
-			if ( ! isset( $groups[ $var ], $m[ $groups[ $var ] ] ) ) {
+			// The value from exactly one group of the path, else a fixed id.
+			if ( ! isset( $last[ $var ] ) || ! preg_match( '/^\$matches\[([0-9]+)\]\z/', $last[ $var ], $group ) || ! isset( $m[ (int) $group[1] ] ) ) {
 				return null;
 			}
-			$group = $m[ $groups[ $var ] ];
+			$group = $m[ (int) $group[1] ];
 			$out[] = array(
 				'var' => (string) $var,
 				'at'  => $lead + (int) $group[1],
@@ -685,6 +740,7 @@ final class AB_MCP_Sync_Urls {
 		}
 		return $out;
 	}
+
 
 	/**
 	 * A path with its dot segments removed, as the browser resolves it

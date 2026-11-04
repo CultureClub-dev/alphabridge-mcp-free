@@ -128,8 +128,9 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	/**
 	 * Where the value of an attribute stands in the stored text of its tag,
 	 * only where it is stored in double quotes in a spelling the core writes
-	 * (set_attribute(), esc_attr(), or the value itself where nothing needs
-	 * escaping), and only where the HTML API reads that span as the value:
+	 * (the value itself where nothing needs escaping, as esc_attr() and as
+	 * esc_url() escape it, in UTF-8), and only where the HTML API reads that
+	 * span as the value:
 	 * with the span replaced, get_attribute() gives the replacement (not a
 	 * spelling inside another attribute). Null for every other spelling.
 	 *
@@ -139,17 +140,11 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	 * @return array{0:int,1:int}|null Offset and length of the value in $raw.
 	 */
 	public static function value_span( $raw, $name, $value ) {
-		$raw = (string) $raw;
-		$q   = new self( '<a>' );
-		$q->next_tag();
-		$q->set_attribute( $name, $value );
-		$lead      = '<a ' . $name . '="';
-		$written   = $q->get_updated_html();
-		$spellings = array( $value, esc_attr( $value ) );
-		if ( 0 === strpos( $written, $lead ) && '">' === substr( $written, -2 ) ) {
-			$spellings[] = (string) substr( $written, strlen( $lead ), -2 );
-		}
-		foreach ( array_unique( $spellings ) as $spelling ) {
+		$raw     = (string) $raw;
+		$escaped = htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8', false );
+		// As stored, as esc_attr() writes it (&amp;), as esc_url() writes it
+		// (&#038;); made without a function that reads an option.
+		foreach ( array_unique( array( (string) $value, $escaped, str_replace( '&amp;', '&#038;', $escaped ) ) ) as $spelling ) {
 			$at = strpos( $raw, ' ' . $name . '="' . $spelling . '"' );
 			if ( false === $at ) {
 				continue;

@@ -42,13 +42,16 @@ final class AB_MCP_Sync_Inventory {
 		// addresses, both from its rows (AB_MCP_Sync_Urls). What cannot be
 		// read locks where it counts.
 		$own = AB_MCP_Sync_Canon::own_addresses();
+		$ctx = AB_MCP_Sync_Canon::context(
+			$addresses,
+			$users,
+			AB_MCP_Sync_Urls::routes(),
+			null === $own ? array() : $own
+		);
+		// The tags read in UTF-8 only where the site writes in it.
+		$ctx['utf8'] = AB_MCP_Sync_Rows::utf8();
 		return array(
-			'ctx'      => AB_MCP_Sync_Canon::context(
-				$addresses,
-				$users,
-				AB_MCP_Sync_Urls::routes(),
-				null === $own ? array() : $own
-			),
+			'ctx'      => $ctx,
 			'deadline' => self::now() + max( 0, (float) $budget ),
 		);
 	}

@@ -178,7 +178,9 @@ final class SyncSafeTest extends TestCase {
 		$wp_rewrite->set_permalink_structure( '/archives/%post_id%/' );
 		$wp_rewrite->flush_rules( false );
 		$target  = wp_insert_post( array( 'post_title' => 'Ziel', 'post_status' => 'publish', 'post_type' => 'post' ) );
-		$post    = wp_insert_post( array( 'post_title' => 'Seite', 'post_status' => 'publish', 'post_type' => 'page', 'post_content' => '<!-- wp:paragraph --><p><a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $target . '/">x</a></p><!-- /wp:paragraph -->' ) );
+		// Codex, round 12 (1): an ampersand in an attribute is spelled without
+		// esc_attr() (which reads blog_charset), the charset from its row.
+		$post    = wp_insert_post( array( 'post_title' => 'Seite', 'post_status' => 'publish', 'post_type' => 'page', 'post_content' => '<!-- wp:paragraph --><p><a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/archives/' . $target . '/">x</a> <a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=' . $target . '&amp;x=1">y</a></p><!-- /wp:paragraph -->' ) );
 		$att     = wp_insert_post( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild', 'post_mime_type' => 'image/jpeg' ) );
 		add_post_meta( $att, '_wp_attached_file', '2026/11/bild.jpg' );
 		add_post_meta( $post, '_elementor_edit_mode', 'builder' );
