@@ -18,12 +18,13 @@
  * references as WP_HTML_Decoder decodes a text node, the escapes of JSON
  * (\/, \uXXXX), of JavaScript (\u{XXXX}, \uXXXX, \xHH), of C
  * (stripcslashes(), what shortcode_parse_atts() takes), of CSS
- * (AB_MCP_Sync_Css::unescaped()), percent escapes, and the text without
- * the comments of code (/*…*‍/ and //… to the end of the line, its strings
- * respected)); every data: address decoded (base64 and percent, of any
- * type: a text type, or one with a charset, read as UTF-8 by its BOM or
- * charset (utf8(): UTF-16, UTF-32, ISO-8859-1, Windows-1252), and a body
- * that is then no UTF-8 or holds a null byte is not read: the unit locks
+ * (AB_MCP_Sync_Css::unescaped()), percent escapes (as urldecode(): "+" a
+ * space), and the text without the comments of code (/*…*‍/ and //… to the
+ * end of the line, its strings respected)); every data: address decoded
+ * (base64 and percent, of any type: a text type, or one with a charset,
+ * read as UTF-8 by its BOM or charset (utf8(): UTF-16, UTF-32, ISO-8859-1,
+ * Windows-1252), and a body that is then no UTF-8 or holds a null byte is
+ * not read: the unit locks
  * (*:unreadable_value); any other type is bytes); every span of base64 of
  * MIN_BASE64 characters or more whose bytes are a text (UTF-8, or by a BOM
  * UTF-16 or UTF-32; one with a BOM that is then no text locks the unit);
@@ -154,13 +155,26 @@ final class AB_MCP_Sync_Net {
 	/** The keywords of JavaScript after which a "/" begins a RegExp literal, not a division (regexp_literal()). */
 	const KEYWORDS = array( 'return', 'typeof', 'void', 'delete', 'in', 'instanceof', 'new', 'throw', 'case', 'do', 'else', 'yield', 'await', 'of' );
 
+	/** The keywords of JavaScript whose ")" closes no operand: if (a) /x/ begins a RegExp literal (regexp_in_code()). */
+	const PAREN_KEYWORDS = array( 'if', 'while', 'for', 'with' );
+
 	/**
-	 * Where a data: address stands as an address (Codex, round 24, B-1): in
-	 * the value of an attribute, in url(), @import or image-set() of CSS, or
-	 * as a string value of JSON; "data:" in a text node or in prose begins
-	 * none (a header that is none locks only here).
+	 * Where a data: address stands as an address in CSS (Codex, round 24
+	 * B-1, round 25 B-1): the argument of url() or @import, a candidate of
+	 * image-set() (the first, or one after a ","). The value of an address
+	 * attribute and a string value of JSON: address_context().
 	 */
-	const DATA_CONTEXT = '#(?:url\(\s*|@import\s+|image-set\(\s*|=\s*|[:\[,]\s*(?=["\']))["\']?\s*\z#i';
+	const CSS_CONTEXT = '#(?:url\(\s*|@import\s+|image-set\(\s*(?:(?:[^()]|\([^()]*\))*,\s*)?)["\']?\s*\z#i';
+
+	/**
+	 * A balanced span of brackets from an offset (\G), its strings of JSON
+	 * read as strings: the text of JSON a "{" or "[" may begin, for
+	 * json_decode() to tell (json_value_at()).
+	 */
+	const JSON_SPAN = '/\G(?<v>[\[{](?:[^\[\]{}"]++|"(?:[^"\\\\]++|\\\\.)*+"|(?&v))*+[\]}])/s';
+
+	/** How many "{" or "[" around a data: address are read as JSON before the net gives up (json_value_at()). */
+	const JSON_TRIES = 32;
 
 	/** The types of a data: address whose body is a text. */
 	const TEXT_TYPES = '#^(?:text/|[^/]+/(?:[^+]+\+)?(?:xml|json|javascript|ecmascript|css|html)\z)#';
@@ -424,7 +438,10 @@ final class AB_MCP_Sync_Net {
 			$out['css']     = AB_MCP_Sync_Css::unescaped( $text );
 		}
 		if ( false !== strpos( $text, '%' ) ) {
-			$out['percent'] = rawurldecode( $text );
+			// As parse_str() decodes a query and WP::parse_request() the path
+			// it matches against the rules: urldecode(), "+" a space (Codex,
+			// round 25, A-6: a share text as urlencode() writes it).
+			$out['percent'] = urldecode( $text );
 		}
 		// Code: the text without its comments; made for a text with braces
 		// as well (Codex, round 24, A-1: the braces of code are counted there
@@ -500,35 +517,98 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * Whether a text of code (its strings blanked) holds a RegExp literal of
-	 * JavaScript (the strings and comments blanked), closed by a "/" on
-	 * the same line: in a layer of code every "/" that is not a division
-	 * after an operand – an identifier that is no keyword, a number, ")",
-	 * "]" or the end of a string right before it (Codex, round 24, A-1);
-	 * elsewhere a "/" after =, (, ",", :, [, !, &, |, ?, {, }, ; or return,
-	 * or at the start of a line (Codex, round 23, A-4). Its braces are
-	 * none; the count cannot tell.
+	 * Whether a RegExp literal of JavaScript stands before an offset of a
+	 * text (its strings and comments blanked): in a layer of code one that
+	 * begins before it, as regexp_in_code() reads the text token by token,
+	 * once (Codex, round 24 A-1, round 25 A-1); elsewhere one closed by a
+	 * "/" on the same line, after =, (, ",", :, [, !, &, |, ?, {, }, ; or
+	 * return, or at the start of a line (Codex, round 23, A-4). Its braces
+	 * are none; the count cannot tell.
 	 *
-	 * @param string $text Text.
-	 * @param bool   $code Whether the text is a layer of code.
+	 * @param string         $text  Text, blanked.
+	 * @param int            $at    Offset (a name).
+	 * @param bool           $code  Whether the text is a layer of code.
+	 * @param int|false|null $first Where the first literal of the code
+	 *                              begins (false: none), read on first use.
 	 * @return bool
 	 */
-	private static function regexp_literal( $text, $code = false ) {
+	private static function regexp_literal( $text, $at, $code, &$first ) {
 		if ( ! $code ) {
-			return 1 === preg_match( '#(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text );
+			return 1 === preg_match( '#(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', (string) substr( $text, 0, $at ) );
 		}
-		if ( ! preg_match_all( '#(^|\S)\s*/(?:[^/\\\\\n]|\\\\.)+/#m', $text, $m, PREG_OFFSET_CAPTURE ) ) {
-			return false;
+		if ( null === $first ) {
+			$first = self::regexp_in_code( $text );
 		}
-		foreach ( $m[1] as $before ) {
-			$c = (string) $before[0];
-			if ( '' === $c || ! preg_match( '/[A-Za-z0-9_$)\]"\'`]/', $c ) ) {
-				return true;
+		return false !== $first && $first < $at;
+	}
+
+	/**
+	 * Where the first RegExp literal of a text of code (its strings and
+	 * comments blanked) begins, read token by token in sequence (Codex,
+	 * round 25, A-1: a division before a literal hides none). Decided by
+	 * the token before a "/": after an operand it is a division – an
+	 * identifier that is no keyword (KEYWORDS), a number, "]", the end of a
+	 * string, ")" except the one of if, while, for or with
+	 * (PAREN_KEYWORDS), each also with a postfix ++ or -- after it; else it
+	 * begins a literal where another "/" stands on its line (none there: no
+	 * literal, read on). The "/" of an end tag of HTML (</a>) begins none.
+	 *
+	 * @param string $text Text.
+	 * @return int|false The offset of its "/", or false.
+	 */
+	private static function regexp_in_code( $text ) {
+		$n       = strlen( $text );
+		$i       = 0;
+		$operand = false;
+		$word    = '';
+		$parens  = array();
+		while ( $i < $n ) {
+			$c = $text[ $i ];
+			if ( ctype_space( $c ) ) {
+				++$i;
+				continue;
 			}
-			// An identifier right before it: a keyword is no operand.
-			if ( preg_match( '/[A-Za-z0-9_$]/', $c ) && preg_match( '/([A-Za-z_$][A-Za-z0-9_$]*)\z/', substr( $text, 0, (int) $before[1] + 1 ), $w ) && in_array( $w[1], self::KEYWORDS, true ) ) {
-				return true;
+			$token = $word;
+			$word  = '';
+			// A string (its content blanked): " and ' end at a line break.
+			if ( '"' === $c || "'" === $c || '`' === $c ) {
+				$i      += 2 + strcspn( $text, '`' === $c ? '`' : $c . "\n\r", $i + 1 );
+				$operand = true;
+				continue;
 			}
+			if ( preg_match( '/\G[A-Za-z_$][A-Za-z0-9_$]*/', $text, $m, 0, $i ) ) {
+				$i      += strlen( $m[0] );
+				$operand = ! in_array( $m[0], self::KEYWORDS, true );
+				$word    = $m[0];
+				continue;
+			}
+			if ( preg_match( '/\G[0-9][A-Za-z0-9_.]*/', $text, $m, 0, $i ) ) {
+				$i      += strlen( $m[0] );
+				$operand = true;
+				continue;
+			}
+			++$i;
+			if ( '<' === $c && preg_match( '#\G/[A-Za-z]#', $text, $m, 0, $i ) ) {
+				// The end tag of HTML around the code (</a>, </code>): no "/"
+				// that begins a literal (as before round 24 in this layer).
+				++$i;
+			} elseif ( '(' === $c ) {
+				$parens[] = in_array( $token, self::PAREN_KEYWORDS, true );
+			} elseif ( ')' === $c ) {
+				$operand = true !== array_pop( $parens );
+				continue;
+			} elseif ( ']' === $c ) {
+				$operand = true;
+				continue;
+			} elseif ( ( '+' === $c || '-' === $c ) && $c === substr( $text, $i, 1 ) ) {
+				// ++ and --: after an operand postfix (an operand still),
+				// else prefix (none).
+				++$i;
+				continue;
+			} elseif ( '/' === $c && ! $operand && false !== strpos( (string) substr( $text, $i, strcspn( $text, "\n\r", $i ) ), '/' ) ) {
+				return $i - 1;
+			}
+			$operand = false;
 		}
 		return false;
 	}
@@ -607,10 +687,10 @@ final class AB_MCP_Sync_Net {
 			// No header (Codex, round 23, A-2: a bracket, no "," within HEAD
 			// bytes), a parameter twice (A-3) or a type that is none after
 			// the tabs and line breaks are removed (round 24, A-2): not read,
-			// and where the address stands as an address (DATA_CONTEXT;
-			// round 24, B-1) the unit locks.
+			// and where the address stands as an address (address_context();
+			// round 24 B-1, round 25 B-1) the unit locks.
 			if ( null === $head || false === $head ) {
-				if ( preg_match( self::DATA_CONTEXT, (string) substr( $text, 0, (int) $hit[1] ) ) ) {
+				if ( self::address_context( $text, (int) $hit[1] ) ) {
 					$bad = true;
 				}
 				continue;
@@ -642,6 +722,81 @@ final class AB_MCP_Sync_Net {
 			$out[ hash( 'sha256', $body ) ] = $body;
 		}
 		return array_values( $out );
+	}
+
+	/**
+	 * Whether a data: address at an offset stands as an address, as the
+	 * structure around it says (Codex, round 24 B-1, round 25 B-1): in CSS
+	 * (CSS_CONTEXT), as the value of an address attribute
+	 * (AB_MCP_Sync_Urls::URL_ATTRIBUTES, a candidate of a srcset after its
+	 * ","), as a string value of JSON (json_value_at()). Quotes in prose,
+	 * a text node, another attribute are none.
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Where "data:" begins.
+	 * @return bool
+	 */
+	private static function address_context( $text, $at ) {
+		$before = (string) substr( $text, 0, $at );
+		$names  = implode( '|', array_map( 'preg_quote', AB_MCP_Sync_Urls::URL_ATTRIBUTES ) );
+		$srcset = implode( '|', array_map( 'preg_quote', AB_MCP_Sync_Urls::SRCSET_ATTRIBUTES ) );
+		return 1 === preg_match( self::CSS_CONTEXT, $before )
+			|| 1 === preg_match( '#(?<![A-Za-z0-9_\-])(?:(?:' . $names . ')\s*=\s*["\']?|(?:' . $srcset . ')\s*=\s*["\'][^"\']*,)\s*\z#i', $before )
+			|| self::json_value_at( $text, $at );
+	}
+
+	/**
+	 * Whether a data: address at an offset begins a string value of JSON
+	 * (white space after its quote allowed) – a block attribute, a context
+	 * of the Interactivity API, a meta value, a leaf of a structure, JSON in
+	 * a decoded layer: of the "{" and "[" before it, nearest first, those
+	 * whose balanced span (JSON_SPAN) closes before it hold it not; of the
+	 * others the first that json_decode() reads tells whether a string
+	 * value begins there (not a key). Deeper than json_decode() reads, or
+	 * more than JSON_TRIES of them that no reading decides: not read, so
+	 * it stands as one.
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Where "data:" begins.
+	 * @return bool
+	 */
+	private static function json_value_at( $text, $at ) {
+		$quote = $at - 1;
+		while ( $quote > 0 && ctype_space( $text[ $quote ] ) ) {
+			--$quote;
+		}
+		if ( ! preg_match_all( '/[\[{]/', (string) substr( $text, 0, max( 0, $quote ) ), $m, PREG_OFFSET_CAPTURE ) ) {
+			return false;
+		}
+		$tries = 0;
+		foreach ( array_reverse( $m[0] ) as $open ) {
+			$from  = (int) $open[1];
+			$found = preg_match( self::JSON_SPAN, $text, $span, 0, $from );
+			if ( $found && $from + strlen( $span[0] ) <= $quote ) {
+				continue;
+			}
+			if ( ++$tries > self::JSON_TRIES ) {
+				return true;
+			}
+			if ( ! $found ) {
+				continue;
+			}
+			$value = json_decode( $span[0] );
+			if ( JSON_ERROR_DEPTH === json_last_error() ) {
+				return true;
+			}
+			if ( ! is_object( $value ) && ! is_array( $value ) ) {
+				continue;
+			}
+			foreach ( AB_MCP_Sync_Json::string_spans( $span[0] ) as $string ) {
+				if ( $from + $string[0] === $quote ) {
+					$after = $quote + $string[1];
+					return ':' !== substr( $text, $after + strspn( $text, " \t\n\r", $after ), 1 );
+				}
+			}
+			return false;
+		}
+		return false;
 	}
 
 	/**
@@ -1044,12 +1199,13 @@ final class AB_MCP_Sync_Net {
 		// none (Codex, round 23, A-4) – it is undecidable: the net locks.
 		if ( preg_match_all( '/[,;]\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/', $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			$blanked = self::blanked( $text );
+			$first   = null;
 			foreach ( $m[1] as $hit ) {
 				$before = (string) substr( $blanked, 0, (int) $hit[1] );
 				$open   = substr_count( $before, '{' ) - substr_count( $before, '}' );
 				if ( $open > 0 ) {
 					$found[] = $hit[0];
-				} elseif ( $open < 0 || self::regexp_literal( $before, $code ) ) {
+				} elseif ( $open < 0 || self::regexp_literal( $blanked, (int) $hit[1], $code, $first ) ) {
 					$undecidable = true;
 				}
 			}

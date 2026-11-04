@@ -743,10 +743,14 @@ final class AB_MCP_Sync_Urls {
 	 * sites (a share text: body=Lesen%3A%20https%3A%2F%2F…; Codex, round
 	 * 24, A-6) is read as a text by the same round trip ("whole" false:
 	 * the hosts and the addresses in it as in prose). Under a host of no
-	 * site (Codex, round 24, A-5) a target relative to the root or the page
-	 * – an address, or one in a text – names the objects of that site:
-	 * locked. A value encoded twice (the address of a site in it after a
-	 * second decoding only) is read by nobody: locked.
+	 * site (Codex, round 24 A-5, round 25 A-5) a target relative to the
+	 * root or the page – the value, or one in a text – names the objects
+	 * of that site: locked where it carries a reference as the readers
+	 * read one (an id variable of QUERY_IDS with digits, ?p=12; a path the
+	 * rules route to one, /archives/12/, or with a segment of digits where
+	 * no rule can tell); "Warum?", "/2", "/2026/11/04" carry none. A value
+	 * encoded twice (the address of a site in it after a second decoding
+	 * only) is read by nobody: locked.
 	 *
 	 * @param string   $url     Address.
 	 * @param int      $start   Where its query begins.
@@ -786,7 +790,7 @@ final class AB_MCP_Sync_Urls {
 					$out[] = self::lock( (int) $at, strlen( $url ), $what );
 					continue;
 				}
-				if ( ! self::names_a_site( $decoded, $ctx ) && ! self::root_in_text( $decoded ) ) {
+				if ( ! self::names_a_site( $decoded, $ctx ) && ! self::root_in_text( $decoded, $ctx ) ) {
 					continue;
 				}
 			}
@@ -796,8 +800,8 @@ final class AB_MCP_Sync_Urls {
 				continue;
 			}
 			// Of a host of no site, a target relative to its root or its
-			// page (an address, or one in a text): locked.
-			if ( $foreign && ( null !== $inner ? in_array( $inner['form'], array( 'root', 'page' ), true ) : self::root_in_text( $decoded ) ) ) {
+			// page (the value, or one in a text) with a reference: locked.
+			if ( $foreign && ( null !== $inner ? in_array( $inner['form'], array( 'root', 'page' ), true ) && array() !== self::hits( $decoded, $inner, $ctx, null, $depth + 1 ) : self::root_in_text( $decoded, $ctx ) ) ) {
 				$out[] = self::lock( (int) $at, strlen( $url ), $what );
 				continue;
 			}
@@ -846,13 +850,17 @@ final class AB_MCP_Sync_Urls {
 	}
 
 	/**
-	 * Whether a text holds a root-relative address with a digit outside its
-	 * addresses with a host (as text_ids() reads one).
+	 * Whether a text holds a root-relative address with a digit that
+	 * carries a reference (an id address() names, or locks) outside its
+	 * addresses with a host (as text_ids() reads one; Codex, round 25,
+	 * A-5: "/2" or "/2026/11/04" where the rules route it to no id is
+	 * none).
 	 *
 	 * @param string $text Text.
+	 * @param array  $ctx  Context.
 	 * @return bool
 	 */
-	private static function root_in_text( $text ) {
+	private static function root_in_text( $text, array $ctx ) {
 		if ( ! preg_match_all( self::ROOT, $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			return false;
 		}
@@ -864,7 +872,7 @@ final class AB_MCP_Sync_Urls {
 			}
 		}
 		foreach ( $m[0] as $start ) {
-			if ( ! self::inside( (int) $start[1], $hosts ) && preg_match( self::EXTENT, $text, $e, 0, (int) $start[1] ) && preg_match( '/[1-9]/', $e[0] ) ) {
+			if ( ! self::inside( (int) $start[1], $hosts ) && preg_match( self::EXTENT, $text, $e, 0, (int) $start[1] ) && preg_match( '/[1-9]/', $e[0] ) && array() !== self::address( (string) preg_replace( '/[.,;:!)\]]+\z/', '', $e[0] ), $ctx, null, $text ) ) {
 				return true;
 			}
 		}

@@ -1,6 +1,6 @@
 # Grenzen des Kanonisierers (Z8, Zweig «Kanon»)
 
-Gesammelte Gruppe-C-Grenzen der Codex-Runden 20 bis 24: seltene oder
+Gesammelte Gruppe-C-Grenzen der Codex-Runden 20 bis 25: seltene oder
 konstruierte Schreibweisen, die der Kanonisierer absichtlich sperrt statt
 umschreibt (`*:reference_spelling`, `*:unread_reference`,
 `*:unread_credential`, `*:unreadable_value`). Je Grenze ein Satz mit
@@ -33,11 +33,17 @@ SyncNetTest, SyncCanonFormTest).
   ausserhalb von `url()`, `@import` und `image-set()`
   (`.x{--bild:"/?attachment_id=12"}`) sperrt, weil nur die Adresskonstrukte
   von CSS gelesen werden (Runden 22, 23).
-- Eine root-relative Objektadresse in Prosa, Titel, Alt-Text oder
-  Kommentar, die im gespeicherten Text nicht genau einmal an einem
-  Adressanfang steht (`&#47;?p=12`, zweimal `/?p=12` in einem Knoten mit
-  Zeichenreferenzen, `&#47;&#63;p&#61;12 https://other.test/?p=12`),
-  sperrt, weil die Rohposition nicht eindeutig ist (Runden 21, 23, 24).
+- Eine Objektadresse in Titel, Alt-Text, Tooltip oder HTML-Kommentar
+  (`<p title="/?p=12">`) sperrt, weil diese Stellen kein Leser des Kerns
+  als Adresse liest (Runde 20).
+- Eine root-relative Objektadresse in einem Textknoten mit
+  Zeichenreferenzen wird nur umgeschrieben, wenn sie im gespeicherten
+  Knoten genau einmal, an einem Adressanfang und ausserhalb jeder anderen
+  Adresse steht (`<p>A &amp; B /?p=12</p>` wird umgeschrieben); sonst
+  sperrt sie – nur dekodiert vorhanden (`&#47;?p=12`), zweimal dieselbe
+  Adresse (`Preis &lt; 5: /?p=12, dann /?p=12`), Fundstelle in einem Wort
+  oder in einer fremden Adresse (`&#47;&#63;p&#61;12 https://other.test/?p=12`)
+  –, weil die Rohposition nicht eindeutig ist (Runden 21, 23, 24).
 - Ein Verweis relativ zur Seite mit Ziffern (`../12/`, `index.php?p=12`)
   sperrt, weil er gegen die Adresse der Seite aufgelöst wird, die keine
   Regel kennt (Runden 11, 21).
@@ -60,8 +66,17 @@ SyncNetTest, SyncCanonFormTest).
   Hosts, die andere Site des Paars), sperrt, weil die äussere Adresse nicht
   kanonisch ist (Runde 23).
 - Ein root- oder seitenrelatives Ziel in einem Abfragewert unter einem
-  fremden Host (`https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12`)
-  sperrt, weil `/?p=12` dort das Objekt der fremden Site meint (Runde 24).
+  fremden Host – der Wert selbst oder eine Adresse in einem Share-Text –
+  sperrt, wenn es eine Objektreferenz trägt, wie der Adressleser sie
+  kennt: eine ID-Variable des Kerns mit Ziffern
+  (`https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12`,
+  `redirect_to=index.php%3Fp%3D12`, `//other.test/?u=%2F%3Fpage_id%3D13`)
+  oder einen Pfad, den die Rewrite-Regeln auf eine ID-Variable abbilden
+  (`%2Farchives%2F12%2F`; ohne lesbare Regeln jedes Ziffernsegment), weil
+  das Ziel dort das Objekt der fremden Site meint. Ohne Objektreferenz
+  bleibt der Wert frei: `?subject=Warum%3F`, `?subject=Preis%201%20%2F2`,
+  `?text=Termin%20%2F2026%2F11%2F04`, `redirect_to=%2Fkontakt%2F`
+  (Runden 24, 25).
 - Eine ID in einem Abfragewert, die der Leser dort nicht wie gespeichert
   liest (eine Variable zweimal, `%2F%3Fp%3D12%26p%3D13`), sperrt den
   ganzen Wert, weil die Rundreise sonst eine andere Stelle umschriebe
@@ -81,9 +96,15 @@ SyncNetTest, SyncCanonFormTest).
 
 - Ein data:-Kopf mit Klammer, ohne Komma innerhalb von 512 Bytes oder mit
   einem Typ, der nach dem Entfernen von Tabs und Zeilenumbrüchen keiner
-  ist, sperrt in Adresskontexten (`src`, `url()`, JSON-Wert), weil der
-  Kopf nicht nach dem MIME-Sniffing-Standard lesbar ist; `data:` in Prosa
-  (`Data: CSV/JSON`) ist keine Adresse (Runden 23, 24).
+  ist, sperrt dort, wo die Adresse strukturell als Adresse steht – als
+  Wert eines Adressattributs (`src`, `href`, ein `srcset`-Kandidat), als
+  Argument von `url()`, `@import` oder als Kandidat von `image-set()` in
+  CSS, als Stringwert in geparstem JSON (auch einem Blockattribut oder
+  einem Interactivity-Kontext) –, weil der Kopf nicht nach dem
+  MIME-Sniffing-Standard lesbar ist. `data:` in Prosa, auch in
+  Anführungszeichen (`Format: "Data: CSV/JSON"`), in einem anderen
+  Attribut (`title`) oder als JSON-Schlüssel ist keine Adresse
+  (Runden 23–25).
 - Ein Parameter zweimal im data:-Kopf (`charset=utf-16le;charset=utf-16be`,
   `Name=a;NAME=b`) sperrt, weil der Standard den ersten nähme und das Netz
   nicht entscheidet (Runde 23).
@@ -99,9 +120,15 @@ SyncNetTest, SyncCanonFormTest).
 
 - Code, dessen Klammerzählung nicht entscheidbar ist – ein RegExp-Literal
   mit `}` vor einem Namen (`{r:/}/,api_key:"…"}`, `x:1+/}/.test("x")`,
-  `void /}/`) oder mehr geschlossene als geöffnete Klammern – sperrt, weil
-  das Netz nicht entscheidet, ob ein Name in einem offenen Objekt steht
-  (Runden 23, 24).
+  `void /}/`, nach einer Division `x:1/2+/}/.test("x")`, `6/2 + /}/`, nach
+  der Klammer von `if (a) /}/`) oder mehr geschlossene als geöffnete
+  Klammern – sperrt, weil das Netz nicht entscheidet, ob ein Name in einem
+  offenen Objekt steht. In der Code-Schicht liest ein Scanner Token für
+  Token; ein `/` nach einem Operanden (Bezeichner ausser Schlüsselwörtern,
+  Zahl, `)`, `]`, String-Ende, Postfix `++`/`--`) ist eine Division, der
+  `/` eines HTML-Endtags (`</a>`) beginnt nichts: `a/b/c`, `(1)/2/3`,
+  `x++ / 2 / 3` und Prosa mit `</a> …, Ort: Zürich` bleiben frei
+  (Runden 23–25).
 - Dynamisch zusammengesetzte Namen in JavaScript (`${…}`, Verkettung)
   werden nicht als Zugangsdaten erkannt; das ist eine dokumentierte
   Grenze, keine Sperre (Runde 22).

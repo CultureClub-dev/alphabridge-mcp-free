@@ -279,6 +279,8 @@ trait SyncCoreReads {
 			'a lazy loader'       => array( '<picture class="lazy" data-sizes="auto"><source data-srcset="a.webp 1x, a2.webp 2x" type="image/webp" class="lazy"><img class="lazyload" data-src="a.jpg" data-srcset="a-300.jpg 300w" alt=""></picture>' ),
 			'a lazy loader with a data: GIF' => array( '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="a.jpg" data-srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7 1x, a.jpg 2x" alt="">' ),
 			'a format in prose'   => array( '<p>Data: CSV/JSON</p><p>Data: text/plain (UTF-8)</p>' ),
+			// Codex, round 25 (B-1): in quotes as well.
+			'a format in quotes in prose' => array( '<p>Format: "Data: CSV/JSON"</p><p>Hinweis: "data: siehe Tabelle"</p>' ),
 			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
 		);
 	}
@@ -813,6 +815,13 @@ trait SyncCoreReads {
 			'base64 of an image'                => array( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'value' ),
 			'a password field named'            => array( '<input type="password" name="pwd" class="token-field">', 'content' ),
 			'a credential the check named'      => array( '{"api_key":"x","x":"' . base64_encode( 'api_key=x' ) . '"}', 'value' ),
+			// Codex, round 25 (A-6): a share text with "+" for a space, read by
+			// the readers and by the percent layer alike.
+			'A-6 a mailto text as urlencode() writes it' => array( '<p><a href="mailto:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Mail</a></p>', 'content' ),
+			'A-6 a share text of Twitter as urlencode() writes it' => array( '<p><a href="https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Teilen</a></p>', 'content' ),
+			'A-6 an sms text as urlencode() writes it' => array( '<p><a href="sms:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12">SMS</a></p>', 'content' ),
+			'A-6 a mailto text as rawurlencode() writes it' => array( '<p><a href="mailto:?body=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Mail</a></p>', 'content' ),
+			'A-6 in prose'                      => array( 'Teilen: mailto:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12+und+https%3A%2F%2Fstaging.test%2F%3Fpage_id%3D13', 'value' ),
 		);
 	}
 
@@ -820,6 +829,115 @@ trait SyncCoreReads {
 	public function testTheNetLeavesTheOrdinaryFree( string $raw, string $as ): void {
 		list( $locks ) = self::net_read( $raw, $as, self::net_ctx() );
 		self::assertSame( array(), preg_grep( '/^\*:unread_/', $locks ), $raw . ' ' . json_encode( $locks ) );
+	}
+
+	/**
+	 * What the net cannot read locks only where it stands so (Codex, round
+	 * 25): a RegExp literal of code before the name of a credential (A-1:
+	 * after a division as well), a header of a data: address that is none
+	 * where the address stands as one (B-1: an attribute of an address,
+	 * url() and image-set() of CSS, a string value of JSON); a division
+	 * after a postfix ++, an end tag of HTML, "data:" in quotes in prose,
+	 * in another attribute or as a key of JSON: free. Null: no lock at all.
+	 */
+	public static function netUnreadable(): array {
+		$svg = base64_encode( '<svg/>' );
+		return array(
+			'A-1 a literal after a division'      => array( '<pre><code>const c={x:1/2+/}/.test("x"),api_key:"demo-secret"};</code></pre>', 'content', '*:unreadable_value@u:net:raw/code' ),
+			'A-1 after a division and a space'    => array( 'const c={x:6/2 + /}/.test("x"),api_key:"demo-secret"};', 'value', '*:unreadable_value@u:net:raw/code' ),
+			'A-1 after the parenthesis of if'     => array( 'var o={k:(function(){ if (a) /}/.test(b) })(), api_key:"s"};', 'value', '*:unreadable_value@u:net:raw/code' ),
+			'A-1 a division after a postfix'      => array( '<pre><code>const o={}; let x=4; x++ / 2 / 3; label: "x";</code></pre>', 'content', null ),
+			'A-1 divisions'                       => array( 'const o={}; a/b/c; (1)/2/3; 6/2; label: "x";', 'value', null ),
+			'A-1 end tags before a label'         => array( '<p>Siehe <a href="https://example.test/">hier</a> und <em>dort</em>, Ort: Zürich</p>', 'content', null ),
+			'B-1 a format in quotes'              => array( '<p>Format: "Data: CSV/JSON"</p>', 'content', null ),
+			'B-1 a note in quotes'                => array( '<p>Hinweis: "data: siehe Tabelle"</p>', 'content', null ),
+			'B-1 in another attribute'            => array( '<p title="data: siehe Tabelle">x</p>', 'content', null ),
+			'B-1 in quotes in a value of JSON'    => array( '{"note":"Hinweis: \\"data: siehe Tabelle\\""}', 'value', null ),
+			'B-1 a key of JSON'                   => array( '{"data: x":1}', 'value', null ),
+			'B-1 in a block attribute'            => array( '<!-- wp:acme/x {"url":"data:image/svg+x(ml;base64,' . $svg . '"} /-->', 'content', '*:unreadable_value@u:net:raw' ),
+			'B-1 in a context of a block'         => array( '<div data-wp-context=\'{"img":"data:image/svg+x(ml;base64,' . $svg . '"}\'>x</div>', 'content', '*:unreadable_value@u:net:raw' ),
+			'B-1 a value of JSON on a line of its own' => array( "{\"a\":1}\n{\"url\":\"data:image/svg+x(ml;base64," . $svg . '"}', 'value', '*:unreadable_value@u:net:raw' ),
+			'B-1 the second candidate of image-set' => array( 'a{background-image:image-set("a.png" 1x, "data:image/svg+x(ml;base64,' . $svg . '" 2x)}', 'css', '*:unreadable_value@u:net:raw' ),
+			'B-1 in url()'                        => array( 'a{mask:url("data:image/svg+x(ml;base64,' . $svg . '")}', 'css', '*:unreadable_value@u:net:raw' ),
+		);
+	}
+
+	#[DataProvider( 'netUnreadable' )]
+	public function testTheNetLocksWhatItCannotReadOnlyWhereItStandsSo( string $raw, string $as, ?string $lock ): void {
+		list( $locks ) = self::net_read( $raw, $as, self::net_ctx() );
+		if ( self::closed( $raw ) ) {
+			self::assertNotSame( array(), $locks, 'Without the core the credential check fails closed: ' . $raw );
+			return;
+		}
+		if ( null === $lock ) {
+			self::assertSame( array(), $locks, $raw );
+			return;
+		}
+		self::assertContains( $lock, $locks, $raw . ' ' . json_encode( $locks ) );
+	}
+
+	/** Rules of a site: archives/12 is post 12, a date is none, any other path a page by its name (none). */
+	private static function rules(): array {
+		return array(
+			'rules'   => array(
+				'archives/([0-9]+)/?$'       => 'index.php?p=$matches[1]',
+				'([0-9]{4})/([0-9]{1,2})/?$' => 'index.php?year=$matches[1]&monthnum=$matches[2]',
+				'(.?.+?)/?$'                 => 'index.php?pagename=$matches[1]',
+			),
+			'verbose' => false,
+			'index'   => false,
+			'pages'   => static fn( $p ) => null,
+		);
+	}
+
+	/**
+	 * Codex, round 25 (A-5, Thomas: «a»): under a host of no site a target
+	 * relative to the root or the page – the value, or one in a text –
+	 * locks only where it carries a reference as the readers read one: an
+	 * id variable of the core with digits, a path the rules route to an
+	 * id. A question, a fraction, a date, a page by its name: free.
+	 * Null: free and unchanged.
+	 */
+	public static function foreignTargets(): array {
+		return array(
+			'a question in a subject'          => array( '<p><a href="mailto:info@example.test?subject=Warum%3F">Mail</a></p>', null ),
+			'a question in a share text'       => array( 'Teilen: https://twitter.com/intent/tweet?text=Warum%3F', null ),
+			'a fraction in a subject'          => array( '<p><a href="mailto:info@example.test?subject=Preis%201%20%2F2">Mail</a></p>', null ),
+			'a fraction in a subject in prose' => array( 'Mail: mailto:info@example.test?subject=Preis%201%20%2F2', null ),
+			'a date in a share text'           => array( 'Teilen: https://twitter.com/intent/tweet?text=Termin%20%2F2026%2F11%2F04', null ),
+			'a page of another site by its name' => array( '<p><a href="https://other.test/wp-login.php?redirect_to=%2Fkontakt%2F">Login</a></p>', null ),
+			'a short link'                     => array( '<p><a href="https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12">Login</a></p>', 'c:html?redirect_to' ),
+			'a short link relative to the page' => array( '<p><a href="https://other.test/wp-login.php?redirect_to=index.php%3Fp%3D12">Login</a></p>', 'c:html?redirect_to' ),
+			'a page id without a scheme'       => array( 'Siehe //other.test/?u=%2F%3Fpage_id%3D13 dort.', 'c:html?u' ),
+			'a path the rules route to an id'  => array( 'Login: https://other.test/wp-login.php?redirect_to=%2Farchives%2F12%2F', 'c:html?redirect_to' ),
+			'a short link in a share text'     => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20%2F%3Fp%3D12', 'c:html?text' ),
+		);
+	}
+
+	#[DataProvider( 'foreignTargets' )]
+	public function testATargetUnderAHostOfNoSiteLocksOnlyWithAReference( string $content, ?string $at ): void {
+		if ( self::closed( $content ) ) {
+			self::assertLockedWithoutTheCore( $content );
+			return;
+		}
+		$ctx = AB_MCP_Sync_Canon::context( array( 'https://staging.test' ), static fn( $id ) => 'user' . $id, self::rules() );
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Refs::content( $content, $ctx, $acc, 'post', 'c' );
+		$plan = AB_MCP_Sync_Refs::plan(
+			array( 'post' => array( 12 => 120, 13 => 130 ) ),
+			array( 'https://staging.test' => 'https://www.live.test' ),
+			self::rules()
+		);
+		$out = AB_MCP_Sync_Refs::rewrite_content( $content, $plan );
+		if ( null === $at ) {
+			self::assertSame( array( array(), array(), array(), $content, array() ), array( $acc['refs'], $acc['locks'], $acc['spelling'], $out['content'], $out['missing'] ), $content );
+			list( $locks ) = self::net_read( $content, 'content', $ctx );
+			self::assertSame( array(), $locks, $content );
+			return;
+		}
+		$result = AB_MCP_Sync_Canon::finish( 'post', '1', array(), array(), $acc );
+		self::assertContains( array( '*:reference_spelling', $at ), array_map( static fn( $l ) => array( $l['key'], $l['at'] ), $result['locks'] ), $content );
+		self::assertContains( 'spelling', array_column( $out['missing'], 'space' ), $content );
 	}
 
 	public function testTheJsonOfADataAttributeIsReadByItsRoundTrip(): void {
@@ -1158,6 +1276,9 @@ trait SyncCoreReads {
 			'a share text of Twitter with a permalink and an id' => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?text?p' ), 'Teilen: https://twitter.com/intent/tweet?text=Lesen%3A%20https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
 			'two addresses in a share text' => array( 'Mailen: mailto:?body=https%3A%2F%2Fstaging.test%2F%3Fp%3D12%20und%20https%3A%2F%2Fstaging.test%2Fkontakt%2F', array( 'post:12@c:html?body?p' ), 'Mailen: mailto:?body=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120%20und%20https%3A%2F%2Fwww.live.test%2Fkontakt%2F' ),
 			'a share text as urlencode() writes it' => array( 'Teilen: https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?text?p' ), 'Teilen: https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			// Codex, round 25 (A-6): mailto and sms as urlencode() writes them.
+			'a mailto text as urlencode() writes it' => array( '<p><a href="mailto:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Mail</a></p>', array( 'post:12@c:html?body?p' ), '<p><a href="mailto:?body=Lesen+https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Mail</a></p>' ),
+			'an sms text as urlencode() writes it' => array( '<p><a href="sms:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12">SMS</a></p>', array( 'post:12@c:html?body?p' ), '<p><a href="sms:?body=Lesen+https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">SMS</a></p>' ),
 			'a text with a root-relative address in a query value' => array( 'Siehe https://staging.test/?u=Lesen%3A%20%2F%3Fp%3D12', array( 'post:12@c:html?u?p' ), 'Siehe https://www.live.test/?u=Lesen%3A%20%2F%3Fp%3D120' ),
 			'a space after a query value' => array( 'Siehe https://staging.test/?u=%2F%3Fp%3D12%20', array( 'post:12@c:html?u?p' ), 'Siehe https://www.live.test/?u=%2F%3Fp%3D120%20' ),
 			// Codex, round 24 (B-2): the markup of a lazy loader.

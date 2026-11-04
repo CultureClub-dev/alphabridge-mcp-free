@@ -75,6 +75,7 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( 'a/bu002fc"d' . chr( 2 ) . 'f e%2Ff', $layers['raw/slashes'], 'stripcslashes(): \\u and an octal escape as C reads them.' );
 		self::assertSame( 'a/bu002fc"d/e%2Ff', $layers['raw/css'], 'AB_MCP_Sync_Css::unescaped(): \\/ and \\" the character, \\u the letter, \\2f the code point.' );
 		self::assertSame( 'a\\/b\\u002fc\\"d\\2f e/f', $layers['raw/percent'] );
+		self::assertSame( 'a b/c', self::layers( 'a+b%2Fc' )['raw/percent'], 'Codex, round 25 (A-6): "+" a space, as parse_str() decodes a query.' );
 		self::assertArrayHasKey( 'raw/json/percent', $layers, 'Each layer again.' );
 		self::assertArrayNotHasKey( 'raw/percent/percent', $layers, 'A decoding that changes nothing is no layer.' );
 		self::assertSame( array( 'raw' => 'a%b' ), self::layers( 'a%b' ), 'No escape to decode: the text alone.' );
@@ -124,11 +125,15 @@ final class SyncNetTest extends TestCase {
 		) as $raw => $want ) {
 			self::assertSame( $want, self::layers( $raw )['raw/data'] ?? null, $raw );
 		}
-		// Codex, round 23 (A-2, A-3), round 24 (A-2, B-1): no header, a
-		// parameter twice, a type that is none after the tabs and line
-		// breaks are removed: not read, and where the address stands as an
-		// address (an attribute, url(), a value of JSON) the layer is named
-		// (the unit locks); "data:" in prose or in a text node begins none.
+		// Codex, round 23 (A-2, A-3), round 24 (A-2, B-1), round 25 (B-1):
+		// no header, a parameter twice, a type that is none after the tabs
+		// and line breaks are removed: not read, and where the address
+		// stands as an address – an address attribute, a candidate of
+		// srcset, url(), @import, a candidate of image-set(), a string
+		// value of JSON (also in a block attribute, a context, a line of
+		// its own) – the layer is named (the unit locks); "data:" in prose,
+		// in quotes as well, in a text node, in another attribute or as a
+		// key of JSON begins none. %j: the address as JSON writes it.
 		foreach ( array(
 			'a bracket in the header'        => 'data:text/plain;name=(x,Geheim',
 			'a bracket in the header of an SVG' => 'data:image/svg+xml;name=(x;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( '<svg/>', 'UTF-16LE', 'UTF-8' ) ),
@@ -140,18 +145,26 @@ final class SyncNetTest extends TestCase {
 			'a bracket in the type'          => 'data:image/svg+x(ml;base64,' . base64_encode( '<svg/>' ),
 			'a type without a slash'         => 'data:svg;base64,' . base64_encode( '<svg/>' ),
 		) as $label => $raw ) {
-			foreach ( array( "url('%s')", 'url(%s)', 'src="%s"', "src='%s'", 'srcset=%s', '{"src":"%s"}', '["%s"]', '@import "%s";', 'image-set("%s" 1x)' ) as $context ) {
-				$layers = self::layers( sprintf( $context, $raw ), $deep, $unread );
+			$fill = static fn( string $context ): string => str_replace( array( '%J', '%j', '%s' ), array( (string) json_encode( ' ' . $raw, JSON_UNESCAPED_SLASHES ), (string) json_encode( $raw, JSON_UNESCAPED_SLASHES ), $raw ), $context );
+			foreach ( array( "url('%s')", 'url(%s)', 'src="%s"', "src='%s'", 'srcset=%s', 'SRC = "%s"', '<image xlink:href="%s"/>', 'data-src="%s"', 'srcset="a.jpg 1x, %s 2x"', '{"src":%j}', '{"src":%J}', '[%j]', '{"a":[1,{"b": %j}]}', "{\"a\":1}\n{\"src\":%j}", '{"t":"a{b","u":%j}', '{"x":{"a":1},"u":%j}', '[%j,' . str_repeat( '[', 600 ) . str_repeat( ']', 600 ) . ']', '<!-- wp:acme/x {"url":%j} /-->', '<div data-wp-context=\'{"img":%j}\'>x</div>', '@import "%s";', 'image-set("%s" 1x)', 'image-set(url(a.png) 1x, "%s" 2x)' ) as $context ) {
+				$layers = self::layers( $fill( $context ), $deep, $unread );
 				self::assertArrayNotHasKey( 'raw/data', $layers, $label );
 				self::assertSame( array( 'raw' ), $unread, $label . ' in ' . $context );
 			}
-			foreach ( array( '<p>%s</p>', 'Siehe %s dort', '%s' ) as $context ) {
-				$layers = self::layers( sprintf( $context, $raw ), $deep, $unread );
+			foreach ( array( '<p>%s</p>', 'Siehe %s dort', '%s', '<p>Format: "%s"</p>', 'Hinweis: "%s" (Tabelle)', 'title="%s"', 'data-x="%s"', 'data-href="%s"', 'x = "%s"', '{%j:1}', '{%j : 1}', '{img:%j}', 'image-set("a.png" 1x) "%s"' ) as $context ) {
+				$layers = self::layers( $fill( $context ), $deep, $unread );
 				self::assertArrayNotHasKey( 'raw/data', $layers, $label );
 				self::assertSame( array(), $unread, $label . ' in ' . $context );
 			}
 		}
-		foreach ( array( '<p>Data: CSV/JSON</p>', '<p>Data: text/plain (UTF-8)</p>', 'Data: siehe (Tabelle 3)', "Metadata:\n2024, ohne Typ", 'data:x', 'Felder: data: image/png (Bild), name' ) as $raw ) {
+		// More brackets around it than JSON_TRIES, none read as JSON: not
+		// decided, so it stands as an address; fewer: none.
+		$raw = 'data:image/svg+x(ml;base64,' . base64_encode( '<svg/>' );
+		self::layers( str_repeat( '[', AB_MCP_Sync_Net::JSON_TRIES + 1 ) . '"' . $raw . '"', $deep, $unread );
+		self::assertSame( array( 'raw' ), $unread );
+		self::layers( str_repeat( '[', AB_MCP_Sync_Net::JSON_TRIES ) . '"' . $raw . '"', $deep, $unread );
+		self::assertSame( array(), $unread );
+		foreach ( array( '<p>Data: CSV/JSON</p>', '<p>Data: text/plain (UTF-8)</p>', 'Data: siehe (Tabelle 3)', "Metadata:\n2024, ohne Typ", 'data:x', 'Felder: data: image/png (Bild), name', '<p>Format: "Data: CSV/JSON"</p>', '<p>Hinweis: "data: siehe Tabelle"</p>', '{"note":"Hinweis: \\"data: siehe Tabelle\\""}', '{"a": "x", "data: b": 1}' ) as $raw ) {
 			$layers = self::layers( $raw, $deep, $unread );
 			self::assertSame( array(), $unread, $raw );
 		}
@@ -356,6 +369,22 @@ final class SyncNetTest extends TestCase {
 			'https://staging.test%2Eother.test/?p=12'                      => array( 'post:?' ),
 			'https://www.live.test/?p=12'                                  => array( 'post:?' ),
 			'/?u=https%3A%2F%2Fwww.live.test%2F%3Fp%3D12'                  => array( 'post:?' ),
+			// Codex, round 25 (A-5): under a host of no site a relative
+			// target names a pair only where it carries a reference: an id
+			// variable with digits, a path the rules route to an id, a
+			// segment of digits relative to the page.
+			'https://other.test/wp-login.php?redirect_to=index.php%3Fp%3D12' => array( 'post:?' ),
+			'//other.test/?u=%2F%3Fpage_id%3D13'                           => array( 'post:?' ),
+			'https://other.test/?r=%2Farchives%2F12%2F'                    => array( 'post:?' ),
+			'https://other.test/?r=12%3F'                                  => array( 'post:?' ),
+			'https://other.test/?t=Lesen%3A%20%2Farchives%2F12'            => array( 'post:?' ),
+			'mailto:info@example.test?subject=Preis%201%20%2F2'            => array(),
+			'https://twitter.com/intent/tweet?text=Termin%20%2F2026%2F11%2F04' => array(),
+			'https://other.test/?r=%2F2026%2F11%2F'                        => array(),
+			'https://other.test/?r=Teil2%3F'                               => array(),
+			'https://other.test/?r=Kapitel%2012%3F'                        => array(),
+			// Codex, round 25 (A-6): a share text as urlencode() writes it.
+			'mailto:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12'    => array( 'post:12' ),
 		) as $text => $pairs ) {
 			self::assertSame( $pairs, AB_MCP_Sync_Net::references( $text, $ctx ), $text );
 		}
@@ -477,12 +506,53 @@ final class SyncNetTest extends TestCase {
 			AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable );
 			self::assertFalse( $undecidable, 'Not in the text itself: ' . $text );
 		}
+		// Codex, round 25 (A-1): read token by token, a division before a
+		// literal hides none; the ")" of if, while, for or with is no
+		// operand; a literal that begins before the name counts, wherever
+		// it closes on its line.
+		foreach ( array(
+			'const c={x:1/2+/}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:6/2 + /}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:a[0]/b+/}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:"a"/2 + /}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:(1)/2 + /}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:++/}/.lastIndex,api_key:"demo-secret"};',
+			'const c={x:[/}/][0],api_key:"demo-secret"};',
+			'var o={k:(function(){ if (a) /}/.test(b) })(), api_key:"s"};',
+			'var o={k:(function(){ while(a) /}/.test(b) })(), api_key:"s"};',
+			'var o={k:(function(){ for (;;) /}/.test(b) })(), api_key:"s"};',
+			'var o={k:(function(){ with (a) /}/.test(b) })(), api_key:"s"};',
+			'var o={k:[/[/}]/], api_key:"s"};',
+			'var o={k:[/\\/}/], api_key:"s"};',
+			'x = /a, token: "y"/.test(s)',
+			"x = 'a\n; r = /x/, token:\"y\"",
+		) as $text ) {
+			$undecidable = false;
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
+			self::assertTrue( $undecidable, $text );
+		}
 		foreach ( array(
 			'x = 6/2, token:"x"',
 			'x = a / b, token:"x"',
 			'x = (1)/2 + y[0]/3, token:"x"',
 			'x = "a"/2, token:"x"',
+			"x = 'a'/2/3, token:\"x\"",
+			'x = `a`/2/3, token:"x"',
 			'x = a /2/ b, token:"x"',
+			'a/b/c, token:"x"',
+			'(1)/2/3, token:"x"',
+			'x++ / 2 / 3, token:"x"',
+			'x-- / 2 / 3, token:"x"',
+			'f(a) / 2 / 3, token:"x"',
+			'if (f(a) / 2 / 3) b, token:"x"',
+			'y = 1.5e3 / 2 / 3, token:"x"',
+			'x = a[1] / 2 / 3, token:"x"',
+			'x = y /= 2 / 3, token:"x"',
+			"x = \"a\nb\" / 2 / 3, token:\"x\"",
+			"x = 1, y = / 2\nz = a / b, token:\"x\"",
+			'a = 1, token:"x"; r = /}/',
+			'while; (a) / 2 / 3, token:"x"',
+			'<p>Siehe <a href="https://example.test/">hier</a> und <em>dort</em>, Ort: "Zürich"</p>',
 		) as $text ) {
 			$undecidable = false;
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra, $undecidable, true ), $text );
@@ -594,13 +664,57 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( array(), array( 'post:12' ) ), array( $locks, $acc['addressed'] ) );
 		list( $locks, $acc ) = self::check( 'https://other.test/wp-login.php?redirect_to=%2F%3Fp%3D12' );
 		self::assertSame( array( array(), array( 'u?redirect_to' ) ), array( $locks, $acc['spelling'] ) );
+		// Codex, round 25 (A-6): "+" for a space (urlencode()) in a share
+		// text: the percent layer reads it as the readers do, free.
+		foreach ( array(
+			'mailto:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12',
+			'https://twitter.com/intent/tweet?text=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12',
+			'sms:?body=Lesen+https%3A%2F%2Fstaging.test%2F%3Fp%3D12',
+			'mailto:?body=Lesen%3A%20https%3A%2F%2Fstaging.test%2F%3Fp%3D12',
+		) as $raw ) {
+			list( $locks, $acc ) = self::check( $raw );
+			self::assertSame( array( array(), array(), array( 'post:12' ) ), array( $locks, $acc['spelling'], $acc['addressed'] ), $raw );
+		}
+		// Codex, round 25 (A-5): a relative target under a host of no site
+		// locks only with a reference (the rules of ctx(): archives/12 is
+		// post 12, a date and a name are none).
+		foreach ( array(
+			'mailto:info@example.test?subject=Warum%3F'                     => array(),
+			'https://twitter.com/intent/tweet?text=Warum%3F'                => array(),
+			'mailto:info@example.test?subject=Preis%201%20%2F2'             => array(),
+			'https://twitter.com/intent/tweet?text=Termin%20%2F2026%2F11%2F04' => array(),
+			'https://other.test/wp-login.php?redirect_to=%2Fkontakt%2F'     => array(),
+			'https://other.test/wp-login.php?redirect_to=index.php%3Fp%3D12' => array( 'u?redirect_to' ),
+			'//other.test/?u=%2F%3Fpage_id%3D13'                            => array( 'u?u' ),
+			'https://other.test/wp-login.php?redirect_to=%2Farchives%2F12%2F' => array( 'u?redirect_to' ),
+			'https://twitter.com/intent/tweet?text=Lesen%3A%20%2Farchives%2F12' => array( 'u?text' ),
+		) as $raw => $spelling ) {
+			list( $locks, $acc ) = self::check( $raw );
+			self::assertSame( array( array(), $spelling ), array( $locks, $acc['spelling'] ), $raw );
+		}
 		// Codex, round 23 (A-4): the braces of code undecidable: never clean.
 		list( $locks, $acc ) = self::check( 'var cfg={r:/}/,api_key:"demo-secret"};' );
 		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		self::assertSame( array( 'code:u:net:raw' ), $acc['unread'] );
-		// Codex, round 24 (A-1): after an operator, in the layer of code.
-		list( $locks, $acc ) = self::check( 'const c={x:1+/}/.test("x"),api_key:"demo-secret"};' );
-		self::assertSame( array( '*:unreadable_value@u:net:raw/code' ), $locks );
+		// Codex, round 24 (A-1): after an operator, in the layer of code;
+		// round 25 (A-1): after a division as well. A division after a
+		// postfix ++, an end tag of HTML: free.
+		foreach ( array(
+			'const c={x:1+/}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:1/2+/}/.test("x"),api_key:"demo-secret"};',
+			'const c={x:6/2 + /}/.test("x"),api_key:"demo-secret"};',
+		) as $raw ) {
+			list( $locks ) = self::check( $raw );
+			self::assertSame( array( '*:unreadable_value@u:net:raw/code' ), $locks, $raw );
+		}
+		foreach ( array(
+			'const o={}; let x=4; x++ / 2 / 3; label: "x";',
+			'const o={}; a/b/c; (1)/2/3; 6/2; label: "x";',
+			'<p>Siehe <a href="https://example.test/">hier</a> und <em>dort</em>, Ort: Zürich</p>',
+		) as $raw ) {
+			list( $locks ) = self::check( $raw );
+			self::assertSame( array(), $locks, $raw );
+		}
 		list( $locks ) = self::check( 'a{background:url(/x.png)} b{--brand:"x"}, Token: "abc"' );
 		self::assertSame( array(), $locks, 'CSS: url(/x) is no literal; a name after "," outside the blocks is prose.' );
 		list( $locks ) = self::check( 'a{background:url(/x.png); --api-key:"x"}' );
@@ -611,6 +725,12 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		list( $locks ) = self::check( '<p>Data: CSV/JSON</p> <p>Data: text/plain (UTF-8)</p>' );
 		self::assertSame( array(), $locks );
+		// Codex, round 25 (B-1): in quotes in prose as well; in a block
+		// attribute (JSON) it locks.
+		list( $locks ) = self::check( '<p>Format: "Data: CSV/JSON"</p> <p>Hinweis: "data: siehe Tabelle"</p>' );
+		self::assertSame( array(), $locks );
+		list( $locks ) = self::check( '<!-- wp:acme/x {"url":"data:image/svg+x(ml;base64,' . base64_encode( '<svg/>' ) . '"} /-->' );
+		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		// Codex, round 21 (A-2): in a layer taken out of the text every pair
 		// is unread, the one the readers read in the text as well.
 		list( $locks ) = self::check( 'https://staging.test/?p=12 ' . base64_encode( 'https://staging.test/?p=13' ) );
