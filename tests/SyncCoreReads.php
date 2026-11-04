@@ -944,6 +944,21 @@ trait SyncCoreReads {
 		self::assertSame( str_replace( 'p=12', 'p=120', $block ), AB_MCP_Sync_Refs::rewrite_value( $block, $plan, $changed ) );
 		list( , $acc ) = self::reads_scan( $styles( array( 'css' => 'a{background:u\\72l(https://staging.test/x.png)}' ) ) );
 		self::assertSame( array( 'c:html:json.styles.css:css' ), $acc['spelling'] );
+		// An escape of CSS tells CSS from a text (as a text node, /?p=1 would
+		// be read): under the key read as CSS in JSON and in a structure, and
+		// rewritten as CSS (locked, not the id 1 mapped).
+		$escaped = $styles( array( 'css' => '.x{background:url(/?p=1\\32)}' ) );
+		list( $refs, $acc ) = self::reads_scan( $escaped );
+		self::assertSame( array( array(), array( 'c:html:json.styles.css:css' ) ), array( $refs, $acc['spelling'] ), $escaped );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $escaped, self::reads_plan() );
+		self::assertSame( array( $escaped, array( 'spelling' ) ), array( $out['content'], array_column( $out['missing'], 'space' ) ), $escaped );
+		$structure = serialize( array( 'css' => '.x{background:url(/?p=1\\32)}' ) );
+		$acc       = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::value( $structure, self::reads_ctx(), $acc, 'option', 'o' );
+		self::assertSame( array( array(), array( 'o.css:css' ) ), array( $acc['refs'], $acc['spelling'] ), $structure );
+		$plan = self::reads_plan();
+		self::assertSame( $structure, AB_MCP_Sync_Refs::rewrite_value( $structure, $plan, $changed ) );
+		self::assertSame( array( 'spelling' ), array_column( $plan['missing'], 'space' ), $structure );
 		// The same as the value of an option or a meta row, and as an attribute of a block.
 		$acc = AB_MCP_Sync_Canon::acc();
 		AB_MCP_Sync_Canon::value( serialize( array( 'styles' => array( 'css' => '.x{background:url(/?p=12)}' ) ) ), self::reads_ctx(), $acc, 'option', 'o' );
@@ -1469,6 +1484,25 @@ trait SyncCoreReads {
 		}
 		self::assertSame( array( 'meta:_json:json.url?p' ), array_column( $acc['refs'], 'at' ) );
 		self::assertSame( '{"url":"https:\/\/www.live.test\/?preview=1\u0026p=120"}', $out );
+	}
+
+	public function testAShortLinkAfterAnAmpersandAsSerializeBlockAttributesWritesIt(): void {
+		// The slashes as they are, "&" as \u0026 and "--" as \u002d\u002d:
+		// the spelling of serialize_block_attributes() only
+		// (AB_MCP_Sync_Json::encode()); no other producer writes "--" so, and
+		// no reading value by value takes the escapes.
+		$json    = '{"url":"/?p=12\u0026x=a\u002d\u002db"}';
+		$acc     = AB_MCP_Sync_Canon::acc();
+		$changed = false;
+		AB_MCP_Sync_Canon::value( $json, self::reads_ctx(), $acc, 'post', 'meta:_json' );
+		$plan = self::reads_plan();
+		$out  = AB_MCP_Sync_Refs::rewrite_value( $json, $plan, $changed );
+		if ( ! self::core() ) {
+			self::assertSame( array( array(), array( 'meta:_json:json.url?' ) ), array( $acc['refs'], $acc['spelling'] ), 'Without WP_HTML_Decoder: locked, as the producer reads it.' );
+			return;
+		}
+		self::assertSame( array( array( 'meta:_json:json.url?p' ), array() ), array( array_column( $acc['refs'], 'at' ), $acc['spelling'] ) );
+		self::assertSame( '{"url":"/?p=120\u0026x=a\u002d\u002db"}', $out );
 	}
 
 	public function testFromTheRootOnlyUnderTheFolderOfTheSiteAndWhereBothSitesShareIt(): void {

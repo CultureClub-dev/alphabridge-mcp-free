@@ -4433,7 +4433,7 @@ return array(
 		'search'  => "preg_match( '/<(?:script|style)\\b|(?<!",
 		'replace' => "preg_match( '/(?<!",
 		'run'     => $unit_reads,
-		'expect'  => '/a relative address in JSON-LD|a relative address in style/',
+		'expect'  => '/data in an import/',
 	),
 	array(
 		'id'      => 'kanon/urls-element-decoded',
@@ -4937,7 +4937,7 @@ return array(
 		'search'  => ". '|style)\\s*=|=\\s*",
 		'replace' => ". ')\\s*=|=\\s*",
 		'run'     => $unit_reads,
-		'expect'  => '/a relative address in a style attribute/',
+		'expect'  => '/data in a style attribute/',
 	),
 	array(
 		'id'      => 'kanon/urls-address-value',
@@ -4946,7 +4946,7 @@ return array(
 		'search'  => "|| 1 === preg_match( '#^(?:https?:|//|/|\\?|\\.\\.?/)#i', (string) \$value );",
 		'replace' => ";",
 		'run'     => $unit_reads,
-		'expect'  => '/an address by its value/',
+		'expect'  => '/digits relative by its value in a block attribute/',
 	),
 	array(
 		'id'      => 'kanon/urls-address-dotdot',
@@ -4982,7 +4982,7 @@ return array(
 		'search'  => "AB_MCP_Sync_Urls::ids( \$text, \$css ? array( 'css' => true ) + \$plan : \$plan, \$addresses, \$whole )",
 		'replace' => "AB_MCP_Sync_Urls::ids( \$text, \$plan, \$addresses, \$whole )",
 		'run'     => $unit_reads,
-		'expect'  => '/testCssIsReadWithoutItsComments/',
+		'expect'  => '/testGlobalStylesAreReadAsCss/',
 	),
 	array(
 		'id'      => 'kanon/refs-is-css',
@@ -5351,7 +5351,7 @@ return array(
 		'search'  => "|=\\s*[\"\\']?\\s*(?:[\\w\\-\\/]+::)?[\\[{&]/i', \$text )",
 		'replace' => "/i', \$text )",
 		'run'     => $unit_reads,
-		'expect'  => '/in the context of a block/',
+		'expect'  => '/a slash escaped once in the context/',
 	),
 	array(
 		'id'      => 'kanon/urls-no-api-namespace',
@@ -5360,7 +5360,7 @@ return array(
 		'search'  => "(?:[\\w\\-\\/]+::)?[\\[{&]/i', \$text )",
 		'replace' => "[\\[{&]/i', \$text )",
 		'run'     => $unit_reads,
-		'expect'  => '/in the context with a namespace/',
+		'expect'  => '/in the context as the core writes it/',
 	),
 	array(
 		'id'      => 'kanon/refs-support-ids',
@@ -5495,7 +5495,7 @@ return array(
 		'search'  => "'block_attributes' => JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,",
 		'replace' => "'block_attributes' => JSON_PRETTY_PRINT,",
 		'run'     => $unit_reads,
-		'expect'  => '/testGlobalStylesAreReadAsCss/',
+		'expect'  => '/testTheBackgroundImageOfGlobalStylesIsAReference/',
 	),
 	array(
 		'id'      => 'kanon/json-block-replacements',
@@ -5504,7 +5504,7 @@ return array(
 		'search'  => "return 'block_attributes' === \$producer ? strtr( \$json, self::BLOCK_ATTRIBUTES ) : \$json;",
 		'replace' => "return \$json;",
 		'run'     => $unit_reads,
-		'expect'  => '/testGlobalStylesAreReadAsCss/',
+		'expect'  => '/testAShortLinkAfterAnAmpersandAsSerializeBlockAttributesWritesIt/',
 	),
 	array(
 		'id'      => 'kanon/urls-json-whole-deep',
@@ -6135,7 +6135,7 @@ return array(
 		'search'  => "return array() === \$acc['spelling'] && 1 === count( \$form['~s'] ) ? array()",
 		'replace' => "return 1 === count( (array) \$form ) ? array()",
 		'run'     => $it_reads,
-		'expect'  => '/a slash escaped once in the context/',
+		'expect'  => '/the context with a reference for a digit/',
 	),
 	array(
 		'id'      => 'kanon/urls-json-attribute-host',
@@ -6144,7 +6144,7 @@ return array(
 		'search'  => "return array() === \$acc['spelling'] && 1 === count( \$form['~s'] ) ? array()",
 		'replace' => "return array() === \$acc['spelling'] ? array()",
 		'run'     => $it_reads,
-		'expect'  => '/a slash escaped once in the context|testIndentedJsonTakesOverItsHostOnly/',
+		'expect'  => '/the context with a reference for a digit/',
 	),
 	/* ------------------------------------------------ the net (AB_MCP_Sync_Net) */
 	array(
@@ -6388,7 +6388,7 @@ return array(
 		'search'  => "\t\t\tforeach ( array( 'plain', 'rawurlencode', 'urlencode' ) as \$candidate ) {",
 		'replace' => "\t\t\tforeach ( array( 'plain', 'urlencode' ) as \$candidate ) {",
 		'run'     => $unit_reads,
-		'expect'  => '/redirect_to encoded/',
+		'expect'  => '/a tilde as rawurlencode\(\) writes it/',
 	),
 	array(
 		'id'      => 'kanon/urls-query-values-url',
