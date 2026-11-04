@@ -193,7 +193,7 @@ trait SyncCoreReads {
 			'a data: address in capitals' => array( '<a href=" DATA:text/html,x">x</a>' ),
 			'a data: image'           => array( '<img src="data:image/png;base64,AAAA" alt="">' ),
 			'an object of HTML'       => array( '<object type="text/html" data="https://cdn.test/a.html"></object>' ),
-			'the PDF preview of a file block' => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a href="https://staging.test/a.pdf">a</a></div>' ),
+			'a PDF outside the uploads of the site' => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a href="https://staging.test/a.pdf">a</a></div>' ),
 			// Fields of a form outside the list (input, select, option, meta).
 			'an unknown HTML tag'   => array( '<acme-widget data-secret="x"></acme-widget>' ),
 			'a field of a form'       => array( '<input type="hidden" name="api_key" value="EXAMPLE_SECRET">' ),

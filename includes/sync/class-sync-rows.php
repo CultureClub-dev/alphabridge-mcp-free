@@ -78,6 +78,40 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * The address of the uploads of this site, from its rows, as
+	 * _wp_upload_dir() makes it (wp-includes/functions.php), its base only:
+	 * upload_url_path where it is set; else WP_CONTENT_URL/uploads where
+	 * upload_path is empty, wp-content/uploads or an absolute directory;
+	 * else siteurl with upload_path (the folder of a site of a network and
+	 * UPLOADS lie under it or elsewhere: a PDF there is not taken, it
+	 * locks). Null where siteurl cannot be read: not known. A row that holds
+	 * no address (a serialized value) is no base of a PDF either.
+	 *
+	 * @return string|null Without a slash at its end.
+	 */
+	public static function uploads_url() {
+		$rows = array();
+		foreach ( array( 'siteurl', 'upload_path', 'upload_url_path' ) as $name ) {
+			// A row not read is empty; without siteurl nothing is known.
+			$row           = self::option( $name );
+			$rows[ $name ] = is_array( $row ) ? trim( (string) $row['value'] ) : '';
+		}
+		if ( '' === $rows['siteurl'] ) {
+			return null;
+		}
+		$content = defined( 'WP_CONTENT_URL' ) ? (string) WP_CONTENT_URL : rtrim( $rows['siteurl'], '/' ) . '/wp-content';
+		$path    = $rows['upload_path'];
+		if ( '' !== $rows['upload_url_path'] ) {
+			$url = $rows['upload_url_path'];
+		} elseif ( '' === $path || 'wp-content/uploads' === $path || ( defined( 'ABSPATH' ) && 0 === strpos( $path, (string) ABSPATH ) ) ) {
+			$url = $content . '/uploads';
+		} else {
+			$url = rtrim( $rows['siteurl'], '/' ) . '/' . $path;
+		}
+		return rtrim( $url, '/' );
+	}
+
+	/**
 	 * Whether the page of a path exists as WP::parse_request() takes it for
 	 * a verbose rule of pages (AB_MCP_Sync_Urls::route()), from the rows,
 	 * without the cache: the search of get_page_by_path() (the parts of the

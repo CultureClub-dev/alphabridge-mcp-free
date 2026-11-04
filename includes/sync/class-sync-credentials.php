@@ -337,11 +337,10 @@ final class AB_MCP_Sync_Credentials {
 				if ( preg_match( '/^\s*[\[{]/', $value ) ) {
 					$out['values'][] = $value;
 				}
-				// An embedded document (data:), and object with data, whose
-				// rule of the core (_wp_kses_allow_pdf_objects()) reads the
-				// uploads through options: outside.
+				// An embedded document (data:), and object with data but a PDF
+				// of the uploads as the core takes it (pdf_object()): outside.
 				$url = trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
-				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) ) || ( 'object' === $tag_name && 'data' === $name ) ) {
+				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $url ) ) ) {
 					$out['outside'] = true;
 				}
 				// An event attribute and a javascript: address (as the URL
@@ -373,6 +372,32 @@ final class AB_MCP_Sync_Credentials {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether an object is a PDF of the uploads as kses takes it ($allowedposttags
+	 * of object: type required, one of application/pdf; data required, by
+	 * _wp_kses_allow_pdf_objects(): no query or fragment, ending in .pdf,
+	 * under the uploads of the site, http or https): here the address of
+	 * the uploads from the rows (AB_MCP_Sync_Rows::uploads_url()), and the
+	 * address under its path, not only its host. Not known: not one.
+	 *
+	 * @param array  $attrs The attributes of the object.
+	 * @param string $url   The value of data, as the URL parser reads it.
+	 * @return bool
+	 */
+	private static function pdf_object( array $attrs, $url ) {
+		if ( ! isset( $attrs['type'] ) || ! is_string( $attrs['type'] ) || 'application/pdf' !== strtolower( $attrs['type'] ) ) {
+			return false;
+		}
+		if ( false !== strpbrk( $url, '?#' ) || '.pdf' !== substr( $url, -4 ) ) {
+			return false;
+		}
+		$uploads = AB_MCP_Sync_Rows::uploads_url();
+		if ( null === $uploads || ! preg_match( '#^https?:(//.+)\z#i', $uploads, $base ) || ! preg_match( '#^https?:(//.+)\z#i', $url, $own ) ) {
+			return false;
+		}
+		return 0 === strpos( $own[1], $base[1] . '/' );
 	}
 
 	/**

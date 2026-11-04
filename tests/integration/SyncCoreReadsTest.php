@@ -269,6 +269,44 @@ final class SyncCoreReadsTest extends TestCase {
 		self::assertSame( array(), array_values( array_filter( $result['locks'], static fn( $l ) => '*:script' === $l['key'] ) ) );
 	}
 
+	public function testThePdfPreviewOfAFileBlockIsFree(): void {
+		// The PDF of the uploads as _wp_kses_allow_pdf_objects() takes it,
+		// the uploads from the rows: free, its address rewritten.
+		$this->permalinks( '/archives/%post_id%/' );
+		$pdf  = AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/2026/11/a.pdf';
+		$file = static fn( string $object ) => '<!-- wp:file {"id":12,"href":"' . $pdf . '","displayPreview":true} --><div class="wp-block-file">' . $object . '<a id="wp-block-file--media-1" href="' . $pdf . '">a</a><a href="' . $pdf . '" class="wp-block-file__button wp-element-button" download aria-describedby="wp-block-file--media-1">Herunterladen</a></div><!-- /wp:file -->';
+		$free = $file( '<object class="wp-block-file__embed" data="' . $pdf . '" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object>' );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'] );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', '<object data="' . $pdf . '" type="Application/PDF"></object>', array() )['state'], 'The type in any case, as kses compares it.' );
+		$read = self::read( $free, array() );
+		self::assertSame( array( array(), str_replace( AB_MCP_IT_Sites::url( 'a' ), 'https://www.live.test', $free ) ), array( $read['spelling'], $read['content'] ) );
+		// Another type, none, a query, outside the uploads, another host: locked.
+		foreach ( array(
+			'<object data="' . $pdf . '" type="text/html"></object>',
+			'<object data="' . $pdf . '"></object>',
+			'<object data="' . $pdf . '?x=1.pdf" type="application/pdf"></object>',
+			'<object data="' . $pdf . '#x.pdf" type="application/pdf"></object>',
+			'<object data="' . AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/other/a.pdf" type="application/pdf"></object>',
+			'<object data="https://cdn.test/wp-content/uploads/a.pdf" type="application/pdf"></object>',
+			'<object data="' . substr( $pdf, 0, -4 ) . '.html" type="application/pdf"></object>',
+		) as $object ) {
+			$check = \AB_MCP_Sync_Credentials::unit( '', $file( $object ), array() );
+			self::assertSame( array( 'unreadable', 'html_outside_kses' ), array( $check['state'], $check['why'] ?? null ), $object );
+		}
+		// upload_url_path from its row: the uploads there.
+		update_option( 'upload_url_path', 'https://media.test/files' );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', '<object data="https://media.test/files/a.pdf" type="application/pdf"></object>', array() )['state'] );
+		self::assertSame( 'unreadable', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'], 'The uploads are elsewhere now.' );
+		// A row that holds no text: not known, locked.
+		update_option( 'upload_url_path', array( 'x' ) );
+		self::assertSame( 'unreadable', \AB_MCP_Sync_Credentials::unit( '', '<object data="https://media.test/files/a.pdf" type="application/pdf"></object>', array() )['state'] );
+		delete_option( 'upload_url_path' );
+		update_option( 'upload_path', 'media' );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', '<object data="' . AB_MCP_IT_Sites::url( 'a' ) . '/media/a.pdf" type="application/pdf"></object>', array() )['state'], 'upload_path under siteurl.' );
+		update_option( 'upload_path', ABSPATH . 'wp-content/uploads' );
+		self::assertSame( 'clean', \AB_MCP_Sync_Credentials::unit( '', $free, array() )['state'], 'An absolute directory: the uploads of WP_CONTENT_URL.' );
+	}
+
 	public function testAdditionalCssIsReadAsCss(): void {
 		// Codex, round 16 (A5, C1): custom_css with a credential, an address
 		// without a host in url(…).
@@ -307,12 +345,14 @@ final class SyncCoreReadsTest extends TestCase {
 		$wpdb->options = $table . '_ab_it_missing';
 		$suppress      = $wpdb->suppress_errors( true );
 		try {
-			$routes = \AB_MCP_Sync_Urls::routes();
+			$routes  = \AB_MCP_Sync_Urls::routes();
+			$uploads = \AB_MCP_Sync_Rows::uploads_url();
 		} finally {
 			$wpdb->options = $table;
 			$wpdb->suppress_errors( $suppress );
 		}
 		self::assertNull( $routes, 'Not read is not known: a segment of digits locks.' );
+		self::assertNull( $uploads, 'Not read: no PDF of the uploads.' );
 	}
 
 	public function testUnderPlainPermalinksNoPathNamesAnId(): void {
