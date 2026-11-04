@@ -108,6 +108,25 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( 'ohne Anfuehrungszeichen', $layers['raw/data'], 'Without a quote, to ")".' );
 		$layers = self::layers( 'DATA:Text/Plain;BASE64,' . base64_encode( 'oben' ) );
 		self::assertSame( 'oben', $layers['raw/data'], 'In any case.' );
+		// Codex, round 22 (A-2): the header as the MIME Sniffing Standard
+		// parses it: parameters in quotes, white space, any order; base64 as
+		// the last token only.
+		foreach ( array(
+			'data:text/plain;name="icon";base64,' . base64_encode( 'Geheim' )        => 'Geheim',
+			'data:text/plain; charset=utf-8 ;base64,' . base64_encode( 'Geheim' )   => 'Geheim',
+			'data:text/plain;charset="utf-8";base64,' . base64_encode( 'Geheim' )  => 'Geheim',
+			'data:text/plain;name="a,b\\"c";base64,' . base64_encode( 'Geheim' )   => 'Geheim',
+			'data:text/plain;base64;name=x,' . base64_encode( 'Geheim' )           => base64_encode( 'Geheim' ),
+			'data:;base64,' . base64_encode( 'ohne Typ' )                           => 'ohne Typ',
+			'data:text/plain;CHARSET=utf-16le;base64,' . base64_encode( mb_convert_encoding( 'Geheim', 'UTF-16LE', 'UTF-8' ) ) => 'Geheim',
+			'data: text/plain ;base64,' . base64_encode( 'Geheim' )                 => 'Geheim',
+			'data:text/plain;name="a;charset=utf-16le";base64,' . base64_encode( 'Geheim' ) => 'Geheim',
+		) as $raw => $want ) {
+			self::assertSame( $want, self::layers( $raw )['raw/data'] ?? null, $raw );
+		}
+		self::assertArrayNotHasKey( 'raw/data', self::layers( 'data:text/plain;name=(x,Geheim' ), 'A bracket in the header: no address.' );
+		self::assertArrayNotHasKey( 'raw/data', self::layers( "data:text/plain;name=\"x\ny\",Geheim" ), 'A line break in the header: no address.' );
+		self::assertArrayNotHasKey( 'raw/data', self::layers( 'data:text/plain;name="' . str_repeat( 'x', 600 ) . '",Geheim' ), 'No "," within the header: no address.' );
 		$layers = self::layers( 'a data:text/plain;base64,!!!! b data:text/plain, c' );
 		self::assertArrayNotHasKey( 'raw/data', $layers, 'What does not decode, and an empty body, is no layer.' );
 		$layers = AB_MCP_Sync_Net::layers( '"' . self::data( 'erste' ) . '" ' . self::data( 'zweite' ) );
@@ -120,23 +139,41 @@ final class SyncNetTest extends TestCase {
 		// Codex, round 21 (A-3): UTF-16 with a BOM, by its charset, UTF-32,
 		// ISO-8859-1, Windows-1252, a UTF-8 BOM.
 		$svg    = '<svg><script>{"api_key":"x"}</script></svg>';
+		$xml    = '<?xml version="1.0"?>' . $svg;
 		$unread = array();
 		foreach ( array(
-			'BOM UTF-16LE'          => array( "\xFF\xFE" . mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), 'image/svg+xml' ),
-			'BOM UTF-16BE'          => array( "\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'image/svg+xml' ),
-			'charset utf-16'        => array( mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), 'image/svg+xml;charset=utf-16' ),
-			'charset UTF-16BE'      => array( mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'text/html;charset=UTF-16BE' ),
-			'BOM UTF-32LE'          => array( "\xFF\xFE\x00\x00" . mb_convert_encoding( $svg, 'UTF-32LE', 'UTF-8' ), 'text/xml' ),
-			'BOM UTF-32BE'          => array( "\x00\x00\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-32BE', 'UTF-8' ), 'application/json' ),
-			'BOM UTF-8'             => array( "\xEF\xBB\xBF" . $svg, 'text/plain' ),
-			'a BOM before a charset' => array( "\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'text/plain;charset=utf-16' ),
+			'BOM UTF-16LE'          => array( "\xFF\xFE" . mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), 'image/svg+xml', $svg ),
+			'BOM UTF-16BE'          => array( "\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'image/svg+xml', $svg ),
+			'charset utf-16'        => array( mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), 'image/svg+xml;charset=utf-16', $svg ),
+			'charset UTF-16BE'      => array( mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'text/html;charset=UTF-16BE', $svg ),
+			'BOM UTF-32LE'          => array( "\xFF\xFE\x00\x00" . mb_convert_encoding( $svg, 'UTF-32LE', 'UTF-8' ), 'text/xml', $svg ),
+			'BOM UTF-32BE'          => array( "\x00\x00\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-32BE', 'UTF-8' ), 'application/json', $svg ),
+			'BOM UTF-8'             => array( "\xEF\xBB\xBF" . $svg, 'text/plain', $svg ),
+			'a BOM before a charset' => array( "\xFE\xFF" . mb_convert_encoding( $svg, 'UTF-16BE', 'UTF-8' ), 'text/plain;charset=utf-16', $svg ),
+			// Codex, round 22 (A-2): XML by its first bytes (Appendix F), and
+			// by the encoding of its declaration.
+			'XML UTF-16LE by its first bytes' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), 'image/svg+xml', $xml ),
+			'XML UTF-16BE by its first bytes' => array( mb_convert_encoding( '<?xml version="1.0" encoding="UTF-16"?>' . $svg, 'UTF-16BE', 'UTF-8' ), 'text/xml', '<?xml version="1.0" encoding="UTF-16"?>' . $svg ),
+			'XML UTF-32LE by its first bytes' => array( mb_convert_encoding( $xml, 'UTF-32LE', 'UTF-8' ), 'application/rss+xml', $xml ),
+			'XML first bytes before a charset' => array( mb_convert_encoding( $xml, 'UTF-16BE', 'UTF-8' ), 'image/svg+xml;charset=latin1', $xml ),
+			'XML UTF-32BE by its first bytes' => array( mb_convert_encoding( $xml, 'UTF-32BE', 'UTF-8' ), 'text/xml', $xml ),
+			'XML by its first bytes, the type in capitals' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), 'IMAGE/SVG+XML', $xml ),
+			'XML by its first bytes, the type with spaces around it' => array( mb_convert_encoding( $xml, 'UTF-16LE', 'UTF-8' ), ' text/xml ', $xml ),
+			'a BOM without a type (text/plain)' => array( "\xFF\xFE" . mb_convert_encoding( $svg, 'UTF-16LE', 'UTF-8' ), '', $svg ),
 		) as $label => $case ) {
 			$layers = self::layers( 'data:' . $case[1] . ';base64,' . base64_encode( $case[0] ), $deep, $unread );
-			self::assertSame( $svg, $layers['raw/data'] ?? null, $label );
+			self::assertSame( $case[2], $layers['raw/data'] ?? null, $label );
 			self::assertSame( array(), $unread, $label );
 		}
 		$layers = self::layers( 'data:text/plain;charset=iso-8859-1;base64,' . base64_encode( "caf\xe9 token=x" ), $deep, $unread );
 		self::assertSame( 'café token=x', $layers['raw/data'] );
+		$layers = self::layers( 'data:text/xml;base64,' . base64_encode( "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><r>caf\xe9</r>" ), $deep, $unread );
+		self::assertSame( '<?xml version="1.0" encoding="ISO-8859-1"?><r>café</r>', $layers['raw/data'], 'The encoding of the declaration.' );
+		$layers = self::layers( 'data:text/xml;base64,' . base64_encode( "<?xml version=\"1.0\" encoding=\"KOI8-R\"?><r>\xC1</r>" ), $deep, $unread );
+		self::assertArrayNotHasKey( 'raw/data', $layers, 'An encoding of the declaration not known: not read.' );
+		self::assertSame( array( 'raw' ), $unread );
+		$layers = self::layers( 'data:application/octet-stream;base64,' . base64_encode( "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><r>caf\xe9</r>" ), $deep, $unread );
+		self::assertSame( "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><r>caf\xe9</r>", $layers['raw/data'], 'Not XML by its type: bytes as they are.' );
 		$layers = self::layers( 'data:text/plain;charset=windows-1252,' . rawurlencode( "\x80 token=x" ), $deep, $unread );
 		self::assertSame( '€ token=x', $layers['raw/data'] );
 		self::assertSame( 'ohne Typ', self::layers( 'data:;base64,' . base64_encode( 'ohne Typ' ) )['raw/data'], 'An empty type is text/plain.' );
@@ -149,6 +186,9 @@ final class SyncNetTest extends TestCase {
 			'a charset not known'             => 'data:text/plain;charset=koi8-r;base64,' . base64_encode( "\xC1" ),
 			'a null character in UTF-16'      => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( "a\0b", 'UTF-16LE', 'UTF-8' ) ),
 			'a BOM before bytes of no text'   => 'data:text/plain;base64,' . base64_encode( "\xFF\xFE\x00\xD8" ),
+			'a charset not known, bytes of ASCII' => 'data:text/plain;charset=koi8-r,abc',
+			'a declaration not known, bytes of ASCII' => 'data:text/xml,' . rawurlencode( '<?xml version="1.0" encoding="KOI8-R"?><r>abc</r>' ),
+			'a declaration in a type that is no XML' => 'data:application/json;base64,' . base64_encode( "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><r>caf\xe9</r>" ),
 		) as $label => $raw ) {
 			$layers = self::layers( $raw, $deep, $unread );
 			self::assertArrayNotHasKey( 'raw/data', $layers, $label );
@@ -259,10 +299,25 @@ final class SyncNetTest extends TestCase {
 			'{"src":"index.php?p=12","type":"iframe"}'     => array( 'post:?' ),
 			'x&p=12'                                       => array( 'post:?' ),
 			'?a=1;x=/?p=12'                                => array( 'post:12' ),
-			'https://staging.test/?redirect_to=https://staging.test/?p=12' => array(),
+			// Codex, round 22 (A-1): the value of a query variable that is an
+			// address of the sites, as the reader reads it.
+			'https://staging.test/?redirect_to=https://staging.test/?p=12' => array( 'post:12' ),
+			'https://staging.test/wp-login.php?redirect_to=%2F%3Fp%3D12'  => array( 'post:12' ),
+			'/x?b=https%3A%2F%2Fstaging.test%2F%3Fcat%3D1%2C2'             => array( 'term:1', 'term:2' ),
+			'https://staging.test/?redirect_to=%2f%3fp%3d12'               => array( 'post:?' ),
+			'/?redirect_to=index.php%3Fp%3D12'                             => array( 'post:?' ),
+			'https://staging.test/?a=' . rawurlencode( '/?b=' . rawurlencode( '/?c=' . rawurlencode( '/?p=12' ) ) ) => array( 'post:?' ),
+			'wp-login.php?redirect_to=%2F%3Fp%3D12'                        => array( 'post:?' ),
+			'https://www.live.test/?p=12'                                  => array( 'post:?' ),
+			'/?u=https%3A%2F%2Fwww.live.test%2F%3Fp%3D12'                  => array( 'post:?' ),
 		) as $text => $pairs ) {
 			self::assertSame( $pairs, AB_MCP_Sync_Net::references( $text, $ctx ), $text );
 		}
+		// A root-relative value where the sites share no root: not rewritten
+		// (locked); with the host, read.
+		$sub = AB_MCP_Sync_Canon::context( array( 'https://staging.test/sub', 'https://www.live.test' ), static fn( $id ) => 'user' . $id, null, array( 'https://staging.test/sub' ) );
+		self::assertSame( array( 'post:?' ), AB_MCP_Sync_Net::references( 'https://staging.test/sub/?u=%2Fsub%2F%3Fp%3D12', $sub ) );
+		self::assertSame( array( 'post:12' ), AB_MCP_Sync_Net::references( 'https://staging.test/sub/?u=https%3A%2F%2Fstaging.test%2Fsub%2F%3Fp%3D12', $sub ) );
 		// Not an address, or none of the sites: after a letter, a digit,
 		// "%", "/" or "."; a site without an id; no digit; another site's
 		// host, whatever follows its "#" (Codex, round 21, B-2); the path of
@@ -287,6 +342,7 @@ final class SyncNetTest extends TestCase {
 			'{"url":"\\/?p=12"}',
 			'&amp;nbsp;12 &copy; 2024',
 			'?x=12',
+			'Ordner/archives/12',
 		) as $text ) {
 			self::assertSame( array(), AB_MCP_Sync_Net::references( $text, $ctx ), $text );
 		}
@@ -319,6 +375,16 @@ final class SyncNetTest extends TestCase {
 			':root{--client-secret:1}'                         => array( 'client_secret' ),
 			'a{color:red;--api-key:1}'                         => array( 'api_key' ),
 			'{a:1, token:x}'                                   => array( 'token' ),
+			// Codex, round 22 (A-3, A-4): white space in a key in brackets; a
+			// brace in a string closes none.
+			'cfg["api_key" ] = "demo-secret";'                 => array( 'api_key' ),
+			"cfg[\n\"api_key\"\n]=\"x\""                       => array( 'api_key' ),
+			'cfg[ `api_key` ] = `x`'                           => array( 'api_key' ),
+			'var cfg = {a:"}",api_key:"demo-secret"};'          => array( 'api_key' ),
+			'var cfg = {a:"{",api_key:"demo-secret"};'          => array( 'api_key' ),
+			"var cfg = {a:'}}', b:`}`, token:\"x\"};"          => array( 'token' ),
+			'var cfg = {a:"\\"}",api_key:"demo-secret"};'      => array( 'api_key' ),
+			"x = \"\n{ a: 1, api_key: \"demo-secret\" }"       => array( 'api_key' ),
 			// Codex, round 21 (A-5): a value is what is not empty after trim.
 			'{"api_key":" demo-secret"}'                       => array( 'api_key' ),
 			"{\"api_key\":\"\tdemo-secret\"}"                  => array( 'api_key' ),
@@ -351,6 +417,10 @@ final class SyncNetTest extends TestCase {
 			'input[type="password"]',
 			'hasPassword=1&token_count=3',
 			'`token`',
+			'x = "{"; Felder: Name, Token: "abc"',
+			"x = `\n{`; Felder: Name, Token: \"abc\"",
+			'{token:` `}',
+			'api_key=` `',
 		) as $text ) {
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
 		}
@@ -380,20 +450,23 @@ final class SyncNetTest extends TestCase {
 	}
 
 	public function testTheNetLocksWhereALayerNamesAPairTheReadersDidNotRead(): void {
-		// The readers of a plain value read the addresses with a host, not
-		// the root-relative one in prose: the net names its pair.
-		list( $locks ) = self::check( 'siehe /?p=12' );
+		// The readers of a plain value read the addresses with a host and the
+		// root-relative ones (a text node; Codex, round 22, B-1), not a query
+		// relative to the page: the net names its pair.
+		list( $locks ) = self::check( 'siehe index.php?p=12' );
 		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
+		list( $locks, $acc ) = self::check( 'siehe /?p=12' );
+		self::assertSame( array( array(), array( 'post:12' ) ), array( $locks, $acc['addressed'] ), 'A root-relative address in a text node: read.' );
 		// What they read as well: the same pairs, free.
 		list( $locks, $acc ) = self::check( 'siehe https://staging.test/?p=12' );
 		self::assertSame( array(), $locks );
 		self::assertSame( array( 'post:12' ), $acc['addressed'] );
 		// The same pair once more than they read it: locked (a copy a reader
 		// does not rewrite).
-		list( $locks ) = self::check( 'https://staging.test/?p=12 und /?p=12' );
+		list( $locks ) = self::check( 'https://staging.test/?p=12 und index.php?p=12' );
 		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
 		// Another pair beside the one they read: locked.
-		list( $locks ) = self::check( 'https://staging.test/?p=12 und /?p=13' );
+		list( $locks ) = self::check( 'https://staging.test/?p=12 und index.php?p=13' );
 		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
 		// A layer beneath the raw text names the layer.
 		list( $locks ) = self::check( base64_encode( '{"src":"/?p=12"}' ) );
@@ -409,7 +482,7 @@ final class SyncNetTest extends TestCase {
 		list( $locks ) = self::check( 'https://staging.test/?p=12 ' . base64_encode( '{"u":"\\/?p=12"}' ) );
 		self::assertSame( array( '*:unread_reference@u:net:raw/base64/json' ), $locks, 'A decoding of an extracted layer is extracted as well.' );
 		// The first layer with more locks; one lock of a kind per unit.
-		list( $locks ) = self::check( '/?p=12 ' . base64_encode( '{"src":"/?p=13"}' ) );
+		list( $locks ) = self::check( 'index.php?p=12 ' . base64_encode( '{"src":"/?p=13"}' ) );
 		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
 		// What the readers read in an earlier unit does not count for this one.
 		$ctx  = self::ctx();
@@ -455,9 +528,9 @@ final class SyncNetTest extends TestCase {
 		// readers: the net reads the value.
 		$table = static function ( array &$acc, array $ctx ): void {
 			$acc['locks'][] = array( 'key' => 'option:unclassified', 'stage' => 'Z8d', 'reason' => 'x', 'at' => 'option' );
-			AB_MCP_Sync_Canon::value( '/?p=12', $ctx, $acc, 'option', 'u' );
+			AB_MCP_Sync_Canon::value( 'index.php?p=12', $ctx, $acc, 'option', 'u' );
 		};
-		list( $locks ) = self::check( '/?p=12', $table );
+		list( $locks ) = self::check( 'index.php?p=12', $table );
 		self::assertSame( array( 'option:unclassified@option', '*:unread_reference@u:net:raw' ), $locks );
 	}
 
@@ -506,11 +579,15 @@ final class SyncNetTest extends TestCase {
 			self::assertSame( array( '*:unread_credential@u:net:' . $layer ), $locks, $script );
 			self::assertSame( array( '~api_key' ), $acc['credentials']['mixed'][0]['fields'] );
 		}
-		// Codex, round 21 (A-3): UTF-16 by its charset; without one, not read.
+		// Codex, round 21 (A-3), 22 (A-2): UTF-16 by its charset, by its
+		// first bytes as XML; without a declaration and a BOM, not read.
 		$utf16 = mb_convert_encoding( '<?xml version="1.0" encoding="UTF-16"?><svg xmlns="http://www.w3.org/2000/svg"><metadata><script type="application/json">{"api_key":"demo-secret"}</script></metadata></svg>', 'UTF-16LE', 'UTF-8' );
 		list( $locks ) = self::check( 'a{background-image:url(data:image/svg+xml;charset=utf-16;base64,' . base64_encode( "\xff\xfe" . $utf16 ) . ')}' );
 		self::assertSame( array( '*:unread_credential@u:net:raw/data' ), $locks );
-		list( $locks, $acc ) = self::check( 'a{background-image:url(data:image/svg+xml;base64,' . base64_encode( $utf16 ) . ')}' );
+		list( $locks ) = self::check( 'a{background-image:url(data:image/svg+xml;base64,' . base64_encode( $utf16 ) . ')}' );
+		self::assertSame( array( '*:unread_credential@u:net:raw/data' ), $locks, 'XML by its first bytes.' );
+		$bare = mb_convert_encoding( '<svg xmlns="http://www.w3.org/2000/svg"><script>{"api_key":"demo-secret"}</script></svg>', 'UTF-16LE', 'UTF-8' );
+		list( $locks, $acc ) = self::check( 'a{background-image:url(data:image/svg+xml;base64,' . base64_encode( $bare ) . ')}' );
 		self::assertSame( array( '*:unreadable_value@u:net:raw' ), $locks );
 		self::assertSame( array( 'charset:u:net:raw' ), $acc['unread'] );
 		// Codex, round 21 (A-5): a value with white space before it.
@@ -564,7 +641,7 @@ final class SyncNetTest extends TestCase {
 			'https://staging.test/?cat=1,2'                       => array( 'term:1', 'term:2' ),
 			'https://staging.test/?p=1%32'                        => array( 'post:?' ),
 			'{"url":"\\/?p=12"}'                                  => array( 'post:12' ),
-			'https://staging.test/archives/12/ und /?page_id=3'   => array( 'post:12' ),
+			'https://staging.test/archives/12/ und /?page_id=3'   => array( 'post:3', 'post:12' ),
 			'<!-- wp:acme/x {"url":"/?p=12"} /-->'                => array( 'post:12' ),
 		) as $text => $addressed ) {
 			$acc = AB_MCP_Sync_Canon::acc();

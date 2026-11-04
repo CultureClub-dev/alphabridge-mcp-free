@@ -132,6 +132,35 @@ final class AB_MCP_Sync_Html extends WP_HTML_Tag_Processor {
 	}
 
 	/**
+	 * The text nodes of a text as the HTML API reads them (Codex, round 22,
+	 * B-1): each with its span in the stored text and its text decoded
+	 * (get_modifiable_text()); the content of a raw text element (script,
+	 * style, textarea …) is no text node here (its element reads it). Empty
+	 * where the text cannot be read to its end.
+	 *
+	 * @param string $text Text.
+	 * @return array<int,array{at:int,len:int,text:string}>
+	 */
+	public static function text_nodes( $text ) {
+		$text = (string) $text;
+		$out  = array();
+		$p    = new self( $text );
+		while ( $p->next_token() ) {
+			if ( '#text' !== $p->get_token_type() || ! $p->set_bookmark( self::MARK ) ) {
+				continue;
+			}
+			$span = $p->bookmarks[ self::MARK ];
+			$p->release_bookmark( self::MARK );
+			$out[] = array(
+				'at'   => (int) $span->start,
+				'len'  => (int) $span->length,
+				'text' => (string) $p->get_modifiable_text(),
+			);
+		}
+		return $p->paused_at_incomplete_token() ? array() : $out;
+	}
+
+	/**
 	 * Whether a script is data in JSON: a type, in ASCII lower case without
 	 * the white space around it, exactly one of DATA_SCRIPTS. Every other
 	 * script (no type, an empty one, a language, any other type, one with

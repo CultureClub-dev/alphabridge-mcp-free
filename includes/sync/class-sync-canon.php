@@ -135,9 +135,18 @@ final class AB_MCP_Sync_Canon {
 				'path'   => $parts[4],
 				'own'    => null === $mine || in_array( $address, $mine, true ),
 			);
-			// With its scheme and without it ("//host/path").
+			// With its scheme and without it ("//host/path"); percent-encoded
+			// as well (Codex, round 22, A-1: the value of a query variable,
+			// redirect_to=https%3A%2F%2F…), the form "percent".
 			foreach ( array( $address, $parts[2] ) as $spelling ) {
-				foreach ( AB_MCP_Replace_Engine::needles( $spelling ) as $needle ) {
+				$needles = AB_MCP_Replace_Engine::needles( $spelling );
+				foreach ( array_unique( array( rawurlencode( $spelling ), urlencode( $spelling ) ) ) as $encoded ) {
+					$needles[] = array(
+						'form'   => 'percent',
+						'needle' => $encoded,
+					);
+				}
+				foreach ( $needles as $needle ) {
 					if ( ! isset( $forms[ $needle['needle'] ] ) ) {
 						$forms[ $needle['needle'] ] = $needle['form'];
 					}

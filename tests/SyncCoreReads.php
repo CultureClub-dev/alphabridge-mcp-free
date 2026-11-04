@@ -202,7 +202,12 @@ trait SyncCoreReads {
 			// Codex, round 16 (A4): an embedded document, object with data.
 			'a data: document in an iframe' => array( '<iframe src="data:text/html;base64,' . base64_encode( '<script>window.api_key="demo-secret"</script>' ) . '"></iframe>' ),
 			'a data: address in capitals' => array( '<a href=" DATA:text/html,x">x</a>' ),
-			'a data: image'           => array( '<img src="data:image/png;base64,AAAA" alt="">' ),
+			'a data: image that is none' => array( '<img src="data:image/png;base64,AAAA" alt="">' ),
+			// Codex, round 22 (B-3): a raster image only with the bytes of its type.
+			'a data: PNG with the bytes of an SVG' => array( '<img src="data:image/png;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"/>' ) . '" alt="">' ),
+			'a data: SVG in src'      => array( '<img src="data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"/>' ) . '" alt="">' ),
+			'a data: GIF in href'     => array( '<a href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">x</a>' ),
+			'a data: WebP with the bytes of a PNG in poster' => array( '<video poster="data:image/webp;base64,' . base64_encode( "\x89PNG\r\n\x1a\n" ) . '"></video>' ),
 			'an object of HTML'       => array( '<object type="text/html" data="https://cdn.test/a.html"></object>' ),
 			'a PDF outside the uploads of the site' => array( '<div class="wp-block-file"><object class="wp-block-file__embed" data="https://staging.test/a.pdf" type="application/pdf" style="width:100%;height:600px" aria-label="Embed of a."></object><a href="https://staging.test/a.pdf">a</a></div>' ),
 			// Fields of a form outside the list (input, select, option, meta).
@@ -259,6 +264,11 @@ trait SyncCoreReads {
 			// Codex, round 17 (A3): comments and an escape that hides nothing.
 			'CSS with comments'    => array( '<style>/* Zitat */ q::before{content:"\\201C"} /* Ende */ a{background:url(https://staging.test/a.png)}</style>' ),
 			'details'       => array( '<details class="wp-block-details"><summary>a</summary><p>b</p></details>' ),
+			// Codex, round 22 (B-3): the placeholder of a lazy loader, a raster image in data:.
+			'a GIF placeholder' => array( '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">' ),
+			'a PNG placeholder beside data-src' => array( '<img src="data:image/png;base64,' . base64_encode( "\x89PNG\r\n\x1a\n\0\0\0\rIHDR" ) . '" data-src="https://staging.test/a.jpg" alt="">' ),
+			'a WebP poster'   => array( '<video poster="data:image/webp;base64,' . base64_encode( "RIFF\0\0\0\0WEBPVP8 " ) . '"></video>' ),
+			'a JPEG and an AVIF' => array( '<img src="data:image/jpeg;base64,' . base64_encode( "\xFF\xD8\xFF\xE0" ) . '" alt=""><img src="data:image/avif;base64,' . base64_encode( "\0\0\0\x1cftypavif" ) . '" alt="">' ),
 			'a heading and code' => array( '<h2 class="wp-block-heading" id="kapitel">K</h2><pre class="wp-block-code"><code>x = 1</code></pre>' ),
 		);
 	}
@@ -599,8 +609,6 @@ trait SyncCoreReads {
 			'A-1 a variable with a page id'             => array( ".x{--bild:'/?page_id=12'}", 'css', 'raw' ),
 			'A-1 a variable in style of content'        => array( '<style>.x{--bild:"/?attachment_id=12"}</style>', 'content', 'raw' ),
 			'A-1 a variable in a style attribute'       => array( '<div style="--bild:\'/?attachment_id=12\'">x</div>', 'content', 'raw' ),
-			'A-4 a key twice with an address'           => array( '{"url":"https://staging.test/?p=12","url":"x"}', 'value', 'raw' ),
-			'A-4 a root address dropped'                => array( '{"src":"/?p=12","src":"x"}', 'value', 'raw' ),
 			'A-4 dropped in a block attribute'          => array( '<!-- wp:acme/x {"u":"/?p=12","u":"x"} /-->', 'content', 'raw' ),
 			'A-5 percent-encoded'                       => array( '<a data-options="%7B%22src%22%3A%22%2F%3Fp%3D12%22%7D">x</a>', 'content', 'raw/percent' ),
 			'A-5 a data-src with a short link'          => array( '<img data-src="/?attachment_id=12" alt="">', 'content', 'raw' ),
@@ -631,11 +639,9 @@ trait SyncCoreReads {
 			'A-2 a copy in the text beside one read'    => array( '<a href="/?p=12">x</a><p title="/?p=12">y</p>', 'content', 'raw' ),
 			// Codex, round 21 (B-1): the JSON of a data-* attribute no producer
 			// of the core writes so is a text: an address with an id locks.
-			'B-1 data-options with &amp;'               => array( '<a data-fancybox data-options=\'{"src":"/?p=12&amp;x=1","type":"iframe"}\'>Details</a>', 'content', 'raw' ),
-			'B-1 data-options indented'                 => array( '<a data-fancybox data-options=\'{ "src": "/?p=12" }\'>Details</a>', 'content', 'raw' ),
+			'B-1 data-options with &amp; in quotes of HTML' => array( '<a data-fancybox data-options=\'{"src":"/?p=12&amp;x=1","type":"iframe"}\'>Details</a>', 'content', 'raw' ),
 			'a character reference in a query'          => array( '<p title="/&#63;p=12">x</p>', 'content', 'raw' ),
 			'a short link as character references'      => array( '<p title="&#47;&#63;p=12">x</p>', 'content', 'raw/html' ),
-			'a query without a slash'                   => array( '{"x":"?p=12","x":1}', 'value', 'raw' ),
 		);
 	}
 
@@ -700,7 +706,30 @@ trait SyncCoreReads {
 			'A-5 a space before the value'                => array( base64_encode( '{"api_key":" demo-secret"}' ), 'value', 'raw/base64', 'api_key' ),
 			'A-5 a tab before the value, in an SVG'       => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<metadata><script type="application/json">{"api_key":"' . "\t" . 'demo-secret"}</script></metadata>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
 			'A-5 a line break before the value'           => array( base64_encode( "token=\n demo-secret" ), 'value', 'raw/base64', 'token' ),
+			// Codex, round 22 (A-2): a header of MIME with parameters, XML in
+			// UTF-16 by its first bytes and its declaration.
+			'A-2 a parameter in quotes before base64'     => array( 'a{mask:url(\'data:image/svg+xml;name="icon";base64,' . base64_encode( mb_convert_encoding( self::xml16( 'UTF-16LE' ), 'UTF-16LE', 'UTF-8' ) ) . '\')}', 'css', 'raw/data', 'api_key' ),
+			'A-2 a charset with a space before it'        => array( 'a{mask:url(\'data:image/svg+xml; charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( self::xml16( 'UTF-16LE' ), 'UTF-16LE', 'UTF-8' ) ) . '\')}', 'css', 'raw/data', 'api_key' ),
+			'A-2 a charset in quotes'                     => array( 'a{mask:url(\'data:image/svg+xml;charset="utf-16le";base64,' . base64_encode( mb_convert_encoding( self::xml16( 'UTF-16LE' ), 'UTF-16LE', 'UTF-8' ) ) . '\')}', 'css', 'raw/data', 'api_key' ),
+			'A-2 UTF-16BE without a BOM, by its declaration' => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( mb_convert_encoding( self::xml16( 'UTF-16BE' ), 'UTF-16BE', 'UTF-8' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-2 ISO-8859-1 by its declaration'           => array( 'data:text/xml;base64,' . base64_encode( "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><r>caf\xe9 token=x</r>" ), 'value', 'raw/data', 'token' ),
+			'A-2 a parameter with an escaped quote'       => array( 'data:text/plain;name="a\\"b";charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( 'token=x', 'UTF-16LE', 'UTF-8' ) ), 'value', 'raw/data', 'token' ),
+			// Codex, round 22 (A-3, A-4): white space in a key in brackets, a
+			// brace in a string of the object.
+			'A-3 white space before the bracket'          => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>cfg["api_key" ] = "demo-secret";</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-3 line breaks in the brackets'             => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( "<script>cfg[\n\"api_key\"\n]=\"demo-secret\";</script>" ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-3 a backtick with white space'             => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>cfg[ `api_key` ] = `demo-secret`;</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-4 a closing brace in a string'             => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg = {a:"}",api_key:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-4 an opening brace in a string'            => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg = {a:"{",api_key:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data', 'api_key' ),
+			'A-4 a brace in a template literal'           => array( 'a{mask:url(data:image/svg+xml;base64,' . base64_encode( self::svg( '<script>var cfg = {a:`}}`, token:"demo-secret"};</script>' ) ) . ')}', 'css', 'raw/data', 'token' ),
+			// Codex, round 22 (B-3): the text of a raster image in src.
+			'B-3 a PNG in src with a text'                => array( '<img src="data:image/png;base64,' . base64_encode( "\x89PNG\r\n\x1a\n tEXt api_key=demo-secret" ) . '" alt="">', 'content', 'raw/data', 'api_key' ),
 		);
+	}
+
+	/** An SVG with a credential in a JSON script, with its XML declaration for a charset. */
+	private static function xml16( string $encoding ): string {
+		return '<?xml version="1.0" encoding="' . $encoding . '"?><svg xmlns="http://www.w3.org/2000/svg"><metadata><script type="application/json">{"api_key":"demo-secret"}</script></metadata></svg>';
 	}
 
 	#[DataProvider( 'netCredentials' )]
@@ -753,6 +782,21 @@ trait SyncCoreReads {
 			'B-1 the JSON of Fancybox'          => array( '<a data-fancybox data-options=\'{"src":"/?p=12","type":"iframe"}\'>Details</a>', 'content' ),
 			'B-1 as references'                 => array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&quot;}">x</a>', 'content' ),
 			'B-1 absolute'                      => array( '<a data-options=\'{"src":"https://staging.test/?p=12"}\'>x</a>', 'content' ),
+			// Codex, round 22 (B-2): JSON as a plugin writes it, value by value.
+			'B-2 Fancybox with spaces'          => array( '<a data-fancybox data-options=\'{ "src": "/?p=12", "type": "iframe" }\'>Details</a>', 'content' ),
+			'B-2 Fancybox with line breaks'     => array( "<a data-fancybox data-options='{\n  \"src\": \"/?p=12\",\n  \"type\": \"iframe\"\n}'>Details</a>", 'content' ),
+			'B-2 Fancybox with &amp; as esc_attr() writes it' => array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&amp;x=1&quot;}">x</a>', 'content' ),
+			'B-2 JSON-LD indented with an id'   => array( "<script type=\"application/ld+json\">\n{\n  \"@type\": \"Article\",\n  \"url\": \"https://staging.test/?p=12\"\n}\n</script>", 'content' ),
+			// Codex, round 22 (B-1): the visible text of a link, prose.
+			'B-1 the visible text of a link'    => array( '<p><a href="/?p=12">/?p=12</a></p>', 'content' ),
+			'B-1 a short link in prose'         => array( 'Der Kurzlink /?p=12 und die Seite /?page_id=13.', 'value' ),
+			'B-1 in a description'              => array( '<p>Siehe <strong>/?p=12</strong> dort.</p>', 'content' ),
+			// Codex, round 22 (A-1): a query value read, and one of another host.
+			'A-1 redirect_to read'              => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=%2F%3Fp%3D12">Anmelden</a></p>', 'content' ),
+			'A-1 redirect_to to another host'   => array( '<p><a href="/?redirect_to=https%3A%2F%2Fcatalog.example%2F%23%2Fsearch%3Fp%3D12">x</a></p>', 'content' ),
+			// Codex, round 22 (B-3): a placeholder of a lazy loader.
+			'B-3 a GIF placeholder'             => array( '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">', 'content' ),
+			'B-3 a PNG placeholder beside data-src' => array( '<img src="data:image/png;base64,' . base64_encode( "\x89PNG\r\n\x1a\n\0\0\0\rIHDR" ) . '" data-src="https://staging.test/wp-content/uploads/a.jpg" alt="">', 'content' ),
 			'a comment of code in prose'        => array( 'Preis: 1/2 // kein Kommentar, /* auch nicht */ https://staging.test/?p=12 gelesen', 'value' ),
 			'fractions, dates, calc'            => array( 'Preis: 1/2 Tag am 05/12/2024, siehe /2024/05/ und calc(100%/3), 16/9.', 'value' ),
 			'CSS with slashes'                  => array( 'a{grid-area:1 / 2 / 3 / 4;font:12px/1.5 Arial;aspect-ratio:16/9;background:url(/img/12.png)}', 'css' ),
@@ -782,6 +826,15 @@ trait SyncCoreReads {
 			array( '<a data-options=\'{"src":"https://staging.test/?p=12"}\'>x</a>', 'post:12@c:html:json.src?p', '<a data-options=\'{"src":"https://www.live.test/?p=120"}\'>x</a>' ),
 			array( '<div data-wp-context="{&quot;url&quot;:&quot;/?p=12&quot;}">x</div>', 'post:12@c:html:json.url?p', '<div data-wp-context="{&quot;url&quot;:&quot;/?p=120&quot;}">x</div>' ),
 			array( '<div data-config=\'[{"href":"/?page_id=12"}]\'>x</div>', 'post:12@c:html:json.0.href?page_id', '<div data-config=\'[{"href":"/?page_id=120"}]\'>x</div>' ),
+			// Codex, round 22 (B-2): no producer writes it so: value by value
+			// in its spans, the formatting as it is.
+			array( '<a data-fancybox data-options=\'{ "src": "/?p=12", "type": "iframe" }\'>Details</a>', 'post:12@c:html:json.src?p', '<a data-fancybox data-options=\'{ "src": "/?p=120", "type": "iframe" }\'>Details</a>' ),
+			array( "<a data-fancybox data-options='{\n  \"src\": \"/?p=12\",\n  \"type\": \"iframe\"\n}'>Details</a>", 'post:12@c:html:json.src?p', "<a data-fancybox data-options='{\n  \"src\": \"/?p=120\",\n  \"type\": \"iframe\"\n}'>Details</a>" ),
+			array( '<a data-options="{&quot;src&quot;:&quot;/?p=12&amp;x=1&quot;}">x</a>', 'post:12@c:html:json.src?p', '<a data-options="{&quot;src&quot;:&quot;/?p=120&amp;x=1&quot;}">x</a>' ),
+			array( '<a data-options=\'{ "src": "\/?p=12" }\'>x</a>', 'post:12@c:html:json.src?p', '<a data-options=\'{ "src": "\/?p=120" }\'>x</a>' ),
+			array( '<a data-options=\'{ "src": "https:\/\/staging.test\/archiv\/?p=12" }\'>x</a>', 'post:12@c:html:json.src?p', '<a data-options=\'{ "src": "https:\/\/www.live.test\/archiv\/?p=120" }\'>x</a>' ),
+			array( "<script type=\"application/ld+json\">\n{\n  \"@type\": \"Article\",\n  \"url\": \"https://staging.test/?p=12\"\n}\n</script>", 'post:12@c:html:json.url?p', "<script type=\"application/ld+json\">\n{\n  \"@type\": \"Article\",\n  \"url\": \"https://www.live.test/?p=120\"\n}\n</script>" ),
+			array( '<div data-wp-context="{ &quot;url&quot;: &quot;/?p=12&quot; }">x</div>', 'post:12@c:html:json.url?p', '<div data-wp-context="{ &quot;url&quot;: &quot;/?p=120&quot; }">x</div>' ),
 		);
 		foreach ( $cases as $case ) {
 			list( $content, $ref, $rewritten ) = $case;
@@ -801,10 +854,10 @@ trait SyncCoreReads {
 			self::assertSame( array( array(), array( 'c:html:json.src?p' ) ), array( $refs, $acc['spelling'] ) );
 			self::assertContains( 'spelling', array_column( AB_MCP_Sync_Refs::rewrite_content( $page, self::reads_plan() )['missing'], 'space' ) );
 		}
-		// No producer writes it so: a text, nothing read, nothing rewritten.
+		// No JSON, or not stored as it is read: a text, nothing read, nothing
+		// rewritten.
 		foreach ( array(
 			'<a data-options=\'{"src":"/?p=12&amp;x=1"}\'>x</a>',
-			'<a data-options=\'{ "src": "/?p=12" }\'>x</a>',
 			'<span data-tippy-content="[Strg+K] Suche öffnen">Suche</span>',
 			'<span data-x="{nicht JSON">x</span>',
 		) as $text ) {
@@ -1052,6 +1105,25 @@ trait SyncCoreReads {
 			'an image set'         => array( '<style>.x{background-image:image-set("/?p=12" 1x)}</style>', array( 'post:12@c:html?p' ), '<style>.x{background-image:image-set("/?p=120" 1x)}</style>' ),
 			// Codex, round 17 (A3): after a comment, where it stands.
 			'after a comment in style' => array( '<style>/* Kopf */ body{background:url(/?p=12)}</style>', array( 'post:12@c:html?p' ), '<style>/* Kopf */ body{background:url(/?p=120)}</style>' ),
+			// Codex, round 22 (B-1): a root-relative address in a text node
+			// (the visible text of a link, prose) as the value of an attribute.
+			'the visible text of a link' => array( '<p><a href="/?p=12">/?p=12</a></p>', array( 'post:12@c:html?p', 'post:12@c:html?p' ), '<p><a href="/?p=120">/?p=120</a></p>' ),
+			'root-relative in prose' => array( 'Siehe /?p=12 und /?page_id=13.', array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), 'Siehe /?p=120 und /?page_id=130.' ),
+			'root-relative in a text node after a tag' => array( '<p>Kurzlink: <strong>/?p=12</strong>, Seite /?page_id=13</p>', array( 'post:12@c:html?p', 'post:13@c:html?page_id' ), '<p>Kurzlink: <strong>/?p=120</strong>, Seite /?page_id=130</p>' ),
+			'an escaped shortcode as text' => array( '[[acme_button url="/?p=12"]]', array( 'post:12@c:html?p' ), '[[acme_button url="/?p=120"]]' ),
+			// Codex, round 22 (A-1): the value of a query variable that is an
+			// address of the sites, in the encoding that writes it so.
+			'redirect_to encoded' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=%2F%3Fp%3D12">Anmelden</a></p>', array( 'post:12@c:html?redirect_to?p' ), '<p><a href="https://www.live.test/wp-login.php?redirect_to=%2F%3Fp%3D120">Anmelden</a></p>' ),
+			'redirect_to encoded with the host' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12">Anmelden</a></p>', array( 'post:12@c:html?redirect_to?p' ), '<p><a href="https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120">Anmelden</a></p>' ),
+			'redirect_to encoded with the host in prose' => array( 'Anmelden: https://staging.test/wp-login.php?redirect_to=https%3A%2F%2Fstaging.test%2F%3Fp%3D12', array( 'post:12@c:html?redirect_to?p' ), 'Anmelden: https://www.live.test/wp-login.php?redirect_to=https%3A%2F%2Fwww.live.test%2F%3Fp%3D120' ),
+			'a query value as it is in prose' => array( 'Siehe /?x=/?p=13 dort.', array( 'post:13@c:html?x?p' ), 'Siehe /?x=/?p=130 dort.' ),
+			'a query value as it is' => array( '<p><a href="/?x=/?p=13">x</a></p>', array( 'post:13@c:html?x?p' ), '<p><a href="/?x=/?p=130">x</a></p>' ),
+			'a query value as urlencode() writes it' => array( 'Siehe https://staging.test/?x=1&u=%2F%3Fcat%3D5%2C6%26q%3Da+b', array( 'term:5@c:html?u?cat', 'term:6@c:html?u?cat' ), 'Siehe https://www.live.test/?x=1&u=%2F%3Fcat%3D50%2C60%26q%3Da+b' ),
+			'a tilde as urlencode() writes it' => array( 'Siehe https://staging.test/?u=%2F%3Fcat%3D5%2C6%23%7E', array( 'term:5@c:html?u?cat', 'term:6@c:html?u?cat' ), 'Siehe https://www.live.test/?u=%2F%3Fcat%3D50%2C60%23%7E' ),
+			'a tilde as rawurlencode() writes it' => array( 'Siehe https://staging.test/?u=%2F%3Fcat%3D5%2C6%23~', array( 'term:5@c:html?u?cat', 'term:6@c:html?u?cat' ), 'Siehe https://www.live.test/?u=%2F%3Fcat%3D50%2C60%23~' ),
+			'a query value in a query value' => array( '<p><a href="/?a=%2F%3Fb%3D%252F%253Fp%253D12">x</a></p>', array( 'post:12@c:html?a?b?p' ), '<p><a href="/?a=%2F%3Fb%3D%252F%253Fp%253D120">x</a></p>' ),
+			// Codex, round 22 (B-2): each string value by itself, in either spelling.
+			'the same address in both spellings in the context' => array( '<div data-wp-context=\'{"a":"/?p=12","b":"\\/?p=12"}\'>x</div>', array( 'post:12@c:html:json.a?p', 'post:12@c:html:json.b?p' ), '<div data-wp-context=\'{"a":"/?p=120","b":"\\/?p=120"}\'>x</div>' ),
 		);
 	}
 
@@ -1156,7 +1228,7 @@ trait SyncCoreReads {
 			'digits relative to the page in CSS' => array( '<p style="background:url(../12/)">x</p>', 'c:html%post_id%' ),
 			'an address hidden by an escape of CSS' => array( '<p style="background:url(https://staging\\2e test/?p=12)">x</p>', 'c:html:css' ),
 			'a style attribute read decoded' => array( '<p style="background:url(https://staging.test/?p=1&#50;)">x</p>', 'c:html?p' ),
-			'a JSON-LD in no spelling of a producer' => array( '<script type="application/ld+json">{ "@type": "Article", "url": "/?p=12" }</script>', 'c:html:json' ),
+			'a JSON-LD with a space after the address' => array( '<script type="application/ld+json">{ "@type": "Article", "url": "/?p=12 " }</script>', 'c:html:json' ),
 			'in a title'             => array( '<title>https://staging.test/?a=&#49;&amp;p=12</title>', 'c:html?p' ),
 			// Codex, round 11 (4): relative to the page, a segment of digits.
 			'digits relative to the page' => array( '<p><a href="../12/">Beitrag</a></p>', 'c:html%post_id%' ),
@@ -1186,7 +1258,6 @@ trait SyncCoreReads {
 			'data in an import'    => array( '<style>@import url("data:text/css;base64,OnJvb3R7LS1hcGkta2V5OmRlbW8tc2VjcmV0fQ==");</style>', 'c:html:css' ),
 			// Codex, round 17 (A6): in JSON of an attribute, not stored as JSON writes it.
 			'a slash escaped once in the context' => array( '<div data-wp-context=\'{"url":"\\/blog/?p=12"}\'>x</div>', 'c:html:json' ),
-			'the same address in both spellings in the context' => array( '<div data-wp-context=\'{"a":"/?p=12","b":"\\/?p=12"}\'>x</div>', 'c:html:json' ),
 			'a key twice in the context' => array( '<div data-wp-context=\'{"url":"/?p=12","url":"/?p=13"}\'>x</div>', 'c:html:json' ),
 			'a context that is no JSON' => array( '<div data-wp-context=\'{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
 			'a context with a namespace that is no JSON' => array( '<div data-wp-context=\'acme::{"url":"/?p=12"\'>x</div>', 'c:html:json' ),
@@ -1197,6 +1268,26 @@ trait SyncCoreReads {
 			'data that does not decode'  => array( '<p style="background:url(data:image/png;base64,!!)">x</p>', 'c:html:css' ),
 			// Codex, round 17 (6): a script of JSON that is no JSON.
 			'JSON-LD that is no JSON' => array( '<script type="application/ld+json">{"url": /?p=12}</script>', 'c:html:json' ),
+			// Codex, round 22 (A-1): a query value in an encoding no function
+			// writes (lower case, a mix), relative to the page.
+			'redirect_to in lower case' => array( '<p><a href="https://staging.test/wp-login.php?redirect_to=%2f%3fp%3d12">x</a></p>', 'c:html?redirect_to?p' ),
+			'redirect_to mixed' => array( '<p><a href="/?redirect_to=%2F?p%3D12">x</a></p>', 'c:html?redirect_to?p' ),
+			'redirect_to relative to the page' => array( '<p><a href="/?redirect_to=index.php%3Fp%3D12">x</a></p>', 'c:html?redirect_to?p' ),
+			'redirect_to in a link relative to the page' => array( '<p><a href="wp-login.php?redirect_to=%2F%3Fp%3D12">x</a></p>', 'c:html?redirect_to?p' ),
+			// Codex, round 22 (B-2): JSON no producer writes so, value by value;
+			// what is no address by itself, or escaped, locks.
+			'a key twice with an address' => array( '{"url":"https://staging.test/?p=12","url":"x"}', 'c:html:json' ),
+			'a root address dropped' => array( '{"src":"/?p=12","src":"x"}', 'c:html:json' ),
+			'a query relative to the page in JSON' => array( '{"x":"?p=12","x":1}', 'c:html:json' ),
+			'an escape in the address of a value' => array( '<a data-options=\'{ "src": "\u002f?p=12" }\'>x</a>', 'c:html:json' ),
+			'a mix of escaped slashes in a value' => array( '<a data-options=\'{ "src": "\/blog/?p=12" }\'>x</a>', 'c:html:json' ),
+			'an address as part of a longer value' => array( '<a data-options=\'{ "caption": "Mehr: https://staging.test/?p=12" }\'>x</a>', 'c:html:json' ),
+			// The context not stored as it is read (a reference for a digit): read only, an id locks.
+			'the context with a reference for a digit' => array( '<div data-wp-context=\'{"url":"\\/?p=1&#50;"}\'>x</div>', 'c:html:json' ),
+			// Codex, round 22 (B-1): a text node not stored as it is read.
+			'a reference in a text node with an address' => array( '<p>Siehe /?p=12&amp;x=1</p>', 'c:html?p' ),
+			// Codex, round 22 (A-1): deeper than the depth, a value is not read.
+			'a query value three deep' => array( '<p><a href="https://staging.test/?a=' . rawurlencode( '/?b=' . rawurlencode( '/?c=' . rawurlencode( '/?p=12' ) ) ) . '">x</a></p>', 'c:html?a?b?c?' ),
 		);
 	}
 
@@ -1217,7 +1308,7 @@ trait SyncCoreReads {
 		return array(
 			'another host'             => array( '<p><a href="//other.test/?p=12">x</a></p>' ),
 			'another scheme, a fragment' => array( '<p><a href="mailto:a@b.test?p=12">x</a> <a href="#?p=12">y</a></p>' ),
-			'prose without a host'     => array( 'Siehe ?p=12 und /?p=12 im Text.' ),
+			'prose without a host'     => array( 'Siehe ?p=12 und index.php?p=12 im Text.' ),
 			'no address attribute'     => array( '<p><a data-href="/?p=12">x</a></p>' ),
 			'another port'             => array( 'Siehe https://staging.test:8443/?p=12 und http://staging.test:443/?p=12' ),
 			'a longer host'            => array( 'Siehe https://staging.test.evil.com/?p=12' ),
@@ -1225,7 +1316,11 @@ trait SyncCoreReads {
 			// JavaScript is no address: the unit locks for it (*:script).
 			'an event attribute'     => array( "<p><button onclick=\"location.href='https://staging.test/?p=12'\">x</button></p>" ),
 			'a fragment in a block attribute' => array( '<!-- wp:acme/x {"url":"#?p=12"} /-->' ),
-			'an escaped shortcode'   => array( '[[acme_button url="/?p=12"]]' ),
+			'an escaped shortcode with a host of no site' => array( '[[acme_button url="https://cdn.example.org/?p=12"]]' ),
+			// Codex, round 22 (A-1): a query value that is no address of the sites.
+			'a query value of another host' => array( '<p><a href="/?redirect_to=https%3A%2F%2Fother.test%2F%3Fp%3D12">x</a></p>' ),
+			'a query value of a file' => array( '<p><a href="/?src=%2Fwp-content%2Fuploads%2Fa.jpg">x</a></p>' ),
+			'a query value of a page of another host' => array( 'Siehe //other.test/?u=%2F%3Fp%3D12 dort.' ),
 			// Codex, round 11 (7): 0 and empty name no object.
 			'all categories'         => array( '<p><a href="/?cat=0">Alle Kategorien</a></p>' ),
 			'no author, no post'     => array( 'Siehe https://staging.test/?author= und https://staging.test/?p=0 und https://staging.test/?cat=0,-0' ),
@@ -1304,6 +1399,19 @@ trait SyncCoreReads {
 		$plan    = self::reads_plan();
 		$changed = false;
 		self::assertSame( str_replace( 'staging.test', 'www.live.test', $meta ), AB_MCP_Sync_Refs::rewrite_value( $meta, $plan, $changed ) );
+		// Codex, round 22 (B-2): the ids of the string values as markers, in
+		// their order; a user by its login.
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$form = AB_MCP_Sync_Canon::value( "{\n  \"u\": \"https://staging.test/?p=12\",\n  \"a\": \"/?author=1\"\n}", self::reads_ctx(), $acc, 'meta', 'm' );
+		self::assertSame( array( '~s' => array( array( '~s' => array( "{\n  \"u\": \"", AB_MCP_Sync_Canon::address_cuts( 'https://staging.test', self::reads_ctx() )[0]['marker'], '/?p=', AB_MCP_Sync_Canon::ref( 'post', 12 ), "\",\n  \"a\": \"/?author=", array( '~ref' => 'user', 'login' => 'user1' ), "\"\n}" ) ) ) ), $form );
+		self::assertSame( array( 'post:12', 'user:1' ), array_map( static fn( $r ) => $r['space'] . ':' . $r['id'], $acc['refs'] ), 'Each once.' );
+		self::assertSame( "{\n  \"u\": \"https://www.live.test/?p=120\",\n  \"a\": \"/?author=10\"\n}", AB_MCP_Sync_Refs::rewrite_value( "{\n  \"u\": \"https://staging.test/?p=12\",\n  \"a\": \"/?author=1\"\n}", $plan, $changed ), 'Rewritten where they stand.' );
+		self::assertSame( "{\n  \"u\": \"\\/?p=120\"\n}", AB_MCP_Sync_Refs::rewrite_value( "{\n  \"u\": \"\\/?p=12\"\n}", $plan, $changed ), 'With \\/ as well.' );
+		// A key that looks like an address is none: not read, not rewritten.
+		$acc = AB_MCP_Sync_Canon::acc();
+		AB_MCP_Sync_Canon::value( "{\n  \"/?p=12\": \"x\"\n}", self::reads_ctx(), $acc, 'meta', 'm' );
+		self::assertSame( array( array(), array() ), array( $acc['refs'], $acc['spelling'] ) );
+		self::assertSame( "{\n  \"/?p=12\": \"x\"\n}", AB_MCP_Sync_Refs::rewrite_value( "{\n  \"/?p=12\": \"x\"\n}", $plan, $changed ) );
 		$free = $ld( 'https://staging.test/ueber-uns/' );
 		if ( self::closed( $free ) ) {
 			self::assertLockedWithoutTheCore( $free );
@@ -1315,11 +1423,25 @@ trait SyncCoreReads {
 			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
 			self::assertSame( array( str_replace( 'staging.test', 'www.live.test', $content ), array() ), array( $out['content'], $out['missing'] ), $content );
 		}
+		// Codex, round 22 (B-2): a string value that is an address by itself
+		// is rewritten where it stands.
+		foreach ( array( $ld( 'https://staging.test/?p=12' ), $ld( '/?p=12' ) ) as $content ) {
+			list( $refs, $acc ) = self::reads_scan( $content );
+			self::assertSame( array( array( 'post:12@c:html:json.url?p' ), array() ), array( $refs, $acc['spelling'] ), $content );
+			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
+			self::assertSame( array( str_replace( array( 'staging.test', '=12' ), array( 'www.live.test', '=120' ), $content ), array() ), array( $out['content'], $out['missing'] ), $content );
+		}
+		// A user by its login; a key that looks like an address is none.
+		list( $refs, $acc ) = self::reads_scan( $ld( '/?author=1' ) );
+		self::assertSame( array( array( 'user:user1@c:html:json.url?author' ), array() ), array( $refs, $acc['spelling'] ) );
+		$out = AB_MCP_Sync_Refs::rewrite_content( $ld( '/?author=1' ), self::reads_plan() );
+		self::assertSame( array( $ld( '/?author=10' ), array() ), array( $out['content'], $out['missing'] ) );
+		list( $refs, $acc ) = self::reads_scan( $ld( 'x', '/?p=12' ) );
+		self::assertSame( array( array(), array() ), array( $refs, $acc['spelling'] ) );
+		self::assertSame( $ld( 'x', '/?p=12' ), AB_MCP_Sync_Refs::rewrite_content( $ld( 'x', '/?p=12' ), self::reads_plan() )['content'] );
 		foreach ( array(
-			$ld( 'https://staging.test/?p=12' ),
 			$ld( 'https://staging\\u002etest/ueber-uns/' ),
 			$ld( 'https://staging.test/ueber-uns/', 'https://staging.test/ueber-uns/' ),
-			$ld( '/?p=12' ),
 			$ld( '?p=12' ),
 		) as $content ) {
 			list( $refs, $acc ) = self::reads_scan( $content );
@@ -1327,9 +1449,10 @@ trait SyncCoreReads {
 			$out = AB_MCP_Sync_Refs::rewrite_content( $content, self::reads_plan() );
 			self::assertSame( array( $content, array( 'spelling' ) ), array( $out['content'], array_column( $out['missing'], 'space' ) ), $content );
 		}
-		// Not stored as it is read in an attribute: locked.
+		// Stored as esc_attr() writes it in an attribute: read, written back so.
 		list( , $acc ) = self::reads_scan( '<div data-wp-context="{ &quot;logo&quot;: &quot;https://staging.test/logo.png&quot; }">x</div>' );
-		self::assertSame( array( 'c:html:json' ), $acc['spelling'] );
+		self::assertSame( array(), $acc['spelling'] );
+		self::assertSame( '<div data-wp-context="{ &quot;logo&quot;: &quot;https://www.live.test/logo.png&quot; }">x</div>', AB_MCP_Sync_Refs::rewrite_content( '<div data-wp-context="{ &quot;logo&quot;: &quot;https://staging.test/logo.png&quot; }">x</div>', self::reads_plan() )['content'] );
 	}
 
 	public function testAShortLinkInJsonAfterAnAmpersandIsAReference(): void {

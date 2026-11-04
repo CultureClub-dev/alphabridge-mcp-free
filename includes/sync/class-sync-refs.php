@@ -488,6 +488,14 @@ final class AB_MCP_Sync_Refs {
 					$subs[ $needle ] = AB_MCP_Replace_Engine::encode( $form, $to );
 				}
 			}
+			// Percent-encoded (the value of a query variable; Codex, round
+			// 22, A-1), as AB_MCP_Sync_Canon::context() finds it.
+			foreach ( array( 'rawurlencode', 'urlencode' ) as $encoder ) {
+				$needle = call_user_func( $encoder, $from );
+				if ( ! isset( $subs[ $needle ] ) ) {
+					$subs[ $needle ] = call_user_func( $encoder, $to );
+				}
+			}
 		}
 		$ctx             = AB_MCP_Sync_Canon::context(
 			array_keys( $addresses ),
@@ -1852,10 +1860,36 @@ final class AB_MCP_Sync_Refs {
 		$sub  = AB_MCP_Sync_Canon::acc();
 		$tree = self::json_tree( $json['value'], '', $ctx, $sub, $at . ':json', 0 );
 		if ( null === $json['producer'] ) {
+			// Not a producer's spelling (Codex, round 20 B-1, round 22 B-2):
+			// value by value in the stored text. The hosts stored literally in
+			// string values are neutral, the ids of a string value that is an
+			// address by itself are references; what the decoded tree names
+			// beyond that (an id in a longer value, an escaped address, a key
+			// that names a site) locks.
 			$cuts = self::json_host_cuts( $json['raw'], $ctx );
-			if ( null === $cuts || array() !== array_merge( $sub['refs'], $sub['spelling'] ) ) {
+			$ids  = self::json_value_ids( $json['raw'], $ctx );
+			if ( null === $cuts || null === $ids || array() !== $sub['spelling'] || count( $ids ) !== count( $sub['refs'] ) ) {
 				AB_MCP_Sync_Canon::spelling( $acc, $at . ':json' );
 				return $json['raw'];
+			}
+			// The marker of each id (a user by its login, as the tree noted it
+			// already: nothing noted again).
+			$void = AB_MCP_Sync_Canon::acc();
+			foreach ( $ids as $hit ) {
+				$cuts[] = array(
+					'at'     => $hit['at'],
+					'len'    => $hit['len'],
+					'marker' => 'user' === $hit['space'] ? AB_MCP_Sync_Canon::user( $hit['id'], $ctx, $void, $at . ':json' . $hit['what'] ) : AB_MCP_Sync_Canon::ref( $hit['space'], $hit['id'] ),
+				);
+			}
+			usort(
+				$cuts,
+				static function ( $a, $b ) {
+					return $a['at'] <=> $b['at'];
+				}
+			);
+			foreach ( $sub as $key => $list ) {
+				$acc[ $key ] = 'credentials' === $key ? $acc[ $key ] : array_merge( $acc[ $key ], $list );
 			}
 			$parts = array();
 			$pos   = 0;
@@ -1877,12 +1911,55 @@ final class AB_MCP_Sync_Refs {
 	}
 
 	/**
+	 * The ids of the string values of a stored text of JSON that no producer
+	 * of the core writes so (Codex, round 22, B-2), where they stand: each
+	 * string value (not a key: a string before ":") that is an address of
+	 * the sites by itself, stored canonically (no escape in it, or every "/"
+	 * as "\/"), read as any address (AB_MCP_Sync_Urls::hits_of()). Null where
+	 * a value is an address with an escape in it, or a mix of "\/" and "/":
+	 * not rewritten, the text locks. A value that is no address by itself
+	 * is no part of it; an id not read as stored (relative to the page, a
+	 * variable twice) counts as one the tree names no reference for: the
+	 * text locks (json_canon(), json_rewrite()).
+	 *
+	 * @param string $raw JSON as stored.
+	 * @param array  $ctx Context (or plan()).
+	 * @return array|null Hits as ids() gives them, at in $raw.
+	 */
+	private static function json_value_ids( $raw, array $ctx ) {
+		$out = array();
+		foreach ( AB_MCP_Sync_Json::string_spans( $raw ) as $span ) {
+			$after = $span[0] + $span[1];
+			$after += strspn( $raw, " \t\n\r", $after );
+			if ( ':' === substr( $raw, $after, 1 ) ) {
+				continue;
+			}
+			$inner   = (string) substr( $raw, $span[0] + 1, $span[1] - 2 );
+			$decoded = json_decode( '"' . $inner . '"' );
+			if ( ! is_string( $decoded ) || ! preg_match( '/[1-9]/', $decoded ) || ! AB_MCP_Sync_Urls::names_an_address( '', $decoded ) ) {
+				continue;
+			}
+			$escaped = str_replace( '/', '\/', $decoded );
+			if ( $inner !== $decoded && $inner !== $escaped ) {
+				return null;
+			}
+			foreach ( AB_MCP_Sync_Urls::hits_of( $decoded, $ctx ) as $hit ) {
+				// With "\/" one byte more for every "/" before the id.
+				$hit['at'] += $span[0] + 1 + ( $inner === $decoded ? 0 : substr_count( substr( $decoded, 0, $hit['at'] ), '/' ) );
+				$out[]      = $hit;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Stored JSON with its ids and addresses rewritten: the data changed
 	 * (json_rewrite_tree()) and written again as its producer writes it.
-	 * Not a producer's spelling: an id in it, or a host not stored literally
-	 * in a string value, is noted missing (spelling) and it is kept as it is;
-	 * else only the hosts stored literally in its string values are replaced,
-	 * every other byte as it was.
+	 * Not a producer's spelling: the hosts stored literally in its string
+	 * values and the ids of its string values that are addresses by
+	 * themselves (json_value_ids()) are replaced where they stand, every
+	 * other byte as it was; what the decoded tree names beyond that is noted
+	 * missing (spelling) and the text is kept as it is.
 	 *
 	 * @param array $json Of AB_MCP_Sync_Json::read().
 	 * @param array $plan plan(), with 'missing' collected.
@@ -1890,24 +1967,39 @@ final class AB_MCP_Sync_Refs {
 	 */
 	public static function json_rewrite( array $json, array &$plan ) {
 		if ( null === $json['producer'] ) {
-			// The ids alone: a probe without the hosts to replace.
-			$probe         = $plan;
-			$probe['subs'] = array();
-			$changed       = false;
-			self::json_rewrite_tree( $json['value'], '', $probe, $changed );
+			// Value by value (json_value_ids()), where the decoded tree names
+			// no more than that: the hosts by the plan, the ids by the map.
+			$acc = AB_MCP_Sync_Canon::acc();
+			self::json_tree( $json['value'], '', $plan, $acc, '', 0 );
 			$cuts = self::json_host_cuts( $json['raw'], $plan );
-			if ( null === $cuts || $changed || count( $probe['missing'] ) > count( $plan['missing'] ) ) {
+			$ids  = self::json_value_ids( $json['raw'], $plan );
+			if ( null === $cuts || null === $ids || array() !== $acc['spelling'] || count( $ids ) !== count( $acc['refs'] ) ) {
 				$plan['missing'][] = array(
 					'space' => 'spelling',
 					'id'    => 0,
 				);
 				return $json['raw'];
 			}
+			foreach ( $ids as $hit ) {
+				$id     = self::mapped_id( $plan, $hit['space'], $hit['id'] );
+				$cuts[] = array(
+					'at'   => $hit['at'],
+					'len'  => $hit['len'],
+					'with' => null === $id ? null : (string) $id,
+				);
+			}
+			usort(
+				$cuts,
+				static function ( $a, $b ) {
+					return $b['at'] <=> $a['at'];
+				}
+			);
 			$raw = $json['raw'];
-			foreach ( array_reverse( $cuts ) as $cut ) {
-				$hit = substr( $raw, $cut['at'], $cut['len'] );
-				if ( isset( $plan['subs'][ $hit ] ) ) {
-					$raw = substr_replace( $raw, $plan['subs'][ $hit ], $cut['at'], $cut['len'] );
+			foreach ( $cuts as $cut ) {
+				$hit  = substr( $raw, $cut['at'], $cut['len'] );
+				$with = isset( $cut['with'] ) ? $cut['with'] : ( isset( $plan['subs'][ $hit ] ) ? $plan['subs'][ $hit ] : null );
+				if ( null !== $with ) {
+					$raw = substr_replace( $raw, $with, $cut['at'], $cut['len'] );
 				}
 			}
 			return $raw;

@@ -139,13 +139,6 @@ final class AB_MCP_Sync_Net {
 	const WINDOW = 256;
 
 	/**
-	 * Where a root-relative address may begin: a "/" after a character that
-	 * stands in no address and continues no word (a backslash escapes it in
-	 * JSON: that address stands in the layer of the escapes of JSON decoded).
-	 */
-	const START = '#(?<![A-Za-z0-9_.~%\-/?\\\\])/#';
-
-	/**
 	 * Where a query may begin: a "?" or "&", whatever stands before it,
 	 * except the "/" JSON escapes (\/?p=12: a root-relative address, read
 	 * in the layer of the escapes of JSON decoded).
@@ -155,11 +148,47 @@ final class AB_MCP_Sync_Net {
 	/** A span of base64: the alphabet and its padding, MIN_BASE64 or more in all (base64_spans()). */
 	const BASE64 = '#(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{8,}={0,2}(?![A-Za-z0-9+/=])#';
 
-	/** A data: address up to its ",": its type and parameters before it. */
-	const DATA = '#data:([^,"\'()<>\s]{0,256}),#i';
+	/** How long the header of a data: address may be (data_header()). */
+	const HEAD = 512;
 
-	/** The types of a data: address whose body is a text (an empty type is text/plain). */
+	/** The types of a data: address whose body is a text. */
 	const TEXT_TYPES = '#^(?:text/|[^/]+/(?:[^+]+\+)?(?:xml|json|javascript|ecmascript|css|html)\z)#';
+
+	/**
+	 * The labels of a charset (the MIME parameter, the XML declaration) and
+	 * the charset each names: UTF-16 and UTF-32 without an order are
+	 * little-endian (the Encoding Standard).
+	 */
+	const LABELS = array(
+		'utf-8'        => 'UTF-8',
+		'utf8'         => 'UTF-8',
+		'us-ascii'     => 'UTF-8',
+		'ascii'        => 'UTF-8',
+		'utf-16'       => 'UTF-16LE',
+		'utf-16le'     => 'UTF-16LE',
+		'utf-16be'     => 'UTF-16BE',
+		'utf-32'       => 'UTF-32LE',
+		'utf-32le'     => 'UTF-32LE',
+		'utf-32be'     => 'UTF-32BE',
+		'iso-8859-1'   => 'ISO-8859-1',
+		'latin1'       => 'ISO-8859-1',
+		'l1'           => 'ISO-8859-1',
+		'windows-1252' => 'Windows-1252',
+		'cp1252'       => 'Windows-1252',
+	);
+
+	/**
+	 * The first bytes of an XML document without a BOM and the charset they
+	 * guess (Appendix F of the XML specification): the declaration "<?xm"
+	 * in UTF-32, UTF-16 and in an encoding compatible with ASCII (then the
+	 * declaration itself names it).
+	 */
+	const XML_STARTS = array(
+		"\x00\x00\x00\x3C" => 'UTF-32BE',
+		"\x3C\x00\x00\x00" => 'UTF-32LE',
+		"\x00\x3C\x00\x3F" => 'UTF-16BE',
+		"\x3C\x00\x3F\x00" => 'UTF-16LE',
+	);
 
 	/** A name as a key is spelled: as FLAT_KEYS of the credential check reads one. */
 	const NAME = '[A-Za-z0-9_\x80-\xFF][A-Za-z0-9_\-.\x80-\xFF]{0,255}';
@@ -169,7 +198,7 @@ final class AB_MCP_Sync_Net {
 	 * quote and the white space after it, else a character that ends no
 	 * value (a space, "&", ";", ",", a bracket, ">").
 	 */
-	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'&;,)}\]>])';
+	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'`&;,)}\]>])';
 
 	/**
 	 * The locks of the readers that make a unit one that is never clean
@@ -443,6 +472,42 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
+	 * A text with the content of its strings blanked (a space for each
+	 * byte: the same length), bounded as uncommented() bounds them, for the
+	 * braces of code to be counted outside of strings.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	private static function blanked( $text ) {
+		$out   = '';
+		$quote = '';
+		$n     = strlen( $text );
+		for ( $i = 0; $i < $n; $i++ ) {
+			$c = $text[ $i ];
+			if ( '' !== $quote ) {
+				if ( '\\' === $c ) {
+					$out .= '  ';
+					++$i;
+					continue;
+				}
+				if ( $c === $quote || ( '`' !== $quote && ( "\n" === $c || "\r" === $c ) ) ) {
+					$quote = '';
+					$out  .= $c;
+					continue;
+				}
+				$out .= ' ';
+				continue;
+			}
+			if ( '"' === $c || "'" === $c || '`' === $c ) {
+				$quote = $c;
+			}
+			$out .= $c;
+		}
+		return $out;
+	}
+
+	/**
 	 * What the data: addresses of a text hold, decoded as the browser
 	 * decodes them (the body percent-decoded, then base64 where its
 	 * parameters say so), of any type: a text type, or one with a charset,
@@ -457,36 +522,34 @@ final class AB_MCP_Sync_Net {
 	 * @return string[]
 	 */
 	private static function data_bodies( $text, &$bad ) {
-		if ( ! preg_match_all( self::DATA, $text, $m, PREG_OFFSET_CAPTURE | PREG_SET_ORDER ) ) {
+		if ( ! preg_match_all( '/data:/i', $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			return array();
 		}
 		$out = array();
-		foreach ( $m as $hit ) {
-			$start = (int) $hit[0][1] + strlen( $hit[0][0] );
-			$quote = (int) $hit[0][1] > 0 ? $text[ (int) $hit[0][1] - 1 ] : '';
+		foreach ( $m[0] as $hit ) {
+			$head = self::data_header( $text, (int) $hit[1] + 5 );
+			if ( null === $head ) {
+				continue;
+			}
+			$start = $head['body'];
+			$quote = (int) $hit[1] > 0 ? $text[ (int) $hit[1] - 1 ] : '';
 			if ( '"' === $quote || "'" === $quote ) {
 				$end = strpos( $text, $quote, $start );
 				$end = false === $end ? strlen( $text ) : $end;
 			} else {
 				$end = $start + strcspn( $text, " \t\n\r\f\"')", $start );
 			}
-			$body    = rawurldecode( (string) substr( $text, $start, $end - $start ) );
-			$params  = array_map( 'trim', explode( ';', strtolower( (string) $hit[1][0] ) ) );
-			$charset = null;
-			foreach ( $params as $param ) {
-				if ( 0 === strpos( $param, 'charset=' ) ) {
-					$charset = trim( substr( $param, 8 ), '"\' ' );
-				}
-			}
-			if ( in_array( 'base64', $params, true ) ) {
+			$body = rawurldecode( (string) substr( $text, $start, $end - $start ) );
+			if ( $head['base64'] ) {
 				$body = base64_decode( $body, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- what the browser decodes, read.
 			}
 			if ( ! is_string( $body ) || '' === $body ) {
 				continue;
 			}
 			// A text: in UTF-8, or not read.
-			if ( null !== $charset || 1 === preg_match( self::TEXT_TYPES, $params[0] ) ) {
-				$body = self::utf8( $body, $charset );
+			$charset = isset( $head['params']['charset'] ) ? strtolower( $head['params']['charset'] ) : null;
+			if ( null !== $charset || 1 === preg_match( self::TEXT_TYPES, $head['type'] ) ) {
+				$body = self::utf8( $body, $charset, 1 === preg_match( '#^(?:text/|image/svg\+xml\z|[^/]+/(?:[^+]+\+)?xml\z)#', $head['type'] ) );
 				if ( null === $body ) {
 					$bad = true;
 					continue;
@@ -495,6 +558,96 @@ final class AB_MCP_Sync_Net {
 			$out[ hash( 'sha256', $body ) ] = $body;
 		}
 		return array_values( $out );
+	}
+
+	/**
+	 * The header of a data: address as the MIME Sniffing Standard parses a
+	 * MIME type (Codex, round 22, A-2): type/subtype, then parameters at
+	 * ";", each name=value with the value as a token or a quoted string (a
+	 * backslash escapes a character in it), white space around them
+	 * allowed, in any order; "base64" as the last token says the body is
+	 * base64 (the fetch standard); an empty type is text/plain. The header
+	 * ends at the first "," outside a quoted string; a line break, a
+	 * bracket or a quote of HTML in it, or no "," within HEAD bytes, is no
+	 * header. Names and the type in lower case, a value as written.
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Where the header begins (after "data:").
+	 * @return array{type:string,params:array<string,string>,base64:bool,body:int}|null
+	 */
+	private static function data_header( $text, $at ) {
+		$n      = min( strlen( $text ), $at + self::HEAD );
+		$quoted = false;
+		$end    = null;
+		for ( $i = $at; $i < $n; $i++ ) {
+			$c = $text[ $i ];
+			if ( "\n" === $c || "\r" === $c ) {
+				return null;
+			}
+			if ( $quoted ) {
+				if ( '\\' === $c ) {
+					++$i;
+				} elseif ( '"' === $c ) {
+					$quoted = false;
+				}
+				continue;
+			}
+			if ( '"' === $c ) {
+				$quoted = true;
+			} elseif ( ',' === $c ) {
+				$end = $i;
+				break;
+			} elseif ( false !== strpos( "<>()'", $c ) ) {
+				return null;
+			}
+		}
+		if ( null === $end ) {
+			return null;
+		}
+		$parts  = array();
+		$part   = '';
+		$quoted = false;
+		for ( $i = $at; $i < $end; $i++ ) {
+			$c = $text[ $i ];
+			if ( $quoted ) {
+				if ( '\\' === $c && $i + 1 < $end ) {
+					$part .= $text[ ++$i ];
+					continue;
+				}
+				$quoted = '"' !== $c;
+				if ( $quoted ) {
+					$part .= $c;
+				}
+				continue;
+			}
+			if ( '"' === $c ) {
+				$quoted = true;
+			} elseif ( ';' === $c ) {
+				$parts[] = $part;
+				$part    = '';
+			} else {
+				$part .= $c;
+			}
+		}
+		$parts[] = $part;
+		$type    = strtolower( trim( (string) array_shift( $parts ) ) );
+		$params  = array();
+		$base64  = false;
+		foreach ( $parts as $i => $param ) {
+			$param = trim( $param );
+			$eq    = strpos( $param, '=' );
+			if ( false === $eq ) {
+				$base64 = $base64 || ( $i === count( $parts ) - 1 && 'base64' === strtolower( $param ) );
+				continue;
+			}
+			$params[ strtolower( trim( substr( $param, 0, $eq ) ) ) ] = trim( substr( $param, $eq + 1 ) );
+		}
+		return array(
+			'type'   => '' === $type ? 'text/plain' : $type,
+			'params' => $params,
+			'base64' => $base64,
+			'body'   => $end + 1,
+		);
 	}
 
 	/**
@@ -541,41 +694,44 @@ final class AB_MCP_Sync_Net {
 	 * charset that is not known), or where no function transcodes
 	 * (mb_convert_encoding(), iconv(): fail closed).
 	 *
+	 * For XML (an SVG, a text type; Codex, round 22, A-2) the first bytes of
+	 * a document without a BOM as Appendix F of the XML specification
+	 * guesses them (XML_STARTS) come before the charset given, and the
+	 * encoding="…" of its declaration after it.
+	 *
 	 * @param string      $bytes   Bytes.
 	 * @param string|null $charset The charset declared, in lower case, or null.
+	 * @param bool        $xml     Whether the bytes are XML (a text type, an SVG).
 	 * @return string|null
 	 */
-	public static function utf8( $bytes, $charset ) {
-		$bom = self::bom( $bytes );
+	public static function utf8( $bytes, $charset, $xml = false ) {
+		$from = null;
+		$bom  = self::bom( $bytes );
 		if ( null !== $bom ) {
 			$from  = $bom[0];
 			$bytes = (string) substr( $bytes, $bom[1] );
-		} elseif ( null !== $charset && '' !== $charset ) {
-			$labels = array(
-				'utf-8'        => 'UTF-8',
-				'utf8'         => 'UTF-8',
-				'us-ascii'     => 'UTF-8',
-				'ascii'        => 'UTF-8',
-				'utf-16'       => 'UTF-16LE',
-				'utf-16le'     => 'UTF-16LE',
-				'utf-16be'     => 'UTF-16BE',
-				'utf-32'       => 'UTF-32LE',
-				'utf-32le'     => 'UTF-32LE',
-				'utf-32be'     => 'UTF-32BE',
-				'iso-8859-1'   => 'ISO-8859-1',
-				'latin1'       => 'ISO-8859-1',
-				'l1'           => 'ISO-8859-1',
-				'windows-1252' => 'Windows-1252',
-				'cp1252'       => 'Windows-1252',
-			);
-			if ( ! isset( $labels[ $charset ] ) ) {
-				return self::is_text( $bytes ) ? $bytes : null;
+		} elseif ( $xml ) {
+			foreach ( self::XML_STARTS as $start => $guess ) {
+				if ( 0 === strncmp( $bytes, $start, strlen( $start ) ) ) {
+					$from = $guess;
+					break;
+				}
 			}
-			$from = $labels[ $charset ];
-		} else {
-			return self::is_text( $bytes ) ? $bytes : null;
 		}
-		if ( 'UTF-8' === $from ) {
+		if ( null === $from && null !== $charset && '' !== $charset ) {
+			if ( ! isset( self::LABELS[ $charset ] ) ) {
+				return null;
+			}
+			$from = self::LABELS[ $charset ];
+		}
+		if ( null === $from && $xml && preg_match( '/^<\?xml[^>]*?\sencoding\s*=\s*["\']([A-Za-z0-9._-]+)["\']/', $bytes, $m ) ) {
+			$label = strtolower( $m[1] );
+			if ( ! isset( self::LABELS[ $label ] ) ) {
+				return null;
+			}
+			$from = self::LABELS[ $label ];
+		}
+		if ( null === $from || 'UTF-8' === $from ) {
 			return self::is_text( $bytes ) ? $bytes : null;
 		}
 		$text = self::transcoded( $bytes, $from );
@@ -691,9 +847,9 @@ final class AB_MCP_Sync_Net {
 				$pairs   = array_merge( $pairs, self::pairs( $url, $ctx ) );
 			}
 		}
-		// Outside the tokens: every root-relative address, with its path and
-		// its query.
-		if ( preg_match_all( self::START, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+		// Outside the tokens: every root-relative address (as a text node is
+		// read, AB_MCP_Sync_Urls::ROOT), with its path and its query.
+		if ( preg_match_all( AB_MCP_Sync_Urls::ROOT, $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $start ) {
 				$at = (int) $start[1];
 				if ( self::inside( $at, $spans ) ) {
@@ -713,9 +869,6 @@ final class AB_MCP_Sync_Net {
 					continue;
 				}
 				$query = self::extent( $text, $at );
-				if ( false === strpos( $query, '=' ) ) {
-					continue;
-				}
 				$pairs = array_merge( $pairs, self::pairs( '?' . substr( $query, 1 ), $ctx ) );
 			}
 		}
@@ -770,7 +923,7 @@ final class AB_MCP_Sync_Net {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
-			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\'`]?\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
+			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\'`]?\s*\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
 			'/["\'`](' . self::NAME . ')["\'`]\s*:\s*' . self::VALUE . '/',
 			'/\{\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/',
 			'/^\s*(' . self::NAME . ')\s*:\s*["\'`]\s*[^"\'`\s]/',
@@ -780,10 +933,13 @@ final class AB_MCP_Sync_Net {
 			}
 		}
 		// In code a name after "," or ";" as well: where a "{" is open before
-		// it (in prose, «Name, Token: "abc"» is none).
+		// it (in prose, «Name, Token: "abc"» is none), the braces counted
+		// with the strings blanked (a "}" in a string closes none; Codex,
+		// round 22, A-4).
 		if ( preg_match_all( '/[,;]\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			$blanked = self::blanked( $text );
 			foreach ( $m[1] as $hit ) {
-				$before = (string) substr( $text, 0, (int) $hit[1] );
+				$before = (string) substr( $blanked, 0, (int) $hit[1] );
 				if ( substr_count( $before, '{' ) > substr_count( $before, '}' ) ) {
 					$found[] = $hit[0];
 				}

@@ -365,7 +365,7 @@ final class SyncLocksTest extends TestCase {
 		};
 		$page = wp_insert_post(
 			array(
-				'post_title'   => 'Siehe /?p=12',
+				'post_title'   => 'Siehe index.php?p=12',
 				'post_content' => '<!-- wp:html --><a href="/?p=12">normal</a><a data-fancybox data-type="iframe" data-src="data:text/html;base64,' . base64_encode( '<a href="' . AB_MCP_IT_Sites::url( 'a' ) . '/?p=13">target</a>' ) . '">open</a><!-- /wp:html -->',
 				'post_status'  => 'publish',
 				'post_type'    => 'page',
@@ -380,7 +380,7 @@ final class SyncLocksTest extends TestCase {
 		self::assertSame( array( 'description:net:raw/base64' ), $net( self::canon( 'term', $term['term_id'] ) ) );
 
 		$menu = wp_create_nav_menu( 'Netz' );
-		$item = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Siehe /?p=12', 'menu-item-url' => 'https://example.test/', 'menu-item-status' => 'publish', 'menu-item-description' => $hidden ) );
+		$item = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-type' => 'custom', 'menu-item-title' => 'Siehe index.php?p=12', 'menu-item-url' => 'https://example.test/', 'menu-item-status' => 'publish', 'menu-item-description' => $hidden ) );
 		self::assertSame( array( 'post_content:net:raw/base64', 'post_title:net:raw' ), $net( self::canon( 'menu_item', $item ) ) );
 
 		update_option( 'widget_acme_box', array( 4 => array( 'text' => $hidden ), '_multiwidget' => 1 ) );

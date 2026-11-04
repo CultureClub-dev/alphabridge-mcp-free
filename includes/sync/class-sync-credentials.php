@@ -118,6 +118,18 @@ final class AB_MCP_Sync_Credentials {
 	/** The tags of a form whose name or id names its field. */
 	const FORM_TAGS = array( 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'META' );
 
+	/** The attributes that show an image or a poster: a raster image in data: is inside there (raster_data()). */
+	const RASTER_ATTRIBUTES = array( 'src', 'srcset', 'poster' );
+
+	/** The raster images of a data: address: type => its magic bytes and where they stand (WebP: RIFF…WEBP). */
+	const RASTER = array(
+		'image/png'  => array( "\x89PNG", 0 ),
+		'image/gif'  => array( 'GIF8', 0 ),
+		'image/jpeg' => array( "\xFF\xD8\xFF", 0 ),
+		'image/webp' => array( 'WEBP', 8 ),
+		'image/avif' => array( 'ftypavif', 4 ),
+	);
+
 	/**
 	 * Check one unit.
 	 *
@@ -379,8 +391,12 @@ final class AB_MCP_Sync_Credentials {
 				}
 				// An embedded document (data:), and object with data but a PDF
 				// of the uploads as the core takes it (pdf_object()): outside.
+				// A raster image in data: whose bytes begin as its type does
+				// (raster_data(); Codex, round 22, B-3), where an image is
+				// shown (RASTER_ATTRIBUTES: src, srcset, poster), is an image:
+				// inside (the net reads its bytes).
 				$url = trim( str_replace( array( "\t", "\n", "\r" ), '', $value ), "\x00..\x20" );
-				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $url ) ) ) {
+				if ( ( in_array( $name, AB_MCP_Sync_Urls::URL_ATTRIBUTES, true ) && 0 === stripos( $url, 'data:' ) && ! ( in_array( $name, self::RASTER_ATTRIBUTES, true ) && self::raster_data( $url ) ) ) || ( 'object' === $tag_name && 'data' === $name && ! self::pdf_object( $tag['attrs'], $url ) ) ) {
 					$out['outside'] = true;
 				}
 				// An event attribute and a javascript: address (as the URL
@@ -438,6 +454,27 @@ final class AB_MCP_Sync_Credentials {
 			return false;
 		}
 		return 0 === strpos( $own[1], $base[1] . '/' );
+	}
+
+	/**
+	 * Whether a data: address is a raster image (a placeholder of a lazy
+	 * loader, an inline icon): of a type of RASTER whose decoded bytes begin
+	 * as that type begins (its magic bytes). An SVG, a type that is none, or
+	 * bytes that are no such image are not one.
+	 *
+	 * @param string $url The address, as the URL parser reads it.
+	 * @return bool
+	 */
+	private static function raster_data( $url ) {
+		$data = AB_MCP_Sync_Css::data( $url );
+		if ( null === $data || ! isset( self::RASTER[ $data['type'] ] ) ) {
+			return false;
+		}
+		list( $magic, $at ) = self::RASTER[ $data['type'] ];
+		if ( 'image/webp' === $data['type'] ) {
+			return 0 === strncmp( $data['content'], 'RIFF', 4 ) && 'WEBP' === substr( $data['content'], 8, 4 );
+		}
+		return substr( $data['content'], $at, strlen( $magic ) ) === $magic;
 	}
 
 	/**

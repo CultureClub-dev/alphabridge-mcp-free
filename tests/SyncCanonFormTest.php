@@ -65,6 +65,22 @@ final class SyncCanonFormTest extends TestCase {
 		self::assertArrayHasKey( '~addr', $markers[0] );
 	}
 
+	public function testAPercentEncodedAddressIsNeutralAsEitherEncoderWritesIt(): void {
+		// Codex, round 22 (A-1): the value of a query variable, with the
+		// scheme and without it.
+		foreach ( array( 'rawurlencode', 'urlencode' ) as $encoder ) {
+			foreach ( array( 'https:', '' ) as $scheme ) {
+				$staging = 'wp-login.php?redirect_to=' . call_user_func( $encoder, $scheme . substr( self::STAGING, 6 ) . '/kontakt/?a=1&b=2' );
+				$live    = 'wp-login.php?redirect_to=' . call_user_func( $encoder, $scheme . substr( self::LIVE, 6 ) . '/kontakt/?a=1&b=2' );
+				$a       = AB_MCP_Sync_Canon::text( $staging, self::ctx() );
+				$b       = AB_MCP_Sync_Canon::text( $live, self::ctx() );
+				self::assertSame( AB_MCP_Sync_Canon::encode( $a ), AB_MCP_Sync_Canon::encode( $b ), $encoder . ' ' . $scheme );
+				self::assertIsArray( $a, $staging );
+				self::assertSame( 'percent', array_values( array_filter( $a['~s'], 'is_array' ) )[0]['~addr'] ?? null, $staging );
+			}
+		}
+	}
+
 	public function testOnlyTheAddressItselfIsNeutralNotWhatBeginsLikeIt(): void {
 		foreach ( array( 'https://staging.example.chx.com/a', 'https://staging.example.ch.evil.com/', 'https://staging.example.ch:8443/', 'https://staging.example.ch-x/' ) as $text ) {
 			self::assertSame( $text, AB_MCP_Sync_Canon::text( $text, self::ctx() ), $text );
