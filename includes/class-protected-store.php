@@ -479,11 +479,9 @@ final class AB_MCP_Protected_Store {
 	 * @param string $area Area.
 	 * @param array  $meta 'declared' (bytes, packages), 'run_id' (the run it
 	 *                     belongs to), 'label' (up to 191 of A-Z a-z 0-9 . _ : -),
-	 *                     'before' (a callable run under the lock, after the
-	 *                     clean-up and before the budgets are counted, which
-	 *                     takes no lock of the store: a WP_Error ends the
-	 *                     opening, nothing made; a list of gids of the area
-	 *                     names groups removed first).
+	 *                     'binding' (the trust a package was begun with, as
+	 *                     the print of a pair; one of another binding counts
+	 *                     as open no more, AB_MCP_Store_Budget::package_refusal()).
 	 * @return string|WP_Error The id of the group (32 hex).
 	 */
 	public static function open( $area, array $meta = array() ) {
@@ -510,27 +508,15 @@ final class AB_MCP_Protected_Store {
 			'used'     => 0,
 			'label'    => $label,
 			'closed'   => false,
+			'binding'  => self::binding( isset( $meta['binding'] ) ? $meta['binding'] : '' ),
 		);
 		$id     = self::install_id();
-		$before = isset( $meta['before'] ) && is_callable( $meta['before'] ) ? $meta['before'] : null;
 		$result = self::writing(
 			$root,
-			static function () use ( $root, $id, $entry, $before ) {
+			static function () use ( $root, $id, $entry ) {
 				self::sweep( $root, $id, time() );
-				if ( null !== $before ) {
-					$stale = call_user_func( $before );
-					if ( is_wp_error( $stale ) ) {
-						return $stale;
-					}
-					foreach ( (array) $stale as $gid ) {
-						$name = self::group_name( $entry['area'], (string) $gid, $id );
-						if ( null === self::bad_ref( $entry['area'], (string) $gid, 'x' ) && is_array( self::group( $root, $entry['area'], $name, (string) $gid ) ) ) {
-							self::remove_group( $root, $entry['area'], $name );
-						}
-					}
-				}
 				if ( in_array( $entry['area'], self::PACKAGES, true ) ) {
-					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( self::entries( $root, $id, 'out' ), self::entries( $root, $id, 'in' ) ), $entry['area'], $entry['user_id'], $entry['declared'], $entry['label'] );
+					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( self::entries( $root, $id, 'out' ), self::entries( $root, $id, 'in' ) ), $entry['area'], $entry['user_id'], $entry['declared'], $entry['label'], $entry['binding'] );
 					if ( null !== $refusal ) {
 						return $refusal;
 					}
@@ -2018,7 +2004,18 @@ final class AB_MCP_Protected_Store {
 			'used'     => isset( $e['used'] ) ? max( 0, (int) $e['used'] ) : 0,
 			'label'    => isset( $e['label'] ) && is_string( $e['label'] ) ? $e['label'] : '',
 			'closed'   => isset( $e['closed'] ) && true === $e['closed'],
+			'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),
 		);
+	}
+
+	/**
+	 * The binding of a group as a sidecar keeps it: a text, or '' for none.
+	 *
+	 * @param mixed $binding Value.
+	 * @return string
+	 */
+	private static function binding( $binding ) {
+		return is_string( $binding ) ? $binding : '';
 	}
 
 	/**

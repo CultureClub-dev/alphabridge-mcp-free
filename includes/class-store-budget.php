@@ -103,9 +103,17 @@ final class AB_MCP_Store_Budget {
 	 * @param int     $declared Bytes it will hold.
 	 * @param string  $label    Its label: SERIES joins the open package of
 	 *                          that series, which counts already.
+	 * @param string  $binding  The trust it is begun with (an import: the
+	 *                          print of the pair, AB_MCP_Sync_Anchor::
+	 *                          pair_print()), '' for none. An open package
+	 *                          of another binding counts as open no more: it
+	 *                          is never continued, and the store removes it
+	 *                          after its time (its bytes count until then).
+	 *                          A binding read from an old cache moves the
+	 *                          count for a while, and removes nothing.
 	 * @return WP_Error|null
 	 */
-	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '' ) {
+	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '', $binding = '' ) {
 		$declared = (int) $declared;
 		if ( $declared < 1 ) {
 			return new WP_Error( 'ab_mcp_store_declare', 'A package is opened with the number of bytes it will hold, and it never grows past them. Pass the size as declared when you open it.' );
@@ -117,6 +125,10 @@ final class AB_MCP_Store_Budget {
 		foreach ( array_values( $packages ) as $i => $entry ) {
 			$bytes += max( 0, (int) $entry['declared'] );
 			if ( ! empty( $entry['closed'] ) ) {
+				continue;
+			}
+			$other = isset( $entry['binding'] ) ? (string) $entry['binding'] : '';
+			if ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {
 				continue;
 			}
 			$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;

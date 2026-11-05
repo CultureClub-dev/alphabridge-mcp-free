@@ -96,6 +96,24 @@ final class StoreBudgetTest extends TestCase {
 		self::assertNull( AB_MCP_Store_Budget::package_refusal( $five, 'in', 6, 10 ) );
 	}
 
+	public function testAnOpenPackageOfAnotherBindingCountsAsOpenNoMore(): void {
+		$old   = str_repeat( 'a', 64 );
+		$now   = str_repeat( 'b', 64 );
+		$bound = static fn( string $binding, int $n ): array => array_map( static fn( array $p ): array => $p + array( 'binding' => $binding ), self::packages( ...array_fill( 0, $n, array( 'in', 1, 10 ) ) ) );
+		// Five imports of a pair of before: none of them counts for one of now.
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10, '', $now ) );
+		// Of the same binding they count, the limit stays.
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 5 ), $bound( $now, 5 ) ), 'in', 1, 10, '', $now )->get_error_code() );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 5 ), $bound( $now, 4 ) ), 'in', 1, 10, '', $now ) );
+		// A package without a binding counts (an export, or one of before this version).
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 1 ), self::packages( ...array_fill( 0, 5, array( 'out', 2, 10 ) ) ) ), 'in', 1, 10, '', $now )->get_error_code() );
+		// One opened without a binding counts every package.
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10 )->get_error_code() );
+		// Their bytes count until the store removes them.
+		add_filter( AB_MCP_Store_Budget::FILTER_BYTES, static fn(): int => 55 );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10, '', $now )->get_error_code() );
+	}
+
 	/** Packages of a series, or closed: area, account, bytes, label, closed. */
 	private static function marked( array ...$list ): array {
 		return array_map(

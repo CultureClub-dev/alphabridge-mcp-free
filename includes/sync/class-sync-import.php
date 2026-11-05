@@ -14,9 +14,10 @@
  * (AB_MCP_Sync_Anchor::pair_print()), and a call after the role, the pair or
  * the anchor changed ends the group before its manifest is checked again
  * (decision 15), as one that holds it for a purpose this version does not
- * take; a new package removes every group of a pair of before first,
- * under the lock of the store with the pair read afresh (stale()), so none
- * holds a place in the budgets. Another account does not see that
+ * take; a group of a pair of before counts as open no more (the binding
+ * it was opened with, AB_MCP_Store_Budget::package_refusal()), so none holds
+ * a place in the budgets, and none is removed but by its own continuation
+ * or the store after its time. Another account does not see that
  * group: it begins a group of its own. Then it takes chunks, each checked against its SHA-256 in the
  * manifest before it is stored (AB_MCP_Sync_Manifest::chunk()):
  *
@@ -411,8 +412,8 @@ final class AB_MCP_Sync_Import {
 			array(
 				'declared' => $manifest['bytes'] + self::RECORD_MAX + self::HELD_MAX,
 				'label'    => self::LABEL . $manifest['package_id'],
-				// Under the lock of the store, before its budgets are counted.
-				'before'   => static fn() => self::stale( $print ),
+				// A package of another pair counts as open no more.
+				'binding'  => (string) $print,
 			)
 		);
 		if ( is_wp_error( $gid ) ) {
@@ -512,38 +513,6 @@ final class AB_MCP_Sync_Import {
 	 */
 	private static function bound( array $found, $print ) {
 		return null !== $found['print'] && hash_equals( $found['print'], (string) $print );
-	}
-
-	/**
-	 * The packages of the area in begun with another pair than the one of
-	 * now (bound()), of any account, for the store to remove before a new
-	 * one is begun (AB_MCP_Protected_Store::open(): before, under its lock):
-	 * none is ever continued (held() ends it), so none holds a place in the
-	 * budgets (AB_MCP_Store_Budget::MAX_PACKAGES) until the end of its day.
-	 * The pair of now is read afresh right before the decision
-	 * (AB_MCP_Sync_Anchor::fresh_print()); where it is no longer the one
-	 * this call holds, the pair changed under the call (a new key confirmed
-	 * meanwhile, and another account may have begun a package of it): the
-	 * call ends with the way and removes nothing. A group whose record does
-	 * not read stays as it is.
-	 *
-	 * @param string $held The print this call holds (its manifest was read with it).
-	 * @return string[]|WP_Error The gids to remove.
-	 */
-	private static function stale( $held ) {
-		$now = AB_MCP_Sync_Anchor::fresh_print();
-		if ( null === $now || ! hash_equals( (string) $held, $now ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_pair_changed', 'The role of this site, its pair or the confirmed key of the staging site changed while this package was begun, so it was not begun. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.' );
-		}
-		$out    = array();
-		$groups = AB_MCP_Protected_Store::groups( 'in' );
-		foreach ( is_array( $groups ) ? $groups : array() as $group ) {
-			$found = self::record( $group );
-			if ( is_array( $found ) && ! self::bound( $found, $now ) ) {
-				$out[] = $group['gid'];
-			}
-		}
-		return $out;
 	}
 
 	/**

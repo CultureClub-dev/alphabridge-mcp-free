@@ -1057,7 +1057,7 @@ e('paket/it-store-close', 'close(): the group closed (two sites)', ST, "\t\t\t\t
 e('paket/it-store-read-closed', 'read_entry(): closed as written (two sites)', ST,
   "\t\t\t'closed'   => isset( $e['closed'] ) && true === $e['closed'],", "\t\t\t'closed'   => false,", 'itpkg', PKG_IT['import_write'])
 e('paket/it-store-open-label', 'open(): the budget sees the label (two sites)', ST,
-  "$entry['declared'], $entry['label'] );", "$entry['declared'] );", 'itpkg', PKG_IT['cursor'])
+  "$entry['declared'], $entry['label'], $entry['binding'] );", "$entry['declared'], '', $entry['binding'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-import-close', 'state(): a package checked whole is closed (two sites)', IM,
   "\t\t\t$closed = AB_MCP_Protected_Store::close( 'in', $held['gid'] );", "\t\t\t$closed = true;", 'itpkg', PKG_IT['import_write'])
 e('paket/it-series-close', 'state(): the production site takes more packages one after the other than it keeps open (two sites)', IM,
@@ -1591,27 +1591,25 @@ e('paket/p3r4-over-name-unread', 'over_name(): a body that is no text (two sites
 P5_IT = 'testImportsOfAKeyOfBeforeHoldNoPlaceOnceTheKeyIsRenewed'
 e('paket/p5-held-bound-before-verify', 'held(): a group of another pair is ended before its manifest is checked again (two sites)', IM,
   PRN, "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) && ! is_wp_error( AB_MCP_Sync_Manifest::verify( $found['signed'], $expect ) ) ) {", 'itpkg', P5_IT)
-e('paket/p5-begin-discard', 'begin(): the groups of a pair of before removed before a new one is opened (two sites)', IM,
-  "\t\t\t\t'before'   => static fn() => self::stale( $print ),\n", "", 'itpkg', P5_IT)
-DS = "\t\t\tif ( is_array( $found ) && ! self::bound( $found, $now ) ) {"
-e('paket/p5-discard-bound', 'stale(): every group of another pair, of any account (two sites)', IM, DS, "\t\t\tif ( false ) {", 'itpkg', P5_IT)
-e('paket/p5-discard-only-stale', 'stale(): a group of the pair of now stays (two sites)', IM, DS, "\t\t\tif ( is_array( $found ) ) {", 'itpkg', P5_IT)
-# Codex on d51833c, A: the pair read afresh under the lock of the store.
-P6_IT = 'testAPackageBegunWhileThePairChangesRemovesNoPackageOfTheNewPair'
-e('paket/p6-stale-pair-changed', 'stale(): a pair changed under the call ends it and removes nothing (two sites)', IM,
-  "\t\tif ( null === $now || ! hash_equals( (string) $held, $now ) ) {", "\t\tif ( null === $now ) {", 'itpkg', P6_IT)
-e('paket/p6-stale-fresh', 'stale(): the pair of now read afresh (two sites)', IM,
-  "\t\t$now = AB_MCP_Sync_Anchor::fresh_print();", "\t\t$now = AB_MCP_Sync_Anchor::pair_print();", 'itpkg', P6_IT)
-e('paket/p6-fresh-alloptions', 'fresh_print(): the autoloaded options read again (two sites)', A,
-  "\t\t\twp_cache_delete( 'alloptions', 'options' );\n", "", 'itpkg', P6_IT)
-e('paket/p6-fresh-anchor', 'fresh_print(): the anchor and the settings read again where they are no autoloaded option (two sites)', A,
-  "\t\t\tforeach ( array( AB_MCP_Settings::OPT_OPTIONS, self::OPTION ) as $name ) {\n\t\t\t\twp_cache_delete( $name, 'options' );\n\t\t\t}\n", "", 'itpkg', P6_IT)
-e('paket/p6-open-before-refusal', 'open(): a refusal of before ends the opening, nothing made (two sites)', ST,
-  "\t\t\t\t\tif ( is_wp_error( $stale ) ) {\n\t\t\t\t\t\treturn $stale;\n\t\t\t\t\t}\n", "", 'itpkg', P6_IT)
-e('paket/p6-open-before-run', 'open(): before runs under the lock (two sites)', ST,
-  "\t\t\t\tif ( null !== $before ) {", "\t\t\t\tif ( false ) {", 'itpkg', P5_IT)
-e('paket/p6-open-before-remove', 'open(): the groups before names are removed first (two sites)', ST,
-  "\t\t\t\t\t\t\tself::remove_group( $root, $entry['area'], $name );\n", "", 'itpkg', P5_IT)
+# Codex on d51833c and 5f626da, A: no group removed at a beginning; one of another pair counts as open no more.
+e('paket/p7-begin-binding', 'begin(): the group opened with the print of its pair (two sites)', IM,
+  "\t\t\t\t'binding'  => (string) $print,\n", "", 'itpkg', P5_IT)
+e('paket/p7-open-binding', 'open(): the binding kept in the sidecar (two sites)', ST,
+  "\t\t\t'binding'  => self::binding( isset( $meta['binding'] ) ? $meta['binding'] : '' ),\n", "\t\t\t'binding'  => '',\n", 'itpkg', P5_IT)
+e('paket/p7-open-binding-count', 'open(): the binding of the package counted with (two sites)', ST,
+  ", $entry['label'], $entry['binding'] );", ", $entry['label'] );", 'itpkg', P5_IT)
+e('paket/p7-read-binding', 'read_entry(): the binding read back (two sites)', ST,
+  "\t\t\t'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),\n", "\t\t\t'binding'  => '',\n", 'itpkg', P5_IT)
+e('paket/p7-race-own-end', 'held(): the next call of a package begun with a pair of before ends its own group, the other account keeps its own (two sites)', IM,
+  PRN, "\t\tif ( false ) {", 'itpkg', 'testAPackageBegunWhileThePairChangesRemovesNoPackageOfTheNewPair')
+P7_UNIT = 'testAnOpenPackageOfAnotherBindingCountsAsOpenNoMore'
+SK = "\t\t\tif ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {"
+e('paket/p7-count-skip', 'package_refusal(): an open package of another binding counts as open no more', BUD, SK, "\t\t\tif ( false ) {", 'budget', P7_UNIT)
+e('paket/p7-count-same', 'package_refusal(): one of the same binding counts', BUD, SK, SK.replace(" && (string) $binding !== $other", ''), 'budget', P7_UNIT)
+e('paket/p7-count-unbound', 'package_refusal(): one without a binding counts', BUD, SK, SK.replace(" && '' !== $other", ''), 'budget', P7_UNIT)
+e('paket/p7-count-opened-unbound', 'package_refusal(): one opened without a binding counts every package', BUD, SK, SK.replace("'' !== (string) $binding && ", ''), 'budget', P7_UNIT)
+e('paket/p7-count-bytes', 'package_refusal(): its bytes count until it is removed', BUD,
+  SK + "\n\t\t\t\tcontinue;", SK + "\n\t\t\t\t$bytes -= max( 0, (int) $entry['declared'] );\n\t\t\t\tcontinue;", 'budget', P7_UNIT)
 
 # ----------------------------------------------------------------- check
 # Each run: its suite and the test class it names; an entry runs the test

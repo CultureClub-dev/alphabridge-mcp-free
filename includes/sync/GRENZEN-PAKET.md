@@ -180,21 +180,23 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   erneuten Prüfung des Manifests verglichen: ein Import eines erneuerten
   oder widerrufenen Schlüssels, eines entfernten Paares oder Ankers endet so
   mit Weg und wird entfernt, statt mit `ab_mcp_sync_manifest_key` stehen zu
-  bleiben. Ein neuer Import entfernt vorher jede Gruppe eines früheren
-  Paares, jedes Kontos, so dass keine einen der fünf Plätze belegt; fünf
-  unterbrochene Importe sperren nach einem Schlüsselwechsel keinen neuen
-  (GitHub-Codex P2 zu PR 132). Entschieden wird unter der Sperre der
-  Ablage, die auch das Kontingent prüft, mit dem Paar unmittelbar davor aus
-  der Datenbank gelesen (`fresh_print()`): hat es sich unter dem Aufruf
-  geändert (ein neuer Schlüssel bestätigt, ein anderes Konto begann schon
-  ein Paket des neuen Paares), endet der Aufruf mit
-  `ab_mcp_sync_import_pair_changed` und Weg und entfernt nichts; entfernt
-  wird nur eine Gruppe, deren Paar von dem frisch gelesenen abweicht
-  (Codex zu d51833c, A). Das Ändern des Paares selbst nimmt die Sperre der
-  Ablage nicht; zwischen dem frischen Lesen und dem Entfernen bleiben
-  Mikrosekunden, in denen ein weiterer Wechsel unbemerkt bliebe
-  (konstruiert). Ein Manifest, das während eines offenen
-  Imports abläuft, lehnt die nächste Fortsetzung ab
+  bleiben. Eine Gruppe eines früheren Paares zählt nicht mehr als offenes
+  Paket: die Ablage hält in der Gruppe die Bindung ihres Beginns
+  (`pair_print`) und lässt beim Zählen unter ihrer Sperre jede Gruppe einer
+  anderen Bindung aus (`AB_MCP_Store_Budget::package_refusal()`); fünf
+  unterbrochene Importe sperren nach einem Schlüsselwechsel so keinen
+  neuen (GitHub-Codex P2 zu PR 132). Ihre Bytes zählen weiter, bis die
+  Ablage sie entfernt, denn sie liegen auf der Platte (alte Pakete nahe der
+  Byte-Grenze von 512 MiB können einen neuen so eine Weile über diese
+  Grenze ablehnen lassen, mit ihrem Weg). Beim Beginn wird
+  keine Gruppe entfernt: die eigene Fortsetzung entfernt ihre Gruppe bei
+  einem geänderten Paar (mit Weg), alles Übrige die Ablage nach ihrer Zeit.
+  Ein Abdruck, den ein Aufruf aus einem alten Cache liest, verschiebt so
+  höchstens die Zählung vorübergehend (eine Gruppe zählt oder fehlt bis zur
+  nächsten Fortsetzung oder ihrem Ablauf) und löscht nie eine Gruppe,
+  auch keine eines anderen Kontos (Codex zu d51833c und 5f626da, A). Ein
+  Manifest, das während eines offenen Imports abläuft, lehnt die nächste
+  Fortsetzung ab
   (`ab_mcp_sync_manifest_expired`); diese Gruppe bleibt, bis die Ablage sie
   einen Tag nach ihrem Beginn entfernt, und belegt bis dahin ihren Platz
   (selten: das Paket wurde kurz vor dem Ablauf seines Manifests begonnen

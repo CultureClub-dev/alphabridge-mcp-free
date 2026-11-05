@@ -1409,20 +1409,31 @@ final class SyncPackageTest extends TestCase {
 		self::refused( $ended, 'ab_mcp_sync_import_pair_changed' );
 		self::assertStringContainsString( 'Fetch the package anew', $ended->get_error_message() );
 		self::assertSame( array(), self::groups_of( $old[0] ) );
-		// A package of the new key begins and completes: the four left of before hold no place.
+		// A package of the new key begins and completes: the four left of
+		// before count as open no more, and none of them is removed.
 		$sixth = self::package_of( str_repeat( 'e6', 16 ), array( array( self::option_line( 'zz_sixth' ) ) ) );
 		$state = self::import_relayed( $sixth );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertTrue( $state['complete'] );
-		foreach ( $old as $id ) {
-			self::assertSame( array(), self::groups_of( $id ), $id );
+		foreach ( array_slice( $old, 1 ) as $id ) {
+			self::assertCount( 1, self::groups_of( $id ), $id . ' is left to its own continuation or its time.' );
 		}
-		self::assertCount( 1, AB_MCP_Protected_Store::groups( 'in' ) );
-		// A package of the pair of now stays when the next one begins.
-		$seventh = self::package_of( str_repeat( 'e7', 16 ), array( array( self::option_line( 'zz_seventh' ) ) ) );
-		self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'e7', 16 ), 'manifest' => self::signed_by_b( $seventh['package'] ), 'purpose' => 'inventory' ) ) );
-		self::assertCount( 1, self::groups_of( str_repeat( 'e6', 16 ) ) );
-		self::assertCount( 2, AB_MCP_Protected_Store::groups( 'in' ) );
+		// Five open packages of the new key, beside the four of before; the sixth is one too many.
+		foreach ( array( 'a1', 'a2', 'a3', 'a4', 'a5', 'a6' ) as $i => $part ) {
+			$package = self::package_of( str_repeat( $part, 16 ), array( array( self::option_line( 'zz_new_' . $part ) ) ) );
+			$state   = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => str_repeat( $part, 16 ),
+					'manifest'   => self::signed_by_b( $package['package'] ),
+					'purpose'    => 'inventory',
+				)
+			);
+			if ( $i < 5 ) {
+				self::assertIsArray( $state, $part . ': ' . ( is_wp_error( $state ) ? $state->get_error_message() : '' ) );
+			} else {
+				self::refused( $state, 'ab_mcp_store_quota' );
+			}
+		}
 	}
 
 	/** What this request cached of the options the print of the pair and a manifest read. */
@@ -1498,20 +1509,20 @@ final class SyncPackageTest extends TestCase {
 			// This request still holds what it read before.
 			self::cache_options( $cached );
 			self::assertSame( $held, AB_MCP_Sync_Anchor::pair_print(), $what );
-			self::assertNotSame( $held, AB_MCP_Sync_Anchor::fresh_print(), $what . ': the pair changed in the database.' );
-			self::cache_options( $cached );
-			// Its package: the pair read afresh under the lock is no longer the
-			// one it holds, so it ends with the way and removes nothing.
-			$ended = AB_MCP_Sync_Import::call( $call );
+			// Its package begins with the pair it read; a beginning removes no
+			// group, so the package of the other account, of the new pair, stays.
+			$state = AB_MCP_Sync_Import::call( $call );
+			self::assertIsArray( $state, $what . ': ' . ( is_wp_error( $state ) ? $state->get_error_message() : '' ) );
+			self::assertCount( 1, self::groups_of( $theirs ), $what . ': the package of the other account stays.' );
+			// Its next call reads the pair of now: its own group ends, with the way; the other stays.
+			wp_cache_flush();
+			self::assertNotSame( $held, AB_MCP_Sync_Anchor::pair_print(), $what );
+			$ended = AB_MCP_Sync_Import::call( array( 'package_id' => $mine ) );
 			self::refused( $ended, 'ab_mcp_sync_import_pair_changed' );
 			self::assertStringContainsString( 'Fetch the package anew', $ended->get_error_message() );
-			self::assertCount( 1, self::groups_of( $theirs ), $what . ': the package of the other account, of the new pair, stays.' );
 			self::assertSame( array(), self::groups_of( $mine ), $what );
+			self::assertCount( 1, self::groups_of( $theirs ), $what );
 		}
-		// The way: begun anew with the pair of now, beside the others.
-		self::assertIsArray( AB_MCP_Sync_Import::call( $begin( str_repeat( 'f6', 16 ) ) ) );
-		self::assertCount( 1, self::groups_of( str_repeat( 'f6', 16 ) ) );
-		self::assertCount( 1, self::groups_of( str_repeat( 'f5', 16 ) ) );
 	}
 
 	public function testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne(): void {
