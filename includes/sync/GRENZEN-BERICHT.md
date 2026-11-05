@@ -53,9 +53,12 @@ Weg.
 - Hält eine Zugangsangabe einen Namen eines Objekts (Liste der gehaltenen
   Zeilen des Imports; auf dieser Site dieselbe Prüfung,
   `AB_MCP_Sync_Import::held_reason()`), wird die Zeile **vor jeder Ablage und
-  Ausgabe** auf Art, SHA-256 der Kennung und Code gekürzt
+  Ausgabe der Vorschlagsdaten** auf Art, SHA-256 der Kennung und Code gekürzt
   (`AB_MCP_Sync_Proposal::reduced()`), auch für schon gepaarte Objekte und im
-  Neuabgleich. Sie steht für sich (die gekürzte Zeile hat keine Identität mehr,
+  Neuabgleich. Die ursprünglichen, geschützten Eingangsstücke des Pakets
+  behalten ihren Inhalt: der Import legt das signierte Stück ab, bevor er die
+  Namen prüft (vorbestehende Grenze des Transports, Zweig 5; der Name einer
+  Zugangsangabe in einer Kennung ist konstruiert). Sie steht für sich (die gekürzte Zeile hat keine Identität mehr,
   nach der sich gruppieren liesse) und wird nie gepaart. Ihr Gegenstück
   derselben Identität auf der anderen Seite erscheint dann als «nur Staging»
   oder «nur live»: beide Seiten prüfen mit den Regeln dieser Site, so trifft
@@ -73,12 +76,61 @@ Weg.
   Login). Dieselben Objekte mit anderen IDs auf beiden Sites sind so «gleich».
   Die Ausgangsstände eines Paars bleiben die Hashes je Seite im eigenen
   ID-Raum.
+- **Ein Ziel je Identität** (Codex Runde 2, A-1): Eine Identität, die ein
+  zweites Objekt derselben Site auch hat, nennt keines von beiden; ein Verweis
+  darauf bleibt unaufgelöst («anderer Inhalt»), und ein Objekt, dessen eigene
+  Identität sie enthält, hat keine (ein Menüeintrag unter einem solchen
+  Eltern-Eintrag, eine Seite unter einer solchen Elternseite heissen
+  «unsicher»). Beispiele: zwei eigene Links «#» mit derselben Beschriftung
+  unter demselben Eltern-Eintrag, zwei Posts eines Typs mit demselben Slug
+  unter derselben Elternseite (ein Entwurf behält seinen Slug), zwei Anhänge
+  derselben Datei, zwei Terme einer Taxonomie mit demselben Slug (der Kern
+  vergibt einen Slug je Taxonomie nur einmal; nur eine anders geschriebene
+  Tabelle hat ihn zweimal). Eigene Links heissen nach Adresse **und**
+  Beschriftung: «Privat» und «Firma» auf `#` sind zwei Einträge, ein
+  Untereintrag, der von «Privat» zu «Firma» wechselt, ist ein anderer Eintrag
+  («nur Staging» und «nur live»), nie «gleich»; eine umbenannte Überschrift
+  ebenso. Folge für mehrsprachige Sites, deren Plugin Anhänge je Sprache auf
+  dieselbe Datei verdoppelt (WPML): ein Verweis auf einen solchen Anhang ist
+  nicht aufzulösen, das Objekt heisst «anderer Inhalt» (die sichere Seite).
+  Die Gruppe selbst wird weiter nur über eine auf beiden Seiten eindeutige
+  gleiche abgebildete Form gepaart (zwei gleiche Überschriften an ihren
+  Plätzen), sonst «mehrdeutig».
+- **Mögliche Verweise** (Entscheid 12; Codex Runde 2, B-1): Ganze Zahlen ohne
+  belegtes Schema in gespeicherten Werten (Meta von Posts, Termen und
+  Menüeinträgen, auch in serialisierten Werten und gespeichertem JSON, etwa
+  `settings.image.id` in `_elementor_data`, ein Bildfeld von ACF, die
+  Komma-Liste `_product_image_gallery`) nennen in einer **zweiten**
+  abgebildeten Form das Objekt, das sie auf ihrer Site treffen, über dessen
+  Identität, als möglicher Verweis markiert (`mapped_possible`). Eine Zahl,
+  die nichts trifft, einen Post und einen Term zugleich oder ein Objekt ohne
+  eindeutige Identität, bleibt, wie sie ist. «Gleich» heisst: eine der beiden
+  abgebildeten Formen ist gleich (`AB_MCP_Sync_Proposal::mapped_same()`). So
+  bleibt eine Zahl, die kein Verweis ist (ein Preis 10 auf beiden Sites, der
+  dort verschiedene Posts 10 trifft), gleich, und eine Bild-ID 7 gegen 107
+  derselben Datei ist gleich. Die Sperre nach Entscheid 12 bleibt
+  unverändert: solche Objekte übernimmt Z8 nicht; nur ihr Paar und ihr
+  Vergleich werden richtig.
+- Grenzen der möglichen Verweise: Ein Objekt, das **beides** enthält,
+  verschobene Bild-IDs und eine gleiche Zahl, die auf den beiden Sites
+  verschiedene Objekte trifft (etwa eine Galerie und `_stock` 5), heisst
+  weiter «anderer Inhalt» und wird *ungeklärt* bestätigt (die sichere Seite).
+  Grund: dafür müsste je Zahl verglichen werden, und ein Paket trägt einen
+  möglichen Verweis nur mit seiner Stelle, nie mit seinem Wert (Vertrag A von
+  Zweig 5). Umgekehrt können zufällig gleich abgebildete Zahlen (ein Preis 7
+  hier, 107 dort, und Post 7 hier ist derselbe wie Post 107 dort; konstruiert)
+  «gleich» ergeben; das betrifft nur gesperrte Objekte und keinen Schreibweg
+  in Z8. Mögliche Verweise im Inhalt (Blöcke ohne Schema, Shortcodes), in
+  Optionen und Widgets werden nicht abgebildet: dort bleibt der Vergleich
+  wie bisher (andere IDs heissen «anderer Inhalt»).
 - Ein Verweis auf ein Ziel ohne Identität (ein Post ohne Slug, ein gelöschtes
   Ziel, ein Term, dessen ID noch in zwei Taxonomien steht) gibt keine
   abgebildete Form: das Objekt heisst «anderer Inhalt». Dafür tragen die
-  Zeilen eines Pakets jetzt `mapped` und die Menüeinträge `target` und
-  `parent` (SHA-256 der Identität, nie ein Wert); das Paketformat ist darum
-  zwischen den Fassungen nicht gemischt lesbar (beide Sites gleiche Fassung).
+  Zeilen eines Pakets jetzt `mapped` und `mapped_possible` und die
+  Menüeinträge `target` und `parent` (SHA-256 der Identität, nie ein Wert);
+  das Paketformat ist darum zwischen den Fassungen nicht gemischt lesbar
+  (beide Sites gleiche Fassung; eine ältere Zeile ohne `mapped` heisst
+  «anderer Inhalt»).
 - Keine Paarung durch Ausschluss: Nur ein Objekt je Seite derselben Identität
   auf demselben Pfad ist ein Paar; mehrere auf einem Pfad nur über eine auf
   beiden Seiten eindeutige gleiche abgebildete Form, der Rest ist
@@ -88,8 +140,14 @@ Weg.
   (`uncertain`) und werden nur durch eine ausdrückliche Wahl gepaart, nie über
   eine Kategorie bestätigt. Eine verschobene Seite muss die Person darum selbst
   zuordnen.
-- Menüeinträge werden über den Slug ihres Menüs, Typ, Objekttyp, ihr Ziel und
-  ihren Eltern-Eintrag zugeordnet, nie über die Position (umsortiert ist
+- Ein **unvollständiger Elternpfad** führt immer nach «unsicher» (Codex Runde
+  2, A-2): eine Elternseite, die die Bestandsaufnahme ihrer Seite nicht hält
+  (nicht gelesen, in einem fehlenden Teilpaket, gehalten), keinen Slug hat
+  oder deren Typ, Slug und Eltern ein zweiter Post derselben Seite auch hat,
+  steht im Pfad als `?`; `?` ist nie ein gemeinsamer Pfad beider Seiten.
+- Menüeinträge werden über den Slug ihres Menüs, Typ, Objekttyp, ihr Ziel
+  (eigene Links: Adresse und Beschriftung) und ihren Eltern-Eintrag
+  zugeordnet, nie über die Position (umsortiert ist
   dasselbe Ziel dasselbe Objekt). Dasselbe Ziel zweimal unter demselben
   Eltern-Eintrag desselben Menüs ist «mehrdeutig», ausser eine gleiche
   abgebildete Form ist auf beiden Seiten eindeutig. Ein Ziel ausserhalb der
@@ -134,7 +192,8 @@ Weg.
   (die Ablage kennt für Berichte kein Kontingent, wie für Pakete; so häufen
   sich wiederholte Vorschläge nicht für ihren Tag an).
 - **Verwerfen darf jedes Konto** mit `manage_options` und Stufe Full, mit
-  Token; das Protokoll der Werkzeugaufrufe (`ab_mcp_audit`) nennt das Konto.
+  Token; das Protokoll der Werkzeugaufrufe (`ab_mcp_audit`) nennt das Konto,
+  sofern die Protokollierung eingeschaltet ist.
   Bewusste Abweichung vom Eigentumsmuster von Entscheid 15 (Entscheid der
   Lead-Sitzung): Paare sind Daten der Site, nicht eines Kontos, und ein
   ausgeschiedener Administrator darf Paare nicht für immer festhalten. Ein

@@ -156,7 +156,10 @@ final class AB_MCP_Sync_Inventory {
 	 * An object of the inventory: the result without its form, with the
 	 * SHA-256 of its mapped form (mapped: every reference by id naming the
 	 * identity of its target, AB_MCP_Sync_Identity; null where a target has
-	 * none or there is no form), which the two sites compare (decision 10).
+	 * none or there is no form), which the two sites compare (decision 10),
+	 * and of the mapped form with its possible references by identity
+	 * (mapped_possible, AB_MCP_Sync_Identity::possible_hash(); null where
+	 * none hits an object).
 	 *
 	 * @param array $result AB_MCP_Sync_Canon::finish().
 	 * @return array
@@ -164,6 +167,8 @@ final class AB_MCP_Sync_Inventory {
 	public static function entry( array $result ) {
 		++self::$made;
 		$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;
+		// The same with the possible references by identity (Codex round 2, B-1).
+		$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;
 		unset( $result['form'] );
 		if ( ! isset( $result['status'] ) ) {
 			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';

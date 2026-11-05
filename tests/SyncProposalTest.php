@@ -196,6 +196,48 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], 'The same hash in another ID space is no proof.' );
 	}
 
+	public function testEitherMappedFormMakesTheSame(): void {
+		$cases = array(
+			'possible references by identity' => array( array( 'm1', 'p' ), array( 'm2', 'p' ), 'equal' ),
+			'a number that is no reference'   => array( array( 'm', 'p1' ), array( 'm', 'p2' ), 'equal' ),
+			'neither'                         => array( array( 'm1', 'p1' ), array( 'm2', 'p2' ), 'differs' ),
+			'one side without the second'     => array( array( 'm1', 'p' ), array( 'm2', null ), 'differs' ),
+			'both without the second'         => array( array( 'm1', null ), array( 'm2', null ), 'differs' ),
+		);
+		foreach ( $cases as $what => list( $a, $b, $category ) ) {
+			$s = self::page( '34', 'about', self::h( 'x' ), null, array( 'mapped' => self::h( $a[0] ), 'mapped_possible' => null === $a[1] ? null : self::h( $a[1] ) ) );
+			$l = self::page( '12', 'about', self::h( 'y' ), null, array( 'mapped' => self::h( $b[0] ), 'mapped_possible' => null === $b[1] ? null : self::h( $b[1] ) ) );
+			self::assertSame( $category, self::match( array( $s ), array( $l ) )['entries'][0]['category'], $what );
+		}
+		$s = self::page( '34', 'about', self::h( 'x' ), null, array( 'mapped' => null, 'mapped_possible' => null ) );
+		self::assertFalse( AB_MCP_Sync_Proposal::mapped_same( $s, $s ), 'No mapped form at all: never the same.' );
+	}
+
+	public function testAPathNotKnownWholeIsUncertainNeverAPair(): void {
+		$cases = array(
+			'parents not read'      => array(
+				array( self::page( '34', 'kontakt', self::h( 'x' ), '90' ) ),
+				array( self::page( '12', 'kontakt', self::h( 'y' ), '80' ) ),
+			),
+			'a parent without slug' => array(
+				array( self::page( '9', '', self::h( 'd' ) ), self::page( '34', 'kontakt', self::h( 'x' ), '9' ) ),
+				array( self::page( '19', '', self::h( 'd' ) ), self::page( '12', 'kontakt', self::h( 'x' ), '19' ) ),
+			),
+			'a parent twice'        => array(
+				array( self::page( '8', 'team', self::h( 't1' ) ), self::page( '9', 'team', self::h( 't2' ) ), self::page( '34', 'kontakt', self::h( 'x' ), '9' ) ),
+				array( self::page( '18', 'team', self::h( 't1' ) ), self::page( '12', 'kontakt', self::h( 'x' ), '18' ) ),
+			),
+		);
+		foreach ( $cases as $what => list( $s, $l ) ) {
+			$r       = self::match( $s, $l );
+			$kontakt = array_values( array_filter( self::of( $r, 'uncertain' ), static fn( $e ) => 'kontakt' === ( $e['candidates']['staging'][0]['identity']['post_name'] ?? null ) ) );
+			self::assertCount( 1, $kontakt, $what . ': "?" names no parent the two sites share.' );
+			self::assertArrayNotHasKey( '34', self::paired( $r ), $what );
+		}
+		$r = self::match( $cases['parents not read'][0], $cases['parents not read'][1] );
+		self::assertStringContainsString( 'path of its parents is not known whole', self::of( $r, 'uncertain' )[0]['reason'] );
+	}
+
 	public function testAReferenceWithoutATargetIsADifference(): void {
 		foreach ( array( 's', 'l', 'both' ) as $side ) {
 			$s = self::page( '34', 'about', self::h( 'x' ), null, 'l' !== $side ? array( 'mapped' => null ) : array() );
@@ -563,7 +605,7 @@ final class SyncProposalTest extends TestCase {
 		foreach ( array( 'target' => array( '', 'none' ), 'parent' => array( 'about', null ) ) as $what => list( $target, $parent ) ) {
 			$r = self::match( array( self::menu( '5', 'main' ), self::item( '51', 5, $target, 1, 'x', $parent ) ), array( self::menu( '15', 'main' ), self::item( '151', 15, $target, 1, 'x', $parent ) ) );
 			self::assertSame( 1, $r['counts']['uncertain'], $what );
-			self::assertStringContainsString( 'has no identity on its site', self::of( $r, 'uncertain' )[0]['reason'], $what );
+			self::assertStringContainsString( 'has no identity of its own on its site', self::of( $r, 'uncertain' )[0]['reason'], $what );
 		}
 	}
 
@@ -599,18 +641,21 @@ final class SyncProposalTest extends TestCase {
 	}
 
 	public function testAnAnswerShowsNoHashMappedFormOrSnapshot(): void {
-		$r = self::match( array( self::page( '34', 'about', self::h( 'x' ) ) ), array( self::page( '12', 'about', self::h( 'x' ) ) ), array( self::pair( 7, 'post', '13', '35', 'unclear' ) ) );
+		$possible = array( 'mapped_possible' => self::h( 'possible' ) );
+		$r        = self::match( array( self::page( '34', 'about', self::h( 'x' ), null, $possible ) ), array( self::page( '12', 'about', self::h( 'x' ), null, $possible ) ), array( self::pair( 7, 'post', '13', '35', 'unclear' ) ) );
 		foreach ( $r['entries'] as $entry ) {
 			$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $entry ) );
 			self::assertStringNotContainsString( self::h( 'x' ), $shown );
 			self::assertStringNotContainsString( '"snapshot"', $shown );
-			self::assertStringNotContainsString( '"mapped"', $shown );
+			self::assertStringNotContainsString( '"mapped', $shown );
+			self::assertStringNotContainsString( self::h( 'possible' ), $shown );
 		}
-		$amb = self::match( array( self::page( '1', 'd', self::h( 'p' ) ), self::page( '2', 'd', self::h( 'q' ) ) ), array( self::page( '3', 'd', self::h( 'r' ) ), self::page( '4', 'd', self::h( 's' ) ) ) )['entries'][0];
+		$amb = self::match( array( self::page( '1', 'd', self::h( 'p' ), null, $possible ), self::page( '2', 'd', self::h( 'q' ) ) ), array( self::page( '3', 'd', self::h( 'r' ) ), self::page( '4', 'd', self::h( 's' ) ) ) )['entries'][0];
 		self::assertSame( 'ambiguous', $amb['category'] );
 		$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $amb ) );
 		self::assertStringNotContainsString( self::h( 'p' ), $shown );
-		self::assertStringNotContainsString( '"mapped"', $shown );
+		self::assertStringNotContainsString( '"mapped', $shown );
+		self::assertStringNotContainsString( self::h( 'possible' ), $shown );
 	}
 
 	/* ------------------------------------------------------------- series */
@@ -732,6 +777,7 @@ final class SyncProposalTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( array( 'override' => array( 'post_status' => 'draft' ) ) + $pair, $s, $l )['target'], 'An override changes the target.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, array( 'mapped' => self::h( 'other' ) ) + $s, $l )['target'], 'Another mapped form.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, array( 'mapped' => null ) + $s, $l )['target'], 'A target without identity.' );
+		self::assertSame( self::h( 'l' ), AB_MCP_Sync_Proposal::canon_forms( $pair, array( 'mapped' => self::h( 'other' ), 'mapped_possible' => self::h( 'p' ) ) + $s, array( 'mapped_possible' => self::h( 'p' ) ) + $l )['target'], 'The same with its possible references by identity.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, null, $l )['staging'] );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, array( 'complete' => false ) + $l )['live'], 'Not read whole: no form.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, array( 'held' => 'credential_field' ) + $l )['live'], 'Held: no form.' );

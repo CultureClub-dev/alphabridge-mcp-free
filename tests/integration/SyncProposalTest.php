@@ -630,6 +630,31 @@ final class SyncProposalTest extends TestCase {
 	}
 
 
+	public function testANumberThatHitsAPostAndATermNamesNeither(): void {
+		global $wpdb;
+		self::pair();
+		self::shift_ids_on_a();
+		$image = array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'feld', 'post_name' => 'feld', 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE );
+		$a     = (int) wp_insert_post( wp_slash( $image ) );
+		update_post_meta( $a, '_wp_attached_file', '2026/10/feld.jpg' );
+		// A term of the same id here: the number names a post or a term.
+		self::assertSame( 1, $wpdb->insert( $wpdb->terms, array( 'term_id' => $a, 'name' => 'Doppelt', 'slug' => 'doppelt', 'term_group' => 0 ) ) );
+		self::assertSame( 1, $wpdb->insert( $wpdb->term_taxonomy, array( 'term_id' => $a, 'taxonomy' => 'post_tag', 'description' => '', 'parent' => 0, 'count' => 0 ) ) );
+		$page = (int) wp_insert_post( wp_slash( self::page( 'doppelt', 'A field.' ) ) );
+		update_post_meta( $page, 'feld', (string) $a );
+		$b = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => $image, 'as' => 'image' ),
+				array( 'op' => 'add_meta', 'post' => '$image', 'key' => '_wp_attached_file', 'value' => '2026/10/feld.jpg' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'doppelt', 'A field.' ), 'as' => 'page' ),
+				array( 'op' => 'add_meta', 'post' => '$page', 'key' => 'feld', 'value' => '{$image}' ),
+			)
+		);
+		self::assertNotSame( (string) $a, (string) $b['image'] );
+		$answer = self::proposal( self::staged() );
+		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $page )['category'], 'Its number names no one object here: compared as it is.' );
+	}
+
 	/* ----------------------------------------------------------- selection */
 
 	public function testAConfirmationTakesOnlyWhatTheProposalOffers(): void {
@@ -1021,6 +1046,27 @@ final class SyncProposalTest extends TestCase {
 		);
 	}
 
+	/** The entry of an object of A by kind and ref, also as a candidate of a choice. */
+	private static function entry_with_live( array $entries, string $kind, string $ref ): array {
+		foreach ( $entries as $entry ) {
+			$refs = array_merge( array( (string) ( $entry['live']['ref'] ?? '' ) ), array_map( 'strval', array_column( $entry['candidates']['live'] ?? array(), 'ref' ) ) );
+			if ( $kind === $entry['kind'] && in_array( $ref, $refs, true ) ) {
+				return $entry;
+			}
+		}
+		self::fail( "No entry for $kind $ref." );
+	}
+
+	/** The entry of an object of B by kind and ref. */
+	private static function entry_by_staging( array $entries, string $kind, string $ref ): array {
+		foreach ( $entries as $entry ) {
+			if ( $kind === $entry['kind'] && $ref === (string) ( $entry['staging']['ref'] ?? '' ) ) {
+				return $entry;
+			}
+		}
+		self::fail( "No entry for $kind $ref on staging." );
+	}
+
 	/** The entry of an object of A by kind and ref. */
 	private static function entry_by_live( array $entries, string $kind, string $ref ): array {
 		foreach ( $entries as $entry ) {
@@ -1055,26 +1101,200 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 'equal', self::entry_by_live( $answer['all'], 'post', $ids['a']['kind'] )['category'] );
 	}
 
-	public function testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike(): void {
+	public function testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike(): void {
 		self::pair();
 		$draft = (int) wp_insert_post( wp_slash( self::page( '', 'A draft.', array( 'post_status' => 'draft' ) ) ) );
 		$under = (int) wp_insert_post( wp_slash( self::page( 'unter-entwurf', 'Under a draft.', array( 'post_parent' => $draft ) ) ) );
 		$gone  = (int) wp_insert_post( wp_slash( self::page( 'ohne-bild', 'An image that is gone.' ) ) );
 		update_post_meta( $gone, '_thumbnail_id', '987654' );
 		self::assertNull( get_post( 987654 ) );
+		$menu = (int) wp_create_nav_menu( 'Haupt' );
+		$item = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-object-id' => $draft, 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) );
 		self::b(
 			array(
 				array( 'op' => 'insert_post', 'args' => self::page( '', 'A draft.', array( 'post_status' => 'draft' ) ), 'as' => 'draft' ),
 				array( 'op' => 'insert_post', 'args' => self::page( 'unter-entwurf', 'Under a draft.', array( 'post_parent' => '$draft' ) ), 'as' => 'under' ),
 				array( 'op' => 'insert_post', 'args' => self::page( 'ohne-bild', 'An image that is gone.' ), 'as' => 'gone' ),
 				array( 'op' => 'add_meta', 'post' => '$gone', 'key' => '_thumbnail_id', 'value' => '987654' ),
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-object-id' => '$draft', 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'item' ),
 			)
 		);
 		$answer = self::proposal( self::staged() );
-		$entry  = self::entry_by_live( $answer['all'], 'post', (string) $under );
-		self::assertSame( 'unter-entwurf', $entry['staging']['identity']['post_name'] ?? null, 'Paired by its slug and the path of its parent.' );
-		self::assertSame( 'differs', $entry['category'], 'A parent without a slug names nothing: no equal.' );
+		$entry  = self::entry_with_live( $answer['all'], 'post', (string) $under );
+		self::assertSame( 'uncertain', $entry['category'], 'A parent without a slug: the path is not known whole (Codex round 2, A-2).' );
+		self::assertStringContainsString( 'path of its parents is not known whole', $entry['reason'] );
 		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $gone )['category'], 'The same id of an object that is on neither site names nothing: no equal.' );
+		self::assertSame( 'uncertain', self::entry_with_live( $answer['all'], 'menu_item', (string) $item )['category'], 'A menu item showing a page without a slug.' );
+	}
+
+	/* ------------------------------------- one target per identity (A-1) */
+
+	public function testTwoHeadingsOfOneAddressAreTwoItemsAndAChildMovedUnderTheOtherIsNoEqual(): void {
+		self::pair();
+		$heading = static fn( string $title, int $position, int $parent = 0 ): array => array( 'menu-item-title' => $title, 'menu-item-url' => '#', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => $position, 'menu-item-parent-id' => $parent );
+		$menu    = (int) wp_create_nav_menu( 'Haupt' );
+		$privat  = (int) wp_update_nav_menu_item( $menu, 0, $heading( 'Privat', 1 ) );
+		$firma   = (int) wp_update_nav_menu_item( $menu, 0, $heading( 'Firma', 2 ) );
+		$konto   = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-title' => 'Konto', 'menu-item-url' => 'https://example.org/konto', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 3, 'menu-item-parent-id' => $firma ) );
+		// A second menu: one heading twice, the same address and label.
+		$zweit   = (int) wp_create_nav_menu( 'Zweit' );
+		$twin_1  = (int) wp_update_nav_menu_item( $zweit, 0, $heading( 'Privat', 1 ) );
+		$twin_2  = (int) wp_update_nav_menu_item( $zweit, 0, $heading( 'Privat', 2 ) );
+		$unter   = (int) wp_update_nav_menu_item( $zweit, 0, array( 'menu-item-title' => 'Unter', 'menu-item-url' => 'https://example.org/unter', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 3, 'menu-item-parent-id' => $twin_2 ) );
+		$custom  = static fn( string $title, int $position, string $url = '#', string $parent = '0' ): array => array( 'menu-item-title' => $title, 'menu-item-url' => $url, 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => $position, 'menu-item-parent-id' => $parent );
+		$b       = self::b(
+			array(
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $custom( 'Privat', 1 ), 'as' => 'privat' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $custom( 'Firma', 2 ), 'as' => 'firma' ),
+				// Under Privat on staging, under Firma here, at the same place.
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $custom( 'Konto', 3, 'https://example.org/konto', '$privat' ), 'as' => 'konto' ),
+				array( 'op' => 'nav_menu', 'name' => 'Zweit', 'as' => 'zweit' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$zweit', 'args' => $custom( 'Privat', 1 ), 'as' => 'twin_1' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$zweit', 'args' => $custom( 'Privat', 2 ), 'as' => 'twin_2' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$zweit', 'args' => $custom( 'Unter', 3, 'https://example.org/unter', '$twin_2' ), 'as' => 'unter' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'privat' => $privat, 'firma' => $firma ) as $name => $live ) {
+			$entry = self::entry_by_live( $answer['all'], 'menu_item', (string) $live );
+			self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $name . ': by its address and its label.' );
+			self::assertSame( 'equal', $entry['category'], $name );
+		}
+		$moved = self::entry_by_live( $answer['all'], 'menu_item', (string) $konto );
+		self::assertSame( 'live_only', $moved['category'], 'Under another heading: another item, never equal.' );
+		self::assertSame( 'staging_only', self::entry_by_staging( $answer['all'], 'menu_item', (string) $b['konto'] )['category'] );
+		// One heading twice: each paired only by its whole form, unique on both sides (its place).
+		foreach ( array( 'twin_1' => $twin_1, 'twin_2' => $twin_2 ) as $name => $live ) {
+			self::assertSame( (string) $b[ $name ], self::entry_by_live( $answer['all'], 'menu_item', (string) $live )['staging']['ref'], $name );
+		}
+		$child = self::entry_with_live( $answer['all'], 'menu_item', (string) $unter );
+		self::assertSame( 'uncertain', $child['category'], 'Under a heading that is there twice: its parent names nothing.' );
+		self::assertStringContainsString( 'two links of one address and label', $child['reason'] );
+	}
+
+	public function testATermWhoseSlugIsThereTwiceNamesNothing(): void {
+		global $wpdb;
+		self::pair();
+		$news = (int) wp_insert_term( 'News', 'category', array( 'slug' => 'news' ) )['term_id'];
+		// The core gives a slug once per taxonomy; a table written otherwise has it twice.
+		$wpdb->insert( $wpdb->terms, array( 'name' => 'News too', 'slug' => 'news', 'term_group' => 0 ) );
+		$twin = (int) $wpdb->insert_id;
+		$wpdb->insert( $wpdb->term_taxonomy, array( 'term_id' => $twin, 'taxonomy' => 'category', 'description' => '', 'parent' => 0, 'count' => 0 ) );
+		clean_term_cache( array( $news, $twin ), 'category' );
+		$post = (int) wp_insert_post( wp_slash( self::page( 'meldung', 'News item.', array( 'post_type' => 'post' ) ) ) );
+		wp_set_object_terms( $post, array( $news ), 'category' );
+		self::b(
+			array(
+				array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'args' => array( 'slug' => 'news' ), 'as' => 'news' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'meldung', 'News item.', array( 'post_type' => 'post' ) ), 'as' => 'meldung' ),
+				array( 'op' => 'set_terms', 'post' => '$meldung', 'terms' => array( '$news' ), 'taxonomy' => 'category' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $post )['category'], 'Its category names nothing here: no equal.' );
+		self::assertSame( 'live_only', self::entry_by_live( $answer['all'], 'term', (string) $twin )['category'], 'The slug twice here: the other one is paired by its whole form only.' );
+		\AB_MCP_Sync_Identity::reset();
+		self::assertNull( \AB_MCP_Sync_Identity::term( $news, 'category' ) );
+		self::assertNull( \AB_MCP_Sync_Identity::term( $twin ) );
+	}
+
+	public function testAnIdentityAnotherObjectOfTheSiteHasNamesNone(): void {
+		global $wpdb;
+		$ctx   = \AB_MCP_Sync_Canon::context( array( home_url(), site_url() ) );
+		$named = static function ( array $args, string $name ) use ( $wpdb ): int {
+			$id = (int) wp_insert_post( wp_slash( $args ) );
+			// The slug as a table written otherwise holds it.
+			$wpdb->update( $wpdb->posts, array( 'post_name' => $name ), array( 'ID' => $id ) );
+			clean_post_cache( $id );
+			return $id;
+		};
+		$one   = $named( self::page( 'kontakt', 'K' ), 'kontakt' );
+		$two   = $named( self::page( 'kontakt-zwei', 'K2', array( 'post_status' => 'draft' ) ), 'kontakt' );
+		$alone = $named( self::page( 'team', 'T' ), 'team' );
+		$index = array();
+		foreach ( array( 'theme-a', 'theme-b' ) as $theme ) {
+			$index[ $theme ] = $named( array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index' ), 'index' );
+			wp_set_object_terms( $index[ $theme ], array( $theme ), 'wp_theme' );
+		}
+		$files = array();
+		foreach ( array( 'f1' => '2026/10/same.jpg', 'f2' => '2026/10/same.jpg', 'f3' => '2026/10/other.jpg' ) as $key => $file ) {
+			$files[ $key ] = (int) wp_insert_post( wp_slash( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => $key, 'post_name' => $key, 'post_mime_type' => 'image/jpeg' ) ) );
+			update_post_meta( $files[ $key ], '_wp_attached_file', $file );
+		}
+		\AB_MCP_Sync_Identity::reset();
+		self::assertNull( \AB_MCP_Sync_Identity::post( $one, $ctx ), 'A slug twice under one parent.' );
+		self::assertNull( \AB_MCP_Sync_Identity::post( $two, $ctx ) );
+		self::assertSame( array( 'post', 'page', '', array(), 'team' ), \AB_MCP_Sync_Identity::post( $alone, $ctx ) );
+		self::assertSame( array( 'post', 'wp_template', 'theme-a', array(), 'index' ), \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'The template of another theme is another identity.' );
+		self::assertNull( \AB_MCP_Sync_Identity::post( $files['f1'], $ctx ), 'One file twice.' );
+		self::assertSame( array( 'attachment', '2026/10/other.jpg' ), \AB_MCP_Sync_Identity::post( $files['f3'], $ctx ) );
+		$again = $named( array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index' ), 'index' );
+		wp_set_object_terms( $again, array( 'theme-a' ), 'wp_theme' );
+		\AB_MCP_Sync_Identity::reset();
+		self::assertNull( \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'One template of one theme twice.' );
+		self::assertNotNull( \AB_MCP_Sync_Identity::post( $index['theme-b'], $ctx ) );
+	}
+
+	/* --------------------------------------- possible references (B-1) */
+
+	public function testImageIdsOfPluginsOnOtherIdsAreEqualAndAnotherImageDiffers(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		$files   = array( 'bild' => '2026/10/bild.jpg', 'g1' => '2026/10/g1.jpg', 'g2' => '2026/10/g2.jpg', 'anderes' => '2026/10/anderes.jpg' );
+		$image   = static fn( string $key ): array => array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => $key, 'post_name' => $key, 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE );
+		$product = array( 'post_type' => 'product', 'post_status' => 'publish', 'post_title' => 'Shirt', 'post_name' => 'shirt', 'post_content' => 'Cotton.', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE );
+		$builder = static fn( string $site, string $id ): string => (string) wp_json_encode( array( array( 'id' => '1a2b3c', 'elType' => 'widget', 'widgetType' => 'image', 'settings' => array( 'image' => array( 'url' => AB_MCP_IT_Sites::url( $site, '/wp-content/uploads/2026/10/bild.jpg' ), 'id' => (int) $id ) ) ) ) );
+		$a       = array();
+		foreach ( $files as $key => $file ) {
+			$a[ $key ] = (int) wp_insert_post( wp_slash( $image( $key ) ) );
+			update_post_meta( $a[ $key ], '_wp_attached_file', $file );
+		}
+		$a['acf'] = (int) wp_insert_post( wp_slash( self::page( 'acf-seite', 'With a field.' ) ) );
+		update_post_meta( $a['acf'], 'hero_bild', (string) $a['bild'] );
+		update_post_meta( $a['acf'], '_hero_bild', 'field_64ab12cd34ef6' );
+		// A gallery field of ACF (serialized ids) and JSON of no producer of the core.
+		update_post_meta( $a['acf'], 'galerie', array( (string) $a['g1'], (string) $a['g2'] ) );
+		update_post_meta( $a['acf'], 'layout', '{"image": ' . $a['bild'] . '}' );
+		$a['anders'] = (int) wp_insert_post( wp_slash( self::page( 'acf-anders', 'Another image.' ) ) );
+		update_post_meta( $a['anders'], 'hero_bild', (string) $a['bild'] );
+		update_post_meta( $a['anders'], '_hero_bild', 'field_64ab12cd34ef6' );
+		$a['elementor'] = (int) wp_insert_post( wp_slash( self::page( 'elementor-seite', '' ) ) );
+		update_post_meta( $a['elementor'], '_elementor_data', wp_slash( $builder( 'a', (string) $a['bild'] ) ) );
+		update_post_meta( $a['elementor'], '_elementor_edit_mode', 'builder' );
+		$a['shirt'] = (int) wp_insert_post( wp_slash( $product ) );
+		update_post_meta( $a['shirt'], '_product_image_gallery', $a['g1'] . ',' . $a['g2'] );
+		update_post_meta( $a['shirt'], '_price', '19.90' );
+		$steps = array();
+		foreach ( $files as $key => $file ) {
+			$steps[] = array( 'op' => 'insert_post', 'args' => $image( $key ), 'as' => $key );
+			$steps[] = array( 'op' => 'add_meta', 'post' => '$' . $key, 'key' => '_wp_attached_file', 'value' => $file );
+		}
+		$steps[] = array( 'op' => 'insert_post', 'args' => self::page( 'acf-seite', 'With a field.' ), 'as' => 'acf' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$acf', 'key' => 'hero_bild', 'value' => '{$bild}' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$acf', 'key' => '_hero_bild', 'value' => 'field_64ab12cd34ef6' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$acf', 'key' => 'galerie', 'value' => array( '{$g1}', '{$g2}' ) );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$acf', 'key' => 'layout', 'value' => '{"image": {$bild}}' );
+		$steps[] = array( 'op' => 'insert_post', 'args' => self::page( 'acf-anders', 'Another image.' ), 'as' => 'anders' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$anders', 'key' => 'hero_bild', 'value' => '{$anderes}' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$anders', 'key' => '_hero_bild', 'value' => 'field_64ab12cd34ef6' );
+		$steps[] = array( 'op' => 'insert_post', 'args' => self::page( 'elementor-seite', '' ), 'as' => 'elementor' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$elementor', 'key' => '_elementor_edit_mode', 'value' => 'builder' );
+		$steps[] = array( 'op' => 'insert_post', 'args' => $product, 'as' => 'shirt' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$shirt', 'key' => '_product_image_gallery', 'value' => '{$g1},{$g2}' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$shirt', 'key' => '_price', 'value' => '19.90' );
+		$b       = self::b( $steps );
+		// The JSON of the builder with the id of the image on B.
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['elementor'], 'key' => '_elementor_data', 'value' => $builder( 'b', (string) $b['bild'] ) ) ) );
+		self::assertNotSame( (string) $a['bild'], (string) $b['bild'], 'Other ids of the images on the two sites.' );
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'acf' => 'An image and a gallery field of ACF, an image in JSON', 'elementor' => 'settings.image.id of Elementor', 'shirt' => 'The gallery of a product' ) as $name => $what ) {
+			$entry = self::entry_by_live( $answer['all'], 'post', (string) $a[ $name ] );
+			self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $what );
+			self::assertSame( 'equal', $entry['category'], $what . ': the same image on other ids.' );
+		}
+		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $a['anders'] )['category'], 'Another image: other content.' );
 	}
 
 	public function testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget(): void {
@@ -1105,13 +1325,14 @@ final class SyncProposalTest extends TestCase {
 		$menu  = (int) wp_create_nav_menu( 'Haupt' );
 		$items = array();
 		foreach ( array( 'own' => AB_MCP_IT_Sites::url( 'a', '/kontakt/' ), 'external' => 'https://example.org/partner' ) as $name => $url ) {
-			$items[ $name ] = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-title' => ucfirst( $name ), 'menu-item-url' => $url, 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 'own' === $name ? 1 : 2 ) );
+			// One label for both: the address tells them apart.
+			$items[ $name ] = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-title' => 'Link', 'menu-item-url' => $url, 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 'own' === $name ? 1 : 2 ) );
 		}
 		$b      = self::b(
 			array(
 				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
-				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'External', 'menu-item-url' => 'https://example.org/partner', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'external' ),
-				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Own', 'menu-item-url' => AB_MCP_IT_Sites::url( 'b', '/kontakt/' ), 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 2 ), 'as' => 'own' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Link', 'menu-item-url' => 'https://example.org/partner', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'external' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Link', 'menu-item-url' => AB_MCP_IT_Sites::url( 'b', '/kontakt/' ), 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 2 ), 'as' => 'own' ),
 			)
 		);
 		$answer = self::proposal( self::staged() );

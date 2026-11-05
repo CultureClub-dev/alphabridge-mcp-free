@@ -1005,9 +1005,9 @@ LINE = 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent'
 e('paket/line-held-name', 'line(): an object whose name is a credential: identity and reason only', EX, LH, LH.replace("'b9' === $object['status'] || ", ''), 'package', HELD % 'the name of a credential')
 e('paket/line-held-field', 'line(): an object with a field of a credential: identity and reason only', EX, LH, LH.replace(" || array() !== $credentials['mixed']", ''), 'package', HELD % 'a field of a credential in it')
 e('paket/line-possible', 'line(): a possible reference by its place, never its value', EX,
-  "'possible' => self::fields( $object['possible'], array( 'at' ) ),", "'possible' => $object['possible'],", 'package', LINE)
+  "'possible'        => self::fields( $object['possible'], array( 'at' ) ),", "'possible'        => $object['possible'],", 'package', LINE)
 e('paket/line-refs', 'line(): references by id and place only', EX,
-  "'refs'     => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),", "'refs'     => $object['refs'],", 'package', LINE)
+  "'refs'            => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),", "'refs'            => $object['refs'],", 'package', LINE)
 e('paket/line-locks', 'line(): locks by key, stage, reason and place only', EX,
   "'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),", "'locks'    => $object['locks'],", 'package', LINE)
 e('paket/line-reason', 'line(): no free text of the object, the reasons are those of its locks', EX,

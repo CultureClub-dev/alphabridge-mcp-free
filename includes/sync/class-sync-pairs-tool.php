@@ -260,7 +260,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return self::selection( sprintf( 'A candidate of entry %d is not compared (it has no hash), so it is not paired; take it over by hand.', $n ) );
 			}
 			// The same once mapped (decision 10): active; else unclear.
-			$equal = $s['complete'] && $l['complete'] && is_string( $s['mapped'] ) && is_string( $l['mapped'] ) && hash_equals( $s['mapped'], $l['mapped'] );
+			$equal = $s['complete'] && $l['complete'] && AB_MCP_Sync_Proposal::mapped_same( $s, $l );
 			$ops[] = self::create_op( $n, $entry['kind'], $s, $l, $equal ? 'active' : 'unclear' );
 		}
 		if ( count( $ops ) > self::MAX ) {

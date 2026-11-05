@@ -90,6 +90,9 @@ final class SyncRowsTest extends TestCase {
 			'options'      => AB_MCP_Sync_Rows::options( 0, 10 ),
 			'user_login'   => AB_MCP_Sync_Rows::user_login( 1 ),
 			'taxonomies'   => AB_MCP_Sync_Rows::term_taxonomies( 3 ),
+			'posts_named'  => AB_MCP_Sync_Rows::posts_named( 'page', 'kontakt', 0 ),
+			'attachments'  => AB_MCP_Sync_Rows::attachments_of( '2026/10/bild.jpg' ),
+			'by_slug'      => AB_MCP_Sync_Rows::terms_by_slug( 'category', 'news' ),
 		);
 	}
 
@@ -115,7 +118,7 @@ final class SyncRowsTest extends TestCase {
 		foreach ( array( 'post', 'term', 'user_login' ) as $one ) {
 			self::assertFalse( $all[ $one ], $one );
 		}
-		foreach ( array( 'post_ids', 'meta', 'object_terms', 'term_objects', 'terms', 'options', 'taxonomies' ) as $many ) {
+		foreach ( array( 'post_ids', 'meta', 'object_terms', 'term_objects', 'terms', 'options', 'taxonomies', 'posts_named', 'attachments', 'by_slug' ) as $many ) {
 			self::assertSame( array(), $all[ $many ], $many );
 		}
 		self::assertSame( array(), AB_MCP_Sync_Rows::post_ids( array(), 0, 10 ), 'No type asked: no query.' );

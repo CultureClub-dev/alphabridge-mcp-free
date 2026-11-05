@@ -139,9 +139,8 @@ CU = "\t\t\treturn is_array( $line ) && isset( $line['hash'] ) && is_string( $li
 CANON = 'testTheTargetOfACanonChangeIsTheLiveHashOnlyWhereTheMappedFormsAreTheSame'
 e('canon-form-complete', 'canon_forms(): a form not read whole is none', P, CU, CU.replace(" && ! empty( $line['complete'] )", ''), 'prop', CANON)
 e('canon-form-held', 'canon_forms(): a held line has no form', P, CU, CU.replace(" && ! isset( $line['held'] )", ''), 'prop', CANON)
-CS = "\t\t$same   = null !== $s && null !== $l && isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && hash_equals( $staging['mapped'], (string) $live['mapped'] );"
+CS = "\t\t$same   = null !== $s && null !== $l && self::mapped_same( $staging, $live );"
 e('canon-same-mapped', 'canon_forms(): the target only where the mapped forms are the same', P, CS, "\t\t$same   = null !== $s && null !== $l;", 'prop', CANON)
-e('canon-same-unresolved', 'canon_forms(): not where a side has no mapped form', P, CS, CS.replace("isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && ", ''), 'prop', CANON)
 e('canon-target-override', 'canon_forms(): an override changes the target', P,
   "\t\t\t'target'  => null === $pair['override'] && $same ? $l : null,", "\t\t\t'target'  => $same ? $l : null,", 'prop', CANON)
 
@@ -183,11 +182,22 @@ e('live-alone', 'live_alone(): only live only where the staging side is complete
 NH = "\t\tif ( null === $s['hash'] || null === $l['hash'] ) {"
 e('pair-no-hash-staging', 'pair_entry(): no hash on the staging side, not compared', P, NH, NH.replace("null === $s['hash'] || ", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
 e('pair-no-hash-live', 'pair_entry(): no hash on this site, not compared', P, NH, NH.replace(" || null === $l['hash']", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
-SA = "\t\treturn $s['complete'] && $l['complete'] && null !== $s['mapped'] && null !== $l['mapped'] && hash_equals( $s['mapped'], $l['mapped'] );"
+SA = "\t\treturn $s['complete'] && $l['complete'] && self::mapped_same( $s, $l );"
 e('same-staging-whole', 'same(): only read whole on the staging site', P, SA, SA.replace("$s['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
 e('same-live-whole', 'same(): only read whole on this site', P, SA, SA.replace("$l['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
 e('same-mapped', 'same(): the same mapped form, not the same hash', P, SA, "\t\treturn $s['complete'] && $l['complete'] && hash_equals( (string) $s['hash'], (string) $l['hash'] );", 'prop', 'testOtherIdsOfTheSameTargetsAreEqualOnceMapped')
-e('same-unresolved', 'same(): a side naming a target without identity is no equal, also where both sides do alike', P, SA, SA.replace("null !== $s['mapped'] && null !== $l['mapped'] && ", '').replace("hash_equals( $s['mapped'], $l['mapped'] )", "hash_equals( (string) $s['mapped'], (string) $l['mapped'] )"), 'prop', 'testAReferenceWithoutATargetIsADifference')
+MS = "\t\t\tif ( isset( $s[ $key ], $l[ $key ] ) && is_string( $s[ $key ] ) && is_string( $l[ $key ] ) && hash_equals( $s[ $key ], $l[ $key ] ) ) {"
+e('same-unresolved', 'mapped_same(): a side without a mapped form is no equal, also where both sides have none', P, MS, "\t\t\tif ( hash_equals( (string) ( $s[ $key ] ?? '' ), (string) ( $l[ $key ] ?? '' ) ) ) {", 'prop', 'testAReferenceWithoutATargetIsADifference')
+MK = "\t\tforeach ( array( 'mapped', 'mapped_possible' ) as $key ) {"
+e('same-possible', 'mapped_same(): the form with the possible references by identity suffices (Codex round 2, B-1)', P, MK, "\t\tforeach ( array( 'mapped' ) as $key ) {", 'prop', 'testEitherMappedFormMakesTheSame')
+e('same-plain', 'mapped_same(): the form with the typed references alone suffices (a number that is no reference)', P, MK, "\t\tforeach ( array( 'mapped_possible' ) as $key ) {", 'prop', 'testEitherMappedFormMakesTheSame')
+e('items-possible', 'items(): the second mapped form of a line', P,
+  "\t\t\t\t'mapped_possible' => isset( $line['mapped_possible'] ) && is_string( $line['mapped_possible'] ) ? $line['mapped_possible'] : null,", "\t\t\t\t'mapped_possible' => null,", 'prop', 'testEitherMappedFormMakesTheSame')
+e('path-doubt', 'doubt(): a path of parents not known whole is uncertain (Codex round 2, A-2)', P,
+  "\t\tif ( 'post' === $kind && in_array( '?', $names, true ) ) {", "\t\tif ( false ) {", 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
+PQ = "\t\t\tif ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {"
+e('path-no-slug', 'path(): a parent without a slug is "?"', P, PQ, PQ.replace(" || '' === (string) $posts[ $parent ]['name']", ''), 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
+e('path-twin', 'path(): a parent whose type, slug and parent another post of its side has is "?"', P, PQ, PQ.replace(" || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1", ''), 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
 RD = "\t\t$ready = null !== $s && null !== $l && null === $s['held'] && null === $l['held'] && null !== $s['hash'] && null !== $l['hash'];"
 e('realign-staging-held', 'realign_entry(): not with a held staging object', P, RD, RD.replace(" && null === $s['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('realign-live-held', 'realign_entry(): not with a held object of this site', P, RD, RD.replace(" && null === $l['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
@@ -217,10 +227,12 @@ e('side-held', 'side(): a held object by the hash of its ref only', P,
   "\t\tif ( null !== $item['held'] ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('side-path', 'side(): the path of parents shown with a post', P,
   "\t\tif ( 'post' === $item['kind'] ) {\n\t\t\t$out['path'] = $item['names'];", "\t\tif ( false ) {\n\t\t\t$out['path'] = $item['names'];", 'prop', 'testTheSameSlugOnAnotherPathIsUncertainNeverAPair')
-e('shown-hash', 'shown(): no hash or mapped form of a side', P,
-  "\t\t\t\tunset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
-e('shown-candidates', 'shown(): no hash or mapped form of a candidate', P,
-  "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+SH_S = "\t\t\t\tunset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'] );"
+SH_C = "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'] );"
+e('shown-hash', 'shown(): no hash or mapped form of a side', P, SH_S, "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-possible', 'shown(): no second mapped form of a side', P, SH_S, SH_S.replace(", $entry[ $side ]['mapped_possible']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-candidates', 'shown(): no hash or mapped form of a candidate', P, SH_C, "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-candidates-possible', 'shown(): no second mapped form of a candidate', P, SH_C, SH_C.replace(", $entry['candidates'][ $side ][ $i ]['mapped_possible']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('shown-snapshot', 'shown(): no snapshot of a pair', P,
   "\t\t\tunset( $entry['pair']['snapshot'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('page-shown', 'page(): the entries as shown', P,
@@ -239,25 +251,56 @@ MAPPED = 'testTheSameObjectsWithOtherIdsAreEqualOnceMapped'
 e('entry-mapped', 'entry(): the mapped form of an object', INV,
   "\t\t$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;",
   "\t\t$result['mapped'] = isset( $result['hash'] ) ? $result['hash'] : null;", 'it', MAPPED)
+B1 = 'testImageIdsOfPluginsOnOtherIdsAreEqualAndAnotherImageDiffers'
+UNIQ = 'testAnIdentityAnotherObjectOfTheSiteHasNamesNone'
+HEAD = 'testTwoHeadingsOfOneAddressAreTwoItemsAndAChildMovedUnderTheOtherIsNoEqual'
 e('export-mapped', 'line(): the mapped form goes into the package', EXF,
-  "\t\t\t'mapped'   => isset( $object['mapped'] ) ? $object['mapped'] : null,", "\t\t\t'mapped'   => null,", 'it', MAPPED)
-e('identity-attachment', 'post(): an attachment by its file', ID,
-  "\t\t\t\t$out   = is_array( $files ) && 1 === count( $files ) && '' !== $files[0] ? array( 'attachment', $files[0] ) : null;",
-  "\t\t\t\t$out   = null;", 'it', MAPPED)
+  "\t\t\t'mapped'          => isset( $object['mapped'] ) ? $object['mapped'] : null,", "\t\t\t'mapped'          => null,", 'it', MAPPED)
+e('export-possible', 'line(): the second mapped form goes into the package', EXF,
+  "\t\t\t'mapped_possible' => isset( $object['mapped_possible'] ) ? $object['mapped_possible'] : null,", "\t\t\t'mapped_possible' => null,", 'it', B1)
+e('entry-possible', 'entry(): the second mapped form of an object', INV,
+  "\t\t$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;",
+  "\t\t$result['mapped_possible'] = null;", 'it', B1)
+IA = "\t\t\t\t$out   = null !== $file && array( $id ) === AB_MCP_Sync_Rows::attachments_of( $file ) ? array( 'attachment', $file ) : null;"
+e('identity-attachment', 'post(): an attachment by its file', ID, IA, "\t\t\t\t$out   = null;", 'it', MAPPED)
+e('identity-unique-attachment', 'post(): a file of two attachments names neither (Codex round 2, A-1)', ID, IA, "\t\t\t\t$out   = null !== $file ? array( 'attachment', $file ) : null;", 'it', UNIQ)
+e('identity-unique-post', 'post(): a slug of two posts of one type under one parent names neither', ID,
+  "\t\t\t\tif ( null !== $out && ! self::alone( $id, (string) $row['post_type'], (string) $row['post_name'], $parent, $theme ) ) {", "\t\t\t\tif ( false ) {", 'it', UNIQ)
+e('identity-unique-theme', 'alone(): a template of another theme is another identity', ID,
+  "\t\t\tif ( $other !== $id && ( '' === $theme || self::theme( $other ) === $theme ) ) {", "\t\t\tif ( $other !== $id ) {", 'it', UNIQ)
+e('identity-unique-term', 'term(): a slug of two terms of one taxonomy names neither', ID,
+  "\t\tif ( is_array( $row ) && '' !== (string) $row['slug'] && array( $id ) === AB_MCP_Sync_Rows::terms_by_slug( (string) $row['taxonomy'], (string) $row['slug'] ) ) {",
+  "\t\tif ( is_array( $row ) && '' !== (string) $row['slug'] ) {", 'it', 'testATermWhoseSlugIsThereTwiceNamesNothing')
+e('identity-unique-item', 'unique_item(): an item whose identity another of its menu has names nothing', ID,
+  "\t\t\t\tif ( null !== $theirs && AB_MCP_Sync_Canon::encode( $theirs ) === $mine ) {", "\t\t\t\tif ( false ) {", 'it', HEAD)
+PH = "\t\tif ( null !== $there && is_array( $terms ) && $there !== ( array() !== $terms ) ) {"
+e('possible-hit', 'hit(): a whole number names the object it hits by its identity', ID, PH, "\t\tif ( false ) {", 'it', B1)
+e('possible-both', 'hit(): a number that hits a post and a term names neither', ID, PH, "\t\tif ( null !== $there && is_array( $terms ) && ( $there || array() !== $terms ) ) {", 'it', 'testANumberThatHitsAPostAndATermNamesNeither')
+e('possible-json', 'stored(): stored JSON by the paths of its tree', ID,
+  "\t\t\tif ( 1 === count( $parts ) && is_array( $parts[0] ) && isset( $parts[0]['~json'] ) && array_key_exists( 'v', $parts[0] ) ) {", "\t\t\tif ( false ) {", 'it', B1)
+e('possible-php', 'stored(): a serialized value key by key', ID,
+  "\t\t\t\treturn array( '~php' => self::tree( $value['~php'], $at, $set, $ctx, $hit, $layers ) );", "\t\t\t\treturn $value;", 'it', B1)
+e('possible-object', 'tree(): an object of JSON member by member', ID,
+  "\t\t\treturn array( '~o' => self::tree( $value['~o'], $at, $set, $ctx, $hit, $layers ) );", "\t\t\treturn $value;", 'it', B1)
+e('possible-inside', 'inside(): a text that holds JSON of no producer by its value', ID,
+  "\t\t$out   = self::noted( $inner, $at, $set, $ctx, $found, $layers + 1, 0 );", "\t\t$out   = $inner;", 'it', B1)
+e('possible-flat', 'flat(): a part that is text again by its parts', ID,
+  "\t\t\t} elseif ( is_array( $part ) && array( '~s' ) === array_keys( $part ) && is_array( $part['~s'] ) ) {", "\t\t\t} elseif ( false ) {", 'it', B1)
 e('identity-parent', 'post(): a post with the identity of its parents', ID,
   "\t\t\t\t$up     = 0 === $parent ? array() : self::post( $parent, $ctx, $depth + 1 );", "\t\t\t\t$up     = 0 === $parent ? array() : null;", 'it', MAPPED)
 e('identity-slug', 'post(): a post without a slug has no identity', ID,
-  "\t\t\t} elseif ( '' !== (string) $row['post_name'] ) {", "\t\t\t} elseif ( true ) {", 'it', 'testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike')
+  "\t\t\t} elseif ( '' !== (string) $row['post_name'] ) {", "\t\t\t} elseif ( true ) {", 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
 e('identity-term', 'term(): a term by taxonomy and slug', ID,
   "\t\t\t$out = array( 'term', (string) $row['taxonomy'], (string) $row['slug'] );", "\t\t\t$out = array( 'term', (string) $row['term_id'] );", 'it', MAPPED)
 e('identity-unresolved', 'map(): a reference without an identity gives no mapped form', ID,
-  "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = false;", "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = true;", 'it', 'testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike')
+  "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = false;", "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = true;", 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
 e('identity-ref', 'map(): a reference names its target by identity', ID,
   "\t\t\tunset( $value['id'] );\n\t\t\treturn array( 'as' => $as ) + $value;", "\t\t\treturn array( 'as' => $as ) + $value;", 'it', MAPPED)
 e('identity-menu-target', 'item(): a menu item with the identity of its target', DK,
   "\t\t\t'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),", "\t\t\t'target'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
-e('identity-custom-url', 'target(): a custom link by the neutral form of its address', ID,
-  "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", "\t\t\t\treturn array( 'custom' );", 'it', 'testACustomLinkIsNamedByItsAddress')
+CL = "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $label );"
+e('identity-custom-url', 'target(): a custom link by the neutral form of its address', ID, CL, "\t\t\t\treturn array( 'custom', (string) $label );", 'it', 'testACustomLinkIsNamedByItsAddress')
+e('identity-custom-label', 'target(): a custom link by its label as well (Codex round 2, A-1)', ID, CL, "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", 'it', HEAD)
 
 # ------------------------------------------------------------------ tool
 e('plan-action', 'plan(): confirm and discard only', T,
@@ -313,7 +356,7 @@ e('sel-by-choice', 'plan_confirm(): an ambiguous or uncertain entry needs a choi
   "\t\t\tif ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", "\t\t\tif ( false ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", 'it', SEL)
 e('sel-choice-by-choice', 'plan_confirm(): a choice for an ambiguous or uncertain entry only', T,
   "\t\t\tif ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
-CE = "\t\t\t$equal = $s['complete'] && $l['complete'] && is_string( $s['mapped'] ) && is_string( $l['mapped'] ) && hash_equals( $s['mapped'], $l['mapped'] );"
+CE = "\t\t\t$equal = $s['complete'] && $l['complete'] && AB_MCP_Sync_Proposal::mapped_same( $s, $l );"
 e('choice-equal', 'plan_confirm(): a chosen pair of the same mapped form is active', T, CE, "\t\t\t$equal = false;", 'it', SEL)
 e('choice-unequal', 'plan_confirm(): a chosen pair of other content is unclear', T, CE, "\t\t\t$equal = true;", 'it', SEL)
 e('live-bound', 'plan_confirm(): the state binds the objects of this site read fresh', T,

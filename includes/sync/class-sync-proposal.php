@@ -35,13 +35,16 @@
  * and identity (identity_key(); a menu item by its menus, the identity of
  * its target and of its parent item, never by its position), then by the
  * path of parents (posts). Equality is that of the mapped forms (decision
- * 10: every reference names its target by identity, AB_MCP_Sync_Identity),
- * so the same objects with other ids on the two sites are equal. No pair by
- * exclusion: one object a side of the same identity and path is a pair; more
- * on a path are paired only where an equal mapped form is unique on both
- * sides, the rest is ambiguous; the same identity left on another path, a
- * post without a slug and a menu item whose target or parent has no
- * identity are uncertain. Categories (CATEGORIES): equal (both read whole,
+ * 10: every reference names its target by identity, AB_MCP_Sync_Identity;
+ * either the form with the typed references so or the one with the possible
+ * references so as well, mapped_same(), Codex round 2, B-1), so the same
+ * objects with other ids on the two sites are equal. No pair by exclusion:
+ * one object a side of the same identity and path is a pair; more on a path
+ * are paired only where an equal mapped form is unique on both sides, the
+ * rest is ambiguous; the same identity left on another path, a post without
+ * a slug or with a path of parents not known whole ("?", Codex round 2, A-2)
+ * and a menu item whose target or parent has no identity of its own are
+ * uncertain. Categories (CATEGORIES): equal (both read whole,
  * the same mapped form: confirmed as active), differs (the same identity,
  * other content, or a reference without a target: confirmed as unclear),
  * ambiguous and uncertain (only a person's choice pairs them), realign (a
@@ -875,13 +878,13 @@ final class AB_MCP_Sync_Proposal {
 	public static function shown( array $entry ) {
 		foreach ( array( 'staging', 'live' ) as $side ) {
 			if ( isset( $entry[ $side ] ) && is_array( $entry[ $side ] ) ) {
-				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'] );
+				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'] );
 			}
 		}
 		if ( isset( $entry['candidates'] ) ) {
 			foreach ( $entry['candidates'] as $side => $list ) {
 				foreach ( $list as $i => $one ) {
-					unset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'] );
+					unset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'] );
 				}
 			}
 		}
@@ -979,7 +982,7 @@ final class AB_MCP_Sync_Proposal {
 		};
 		$s      = $usable( $staging ) ? $staging['hash'] : null;
 		$l      = $usable( $live ) ? $live['hash'] : null;
-		$same   = null !== $s && null !== $l && isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && hash_equals( $staging['mapped'], (string) $live['mapped'] );
+		$same   = null !== $s && null !== $l && self::mapped_same( $staging, $live );
 		return array(
 			'live'    => $l,
 			'staging' => $s,
@@ -1151,13 +1154,17 @@ final class AB_MCP_Sync_Proposal {
 				$posts[ $line['ref'] ] = array(
 					'name'   => $id['post_name'],
 					'parent' => self::parent_of( $line ),
+					'type'   => (string) ( $id['post_type'] ?? '' ),
+					'theme'  => (string) ( $id['theme'] ?? '' ),
 				);
 			}
 			if ( 'menu' === $line['kind'] && is_string( $line['ref'] ) && isset( $id['slug'] ) ) {
 				$menus[ $line['ref'] ] = $id['slug'];
 			}
 		}
-		$out = array();
+		// Parents of one type, slug, theme and parent more than once: no path (Codex round 2, A-1).
+		$twins = array_count_values( array_map( array( __CLASS__, 'twin_key' ), $posts ) );
+		$out   = array();
 		foreach ( $lines as $line ) {
 			$kind = (string) $line['kind'];
 			if ( isset( $line['held'] ) ) {
@@ -1181,26 +1188,27 @@ final class AB_MCP_Sync_Proposal {
 					'stage' => $lock['stage'] ?? null,
 				);
 			}
-			$names = 'post' === $kind ? self::path( $line, $posts ) : array();
+			$names = 'post' === $kind ? self::path( $line, $posts, $twins ) : array();
 			$out[] = array(
-				'side'        => $side,
-				'kind'        => $kind,
-				'ref'         => $line['ref'],
-				'ref_key'     => AB_MCP_Sync_Canon::encode( $line['ref'] ),
-				'subtype'     => (string) ( $identity['post_type'] ?? ( $identity['taxonomy'] ?? '' ) ),
-				'identity'    => $identity,
-				'status'      => (string) ( $line['status'] ?? '' ),
-				'hash'        => isset( $line['hash'] ) && is_string( $line['hash'] ) ? $line['hash'] : null,
-				'mapped'      => isset( $line['mapped'] ) && is_string( $line['mapped'] ) ? $line['mapped'] : null,
-				'complete'    => ! empty( $line['complete'] ),
-				'held'        => null,
-				'locks'       => $locks,
-				'reason_code' => $line['reason_code'] ?? null,
-				'target'      => $line['target'] ?? null,
-				'key'         => self::identity_key( $kind, $identity, $menus ),
-				'names'       => $names,
-				'path'        => AB_MCP_Sync_Canon::encode( $names ),
-				'doubt'       => self::doubt( $kind, $identity ),
+				'side'            => $side,
+				'kind'            => $kind,
+				'ref'             => $line['ref'],
+				'ref_key'         => AB_MCP_Sync_Canon::encode( $line['ref'] ),
+				'subtype'         => (string) ( $identity['post_type'] ?? ( $identity['taxonomy'] ?? '' ) ),
+				'identity'        => $identity,
+				'status'          => (string) ( $line['status'] ?? '' ),
+				'hash'            => isset( $line['hash'] ) && is_string( $line['hash'] ) ? $line['hash'] : null,
+				'mapped'          => isset( $line['mapped'] ) && is_string( $line['mapped'] ) ? $line['mapped'] : null,
+				'mapped_possible' => isset( $line['mapped_possible'] ) && is_string( $line['mapped_possible'] ) ? $line['mapped_possible'] : null,
+				'complete'        => ! empty( $line['complete'] ),
+				'held'            => null,
+				'locks'           => $locks,
+				'reason_code'     => $line['reason_code'] ?? null,
+				'target'          => $line['target'] ?? null,
+				'key'             => self::identity_key( $kind, $identity, $menus ),
+				'names'           => $names,
+				'path'            => AB_MCP_Sync_Canon::encode( $names ),
+				'doubt'           => self::doubt( $kind, $identity, $names ),
 			);
 		}
 		return $out;
@@ -1208,22 +1216,28 @@ final class AB_MCP_Sync_Proposal {
 
 	/**
 	 * What keeps an object from a pair by its identity alone, so that only a
-	 * person's choice pairs it (Codex A1, A2): a post without a slug, a menu
-	 * item whose target or parent has no identity. Null for none.
+	 * person's choice pairs it (Codex A1, A2; round 2, A-1 and A-2): a post
+	 * without a slug, a post whose path of parents is not known whole on its
+	 * site ("?" names no parent, never one the two sites share), a menu item
+	 * whose target or parent has no identity. Null for none.
 	 *
-	 * @param string $kind     Kind.
-	 * @param array  $identity Identity.
+	 * @param string   $kind     Kind.
+	 * @param array    $identity Identity.
+	 * @param string[] $names    Its path (posts).
 	 * @return string|null
 	 */
-	private static function doubt( $kind, array $identity ) {
+	private static function doubt( $kind, array $identity, array $names = array() ) {
 		if ( array() === $identity ) {
 			return null;
 		}
 		if ( 'post' === $kind && '' === ( $identity['post_name'] ?? '' ) ) {
 			return 'Without a slug, an object is named by nothing but its id, so it is paired only by the choice of a person.';
 		}
+		if ( 'post' === $kind && in_array( '?', $names, true ) ) {
+			return 'The path of its parents is not known whole on its site (a parent not read, without a slug, or with the slug of another), so it is paired only by the choice of a person.';
+		}
 		if ( 'menu_item' === $kind && ( ! isset( $identity['target'] ) || ! isset( $identity['parent'] ) ) ) {
-			return 'What the menu item shows, or the item it hangs under, has no identity on its site (a target that is gone or has no slug), so it is paired only by the choice of a person.';
+			return 'What the menu item shows, or the item it hangs under, has no identity of its own on its site (a target that is gone or has no slug, or another with the same: two links of one address and label), so it is paired only by the choice of a person.';
 		}
 		return null;
 	}
@@ -1293,19 +1307,33 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
+	 * What a post is named by on its side apart from its id: type, theme,
+	 * slug and parent.
+	 *
+	 * @param array $post name, parent, type, theme.
+	 * @return string
+	 */
+	private static function twin_key( array $post ) {
+		return AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['parent'] ) );
+	}
+
+	/**
 	 * The path of a post: the slugs of its parents from the top, as far as
-	 * the side names them ('?' for one it does not).
+	 * the side names them ('?' for one it does not: not read, without a
+	 * slug, or with the type, slug, theme and parent of another post of the
+	 * side; Codex round 2, A-1 and A-2).
 	 *
 	 * @param array $line  Line.
-	 * @param array $posts Post ref => name, parent of the same side.
+	 * @param array $posts Post ref => name, parent, type, theme of the same side.
+	 * @param array $twins twin_key() => how many posts of the side have it.
 	 * @return array
 	 */
-	private static function path( array $line, array $posts ) {
+	private static function path( array $line, array $posts, array $twins = array() ) {
 		$names  = array();
 		$parent = self::parent_of( $line );
 		$seen   = array();
 		while ( null !== $parent && count( $names ) < self::MAX_PATH ) {
-			if ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) ) {
+			if ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {
 				$names[] = '?';
 				break;
 			}
@@ -1454,7 +1482,29 @@ final class AB_MCP_Sync_Proposal {
 	 * @return bool
 	 */
 	private static function same( array $s, array $l ) {
-		return $s['complete'] && $l['complete'] && null !== $s['mapped'] && null !== $l['mapped'] && hash_equals( $s['mapped'], $l['mapped'] );
+		return $s['complete'] && $l['complete'] && self::mapped_same( $s, $l );
+	}
+
+	/**
+	 * Whether two lines or objects have the same mapped form: the one with
+	 * its typed references by identity (mapped), or the one with its
+	 * possible references by identity as well (mapped_possible, Codex
+	 * round 2, B-1). Either suffices: a number that is no reference (a price
+	 * of 10 on both sites) keeps the first, an id of the same image on other
+	 * ids the second. A side without one (a target without identity) is
+	 * none.
+	 *
+	 * @param array $s Staging line or object.
+	 * @param array $l Production line or object.
+	 * @return bool
+	 */
+	public static function mapped_same( array $s, array $l ) {
+		foreach ( array( 'mapped', 'mapped_possible' ) as $key ) {
+			if ( isset( $s[ $key ], $l[ $key ] ) && is_string( $s[ $key ] ) && is_string( $l[ $key ] ) && hash_equals( $s[ $key ], $l[ $key ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1622,12 +1672,13 @@ final class AB_MCP_Sync_Proposal {
 			);
 		}
 		$out = array(
-			'ref'      => $item['ref'],
-			'identity' => $item['identity'],
-			'status'   => $item['status'],
-			'complete' => $item['complete'],
-			'hash'     => $item['hash'],
-			'mapped'   => $item['mapped'],
+			'ref'             => $item['ref'],
+			'identity'        => $item['identity'],
+			'status'          => $item['status'],
+			'complete'        => $item['complete'],
+			'hash'            => $item['hash'],
+			'mapped'          => $item['mapped'],
+			'mapped_possible' => $item['mapped_possible'],
 		);
 		if ( 'post' === $item['kind'] ) {
 			$out['path'] = $item['names'];

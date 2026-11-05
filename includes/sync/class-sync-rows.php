@@ -245,6 +245,40 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * The posts of one type with exactly this slug under one parent, by id
+	 * (Codex round 2, A-1: an identity that is not unique on its site names
+	 * no target).
+	 *
+	 * @param string $type   Post type, compared byte for byte.
+	 * @param string $name   post_name, compared byte for byte.
+	 * @param int    $parent post_parent.
+	 * @return int[]|null
+	 */
+	public static function posts_named( $type, $name, $parent ) {
+		global $wpdb;
+		if ( ! self::has( array( 'posts' ) ) ) {
+			return null;
+		}
+		$rows = self::select( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = BINARY %s AND post_name = BINARY %s AND post_parent = %d ORDER BY ID ASC", (string) $type, (string) $name, (int) $parent ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from $wpdb.
+		return null === $rows ? null : array_map( 'intval', array_column( $rows, 'ID' ) );
+	}
+
+	/**
+	 * The attachments whose _wp_attached_file is exactly this file, by id.
+	 *
+	 * @param string $file The file under the uploads.
+	 * @return int[]|null
+	 */
+	public static function attachments_of( $file ) {
+		global $wpdb;
+		if ( ! self::has( array( 'posts', 'postmeta' ) ) ) {
+			return null;
+		}
+		$rows = self::select( $wpdb->prepare( "SELECT DISTINCT p.ID FROM {$wpdb->posts} AS p INNER JOIN {$wpdb->postmeta} AS pm ON pm.post_id = p.ID WHERE p.post_type = 'attachment' AND pm.meta_key = BINARY '_wp_attached_file' AND pm.meta_value = BINARY %s ORDER BY p.ID ASC", (string) $file ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- tables from $wpdb.
+		return null === $rows ? null : array_map( 'intval', array_column( $rows, 'ID' ) );
+	}
+
+	/**
 	 * Every meta row of an object, by meta_id: the key and the value as
 	 * stored. Every key is in it, also one stored in another letter case
 	 * than another (meta_key compares by a collation; here each row keeps
@@ -368,6 +402,24 @@ final class AB_MCP_Sync_Rows {
 			return null;
 		}
 		return isset( $rows[0] ) ? self::columns( $rows[0], self::TERM_COLUMNS ) : false;
+	}
+
+	/**
+	 * The terms of one taxonomy with exactly this slug, by term id (Codex
+	 * round 2, A-1: an identity that is not unique on its site names no
+	 * target).
+	 *
+	 * @param string $taxonomy Taxonomy, compared byte for byte.
+	 * @param string $slug     Slug, compared byte for byte.
+	 * @return int[]|null
+	 */
+	public static function terms_by_slug( $taxonomy, $slug ) {
+		global $wpdb;
+		if ( ! self::has( array( 'terms', 'term_taxonomy' ) ) ) {
+			return null;
+		}
+		$rows = self::select( $wpdb->prepare( "SELECT t.term_id FROM {$wpdb->terms} AS t INNER JOIN {$wpdb->term_taxonomy} AS tt ON tt.term_id = t.term_id WHERE tt.taxonomy = BINARY %s AND t.slug = BINARY %s ORDER BY t.term_id ASC", (string) $taxonomy, (string) $slug ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- tables from $wpdb.
+		return null === $rows ? null : array_map( 'intval', array_column( $rows, 'term_id' ) );
 	}
 
 	/**

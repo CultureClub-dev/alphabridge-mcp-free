@@ -128,22 +128,23 @@ final class AB_MCP_Sync_Import {
 	 * (held_code()).
 	 */
 	const LINE_FIELDS = array(
-		'b9'          => 'names',
-		'canon'       => 'canon',
-		'complete'    => 'bool',
-		'hash'        => 'hash',
-		'identity'    => 'identity',
-		'kind'        => 'string',
-		'locks'       => 'locks',
-		'mapped'      => 'hash',
-		'possible'    => 'possible',
-		'reason_code' => 'string',
-		'ref'         => 'name',
-		'refs'        => 'refs',
-		'size'        => 'size',
-		'status'      => 'status',
-		'target'      => 'name',
-		'unread'      => 'names',
+		'b9'              => 'names',
+		'canon'           => 'canon',
+		'complete'        => 'bool',
+		'hash'            => 'hash',
+		'identity'        => 'identity',
+		'kind'            => 'string',
+		'locks'           => 'locks',
+		'mapped'          => 'hash',
+		'mapped_possible' => 'hash',
+		'possible'        => 'possible',
+		'reason_code'     => 'string',
+		'ref'             => 'name',
+		'refs'            => 'refs',
+		'size'            => 'size',
+		'status'          => 'status',
+		'target'          => 'name',
+		'unread'          => 'names',
 	);
 
 	/** The statuses a line has (AB_MCP_Sync_Inventory::entry(); b9 is never packed). */
@@ -236,7 +237,7 @@ final class AB_MCP_Sync_Import {
 	const POSSIBLE_FIELDS = array( 'at' => 'name' );
 
 	/** The fields of a line besides its identity, status and locks, which a line a credential holds never carries. */
-	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'mapped', 'possible', 'refs', 'size', 'unread' );
+	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'mapped', 'mapped_possible', 'possible', 'refs', 'size', 'unread' );
 
 	/** Seconds one call fetches at most; what is left, the next one does. */
 	const BUDGET = 60;
