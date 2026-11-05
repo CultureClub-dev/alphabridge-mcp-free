@@ -61,6 +61,36 @@ final class AB_MCP_Sync_Option_Schema {
 		'unreadable'  => array( 'lookup_failed', 'not_settled' ),
 	);
 
+	/**
+	 * The words of each code of REASON_CODES, as classify() and
+	 * AB_MCP_Sync_Option_Name::settle() write them on the site that read the
+	 * row (a test holds them to those texts; read_as_other_row adds the way);
+	 * %s is the target of read_as_other_row.
+	 * The report and the proposal of the pairs (branch 6) say them for a line
+	 * of the staging site, which carries the code only.
+	 */
+	const REASON_TEXTS = array(
+		'option_guard'      => 'The option guard of AlphaBridge MCP refuses this option name, so it is not taken over. An administrator changes it in wp-admin.',
+		'read_as_other_row' => 'WordPress reads the row %s under this name, so this row is never read and is not taken over. An administrator changes it in wp-admin.',
+		'lookup_failed'     => 'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.',
+		'not_settled'       => 'The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause.',
+	);
+
+	/**
+	 * The words of a reason code (REASON_TEXTS), with its target; null for a
+	 * code outside the list.
+	 *
+	 * @param mixed $code   Code.
+	 * @param mixed $target The row WordPress reads instead (read_as_other_row).
+	 * @return string|null
+	 */
+	public static function reason_text( $code, $target = null ) {
+		if ( ! is_string( $code ) || ! isset( self::REASON_TEXTS[ $code ] ) ) {
+			return null;
+		}
+		return 'read_as_other_row' === $code ? sprintf( self::REASON_TEXTS[ $code ], is_string( $target ) ? $target : 'of another name' ) : self::REASON_TEXTS[ $code ];
+	}
+
 	/** The core options with a schema: name => type (and space, values). */
 	const CORE = array(
 		'blogname'                     => array( 'type' => 'text' ),

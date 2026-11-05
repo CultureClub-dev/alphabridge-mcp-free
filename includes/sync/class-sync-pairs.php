@@ -172,6 +172,43 @@ final class AB_MCP_Sync_Pairs {
 		);
 	}
 
+	/**
+	 * The pairs of a source over every kind, by id, a page at a time
+	 * (wp_site_pairs list and the proposal, branch 6).
+	 *
+	 * @param string $source_id Source.
+	 * @param int    $after     The last id of the page before (0: from the start).
+	 * @param int    $limit     At most this many (1 to PER_PAGE).
+	 * @return array{pairs:array[],next:int|null}|WP_Error next is the $after of the next page.
+	 */
+	public static function page_source( $source_id, $after = 0, $limit = self::PER_PAGE ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		$bad = self::check_fields( array( 'source_id' => $source_id ) );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		global $wpdb;
+		$limit = max( 1, min( self::PER_PAGE, (int) $limit ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours; the values are prepared.
+		$sql  = 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE ' . self::exact( 'source_id', $source_id ) . $wpdb->prepare( ' AND id > %d ORDER BY id ASC LIMIT %d', max( 0, (int) $after ), $limit + 1 );
+		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- built from prepared parts above.
+		if ( '' !== $wpdb->last_error || ! is_array( $rows ) ) {
+			return self::db_error();
+		}
+		$next = null;
+		if ( count( $rows ) > $limit ) {
+			$rows = array_slice( $rows, 0, $limit );
+			$next = (int) $rows[ $limit - 1 ]['id'];
+		}
+		return array(
+			'pairs' => array_map( array( __CLASS__, 'decode' ), $rows ),
+			'next'  => $next,
+		);
+	}
+
 	/* ----------------------------------------------------------- write */
 
 	/**
@@ -956,6 +993,18 @@ final class AB_MCP_Sync_Pairs {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a pair can hold this ref (the rule of the columns live_ref and
+	 * staging_ref): text of valid UTF-8 without control characters, 1 to
+	 * MAX_REF characters.
+	 *
+	 * @param mixed $ref Ref.
+	 * @return bool
+	 */
+	public static function valid_ref( $ref ) {
+		return null === self::check_fields( array( 'live_ref' => $ref ) );
 	}
 
 	/**

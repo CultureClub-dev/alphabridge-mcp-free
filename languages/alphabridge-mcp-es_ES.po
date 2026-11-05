@@ -5499,6 +5499,10 @@ msgctxt "tool label"
 msgid "Import a staging package"
 msgstr "Importar un paquete del staging"
 
+msgctxt "tool label"
+msgid "Pair objects with the staging site"
+msgstr "Emparejar objetos con el staging"
+
 msgid "Off: nothing is asked."
 msgstr "Desactivado: no se pregunta nada."
 

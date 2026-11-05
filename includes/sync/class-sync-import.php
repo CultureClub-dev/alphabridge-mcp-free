@@ -305,6 +305,97 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
+	 * A package of the inventory this account took over completely, for the
+	 * takeover (wp_site_pairs and wp_site_diff, branch 6): its kept manifest
+	 * checked again for the purpose this version takes and against the pair
+	 * as it is now (the print it was begun with, AB_MCP_Sync_Anchor::
+	 * pair_print()), marked complete with the hash of that manifest, its
+	 * lines read against the SHA-256 of each chunk and inflated no further
+	 * than the manifest declares, and its list of the objects a credential
+	 * holds by the rules of this site (held_list()). Reading removes nothing:
+	 * what refuses here names the way, and the store removes the group after
+	 * its day.
+	 *
+	 * @param mixed $package_id Package (32 hex).
+	 * @return array|WP_Error manifest (the array verify() read), lines (the
+	 *                        objects, in order), held (kind, SHA-256 of the
+	 *                        ref, code of each object held here).
+	 */
+	public static function taken( $package_id ) {
+		if ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
+			return new WP_Error( 'ab_mcp_sync_import_package', 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.' );
+		}
+		$found = self::find( $package_id );
+		if ( is_wp_error( $found ) ) {
+			return $found;
+		}
+		if ( null === $found ) {
+			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( 'This site holds no package %s taken over by this account (packages are kept a day, and each belongs to the account that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', $package_id ) );
+		}
+		$expect = $found['expect'];
+		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || AB_MCP_Sync_Export::PURPOSES[0] !== $expect['purpose'] ) {
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %s for a purpose this version does not take, so it is not read. Fetch it anew: call wp_site_export on the staging site, then wp_site_import_chunk here with purpose=%s.', $package_id, AB_MCP_Sync_Export::PURPOSES[0] ) );
+		}
+		if ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
+			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', $package_id ) );
+		}
+		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
+		if ( is_wp_error( $checked ) ) {
+			return $checked;
+		}
+		$manifest = $checked['manifest'];
+		$have     = AB_MCP_Protected_Store::files( 'in', $found['gid'] );
+		if ( is_wp_error( $have ) ) {
+			return $have;
+		}
+		// The mark holds the hash of the package it marks complete, read
+		// against its own hash: the mark of this manifest only.
+		$mark = isset( $have[ self::COMPLETE ] ) ? AB_MCP_Protected_Store::get( 'in', $found['gid'], self::COMPLETE, hash( 'sha256', $manifest['sha256'] ) ) : null;
+		if ( ! is_string( $mark ) ) {
+			return new WP_Error( 'ab_mcp_sync_import_incomplete', sprintf( 'The package %s is not complete on this site yet, so it is not read. Hand over or fetch its missing chunks with wp_site_import_chunk until it answers complete true, then call again.', $package_id ) );
+		}
+		// Each chunk against its hash in the signed manifest, which the import
+		// unpacked and checked line by line before it set the mark: the same
+		// bytes give the same lines.
+		$lines = array();
+		$total = 0;
+		foreach ( $manifest['chunks'] as $i => $chunk ) {
+			$data = AB_MCP_Protected_Store::get( 'in', $found['gid'], AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'] );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			$text   = (string) self::inflate( $data, min( $manifest['unpacked'] - $total, AB_MCP_Store_Budget::UNPACK['object_bytes'] ) );
+			$total += strlen( $text );
+			foreach ( '' === $text ? array() : explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
+				$lines[] = json_decode( $line, true, AB_MCP_Store_Budget::UNPACK['depth'] );
+			}
+		}
+		$held = self::held_list( $found, $have );
+		if ( is_wp_error( $held ) ) {
+			return $held;
+		}
+		return array(
+			'manifest' => $manifest,
+			'lines'    => $lines,
+			'held'     => $held,
+		);
+	}
+
+	/**
+	 * Why a line of an object of this site is held, by the rules of this
+	 * site, as the import holds a line of a package (held_code()); null where
+	 * nothing holds it. For the inventory of the production site itself
+	 * (wp_site_pairs), so that its names are shown under the same rule as
+	 * those of the staging site.
+	 *
+	 * @param array $line A line as AB_MCP_Sync_Export::line() writes it.
+	 * @return string|null A code of HELD_CODES.
+	 */
+	public static function held_reason( array $line ) {
+		return self::held_code( $line + array( 'identity' => array(), 'locks' => array() ), AB_MCP_Redactor::extra_keys() );
+	}
+
+	/**
 	 * The address of one chunk at the staging site, built here: the stored
 	 * address of the staging site in the form the anchor compares
 	 * (AB_MCP_Sync_Key::site_form()), the route, and the four values of the

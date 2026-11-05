@@ -1,0 +1,1378 @@
+<?php
+/**
+ * wp_site_pairs on two WordPress sites (Z8, decisions 10, 13 and 15 of the
+ * plan; branch 6, part 1): site B is the staging site, in processes of its
+ * own; site A, this process, is the production site with B's key a person
+ * confirmed, and takes B's packages over.
+ *
+ * - The inventory B packed is compared with A's own: the same page is equal,
+ *   another content differs, a page on one side only is staging_only or
+ *   live_only. Over MCP: confirm answers with a preview and a token, the
+ *   same call with the token makes the pairs (active, unclear), list shows
+ *   them, the token repeated after it ran is refused, a fresh preview says
+ *   nothing is left, and discard ends a pair with its token.
+ * - A proposal goes on over calls and belongs to its account and connection.
+ * - A name holding a credential is shown by the SHA-256 of its ref only, on
+ *   both sides.
+ * - Packages of one series are one inventory; packages of two are refused;
+ *   a package not taken over completely, or not by this account, is none.
+ * - The canon change on rows; an unclear pair aligned anew keeps its
+ *   override and base_extra; a confirmation that cannot write a pair keeps
+ *   nothing; a proposal holds no more once the pair of sites changed or it
+ *   expired.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+declare( strict_types = 1 );
+
+namespace AlphaBridge\Tests\Integration;
+
+use AB_MCP_IT_Sites;
+use AB_MCP_IT_Sync_Steps;
+use AB_MCP_Protected_Store;
+use AB_MCP_REST_Controller;
+use AB_MCP_Staging;
+use AB_MCP_Sync_Anchor;
+use AB_MCP_Sync_Export;
+use AB_MCP_Sync_Import;
+use AB_MCP_Sync_Pairs;
+use AB_MCP_Sync_Pairs_Tool;
+use AB_MCP_Sync_Proposal;
+use AB_MCP_Sync_Schema;
+use AB_MCP_Tool_Registry;
+use AB_MCP_Tools_Staging;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use WP_Error;
+
+require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs-tool.php';
+require_once AB_MCP_DIR . 'includes/tools/class-tools-staging.php';
+
+final class SyncProposalTest extends TestCase {
+
+	/** The date every page of these tests carries, on both sites. */
+	private const DATE = '2026-10-01 10:00:00';
+
+	/** @var string|null DOCUMENT_ROOT before the case. */
+	private $docroot_before;
+
+	protected function setUp(): void {
+		AB_MCP_IT_Sites::reset( 'a' );
+		AB_MCP_IT_Sites::reset( 'b' );
+		self::wipe();
+		$this->docroot_before     = $_SERVER['DOCUMENT_ROOT'] ?? null;
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Schema::forget();
+		wp_set_current_user( self::admin() );
+		self::assertIsArray( AB_MCP_Sync_Schema::install() );
+	}
+
+	protected function tearDown(): void {
+		if ( null === $this->docroot_before ) {
+			unset( $_SERVER['DOCUMENT_ROOT'] );
+		} else {
+			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
+		}
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Proposal::$limit = null;
+		AB_MCP_Sync_Proposal::$clock = null;
+		remove_all_filters( 'query' );
+	}
+
+	public static function tearDownAfterClass(): void {
+		AB_MCP_IT_Sites::reset( 'a' );
+		AB_MCP_IT_Sites::reset( 'b' );
+		self::wipe();
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Schema::forget();
+	}
+
+	private static function admin(): int {
+		return (int) AB_MCP_IT_Sites::site( 'a' )['admin']['user_id'];
+	}
+
+	private static function wipe(): void {
+		$root = (string) AB_MCP_IT_Sites::state()['root'];
+		self::remove_tree( $root . '/ab-mcp-store', $root );
+	}
+
+	private static function remove_tree( string $path, string $root ): void {
+		if ( 0 !== strpos( $path, $root . '/' ) ) {
+			throw new RuntimeException( "Will not remove $path: it is not in AB_IT_ROOT." );
+		}
+		if ( is_link( $path ) || is_file( $path ) ) {
+			unlink( $path );
+			return;
+		}
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+		foreach ( array_diff( (array) scandir( $path ), array( '.', '..' ) ) as $entry ) {
+			self::remove_tree( $path . '/' . $entry, $root );
+		}
+		rmdir( $path );
+	}
+
+	/** Steps on site B. */
+	private static function b( array $steps ): array {
+		return AB_MCP_IT_Sync_Steps::run( 'b', $steps );
+	}
+
+	/** B the staging site of A, A the production site of B with B's key confirmed. */
+	private static function pair(): void {
+		$b = self::b(
+			array(
+				array( 'op' => 'write_access' ),
+				array(
+					'op'          => 'staging_save',
+					'role'        => 'staging',
+					'partner_url' => AB_MCP_IT_Sites::url( 'a' ),
+					'source'      => 'form',
+				),
+				array(
+					'op' => 'pairing_code',
+					'as' => 'code',
+				),
+			)
+		);
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		$saved = AB_MCP_Staging::save( 'production', AB_MCP_IT_Sites::url( 'b' ), 'staging', self::admin(), 'form' );
+		self::assertIsArray( $saved, is_wp_error( $saved ) ? $saved->get_error_message() : '' );
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $b['code'], self::admin() );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
+	}
+
+	/** A tool over MCP: its structured answer, or the text of its error. */
+	private static function tool( string $key, string $name, array $arguments ) {
+		$answer = AB_MCP_IT_Sites::mcp(
+			$key,
+			'tools/call',
+			array(
+				'name'      => $name,
+				'arguments' => $arguments,
+			)
+		);
+		self::assertSame( 200, $answer['status'], $answer['raw'] );
+		$result = $answer['body']['result'];
+		return $result['isError'] ? $result['content'][0]['text'] : $result['structuredContent'];
+	}
+
+	/** The arguments of a page, the same on both sites but for $over. */
+	private static function page( string $name, string $content, array $over = array() ): array {
+		return array_merge(
+			array(
+				'post_type'     => 'page',
+				'post_status'   => 'publish',
+				'post_title'    => ucfirst( $name ),
+				'post_name'     => $name,
+				'post_content'  => $content,
+				'post_author'   => 1,
+				'post_date'     => self::DATE,
+				'post_date_gmt' => self::DATE,
+			),
+			$over
+		);
+	}
+
+	/** Pages on A, in this process. */
+	private static function pages_on_a( array $pages ): array {
+		$ids = array();
+		foreach ( $pages as $name => $content ) {
+			$id = wp_insert_post( wp_slash( self::page( $name, $content ) ), true );
+			self::assertIsInt( $id, is_wp_error( $id ) ? $id->get_error_message() : '' );
+			$ids[ $name ] = (string) $id;
+		}
+		return $ids;
+	}
+
+	/** Pages on B. */
+	private static function pages_on_b( array $pages ): array {
+		$steps = array();
+		foreach ( $pages as $name => $content ) {
+			$steps[] = array(
+				'op'   => 'insert_post',
+				'args' => self::page( $name, $content ),
+				'as'   => $name,
+			);
+		}
+		return array_map( 'strval', self::b( $steps ) );
+	}
+
+	/** B packs its inventory: the packages of one series, at most $objects objects each. */
+	private static function export_b( ?int $objects = null ): array {
+		$packages = array();
+		$cursor   = null;
+		do {
+			$step = array(
+				'op'      => 'export',
+				'purpose' => 'inventory',
+				'as'      => 'package',
+			);
+			if ( null !== $cursor ) {
+				$step['cursor'] = $cursor;
+			}
+			if ( null !== $objects ) {
+				$step['objects'] = $objects;
+			}
+			$package    = self::b( array( $step ) )['package'];
+			$packages[] = $package;
+			$cursor     = $package['cursor'];
+		} while ( null !== $cursor && count( $packages ) < 50 );
+		self::assertNull( $cursor );
+		return $packages;
+	}
+
+	/** A takes a package of B over the relay, in this process: the last answer. */
+	private static function import( array $package, ?int $chunks = null ) {
+		$state = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => $package['package_id'],
+				'manifest'   => $package['manifest'],
+				'purpose'    => 'inventory',
+			)
+		);
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		$steps = array();
+		foreach ( range( 0, ( $chunks ?? $package['chunks'] ) - 1 ) as $i ) {
+			$steps[] = array(
+				'op'         => 'export_chunk',
+				'package_id' => $package['package_id'],
+				'chunk'      => $i,
+				'as'         => 'c' . $i,
+			);
+		}
+		$data = self::b( $steps );
+		foreach ( range( 0, ( $chunks ?? $package['chunks'] ) - 1 ) as $i ) {
+			$state = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $package['package_id'],
+					'chunk'      => $i,
+					'data'       => $data[ 'c' . $i ]['data'],
+				)
+			);
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		}
+		return $state;
+	}
+
+	/** B packs and A takes over: the package ids. */
+	private static function staged( ?int $objects = null ): array {
+		$ids = array();
+		foreach ( self::export_b( $objects ) as $package ) {
+			self::assertTrue( self::import( $package )['complete'] );
+			$ids[] = $package['package_id'];
+		}
+		return $ids;
+	}
+
+	/** wp_site_pairs in this process (propose and list run at once). */
+	private static function here( array $a ) {
+		return AB_MCP_Sync_Pairs_Tool::call( $a );
+	}
+
+	/** A proposal worked out to its end in this process: every entry. */
+	private static function proposal( array $packages, int &$calls = 0 ): array {
+		$answer = self::here(
+			array(
+				'action'   => 'propose',
+				'packages' => $packages,
+			)
+		);
+		$calls  = 1;
+		while ( is_array( $answer ) && false === $answer['done'] ) {
+			$answer = self::here(
+				array(
+					'action'      => 'propose',
+					'proposal_id' => $answer['proposal_id'],
+				)
+			);
+			++$calls;
+			self::assertLessThan( 200, $calls );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		$all  = $answer['entries'];
+		$page = $answer;
+		while ( null !== $page['next_after'] ) {
+			$page = self::here(
+				array(
+					'action'      => 'propose',
+					'proposal_id' => $answer['proposal_id'],
+					'after'       => $page['next_after'],
+				)
+			);
+			self::assertIsArray( $page );
+			$all = array_merge( $all, $page['entries'] );
+		}
+		$answer['all'] = $all;
+		return $answer;
+	}
+
+	/** The entry of a page by its name, on either side. */
+	private static function entry_of( array $entries, string $name ): array {
+		foreach ( $entries as $entry ) {
+			foreach ( array( 'staging', 'live' ) as $side ) {
+				if ( isset( $entry[ $side ]['identity']['post_name'] ) && $name === $entry[ $side ]['identity']['post_name'] && 'post' === $entry['kind'] ) {
+					return $entry;
+				}
+			}
+		}
+		self::fail( "No entry for $name." );
+	}
+
+	/** The pairs of A's table, by id. */
+	private static function pair_rows(): array {
+		$rows = array();
+		foreach ( AB_MCP_IT_Sites::rows( 'a', 'ab_mcp_staging_pairs' ) as $row ) {
+			$rows[ (int) $row['id'] ] = $row;
+		}
+		return $rows;
+	}
+
+	/** The definition of wp_site_pairs. */
+	private static function def(): array {
+		$r = new AB_MCP_Tool_Registry();
+		AB_MCP_Tools_Staging::register( $r );
+		return $r->get( 'wp_site_pairs' );
+	}
+
+	/** wp_site_pairs through the gate of the plugin, in this process. */
+	private static function gated( array $a ) {
+		return AB_MCP_REST_Controller::run_tool( 'wp_site_pairs', self::def(), $a );
+	}
+
+	/** A confirmation in this process: preview, then the same call with its token. */
+	private static function confirmed( array $a ) {
+		$preview = self::gated( $a );
+		if ( is_wp_error( $preview ) ) {
+			return $preview;
+		}
+		self::assertTrue( $preview['confirm_required'], (string) json_encode( $preview ) );
+		return self::gated( $a + array( 'confirm_token' => $preview['confirm_token'] ) );
+	}
+
+	private static function refused( $result, string $code ): string {
+		self::assertInstanceOf( WP_Error::class, $result );
+		self::assertSame( $code, $result->get_error_code(), $result->get_error_message() );
+		return $result->get_error_message();
+	}
+
+
+	/** A package of these lines, as B would make it, with the manifest B signs at $now. */
+	private static function crafted( array $lines, int $now ): array {
+		$text = '';
+		foreach ( $lines as $line ) {
+			$text .= \AB_MCP_Sync_Canon::encode( $line ) . "\n";
+		}
+		$chunk   = (string) gzencode( $text, 6 );
+		$id      = bin2hex( random_bytes( 16 ) );
+		$package = array(
+			'package_id'  => $id,
+			'purpose'     => 'inventory',
+			'report_hash' => null,
+			'kinds'       => array(),
+			'objects'     => count( $lines ),
+			'unpacked'    => strlen( $text ),
+			'chunks'      => array(
+				array(
+					'bytes'  => strlen( $chunk ),
+					'sha256' => hash( 'sha256', $chunk ),
+				),
+			),
+			'bytes'       => strlen( $chunk ),
+			'sha256'      => hash( 'sha256', $chunk ),
+		);
+		$signed  = self::b(
+			array(
+				array(
+					'op'      => 'sign_manifest',
+					'as'      => 'signed',
+					'package' => $package,
+					'now'     => $now,
+				),
+			)
+		)['signed'];
+		$state   = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'manifest' => $signed, 'purpose' => 'inventory' ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( $chunk ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'] );
+		return array(
+			'id'      => $id,
+			'expires' => $now + 86400,
+		);
+	}
+
+	/** Put a file into the group of a proposal, named as the proposal names its files. */
+	private static function put_file( string $gid, string $prefix, ?int $seq, array $data ): void {
+		$text = \AB_MCP_Sync_Canon::encode( $data );
+		$put  = AB_MCP_Protected_Store::put( 'reports', $gid, AB_MCP_Sync_Proposal::name( $prefix, $seq, hash( 'sha256', $text ) ), $text );
+		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
+	}
+
+	/** A group of the area reports with a head of its own, as a proposal of this connection would have it. */
+	private static function head( array $over, string $label = 'proposal' ): string {
+		$gid = AB_MCP_Protected_Store::open( 'reports', array( 'label' => $label ) );
+		self::assertIsString( $gid );
+		self::put_file(
+			$gid,
+			'h',
+			null,
+			array_merge(
+				array(
+					'canon'      => 'canon/1',
+					'connection' => AB_MCP_Sync_Proposal::connection(),
+					'created'    => time(),
+					'expires'    => time() + 3600,
+					'format'     => AB_MCP_Sync_Proposal::FORMAT,
+					'packages'   => array( str_repeat( 'a', 32 ) ),
+					'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),
+					'source_id'  => AB_MCP_Sync_Anchor::active()['source_id'],
+				),
+				$over
+			)
+		);
+		return $gid;
+	}
+
+	/** A line of an option, as the export writes one. */
+	private static function option_line( string $name ): array {
+		return array(
+			'b9'       => array(),
+			'canon'    => 'canon/1',
+			'complete' => true,
+			'hash'     => hash( 'sha256', $name ),
+			'identity' => array( 'name' => $name ),
+			'kind'     => 'option',
+			'locks'    => array(),
+			'possible' => array(),
+			'ref'      => $name,
+			'refs'     => array(),
+			'size'     => 10,
+			'status'   => 'z8',
+			'unread'   => array(),
+		);
+	}
+
+	/* ---------------------------------------------------------------- MCP */
+
+	public function testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp(): void {
+		self::pair();
+		$a = self::pages_on_a(
+			array(
+				'about'    => 'About us.',
+				'contact'  => 'Write to us at A.',
+				'live-new' => 'Only here.',
+			)
+		);
+		$b = self::pages_on_b(
+			array(
+				'about'       => 'About us.',
+				'contact'     => 'Write to us at B.',
+				'staging-new' => 'Only on staging.',
+			)
+		);
+		$ids = self::staged();
+		self::assertCount( 1, $ids, 'A small site in one package.' );
+
+		$answer = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+		self::assertIsArray( $answer, is_string( $answer ) ? $answer : '' );
+		self::assertTrue( $answer['done'] );
+		self::assertNull( $answer['next_after'], 'A small site in one page.' );
+		self::assertSame( array(), $answer['staging']['incomplete'], 'One package read every kind whole.' );
+		$about   = self::entry_of( $answer['entries'], 'about' );
+		$contact = self::entry_of( $answer['entries'], 'contact' );
+		self::assertSame( array( 'equal', $b['about'], $a['about'] ), array( $about['category'], $about['staging']['ref'], $about['live']['ref'] ) );
+		self::assertSame( array( 'differs', $b['contact'], $a['contact'] ), array( $contact['category'], $contact['staging']['ref'], $contact['live']['ref'] ) );
+		self::assertSame( 'staging_only', self::entry_of( $answer['entries'], 'staging-new' )['category'] );
+		self::assertSame( 'live_only', self::entry_of( $answer['entries'], 'live-new' )['category'] );
+		self::assertStringNotContainsString( '"hash"', (string) json_encode( $answer ), 'No hash in an answer.' );
+		self::assertSame( array(), self::pair_rows(), 'A proposal pairs nothing.' );
+
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( $about['n'], $contact['n'] ),
+		);
+		$preview = self::tool( 'a', 'wp_site_pairs', $args );
+		self::assertIsArray( $preview, is_string( $preview ) ? $preview : '' );
+		self::assertTrue( $preview['confirm_required'] );
+		self::assertSame( array( 'made_active' => 1, 'made_unclear' => 1 ), $preview['preview']['counts'] );
+		self::assertSame( array(), self::pair_rows(), 'A preview pairs nothing.' );
+
+		$other = self::tool( 'a', 'wp_site_pairs', array( 'select' => array( $about['n'] ) ) + $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsString( $other, 'The token of other arguments.' );
+		self::assertStringContainsString( 'does not match this call', $other );
+		self::assertSame( array(), self::pair_rows() );
+
+		$done = self::tool( 'a', 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $done, is_string( $done ) ? $done : '' );
+		self::assertTrue( $done['done'] );
+		$rows = self::pair_rows();
+		self::assertCount( 2, $rows );
+		$by = array();
+		foreach ( $rows as $row ) {
+			$by[ $row['live_ref'] ] = $row;
+			self::assertSame( AB_MCP_Sync_Anchor::active()['source_id'], $row['source_id'] );
+			self::assertSame( 'post', $row['kind'] );
+			self::assertSame( 'proposal', $row['base_origin'] );
+			self::assertSame( 'canon/1', $row['canon'] );
+		}
+		self::assertSame( array( $b['about'], 'active' ), array( $by[ $a['about'] ]['staging_ref'], $by[ $a['about'] ]['state'] ) );
+		self::assertSame( $by[ $a['about'] ]['base_live'], $by[ $a['about'] ]['base_staging'], 'Equal: one base on both sides.' );
+		self::assertSame( array( $b['contact'], 'unclear' ), array( $by[ $a['contact'] ]['staging_ref'], $by[ $a['contact'] ]['state'] ) );
+		self::assertNotSame( $by[ $a['contact'] ]['base_live'], $by[ $a['contact'] ]['base_staging'] );
+
+		// Replay: the same token meets the pairs it made, and makes none twice.
+		$again = self::tool( 'a', 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsString( $again );
+		self::assertStringContainsString( 'Nothing is left to confirm', $again );
+		self::assertStringContainsString( 'paired meanwhile', $again );
+		$fresh = self::tool( 'a', 'wp_site_pairs', $args );
+		self::assertIsString( $fresh );
+		self::assertStringContainsString( 'Nothing is left to confirm', $fresh );
+		self::assertCount( 2, self::pair_rows() );
+
+		$list = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'list' ) );
+		self::assertIsArray( $list );
+		self::assertSame( array_keys( $rows ), array_column( $list['pairs'], 'pair_id' ) );
+		self::assertNull( $list['next_after'] );
+		self::assertSame( array( (int) $by[ $a['contact'] ]['id'] ), array_column( self::tool( 'a', 'wp_site_pairs', array( 'action' => 'list', 'state' => 'unclear' ) )['pairs'], 'pair_id' ) );
+		self::assertSame( array(), self::tool( 'a', 'wp_site_pairs', array( 'action' => 'list', 'kind' => 'term' ) )['pairs'] );
+
+		// The pairs are not proposed again; the unclear one is for a new alignment.
+		$next = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+		self::assertIsArray( $next, is_string( $next ) ? $next : '' );
+		self::assertSame( 1, $next['paired'] );
+		$realign = array_values( array_filter( $next['entries'], static fn( $e ) => 'realign' === $e['category'] ) );
+		self::assertCount( 1, $realign );
+		self::assertSame( (int) $by[ $a['contact'] ]['id'], $realign[0]['pair']['id'] );
+		self::assertStringContainsString( 'The two sides differ now', $realign[0]['note'] );
+
+		// discard, with its token.
+		$discard = array(
+			'action'   => 'discard',
+			'pair_ids' => array( (int) $by[ $a['contact'] ]['id'] ),
+		);
+		$preview = self::tool( 'a', 'wp_site_pairs', $discard );
+		self::assertIsArray( $preview );
+		self::assertTrue( $preview['confirm_required'] );
+		self::assertCount( 2, self::pair_rows() );
+		$ended = self::tool( 'a', 'wp_site_pairs', $discard + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $ended, is_string( $ended ) ? $ended : '' );
+		self::assertSame( array( 'discarded' => 1 ), $ended['counts'] );
+		self::assertSame( array( (int) $by[ $a['about'] ]['id'] ), array_keys( self::pair_rows() ) );
+		self::assertSame( 'Write to us at A.', get_post( (int) $a['contact'] )->post_content, 'Its objects stay.' );
+	}
+
+	public function testObjectsOfPluginsAreProposedWithTheirLocksNotLeftOut(): void {
+		self::pair();
+		// What WooCommerce, ACF, Elementor and Yoast store, on both sites alike
+		// (a product of the other content on B).
+		$posts = array(
+			'product'  => array( 'post_type' => 'product', 'post_name' => 'blue-shirt', 'post_title' => 'Blue shirt', 'post_status' => 'publish' ),
+			'group'    => array( 'post_type' => 'acf-field-group', 'post_name' => 'group_64ab12cd34ef5', 'post_title' => 'Shirt fields', 'post_status' => 'publish', 'post_content' => 'a:1:{s:8:"position";s:6:"normal";}' ),
+			'template' => array( 'post_type' => 'elementor_library', 'post_name' => 'header-1', 'post_title' => 'Header', 'post_status' => 'publish' ),
+			'landing'  => array( 'post_type' => 'page', 'post_name' => 'landing', 'post_title' => 'Landing', 'post_status' => 'publish' ),
+		);
+		$common = array(
+			'post_author'   => 1,
+			'post_date'     => self::DATE,
+			'post_date_gmt' => self::DATE,
+		);
+		$a      = array();
+		foreach ( $posts as $key => $args ) {
+			$id = wp_insert_post( wp_slash( $args + $common + array( 'post_content' => 'product' === $key ? 'Cotton, size M.' : '' ) ), true );
+			self::assertIsInt( $id );
+			$a[ $key ] = (string) $id;
+		}
+		update_post_meta( (int) $a['landing'], '_elementor_data', wp_slash( '[{"id":"1a2b3c","elType":"section","elements":[]}]' ) );
+		update_post_meta( (int) $a['landing'], '_elementor_edit_mode', 'builder' );
+		update_option( 'woocommerce_currency', 'CHF' );
+		update_option( 'wpseo_titles', array( 'title-home-wpseo' => '%%sitename%%', 'separator' => 'sc-dash' ) );
+		$steps = array();
+		foreach ( $posts as $key => $args ) {
+			$steps[] = array(
+				'op'   => 'insert_post',
+				'args' => $args + $common + array( 'post_content' => 'product' === $key ? 'Cotton, size L.' : '' ),
+				'as'   => $key,
+			);
+		}
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$landing', 'key' => '_elementor_data', 'value' => '[{"id":"1a2b3c","elType":"section","elements":[]}]' );
+		$steps[] = array( 'op' => 'add_meta', 'post' => '$landing', 'key' => '_elementor_edit_mode', 'value' => 'builder' );
+		$steps[] = array( 'op' => 'update_option', 'name' => 'woocommerce_currency', 'value' => 'CHF' );
+		$steps[] = array( 'op' => 'update_option', 'name' => 'wpseo_titles', 'value' => array( 'title-home-wpseo' => '%%sitename%%', 'separator' => 'sc-dash' ) );
+		self::b( $steps );
+
+		$answer = self::proposal( self::staged() );
+		$want   = array(
+			'blue-shirt'          => array( 'differs', 'post_type:*' ),
+			'group_64ab12cd34ef5' => array( 'equal', 'post_type:*' ),
+			'header-1'            => array( 'equal', 'post_type:*' ),
+			'landing'             => array( 'equal', 'post:builder' ),
+		);
+		foreach ( $want as $name => list( $category, $lock ) ) {
+			$entry = self::entry_of( $answer['all'], $name );
+			self::assertSame( $category, $entry['category'], $name );
+			self::assertContains( $lock, array_column( $entry['live']['locks'], 'key' ), $name . ': proposed with its lock, shown.' );
+			self::assertContains( $entry['confirm'], array( 'active', 'unclear' ), $name );
+		}
+		foreach ( array( 'woocommerce_currency', 'wpseo_titles' ) as $option ) {
+			$found = array_values( array_filter( $answer['all'], static fn( $e ) => 'option' === $e['kind'] && $option === ( $e['live']['ref'] ?? null ) ) );
+			self::assertCount( 1, $found, $option );
+			self::assertSame( 'equal', $found[0]['category'], $option );
+			self::assertSame( array( 'option:unclassified' ), array_column( $found[0]['live']['locks'], 'key' ), $option );
+		}
+		self::assertSame( 0, $answer['counts']['held'], 'No name of these plugins is held.' );
+	}
+
+
+	/* ----------------------------------------------------------- selection */
+
+	public function testAConfirmationTakesOnlyWhatTheProposalOffers(): void {
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'live-new' => 'x' ) );
+		self::pages_on_b( array( 'about' => 'About us.', 'staging-new' => 'y' ) );
+		// Drafts without a slug: one group of more than one on each side.
+		$drafts_a = array();
+		foreach ( array( 'x1', 'x2', 'same' ) as $content ) {
+			$id = wp_insert_post( wp_slash( self::page( '', $content, array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ) ), true );
+			self::assertIsInt( $id );
+			$drafts_a[ $content ] = (string) $id;
+		}
+		$steps = array();
+		foreach ( array( 'x3', 'x4', 'same', 'same2' ) as $content ) {
+			$steps[] = array(
+				'op'   => 'insert_post',
+				'args' => self::page( '', 'same2' === $content ? 'same' : $content, array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ),
+				'as'   => $content,
+			);
+		}
+		$steps[]  = array(
+			'op'   => 'insert_post',
+			'args' => self::page( '', 'locked', array( 'post_status' => 'draft', 'post_title' => 'Draft', 'post_password' => 'secret' ) ),
+			'as'   => 'locked',
+		);
+		$drafts_b = array_map( 'strval', self::b( $steps ) );
+		$source   = AB_MCP_Sync_Anchor::active()['source_id'];
+		self::assertIsArray(
+			AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => $source,
+					'kind'         => 'post',
+					'live_ref'     => $a['live-new'],
+					'staging_ref'  => '999999',
+					'canon'        => 'canon/1',
+					'base_live'    => hash( 'sha256', 'l' ),
+					'base_staging' => hash( 'sha256', 's' ),
+					'base_origin'  => 'push',
+					'state'        => 'unclear',
+				)
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		$id     = $answer['proposal_id'];
+		$pick   = static fn( string $category ): array => array_values( array_filter( $answer['all'], static fn( $e ) => $category === $e['category'] ) );
+		$amb    = array_values( array_filter( $pick( 'ambiguous' ), static fn( $e ) => 'page' === $e['subtype'] ) );
+		self::assertCount( 1, $amb );
+		$amb    = $amb[0];
+		self::assertCount( 5, $amb['candidates']['staging'] );
+		self::assertCount( 3, $amb['candidates']['live'] );
+		$about   = self::entry_of( $answer['all'], 'about' );
+		$staging = self::entry_of( $answer['all'], 'staging-new' );
+		$realign = $pick( 'realign' );
+		self::assertNull( $realign[0]['confirm'] );
+
+		$c   = static fn( array $more ): array => array( 'action' => 'confirm', 'proposal_id' => $id ) + $more;
+		$say = static function ( array $more, string $says ) use ( $c ): void {
+			self::assertStringContainsString( $says, self::refused( self::gated( $c( $more ) ), 'ab_mcp_sync_pairs_selection' ), (string) json_encode( $more ) );
+		};
+		$say( array(), 'Nothing is chosen.' );
+		$say( array( 'select' => array( 'x' ) ), 'select is a list of entry numbers' );
+		$say( array( 'select' => array( 0 ) ), 'select is a list of entry numbers' );
+		$say( array( 'categories' => array( 'staging_only' ) ), 'categories a list of equal, differs and realign' );
+		// The schema of the tool refuses a choices that is no list before; the plan, called alone, as well.
+		self::assertStringContainsString( 'choices a list of entry', self::refused( AB_MCP_Tools_Staging::pairs_state( $c( array( 'choices' => 'x' ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		$say( array( 'choices' => array( array( 'entry' => $amb['n'] ) ) ), 'A choice is an object of entry' );
+		$say( array( 'select' => array( 99999 ) ), 'The proposal has no entry 99999' );
+		$say( array( 'select' => array( $amb['n'] ) ), 'is ambiguous: name the pair' );
+		$say( array( 'select' => array( $staging['n'] ) ), 'is staging_only and is not paired' );
+		$say( array( 'select' => array( $realign[0]['n'] ) ), 'cannot be aligned anew' );
+		$say( array( 'choices' => array( array( 'entry' => $about['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $about['live']['ref'] ) ) ), 'is not ambiguous; choose it with select' );
+		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $drafts_a['x1'] ) ) ), 'not among its candidates' );
+		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $about['live']['ref'] ) ) ), 'not among its candidates' );
+		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['locked'], 'live_ref' => $drafts_a['x1'] ) ) ), 'is not compared (it has no hash)' );
+		$say(
+			array(
+				'choices' => array(
+					array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $drafts_a['x1'] ),
+					array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $drafts_a['x2'] ),
+				),
+			),
+			'The same object is chosen twice'
+		);
+		$say(
+			array(
+				'choices' => array(
+					array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $drafts_a['x1'] ),
+					array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x4'], 'live_ref' => $drafts_a['x1'] ),
+				),
+			),
+			'The same object is chosen twice'
+		);
+		$skip = self::refused( self::gated( $c( array( 'categories' => array( 'realign' ) ) ) ), 'ab_mcp_sync_pairs_nothing' );
+		self::assertStringContainsString( 'entry ' . $realign[0]['n'] . ': The object is not in the inventory of the staging site.', $skip );
+		self::assertSame( array(), array_filter( self::pair_rows(), static fn( $r ) => 'proposal' === $r['base_origin'] ), 'Nothing was paired.' );
+
+		$done = self::confirmed(
+			$c(
+				array(
+					'choices' => array(
+						array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['same'], 'live_ref' => $drafts_a['same'] ),
+						array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $drafts_a['x1'] ),
+					),
+				)
+			)
+		);
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( array( 'made_active' => 1, 'made_unclear' => 1 ), $done['counts'] );
+		$by = array();
+		foreach ( self::pair_rows() as $row ) {
+			$by[ $row['live_ref'] ] = $row;
+		}
+		self::assertSame( array( $drafts_b['same'], 'active' ), array( $by[ $drafts_a['same'] ]['staging_ref'], $by[ $drafts_a['same'] ]['state'] ), 'The same content: active.' );
+		self::assertSame( array( $drafts_b['x3'], 'unclear' ), array( $by[ $drafts_a['x1'] ]['staging_ref'], $by[ $drafts_a['x1'] ]['state'] ) );
+	}
+
+	public function testAConfirmationMakesAtMost500PairsAndTheRestInAPartAfter(): void {
+		self::pair();
+		$names = array();
+		foreach ( range( 1, 501 ) as $i ) {
+			$names[ 'p-' . $i ] = 'Same ' . $i;
+		}
+		self::pages_on_a( $names );
+		self::pages_on_b( $names );
+		$answer = self::proposal( self::staged() );
+		$equal  = array_values( array_filter( $answer['all'], static fn( $e ) => 'equal' === $e['category'] ) );
+		self::assertGreaterThanOrEqual( 501, count( $equal ) );
+		self::assertGreaterThan( 200, $answer['total'], 'More than one page of entries.' );
+
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'categories'  => array( 'equal' ),
+		);
+		$preview = self::gated( $args );
+		self::assertIsArray( $preview );
+		self::assertSame( array( 'made_active' => 500 ), $preview['preview']['counts'] );
+		self::assertSame( $equal[499]['n'], $preview['preview']['more_after'] );
+		self::assertCount( 200, $preview['preview']['pairs'], 'The first 200 named.' );
+		$done = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $done );
+		self::assertSame( $equal[499]['n'], $done['more_after'] );
+		self::assertStringContainsString( 'after=' . $equal[499]['n'], $done['next'] );
+		self::assertCount( 500, self::pair_rows() );
+		$rest = self::confirmed( $args + array( 'after' => $done['more_after'] ) );
+		self::assertIsArray( $rest, is_wp_error( $rest ) ? $rest->get_error_message() : '' );
+		self::assertSame( array( 'made_active' => count( $equal ) - 500 ), $rest['counts'] );
+		self::assertArrayNotHasKey( 'more_after', $rest );
+		self::assertCount( count( $equal ), self::pair_rows() );
+
+		$numbers = array_column( array_slice( $equal, 0, 501 ), 'n' );
+		self::assertStringContainsString( 'at most 500 pairs', self::refused( self::gated( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'select' => $numbers ) ), 'ab_mcp_sync_pairs_selection' ) );
+		self::assertStringContainsString( 'fill them already', self::refused( self::gated( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'select' => array_slice( $numbers, 0, 500 ), 'categories' => array( 'equal' ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+	}
+
+	/* ------------------------------------------------------------- discard */
+
+	public function testADiscardThatCannotEndAPairEndsNone(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'about' => 'About us.', 'team' => 'T' ) );
+		$b      = self::pages_on_b( array( 'about' => 'About us.', 'team' => 'T' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$ids    = array();
+		foreach ( array( 'about', 'team' ) as $name ) {
+			$pair = AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => $source,
+					'kind'         => 'post',
+					'live_ref'     => $a[ $name ],
+					'staging_ref'  => $b[ $name ],
+					'canon'        => 'canon/1',
+					'base_live'    => hash( 'sha256', 'l' ),
+					'base_staging' => hash( 'sha256', 's' ),
+					'base_origin'  => 'proposal',
+					'state'        => 'residual',
+					'override'     => array( 'post_status' => 'draft' ),
+				)
+			);
+			self::assertIsArray( $pair );
+			$ids[ $name ] = (int) $pair['id'];
+		}
+		$foreign = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => 'another-source',
+				'kind'         => 'post',
+				'live_ref'     => $a['about'],
+				'staging_ref'  => '1',
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'proposal',
+			)
+		);
+		self::assertIsArray( $foreign );
+		self::assertStringContainsString( 'There is no pair ' . $foreign['id'], self::refused( self::gated( array( 'action' => 'discard', 'pair_ids' => array( (int) $foreign['id'] ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		self::refused( self::gated( array( 'action' => 'discard', 'pair_ids' => array( 999999 ) ) ), 'ab_mcp_sync_pairs_selection' );
+
+		$args    = array(
+			'action'   => 'discard',
+			'pair_ids' => array( $ids['about'], $ids['team'] ),
+		);
+		$preview = self::gated( $args );
+		self::assertSame( array( 'discarded' => 2 ), $preview['preview']['counts'] );
+		$table   = AB_MCP_Sync_Schema::table( 'pairs' );
+		$deletes = 0;
+		add_filter(
+			'query',
+			static function ( $sql ) use ( $table, &$deletes ) {
+				if ( 0 === strpos( (string) $sql, 'DELETE FROM ' . $table ) && 2 === ++$deletes ) {
+					return 'SELECT broken FROM nowhere_at_all';
+				}
+				return $sql;
+			}
+		);
+		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		remove_all_filters( 'query' );
+		self::assertStringContainsString( 'the pairs ended before it were made again with new ids', self::refused( $result, 'ab_mcp_sync_pairs_discard_failed' ) );
+		$rows = array_values( array_filter( self::pair_rows(), static fn( $r ) => $source === $r['source_id'] ) );
+		self::assertCount( 2, $rows );
+		$back = array_values( array_filter( $rows, static fn( $r ) => $a['about'] === $r['live_ref'] ) )[0];
+		self::assertNotSame( $ids['about'], (int) $back['id'] );
+		self::assertSame( array( $b['about'], 'residual', '{"post_status":"draft"}', 'proposal' ), array( $back['staging_ref'], $back['state'], $back['override'], $back['base_origin'] ), 'Made again as it was.' );
+		self::assertTrue( isset( self::pair_rows()[ $ids['team'] ] ) );
+	}
+
+	/* --------------------------------------------------------------- store */
+
+	public function testAProposalNotDoneIsNotConfirmedAndTwoCallsAtOnceVoidIt(): void {
+		self::pair();
+		$ids                         = self::staged();
+		AB_MCP_Sync_Proposal::$limit = 3;
+		$cases                       = array(
+			'the same number twice' => static fn( array $first ): array => array( 'c', 1, array_merge( $first, array( 'b9' => 99 ) ) ),
+			'a gap'                 => static fn( array $first ): array => array( 'c', 3, array_merge( $first, array( 'seq' => 3 ) ) ),
+			'another number inside' => static fn( array $first ): array => array( 'c', 2, array_merge( $first, array( 'seq' => 5 ) ) ),
+		);
+		foreach ( $cases as $case => $make ) {
+			$begun = self::here( array( 'action' => 'propose', 'packages' => $ids ) );
+			self::assertFalse( $begun['done'], $case );
+			self::assertStringContainsString( 'not worked out yet', self::refused( self::gated( array( 'action' => 'confirm', 'proposal_id' => $begun['proposal_id'], 'select' => array( 1 ) ) ), 'ab_mcp_sync_pairs_not_done' ), $case );
+			$files = AB_MCP_Protected_Store::files( 'reports', $begun['proposal_id'] );
+			$close = null;
+			foreach ( array_keys( $files ) as $name ) {
+				$parsed = AB_MCP_Sync_Proposal::parse_name( (string) $name );
+				if ( null !== $parsed && 'c' === $parsed['prefix'] ) {
+					$close = json_decode( (string) AB_MCP_Protected_Store::get( 'reports', $begun['proposal_id'], $parsed['name'], $parsed['sha'] ), true );
+				}
+			}
+			self::assertIsArray( $close, $case );
+			list( $prefix, $seq, $data ) = $make( $close );
+			self::put_file( $begun['proposal_id'], $prefix, $seq, $data );
+			self::assertStringContainsString( 'two calls went on with it at once', self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $begun['proposal_id'] ) ), 'ab_mcp_sync_pairs_parts' ), $case );
+		}
+	}
+
+	public function testAProposalWhoseWorkingOutFailedIsWorkedOutByTheNextCall(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.', 'live-new' => 'x' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$ids   = self::staged();
+		$whole = self::proposal( $ids );
+		$table = AB_MCP_Sync_Schema::table( 'pairs' );
+		$fail  = true;
+		add_filter(
+			'query',
+			static function ( $sql ) use ( $table, &$fail ) {
+				if ( $fail && false !== strpos( (string) $sql, 'FROM ' . $table ) ) {
+					$fail = false;
+					return 'SELECT broken FROM nowhere_at_all';
+				}
+				return $sql;
+			}
+		);
+		$failed = self::here( array( 'action' => 'propose', 'packages' => $ids ) );
+		remove_all_filters( 'query' );
+		self::refused( $failed, 'ab_mcp_staging_db_error' );
+		$groups = array_values( array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'proposal' === $g['label'] && $whole['proposal_id'] !== $g['gid'] ) );
+		self::assertCount( 1, $groups );
+		$again = self::here( array( 'action' => 'propose', 'proposal_id' => $groups[0]['gid'] ) );
+		self::assertIsArray( $again, is_wp_error( $again ) ? $again->get_error_message() : '' );
+		self::assertTrue( $again['done'] );
+		$strip = static fn( array $entries ): array => array_map( static fn( $e ) => array( $e['category'], $e['staging']['ref'] ?? null, $e['live']['ref'] ?? null ), $entries );
+		self::assertSame( $strip( $whole['entries'] ), $strip( $again['entries'] ), 'Its inventory was not read a second time.' );
+		self::assertSame( $whole['live']['objects'], $again['live']['objects'] );
+	}
+
+	public function testAGroupWithTwoHeadsIsNone(): void {
+		self::pair();
+		$gid = self::head( array() );
+		self::put_file( $gid, 'h', null, array( 'format' => AB_MCP_Sync_Proposal::FORMAT, 'other' => true ) );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $gid ) ), 'ab_mcp_sync_pairs_parts' );
+	}
+
+	public function testAProposalOfAnotherCanonSourceOrFormatIsNone(): void {
+		self::pair();
+		foreach ( array( 'canon' => 'canon/9', 'source_id' => 'another-source' ) as $field => $value ) {
+			$gid = self::head( array( $field => $value ) );
+			self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $gid ) ), 'ab_mcp_sync_pairs_stale' );
+		}
+		$gid = self::head( array( 'expires' => time() + 3600 ) );
+		self::assertNotSame( 'ab_mcp_sync_pairs_stale', self::here( array( 'action' => 'propose', 'proposal_id' => $gid ) )->get_error_code(), 'The same head as it should be is no stale one.' );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => self::head( array( 'format' => 'other/1' ) ) ) ), 'ab_mcp_sync_pairs_unknown' );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => self::head( array(), 'other' ) ) ), 'ab_mcp_sync_pairs_unknown' );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => self::head( array( 'connection' => hash( 'sha256', 'x' ) ) ) ) ), 'ab_mcp_sync_pairs_foreign' );
+	}
+
+	public function testAProposalHoldsAsLongAsItsEarliestPackage(): void {
+		self::pair();
+		$early = self::crafted( array( self::option_line( 'blogname' ) ), time() - 3600 );
+		$late  = self::crafted( array( self::option_line( 'blogdescription' ) ), time() );
+		$answer = self::proposal( array( $late['id'], $early['id'] ) );
+		self::assertSame( $early['expires'], $answer['expires'] );
+	}
+
+	public function testAPackageWhoseManifestExpiredIsNotRead(): void {
+		self::pair();
+		$package = self::crafted( array( self::option_line( 'blogname' ) ), time() - 86400 + 8 );
+		while ( time() < $package['expires'] ) {
+			sleep( 1 );
+		}
+		self::refused( self::here( array( 'action' => 'propose', 'packages' => array( $package['id'] ) ) ), 'ab_mcp_sync_manifest_expired' );
+	}
+
+	/* ------------------------------------------------------- calls, owner */
+
+	public function testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.', 'live-new' => 'x' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$ids = self::staged();
+
+		$calls = 0;
+		$whole = self::proposal( $ids, $calls );
+		self::assertSame( 1, $calls );
+		AB_MCP_Sync_Proposal::$limit = 3;
+		$parts = self::proposal( $ids, $calls );
+		self::assertGreaterThan( 3, $calls, 'Three objects a call.' );
+		$strip = static fn( array $entries ): array => array_map( static fn( $e ) => array( $e['category'], $e['staging']['ref'] ?? null, $e['live']['ref'] ?? null ), $entries );
+		self::assertSame( $strip( $whole['all'] ), $strip( $parts['all'] ), 'The same proposal over calls.' );
+		self::assertSame( $whole['live']['objects'], $parts['live']['objects'] );
+		self::assertNotSame( $whole['proposal_id'], $parts['proposal_id'] );
+
+		// One proposal a connection: the later one removed the earlier one.
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $whole['proposal_id'] ) ), 'ab_mcp_sync_pairs_unknown' );
+
+		// Another connection: over MCP.
+		$over = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'proposal_id' => $parts['proposal_id'] ) );
+		self::assertIsString( $over );
+		self::assertStringContainsString( 'belongs to another account or connection', $over );
+		$confirm = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'confirm', 'proposal_id' => $parts['proposal_id'], 'select' => array( 1 ) ) );
+		self::assertIsString( $confirm );
+		self::assertStringContainsString( 'belongs to another account or connection', $confirm );
+
+		// A proposal over MCP removes none of this process, nor the other way.
+		$mcp = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+		self::assertIsArray( $mcp );
+		self::assertTrue( self::here( array( 'action' => 'propose', 'proposal_id' => $parts['proposal_id'] ) )['done'] );
+		AB_MCP_Sync_Proposal::$limit = null;
+		self::proposal( $ids );
+		self::assertIsArray( self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'proposal_id' => $mcp['proposal_id'] ) ) );
+		$left = array_column( array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'proposal' === $g['label'] ), 'gid' );
+		self::assertCount( 2, $left, 'One a connection.' );
+		self::assertContains( $mcp['proposal_id'], $left );
+	}
+
+	public function testAProposalOfAnotherAccountIsNotItsOwn(): void {
+		self::pair();
+		$ids   = self::staged();
+		$whole = self::proposal( $ids );
+		$other = wp_insert_user(
+			array(
+				'user_login' => 'second',
+				'user_pass'  => wp_generate_password( 24 ),
+				'user_email' => 'second@example.invalid',
+				'role'       => 'administrator',
+			)
+		);
+		self::assertIsInt( $other );
+		wp_set_current_user( $other );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $whole['proposal_id'] ) ), 'ab_mcp_sync_pairs_foreign' );
+		self::refused( self::here( array( 'action' => 'propose', 'packages' => $ids ) ), 'ab_mcp_sync_import_unknown' );
+	}
+
+	/* --------------------------------------------------------------- held */
+
+	public function testANameHoldingACredentialIsShownByTheHashOfItsRefOnly(): void {
+		global $wpdb;
+		self::pair();
+		self::b(
+			array(
+				array(
+					'op'   => 'insert_post',
+					'args' => self::page( 'plain', 'x' ),
+					'as'   => 'p',
+				),
+			)
+		);
+		// A slug no form of WordPress writes, with a credential in it, on both sites.
+		$slug = '{"password":"CANARY-ONLY"}';
+		$a    = self::pages_on_a( array( 'plain' => 'x' ) );
+		$wpdb->update( $wpdb->posts, array( 'post_name' => $slug ), array( 'ID' => (int) $a['plain'] ) );
+		clean_post_cache( (int) $a['plain'] );
+		update_option( 'my_api_key', 'CANARY-B9' );
+		$ids    = self::staged();
+		$answer = self::proposal( $ids );
+		$held   = array_values( array_filter( $answer['all'], static fn( $e ) => 'held' === $e['category'] ) );
+		self::assertGreaterThanOrEqual( 1, $answer['live']['credentials'], 'The option of a credential is counted.' );
+		self::assertSame( array(), array_filter( $answer['all'], static fn( $e ) => 'my_api_key' === ( $e['live']['ref'] ?? null ) ), 'And never listed.' );
+		self::assertCount( 1, $held );
+		self::assertSame( array( array( 'held' => 'credential_field', 'ref_sha256' => hash( 'sha256', '"' . $a['plain'] . '"' ) ) ), $held[0]['live'] );
+		self::assertSame( 1, $answer['live']['held'] );
+		self::assertStringNotContainsString( 'CANARY', (string) json_encode( $answer ) );
+		self::assertSame( 'staging_only', self::entry_of( $answer['all'], 'plain' )['category'], 'The page of B has no counterpart now.' );
+	}
+
+	/* ------------------------------------------------------------- series */
+
+	public function testPackagesOfOneSeriesAreOneInventoryAndOfTwoAreRefused(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.', 'live-new' => 'x' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$series = self::export_b( 4 );
+		self::assertGreaterThan( 2, count( $series ) );
+		$ids = array();
+		foreach ( $series as $package ) {
+			self::assertTrue( self::import( $package )['complete'] );
+			$ids[] = $package['package_id'];
+		}
+		$answer = self::proposal( $ids );
+		self::assertSame( 'equal', self::entry_of( $answer['all'], 'about' )['category'] );
+		$incomplete = array_map( static fn( $k ) => $k['kind'] . '/' . $k['subtype'], $answer['staging']['incomplete'] );
+		$live       = self::entry_of( $answer['all'], 'live-new' );
+		if ( in_array( 'post/page', $incomplete, true ) ) {
+			self::assertSame( 'not_compared', $live['category'], 'The post kind across packages: never only live.' );
+			self::assertStringContainsString( 'does not hold every object of this kind', $live['reason'] );
+		} else {
+			self::assertSame( 'live_only', $live['category'] );
+		}
+		self::assertContains( 'option/', $incomplete, 'The options of B are more than four.' );
+
+		// The first package of another series with this one: an object twice.
+		$second = self::export_b( 4 );
+		self::assertTrue( self::import( $second[0] )['complete'] );
+		self::refused( self::here( array( 'action' => 'propose', 'packages' => array( $ids[0], $second[0]['package_id'] ) ) ), 'ab_mcp_sync_pairs_series' );
+	}
+
+	public function testOnlyAPackageTakenOverCompletelyIsRead(): void {
+		self::pair();
+		self::pages_on_b( array( 'about' => str_repeat( 'Long text. ', 10 ) ) );
+		$package = self::export_b()[0];
+		$msg     = self::refused( self::here( array( 'action' => 'propose', 'packages' => array( $package['package_id'] ) ) ), 'ab_mcp_sync_import_unknown' );
+		self::assertStringContainsString( 'wp_site_import_chunk', $msg );
+		$state = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => $package['package_id'],
+				'manifest'   => $package['manifest'],
+				'purpose'    => 'inventory',
+			)
+		);
+		self::assertFalse( $state['complete'] );
+		self::refused( self::here( array( 'action' => 'propose', 'packages' => array( $package['package_id'] ) ) ), 'ab_mcp_sync_import_incomplete' );
+		self::assertSame( array(), array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'proposal' === $g['label'] ), 'No proposal begun.' );
+	}
+
+	/* ------------------------------------------------------------- canon */
+
+	public function testACanonChangeGivesEqualFormsNewBasesAndMakesTheOthersUnclear(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'A' ) );
+		$b      = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'B' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$old    = hash( 'sha256', 'old' );
+		$made   = array();
+		foreach ( array( 'about', 'contact' ) as $name ) {
+			$pair = AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => $source,
+					'kind'         => 'post',
+					'live_ref'     => $a[ $name ],
+					'staging_ref'  => $b[ $name ],
+					'canon'        => 'canon/9',
+					'base_live'    => $old,
+					'base_staging' => $old,
+					'base_origin'  => 'proposal',
+				)
+			);
+			self::assertIsArray( $pair );
+			$made[ $name ] = $pair;
+		}
+		$waits = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => $source,
+				'kind'         => 'post',
+				'live_ref'     => (string) self::pages_on_a( array( 'gone-on-staging' => 'x' ) )['gone-on-staging'],
+				'staging_ref'  => '999999',
+				'canon'        => 'canon/9',
+				'base_live'    => $old,
+				'base_staging' => $old,
+				'base_origin'  => 'proposal',
+			)
+		);
+		self::assertIsArray( $waits );
+		$answer = self::proposal( self::staged() );
+		self::assertSame( array( 'rebased' => 1, 'unclear' => 1, 'waiting' => 1 ), $answer['canon'] );
+		self::assertSame( array( 'active', 'canon/9', $old ), array( AB_MCP_Sync_Pairs::get( $waits['id'] )['state'], AB_MCP_Sync_Pairs::get( $waits['id'] )['canon'], AB_MCP_Sync_Pairs::get( $waits['id'] )['base_live'] ), 'Its staging object is not in the inventory: it waits.' );
+		$about   = AB_MCP_Sync_Pairs::get( $made['about']['id'] );
+		$contact = AB_MCP_Sync_Pairs::get( $made['contact']['id'] );
+		self::assertSame( array( 'active', 'canon/1' ), array( $about['state'], $about['canon'] ) );
+		self::assertSame( $about['base_live'], $about['base_staging'] );
+		self::assertNotSame( $old, $about['base_live'] );
+		self::assertSame( array( 'unclear', 'canon/9', $old ), array( $contact['state'], $contact['canon'], $contact['base_live'] ), 'The old bases stay for the person who confirms.' );
+		self::assertSame( 2, $answer['paired'] );
+		self::assertSame( 1, $answer['counts']['realign'], 'The unclear one, read again after the change.' );
+	}
+
+	/* ------------------------------------------------------------ realign */
+
+	public function testAnUnclearPairAlignedAnewKeepsItsOverrideAndExtra(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'contact' => 'A' ) );
+		$b      = self::pages_on_b( array( 'contact' => 'B' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$pair   = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => $source,
+				'kind'         => 'post',
+				'live_ref'     => $a['contact'],
+				'staging_ref'  => $b['contact'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'push',
+				'state'        => 'unclear',
+				'override'     => array( 'post_status' => 'draft' ),
+				'base_extra'   => array( 'items' => array( 1, 2 ) ),
+			)
+		);
+		self::assertIsArray( $pair );
+		$answer  = self::proposal( self::staged() );
+		$realign = array_values( array_filter( $answer['all'], static fn( $e ) => 'realign' === $e['category'] ) );
+		self::assertCount( 1, $realign );
+		$done = self::confirmed(
+			array(
+				'action'      => 'confirm',
+				'proposal_id' => $answer['proposal_id'],
+				'select'      => array( $realign[0]['n'] ),
+			)
+		);
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( array( 'aligned' => 1 ), $done['counts'] );
+		$now = AB_MCP_Sync_Pairs::get( $pair['id'] );
+		self::assertSame( array( 'active', 'proposal', array( 'post_status' => 'draft' ), array( 'items' => array( 1, 2 ) ) ), array( $now['state'], $now['base_origin'], $now['override'], $now['base_extra'] ) );
+		self::assertNotSame( hash( 'sha256', 'l' ), $now['base_live'] );
+		self::assertNotSame( $now['base_live'], $now['base_staging'], 'Each side its own base.' );
+	}
+
+	public function testAPairChangedSinceTheProposalIsSkippedNotOverwritten(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'contact' => 'A', 'about' => 'About us.' ) );
+		$b      = self::pages_on_b( array( 'contact' => 'B', 'about' => 'About us.' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$pair   = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => $source,
+				'kind'         => 'post',
+				'live_ref'     => $a['contact'],
+				'staging_ref'  => $b['contact'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'push',
+				'state'        => 'unclear',
+			)
+		);
+		$answer  = self::proposal( self::staged() );
+		$realign = array_values( array_filter( $answer['all'], static fn( $e ) => 'realign' === $e['category'] ) )[0];
+		$about   = self::entry_of( $answer['all'], 'about' );
+		// Another request moves the pair on in between.
+		self::assertIsArray( AB_MCP_Sync_Pairs::set_state( $pair['id'], 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair['id'] ) ) ) );
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( $realign['n'], $about['n'] ),
+		);
+		$preview = self::gated( $args );
+		self::assertSame( array( 'made_active' => 1 ), $preview['preview']['counts'] );
+		self::assertSame( array( array( 'entry' => $realign['n'], 'reason' => 'pair ' . $pair['id'] . ' changed since the proposal' ) ), $preview['preview']['skipped'] );
+		$done = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $done );
+		self::assertSame( 'residual', AB_MCP_Sync_Pairs::get( $pair['id'] )['state'], 'Left as the other request wrote it.' );
+		self::assertCount( 2, self::pair_rows() );
+	}
+
+	/* ------------------------------------------------------- all or nothing */
+
+	public function testAConfirmationThatCannotWriteAPairKeepsNothing(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'contact' => 'A', 'about' => 'About us.', 'team' => 'T' ) );
+		$b      = self::pages_on_b( array( 'contact' => 'B', 'about' => 'About us.', 'team' => 'T' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$pair   = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => $source,
+				'kind'         => 'post',
+				'live_ref'     => $a['contact'],
+				'staging_ref'  => $b['contact'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'push',
+				'state'        => 'unclear',
+			)
+		);
+		// Drafts without a slug: an ambiguous group, whose choice comes last.
+		$drafts_a = array();
+		foreach ( array( 'd1', 'd2' ) as $content ) {
+			$drafts_a[ $content ] = (string) wp_insert_post( wp_slash( self::page( '', $content, array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ) ) );
+		}
+		$drafts_b = array_map(
+			'strval',
+			self::b(
+				array(
+					array( 'op' => 'insert_post', 'args' => self::page( '', 'd3', array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ), 'as' => 'd3' ),
+					array( 'op' => 'insert_post', 'args' => self::page( '', 'd4', array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ), 'as' => 'd4' ),
+				)
+			)
+		);
+		$before  = AB_MCP_Sync_Pairs::snapshot( $pair['id'] );
+		$answer  = self::proposal( self::staged() );
+		$realign = array_values( array_filter( $answer['all'], static fn( $e ) => 'realign' === $e['category'] ) )[0];
+		$amb     = array_values( array_filter( $answer['all'], static fn( $e ) => 'ambiguous' === $e['category'] && 'page' === $e['subtype'] ) )[0];
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( $realign['n'], self::entry_of( $answer['all'], 'about' )['n'], self::entry_of( $answer['all'], 'team' )['n'] ),
+		);
+		$preview = self::gated( $args );
+		self::assertIsArray( $preview );
+		$table   = AB_MCP_Sync_Schema::table( 'pairs' );
+		$inserts = 0;
+		add_filter(
+			'query',
+			static function ( $sql ) use ( $table, &$inserts ) {
+				if ( 0 === strpos( (string) $sql, 'INSERT INTO `' . $table . '`' ) && 2 === ++$inserts ) {
+					return 'SELECT broken FROM nowhere_at_all';
+				}
+				return $sql;
+			}
+		);
+		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		remove_all_filters( 'query' );
+		self::assertSame( 2, $inserts );
+		$msg = self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' );
+		self::assertStringContainsString( 'what it wrote before was taken back', $msg );
+		self::assertSame( array( (int) $pair['id'] ), array_keys( self::pair_rows() ), 'The pair made before is gone.' );
+		self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( $pair['id'] ), 'The pair to align was not reached.' );
+
+		// The pair aligned anew before a later failure is put back.
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( $realign['n'] ),
+			'choices'     => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['d3'], 'live_ref' => $drafts_a['d1'] ) ),
+		);
+		$preview = self::gated( $args );
+		self::assertIsArray( $preview );
+		self::assertSame( array( 'realign', 'create' ), array_column( $preview['preview']['pairs'], 'op' ), 'Aligned first, the choice after it.' );
+		$inserts = 0;
+		$updates = 0;
+		add_filter(
+			'query',
+			static function ( $sql ) use ( $table, &$inserts, &$updates ) {
+				if ( 0 === strpos( (string) $sql, 'UPDATE ' . $table ) ) {
+					++$updates;
+				}
+				if ( 0 === strpos( (string) $sql, 'INSERT INTO `' . $table . '`' ) && 1 === ++$inserts ) {
+					return 'SELECT broken FROM nowhere_at_all';
+				}
+				return $sql;
+			}
+		);
+		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		remove_all_filters( 'query' );
+		self::assertSame( 2, $updates, 'Aligned, then put back.' );
+		self::assertStringContainsString( 'what it wrote before was taken back', self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' ) );
+		$now = AB_MCP_Sync_Pairs::get( $pair['id'] );
+		self::assertSame( array( 'unclear', 'push', hash( 'sha256', 'l' ) ), array( $now['state'], $now['base_origin'], $now['base_live'] ), 'Back as it was.' );
+		self::assertSame( array( (int) $pair['id'] ), array_keys( self::pair_rows() ) );
+	}
+
+	/* ------------------------------------------------------------ validity */
+
+	public function testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$ids    = self::staged();
+		$answer = self::proposal( $ids );
+		$args   = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		self::assertIsArray( self::gated( $args ) );
+
+		AB_MCP_Sync_Proposal::$clock = static fn(): int => (int) $answer['expires'];
+		self::assertStringContainsString( 'expired', self::refused( self::gated( $args ), 'ab_mcp_sync_pairs_expired' ) );
+		AB_MCP_Sync_Proposal::$clock = static fn(): int => (int) $answer['expires'] - 1;
+		self::assertIsArray( self::gated( $args ), 'Until it expires.' );
+		AB_MCP_Sync_Proposal::$clock = null;
+
+		// The role confirmed again later: another print of the pair, the same key.
+		$print = AB_MCP_Sync_Anchor::pair_print();
+		$raw   = \AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+		$raw['role']['at'] = (int) $raw['role']['at'] + 1;
+		\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+		self::assertNotNull( AB_MCP_Sync_Anchor::active() );
+		self::assertNotSame( $print, AB_MCP_Sync_Anchor::pair_print() );
+		self::refused( self::gated( $args ), 'ab_mcp_sync_pairs_stale' );
+		self::refused( self::here( array( 'action' => 'propose', 'proposal_id' => $answer['proposal_id'] ) ), 'ab_mcp_sync_pairs_stale' );
+		self::refused( self::here( array( 'action' => 'propose', 'packages' => $ids ) ), 'ab_mcp_sync_import_pair_changed' );
+		self::assertSame( array(), self::pair_rows() );
+	}
+
+	public function testTheSnapshotAProposalKeepsIsTheOneOfTheStore(): void {
+		$pair = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => 'src-1',
+				'kind'         => 'menu',
+				'live_ref'     => '12',
+				'staging_ref'  => 'ä/34',
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'push',
+				'state'        => 'residual',
+				'override'     => array( 'post_status' => 'draft', 'comment_status' => 'closed' ),
+				'base_extra'   => array( 'z' => array( 'b' => 1, 'a' => 'ü/x' ), 'a' => true ),
+				'last_run'     => 7,
+			)
+		);
+		self::assertIsArray( $pair );
+		self::assertSame( AB_MCP_Sync_Pairs::snapshot( $pair['id'] ), AB_MCP_Sync_Proposal::pair_snapshot( $pair ) );
+	}
+}

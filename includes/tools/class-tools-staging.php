@@ -10,7 +10,8 @@
  * The group «Staging» grows with the later stages of the staging workflow:
  * since Z8 the packages of the takeover (wp_site_export, wp_site_export_chunk
  * on the staging site, wp_site_import_chunk on the production site;
- * AB_MCP_Sync_Export, AB_MCP_Sync_Import).
+ * AB_MCP_Sync_Export, AB_MCP_Sync_Import) and the object pairs
+ * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool).
  *
  * @package AlphaBridge_MCP
  */
@@ -200,6 +201,87 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 			)
 		);
 
+		$r->register(
+			'wp_site_pairs',
+			array(
+				'description' => 'On the production site: pair the objects of this site with those of its staging site, where the staging site is no copy made with the same ids. action=propose with packages (the package_ids of the inventory of the staging site this site took over completely with wp_site_import_chunk: one package, or the packages of one series) compares that inventory with the inventory of this site, read in parts of at most 4000 objects and 45 seconds a call (call again with action=propose and the proposal_id until done is true), and proposes by kind and identity (post type, theme, slug and the path of parents; taxonomy and slug; menu, position and target type of a menu item; the name of an option or area; the stylesheet of the additional CSS) and by hash: equal (the same identity and content), differs (the same identity, other content), ambiguous (more than one candidate: the person names the pair), realign (a pair that is unclear or residual: both sides now as its new bases), staging_only and live_only (no counterpart; live_only only where the inventory of the staging site holds every object of that kind, else not_compared), not_compared (with the reason: a row not read, a name no pair holds, an option the takeover never reads, an object a credential holds) and held (a name holds a credential: shown by the SHA-256 of its ref only, never paired). Objects of a pair are not proposed again, and an active pair whose bases are of another version of the comparison data is worked out again where both objects are at hand (equal → new bases, else unclear). The answer carries counts, the first 200 entries and next_after (call again with proposal_id and after for the next ones). action=confirm with the proposal_id and select (entry numbers), categories (equal, differs, realign; at most 500 a call, after for the next part) or choices (for an ambiguous entry: its staging_ref and live_ref) makes the pairs: equal as active, differs and an ambiguous pair of other content as unclear, realign as active with the states of both sides now; all or nothing. action=discard with pair_ids ends pairs; their objects stay. action=list with after, kind and state lists the pairs. A proposal belongs to the account and connection that made it, holds as long as its packages (a day at most), and a new proposal of the same connection replaces it. Writes the table of object pairs and the protected store of this site only; no content of either site changes. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'action'      => array(
+							'type'        => 'string',
+							'enum'        => array( 'propose', 'confirm', 'discard', 'list' ),
+							'description' => 'propose: work out or page a proposal; confirm: make the pairs chosen; discard: end pairs; list: the pairs.',
+						),
+						'packages'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'propose: the package_ids of the inventory of the staging site, taken over completely here, of one series.',
+						),
+						'proposal_id' => array(
+							'type'        => 'string',
+							'description' => 'propose: go on with this proposal or page it; confirm: the proposal the entries are of.',
+						),
+						'after'       => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'propose: the entries after this number; confirm with categories: the entries after this number; list: the pairs after this pair id.',
+						),
+						'select'      => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'confirm: the numbers of the entries to pair (equal, differs or realign).',
+						),
+						'categories'  => array(
+							'type'        => 'array',
+							'items'       => array(
+								'type' => 'string',
+								'enum' => array( 'equal', 'differs', 'realign' ),
+							),
+							'description' => 'confirm: every entry of these categories after the number in after, at most 500 a call.',
+						),
+						'choices'     => array(
+							'type'        => 'array',
+							'description' => 'confirm: for an ambiguous entry, the pair the person chose: entry, staging_ref and live_ref among its candidates.',
+							'items'       => array(
+								'type'       => 'object',
+								'properties' => array(
+									'entry'       => array( 'type' => 'integer' ),
+									'staging_ref' => array( 'type' => 'string' ),
+									'live_ref'    => array( 'type' => 'string' ),
+								),
+							),
+						),
+						'pair_ids'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'discard: the ids of the pairs to end, from action=list.',
+						),
+						'kind'        => array(
+							'type'        => 'string',
+							'description' => 'list: only pairs of this kind (post, term, menu, menu_item, widget_area, custom_css, option, theme_mod).',
+						),
+						'state'       => array(
+							'type'        => 'string',
+							'enum'        => array( 'active', 'unclear', 'residual', 'deleted' ),
+							'description' => 'list: only pairs in this state.',
+						),
+					),
+					'required'   => array( 'action' ),
+				),
+				'confirm'     => array(
+					'when'    => array( __CLASS__, 'pairs_when' ),
+					'state'   => array( __CLASS__, 'pairs_state' ),
+					'preview' => array( __CLASS__, 'pairs_preview' ),
+					'note'    => 'action=confirm and action=discard run in two steps: without confirm_token such a call changes nothing and returns a preview with a confirm_token, and the same call with that token runs it; propose and list run at once. The token holds for this account and connection, while the proposal and the pairs it covers are unchanged. This guards against a call nobody meant; it does not make the change reversible.',
+				),
+				'callback'    => array( __CLASS__, 'site_pairs' ),
+			)
+		);
+
 		if ( false === has_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ) ) ) {
 			add_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ), 10, 2 );
 		}
@@ -296,6 +378,51 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	public static function site_import_chunk( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-import.php';
 		return AB_MCP_Sync_Import::call( $a );
+	}
+
+	/**
+	 * Whether a call of wp_site_pairs needs the token: a strict false for
+	 * propose and list only, true for any other (confirm, discard, none),
+	 * asked without loading the classes of the takeover.
+	 *
+	 * @param array $a Arguments.
+	 * @return bool
+	 */
+	public static function pairs_when( array $a ) {
+		return ! ( isset( $a['action'] ) && in_array( $a['action'], array( 'propose', 'list' ), true ) );
+	}
+
+	/**
+	 * The state a token of wp_site_pairs is bound to.
+	 *
+	 * @param array $a Arguments.
+	 * @return string|WP_Error
+	 */
+	public static function pairs_state( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::state( $a );
+	}
+
+	/**
+	 * The preview of wp_site_pairs confirm and discard.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function pairs_preview( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::preview( $a );
+	}
+
+	/**
+	 * wp_site_pairs.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_pairs( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::call( $a );
 	}
 
 	/**
