@@ -56,6 +56,7 @@ require_once dirname( __DIR__ ) . '/class-store-budget.php';
 require_once __DIR__ . '/class-sync-export.php';
 require_once __DIR__ . '/class-sync-fetcher.php';
 require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 
 /**
@@ -81,19 +82,25 @@ final class AB_MCP_Sync_Import {
 	/** The letters of base32 (RFC 4648, in lower case), which fit the names of the protected store. */
 	const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
-	/** The format of that list: kind, ref and code (HELD_CODES) of each object, no other field of its line. */
-	const HELD_FORMAT = 'ab-sync-held/2';
+	/**
+	 * The format of that list: of each object its kind, the SHA-256 of its
+	 * ref in the spelling of AB_MCP_Sync_Canon::encode() (a text with its
+	 * quotes, bytes in the byte form), by which the takeover finds its line
+	 * in the package, and the code of why (HELD_CODES); never the ref nor
+	 * another name, which may carry what holds it.
+	 */
+	const HELD_FORMAT = 'ab-sync-held/3';
 
 	/**
 	 * Why a line is held (held_code()): a name of it is the name of a
 	 * credential by the rules of this site (credential_name); a name of it
-	 * holds a field of a credential, as the credential check reads a value
-	 * (credential_field); a name of it does not read to its end, so nothing
-	 * says what it holds (unreadable_name).
+	 * holds a field of a credential, as the credential check and the net
+	 * over the raw value read a value (credential_field); a name of it does
+	 * not read to its end, so nothing says what it holds (unreadable_name).
 	 */
 	const HELD_CODES = array( 'credential_name', 'credential_field', 'unreadable_name' );
 
-	/** Bytes of that list at most: the kind and ref of every object a package holds. */
+	/** Bytes of that list at most: a kind, a SHA-256 and a code for each object a package may hold (AB_MCP_Store_Budget::UNPACK, some 100 bytes each). */
 	const HELD_MAX = 2097152;
 
 	/** Bytes of a chunk inflated at a time (inflate()). */
@@ -687,7 +694,7 @@ final class AB_MCP_Sync_Import {
 	 * of why (held_code()), and the package goes on.
 	 *
 	 * @param array $held held().
-	 * @return array[]|WP_Error kind, ref and code of the objects held by this site.
+	 * @return array[]|WP_Error kind, SHA-256 of the ref and code of the objects held by this site (HELD_FORMAT).
 	 */
 	private static function unpacked( array $held ) {
 		$manifest = $held['manifest'];
@@ -734,7 +741,7 @@ final class AB_MCP_Sync_Import {
 				}
 				$code = self::held_code( $object, $extra );
 				if ( null !== $code ) {
-					$out[] = array( $object['kind'], $object['ref'], $code );
+					$out[] = array( $object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( $object['ref'] ) ), $code );
 				}
 			}
 		}
@@ -1038,11 +1045,14 @@ final class AB_MCP_Sync_Import {
 	 * Why a line is held on this site (HELD_CODES), or null: its name, or the
 	 * row WordPress reads instead (target), is the name of a credential by
 	 * the rules of this site (named_credential(); a line without its
-	 * identity names its object by its ref); else the
-	 * content check of the credential check (AB_MCP_Sync_Credentials::unit()
-	 * as it reads a value) over every name of the line (names_of()): a field
-	 * of a credential in one, or one that does not read to its end. A slug
-	 * «reset-password» is no field of one; {"password":"…"} is.
+	 * identity names its object by its ref); else, over every name of the
+	 * line (names_of()), what the export runs over a value: the content check
+	 * of the credential check (AB_MCP_Sync_Credentials::unit()) and the net
+	 * over the raw value in every layer of it (AB_MCP_Sync_Net::over_name():
+	 * decoded, in base64, in data:). A field of a credential in one, or one
+	 * that does not read to its end, holds the line. A slug «reset-password»
+	 * is no field of one; {"password":"…"} is, as its base64 and
+	 * password%253D… are.
 	 *
 	 * @param array    $object Line (line_shaped()).
 	 * @param string[] $extra  AB_MCP_Redactor::extra_keys().
@@ -1059,6 +1069,13 @@ final class AB_MCP_Sync_Import {
 				return 'credential_field';
 			}
 			if ( 'unreadable' === $check['state'] ) {
+				return 'unreadable_name';
+			}
+			$net = AB_MCP_Sync_Net::over_name( $name, $extra );
+			if ( 'credential' === $net ) {
+				return 'credential_field';
+			}
+			if ( 'unreadable' === $net ) {
 				return 'unreadable_name';
 			}
 		}

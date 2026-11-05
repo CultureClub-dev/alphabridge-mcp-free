@@ -39,7 +39,9 @@
  * closed form, an empty identity only for a row not read, names in bytes.
  * Codex round 3 of part 3: two levels, the structure refuses a package and
  * the names never; a credential in a name holds its line, with the code of
- * why; the reason of a row the takeover never reads as a code.
+ * why; the reason of a row the takeover never reads as a code. Codex
+ * round 4 of part 3: the net over the raw value over every name, the list
+ * of held lines without a value (the SHA-256 of each ref).
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
@@ -91,6 +93,7 @@ $un = 'uninstall.php';
 $rt = 'includes/sync/class-sync-export-rights.php';
 $os = 'includes/sync/class-sync-option-schema.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$net = 'includes/sync/class-sync-net.php';
 
 return array(
 	array(
@@ -5209,8 +5212,8 @@ return array(
 		'id'      => 'paket/p3r3-held-list-code',
 		'clause'  => 'unpacked(): kind, ref and the code in the list (two sites)',
 		'file'    => $im,
-		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], \$object['ref'], \$code );",
-		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], \$object['ref'] );",
+		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
+		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ) );",
 		'run'     => $itpkg,
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
@@ -5317,7 +5320,7 @@ return array(
 		'id'      => 'paket/p3r3-held-format',
 		'clause'  => 'HELD_FORMAT: a list of the version before is none (two sites)',
 		'file'    => $im,
-		'search'  => "\tconst HELD_FORMAT = 'ab-sync-held/2';",
+		'search'  => "\tconst HELD_FORMAT = 'ab-sync-held/3';",
 		'replace' => "\tconst HELD_FORMAT = 'ab-sync-held/1';",
 		'run'     => $itpkg,
 		'expect'  => '/testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew/',
@@ -5447,5 +5450,86 @@ return array(
 		'replace' => "\t\t);",
 		'run'     => $package,
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
+	),
+	array(
+		'id'      => 'paket/p3r4-held-hash',
+		'clause'  => 'unpacked(): the SHA-256 of the ref in the list, never the ref (two sites)',
+		'file'    => $im,
+		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
+		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], \$object['ref'], \$code );",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-held-hash-canon',
+		'clause'  => 'unpacked(): the ref as the canon spells it (two sites)',
+		'file'    => $im,
+		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
+		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', (string) AB_MCP_Sync_Import::bytes( \$object['ref'] ) ), \$code );",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-net-credential',
+		'clause'  => 'held_code(): the net finds a credential in a layer of a name (two sites)',
+		'file'    => $im,
+		'search'  => "\t\t\tif ( 'credential' === \$net ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-net-unreadable',
+		'clause'  => 'held_code(): a name the net does not read to its end (two sites)',
+		'file'    => $im,
+		'search'  => "\t\t\tif ( 'unreadable' === \$net ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-over-name-count',
+		'clause'  => 'over_name(): the credentials of every layer (two sites)',
+		'file'    => $net,
+		'search'  => "\t\t\tif ( array() !== self::credentials( \$layer[1], \$extra, \$undecidable, '/code' === substr( \$layer[0], -5 ) ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-over-name-code',
+		'clause'  => 'over_name(): the layer of code read as code (two sites)',
+		'file'    => $net,
+		'search'  => "\$undecidable, '/code' === substr( \$layer[0], -5 ) ) ) {\n\t\t\t\treturn 'credential';",
+		'replace' => "\$undecidable, false ) ) {\n\t\t\t\treturn 'credential';",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-over-name-undecidable',
+		'clause'  => 'over_name(): braces that cannot be counted (two sites)',
+		'file'    => $net,
+		'search'  => "\t\t\tif ( \$undecidable ) {\n\t\t\t\treturn 'unreadable';",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn 'unreadable';",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-over-name-deep',
+		'clause'  => 'over_name(): deeper than the net reads (two sites)',
+		'file'    => $net,
+		'search'  => "\t\treturn \$deep || array() !== \$unread ? 'unreadable' : null;",
+		'replace' => "\t\treturn array() !== \$unread ? 'unreadable' : null;",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
+	),
+	array(
+		'id'      => 'paket/p3r4-over-name-unread',
+		'clause'  => 'over_name(): a body that is no text (two sites)',
+		'file'    => $net,
+		'search'  => "\t\treturn \$deep || array() !== \$unread ? 'unreadable' : null;",
+		'replace' => "\t\treturn \$deep ? 'unreadable' : null;",
+		'run'     => $itpkg,
+		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 );

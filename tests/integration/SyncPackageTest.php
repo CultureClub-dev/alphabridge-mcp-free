@@ -346,14 +346,23 @@ final class SyncPackageTest extends TestCase {
 		return array_values( array_filter( AB_MCP_Protected_Store::groups( 'in' ), static fn( $group ) => 'package-' . $id === $group['label'] ) );
 	}
 
-	/** The list of held objects of a package A took over: kind, ref and code of each. */
-	private static function held_of( string $id ): array {
+	/**
+	 * The list of held objects of a package A took over: kind, SHA-256 of
+	 * the ref and code of each. $text is set to the list as it is kept.
+	 */
+	private static function held_of( string $id, &$text = null ): array {
 		$gid   = self::groups_of( $id )[0]['gid'];
 		$names = array_values( array_filter( array_map( 'strval', array_keys( AB_MCP_Protected_Store::files( 'in', $gid ) ) ), static fn( $name ) => null !== AB_MCP_Sync_Import::held_sha( $name ) ) );
 		self::assertCount( 1, $names );
-		$list = json_decode( (string) AB_MCP_Protected_Store::get( 'in', $gid, $names[0], AB_MCP_Sync_Import::held_sha( $names[0] ) ), true );
+		$text = (string) AB_MCP_Protected_Store::get( 'in', $gid, $names[0], AB_MCP_Sync_Import::held_sha( $names[0] ) );
+		$list = json_decode( $text, true );
 		self::assertSame( AB_MCP_Sync_Import::HELD_FORMAT, $list['format'] );
 		return $list['objects'];
+	}
+
+	/** An entry of the list of held objects: the kind, the SHA-256 of the ref as the canon spells it, the code. */
+	private static function held( string $kind, $ref, string $code ): array {
+		return array( $kind, hash( 'sha256', \AB_MCP_Sync_Canon::encode( $ref ) ), $code );
 	}
 
 	/** The lines of a package A made in this process, read from its store. */
@@ -1997,7 +2006,7 @@ final class SyncPackageTest extends TestCase {
 			self::assertTrue( $state['complete'] );
 			self::assertSame( 3, $state['held'], 'The option, the theme mod and the option WordPress reads it for.' );
 			self::assertSame( 3, AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '1a', 16 ) ) )['held'], 'Read back on a later call.' );
-			self::assertSame( array( array( 'option', 'zz_live_only_name', 'credential_name' ), array( 'theme_mod', 'zz/zz_live_only_name', 'credential_name' ), array( 'option', 'zz_alias', 'credential_name' ) ), self::held_of( str_repeat( '1a', 16 ) ) );
+			self::assertSame( array( self::held( 'option', 'zz_live_only_name', 'credential_name' ), self::held( 'theme_mod', 'zz/zz_live_only_name', 'credential_name' ), self::held( 'option', 'zz_alias', 'credential_name' ) ), self::held_of( str_repeat( '1a', 16 ) ) );
 		} finally {
 			remove_filter( 'ab_mcp_redact_keys', $keys );
 		}
@@ -2027,6 +2036,10 @@ final class SyncPackageTest extends TestCase {
 		// length; a credential written into one holds that line, with the
 		// code of why (Codex round 3 of part 3).
 		$lock    = \AB_MCP_Sync_Kinds::lock( 'option', 'unclassified' );
+		$layered = 'nothing to see here at all';
+		for ( $i = 0; $i < 5; $i++ ) {
+			$layered = base64_encode( $layered );
+		}
 		$class   = 'Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer';
 		$names   = array(
 			'a name with backslashes'      => array( self::option_line( 'wc_batch_' . $class . '_' . md5( $class ) ), null ),
@@ -2045,17 +2058,53 @@ final class SyncPackageTest extends TestCase {
 			'a place of a lock'            => array( self::option_line( 'zz_la', array( 'locks' => array( $lock + array( 'at' => '{"password":"x"}' ) ), 'status' => 'locked' ) ), 'credential_field' ),
 			'a place of a unit'            => array( self::option_line( 'zz_b9', array( 'b9' => array( 'meta:{"password":"x"}' ) ) ), 'credential_field' ),
 			'a target of a credential'     => array( self::option_line( 'zz_tg', array( 'reason_code' => 'read_as_other_row', 'status' => 'unreachable', 'target' => '{"password":"x"}' ) ), 'credential_field' ),
+			// The net over the raw value, as the export runs it (Codex round 4 of part 3): decoded, in base64.
+			'a slug of a credential in base64' => array( array( 'identity' => array( 'post_name' => 'eyJwYXNzd29yZCI6IkNBTkFSWS1PTkxZIn0=', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ), 'credential_field' ),
+			'a slug of a credential in code' => array( array( 'identity' => array( 'post_name' => '{password:"CANARY-ONLY"}', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '10', 'status' => 'z8' ), 'credential_field' ),
+			'a slug of a credential encoded twice' => array( array( 'identity' => array( 'post_name' => 'password%253DCANARY-ONLY', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '11', 'status' => 'z8' ), 'credential_field' ),
+			'a slug the net does not read to its end' => array( array( 'identity' => array( 'post_name' => $layered, 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '12', 'status' => 'z8' ), 'unreadable_name' ),
+			'a slug whose braces cannot be counted' => array( array( 'identity' => array( 'post_name' => 'a}, b: c', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '13', 'status' => 'z8' ), 'unreadable_name' ),
+			'a slug with a field of a credential and no value' => array( array( 'identity' => array( 'post_name' => '{"password":""}', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '16', 'status' => 'z8' ), 'credential_field' ),
+			'a slug read as code with a RegExp literal' => array( array( 'identity' => array( 'post_name' => '{}if (x) /re/, token: v', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '15', 'status' => 'z8' ), 'unreadable_name' ),
+			'a slug with a data address that is no text' => array( array( 'identity' => array( 'post_name' => 'data:text/plain;base64,//79', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '14', 'status' => 'z8' ), 'unreadable_name' ),
+			'a ref that carries a value'   => array( self::option_line( 'zz_note {"password":"CANARY-ONLY"}' ), 'credential_field' ),
+			'a ref of a credential with its value' => array( self::option_line( 'api_key=CANARY-ONLY' ), 'credential_name' ),
 		);
+		// Ordinary names stay as they are: slugs, Unicode and number slugs,
+		// the names and places of WooCommerce, Elementor and Yoast.
+		foreach ( array( 'api-docs', 'token-sale', 'about-us', 'r-d', '&amp;', 'R&D', '%c3%bcber-uns', 'über-uns', '2024', 'lost-password', 'my-account' ) as $i => $slug ) {
+			$names[ 'the slug ' . $slug ] = array( array( 'identity' => array( 'post_name' => $slug, 'post_type' => 'page', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => (string) ( 100 + $i ), 'status' => 'z8' ), null );
+		}
+		foreach ( array( 'woocommerce_api_enabled', 'woocommerce_myaccount_orders_endpoint', 'woocommerce_checkout_pay_endpoint', 'wpseo_titles', 'elementor_active_kit', '_elementor_page_settings' ) as $option ) {
+			$names[ 'the option ' . $option ] = array( self::option_line( $option ), null );
+		}
+		foreach ( array( 'meta:_yoast_wpseo_title', 'meta:_yoast_wpseo_metadesc', 'meta:_elementor_data.0.elements.0.settings.__dynamic__.link', 'meta:_wc_order_attribution_session_count', 'meta:_regular_price', 'post_content:html:a.href' ) as $i => $place ) {
+			$names[ 'the place ' . $place ] = array( self::option_line( 'zz_place_' . $i, array( 'possible' => array( array( 'at' => $place ) ) ) ), null );
+		}
 		$state   = self::import_relayed( self::package_of( str_repeat( '1f', 16 ), array( array_column( $names, 0 ) ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		$want = array();
 		foreach ( $names as $given ) {
 			if ( null !== $given[1] ) {
-				$want[] = array( $given[0]['kind'], $given[0]['ref'], $given[1] );
+				$want[] = self::held( $given[0]['kind'], $given[0]['ref'], $given[1] );
 			}
 		}
 		self::assertSame( array( true, count( $want ) ), array( $state['complete'], $state['held'] ) );
-		self::assertSame( $want, self::held_of( str_repeat( '1f', 16 ) ), 'Kind, ref and code; never a value of a name but the ref.' );
+		self::assertSame( $want, self::held_of( str_repeat( '1f', 16 ), $text ), 'Kind, the SHA-256 of the ref and code.' );
+		self::assertStringNotContainsString( 'CANARY', $text, 'No value, not even in a ref.' );
+		// Refs of any length: the list holds a hash of each, so it fits its
+		// reservation however long they are (five of a million bytes, each
+		// line in a chunk of its own, as the export cuts them).
+		$long = array();
+		for ( $i = 0; $i < 5; $i++ ) {
+			$area   = 'password=CANARY-ONLY-' . $i . str_repeat( 'a', 1000000 );
+			$long[] = array( 'identity' => array( 'area' => $area ), 'kind' => 'widget_area', 'locks' => array(), 'ref' => $area, 'status' => 'z8' );
+		}
+		$state = self::import_relayed( self::package_of( str_repeat( 'd3', 16 ), array_map( static fn( $line ) => array( $line ), $long ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertSame( array( true, 5 ), array( $state['complete'], $state['held'] ) );
+		self::assertSame( array_map( static fn( $line ) => self::held( 'widget_area', $line['ref'], 'credential_field' ), $long ), self::held_of( str_repeat( 'd3', 16 ), $text ) );
+		self::assertLessThan( 1024, strlen( $text ) );
 
 		// Packages that do not unpack as they must: refused, removed.
 		$deep = '1';
@@ -2268,6 +2317,23 @@ final class SyncPackageTest extends TestCase {
 		self::assertIsInt( wp_insert_post( array( 'post_title' => 'Reset', 'post_name' => 'reset-password', 'post_type' => 'page', 'post_status' => 'publish' ), true ) );
 		$wpdb->insert( $wpdb->options, array( 'option_name' => 'blacklist_keys', 'option_value' => 'x', 'autoload' => 'off' ) );
 		update_option( 'zz_unreadable_name', 'x' );
+		// Ordinary names that hold no credential (Codex round 4 of part 3):
+		// slugs, Unicode and number slugs, a slug with a character reference,
+		// the meta and options of WooCommerce, Elementor and Yoast.
+		foreach ( array( 'api-docs', 'token-sale', 'about-us', 'r-d', '中文', '2024' ) as $slug ) {
+			self::assertIsInt( wp_insert_post( array( 'post_title' => $slug, 'post_name' => $slug, 'post_type' => 'page', 'post_status' => 'publish' ), true ) );
+		}
+		$amp = wp_insert_post( array( 'post_title' => 'R&D', 'post_status' => 'publish' ), true );
+		$wpdb->update( $wpdb->posts, array( 'post_name' => '&amp;' ), array( 'ID' => $amp ) );
+		clean_post_cache( $amp );
+		$shop = wp_insert_post( array( 'post_title' => 'Product', 'post_status' => 'publish' ), true );
+		foreach ( array( '_yoast_wpseo_title' => 'Title %%sep%% %%sitename%%', '_yoast_wpseo_metadesc' => 'See ' . $link, '_wc_order_attribution_session_count' => '3', '_regular_price' => '19.90', '_elementor_page_settings' => array( 'background_image' => array( 'id' => $post, 'url' => $link ) ) ) as $key => $value ) {
+			update_post_meta( $shop, $key, $value );
+		}
+		update_option( 'woocommerce_api_enabled', 'no' );
+		update_option( 'woocommerce_myaccount_orders_endpoint', 'orders' );
+		update_option( 'wpseo_titles', array( 'title-page' => '%%title%%', 'breadcrumbs-home' => 'Home', 'page_for_posts' => $post ) );
+		update_option( 'elementor_active_kit', (string) $post );
 		// A slug and a meta key of bytes that are no UTF-8 (tables that keep
 		// bytes, as old sites in latin1 have).
 		$wpdb->query( "ALTER TABLE {$wpdb->posts} MODIFY post_name VARBINARY(200) NOT NULL DEFAULT ''" );
@@ -2302,6 +2368,7 @@ final class SyncPackageTest extends TestCase {
 		$held  = array();
 		$lines = array();
 		$codes = 0;
+		$all   = array();
 		foreach ( $objects as $object ) {
 			// A code of its reason only on a row the takeover never reads (not on B9 of a name the guard refuses, mailserver_pass).
 			self::assertSame( isset( \AB_MCP_Sync_Option_Schema::REASON_CODES[ $object['status'] ] ), isset( $object['reason_code'] ), $object['kind'] . ':' . \AB_MCP_Sync_Canon::encode( $object['ref'] ) );
@@ -2323,6 +2390,7 @@ final class SyncPackageTest extends TestCase {
 				$forms['a name with backslashes'] = $ref;
 			}
 			foreach ( $named->invoke( null, $line ) as $name ) {
+				$all[] = $name;
 				foreach ( array( 'a"b' => 'a quote', 'Vendor\Service' => 'a backslash', '{{WRAPPER}}' => 'braces' ) as $part => $form ) {
 					if ( false !== strpos( $name, $part ) ) {
 						$forms[ 'a place with ' . $form ] = $ref;
@@ -2392,6 +2460,15 @@ final class SyncPackageTest extends TestCase {
 			'Each form was read and went through.'
 		);
 		self::assertSame( 1, $codes, 'mailserver_pass: B9, and the guard refuses it.' );
+		// The ordinary names were read, each a name of a line.
+		$places = implode( "\n", $all );
+		foreach ( array( 'api-docs', 'token-sale', 'about-us', 'r-d', '%e4%b8%ad%e6%96%87', '&amp;', 'woocommerce_api_enabled', 'woocommerce_myaccount_orders_endpoint', 'wpseo_titles', 'elementor_active_kit' ) as $name ) {
+			self::assertContains( $name, $all, $name );
+		}
+		self::assertMatchesRegularExpression( '/^2024(-\d+)?$/m', $places, 'A number slug (WordPress may add a suffix).' );
+		self::assertMatchesRegularExpression( '/^meta:_elementor_page_settings\.background_image/m', $places );
+		self::assertMatchesRegularExpression( '/^meta:_yoast_wpseo_metadesc/m', $places );
+		self::assertMatchesRegularExpression( '/^wpseo_titles|^option_value\.page_for_posts/m', $places );
 		self::assertSame( 'guarded', \AB_MCP_Sync_Option_Schema::classify( 'mailserver_pass' )['status'] );
 		// Only the slug that holds a credential is held; reset-password is no field of one.
 		self::assertSame( array( 'post:"' . $a2 . '"' => 'credential_field' ), $held );
@@ -2400,7 +2477,7 @@ final class SyncPackageTest extends TestCase {
 		$state = self::import_relayed( self::package_of( str_repeat( 'c1', 16 ), array( $lines ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertSame( array( true, 1 ), array( $state['complete'], $state['held'] ) );
-		self::assertSame( array( array( 'post', (string) $a2, 'credential_field' ) ), self::held_of( str_repeat( 'c1', 16 ) ) );
+		self::assertSame( array( self::held( 'post', (string) $a2, 'credential_field' ) ), self::held_of( str_repeat( 'c1', 16 ) ) );
 		// Each table a reader notes when it could not read a row at all.
 		$tables = array(
 			'posts'              => 'post',

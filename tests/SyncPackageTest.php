@@ -660,6 +660,20 @@ final class SyncPackageTest extends TestCase {
 		}
 	}
 
+	public function testTheListOfHeldObjectsFitsItsReservationWhateverTheRefs(): void {
+		// Each object a kind, the SHA-256 of its ref and a code: the longest of each, for as many objects as a package may hold.
+		$longest = static fn( array $list ) => array_reduce( $list, static fn( $a, $b ) => strlen( (string) $b ) > strlen( (string) $a ) ? (string) $b : (string) $a, '' );
+		$entry   = array( $longest( array_keys( AB_MCP_Sync_Import::IDENTITIES ) ), str_repeat( 'f', 64 ), $longest( AB_MCP_Sync_Import::HELD_CODES ) );
+		$text    = \AB_MCP_Sync_Canon::encode(
+			array(
+				'format'  => AB_MCP_Sync_Import::HELD_FORMAT,
+				'objects' => array_fill( 0, \AB_MCP_Store_Budget::UNPACK['objects'], $entry ),
+			)
+		);
+		self::assertLessThanOrEqual( AB_MCP_Sync_Import::HELD_MAX, strlen( $text ) );
+		self::assertSame( 'ab-sync-held/3', AB_MCP_Sync_Import::HELD_FORMAT );
+	}
+
 	public function testThisVersionMakesPackagesOfTheInventoryOnly(): void {
 		$this->paired();
 		$this->on( 'staging' );

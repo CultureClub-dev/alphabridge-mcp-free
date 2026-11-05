@@ -279,20 +279,43 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Namen gespeicherter Werte (der Name einer Option, der Zeile der
   Theme-Mods, der Schlüssel eines Theme-Mods, bei `unreachable` die Zeile,
   die WordPress stattdessen liest), nach den Regeln der Live-Site samt
-  `ab_mcp_redact_keys` (Code `credential_name`). Dazu läuft der Inhaltsteil
-  der vorhandenen Zugangsdatenprüfung (`AB_MCP_Sync_Credentials::unit()`,
-  wie sie einen Wert liest) über jeden namensartigen Wert der Zeile, auch
-  über `identity.post_name`: ein Feld einer Zugangsangabe darin hält die
-  Zeile (`credential_field`, etwa ein Slug `{"password":"CANARY-ONLY"}`),
-  ein Name, der sich nicht zu Ende lesen lässt (ein Skript, ein unfertiges
-  Tag, ein PHP-Objekt), ebenso (`unreadable_name`: was nicht zu Ende
-  gelesen ist, gilt nie als sauber). Eine gehaltene Zeile wird gezählt
-  (`held`) und in der Liste `held-…` mit Art, Kennung und Code geführt,
-  ohne die übrigen Felder der Zeile; die Kennung steht dort wie im Paket.
-  Das Paket läuft weiter. Eine Seite «reset-password» ist kein Feld einer
-  Zugangsangabe und bleibt ungehalten. Die Liste hat das Format
-  `ab-sync-held/2`; eine Liste der Fassung davor (ohne Code) gilt als
-  fehlend (`ab_mcp_sync_import_held`, Weg: Paket neu holen).
+  `ab_mcp_redact_keys` (Code `credential_name`). Dazu läuft über jeden
+  namensartigen Wert der Zeile, auch über `identity.post_name`, was der
+  Export über einen Wert laufen lässt: der Inhaltsteil der
+  Zugangsdatenprüfung (`AB_MCP_Sync_Credentials::unit()`) und das Netz über
+  den Rohwert in jeder seiner Schichten (`AB_MCP_Sync_Net::over_name()`:
+  dekodiert, in Base64, in `data:`; dieselbe Zählung der Zugangsangaben wie
+  `check()`, ohne die Zählung der Verweise, denn ein Name ist keine
+  Adresse; Codex-Runde 4 zu Teil 3). Ein Feld einer Zugangsangabe hält die
+  Zeile (`credential_field`): ein Slug `{"password":"CANARY-ONLY"}`, seine
+  Base64-Form, `{password:"CANARY-ONLY"}` und `password%253DCANARY-ONLY`.
+  Ein Name, der sich nicht zu Ende lesen lässt (ein Skript, ein unfertiges
+  Tag, ein PHP-Objekt, eine Schicht tiefer als das Netz liest), hält sie
+  ebenso (`unreadable_name`: was nicht zu Ende gelesen ist, gilt nie als
+  sauber). Eine gehaltene Zeile wird gezählt (`held`), das Paket läuft
+  weiter. Gewöhnliche Namen bleiben ungehalten, mit echten Lesern geprüft
+  (das ganze Inventar der Prüf-Site hält nur die beabsichtigte Zeile):
+  `reset-password`, `api-docs`, `token-sale`, `about-us`, `r-d`, `&amp;`,
+  Slugs in Unicode und aus Zahlen, Meta und Optionen von WooCommerce,
+  Elementor und Yoast. Eine Option, deren Name nach der Namensregel eine
+  Zugangsangabe ist (etwa `woocommerce_myaccount_lost_password_endpoint`),
+  ist schon beim Export B9 und kommt nicht ins Paket (vorbestehend).
+- Die Liste der gehaltenen Zeilen (`held-…`, Format `ab-sync-held/3`) ist
+  wertfrei: je Zeile Art, SHA-256 der Kennung in der Schreibweise von
+  `AB_MCP_Sync_Canon::encode()` (ein Text mit seinen Anführungszeichen,
+  Bytes in der Byte-Form) und Code, nie die Kennung selbst, die eine
+  Zugangsangabe tragen kann (eine Option `api_key=…`). Zweig 6 findet die
+  Zeile im Paket über denselben Hash ihrer Kennung (Art und Kennung sind
+  in einem Paket eindeutig). Jeder Eintrag hat so eine feste Grösse (rund
+  100 Bytes), die Liste für 5000 Objekte passt in ihre Reservierung
+  (`HELD_MAX`) auch bei Kennungen von einer Million Bytes; vorher sprengten
+  fünf solche gehaltene Kennungen den Abschluss (Codex-Runde 4 zu Teil 3,
+  C). Eine Liste einer Fassung davor gilt als fehlend
+  (`ab_mcp_sync_import_held`, Weg: Paket neu holen).
+- `unreadable_name` hält auch einen harmlosen Namen, den die Prüfung als
+  unfertiges HTML liest, etwa eine Option `literal<foo` (konstruiert; kein
+  gewöhnlicher Name eines Plugins so gefunden). Das Paket läuft weiter;
+  nur diese Zeile übernimmt Zweig 6 nicht von selbst.
 - Gründe ohne Sperre als Codes: eine Zeile mit Status `guarded`,
   `unreachable` oder `unreadable` trägt keinen Text, sondern `reason_code`
   aus der festen Liste `AB_MCP_Sync_Option_Schema::REASON_CODES`, die der
@@ -395,7 +418,8 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Inhalte beim Schreiben (Rechte je Meta-Schlüssel, Entscheid 28) bringt
   Zweig 8.
 - Die Liste der Objekte, die eine Zugangsangabe nach den Regeln der
-  Live-Site hält (`held-…` in der Gruppe), liest die Übernahme ab Zweig 6;
-  in diesem Zweig wird sie geschrieben, gezählt und zurückgelesen.
+  Live-Site hält (`held-…` in der Gruppe), liest die Übernahme ab Zweig 6
+  und findet jede Zeile über den SHA-256 ihrer Kennung; in diesem Zweig
+  wird sie geschrieben, gezählt und zurückgelesen.
 - Den Anker aus der Paar-Route des Hubs oder per Werkzeug vorbereiten:
   frühestens mit dem Hub-Zweig 14, dann nur als Vorbereitung.

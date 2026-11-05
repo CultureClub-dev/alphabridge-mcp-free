@@ -33,7 +33,8 @@ UN = 'uninstall.php'
 RT = 'includes/sync/class-sync-export-rights.php'
 OS = 'includes/sync/class-sync-option-schema.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
-FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st', GRANT_F: '$gr', PF: '$pf', UN: '$un', RT: '$rt', OS: '$os', DK: '$dk'}
+NET = 'includes/sync/class-sync-net.php'
+FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st', GRANT_F: '$gr', PF: '$pf', UN: '$un', RT: '$rt', OS: '$os', DK: '$dk', NET: '$net'}
 
 entries = []
 
@@ -1515,8 +1516,8 @@ e('paket/p3r3-name-only-bytes', 'identity_fits(): a theme mod row by its name on
   "\t\t\t$fields = array( 'name' => 'name' );", "\t\t\t$fields = array( 'name' => 'string' );", 'itpkg', P3['forms_it'])
 e('paket/p3r3-unpack-code', 'unpacked(): each line asked why it is held (two sites)', IM,
   "\t\t\t\t$code = self::held_code( $object, $extra );", "\t\t\t\t$code = null;", 'itpkg', P3['unpack_it'])
-e('paket/p3r3-held-list-code', 'unpacked(): kind, ref and the code in the list (two sites)', IM,
-  "\t\t\t\t\t$out[] = array( $object['kind'], $object['ref'], $code );", "\t\t\t\t\t$out[] = array( $object['kind'], $object['ref'] );", 'itpkg', P3['unpack_it'])
+HL = "\t\t\t\t\t$out[] = array( $object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( $object['ref'] ) ), $code );"
+e('paket/p3r3-held-list-code', 'unpacked(): kind, ref and the code in the list (two sites)', IM, HL, HL.replace(", $code );", " );"), 'itpkg', P3['unpack_it'])
 e('paket/p3r3-held-target', 'held_code(): the row WordPress reads instead named as well (two sites)', IM,
   " + array_intersect_key( $object, array( 'target' => true ) );", ";", 'itpkg', P3['unpack_it'])
 e('paket/p3r3-named-target', 'named_credential(): the target as well (two sites)', IM,
@@ -1540,7 +1541,7 @@ e('paket/p3r3-names-list', 'names_of(): each name of a list of names (two sites)
 e('paket/p3r3-names-login', 'names_of(): a login (two sites)', IM,
   "array( 'name', 'names', 'login' ), true )", "array( 'name', 'names' ), true )", 'itpkg', P3['unpack_it'])
 e('paket/p3r3-held-format', 'HELD_FORMAT: a list of the version before is none (two sites)', IM,
-  "\tconst HELD_FORMAT = 'ab-sync-held/2';", "\tconst HELD_FORMAT = 'ab-sync-held/1';", 'itpkg', P3['held_it'])
+  "\tconst HELD_FORMAT = 'ab-sync-held/3';", "\tconst HELD_FORMAT = 'ab-sync-held/1';", 'itpkg', P3['held_it'])
 # The reason of a row the takeover never reads, as a code.
 RC_ = "\t\tif ( null === $codes ? array_key_exists( 'reason_code', $object ) : ! in_array( isset( $object['reason_code'] ) ? $object['reason_code'] : null, $codes, true ) ) {"
 e('paket/p3r3-reason-code-elsewhere', 'line_shaped(): no reason code where the row is read (two sites)', IM, RC_, RC_.replace("array_key_exists( 'reason_code', $object )", 'false'), 'itpkg', P3['unpack_it'])
@@ -1567,6 +1568,23 @@ e('paket/p3r3-bare-why-only', 'bare(): no reason code of another status (two sit
   "\t\t$why = isset( AB_MCP_Sync_Option_Schema::REASON_CODES[ $class['status'] ] ) ? array_intersect_key( $class, array_flip( array( 'code', 'target' ) ) ) : array();", "\t\t$why = array_intersect_key( $class, array_flip( array( 'code', 'target' ) ) );", 'itpkg', P3['forms_it'])
 e('paket/p3r3-line-why', 'line(): the code of the reason and the target, never the text', EX,
   "\t\t) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );", "\t\t);", 'package', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent')
+
+# ---------------------------------------- part 3, Codex round 4 (net, list without values)
+e('paket/p3r4-held-hash', 'unpacked(): the SHA-256 of the ref in the list, never the ref (two sites)', IM, HL, HL.replace("hash( 'sha256', AB_MCP_Sync_Canon::encode( $object['ref'] ) )", "$object['ref']"), 'itpkg', P3['unpack_it'])
+e('paket/p3r4-held-hash-canon', 'unpacked(): the ref as the canon spells it (two sites)', IM, HL, HL.replace("AB_MCP_Sync_Canon::encode( $object['ref'] )", "(string) AB_MCP_Sync_Import::bytes( $object['ref'] )"), 'itpkg', P3['unpack_it'])
+e('paket/p3r4-net-credential', 'held_code(): the net finds a credential in a layer of a name (two sites)', IM,
+  "\t\t\tif ( 'credential' === $net ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r4-net-unreadable', 'held_code(): a name the net does not read to its end (two sites)', IM,
+  "\t\t\tif ( 'unreadable' === $net ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r4-over-name-count', 'over_name(): the credentials of every layer (two sites)', NET,
+  "\t\t\tif ( array() !== self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $layer[0], -5 ) ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r4-over-name-code', 'over_name(): the layer of code read as code (two sites)', NET,
+  "$undecidable, '/code' === substr( $layer[0], -5 ) ) ) {\n\t\t\t\treturn 'credential';", "$undecidable, false ) ) {\n\t\t\t\treturn 'credential';", 'itpkg', P3['unpack_it'])
+e('paket/p3r4-over-name-undecidable', 'over_name(): braces that cannot be counted (two sites)', NET,
+  "\t\t\tif ( $undecidable ) {\n\t\t\t\treturn 'unreadable';", "\t\t\tif ( false ) {\n\t\t\t\treturn 'unreadable';", 'itpkg', P3['unpack_it'])
+ON = "\t\treturn $deep || array() !== $unread ? 'unreadable' : null;"
+e('paket/p3r4-over-name-deep', 'over_name(): deeper than the net reads (two sites)', NET, ON, ON.replace("$deep || ", ''), 'itpkg', P3['unpack_it'])
+e('paket/p3r4-over-name-unread', 'over_name(): a body that is no text (two sites)', NET, ON, ON.replace(" || array() !== $unread", ''), 'itpkg', P3['unpack_it'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -1644,7 +1662,9 @@ out.append('''<?php
  * closed form, an empty identity only for a row not read, names in bytes.
  * Codex round 3 of part 3: two levels, the structure refuses a package and
  * the names never; a credential in a name holds its line, with the code of
- * why; the reason of a row the takeover never reads as a code.
+ * why; the reason of a row the takeover never reads as a code. Codex
+ * round 4 of part 3: the net over the raw value over every name, the list
+ * of held lines without a value (the SHA-256 of each ref).
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
@@ -1696,6 +1716,7 @@ $un = 'uninstall.php';
 $rt = 'includes/sync/class-sync-export-rights.php';
 $os = 'includes/sync/class-sync-option-schema.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$net = 'includes/sync/class-sync-net.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:
