@@ -1673,6 +1673,12 @@ require_once __DIR__ . '/support/class-wp-http.php';
  * it from looking up or reaching the host itself. The log is recorded.
  */
 function wp_safe_remote_get( $url, $args = array() ) {
+	// As WP_Http::request() with reject_unsafe_urls, which
+	// wp_safe_remote_get() sets: an address wp_http_validate_url() refuses
+	// is not asked at all.
+	if ( false === wp_http_validate_url( $url ) ) {
+		return new WP_Error( 'http_request_failed', 'A valid URL was not provided.' );
+	}
 	$call = array(
 		'url'  => (string) $url,
 		'args' => (array) $args,
@@ -1785,10 +1791,27 @@ function ab_test_no_dns( $addresses, $host ) {
 	return $addresses;
 }
 
-/** As in WordPress, in short: loopback and private hosts are refused. */
+/**
+ * As in WordPress, in short: loopback and private hosts are refused, and a
+ * port that is not 80, 443 or 8080 (the filter http_allowed_safe_ports, with
+ * the host and the address), unless it is the port of the site's own host
+ * (wp-includes/http.php, wp_http_validate_url(), 7.1.3).
+ */
 function wp_http_validate_url( $url ) {
 	$host = (string) parse_url( (string) $url, PHP_URL_HOST );
-	return ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) ? false : $url;
+	if ( '' === $host || 'localhost' === $host || preg_match( '/^(127\.|10\.|192\.168\.)/', $host ) ) {
+		return false;
+	}
+	$port = parse_url( (string) $url, PHP_URL_PORT );
+	if ( empty( $port ) ) {
+		return $url;
+	}
+	$allowed = apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), $host, $url );
+	if ( is_array( $allowed ) && in_array( $port, $allowed, true ) ) {
+		return $url;
+	}
+	$home = parse_url( home_url() );
+	return isset( $home['host'], $home['port'] ) && strtolower( $home['host'] ) === strtolower( $host ) && $home['port'] === $port ? $url : false;
 }
 
 function ab_test_http_response( int $code, string $body, array $headers = array(), array $cookies = array() ): array {

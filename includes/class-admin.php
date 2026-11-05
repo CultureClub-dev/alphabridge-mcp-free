@@ -79,7 +79,7 @@ class AB_MCP_Admin {
 		'staging_anchor_confirmed'                 => array( 'success', 'The key of the staging site is confirmed: this site reads the packages signed with it.' ),
 		'staging_anchor_unknown'                   => array( 'error', 'Nothing was changed: the action was not to fetch the key, to enter a pairing code or to confirm the key.' ),
 		'staging_trust_sync_key_role'              => array( 'error', 'Nothing was made: only a confirmed staging site has a key. Confirm the role staging site above first.' ),
-		'staging_trust_sync_key_failed'            => array( 'error', 'No key was made: PHP could not make a key on this server. Ask the host to enable the sodium extension of PHP, then try again.' ),
+		'staging_trust_sync_key_failed'            => array( 'error', 'Nothing was saved: the new key of this staging site could not be made or did not read back from the database, and the old key was removed, so this site signs nothing. Ask the host to enable the sodium extension of PHP and to check that the database accepts writes to the options, then confirm the role or make the key again.' ),
 		'staging_trust_sync_anchor_role'           => array( 'error', 'Nothing was done: only the confirmed production site anchors the key of a staging site. Confirm the role production site above first.' ),
 		'staging_trust_sync_anchor_pair'           => array( 'error', 'Nothing was done: this production site has no staging site paired. Enter the address of the staging site above first.' ),
 		'staging_trust_sync_anchor_not_https'      => array( 'error', 'Nothing was fetched: the key is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code of the staging site instead.' ),
@@ -909,6 +909,10 @@ class AB_MCP_Admin {
 			$this->redirect( 'staging_bad_host', AB_MCP_Staging::ANCHOR );
 		}
 		$saved = AB_MCP_Staging::save( $role, $partner, null, get_current_user_id(), AB_MCP_Staging::SOURCE_FORM );
+		// The key of the staging site was not stored (Z8): nothing was saved.
+		if ( is_wp_error( $saved ) && 'ab_mcp_staging_invalid' !== $saved->get_error_code() ) {
+			$this->redirect( self::trust_notice( $saved ), self::STAGING_TRUST );
+		}
 		if ( is_wp_error( $saved ) ) {
 			$data = $saved->get_error_data();
 			$this->redirect( 'staging_bad_' . ( is_array( $data ) && isset( $data['problems'][0] ) ? $data['problems'][0] : 'role' ), AB_MCP_Staging::ANCHOR );

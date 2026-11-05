@@ -92,7 +92,9 @@ final class AB_MCP_Sync_Anchor {
 		if ( 0 !== strpos( $partner, 'https://' ) ) {
 			return new WP_Error( 'ab_mcp_sync_anchor_not_https', 'The key of the staging site is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code the staging site shows on its page AlphaBridge → Staging instead, or store its https:// address on both sites.', array( 'partner_url' => $partner ) );
 		}
-		$url      = self::key_url( $partner );
+		// The host of an international domain name in its xn-- form, as the
+		// lookup of the fetch needs it (AB_MCP_Sync_Key::site_form()).
+		$url      = self::key_url( AB_MCP_Sync_Key::site_form( $partner ) );
 		$fetcher  = is_object( $fetcher ) ? $fetcher : new AB_MCP_Sync_Fetcher();
 		$response = $fetcher->get(
 			$url,
@@ -297,10 +299,13 @@ final class AB_MCP_Sync_Anchor {
 	 * @return array|WP_Error
 	 */
 	private static function hold( array $key, $partner, $via, $user_id ) {
-		if ( $key['site'] !== $partner ) {
+		// The same address exactly, an international domain name in either
+		// spelling (AB_MCP_Sync_Key::site_form()); one it cannot read is none.
+		$site = AB_MCP_Sync_Key::site_form( $key['site'] );
+		if ( '' === $site || AB_MCP_Sync_Key::site_form( $partner ) !== $site ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_site',
-				sprintf( 'The key names the staging site %1$s, but the staging site stored here is %2$s, and the two must be the same address exactly (scheme, host, port and path). Correct the address on the page AlphaBridge → Staging of the site that has it wrong, then fetch the key or enter the pairing code again.', $key['site'], $partner ),
+				sprintf( 'The key names the staging site %1$s, but the staging site stored here is %2$s, and the two must be the same address exactly (scheme, host, port and path). Correct the address on the page AlphaBridge → Staging of the site that has it wrong, then fetch the key or enter the pairing code again.', $key['site'], $partner ) . AB_MCP_Sync_Key::idn_hint( $key['site'], $partner ),
 				array(
 					'site'        => $key['site'],
 					'partner_url' => $partner,

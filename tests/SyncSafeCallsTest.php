@@ -105,7 +105,9 @@ final class SyncSafeCallsTest extends TestCase {
 		'wp_json_encode'                       => 'Encodes the data it is given.',
 		'wp_remote_retrieve_body'              => 'The body of the answer it is given.',
 		'wp_remote_retrieve_response_code'     => 'The status of the answer it is given.',
-		'AB_MCP_Outbound::get'                 => 'Asks the other site over the network, tied to its checked addresses; no stored value of this site.',
+		'AB_MCP_Outbound::get_partner'         => 'Asks the other site over the network, tied to its checked addresses, on the port of its stored address; no stored value of this site.',
+		'->hide_errors'                        => '$wpdb: no error shown while the private key of a staging site is written (AB_MCP_Sync_Key::store_secret()).',
+		'->show_errors'                        => '$wpdb: errors shown again as before, afterwards.',
 		'->header'                             => 'WP_REST_Response: a header of the answer.',
 		'new WP_REST_Response'                 => 'An answer object.',
 		// Constructors.
@@ -132,7 +134,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
 		),
 		'class-sync-key.php'      => array(
-			'AB_MCP_Staging::role' => array( 4, 'renew(), make(), sign(), answer(): only a confirmed staging site has a key.' ),
+			'AB_MCP_Staging::role' => array( 3, 'make(), sign(), answer(): only a confirmed staging site has a key.' ),
 			'get_option'           => array( 2, 'found() and secret(): the key, in the two options this class writes itself.' ),
 			'update_option'        => array( 2, 'renew(): those two options, without autoload.' ),
 			'delete_option'        => array( 2, 'forget(): removes them.' ),

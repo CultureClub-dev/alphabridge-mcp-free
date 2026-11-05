@@ -41,13 +41,14 @@
  * confirmed, AB_MCP_Sync_Anchor); the source id and the key id of that
  * anchor; the signature with its key; the target exactly this site's own
  * address by normalize_url() (scheme, host, port and path: not same_site(),
- * which leaves the scheme out); the source exactly the address of the
- * staging site it is paired with; not expired, and not made later than
- * SKEW from now; the purpose the caller reads it for, and for objects and
- * media the report it is for, so a package is not used for another report;
- * where the caller names it, the package. Then each chunk against its own
- * hash and size before it is read (chunk()), and the whole against the
- * hash of the package (whole()).
+ * which leaves the scheme out; an international domain name in either
+ * spelling, AB_MCP_Sync_Key::site_form()); the source exactly the address
+ * of the staging site it is paired with, compared the same way; not
+ * expired, and not made later than SKEW from now; the purpose the caller
+ * reads it for, and for objects and media the report it is for, so a
+ * package is not used for another report; where the caller names it, the
+ * package. Then each chunk against its own hash before it is read
+ * (chunk()), and the whole against the hash of the package (whole()).
  *
  * Messages are English without gettext, as the other classes of the
  * takeover; each names the way.
@@ -139,6 +140,14 @@ final class AB_MCP_Sync_Manifest {
 		if ( null === $key ) {
 			return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
 		}
+		// Both addresses as the production site compares them
+		// (AB_MCP_Sync_Key::site_form()): an international domain name in its
+		// xn-- form where PHP has intl.
+		$source = AB_MCP_Sync_Key::site_form( home_url() );
+		$target = AB_MCP_Sync_Key::site_form( $pair['partner_url'] );
+		if ( '' === $source || '' === $target ) {
+			return new WP_Error( 'ab_mcp_sync_manifest_address', sprintf( 'No package is signed: the address of this site or of the production site (%s) cannot be read here, an international domain name this server cannot convert. Store the address in its xn-- form (Punycode) on the page AlphaBridge → Staging, and the address of this site under Settings → General.', $pair['partner_url'] ) );
+		}
 		$fields = array_keys( $package );
 		sort( $fields );
 		if ( self::PACKAGE_FIELDS !== $fields ) {
@@ -153,8 +162,8 @@ final class AB_MCP_Sync_Manifest {
 				'canon'     => AB_MCP_Sync_Canon::VERSION,
 				'source_id' => $key['source_id'],
 				'key_id'    => $key['key_id'],
-				'source'    => AB_MCP_Staging::normalize_url( home_url() ),
-				'target'    => $pair['partner_url'],
+				'source'    => $source,
+				'target'    => $target,
 				'created'   => $now,
 				'expires'   => $now + self::TTL,
 			)
@@ -246,23 +255,25 @@ final class AB_MCP_Sync_Manifest {
 		}
 
 		// For this site, from its staging site, exactly.
+		// Compared as AB_MCP_Sync_Key::site_form() gives them (an international
+		// domain name in either spelling); an address it cannot read is none.
 		$own = AB_MCP_Staging::normalize_url( home_url() );
-		// The target is a stored address (shape()), so it never equals the
-		// '' of a site whose own address normalize_url() does not take.
-		if ( $manifest['target'] !== $own ) {
+		$us  = AB_MCP_Sync_Key::site_form( $own );
+		if ( '' === $us || AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_target',
-				sprintf( 'The package is for %1$s, and this site is %2$s: scheme, host, port and path must be the same. Check the address of the production site on the page AlphaBridge → Staging of the staging site, then export the package again.', $manifest['target'], $own ),
+				sprintf( 'The package is for %1$s, and this site is %2$s: scheme, host, port and path must be the same. Check the address of the production site on the page AlphaBridge → Staging of the staging site, then export the package again.', $manifest['target'], $own ) . AB_MCP_Sync_Key::idn_hint( $manifest['target'], $own ),
 				array(
 					'target' => $manifest['target'],
 					'site'   => $own,
 				)
 			);
 		}
-		if ( $manifest['source'] !== $anchor['partner_url'] ) {
+		$from = AB_MCP_Sync_Key::site_form( $manifest['source'] );
+		if ( '' === $from || AB_MCP_Sync_Key::site_form( $anchor['partner_url'] ) !== $from ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_source',
-				sprintf( 'The package comes from %1$s, and the staging site paired with this site is %2$s: scheme, host, port and path must be the same. Check the addresses on the page AlphaBridge → Staging of both sites, then export the package again.', $manifest['source'], $anchor['partner_url'] ),
+				sprintf( 'The package comes from %1$s, and the staging site paired with this site is %2$s: scheme, host, port and path must be the same. Check the addresses on the page AlphaBridge → Staging of both sites, then export the package again.', $manifest['source'], $anchor['partner_url'] ) . AB_MCP_Sync_Key::idn_hint( $manifest['source'], $anchor['partner_url'] ),
 				array(
 					'source'      => $manifest['source'],
 					'partner_url' => $anchor['partner_url'],

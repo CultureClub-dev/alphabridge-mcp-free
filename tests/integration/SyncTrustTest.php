@@ -17,6 +17,13 @@
  *   port or scheme is refused), and the key of an older confirmation is
  *   refused once B confirmed its role again.
  * - The print of the pair follows A's record and anchor.
+ * - A write of the private key that MariaDB refuses leaves it in no report
+ *   of wpdb (the PHP error log, the page, $EZSQL_ERROR, last_query,
+ *   last_error, func_call); a renewal whose writes are refused confirms no
+ *   role and leaves no key (Codex round 1, A-1 and A-2).
+ * - WordPress 7.1.3's own check of an address (wp_http_validate_url())
+ *   asks the port of the stored staging site only for that request
+ *   (Codex round 1, B-2).
  *
  * @package AlphaBridge_MCP
  */
@@ -26,6 +33,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests\Integration;
 
 use AB_MCP_IT_Sites;
+use AB_MCP_Outbound;
 use AB_MCP_IT_Sync_Steps;
 use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
@@ -323,5 +331,87 @@ final class SyncTrustTest extends TestCase {
 		AB_MCP_Staging::save( 'production', 'https://staging.example.org', null, self::admin(), 'form' );
 		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Anchor::OPTION ), 'Another pair: the anchor row is gone.' );
 		self::assertNull( AB_MCP_Sync_Anchor::pair_print() );
+	}
+
+	public function testAWriteOfThePrivateKeyMariaDBRefusesLeavesItInNoReport(): void {
+		global $wpdb;
+		$secret  = '';
+		$capture = static function ( $value ) use ( &$secret ) {
+			$secret = (string) $value['secret_key'];
+			return $value;
+		};
+		// A query MariaDB refuses with a syntax error, right after the name
+		// of the option, so that its error quotes the rest of the query.
+		$break = static function ( $query ) {
+			return preg_match( '/^\s*(INSERT|UPDATE)\b/i', (string) $query ) && false !== strpos( (string) $query, "'ab_mcp_sync_secret'" ) ? str_replace( "'ab_mcp_sync_secret'", "'ab_mcp_sync_secret' x", (string) $query ) : $query;
+		};
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET, $capture );
+		add_filter( 'query', $break );
+		$log                    = (string) tempnam( sys_get_temp_dir(), 'ab-it-trust-log-' );
+		$ini                    = ini_set( 'error_log', $log );
+		$shown                  = $wpdb->show_errors( true );
+		$GLOBALS['EZSQL_ERROR'] = array();
+		ob_start();
+		try {
+			$saved = AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), null, self::admin(), 'form' );
+		} finally {
+			$out = (string) ob_get_clean();
+			ini_set( 'error_log', (string) $ini );
+			$wpdb->show_errors( $shown );
+			remove_filter( 'query', $break );
+			remove_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET, $capture );
+		}
+		$logged = (string) file_get_contents( $log );
+		unlink( $log );
+		self::assertSame( 88, strlen( $secret ), 'The private key was written.' );
+		self::refused( $saved, 'ab_mcp_sync_key_failed' );
+		foreach ( array(
+			'the PHP error log' => $logged,
+			'the page'          => $out,
+			'$EZSQL_ERROR'      => serialize( $GLOBALS['EZSQL_ERROR'] ),
+			'last_query'        => (string) $wpdb->last_query,
+			'last_error'        => (string) $wpdb->last_error,
+			'func_call'         => (string) $wpdb->func_call,
+			'the refusal'       => $saved->get_error_message(),
+		) as $where => $text ) {
+			self::assertStringNotContainsString( $secret, $text, $where . ' shows the private key.' );
+		}
+		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Key::OPTION_SECRET ), 'Nothing of it stored.' );
+		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Key::OPTION_SOURCE ) );
+		self::assertSame( AB_MCP_Staging::ROLE_UNCONFIRMED, AB_MCP_Staging::role(), 'The role was not confirmed.' );
+	}
+
+	public function testARenewalWhoseWritesAreRefusedConfirmsNothingAndLeavesNoKey(): void {
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'hub' ) );
+		$old = AB_MCP_Sync_Key::current();
+		self::assertIsArray( $old );
+		self::assertNotNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Key::OPTION_SECRET ) );
+		$keep = static fn( $value, $stored ) => $stored;
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET, $keep, 10, 2 );
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SOURCE, $keep, 10, 2 );
+		try {
+			$saved = AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), null, self::admin(), 'form' );
+		} finally {
+			remove_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET, $keep, 10 );
+			remove_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SOURCE, $keep, 10 );
+		}
+		self::refused( $saved, 'ab_mcp_sync_key_failed' );
+		self::assertSame( 'hub', AB_MCP_Staging::record()['role']['source'], 'The form confirmed nothing.' );
+		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Key::OPTION_SECRET ), 'The old key is gone, by its row.' );
+		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Key::OPTION_SOURCE ) );
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Sync_Key::sign( 'x', $old['key_id'] ), 'Nothing signs.' );
+	}
+
+	public function testWordPressAsksThePortOfTheStoredStagingSiteForThatRequestOnly(): void {
+		// An address as host: nothing is looked up, and the test sites send
+		// nothing outside (WP_HTTP_BLOCK_EXTERNAL), which WordPress checks
+		// after the address (WP_Http::request()).
+		$url   = 'https://93.184.216.34:8443/blog/?rest_route=/alphabridge/v1/staging-key';
+		$plain = AB_MCP_Outbound::get( $url, array( 'timeout' => 2 ) );
+		self::refused( $plain, 'http_request_failed' );
+		self::assertSame( 'A valid URL was not provided.', $plain->get_error_message(), 'WordPress asks no port 8443 by itself.' );
+		self::refused( AB_MCP_Outbound::get_partner( $url, array( 'timeout' => 2 ) ), 'http_request_not_executed' );
+		self::assertFalse( has_filter( 'http_allowed_safe_ports' ), 'Past the check of the address for this request, and no further.' );
+		self::refused( AB_MCP_Outbound::get( $url, array( 'timeout' => 2 ) ), 'http_request_failed' );
 	}
 }

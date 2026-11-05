@@ -184,7 +184,6 @@ final class SyncTrustTest extends TestCase {
 
 		$this->on( 'live' );
 		self::assertSame( 'ab_mcp_sync_key_role', AB_MCP_Sync_Key::make()->get_error_code() );
-		self::assertSame( 'ab_mcp_sync_key_role', AB_MCP_Sync_Key::renew()->get_error_code() );
 		self::assertFalse( get_option( AB_MCP_Sync_Key::OPTION_SOURCE ), 'The production site made none.' );
 		// A key left on a production site (written past save(), as a copy
 		// of the database could bring it) makes it no staging site.
@@ -235,6 +234,13 @@ final class SyncTrustTest extends TestCase {
 					$p           = get_option( AB_MCP_Sync_Key::OPTION_SOURCE );
 					$p['key_id'] = array( $p['key_id'] );
 					update_option( AB_MCP_Sync_Key::OPTION_SOURCE, $p );
+				},
+			),
+			'a private key whose second half is not its public key' => array(
+				static function () {
+					$s               = get_option( AB_MCP_Sync_Key::OPTION_SECRET );
+					$s['secret_key'] = base64_encode( substr( base64_decode( $s['secret_key'] ), 0, 32 ) . str_repeat( "\x01", 32 ) );
+					update_option( AB_MCP_Sync_Key::OPTION_SECRET, $s );
 				},
 			),
 			'a public key as a list'            => array(
@@ -541,6 +547,8 @@ final class SyncTrustTest extends TestCase {
 	}
 
 	public function testTheFetcherFollowsNoRedirectWhateverTheCallerAsksFor(): void {
+		$this->paired();
+		$this->on( 'live' );
 		self::answers(
 			array(
 				'https://staging.example.com/a' => ab_test_http_response( 302, '', array( 'Location' => 'https://staging.example.com/b' ) ),

@@ -355,7 +355,9 @@ class AB_MCP_Staging {
 	 * @param string|null $partner_role Its role; null for the other one (the settings page).
 	 * @param int         $user_id      Who confirms.
 	 * @param string      $source       SOURCE_FORM or SOURCE_HUB.
-	 * @return array{role_changed:bool,pair_changed:bool}|WP_Error
+	 * @return array{role_changed:bool,pair_changed:bool}|WP_Error The
+	 *         refusal of validate(), or of AB_MCP_Sync_Key::renew() where
+	 *         the key of a confirmed staging site was not stored.
 	 */
 	public static function save( $role, $partner_url, $partner_role, $user_id, $source ) {
 		$checked = self::validate( $role, $partner_url, $partner_role, $source );
@@ -406,6 +408,19 @@ class AB_MCP_Staging {
 			$confirmed   = $confirmed || $keep_pair;
 		}
 
+		// The key of a staging source (Z8, decision 4): a person who confirms
+		// the role staging site (the role written now, as a new role or as the
+		// form's confirmation of the hub's) gives the site a new source id and
+		// key, which the production site has to confirm anew. Made before
+		// anything is written: where the new key is not stored, nothing is,
+		// the role is not confirmed, and renew() has removed the old key.
+		if ( self::ROLE_STAGING === $role && ( $role_changed || $confirms( $stored['role'] ) ) ) {
+			$key = AB_MCP_Sync_Key::renew();
+			if ( is_wp_error( $key ) ) {
+				return $key;
+			}
+		}
+
 		if ( $role_changed || $pair_changed || $confirmed ) {
 			AB_MCP_Settings::set( self::KEY, $raw );
 		}
@@ -414,18 +429,10 @@ class AB_MCP_Staging {
 		if ( $role_changed && class_exists( 'AB_MCP_Staging_Gate' ) ) {
 			AB_MCP_Staging_Gate::on_role_changed();
 		}
-		// The key of a staging source and the anchor of a production site
-		// (Z8, decision 4). A person who confirms the role staging site (the
-		// role written now, as a new role or as the form's confirmation of
-		// the hub's) gives the site a new source id and key, which the
-		// production site has to confirm anew; a site with any other role
-		// keeps none. Another pair takes the anchor of the old one away (a
-		// new role never keeps the pair, see above).
-		if ( self::ROLE_STAGING === $role ) {
-			if ( $role_changed || $confirms( $stored['role'] ) ) {
-				AB_MCP_Sync_Key::renew();
-			}
-		} else {
+		// A site with any other role keeps no key; another pair takes the
+		// anchor of the old one away (a new role never keeps the pair, see
+		// above).
+		if ( self::ROLE_STAGING !== $role ) {
 			AB_MCP_Sync_Key::forget();
 		}
 		if ( $pair_changed ) {
@@ -794,7 +801,9 @@ class AB_MCP_Staging {
 			'url'         => $url,
 			'http_status' => null,
 		);
-		$response = AB_MCP_Outbound::get(
+		// On the port of the stored address, also one WordPress does not ask
+		// by itself (8443), for this request only (AB_MCP_Outbound::get_partner()).
+		$response = AB_MCP_Outbound::get_partner(
 			$url,
 			array(
 				'timeout'             => self::CHECK_TIMEOUT,

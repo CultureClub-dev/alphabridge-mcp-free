@@ -2,14 +2,17 @@
 /**
  * The key of a staging source (Z8, decision 4 of the plan of 01.11.2026).
  *
- * When a person confirms the role staging site (AB_MCP_Staging::save()
- * writes the role as staging, on the page AlphaBridge → Staging or from the
- * hub), the site gets a new source id and a new Ed25519 key pair
- * (sodium_crypto_sign_keypair(); WordPress brings sodium_compat where PHP
- * lacks the extension): renew(). A site whose role is anything else keeps
- * neither (forget()). A staging site whose role was confirmed before there
- * were keys has none until a person makes it on that page (make()), which
- * never replaces a key that is there.
+ * When a person confirms the role staging site (AB_MCP_Staging::save(), on
+ * the page AlphaBridge → Staging or from the hub), the site gets a new
+ * source id and a new Ed25519 key pair (sodium_crypto_sign_keypair();
+ * WordPress brings sodium_compat where PHP lacks the extension): renew(),
+ * called before the role is written. renew() reads back exactly what it
+ * made; where the options did not keep it, it removes the key and says so,
+ * and save() writes no role (no confirmation without the new key, no old
+ * key that signs on). A site whose role is anything else keeps neither
+ * (forget()). A staging site whose role was confirmed before there were
+ * keys has none until a person makes it on that page (make()), which never
+ * replaces a key that is there.
  *
  * WHERE. Two options of their own, without autoload:
  *  - OPTION_SOURCE: the source id, the key id, the public key, when made;
@@ -19,10 +22,19 @@
  *    guard keeps both from the option tools (an ab_mcp_ name is the
  *    plugin's own, AB_MCP_Option_Guard).
  * They are written one after the other, so a key counts only where both
- * agree: the private key's key id is the public key's, and the private key
- * carries exactly that public key (sodium_crypto_sign_publickey_from_secretkey()).
- * Anything else reads as no key (current() null), signs nothing and is
- * shown to nobody; the page offers to make a new one.
+ * agree: the private key's key id is the public key's, and the key pair its
+ * seed makes is exactly that private key with that public key
+ * (sodium_crypto_sign_seed_keypair()). Anything else reads as no key
+ * (current() null), signs nothing and is shown to nobody; the page offers
+ * to make a new one.
+ *
+ * NO ERROR SHOWS THE PRIVATE KEY. A query that fails is reported by wpdb
+ * with its full text (wpdb::print_error(): the PHP error log, the page with
+ * show_errors, the list $EZSQL_ERROR), and the text stays in last_query,
+ * func_call, last_error (a syntax error quotes it) and, with SAVEQUERIES,
+ * in queries. The private key is written with wpdb's error output off and
+ * every one of these traces of its query taken away (store_secret()); a
+ * refusal names the options and what went wrong, never a value.
  *
  * IDS. The source id is 16 random bytes in hex. The key id is the first 32
  * hex characters of the SHA-256 of the public key, so it names that key and
@@ -38,6 +50,12 @@
  * over by hand where the production site cannot ask (pairing_code()); the
  * production site reads either with read_answer() or read_code(), which
  * accept exactly what this class writes.
+ *
+ * ADDRESSES of a key and of a package are compared in the form site_form()
+ * gives: as normalize_url() stores them, a host of an international domain
+ * name in its xn-- form (idn_to_ascii(), UTS #46, nontransitional), where
+ * PHP has intl; without it byte for byte, and a refusal names the xn-- form
+ * as the way (idn_hint()).
  *
  * Base64 is PHP's (base64_encode(), base64_decode() in its strict mode), and
  * a text counts only where encoding the bytes again gives it back
@@ -90,17 +108,16 @@ final class AB_MCP_Sync_Key {
 	/* ------------------------------------------------------------- make */
 
 	/**
-	 * A new source id and key pair, replacing what is there. Only on a
-	 * confirmed staging site: AB_MCP_Staging::save() calls it right after it
-	 * wrote that role.
+	 * A new source id and key pair, replacing what is there:
+	 * AB_MCP_Staging::save() calls it before it writes the role staging site,
+	 * make() on a confirmed staging site. Read back exactly as made; where
+	 * the options did not keep it, the key is removed (no old key signs on)
+	 * and the refusal says so.
 	 *
 	 * @param int|null $now Time; now when null.
 	 * @return array|WP_Error The public part (current()).
 	 */
 	public static function renew( $now = null ) {
-		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {
-			return self::role_refusal();
-		}
 		try {
 			$pair   = sodium_crypto_sign_keypair();
 			$secret = sodium_crypto_sign_secretkey( $pair );
@@ -110,13 +127,11 @@ final class AB_MCP_Sync_Key {
 			return new WP_Error( 'ab_mcp_sync_key_failed', 'No key was made: PHP could not make an Ed25519 key pair or random bytes on this server. Ask the host to enable the sodium extension of PHP, then make the key on the page AlphaBridge → Staging.' );
 		}
 		$key_id = self::key_id( $public );
-		update_option(
-			self::OPTION_SECRET,
+		self::store_secret(
 			array(
 				'key_id'     => $key_id,
 				'secret_key' => self::to_base64( $secret ),
-			),
-			false
+			)
 		);
 		update_option(
 			self::OPTION_SOURCE,
@@ -129,8 +144,18 @@ final class AB_MCP_Sync_Key {
 			),
 			false
 		);
-		$made = self::current();
-		return null !== $made ? $made : new WP_Error( 'ab_mcp_sync_key_failed', 'The key was made but does not read back: the options of this site did not keep it. Check the database (wp_get_error_log), then make the key again on the page AlphaBridge → Staging.' );
+		// What was made, not any key that reads: its source id and its key id
+		// (the private key of that key id is the one of its seed, found()).
+		$found = self::found();
+		if ( null === $found || $found['key']['source_id'] !== $source || $found['key']['key_id'] !== $key_id ) {
+			self::forget();
+			return new WP_Error(
+				'ab_mcp_sync_key_failed',
+				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s and %2$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site again on the page AlphaBridge → Staging.', self::OPTION_SECRET, self::OPTION_SOURCE ),
+				array( 'options' => array( self::OPTION_SECRET, self::OPTION_SOURCE ) )
+			);
+		}
+		return $found['key'];
 	}
 
 	/**
@@ -210,7 +235,9 @@ final class AB_MCP_Sync_Key {
 
 	/**
 	 * What the route answers and the page shows: the public part of the key
-	 * of a confirmed staging site and its own address, or null.
+	 * of a confirmed staging site and its own address, or null. The address
+	 * in the form site_form() gives (an international domain name in its
+	 * xn-- form where PHP has intl).
 	 *
 	 * @return array{format:string,site:string,source_id:string,key_id:string,public_key:string,fingerprint:string}|null
 	 */
@@ -219,7 +246,7 @@ final class AB_MCP_Sync_Key {
 			return null;
 		}
 		$key  = self::current();
-		$site = AB_MCP_Staging::normalize_url( home_url() );
+		$site = self::site_form( home_url() );
 		if ( null === $key || '' === $site ) {
 			return null;
 		}
@@ -352,6 +379,71 @@ final class AB_MCP_Sync_Key {
 	}
 
 	/**
+	 * An address as anchor and manifest compare it: as normalize_url()
+	 * stores it (scheme, host in lower case, the port unless the scheme's,
+	 * the path), with a host of an international domain name in its xn--
+	 * form (idn_to_ascii(), UTS #46 nontransitional, as browsers resolve it)
+	 * where PHP has intl. Without intl such a host stays as it is, its ASCII
+	 * letters in lower case, and is compared byte for byte. '' for no address,
+	 * or a host idn_to_ascii() does not take.
+	 *
+	 * The host of such an address is read from its text, as
+	 * AB_MCP_Outbound::get_bound() reads an authority, not through
+	 * parse_url(): that turns the bytes 0x80 to 0x9F into "_", so «straße» or
+	 * «BÜCHER» would come out as another host.
+	 *
+	 * @param mixed               $url Address.
+	 * @param callable|false|null $idn idn_to_ascii() or a stand-in; false for
+	 *                                 a PHP without intl; null: as PHP has it.
+	 * @return string
+	 */
+	public static function site_form( $url, $idn = null ) {
+		$stored = AB_MCP_Staging::normalize_url( $url );
+		if ( '' === $stored || ! preg_match( '~^(https?)://([^/?#:@\[\]]+)(:[0-9]+)?(/[^?#]*)?\z~i', trim( (string) $url ), $m ) || ! preg_match( '/[\x80-\xff]/', $m[2] ) ) {
+			return $stored;
+		}
+		$idn  = self::idn( $idn );
+		$host = $m[2];
+		if ( false !== $idn ) {
+			$host = call_user_func( $idn, $host, IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46 );
+			if ( ! is_string( $host ) || '' === $host ) {
+				return '';
+			}
+		}
+		// The ASCII letters in lower case, the other bytes as they are
+		// (strtolower() follows the locale on PHP 8.0 and 8.1). Port and path
+		// as normalize_url() writes them, after a host it reads as it is.
+		$host   = strtr( $host, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz' );
+		$scheme = strtolower( $m[1] );
+		$rest   = substr( AB_MCP_Staging::normalize_url( $scheme . '://host.invalid' . ( isset( $m[3] ) ? $m[3] : '' ) . ( isset( $m[4] ) ? $m[4] : '' ) ), strlen( $scheme . '://host.invalid' ) );
+		return $scheme . '://' . $host . $rest;
+	}
+
+	/**
+	 * The way for two addresses that differ where a host is an international
+	 * domain name this server did not read: without PHP's intl, or a name
+	 * idn_to_ascii() does not take (also one parse_url() changed when
+	 * normalize_url() stored it). Both sites in the xn-- form, naming it where
+	 * one of the two is in it.
+	 *
+	 * @param string              $a   Address.
+	 * @param string              $b   Address.
+	 * @param callable|false|null $idn See site_form().
+	 * @return string A sentence that starts with a space, or ''.
+	 */
+	public static function idn_hint( $a, $b, $idn = null ) {
+		if ( ! preg_match( '/[\x80-\xff]/', (string) $a . (string) $b ) ) {
+			return '';
+		}
+		$read = false !== self::idn( $idn );
+		if ( $read && '' !== self::site_form( $a, $idn ) && '' !== self::site_form( $b, $idn ) ) {
+			return '';
+		}
+		$known = preg_match( '#^https?://([a-z0-9-]+\.)*xn--#', (string) $a ) ? (string) $a : ( preg_match( '#^https?://([a-z0-9-]+\.)*xn--#', (string) $b ) ? (string) $b : '' );
+		return ( $read ? ' This server cannot read the international domain name as it is stored' : ' This server cannot compare international domain names (PHP has no intl)' ) . ': store the address on both sites in its xn-- form (Punycode)' . ( '' !== $known ? ', here ' . $known : '' ) . '.';
+	}
+
+	/**
 	 * @param string $raw Bytes.
 	 * @return string Base64 with padding.
 	 */
@@ -401,6 +493,45 @@ final class AB_MCP_Sync_Key {
 	/* ---------------------------------------------------------- private */
 
 	/**
+	 * Write the private key so that no report of a database error carries
+	 * it. While update_option() writes it, wpdb neither logs nor shows an
+	 * error (suppress_errors(), hide_errors()); afterwards both are as they
+	 * were, and what wpdb keeps of that query is taken away: last_query,
+	 * func_call and last_error (a syntax error quotes the query), the
+	 * entries print_error() added to $EZSQL_ERROR, which it fills even with
+	 * errors suppressed, and those log_query() added to queries under
+	 * SAVEQUERIES. A database layer without wpdb's switches (a drop-in that
+	 * does not extend wpdb) is written to as it is.
+	 *
+	 * @param array $value key_id and secret_key.
+	 */
+	private static function store_secret( array $value ) {
+		global $wpdb;
+		$db      = is_object( $wpdb ) && method_exists( $wpdb, 'suppress_errors' ) && method_exists( $wpdb, 'hide_errors' ) && method_exists( $wpdb, 'show_errors' ) ? $wpdb : null;
+		$errors  = isset( $GLOBALS['EZSQL_ERROR'] ) && is_array( $GLOBALS['EZSQL_ERROR'] ) ? count( $GLOBALS['EZSQL_ERROR'] ) : 0;
+		$logged  = null !== $db && isset( $db->queries ) && is_array( $db->queries ) ? count( $db->queries ) : 0;
+		$quiet   = null !== $db ? $db->suppress_errors( true ) : false;
+		$visible = null !== $db ? $db->hide_errors() : false;
+		try {
+			update_option( self::OPTION_SECRET, $value, false );
+		} finally {
+			if ( null !== $db ) {
+				$db->suppress_errors( $quiet );
+				$db->show_errors( $visible );
+				$db->last_query = null;
+				$db->func_call  = null;
+				$db->last_error = '';
+				if ( isset( $db->queries ) && is_array( $db->queries ) ) {
+					array_splice( $db->queries, $logged );
+				}
+			}
+			if ( isset( $GLOBALS['EZSQL_ERROR'] ) && is_array( $GLOBALS['EZSQL_ERROR'] ) ) {
+				array_splice( $GLOBALS['EZSQL_ERROR'], $errors );
+			}
+		}
+	}
+
+	/**
 	 * The key of this site with its private key, read once, where both
 	 * options agree; else null.
 	 *
@@ -428,7 +559,7 @@ final class AB_MCP_Sync_Key {
 
 	/**
 	 * The private key of the key named, where the option holds it for that
-	 * key id and it carries exactly that public key.
+	 * key id and its seed makes exactly it and that public key.
 	 *
 	 * @param string $key_id     Key id.
 	 * @param string $public_key Public key, base64.
@@ -439,15 +570,31 @@ final class AB_MCP_Sync_Key {
 		if ( ! is_array( $raw ) || ! isset( $raw['key_id'], $raw['secret_key'] ) || ! is_string( $raw['key_id'] ) || ! hash_equals( (string) $key_id, $raw['key_id'] ) ) {
 			return null;
 		}
-		// A private key that is no base64 of 64 bytes is '' here, which sodium
-		// refuses with an exception.
+		// The key pair its seed makes must be this private key with this
+		// public key: a private key carries its public key in its second half,
+		// which a changed seed would not change. A private key that is no
+		// base64 of 64 bytes gives a seed sodium refuses with an exception.
 		$secret = (string) self::from_base64( $raw['secret_key'], self::SECRET_BYTES );
 		try {
-			$carried = sodium_crypto_sign_publickey_from_secretkey( $secret );
+			$pair = sodium_crypto_sign_seed_keypair( substr( $secret, 0, 32 ) );
 		} catch ( Throwable $e ) {
 			return null;
 		}
-		return hash_equals( (string) self::from_base64( $public_key, self::PUBLIC_BYTES ), $carried ) ? $secret : null;
+		if ( ! hash_equals( sodium_crypto_sign_secretkey( $pair ), $secret ) ) {
+			return null;
+		}
+		return hash_equals( (string) self::from_base64( $public_key, self::PUBLIC_BYTES ), sodium_crypto_sign_publickey( $pair ) ) ? $secret : null;
+	}
+
+	/**
+	 * @param callable|false|null $idn See site_form().
+	 * @return callable|false idn_to_ascii() where PHP has intl, else false.
+	 */
+	private static function idn( $idn ) {
+		if ( null === $idn ) {
+			return function_exists( 'idn_to_ascii' ) ? 'idn_to_ascii' : false;
+		}
+		return is_callable( $idn ) ? $idn : false;
 	}
 
 	/**
