@@ -12,8 +12,10 @@
  * after, so a new key, another pair or the end of its day stops the package
  * where it is; with it the print of the pair it was begun with
  * (AB_MCP_Sync_Anchor::pair_print()), and a call after the role, the pair or
- * the anchor changed ends the group (decision 15), as one that holds it for
- * a purpose this version does not take. Another account does not see that
+ * the anchor changed ends the group before its manifest is checked again
+ * (decision 15), as one that holds it for a purpose this version does not
+ * take; a new package removes every group of a pair of before first, so
+ * none holds a place in the budgets. Another account does not see that
  * group: it begins a group of its own. Then it takes chunks, each checked against its SHA-256 in the
  * manifest before it is stored (AB_MCP_Sync_Manifest::chunk()):
  *
@@ -203,13 +205,14 @@ final class AB_MCP_Sync_Import {
 	/**
 	 * A lock of a line: exactly these fields (AB_MCP_Sync_Kinds::lock() and
 	 * the place); key, stage and reason as the tables of AB_MCP_Sync_Kinds
-	 * have them (lock_known()).
+	 * have them (lock_known(), which compares stage and reason with the
+	 * table exactly: type table, no type of their own).
 	 */
 	const LOCK_FIELDS = array(
 		'at'     => 'name',
 		'key'    => 'string',
-		'reason' => 'text',
-		'stage'  => 'text',
+		'reason' => 'table',
+		'stage'  => 'table',
 	);
 
 	/** A reference of a line: these fields at most. */
@@ -353,18 +356,21 @@ final class AB_MCP_Sync_Import {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
 			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site held the package for a purpose this version does not take (it takes purpose=%s only), so what arrived of it was removed. Call again with the manifest and purpose=%s as wp_site_export gave them on the staging site.', AB_MCP_Sync_Export::PURPOSES[0], AB_MCP_Sync_Export::PURPOSES[0] ) );
 		}
+		// The pair it was begun with (decision 15): a new confirmation of the
+		// role, another pair or another anchor ends it, before its manifest
+		// is checked again (verify() refuses a manifest of a key that is no
+		// longer confirmed, and the group would hold its place in the budget
+		// until the end of its day; Codex P2 on PR 132).
+		if ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
+			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
+			return new WP_Error( 'ab_mcp_sync_import_pair_changed', 'The role of this site, its pair or the confirmed key of the staging site changed since this package was begun, so it is not continued, and what arrived of it was removed. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.' );
+		}
 		if ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] ) || array( 'manifest', 'signature' ) !== self::sorted_keys( $a['manifest'] ) || $found['signed']['manifest'] !== $a['manifest']['manifest'] || $found['signed']['signature'] !== $a['manifest']['signature'] ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_other_manifest', 'This site holds the package with another manifest than the one passed now. Pass the manifest of the first call, or leave it out.' );
 		}
 		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
 		if ( is_wp_error( $checked ) ) {
 			return $checked;
-		}
-		// The pair it was begun with (decision 15): a new confirmation of the
-		// role, another pair or another anchor ends it.
-		if ( null === $found['print'] || ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {
-			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_pair_changed', 'The role of this site, its pair or the confirmed key of the staging site changed since this package was begun, so it is not continued, and what arrived of it was removed. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.' );
 		}
 		return $found;
 	}
@@ -399,6 +405,7 @@ final class AB_MCP_Sync_Import {
 	private static function begin( array $manifest, array $signed, array $expect ) {
 		// verify() read the manifest with the active anchor: there is a print.
 		$print = AB_MCP_Sync_Anchor::pair_print();
+		self::discard_stale( $print );
 		$gid   = AB_MCP_Protected_Store::open(
 			'in',
 			array(
@@ -451,32 +458,77 @@ final class AB_MCP_Sync_Import {
 			if ( self::LABEL . $package_id !== $group['label'] || (int) $group['user_id'] !== (int) get_current_user_id() ) {
 				continue;
 			}
-			$files = AB_MCP_Protected_Store::files( 'in', $group['gid'] );
-			if ( is_wp_error( $files ) ) {
-				return $files;
+			$found = self::record( $group );
+			if ( null !== $found ) {
+				return $found;
 			}
-			$records = preg_grep( '/^[0-9a-f]{64}\z/', array_map( 'strval', array_keys( $files ) ) );
-			if ( array() === $records ) {
-				continue;
-			}
-			$name = reset( $records );
-			$text = AB_MCP_Protected_Store::get( 'in', $group['gid'], $name, $name );
-			if ( is_wp_error( $text ) ) {
-				return $text;
-			}
-			$record = json_decode( $text, true, 64 );
-			return array(
-				'gid'      => $group['gid'],
-				'manifest' => json_decode( $record['manifest'], true, 8 ),
-				'signed'   => array(
-					'manifest'  => $record['manifest'],
-					'signature' => $record['signature'],
-				),
-				'expect'   => $record['expect'],
-				'print'    => isset( $record['print'] ) && is_string( $record['print'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['print'] ) ? $record['print'] : null,
-			);
 		}
 		return null;
+	}
+
+	/**
+	 * A group of the area in with its record.
+	 *
+	 * @param array $group An entry of AB_MCP_Protected_Store::groups().
+	 * @return array|WP_Error|null held(), null where it has no record (yet).
+	 */
+	private static function record( array $group ) {
+		$files = AB_MCP_Protected_Store::files( 'in', $group['gid'] );
+		if ( is_wp_error( $files ) ) {
+			return $files;
+		}
+		$records = preg_grep( '/^[0-9a-f]{64}\z/', array_map( 'strval', array_keys( $files ) ) );
+		if ( array() === $records ) {
+			return null;
+		}
+		$name = reset( $records );
+		$text = AB_MCP_Protected_Store::get( 'in', $group['gid'], $name, $name );
+		if ( is_wp_error( $text ) ) {
+			return $text;
+		}
+		$record = json_decode( $text, true, 64 );
+		return array(
+			'gid'      => $group['gid'],
+			'manifest' => json_decode( $record['manifest'], true, 8 ),
+			'signed'   => array(
+				'manifest'  => $record['manifest'],
+				'signature' => $record['signature'],
+			),
+			'expect'   => $record['expect'],
+			'print'    => isset( $record['print'] ) && is_string( $record['print'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['print'] ) ? $record['print'] : null,
+		);
+	}
+
+	/**
+	 * Whether a package was begun with the pair as it is now: the print it
+	 * kept is the one of now (AB_MCP_Sync_Anchor::pair_print(): this site's
+	 * role, its pair, the confirmed key of the staging site).
+	 *
+	 * @param array       $found held().
+	 * @param string|null $print The print of now.
+	 * @return bool
+	 */
+	private static function bound( array $found, $print ) {
+		return null !== $found['print'] && hash_equals( $found['print'], (string) $print );
+	}
+
+	/**
+	 * Remove every package of the area in begun with another pair than the
+	 * one of now (bound()), of any account, before a new one is begun: none
+	 * is ever continued (held() ends it), so none holds a place in the
+	 * budgets (AB_MCP_Store_Budget::MAX_PACKAGES) until the end of its day.
+	 * A group whose record does not read stays as it is.
+	 *
+	 * @param string $print The print of now.
+	 */
+	private static function discard_stale( $print ) {
+		$groups = AB_MCP_Protected_Store::groups( 'in' );
+		foreach ( is_array( $groups ) ? $groups : array() as $group ) {
+			$found = self::record( $group );
+			if ( is_array( $found ) && ! self::bound( $found, $print ) ) {
+				AB_MCP_Protected_Store::remove( 'in', $group['gid'] );
+			}
+		}
 	}
 
 	/**
@@ -977,7 +1029,8 @@ final class AB_MCP_Sync_Import {
 	/**
 	 * Whether a value has a type of a line. Content: name (any text, or
 	 * bytes in the byte form of the canon, bytes()), names (a list of them),
-	 * login (a name or null). Structure: string; text (a string or null);
+	 * login (a name or null). Structure: string; table (any value: what the
+	 * tables of AB_MCP_Sync_Kinds hold is compared with them, lock_known());
 	 * canon (the version of the canonical form); space and strength (of the
 	 * readers); integer (an int or the digits of one, negative too); number
 	 * (an int or the digits of one); bool; ints (a list of ints); hash (64
@@ -991,8 +1044,8 @@ final class AB_MCP_Sync_Import {
 		switch ( $type ) {
 			case 'string':
 				return is_string( $value );
-			case 'text':
-				return null === $value || is_string( $value );
+			case 'table':
+				return true;
 			case 'name':
 				return null !== self::bytes( $value );
 			case 'names':

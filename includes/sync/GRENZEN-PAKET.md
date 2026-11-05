@@ -176,7 +176,19 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   und endet, wo sich Rolle, Paar oder Anker geändert haben
   (`ab_mcp_sync_import_pair_changed`, Weg: Paket neu holen) oder der Zweck
   keiner dieser Version ist (`ab_mcp_sync_import_purpose_held`); was ankam,
-  wird entfernt (Codex-Runde 5, B-3 und Punkt 3).
+  wird entfernt (Codex-Runde 5, B-3 und Punkt 3). Das Paar wird vor der
+  erneuten Prüfung des Manifests verglichen: ein Import eines erneuerten
+  oder widerrufenen Schlüssels, eines entfernten Paares oder Ankers endet so
+  mit Weg und wird entfernt, statt mit `ab_mcp_sync_manifest_key` stehen zu
+  bleiben. Ein neuer Import entfernt vorher jede Gruppe eines früheren
+  Paares, jedes Kontos, so dass keine einen der fünf Plätze belegt; fünf
+  unterbrochene Importe sperren nach einem Schlüsselwechsel keinen neuen
+  (GitHub-Codex P2 zu PR 132). Ein Manifest, das während eines offenen
+  Imports abläuft, lehnt die nächste Fortsetzung ab
+  (`ab_mcp_sync_manifest_expired`); diese Gruppe bleibt, bis die Ablage sie
+  einen Tag nach ihrem Beginn entfernt, und belegt bis dahin ihren Platz
+  (selten: das Paket wurde kurz vor dem Ablauf seines Manifests begonnen
+  und liegen gelassen).
 - Bestätigt eine Person auf der Live-Site nur die Rolle neu und bleibt der
   Anker unverändert, bleiben Manifeste desselben Schlüssels innerhalb ihrer
   24 Stunden annehmbar: derselbe Anker, dasselbe Vertrauen. Offene Importe

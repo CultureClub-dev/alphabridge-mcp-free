@@ -962,8 +962,8 @@ e('paket/it-export-kinds-from', 'make(): complete by the cursor the package bega
 e('paket/it-import-label', 'begin(): the group named by the package', IM,
   "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
 e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
-  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t// The pair it was begun with",
-  "\t\t// The pair it was begun with", 'itpkg', PKG_IT['manifest'])
+  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\treturn $found;",
+  "\t\treturn $found;", 'itpkg', PKG_IT['manifest'])
 e('paket/it-import-other-manifest', 'held(): a later manifest is the kept one', IM,
   "\t\tif ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] )", "\t\tif ( false && ( ! is_array( $a['manifest'] )", 'itpkg', PKG_IT['manifest'])
 e('paket/it-import-unknown', 'held(): the first call brings the manifest', IM,
@@ -1192,9 +1192,10 @@ e('paket/r5-uninstall-retired', 'uninstall.php: the retired key ids go (point 3)
 # Point 3: the print at the import; B-3: the purpose of a continuation.
 e('paket/r5-import-print-kept', 'begin(): the print of the pair kept with the record (point 3)', IM,
   "\t\t\t\t'print'     => $print,\n", "\t\t\t\t'print'     => null,\n", 'itpkg', R5['print_it'])
-PRN = "\t\tif ( null === $found['print'] || ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {"
+PRN = "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {"
 e('paket/r5-import-print-check', 'held(): a continuation ends where the print changed (point 3)', IM, PRN, "\t\tif ( false ) {", 'itpkg', R5['print_it'])
-e('paket/r5-import-print-none', 'held(): a group without the print of its beginning ends (point 3)', IM, PRN, "\t\tif ( null !== $found['print'] && ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {", 'itpkg', R5['print_none'])
+e('paket/r5-import-print-none', 'bound(): a group without the print of its beginning is none of now (point 3)', IM,
+  "\t\treturn null !== $found['print'] && hash_equals( $found['print'], (string) $print );", "\t\treturn null === $found['print'] || hash_equals( (string) $found['print'], (string) $print );", 'itpkg', R5['print_none'])
 e('paket/r5-import-print-removed', 'held(): what arrived of it is removed (point 3)', IM,
   PRN + "\n\t\t\tAB_MCP_Protected_Store::remove( 'in', $found['gid'] );\n", PRN + "\n", 'itpkg', R5['print_it'])
 PUR = "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {"
@@ -1444,8 +1445,7 @@ e('paket/p3r1-records-typed', 'records(): each field typed (two sites)', IM,
 e('paket/p3r1-line-typed', 'line_shaped(): each field of a line typed (two sites)', IM,
   "\t\t\t\t$fits = 'identity' === $type || self::typed( $value, $type );", "\t\t\t\t$fits = true;", 'itpkg', P3['unpack_it'])
 for name, search, replace in (
-    ('string', "\t\t\t\treturn is_string( $value );\n\t\t\tcase 'text':", "\t\t\t\treturn true;\n\t\t\tcase 'text':"),
-    ('text', "\t\t\t\treturn null === $value || is_string( $value );", "\t\t\t\treturn true;"),
+    ('string', "\t\t\t\treturn is_string( $value );\n\t\t\tcase 'table':", "\t\t\t\treturn true;\n\t\t\tcase 'table':"),
     ('number', "\t\t\t\treturn is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[0-9]{1,20}\\z/', $value ) );", "\t\t\t\treturn true;"),
     ('bool', "\t\t\t\treturn is_bool( $value );", "\t\t\t\treturn true;"),
     ('lists', "\t\t\t\t\tif ( ! is_int( $item ) ) {", "\t\t\t\t\tif ( false ) {"),
@@ -1586,6 +1586,16 @@ e('paket/p3r4-over-name-undecidable', 'over_name(): braces that cannot be counte
 ON = "\t\treturn $deep || array() !== $unread ? 'unreadable' : null;"
 e('paket/p3r4-over-name-deep', 'over_name(): deeper than the net reads (two sites)', NET, ON, ON.replace("$deep || ", ''), 'itpkg', P3['unpack_it'])
 e('paket/p3r4-over-name-unread', 'over_name(): a body that is no text (two sites)', NET, ON, ON.replace(" || array() !== $unread", ''), 'itpkg', P3['unpack_it'])
+
+# ---------------------------------------- part 3: GitHub Codex P2 on PR 132 (a key of before)
+P5_IT = 'testImportsOfAKeyOfBeforeHoldNoPlaceOnceTheKeyIsRenewed'
+e('paket/p5-held-bound-before-verify', 'held(): a group of another pair is ended before its manifest is checked again (two sites)', IM,
+  PRN, "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) && ! is_wp_error( AB_MCP_Sync_Manifest::verify( $found['signed'], $expect ) ) ) {", 'itpkg', P5_IT)
+e('paket/p5-begin-discard', 'begin(): the groups of a pair of before removed before a new one is opened (two sites)', IM,
+  "\t\tself::discard_stale( $print );\n", "", 'itpkg', P5_IT)
+DS = "\t\t\tif ( is_array( $found ) && ! self::bound( $found, $print ) ) {"
+e('paket/p5-discard-bound', 'discard_stale(): every group of another pair, of any account (two sites)', IM, DS, "\t\t\tif ( false ) {", 'itpkg', P5_IT)
+e('paket/p5-discard-only-stale', 'discard_stale(): a group of the pair of now stays (two sites)', IM, DS, "\t\t\tif ( is_array( $found ) ) {", 'itpkg', P5_IT)
 
 # ----------------------------------------------------------------- check
 # Each run: its suite and the test class it names; an entry runs the test

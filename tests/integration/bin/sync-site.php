@@ -148,7 +148,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'sign_manifest':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-manifest.php';
-			$ab_it_out = AB_MCP_Sync_Manifest::sign( $ab_it_step['package'] );
+			$ab_it_out = AB_MCP_Sync_Manifest::sign( $ab_it_step['package'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
 			break;
 		case 'export':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';

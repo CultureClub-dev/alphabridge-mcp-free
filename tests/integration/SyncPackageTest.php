@@ -658,8 +658,42 @@ final class SyncPackageTest extends TestCase {
 		$other = self::export();
 		self::refused( AB_MCP_Sync_Import::call( array( 'manifest' => $other['manifest'] ) + $args ), 'ab_mcp_sync_import_other_manifest' );
 
+		// A manifest that expires while its package is open: checked again on
+		// the next call, with the pair as it was.
+		$soon   = self::package_of( str_repeat( 'f1', 16 ), array( array( self::option_line( 'zz_soon' ) ) ) );
+		$signed = self::b(
+			array(
+				array(
+					'op'      => 'sign_manifest',
+					'as'      => 'signed',
+					'package' => $soon['package'],
+					'now'     => time() - AB_MCP_Sync_Manifest::TTL + 2,
+				),
+			)
+		)['signed'];
+		$state  = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => str_repeat( 'f1', 16 ),
+				'manifest'   => $signed,
+				'purpose'    => 'inventory',
+			)
+		);
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		$expires = json_decode( $signed['manifest'], true )['expires'];
+		while ( time() < $expires ) {
+			usleep( 200000 );
+		}
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'f1', 16 ) ) ), 'ab_mcp_sync_manifest_expired' );
+
+		// The anchor forgotten: the pair it was begun with is gone, so the
+		// package is ended and removed, with the way; begun anew, no
+		// manifest is read without an anchor.
 		AB_MCP_Sync_Anchor::forget();
-		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) ), 'ab_mcp_sync_manifest_no_anchor' );
+		$ended = AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) );
+		self::refused( $ended, 'ab_mcp_sync_import_pair_changed' );
+		self::assertStringContainsString( 'Fetch the package anew', $ended->get_error_message() );
+		self::assertSame( array(), self::groups_of( $package['package_id'] ) );
+		self::refused( AB_MCP_Sync_Import::call( $args ), 'ab_mcp_sync_manifest_no_anchor' );
 	}
 
 	/* --------------------------------------------------------------- relay */
@@ -1331,6 +1365,64 @@ final class SyncPackageTest extends TestCase {
 		$raw['role']['at'] = (int) $raw['role']['at'] + 1;
 		\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
 		self::refused( AB_MCP_Sync_Import::call( $begin ), 'ab_mcp_sync_import_pair_changed' );
+	}
+
+	public function testImportsOfAKeyOfBeforeHoldNoPlaceOnceTheKeyIsRenewed(): void {
+		self::pair();
+		// Five imports begun and left: the most a site keeps open.
+		$old = array();
+		for ( $i = 0; $i < 5; $i++ ) {
+			$id      = str_repeat( 'e' . $i, 16 );
+			$package = self::package_of( $id, array( array( self::option_line( 'zz_old_' . $i ) ) ) );
+			$state   = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $id,
+					'manifest'   => self::signed_by_b( $package['package'] ),
+					'purpose'    => 'inventory',
+				)
+			);
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+			self::assertFalse( $state['complete'] );
+			$old[] = $id;
+		}
+		$sixth = self::package_of( str_repeat( 'e5', 16 ), array( array( self::option_line( 'zz_sixth' ) ) ) );
+		$begin = array(
+			'package_id' => str_repeat( 'e5', 16 ),
+			'manifest'   => self::signed_by_b( $sixth['package'] ),
+			'purpose'    => 'inventory',
+		);
+		self::refused( AB_MCP_Sync_Import::call( $begin ), 'ab_mcp_store_quota' );
+
+		// B: «Renew the key»; A: the new key confirmed.
+		$b        = self::b(
+			array(
+				array( 'op' => 'key_replace', 'as' => 'key' ),
+				array( 'op' => 'pairing_code', 'as' => 'code' ),
+			)
+		);
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $b['code'], self::admin() );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
+
+		// An import of before, called again: ended for the pair, with the way, not refused for its key and kept.
+		$ended = AB_MCP_Sync_Import::call( array( 'package_id' => $old[0] ) );
+		self::refused( $ended, 'ab_mcp_sync_import_pair_changed' );
+		self::assertStringContainsString( 'Fetch the package anew', $ended->get_error_message() );
+		self::assertSame( array(), self::groups_of( $old[0] ) );
+		// A package of the new key begins and completes: the four left of before hold no place.
+		$sixth = self::package_of( str_repeat( 'e6', 16 ), array( array( self::option_line( 'zz_sixth' ) ) ) );
+		$state = self::import_relayed( $sixth );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'] );
+		foreach ( $old as $id ) {
+			self::assertSame( array(), self::groups_of( $id ), $id );
+		}
+		self::assertCount( 1, AB_MCP_Protected_Store::groups( 'in' ) );
+		// A package of the pair of now stays when the next one begins.
+		$seventh = self::package_of( str_repeat( 'e7', 16 ), array( array( self::option_line( 'zz_seventh' ) ) ) );
+		self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'e7', 16 ), 'manifest' => self::signed_by_b( $seventh['package'] ), 'purpose' => 'inventory' ) ) );
+		self::assertCount( 1, self::groups_of( str_repeat( 'e6', 16 ) ) );
+		self::assertCount( 2, AB_MCP_Protected_Store::groups( 'in' ) );
 	}
 
 	public function testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne(): void {
@@ -2155,6 +2247,7 @@ final class SyncPackageTest extends TestCase {
 			'a widget area of another name' => array( self::package_of( str_repeat( '7c', 16 ), array( array( array( 'identity' => array( 'area' => 'sidebar-1' ), 'kind' => 'widget_area', 'locks' => array(), 'ref' => 'sidebar-2', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'the CSS of another stylesheet' => array( self::package_of( str_repeat( '7d', 16 ), array( array( array( 'identity' => array( 'linked' => false, 'post' => 5, 'stylesheet' => 'a' ), 'kind' => 'custom_css', 'locks' => array(), 'ref' => 'a@6', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'locks that are no list'   => array( self::package_of( str_repeat( '7f', 16 ), array( array( self::option_line( 'zz_lk', array( 'locks' => array( 'a' => $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reference whose id is no number' => array( self::package_of( str_repeat( 'd4', 16 ), array( array( self::option_line( 'zz_ri', array( 'refs' => array( array( 'at' => 'value', 'id' => 'x', 'space' => 'post', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a reference without its strength' => array( self::package_of( str_repeat( '8b', 16 ), array( array( self::option_line( 'zz_rs', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'complete that is text'    => array( self::package_of( str_repeat( '8c', 16 ), array( array( self::option_line( 'zz_c', array( 'complete' => 'yes' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a reason of a lock that is a number' => array( self::package_of( str_repeat( '8d', 16 ), array( array( self::option_line( 'zz_rn', array( 'locks' => array( array( 'reason' => 7 ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
