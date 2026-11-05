@@ -19,7 +19,7 @@
  * row may give several), each object as line() writes it from a list of
  * what it may carry: identity, status, locks, hash, size, references by
  * id, the places of possible references, never a value of its content; an
- * object a credential holds only with its identity and the reason. What is
+ * object a credential holds only with its identity, status and locks. What is
  * left is the next package: the answer carries the cursor to go on from,
  * which names this package; the packages of one inventory are one series
  * and count as one open export (AB_MCP_Store_Budget). The manifest lists
@@ -36,7 +36,7 @@
  * package, counted and named in the answer (withheld). An object whose name
  * is the name of a credential (B9) is not in the package and is counted
  * (credentials.names); one with a field of a credential in it, or any lock
- * of the credential check, is held to its identity and the reason
+ * of the credential check, is held to its identity, status and locks
  * (credentials.held, line()).
  *
  * WHAT IT IS BOUND TO (binding()): the key, both addresses, the confirmed
@@ -303,9 +303,6 @@ final class AB_MCP_Sync_Export {
 			'status'   => $object['status'],
 			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
 		);
-		if ( isset( $object['reason'] ) ) {
-			$line['reason'] = (string) $object['reason'];
-		}
 		$credentials = $object['credentials'];
 		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
 			return $line;

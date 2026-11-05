@@ -93,21 +93,35 @@ final class AB_MCP_Sync_Import {
 	 * locks, refs and possible are checked by their own lists.
 	 */
 	const LINE_FIELDS = array(
-		'b9'       => 'strings',
-		'canon'    => 'string',
+		'b9'       => 'places',
+		'canon'    => 'canon',
 		'complete' => 'bool',
 		'hash'     => 'hash',
 		'identity' => 'identity',
 		'kind'     => 'string',
 		'locks'    => 'locks',
 		'possible' => 'possible',
-		'reason'   => 'string',
-		'ref'      => 'string',
+		'ref'      => 'ref',
 		'refs'     => 'refs',
 		'size'     => 'size',
 		'status'   => 'status',
-		'unread'   => 'strings',
+		'unread'   => 'places',
 	);
+
+	/** The statuses a line has (AB_MCP_Sync_Inventory::entry(); b9 is never packed). */
+	const STATUSES = array( 'z8', 'locked', 'guarded', 'unreachable', 'unreadable' );
+
+	/** The spaces of a reference (AB_MCP_Sync_Canon::ref(), the readers). */
+	const SPACES = array( 'post', 'term', 'user' );
+
+	/** The strength of a reference. */
+	const STRENGTHS = array( 'strong' );
+
+	/**
+	 * What the readers note in unread where a row could not be read at all
+	 * (AB_MCP_Sync_Db_Kinds): the only lines with an empty identity.
+	 */
+	const ROW_UNREAD = array( 'posts', 'postmeta', 'term_relationships', 'terms', 'menu_item', 'theme_mods', 'options' );
 
 	/** The fields every line carries. */
 	const LINE_NEEDS = array( 'identity', 'kind', 'locks', 'ref', 'status' );
@@ -119,43 +133,47 @@ final class AB_MCP_Sync_Import {
 	 */
 	const IDENTITIES = array(
 		'post'        => array(
-			'post_name' => 'string',
-			'post_type' => 'string',
-			'theme'     => 'string',
+			'post_name' => 'name',
+			'post_type' => 'name',
+			'theme'     => 'name',
 		),
 		'term'        => array(
-			'slug'     => 'string',
-			'taxonomy' => 'string',
+			'slug'     => 'name',
+			'taxonomy' => 'name',
 		),
 		'menu'        => array(
-			'slug'     => 'string',
-			'taxonomy' => 'string',
+			'slug'     => 'name',
+			'taxonomy' => 'name',
 		),
 		'menu_item'   => array(
 			'menus'    => 'ints',
-			'object'   => 'string',
-			'position' => 'number',
-			'type'     => 'string',
+			'object'   => 'name',
+			'position' => 'integer',
+			'type'     => 'name',
 		),
-		'widget_area' => array( 'area' => 'string' ),
+		'widget_area' => array( 'area' => 'name' ),
 		'custom_css'  => array(
 			'linked'     => 'bool',
 			'post'       => 'number',
-			'stylesheet' => 'string',
+			'stylesheet' => 'name',
 		),
-		'option'      => array( 'name' => 'string' ),
+		'option'      => array( 'name' => 'name' ),
 		'theme_mod'   => array(
-			'name'      => 'string',
-			'theme_mod' => 'string',
+			'name'      => 'name',
+			'theme_mod' => 'name',
 		),
 	);
 
 	/** The kinds whose ref is an id of the database. */
 	const ID_KINDS = array( 'post', 'term', 'menu', 'menu_item' );
 
-	/** A lock of a line: exactly these fields (AB_MCP_Sync_Kinds::lock() and the place). */
+	/**
+	 * A lock of a line: exactly these fields (AB_MCP_Sync_Kinds::lock() and
+	 * the place); key, stage and reason as the tables of AB_MCP_Sync_Kinds
+	 * have them (lock_known()).
+	 */
 	const LOCK_FIELDS = array(
-		'at'     => 'string',
+		'at'     => 'place',
 		'key'    => 'string',
 		'reason' => 'text',
 		'stage'  => 'text',
@@ -163,15 +181,30 @@ final class AB_MCP_Sync_Import {
 
 	/** A reference of a line: these fields at most. */
 	const REF_FIELDS = array(
-		'at'       => 'string',
+		'at'       => 'place',
 		'id'       => 'number',
-		'login'    => 'text',
-		'space'    => 'string',
-		'strength' => 'string',
+		'login'    => 'login',
+		'space'    => 'space',
+		'strength' => 'strength',
 	);
 
 	/** The fields every reference carries. */
 	const REF_NEEDS = array( 'at', 'id', 'space', 'strength' );
+
+	/**
+	 * What a place (where in an object: a column, meta:key, a path of keys
+	 * and indexes, a reader's suffix) never holds: control characters,
+	 * quotes, a backslash, braces; a place is built from names and the
+	 * readers' tokens, so JSON, an encoded value or a line break in one is
+	 * none of ours.
+	 */
+	const PLACE_NOT = '/[\x00-\x1F\x7F"\\\\{}]/';
+
+	/** Bytes of a place at most. */
+	const PLACE_MAX = 4096;
+
+	/** Bytes of a ref at most (an option name, a stylesheet with its key). */
+	const NAME_MAX = 1024;
 
 	/** The fields of a line besides its identity, status, locks and reason, which a line a credential holds never carries. */
 	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'possible', 'refs', 'size', 'unread' );
@@ -683,7 +716,8 @@ final class AB_MCP_Sync_Import {
 				if ( ! self::line_shaped( $object ) ) {
 					return self::unpack_refusal( 'A line carries what a line of the inventory does not: a field it has no place for, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
 				}
-				if ( self::named_credential( $object['identity'], $extra ) ) {
+				// A line without its identity names its object by its ref.
+				if ( self::named_credential( array() === $object['identity'] ? array( 'name' => $object['ref'] ) : $object['identity'], $extra ) ) {
 					$out[] = array( $object['kind'], $object['ref'] );
 				}
 			}
@@ -757,11 +791,11 @@ final class AB_MCP_Sync_Import {
 			// A field a line has no place for has no type (typed(): none).
 			$type = isset( self::LINE_FIELDS[ $field ] ) ? self::LINE_FIELDS[ $field ] : '';
 			if ( 'locks' === $type ) {
-				$fits = self::records( $value, self::LOCK_FIELDS, array_keys( self::LOCK_FIELDS ) );
+				$fits = self::records( $value, self::LOCK_FIELDS, array_keys( self::LOCK_FIELDS ) ) && array() === array_filter( $value, static fn( $lock ) => ! self::lock_known( $lock ) );
 			} elseif ( 'refs' === $type ) {
 				$fits = self::records( $value, self::REF_FIELDS, self::REF_NEEDS );
 			} elseif ( 'possible' === $type ) {
-				$fits = self::records( $value, array( 'at' => 'string' ), array( 'at' ) );
+				$fits = self::records( $value, array( 'at' => 'place' ), array( 'at' ) );
 			} else {
 				$fits = 'identity' === $type || self::typed( $value, $type );
 			}
@@ -769,7 +803,12 @@ final class AB_MCP_Sync_Import {
 				return false;
 			}
 		}
-		if ( ! isset( self::IDENTITIES[ $object['kind'] ] ) || ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {
+		if ( ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {
+			return false;
+		}
+		// An empty identity only where the row could not be read: the line
+		// says so (not complete, the table in unread).
+		if ( array() === $object['identity'] && ( ! isset( $object['complete'], $object['unread'] ) || false !== $object['complete'] || array() === array_intersect( $object['unread'], self::ROW_UNREAD ) ) ) {
 			return false;
 		}
 		return ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );
@@ -789,6 +828,10 @@ final class AB_MCP_Sync_Import {
 	 * @return bool
 	 */
 	private static function identity_fits( $kind, $ref, $identity ) {
+		if ( ! isset( self::IDENTITIES[ $kind ] ) ) {
+			return false;
+		}
+		$ref    = (string) self::bytes( $ref );
 		$id_ref = 1 === preg_match( '/^[1-9][0-9]*\z/', $ref );
 		if ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {
 			return false;
@@ -815,15 +858,16 @@ final class AB_MCP_Sync_Import {
 				return false;
 			}
 		}
+		$text = array_map( array( __CLASS__, 'bytes' ), $identity );
 		switch ( $kind ) {
 			case 'widget_area':
-				return $identity['area'] === $ref;
+				return $text['area'] === $ref;
 			case 'option':
-				return $identity['name'] === $ref;
+				return $text['name'] === $ref;
 			case 'theme_mod':
-				return 0 === strpos( $identity['name'], 'theme_mods_' ) && substr( $identity['name'], strlen( 'theme_mods_' ) ) . ( isset( $identity['theme_mod'] ) ? '/' . $identity['theme_mod'] : '' ) === $ref;
+				return 0 === strpos( $text['name'], 'theme_mods_' ) && substr( $text['name'], strlen( 'theme_mods_' ) ) . ( isset( $text['theme_mod'] ) ? '/' . $text['theme_mod'] : '' ) === $ref;
 			case 'custom_css':
-				return $identity['stylesheet'] . ( $identity['linked'] ? '' : '@' . $identity['post'] ) === $ref;
+				return $text['stylesheet'] . ( $identity['linked'] ? '' : '@' . $identity['post'] ) === $ref;
 			default:
 				return true;
 		}
@@ -856,6 +900,44 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
+	 * A name as the export writes it: a text, or bytes that are no UTF-8 in
+	 * the byte form of AB_MCP_Sync_Canon::encode() ({"~b": base64}, only for
+	 * bytes that are no UTF-8). The bytes, or null where it is neither.
+	 *
+	 * @param mixed $value Value.
+	 * @return string|null
+	 */
+	public static function bytes( $value ) {
+		if ( is_string( $value ) ) {
+			return $value;
+		}
+		if ( ! is_array( $value ) || array( '~b' ) !== array_keys( $value ) || ! is_string( $value['~b'] ) ) {
+			return null;
+		}
+		$bytes = base64_decode( $value['~b'], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the byte form of the canonical form.
+		return is_string( $bytes ) && base64_encode( $bytes ) === $value['~b'] && 1 !== preg_match( '//u', $bytes ) ? $bytes : null; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round trip.
+	}
+
+	/**
+	 * Whether a lock is one of the tables of AB_MCP_Sync_Kinds: its key there
+	 * (a lock of LOCKS, or an entry of OWNERSHIP a reader locks by), with
+	 * the stage and the reason the table gives it.
+	 *
+	 * @param array $lock Lock (records() checked its fields).
+	 * @return bool
+	 */
+	private static function lock_known( array $lock ) {
+		if ( isset( AB_MCP_Sync_Kinds::LOCKS[ $lock['key'] ] ) ) {
+			$entry = AB_MCP_Sync_Kinds::LOCKS[ $lock['key'] ];
+		} elseif ( isset( AB_MCP_Sync_Kinds::OWNERSHIP[ $lock['key'] ] ) ) {
+			$entry = AB_MCP_Sync_Kinds::OWNERSHIP[ $lock['key'] ];
+		} else {
+			return false;
+		}
+		return ( isset( $entry['stage'] ) ? $entry['stage'] : null ) === $lock['stage'] && ( isset( $entry['reason'] ) ? $entry['reason'] : null ) === $lock['reason'];
+	}
+
+	/**
 	 * Whether a value has a type of a line: string; text (a string or null);
 	 * int; number (an int or the digits of one); bool; ints and strings
 	 * (lists of them); hash (64 hex or null); size (an int from 0); status
@@ -871,6 +953,34 @@ final class AB_MCP_Sync_Import {
 				return is_string( $value );
 			case 'text':
 				return null === $value || is_string( $value );
+			case 'name':
+				return null !== self::bytes( $value );
+			case 'ref':
+				$text = self::bytes( $value );
+				return null !== $text && '' !== $text && strlen( $text ) <= self::NAME_MAX && 1 !== preg_match( self::PLACE_NOT, $text );
+			case 'canon':
+				return AB_MCP_Sync_Canon::VERSION === $value;
+			case 'place':
+				$text = self::bytes( $value );
+				return null !== $text && '' !== $text && strlen( $text ) <= self::PLACE_MAX && 1 !== preg_match( self::PLACE_NOT, $text );
+			case 'places':
+				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
+					return false;
+				}
+				foreach ( $value as $item ) {
+					if ( ! self::typed( $item, 'place' ) ) {
+						return false;
+					}
+				}
+				return true;
+			case 'login':
+				return null === $value || ( is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9 _.@-]{1,60}\z/', $value ) );
+			case 'space':
+				return in_array( $value, self::SPACES, true );
+			case 'strength':
+				return in_array( $value, self::STRENGTHS, true );
+			case 'integer':
+				return is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^-?[0-9]{1,19}\z/', $value ) );
 			case 'number':
 				return is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[0-9]{1,20}\z/', $value ) );
 			case 'bool':
@@ -891,7 +1001,7 @@ final class AB_MCP_Sync_Import {
 			case 'size':
 				return is_int( $value ) && $value >= 0;
 			case 'status':
-				return is_string( $value ) && 1 === preg_match( '/^[a-z0-9_]{1,32}\z/', $value ) && 'b9' !== $value;
+				return in_array( $value, self::STATUSES, true );
 			default:
 				// No type: no field of a line.
 				return false;
@@ -909,7 +1019,7 @@ final class AB_MCP_Sync_Import {
 	 */
 	private static function named_credential( array $identity, array $extra ) {
 		foreach ( array( 'name', 'theme_mod' ) as $field ) {
-			if ( isset( $identity[ $field ] ) && is_string( $identity[ $field ] ) && AB_MCP_Sync_Credentials::names_credential( $identity[ $field ], $extra ) ) {
+			if ( isset( $identity[ $field ] ) && AB_MCP_Sync_Credentials::names_credential( (string) self::bytes( $identity[ $field ] ), $extra ) ) {
 				return true;
 			}
 		}

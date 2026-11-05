@@ -828,7 +828,7 @@ final class SyncPackageTest extends TestCase {
 			AB_MCP_Sync_Export::line( self::object() )
 		);
 		$line = AB_MCP_Sync_Export::line( self::object( array( 'reason' => 'Never compared.', 'unread' => array( 'postmeta' ) ) ) );
-		self::assertSame( 'Never compared.', $line['reason'] );
+		self::assertArrayNotHasKey( 'reason', $line, 'No free text: the reasons are those of its locks.' );
 		self::assertSame( array( 'postmeta' ), $line['unread'] );
 		self::assertSame( array(), AB_MCP_Sync_Export::line( array_diff_key( self::object(), array( 'unread' => true ) ) )['unread'], 'An option without its own list of what was not read.' );
 		self::assertStringNotContainsString( 'RAW', (string) json_encode( AB_MCP_Sync_Export::line( self::object() ) ) );

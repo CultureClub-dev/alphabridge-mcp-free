@@ -100,11 +100,13 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Art gilt in einem Paket nur als vollständig, wenn es sie von ihrem Anfang
   bis zu ihrem Ende gelesen hat; das Zusammensetzen mehrerer Pakete ist
   Sache des Berichts (Zweig 6).
-- Eine Zeile der Datenbank mit vielen Objekten (ein Menü mit seinen
-  Einträgen, die Theme-Mods eines Themes) wird ganz gelesen; ein Paket kann
-  so über 4000 Objekte hinausgehen. Trägt eine solche Zeile ein Paket über
-  5000 Objekte (ein Menü mit mehr als 1000 Einträgen genau an der Grenze),
-  lehnt der Export ab, und derselbe Cursor scheitert wieder (konstruiert).
+- Eine Zeile der Datenbank mit vielen Objekten (die Theme-Mods eines
+  Themes: eine Optionszeile, jeder Schlüssel ein Objekt) wird ganz gelesen;
+  ein Paket kann so über 4000 Objekte hinausgehen. Trägt eine solche Zeile
+  ein Paket über 5000 Objekte (eine Zeile der Theme-Mods mit mehr als 1000
+  Schlüsseln genau an der Grenze), lehnt der Export ab, und derselbe Cursor
+  scheitert wieder (konstruiert). Menüeinträge sind keine solche Zeile: der
+  Leser paginiert sie einzeln (berichtigt in Codex-Runde 2 zu Teil 3).
 - Ein Objekt, das kein Stück fasst (eine Zeile des Inventars über 5 MiB),
   oder eines, das JSON nicht schreibt (tiefer als 4096 Ebenen), lehnt den
   Export ab; Zeilen des Inventars tragen keinen Inhalt und sind klein.
@@ -154,7 +156,7 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Zugangsangabe, ein Passwort, ein Skript, HTML ausserhalb von kses, ein
   PHP-Objekt, ein Wert, der nicht entpackt, ein Name einer Zugangsangabe in
   einer Schicht, die kein Leser las) steht im Paket nur mit Identität,
-  Status, Sperren und Grund, ohne Hash, Verweise und mögliche Verweise
+  Status und Sperren (mit Etappe und Grund), ohne Hash, Verweise und mögliche Verweise
   (`CREDENTIAL_LOCKS`, Codex-Runde 5, A-1). `php_object` und
   `unreadable_value` geben auch die Leser der kanonischen Form (zu tief,
   nicht entpackbar); für denselben Wert gibt sie die Zugangsdatenprüfung
@@ -228,8 +230,8 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Objekt, dessen Name der einer Zugangsangabe ist (B9), kommt nicht ins
   Paket und wird gezählt (`credentials.names`); seine Art bleibt
   `complete`, weil es auf keiner Site verglichen wird. Ein Feld darin oder
-  eine Sperre der Zugangsdatenprüfung hält die Zeile auf Identität und
-  Grund (A-1, `credentials.held`); ausgelassene B9-Einheiten in gepackten
+  eine Sperre der Zugangsdatenprüfung hält die Zeile auf Identität, Status
+  und Sperren (A-1, `credentials.held`); ausgelassene B9-Einheiten in gepackten
   Objekten zählt `credentials.units`. Optionen, die das Inventar als
   geschützt führt (Status `guarded`, etwa `password_1`), sind kein B9: ihre
   Zeile trägt wie bisher Name und Status, keinen Hash und keinen Wert.
@@ -249,7 +251,26 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Stylesheet und Schlüssel), kein B9-Objekt, keine von einer
   Zugangsdatensperre gehaltene Zeile mit mehr als ihrer Identität; so viele
   Zeilen und Bytes, wie das Manifest nennt (Codex-Runde 1 zu Teil 3, A2 und
-  B2). Das ganze Inventar beider Prüf-Sites über alle Arten geht so durch. Die deklarierten Höchstwerte (5000 Objekte,
+  B2). Das ganze Inventar beider Prüf-Sites über alle Arten geht so durch.
+- Jedes Textfeld einer Zeile hat eine geschlossene Form, genau die des
+  Exports (Codex-Runde 2 zu Teil 3): `canon` die Fassung des Kanons; der
+  Status aus der festen Liste des Inventars; jede Sperre mit Schlüssel,
+  Etappe und Grund genau wie in den Tafeln von `AB_MCP_Sync_Kinds`;
+  Verweise mit Raum (post, term, user), Stärke (strong) und einem Login aus
+  den Zeichen von WordPress; Orte (`at`, `unread`, `b9`) ohne
+  Steuerzeichen, Anführungszeichen, Backslash und geschweifte Klammern, nicht
+  leer und höchstens 4096 Bytes. Der freie Grund eines Objekts steht nicht
+  mehr in der Zeile (die Live-Site liest Gründe aus den Sperren). Orte sind
+  aus Namen gebaut (Spalten, Meta-Schlüssel, Pfade von Schlüsseln); einen
+  Namen von einem Wert unterscheidet keine Form, darum bleibt ein Ort, der
+  nur Buchstaben und Zeichen eines Namens trägt, annehmbar. Ein Meta- oder
+  JSON-Schlüssel mit einem der ausgeschlossenen Zeichen lässt den Import
+  des Pakets ablehnen (konstruiert; der Weg nennt den neuen Export).
+- Eine leere Identität gilt nur in der Zeile einer Zeile der Datenbank, die
+  nicht gelesen wurde (nicht vollständig, die Tafel in `unread`); dann
+  prüft die Namensprüfung die Kennung. Namen, die keine UTF-8 sind, nimmt
+  der Import in der Byte-Form des Kanons (`{"~b": …}`) an, und eine
+  Menüposition darf negativ sein (`menu_order = -1` eines Plugins). Die deklarierten Höchstwerte (5000 Objekte,
   256 MiB) prüft schon das Manifest (`MAX_OBJECTS`, `MAX_UNPACKED`, gleich
   `AB_MCP_Store_Budget::UNPACK`). Ein Paket, das nicht hält, wird entfernt
   (`ab_mcp_store_unpack_limit` oder `ab_mcp_sync_import_lines`, je mit

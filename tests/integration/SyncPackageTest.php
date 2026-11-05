@@ -2005,6 +2005,14 @@ final class SyncPackageTest extends TestCase {
 		$state     = self::import_relayed( self::package_of( str_repeat( '1b', 16 ), array( array( self::option_line( 'zz_live_only_name' ), $name_only ) ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertSame( 0, $state['held'], 'Without that rule, nothing held; a theme mod row by its name only goes through.' );
+		// A row that could not be read names its object by its ref: held where that names a credential.
+		$state = self::import_relayed( self::package_of( str_repeat( '1d', 16 ), array( array( array( 'complete' => false, 'identity' => array(), 'kind' => 'theme_mod', 'locks' => array(), 'ref' => 'api_token', 'status' => 'z8', 'unread' => array( 'options' ) ) ) ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertSame( 1, $state['held'] );
+		// An option whose name is bytes that are no UTF-8 (a site in latin1): its name and ref in the byte form.
+		$state = self::import_relayed( self::package_of( str_repeat( '1e', 16 ), array( array( array( 'identity' => array( 'name' => "zz\xE9" ), 'kind' => 'option', 'locks' => array(), 'ref' => "zz\xE9", 'status' => 'z8' ) ) ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'] );
 		// A package without an object: one empty chunk.
 		$state = self::import_relayed( self::package_of( str_repeat( '1c', 16 ), array( array() ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
@@ -2019,14 +2027,7 @@ final class SyncPackageTest extends TestCase {
 		for ( $i = 0; $i < 5001; $i++ ) {
 			$many[] = self::option_line( 'o' . $i );
 		}
-		$lock   = array(
-			array(
-				'at'     => 'option_value',
-				'key'    => '*:credential_field',
-				'reason' => 'Held.',
-				'stage'  => 'Z8d',
-			),
-		);
+		$lock   = array( \AB_MCP_Sync_Kinds::lock( 'option', 'credential_field' ) + array( 'at' => 'option_value' ) );
 		$base   = self::package_of( str_repeat( '2a', 16 ), array( array( self::option_line( 'zz_a' ) ) ) );
 		$one    = \AB_MCP_Sync_Canon::encode( self::option_line( 'zz_one' ) ) . "\n";
 		$big    = self::package_of( str_repeat( '2c', 16 ), array( array( self::option_line( 'zz_big', array( 'reason' => str_repeat( 'a', 8388608 ) ) ) ) ) );
@@ -2057,7 +2058,7 @@ final class SyncPackageTest extends TestCase {
 			'a size that is text'      => array( self::package_of( str_repeat( '5f', 16 ), array( array( self::option_line( 'zz_s', array( 'size' => '12' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'unread that is no list of text' => array( self::package_of( str_repeat( '6a', 16 ), array( array( self::option_line( 'zz_u', array( 'unread' => array( 7 ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a ref that is not its name' => array( self::package_of( str_repeat( '6b', 16 ), array( array( self::option_line( 'zz_n', array( 'ref' => 'zz_other' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a post ref that is no id' => array( self::package_of( str_repeat( '6c', 16 ), array( array( array( 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => 'x', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a post ref that is no id' => array( self::package_of( str_repeat( '6c', 16 ), array( array( array( 'complete' => false, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => 'x', 'status' => 'z8', 'unread' => array( 'posts' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a kind without a rule'    => array( self::package_of( str_repeat( '6d', 16 ), array( array( array( 'identity' => array(), 'kind' => 'attachment', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a post with another identity' => array( self::package_of( str_repeat( '6e', 16 ), array( array( array( 'identity' => array( 'name' => 'x' ), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a theme mod of another key' => array( self::package_of( str_repeat( '6f', 16 ), array( array( array( 'identity' => array( 'name' => 'theme_mods_zz', 'theme_mod' => 'a' ), 'kind' => 'theme_mod', 'locks' => array(), 'ref' => 'zz/b', 'status' => 'locked' ) ) ) ), 'ab_mcp_sync_import_lines' ),
@@ -2071,6 +2072,26 @@ final class SyncPackageTest extends TestCase {
 			'complete that is text'    => array( self::package_of( str_repeat( '8c', 16 ), array( array( self::option_line( 'zz_c', array( 'complete' => 'yes' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a reason of a lock that is a number' => array( self::package_of( str_repeat( '8d', 16 ), array( array( self::option_line( 'zz_rn', array( 'locks' => array( array( 'reason' => 7 ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'canon that is a number'   => array( self::package_of( str_repeat( '8e', 16 ), array( array( self::option_line( 'zz_cn', array( 'canon' => 1 ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reason as free text'    => array( self::package_of( str_repeat( '9a', 16 ), array( array( self::option_line( 'zz_rf', array( 'reason' => '{"password":"CANARY-ONLY"}' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'canon of another version' => array( self::package_of( str_repeat( '9b', 16 ), array( array( self::option_line( 'zz_cv', array( 'canon' => 'canon/9' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a lock no table has'      => array( self::package_of( str_repeat( '9c', 16 ), array( array( self::option_line( 'zz_lt', array( 'locks' => array( array( 'key' => '*:password', 'stage' => 'Z8d', 'reason' => 'x', 'at' => 'option_value' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a lock with another reason' => array( self::package_of( str_repeat( '9d', 16 ), array( array( self::option_line( 'zz_lr', array( 'locks' => array( array( 'reason' => '{"password":"CANARY-ONLY"}' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a lock with another stage' => array( self::package_of( str_repeat( '9e', 16 ), array( array( self::option_line( 'zz_ls', array( 'locks' => array( array( 'stage' => 'Z99' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a place that is JSON'     => array( self::package_of( str_repeat( '9f', 16 ), array( array( self::option_line( 'zz_pj', array( 'possible' => array( array( 'at' => '{"password":"CANARY-ONLY"}' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a place with a line break' => array( self::package_of( str_repeat( 'a1', 16 ), array( array( self::option_line( 'zz_pl', array( 'b9' => array( "meta:a\nb" ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'an unread place with a quote' => array( self::package_of( str_repeat( 'a2', 16 ), array( array( self::option_line( 'zz_pq', array( 'unread' => array( 'depth:"x"' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'an empty place'           => array( self::package_of( str_repeat( 'a3', 16 ), array( array( self::option_line( 'zz_pe', array( 'b9' => array( '' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a space no reader writes' => array( self::package_of( str_repeat( 'a4', 16 ), array( array( self::option_line( 'zz_sp', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'option', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a strength no reader writes' => array( self::package_of( str_repeat( 'a5', 16 ), array( array( self::option_line( 'zz_st', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post', 'strength' => 'weak' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a login that is no login' => array( self::package_of( str_repeat( 'a6', 16 ), array( array( self::option_line( 'zz_lg', array( 'refs' => array( array( 'at' => 'post_author', 'id' => 1, 'login' => '{"password":"x"}', 'space' => 'user', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a status no reader writes' => array( self::package_of( str_repeat( 'a7', 16 ), array( array( self::option_line( 'zz_ex', array( 'status' => 'excluded' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'no identity, readable'    => array( self::package_of( str_repeat( 'a8', 16 ), array( array( array( 'identity' => array(), 'kind' => 'option', 'locks' => array(), 'ref' => 'api_token', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'no identity, complete'    => array( self::package_of( str_repeat( 'a9', 16 ), array( array( array( 'complete' => true, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8', 'unread' => array( 'posts' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'no identity, another unread' => array( self::package_of( str_repeat( 'b1', 16 ), array( array( array( 'complete' => false, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8', 'unread' => array( 'encode' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a place too long'         => array( self::package_of( str_repeat( 'b3', 16 ), array( array( self::option_line( 'zz_pt', array( 'b9' => array( 'meta:' . str_repeat( 'a', 4092 ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a ref with a quote'       => array( self::package_of( str_repeat( 'b4', 16 ), array( array( self::option_line( 'zz"q' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'bytes not as the canon writes them' => array( self::package_of( str_repeat( 'b5', 16 ), array( array( array( 'identity' => array( 'name' => array( '~b' => rtrim( base64_encode( "\xC3\x28" ), '=' ) ) ), 'kind' => 'option', 'locks' => array(), 'ref' => "\xC3\x28", 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'bytes that are UTF-8'     => array( self::package_of( str_repeat( 'b2', 16 ), array( array( array( 'identity' => array( 'name' => array( '~b' => base64_encode( 'zz' ) ) ), 'kind' => 'option', 'locks' => array(), 'ref' => 'zz', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a position that is a word' => array( self::package_of( str_repeat( '8f', 16 ), array( array( array( 'identity' => array( 'menus' => array( 3 ), 'object' => '', 'position' => 'x', 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 		);
 		foreach ( $cases as $case => $given ) {
@@ -2162,6 +2183,124 @@ final class SyncPackageTest extends TestCase {
 			++$lines;
 		}
 		self::assertGreaterThan( 50, $lines );
+	}
+
+	public function testEveryFormOfALineTheReadersMakeGoesThroughTheImport(): void {
+		global $wpdb;
+		$post    = wp_insert_post( array( 'post_title' => 'Forms', 'post_status' => 'publish', 'post_content' => '<p>x</p>' ), true );
+		$bytes   = wp_insert_post( array( 'post_title' => 'Bytes', 'post_status' => 'draft' ), true );
+		$unread  = wp_insert_post( array( 'post_title' => 'Unread', 'post_status' => 'draft' ), true );
+		$menu    = wp_create_nav_menu( 'Forms menu' );
+		$item    = wp_update_nav_menu_item( $menu, 0, array( 'menu-item-title' => 'Below', 'menu-item-url' => home_url( '/' ), 'menu-item-status' => 'publish', 'menu-item-type' => 'custom' ) );
+		self::assertIsInt( $item );
+		$wpdb->update( $wpdb->posts, array( 'menu_order' => -1 ), array( 'ID' => $item ) );
+		clean_post_cache( $item );
+		update_post_meta( $post, 'service_settings', '{"api_key":"x1","enabled":true}' );
+		$units = wp_insert_post( array( 'post_title' => 'Units', 'post_status' => 'publish' ), true );
+		update_post_meta( $units, 'api_token', 'x2' );
+		update_post_meta( $units, 'zz_related', (string) $post );
+		update_option( 'password_1', 'guarded' );
+		update_option( 'theme_mods_zzbroken', 'not an array' );
+		wp_update_custom_css_post( 'body { color: #123; }' );
+		// A slug and a meta key of bytes that are no UTF-8 (tables that keep
+		// bytes, as old sites in latin1 have).
+		$wpdb->query( "ALTER TABLE {$wpdb->posts} MODIFY post_name VARBINARY(200) NOT NULL DEFAULT ''" );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_name = UNHEX(%s) WHERE ID = %d", 'c328c328', $bytes ) );
+		$wpdb->query( "ALTER TABLE {$wpdb->postmeta} MODIFY meta_key VARBINARY(255) NULL DEFAULT NULL" );
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->postmeta} ( post_id, meta_key, meta_value ) VALUES ( %d, UNHEX(%s), %s )", $bytes, '7a7ae9', (string) $post ) );
+		// A row whose meta could not be read.
+		$break = static function ( $query ) use ( $wpdb, $unread ) {
+			return false !== strpos( $query, "FROM {$wpdb->postmeta} WHERE post_id = {$unread} " ) ? 'SELECT broken FROM ab_it_no_such_table' : $query;
+		};
+		$quiet = $wpdb->suppress_errors( true );
+		add_filter( 'query', $break );
+		try {
+			$objects = \AB_MCP_Sync_Inventory::run( \AB_MCP_Sync_Inventory::source( \AB_MCP_IT_Sync_Steps::addresses() ) )['objects'];
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $quiet );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_name = %s WHERE ID = %d", 'bytes', $bytes ) );
+			$wpdb->query( "ALTER TABLE {$wpdb->posts} MODIFY post_name VARCHAR(200) NOT NULL DEFAULT ''" );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d", $bytes ) );
+			$wpdb->query( "ALTER TABLE {$wpdb->postmeta} MODIFY meta_key VARCHAR(255) NULL DEFAULT NULL" );
+		}
+		$check = new \ReflectionMethod( AB_MCP_Sync_Import::class, 'line_shaped' );
+		$forms = array();
+		foreach ( $objects as $object ) {
+			if ( 'b9' === $object['status'] ) {
+				continue;
+			}
+			$line = json_decode( \AB_MCP_Sync_Canon::encode( AB_MCP_Sync_Export::line( $object ) ), true );
+			self::assertTrue( $check->invoke( null, $line ), \AB_MCP_Sync_Canon::encode( $line ) );
+			$ref = $line['kind'] . ':' . $line['ref'];
+			if ( array() === $line['identity'] ) {
+				$forms['no identity'] = $ref;
+			}
+			if ( isset( $line['identity']['post_name'] ) && is_array( $line['identity']['post_name'] ) ) {
+				$forms['bytes'] = $ref;
+			}
+			if ( isset( $line['identity']['position'] ) && '-1' === (string) $line['identity']['position'] ) {
+				$forms['position -1'] = $ref;
+			}
+			if ( \AB_MCP_Sync_Export::credential_locked( $line['locks'] ) ) {
+				$forms['held by a credential'] = $ref;
+			}
+			if ( array() !== ( $line['b9'] ?? array() ) ) {
+				$forms['units of credentials'] = $ref;
+			}
+			if ( array() !== ( $line['possible'] ?? array() ) ) {
+				$forms['possible'] = $ref;
+				foreach ( $line['possible'] as $one ) {
+					if ( is_array( $one['at'] ) ) {
+						$forms['a place in bytes'] = $ref;
+					}
+				}
+			}
+			foreach ( $line['refs'] ?? array() as $one ) {
+				if ( 'user' === $one['space'] && null !== $one['login'] ) {
+					$forms['user'] = $ref;
+				}
+			}
+			if ( 'guarded' === $line['status'] ) {
+				$forms['guarded'] = $ref;
+			}
+			if ( 'theme_mod' === $line['kind'] && array( 'name' ) === array_keys( $line['identity'] ) ) {
+				$forms['theme mods by name'] = $ref;
+			}
+			if ( array() !== $line['locks'] && ! \AB_MCP_Sync_Export::credential_locked( $line['locks'] ) ) {
+				$forms['other locks'] = $ref;
+			}
+			$forms[ 'kind ' . $line['kind'] ] = $ref;
+		}
+		ksort( $forms );
+		self::assertSame(
+			array( 'a place in bytes', 'bytes', 'guarded', 'held by a credential', 'kind custom_css', 'kind menu', 'kind menu_item', 'kind option', 'kind post', 'kind term', 'kind theme_mod', 'kind widget_area', 'no identity', 'other locks', 'position -1', 'possible', 'theme mods by name', 'units of credentials', 'user' ),
+			array_keys( $forms ),
+			'Each form was read and went through.'
+		);
+		// Each table a reader notes when it could not read a row at all.
+		$tables = array(
+			'posts'              => 'post',
+			'postmeta'           => 'post',
+			'term_relationships' => 'post',
+			'terms'              => 'term',
+			'menu_item'          => 'menu_item',
+			'theme_mods'         => 'custom_css',
+			'options'            => 'theme_mod',
+		);
+		self::assertSame( array_keys( $tables ), AB_MCP_Sync_Import::ROW_UNREAD );
+		foreach ( $tables as $table => $kind ) {
+			$line = array(
+				'complete' => false,
+				'identity' => array(),
+				'kind'     => $kind,
+				'locks'    => array(),
+				'ref'      => '7',
+				'status'   => 'z8',
+				'unread'   => array( $table ),
+			);
+			self::assertTrue( $check->invoke( null, $line ), $table );
+		}
 	}
 
 	public function testARecordOfAnOlderVersionIsDiscardedWithTheWay(): void {
