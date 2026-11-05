@@ -12,7 +12,8 @@
  *   anchors is exactly the ids the page «Staging» shows, and no id of «AI
  *   Connection» is in it.
  * - Every form lands with its anchor and its notice on the page it was sent
- *   from: the four of the card on «Staging», all others on «AI Connection».
+ *   from: the six of the card on «Staging» (the two of the key of the staging
+ *   site since Z8), all others on «AI Connection».
  * - «AI Connection» carries what the settings page carried but the card
  *   «Staging»: the boxes of add-ons on the hook of 4.16.0 and, right after,
  *   on the hook from before; the side column.
@@ -170,6 +171,11 @@ final class AdminPagesTest extends TestCase {
 			'role, a bad host'            => array( 'handle_staging_record', array( '_wpnonce' => 'nonce-ab_mcp_staging', 'staging_role' => 'production', 'host' => 'nowhere' ), 'staging', 'ab-staging', 'staging_bad_host' ),
 			'staging first'               => array( 'handle_staging_first', array( '_wpnonce' => 'nonce-ab_mcp_staging_first', 'staging_first' => 'require' ), 'staging', 'ab-staging-first', 'staging_first_saved' ),
 			'staging first, a connection' => array( 'handle_staging_connection', array( '_wpnonce' => 'nonce-ab_mcp_staging_connection', 'do' => 'release', 'hash' => 'unknown' ), 'staging', 'ab-staging-first', 'staging_connection_unknown' ),
+			// The key of the staging site and its anchor (Z8): on a site
+			// without a confirmed role each form is refused, and says why.
+			'key of a staging site'       => array( 'handle_staging_key', array( '_wpnonce' => 'nonce-ab_mcp_staging_key' ), 'staging', 'ab-staging-trust', 'staging_trust_sync_key_role' ),
+			'key, fetched'                => array( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'fetch' ), 'staging', 'ab-staging-trust', 'staging_trust_sync_anchor_role' ),
+			'key, other action'           => array( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'x' ), 'staging', 'ab-staging-trust', 'staging_anchor_unknown' ),
 		);
 	}
 

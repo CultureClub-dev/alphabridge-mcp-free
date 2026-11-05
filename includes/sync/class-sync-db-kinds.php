@@ -1410,13 +1410,17 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
-	 * An entry without form or hash: a row that is never compared.
+	 * An entry without form or hash: a row that is never compared; for a
+	 * row the takeover never reads (guarded, unreachable, unreadable) the
+	 * code of its reason and, where WordPress reads another row, that row
+	 * (AB_MCP_Sync_Option_Schema::REASON_CODES).
 	 *
 	 * @param string $name  Name.
 	 * @param array  $class Class.
 	 * @return array
 	 */
 	protected function bare( $name, array $class ) {
+		$why = isset( AB_MCP_Sync_Option_Schema::REASON_CODES[ $class['status'] ] ) ? array_intersect_key( $class, array_flip( array( 'code', 'target' ) ) ) : array();
 		return array(
 			'kind'        => 'option',
 			'ref'         => (string) $name,
@@ -1434,7 +1438,7 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 			),
 			'complete'    => 'unreadable' !== $class['status'],
 			'reason'      => 'b9' === $class['status'] ? 'The name is the name of a credential (B9): never compared, never packed, counted.' : ( isset( $class['reason'] ) ? $class['reason'] : null ),
-		);
+		) + ( isset( $why['code'] ) ? array( 'reason_code' => $why['code'] ) : array() ) + ( isset( $why['target'] ) ? array( 'target' => $why['target'] ) : array() );
 	}
 }
 

@@ -5487,6 +5487,18 @@ msgctxt "tool label"
 msgid "Show the staging status"
 msgstr "Staging-Stand anzeigen"
 
+msgctxt "tool label"
+msgid "Export a staging package"
+msgstr "Staging-Paket exportieren"
+
+msgctxt "tool label"
+msgid "Pass on a chunk of a package"
+msgstr "Stück eines Pakets weitergeben"
+
+msgctxt "tool label"
+msgid "Import a staging package"
+msgstr "Staging-Paket importieren"
+
 msgid "Off: nothing is asked."
 msgstr "Aus: Es wird nichts gefragt."
 

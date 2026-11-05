@@ -10,7 +10,8 @@
  *   except the exempt ones: the ways back and the protection (wp_undo,
  *   wp_undo_discard, wp_set_preview_protection, wp_clear_cache), the
  *   operation of the production site (comments, the order status) and the
- *   carrying over from staging (wp_site_push, wp_site_sync). The filter
+ *   carrying over from staging (wp_site_push, wp_site_sync; since Z8 the
+ *   packages: wp_site_export, wp_site_export_chunk, wp_site_import_chunk). The filter
  *   ab_mcp_staging_gate_exempt adds names and cannot take a way back away.
  *   The diagnostic tools only read, so they stand outside already.
  * - Every tool the gate concerns, Pro's included, takes staging_acknowledged
@@ -210,7 +211,7 @@ final class StagingGateTest extends TestCase {
 	public function testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds(): void {
 		self::assertSame( array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache' ), Gate::WAYS_BACK );
 		self::assertSame( array( 'wp_moderate_comment', 'wp_reply_comment', 'wp_wc_update_order_status' ), Gate::OPERATION );
-		self::assertSame( array( 'wp_site_push', 'wp_site_sync' ), Gate::CARRY_OVER );
+		self::assertSame( array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' ), Gate::CARRY_OVER );
 		self::assertSame( array_merge( Gate::WAYS_BACK, Gate::OPERATION, Gate::CARRY_OVER ), Gate::exempt_tools(), 'Without a filter: the three groups, in this order.' );
 
 		add_filter( Gate::FILTER, static fn( array $names ): array => array_merge( $names, array( 'acme_sync_to_staging' ) ) );

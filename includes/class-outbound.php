@@ -456,6 +456,42 @@ class AB_MCP_Outbound {
 	}
 
 	/**
+	 * GET an address of the other site of the staging pair, as get(), on the
+	 * port its stored address names. WordPress asks another host only on the
+	 * ports 80, 443 and 8080 (wp_http_validate_url(), the filter
+	 * http_allowed_safe_ports); for this one request, and only for the very
+	 * address asked (not for a redirect target), the filter adds the port of
+	 * $url, once: the first check of that address uses it up, so a request a
+	 * hook starts while this one runs is not allowed the port, even for the
+	 * same address. It is taken off again in every case. The caller builds
+	 * $url from the stored address of the other site and nothing else
+	 * (AB_MCP_Staging::check_partner(), AB_MCP_Sync_Fetcher), and asks with
+	 * no redirect followed, so its request checks the address once.
+	 *
+	 * @param string $url  Address on the other site.
+	 * @param array  $args As get().
+	 * @return array|WP_Error As get().
+	 */
+	public static function get_partner( $url, array $args ) {
+		$url   = (string) $url;
+		$port  = wp_parse_url( $url, PHP_URL_PORT );
+		$left  = true;
+		$allow = static function ( $ports, $host = '', $asked = '' ) use ( $url, $port, &$left ) {
+			if ( ! $left || ! is_array( $ports ) || ! is_int( $port ) || $asked !== $url ) {
+				return $ports;
+			}
+			$left = false;
+			return array_merge( $ports, array( $port ) );
+		};
+		add_filter( 'http_allowed_safe_ports', $allow, 10, 3 );
+		try {
+			return self::get( $url, $args );
+		} finally {
+			remove_filter( 'http_allowed_safe_ports', $allow, 10 );
+		}
+	}
+
+	/**
 	 * GET one address in the bound mode: the host a DNS name, the connection
 	 * tied to the addresses the caller hands over (pin_to) or, without them,
 	 * to those the name resolves to, and the address sent exactly as given.

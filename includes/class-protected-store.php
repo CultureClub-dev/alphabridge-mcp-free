@@ -478,7 +478,10 @@ final class AB_MCP_Protected_Store {
 	 *
 	 * @param string $area Area.
 	 * @param array  $meta 'declared' (bytes, packages), 'run_id' (the run it
-	 *                     belongs to), 'label' (up to 191 of A-Z a-z 0-9 . _ : -).
+	 *                     belongs to), 'label' (up to 191 of A-Z a-z 0-9 . _ : -),
+	 *                     'binding' (the trust a package was begun with, as
+	 *                     the print of a pair; one of another binding counts
+	 *                     as open no more, AB_MCP_Store_Budget::package_refusal()).
 	 * @return string|WP_Error The id of the group (32 hex).
 	 */
 	public static function open( $area, array $meta = array() ) {
@@ -504,6 +507,8 @@ final class AB_MCP_Protected_Store {
 			'declared' => isset( $meta['declared'] ) ? max( 0, (int) $meta['declared'] ) : 0,
 			'used'     => 0,
 			'label'    => $label,
+			'closed'   => false,
+			'binding'  => self::binding( isset( $meta['binding'] ) ? $meta['binding'] : '' ),
 		);
 		$id     = self::install_id();
 		$result = self::writing(
@@ -511,7 +516,7 @@ final class AB_MCP_Protected_Store {
 			static function () use ( $root, $id, $entry ) {
 				self::sweep( $root, $id, time() );
 				if ( in_array( $entry['area'], self::PACKAGES, true ) ) {
-					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( self::entries( $root, $id, 'out' ), self::entries( $root, $id, 'in' ) ), $entry['area'], $entry['user_id'], $entry['declared'] );
+					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( self::entries( $root, $id, 'out' ), self::entries( $root, $id, 'in' ) ), $entry['area'], $entry['user_id'], $entry['declared'], $entry['label'], $entry['binding'] );
 					if ( null !== $refusal ) {
 						return $refusal;
 					}
@@ -648,7 +653,7 @@ final class AB_MCP_Protected_Store {
 	 * The groups of an area, oldest first.
 	 *
 	 * @param string $area Area.
-	 * @return array[]|WP_Error Entries: gid, area, created, user_id, run_id, declared, used, label, expires.
+	 * @return array[]|WP_Error Entries: gid, area, created, user_id, run_id, declared, used, label, closed, expires.
 	 */
 	public static function groups( $area ) {
 		$bad = self::bad_area( $area );
@@ -740,6 +745,40 @@ final class AB_MCP_Protected_Store {
 				list( $side, , $entry ) = $found;
 				$entry['run_id'] = max( 0, (int) $run_id );
 				return self::write_entry( $side, $entry ) ? true : new WP_Error( 'ab_mcp_store_write', 'The group could not be bound to its run in the protected store. Ask the host to check that the folder is writable, then try again.' );
+			}
+		);
+	}
+
+	/**
+	 * Close a package: its use is done (an import checked whole), so it no
+	 * longer counts as open for the budgets of packages and exports
+	 * (AB_MCP_Store_Budget::package_refusal()); its bytes count until it is
+	 * removed, a day after it was made.
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @return true|WP_Error
+	 */
+	public static function close( $area, $gid ) {
+		$bad = self::bad_ref( $area, $gid, 'x' );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$id = self::install_id();
+		return self::writing(
+			$root,
+			static function () use ( $root, $id, $area, $gid ) {
+				$found = self::group( $root, $area, self::group_name( $area, $gid, $id ), $gid );
+				if ( ! is_array( $found ) ) {
+					return $found;
+				}
+				list( $side, , $entry ) = $found;
+				$entry['closed'] = true;
+				return self::write_entry( $side, $entry ) ? true : new WP_Error( 'ab_mcp_store_write', 'The group could not be closed in the protected store. Ask the host to check that the folder is writable, then try again.' );
 			}
 		);
 	}
@@ -1964,7 +2003,19 @@ final class AB_MCP_Protected_Store {
 			'declared' => isset( $e['declared'] ) ? max( 0, (int) $e['declared'] ) : 0,
 			'used'     => isset( $e['used'] ) ? max( 0, (int) $e['used'] ) : 0,
 			'label'    => isset( $e['label'] ) && is_string( $e['label'] ) ? $e['label'] : '',
+			'closed'   => isset( $e['closed'] ) && true === $e['closed'],
+			'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),
 		);
+	}
+
+	/**
+	 * The binding of a group as a sidecar keeps it: a text, or '' for none.
+	 *
+	 * @param mixed $binding Value.
+	 * @return string
+	 */
+	private static function binding( $binding ) {
+		return is_string( $binding ) ? $binding : '';
 	}
 
 	/**

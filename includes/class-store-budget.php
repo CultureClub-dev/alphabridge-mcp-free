@@ -9,7 +9,12 @@
  *   will hold (declared) and never grows past them
  *   (AB_MCP_Protected_Store::put()), so the declared bytes bound what the
  *   packages hold. A package counts until it is removed: a day after it was
- *   made, or later while a run that is not closed holds it.
+ *   made, or later while a run that is not closed holds it. Two rules count
+ *   fewer (branch 5): the packages of one series, the parts of one
+ *   inventory a cursor leads from one to the next (label SERIES and the
+ *   same id), count as one open package and one open export; and a package
+ *   that is closed (AB_MCP_Protected_Store::close(), an import checked
+ *   whole) counts as open no more. Their bytes count all the same.
  * - Runs: a run books what it needs before its first write (backups,
  *   incoming packages, new media files, temporary files: book()); the
  *   bookings of all runs that are not closed, with this one, must leave
@@ -48,6 +53,9 @@ final class AB_MCP_Store_Budget {
 
 	/** Open exports (out) per account at most. */
 	const MAX_EXPORTS = 3;
+
+	/** The label of a package of a series: this and the id of the series (32 hex). */
+	const SERIES = '/^series:[0-9a-f]{32}\z/';
 
 	/** The filters of the three limits, read after the count. */
 	const FILTER_PACKAGES = 'ab_mcp_store_max_packages';
@@ -89,27 +97,49 @@ final class AB_MCP_Store_Budget {
 	 * AB_MCP_Protected_Store::open() under the store's lock, between the count
 	 * and the creation.
 	 *
-	 * @param array[] $packages Entries of the open packages (out and in).
+	 * @param array[] $packages Entries of the packages (out and in).
 	 * @param string  $area     'out' or 'in'.
 	 * @param int     $user_id  Account that opens it.
 	 * @param int     $declared Bytes it will hold.
+	 * @param string  $label    Its label: SERIES joins the open package of
+	 *                          that series, which counts already.
+	 * @param string  $binding  The trust it is begun with (an import: the
+	 *                          print of the pair, AB_MCP_Sync_Anchor::
+	 *                          pair_print()), '' for none. An open package
+	 *                          of another binding counts as open no more: it
+	 *                          is never continued, and the store removes it
+	 *                          after its time (its bytes count until then).
+	 *                          A binding read from an old cache moves the
+	 *                          count for a while, and removes nothing.
 	 * @return WP_Error|null
 	 */
-	public static function package_refusal( array $packages, $area, $user_id, $declared ) {
+	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '', $binding = '' ) {
 		$declared = (int) $declared;
 		if ( $declared < 1 ) {
 			return new WP_Error( 'ab_mcp_store_declare', 'A package is opened with the number of bytes it will hold, and it never grows past them. Pass the size as declared when you open it.' );
 		}
-		$open    = 0;
+		// Each open package counts once, the packages of a series together.
+		$open    = array();
+		$exports = array();
 		$bytes   = 0;
-		$exports = 0;
-		foreach ( $packages as $entry ) {
-			++$open;
+		foreach ( array_values( $packages ) as $i => $entry ) {
 			$bytes += max( 0, (int) $entry['declared'] );
+			if ( ! empty( $entry['closed'] ) ) {
+				continue;
+			}
+			$other = isset( $entry['binding'] ) ? (string) $entry['binding'] : '';
+			if ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {
+				continue;
+			}
+			$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;
+			$open[ $key ] = true;
 			if ( 'out' === $entry['area'] && (int) $entry['user_id'] === (int) $user_id ) {
-				++$exports;
+				$exports[ $key ] = true;
 			}
 		}
+		$joins   = 1 === preg_match( self::SERIES, (string) $label );
+		$exports = $joins && isset( $exports[ $label ] ) ? 0 : count( $exports );
+		$open    = $joins && isset( $open[ $label ] ) ? 0 : count( $open );
 		// The limits after the count, as Pro reads its own.
 		if ( 'out' === $area ) {
 			$max_exports = max( 0, (int) apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );
@@ -270,7 +300,7 @@ final class AB_MCP_Store_Budget {
 			if ( isset( $measured[ $key ] ) && (int) $measured[ $key ] > $max ) {
 				return new WP_Error(
 					'ab_mcp_store_unpack_limit',
-					sprintf( 'The package passes the limit for %1$s (%2$d, at most %3$d), so it is not unpacked and nothing of it is used. Export it again on the staging site in smaller packages, then try again.', self::UNPACK_WHAT[ $key ], (int) $measured[ $key ], $max ),
+					sprintf( 'The package passes the limit for %1$s (%2$d, at most %3$d), so it is not unpacked and nothing of it is used; a staging site of this version never makes such a package. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.', self::UNPACK_WHAT[ $key ], (int) $measured[ $key ], $max ),
 					array(
 						'limit' => $key,
 						'found' => (int) $measured[ $key ],

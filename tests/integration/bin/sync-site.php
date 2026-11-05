@@ -10,7 +10,24 @@
  * is the result of that earlier step, "{$name}" inside a text the same as
  * text. Ops: insert_post (args), add_meta (post, key, value), insert_term
  * (name, taxonomy, args), set_terms (post, terms, taxonomy), update_option
- * (name, value), canonical (kind, ref, addresses), inventory (addresses).
+ * (name, value), canonical (kind, ref, addresses), inventory (addresses);
+ * for the trust of the takeover (Z8 branch 5): staging_save (role,
+ * partner_url, partner_role, source; as the administrator), sync_key (the
+ * key of the site), pairing_code, key_replace («Renew the key»), anchor_code
+ * (code: prepared and confirmed
+ * as a person does), sign_manifest (package); for its packages: export
+ * (purpose, cursor, objects), import (the arguments of wp_site_import_chunk,
+ * relay), export_again (package_id, now), export_chunk
+ * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
+ * (now), add_admin (login), as_user (user) and write_access (the site mode
+ * Full, as a person switches it on), staging_raw and staging_raw_set
+ * (value: the record of role and pair as stored, past save()); for what the
+ * route loads: loaded
+ * (whether export, inventory and kinds are loaded), menu_css_mods (a menu
+ * with an item, the additional CSS and two theme mods), serve (query: the route
+ * of the chunks asked through the REST server of this process, its status). The process
+ * loads only what WordPress and the plugin load and what an op needs. A step with "expect": "error"
+ * gives { code, message } of its WP_Error instead of ending the steps.
  * Prints { name: result, … } as JSON.
  *
  * @package AlphaBridge_MCP
@@ -24,11 +41,11 @@ require dirname( __DIR__ ) . '/support/class-it-sites.php';
 
 putenv( 'AB_IT_STATE=' . $argv[1] );
 $ab_it_key = $argv[2];
-$_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ) );
+// The document root as the web server of the site has it, so the protected
+// store chooses its place as in a request to the site.
+$_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ), array( 'DOCUMENT_ROOT' => AB_MCP_IT_Sites::docroot( $ab_it_key ) ) );
 define( 'WP_USE_THEMES', false );
 require AB_MCP_IT_Sites::docroot( $ab_it_key ) . '/wp-load.php';
-require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
-require_once AB_MCP_DIR . 'includes/sync/class-sync-inventory.php';
 
 wp_set_current_user( (int) AB_MCP_IT_Sites::site( $ab_it_key )['admin']['user_id'] );
 
@@ -88,6 +105,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_out = update_option( $ab_it_step['name'], $ab_it_step['value'] );
 			break;
 		case 'canonical':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_kind = null;
 			foreach ( AB_MCP_Sync_Db_Kinds::all() as $ab_it_candidate ) {
 				if ( $ab_it_candidate->kind() === $ab_it_step['kind'] ) {
@@ -102,6 +120,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			);
 			break;
 		case 'inventory':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_source = AB_MCP_Sync_Inventory::source( $ab_it_step['addresses'] );
 			$ab_it_cursor = null;
 			$ab_it_out    = array();
@@ -115,11 +134,118 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				$ab_it_cursor = $ab_it_part['cursor'];
 			} while ( null !== $ab_it_cursor );
 			break;
+		case 'staging_save':
+			$ab_it_out = AB_MCP_Staging::save( $ab_it_step['role'], $ab_it_step['partner_url'], isset( $ab_it_step['partner_role'] ) ? $ab_it_step['partner_role'] : null, get_current_user_id(), $ab_it_step['source'] );
+			break;
+		case 'sync_key':
+			$ab_it_out = AB_MCP_Sync_Key::current();
+			break;
+		case 'pairing_code':
+			$ab_it_out = AB_MCP_Sync_Key::pairing_code();
+			break;
+		case 'key_replace':
+			$ab_it_out = AB_MCP_Sync_Key::replace();
+			break;
+		case 'sign_manifest':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-manifest.php';
+			$ab_it_out = AB_MCP_Sync_Manifest::sign( $ab_it_step['package'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
+			break;
+		case 'export':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
+			break;
+		case 'import':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
+			$ab_it_out = AB_MCP_Sync_Import::call( $ab_it_step['args'] );
+			break;
+		case 'anchor_code':
+			$ab_it_out = AB_MCP_Sync_Anchor::prepare_from_code( $ab_it_step['code'], get_current_user_id() );
+			if ( is_array( $ab_it_out ) ) {
+				$ab_it_out = AB_MCP_Sync_Anchor::confirm( $ab_it_out['fingerprint'], get_current_user_id() );
+			}
+			break;
+		case 'export_again':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::again( $ab_it_step['package_id'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
+			break;
+		case 'export_chunk':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::chunk( $ab_it_step['package_id'], $ab_it_step['chunk'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
+			break;
+		case 'grants':
+			$ab_it_out = AB_MCP_Sync_Grant::grants( $ab_it_step['package_id'], (int) $ab_it_step['count'], (int) $ab_it_step['now'] );
+			break;
+		case 'menu_css_mods':
+			$ab_it_menu = wp_create_nav_menu( 'Every menu' );
+			$ab_it_item = wp_update_nav_menu_item(
+				$ab_it_menu,
+				0,
+				array(
+					'menu-item-title'  => 'Every item',
+					'menu-item-url'    => home_url( '/' ),
+					'menu-item-status' => 'publish',
+					'menu-item-type'   => 'custom',
+				)
+			);
+			$ab_it_css  = wp_update_custom_css_post( 'body { color: #123; }' );
+			set_theme_mod( 'header_textcolor', '333333' );
+			set_theme_mod( 'nav_menu_locations', array( 'primary' => $ab_it_menu ) );
+			$ab_it_out = array(
+				'menu' => $ab_it_menu,
+				'item' => $ab_it_item,
+				'css'  => $ab_it_css instanceof WP_Post ? $ab_it_css->ID : 0,
+			);
+			break;
+		case 'staging_raw':
+			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+			break;
+		case 'staging_raw_set':
+			AB_MCP_Settings::set( AB_MCP_Staging::KEY, $ab_it_step['value'] );
+			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+			break;
+		case 'loaded':
+			$ab_it_out = array(
+				'export'    => class_exists( 'AB_MCP_Sync_Export', false ),
+				'inventory' => class_exists( 'AB_MCP_Sync_Inventory', false ),
+				'kinds'     => class_exists( 'AB_MCP_Sync_Db_Kinds', false ),
+			);
+			break;
+		case 'serve':
+			$ab_it_request = new WP_REST_Request( 'GET', '/' . AB_MCP_REST_NAMESPACE . AB_MCP_Sync_Grant::ROUTE );
+			$ab_it_request->set_query_params( $ab_it_step['query'] );
+			$ab_it_out = rest_do_request( $ab_it_request )->get_status();
+			break;
+		case 'store_cleanup':
+			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );
+			break;
+		case 'add_admin':
+			$ab_it_out = wp_insert_user(
+				array(
+					'user_login' => $ab_it_step['login'],
+					'user_pass'  => wp_generate_password( 24 ),
+					'user_email' => $ab_it_step['login'] . '@example.invalid',
+					'role'       => 'administrator',
+				)
+			);
+			break;
+		case 'write_access':
+			AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY, AB_MCP_Site_Mode::FULL );
+			$ab_it_out = AB_MCP_Site_Mode::get();
+			break;
+		case 'as_user':
+			wp_set_current_user( (int) $ab_it_step['user'] );
+			$ab_it_out = get_current_user_id();
+			break;
 		default:
 			fwrite( STDERR, "Unknown op {$ab_it_step['op']}.\n" );
 			exit( 2 );
 	}
-	if ( is_wp_error( $ab_it_out ) ) {
+	if ( is_wp_error( $ab_it_out ) && isset( $ab_it_step['expect'] ) && 'error' === $ab_it_step['expect'] ) {
+		$ab_it_out = array(
+			'code'    => $ab_it_out->get_error_code(),
+			'message' => $ab_it_out->get_error_message(),
+		);
+	} elseif ( is_wp_error( $ab_it_out ) ) {
 		fwrite( STDERR, "Step $ab_it_i ({$ab_it_step['op']}): " . $ab_it_out->get_error_message() . "\n" );
 		exit( 1 );
 	}

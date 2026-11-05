@@ -98,6 +98,24 @@ final class SyncDbKindsTest extends TestCase {
 		$now = 1060.0;
 		self::assertTrue( AB_MCP_Sync_Inventory::out_of_time( $source ) );
 		self::assertSame( 60, AB_MCP_Sync_Inventory::BUDGET );
+		self::assertNull( $source['objects'], 'No bound of objects unless the source names one.' );
+	}
+
+	public function testASourceMayBoundTheObjectsOfAnInventory(): void {
+		$base   = array( 'locks' => array() );
+		$source = AB_MCP_Sync_Inventory::source( array(), 60, null, 2 );
+		self::assertSame( 2, $source['objects'] );
+		self::assertFalse( AB_MCP_Sync_Inventory::out_of_time( $source ) );
+		AB_MCP_Sync_Inventory::entry( $base );
+		self::assertFalse( AB_MCP_Sync_Inventory::out_of_time( $source ), 'One object of two.' );
+		AB_MCP_Sync_Inventory::entry( $base );
+		self::assertTrue( AB_MCP_Sync_Inventory::out_of_time( $source ), 'The bound reached, before the time.' );
+		$unbound = AB_MCP_Sync_Inventory::source( array(), 60 );
+		self::assertFalse( AB_MCP_Sync_Inventory::out_of_time( $unbound ), 'A source without a bound counts no objects.' );
+		$again = AB_MCP_Sync_Inventory::source( array(), 60, null, 2 );
+		self::assertFalse( AB_MCP_Sync_Inventory::out_of_time( $again ), 'A new source counts anew.' );
+		self::assertSame( 1, AB_MCP_Sync_Inventory::source( array(), 60, null, 0 )['objects'], 'At least one object.' );
+		self::assertFalse( AB_MCP_Sync_Inventory::out_of_time( 'no source' ) );
 	}
 
 	public function testTheStatusOfAnObjectOfTheInventory(): void {

@@ -144,6 +144,14 @@ require_once AB_MCP_DIR . 'includes/class-preview-protection.php';
 // the pair with the other site and the host, for wp_staging_status, the
 // settings page, the hub's REST route and the site contract.
 require_once AB_MCP_DIR . 'includes/class-staging.php';
+// The trust between a staging site and its production site (Z8, decision 4):
+// the key of a staging source with its route alphabridge/v1/staging-key, and
+// the anchor a person confirms on the production site. The record above
+// hands its changes on to both; the signed manifest of a package
+// (AB_MCP_Sync_Manifest) is loaded where a package is made or read.
+require_once AB_MCP_DIR . 'includes/sync/class-sync-key.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-anchor.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-grant.php';
 // «Staging first» (free since 4.15.0): the pre-check of a write on a site
 // that counts as the production site, in run_tool(), and its setting.
 require_once AB_MCP_DIR . 'includes/class-staging-gate.php';

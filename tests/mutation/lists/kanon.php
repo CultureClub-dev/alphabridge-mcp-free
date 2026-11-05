@@ -397,7 +397,7 @@ return array(
 		'id'      => 'kanon/inventory-budget',
 		'clause'  => 'out_of_time(): the inventory stops at its deadline and hands on a cursor',
 		'file'    => $inv,
-		'search'  => "		return is_array( \$source ) && isset( \$source['deadline'] ) && self::now() >= (float) \$source['deadline'];",
+		'search'  => "		return isset( \$source['deadline'] ) && self::now() >= (float) \$source['deadline'];",
 		'replace' => '		return false;',
 		'run'     => $it_canon,
 		'expect'  => '/testTheInventoryReadsEveryKindOnceAcrossItsCursor/',

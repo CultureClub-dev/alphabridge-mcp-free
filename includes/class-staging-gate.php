@@ -182,11 +182,12 @@ class AB_MCP_Staging_Gate {
 	 * (c) CARRY_OVER: the carrying over from the staging site (S2 of the
 	 * staging concept), named here before it exists so that the setting
 	 * REQUIRE does not refuse it once it does. The signed fetch of packages
-	 * and media of S2 joins this list with its names.
+	 * of Z8 is in it: wp_site_export and wp_site_export_chunk on the staging
+	 * site, wp_site_import_chunk on the production site.
 	 */
 	const WAYS_BACK  = array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache' );
 	const OPERATION  = array( 'wp_moderate_comment', 'wp_reply_comment', 'wp_wc_update_order_status' );
-	const CARRY_OVER = array( 'wp_site_push', 'wp_site_sync' );
+	const CARRY_OVER = array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );
 
 	/**
 	 * The tools the gate never holds: the three groups, and what the filter

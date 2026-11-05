@@ -351,6 +351,37 @@ final class AB_MCP_Sync_Net {
 		}
 	}
 
+	/**
+	 * The net over a name of a line of a package, at the import (Z8, Codex
+	 * round 4 of part 3): the same count of credentials as check() makes in
+	 * every layer of a value (layers(): its decodings, base64, data:), over
+	 * the name as its raw text; a name is no address, so its references
+	 * are not counted. Fails closed as check() does: where a layer is not
+	 * read to its end (deeper than MAX_DEPTH or MAX_LAYERS, a body that is
+	 * no text in UTF-8, braces of code that cannot be counted), the name is
+	 * unreadable.
+	 *
+	 * @param string   $text  The name (bytes).
+	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @return string|null credential where a layer holds the name of a
+	 *                     credential with a value beside it, unreadable
+	 *                     where a layer is not read to its end, else null.
+	 */
+	public static function over_name( $text, array $extra ) {
+		$deep   = false;
+		$unread = array();
+		foreach ( self::layers( (string) $text, $deep, $unread ) as $layer ) {
+			$undecidable = false;
+			if ( array() !== self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $layer[0], -5 ) ) ) {
+				return 'credential';
+			}
+			if ( $undecidable ) {
+				return 'unreadable';
+			}
+		}
+		return $deep || array() !== $unread ? 'unreadable' : null;
+	}
+
 	/* ------------------------------------------------------------ unfold */
 
 	/**

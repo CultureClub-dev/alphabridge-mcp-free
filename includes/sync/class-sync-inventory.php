@@ -11,6 +11,13 @@
  * The source of this branch is the rows of this site, with the addresses
  * that are neutral; the package as a source follows with branch 5.
  *
+ * A source may also bound the number of objects (branch 5: a package holds
+ * at most AB_MCP_Sync_Manifest::MAX_OBJECTS): the kinds stop the same way
+ * as at the end of the time, before the next row, once the objects made
+ * since source() reach it. A row that gives several objects (a menu with
+ * its items, the theme mods of a theme) is read whole, so a part may end a
+ * few objects past the bound.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -29,15 +36,19 @@ final class AB_MCP_Sync_Inventory {
 	/** The clock of the budget; a callable returning seconds, null for microtime(). Set by tests only. */
 	public static $clock = null;
 
+	/** Objects entry() made since the last source(). */
+	private static $made = 0;
+
 	/**
 	 * The source of an inventory on this site.
 	 *
 	 * @param string[]      $addresses The addresses of both sites (neutral).
 	 * @param int|float     $budget    Seconds.
 	 * @param callable|null $users     Reader of user logins.
-	 * @return array ctx, deadline.
+	 * @param int|null      $objects   Objects at most (see the class), null for no bound.
+	 * @return array ctx, deadline, objects.
 	 */
-	public static function source( array $addresses, $budget = self::BUDGET, $users = null ) {
+	public static function source( array $addresses, $budget = self::BUDGET, $users = null, $objects = null ) {
 		// The rewrite rules of this site route its paths, and its own
 		// addresses, both from its rows (AB_MCP_Sync_Urls). What cannot be
 		// read locks where it counts.
@@ -50,20 +61,27 @@ final class AB_MCP_Sync_Inventory {
 		);
 		// The tags read in UTF-8 only where the site writes in it.
 		$ctx['utf8'] = AB_MCP_Sync_Rows::utf8();
+		self::$made  = 0;
 		return array(
 			'ctx'      => $ctx,
 			'deadline' => self::now() + max( 0, (float) $budget ),
+			'objects'  => null === $objects ? null : max( 1, (int) $objects ),
 		);
 	}
 
 	/**
-	 * Whether the budget of a source is used up.
+	 * Whether the budget of a source is used up: its time, or the objects
+	 * it bounds.
 	 *
 	 * @param mixed $source Source.
 	 * @return bool
 	 */
 	public static function out_of_time( $source ) {
-		return is_array( $source ) && isset( $source['deadline'] ) && self::now() >= (float) $source['deadline'];
+		// isset() reads nothing from what is no source.
+		if ( isset( $source['objects'] ) && self::$made >= (int) $source['objects'] ) {
+			return true;
+		}
+		return isset( $source['deadline'] ) && self::now() >= (float) $source['deadline'];
 	}
 
 	/**
@@ -135,6 +153,7 @@ final class AB_MCP_Sync_Inventory {
 	 * @return array
 	 */
 	public static function entry( array $result ) {
+		++self::$made;
 		unset( $result['form'] );
 		if ( ! isset( $result['status'] ) ) {
 			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';

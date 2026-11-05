@@ -146,6 +146,8 @@ class AB_MCP_Guidance {
 		'ab-staging-checklist',
 		'ab-staging',
 		'ab-staging-partner',
+		// The key of the staging site and its anchor (Z8, AB_MCP_Admin::STAGING_TRUST).
+		'ab-staging-trust',
 		'ab-staging-host',
 		'ab-staging-copy',
 		'ab-preview',

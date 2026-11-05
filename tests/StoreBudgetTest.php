@@ -96,6 +96,72 @@ final class StoreBudgetTest extends TestCase {
 		self::assertNull( AB_MCP_Store_Budget::package_refusal( $five, 'in', 6, 10 ) );
 	}
 
+	public function testAnOpenPackageOfAnotherBindingCountsAsOpenNoMore(): void {
+		$old   = str_repeat( 'a', 64 );
+		$now   = str_repeat( 'b', 64 );
+		$bound = static fn( string $binding, int $n ): array => array_map( static fn( array $p ): array => $p + array( 'binding' => $binding ), self::packages( ...array_fill( 0, $n, array( 'in', 1, 10 ) ) ) );
+		// Five imports of a pair of before: none of them counts for one of now.
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10, '', $now ) );
+		// Of the same binding they count, the limit stays.
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 5 ), $bound( $now, 5 ) ), 'in', 1, 10, '', $now )->get_error_code() );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 5 ), $bound( $now, 4 ) ), 'in', 1, 10, '', $now ) );
+		// A package without a binding counts (an export, or one of before this version).
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( array_merge( $bound( $old, 1 ), self::packages( ...array_fill( 0, 5, array( 'out', 2, 10 ) ) ) ), 'in', 1, 10, '', $now )->get_error_code() );
+		// One opened without a binding counts every package.
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10 )->get_error_code() );
+		// Their bytes count until the store removes them.
+		add_filter( AB_MCP_Store_Budget::FILTER_BYTES, static fn(): int => 55 );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10, '', $now )->get_error_code() );
+	}
+
+	/** Packages of a series, or closed: area, account, bytes, label, closed. */
+	private static function marked( array ...$list ): array {
+		return array_map(
+			static fn( array $p ): array => array(
+				'area'     => $p[0],
+				'user_id'  => $p[1],
+				'declared' => $p[2],
+				'label'    => $p[3],
+				'closed'   => $p[4] ?? false,
+			),
+			$list
+		);
+	}
+
+	public function testThePackagesOfASeriesCountAsOneExportAndOnePackage(): void {
+		$a = 'series:' . str_repeat( 'a', 32 );
+		$b = 'series:' . str_repeat( 'b', 32 );
+		self::assertSame( '/^series:[0-9a-f]{32}\z/', AB_MCP_Store_Budget::SERIES );
+		$open = self::marked( array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'out', 1, 10, $b ), array( 'out', 1, 10, '' ) );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10, $a ), 'The fourth package of series a joins it: still three exports.' );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10, $b ) );
+		$res = AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10, '' );
+		self::assertSame( 3, $res->get_error_data()['open'], 'Three exports: series a, series b, one alone.' );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10, 'series:' . str_repeat( 'c', 32 ) )->get_error_code(), 'A new series is a new export.' );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10, 'series:xyz' )->get_error_code(), 'A label that is no series counts alone.' );
+		$spelled = self::marked( array( 'out', 1, 10, 'series:XYZ' ), array( 'out', 1, 10, 'series:XYZ' ), array( 'out', 1, 10, 'series:XYZ' ) );
+		self::assertSame( 3, AB_MCP_Store_Budget::package_refusal( $spelled, 'out', 1, 10, '' )->get_error_data()['open'], 'Packages with a label that is no series count each.' );
+		$site = self::marked( array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'out', 1, 10, $a ), array( 'in', 2, 10, '' ) );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $site, 'in', 2, 10, '' ), 'Two open packages on the site: series a and one import.' );
+		$full = self::marked( array( 'out', 1, 10, $a ), array( 'in', 2, 10, '' ), array( 'in', 2, 10, '' ), array( 'in', 2, 10, '' ), array( 'in', 2, 10, '' ) );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $full, 'out', 1, 10, $a ), 'Five open packages, and the next of series a joins one of them.' );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $full, 'out', 1, 10, $b )->get_error_code(), 'A new series would be the sixth.' );
+	}
+
+	public function testAClosedPackageCountsAsOpenNoMoreButItsBytesDo(): void {
+		$five = self::marked( array( 'in', 1, 10, '', true ), array( 'in', 1, 10, '', true ), array( 'in', 1, 10, '', true ), array( 'in', 1, 10, '', true ), array( 'in', 1, 10, '', true ) );
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $five, 'in', 1, 10 ), 'Five imports done: none open.' );
+		$five[0]['closed'] = false;
+		self::assertNull( AB_MCP_Store_Budget::package_refusal( $five, 'in', 1, 10 ) );
+		$open = self::marked( array( 'out', 1, 10, '', true ), array( 'out', 1, 10, '' ), array( 'out', 1, 10, '' ), array( 'out', 1, 10, '' ) );
+		self::assertSame( 3, AB_MCP_Store_Budget::package_refusal( $open, 'out', 1, 10 )->get_error_data()['open'], 'A closed export does not count.' );
+		$a      = 'series:' . str_repeat( 'a', 32 );
+		$joined = self::marked( array( 'out', 1, 10, $a, true ), array( 'out', 1, 10, '' ), array( 'out', 1, 10, '' ), array( 'out', 1, 10, '' ) );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $joined, 'out', 1, 10, $a )->get_error_code(), 'A series whose packages are all closed is open no more: a new package of it counts.' );
+		$full = self::marked( array( 'in', 1, AB_MCP_Store_Budget::MAX_BYTES, '', true ) );
+		self::assertSame( 'ab_mcp_store_quota', AB_MCP_Store_Budget::package_refusal( $full, 'in', 1, 1 )->get_error_code(), 'Its bytes count until it is removed.' );
+	}
+
 	public function testFiveHundredTwelveMebibytesDeclaredOnTheSite(): void {
 		$max  = AB_MCP_Store_Budget::MAX_BYTES;
 		$open = self::packages( array( 'out', 1, 200 * 1048576 ), array( 'in', 2, 300 * 1048576 ) );
