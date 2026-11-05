@@ -210,15 +210,16 @@ jobs:
   # tests/mutation/lists/ takes one clause out and expects its tests to fail;
   # the file is written back and compared byte for byte. The lists of the
   # heikel/ branches ask the integration suite, so the sites run here too.
-  # Three jobs share the entries (--shard), each inside the time limit.
+  # Six jobs share the entries (--shard), each well inside the time limit;
+  # three reached it with the lists of Z8 branch 5 (about 1540 entries).
   mutation:
-    name: Every listed clause is held by a test (${{ matrix.shard }}/3)
+    name: Every listed clause is held by a test (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     services:
       mariadb:
         image: mariadb:11.4
@@ -278,7 +279,7 @@ jobs:
           bash tests/integration/bin/serve.sh start
 
       - name: Mutation probes
-        run: php tests/mutation/run.php --shard=${{ matrix.shard }}/3
+        run: php tests/mutation/run.php --shard=${{ matrix.shard }}/6
 
       - name: The checkout is unchanged
         if: always()
