@@ -315,7 +315,12 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 - `unreadable_name` hält auch einen harmlosen Namen, den die Prüfung als
   unfertiges HTML liest, etwa eine Option `literal<foo` (konstruiert; kein
   gewöhnlicher Name eines Plugins so gefunden). Das Paket läuft weiter;
-  nur diese Zeile übernimmt Zweig 6 nicht von selbst.
+  nur diese Zeile übernimmt Zweig 6 nicht von selbst. Ebenso hält das Netz
+  über Namen einen Namen mit Klammern, die es nicht auswerten kann (eine
+  Option `zz_a}, b: c`), und einen Namen, dessen Schichten tiefer reichen
+  als das Netz liest (ein mehrfach Base64-kodierter Text); beides
+  konstruiert (Codex-Runde 5 zu Teil 3, C), Slugs, Optionsnamen,
+  Meta-Schlüssel, Pfade und Logins gängiger Plugins blieben ungehalten.
 - Gründe ohne Sperre als Codes: eine Zeile mit Status `guarded`,
   `unreachable` oder `unreadable` trägt keinen Text, sondern `reason_code`
   aus der festen Liste `AB_MCP_Sync_Option_Schema::REASON_CODES`, die der
