@@ -172,11 +172,13 @@ final class AB_MCP_Sync_Import {
 	 */
 	const IDENTITIES = array(
 		'post'        => array(
+			'language'  => 'name',
 			'post_name' => 'name',
 			'post_type' => 'name',
 			'theme'     => 'name',
 		),
 		'term'        => array(
+			'language' => 'name',
 			'slug'     => 'name',
 			'taxonomy' => 'name',
 		),
@@ -203,6 +205,12 @@ final class AB_MCP_Sync_Import {
 			'name'      => 'name',
 			'theme_mod' => 'name',
 		),
+	);
+
+	/** Fields of IDENTITIES a line leaves out where its object has none (a language, Codex round 3, B2). */
+	const IDENTITY_OPEN = array(
+		'post' => array( 'language' ),
+		'term' => array( 'language' ),
 	);
 
 	/** The kinds whose ref is an id of the database. */
@@ -984,7 +992,8 @@ final class AB_MCP_Sync_Import {
 	/**
 	 * Whether the identity of a line is the one its kind has and names its
 	 * ref: none (a row that could not be read) with a ref of the kind's form,
-	 * or exactly the fields of IDENTITIES (a theme mod also its name only, a
+	 * or exactly the fields of IDENTITIES but those of IDENTITY_OPEN it may
+	 * leave out (a theme mod also its name only, a
 	 * name as any other: a row in bytes too), typed, with the ref they give:
 	 * the id of a post, term or menu (item),
 	 * the area of a widget area, the name of an option, the stylesheet and
@@ -1016,13 +1025,12 @@ final class AB_MCP_Sync_Import {
 		}
 		$given = array_map( 'strval', array_keys( $identity ) );
 		$want  = array_keys( $fields );
-		sort( $given );
-		sort( $want );
-		if ( $given !== $want ) {
+		$needs = array_diff( $want, self::IDENTITY_OPEN[ $kind ] ?? array() );
+		if ( array() !== array_diff( $given, $want ) || array() !== array_diff( $needs, $given ) ) {
 			return false;
 		}
 		foreach ( $fields as $field => $type ) {
-			if ( ! self::typed( $identity[ $field ], $type ) ) {
+			if ( array_key_exists( $field, $identity ) && ! self::typed( $identity[ $field ], $type ) ) {
 				return false;
 			}
 		}

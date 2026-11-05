@@ -2,46 +2,62 @@
 /**
  * What an object is on its own site, apart from its id (Z8, decisions 10 and
  * 11 of the plan of 01.11.2026; branch 6): the identity a reference points
- * to, read from the rows (AB_MCP_Sync_Rows), and the mapped form of an
- * object, in which every reference by id names its target by that identity
- * instead (mapped_hash()). Two sites with other ids for the same objects
- * give the same mapped form: «beidseitig gleich» compares the mapped forms
- * (decision 10), while the bases of a pair stay the hashes of each side in
- * its own ID space.
+ * to, and the mapped form of an object, in which every reference by id names
+ * its target by that identity instead (mapped_hash()). Two sites with other
+ * ids for the same objects give the same mapped form: «beidseitig gleich»
+ * compares the mapped forms (decision 10), while the bases of a pair stay
+ * the hashes of each side in its own ID space.
  *
  * THE IDENTITY of a target, by its kind:
  *  - a post: its type, its theme (templates, template parts and global
- *    styles only, from the taxonomy wp_theme), the identities of its parents
- *    from the top, its slug; none for a post without a slug;
- *  - an attachment: its file under the uploads (_wp_attached_file), as the
- *    media kind will pair it (branch 10; read here, not paired);
+ *    styles only, from the taxonomy wp_theme), the identity of its parent,
+ *    its slug, its language; none for a post without a slug;
+ *  - an attachment: its file under the uploads (_wp_attached_file) and its
+ *    language, as the media kind will pair it (branch 10; read here, not
+ *    paired);
  *  - a menu item: the slugs of its menus, its type and object, its target
  *    (the identity of the post or term it shows; for a custom link the
- *    neutral form of its address and its label, Codex round 2, A-1; else
- *    nothing) and its parent item;
- *  - a term: its taxonomy and slug.
- * A target that is not there, has no slug, or is not read to its end has no
- * identity: the mapped form is then none (null), and the object counts as
- * not equal (a reference without a resolvable target is a difference).
+ *    neutral form of its address and its label; else nothing) and the
+ *    identity of its parent item;
+ *  - a term: its taxonomy, slug and language.
+ * The language (Codex round 3, B2) where the rows of the site say it: the
+ * taxonomies language and term_language of Polylang, else the table
+ * icl_translations of WPML; '' for none.
  *
- * ONE TARGET PER IDENTITY (Codex round 2, A-1): an identity that another
- * object of the same site has as well (two custom links «#» with the same
- * label under one parent, two posts of one type with one slug under one
- * parent, two attachments of one file, two terms of one taxonomy with one
- * slug) names none of them: it maps nothing, and an object whose own
- * identity holds it (a menu item under such a parent) has none either.
+ * ONE PURE FUNCTION OF THE WHOLE SITE (Codex round 3, 1): index() reads, in
+ * a first pass, what names each post, attachment, menu item and term (kind,
+ * slug, file, target, the reference to its parent), in pages over the whole
+ * site; in a second pass it works the identities out level by level of the
+ * parents, each level from the finished identities of the one above, and
+ * then asks over these finished identities whether another object of the
+ * site has the same one. An identity another object has as well names none
+ * of them (Codex round 2, A-1): two custom links «#» with one label under one
+ * parent, two posts of one type, slug and language under one parent, two
+ * attachments of one file and language, two terms of one taxonomy, slug and
+ * language. Nothing is kept before it is final: the order of reading cannot
+ * change an identity. A part of the site that cannot be read leaves every
+ * identity none.
  *
- * POSSIBLE REFERENCES (decision 12; Codex round 2, B-1): possible_hash()
- * gives a second mapped form, in which each whole number the canonical form
- * noted as a possible reference in a stored value (meta) names the object it
- * hits on this site by its identity, marked as possible; a number that hits
- * none, hits a post and a term, or hits one without an identity stays as it
- * is. Two objects are the same where either form is the same
- * (AB_MCP_Sync_Proposal::mapped_same()): a number that is no reference
- * (a price of 10 on both sites, hitting other posts 10) keeps the first,
- * an image id 7 against 107 of the same file the second.
+ * A target that is not there, has no slug, is not read or has the identity
+ * of another has none: the mapped form is then none (null), and the object
+ * counts as not equal (a reference without a resolvable target is a
+ * difference).
  *
- * Read once per object and inventory (reset() with each source).
+ * POSSIBLE REFERENCES (decision 12; Codex round 2, B-1; round 3, A1):
+ * possible_hash() gives a second mapped form, in which a whole number the
+ * canonical form noted as a possible reference in a stored value (meta)
+ * names the object it hits on this site by its identity, marked as possible,
+ * keeping the value as it is written: only a run of digits in its plain
+ * spelling (no leading zero, not 0) is named so, every other part of the
+ * value (a separator, 0, a number that hits nothing) stays, and the marker
+ * says whether the value was a number or a text. A number that hits a post
+ * and a term, or an object without an identity, stays as well. Two objects
+ * are the same where either form is the same (AB_MCP_Sync_Proposal::
+ * mapped_same()): a number that is no reference (a price of 10 on both
+ * sites, hitting other posts 10) keeps the first, an image id 7 against 107
+ * of the same file the second.
+ *
+ * Read once per inventory (reset() with each source).
  *
  * @package AlphaBridge_MCP
  */
@@ -57,23 +73,17 @@ require_once __DIR__ . '/class-sync-refs.php';
  */
 final class AB_MCP_Sync_Identity {
 
-	/** Parents (of posts, of menu items) followed at most. */
+	/** Levels of parents (of posts, of menu items) worked out at most. */
 	const MAX_DEPTH = 32;
 
 	/** The post types whose identity holds their theme. */
 	const THEMED = array( 'wp_template', 'wp_template_part', 'wp_global_styles' );
 
-	/** @var array<int,array|null> Identities of posts read, by id. */
-	private static $posts = array();
+	/** The meta a menu item is named by. */
+	const ITEM_META = array( '_menu_item_type', '_menu_item_object', '_menu_item_object_id', '_menu_item_url', '_menu_item_menu_item_parent' );
 
-	/** @var array<int,bool|null> Whether a post row was there (null: not read), by id. */
-	private static $there = array();
-
-	/** @var array<int,array|null> Identities of menu items as they are, before the check that they are unique, by id. */
-	private static $items = array();
-
-	/** @var array<string,array|null> Identities of terms read, by id and taxonomy. */
-	private static $terms = array();
+	/** @var array|null The identities of the site (index()), null until read. */
+	private static $index = null;
 
 	/** @var array<int,array|null> What a whole number hits, by number. */
 	private static $hits = array();
@@ -82,86 +92,75 @@ final class AB_MCP_Sync_Identity {
 	 * Forget what was read (a new inventory).
 	 */
 	public static function reset() {
-		self::$posts = array();
-		self::$there = array();
-		self::$items = array();
-		self::$terms = array();
+		self::$index = null;
 		self::$hits  = array();
 	}
 
 	/**
-	 * The identity of a post of this site; null where it has none or another
-	 * post of the site has the same.
+	 * The identity of a post of this site (an attachment, a menu item too);
+	 * null where it has none or another object of the site has the same.
 	 *
-	 * @param int   $id    Post id.
-	 * @param array $ctx   The context of the canonical form (the neutral addresses).
-	 * @param int   $depth Parents followed so far.
+	 * @param int   $id  Post id.
+	 * @param array $ctx The context of the canonical form (the neutral addresses).
 	 * @return array|null
 	 */
-	public static function post( $id, array $ctx, $depth = 0 ) {
-		$id = (int) $id;
-		if ( $id <= 0 || $depth > self::MAX_DEPTH ) {
-			return null;
-		}
-		if ( array_key_exists( $id, self::$posts ) ) {
-			return self::$posts[ $id ];
-		}
-		// A parent that leads back here has none.
-		self::$posts[ $id ] = null;
-		$row                = AB_MCP_Sync_Rows::post( $id );
-		self::$there[ $id ] = null === $row ? null : is_array( $row );
-		$out                = null;
-		if ( is_array( $row ) ) {
-			if ( 'attachment' === $row['post_type'] ) {
-				$files = AB_MCP_Sync_Rows::meta_values( 'post', $id, '_wp_attached_file' );
-				$file  = is_array( $files ) && 1 === count( $files ) && '' !== $files[0] ? $files[0] : null;
-				$out   = null !== $file && array( $id ) === AB_MCP_Sync_Rows::attachments_of( $file ) ? array( 'attachment', $file ) : null;
-			} elseif ( 'nav_menu_item' === $row['post_type'] ) {
-				$out = self::unique_item( $id, self::menu_item( $id, $ctx, $depth, $row ), $ctx, $depth );
-			} elseif ( '' !== (string) $row['post_name'] ) {
-				$parent = (int) $row['post_parent'];
-				$up     = 0 === $parent ? array() : self::post( $parent, $ctx, $depth + 1 );
-				$theme  = in_array( $row['post_type'], self::THEMED, true ) ? self::theme( $id ) : '';
-				$out    = null === $up || null === $theme ? null : array( 'post', (string) $row['post_type'], $theme, $up, (string) $row['post_name'] );
-				if ( null !== $out && ! self::alone( $id, (string) $row['post_type'], (string) $row['post_name'], $parent, $theme ) ) {
-					$out = null;
-				}
-			}
-		}
-		self::$posts[ $id ] = $out;
-		return $out;
+	public static function post( $id, array $ctx ) {
+		$index = self::index( $ctx );
+		return $index['posts'][ (int) $id ] ?? null;
 	}
 
 	/**
 	 * The identity of a term of this site; null where it has none or another
-	 * term of its taxonomy has the same slug.
+	 * term of its taxonomy has the same slug and language.
 	 *
 	 * @param int         $id       Term id.
+	 * @param array       $ctx      Context.
 	 * @param string|null $taxonomy Its taxonomy; null where the reference
 	 *                              does not say (then the one taxonomy the
 	 *                              term id has rows in).
 	 * @return array|null
 	 */
-	public static function term( $id, $taxonomy = null ) {
-		$id = (int) $id;
-		if ( $id <= 0 ) {
-			return null;
-		}
-		$key = $id . "\0" . (string) $taxonomy;
-		if ( array_key_exists( $key, self::$terms ) ) {
-			return self::$terms[ $key ];
-		}
-		$out = null;
+	public static function term( $id, array $ctx, $taxonomy = null ) {
+		$index = self::index( $ctx );
+		$id    = (int) $id;
 		if ( null === $taxonomy ) {
-			$taxonomies = AB_MCP_Sync_Rows::term_taxonomies( $id );
-			$taxonomy   = is_array( $taxonomies ) && 1 === count( $taxonomies ) ? $taxonomies[0] : null;
+			$taxonomies = $index['taxonomies'][ $id ] ?? array();
+			if ( 1 !== count( $taxonomies ) ) {
+				return null;
+			}
+			$taxonomy = $taxonomies[0];
 		}
-		$row = null === $taxonomy ? null : AB_MCP_Sync_Rows::term( $id, (string) $taxonomy );
-		if ( is_array( $row ) && '' !== (string) $row['slug'] && array( $id ) === AB_MCP_Sync_Rows::terms_by_slug( (string) $row['taxonomy'], (string) $row['slug'] ) ) {
-			$out = array( 'term', (string) $row['taxonomy'], (string) $row['slug'] );
-		}
-		self::$terms[ $key ] = $out;
-		return $out;
+		return $index['terms'][ $id . "\0" . (string) $taxonomy ] ?? null;
+	}
+
+	/**
+	 * The identity of a menu item as it is, before the question whether
+	 * another item has the same (the identity of its line: what it shows and
+	 * where it hangs); null where its target or parent has none.
+	 *
+	 * @param int   $id  Post id.
+	 * @param array $ctx Context.
+	 * @return array|null
+	 */
+	public static function menu_item( $id, array $ctx ) {
+		$index = self::index( $ctx );
+		return $index['items'][ (int) $id ] ?? null;
+	}
+
+	/**
+	 * The language of a post or term, as the rows of the site say it; '' for
+	 * none (also where they cannot be read), null where they say more than
+	 * one.
+	 *
+	 * @param string $space post or term.
+	 * @param int    $id    Post or term id.
+	 * @param array  $ctx   Context.
+	 * @param int    $ttid  The term_taxonomy_id of a term (WPML names it by that).
+	 * @return string|null
+	 */
+	public static function language( $space, $id, array $ctx, $ttid = 0 ) {
+		$index = self::index( $ctx );
+		return 'term' === $space ? self::lang( $index['languages'], 'term', (int) $id, (int) $ttid ) : self::lang( $index['languages'], 'post', (int) $id, 0 );
 	}
 
 	/**
@@ -221,165 +220,322 @@ final class AB_MCP_Sync_Identity {
 		return null === $identity ? null : hash( 'sha256', AB_MCP_Sync_Canon::encode( $identity ) );
 	}
 
+	/* ------------------------------------------------------------ index */
+
 	/**
-	 * The identity of a menu item as it is: its menus, type, object, target
-	 * and parent ('none' at the top). Whether another item of its menu has
-	 * the same is asked where it names a target (post()).
+	 * The identities of the site, read once per inventory.
 	 *
-	 * @param int        $id    Post id.
-	 * @param array      $ctx   Context.
-	 * @param int        $depth Parents followed so far.
-	 * @param array|null $row   Its row, where read already.
-	 * @return array|null
+	 * @param array $ctx Context.
+	 * @return array posts (id => identity|null), there (id => true, every
+	 *               post but revisions), items (id => identity as it is),
+	 *               terms (term id NUL taxonomy => identity|null),
+	 *               taxonomies (term id => taxonomies), languages.
 	 */
-	public static function menu_item( $id, array $ctx, $depth = 0, $row = null ) {
-		$id = (int) $id;
-		if ( array_key_exists( $id, self::$items ) ) {
-			return self::$items[ $id ];
+	private static function index( array $ctx ) {
+		if ( null === self::$index ) {
+			self::$index = self::build( $ctx );
 		}
-		self::$items[ $id ] = null;
-		$row                = is_array( $row ) ? $row : AB_MCP_Sync_Rows::post( $id );
-		$meta               = AB_MCP_Sync_Rows::meta( 'post', $id );
-		$tax                = AB_MCP_Sync_Rows::object_terms( $id );
-		if ( ! is_array( $row ) || null === $meta || null === $tax ) {
-			return null;
+		return self::$index;
+	}
+
+	/**
+	 * The first pass (what names each object) and the second (the
+	 * identities, level by level, then the question whether one is unique).
+	 *
+	 * @param array $ctx Context.
+	 * @return array
+	 */
+	private static function build( array $ctx ) {
+		$none = array(
+			'posts'      => array(),
+			'there'      => array(),
+			'items'      => array(),
+			'terms'      => array(),
+			'taxonomies' => array(),
+			'languages'  => array(
+				'post'    => array(),
+				'term'    => array(),
+				'wp_post' => array(),
+				'wp_tax'  => array(),
+			),
+		);
+		// First pass: what names each object.
+		$rows = self::all_pages(
+			static function ( $after ) {
+				return AB_MCP_Sync_Rows::post_index( $after, AB_MCP_Sync_Rows::INDEX_PAGE );
+			},
+			'ID'
+		);
+		$files = self::all_pages(
+			static function ( $after ) {
+				return AB_MCP_Sync_Rows::meta_by_key( '_wp_attached_file', $after, AB_MCP_Sync_Rows::INDEX_PAGE );
+			},
+			'meta_id'
+		);
+		$terms = self::all_pages(
+			static function ( $after ) {
+				return AB_MCP_Sync_Rows::terms( null, $after, AB_MCP_Sync_Rows::MAX_PAGE );
+			},
+			'term_taxonomy_id',
+			AB_MCP_Sync_Rows::MAX_PAGE
+		);
+		$themes    = AB_MCP_Sync_Rows::relations( 'wp_theme' );
+		$menus     = AB_MCP_Sync_Rows::relations( 'nav_menu' );
+		$pll_post  = AB_MCP_Sync_Rows::relations( 'language' );
+		$pll_term  = AB_MCP_Sync_Rows::relations( 'term_language' );
+		$wpml      = AB_MCP_Sync_Rows::wpml_languages();
+		$item_rows = AB_MCP_Sync_Rows::menu_items( self::ITEM_META );
+		if ( null === $rows || null === $files || null === $terms || null === $themes || null === $menus || null === $pll_post || null === $pll_term || null === $wpml || null === $item_rows ) {
+			return $none;
 		}
-		$m = array();
-		foreach ( $meta as $one ) {
-			if ( ! array_key_exists( $one['key'], $m ) ) {
-				$m[ $one['key'] ] = $one['value'];
+		$index              = $none;
+		$index['languages'] = array(
+			'post'    => self::by_object( $pll_post ),
+			'term'    => self::by_object( $pll_term ),
+			'wp_post' => array(),
+			'wp_tax'  => array(),
+		);
+		foreach ( $wpml as $row ) {
+			$space = 0 === strpos( $row['type'], 'post_' ) ? 'wp_post' : ( 0 === strpos( $row['type'], 'tax_' ) ? 'wp_tax' : null );
+			if ( null !== $space ) {
+				$index['languages'][ $space ][ $row['id'] ][] = $row['language'];
 			}
 		}
-		$menus = array();
-		foreach ( $tax as $term ) {
-			if ( 'nav_menu' === $term['taxonomy'] ) {
-				$menus[] = $term['slug'];
+		$langs = $index['languages'];
+
+		// Second pass, terms: taxonomy, slug, language.
+		$candidates = array();
+		foreach ( $terms as $row ) {
+			$id                           = (int) $row['term_id'];
+			$index['taxonomies'][ $id ][] = (string) $row['taxonomy'];
+			$lang                         = self::lang( $langs, 'term', $id, (int) $row['term_taxonomy_id'] );
+			$candidates[ $id . "\0" . $row['taxonomy'] ] = '' === (string) $row['slug'] || null === $lang ? null : array( 'term', (string) $row['taxonomy'], (string) $row['slug'], $lang );
+		}
+		$index['terms'] = self::unique( $candidates );
+
+		$posts = array();
+		foreach ( $rows as $row ) {
+			$posts[ $row['ID'] ]          = $row;
+			$index['there'][ $row['ID'] ] = true;
+		}
+		$by_file = self::by_object( $files, 'post_id', 'value' );
+		$themed  = self::by_object( $themes );
+
+		// Attachments: file and language.
+		$candidates = array();
+		foreach ( $posts as $id => $row ) {
+			if ( 'attachment' === $row['post_type'] ) {
+				$list              = $by_file[ $id ] ?? array();
+				$lang              = self::lang( $langs, 'post', $id, 0 );
+				$candidates[ $id ] = 1 === count( $list ) && '' !== $list[0] && null !== $lang ? array( 'attachment', $list[0], $lang ) : null;
 			}
 		}
-		sort( $menus, SORT_STRING );
-		$type   = isset( $m['_menu_item_type'] ) ? (string) $m['_menu_item_type'] : '';
-		$object = isset( $m['_menu_item_object'] ) ? (string) $m['_menu_item_object'] : '';
-		$target = self::target( $type, $object, isset( $m['_menu_item_object_id'] ) ? $m['_menu_item_object_id'] : '', isset( $m['_menu_item_url'] ) ? $m['_menu_item_url'] : '', $ctx, $depth, (string) $row['post_title'] );
-		$parent = isset( $m['_menu_item_menu_item_parent'] ) ? (int) $m['_menu_item_menu_item_parent'] : 0;
-		$up     = 0 === $parent ? 'none' : self::post( $parent, $ctx, $depth + 1 );
-		$out    = null === $target || null === $up ? null : array( 'nav_menu_item', $menus, $type, $object, $target, $up );
-		self::$items[ $id ] = $out;
+		$index['posts'] = self::unique( $candidates );
+
+		// Posts, level by level of their parents.
+		$open = array();
+		foreach ( $posts as $id => $row ) {
+			if ( 'attachment' !== $row['post_type'] && 'nav_menu_item' !== $row['post_type'] ) {
+				$open[ $id ] = $row;
+			}
+		}
+		$index['posts'] = self::levels(
+			$open,
+			$index['posts'],
+			static function ( $row ) {
+				return (int) $row['post_parent'];
+			},
+			static function ( $id, $row, $up ) use ( $themed, $langs ) {
+				$theme = '';
+				if ( in_array( $row['post_type'], self::THEMED, true ) ) {
+					$list  = $themed[ $id ] ?? array();
+					$theme = array() === $list ? '' : ( 1 === count( $list ) ? $list[0] : null );
+				}
+				$lang = self::lang( $langs, 'post', $id, 0 );
+				return '' === $row['post_name'] || null === $theme || null === $lang ? null : array( 'post', $row['post_type'], $theme, $up, $row['post_name'], $lang );
+			}
+		);
+
+		// Menu items, level by level of their parent items.
+		$meta = array();
+		foreach ( $item_rows['meta'] as $row ) {
+			if ( ! isset( $meta[ $row['post_id'] ][ $row['key'] ] ) ) {
+				$meta[ $row['post_id'] ][ $row['key'] ] = $row['value'];
+			}
+		}
+		$in_menus = self::by_object( $menus );
+		$open     = array();
+		foreach ( $posts as $id => $row ) {
+			if ( 'nav_menu_item' === $row['post_type'] ) {
+				$open[ $id ] = ( $meta[ $id ] ?? array() ) + array( '~title' => $item_rows['titles'][ $id ] ?? '' );
+			}
+		}
+		$items = array();
+		$found = self::levels(
+			$open,
+			array(),
+			static function ( $m ) {
+				return isset( $m['_menu_item_menu_item_parent'] ) ? (int) $m['_menu_item_menu_item_parent'] : 0;
+			},
+			static function ( $id, $m, $up ) use ( $in_menus, $index, $ctx, &$items ) {
+				$slugs = $in_menus[ $id ] ?? array();
+				sort( $slugs, SORT_STRING );
+				$type   = (string) ( $m['_menu_item_type'] ?? '' );
+				$object = (string) ( $m['_menu_item_object'] ?? '' );
+				$of     = (int) ( $m['_menu_item_object_id'] ?? 0 );
+				switch ( $type ) {
+					case 'post_type':
+						$target = $index['posts'][ $of ] ?? null;
+						break;
+					case 'taxonomy':
+						$target = $index['terms'][ $of . "\0" . $object ] ?? null;
+						break;
+					case 'custom':
+						$acc    = AB_MCP_Sync_Canon::acc();
+						$target = array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $m['~title'] );
+						break;
+					default:
+						$target = array( $type, $object );
+				}
+				$items[ $id ] = null === $target ? null : array( 'nav_menu_item', $slugs, $type, $object, $target, null === $up ? 'none' : $up );
+				return $items[ $id ];
+			},
+			true
+		);
+		$index['items'] = $items;
+		$index['posts'] = $index['posts'] + $found;
+		return $index;
+	}
+
+	/**
+	 * The identities of objects whose identity holds that of their parent,
+	 * level by level: the objects under no parent first, then those whose
+	 * parent is final; at each level the identities made from the finished
+	 * ones above, then each that another of the level has as well made none.
+	 * An object whose parent is not there, has none, or leads back to it has
+	 * none.
+	 *
+	 * @param array    $open   id => what names it, not worked out yet.
+	 * @param array    $final  id => identity|null already final (the parents
+	 *                         they may hang under besides their own kind).
+	 * @param callable $parent function( $row ): int, its parent (0 for none).
+	 * @param callable $make   function( $id, $row, $up ): array|null, $up the
+	 *                         identity of the parent (array() at the top for
+	 *                         posts, null for items).
+	 * @param bool     $items  Whether these are menu items (their parent is an
+	 *                         item; at the top their up is null, not array()).
+	 * @return array id => identity|null, the final ones of $open (and $final).
+	 */
+	private static function levels( array $open, array $final, $parent, $make, $items = false ) {
+		$out = $final;
+		for ( $level = 0; $level <= self::MAX_DEPTH && array() !== $open; ++$level ) {
+			$made = array();
+			foreach ( $open as $id => $row ) {
+				$up = (int) call_user_func( $parent, $row );
+				if ( 0 === $up ) {
+					$made[ $id ] = call_user_func( $make, $id, $row, $items ? null : array() );
+				} elseif ( ! isset( $open[ $up ] ) && array_key_exists( $up, $out ) ) {
+					// Its parent is final: of a level above, or of a kind worked out before.
+					$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, $out[ $up ] );
+				}
+			}
+			if ( array() === $made ) {
+				break;
+			}
+			foreach ( self::unique( $made ) as $id => $identity ) {
+				$out[ $id ] = $identity;
+				unset( $open[ $id ] );
+			}
+		}
+		// What is left hangs under a parent that is not there, too deep, or leads back.
+		foreach ( array_keys( $open ) as $id ) {
+			$out[ $id ] = null;
+		}
 		return $out;
 	}
 
 	/**
-	 * What a menu item shows: the identity of its post or term; for a custom
-	 * link the neutral form of its address and its label (two «#» headings
-	 * are two items, Codex round 2, A-1); else its type and object.
+	 * Identities with each that another one has as well made none.
 	 *
-	 * @param string $type   _menu_item_type.
-	 * @param string $object _menu_item_object.
-	 * @param string $id     _menu_item_object_id.
-	 * @param string $url    _menu_item_url.
-	 * @param array  $ctx    Context.
-	 * @param int    $depth  Depth.
-	 * @param string $label  The label of the item (post_title).
-	 * @return array|string|null
+	 * @param array $candidates key => identity|null.
+	 * @return array
 	 */
-	public static function target( $type, $object, $id, $url, array $ctx, $depth = 0, $label = '' ) {
-		switch ( $type ) {
-			case 'post_type':
-				return self::post( (int) $id, $ctx, $depth + 1 );
-			case 'taxonomy':
-				return self::term( (int) $id, $object );
-			case 'custom':
-				$acc = AB_MCP_Sync_Canon::acc();
-				return array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $label );
-		}
-		return array( (string) $type, (string) $object );
-	}
-
-	/* ----------------------------------------------------------- private */
-
-	/**
-	 * Whether a post is the only one of its type, slug, parent (and theme)
-	 * on this site; false where that is not read.
-	 *
-	 * @param int    $id     Post id.
-	 * @param string $type   Type.
-	 * @param string $name   Slug.
-	 * @param int    $parent Parent.
-	 * @param string $theme  Theme ('' for a type without one).
-	 * @return bool
-	 */
-	private static function alone( $id, $type, $name, $parent, $theme ) {
-		$same = AB_MCP_Sync_Rows::posts_named( $type, $name, $parent );
-		if ( ! is_array( $same ) || ! in_array( $id, $same, true ) ) {
-			return false;
-		}
-		foreach ( $same as $other ) {
-			// A template of another theme is another identity.
-			if ( $other !== $id && ( '' === $theme || self::theme( $other ) === $theme ) ) {
-				return false;
+	private static function unique( array $candidates ) {
+		$count = array();
+		foreach ( $candidates as $identity ) {
+			if ( null !== $identity ) {
+				$key           = AB_MCP_Sync_Canon::encode( $identity );
+				$count[ $key ] = ( $count[ $key ] ?? 0 ) + 1;
 			}
 		}
-		return true;
+		foreach ( $candidates as $key => $identity ) {
+			if ( null !== $identity && 1 !== $count[ AB_MCP_Sync_Canon::encode( $identity ) ] ) {
+				$candidates[ $key ] = null;
+			}
+		}
+		return $candidates;
 	}
 
 	/**
-	 * The identity of a menu item where no other item of its menus has the
-	 * same; null else.
+	 * Every page of a reader of the index, one after another.
 	 *
-	 * @param int        $id       Post id.
-	 * @param array|null $identity Its identity as it is (menu_item()).
-	 * @param array      $ctx      Context.
-	 * @param int        $depth    Depth.
-	 * @return array|null
+	 * @param callable $page   function( int $after ): array[]|null.
+	 * @param string   $cursor The field of a row the next page starts after.
+	 * @param int      $size   Rows of a full page.
+	 * @return array[]|null
 	 */
-	private static function unique_item( $id, $identity, array $ctx, $depth ) {
-		if ( null === $identity ) {
-			return null;
-		}
-		$tax = AB_MCP_Sync_Rows::object_terms( (int) $id );
-		if ( null === $tax ) {
-			return null;
-		}
-		$mine = AB_MCP_Sync_Canon::encode( $identity );
-		foreach ( $tax as $term ) {
-			if ( 'nav_menu' !== $term['taxonomy'] ) {
-				continue;
-			}
-			$items = AB_MCP_Sync_Rows::term_objects( (int) $term['term_id'], 'nav_menu' );
-			if ( null === $items ) {
+	private static function all_pages( $page, $cursor, $size = AB_MCP_Sync_Rows::INDEX_PAGE ) {
+		$all   = array();
+		$after = 0;
+		do {
+			$rows = call_user_func( $page, $after );
+			if ( null === $rows ) {
 				return null;
 			}
-			foreach ( $items as $other ) {
-				if ( (int) $other === (int) $id ) {
-					continue;
-				}
-				$theirs = self::menu_item( (int) $other, $ctx, $depth );
-				if ( null !== $theirs && AB_MCP_Sync_Canon::encode( $theirs ) === $mine ) {
-					return null;
-				}
+			foreach ( $rows as $row ) {
+				$all[] = $row;
+				$after = (int) $row[ $cursor ];
 			}
-		}
-		return $identity;
+		} while ( count( $rows ) >= $size );
+		return $all;
 	}
 
 	/**
-	 * The theme of a template: the slug of its one term of wp_theme; '' for
-	 * none, null where there are more.
+	 * Rows by their object: object id => the values of the field.
 	 *
-	 * @param int $id Post id.
+	 * @param array[] $rows  Rows.
+	 * @param string  $by    Field of the object.
+	 * @param string  $field Field of the value.
+	 * @return array<int,array>
+	 */
+	private static function by_object( array $rows, $by = 'object_id', $field = 'slug' ) {
+		$out = array();
+		foreach ( $rows as $row ) {
+			$out[ (int) $row[ $by ] ][] = $row[ $field ];
+		}
+		return $out;
+	}
+
+	/**
+	 * The language of an object: of Polylang where it names one, else of
+	 * WPML, else ''; null where one of them names more than one.
+	 *
+	 * @param array  $langs post, term (Polylang), wp_post, wp_tax (WPML).
+	 * @param string $space post or term.
+	 * @param int    $id    Post or term id.
+	 * @param int    $ttid  term_taxonomy_id of a term.
 	 * @return string|null
 	 */
-	private static function theme( $id ) {
-		$tax = AB_MCP_Sync_Rows::object_terms( (int) $id );
-		if ( null === $tax ) {
-			return null;
+	private static function lang( array $langs, $space, $id, $ttid ) {
+		$polylang = $langs[ $space ][ $id ] ?? array();
+		if ( array() !== $polylang ) {
+			return 1 === count( $polylang ) ? (string) $polylang[0] : null;
 		}
-		$themes = array();
-		foreach ( $tax as $term ) {
-			if ( 'wp_theme' === $term['taxonomy'] ) {
-				$themes[] = $term['slug'];
-			}
+		$wpml = 'term' === $space ? ( $langs['wp_tax'][ $ttid ] ?? array() ) : ( $langs['wp_post'][ $id ] ?? array() );
+		if ( array() !== $wpml ) {
+			return 1 === count( array_unique( $wpml ) ) ? (string) $wpml[0] : null;
 		}
-		return array() === $themes ? '' : ( 1 === count( $themes ) ? $themes[0] : null );
+		return '';
 	}
 
 	/**
@@ -396,12 +552,13 @@ final class AB_MCP_Sync_Identity {
 		if ( array_key_exists( $n, self::$hits ) ) {
 			return self::$hits[ $n ];
 		}
-		$post  = self::post( $n, $ctx );
-		$there = self::$there[ $n ] ?? null;
-		$terms = AB_MCP_Sync_Rows::term_taxonomies( $n );
+		$index = self::index( $ctx );
+		// A revision is not in the index; it is a post all the same.
+		$there = isset( $index['there'][ $n ] ) ? true : AB_MCP_Sync_Rows::post_type_of( $n );
+		$terms = isset( $index['taxonomies'][ $n ] );
 		$out   = null;
-		if ( null !== $there && is_array( $terms ) && $there !== ( array() !== $terms ) ) {
-			$out = $there ? $post : self::term( $n );
+		if ( null !== $there && ( false !== $there ) !== $terms ) {
+			$out = false !== $there ? ( $index['posts'][ $n ] ?? null ) : self::term( $n, $ctx );
 		}
 		self::$hits[ $n ] = $out;
 		return $out;
@@ -568,9 +725,12 @@ final class AB_MCP_Sync_Identity {
 	}
 
 	/**
-	 * The numbers of a leaf the canonical form noted as possible references,
-	 * each by the identity of what it hits (marked as possible), or as it is;
-	 * null where the place was not noted or no number hits an object.
+	 * A leaf the canonical form noted as a possible reference, as it is
+	 * written (Codex round 3, A1): a number as a number, a text as its parts,
+	 * each run of digits in its plain spelling (no leading zero, not 0) that
+	 * hits an object by its identity, every other part (a separator, 0, a
+	 * number with a leading zero, one that hits nothing) as it is; null where
+	 * the place was not noted or no part hits an object.
 	 *
 	 * @param mixed  $value Leaf.
 	 * @param string $at    Where it stands.
@@ -580,21 +740,28 @@ final class AB_MCP_Sync_Identity {
 	 * @return array|null
 	 */
 	private static function numbers_of( $value, $at, array $set, array $ctx, &$hit ) {
-		if ( ! isset( $set[ $at ] ) || ( ! is_int( $value ) && ! is_string( $value ) ) ) {
+		if ( ! isset( $set[ $at ] ) || ( ! is_int( $value ) && ! is_string( $value ) ) || array() === AB_MCP_Sync_Refs::numbers( $value ) ) {
 			return null;
 		}
-		$out = array();
-		$any = false;
-		foreach ( AB_MCP_Sync_Refs::numbers( $value ) as $n ) {
-			$as    = self::hit( $n, $ctx );
-			$any   = $any || null !== $as;
-			$out[] = null === $as ? $n : array( 'as' => $as );
+		$parts = is_int( $value ) ? array( (string) $value ) : preg_split( '/([0-9]+)/', $value, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY );
+		$any   = false;
+		foreach ( $parts as $i => $part ) {
+			if ( 1 === preg_match( '/^[1-9][0-9]{0,17}\z/', $part ) ) {
+				$as = self::hit( (int) $part, $ctx );
+				if ( null !== $as ) {
+					$parts[ $i ] = array( 'as' => $as );
+					$any         = true;
+				}
+			}
 		}
 		if ( ! $any ) {
 			return null;
 		}
 		$hit = true;
-		return array( '~possible' => $out );
+		return array(
+			'~possible' => is_int( $value ) ? 'number' : 'text',
+			'parts'     => $parts,
+		);
 	}
 
 	/**
@@ -625,7 +792,7 @@ final class AB_MCP_Sync_Identity {
 			return $value;
 		}
 		if ( isset( $value['~ref'], $value['id'] ) && is_string( $value['~ref'] ) ) {
-			$as = 'post' === $value['~ref'] ? self::post( (int) $value['id'], $ctx ) : ( 'term' === $value['~ref'] ? self::term( (int) $value['id'] ) : null );
+			$as = 'post' === $value['~ref'] ? self::post( (int) $value['id'], $ctx ) : ( 'term' === $value['~ref'] ? self::term( (int) $value['id'], $ctx ) : null );
 			if ( null === $as ) {
 				$ok = false;
 				return $value;

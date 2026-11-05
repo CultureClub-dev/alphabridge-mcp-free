@@ -76,26 +76,47 @@ Weg.
   Login). Dieselben Objekte mit anderen IDs auf beiden Sites sind so «gleich».
   Die Ausgangsstände eines Paars bleiben die Hashes je Seite im eigenen
   ID-Raum.
-- **Ein Ziel je Identität** (Codex Runde 2, A-1): Eine Identität, die ein
+- **Ein Ziel je Identität** (Codex Runde 2, A-1; Runde 3, 1): Die Identität
+  ist eine Funktion der ganzen Site. `AB_MCP_Sync_Identity` liest in einem
+  ersten Durchgang, was jedes Objekt nennt (Typ, Slug, Datei, Ziel, Verweis
+  auf den Eltern-Eintrag, Theme, Sprache), seitenweise über die ganze Site,
+  und rechnet im zweiten die Identitäten Ebene für Ebene der Eltern, jede aus
+  den fertigen Identitäten der Ebene darüber; erst über die fertigen fragt es,
+  ob ein zweites Objekt dieselbe hat. Nichts wird gemerkt, bevor es feststeht:
+  die Reihenfolge des Lesens ändert keine Identität. Eine Identität, die ein
   zweites Objekt derselben Site auch hat, nennt keines von beiden; ein Verweis
   darauf bleibt unaufgelöst («anderer Inhalt»), und ein Objekt, dessen eigene
   Identität sie enthält, hat keine (ein Menüeintrag unter einem solchen
   Eltern-Eintrag, eine Seite unter einer solchen Elternseite heissen
   «unsicher»). Beispiele: zwei eigene Links «#» mit derselben Beschriftung
-  unter demselben Eltern-Eintrag, zwei Posts eines Typs mit demselben Slug
-  unter derselben Elternseite (ein Entwurf behält seinen Slug), zwei Anhänge
-  derselben Datei, zwei Terme einer Taxonomie mit demselben Slug (der Kern
-  vergibt einen Slug je Taxonomie nur einmal; nur eine anders geschriebene
-  Tabelle hat ihn zweimal). Eigene Links heissen nach Adresse **und**
-  Beschriftung: «Privat» und «Firma» auf `#` sind zwei Einträge, ein
-  Untereintrag, der von «Privat» zu «Firma» wechselt, ist ein anderer Eintrag
-  («nur Staging» und «nur live»), nie «gleich»; eine umbenannte Überschrift
-  ebenso. Folge für mehrsprachige Sites, deren Plugin Anhänge je Sprache auf
-  dieselbe Datei verdoppelt (WPML): ein Verweis auf einen solchen Anhang ist
-  nicht aufzulösen, das Objekt heisst «anderer Inhalt» (die sichere Seite).
-  Die Gruppe selbst wird weiter nur über eine auf beiden Seiten eindeutige
-  gleiche abgebildete Form gepaart (zwei gleiche Überschriften an ihren
-  Plätzen), sonst «mehrdeutig».
+  unter demselben Eltern-Eintrag, zwei Posts eines Typs, Slugs und einer
+  Sprache unter derselben Elternseite (ein Entwurf behält seinen Slug), zwei
+  Anhänge derselben Datei und Sprache, zwei Terme einer Taxonomie, eines
+  Slugs und einer Sprache (der Kern vergibt einen Slug je Taxonomie nur
+  einmal; nur eine anders geschriebene Tabelle hat ihn zweimal). Eigene Links
+  heissen nach Adresse **und** Beschriftung: «Privat» und «Firma» auf `#`
+  sind zwei Einträge, ein Untereintrag, der von «Privat» zu «Firma» wechselt,
+  ist ein anderer Eintrag («nur Staging» und «nur live»), nie «gleich»; eine
+  umbenannte Überschrift ebenso. Ein Untermenü verschiedener Einträge
+  («Privat» mit «Kontakt» und «Hilfe») ist «gleich».
+- **Sprache** (Codex Runde 3, B2): Wo die Zeilen der Site sie nennen, gehört
+  die Sprache zur Identität von Posts, Anhängen und Termen und zur Identität
+  ihrer Zeile (`language`, fehlt ohne Sprache): bei Polylang die Taxonomien
+  `language` und `term_language`, sonst die Tabelle `icl_translations` von
+  WPML (gelesen, wo es sie gibt). So sind Übersetzungen mit gemeinsamem Slug
+  (Polylang Pro, WPML) und übersetzte Medien derselben Datei je Sprache ein
+  eigenes Objekt; Unterseiten haben einen ganzen Pfad. Grenzen: ein
+  Sprach-Plugin, das die Sprache anderswo hält (eigene Tabellen, Optionen,
+  Multisite je Sprache), wird nicht gelesen: dort bleiben gemeinsame Slugs
+  doppelt (Unterseiten «unsicher») und übersetzte Medien derselben Datei
+  doppelt (Verweiser «anderer Inhalt»), die sichere Seite; Weg: die Paare der
+  Übersetzungen selbst wählen (`choices`). Nennt die Site für ein Objekt mehr
+  als eine Sprache, hat es keine Identität (`language` `?`). Die Pakete beider
+  Sites tragen die Sprache nur, wo beide dieselbe Fassung haben.
+- **Grosse Sites:** Der erste Durchgang liest je Aufruf die ganze Site (Posts
+  ohne Revisionen, Dateien der Anhänge, Menüeinträge, Terme, Sprachen) in den
+  Speicher; gemessen bis zu rund 500 Objekten je Seite (Prüffälle), grosse
+  Sites misst Z11c.
 - **Mögliche Verweise** (Entscheid 12; Codex Runde 2, B-1): Ganze Zahlen ohne
   belegtes Schema in gespeicherten Werten (Meta von Posts, Termen und
   Menüeinträgen, auch in serialisierten Werten und gespeichertem JSON, etwa
@@ -111,18 +132,29 @@ Weg.
   derselben Datei ist gleich. Die Sperre nach Entscheid 12 bleibt
   unverändert: solche Objekte übernimmt Z8 nicht; nur ihr Paar und ihr
   Vergleich werden richtig.
+- Die zweite Form erhält den Wert (Codex Runde 3, A1): Nur eine Ziffernfolge
+  in ihrer schlichten Schreibweise (keine führende Null, nicht 0) wird über
+  die Identität genannt; jeder andere Teil des Werts (ein Trenner, 0, eine Zahl
+  mit führender Null, eine, die nichts trifft) bleibt, und der Marker sagt, ob
+  der Wert eine Zahl oder ein Text war. `"007"` gegen `"7"`, `"7,0,9"` gegen
+  `"7,9"` und die JSON-Zahl `7` gegen den Text `"7"` heissen so «anderer
+  Inhalt».
 - Grenzen der möglichen Verweise: Ein Objekt, das **beides** enthält,
   verschobene Bild-IDs und eine gleiche Zahl, die auf den beiden Sites
   verschiedene Objekte trifft (etwa eine Galerie und `_stock` 5), heisst
-  weiter «anderer Inhalt» und wird *ungeklärt* bestätigt (die sichere Seite).
-  Grund: dafür müsste je Zahl verglichen werden, und ein Paket trägt einen
-  möglichen Verweis nur mit seiner Stelle, nie mit seinem Wert (Vertrag A von
-  Zweig 5). Umgekehrt können zufällig gleich abgebildete Zahlen (ein Preis 7
-  hier, 107 dort, und Post 7 hier ist derselbe wie Post 107 dort; konstruiert)
-  «gleich» ergeben; das betrifft nur gesperrte Objekte und keinen Schreibweg
-  in Z8. Mögliche Verweise im Inhalt (Blöcke ohne Schema, Shortcodes), in
-  Optionen und Widgets werden nicht abgebildet: dort bleibt der Vergleich
-  wie bisher (andere IDs heissen «anderer Inhalt»).
+  weiter «anderer Inhalt» und wird *ungeklärt* bestätigt (die sichere Seite;
+  solche Objekte sperrt Entscheid 12 ohnehin, soweit die verschobenen Bilder
+  im Umfang der Übernahme liegen). Grund: dafür müsste je Zahl verglichen
+  werden, und ein Paket trägt einen möglichen Verweis nur mit seiner Stelle,
+  nie mit seinem Wert (Vertrag A von Zweig 5). Umgekehrt bleibt ein falsches
+  «gleich», wo zwei verschiedene Zahlen in derselben Schreibweise auf ihren
+  Sites Objekte derselben Identität treffen, ohne Verweise zu sein (ein Preis
+  7 hier, 107 dort, und Post 7 hier ist derselbe wie Post 107 dort;
+  konstruiert). Das kann auch ein Objekt treffen, das Entscheid 12 nicht
+  sperrt; das Paar wird dann aktiv bestätigt, ein späterer Lauf sieht den
+  Unterschied als Änderung einer Seite. Mögliche Verweise im Inhalt (Blöcke
+  ohne Schema, Shortcodes), in Optionen und Widgets werden nicht abgebildet:
+  dort bleibt der Vergleich wie bisher (andere IDs heissen «anderer Inhalt»).
 - Ein Verweis auf ein Ziel ohne Identität (ein Post ohne Slug, ein gelöschtes
   Ziel, ein Term, dessen ID noch in zwei Taxonomien steht) gibt keine
   abgebildete Form: das Objekt heisst «anderer Inhalt». Dafür tragen die
@@ -140,19 +172,28 @@ Weg.
   (`uncertain`) und werden nur durch eine ausdrückliche Wahl gepaart, nie über
   eine Kategorie bestätigt. Eine verschobene Seite muss die Person darum selbst
   zuordnen.
-- Ein **unvollständiger Elternpfad** führt immer nach «unsicher» (Codex Runde
-  2, A-2): eine Elternseite, die die Bestandsaufnahme ihrer Seite nicht hält
-  (nicht gelesen, in einem fehlenden Teilpaket, gehalten), keinen Slug hat
-  oder deren Typ, Slug und Eltern ein zweiter Post derselben Seite auch hat,
-  steht im Pfad als `?`; `?` ist nie ein gemeinsamer Pfad beider Seiten.
+- Ein **unvollständiger Elternpfad** führt nach «unsicher», wo beide Seiten
+  Kandidaten derselben Identität haben (Codex Runde 2, A-2): eine Elternseite,
+  die die Bestandsaufnahme ihrer Seite nicht hält (nicht gelesen, in einem
+  fehlenden Teilpaket, gehalten), keinen Slug hat oder deren Typ, Slug,
+  Sprache und Eltern ein zweiter Post derselben Seite auch hat, steht im Pfad
+  als `?`; `?` ist nie ein gemeinsamer Pfad beider Seiten. Hat die andere
+  Seite keinen Kandidaten dieser Identität, bleibt das Objekt «nur live» oder
+  «nur Staging» (Codex Runde 3, C1; selten, keine Fehlpaarung: es gibt nichts
+  zu paaren).
 - Menüeinträge werden über den Slug ihres Menüs, Typ, Objekttyp, ihr Ziel
   (eigene Links: Adresse und Beschriftung) und ihren Eltern-Eintrag
-  zugeordnet, nie über die Position (umsortiert ist
-  dasselbe Ziel dasselbe Objekt). Dasselbe Ziel zweimal unter demselben
-  Eltern-Eintrag desselben Menüs ist «mehrdeutig», ausser eine gleiche
-  abgebildete Form ist auf beiden Seiten eindeutig. Ein Ziel ausserhalb der
-  Bestandsaufnahme ohne Identität (ein gelöschter Post) macht den Eintrag
-  «unsicher».
+  zugeordnet, nie über die Position (umsortiert ist dasselbe Ziel dasselbe
+  Objekt). Haben zwei Einträge eines Menüs dieselbe Identität (dasselbe Ziel
+  oder dieselbe Überschrift zweimal unter einem Eltern-Eintrag), trennt sie
+  nur ihr Platz: sie heissen «unsicher», auch wo ihre ganzen Formen auf beiden
+  Seiten eindeutig wären, und was unter ihnen hängt, ebenso (Codex Runde 3,
+  A2). Ein Ziel ausserhalb der Bestandsaufnahme ohne Identität (ein
+  gelöschter Post) macht den Eintrag «unsicher».
+- Mehrere Kandidaten derselben Identität auf einem Pfad werden über eine auf
+  beiden Seiten eindeutige gleiche abgebildete Form gepaart, erst die mit den
+  getypten Verweisen, dann die mit den möglichen Verweisen über die Identität
+  (Codex Runde 3, B3); der Rest ist «mehrdeutig».
 - Eine Kennung, die kein Paar hält (länger als 191 Zeichen, ein
   Steuerzeichen, kein UTF-8; etwa ein Schlüssel eines Theme-Mods, der mit dem
   Stylesheet über 191 Zeichen kommt), heisst «nicht verglichen» mit dem Weg

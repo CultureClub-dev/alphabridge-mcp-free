@@ -169,10 +169,20 @@ e('resolve-doubt', 'resolve(): a group with a doubt is left to a choice', P,
   "\t\tif ( null !== $doubt ) {\n\t\t\t$left = array(", "\t\tif ( false ) {\n\t\t\t$left = array(", 'prop', 'testPostsWithoutASlugAreUncertainNeverAPair')
 e('resolve-path', 'resolve(): one to one on a path is a pair', P,
   "\t\t\t\tif ( 1 === count( $ss ) && 1 === count( $ll ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testThePathOfParentsTellsPagesOfTheSameSlugApart')
-HU = "\t\t\t\t\tif ( null !== $item['mapped'] && 1 === ( $hl[ $item['mapped'] ] ?? 0 ) && 1 === ( $hs[ $item['mapped'] ] ?? 0 ) ) {"
-e('resolve-hash', 'resolve(): an equal mapped form unique on both sides of a path is a pair', P, HU, "\t\t\t\t\tif ( false ) {", 'prop', 'testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair')
-e('resolve-hash-live', 'resolve(): unique on this site', P, HU, HU.replace(" && 1 === ( $hl[ $item['mapped'] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
-e('resolve-hash-staging', 'resolve(): unique on the staging site', P, HU, HU.replace(" && 1 === ( $hs[ $item['mapped'] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
+HU = "\t\t\tif ( null !== $item[ $form ] && 1 === ( $hl[ $item[ $form ] ] ?? 0 ) && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {"
+e('resolve-hash', 'unique_pairs(): an equal mapped form unique on both sides of a path is a pair', P, HU, "\t\t\tif ( false ) {", 'prop', 'testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair')
+e('resolve-hash-live', 'unique_pairs(): unique on this site', P, HU, HU.replace(" && 1 === ( $hl[ $item[ $form ] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
+e('resolve-hash-staging', 'unique_pairs(): unique on the staging site', P, HU, HU.replace(" && 1 === ( $hs[ $item[ $form ] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
+e('resolve-possible', 'resolve(): then the second mapped form, unique on both sides (Codex round 3, B3)', P,
+  "\t\t\t\tforeach ( array( 'mapped', 'mapped_possible' ) as $form ) {", "\t\t\t\tforeach ( array( 'mapped' ) as $form ) {", 'prop', 'testAnEqualSecondMappedFormUniqueOnBothSidesOfAPathIsAPair')
+e('resolve-menu-twins', 'resolve(): items of one identity in one menu are uncertain (Codex round 3, A2)', P,
+  "\t\t} elseif ( 'menu_item' === ( $s[0]['kind'] ?? ( $l[0]['kind'] ?? '' ) ) && ( count( $s ) > 1 || count( $l ) > 1 ) ) {", "\t\t} elseif ( false ) {", 'prop', 'testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart')
+e('key-language-post', 'identity_key(): a post with its language (Codex round 3, B2)', P,
+  "\t\t\t\t$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null, $identity['language'] ?? '' );",
+  "\t\t\t\t$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null );", 'prop', 'testTranslationsSharingASlugAreTwoObjects')
+e('twin-language', 'twin_key(): a parent with its language', P,
+  "\t\treturn AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['language'] ?? '', $post['parent'] ) );",
+  "\t\treturn AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['parent'] ) );", 'prop', 'testTranslationsSharingASlugAreTwoObjects')
 e('resolve-ambiguous', 'resolve(): more of the same identity on a path are ambiguous', P,
   "\t\t\t\tif ( array() !== $rest && array() !== $rest_l ) {", "\t\t\t\tif ( false ) {", 'prop', 'testMoreOfTheSameIdentityOnAPathAreAmbiguousWithAllOfThem')
 e('resolve-uncertain', 'resolve(): the same identity left on other paths is uncertain, no pair by exclusion', P,
@@ -216,11 +226,11 @@ e('key-menu-slug', 'identity_key(): a menu item by the slug of its menu', P,
 KM = "\t\t\t\t$parts = array( $slugs, $identity['type'] ?? null, $identity['object'] ?? null, $identity['target'] ?? null, $identity['parent'] ?? null );"
 e('key-menu-position', 'identity_key(): a menu item not by its position', P, KM, KM.replace(" );", ", $identity['position'] ?? null );"), 'prop', 'testAMenuSortedAnewPairsEachItemWithItsTarget')
 e('key-menu-target', 'identity_key(): a menu item by its target', P, KM, KM.replace(" $identity['target'] ?? null,", ''), 'prop', 'testAMenuSortedAnewPairsEachItemWithItsTarget')
-e('key-menu-parent', 'identity_key(): a menu item by its parent item', P, KM, KM.replace(", $identity['parent'] ?? null", ''), 'prop', 'testTheSameTargetTwiceUnderOneParentIsAmbiguous')
+e('key-menu-parent', 'identity_key(): a menu item by its parent item', P, KM, KM.replace(", $identity['parent'] ?? null", ''), 'prop', 'testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart')
 e('key-css-linked', 'identity_key(): the CSS of a stylesheet and a CSS post apart', P,
   "\t\t\t\t$parts = array( $identity['stylesheet'] ?? null, ! empty( $identity['linked'] ) );", "\t\t\t\t$parts = array( $identity['stylesheet'] ?? null );", 'prop', 'testTheIdentityKeyOfEachKind')
 e('key-theme', 'identity_key(): the theme of a template', P,
-  "$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null );", "$parts = array( $identity['post_type'] ?? null, $identity['post_name'] ?? null );", 'prop', 'testTheIdentityKeyOfEachKind')
+  "$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null, $identity['language'] ?? '' );", "$parts = array( $identity['post_type'] ?? null, $identity['post_name'] ?? null, $identity['language'] ?? '' );", 'prop', 'testTheIdentityKeyOfEachKind')
 e('parent-at', 'parent_of(): only the post_parent is a parent', P,
   "\t\t\tif ( 'post_parent' === ( $ref['at'] ?? null ) && 'post' === ( $ref['space'] ?? null ) ) {", "\t\t\tif ( 'post' === ( $ref['space'] ?? null ) ) {", 'prop', 'testOnlyThePostParentIsAParentNotAnotherReferenceToAPost')
 e('side-held', 'side(): a held object by the hash of its ref only', P,
@@ -261,21 +271,46 @@ e('export-possible', 'line(): the second mapped form goes into the package', EXF
 e('entry-possible', 'entry(): the second mapped form of an object', INV,
   "\t\t$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;",
   "\t\t$result['mapped_possible'] = null;", 'it', B1)
-IA = "\t\t\t\t$out   = null !== $file && array( $id ) === AB_MCP_Sync_Rows::attachments_of( $file ) ? array( 'attachment', $file ) : null;"
-e('identity-attachment', 'post(): an attachment by its file', ID, IA, "\t\t\t\t$out   = null;", 'it', MAPPED)
-e('identity-unique-attachment', 'post(): a file of two attachments names neither (Codex round 2, A-1)', ID, IA, "\t\t\t\t$out   = null !== $file ? array( 'attachment', $file ) : null;", 'it', UNIQ)
-e('identity-unique-post', 'post(): a slug of two posts of one type under one parent names neither', ID,
-  "\t\t\t\tif ( null !== $out && ! self::alone( $id, (string) $row['post_type'], (string) $row['post_name'], $parent, $theme ) ) {", "\t\t\t\tif ( false ) {", 'it', UNIQ)
-e('identity-unique-theme', 'alone(): a template of another theme is another identity', ID,
-  "\t\t\tif ( $other !== $id && ( '' === $theme || self::theme( $other ) === $theme ) ) {", "\t\t\tif ( $other !== $id ) {", 'it', UNIQ)
-e('identity-unique-term', 'term(): a slug of two terms of one taxonomy names neither', ID,
-  "\t\tif ( is_array( $row ) && '' !== (string) $row['slug'] && array( $id ) === AB_MCP_Sync_Rows::terms_by_slug( (string) $row['taxonomy'], (string) $row['slug'] ) ) {",
-  "\t\tif ( is_array( $row ) && '' !== (string) $row['slug'] ) {", 'it', 'testATermWhoseSlugIsThereTwiceNamesNothing')
-e('identity-unique-item', 'unique_item(): an item whose identity another of its menu has names nothing', ID,
-  "\t\t\t\tif ( null !== $theirs && AB_MCP_Sync_Canon::encode( $theirs ) === $mine ) {", "\t\t\t\tif ( false ) {", 'it', HEAD)
-PH = "\t\tif ( null !== $there && is_array( $terms ) && $there !== ( array() !== $terms ) ) {"
+PL = 'testTranslationsOfPolylangSharingSlugsAndAFileAreEqualByLanguage'
+e('identity-attachment', 'build(): an attachment by its file', ID,
+  "\t\t\t\t$candidates[ $id ] = 1 === count( $list ) && '' !== $list[0] && null !== $lang ? array( 'attachment', $list[0], $lang ) : null;", "\t\t\t\t$candidates[ $id ] = null;", 'it', MAPPED)
+e('identity-unique', 'unique(): an identity another object of the site has names none (Codex round 2, A-1)', ID,
+  "\t\t\tif ( null !== $identity && 1 !== $count[ AB_MCP_Sync_Canon::encode( $identity ) ] ) {", "\t\t\tif ( false ) {", 'it', UNIQ)
+e('identity-unique-attachment', 'build(): the files of the attachments unique', ID,
+  "\t\t$index['posts'] = self::unique( $candidates );", "\t\t$index['posts'] = $candidates;", 'it', UNIQ)
+e('identity-unique-term', 'build(): the slugs of the terms unique', ID,
+  "\t\t$index['terms'] = self::unique( $candidates );", "\t\t$index['terms'] = $candidates;", 'it', 'testATermWhoseSlugIsThereTwiceNamesNothing')
+e('identity-unique-level', 'levels(): each level unique over its finished identities (Codex round 3, 1)', ID,
+  "\t\t\tforeach ( self::unique( $made ) as $id => $identity ) {", "\t\t\tforeach ( $made as $id => $identity ) {", 'it', HEAD)
+e('identity-parent', 'levels(): an object with the identity of its parent', ID,
+  "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, $out[ $up ] );", "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, array() );", 'it', UNIQ)
+e('identity-parent-none', 'levels(): under a parent without an identity, none', ID,
+  "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, $out[ $up ] );", "\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, $row, $out[ $up ] ?? array() );", 'it', UNIQ)
+e('identity-parent-final', 'levels(): a parent only once it is final', ID,
+  "\t\t\t\t} elseif ( ! isset( $open[ $up ] ) && array_key_exists( $up, $out ) ) {", "\t\t\t\t} elseif ( true ) {", 'it', HEAD)
+e('identity-theme', 'build(): a template with its theme', ID,
+  "\t\t\t\t\t$theme = array() === $list ? '' : ( 1 === count( $list ) ? $list[0] : null );", "\t\t\t\t\t$theme = '';", 'it', UNIQ)
+PM = "\t\t\t\treturn '' === $row['post_name'] || null === $theme || null === $lang ? null : array( 'post', $row['post_type'], $theme, $up, $row['post_name'], $lang );"
+e('identity-slug', 'build(): a post without a slug has no identity', ID, PM, PM.replace("'' === $row['post_name'] || ", ''), 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
+e('identity-language', 'build(): a post with its language (Codex round 3, B2)', ID, PM, PM.replace("$row['post_name'], $lang );", "$row['post_name'], '' );"), 'it', PL)
+e('identity-polylang', 'lang(): the language of Polylang', ID,
+  "\t\tif ( array() !== $polylang ) {", "\t\tif ( false ) {", 'it', PL)
+e('identity-wpml', 'lang(): else the language of WPML', ID,
+  "\t\tif ( array() !== $wpml ) {", "\t\tif ( false ) {", 'it', 'testTheLanguagesOfWpmlNameTranslationsApart')
+e('identity-line-language', 'read(): the line of a post with its language', DK,
+  "\t\tif ( '' !== $language ) {\n\t\t\t$identity['language'] = null === $language ? '?' : (string) $language;\n\t\t}\n\t\treturn AB_MCP_Sync_Canon::finish( 'post',", "\t\tif ( false ) {\n\t\t\t$identity['language'] = null === $language ? '?' : (string) $language;\n\t\t}\n\t\treturn AB_MCP_Sync_Canon::finish( 'post',", 'it', PL)
+e('identity-open', 'identity_fits(): a line without a language is whole', IM,
+  "\t\t$needs = array_diff( $want, self::IDENTITY_OPEN[ $kind ] ?? array() );", "\t\t$needs = $want;", 'it', MAPPED)
+PH = "\t\tif ( null !== $there && ( false !== $there ) !== $terms ) {"
 e('possible-hit', 'hit(): a whole number names the object it hits by its identity', ID, PH, "\t\tif ( false ) {", 'it', B1)
-e('possible-both', 'hit(): a number that hits a post and a term names neither', ID, PH, "\t\tif ( null !== $there && is_array( $terms ) && ( $there || array() !== $terms ) ) {", 'it', 'testANumberThatHitsAPostAndATermNamesNeither')
+e('possible-both', 'hit(): a number that hits a post and a term names neither', ID, PH, "\t\tif ( null !== $there && ( false !== $there || $terms ) ) {", 'it', 'testANumberThatHitsAPostAndATermNamesNeither')
+VW = 'testAValueIsMappedOnlyAsItIsWritten'
+e('possible-plain', 'numbers_of(): only a number in its plain spelling (Codex round 3, A1)', ID,
+  "\t\t\tif ( 1 === preg_match( '/^[1-9][0-9]{0,17}\\z/', $part ) ) {", "\t\t\tif ( 1 === preg_match( '/^[0-9]{1,18}\\z/', $part ) ) {", 'it', VW)
+e('possible-parts', 'numbers_of(): every part of the value kept', ID,
+  "\t\t$parts = is_int( $value ) ? array( (string) $value ) : preg_split( '/([0-9]+)/', $value, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY );", "\t\t$parts = array_map( 'strval', AB_MCP_Sync_Refs::numbers( $value ) );", 'it', VW)
+e('possible-type', 'numbers_of(): a number and a text apart', ID,
+  "\t\t\t'~possible' => is_int( $value ) ? 'number' : 'text',", "\t\t\t'~possible' => 'value',", 'it', VW)
 e('possible-json', 'stored(): stored JSON by the paths of its tree', ID,
   "\t\t\tif ( 1 === count( $parts ) && is_array( $parts[0] ) && isset( $parts[0]['~json'] ) && array_key_exists( 'v', $parts[0] ) ) {", "\t\t\tif ( false ) {", 'it', B1)
 e('possible-php', 'stored(): a serialized value key by key', ID,
@@ -286,21 +321,18 @@ e('possible-inside', 'inside(): a text that holds JSON of no producer by its val
   "\t\t$out   = self::noted( $inner, $at, $set, $ctx, $found, $layers + 1, 0 );", "\t\t$out   = $inner;", 'it', B1)
 e('possible-flat', 'flat(): a part that is text again by its parts', ID,
   "\t\t\t} elseif ( is_array( $part ) && array( '~s' ) === array_keys( $part ) && is_array( $part['~s'] ) ) {", "\t\t\t} elseif ( false ) {", 'it', B1)
-e('identity-parent', 'post(): a post with the identity of its parents', ID,
-  "\t\t\t\t$up     = 0 === $parent ? array() : self::post( $parent, $ctx, $depth + 1 );", "\t\t\t\t$up     = 0 === $parent ? array() : null;", 'it', MAPPED)
-e('identity-slug', 'post(): a post without a slug has no identity', ID,
-  "\t\t\t} elseif ( '' !== (string) $row['post_name'] ) {", "\t\t\t} elseif ( true ) {", 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
-e('identity-term', 'term(): a term by taxonomy and slug', ID,
-  "\t\t\t$out = array( 'term', (string) $row['taxonomy'], (string) $row['slug'] );", "\t\t\t$out = array( 'term', (string) $row['term_id'] );", 'it', MAPPED)
+e('identity-term', 'build(): a term by taxonomy and slug', ID,
+  "\t\t\t$candidates[ $id . \"\\0\" . $row['taxonomy'] ] = '' === (string) $row['slug'] || null === $lang ? null : array( 'term', (string) $row['taxonomy'], (string) $row['slug'], $lang );",
+  "\t\t\t$candidates[ $id . \"\\0\" . $row['taxonomy'] ] = array( 'term', (string) $row['term_id'] );", 'it', MAPPED)
 e('identity-unresolved', 'map(): a reference without an identity gives no mapped form', ID,
   "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = false;", "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = true;", 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
 e('identity-ref', 'map(): a reference names its target by identity', ID,
   "\t\t\tunset( $value['id'] );\n\t\t\treturn array( 'as' => $as ) + $value;", "\t\t\treturn array( 'as' => $as ) + $value;", 'it', MAPPED)
 e('identity-menu-target', 'item(): a menu item with the identity of its target', DK,
   "\t\t\t'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),", "\t\t\t'target'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
-CL = "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $label );"
-e('identity-custom-url', 'target(): a custom link by the neutral form of its address', ID, CL, "\t\t\t\treturn array( 'custom', (string) $label );", 'it', 'testACustomLinkIsNamedByItsAddress')
-e('identity-custom-label', 'target(): a custom link by its label as well (Codex round 2, A-1)', ID, CL, "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", 'it', HEAD)
+CL = "\t\t\t\t\t\t$target = array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $m['~title'] );"
+e('identity-custom-url', 'build(): a custom link by the neutral form of its address', ID, CL, "\t\t\t\t\t\t$target = array( 'custom', (string) $m['~title'] );", 'it', 'testACustomLinkIsNamedByItsAddress')
+e('identity-custom-label', 'build(): a custom link by its label as well (Codex round 2, A-1)', ID, CL, "\t\t\t\t\t\t$target = array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", 'it', HEAD)
 
 # ------------------------------------------------------------------ tool
 e('plan-action', 'plan(): confirm and discard only', T,

@@ -203,6 +203,15 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'nav_menu_item':
 			$ab_it_out = wp_update_nav_menu_item( (int) $ab_it_step['menu'], 0, $ab_it_step['args'] );
 			break;
+		case 'register_taxonomy':
+			// A taxonomy of a plugin this site does not run (the data of Polylang, nachgebildet).
+			$ab_it_out = register_taxonomy( $ab_it_step['name'], $ab_it_step['types'], array( 'public' => false ) ) instanceof WP_Taxonomy;
+			break;
+		case 'raw_slug':
+			// A slug as the plugin writes it past wp_unique_post_slug() (shared slugs of translations).
+			$ab_it_out = $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, array( 'post_name' => $ab_it_step['slug'] ), array( 'ID' => (int) $ab_it_step['post'] ) );
+			clean_post_cache( (int) $ab_it_step['post'] );
+			break;
 		case 'staging_raw':
 			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
 			break;

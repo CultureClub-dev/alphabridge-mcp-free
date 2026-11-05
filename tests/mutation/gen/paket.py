@@ -1413,9 +1413,9 @@ e('paket/p3r1-unknown-taxonomy', 'term(): a taxonomy WordPress does not know, ma
 e('paket/p3r1-identity-fits', 'line_shaped(): the identity as its kind has it (two sites)', IM,
   "\t\tif ( ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-fields', 'identity_fits(): exactly the fields of the kind (two sites)', IM,
-  "\t\tif ( $given !== $want ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+  "\t\tif ( array() !== array_diff( $given, $want ) || array() !== array_diff( $needs, $given ) ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-typed', 'identity_fits(): each field typed (two sites)', IM,
-  "\t\t\tif ( ! self::typed( $identity[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+  "\t\t\tif ( array_key_exists( $field, $identity ) && ! self::typed( $identity[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-id-ref', 'identity_fits(): a post, term or menu (item) by its id (two sites)', IM,
   "\t\tif ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-widget', 'identity_fits(): a widget area by its area (two sites)', IM,

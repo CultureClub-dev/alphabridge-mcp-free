@@ -424,6 +424,12 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 			'post_name' => $row['post_name'],
 			'theme'     => $theme,
 		);
+		// Its language where the rows of the site say one (Polylang, WPML;
+		// Codex round 3, B2): translations may share a slug.
+		$language = AB_MCP_Sync_Identity::language( 'post', $id, $ctx );
+		if ( '' !== $language ) {
+			$identity['language'] = null === $language ? '?' : (string) $language;
+		}
 		return AB_MCP_Sync_Canon::finish( 'post', (string) $id, $identity, $form, $acc );
 	}
 
@@ -589,17 +595,17 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 			'row'  => self::term_form( $row, $ctx, $acc, $this->kind() ),
 			'meta' => self::meta_form( $meta, $ctx, $acc, $this->kind(), false ),
 		);
-		$form = $this->more( $row, $form, $acc );
-		return AB_MCP_Sync_Canon::finish(
-			$this->kind(),
-			(string) $row['term_id'],
-			array(
-				'taxonomy' => $row['taxonomy'],
-				'slug'     => $row['slug'],
-			),
-			$form,
-			$acc
+		$form     = $this->more( $row, $form, $acc );
+		$identity = array(
+			'taxonomy' => $row['taxonomy'],
+			'slug'     => $row['slug'],
 		);
+		// Its language where the rows of the site say one (Codex round 3, B2).
+		$language = 'term' === $this->kind() ? AB_MCP_Sync_Identity::language( 'term', (int) $row['term_id'], $ctx, (int) $row['term_taxonomy_id'] ) : '';
+		if ( '' !== $language ) {
+			$identity['language'] = null === $language ? '?' : (string) $language;
+		}
+		return AB_MCP_Sync_Canon::finish( $this->kind(), (string) $row['term_id'], $identity, $form, $acc );
 	}
 
 	/**

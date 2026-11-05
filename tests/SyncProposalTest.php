@@ -342,6 +342,26 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 0, $r['counts']['ambiguous'] );
 	}
 
+	public function testAnEqualSecondMappedFormUniqueOnBothSidesOfAPathIsAPair(): void {
+		// Other ids of the images in their meta: the mapped forms differ, the second ones pair.
+		$r = self::match(
+			array( self::page( '34', 'dup', self::h( 'a' ), null, array( 'mapped' => self::h( 's1' ), 'mapped_possible' => self::h( 'p1' ) ) ), self::page( '35', 'dup', self::h( 'b' ), null, array( 'mapped' => self::h( 's2' ), 'mapped_possible' => self::h( 'p2' ) ) ) ),
+			array( self::page( '12', 'dup', self::h( 'c' ), null, array( 'mapped' => self::h( 'l2' ), 'mapped_possible' => self::h( 'p2' ) ) ), self::page( '13', 'dup', self::h( 'd' ), null, array( 'mapped' => self::h( 'l1' ), 'mapped_possible' => self::h( 'p1' ) ) ) )
+		);
+		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ), 'Codex round 3, B3.' );
+		self::assertSame( 0, $r['counts']['ambiguous'] );
+	}
+
+	public function testTranslationsSharingASlugAreTwoObjects(): void {
+		$lang = static fn( string $l ): array => array( 'identity' => array( 'post_name' => 'kontakt', 'post_type' => 'page', 'theme' => '', 'language' => $l ) );
+		$r    = self::match(
+			array( array_merge( self::page( '34', 'kontakt', self::h( 'de' ) ), $lang( 'de' ) ), array_merge( self::page( '35', 'kontakt', self::h( 'en' ) ), $lang( 'en' ) ), self::page( '36', 'team', self::h( 't' ), '35' ) ),
+			array( array_merge( self::page( '12', 'kontakt', self::h( 'en-changed' ) ), $lang( 'en' ) ), array_merge( self::page( '13', 'kontakt', self::h( 'de' ) ), $lang( 'de' ) ), self::page( '14', 'team', self::h( 't' ), '12' ) )
+		);
+		self::assertSame( array( '34' => '13', '35' => '12', '36' => '14' ), self::paired( $r ), 'By language (Codex round 3, B2); the page under one of them has a whole path.' );
+		self::assertSame( 0, $r['counts']['ambiguous'] + $r['counts']['uncertain'] );
+	}
+
 	public function testAnEqualMappedFormTwiceOnASideIsNoPair(): void {
 		foreach ( array( 's', 'l' ) as $twice ) {
 			$s = array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 's' === $twice ? 'a' : 'b' ) ) );
@@ -588,12 +608,20 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( array( '5' => '15', '51' => '152', '52' => '151' ), self::paired( $r ), 'Kontakt with Kontakt, whatever its position.' );
 	}
 
-	public function testTheSameTargetTwiceUnderOneParentIsAmbiguous(): void {
+	public function testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart(): void {
 		$r = self::match(
 			array( self::menu( '5', 'main' ), self::item( '51', 5, 'shop', 1, 'a' ), self::item( '52', 5, 'shop', 2, 'b' ) ),
 			array( self::menu( '15', 'main' ), self::item( '151', 15, 'shop', 1, 'c' ), self::item( '152', 15, 'shop', 2, 'd' ) )
 		);
-		self::assertSame( 1, $r['counts']['ambiguous'] );
+		self::assertSame( 1, $r['counts']['uncertain'] );
+		// The same forms on both sides: only the place tells them apart, which is no identity (Codex round 3, 1).
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::item( '51', 5, 'shop', 2, 'a' ), self::item( '52', 5, 'shop', 3, 'b' ) ),
+			array( self::menu( '15', 'main' ), self::item( '151', 15, 'shop', 2, 'a' ), self::item( '152', 15, 'shop', 3, 'b' ) )
+		);
+		self::assertSame( 1, $r['counts']['uncertain'] );
+		self::assertSame( 1, $r['counts']['equal'], 'Only the menu is equal.' );
+		self::assertStringContainsString( 'only its place tells them apart', self::of( $r, 'uncertain' )[0]['reason'] );
 		$r = self::match(
 			array( self::menu( '5', 'main' ), self::item( '51', 5, 'shop', 1, 'a', 'top' ), self::item( '52', 5, 'shop', 2, 'b', 'other' ) ),
 			array( self::menu( '15', 'main' ), self::item( '151', 15, 'shop', 1, 'c', 'top' ), self::item( '152', 15, 'shop', 2, 'd', 'other' ) )

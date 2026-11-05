@@ -1165,10 +1165,10 @@ final class SyncProposalTest extends TestCase {
 		$moved = self::entry_by_live( $answer['all'], 'menu_item', (string) $konto );
 		self::assertSame( 'live_only', $moved['category'], 'Under another heading: another item, never equal.' );
 		self::assertSame( 'staging_only', self::entry_by_staging( $answer['all'], 'menu_item', (string) $b['konto'] )['category'] );
-		// One heading twice: each paired only by its whole form, unique on both sides (its place).
-		foreach ( array( 'twin_1' => $twin_1, 'twin_2' => $twin_2 ) as $name => $live ) {
-			self::assertSame( (string) $b[ $name ], self::entry_by_live( $answer['all'], 'menu_item', (string) $live )['staging']['ref'], $name );
-		}
+		// One heading twice: only its place tells them apart, which is no identity (Codex round 3, 1).
+		$twins = self::entry_with_live( $answer['all'], 'menu_item', (string) $twin_1 );
+		self::assertSame( 'uncertain', $twins['category'] );
+		self::assertEqualsCanonicalizing( array( (string) $twin_1, (string) $twin_2 ), array_map( 'strval', array_column( $twins['candidates']['live'], 'ref' ) ) );
 		$child = self::entry_with_live( $answer['all'], 'menu_item', (string) $unter );
 		self::assertSame( 'uncertain', $child['category'], 'Under a heading that is there twice: its parent names nothing.' );
 		self::assertStringContainsString( 'two links of one address and label', $child['reason'] );
@@ -1196,8 +1196,9 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $post )['category'], 'Its category names nothing here: no equal.' );
 		self::assertSame( 'live_only', self::entry_by_live( $answer['all'], 'term', (string) $twin )['category'], 'The slug twice here: the other one is paired by its whole form only.' );
 		\AB_MCP_Sync_Identity::reset();
-		self::assertNull( \AB_MCP_Sync_Identity::term( $news, 'category' ) );
-		self::assertNull( \AB_MCP_Sync_Identity::term( $twin ) );
+		$ctx = \AB_MCP_Sync_Canon::context( array( home_url() ) );
+		self::assertNull( \AB_MCP_Sync_Identity::term( $news, $ctx, 'category' ) );
+		self::assertNull( \AB_MCP_Sync_Identity::term( $twin, $ctx ) );
 	}
 
 	public function testAnIdentityAnotherObjectOfTheSiteHasNamesNone(): void {
@@ -1213,6 +1214,13 @@ final class SyncProposalTest extends TestCase {
 		$one   = $named( self::page( 'kontakt', 'K' ), 'kontakt' );
 		$two   = $named( self::page( 'kontakt-zwei', 'K2', array( 'post_status' => 'draft' ) ), 'kontakt' );
 		$alone = $named( self::page( 'team', 'T' ), 'team' );
+		// Under the twins: a page without an identity; under two other parents: two.
+		$under = $named( self::page( 'unter-zwilling', 'U', array( 'post_parent' => $one ) ), 'unter-zwilling' );
+		$infos = array();
+		foreach ( array( 'a-eltern', 'b-eltern' ) as $parent ) {
+			$up       = $named( self::page( $parent, 'P' ), $parent );
+			$infos[]  = $named( self::page( 'info-' . $parent, 'I', array( 'post_parent' => $up ) ), 'info' );
+		}
 		$index = array();
 		foreach ( array( 'theme-a', 'theme-b' ) as $theme ) {
 			$index[ $theme ] = $named( array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index' ), 'index' );
@@ -1226,15 +1234,182 @@ final class SyncProposalTest extends TestCase {
 		\AB_MCP_Sync_Identity::reset();
 		self::assertNull( \AB_MCP_Sync_Identity::post( $one, $ctx ), 'A slug twice under one parent.' );
 		self::assertNull( \AB_MCP_Sync_Identity::post( $two, $ctx ) );
-		self::assertSame( array( 'post', 'page', '', array(), 'team' ), \AB_MCP_Sync_Identity::post( $alone, $ctx ) );
-		self::assertSame( array( 'post', 'wp_template', 'theme-a', array(), 'index' ), \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'The template of another theme is another identity.' );
+		self::assertSame( array( 'post', 'page', '', array(), 'team', '' ), \AB_MCP_Sync_Identity::post( $alone, $ctx ) );
+		self::assertNull( \AB_MCP_Sync_Identity::post( $under, $ctx ), 'Under a parent without an identity.' );
+		foreach ( $infos as $info ) {
+			self::assertNotNull( \AB_MCP_Sync_Identity::post( $info, $ctx ), 'One slug under two parents: two identities.' );
+		}
+		self::assertSame( array( 'post', 'wp_template', 'theme-a', array(), 'index', '' ), \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'The template of another theme is another identity.' );
 		self::assertNull( \AB_MCP_Sync_Identity::post( $files['f1'], $ctx ), 'One file twice.' );
-		self::assertSame( array( 'attachment', '2026/10/other.jpg' ), \AB_MCP_Sync_Identity::post( $files['f3'], $ctx ) );
+		self::assertSame( array( 'attachment', '2026/10/other.jpg', '' ), \AB_MCP_Sync_Identity::post( $files['f3'], $ctx ) );
 		$again = $named( array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index' ), 'index' );
 		wp_set_object_terms( $again, array( 'theme-a' ), 'wp_theme' );
 		\AB_MCP_Sync_Identity::reset();
 		self::assertNull( \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'One template of one theme twice.' );
 		self::assertNotNull( \AB_MCP_Sync_Identity::post( $index['theme-b'], $ctx ) );
+	}
+
+	public function testASubmenuIsEqualAndHeadingsTwiceAreUncertainInAnyOrder(): void {
+		self::pair();
+		$link = static fn( string $title, string $url, int $position, $parent = 0 ): array => array( 'menu-item-title' => $title, 'menu-item-url' => $url, 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => $position, 'menu-item-parent-id' => $parent );
+		$menu = (int) wp_create_nav_menu( 'Haupt' );
+		$a    = array();
+		$a['privat']  = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Privat', '#', 1 ) );
+		$a['kontakt'] = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Kontakt', 'https://example.org/kontakt', 2, $a['privat'] ) );
+		$a['hilfe']   = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Hilfe', 'https://example.org/hilfe', 3, $a['privat'] ) );
+		$a['firma']   = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Firma', '#', 4 ) );
+		$a['service'] = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Service', '#', 5, $a['firma'] ) );
+		$a['zwilling'] = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Service', '#', 6, $a['firma'] ) );
+		$a['anfrage'] = (int) wp_update_nav_menu_item( $menu, 0, $link( 'Anfrage', 'https://example.org/anfrage', 7, $a['zwilling'] ) );
+		// On staging each level the other way round: other ids in another order.
+		$b = self::b(
+			array(
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Firma', '#', 4 ), 'as' => 'firma' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Privat', '#', 1 ), 'as' => 'privat' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Service', '#', 6, '$firma' ), 'as' => 'zwilling' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Service', '#', 5, '$firma' ), 'as' => 'service' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Hilfe', 'https://example.org/hilfe', 3, '$privat' ), 'as' => 'hilfe' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Kontakt', 'https://example.org/kontakt', 2, '$privat' ), 'as' => 'kontakt' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link( 'Anfrage', 'https://example.org/anfrage', 7, '$zwilling' ), 'as' => 'anfrage' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'privat', 'kontakt', 'hilfe', 'firma' ) as $name ) {
+			$entry = self::entry_by_live( $answer['all'], 'menu_item', (string) $a[ $name ] );
+			self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $name );
+			self::assertSame( 'equal', $entry['category'], $name . ': a submenu of other items (Codex round 3, B1).' );
+		}
+		foreach ( array( 'service', 'zwilling', 'anfrage' ) as $name ) {
+			self::assertSame( 'uncertain', self::entry_with_live( $answer['all'], 'menu_item', (string) $a[ $name ] )['category'], $name . ': no differs, no equal (Codex round 3, A2).' );
+		}
+		// The identities are the same whatever is asked first.
+		$ctx   = \AB_MCP_Sync_Canon::context( array( home_url() ) );
+		$ask   = static function ( array $ids ) use ( $ctx ): array {
+			\AB_MCP_Sync_Identity::reset();
+			$out = array();
+			foreach ( $ids as $id ) {
+				$out[ $id ] = array( \AB_MCP_Sync_Identity::post( $id, $ctx ), \AB_MCP_Sync_Identity::menu_item( $id, $ctx ) );
+			}
+			ksort( $out );
+			return $out;
+		};
+		$first = $ask( array_values( $a ) );
+		self::assertSame( $first, $ask( array_reverse( array_values( $a ) ) ) );
+		self::assertNull( $first[ $a['service'] ][0] );
+		self::assertNull( $first[ $a['anfrage'] ][1], 'Under a heading that is there twice: its line names no parent.' );
+		self::assertNotNull( $first[ $a['hilfe'] ][0] );
+	}
+
+	public function testAValueIsMappedOnlyAsItIsWritten(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		$image = static fn( string $key ): array => array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => $key, 'post_name' => $key, 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE );
+		$a     = array();
+		foreach ( array( 'i1' => '2026/10/i1.jpg', 'i2' => '2026/10/i2.jpg' ) as $key => $file ) {
+			$a[ $key ] = (int) wp_insert_post( wp_slash( $image( $key ) ) );
+			update_post_meta( $a[ $key ], '_wp_attached_file', $file );
+		}
+		$pages = array(
+			'null-davor'  => array( '0' . $a['i1'], '{$i1}' ),
+			'mit-null'    => array( $a['i1'] . ',0,' . $a['i2'], '{$i1},{$i2}' ),
+			'zahl-text'   => array( (string) wp_json_encode( array( 'image' => $a['i1'] ) ), '{"image":"{$i1}"}' ),
+		);
+		$steps = array();
+		foreach ( array( 'i1' => '2026/10/i1.jpg', 'i2' => '2026/10/i2.jpg' ) as $key => $file ) {
+			$steps[] = array( 'op' => 'insert_post', 'args' => $image( $key ), 'as' => $key );
+			$steps[] = array( 'op' => 'add_meta', 'post' => '$' . $key, 'key' => '_wp_attached_file', 'value' => $file );
+		}
+		foreach ( $pages as $slug => list( $here, $there ) ) {
+			$a[ $slug ] = (int) wp_insert_post( wp_slash( self::page( $slug, 'A field.' ) ) );
+			update_post_meta( $a[ $slug ], 'feld', wp_slash( $here ) );
+			$steps[] = array( 'op' => 'insert_post', 'args' => self::page( $slug, 'A field.' ), 'as' => str_replace( '-', '_', $slug ) );
+			$steps[] = array( 'op' => 'add_meta', 'post' => '$' . str_replace( '-', '_', $slug ), 'key' => 'feld', 'value' => $there );
+		}
+		self::b( $steps );
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'null-davor' => '"007" against "7"', 'mit-null' => '"7,0,9" against "7,9"', 'zahl-text' => 'a number against a text' ) as $slug => $what ) {
+			self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $a[ $slug ] )['category'], $what . ' (Codex round 3, A1).' );
+		}
+	}
+
+	public function testTranslationsOfPolylangSharingSlugsAndAFileAreEqualByLanguage(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		register_taxonomy( 'language', array( 'page', 'attachment' ), array( 'public' => false ) );
+		try {
+			$image = static fn( string $l ): array => array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild ' . $l, 'post_name' => 'bild-' . $l, 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE );
+			$a     = array();
+			$steps = array( array( 'op' => 'register_taxonomy', 'name' => 'language', 'types' => array( 'page', 'attachment' ) ) );
+			foreach ( array( 'de', 'en' ) as $l ) {
+				$a[ 'lang_' . $l ] = (int) wp_insert_term( strtoupper( $l ), 'language', array( 'slug' => $l ) )['term_id'];
+				$steps[]           = array( 'op' => 'insert_term', 'name' => strtoupper( $l ), 'taxonomy' => 'language', 'args' => array( 'slug' => $l ), 'as' => 'lang_' . $l );
+			}
+			foreach ( array( 'de', 'en' ) as $l ) {
+				// One file, translated (Polylang: one attachment per language).
+				$a[ 'bild_' . $l ] = (int) wp_insert_post( wp_slash( $image( $l ) ) );
+				update_post_meta( $a[ 'bild_' . $l ], '_wp_attached_file', '2026/10/bild.jpg' );
+				wp_set_object_terms( $a[ 'bild_' . $l ], array( $a[ 'lang_' . $l ] ), 'language' );
+				$a[ 'kontakt_' . $l ] = (int) wp_insert_post( wp_slash( self::page( 'kontakt-' . $l, 'Kontakt ' . $l ) ) );
+				$a[ 'team_' . $l ]    = (int) wp_insert_post( wp_slash( self::page( 'team-' . $l, 'Team ' . $l, array( 'post_parent' => $a[ 'kontakt_' . $l ] ) ) ) );
+				foreach ( array( 'kontakt', 'team' ) as $page ) {
+					// One slug for both translations (Polylang Pro, shared slugs).
+					$GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, array( 'post_name' => $page ), array( 'ID' => $a[ $page . '_' . $l ] ) );
+					clean_post_cache( $a[ $page . '_' . $l ] );
+					wp_set_object_terms( $a[ $page . '_' . $l ], array( $a[ 'lang_' . $l ] ), 'language' );
+				}
+				update_post_meta( $a[ 'kontakt_' . $l ], '_thumbnail_id', (string) $a[ 'bild_' . $l ] );
+				$steps = array_merge(
+					$steps,
+					array(
+						array( 'op' => 'insert_post', 'args' => $image( $l ), 'as' => 'bild_' . $l ),
+						array( 'op' => 'add_meta', 'post' => '$bild_' . $l, 'key' => '_wp_attached_file', 'value' => '2026/10/bild.jpg' ),
+						array( 'op' => 'set_terms', 'post' => '$bild_' . $l, 'terms' => array( '$lang_' . $l ), 'taxonomy' => 'language' ),
+						array( 'op' => 'insert_post', 'args' => self::page( 'kontakt-' . $l, 'Kontakt ' . $l . ( 'en' === $l ? ', changed on staging' : '' ) ), 'as' => 'kontakt_' . $l ),
+						array( 'op' => 'insert_post', 'args' => self::page( 'team-' . $l, 'Team ' . $l, array( 'post_parent' => '$kontakt_' . $l ) ), 'as' => 'team_' . $l ),
+						array( 'op' => 'raw_slug', 'post' => '$kontakt_' . $l, 'slug' => 'kontakt' ),
+						array( 'op' => 'raw_slug', 'post' => '$team_' . $l, 'slug' => 'team' ),
+						array( 'op' => 'set_terms', 'post' => '$kontakt_' . $l, 'terms' => array( '$lang_' . $l ), 'taxonomy' => 'language' ),
+						array( 'op' => 'set_terms', 'post' => '$team_' . $l, 'terms' => array( '$lang_' . $l ), 'taxonomy' => 'language' ),
+						array( 'op' => 'add_meta', 'post' => '$kontakt_' . $l, 'key' => '_thumbnail_id', 'value' => '{$bild_' . $l . '}' ),
+					)
+				);
+			}
+			$b      = self::b( $steps );
+			$answer = self::proposal( self::staged() );
+			foreach ( array( 'kontakt_de' => 'equal', 'kontakt_en' => 'differs', 'team_de' => 'equal', 'team_en' => 'equal' ) as $name => $category ) {
+				$entry = self::entry_by_live( $answer['all'], 'post', (string) $a[ $name ] );
+				self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $name . ': by its language (Codex round 3, B2).' );
+				self::assertSame( $category, $entry['category'], $name . ': its image, its parent by language.' );
+			}
+		} finally {
+			unregister_taxonomy( 'language' );
+		}
+	}
+
+	public function testTheLanguagesOfWpmlNameTranslationsApart(): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'icl_translations';
+		$wpdb->query( "CREATE TABLE `{$table}` ( translation_id bigint(20) NOT NULL AUTO_INCREMENT, element_type varchar(60) NOT NULL DEFAULT 'post_post', element_id bigint(20) DEFAULT NULL, trid bigint(20) NOT NULL, language_code varchar(7) NOT NULL, source_language_code varchar(7) DEFAULT NULL, PRIMARY KEY (translation_id) )" ); // phpcs:ignore WordPress.DB
+		try {
+			$files = array();
+			foreach ( array( 'de', 'en' ) as $i => $l ) {
+				$files[ $l ] = (int) wp_insert_post( wp_slash( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild ' . $l, 'post_name' => 'bild-' . $l, 'post_mime_type' => 'image/jpeg' ) ) );
+				update_post_meta( $files[ $l ], '_wp_attached_file', '2026/10/bild.jpg' );
+				$wpdb->insert( $table, array( 'element_type' => 'post_attachment', 'element_id' => $files[ $l ], 'trid' => 1, 'language_code' => $l ) );
+			}
+			$news = wp_insert_term( 'News', 'category', array( 'slug' => 'news' ) );
+			$wpdb->insert( $table, array( 'element_type' => 'tax_category', 'element_id' => (int) $news['term_taxonomy_id'], 'trid' => 2, 'language_code' => 'de' ) );
+			$ctx = \AB_MCP_Sync_Canon::context( array( home_url() ) );
+			\AB_MCP_Sync_Identity::reset();
+			self::assertSame( array( 'attachment', '2026/10/bild.jpg', 'de' ), \AB_MCP_Sync_Identity::post( $files['de'], $ctx ), 'One file in two languages: two identities.' );
+			self::assertSame( array( 'attachment', '2026/10/bild.jpg', 'en' ), \AB_MCP_Sync_Identity::post( $files['en'], $ctx ) );
+			self::assertSame( array( 'term', 'category', 'news', 'de' ), \AB_MCP_Sync_Identity::term( (int) $news['term_id'], $ctx ) );
+			self::assertSame( 'en', \AB_MCP_Sync_Identity::language( 'post', $files['en'], $ctx ) );
+		} finally {
+			$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" ); // phpcs:ignore WordPress.DB
+			\AB_MCP_Sync_Identity::reset();
+		}
 	}
 
 	/* --------------------------------------- possible references (B-1) */

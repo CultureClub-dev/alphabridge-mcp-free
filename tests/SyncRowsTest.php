@@ -90,9 +90,12 @@ final class SyncRowsTest extends TestCase {
 			'options'      => AB_MCP_Sync_Rows::options( 0, 10 ),
 			'user_login'   => AB_MCP_Sync_Rows::user_login( 1 ),
 			'taxonomies'   => AB_MCP_Sync_Rows::term_taxonomies( 3 ),
-			'posts_named'  => AB_MCP_Sync_Rows::posts_named( 'page', 'kontakt', 0 ),
-			'attachments'  => AB_MCP_Sync_Rows::attachments_of( '2026/10/bild.jpg' ),
-			'by_slug'      => AB_MCP_Sync_Rows::terms_by_slug( 'category', 'news' ),
+			'post_index'   => AB_MCP_Sync_Rows::post_index( 0, 10 ),
+			'post_type_of' => AB_MCP_Sync_Rows::post_type_of( 5 ),
+			'meta_by_key'  => AB_MCP_Sync_Rows::meta_by_key( '_wp_attached_file', 0, 10 ),
+			'menu_items'   => AB_MCP_Sync_Rows::menu_items( array( '_menu_item_type' ) ),
+			'relations'    => AB_MCP_Sync_Rows::relations( 'language' ),
+			'wpml'         => AB_MCP_Sync_Rows::wpml_languages(),
 		);
 	}
 
@@ -115,12 +118,14 @@ final class SyncRowsTest extends TestCase {
 	public function testNoneIsFalseForOneRowAndEmptyForMany(): void {
 		self::db()->answer = array();
 		$all               = self::all();
-		foreach ( array( 'post', 'term', 'user_login' ) as $one ) {
+		foreach ( array( 'post', 'term', 'user_login', 'post_type_of' ) as $one ) {
 			self::assertFalse( $all[ $one ], $one );
 		}
-		foreach ( array( 'post_ids', 'meta', 'object_terms', 'term_objects', 'terms', 'options', 'taxonomies', 'posts_named', 'attachments', 'by_slug' ) as $many ) {
+		foreach ( array( 'post_ids', 'meta', 'object_terms', 'term_objects', 'terms', 'options', 'taxonomies', 'post_index', 'meta_by_key', 'relations', 'wpml' ) as $many ) {
 			self::assertSame( array(), $all[ $many ], $many );
 		}
+		self::assertSame( array( 'titles' => array(), 'meta' => array() ), $all['menu_items'] );
+		self::assertNull( AB_MCP_Sync_Rows::menu_items( array() ), 'No key asked: nothing to read.' );
 		self::assertSame( array(), AB_MCP_Sync_Rows::post_ids( array(), 0, 10 ), 'No type asked: no query.' );
 	}
 

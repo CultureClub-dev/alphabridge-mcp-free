@@ -40,11 +40,14 @@
  * references so as well, mapped_same(), Codex round 2, B-1), so the same
  * objects with other ids on the two sites are equal. No pair by exclusion:
  * one object a side of the same identity and path is a pair; more on a path
- * are paired only where an equal mapped form is unique on both sides, the
- * rest is ambiguous; the same identity left on another path, a post without
- * a slug or with a path of parents not known whole ("?", Codex round 2, A-2)
- * and a menu item whose target or parent has no identity of its own are
- * uncertain. Categories (CATEGORIES): equal (both read whole,
+ * are paired only where an equal mapped form (the one with the typed
+ * references, then the one with the possible references, Codex round 3,
+ * B3) is unique on both sides, the rest is ambiguous; the same identity left
+ * on another path, a post without a slug or with a path of parents not known
+ * whole ("?", Codex round 2, A-2), a menu item whose target or parent has no
+ * identity of its own, and menu items of one identity in one menu (only
+ * their place tells them apart, Codex round 3, A2) are uncertain. A post or
+ * term carries its language where its site names one (Codex round 3, B2). Categories (CATEGORIES): equal (both read whole,
  * the same mapped form: confirmed as active), differs (the same identity,
  * other content, or a reference without a target: confirmed as unclear),
  * ambiguous and uncertain (only a person's choice pairs them), realign (a
@@ -1152,10 +1155,11 @@ final class AB_MCP_Sync_Proposal {
 			$id = isset( $line['identity'] ) && is_array( $line['identity'] ) ? $line['identity'] : array();
 			if ( 'post' === $line['kind'] && is_string( $line['ref'] ) && isset( $id['post_name'] ) ) {
 				$posts[ $line['ref'] ] = array(
-					'name'   => $id['post_name'],
-					'parent' => self::parent_of( $line ),
-					'type'   => (string) ( $id['post_type'] ?? '' ),
-					'theme'  => (string) ( $id['theme'] ?? '' ),
+					'name'     => $id['post_name'],
+					'parent'   => self::parent_of( $line ),
+					'type'     => (string) ( $id['post_type'] ?? '' ),
+					'theme'    => (string) ( $id['theme'] ?? '' ),
+					'language' => (string) ( $id['language'] ?? '' ),
 				);
 			}
 			if ( 'menu' === $line['kind'] && is_string( $line['ref'] ) && isset( $id['slug'] ) ) {
@@ -1259,11 +1263,12 @@ final class AB_MCP_Sync_Proposal {
 		}
 		switch ( $kind ) {
 			case 'post':
-				$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null );
+				// The language where the site says one (Codex round 3, B2): translations may share a slug.
+				$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null, $identity['language'] ?? '' );
 				break;
 			case 'term':
 			case 'menu':
-				$parts = array( $identity['taxonomy'] ?? null, $identity['slug'] ?? null );
+				$parts = array( $identity['taxonomy'] ?? null, $identity['slug'] ?? null, $identity['language'] ?? '' );
 				break;
 			case 'menu_item':
 				$slugs = array();
@@ -1308,13 +1313,13 @@ final class AB_MCP_Sync_Proposal {
 
 	/**
 	 * What a post is named by on its side apart from its id: type, theme,
-	 * slug and parent.
+	 * slug, language and parent.
 	 *
-	 * @param array $post name, parent, type, theme.
+	 * @param array $post name, parent, type, theme, language.
 	 * @return string
 	 */
 	private static function twin_key( array $post ) {
-		return AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['parent'] ) );
+		return AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['language'] ?? '', $post['parent'] ) );
 	}
 
 	/**
@@ -1374,6 +1379,15 @@ final class AB_MCP_Sync_Proposal {
 				's' => $s,
 				'l' => $l,
 			);
+		} elseif ( 'menu_item' === ( $s[0]['kind'] ?? ( $l[0]['kind'] ?? '' ) ) && ( count( $s ) > 1 || count( $l ) > 1 ) ) {
+			// One identity twice in a menu (Codex round 3, 1): only the place
+			// tells them apart, which is no identity; nothing under them names
+			// its parent either.
+			$doubt = 'Another item of its menu has the same identity on its site (two links of one address and label, or one target, under one parent), so only its place tells them apart: it is paired only by the choice of a person.';
+			$left  = array(
+				's' => $s,
+				'l' => $l,
+			);
 		} else {
 			$by_path = array();
 			foreach ( $s as $item ) {
@@ -1390,29 +1404,15 @@ final class AB_MCP_Sync_Proposal {
 					$out[] = self::pair_entry( $ss[0], $ll[0] );
 					continue;
 				}
-				// An equal mapped form that is unique on both sides of the path.
-				$hs = array_count_values( array_filter( array_column( $ss, 'mapped' ), 'is_string' ) );
-				$hl = array_count_values( array_filter( array_column( $ll, 'mapped' ), 'is_string' ) );
-				$by = array();
-				foreach ( $ll as $j => $item ) {
-					if ( null !== $item['mapped'] && 1 === ( $hl[ $item['mapped'] ] ?? 0 ) && 1 === ( $hs[ $item['mapped'] ] ?? 0 ) ) {
-						$by[ $item['mapped'] ] = $j;
-					}
-				}
-				$used = array();
-				$rest = array();
-				foreach ( $ss as $item ) {
-					if ( null !== $item['mapped'] && isset( $by[ $item['mapped'] ] ) ) {
-						$used[ $by[ $item['mapped'] ] ] = true;
-						$out[]                           = self::pair_entry( $item, $ll[ $by[ $item['mapped'] ] ] );
-						continue;
-					}
-					$rest[] = $item;
-				}
-				$rest_l = array();
-				foreach ( $ll as $j => $item ) {
-					if ( ! isset( $used[ $j ] ) ) {
-						$rest_l[] = $item;
+				// An equal mapped form that is unique on both sides of the path:
+				// the one with the typed references by identity, then the one
+				// with the possible references so as well (Codex round 3, B3).
+				$rest   = $ss;
+				$rest_l = $ll;
+				foreach ( array( 'mapped', 'mapped_possible' ) as $form ) {
+					list( $pairs, $rest, $rest_l ) = self::unique_pairs( $rest, $rest_l, $form );
+					foreach ( $pairs as $pair ) {
+						$out[] = self::pair_entry( $pair[0], $pair[1] );
 					}
 				}
 				if ( array() !== $rest && array() !== $rest_l ) {
@@ -1435,6 +1435,44 @@ final class AB_MCP_Sync_Proposal {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The objects of the two sides whose mapped form (of $form) is equal and
+	 * unique on both sides, as pairs; the rest of each side.
+	 *
+	 * @param array[] $ss   Staging objects.
+	 * @param array[] $ll   Production objects.
+	 * @param string  $form mapped or mapped_possible.
+	 * @return array pairs (staging, production), the rest of each side.
+	 */
+	private static function unique_pairs( array $ss, array $ll, $form ) {
+		$hs = array_count_values( array_filter( array_column( $ss, $form ), 'is_string' ) );
+		$hl = array_count_values( array_filter( array_column( $ll, $form ), 'is_string' ) );
+		$by = array();
+		foreach ( $ll as $j => $item ) {
+			if ( null !== $item[ $form ] && 1 === ( $hl[ $item[ $form ] ] ?? 0 ) && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {
+				$by[ $item[ $form ] ] = $j;
+			}
+		}
+		$pairs = array();
+		$used  = array();
+		$rest  = array();
+		foreach ( $ss as $item ) {
+			if ( null !== $item[ $form ] && isset( $by[ $item[ $form ] ] ) ) {
+				$used[ $by[ $item[ $form ] ] ] = true;
+				$pairs[]                        = array( $item, $ll[ $by[ $item[ $form ] ] ] );
+				continue;
+			}
+			$rest[] = $item;
+		}
+		$rest_l = array();
+		foreach ( $ll as $j => $item ) {
+			if ( ! isset( $used[ $j ] ) ) {
+				$rest_l[] = $item;
+			}
+		}
+		return array( $pairs, $rest, $rest_l );
 	}
 
 	/**
