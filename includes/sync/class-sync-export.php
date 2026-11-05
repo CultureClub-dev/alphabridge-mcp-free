@@ -283,7 +283,10 @@ final class AB_MCP_Sync_Export {
 	/**
 	 * The line of an object in a package of the inventory, from a list of
 	 * what it may carry (contract A): its identity, status and locks with
-	 * their reasons, and unless a credential holds it (a name of a
+	 * their reasons, for a row the takeover never reads the code of its
+	 * reason (reason_code, AB_MCP_Sync_Option_Schema::REASON_CODES; never a
+	 * text) and the row WordPress reads instead (target), and unless a
+	 * credential holds it (a name of a
 	 * credential, B9, a field of one in it, or any lock of the credential
 	 * check, CREDENTIAL_LOCKS), its hash, size, whether it was read whole,
 	 * what was not read, its references by id, the places of possible
@@ -302,7 +305,7 @@ final class AB_MCP_Sync_Export {
 			'identity' => $object['identity'],
 			'status'   => $object['status'],
 			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
-		);
+		) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );
 		$credentials = $object['credentials'];
 		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
 			return $line;

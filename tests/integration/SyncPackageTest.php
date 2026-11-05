@@ -346,6 +346,16 @@ final class SyncPackageTest extends TestCase {
 		return array_values( array_filter( AB_MCP_Protected_Store::groups( 'in' ), static fn( $group ) => 'package-' . $id === $group['label'] ) );
 	}
 
+	/** The list of held objects of a package A took over: kind, ref and code of each. */
+	private static function held_of( string $id ): array {
+		$gid   = self::groups_of( $id )[0]['gid'];
+		$names = array_values( array_filter( array_map( 'strval', array_keys( AB_MCP_Protected_Store::files( 'in', $gid ) ) ), static fn( $name ) => null !== AB_MCP_Sync_Import::held_sha( $name ) ) );
+		self::assertCount( 1, $names );
+		$list = json_decode( (string) AB_MCP_Protected_Store::get( 'in', $gid, $names[0], AB_MCP_Sync_Import::held_sha( $names[0] ) ), true );
+		self::assertSame( AB_MCP_Sync_Import::HELD_FORMAT, $list['format'] );
+		return $list['objects'];
+	}
+
 	/** The lines of a package A made in this process, read from its store. */
 	private static function lines_out( array $package ): array {
 		$manifest = json_decode( $package['manifest']['manifest'], true );
@@ -1981,17 +1991,13 @@ final class SyncPackageTest extends TestCase {
 				'ref'      => 'zz/zz_live_only_name',
 				'status'   => 'locked',
 			);
-			$state = self::import_relayed( self::package_of( str_repeat( '1a', 16 ), array( array( self::option_line( 'zz_live_only_name' ), self::option_line( 'zz_plain' ) ), array( self::option_line( 'zz_other' ), $mod ) ) ) );
+			$alias = self::option_line( 'zz_alias', array( 'reason_code' => 'read_as_other_row', 'status' => 'unreachable', 'target' => 'zz_live_only_name' ) );
+			$state = self::import_relayed( self::package_of( str_repeat( '1a', 16 ), array( array( self::option_line( 'zz_live_only_name' ), self::option_line( 'zz_plain' ) ), array( self::option_line( 'zz_other' ), $mod, $alias ) ) ) );
 			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 			self::assertTrue( $state['complete'] );
-			self::assertSame( 2, $state['held'], 'The option and the theme mod.' );
-			self::assertSame( 2, AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '1a', 16 ) ) )['held'], 'Read back on a later call.' );
-			$files = AB_MCP_Protected_Store::files( 'in', self::groups_of( str_repeat( '1a', 16 ) )[0]['gid'] );
-			$held  = array_values( array_filter( array_map( 'strval', array_keys( $files ) ), static fn( $name ) => null !== AB_MCP_Sync_Import::held_sha( $name ) ) );
-			self::assertCount( 1, $held );
-			$name = $held[0];
-			$list = json_decode( (string) AB_MCP_Protected_Store::get( 'in', self::groups_of( str_repeat( '1a', 16 ) )[0]['gid'], $name, AB_MCP_Sync_Import::held_sha( $name ) ), true );
-			self::assertSame( array( array( 'option', 'zz_live_only_name' ), array( 'theme_mod', 'zz/zz_live_only_name' ) ), $list['objects'] );
+			self::assertSame( 3, $state['held'], 'The option, the theme mod and the option WordPress reads it for.' );
+			self::assertSame( 3, AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '1a', 16 ) ) )['held'], 'Read back on a later call.' );
+			self::assertSame( array( array( 'option', 'zz_live_only_name', 'credential_name' ), array( 'theme_mod', 'zz/zz_live_only_name', 'credential_name' ), array( 'option', 'zz_alias', 'credential_name' ) ), self::held_of( str_repeat( '1a', 16 ) ) );
 		} finally {
 			remove_filter( 'ab_mcp_redact_keys', $keys );
 		}
@@ -2017,6 +2023,39 @@ final class SyncPackageTest extends TestCase {
 		$state = self::import_relayed( self::package_of( str_repeat( '1c', 16 ), array( array() ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertSame( array( true, 0 ), array( $state['complete'], $state['held'] ) );
+		// The names of a line never refuse the package: any text, of any
+		// length; a credential written into one holds that line, with the
+		// code of why (Codex round 3 of part 3).
+		$lock    = \AB_MCP_Sync_Kinds::lock( 'option', 'unclassified' );
+		$class   = 'Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer';
+		$names   = array(
+			'a name with backslashes'      => array( self::option_line( 'wc_batch_' . $class . '_' . md5( $class ) ), null ),
+			'a ref with a quote'           => array( self::option_line( 'zz"q' ), null ),
+			'an empty name'                => array( self::option_line( '' ), null ),
+			'a place with a line break'    => array( self::option_line( 'zz_pl', array( 'b9' => array( "meta:a\nb" ) ) ), null ),
+			'an unread place with a quote' => array( self::option_line( 'zz_pq', array( 'unread' => array( 'depth:"x"' ) ) ), null ),
+			'an empty place'               => array( self::option_line( 'zz_pe', array( 'b9' => array( '' ) ) ), null ),
+			'a place over 4 KiB'           => array( self::option_line( 'zz_pt', array( 'possible' => array( array( 'at' => 'option_value.' . str_repeat( 'k', 4200 ) ) ) ) ), null ),
+			'a page reset-password'        => array( array( 'identity' => array( 'post_name' => 'reset-password', 'post_type' => 'page', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '8', 'status' => 'z8' ), null ),
+			'a slug of a credential'       => array( array( 'identity' => array( 'post_name' => '{"password":"CANARY-ONLY"}', 'post_type' => 'post', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ), 'credential_field' ),
+			'a name that does not read'    => array( self::option_line( '<script>x</script>' ), 'unreadable_name' ),
+			'a place of a credential'      => array( self::option_line( 'zz_pj', array( 'possible' => array( array( 'at' => '{"password":"CANARY-ONLY"}' ) ) ) ), 'credential_field' ),
+			'a place of a reference'       => array( self::option_line( 'zz_ra', array( 'refs' => array( array( 'at' => '{"password":"x"}', 'id' => 7, 'space' => 'post', 'strength' => 'strong' ) ) ) ), 'credential_field' ),
+			'a login of a credential'      => array( self::option_line( 'zz_lg', array( 'refs' => array( array( 'at' => 'post_author', 'id' => 1, 'login' => '{"password":"x"}', 'space' => 'user', 'strength' => 'strong' ) ) ) ), 'credential_field' ),
+			'a place of a lock'            => array( self::option_line( 'zz_la', array( 'locks' => array( $lock + array( 'at' => '{"password":"x"}' ) ), 'status' => 'locked' ) ), 'credential_field' ),
+			'a place of a unit'            => array( self::option_line( 'zz_b9', array( 'b9' => array( 'meta:{"password":"x"}' ) ) ), 'credential_field' ),
+			'a target of a credential'     => array( self::option_line( 'zz_tg', array( 'reason_code' => 'read_as_other_row', 'status' => 'unreachable', 'target' => '{"password":"x"}' ) ), 'credential_field' ),
+		);
+		$state   = self::import_relayed( self::package_of( str_repeat( '1f', 16 ), array( array_column( $names, 0 ) ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		$want = array();
+		foreach ( $names as $given ) {
+			if ( null !== $given[1] ) {
+				$want[] = array( $given[0]['kind'], $given[0]['ref'], $given[1] );
+			}
+		}
+		self::assertSame( array( true, count( $want ) ), array( $state['complete'], $state['held'] ) );
+		self::assertSame( $want, self::held_of( str_repeat( '1f', 16 ) ), 'Kind, ref and code; never a value of a name but the ref.' );
 
 		// Packages that do not unpack as they must: refused, removed.
 		$deep = '1';
@@ -2066,7 +2105,6 @@ final class SyncPackageTest extends TestCase {
 			'menus that are no ids'    => array( self::package_of( str_repeat( '7b', 16 ), array( array( array( 'identity' => array( 'menus' => array( 'x' ), 'object' => '', 'position' => '1', 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a widget area of another name' => array( self::package_of( str_repeat( '7c', 16 ), array( array( array( 'identity' => array( 'area' => 'sidebar-1' ), 'kind' => 'widget_area', 'locks' => array(), 'ref' => 'sidebar-2', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'the CSS of another stylesheet' => array( self::package_of( str_repeat( '7d', 16 ), array( array( array( 'identity' => array( 'linked' => false, 'post' => 5, 'stylesheet' => 'a' ), 'kind' => 'custom_css', 'locks' => array(), 'ref' => 'a@6', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'an empty ref'             => array( self::package_of( str_repeat( '7e', 16 ), array( array( array( 'identity' => array(), 'kind' => 'option', 'locks' => array(), 'ref' => '', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'locks that are no list'   => array( self::package_of( str_repeat( '7f', 16 ), array( array( self::option_line( 'zz_lk', array( 'locks' => array( 'a' => $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a reference without its strength' => array( self::package_of( str_repeat( '8b', 16 ), array( array( self::option_line( 'zz_rs', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'complete that is text'    => array( self::package_of( str_repeat( '8c', 16 ), array( array( self::option_line( 'zz_c', array( 'complete' => 'yes' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
@@ -2077,21 +2115,24 @@ final class SyncPackageTest extends TestCase {
 			'a lock no table has'      => array( self::package_of( str_repeat( '9c', 16 ), array( array( self::option_line( 'zz_lt', array( 'locks' => array( array( 'key' => '*:password', 'stage' => 'Z8d', 'reason' => 'x', 'at' => 'option_value' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a lock with another reason' => array( self::package_of( str_repeat( '9d', 16 ), array( array( self::option_line( 'zz_lr', array( 'locks' => array( array( 'reason' => '{"password":"CANARY-ONLY"}' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a lock with another stage' => array( self::package_of( str_repeat( '9e', 16 ), array( array( self::option_line( 'zz_ls', array( 'locks' => array( array( 'stage' => 'Z99' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a place that is JSON'     => array( self::package_of( str_repeat( '9f', 16 ), array( array( self::option_line( 'zz_pj', array( 'possible' => array( array( 'at' => '{"password":"CANARY-ONLY"}' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a place with a line break' => array( self::package_of( str_repeat( 'a1', 16 ), array( array( self::option_line( 'zz_pl', array( 'b9' => array( "meta:a\nb" ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'an unread place with a quote' => array( self::package_of( str_repeat( 'a2', 16 ), array( array( self::option_line( 'zz_pq', array( 'unread' => array( 'depth:"x"' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'an empty place'           => array( self::package_of( str_repeat( 'a3', 16 ), array( array( self::option_line( 'zz_pe', array( 'b9' => array( '' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a space no reader writes' => array( self::package_of( str_repeat( 'a4', 16 ), array( array( self::option_line( 'zz_sp', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'option', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a strength no reader writes' => array( self::package_of( str_repeat( 'a5', 16 ), array( array( self::option_line( 'zz_st', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post', 'strength' => 'weak' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a login that is no login' => array( self::package_of( str_repeat( 'a6', 16 ), array( array( self::option_line( 'zz_lg', array( 'refs' => array( array( 'at' => 'post_author', 'id' => 1, 'login' => '{"password":"x"}', 'space' => 'user', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a status no reader writes' => array( self::package_of( str_repeat( 'a7', 16 ), array( array( self::option_line( 'zz_ex', array( 'status' => 'excluded' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no identity, readable'    => array( self::package_of( str_repeat( 'a8', 16 ), array( array( array( 'identity' => array(), 'kind' => 'option', 'locks' => array(), 'ref' => 'api_token', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no identity, complete'    => array( self::package_of( str_repeat( 'a9', 16 ), array( array( array( 'complete' => true, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8', 'unread' => array( 'posts' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no identity, another unread' => array( self::package_of( str_repeat( 'b1', 16 ), array( array( array( 'complete' => false, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8', 'unread' => array( 'encode' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a place too long'         => array( self::package_of( str_repeat( 'b3', 16 ), array( array( self::option_line( 'zz_pt', array( 'b9' => array( 'meta:' . str_repeat( 'a', 4092 ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a ref with a quote'       => array( self::package_of( str_repeat( 'b4', 16 ), array( array( self::option_line( 'zz"q' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'bytes not as the canon writes them' => array( self::package_of( str_repeat( 'b5', 16 ), array( array( array( 'identity' => array( 'name' => array( '~b' => rtrim( base64_encode( "\xC3\x28" ), '=' ) ) ), 'kind' => 'option', 'locks' => array(), 'ref' => "\xC3\x28", 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'bytes that are UTF-8'     => array( self::package_of( str_repeat( 'b2', 16 ), array( array( array( 'identity' => array( 'name' => array( '~b' => base64_encode( 'zz' ) ) ), 'kind' => 'option', 'locks' => array(), 'ref' => 'zz', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reason code of another status' => array( self::package_of( str_repeat( 'c2', 16 ), array( array( self::option_line( 'zz_rc', array( 'reason_code' => 'option_guard' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reason code outside its list' => array( self::package_of( str_repeat( 'c3', 16 ), array( array( self::option_line( 'zz_ro', array( 'reason_code' => 'read_as_other_row', 'status' => 'guarded' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reason without its code'      => array( self::package_of( str_repeat( 'c4', 16 ), array( array( self::option_line( 'zz_rw', array( 'status' => 'unreadable' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'unreachable without its target' => array( self::package_of( str_repeat( 'c5', 16 ), array( array( self::option_line( 'zz_ut', array( 'reason_code' => 'read_as_other_row', 'status' => 'unreachable' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a target elsewhere'             => array( self::package_of( str_repeat( 'c6', 16 ), array( array( self::option_line( 'zz_te', array( 'reason_code' => 'option_guard', 'status' => 'guarded', 'target' => 'x' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a target that is no name'       => array( self::package_of( str_repeat( 'c7', 16 ), array( array( self::option_line( 'zz_tn', array( 'reason_code' => 'read_as_other_row', 'status' => 'unreachable', 'target' => 7 ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a login that is a number'       => array( self::package_of( str_repeat( 'c8', 16 ), array( array( self::option_line( 'zz_ln', array( 'refs' => array( array( 'at' => 'post_author', 'id' => 1, 'login' => 7, 'space' => 'user', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a kind that is a list'          => array( self::package_of( str_repeat( 'd2', 16 ), array( array( self::option_line( 'zz_kl', array( 'kind' => array( 'option' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'unread that is no list'         => array( self::package_of( str_repeat( 'd1', 16 ), array( array( self::option_line( 'zz_ul', array( 'unread' => array( 'a' => 'options' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a place in a broken byte form'  => array( self::package_of( str_repeat( 'c9', 16 ), array( array( self::option_line( 'zz_bb', array( 'possible' => array( array( 'at' => array( '~b' => 'x' ) ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a position that is a word' => array( self::package_of( str_repeat( '8f', 16 ), array( array( array( 'identity' => array( 'menus' => array( 3 ), 'object' => '', 'position' => 'x', 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 		);
 		foreach ( $cases as $case => $given ) {
@@ -2202,15 +2243,43 @@ final class SyncPackageTest extends TestCase {
 		update_option( 'password_1', 'guarded' );
 		update_option( 'theme_mods_zzbroken', 'not an array' );
 		wp_update_custom_css_post( 'body { color: #123; }' );
+		// What ordinary sites hold (Codex round 3 of part 3): the state of a
+		// batch of WooCommerce, named with its class and backslashes
+		// (BatchProcessingController); keys of a serialized value with a
+		// quote, a backslash and braces, and a path over 4 KiB, each over a
+		// local link; a login beyond ASCII (kept by a filter of a plugin); a
+		// slug that holds a credential and a page reset-password; a row
+		// WordPress reads under another name, one that could not be looked up.
+		$class = 'Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer';
+		$wc    = 'wc_batch_' . $class . '_' . md5( $class );
+		update_option( $wc, array( 'total_time_spent' => 0, 'current_batch_size' => 100, 'last_error' => null ), false );
+		$link = home_url( '/?p=' . $post );
+		$long = str_repeat( 'k', 4200 );
+		update_option( 'zz_keys', array( 'a"b' => $link, 'Vendor\Service' => array( 'page' => $link ), '{{WRAPPER}}' => '<a href="' . $link . '">x</a>', $long => $link ) );
+		$keep = static fn( $user, $raw ) => $raw;
+		add_filter( 'sanitize_user', $keep, 10, 2 );
+		$joerg = wp_insert_user( array( 'user_login' => 'jörg', 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'joerg@example.test', 'role' => 'author' ) );
+		remove_filter( 'sanitize_user', $keep, 10 );
+		self::assertIsInt( $joerg );
+		self::assertIsInt( wp_insert_post( array( 'post_title' => 'By jörg', 'post_status' => 'publish', 'post_author' => $joerg ), true ) );
+		$a2 = wp_insert_post( array( 'post_title' => 'A2', 'post_status' => 'publish' ), true );
+		$wpdb->update( $wpdb->posts, array( 'post_name' => '{"password":"CANARY-ONLY"}' ), array( 'ID' => $a2 ) );
+		clean_post_cache( $a2 );
+		self::assertIsInt( wp_insert_post( array( 'post_title' => 'Reset', 'post_name' => 'reset-password', 'post_type' => 'page', 'post_status' => 'publish' ), true ) );
+		$wpdb->insert( $wpdb->options, array( 'option_name' => 'blacklist_keys', 'option_value' => 'x', 'autoload' => 'off' ) );
+		update_option( 'zz_unreadable_name', 'x' );
 		// A slug and a meta key of bytes that are no UTF-8 (tables that keep
 		// bytes, as old sites in latin1 have).
 		$wpdb->query( "ALTER TABLE {$wpdb->posts} MODIFY post_name VARBINARY(200) NOT NULL DEFAULT ''" );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_name = UNHEX(%s) WHERE ID = %d", 'c328c328', $bytes ) );
 		$wpdb->query( "ALTER TABLE {$wpdb->postmeta} MODIFY meta_key VARBINARY(255) NULL DEFAULT NULL" );
 		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->postmeta} ( post_id, meta_key, meta_value ) VALUES ( %d, UNHEX(%s), %s )", $bytes, '7a7ae9', (string) $post ) );
-		// A row whose meta could not be read.
+		// A row of theme mods named in bytes whose value does not unpack: its name only.
+		$wpdb->query( "ALTER TABLE {$wpdb->options} MODIFY option_name VARBINARY(191) NOT NULL DEFAULT ''" );
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} ( option_name, option_value, autoload ) VALUES ( UNHEX(%s), %s, 'off' )", bin2hex( "theme_mods_z\xE9" ), 'not an array' ) );
+		// A row whose meta could not be read; an option that could not be looked up.
 		$break = static function ( $query ) use ( $wpdb, $unread ) {
-			return false !== strpos( $query, "FROM {$wpdb->postmeta} WHERE post_id = {$unread} " ) ? 'SELECT broken FROM ab_it_no_such_table' : $query;
+			return false !== strpos( $query, "FROM {$wpdb->postmeta} WHERE post_id = {$unread} " ) || false !== strpos( $query, "WHERE option_name = 'zz_unreadable_name' LIMIT 1" ) ? 'SELECT broken FROM ab_it_no_such_table' : $query;
 		};
 		$quiet = $wpdb->suppress_errors( true );
 		add_filter( 'query', $break );
@@ -2223,16 +2292,46 @@ final class SyncPackageTest extends TestCase {
 			$wpdb->query( "ALTER TABLE {$wpdb->posts} MODIFY post_name VARCHAR(200) NOT NULL DEFAULT ''" );
 			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d", $bytes ) );
 			$wpdb->query( "ALTER TABLE {$wpdb->postmeta} MODIFY meta_key VARCHAR(255) NULL DEFAULT NULL" );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = UNHEX(%s)", bin2hex( "theme_mods_z\xE9" ) ) );
+			$wpdb->query( "ALTER TABLE {$wpdb->options} MODIFY option_name VARCHAR(191) NOT NULL DEFAULT ''" );
 		}
 		$check = new \ReflectionMethod( AB_MCP_Sync_Import::class, 'line_shaped' );
+		$named = new \ReflectionMethod( AB_MCP_Sync_Import::class, 'names_of' );
+		$code  = new \ReflectionMethod( AB_MCP_Sync_Import::class, 'held_code' );
 		$forms = array();
+		$held  = array();
+		$lines = array();
+		$codes = 0;
 		foreach ( $objects as $object ) {
+			// A code of its reason only on a row the takeover never reads (not on B9 of a name the guard refuses, mailserver_pass).
+			self::assertSame( isset( \AB_MCP_Sync_Option_Schema::REASON_CODES[ $object['status'] ] ), isset( $object['reason_code'] ), $object['kind'] . ':' . \AB_MCP_Sync_Canon::encode( $object['ref'] ) );
+			if ( 'b9' === $object['status'] && 'option:mailserver_pass' === $object['kind'] . ':' . $object['ref'] ) {
+				++$codes;
+			}
 			if ( 'b9' === $object['status'] ) {
 				continue;
 			}
-			$line = json_decode( \AB_MCP_Sync_Canon::encode( AB_MCP_Sync_Export::line( $object ) ), true );
+			$lines[] = AB_MCP_Sync_Export::line( $object );
+			$line    = json_decode( \AB_MCP_Sync_Canon::encode( AB_MCP_Sync_Export::line( $object ) ), true );
 			self::assertTrue( $check->invoke( null, $line ), \AB_MCP_Sync_Canon::encode( $line ) );
-			$ref = $line['kind'] . ':' . $line['ref'];
+			$ref = $line['kind'] . ':' . \AB_MCP_Sync_Canon::encode( $line['ref'] );
+			$why = $code->invoke( null, $line, \AB_MCP_Redactor::extra_keys() );
+			if ( null !== $why ) {
+				$held[ $ref ] = $why;
+			}
+			if ( $wc === $line['ref'] ) {
+				$forms['a name with backslashes'] = $ref;
+			}
+			foreach ( $named->invoke( null, $line ) as $name ) {
+				foreach ( array( 'a"b' => 'a quote', 'Vendor\Service' => 'a backslash', '{{WRAPPER}}' => 'braces' ) as $part => $form ) {
+					if ( false !== strpos( $name, $part ) ) {
+						$forms[ 'a place with ' . $form ] = $ref;
+					}
+				}
+				if ( strlen( $name ) > 4096 ) {
+					$forms['a place over 4 KiB'] = $ref;
+				}
+			}
 			if ( array() === $line['identity'] ) {
 				$forms['no identity'] = $ref;
 			}
@@ -2260,12 +2359,26 @@ final class SyncPackageTest extends TestCase {
 				if ( 'user' === $one['space'] && null !== $one['login'] ) {
 					$forms['user'] = $ref;
 				}
+				if ( 'user' === $one['space'] && 'jörg' === $one['login'] ) {
+					$forms['a login beyond ASCII'] = $ref;
+				}
 			}
-			if ( 'guarded' === $line['status'] ) {
+			// The reason of a row the takeover never reads, as a code; where WordPress reads another row, that row.
+			$reason = array( $line['status'], $line['reason_code'] ?? null, $line['target'] ?? null );
+			if ( array( 'guarded', 'option_guard', null ) === $reason ) {
 				$forms['guarded'] = $ref;
+			}
+			if ( array( 'unreachable', 'read_as_other_row', 'disallowed_keys' ) === $reason ) {
+				$forms['unreachable'] = $ref;
+			}
+			if ( array( 'unreadable', 'lookup_failed', null ) === $reason ) {
+				$forms['unreadable'] = $ref;
 			}
 			if ( 'theme_mod' === $line['kind'] && array( 'name' ) === array_keys( $line['identity'] ) ) {
 				$forms['theme mods by name'] = $ref;
+				if ( is_array( $line['identity']['name'] ) && "theme_mods_z\xE9" === AB_MCP_Sync_Import::bytes( $line['identity']['name'] ) ) {
+					$forms['theme mods by a name in bytes'] = $ref;
+				}
 			}
 			if ( array() !== $line['locks'] && ! \AB_MCP_Sync_Export::credential_locked( $line['locks'] ) ) {
 				$forms['other locks'] = $ref;
@@ -2274,10 +2387,20 @@ final class SyncPackageTest extends TestCase {
 		}
 		ksort( $forms );
 		self::assertSame(
-			array( 'a place in bytes', 'bytes', 'guarded', 'held by a credential', 'kind custom_css', 'kind menu', 'kind menu_item', 'kind option', 'kind post', 'kind term', 'kind theme_mod', 'kind widget_area', 'no identity', 'other locks', 'position -1', 'possible', 'theme mods by name', 'units of credentials', 'user' ),
+			array( 'a login beyond ASCII', 'a name with backslashes', 'a place in bytes', 'a place over 4 KiB', 'a place with a backslash', 'a place with a quote', 'a place with braces', 'bytes', 'guarded', 'held by a credential', 'kind custom_css', 'kind menu', 'kind menu_item', 'kind option', 'kind post', 'kind term', 'kind theme_mod', 'kind widget_area', 'no identity', 'other locks', 'position -1', 'possible', 'theme mods by a name in bytes', 'theme mods by name', 'units of credentials', 'unreachable', 'unreadable', 'user' ),
 			array_keys( $forms ),
 			'Each form was read and went through.'
 		);
+		self::assertSame( 1, $codes, 'mailserver_pass: B9, and the guard refuses it.' );
+		self::assertSame( 'guarded', \AB_MCP_Sync_Option_Schema::classify( 'mailserver_pass' )['status'] );
+		// Only the slug that holds a credential is held; reset-password is no field of one.
+		self::assertSame( array( 'post:"' . $a2 . '"' => 'credential_field' ), $held );
+		// The whole package of these lines: taken, complete, that one line held.
+		self::pair();
+		$state = self::import_relayed( self::package_of( str_repeat( 'c1', 16 ), array( $lines ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertSame( array( true, 1 ), array( $state['complete'], $state['held'] ) );
+		self::assertSame( array( array( 'post', (string) $a2, 'credential_field' ) ), self::held_of( str_repeat( 'c1', 16 ) ) );
 		// Each table a reader notes when it could not read a row at all.
 		$tables = array(
 			'posts'              => 'post',
@@ -2373,6 +2496,15 @@ final class SyncPackageTest extends TestCase {
 		$refused = AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '8a', 16 ) ) );
 		self::refused( $refused, 'ab_mcp_sync_import_held' );
 		self::assertStringContainsString( 'Fetch the package anew', $refused->get_error_message() );
+		self::assertSame( array(), self::groups_of( str_repeat( '8a', 16 ) ), 'Removed.' );
+		// A list as the version before kept it (kind and ref, no code): the same.
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
+		$gid  = self::groups_of( str_repeat( '8a', 16 ) )[0]['gid'];
+		$text = \AB_MCP_Sync_Canon::encode( array( 'format' => 'ab-sync-held/1', 'objects' => array() ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::held_name( hash( 'sha256', $text ) ), $text ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 0 ), $package['data'][0] ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::COMPLETE, $package['package']['sha256'] ) );
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '8a', 16 ) ) ), 'ab_mcp_sync_import_held' );
 		self::assertSame( array(), self::groups_of( str_repeat( '8a', 16 ) ), 'Removed.' );
 		// The way: begun anew with the same manifest, it completes.
 		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );

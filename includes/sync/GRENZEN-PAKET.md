@@ -234,7 +234,8 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   und Sperren (A-1, `credentials.held`); ausgelassene B9-Einheiten in gepackten
   Objekten zählt `credentials.units`. Optionen, die das Inventar als
   geschützt führt (Status `guarded`, etwa `password_1`), sind kein B9: ihre
-  Zeile trägt wie bisher Name und Status, keinen Hash und keinen Wert.
+  Zeile trägt wie bisher Name und Status, keinen Hash und keinen Wert, dazu
+  den Code ihres Grundes (unten, «Gründe ohne Sperre»).
 - Beim Import, sobald das Paket ganz geprüft ist, wird es entpackt und
   jede Zeile erneut geprüft, bevor es als vollständig gilt: jedes Stück
   stückweise aufgeblasen (je 512 Bytes Eingabe) und angehalten, sobald es
@@ -252,20 +253,61 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Zugangsdatensperre gehaltene Zeile mit mehr als ihrer Identität; so viele
   Zeilen und Bytes, wie das Manifest nennt (Codex-Runde 1 zu Teil 3, A2 und
   B2). Das ganze Inventar beider Prüf-Sites über alle Arten geht so durch.
-- Jedes Textfeld einer Zeile hat eine geschlossene Form, genau die des
-  Exports (Codex-Runde 2 zu Teil 3): `canon` die Fassung des Kanons; der
-  Status aus der festen Liste des Inventars; jede Sperre mit Schlüssel,
-  Etappe und Grund genau wie in den Tafeln von `AB_MCP_Sync_Kinds`;
-  Verweise mit Raum (post, term, user), Stärke (strong) und einem Login aus
-  den Zeichen von WordPress; Orte (`at`, `unread`, `b9`) ohne
-  Steuerzeichen, Anführungszeichen, Backslash und geschweifte Klammern, nicht
-  leer und höchstens 4096 Bytes. Der freie Grund eines Objekts steht nicht
-  mehr in der Zeile (die Live-Site liest Gründe aus den Sperren). Orte sind
-  aus Namen gebaut (Spalten, Meta-Schlüssel, Pfade von Schlüsseln); einen
-  Namen von einem Wert unterscheidet keine Form, darum bleibt ein Ort, der
-  nur Buchstaben und Zeichen eines Namens trägt, annehmbar. Ein Meta- oder
-  JSON-Schlüssel mit einem der ausgeschlossenen Zeichen lässt den Import
-  des Pakets ablehnen (konstruiert; der Weg nennt den neuen Export).
+- Die Prüfung jeder Zeile hat zwei Stufen (Codex-Runde 3 zu Teil 3; die
+  Zeichensperren und Längengrenzen der Runde 2 lehnten Pakete gewöhnlicher
+  Sites ab). Die Struktur lehnt das Paket ab, wo eine Zeile nicht ist, was
+  der Export schreibt: ein Feld ohne Platz oder von anderem Typ, `canon`
+  nicht die Fassung des Kanons, ein Status ausserhalb der festen Liste des
+  Inventars, eine Sperre, deren Schlüssel, Etappe und Grund nicht genau so
+  in den Tafeln von `AB_MCP_Sync_Kinds` stehen, Raum (post, term, user) und
+  Stärke (strong) ausserhalb ihrer Listen, ein Grundcode ausserhalb der
+  Liste seines Status, Bytes nicht in der Byte-Form des Kanons, eine
+  Identität nicht ihrer Art oder für ein anderes Objekt; dazu LF, gzip und
+  Mengen wie oben. Der Inhalt lehnt nie ab: namensartige Felder (die
+  Kennung `ref`, Namen und Slugs der Identität, die Orte `at`, `unread` und
+  `b9`, Logins, das Ziel `target`) nehmen jeden Text an oder die Byte-Form
+  des Kanons, ohne Zeichenverbot und ohne eigene Längengrenze; für sie
+  gelten nur die Grenzen je Stück und Zeile (8 MiB, Tiefe 64). Mit echten
+  Lesern geprüft gehen so durch: der Stand eines Stapels von WooCommerce
+  (`wc_batch_` mit dem Klassennamen samt Backslashes und dessen md5),
+  Schlüssel serialisierter Werte mit Anführungszeichen, Backslash und
+  geschweiften Klammern (`a"b`, `Vendor\Service`, `{{WRAPPER}}`, je über
+  einem lokalen Link), ein Pfad über 4 KiB, ein Login `jörg` (von einem
+  Filter eines Plugins belassen), der Name einer Zeile der Theme-Mods in
+  Bytes, deren Wert nicht entpackt, und ein leerer Name.
+- Zugangsdaten je Zeile beim Import: die Namensprüfung bleibt für die
+  Namen gespeicherter Werte (der Name einer Option, der Zeile der
+  Theme-Mods, der Schlüssel eines Theme-Mods, bei `unreachable` die Zeile,
+  die WordPress stattdessen liest), nach den Regeln der Live-Site samt
+  `ab_mcp_redact_keys` (Code `credential_name`). Dazu läuft der Inhaltsteil
+  der vorhandenen Zugangsdatenprüfung (`AB_MCP_Sync_Credentials::unit()`,
+  wie sie einen Wert liest) über jeden namensartigen Wert der Zeile, auch
+  über `identity.post_name`: ein Feld einer Zugangsangabe darin hält die
+  Zeile (`credential_field`, etwa ein Slug `{"password":"CANARY-ONLY"}`),
+  ein Name, der sich nicht zu Ende lesen lässt (ein Skript, ein unfertiges
+  Tag, ein PHP-Objekt), ebenso (`unreadable_name`: was nicht zu Ende
+  gelesen ist, gilt nie als sauber). Eine gehaltene Zeile wird gezählt
+  (`held`) und in der Liste `held-…` mit Art, Kennung und Code geführt,
+  ohne die übrigen Felder der Zeile; die Kennung steht dort wie im Paket.
+  Das Paket läuft weiter. Eine Seite «reset-password» ist kein Feld einer
+  Zugangsangabe und bleibt ungehalten. Die Liste hat das Format
+  `ab-sync-held/2`; eine Liste der Fassung davor (ohne Code) gilt als
+  fehlend (`ab_mcp_sync_import_held`, Weg: Paket neu holen).
+- Gründe ohne Sperre als Codes: eine Zeile mit Status `guarded`,
+  `unreachable` oder `unreadable` trägt keinen Text, sondern `reason_code`
+  aus der festen Liste `AB_MCP_Sync_Option_Schema::REASON_CODES`, die der
+  Export setzt und der Import prüft; `unreachable` dazu `target`, den Namen
+  der Zeile, die WordPress unter diesem Namen liest (namensartig, geprüft
+  wie oben). Ein Code eines anderen Status, ein fehlender, ein Code oder
+  ein Ziel bei einem anderen Status lehnen das Paket ab. Zweig 6 setzt die
+  Codes in die Meldungen um, die `classify()` und
+  `AB_MCP_Sync_Option_Name::settle()` heute zu ihnen schreiben (englisch,
+  mit Weg): `option_guard` die Ablehnung durch den Optionsschutz (ein
+  Administrator ändert den Namen in wp-admin), `read_as_other_row` «WordPress
+  reads the row <target> under this name …», `lookup_failed` und
+  `not_settled` die Option liess sich nicht nachschlagen beziehungsweise ihr
+  Name nicht auflösen (erneut versuchen; das Fehlerprotokoll der Datenbank
+  nennt die Ursache).
 - Eine leere Identität gilt nur in der Zeile einer Zeile der Datenbank, die
   nicht gelesen wurde (nicht vollständig, die Tafel in `unread`); dann
   prüft die Namensprüfung die Kennung. Namen, die keine UTF-8 sind, nimmt
@@ -276,11 +318,10 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   (`ab_mcp_store_unpack_limit` oder `ab_mcp_sync_import_lines`, je mit
   Schritten). Ein Name, den erst die Regeln der Live-Site als Zugangsangabe
   lesen (`ab_mcp_redact_keys`), wird als gehalten gelistet (`held`); die
-  Werte selbst waren nie im Paket. Geprüft werden die Namen, die die
-  Staging-Site ebenso prüft: der Name einer Option, der Zeile der
-  Theme-Mods und der Schlüssel eines Theme-Mods. Slugs, Post-Typen,
-  Taxonomien und Bereiche sind keine Namen gespeicherter Werte; eine Seite
-  «reset-password» würde sonst auf jeder Mitglieder-Site gehalten.
+  Werte selbst waren nie im Paket. Slugs, Post-Typen, Taxonomien und
+  Bereiche sind keine Namen gespeicherter Werte: sie prüft nur der
+  Inhaltsteil (oben), sonst würde eine Seite «reset-password» auf jeder
+  Mitglieder-Site gehalten.
 - Ein Exportdatensatz einer älteren Fassung (ohne Bericht) wird beim
   nächsten Zugriff als veraltet verworfen (`ab_mcp_sync_export_stale`, Weg:
   neu exportieren); ein abgeschlossener Import ohne Liste der gehaltenen

@@ -32,9 +32,10 @@
  * package_id) or the relay takes up where the last one ended. Once every
  * chunk is there, the package is checked whole against its SHA-256
  * (AB_MCP_Sync_Manifest::whole()), unpacked within the limits of decision 8
- * with each line checked again (decision 9, unpacked(); a package that does
- * not hold is removed), the objects a credential holds by the rules of this
- * site listed (held), closed (it counts as an open package no more,
+ * with each line checked again (decision 9, unpacked(); a package whose
+ * structure does not hold is removed), the objects a credential holds by
+ * the rules of this site, or one written into a name of a line, listed
+ * (held, each with the code of why), closed (it counts as an open package no more,
  * AB_MCP_Store_Budget) and marked complete. What is in it is read
  * only by the takeover, which checks the manifest again for its purpose
  * and report. The store removes the group a day after it was made.
@@ -54,6 +55,8 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/class-store-budget.php';
 require_once __DIR__ . '/class-sync-export.php';
 require_once __DIR__ . '/class-sync-fetcher.php';
+require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-option-schema.php';
 
 /**
  * Class AB_MCP_Sync_Import
@@ -78,8 +81,17 @@ final class AB_MCP_Sync_Import {
 	/** The letters of base32 (RFC 4648, in lower case), which fit the names of the protected store. */
 	const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
-	/** The format of that list. */
-	const HELD_FORMAT = 'ab-sync-held/1';
+	/** The format of that list: kind, ref and code (HELD_CODES) of each object, no other field of its line. */
+	const HELD_FORMAT = 'ab-sync-held/2';
+
+	/**
+	 * Why a line is held (held_code()): a name of it is the name of a
+	 * credential by the rules of this site (credential_name); a name of it
+	 * holds a field of a credential, as the credential check reads a value
+	 * (credential_field); a name of it does not read to its end, so nothing
+	 * says what it holds (unreadable_name).
+	 */
+	const HELD_CODES = array( 'credential_name', 'credential_field', 'unreadable_name' );
 
 	/** Bytes of that list at most: the kind and ref of every object a package holds. */
 	const HELD_MAX = 2097152;
@@ -91,21 +103,35 @@ final class AB_MCP_Sync_Import {
 	 * The fields a line of the inventory carries at most
 	 * (AB_MCP_Sync_Export::line()), each with its type (typed()); identity,
 	 * locks, refs and possible are checked by their own lists.
+	 *
+	 * Two levels. The structure refuses the package where it is not what the
+	 * export writes: a field without a place or of another type, the version
+	 * of the canonical form, a status, lock (key, stage, reason of the
+	 * tables), space, strength or reason code outside its list, bytes not in
+	 * the byte form of the canon, an identity not of its kind or naming
+	 * another object. The content never refuses it: a name (type name: the
+	 * ref, the names and slugs of an identity, the places at, unread and b9,
+	 * a login, the target) is any text, or bytes in the byte form, without a
+	 * ban of characters or a length of its own (only the limits of a chunk
+	 * and a line hold it); a credential in a name holds the line
+	 * (held_code()).
 	 */
 	const LINE_FIELDS = array(
-		'b9'       => 'places',
-		'canon'    => 'canon',
-		'complete' => 'bool',
-		'hash'     => 'hash',
-		'identity' => 'identity',
-		'kind'     => 'string',
-		'locks'    => 'locks',
-		'possible' => 'possible',
-		'ref'      => 'ref',
-		'refs'     => 'refs',
-		'size'     => 'size',
-		'status'   => 'status',
-		'unread'   => 'places',
+		'b9'          => 'names',
+		'canon'       => 'canon',
+		'complete'    => 'bool',
+		'hash'        => 'hash',
+		'identity'    => 'identity',
+		'kind'        => 'string',
+		'locks'       => 'locks',
+		'possible'    => 'possible',
+		'reason_code' => 'string',
+		'ref'         => 'name',
+		'refs'        => 'refs',
+		'size'        => 'size',
+		'status'      => 'status',
+		'target'      => 'name',
+		'unread'      => 'names',
 	);
 
 	/** The statuses a line has (AB_MCP_Sync_Inventory::entry(); b9 is never packed). */
@@ -173,7 +199,7 @@ final class AB_MCP_Sync_Import {
 	 * have them (lock_known()).
 	 */
 	const LOCK_FIELDS = array(
-		'at'     => 'place',
+		'at'     => 'name',
 		'key'    => 'string',
 		'reason' => 'text',
 		'stage'  => 'text',
@@ -181,7 +207,7 @@ final class AB_MCP_Sync_Import {
 
 	/** A reference of a line: these fields at most. */
 	const REF_FIELDS = array(
-		'at'       => 'place',
+		'at'       => 'name',
 		'id'       => 'number',
 		'login'    => 'login',
 		'space'    => 'space',
@@ -191,22 +217,10 @@ final class AB_MCP_Sync_Import {
 	/** The fields every reference carries. */
 	const REF_NEEDS = array( 'at', 'id', 'space', 'strength' );
 
-	/**
-	 * What a place (where in an object: a column, meta:key, a path of keys
-	 * and indexes, a reader's suffix) never holds: control characters,
-	 * quotes, a backslash, braces; a place is built from names and the
-	 * readers' tokens, so JSON, an encoded value or a line break in one is
-	 * none of ours.
-	 */
-	const PLACE_NOT = '/[\x00-\x1F\x7F"\\\\{}]/';
+	/** A possible reference: its place only, never its value. */
+	const POSSIBLE_FIELDS = array( 'at' => 'name' );
 
-	/** Bytes of a place at most. */
-	const PLACE_MAX = 4096;
-
-	/** Bytes of a ref at most (an option name, a stylesheet with its key). */
-	const NAME_MAX = 1024;
-
-	/** The fields of a line besides its identity, status, locks and reason, which a line a credential holds never carries. */
+	/** The fields of a line besides its identity, status and locks, which a line a credential holds never carries. */
 	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'possible', 'refs', 'size', 'unread' );
 
 	/** Seconds one call fetches at most; what is left, the next one does. */
@@ -662,16 +676,18 @@ final class AB_MCP_Sync_Import {
 	 * AB_MCP_Sync_Export::SLICE bytes, so no line passes that size either),
 	 * so a chunk that would inflate further is not inflated past it; no more
 	 * objects than the limit; JSON no deeper than the limit, in the one spelling
-	 * AB_MCP_Sync_Canon::encode() writes, with the fields of a line of the
-	 * inventory and no other, no object whose name is the name of a
-	 * credential (those are never packed), and no line a lock of the
-	 * credential check holds that carries more than its identity; as many
-	 * lines and bytes as the manifest declares. What a credential holds by
-	 * the rules of this site (its name, AB_MCP_Redactor::extra_keys()
-	 * included) is listed.
+	 * AB_MCP_Sync_Canon::encode() writes, with the structure of a line of the
+	 * inventory (line_shaped(), the first level of LINE_FIELDS), no object
+	 * whose name is the name of a credential (those are never packed), and
+	 * no line a lock of the credential check holds that carries more than its
+	 * identity; as many lines and bytes as the manifest declares. The names
+	 * of a line (the second level) never refuse it: what a credential holds
+	 * by the rules of this site (AB_MCP_Redactor::extra_keys() included), in
+	 * its name or written into a name of the line, is listed with the code
+	 * of why (held_code()), and the package goes on.
 	 *
 	 * @param array $held held().
-	 * @return array[]|WP_Error kind and ref of the objects held by this site.
+	 * @return array[]|WP_Error kind, ref and code of the objects held by this site.
 	 */
 	private static function unpacked( array $held ) {
 		$manifest = $held['manifest'];
@@ -714,11 +730,11 @@ final class AB_MCP_Sync_Import {
 					return self::unpack_refusal( 'A line is not an object in the one spelling of the staging site.' );
 				}
 				if ( ! self::line_shaped( $object ) ) {
-					return self::unpack_refusal( 'A line carries what a line of the inventory does not: a field it has no place for, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
+					return self::unpack_refusal( 'A line is not one as the staging site writes it: a field it has no place for or of another type, a status, lock, space, strength or reason code outside its list, bytes not in the byte form, an identity not of its kind or naming another object, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
 				}
-				// A line without its identity names its object by its ref.
-				if ( self::named_credential( array() === $object['identity'] ? array( 'name' => $object['ref'] ) : $object['identity'], $extra ) ) {
-					$out[] = array( $object['kind'], $object['ref'] );
+				$code = self::held_code( $object, $extra );
+				if ( null !== $code ) {
+					$out[] = array( $object['kind'], $object['ref'], $code );
 				}
 			}
 		}
@@ -770,13 +786,17 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
-	 * Whether an object of a line is a line of the inventory exactly: its
-	 * fields from LINE_FIELDS with their types, those of LINE_NEEDS there; a
-	 * kind of IDENTITIES with its identity as that kind has it and matching
-	 * its ref; each lock, reference and possible reference with its fields
-	 * and no other; no object whose name is the name of a credential (B9,
-	 * never packed); and, where a lock of the credential check holds it, no
-	 * more than its identity, status, locks and reason.
+	 * Whether an object of a line has the structure of a line of the
+	 * inventory: its fields from LINE_FIELDS with their types, those of
+	 * LINE_NEEDS there; a kind of IDENTITIES with its identity as that kind
+	 * has it and matching its ref; each lock, reference and possible
+	 * reference with its fields and no other; no object whose name is the
+	 * name of a credential (B9, never packed); a reason code of the list of
+	 * its status where the takeover never reads the row
+	 * (AB_MCP_Sync_Option_Schema::REASON_CODES) and none elsewhere, a target
+	 * where WordPress reads another row and none elsewhere; and, where a
+	 * lock of the credential check holds it, no more than its identity,
+	 * status and locks. A name passes as any text or bytes (typed(): name).
 	 *
 	 * @param array $object Object.
 	 * @return bool
@@ -795,7 +815,7 @@ final class AB_MCP_Sync_Import {
 			} elseif ( 'refs' === $type ) {
 				$fits = self::records( $value, self::REF_FIELDS, self::REF_NEEDS );
 			} elseif ( 'possible' === $type ) {
-				$fits = self::records( $value, array( 'at' => 'place' ), array( 'at' ) );
+				$fits = self::records( $value, self::POSSIBLE_FIELDS, array( 'at' ) );
 			} else {
 				$fits = 'identity' === $type || self::typed( $value, $type );
 			}
@@ -811,14 +831,24 @@ final class AB_MCP_Sync_Import {
 		if ( array() === $object['identity'] && ( ! isset( $object['complete'], $object['unread'] ) || false !== $object['complete'] || array() === array_intersect( $object['unread'], self::ROW_UNREAD ) ) ) {
 			return false;
 		}
+		// The reason of a row the takeover never reads: a code of its status;
+		// where WordPress reads another row, that row.
+		$codes = isset( AB_MCP_Sync_Option_Schema::REASON_CODES[ $object['status'] ] ) ? AB_MCP_Sync_Option_Schema::REASON_CODES[ $object['status'] ] : null;
+		if ( null === $codes ? array_key_exists( 'reason_code', $object ) : ! in_array( isset( $object['reason_code'] ) ? $object['reason_code'] : null, $codes, true ) ) {
+			return false;
+		}
+		if ( ( 'unreachable' === $object['status'] ) !== array_key_exists( 'target', $object ) ) {
+			return false;
+		}
 		return ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );
 	}
 
 	/**
 	 * Whether the identity of a line is the one its kind has and names its
 	 * ref: none (a row that could not be read) with a ref of the kind's form,
-	 * or exactly the fields of IDENTITIES (a theme mod also its name only),
-	 * typed, with the ref they give: the id of a post, term or menu (item),
+	 * or exactly the fields of IDENTITIES (a theme mod also its name only, a
+	 * name as any other: a row in bytes too), typed, with the ref they give:
+	 * the id of a post, term or menu (item),
 	 * the area of a widget area, the name of an option, the stylesheet and
 	 * key of a theme mod, the stylesheet (and post) of the additional CSS.
 	 *
@@ -836,7 +866,7 @@ final class AB_MCP_Sync_Import {
 		if ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {
 			return false;
 		}
-		if ( ! is_array( $identity ) || '' === $ref ) {
+		if ( ! is_array( $identity ) ) {
 			return false;
 		}
 		if ( array() === $identity ) {
@@ -844,7 +874,7 @@ final class AB_MCP_Sync_Import {
 		}
 		$fields = self::IDENTITIES[ $kind ];
 		if ( 'theme_mod' === $kind && array( 'name' ) === array_keys( $identity ) ) {
-			$fields = array( 'name' => 'string' );
+			$fields = array( 'name' => 'name' );
 		}
 		$given = array_map( 'strval', array_keys( $identity ) );
 		$want  = array_keys( $fields );
@@ -938,10 +968,13 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
-	 * Whether a value has a type of a line: string; text (a string or null);
-	 * int; number (an int or the digits of one); bool; ints and strings
-	 * (lists of them); hash (64 hex or null); size (an int from 0); status
-	 * (a word of lower case letters, digits and _, not b9).
+	 * Whether a value has a type of a line. Content: name (any text, or
+	 * bytes in the byte form of the canon, bytes()), names (a list of them),
+	 * login (a name or null). Structure: string; text (a string or null);
+	 * canon (the version of the canonical form); space and strength (of the
+	 * readers); integer (an int or the digits of one, negative too); number
+	 * (an int or the digits of one); bool; ints (a list of ints); hash (64
+	 * hex or null); size (an int from 0); status (of STATUSES).
 	 *
 	 * @param mixed  $value Value.
 	 * @param string $type  Type.
@@ -955,26 +988,20 @@ final class AB_MCP_Sync_Import {
 				return null === $value || is_string( $value );
 			case 'name':
 				return null !== self::bytes( $value );
-			case 'ref':
-				$text = self::bytes( $value );
-				return null !== $text && '' !== $text && strlen( $text ) <= self::NAME_MAX && 1 !== preg_match( self::PLACE_NOT, $text );
-			case 'canon':
-				return AB_MCP_Sync_Canon::VERSION === $value;
-			case 'place':
-				$text = self::bytes( $value );
-				return null !== $text && '' !== $text && strlen( $text ) <= self::PLACE_MAX && 1 !== preg_match( self::PLACE_NOT, $text );
-			case 'places':
+			case 'names':
 				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
 					return false;
 				}
 				foreach ( $value as $item ) {
-					if ( ! self::typed( $item, 'place' ) ) {
+					if ( null === self::bytes( $item ) ) {
 						return false;
 					}
 				}
 				return true;
 			case 'login':
-				return null === $value || ( is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9 _.@-]{1,60}\z/', $value ) );
+				return null === $value || null !== self::bytes( $value );
+			case 'canon':
+				return AB_MCP_Sync_Canon::VERSION === $value;
 			case 'space':
 				return in_array( $value, self::SPACES, true );
 			case 'strength':
@@ -986,12 +1013,11 @@ final class AB_MCP_Sync_Import {
 			case 'bool':
 				return is_bool( $value );
 			case 'ints':
-			case 'strings':
 				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
 					return false;
 				}
 				foreach ( $value as $item ) {
-					if ( 'ints' === $type ? ! is_int( $item ) : ! is_string( $item ) ) {
+					if ( ! is_int( $item ) ) {
 						return false;
 					}
 				}
@@ -1009,16 +1035,76 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
+	 * Why a line is held on this site (HELD_CODES), or null: its name, or the
+	 * row WordPress reads instead (target), is the name of a credential by
+	 * the rules of this site (named_credential(); a line without its
+	 * identity names its object by its ref); else the
+	 * content check of the credential check (AB_MCP_Sync_Credentials::unit()
+	 * as it reads a value) over every name of the line (names_of()): a field
+	 * of a credential in one, or one that does not read to its end. A slug
+	 * «reset-password» is no field of one; {"password":"…"} is.
+	 *
+	 * @param array    $object Line (line_shaped()).
+	 * @param string[] $extra  AB_MCP_Redactor::extra_keys().
+	 * @return string|null
+	 */
+	private static function held_code( array $object, array $extra ) {
+		$named = ( array() === $object['identity'] ? array( 'name' => $object['ref'] ) : $object['identity'] ) + array_intersect_key( $object, array( 'target' => true ) );
+		if ( self::named_credential( $named, $extra ) ) {
+			return 'credential_name';
+		}
+		foreach ( self::names_of( $object ) as $name ) {
+			$check = AB_MCP_Sync_Credentials::unit( '', $name, $extra );
+			if ( 'mixed' === $check['state'] ) {
+				return 'credential_field';
+			}
+			if ( 'unreadable' === $check['state'] ) {
+				return 'unreadable_name';
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Every name of a line, as bytes, once: each field typed name, names or
+	 * login (LINE_FIELDS, LOCK_FIELDS, REF_FIELDS, POSSIBLE_FIELDS) and each
+	 * text of its identity.
+	 *
+	 * @param array $object Line (line_shaped()).
+	 * @return string[]
+	 */
+	private static function names_of( array $object ) {
+		$out    = array_values( $object['identity'] );
+		$fields = array(
+			array( array( $object ), self::LINE_FIELDS ),
+			array( $object['locks'], self::LOCK_FIELDS ),
+			array( isset( $object['refs'] ) ? $object['refs'] : array(), self::REF_FIELDS ),
+			array( isset( $object['possible'] ) ? $object['possible'] : array(), self::POSSIBLE_FIELDS ),
+		);
+		foreach ( $fields as list( $records, $types ) ) {
+			foreach ( $records as $record ) {
+				foreach ( $types as $field => $type ) {
+					if ( ! isset( $record[ $field ] ) || ! in_array( $type, array( 'name', 'names', 'login' ), true ) ) {
+						continue;
+					}
+					$out = array_merge( $out, 'names' === $type ? $record[ $field ] : array( $record[ $field ] ) );
+				}
+			}
+		}
+		return array_values( array_unique( array_filter( array_map( array( __CLASS__, 'bytes' ), $out ), 'is_string' ) ) );
+	}
+
+	/**
 	 * Whether the identity of an object names a credential by the rules of
 	 * this site: the name of an option or of a row of theme mods, the key of
-	 * a theme mod.
+	 * a theme mod, the row WordPress reads instead of it.
 	 *
-	 * @param array    $identity Identity.
+	 * @param array    $identity Identity (and target).
 	 * @param string[] $extra    AB_MCP_Redactor::extra_keys().
 	 * @return bool
 	 */
 	private static function named_credential( array $identity, array $extra ) {
-		foreach ( array( 'name', 'theme_mod' ) as $field ) {
+		foreach ( array( 'name', 'theme_mod', 'target' ) as $field ) {
 			if ( isset( $identity[ $field ] ) && AB_MCP_Sync_Credentials::names_credential( (string) self::bytes( $identity[ $field ] ), $extra ) ) {
 				return true;
 			}

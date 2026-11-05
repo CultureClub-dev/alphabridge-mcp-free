@@ -833,6 +833,11 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Sync_Export::line( array_diff_key( self::object(), array( 'unread' => true ) ) )['unread'], 'An option without its own list of what was not read.' );
 		self::assertStringNotContainsString( 'RAW', (string) json_encode( AB_MCP_Sync_Export::line( self::object() ) ) );
 		self::assertStringNotContainsString( '987654321', (string) json_encode( AB_MCP_Sync_Export::line( self::object() ) ) );
+		// A row the takeover never reads: the code of its reason, never the text, and the row WordPress reads instead.
+		$alias = AB_MCP_Sync_Export::line( self::object( array( 'status' => 'unreachable', 'reason' => 'WordPress reads the row disallowed_keys under this name.', 'reason_code' => 'read_as_other_row', 'target' => 'disallowed_keys' ) ) );
+		self::assertSame( array( 'read_as_other_row', 'disallowed_keys' ), array( $alias['reason_code'], $alias['target'] ) );
+		self::assertArrayNotHasKey( 'reason', $alias );
+		self::assertArrayNotHasKey( 'reason_code', AB_MCP_Sync_Export::line( self::object() ) );
 	}
 
 	/** @return array<string,array{0:array}> */

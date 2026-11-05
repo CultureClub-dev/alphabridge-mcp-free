@@ -98,6 +98,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'->parse'                              => 'WP_Block_Parser: parses the text it is given.',
 		'->get_error_code'                     => 'WP_Error.',
 		'->get_error_message'                  => 'WP_Error.',
+		'->get_error_data'                     => 'WP_Error.',
 		'->carries_record'                     => 'AB_MCP_Replace_Engine: walks the serialized text without unserialize().',
 		// The trust of the takeover (Z8, decisions 4 and 5): encoders, the
 		// answer of another site, the answer of a route.

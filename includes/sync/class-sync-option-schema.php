@@ -46,6 +46,21 @@ require_once __DIR__ . '/class-sync-canon.php';
  */
 final class AB_MCP_Sync_Option_Schema {
 
+	/**
+	 * The reason of a row the takeover never reads, by its status, as a code
+	 * of this closed list (the line of a package carries the code, never a
+	 * text; the takeover words it): guarded, the option guard refuses the
+	 * name (option_guard); unreachable, WordPress reads another row under
+	 * this name (read_as_other_row, with that row as target); unreadable,
+	 * the row could not be looked up (lookup_failed) or its name not settled
+	 * (not_settled).
+	 */
+	const REASON_CODES = array(
+		'guarded'     => array( 'option_guard' ),
+		'unreachable' => array( 'read_as_other_row' ),
+		'unreadable'  => array( 'lookup_failed', 'not_settled' ),
+	);
+
 	/** The core options with a schema: name => type (and space, values). */
 	const CORE = array(
 		'blogname'                     => array( 'type' => 'text' ),
@@ -193,7 +208,9 @@ final class AB_MCP_Sync_Option_Schema {
 	 *               guard refuses it; reason: its way), unreachable (WordPress
 	 *               reads another row under this name), unclassified (locked,
 	 *               Z8d), unreadable (the guard could not look it up); key,
-	 *               stage, reason.
+	 *               stage, reason; for guarded, unreachable and unreadable
+	 *               code (REASON_CODES), for unreachable target (the name of
+	 *               the row WordPress reads).
 	 */
 	public static function classify( $name, $raw = null ) {
 		$name  = (string) $name;
@@ -211,12 +228,15 @@ final class AB_MCP_Sync_Option_Schema {
 		$resolved = AB_MCP_Sync_Option_Name::settle( $name );
 		if ( is_wp_error( $resolved ) ) {
 			if ( 'ab_mcp_option_unreadable' === $resolved->get_error_code() ) {
-				return self::answer( 'unreadable', 'option:' . $name, null, $resolved->get_error_message() );
+				return self::answer( 'unreadable', 'option:' . $name, null, $resolved->get_error_message() ) + array( 'code' => $resolved->get_error_data()['code'] );
 			}
-			return self::answer( 'guarded', 'option:' . $name, null, $resolved->get_error_message() );
+			return self::answer( 'guarded', 'option:' . $name, null, $resolved->get_error_message() ) + array( 'code' => 'option_guard' );
 		}
 		if ( $resolved['name'] !== $name ) {
-			return self::answer( 'unreachable', 'option:' . $name, null, sprintf( 'WordPress reads the row %s under this name, so this row is never read and is not taken over.', $resolved['name'] ) );
+			return self::answer( 'unreachable', 'option:' . $name, null, sprintf( 'WordPress reads the row %s under this name, so this row is never read and is not taken over.', $resolved['name'] ) ) + array(
+				'code'   => 'read_as_other_row',
+				'target' => $resolved['name'],
+			);
 		}
 		if ( isset( self::CORE[ $name ] ) ) {
 			return self::answer( 'core', 'option:' . $name, null, null ) + array( 'schema' => self::CORE[ $name ] );
@@ -364,7 +384,8 @@ final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 	 *
 	 * @param string $given Name.
 	 * @return array|WP_Error array( 'name' => settled name ), or the refusal
-	 *                        of the guard, or ab_mcp_option_unreadable.
+	 *                        of the guard, or ab_mcp_option_unreadable (its
+	 *                        data: code, lookup_failed or not_settled).
 	 */
 	public static function settle( $given ) {
 		$name = self::real_option_name( $given );
@@ -374,7 +395,7 @@ final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 			}
 			$row = AB_MCP_Undo::option_row( $name );
 			if ( null === $row ) {
-				return new WP_Error( 'ab_mcp_option_unreadable', 'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' );
+				return new WP_Error( 'ab_mcp_option_unreadable', 'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.', array( 'code' => 'lookup_failed' ) );
 			}
 			$settled = is_array( $row ) ? self::real_option_name( $row['name'] ) : $name;
 			if ( $settled === $name ) {
@@ -382,7 +403,7 @@ final class AB_MCP_Sync_Option_Name extends AB_MCP_Option_Guard {
 			}
 			$name = $settled;
 		}
-		return new WP_Error( 'ab_mcp_option_unreadable', 'The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' );
+		return new WP_Error( 'ab_mcp_option_unreadable', 'The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause.', array( 'code' => 'not_settled' ) );
 	}
 
 	/**
