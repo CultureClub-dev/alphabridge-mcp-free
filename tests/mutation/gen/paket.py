@@ -1242,7 +1242,7 @@ e('paket/r6-renew-hook', 'the form «Renew the key» is hooked (F2)', AD,
 e('paket/r6-renew-nonce', 'handle_staging_key_renew(): behind its own nonce (F2)', AD,
   "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", "\t\tcheck_admin_referer( 'ab_mcp_staging_key' );", 'trust', R6['flow'])
 e('paket/r6-renew-guard', 'handle_staging_key_renew(): manage_options (F2)', AD,
-  "\t\t$this->guard();\n\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", 'trust', R6['flow'])
+  "\t\t$this->guard();\n\t\t// The form of the page only", "\t\t// The form of the page only", 'trust', R6['flow'])
 e('paket/r6-renew-form', 'the page of the staging site offers «Renew the key» (F2)', AD,
   "\t\t$html .= '<input type=\"hidden\" name=\"action\" value=\"ab_mcp_staging_key_renew\">';\n", "", 'trust', R6['flow'])
 e('paket/r6-replace-role', 'replace(): only a confirmed staging site renews its key (F2)', K,
@@ -1259,6 +1259,10 @@ e('paket/r6-active-retired', 'active(): an anchor whose key is retired is none (
   "$active['partner_url'] === self::partner() && ! self::retired( $active['key_id'] ) ? $active : null;", "$active['partner_url'] === self::partner() ? $active : null;", 'trust', R6['readback'])
 e('paket/r6-confirm-current-retired', 'confirm(): a retired anchor is not confirmed once more (F4)', A,
   "$state['active']['partner_url'] === $partner && ! self::retired( $state['active']['key_id'] ) ? $state['active'] : null;", "$state['active']['partner_url'] === $partner ? $state['active'] : null;", 'trust', R6['readback'])
+
+# ------------------------------------------------------ Codex round 7
+e('paket/r7-renew-post-only', 'handle_staging_key_renew(): a POST only, nothing on a GET with the nonce (R1)', AD,
+  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -1325,7 +1329,8 @@ out.append('''<?php
  * secret of the MACs made where it is missing, a making stopped before its
  * record, a write of the store that fails or falls short. Codex round 6: a
  * revocation that cannot be kept changes nothing, the notices and the way
- * «Renew the key», a confirmation that reads back.
+ * «Renew the key», a confirmation that reads back. Codex round 7: «Renew
+ * the key» on a POST only.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.

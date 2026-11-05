@@ -72,7 +72,7 @@ final class SyncTrustTest extends TestCase {
 	protected function tearDown(): void {
 		$_POST    = array();
 		$_REQUEST = array();
-		unset( $GLOBALS['ab_test_home'] );
+		unset( $GLOBALS['ab_test_home'], $_SERVER['REQUEST_METHOD'] );
 	}
 
 	/** The stored public part of the key of the site running now. */
@@ -1013,10 +1013,11 @@ final class SyncTrustTest extends TestCase {
 		return (string) $m->invoke( new AB_MCP_Admin() );
 	}
 
-	/** Send a form of the part «Key». */
-	private function submit( string $handler, array $post ): AbTestExit {
-		$_POST    = $post;
-		$_REQUEST = $post;
+	/** Send a form of the part «Key» (a POST, as the page sends it). */
+	private function submit( string $handler, array $post, string $method = 'POST' ): AbTestExit {
+		$_POST                     = 'POST' === $method ? $post : array();
+		$_REQUEST                  = $post;
+		$_SERVER['REQUEST_METHOD'] = $method;
 		try {
 			( new AB_MCP_Admin() )->$handler();
 		} catch ( AbTestExit $exit ) {
@@ -1071,10 +1072,26 @@ final class SyncTrustTest extends TestCase {
 		self::assertSame( 'die', $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ) )->kind );
 		self::assertSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'] );
 		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		// Its nonce in the address of a GET: nothing happens.
+		foreach ( array( 'GET', 'HEAD', 'PUT' ) as $method ) {
+			$refused = $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ), $method );
+			self::assertSame( 'die', $refused->kind, $method );
+			self::assertSame( 405, $GLOBALS['ab_test_die_args']['response'] );
+			self::assertStringContainsString( 'Nothing was changed', $refused->detail );
+		}
+		self::assertSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'], 'Not renewed.' );
 		self::landed( $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ) ), 'staging_key_renewed' );
 		self::assertNotSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'] );
 		self::assertSame( $role, AB_MCP_Staging::record()['role'], 'The role stays as it was.' );
-		self::assertStringContainsString( 'notice-success', self::shown( 'staging_key_renewed' ) );
+		$renewed = self::shown( 'staging_key_renewed' );
+		self::assertStringContainsString( 'notice-success', $renewed );
+		// Both texts say what ends at once and what only the production site ends.
+		foreach ( array( $renewed, $this->card() ) as $text ) {
+			self::assertStringContainsString( 'given out no more', $text );
+			self::assertStringContainsString( 'stay readable there for up to 24 hours', $text );
+			self::assertStringContainsString( 'confirming the new key, or removing the pair there, ends that', $text );
+			self::assertStringNotContainsString( 'reads no package of this site', $text );
+		}
 		$new = $this->code();
 
 		// The production site: the new code, compared and confirmed.

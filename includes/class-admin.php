@@ -75,7 +75,7 @@ class AB_MCP_Admin {
 	const TRUST_NOTICES = array(
 		'staging_key_made'                         => array( 'success', 'The key of this staging site was made. Its fingerprint and pairing code are below: confirm it on the page AlphaBridge → Staging of the production site.' ),
 		'staging_key_kept'                         => array( 'success', 'This staging site has its key already; nothing was changed.' ),
-		'staging_key_renewed'                      => array( 'success', 'The key of this staging site was renewed; packages made with the old key are no longer given out. 1. On the production site, open AlphaBridge → Staging. 2. Enter the new pairing code shown below, or fetch the key again. 3. Compare the fingerprint with the one below and confirm it there. Until then the production site reads no package of this site.' ),
+		'staging_key_renewed'                      => array( 'success', 'The key of this staging site was renewed: packages and fetch addresses of the old key are given out no more. 1. On the production site, open AlphaBridge → Staging. 2. Enter the new pairing code shown below, or fetch the key again. 3. Compare the fingerprint with the one below and confirm it there. Copies of packages delivered before stay readable there for up to 24 hours while the old key is confirmed there; confirming the new key, or removing the pair there, ends that.' ),
 		'staging_anchor_prepared'                  => array( 'success', 'The key of the staging site is prepared, not confirmed. Compare its fingerprint below with the one the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same.' ),
 		'staging_anchor_confirmed'                 => array( 'success', 'The key of the staging site is confirmed: this site reads the packages signed with it.' ),
 		'staging_anchor_unknown'                   => array( 'error', 'Nothing was changed: the action was not to fetch the key, to enter a pairing code or to confirm the key.' ),
@@ -1003,6 +1003,12 @@ class AB_MCP_Admin {
 	 */
 	public function handle_staging_key_renew() {
 		$this->guard();
+		// The form of the page only: admin-post.php also runs the action for a
+		// GET with the nonce in its address, and nothing happens on that.
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
+		if ( 'POST' !== $method ) {
+			wp_die( esc_html( 'Nothing was changed: «Renew the key» works only from the button on the page AlphaBridge → Staging. Open that page and click it there.' ), '', array( 'response' => 405 ) );
+		}
 		check_admin_referer( 'ab_mcp_staging_key_renew' );
 		$key = AB_MCP_Sync_Key::replace();
 		$this->redirect( is_wp_error( $key ) ? self::trust_notice( $key ) : 'staging_key_renewed', self::STAGING_TRUST );
@@ -2139,7 +2145,7 @@ class AB_MCP_Admin {
 		$html .= '<p class="ab-direct__status">' . esc_html( 'Fingerprint:' ) . ' <code class="ab-staging-trust__fingerprint">' . esc_html( $answer['fingerprint'] ) . '</code></p>';
 		$html .= '<p class="ab-note">' . esc_html( 'On the production site, fetch this key over https or enter the pairing code below on its page AlphaBridge → Staging, compare the fingerprint it shows with this one, and confirm it there.' ) . '</p>';
 		$html .= '<p class="ab-field"><label>' . esc_html( 'Pairing code' ) . ' <textarea class="large-text code ab-staging-trust__code" rows="3" readonly>' . esc_textarea( (string) AB_MCP_Sync_Key::pairing_code() ) . '</textarea></label></p>';
-		$html .= '<p class="ab-note ab-staging-trust__renew">' . esc_html( 'Renew the key where the production site no longer accepts this one (it was replaced or revoked there, for instance when the pair was removed), or where it may be known to others. The role of this site stays. Afterwards the production site reads packages of this site only once a person has confirmed the new key there, with its new pairing code or by fetching it, and packages made with this key are no longer given out.' ) . '</p>';
+		$html .= '<p class="ab-note ab-staging-trust__renew">' . esc_html( 'Renew the key where the production site no longer accepts this one (it was replaced or revoked there, for instance when the pair was removed), or where it may be known to others. The role of this site stays. Packages and fetch addresses of this key are given out no more at once; the production site reads new packages of this site once a person has confirmed the new key there, with its new pairing code or by fetching it. Copies of packages delivered before stay readable there for up to 24 hours while this key is confirmed there; confirming the new key, or removing the pair there, ends that.' ) . '</p>';
 		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_staging_key_renew', '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_staging_key_renew">';
 		$html .= '<p><button class="ab-btn ab-btn--ghost">' . esc_html( 'Renew the key' ) . '</button></p></form>';

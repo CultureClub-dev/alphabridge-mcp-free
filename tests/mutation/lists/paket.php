@@ -28,7 +28,8 @@
  * secret of the MACs made where it is missing, a making stopped before its
  * record, a write of the store that fails or falls short. Codex round 6: a
  * revocation that cannot be kept changes nothing, the notices and the way
- * «Renew the key», a confirmation that reads back.
+ * «Renew the key», a confirmation that reads back. Codex round 7: «Renew
+ * the key» on a POST only.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
@@ -4133,8 +4134,8 @@ return array(
 		'id'      => 'paket/r6-renew-guard',
 		'clause'  => 'handle_staging_key_renew(): manage_options (F2)',
 		'file'    => $ad,
-		'search'  => "\t\t\$this->guard();\n\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );",
-		'replace' => "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );",
+		'search'  => "\t\t\$this->guard();\n\t\t// The form of the page only",
+		'replace' => "\t\t// The form of the page only",
 		'run'     => $trust,
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
@@ -4200,5 +4201,14 @@ return array(
 		'replace' => "\$state['active']['partner_url'] === \$partner ? \$state['active'] : null;",
 		'run'     => $trust,
 		'expect'  => '/testAConfirmationThatDoesNotReadBackIsNone/',
+	),
+	array(
+		'id'      => 'paket/r7-renew-post-only',
+		'clause'  => 'handle_staging_key_renew(): a POST only, nothing on a GET with the nonce (R1)',
+		'file'    => $ad,
+		'search'  => "\t\tif ( 'POST' !== \$method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»",
+		'replace' => "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»",
+		'run'     => $trust,
+		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 );
