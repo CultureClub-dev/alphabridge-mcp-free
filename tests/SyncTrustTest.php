@@ -1073,7 +1073,7 @@ final class SyncTrustTest extends TestCase {
 		self::assertSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'] );
 		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
 		// Its nonce in the address of a GET: nothing happens.
-		foreach ( array( 'GET', 'HEAD', 'PUT' ) as $method ) {
+		foreach ( array( 'GET', 'HEAD', 'PUT', 'P!OST', 'post', ' POST' ) as $method ) {
 			$refused = $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ), $method );
 			self::assertSame( 'die', $refused->kind, $method );
 			self::assertSame( 405, $GLOBALS['ab_test_die_args']['response'] );

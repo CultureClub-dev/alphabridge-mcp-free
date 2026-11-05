@@ -4211,4 +4211,13 @@ return array(
 		'run'     => $trust,
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
+	array(
+		'id'      => 'paket/r8-renew-post-exact',
+		'clause'  => 'handle_staging_key_renew(): the method exactly POST, not as normalised (R1)',
+		'file'    => $ad,
+		'search'  => "? wp_unslash( \$_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly",
+		'replace' => "? strtoupper( sanitize_key( wp_unslash( \$_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly",
+		'run'     => $trust,
+		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
+	),
 );

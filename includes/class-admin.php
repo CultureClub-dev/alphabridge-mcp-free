@@ -1005,7 +1005,7 @@ class AB_MCP_Admin {
 		$this->guard();
 		// The form of the page only: admin-post.php also runs the action for a
 		// GET with the nonce in its address, and nothing happens on that.
-		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.
 		if ( 'POST' !== $method ) {
 			wp_die( esc_html( 'Nothing was changed: «Renew the key» works only from the button on the page AlphaBridge → Staging. Open that page and click it there.' ), '', array( 'response' => 405 ) );
 		}
