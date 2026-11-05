@@ -203,21 +203,27 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Konto mit `manage_options`; sonst `ab_mcp_sync_export_capability` oder
   `ab_mcp_sync_export_mode` mit nummerierten Schritten. Mit Schreibzugriff
   aus gibt die Route auch gemachte Pakete nicht aus.
-- Rechte je Objekt (`AB_MCP_Sync_Export_Rights`): Inhalte mit `read_post`,
-  nicht Öffentliches (`is_post_publicly_viewable()`: Status oder Typ nicht
-  öffentlich) zusätzlich mit `edit_post`; Begriffe einer öffentlichen
-  Taxonomie wie für jeden auf der Site, sonst mit `edit_term` (der Plan
-  nennt Begriffe nicht; die Regel folgt der für Inhalte); Menüs, ihre
-  Einträge, Widget-Bereiche, Theme-Mods und das zusätzliche CSS mit
+- Rechte je Objekt (`AB_MCP_Sync_Export_Rights`): Inhalte mit `read_post`
+  oder `edit_post` (wer bearbeiten darf, darf lesen: ACF registriert seine
+  Feldgruppen mit eigenen Rechten und `map_meta_cap` aus, dort hat ein
+  Administrator `edit_post`, aber kein `read_post`; Codex-Runde 1 zu Teil
+  3, B1), nicht Öffentliches (`is_post_publicly_viewable()`: Status oder Typ
+  nicht öffentlich) mit `edit_post`; Begriffe einer öffentlichen Taxonomie
+  wie für jeden auf der Site, sonst mit `edit_term` (der Plan nennt
+  Begriffe nicht; die Regel folgt der für Inhalte); Menüs, ihre Einträge,
+  Widget-Bereiche, Theme-Mods und das zusätzliche CSS mit
   `edit_theme_options`; Optionen mit `manage_options`, das jeder Export
-  zuerst verlangt. Ein Post eines Typs oder ein Begriff einer Taxonomie,
-  die WordPress nicht kennt (das Plugin ist aus), hat keine Regel des Kerns
-  (`map_meta_cap()` meldete «doing it wrong» oder `do_not_allow`); er wird
-  mit `manage_options` gelesen, gesperrt ist er ohnehin. Was das Konto nicht
-  darf, ein nicht mehr vorhandenes Objekt und eine Art ohne Regel kommen
-  nicht ins Paket, werden gezählt und (die ersten 200) mit Art, Untertyp,
-  Kennung und fehlendem Recht benannt (`withheld`, mit Weg); Art und
-  Untertyp sind dann nicht `complete`.
+  zuerst verlangt. Ein Post eines Typs, den WordPress nicht kennt (das
+  Plugin ist aus), mit `edit_others_posts`, worauf `map_meta_cap()` für
+  `read_post` und `edit_post` eines solchen Posts selbst zurückfällt (direkt
+  gefragt, ohne dessen Meldung «doing it wrong»); ein Begriff einer
+  unbekannten Taxonomie mit `manage_categories`, was `register_taxonomy()`
+  einer Taxonomie zum Verwalten und Bearbeiten ihrer Begriffe gibt
+  (`map_meta_cap()` antwortet dort `do_not_allow`; Codex-Runde 1 zu Teil 3,
+  A1). Was das Konto nicht darf, ein nicht mehr vorhandenes Objekt und eine
+  Art ohne Regel kommen nicht ins Paket, werden gezählt und (die ersten
+  200) mit Art, Untertyp, Kennung und fehlendem Recht benannt (`withheld`,
+  mit Weg); Art und Untertyp sind dann nicht `complete`.
 - Zugangsdaten vor dem Paket (die vorhandene Prüfung des Inventars): ein
   Objekt, dessen Name der einer Zugangsangabe ist (B9), kommt nicht ins
   Paket und wird gezählt (`credentials.names`); seine Art bleibt
@@ -229,20 +235,36 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Zeile trägt wie bisher Name und Status, keinen Hash und keinen Wert.
 - Beim Import, sobald das Paket ganz geprüft ist, wird es entpackt und
   jede Zeile erneut geprüft, bevor es als vollständig gilt: jedes Stück
-  stückweise aufgeblasen (je 4096 Bytes Eingabe) und nie weiter als bis zum
-  Rest der deklarierten Grösse und zu 8 MiB (ein Stück fasst ganze Zeilen
-  von höchstens `SLICE` Bytes, so bleibt auch jede Zeile darunter);
-  höchstens 5000 Objekte; JSON höchstens 64 tief, in der einen Schreibweise
-  von `AB_MCP_Sync_Canon::encode()`, mit den Feldern einer Inventarzeile und
-  keinem anderen, kein B9-Objekt, keine von einer Zugangsdatensperre
-  gehaltene Zeile mit mehr als ihrer Identität; so viele Zeilen und Bytes,
-  wie das Manifest nennt. Die deklarierten Höchstwerte (5000 Objekte,
+  stückweise aufgeblasen (je 512 Bytes Eingabe) und angehalten, sobald es
+  den Rest der deklarierten Grösse oder 8 MiB übersteigt, also höchstens um
+  die Ausgabe eines Eingabeschritts darüber (zlib bläst höchstens etwa
+  1032-fach auf: rund 516 KiB); genau ein gzip-Mitglied, die ganze Eingabe
+  gelesen, nichts danach; jedes Stück endet mit einem Zeilenumbruch (ein
+  Stück fasst ganze Zeilen von höchstens `SLICE` Bytes, so bleibt auch jede
+  Zeile unter 8 MiB); höchstens 5000 Objekte; JSON höchstens 64 tief, in der
+  einen Schreibweise von `AB_MCP_Sync_Canon::encode()`; jede Zeile genau mit
+  den Feldern und Typen einer Inventarzeile, auch in ihren verschachtelten
+  Teilen (Identität je Art, Sperren, Verweise, mögliche Verweise), die
+  Identität passend zur Kennung (Id der Datenbank, Name der Option, Bereich,
+  Stylesheet und Schlüssel), kein B9-Objekt, keine von einer
+  Zugangsdatensperre gehaltene Zeile mit mehr als ihrer Identität; so viele
+  Zeilen und Bytes, wie das Manifest nennt (Codex-Runde 1 zu Teil 3, A2 und
+  B2). Das ganze Inventar beider Prüf-Sites über alle Arten geht so durch. Die deklarierten Höchstwerte (5000 Objekte,
   256 MiB) prüft schon das Manifest (`MAX_OBJECTS`, `MAX_UNPACKED`, gleich
   `AB_MCP_Store_Budget::UNPACK`). Ein Paket, das nicht hält, wird entfernt
   (`ab_mcp_store_unpack_limit` oder `ab_mcp_sync_import_lines`, je mit
   Schritten). Ein Name, den erst die Regeln der Live-Site als Zugangsangabe
   lesen (`ab_mcp_redact_keys`), wird als gehalten gelistet (`held`); die
-  Werte selbst waren nie im Paket.
+  Werte selbst waren nie im Paket. Geprüft werden die Namen, die die
+  Staging-Site ebenso prüft: der Name einer Option, der Zeile der
+  Theme-Mods und der Schlüssel eines Theme-Mods. Slugs, Post-Typen,
+  Taxonomien und Bereiche sind keine Namen gespeicherter Werte; eine Seite
+  «reset-password» würde sonst auf jeder Mitglieder-Site gehalten.
+- Ein Exportdatensatz einer älteren Fassung (ohne Bericht) wird beim
+  nächsten Zugriff als veraltet verworfen (`ab_mcp_sync_export_stale`, Weg:
+  neu exportieren); ein abgeschlossener Import ohne Liste der gehaltenen
+  Objekte wird entfernt (`ab_mcp_sync_import_held`, Weg: Paket neu holen;
+  Codex-Runde 1 zu Teil 3, C1).
 
 ## Anker
 

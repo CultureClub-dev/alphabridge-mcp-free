@@ -631,7 +631,17 @@ final class SyncPackageTest extends TestCase {
 		$before = memory_get_peak_usage();
 		self::assertNull( AB_MCP_Sync_Import::inflate( $bomb, 1048576 ) );
 		self::assertLessThan( 12582912, memory_get_peak_usage() - $before, 'Not inflated to its end (24 MiB).' );
-		self::assertSame( 4096, AB_MCP_Sync_Import::INFLATE_PIECE );
+		self::assertSame( 512, AB_MCP_Sync_Import::INFLATE_PIECE );
+		// One gzip member and nothing after it.
+		self::assertFalse( AB_MCP_Sync_Import::inflate( (string) gzencode( $text ) . 'X', 100000 ), 'A byte after the member.' );
+		self::assertFalse( AB_MCP_Sync_Import::inflate( (string) gzencode( $text ) . (string) gzencode( 'more' ), 100000 ), 'A second member.' );
+		$long = str_repeat( 'x', 5000 );
+		self::assertFalse( AB_MCP_Sync_Import::inflate( (string) gzencode( $long ) . str_repeat( 'Y', 3000 ), 100000 ), 'Bytes after it beyond one piece.' );
+		// Past the cap by at most what one piece inflates to.
+		memory_reset_peak_usage();
+		$start = memory_get_usage();
+		self::assertNull( AB_MCP_Sync_Import::inflate( $bomb, 0 ) );
+		self::assertLessThan( 2097152, memory_get_peak_usage() - $start, 'One piece of 512 bytes inflates to some 516 KiB at most.' );
 	}
 
 	public function testTheListOfHeldObjectsIsNamedByItsHashInBase32(): void {

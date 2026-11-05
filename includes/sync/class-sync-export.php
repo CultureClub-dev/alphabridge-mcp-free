@@ -807,7 +807,7 @@ final class AB_MCP_Sync_Export {
 			return new WP_Error( 'ab_mcp_sync_export_unknown', 'This site keeps no package of that id made by this account: packages are kept a day, and each account reads its own. Make a new one with wp_site_export.' );
 		}
 		if ( ! self::bound( $found ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_stale', 'The package was made for another pair or with another key of this staging site: the pair or the role was confirmed again since, so it was discarded. Make a new one with wp_site_export.' );
+			return new WP_Error( 'ab_mcp_sync_export_stale', 'The package was made for another pair, with another key of this staging site or by an older version of this plugin: the pair or the role was confirmed again since, or the plugin was updated, so it was discarded. Make a new one with wp_site_export.' );
 		}
 		return $found;
 	}
@@ -853,7 +853,8 @@ final class AB_MCP_Sync_Export {
 	 * @return bool
 	 */
 	private static function bound( array $found, $binding = null ) {
-		if ( $found['binding'] === ( null === $binding ? self::binding() : $binding ) ) {
+		// A record of an older version, without its report, is none either.
+		if ( null !== $found['report'] && $found['binding'] === ( null === $binding ? self::binding() : $binding ) ) {
 			return true;
 		}
 		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
@@ -932,8 +933,28 @@ final class AB_MCP_Sync_Export {
 			'cursor'   => $record['cursor'],
 			'series'   => $record['series'],
 			'binding'  => $record['binding'],
-			'report'   => $record['report'],
+			'report'   => self::report_shaped( isset( $record['report'] ) ? $record['report'] : null ),
 		);
+	}
+
+	/**
+	 * The report of a record as sort() writes it (withheld: count and the
+	 * objects named; credentials: held, names, units), or null.
+	 *
+	 * @param mixed $report Report.
+	 * @return array|null
+	 */
+	private static function report_shaped( $report ) {
+		if ( ! is_array( $report ) || array( 'credentials', 'withheld' ) !== self::sorted_keys( $report ) || ! is_array( $report['withheld'] ) || ! is_array( $report['credentials'] ) ) {
+			return null;
+		}
+		if ( array( 'count', 'objects' ) !== self::sorted_keys( $report['withheld'] ) || ! is_int( $report['withheld']['count'] ) || ! is_array( $report['withheld']['objects'] ) ) {
+			return null;
+		}
+		if ( array( 'held', 'names', 'units' ) !== self::sorted_keys( $report['credentials'] ) || array( true, true, true ) !== array_values( array_map( 'is_int', $report['credentials'] ) ) ) {
+			return null;
+		}
+		return $report;
 	}
 
 	/**

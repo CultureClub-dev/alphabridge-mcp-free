@@ -23,7 +23,8 @@
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
- * (whether export, inventory and kinds are loaded), serve (query: the route
+ * (whether export, inventory and kinds are loaded), menu_css_mods (a menu
+ * with an item, the additional CSS and two theme mods), serve (query: the route
  * of the chunks asked through the REST server of this process, its status). The process
  * loads only what WordPress and the plugin load and what an op needs. A step with "expect": "error"
  * gives { code, message } of its WP_Error instead of ending the steps.
@@ -173,6 +174,27 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'grants':
 			$ab_it_out = AB_MCP_Sync_Grant::grants( $ab_it_step['package_id'], (int) $ab_it_step['count'], (int) $ab_it_step['now'] );
+			break;
+		case 'menu_css_mods':
+			$ab_it_menu = wp_create_nav_menu( 'Every menu' );
+			$ab_it_item = wp_update_nav_menu_item(
+				$ab_it_menu,
+				0,
+				array(
+					'menu-item-title'  => 'Every item',
+					'menu-item-url'    => home_url( '/' ),
+					'menu-item-status' => 'publish',
+					'menu-item-type'   => 'custom',
+				)
+			);
+			$ab_it_css  = wp_update_custom_css_post( 'body { color: #123; }' );
+			set_theme_mod( 'header_textcolor', '333333' );
+			set_theme_mod( 'nav_menu_locations', array( 'primary' => $ab_it_menu ) );
+			$ab_it_out = array(
+				'menu' => $ab_it_menu,
+				'item' => $ab_it_item,
+				'css'  => $ab_it_css instanceof WP_Post ? $ab_it_css->ID : 0,
+			);
 			break;
 		case 'staging_raw':
 			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );

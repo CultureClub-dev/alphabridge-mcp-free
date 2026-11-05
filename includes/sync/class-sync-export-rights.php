@@ -5,9 +5,11 @@
  * in the package; AB_MCP_Sync_Export counts and names it, and its kind and
  * subtype are not complete there.
  *
- * - Content (the kind post): read_post; where it is not publicly viewable
- *   (is_post_publicly_viewable(): a status or a type that is not public),
- *   edit_post as well.
+ * - Content (the kind post): read_post, or edit_post (who may edit an
+ *   object may read it; a type that maps its own capabilities, as ACF's
+ *   field groups do with map_meta_cap off, gives its editors no read_post);
+ *   where it is not publicly viewable (is_post_publicly_viewable(): a
+ *   status or a type that is not public), edit_post.
  * - Terms: those of a viewable taxonomy (is_taxonomy_viewable()) as anyone
  *   reads them on the site; the others with edit_term.
  * - Menus, their items, widget areas, theme mods and the additional CSS:
@@ -15,12 +17,14 @@
  * - Options: manage_options, which every export asks first
  *   (AB_MCP_Sync_Export::refusal()); so does this class only ever answer
  *   for an account that has it.
- * - A post of a type or a term of a taxonomy WordPress does not know (the
- *   plugin that registered it is off): WordPress has no rule of its own for
- *   it (map_meta_cap() reports a post as doing it wrong, a term as
- *   do_not_allow), so it is read with manage_options, as the options are.
- *   Such objects are locked for the takeover anyway; the inventory lists
- *   them.
+ * - A post of a type WordPress does not know (the plugin that registered
+ *   it is off): edit_others_posts, what map_meta_cap() falls back to for
+ *   read_post and edit_post of such a post, asked directly (map_meta_cap()
+ *   would report doing it wrong). A term of a taxonomy WordPress does not
+ *   know: manage_categories, what register_taxonomy() gives a taxonomy to
+ *   manage and edit its terms by default (map_meta_cap() answers
+ *   do_not_allow for it). Such objects are locked for the takeover anyway;
+ *   the inventory lists them.
  * - An object that is not there any more, or of a kind this class has no
  *   rule for, is withheld (fail closed).
  *
@@ -40,8 +44,9 @@ final class AB_MCP_Sync_Export_Rights {
 	/**
 	 * Why the current account, which has manage_options, may not have an
 	 * object in a package, or null where it may: the capability it lacks
-	 * (read_post, edit_post, edit_term, edit_theme_options), gone (the
-	 * object is not there) or kind (a kind without a rule here).
+	 * (read_post, edit_post, edit_others_posts, edit_term, manage_categories,
+	 * edit_theme_options), gone (the object is not there) or kind (a kind
+	 * without a rule here).
 	 *
 	 * @param array $object An object of the inventory (kind, ref, identity).
 	 * @return string|null
@@ -71,15 +76,15 @@ final class AB_MCP_Sync_Export_Rights {
 			return 'gone';
 		}
 		if ( null === get_post_type_object( $post->post_type ) ) {
+			return current_user_can( 'edit_others_posts' ) ? null : 'edit_others_posts';
+		}
+		if ( current_user_can( 'edit_post', $post->ID ) ) {
 			return null;
 		}
 		if ( ! current_user_can( 'read_post', $post->ID ) ) {
 			return 'read_post';
 		}
-		if ( ! is_post_publicly_viewable( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {
-			return 'edit_post';
-		}
-		return null;
+		return is_post_publicly_viewable( $post ) ? null : 'edit_post';
 	}
 
 	/**
@@ -92,7 +97,7 @@ final class AB_MCP_Sync_Export_Rights {
 			return 'gone';
 		}
 		if ( ! taxonomy_exists( $taxonomy ) ) {
-			return null;
+			return current_user_can( 'manage_categories' ) ? null : 'manage_categories';
 		}
 		$term = get_term( (int) $ref, $taxonomy );
 		if ( ! $term instanceof WP_Term ) {

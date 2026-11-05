@@ -278,6 +278,31 @@ final class SyncPackageTest extends TestCase {
 		);
 	}
 
+	/** A package of chunks given as they are (bytes), with the objects and unpacked size named. */
+	private static function package_raw( string $id, array $chunks, int $objects, int $unpacked ): array {
+		$list = array();
+		foreach ( $chunks as $chunk ) {
+			$list[] = array(
+				'bytes'  => strlen( $chunk ),
+				'sha256' => hash( 'sha256', $chunk ),
+			);
+		}
+		return array(
+			'package' => array(
+				'package_id'  => $id,
+				'purpose'     => 'inventory',
+				'report_hash' => null,
+				'kinds'       => array(),
+				'objects'     => $objects,
+				'unpacked'    => $unpacked,
+				'chunks'      => $list,
+				'bytes'       => strlen( implode( '', $chunks ) ),
+				'sha256'      => hash( 'sha256', implode( '', $chunks ) ),
+			),
+			'data'    => $chunks,
+		);
+	}
+
 	/** B signs a package. */
 	private static function signed_by_b( array $package ): array {
 		return self::b(
@@ -1643,7 +1668,7 @@ final class SyncPackageTest extends TestCase {
 		update_post_meta( $public, 'api_token', 'zz 987650001' );
 		$deny  = static function ( $caps, $cap, $user_id, $args ) use ( $public, $private ) {
 			unset( $user_id );
-			if ( 'read_post' === $cap && isset( $args[0] ) && (int) $args[0] === $public ) {
+			if ( in_array( $cap, array( 'read_post', 'edit_post' ), true ) && isset( $args[0] ) && (int) $args[0] === $public ) {
 				return array( 'do_not_allow' );
 			}
 			if ( 'edit_post' === $cap && isset( $args[0] ) && (int) $args[0] === $private ) {
@@ -1728,7 +1753,7 @@ final class SyncPackageTest extends TestCase {
 		for ( $i = 0; $i < 201; $i++ ) {
 			$ids[] = (int) wp_insert_post( array( 'post_title' => 'Withheld ' . $i, 'post_status' => 'publish' ) );
 		}
-		$deny = static fn( $caps, $cap, $user_id, $args ) => 'read_post' === $cap && isset( $args[0] ) && in_array( (int) $args[0], $ids, true ) ? array( 'do_not_allow' ) : $caps;
+		$deny = static fn( $caps, $cap, $user_id, $args ) => in_array( $cap, array( 'read_post', 'edit_post' ), true ) && isset( $args[0] ) && in_array( (int) $args[0], $ids, true ) ? array( 'do_not_allow' ) : $caps;
 		add_filter( 'map_meta_cap', $deny, 10, 4 );
 		try {
 			$package = AB_MCP_Sync_Export::make( 'inventory' );
@@ -1753,8 +1778,27 @@ final class SyncPackageTest extends TestCase {
 		$private = (string) wp_insert_post( array( 'post_title' => 'R private', 'post_status' => 'private' ) );
 		$draft   = (string) wp_insert_post( array( 'post_title' => 'R draft', 'post_status' => 'draft' ) );
 		register_post_type( 'zz_gone_type' );
-		$gone_type = (string) wp_insert_post( array( 'post_title' => 'R gone type', 'post_status' => 'publish', 'post_type' => 'zz_gone_type' ) );
+		$gone_type = (string) wp_insert_post( array( 'post_title' => 'R gone type', 'post_status' => 'private', 'post_type' => 'zz_gone_type' ) );
 		unregister_post_type( 'zz_gone_type' );
+		// A type as ACF registers its field groups: its own capabilities, no
+		// read_post among them, so map_meta_cap stays off.
+		register_post_type(
+			'zz_acf_group',
+			array(
+				'public'          => false,
+				'capability_type' => 'post',
+				'capabilities'    => array(
+					'edit_post'    => 'manage_options',
+					'delete_post'  => 'manage_options',
+					'edit_posts'   => 'manage_options',
+					'delete_posts' => 'manage_options',
+				),
+				'supports'        => false,
+				'rewrite'         => false,
+				'query_var'       => false,
+			)
+		);
+		$acf = (string) wp_insert_post( array( 'post_title' => 'R field group', 'post_status' => 'publish', 'post_type' => 'zz_acf_group' ) );
 		register_taxonomy( 'zz_gone_tax', 'post' );
 		$gone_tax = wp_insert_term( 'R gone tax', 'zz_gone_tax' );
 		unregister_taxonomy( 'zz_gone_tax' );
@@ -1777,6 +1821,11 @@ final class SyncPackageTest extends TestCase {
 			self::assertNull( $rights( 'post', $private ) );
 			self::assertNull( $rights( 'post', $draft ) );
 			$denied = array( 'read_post' => array( (int) $public ) );
+			self::assertNull( $rights( 'post', $public ), 'Who may edit it reads it.' );
+			$denied = array(
+				'read_post' => array( (int) $public ),
+				'edit_post' => array( (int) $public ),
+			);
 			self::assertSame( 'read_post', $rights( 'post', $public ) );
 			$denied = array( 'edit_post' => array( (int) $private, (int) $public ) );
 			self::assertSame( 'edit_post', $rights( 'post', $private ), 'Not public: edit_post as well.' );
@@ -1786,8 +1835,27 @@ final class SyncPackageTest extends TestCase {
 			self::assertSame( 'gone', $rights( 'post', '999999' ) );
 			self::assertSame( 'gone', $rights( 'post', 'abc' ) );
 			self::assertSame( 'gone', $rights( 'post', $public . 'x' ), 'Not another post by its leading digits.' );
-			// A type WordPress does not know: no rule of its own, read with manage_options.
+			// A type WordPress does not know: edit_others_posts, as WordPress falls back to.
 			self::assertNull( $rights( 'post', $gone_type ) );
+			$without = static function ( $allcaps ) {
+				unset( $allcaps['edit_others_posts'], $allcaps['manage_categories'] );
+				return $allcaps;
+			};
+			add_filter( 'user_has_cap', $without );
+			try {
+				self::assertTrue( current_user_can( 'manage_options' ) );
+				self::assertSame( 'edit_others_posts', $rights( 'post', $gone_type ), 'manage_options is not enough for a private post of a type WordPress does not know.' );
+				self::assertSame( 'manage_categories', $rights( 'term', (string) $gone_tax['term_id'], array( 'taxonomy' => 'zz_gone_tax' ) ) );
+			} finally {
+				remove_filter( 'user_has_cap', $without );
+			}
+			// A type with capabilities of its own: who may edit it reads it.
+			self::assertFalse( current_user_can( 'read_post', (int) $acf ), 'WordPress gives no read_post here.' );
+			self::assertNull( $rights( 'post', $acf ) );
+			// Without edit_post for it (its capability, as map_meta_cap() gives it): not read.
+			$denied = array( 'manage_options' => array( (int) $acf ) );
+			self::assertSame( 'read_post', $rights( 'post', $acf ) );
+			$denied = array();
 			self::assertSame( 0, $wrong, 'Without a notice of doing it wrong.' );
 			// Terms: a public taxonomy as anyone reads it, the others with edit_term.
 			$denied = array( 'edit_term' => array( (int) $category['term_id'], (int) $pattern['term_id'] ) );
@@ -1795,7 +1863,7 @@ final class SyncPackageTest extends TestCase {
 			self::assertSame( 'edit_term', $rights( 'term', (string) $pattern['term_id'], array( 'taxonomy' => 'wp_pattern_category' ) ) );
 			$denied = array();
 			self::assertNull( $rights( 'term', (string) $pattern['term_id'], array( 'taxonomy' => 'wp_pattern_category' ) ) );
-			self::assertNull( $rights( 'term', (string) $gone_tax['term_id'], array( 'taxonomy' => 'zz_gone_tax' ) ), 'A taxonomy WordPress does not know.' );
+			self::assertNull( $rights( 'term', (string) $gone_tax['term_id'], array( 'taxonomy' => 'zz_gone_tax' ) ), 'A taxonomy WordPress does not know, with manage_categories.' );
 			self::assertSame( 'gone', $rights( 'term', '999999', array( 'taxonomy' => 'category' ) ) );
 			self::assertSame( 'gone', $rights( 'term', (string) $category['term_id'] ), 'Without its taxonomy.' );
 			self::assertSame( 'gone', $rights( 'term', 'x', array( 'taxonomy' => 'category' ) ) );
@@ -1824,6 +1892,60 @@ final class SyncPackageTest extends TestCase {
 		} finally {
 			remove_filter( 'map_meta_cap', $deny, 10 );
 			remove_action( 'doing_it_wrong_run', $count );
+			unregister_post_type( 'zz_acf_group' );
+		}
+		self::assertSame( 0, $wrong, 'No notice of doing it wrong at all.' );
+	}
+
+	public function testAFieldGroupOfAcfIsInThePackageOfAnAdministrator(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		register_post_type(
+			'acf-field-group',
+			array(
+				'public'          => false,
+				'hierarchical'    => true,
+				'show_ui'         => true,
+				'show_in_menu'    => false,
+				'_builtin'        => false,
+				'capability_type' => 'post',
+				'capabilities'    => array(
+					'edit_post'    => 'manage_options',
+					'delete_post'  => 'manage_options',
+					'edit_posts'   => 'manage_options',
+					'delete_posts' => 'manage_options',
+				),
+				'supports'        => false,
+				'rewrite'         => false,
+				'query_var'       => false,
+			)
+		);
+		try {
+			$group   = wp_insert_post( array( 'post_title' => 'Group', 'post_status' => 'publish', 'post_type' => 'acf-field-group' ) );
+			$package = AB_MCP_Sync_Export::make( 'inventory' );
+			self::assertIsArray( $package );
+			self::assertContains( 'post:' . $group, array_map( static fn( $line ) => $line['kind'] . ':' . $line['ref'], self::lines_out( $package ) ), 'An administrator has the field group in the package.' );
+			self::assertSame( 0, $package['withheld']['count'] );
+			// An account without edit_post for it does not.
+			// map_meta_cap() hands the filter the capability of the type (manage_options) for edit_post.
+			$deny = static fn( $caps, $cap, $user_id, $args ) => isset( $args[0] ) && (int) $args[0] === $group ? array( 'do_not_allow' ) : $caps;
+			add_filter( 'map_meta_cap', $deny, 10, 4 );
+			try {
+				$without = AB_MCP_Sync_Export::make( 'inventory' );
+			} finally {
+				remove_filter( 'map_meta_cap', $deny, 10 );
+			}
+			self::assertSame(
+				array(
+					'kind'    => 'post',
+					'needs'   => 'read_post',
+					'ref'     => (string) $group,
+					'subtype' => 'acf-field-group',
+				),
+				$without['withheld']['objects'][0]
+			);
+		} finally {
+			unregister_post_type( 'acf-field-group' );
 		}
 	}
 
@@ -1873,8 +1995,16 @@ final class SyncPackageTest extends TestCase {
 		} finally {
 			remove_filter( 'ab_mcp_redact_keys', $keys );
 		}
-		$state = self::import_relayed( self::package_of( str_repeat( '1b', 16 ), array( array( self::option_line( 'zz_live_only_name' ) ) ) ) );
-		self::assertSame( 0, $state['held'], 'Without that rule, nothing held.' );
+		$name_only = array(
+			'identity' => array( 'name' => 'theme_mods_zz' ),
+			'kind'     => 'theme_mod',
+			'locks'    => array(),
+			'ref'      => 'zz',
+			'status'   => 'locked',
+		);
+		$state     = self::import_relayed( self::package_of( str_repeat( '1b', 16 ), array( array( self::option_line( 'zz_live_only_name' ), $name_only ) ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertSame( 0, $state['held'], 'Without that rule, nothing held; a theme mod row by its name only goes through.' );
 		// A package without an object: one empty chunk.
 		$state = self::import_relayed( self::package_of( str_repeat( '1c', 16 ), array( array() ) ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
@@ -1898,6 +2028,7 @@ final class SyncPackageTest extends TestCase {
 			),
 		);
 		$base   = self::package_of( str_repeat( '2a', 16 ), array( array( self::option_line( 'zz_a' ) ) ) );
+		$one    = \AB_MCP_Sync_Canon::encode( self::option_line( 'zz_one' ) ) . "\n";
 		$big    = self::package_of( str_repeat( '2c', 16 ), array( array( self::option_line( 'zz_big', array( 'reason' => str_repeat( 'a', 8388608 ) ) ) ) ) );
 		$cases  = array(
 			'no gzip'                  => array( self::package_of( str_repeat( '2b', 16 ), array( array( self::option_line( 'zz_a' ) ) ), array(), false ), 'ab_mcp_sync_import_lines' ),
@@ -1915,6 +2046,32 @@ final class SyncPackageTest extends TestCase {
 			'shorter than declared'    => array( self::package_of( str_repeat( '4b', 16 ), array( array( self::option_line( 'zz_a' ) ) ), array( 'unpacked' => $base['package']['unpacked'] + 1 ) ), 'ab_mcp_sync_import_lines' ),
 			'a lock that is no lock'   => array( self::package_of( str_repeat( '4c', 16 ), array( array( self::option_line( 'zz_l', array( 'locks' => array( 'x' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no whole line'            => array( self::package_of( str_repeat( '4a', 16 ), array( \AB_MCP_Sync_Canon::encode( self::option_line( 'zz_w' ) ) ), array( 'objects' => 1 ) ), 'ab_mcp_sync_import_lines' ),
+			'X instead of a line break' => array( self::package_of( str_repeat( '4d', 16 ), array( \AB_MCP_Sync_Canon::encode( self::option_line( 'zz_x' ) ) . 'X' ), array( 'objects' => 1 ) ), 'ab_mcp_sync_import_lines' ),
+			'bytes after the gzip'     => array( self::package_raw( str_repeat( '4e', 16 ), array( (string) gzencode( $one ) . 'XYZ' ), 1, strlen( $one ) ), 'ab_mcp_sync_import_lines' ),
+			'a second gzip member'     => array( self::package_raw( str_repeat( '4f', 16 ), array( (string) gzencode( $one ) . (string) gzencode( $one ) ), 1, strlen( $one ) ), 'ab_mcp_sync_import_lines' ),
+			'a field in the identity'  => array( self::package_of( str_repeat( '5a', 16 ), array( array( self::option_line( 'zz_i', array( 'identity' => array( 'name' => 'zz_i', 'password' => 'CANARY' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a field in a lock'        => array( self::package_of( str_repeat( '5b', 16 ), array( array( self::option_line( 'zz_k', array( 'locks' => array( $lock[0] + array( 'value' => 'x' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a field in a reference'   => array( self::package_of( str_repeat( '5c', 16 ), array( array( self::option_line( 'zz_r', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post', 'strength' => 'strong', 'token' => 'x' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a value in a possible one' => array( self::package_of( str_repeat( '5d', 16 ), array( array( self::option_line( 'zz_p', array( 'possible' => array( array( 'at' => 'value', 'value' => 7 ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a hash that is a list'    => array( self::package_of( str_repeat( '5e', 16 ), array( array( self::option_line( 'zz_h2', array( 'hash' => array( 'x' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a size that is text'      => array( self::package_of( str_repeat( '5f', 16 ), array( array( self::option_line( 'zz_s', array( 'size' => '12' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'unread that is no list of text' => array( self::package_of( str_repeat( '6a', 16 ), array( array( self::option_line( 'zz_u', array( 'unread' => array( 7 ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a ref that is not its name' => array( self::package_of( str_repeat( '6b', 16 ), array( array( self::option_line( 'zz_n', array( 'ref' => 'zz_other' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a post ref that is no id' => array( self::package_of( str_repeat( '6c', 16 ), array( array( array( 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => 'x', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a kind without a rule'    => array( self::package_of( str_repeat( '6d', 16 ), array( array( array( 'identity' => array(), 'kind' => 'attachment', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a post with another identity' => array( self::package_of( str_repeat( '6e', 16 ), array( array( array( 'identity' => array( 'name' => 'x' ), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a theme mod of another key' => array( self::package_of( str_repeat( '6f', 16 ), array( array( array( 'identity' => array( 'name' => 'theme_mods_zz', 'theme_mod' => 'a' ), 'kind' => 'theme_mod', 'locks' => array(), 'ref' => 'zz/b', 'status' => 'locked' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a status of another form' => array( self::package_of( str_repeat( '7a', 16 ), array( array( self::option_line( 'zz_t', array( 'status' => 'Z8 ' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'menus that are no ids'    => array( self::package_of( str_repeat( '7b', 16 ), array( array( array( 'identity' => array( 'menus' => array( 'x' ), 'object' => '', 'position' => '1', 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a widget area of another name' => array( self::package_of( str_repeat( '7c', 16 ), array( array( array( 'identity' => array( 'area' => 'sidebar-1' ), 'kind' => 'widget_area', 'locks' => array(), 'ref' => 'sidebar-2', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'the CSS of another stylesheet' => array( self::package_of( str_repeat( '7d', 16 ), array( array( array( 'identity' => array( 'linked' => false, 'post' => 5, 'stylesheet' => 'a' ), 'kind' => 'custom_css', 'locks' => array(), 'ref' => 'a@6', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'an empty ref'             => array( self::package_of( str_repeat( '7e', 16 ), array( array( array( 'identity' => array(), 'kind' => 'option', 'locks' => array(), 'ref' => '', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'locks that are no list'   => array( self::package_of( str_repeat( '7f', 16 ), array( array( self::option_line( 'zz_lk', array( 'locks' => array( 'a' => $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reference without its strength' => array( self::package_of( str_repeat( '8b', 16 ), array( array( self::option_line( 'zz_rs', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'complete that is text'    => array( self::package_of( str_repeat( '8c', 16 ), array( array( self::option_line( 'zz_c', array( 'complete' => 'yes' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a reason of a lock that is a number' => array( self::package_of( str_repeat( '8d', 16 ), array( array( self::option_line( 'zz_rn', array( 'locks' => array( array( 'reason' => 7 ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'canon that is a number'   => array( self::package_of( str_repeat( '8e', 16 ), array( array( self::option_line( 'zz_cn', array( 'canon' => 1 ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a position that is a word' => array( self::package_of( str_repeat( '8f', 16 ), array( array( array( 'identity' => array( 'menus' => array( 3 ), 'object' => '', 'position' => 'x', 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 		);
 		foreach ( $cases as $case => $given ) {
 			$result = self::import_relayed( $given[0] );
@@ -1945,5 +2102,142 @@ final class SyncPackageTest extends TestCase {
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertTrue( $state['complete'] );
 		self::assertSame( 0, $state['held'] );
+	}
+
+	public function testTheInventoryOfBothSitesOverEveryKindPassesTheCheckOfTheImport(): void {
+		self::pair();
+		// B with an object of every kind.
+		self::b(
+			array(
+				array( 'op' => 'insert_post', 'as' => 'post', 'args' => array( 'post_title' => 'Every post', 'post_status' => 'publish', 'post_content' => '<p>Text <a href="?p=1">link</a></p>' ) ),
+				array( 'op' => 'insert_post', 'as' => 'page', 'args' => array( 'post_title' => 'Every page', 'post_type' => 'page', 'post_status' => 'draft' ) ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => '_thumbnail_id', 'value' => '1' ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'service_settings', 'value' => '{"api_key":"x1","enabled":true}' ),
+				array( 'op' => 'add_meta', 'post' => '$page', 'key' => 'api_token', 'value' => 'x2' ),
+				array( 'op' => 'insert_term', 'as' => 'cat', 'name' => 'Every category', 'taxonomy' => 'category' ),
+				array( 'op' => 'set_terms', 'post' => '$post', 'terms' => array( '$cat' ), 'taxonomy' => 'category' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => array( 2 => array( 'title' => 'Every', 'text' => 'widget' ), '_multiwidget' => 1 ) ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-2' ), 'array_version' => 3 ) ),
+				array( 'op' => 'update_option', 'name' => 'zz_plugin_settings', 'value' => array( 'a' => 1, 'b' => array( 'c' => 'd' ) ) ),
+				array( 'op' => 'menu_css_mods', 'as' => 'theme' ),
+			)
+		);
+		$cursor = null;
+		$kinds  = array();
+		$count  = 0;
+		do {
+			$package = self::tool( 'b', 'wp_site_export', array( 'purpose' => 'inventory' ) + ( null === $cursor ? array() : array( 'cursor' => $cursor ) ) );
+			self::assertIsArray( $package, is_string( $package ) ? $package : '' );
+			$state = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $package['package_id'],
+					'manifest'   => $package['manifest'],
+					'purpose'    => 'inventory',
+					'fetch'      => $package['fetch'],
+				),
+				AB_MCP_Test_Sync_Fetcher::for_sites()
+			);
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+			self::assertTrue( $state['complete'] );
+			self::assertSame( 0, $state['held'] );
+			foreach ( $package['kinds'] as $kind ) {
+				$kinds[ $kind['kind'] ] = true;
+			}
+			$count += $package['objects'];
+			$cursor = $package['cursor'];
+		} while ( null !== $cursor );
+		ksort( $kinds );
+		self::assertSame( array( 'custom_css', 'menu', 'menu_item', 'option', 'post', 'term', 'theme_mod', 'widget_area' ), array_keys( $kinds ), 'Every kind of B went through.' );
+		self::assertGreaterThan( 50, $count );
+
+		// A's own inventory, line by line, through the same check.
+		$check = new \ReflectionMethod( AB_MCP_Sync_Import::class, 'line_shaped' );
+		$lines = 0;
+		foreach ( \AB_MCP_Sync_Inventory::run( \AB_MCP_Sync_Inventory::source( \AB_MCP_IT_Sync_Steps::addresses() ) )['objects'] as $object ) {
+			if ( 'b9' === $object['status'] ) {
+				continue;
+			}
+			$line = json_decode( \AB_MCP_Sync_Canon::encode( AB_MCP_Sync_Export::line( $object ) ), true );
+			self::assertTrue( $check->invoke( null, $line ), \AB_MCP_Sync_Canon::encode( $line ) );
+			++$lines;
+		}
+		self::assertGreaterThan( 50, $lines );
+	}
+
+	public function testARecordOfAnOlderVersionIsDiscardedWithTheWay(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$package = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertIsArray( $package );
+		// A package as the version before kept it: its record without a report.
+		$gid = AB_MCP_Protected_Store::open( 'out', array( 'declared' => 1048576 + AB_MCP_Sync_Export::RECORD_MAX ) );
+		self::assertIsString( $gid );
+		$manifest = json_decode( $package['manifest']['manifest'], true );
+		foreach ( $manifest['chunks'] as $i => $chunk ) {
+			$data = AB_MCP_Protected_Store::get( 'out', $package['package_id'], AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'] );
+			self::assertIsArray( AB_MCP_Protected_Store::put( 'out', $gid, AB_MCP_Sync_Export::chunk_name( $i ), $data ) );
+		}
+		$signed = AB_MCP_Sync_Manifest::sign( array( 'package_id' => $gid ) + array_intersect_key( $manifest, array_flip( array( 'bytes', 'chunks', 'kinds', 'objects', 'purpose', 'report_hash', 'sha256', 'unpacked' ) ) ) );
+		self::assertIsArray( $signed, is_wp_error( $signed ) ? $signed->get_error_message() : '' );
+		$record = \AB_MCP_Sync_Canon::encode(
+			array(
+				'binding'   => AB_MCP_Sync_Export::binding(),
+				'cursor'    => null,
+				'format'    => AB_MCP_Sync_Export::RECORD,
+				'manifest'  => $signed['manifest'],
+				'series'    => str_repeat( 'a', 32 ),
+				'signature' => $signed['signature'],
+			)
+		);
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'out', $gid, hash( 'sha256', $record ), $record ) );
+		$refused = AB_MCP_Sync_Export::again( $gid );
+		self::refused( $refused, 'ab_mcp_sync_export_stale' );
+		// A report that is not one: the same.
+		$other = AB_MCP_Protected_Store::open( 'out', array( 'declared' => 1048576 + AB_MCP_Sync_Export::RECORD_MAX ) );
+		$again = AB_MCP_Sync_Manifest::sign( array( 'package_id' => $other ) + array_intersect_key( $manifest, array_flip( array( 'bytes', 'chunks', 'kinds', 'objects', 'purpose', 'report_hash', 'sha256', 'unpacked' ) ) ) );
+		$text  = \AB_MCP_Sync_Canon::encode(
+			array(
+				'binding'   => AB_MCP_Sync_Export::binding(),
+				'cursor'    => null,
+				'format'    => AB_MCP_Sync_Export::RECORD,
+				'manifest'  => $again['manifest'],
+				'report'    => array(
+					'credentials' => array( 'held' => 0, 'names' => 0, 'units' => '0' ),
+					'withheld'    => array( 'count' => 0, 'objects' => array() ),
+				),
+				'series'    => str_repeat( 'b', 32 ),
+				'signature' => $again['signature'],
+			)
+		);
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'out', $other, hash( 'sha256', $text ), $text ) );
+		self::refused( AB_MCP_Sync_Export::again( $other ), 'ab_mcp_sync_export_stale' );
+		self::assertStringContainsString( 'Make a new one with wp_site_export', $refused->get_error_message() );
+		self::assertNotContains( $gid, array_column( AB_MCP_Protected_Store::groups( 'out' ), 'gid' ), 'Discarded.' );
+		// The way: a new package.
+		self::assertIsArray( AB_MCP_Sync_Export::make( 'inventory' ) );
+	}
+
+	public function testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew(): void {
+		self::pair();
+		$package = self::package_of( str_repeat( '8a', 16 ), array( array( self::option_line( 'zz_a' ) ) ) );
+		$signed  = self::signed_by_b( $package['package'] );
+		$begin   = array(
+			'package_id' => str_repeat( '8a', 16 ),
+			'manifest'   => $signed,
+			'purpose'    => 'inventory',
+		);
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
+		// Complete as the version before marked it: the chunk and the mark, no list.
+		$gid = self::groups_of( str_repeat( '8a', 16 ) )[0]['gid'];
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 0 ), $package['data'][0] ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::COMPLETE, $package['package']['sha256'] ) );
+		$refused = AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '8a', 16 ) ) );
+		self::refused( $refused, 'ab_mcp_sync_import_held' );
+		self::assertStringContainsString( 'Fetch the package anew', $refused->get_error_message() );
+		self::assertSame( array(), self::groups_of( str_repeat( '8a', 16 ) ), 'Removed.' );
+		// The way: begun anew with the same manifest, it completes.
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '8a', 16 ), 'chunk' => 0, 'data' => base64_encode( $package['data'][0] ) ) );
+		self::assertSame( array( true, 0 ), array( $state['complete'], $state['held'] ) );
 	}
 }

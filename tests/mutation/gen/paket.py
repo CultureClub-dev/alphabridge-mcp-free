@@ -1310,20 +1310,20 @@ e('paket/t3-record-report', 'store(): the record keeps what was withheld, for ag
 # The rights of an object.
 e('paket/t3-rights-post-read', 'post(): read_post (two sites)', RT,
   "\t\tif ( ! current_user_can( 'read_post', $post->ID ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
-e('paket/t3-rights-post-public', 'post(): edit_post only where it is not public (two sites)', RT,
-  "\t\tif ( ! is_post_publicly_viewable( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {", "\t\tif ( ! current_user_can( 'edit_post', $post->ID ) ) {", 'itpkg', T3['rights_it'])
-e('paket/t3-rights-post-edit', 'post(): not public, edit_post as well (two sites)', RT,
-  "\t\tif ( ! is_post_publicly_viewable( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-public', 'post(): public, read_post is enough (two sites)', RT,
+  "\t\treturn is_post_publicly_viewable( $post ) ? null : 'edit_post';", "\t\treturn 'edit_post';", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-edit', 'post(): not public, edit_post (two sites)', RT,
+  "\t\treturn is_post_publicly_viewable( $post ) ? null : 'edit_post';", "\t\treturn null;", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-post-id', 'post(): only an id, no leading digits (two sites)', RT,
   "\t\t$post = 1 === preg_match( '/^[1-9][0-9]*\\z/', $ref ) ? get_post( (int) $ref ) : null;", "\t\t$post = get_post( (int) $ref );", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-post-unregistered', 'post(): a type WordPress does not know, without doing it wrong (two sites)', RT,
-  "\t\tif ( null === get_post_type_object( $post->post_type ) ) {\n\t\t\treturn null;\n\t\t}\n", "", 'itpkg', T3['rights_it'])
+  "\t\tif ( null === get_post_type_object( $post->post_type ) ) {\n\t\t\treturn current_user_can( 'edit_others_posts' ) ? null : 'edit_others_posts';\n\t\t}\n", "", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-term-public', 'term(): a public taxonomy as anyone reads it (two sites)', RT,
   "\t\tif ( ! is_taxonomy_viewable( $taxonomy ) && ! current_user_can( 'edit_term', $term->term_id ) ) {", "\t\tif ( ! current_user_can( 'edit_term', $term->term_id ) ) {", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-term-edit', 'term(): the others with edit_term (two sites)', RT,
   "\t\tif ( ! is_taxonomy_viewable( $taxonomy ) && ! current_user_can( 'edit_term', $term->term_id ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-term-unregistered', 'term(): a taxonomy WordPress does not know (two sites)', RT,
-  "\t\tif ( ! taxonomy_exists( $taxonomy ) ) {\n\t\t\treturn null;\n\t\t}\n", "", 'itpkg', T3['rights_it'])
+  "\t\tif ( ! taxonomy_exists( $taxonomy ) ) {\n\t\t\treturn current_user_can( 'manage_categories' ) ? null : 'manage_categories';\n\t\t}\n", "", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-term-no-taxonomy', 'term(): without its taxonomy, gone (two sites)', RT,
   "\t\tif ( '' === $taxonomy || 1 !== preg_match( '/^[1-9][0-9]*\\z/', $ref ) ) {", "\t\tif ( 1 !== preg_match( '/^[1-9][0-9]*\\z/', $ref ) ) {", 'itpkg', T3['rights_it'])
 e('paket/t3-rights-term-id', 'term(): only an id, no leading digits (two sites)', RT,
@@ -1364,14 +1364,14 @@ e('paket/t3-unpack-held', 'unpacked(): a name of a credential by the rules of th
 UEND = "\t\tif ( $count !== $manifest['objects'] || $total !== $manifest['unpacked'] ) {"
 e('paket/t3-unpack-count', 'unpacked(): as many lines as declared (two sites)', IM, UEND, UEND.replace("$count !== $manifest['objects'] || ", ''), 'itpkg', T3['unpack_it'])
 e('paket/t3-unpack-total', 'unpacked(): as many bytes as declared (two sites)', IM, UEND, UEND.replace(" || $total !== $manifest['unpacked']", ''), 'itpkg', T3['unpack_it'])
-e('paket/t3-shape-keys', 'line_shaped(): no field a line has no place for (two sites)', IM,
-  "\t\tif ( array() !== array_diff( array_map( 'strval', array_keys( $object ) ), self::LINE_KEYS ) ) {", "\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-keys', 'typed(): no field a line has no place for (two sites)', IM,
+  "\t\t\t\t// No type: no field of a line.\n\t\t\t\treturn false;", "\t\t\t\t// No type: no field of a line.\n\t\t\t\treturn true;", 'itpkg', T3['unpack_it'])
 e('paket/t3-shape-required', 'line_shaped(): kind, ref, identity, status and locks (two sites)', IM,
-  "\t\tif ( ! isset( $object['kind'], $object['ref'], $object['identity'], $object['status'], $object['locks'] ) ||", "\t\tif ( false ||", 'itpkg', T3['unpack_it'])
-e('paket/t3-shape-b9', 'line_shaped(): no object whose name is a credential (two sites)', IM,
-  "\t\tif ( 'b9' === $object['status'] ) {\n\t\t\treturn false;", "\t\tif ( false ) {\n\t\t\treturn false;", 'itpkg', T3['unpack_it'])
-e('paket/t3-shape-locks', 'line_shaped(): each lock a lock (two sites)', IM,
-  "\t\t\tif ( ! is_array( $lock ) ) {", "\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+  "\t\t\tif ( ! array_key_exists( $field, $object ) ) {", "\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-b9', 'typed(): status no b9, an object whose name is a credential (two sites)', IM,
+  " && 'b9' !== $value;", ";", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-locks', 'records(): each record a record (two sites)', IM,
+  "\t\t\tif ( ! is_array( $record ) || array() !== array_diff_key( array_flip( $needs ), $record ) ) {", "\t\t\tif ( ! is_array( $record ) ) {", 'itpkg', T3['unpack_it'])
 e('paket/t3-shape-held', 'line_shaped(): a line a credential holds carries its identity only (two sites)', IM,
   "\t\treturn ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );", "\t\treturn true;", 'itpkg', T3['unpack_it'])
 e('paket/t3-named-theme-mod', 'named_credential(): the key of a theme mod as well (two sites)', IM,
@@ -1384,6 +1384,89 @@ e('paket/t3-inflate-cut', 'inflate(): a cut gzip is none', IM,
   "\t\t\tif ( false === $more || ZLIB_STREAM_END !== inflate_get_status( $context ) ) {", "\t\t\tif ( false === $more ) {", 'package', T3['inflate'])
 e('paket/t3-held-name-pad', 'held_sha(): only the name held_name() writes', IM,
   "\t\treturn self::held_name( $hex ) === $name ? $hex : null;", "\t\treturn $hex;", 'package', T3['held_name'])
+
+# ---------------------------------------- part 3, Codex round 1 (B1, A1, A2, B2, C1)
+P3 = {
+    'rights_it': 'testTheRightsOfAnObjectAreAskedOfWordPress',
+    'acf_it': 'testAFieldGroupOfAcfIsInThePackageOfAnAdministrator',
+    'unpack_it': 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain',
+    'both_it': 'testTheInventoryOfBothSitesOverEveryKindPassesTheCheckOfTheImport',
+    'older_it': 'testARecordOfAnOlderVersionIsDiscardedWithTheWay',
+    'held_it': 'testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew',
+    'inflate': 'testAChunkIsInflatedNoFurtherThanItMay',
+}
+# B1: who may edit an object may read it.
+e('paket/p3r1-post-edit-reads', 'post(): edit_post reads it, as for the field groups of ACF (two sites)', RT,
+  "\t\tif ( current_user_can( 'edit_post', $post->ID ) ) {\n\t\t\treturn null;\n\t\t}\n", "", 'itpkg', P3['acf_it'])
+# A1: what WordPress falls back to.
+e('paket/p3r1-unknown-type', 'post(): a type WordPress does not know, edit_others_posts (two sites)', RT,
+  "\t\t\treturn current_user_can( 'edit_others_posts' ) ? null : 'edit_others_posts';", "\t\t\treturn null;", 'itpkg', P3['rights_it'])
+e('paket/p3r1-unknown-taxonomy', 'term(): a taxonomy WordPress does not know, manage_categories (two sites)', RT,
+  "\t\t\treturn current_user_can( 'manage_categories' ) ? null : 'manage_categories';", "\t\t\treturn null;", 'itpkg', P3['rights_it'])
+# A2: every nested part exactly.
+e('paket/p3r1-identity-fits', 'line_shaped(): the identity as its kind has it (two sites)', IM,
+  "|| ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {", ") {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-fields', 'identity_fits(): exactly the fields of the kind (two sites)', IM,
+  "\t\tif ( $given !== $want ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-typed', 'identity_fits(): each field typed (two sites)', IM,
+  "\t\t\tif ( ! self::typed( $identity[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-id-ref', 'identity_fits(): a post, term or menu (item) by its id (two sites)', IM,
+  "\t\tif ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-empty-ref', 'identity_fits(): no empty ref (two sites)', IM,
+  "\t\tif ( ! is_array( $identity ) || '' === $ref ) {", "\t\tif ( ! is_array( $identity ) ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-widget', 'identity_fits(): a widget area by its area (two sites)', IM,
+  "\t\t\t\treturn $identity['area'] === $ref;", "\t\t\t\treturn true;", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-option', 'identity_fits(): an option by its name (two sites)', IM,
+  "\t\t\t\treturn $identity['name'] === $ref;", "\t\t\t\treturn true;", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-theme-mod', 'identity_fits(): a theme mod by its stylesheet and key (two sites)', IM,
+  "\t\t\t\treturn 0 === strpos( $identity['name'], 'theme_mods_' ) &&", "\t\t\t\treturn true ||", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-css', 'identity_fits(): the additional CSS by its stylesheet and post (two sites)', IM,
+  "\t\t\t\treturn $identity['stylesheet'] . ( $identity['linked'] ? '' : '@' . $identity['post'] ) === $ref;", "\t\t\t\treturn true;", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-identity-name-only', 'identity_fits(): a theme mod row by its name only (two sites)', IM,
+  "\t\tif ( 'theme_mod' === $kind && array( 'name' ) === array_keys( $identity ) ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-locks', 'line_shaped(): each lock with its fields (two sites)', IM,
+  "\t\t\t\t$fits = self::records( $value, self::LOCK_FIELDS, array_keys( self::LOCK_FIELDS ) );", "\t\t\t\t$fits = is_array( $value );", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-refs', 'line_shaped(): each reference with its fields (two sites)', IM,
+  "\t\t\t\t$fits = self::records( $value, self::REF_FIELDS, self::REF_NEEDS );", "\t\t\t\t$fits = is_array( $value );", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-possible', 'line_shaped(): each possible reference by its place only (two sites)', IM,
+  "\t\t\t\t$fits = self::records( $value, array( 'at' => 'string' ), array( 'at' ) );", "\t\t\t\t$fits = is_array( $value );", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-list', 'records(): a list (two sites)', IM,
+  "\t\tif ( ! is_array( $list ) || ! array_is_list( $list ) ) {", "\t\tif ( ! is_array( $list ) ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-needs', 'records(): the fields every record carries (two sites)', IM,
+  " || array() !== array_diff_key( array_flip( $needs ), $record ) ) {", " ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-fields', 'records(): no other field (two sites)', IM,
+  "\t\t\t\tif ( ! isset( $fields[ $field ] ) || ! self::typed( $value, $fields[ $field ] ) ) {", "\t\t\t\tif ( isset( $fields[ $field ] ) && ! self::typed( $value, $fields[ $field ] ) ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-records-typed', 'records(): each field typed (two sites)', IM,
+  "\t\t\t\tif ( ! isset( $fields[ $field ] ) || ! self::typed( $value, $fields[ $field ] ) ) {", "\t\t\t\tif ( ! isset( $fields[ $field ] ) ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-line-typed', 'line_shaped(): each field of a line typed (two sites)', IM,
+  "\t\t\t\t$fits = 'identity' === $type || self::typed( $value, $type );", "\t\t\t\t$fits = true;", 'itpkg', P3['unpack_it'])
+for name, search, replace in (
+    ('string', "\t\t\t\treturn is_string( $value );\n\t\t\tcase 'text':", "\t\t\t\treturn true;\n\t\t\tcase 'text':"),
+    ('text', "\t\t\t\treturn null === $value || is_string( $value );", "\t\t\t\treturn true;"),
+    ('number', "\t\t\t\treturn is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[0-9]{1,20}\\z/', $value ) );", "\t\t\t\treturn true;"),
+    ('bool', "\t\t\t\treturn is_bool( $value );", "\t\t\t\treturn true;"),
+    ('lists', "\t\t\t\t\tif ( 'ints' === $type ? ! is_int( $item ) : ! is_string( $item ) ) {", "\t\t\t\t\tif ( false ) {"),
+    ('hash', "\t\t\t\treturn null === $value || ( is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $value ) );", "\t\t\t\treturn true;"),
+    ('size', "\t\t\t\treturn is_int( $value ) && $value >= 0;", "\t\t\t\treturn true;"),
+    ('status', "\t\t\t\treturn is_string( $value ) && 1 === preg_match( '/^[a-z0-9_]{1,32}\\z/', $value ) && 'b9' !== $value;", "\t\t\t\treturn is_string( $value ) && 'b9' !== $value;"),
+):
+    e('paket/p3r1-typed-' + name, 'typed(): the type ' + name + ' (two sites)', IM, search, replace, 'itpkg', P3['unpack_it'])
+# B2: one whole gzip, whole lines.
+e('paket/p3r1-line-break', 'unpacked(): a chunk ends with a line break (two sites)', IM,
+  "\t\t\tif ( \"\\n\" !== substr( $text, -1 ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-inflate-all-read', 'inflate(): all of the input read, one member and nothing after it', IM,
+  "\t\treturn inflate_get_read_len( $context ) === strlen( $data ) ? $out : false;", "\t\treturn $out;", 'package', P3['inflate'])
+e('paket/p3r1-it-inflate-all-read', 'inflate(): bytes or a second member after it refused (two sites)', IM,
+  "\t\treturn inflate_get_read_len( $context ) === strlen( $data ) ? $out : false;", "\t\treturn $out;", 'itpkg', P3['unpack_it'])
+e('paket/p3r1-inflate-piece', 'INFLATE_PIECE: past the cap by one small piece at most', IM,
+  "\tconst INFLATE_PIECE = 512;", "\tconst INFLATE_PIECE = 4096;", 'package', P3['inflate'])
+# C1: what an older version left.
+e('paket/p3r1-report-bound', 'bound(): a record without its report is none (two sites)', EX,
+  "\t\tif ( null !== $found['report'] && $found['binding']", "\t\tif ( $found['binding']", 'itpkg', P3['older_it'])
+e('paket/p3r1-report-shaped', 'report_shaped(): the counts of the credentials as numbers (two sites)', EX,
+  " || array( true, true, true ) !== array_values( array_map( 'is_int', $report['credentials'] ) ) ) {", " ) {", 'itpkg', P3['older_it'])
+e('paket/p3r1-held-missing-removed', 'state(): a complete import without its list is removed (two sites)', IM,
+  "\t\t\tif ( is_wp_error( $list ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'in', $held['gid'] );", "\t\t\tif ( is_wp_error( $list ) ) {", 'itpkg', P3['held_it'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -1454,7 +1537,10 @@ out.append('''<?php
  * the key» on a POST only. Part 3 (decisions 9 and 8): who makes a package,
  * the rights of each object, complete per kind and subtype, the credentials
  * before the package, the unpacking within the limits and each line checked
- * again at the import.
+ * again at the import. Codex round 1 of part 3: edit_post reads an object,
+ * the fallbacks of WordPress for types and taxonomies it does not know, every
+ * nested part of a line exactly, one whole gzip with whole lines, what an
+ * older version left.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.

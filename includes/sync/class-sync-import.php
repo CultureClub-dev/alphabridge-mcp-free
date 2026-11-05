@@ -85,10 +85,93 @@ final class AB_MCP_Sync_Import {
 	const HELD_MAX = 2097152;
 
 	/** Bytes of a chunk inflated at a time (inflate()). */
-	const INFLATE_PIECE = 4096;
+	const INFLATE_PIECE = 512;
 
-	/** The fields a line of the inventory carries at most (AB_MCP_Sync_Export::line()). */
-	const LINE_KEYS = array( 'b9', 'canon', 'complete', 'hash', 'identity', 'kind', 'locks', 'possible', 'reason', 'ref', 'refs', 'size', 'status', 'unread' );
+	/**
+	 * The fields a line of the inventory carries at most
+	 * (AB_MCP_Sync_Export::line()), each with its type (typed()); identity,
+	 * locks, refs and possible are checked by their own lists.
+	 */
+	const LINE_FIELDS = array(
+		'b9'       => 'strings',
+		'canon'    => 'string',
+		'complete' => 'bool',
+		'hash'     => 'hash',
+		'identity' => 'identity',
+		'kind'     => 'string',
+		'locks'    => 'locks',
+		'possible' => 'possible',
+		'reason'   => 'string',
+		'ref'      => 'string',
+		'refs'     => 'refs',
+		'size'     => 'size',
+		'status'   => 'status',
+		'unread'   => 'strings',
+	);
+
+	/** The fields every line carries. */
+	const LINE_NEEDS = array( 'identity', 'kind', 'locks', 'ref', 'status' );
+
+	/**
+	 * The identity of a line by its kind (AB_MCP_Sync_Db_Kinds): exactly
+	 * these fields with these types, or none (a row that could not be read).
+	 * A theme mod whose row could not be unpacked has its name only.
+	 */
+	const IDENTITIES = array(
+		'post'        => array(
+			'post_name' => 'string',
+			'post_type' => 'string',
+			'theme'     => 'string',
+		),
+		'term'        => array(
+			'slug'     => 'string',
+			'taxonomy' => 'string',
+		),
+		'menu'        => array(
+			'slug'     => 'string',
+			'taxonomy' => 'string',
+		),
+		'menu_item'   => array(
+			'menus'    => 'ints',
+			'object'   => 'string',
+			'position' => 'number',
+			'type'     => 'string',
+		),
+		'widget_area' => array( 'area' => 'string' ),
+		'custom_css'  => array(
+			'linked'     => 'bool',
+			'post'       => 'number',
+			'stylesheet' => 'string',
+		),
+		'option'      => array( 'name' => 'string' ),
+		'theme_mod'   => array(
+			'name'      => 'string',
+			'theme_mod' => 'string',
+		),
+	);
+
+	/** The kinds whose ref is an id of the database. */
+	const ID_KINDS = array( 'post', 'term', 'menu', 'menu_item' );
+
+	/** A lock of a line: exactly these fields (AB_MCP_Sync_Kinds::lock() and the place). */
+	const LOCK_FIELDS = array(
+		'at'     => 'string',
+		'key'    => 'string',
+		'reason' => 'text',
+		'stage'  => 'text',
+	);
+
+	/** A reference of a line: these fields at most. */
+	const REF_FIELDS = array(
+		'at'       => 'string',
+		'id'       => 'number',
+		'login'    => 'text',
+		'space'    => 'string',
+		'strength' => 'string',
+	);
+
+	/** The fields every reference carries. */
+	const REF_NEEDS = array( 'at', 'id', 'space', 'strength' );
 
 	/** The fields of a line besides its identity, status, locks and reason, which a line a credential holds never carries. */
 	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'possible', 'refs', 'size', 'unread' );
@@ -522,6 +605,7 @@ final class AB_MCP_Sync_Import {
 		if ( $complete && null === $held_count ) {
 			$list = self::held_list( $held, $have );
 			if ( is_wp_error( $list ) ) {
+				AB_MCP_Protected_Store::remove( 'in', $held['gid'] );
 				return $list;
 			}
 			$held_count = count( $list );
@@ -580,8 +664,9 @@ final class AB_MCP_Sync_Import {
 			if ( '' === $text ) {
 				continue;
 			}
-			// Each line ends with a line break; a chunk without one at its end
-			// leaves its last line cut, which is no object in its one spelling.
+			if ( "\n" !== substr( $text, -1 ) ) {
+				return self::unpack_refusal( 'A chunk does not end with a whole line.' );
+			}
 			foreach ( explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
 				++$count;
 				$refused = AB_MCP_Store_Budget::unpack_refusal( array( 'objects' => $count ) );
@@ -610,15 +695,17 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
-	 * A chunk inflated as far as $cap bytes and no further: its input fed in
-	 * pieces of INFLATE_PIECE bytes, so what one piece adds stays bounded
-	 * (zlib inflates at most about 1032 times), and the inflation stops once
-	 * the output passes $cap.
+	 * A chunk inflated as far as $cap bytes: its input fed in pieces of
+	 * INFLATE_PIECE bytes and the inflation stopped once the output passes
+	 * $cap, so it passes $cap by at most what one piece inflates to (zlib
+	 * inflates at most about 1032 times: some 516 KiB). One gzip member and
+	 * nothing after it: all of the input read, the stream at its end.
 	 *
 	 * @param string $data Chunk (gzip).
 	 * @param int    $cap  Bytes at most.
-	 * @return string|false|null The bytes; false where it is no whole gzip;
-	 *                           null where it inflates past $cap.
+	 * @return string|false|null The bytes; false where it is no whole gzip,
+	 *                           or bytes or a second member follow it; null
+	 *                           where it inflates past $cap.
 	 */
 	public static function inflate( $data, $cap ) {
 		$context = '' === $data ? false : inflate_init( ZLIB_ENCODING_GZIP );
@@ -645,34 +732,170 @@ final class AB_MCP_Sync_Import {
 			// nothing the check in the loop has not seen.
 			$out .= $more;
 		}
-		return $out;
+		return inflate_get_read_len( $context ) === strlen( $data ) ? $out : false;
 	}
 
 	/**
-	 * Whether an object of a line has the fields of a line of the inventory
-	 * and no other, is no object whose name is the name of a credential (B9,
-	 * never packed), and, where a lock of the credential check holds it,
-	 * carries no more than its identity, status, locks and reason.
+	 * Whether an object of a line is a line of the inventory exactly: its
+	 * fields from LINE_FIELDS with their types, those of LINE_NEEDS there; a
+	 * kind of IDENTITIES with its identity as that kind has it and matching
+	 * its ref; each lock, reference and possible reference with its fields
+	 * and no other; no object whose name is the name of a credential (B9,
+	 * never packed); and, where a lock of the credential check holds it, no
+	 * more than its identity, status, locks and reason.
 	 *
 	 * @param array $object Object.
 	 * @return bool
 	 */
 	private static function line_shaped( array $object ) {
-		if ( array() !== array_diff( array_map( 'strval', array_keys( $object ) ), self::LINE_KEYS ) ) {
-			return false;
-		}
-		if ( ! isset( $object['kind'], $object['ref'], $object['identity'], $object['status'], $object['locks'] ) || ! is_string( $object['kind'] ) || ! is_string( $object['ref'] ) || ! is_string( $object['status'] ) || ! is_array( $object['identity'] ) || ! is_array( $object['locks'] ) ) {
-			return false;
-		}
-		if ( 'b9' === $object['status'] ) {
-			return false;
-		}
-		foreach ( $object['locks'] as $lock ) {
-			if ( ! is_array( $lock ) ) {
+		foreach ( self::LINE_NEEDS as $field ) {
+			if ( ! array_key_exists( $field, $object ) ) {
 				return false;
 			}
 		}
+		foreach ( $object as $field => $value ) {
+			// A field a line has no place for has no type (typed(): none).
+			$type = isset( self::LINE_FIELDS[ $field ] ) ? self::LINE_FIELDS[ $field ] : '';
+			if ( 'locks' === $type ) {
+				$fits = self::records( $value, self::LOCK_FIELDS, array_keys( self::LOCK_FIELDS ) );
+			} elseif ( 'refs' === $type ) {
+				$fits = self::records( $value, self::REF_FIELDS, self::REF_NEEDS );
+			} elseif ( 'possible' === $type ) {
+				$fits = self::records( $value, array( 'at' => 'string' ), array( 'at' ) );
+			} else {
+				$fits = 'identity' === $type || self::typed( $value, $type );
+			}
+			if ( ! $fits ) {
+				return false;
+			}
+		}
+		if ( ! isset( self::IDENTITIES[ $object['kind'] ] ) || ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {
+			return false;
+		}
 		return ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );
+	}
+
+	/**
+	 * Whether the identity of a line is the one its kind has and names its
+	 * ref: none (a row that could not be read) with a ref of the kind's form,
+	 * or exactly the fields of IDENTITIES (a theme mod also its name only),
+	 * typed, with the ref they give: the id of a post, term or menu (item),
+	 * the area of a widget area, the name of an option, the stylesheet and
+	 * key of a theme mod, the stylesheet (and post) of the additional CSS.
+	 *
+	 * @param string $kind     Kind.
+	 * @param string $ref      Ref.
+	 * @param mixed  $identity Identity.
+	 * @return bool
+	 */
+	private static function identity_fits( $kind, $ref, $identity ) {
+		$id_ref = 1 === preg_match( '/^[1-9][0-9]*\z/', $ref );
+		if ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {
+			return false;
+		}
+		if ( ! is_array( $identity ) || '' === $ref ) {
+			return false;
+		}
+		if ( array() === $identity ) {
+			return true;
+		}
+		$fields = self::IDENTITIES[ $kind ];
+		if ( 'theme_mod' === $kind && array( 'name' ) === array_keys( $identity ) ) {
+			$fields = array( 'name' => 'string' );
+		}
+		$given = array_map( 'strval', array_keys( $identity ) );
+		$want  = array_keys( $fields );
+		sort( $given );
+		sort( $want );
+		if ( $given !== $want ) {
+			return false;
+		}
+		foreach ( $fields as $field => $type ) {
+			if ( ! self::typed( $identity[ $field ], $type ) ) {
+				return false;
+			}
+		}
+		switch ( $kind ) {
+			case 'widget_area':
+				return $identity['area'] === $ref;
+			case 'option':
+				return $identity['name'] === $ref;
+			case 'theme_mod':
+				return 0 === strpos( $identity['name'], 'theme_mods_' ) && substr( $identity['name'], strlen( 'theme_mods_' ) ) . ( isset( $identity['theme_mod'] ) ? '/' . $identity['theme_mod'] : '' ) === $ref;
+			case 'custom_css':
+				return $identity['stylesheet'] . ( $identity['linked'] ? '' : '@' . $identity['post'] ) === $ref;
+			default:
+				return true;
+		}
+	}
+
+	/**
+	 * Whether a value is a list of records, each with fields of $fields
+	 * only, typed, and those of $needs there.
+	 *
+	 * @param mixed                $list   Value.
+	 * @param array<string,string> $fields Field => type (typed()).
+	 * @param string[]             $needs  Fields every record carries.
+	 * @return bool
+	 */
+	private static function records( $list, array $fields, array $needs ) {
+		if ( ! is_array( $list ) || ! array_is_list( $list ) ) {
+			return false;
+		}
+		foreach ( $list as $record ) {
+			if ( ! is_array( $record ) || array() !== array_diff_key( array_flip( $needs ), $record ) ) {
+				return false;
+			}
+			foreach ( $record as $field => $value ) {
+				if ( ! isset( $fields[ $field ] ) || ! self::typed( $value, $fields[ $field ] ) ) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a value has a type of a line: string; text (a string or null);
+	 * int; number (an int or the digits of one); bool; ints and strings
+	 * (lists of them); hash (64 hex or null); size (an int from 0); status
+	 * (a word of lower case letters, digits and _, not b9).
+	 *
+	 * @param mixed  $value Value.
+	 * @param string $type  Type.
+	 * @return bool
+	 */
+	private static function typed( $value, $type ) {
+		switch ( $type ) {
+			case 'string':
+				return is_string( $value );
+			case 'text':
+				return null === $value || is_string( $value );
+			case 'number':
+				return is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[0-9]{1,20}\z/', $value ) );
+			case 'bool':
+				return is_bool( $value );
+			case 'ints':
+			case 'strings':
+				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
+					return false;
+				}
+				foreach ( $value as $item ) {
+					if ( 'ints' === $type ? ! is_int( $item ) : ! is_string( $item ) ) {
+						return false;
+					}
+				}
+				return true;
+			case 'hash':
+				return null === $value || ( is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $value ) );
+			case 'size':
+				return is_int( $value ) && $value >= 0;
+			case 'status':
+				return is_string( $value ) && 1 === preg_match( '/^[a-z0-9_]{1,32}\z/', $value ) && 'b9' !== $value;
+			default:
+				// No type: no field of a line.
+				return false;
+		}
 	}
 
 	/**
@@ -773,7 +996,7 @@ final class AB_MCP_Sync_Import {
 		$text  = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ) ) : null;
 		$list  = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
 		if ( ! is_array( $list ) || ! isset( $list['format'], $list['objects'] ) || self::HELD_FORMAT !== $list['format'] || ! is_array( $list['objects'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_held', 'The package is marked complete, but the list of its objects a credential holds on this site does not read back, so it is not used. 1. Export the package again on the staging site (wp_site_export). 2. Import it again with the new package_id and manifest.' );
+			return new WP_Error( 'ab_mcp_sync_import_held', 'The package is marked complete, but the list of its objects a credential holds on this site does not read back (it was taken over by an older version, or the list was changed), so it is not used, and what arrived of it was removed. Fetch the package anew: 1. Call wp_site_import_chunk again with the package_id, manifest and purpose as wp_site_export gave them, while the manifest is valid; or export it again on the staging site (wp_site_export). 2. Hand over or fetch its chunks.' );
 		}
 		return $list['objects'];
 	}

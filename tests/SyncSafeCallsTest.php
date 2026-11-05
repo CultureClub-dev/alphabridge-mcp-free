@@ -165,7 +165,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// capabilities and the object as WordPress has it, never a value the
 		// package compares.
 		'class-sync-export-rights.php' => array(
-			'current_user_can'          => array( 4, 'withheld(), post(), term(): the capabilities of the account that makes the package, per object.' ),
+			'current_user_can'          => array( 6, 'withheld(), post(), term(): the capabilities of the account that makes the package, per object.' ),
 			'get_post'                  => array( 1, 'post(): the post whose rights are asked, for read_post, edit_post and whether it is publicly viewable.' ),
 			'get_post_type_object'      => array( 1, 'post(): whether WordPress knows its type (no rule of its own otherwise).' ),
 			'get_term'                  => array( 1, 'term(): the term whose rights are asked.' ),
