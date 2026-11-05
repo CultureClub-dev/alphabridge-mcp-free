@@ -12,7 +12,9 @@
  * @package AlphaBridge_MCP
  */
 
-$integration = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist' );
+// The test the entry expects, alone: the whole suite takes minutes, and the
+// CI runs every entry (as tests/mutation/gen/paket.py narrows its runs).
+$integration = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]TwoSitesSmokeTest::testTwoSitesRunThePluginOnTheirOwnRowsAndAnswerOverHttp( |$)/' );
 
 return array(
 	array(

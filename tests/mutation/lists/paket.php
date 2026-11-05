@@ -57,20 +57,16 @@
  * @package AlphaBridge_MCP
  */
 
-$trust    = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustTest' );
-$storage  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustStorageTest' );
-$address  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustAddressTest' );
-$manifest = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncManifestTest' );
-$status   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingStatusTest' );
-$it       = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncTrustTest' );
-$package  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPackageTest' );
-$dbkinds  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncDbKindsTest' );
-$gate     = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingGateTest' );
-$itpkg    = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageTest' );
-$itseries = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageSeriesTest' );
-$budget   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StoreBudgetTest' );
-$payload  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'PayloadFileTest' );
-$uninstall = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'UninstallTest' );
+/*
+ * The run of an entry: the test its expect names, alone, in the unit suite
+ * or in the integration suite (-c; the sites running). A whole class of
+ * the integration suite takes more than a minute, and the CI runs every
+ * entry in it (paket.py checks that the test is a method of the class).
+ * The filter matches the class after its namespace and the test with or
+ * without a data set, as PHPUnit names it (Class::test with data set …).
+ */
+$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
+$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
 
 $k  = 'includes/sync/class-sync-key.php';
 $a  = 'includes/sync/class-sync-anchor.php';
@@ -102,7 +98,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$found || \$found['key']['source_id'] !== \$source || self::mac_secret() !== hex2bin( \$mac ) ) {",
 		'replace' => "\t\tif ( \$found['key']['source_id'] !== \$source || self::mac_secret() !== hex2bin( \$mac ) ) {",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey(?: with data set "|#)only the private key refused/',
 	),
 	array(
@@ -111,7 +107,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$found || \$found['key']['source_id'] !== \$source || self::mac_secret() !== hex2bin( \$mac ) ) {",
 		'replace' => "\t\tif ( null === \$found || self::mac_secret() !== hex2bin( \$mac ) ) {",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey(?: with data set "|#)another source id kept/',
 	),
 	array(
@@ -120,7 +116,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\tself::forget();\n\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_key_failed',",
 		'replace' => "\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_key_failed',",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey(?: with data set "|#)both writes refused/',
 	),
 	array(
@@ -129,7 +125,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\$quiet   = null !== \$db ? \$db->suppress_errors( true ) : false;",
 		'replace' => "\$quiet   = null !== \$db ? \$db->suppress_errors( false ) : false;",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -138,7 +134,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\$visible = null !== \$db ? \$db->hide_errors() : false;",
 		'replace' => "\$visible = null !== \$db ? \$db->show_errors( true ) : false;",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -147,7 +143,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\$db->suppress_errors( \$quiet );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -156,7 +152,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\$db->show_errors( \$visible );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -165,7 +161,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\$db->last_query = null;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -174,7 +170,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\$db->func_call  = null;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -183,7 +179,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\$db->last_error = '';\n",
 		'replace' => "/* removed */\n",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -192,7 +188,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t\tarray_splice( \$db->queries, \$logged );",
 		'replace' => "/* removed */",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAWriteThatWorksLeavesNoTraceOfItsQuery' ),
 		'expect'  => '/testAWriteThatWorksLeavesNoTraceOfItsQuery/',
 	),
 	array(
@@ -201,7 +197,7 @@ return array(
 		'file'    => $k,
 		'search'  => "array_splice( \$db->queries, \$logged )",
 		'replace' => "array_splice( \$db->queries, 0 )",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -210,7 +206,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\tarray_splice( \$GLOBALS['EZSQL_ERROR'], \$errors );",
 		'replace' => "/* removed */",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -219,7 +215,7 @@ return array(
 		'file'    => $k,
 		'search'  => "array_splice( \$GLOBALS['EZSQL_ERROR'], \$errors )",
 		'replace' => "array_splice( \$GLOBALS['EZSQL_ERROR'], 0 )",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAFailedWriteOfThePrivateKeyIsReportedWithoutIt' ),
 		'expect'  => '/testAFailedWriteOfThePrivateKeyIsReportedWithoutIt/',
 	),
 	array(
@@ -228,7 +224,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\$db      = is_object( \$wpdb ) && method_exists( \$wpdb, 'suppress_errors' ) && method_exists( \$wpdb, 'hide_errors' ) && method_exists( \$wpdb, 'show_errors' ) ? \$wpdb : null;",
 		'replace' => "\$db      = is_object( \$wpdb ) ? \$wpdb : null;",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testADatabaseLayerWithoutTheSwitchesOfWpdbIsWrittenToAsItIs' ),
 		'expect'  => '/testADatabaseLayerWithoutTheSwitchesOfWpdbIsWrittenToAsItIs/',
 	),
 	array(
@@ -237,7 +233,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\tupdate_option( \$option, \$value, false );",
 		'replace' => "\t\t\tupdate_option( \$option, \$value, true );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn' ),
 		'expect'  => '/testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn/',
 	),
 	array(
@@ -246,7 +242,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\t'created'    => null === \$now ? time() : (int) \$now,\n\t\t\t),\n\t\t\tfalse",
 		'replace' => "\t\t\t\t'created'    => null === \$now ? time() : (int) \$now,\n\t\t\t),\n\t\t\ttrue",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn' ),
 		'expect'  => '/testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn/',
 	),
 	array(
@@ -255,7 +251,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\tpublic static function make() {\n\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {",
 		'replace' => "\tpublic static function make() {\n\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond' ),
 		'expect'  => '/testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond/',
 	),
 	array(
@@ -264,7 +260,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null !== \$key ) {\n\t\t\t// A key without the secret of its MACs gets one here as well.",
 		'replace' => "\t\tif ( false ) {\n\t\t\t// A key without the secret of its MACs gets one here as well.",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond' ),
 		'expect'  => '/testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond/',
 	),
 	array(
@@ -273,7 +269,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tdelete_option( self::OPTION_SECRET );\n\t\tdelete_option( self::OPTION_SOURCE );",
 		'replace' => "\t\tdelete_option( self::OPTION_SOURCE );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone' ),
 		'expect'  => '/testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone/',
 	),
 	array(
@@ -282,7 +278,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( ! is_array( \$source ) || ! isset( \$source['format'] ) || self::FORMAT !== \$source['format'] ) {",
 		'replace' => "if ( ! is_array( \$source ) || ! isset( \$source['format'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)another format/',
 	),
 	array(
@@ -291,7 +287,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$key = self::key_record( \$source );\n\t\tif ( null === \$key ) {\n\t\t\treturn null;\n\t\t}",
 		'replace' => "\t\t\$key = self::key_record( \$source );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a source id in capitals/',
 	),
 	array(
@@ -300,7 +296,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$secret = self::secret( \$key['key_id'], \$key['public_key'] );\n\t\tif ( null === \$secret ) {\n\t\t\treturn null;\n\t\t}",
 		'replace' => "\t\t\$secret = self::secret( \$key['key_id'], \$key['public_key'] );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)no private key/',
 	),
 	array(
@@ -309,7 +305,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\tpublic static function sign( \$message, \$key_id ) {\n\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {",
 		'replace' => "\tpublic static function sign( \$message, \$key_id ) {\n\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testSigningNamesTheKeyItSignsWith' ),
 		'expect'  => '/testSigningNamesTheKeyItSignsWith/',
 	),
 	array(
@@ -318,7 +314,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$found = self::found();\n\t\tif ( null === \$found ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
 		'replace' => "\t\t\$found = self::found();\n\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)no private key/',
 	),
 	array(
@@ -327,7 +323,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! is_string( \$key_id ) || ! hash_equals( \$found['key']['key_id'], \$key_id ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testSigningNamesTheKeyItSignsWith' ),
 		'expect'  => '/testSigningNamesTheKeyItSignsWith/',
 	),
 	array(
@@ -336,7 +332,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\tpublic static function answer() {\n\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {",
 		'replace' => "\tpublic static function answer() {\n\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -345,7 +341,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$key || '' === \$site ) {",
 		'replace' => "\t\tif ( '' === \$site ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -354,7 +350,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$key || '' === \$site ) {",
 		'replace' => "\t\tif ( null === \$key ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -363,7 +359,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$code = is_string( \$code ) ? trim( \$code ) : '';",
 		'replace' => "\t\t\$code = is_string( \$code ) ? \$code : '';",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairingCodeReadsBackAsTheKeyOfTheStagingSite' ),
 		'expect'  => '/testThePairingCodeReadsBackAsTheKeyOfTheStagingSite/',
 	),
 	array(
@@ -372,7 +368,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$answer = self::answer();\n\t\tif ( null === \$answer ) {\n\t\t\treturn null;\n\t\t}",
 		'replace' => "\t\t\$answer = self::answer();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -381,7 +377,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$code = is_string( \$code ) ? trim( \$code ) : '';",
 		'replace' => "\t\t\$code = trim( \$code );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeIsText' ),
 		'expect'  => '/testAPairingCodeIsText/',
 	),
 	array(
@@ -390,7 +386,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( ! is_array( \$data ) || self::CODE_FIELDS !== array_keys( \$data ) ||",
 		'replace' => "if ( self::CODE_FIELDS !== array_keys( \$data ) ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)no JSON inside/',
 	),
 	array(
@@ -399,7 +395,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( null === \$offer || ! is_string( \$data['fingerprint'] )",
 		'replace' => "if ( ! is_string( \$data['fingerprint'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt' ),
 		'expect'  => '/testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt(?: with data set "|#)another key id/',
 	),
 	array(
@@ -408,7 +404,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( strlen( \$code ) > self::MAX_CODE ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)too long, valid but for that/',
 	),
 	array(
@@ -417,7 +413,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( base64_encode( (string) \$json ) !== \$code ) {",
 		'replace' => "if ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)bits that encode nothing/',
 	),
 	array(
@@ -426,7 +422,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| self::CODE_FIELDS !== array_keys( \$data ) ||",
 		'replace' => "||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)a field more/',
 	),
 	array(
@@ -435,7 +431,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| wp_json_encode( \$data, JSON_UNESCAPED_SLASHES ) !== \$json ) {",
 		'replace' => ") {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)escaped slashes/',
 	),
 	array(
@@ -444,7 +440,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( self::FORMAT !== \$data['format'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)another format/',
 	),
 	array(
@@ -453,7 +449,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( '' === \$data['site'] || AB_MCP_Staging::normalize_url( \$data['site'] ) !== \$data['site'] ) {",
 		'replace' => "\t\tif ( AB_MCP_Staging::normalize_url( \$data['site'] ) !== \$data['site'] ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)no address/',
 	),
 	array(
@@ -462,7 +458,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( '' === \$data['site'] || AB_MCP_Staging::normalize_url( \$data['site'] ) !== \$data['site'] ) {",
 		'replace' => "\t\tif ( '' === \$data['site'] ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)an address not as stored/',
 	),
 	array(
@@ -471,7 +467,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( \$fields !== \$keys ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt' ),
 		'expect'  => '/testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt(?: with data set "|#)a field more/',
 	),
 	array(
@@ -480,7 +476,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| ! is_string( \$data['fingerprint'] ) || ! hash_equals( \$offer['fingerprint'], \$data['fingerprint'] ) ) {",
 		'replace' => ") {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt' ),
 		'expect'  => '/testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt(?: with data set "|#)another fingerprint/',
 	),
 	array(
@@ -489,7 +485,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( ! is_array( \$raw ) || ! isset( \$raw['source_id'], \$raw['key_id'], \$raw['public_key'] ) ) {",
 		'replace' => "if ( ! is_array( \$raw ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)no public key/',
 	),
 	array(
@@ -498,7 +494,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( ! is_string( \$raw['source_id'] ) || 1 !== preg_match( self::ID, \$raw['source_id'] ) ||",
 		'replace' => "if ( 1 !== preg_match( self::ID, \$raw['source_id'] ) ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a source id as a list/',
 	),
 	array(
@@ -507,7 +503,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| 1 !== preg_match( self::ID, \$raw['source_id'] ) ||",
 		'replace' => "||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a source id in capitals/',
 	),
 	array(
@@ -516,7 +512,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| ! is_string( \$raw['key_id'] ) ) {\n\t\t\treturn null;\n\t\t}\n\t\t\$public = self::from_base64( \$raw['public_key'], self::PUBLIC_BYTES );",
 		'replace' => ") {\n\t\t\treturn null;\n\t\t}\n\t\t\$public = self::from_base64( \$raw['public_key'], self::PUBLIC_BYTES );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a key id as a list/',
 	),
 	array(
@@ -525,7 +521,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( null === \$public || ! hash_equals( self::key_id( \$public ), \$raw['key_id'] ) ) {",
 		'replace' => "if ( ! hash_equals( self::key_id( (string) \$public ), \$raw['key_id'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt' ),
 		'expect'  => '/testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt(?: with data set "|#)a key that is no base64, with the key id of nothing/',
 	),
 	array(
@@ -534,7 +530,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( null === \$public || ! hash_equals( self::key_id( \$public ), \$raw['key_id'] ) ) {",
 		'replace' => "if ( null === \$public ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairingCodeReadsOnlyInItsOneSpelling' ),
 		'expect'  => '/testAPairingCodeReadsOnlyInItsOneSpelling(?: with data set "|#)a key id not of the key/',
 	),
 	array(
@@ -543,7 +539,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! is_string( \$text ) ) {\n\t\t\treturn null;\n\t\t}",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a public key as a list/',
 	),
 	array(
@@ -552,7 +548,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( strlen( (string) \$raw ) !== (int) \$bytes ||",
 		'replace' => "if (",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt' ),
 		'expect'  => '/testTheAnswerOfTheRouteReadsOnlyAsTheRouteWritesIt(?: with data set "|#)a key of 31 bytes/',
 	),
 	array(
@@ -561,7 +557,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| self::to_base64( \$raw ) !== \$text ) {",
 		'replace' => ") {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a public key with bits for nothing/',
 	),
 	array(
@@ -570,7 +566,7 @@ return array(
 		'file'    => $k,
 		'search'  => "if ( ! is_array( \$raw ) || ! isset( \$raw['key_id'], \$raw['secret_key'] ) ||",
 		'replace' => "if ( ! is_array( \$raw ) ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a private key without its key/',
 	),
 	array(
@@ -579,7 +575,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| ! is_string( \$raw['key_id'] ) || ! hash_equals( (string) \$key_id, \$raw['key_id'] ) ) {",
 		'replace' => "|| ! hash_equals( (string) \$key_id, \$raw['key_id'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a private key with a key id as a list/',
 	),
 	array(
@@ -588,7 +584,7 @@ return array(
 		'file'    => $k,
 		'search'  => "|| ! is_string( \$raw['key_id'] ) || ! hash_equals( (string) \$key_id, \$raw['key_id'] ) ) {",
 		'replace' => "|| ! is_string( \$raw['key_id'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)the private key of another key id/',
 	),
 	array(
@@ -597,7 +593,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! hash_equals( sodium_crypto_sign_secretkey( \$pair ), \$secret ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)a private key whose second half is not its public key/',
 	),
 	array(
@@ -606,7 +602,7 @@ return array(
 		'file'    => $k,
 		'search'  => "return hash_equals( (string) self::from_base64( \$public_key, self::PUBLIC_BYTES ), sodium_crypto_sign_publickey( \$pair ) ) ? \$secret : null;",
 		'replace' => "return \$secret;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyCountsOnlyWhereBothOptionsAgree' ),
 		'expect'  => '/testAKeyCountsOnlyWhereBothOptionsAgree(?: with data set "|#)the private key of another key/',
 	),
 	array(
@@ -615,7 +611,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( '' === \$stored || ! preg_match( '~^(https?)://([^/?#:@\\[\\]]+)(:[0-9]+)?(/[^?#]*)?\\z~i', trim( (string) \$url ), \$m ) || ! preg_match( '/[\\x80-\\xff]/', \$m[2] ) ) {",
 		'replace' => "\t\tif ( ! preg_match( '~^(https?)://([^/?#:@\\[\\]]+)(:[0-9]+)?(/[^?#]*)?\\z~i', trim( (string) \$url ), \$m ) || ! preg_match( '/[\\x80-\\xff]/', \$m[2] ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -624,7 +620,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( '' === \$stored || ! preg_match( '~^(https?)://([^/?#:@\\[\\]]+)(:[0-9]+)?(/[^?#]*)?\\z~i', trim( (string) \$url ), \$m ) || ! preg_match( '/[\\x80-\\xff]/', \$m[2] ) ) {",
 		'replace' => "\t\tif ( '' === \$stored || ! preg_match( '/[\\x80-\\xff]/', \$m[2] ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -633,7 +629,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( '' === \$stored || ! preg_match( '~^(https?)://([^/?#:@\\[\\]]+)(:[0-9]+)?(/[^?#]*)?\\z~i', trim( (string) \$url ), \$m ) || ! preg_match( '/[\\x80-\\xff]/', \$m[2] ) ) {",
 		'replace' => "\t\tif ( '' === \$stored || ! preg_match( '~^(https?)://([^/?#:@\\[\\]]+)(:[0-9]+)?(/[^?#]*)?\\z~i', trim( (string) \$url ), \$m ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -642,7 +638,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$host   = strtr( \$host, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz' );",
 		'replace' => "/* removed */",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testWithoutIntlAnInternationalHostIsComparedByteForByte' ),
 		'expect'  => '/testWithoutIntlAnInternationalHostIsComparedByteForByte/',
 	),
 	array(
@@ -651,7 +647,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\tif ( ! is_string( \$host ) || '' === \$host ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -660,7 +656,7 @@ return array(
 		'file'    => $k,
 		'search'  => "'://host.invalid' . ( isset( \$m[3] ) ? \$m[3] : '' ) .",
 		'replace' => "'://host.invalid' . '' .",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -669,7 +665,7 @@ return array(
 		'file'    => $k,
 		'search'  => ". ( isset( \$m[4] ) ? \$m[4] : '' ) )",
 		'replace' => ". '' )",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalHostIsComparedInItsXnForm' ),
 		'expect'  => '/testAnInternationalHostIsComparedInItsXnForm/',
 	),
 	array(
@@ -678,7 +674,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! preg_match( '/[\\x80-\\xff]/', (string) \$a . (string) \$b ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testWithoutIntlAnInternationalHostIsComparedByteForByte' ),
 		'expect'  => '/testWithoutIntlAnInternationalHostIsComparedByteForByte/',
 	),
 	array(
@@ -687,7 +683,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( \$read && '' !== self::site_form( \$a, \$idn ) && '' !== self::site_form( \$b, \$idn ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testWithoutIntlAnInternationalHostIsComparedByteForByte' ),
 		'expect'  => '/testWithoutIntlAnInternationalHostIsComparedByteForByte/',
 	),
 	array(
@@ -696,7 +692,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$site = self::site_form( home_url() );",
 		'replace' => "\t\t\$site = AB_MCP_Staging::normalize_url( home_url() );",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testANameStoredWithBrokenBytesIsRefusedWithTheWay' ),
 		'expect'  => '/testANameStoredWithBrokenBytesIsRefusedWithTheWay/',
 	),
 	array(
@@ -705,7 +701,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$answer ) {\n\t\t\treturn new WP_Error( 'ab_mcp_staging_key_none'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_staging_key_none'",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -714,7 +710,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\$response->header( 'Cache-Control', 'no-store' );",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -723,7 +719,7 @@ return array(
 		'file'    => $rc,
 		'search'  => "\t\t\t\t\t'methods'             => 'GET',\n\t\t\t\t\t'callback'            => array( 'AB_MCP_Sync_Key', 'rest_key' ),",
 		'replace' => "\t\t\t\t\t'methods'             => 'GET, POST',\n\t\t\t\t\t'callback'            => array( 'AB_MCP_Sync_Key', 'rest_key' ),",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRouteGivesThePublicPartToAnyoneAndNothingElse' ),
 		'expect'  => '/testTheRouteGivesThePublicPartToAnyoneAndNothingElse/',
 	),
 	array(
@@ -732,7 +728,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\t\$key = AB_MCP_Sync_Key::renew();",
 		'replace' => "\t\t\t\$key = array();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn' ),
 		'expect'  => '/testConfirmingTheRoleStagingMakesASourceIdAndAKeyInOptionsOfTheirOwn/',
 	),
 	array(
@@ -741,7 +737,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( self::ROLE_STAGING === \$role && ( \$role_changed || \$confirms( \$stored['role'] ) ) ) {",
 		'replace' => "\t\tif ( ( \$role_changed || \$confirms( \$stored['role'] ) ) ) {",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testAProductionSiteConfirmsItsRoleWhateverTheKeyOptionsTake' ),
 		'expect'  => '/testAProductionSiteConfirmsItsRoleWhateverTheKeyOptionsTake/',
 	),
 	array(
@@ -750,7 +746,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( self::ROLE_STAGING === \$role && ( \$role_changed || \$confirms( \$stored['role'] ) ) ) {",
 		'replace' => "\t\tif ( self::ROLE_STAGING === \$role ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone' ),
 		'expect'  => '/testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone/',
 	),
 	array(
@@ -759,7 +755,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( self::ROLE_STAGING === \$role && ( \$role_changed || \$confirms( \$stored['role'] ) ) ) {",
 		'replace' => "\t\tif ( self::ROLE_STAGING === \$role && ( \$role_changed ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone' ),
 		'expect'  => '/testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone/',
 	),
 	array(
@@ -768,7 +764,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\tif ( is_wp_error( \$key ) ) {\n\t\t\t\treturn \$key;\n\t\t\t}",
 		'replace' => "/* removed */",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey(?: with data set "|#)both writes refused/',
 	),
 	array(
@@ -777,7 +773,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( self::ROLE_STAGING !== \$role ) {\n\t\t\tAB_MCP_Sync_Key::forget();\n\t\t}",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone' ),
 		'expect'  => '/testEachConfirmationOfTheRoleStagingMakesANewKeyAndAnyOtherRoleNone/',
 	),
 	array(
@@ -786,7 +782,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\$response = AB_MCP_Outbound::get_partner(",
 		'replace' => "\$response = AB_MCP_Outbound::get(",
-		'run'     => $status,
+		'run'     => $unit( 'StagingStatusTest', 'testTheConnectionIsTiedToTheCheckedAddresses' ),
 		'expect'  => '/testTheConnectionIsTiedToTheCheckedAddresses(?: with data set "|#)its own port/',
 	),
 	array(
@@ -795,7 +791,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( \$pair_changed ) {\n\t\t\t\$forgot = AB_MCP_Sync_Anchor::forget();",
 		'replace' => "\t\tif ( false ) {\n\t\t\t\$forgot = AB_MCP_Sync_Anchor::forget();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnotherPairOrRoleTakesTheAnchorAway' ),
 		'expect'  => '/testAnotherPairOrRoleTakesTheAnchorAway/',
 	),
 	array(
@@ -804,7 +800,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\$forgot = AB_MCP_Sync_Anchor::forget();\n\t\tif ( is_wp_error( \$forgot ) ) {\n\t\t\treturn \$forgot;\n\t\t}\n\t\t\$had",
 		'replace' => "\t\t\$forgot = true;\n\t\tif ( is_wp_error( \$forgot ) ) {\n\t\t\treturn \$forgot;\n\t\t}\n\t\t\$had",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnotherPairOrRoleTakesTheAnchorAway' ),
 		'expect'  => '/testAnotherPairOrRoleTakesTheAnchorAway/',
 	),
 	array(
@@ -813,7 +809,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( 0 !== strpos( \$url, 'https://' ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnHttpAddressIsNeverAsked' ),
 		'expect'  => '/testAnHttpAddressIsNeverAsked/',
 	),
 	array(
@@ -822,7 +818,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\t\$args['redirection'] = 0;",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheFetcherFollowsNoRedirectWhateverTheCallerAsksFor' ),
 		'expect'  => '/testTheFetcherFollowsNoRedirectWhateverTheCallerAsksFor/',
 	),
 	array(
@@ -831,7 +827,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\tpublic static function prepare_from_partner( \$user_id, \$fetcher = null ) {\n\t\t\$partner = self::partner();\n\t\tif ( is_wp_error( \$partner ) ) {\n\t\t\treturn \$partner;\n\t\t}",
 		'replace' => "\tpublic static function prepare_from_partner( \$user_id, \$fetcher = null ) {\n\t\t\$partner = self::partner();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares' ),
 		'expect'  => '/testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares/',
 	),
 	array(
@@ -840,7 +836,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( 0 !== strpos( \$partner, 'https://' ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnHttpAddressIsNeverAsked' ),
 		'expect'  => '/testAnHttpAddressIsNeverAsked/',
 	),
 	array(
@@ -849,7 +845,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( is_wp_error( \$response ) ) {\n\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_anchor_unreached',",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_anchor_unreached',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnUnreachedOrWrongAnswerPreparesNothing' ),
 		'expect'  => '/testAnUnreachedOrWrongAnswerPreparesNothing/',
 	),
 	array(
@@ -858,7 +854,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( 200 !== \$status ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheProductionSiteFetchesTheKeyOverTheBoundFetcherAndFollowsNoRedirect' ),
 		'expect'  => '/testTheProductionSiteFetchesTheKeyOverTheBoundFetcherAndFollowsNoRedirect/',
 	),
 	array(
@@ -867,7 +863,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\$key = AB_MCP_Sync_Key::read_answer( (string) wp_remote_retrieve_body( \$response ) );\n\t\tif ( is_wp_error( \$key ) ) {\n\t\t\treturn \$key;\n\t\t}",
 		'replace' => "\t\t\$key = AB_MCP_Sync_Key::read_answer( (string) wp_remote_retrieve_body( \$response ) );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnUnreachedOrWrongAnswerPreparesNothing' ),
 		'expect'  => '/testAnUnreachedOrWrongAnswerPreparesNothing/',
 	),
 	array(
@@ -876,7 +872,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\tpublic static function prepare_from_code( \$code, \$user_id ) {\n\t\t\$partner = self::partner();\n\t\tif ( is_wp_error( \$partner ) ) {\n\t\t\treturn \$partner;\n\t\t}",
 		'replace' => "\tpublic static function prepare_from_code( \$code, \$user_id ) {\n\t\t\$partner = self::partner();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares' ),
 		'expect'  => '/testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares/',
 	),
 	array(
@@ -885,7 +881,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\$key = AB_MCP_Sync_Key::read_code( \$code );\n\t\tif ( is_wp_error( \$key ) ) {\n\t\t\treturn \$key;\n\t\t}",
 		'replace' => "\t\t\$key = AB_MCP_Sync_Key::read_code( \$code );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint' ),
 		'expect'  => '/testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint/',
 	),
 	array(
@@ -894,7 +890,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( '' === \$site || AB_MCP_Sync_Key::site_form( \$partner ) !== \$site ) {",
 		'replace' => "\t\tif ( '' === \$site ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyForAnotherAddressThanTheStoredOneIsNotPrepared' ),
 		'expect'  => '/testAKeyForAnotherAddressThanTheStoredOneIsNotPrepared/',
 	),
 	array(
@@ -903,7 +899,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( '' === \$site || AB_MCP_Sync_Key::site_form( \$partner ) !== \$site ) {",
 		'replace' => "\t\tif ( AB_MCP_Sync_Key::site_form( \$partner ) !== \$site ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testANameThatCannotBeReadIsNoSiteEvenWhereBothSpellItAlike' ),
 		'expect'  => '/testANameThatCannotBeReadIsNoSiteEvenWhereBothSpellItAlike/',
 	),
 	array(
@@ -912,7 +908,7 @@ return array(
 		'file'    => $a,
 		'search'  => "self::key_url( AB_MCP_Sync_Key::site_form( \$partner ) )",
 		'replace' => "self::key_url( \$partner )",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheKeyIsFetchedFromTheXnFormOfTheStoredAddress' ),
 		'expect'  => '/testTheKeyIsFetchedFromTheXnFormOfTheStoredAddress/',
 	),
 	array(
@@ -921,7 +917,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tself::write( \$prepared, self::read()['active'] );",
 		'replace' => "\t\tself::write( \$prepared, null );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testANewKeyStaysPreparedBesideTheActiveOneUntilConfirmed' ),
 		'expect'  => '/testANewKeyStaysPreparedBesideTheActiveOneUntilConfirmed/',
 	),
 	array(
@@ -930,7 +926,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\tpublic static function confirm( \$fingerprint, \$user_id, \$now = null ) {\n\t\t\$partner = self::partner();\n\t\tif ( is_wp_error( \$partner ) ) {\n\t\t\treturn \$partner;\n\t\t}",
 		'replace' => "\tpublic static function confirm( \$fingerprint, \$user_id, \$now = null ) {\n\t\t\$partner = self::partner();",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testOnlyTheConfirmedProductionSiteConfirms' ),
 		'expect'  => '/testOnlyTheConfirmedProductionSiteConfirms/',
 	),
 	array(
@@ -939,7 +935,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null === \$prepared ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_anchor_nothing'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_anchor_nothing'",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown' ),
 		'expect'  => '/testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown/',
 	),
 	array(
@@ -948,7 +944,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( \$prepared['partner_url'] !== \$partner ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingNeedsAPreparedKeyOfTheStoredStagingSite' ),
 		'expect'  => '/testConfirmingNeedsAPreparedKeyOfTheStoredStagingSite/',
 	),
 	array(
@@ -957,7 +953,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( ! is_string( \$fingerprint ) || ! hash_equals( \$prepared['fingerprint'], \$fingerprint ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown' ),
 		'expect'  => '/testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown/',
 	),
 	array(
@@ -966,7 +962,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( ! is_string( \$fingerprint ) || ! hash_equals( \$prepared['fingerprint'], \$fingerprint ) ) {",
 		'replace' => "\t\tif ( ! hash_equals( \$prepared['fingerprint'], \$fingerprint ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown' ),
 		'expect'  => '/testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown/',
 	),
 	array(
@@ -975,7 +971,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tself::write( null, \$active );",
 		'replace' => "\t\tself::write( \$prepared, \$active );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown' ),
 		'expect'  => '/testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown/',
 	),
 	array(
@@ -984,7 +980,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\treturn null !== \$active && \$active['partner_url'] === self::partner() && ! self::retired( \$active['key_id'] ) ? \$active : null;",
 		'replace' => "\t\treturn null !== \$active && ! self::retired( \$active['key_id'] ) ? \$active : null;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAnAnchorHoldsOnlyForTheStoredStagingSiteOfAProductionSite' ),
 		'expect'  => '/testAnAnchorHoldsOnlyForTheStoredStagingSiteOfAProductionSite/',
 	),
 	array(
@@ -993,7 +989,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\treturn null !== \$prepared && \$prepared['partner_url'] === self::partner() ? \$prepared : null;",
 		'replace' => "\t\treturn \$prepared;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingNeedsAPreparedKeyOfTheStoredStagingSite' ),
 		'expect'  => '/testConfirmingNeedsAPreparedKeyOfTheStoredStagingSite/',
 	),
 	array(
@@ -1002,7 +998,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null === \$record['role'] || AB_MCP_Staging::ROLE_PRODUCTION !== \$record['role']['value'] ) {",
 		'replace' => "\t\tif ( null === \$record['role'] ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares' ),
 		'expect'  => '/testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares/',
 	),
 	array(
@@ -1011,7 +1007,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null === \$record['pair'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares' ),
 		'expect'  => '/testOnlyTheConfirmedProductionSitePairedWithAStagingSitePrepares/',
 	),
 	array(
@@ -1020,7 +1016,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['format'] ) || self::FORMAT !== \$raw['format'] ) {",
 		'replace' => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['format'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)another format/',
 	),
 	array(
@@ -1029,7 +1025,7 @@ return array(
 		'file'    => $a,
 		'search'  => "if ( ! is_array( \$raw ) || ! isset( \$raw['partner_url'], \$raw['fingerprint'], \$raw['via'], \$raw['user_id'], \$raw['at'] ) ) {",
 		'replace' => "if ( ! is_array( \$raw ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)no way/',
 	),
 	array(
@@ -1038,7 +1034,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null === \$key || \$key['fingerprint'] !== \$raw['fingerprint'] ||",
 		'replace' => "\t\tif ( \$key['fingerprint'] !== \$raw['fingerprint'] ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)a key id not of the key/',
 	),
 	array(
@@ -1047,7 +1043,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| \$key['fingerprint'] !== \$raw['fingerprint'] ||",
 		'replace' => "||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)another fingerprint/',
 	),
 	array(
@@ -1056,7 +1052,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! in_array( \$raw['via'], self::VIA, true ) ) {",
 		'replace' => ") {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)an unknown way/',
 	),
 	array(
@@ -1065,7 +1061,7 @@ return array(
 		'file'    => $a,
 		'search'  => "if ( ! is_int( \$raw['user_id'] ) || \$raw['user_id'] < 0 ||",
 		'replace' => "if ( \$raw['user_id'] < 0 ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)who as text/',
 	),
 	array(
@@ -1074,7 +1070,7 @@ return array(
 		'file'    => $a,
 		'search'  => "if ( ! is_int( \$raw['user_id'] ) || \$raw['user_id'] < 0 ||",
 		'replace' => "if ( ! is_int( \$raw['user_id'] ) ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)who below zero/',
 	),
 	array(
@@ -1083,7 +1079,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['at'] ) || \$raw['at'] <= 0 ) {",
 		'replace' => "|| \$raw['at'] <= 0 ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)when as text/',
 	),
 	array(
@@ -1092,7 +1088,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['at'] ) || \$raw['at'] <= 0 ) {",
 		'replace' => "|| ! is_int( \$raw['at'] ) || \$raw['at'] < 0 ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)no time/',
 	),
 	array(
@@ -1101,7 +1097,7 @@ return array(
 		'file'    => $a,
 		'search'  => "if ( ! isset( \$raw['prepared_by'], \$raw['prepared_at'] ) || ",
 		'replace' => "if ( ",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)who prepared it, missing/',
 	),
 	array(
@@ -1110,7 +1106,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['prepared_by'] ) || \$raw['prepared_by'] < 0 ||",
 		'replace' => "|| \$raw['prepared_by'] < 0 ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)who prepared it as text/',
 	),
 	array(
@@ -1119,7 +1115,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['prepared_by'] ) || \$raw['prepared_by'] < 0 ||",
 		'replace' => "|| ! is_int( \$raw['prepared_by'] ) ||",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)who prepared, below zero/',
 	),
 	array(
@@ -1128,7 +1124,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['prepared_at'] ) || \$raw['prepared_at'] <= 0 ) {",
 		'replace' => "|| \$raw['prepared_at'] <= 0 ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)when it was prepared, text/',
 	),
 	array(
@@ -1137,7 +1133,7 @@ return array(
 		'file'    => $a,
 		'search'  => "|| ! is_int( \$raw['prepared_at'] ) || \$raw['prepared_at'] <= 0 ) {",
 		'replace' => "|| ! is_int( \$raw['prepared_at'] ) || \$raw['prepared_at'] < 0 ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheAnchorReadsOnlyWhatItWrites' ),
 		'expect'  => '/testTheAnchorReadsOnlyWhatItWrites(?: with data set "|#)prepared at 0/',
 	),
 	array(
@@ -1146,7 +1142,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\$active = self::active();\n\t\tif ( null === \$active ) {\n\t\t\treturn null;\n\t\t}\n",
 		'replace' => "\t\t\$active = self::active();\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1155,7 +1151,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\$site = AB_MCP_Sync_Key::site_form( home_url() );",
 		'replace' => "\t\t\$site = AB_MCP_Staging::normalize_url( home_url() );",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testThisSiteReadsItsOwnNameAsHomeUrlGivesIt' ),
 		'expect'  => '/testThisSiteReadsItsOwnNameAsHomeUrlGivesIt/',
 	),
 	array(
@@ -1164,7 +1160,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( '' === \$site ) {\n\t\t\treturn null;\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testASiteWhoseOwnNameCannotBeReadHasNoPrint' ),
 		'expect'  => '/testASiteWhoseOwnNameCannotBeReadHasNoPrint/',
 	),
 	array(
@@ -1173,7 +1169,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\t\t'site'   => \$site,\n",
 		'replace' => "/* removed */\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1182,7 +1178,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$role['value'], \$role['user_id'], \$role['source'], \$role['at'] )",
 		'replace' => "array( \$role['value'], \$role['user_id'], \$role['source'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1191,7 +1187,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$role['value'], \$role['user_id'], \$role['source'], \$role['at'] )",
 		'replace' => "array( \$role['value'], \$role['source'], \$role['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1200,7 +1196,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$role['value'], \$role['user_id'], \$role['source'], \$role['at'] )",
 		'replace' => "array( \$role['value'], \$role['user_id'], \$role['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1209,7 +1205,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['source'], \$pair['at'] )",
 		'replace' => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['source'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1218,7 +1214,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['source'], \$pair['at'] )",
 		'replace' => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['source'], \$pair['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1227,7 +1223,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['source'], \$pair['at'] )",
 		'replace' => "array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1236,7 +1232,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$active['source_id'], \$active['key_id'], \$active['public_key'], \$active['via'], \$active['user_id'], \$active['at'] )",
 		'replace' => "array( \$active['via'], \$active['user_id'], \$active['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1245,7 +1241,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$active['source_id'], \$active['key_id'], \$active['public_key'], \$active['via'], \$active['user_id'], \$active['at'] )",
 		'replace' => "array( \$active['source_id'], \$active['key_id'], \$active['public_key'], \$active['via'], \$active['at'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1254,7 +1250,7 @@ return array(
 		'file'    => $a,
 		'search'  => "array( \$active['source_id'], \$active['key_id'], \$active['public_key'], \$active['via'], \$active['user_id'], \$active['at'] )",
 		'replace' => "array( \$active['source_id'], \$active['key_id'], \$active['public_key'], \$active['via'], \$active['user_id'] )",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor' ),
 		'expect'  => '/testThePairPrintChangesWithTheRoleThePairAndTheAnchor/',
 	),
 	array(
@@ -1263,7 +1259,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role'",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1272,7 +1268,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( null === \$pair ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1281,7 +1277,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\$key = AB_MCP_Sync_Key::current();\n\t\tif ( null === \$key ) {",
 		'replace' => "\t\t\$key = AB_MCP_Sync_Key::current();\n\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1290,7 +1286,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( self::PACKAGE_FIELDS !== \$fields ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1299,7 +1295,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\$bad = self::shape( \$manifest );\n\t\tif ( null !== \$bad ) {\n\t\t\treturn \$bad;\n\t\t}\n\t\t\$text      = AB_MCP_Sync_Canon::encode( \$manifest );",
 		'replace' => "\t\t\$text      = AB_MCP_Sync_Canon::encode( \$manifest );",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1308,7 +1304,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
 		'replace' => "\t\tif ( ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly' ),
 		'expect'  => '/testTheEnvelopeIsTheTextAndItsSignatureOnly(?: with data set "|#)a key more/',
 	),
 	array(
@@ -1317,7 +1313,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
 		'replace' => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly' ),
 		'expect'  => '/testTheEnvelopeIsTheTextAndItsSignatureOnly(?: with data set "|#)manifest as array/',
 	),
 	array(
@@ -1326,7 +1322,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
 		'replace' => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly' ),
 		'expect'  => '/testTheEnvelopeIsTheTextAndItsSignatureOnly(?: with data set "|#)empty manifest/',
 	),
 	array(
@@ -1335,7 +1331,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
 		'replace' => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || ! is_string( \$signed['signature'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly' ),
 		'expect'  => '/testTheEnvelopeIsTheTextAndItsSignatureOnly(?: with data set "|#)too long/',
 	),
 	array(
@@ -1344,7 +1340,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT || ! is_string( \$signed['signature'] ) ) {",
 		'replace' => "\t\tif ( array( 'manifest', 'signature' ) !== \$keys || ! is_string( \$signed['manifest'] ) || '' === \$signed['manifest'] || strlen( \$signed['manifest'] ) > self::MAX_TEXT ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly' ),
 		'expect'  => '/testTheEnvelopeIsTheTextAndItsSignatureOnly(?: with data set "|#)signature no text/',
 	),
 	array(
@@ -1353,7 +1349,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$manifest ) || AB_MCP_Sync_Canon::encode( \$manifest ) !== \$text ) {",
 		'replace' => "\t\tif ( ! is_array( \$manifest ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheOneSpellingIsReadEvenWithAValidSignature' ),
 		'expect'  => '/testOnlyTheOneSpellingIsReadEvenWithAValidSignature(?: with data set "|#)white space/',
 	),
 	array(
@@ -1362,7 +1358,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$manifest ) || AB_MCP_Sync_Canon::encode( \$manifest ) !== \$text ) {",
 		'replace' => "\t\tif ( AB_MCP_Sync_Canon::encode( \$manifest ) !== \$text ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestThatIsNoObjectIsNotRead' ),
 		'expect'  => '/testAManifestThatIsNoObjectIsNotRead/',
 	),
 	array(
@@ -1371,7 +1367,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\$bad = self::shape( \$manifest );\n\t\tif ( null !== \$bad ) {\n\t\t\treturn \$bad;\n\t\t}\n\t\t\$version",
 		'replace' => "\t\t\$version",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a field more/',
 	),
 	array(
@@ -1380,7 +1376,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( null !== \$version ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)another canon/',
 	),
 	array(
@@ -1389,7 +1385,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( null === \$anchor ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestIsReadOnlyWithAKeyAPersonConfirmed' ),
 		'expect'  => '/testAManifestIsReadOnlyWithAKeyAPersonConfirmed/',
 	),
 	array(
@@ -1398,7 +1394,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== AB_MCP_Sync_Anchor::prepared() ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestIsReadOnlyWithAKeyAPersonConfirmed' ),
 		'expect'  => '/testAManifestIsReadOnlyWithAKeyAPersonConfirmed/',
 	),
 	array(
@@ -1407,7 +1403,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$manifest['source_id'] !== \$anchor['source_id'] || \$manifest['key_id'] !== \$anchor['key_id'] ) {",
 		'replace' => "\t\tif ( \$manifest['key_id'] !== \$anchor['key_id'] ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestSignedWithAnotherKeyIsRefused' ),
 		'expect'  => '/testAManifestSignedWithAnotherKeyIsRefused/',
 	),
 	array(
@@ -1416,7 +1412,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$manifest['source_id'] !== \$anchor['source_id'] || \$manifest['key_id'] !== \$anchor['key_id'] ) {",
 		'replace' => "\t\tif ( \$manifest['source_id'] !== \$anchor['source_id'] ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestSignedWithAnotherKeyIsRefused' ),
 		'expect'  => '/testAManifestSignedWithAnotherKeyIsRefused/',
 	),
 	array(
@@ -1425,7 +1421,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( true !== \$valid ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestSignedWithAnotherKeyIsRefused' ),
 		'expect'  => '/testAManifestSignedWithAnotherKeyIsRefused/',
 	),
 	array(
@@ -1434,7 +1430,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$us || AB_MCP_Sync_Key::site_form( \$manifest['target'] ) !== \$us ) {",
 		'replace' => "\t\tif ( '' === \$us ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestForAnotherAddressThanThisSiteIsRefused' ),
 		'expect'  => '/testAManifestForAnotherAddressThanThisSiteIsRefused/',
 	),
 	array(
@@ -1443,7 +1439,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$us || AB_MCP_Sync_Key::site_form( \$manifest['target'] ) !== \$us ) {",
 		'replace' => "\t\tif ( AB_MCP_Sync_Key::site_form( \$manifest['target'] ) !== \$us ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike' ),
 		'expect'  => '/testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike/',
 	),
 	array(
@@ -1452,7 +1448,7 @@ return array(
 		'file'    => $m,
 		'search'  => "AB_MCP_Sync_Key::site_form( \$manifest['target'] ) !== \$us",
 		'replace' => "\$manifest['target'] !== \$us",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testThePackageIsForThisSiteInEitherSpelling' ),
 		'expect'  => '/testThePackageIsForThisSiteInEitherSpelling/',
 	),
 	array(
@@ -1461,7 +1457,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$from || AB_MCP_Sync_Key::site_form( \$anchor['partner_url'] ) !== \$from ) {",
 		'replace' => "\t\tif ( '' === \$from ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestFromAnotherAddressThanTheStagingSiteIsRefused' ),
 		'expect'  => '/testAManifestFromAnotherAddressThanTheStagingSiteIsRefused/',
 	),
 	array(
@@ -1470,7 +1466,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$from || AB_MCP_Sync_Key::site_form( \$anchor['partner_url'] ) !== \$from ) {",
 		'replace' => "\t\tif ( AB_MCP_Sync_Key::site_form( \$anchor['partner_url'] ) !== \$from ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike' ),
 		'expect'  => '/testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike/',
 	),
 	array(
@@ -1479,7 +1475,7 @@ return array(
 		'file'    => $m,
 		'search'  => "AB_MCP_Sync_Key::site_form( \$anchor['partner_url'] ) !== \$from",
 		'replace' => "\$anchor['partner_url'] !== \$from",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAnInternationalNameAnchorsInEitherSpelling' ),
 		'expect'  => '/testAnInternationalNameAnchorsInEitherSpelling(?: with data set "|#)stored in Unicode, the key in xn--/',
 	),
 	array(
@@ -1488,7 +1484,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$source || '' === \$target ) {",
 		'replace' => "\t\tif ( '' === \$target ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAStagingSiteThatCannotReadAnAddressSignsNothing' ),
 		'expect'  => '/testAStagingSiteThatCannotReadAnAddressSignsNothing/',
 	),
 	array(
@@ -1497,7 +1493,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$source || '' === \$target ) {",
 		'replace' => "\t\tif ( '' === \$source ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAStagingSiteThatCannotReadAnAddressSignsNothing' ),
 		'expect'  => '/testAStagingSiteThatCannotReadAnAddressSignsNothing/',
 	),
 	array(
@@ -1506,7 +1502,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$now >= \$manifest['expires'] ) {",
 		'replace' => "\t\tif ( \$now > \$manifest['expires'] ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestIsReadFor24HoursFromWhenItWasMade' ),
 		'expect'  => '/testAManifestIsReadFor24HoursFromWhenItWasMade/',
 	),
 	array(
@@ -1515,7 +1511,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$manifest['created'] > \$now + self::SKEW ) {",
 		'replace' => "\t\tif ( \$manifest['created'] >= \$now + self::SKEW ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAManifestIsReadFor24HoursFromWhenItWasMade' ),
 		'expect'  => '/testAManifestIsReadFor24HoursFromWhenItWasMade/',
 	),
 	array(
@@ -1524,7 +1520,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! isset( \$expect['purpose'] ) || \$expect['purpose'] !== \$manifest['purpose'] ) {",
 		'replace' => "\t\tif ( ! isset( \$expect['purpose'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1533,7 +1529,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! isset( \$expect['purpose'] ) || \$expect['purpose'] !== \$manifest['purpose'] ) {",
 		'replace' => "\t\tif ( \$expect['purpose'] !== \$manifest['purpose'] ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1542,7 +1538,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( \$expect['report_hash'] ) || ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1551,7 +1547,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( \$expect['report_hash'] ) || ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
 		'replace' => "\t\tif ( ( ! isset( \$expect['report_hash'] ) || ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1560,7 +1556,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( \$expect['report_hash'] ) || ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
 		'replace' => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1569,7 +1565,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( \$expect['report_hash'] ) || ! is_string( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
 		'replace' => "\t\tif ( in_array( \$manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( \$expect['report_hash'] ) || ! hash_equals( \$manifest['report_hash'], \$expect['report_hash'] ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1578,7 +1574,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( isset( \$expect['package_id'] ) && \$expect['package_id'] !== \$manifest['package_id'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testAPackageIsReadOnlyForItsPurposeItsReportAndItself' ),
 		'expect'  => '/testAPackageIsReadOnlyForItsPurposeItsReportAndItself/',
 	),
 	array(
@@ -1587,7 +1583,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_int( \$index ) || ! isset( \$manifest['chunks'][ \$index ] ) ) {",
 		'replace' => "\t\tif ( ! isset( \$manifest['chunks'][ \$index ] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1596,7 +1592,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_int( \$index ) || ! isset( \$manifest['chunks'][ \$index ] ) ) {",
 		'replace' => "\t\tif ( ! is_int( \$index ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1605,7 +1601,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_string( \$data ) || ! hash_equals( \$manifest['chunks'][ \$index ]['sha256'], hash( 'sha256', \$data ) ) ) {",
 		'replace' => "\t\tif ( ! is_string( \$data ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1614,7 +1610,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_string( \$data ) || ! hash_equals( \$manifest['chunks'][ \$index ]['sha256'], hash( 'sha256', \$data ) ) ) {",
 		'replace' => "\t\tif ( ! hash_equals( \$manifest['chunks'][ \$index ]['sha256'], hash( 'sha256', \$data ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1623,7 +1619,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_string( \$sha256 ) || ! hash_equals( \$manifest['sha256'], \$sha256 ) ) {",
 		'replace' => "\t\tif ( ! is_string( \$sha256 ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1632,7 +1628,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_string( \$sha256 ) || ! hash_equals( \$manifest['sha256'], \$sha256 ) ) {",
 		'replace' => "\t\tif ( ! hash_equals( \$manifest['sha256'], \$sha256 ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEachChunkIsReadOnlyAgainstItsSizeAndHash' ),
 		'expect'  => '/testEachChunkIsReadOnlyAgainstItsSizeAndHash/',
 	),
 	array(
@@ -1641,7 +1637,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( self::FIELDS !== \$fields ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a field more/',
 	),
 	array(
@@ -1650,7 +1646,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( self::FORMAT !== \$m['format'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)another format/',
 	),
 	array(
@@ -1659,7 +1655,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'canon'      => is_string( \$m['canon'] ) && 1 === preg_match( '/^canon\\/[1-9][0-9]{0,5}\\z/', \$m['canon'] ),",
 		'replace' => "\t\t\t'canon'      => is_string( \$m['canon'] ),",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a canon that is none/',
 	),
 	array(
@@ -1668,7 +1664,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'canon'      => is_string( \$m['canon'] ) && 1 === preg_match( '/^canon\\/[1-9][0-9]{0,5}\\z/', \$m['canon'] ),",
 		'replace' => "\t\t\t'canon'      => 1 === preg_match( '/^canon\\/[1-9][0-9]{0,5}\\z/', \$m['canon'] ),",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a canon as a list/',
 	),
 	array(
@@ -1677,7 +1673,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'source_id'  => \$hex32( \$m['source_id'] ),\n",
 		'replace' => "\t\t\t'source_id'  => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a source id in capitals/',
 	),
 	array(
@@ -1686,7 +1682,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'key_id'     => \$hex32( \$m['key_id'] ),\n",
 		'replace' => "\t\t\t'key_id'     => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a short key id/',
 	),
 	array(
@@ -1695,7 +1691,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'source'     => \$site( \$m['source'] ),\n",
 		'replace' => "\t\t\t'source'     => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a source not as stored/',
 	),
 	array(
@@ -1704,7 +1700,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'target'     => \$site( \$m['target'] ),\n",
 		'replace' => "\t\t\t'target'     => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a target not as stored/',
 	),
 	array(
@@ -1713,7 +1709,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'package_id' => \$hex32( \$m['package_id'] ),\n",
 		'replace' => "\t\t\t'package_id' => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a package id of 31/',
 	),
 	array(
@@ -1722,7 +1718,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'purpose'    => in_array( \$m['purpose'], self::PURPOSES, true ),\n",
 		'replace' => "\t\t\t'purpose'    => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)an unknown purpose/',
 	),
 	array(
@@ -1731,7 +1727,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'created'    => is_int( \$m['created'] ) && \$m['created'] > 0,\n",
 		'replace' => "\t\t\t'created'    => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)created as text/',
 	),
 	array(
@@ -1740,7 +1736,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'objects'    => \$count( \$m['objects'], self::MAX_OBJECTS ),\n",
 		'replace' => "\t\t\t'objects'    => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)too many objects/',
 	),
 	array(
@@ -1749,7 +1745,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'unpacked'   => \$count( \$m['unpacked'], self::MAX_UNPACKED ),\n",
 		'replace' => "\t\t\t'unpacked'   => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)too much unpacked/',
 	),
 	array(
@@ -1758,7 +1754,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'sha256'     => \$hex64( \$m['sha256'] ),\n",
 		'replace' => "\t\t\t'sha256'     => true,\n",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a hash in capitals/',
 	),
 	array(
@@ -1767,7 +1763,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t'created'    => is_int( \$m['created'] ) && \$m['created'] > 0,",
 		'replace' => "\t\t\t'created'    => is_int( \$m['created'] ) && \$m['created'] >= 0,",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)created at 0/',
 	),
 	array(
@@ -1776,7 +1772,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn is_string( \$v ) && 1 === preg_match( AB_MCP_Sync_Key::ID, \$v );",
 		'replace' => "\t\t\treturn 1 === preg_match( AB_MCP_Sync_Key::ID, \$v );",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a source id as a list/',
 	),
 	array(
@@ -1785,7 +1781,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn is_string( \$v ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', \$v );",
 		'replace' => "\t\t\treturn 1 === preg_match( '/^[0-9a-f]{64}\\z/', \$v );",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a hash as a list/',
 	),
 	array(
@@ -1794,7 +1790,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn '' !== \$v && AB_MCP_Staging::normalize_url( \$v ) === \$v;",
 		'replace' => "\t\t\treturn AB_MCP_Staging::normalize_url( \$v ) === \$v;",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)no target/',
 	),
 	array(
@@ -1803,7 +1799,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn is_int( \$v ) && \$v >= \$min && \$v <= \$max;",
 		'replace' => "\t\t\treturn \$v >= \$min && \$v <= \$max;",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)objects as text/',
 	),
 	array(
@@ -1812,7 +1808,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn is_int( \$v ) && \$v >= \$min && \$v <= \$max;",
 		'replace' => "\t\t\treturn is_int( \$v ) && \$v <= \$max;",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)fewer than no objects/',
 	),
 	array(
@@ -1821,7 +1817,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\treturn is_int( \$v ) && \$v >= \$min && \$v <= \$max;",
 		'replace' => "\t\t\treturn is_int( \$v ) && \$v >= \$min && \$v < \$max;",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheLimitsThemselvesAreRead' ),
 		'expect'  => '/testTheLimitsThemselvesAreRead(?: with data set "|#)5000 objects/',
 	),
 	array(
@@ -1830,7 +1826,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\$count( \$m['objects'], self::MAX_OBJECTS )",
 		'replace' => "\$count( \$m['objects'], self::MAX_OBJECTS + 1 )",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)too many objects/',
 	),
 	array(
@@ -1839,7 +1835,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\$count( \$m['unpacked'], self::MAX_UNPACKED )",
 		'replace' => "\$count( \$m['unpacked'], self::MAX_UNPACKED + 1 )",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)too much unpacked/',
 	),
 	array(
@@ -1848,7 +1844,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$m['purpose'], self::FOR_REPORT, true ) ? ! \$hex64( \$m['report_hash'] ) : null !== \$m['report_hash'] ) {",
 		'replace' => "\t\tif ( in_array( \$m['purpose'], self::FOR_REPORT, true ) ? false : null !== \$m['report_hash'] ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)objects without their report/',
 	),
 	array(
@@ -1857,7 +1853,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( in_array( \$m['purpose'], self::FOR_REPORT, true ) ? ! \$hex64( \$m['report_hash'] ) : null !== \$m['report_hash'] ) {",
 		'replace' => "\t\tif ( in_array( \$m['purpose'], self::FOR_REPORT, true ) ? ! \$hex64( \$m['report_hash'] ) : false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)an inventory with a report/',
 	),
 	array(
@@ -1866,7 +1862,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$m['expires'] !== \$m['created'] + self::TTL ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)expires a second later/',
 	),
 	array(
@@ -1875,7 +1871,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['kinds'] ) || ! array_is_list( \$m['kinds'] ) || count( \$m['kinds'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! array_is_list( \$m['kinds'] ) || count( \$m['kinds'] ) > self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)kinds as text/',
 	),
 	array(
@@ -1884,7 +1880,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['kinds'] ) || ! array_is_list( \$m['kinds'] ) || count( \$m['kinds'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! is_array( \$m['kinds'] ) || count( \$m['kinds'] ) > self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)kinds as a map/',
 	),
 	array(
@@ -1893,7 +1889,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['kinds'] ) || ! array_is_list( \$m['kinds'] ) || count( \$m['kinds'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! is_array( \$m['kinds'] ) || ! array_is_list( \$m['kinds'] ) || count( \$m['kinds'] ) >= self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheLimitsThemselvesAreRead' ),
 		'expect'  => '/testTheLimitsThemselvesAreRead(?: with data set "|#)2000 kinds/',
 	),
 	array(
@@ -1902,7 +1898,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'complete', 'kind', 'subtype' ) !== \$keys || ! is_bool( \$entry['complete'] )",
 		'replace' => "\t\t\tif ( ! is_bool( \$entry['complete'] )",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a kind without complete/',
 	),
 	array(
@@ -1911,7 +1907,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'complete', 'kind', 'subtype' ) !== \$keys || ! is_bool( \$entry['complete'] )",
 		'replace' => "\t\t\tif ( array( 'complete', 'kind', 'subtype' ) !== \$keys",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)complete as text/',
 	),
 	array(
@@ -1920,7 +1916,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['kind'] ) || 1 !== preg_match( '/^[a-z][a-z0-9_]{0,31}\\z/', \$entry['kind'] )",
 		'replace' => "\t\t\t\t|| 1 !== preg_match( '/^[a-z][a-z0-9_]{0,31}\\z/', \$entry['kind'] )",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a kind as a list/',
 	),
 	array(
@@ -1929,7 +1925,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['kind'] ) || 1 !== preg_match( '/^[a-z][a-z0-9_]{0,31}\\z/', \$entry['kind'] )",
 		'replace' => "\t\t\t\t|| ! is_string( \$entry['kind'] )",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a kind in capitals/',
 	),
 	array(
@@ -1938,7 +1934,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
 		'replace' => "\t\t\t\t|| 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a subtype not text/',
 	),
 	array(
@@ -1947,7 +1943,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
 		'replace' => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey' ),
 		'expect'  => '/testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey/',
 	),
 	array(
@@ -1956,7 +1952,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
 		'replace' => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a subtype with a line break/',
 	),
 	array(
@@ -1965,7 +1961,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) > self::MAX_SUBTYPE ) {",
 		'replace' => "\t\t\t\t|| ! is_string( \$entry['subtype'] ) || 1 !== preg_match( '//u', \$entry['subtype'] ) || preg_match( '/[\\x00-\\x1F\\x7F]/', \$entry['subtype'] ) || mb_strlen( \$entry['subtype'], 'UTF-8' ) >= self::MAX_SUBTYPE ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheLimitsThemselvesAreRead' ),
 		'expect'  => '/testTheLimitsThemselvesAreRead(?: with data set "|#)a subtype of 191/',
 	),
 	array(
@@ -1974,7 +1970,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
 		'replace' => "\t\t\tif ( null !== \$last && ( ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)kinds out of order by kind/',
 	),
 	array(
@@ -1983,7 +1979,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
 		'replace' => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)kinds out of order/',
 	),
 	array(
@@ -1992,7 +1988,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
 		'replace' => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) > 0 ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a kind twice/',
 	),
 	array(
@@ -2001,7 +1997,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( \$last['kind'] === \$entry['kind'] && strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
 		'replace' => "\t\t\tif ( null !== \$last && ( strcmp( \$last['kind'], \$entry['kind'] ) > 0 || ( strcmp( \$last['subtype'], \$entry['subtype'] ) >= 0 ) ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheLimitsThemselvesAreRead' ),
 		'expect'  => '/testTheLimitsThemselvesAreRead(?: with data set "|#)two kinds, lower subtype/',
 	),
 	array(
@@ -2010,7 +2006,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)chunks as text/',
 	),
 	array(
@@ -2019,7 +2015,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! is_array( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)chunks as a map/',
 	),
 	array(
@@ -2028,7 +2024,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || count( \$m['chunks'] ) > self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)no chunk/',
 	),
 	array(
@@ -2037,7 +2033,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) > self::MAX_LIST ) {",
 		'replace' => "\t\tif ( ! is_array( \$m['chunks'] ) || ! array_is_list( \$m['chunks'] ) || array() === \$m['chunks'] || count( \$m['chunks'] ) >= self::MAX_LIST ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testTheLimitsThemselvesAreRead' ),
 		'expect'  => '/testTheLimitsThemselvesAreRead(?: with data set "|#)2000 chunks/',
 	),
 	array(
@@ -2046,7 +2042,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
 		'replace' => "\t\t\tif ( ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a chunk with a field more/',
 	),
 	array(
@@ -2055,7 +2051,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
 		'replace' => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 0 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)an empty chunk/',
 	),
 	array(
@@ -2064,7 +2060,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
 		'replace' => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK + 1, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a chunk over 5 MiB/',
 	),
 	array(
@@ -2073,7 +2069,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) || ! \$hex64( \$chunk['sha256'] ) ) {",
 		'replace' => "\t\t\tif ( array( 'bytes', 'sha256' ) !== \$keys || ! \$count( \$chunk['bytes'], self::MAX_CHUNK, 1 ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a chunk hash in capitals/',
 	),
 	array(
@@ -2082,7 +2078,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! \$count( \$m['bytes'], self::MAX_BYTES, 1 ) || \$m['bytes'] !== \$sum ) {",
 		'replace' => "\t\tif ( \$m['bytes'] !== \$sum ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)a package over 64 MiB/',
 	),
 	array(
@@ -2091,7 +2087,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( ! \$count( \$m['bytes'], self::MAX_BYTES, 1 ) || \$m['bytes'] !== \$sum ) {",
 		'replace' => "\t\tif ( ! \$count( \$m['bytes'], self::MAX_BYTES, 1 ) ) {",
-		'run'     => $manifest,
+		'run'     => $unit( 'SyncManifestTest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature' ),
 		'expect'  => '/testEveryFieldIsAsTheFormatHasItWhateverTheSignature(?: with data set "|#)bytes not the sum/',
 	),
 	array(
@@ -2100,7 +2096,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\tpublic function handle_staging_key() {\n\t\t\$this->guard();",
 		'replace' => "\tpublic function handle_staging_key() {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsMadeBehindTheNonceAndTheCapability' ),
 		'expect'  => '/testTheKeyIsMadeBehindTheNonceAndTheCapability/',
 	),
 	array(
@@ -2109,7 +2105,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tcheck_admin_referer( 'ab_mcp_staging_key' );",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsMadeBehindTheNonceAndTheCapability' ),
 		'expect'  => '/testTheKeyIsMadeBehindTheNonceAndTheCapability/',
 	),
 	array(
@@ -2118,7 +2114,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\tpublic function handle_staging_anchor() {\n\t\t\$this->guard();",
 		'replace' => "\tpublic function handle_staging_anchor() {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint' ),
 		'expect'  => '/testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint/',
 	),
 	array(
@@ -2127,7 +2123,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tcheck_admin_referer( 'ab_mcp_staging_anchor' );",
 		'replace' => "/* removed */",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint' ),
 		'expect'  => '/testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint/',
 	),
 	array(
@@ -2136,7 +2132,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tif ( is_wp_error( \$made ) ) {\n\t\t\t\$this->redirect( self::trust_notice( \$made ), self::STAGING_TRUST );",
 		'replace' => "\t\tif ( false ) {\n\t\t\t\$this->redirect( self::trust_notice( \$made ), self::STAGING_TRUST );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsMadeBehindTheNonceAndTheCapability' ),
 		'expect'  => '/testTheKeyIsMadeBehindTheNonceAndTheCapability/',
 	),
 	array(
@@ -2145,7 +2141,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\$this->redirect( is_wp_error( \$result ) ? self::trust_notice( \$result ) : \$done, self::STAGING_TRUST );",
 		'replace' => "\$this->redirect( \$done, self::STAGING_TRUST );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint' ),
 		'expect'  => '/testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint/',
 	),
 	array(
@@ -2154,7 +2150,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tif ( is_wp_error( \$saved ) && 'ab_mcp_staging_invalid' !== \$saved->get_error_code() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testTheFormSaysTheRoleWasNotConfirmed' ),
 		'expect'  => '/testTheFormSaysTheRoleWasNotConfirmed/',
 	),
 	array(
@@ -2163,7 +2159,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "AB_MCP_Sync_Anchor::confirm( isset( \$_POST['fingerprint'] ) ? sanitize_text_field( wp_unslash( \$_POST['fingerprint'] ) ) : '', \$user_id );",
 		'replace' => "AB_MCP_Sync_Anchor::confirm( (string) AB_MCP_Sync_Anchor::prepared()['fingerprint'], \$user_id );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint' ),
 		'expect'  => '/testTheKeyIsConfirmedOnlyBehindTheNonceTheCapabilityAndTheFingerprint/',
 	),
 	array(
@@ -2172,7 +2168,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tif ( 0 === strpos( \$partner, 'https://' ) ) {",
 		'replace' => "\t\tif ( true ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheProductionSiteShowsTheAnchorAndConfirmsOnlyThePreparedFingerprint' ),
 		'expect'  => '/testTheProductionSiteShowsTheAnchorAndConfirmsOnlyThePreparedFingerprint/',
 	),
 	array(
@@ -2181,7 +2177,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || ! is_int( \$port ) || \$asked !== \$url ) {",
 		'replace' => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || ! is_int( \$port ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly' ),
 		'expect'  => '/testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly/',
 	),
 	array(
@@ -2190,7 +2186,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || ! is_int( \$port ) || \$asked !== \$url ) {",
 		'replace' => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || \$asked !== \$url ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays' ),
 		'expect'  => '/testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays/',
 	),
 	array(
@@ -2199,7 +2195,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || ! is_int( \$port ) || \$asked !== \$url ) {",
 		'replace' => "\t\t\tif ( ! \$left || ! is_int( \$port ) || \$asked !== \$url ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays' ),
 		'expect'  => '/testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays/',
 	),
 	array(
@@ -2208,7 +2204,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\tif ( ! \$left || ! is_array( \$ports ) || ! is_int( \$port ) || \$asked !== \$url ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$ports ) || ! is_int( \$port ) || \$asked !== \$url ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testARequestStartedWhileTheFirstRunsIsNotAllowedThePort' ),
 		'expect'  => '/testARequestStartedWhileTheFirstRunsIsNotAllowedThePort/',
 	),
 	array(
@@ -2217,7 +2213,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\t\$left = false;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testARequestStartedWhileTheFirstRunsIsNotAllowedThePort' ),
 		'expect'  => '/testARequestStartedWhileTheFirstRunsIsNotAllowedThePort/',
 	),
 	array(
@@ -2226,7 +2222,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\tadd_filter( 'http_allowed_safe_ports', \$allow, 10, 3 );",
 		'replace' => "/* removed */",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly' ),
 		'expect'  => '/testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly/',
 	),
 	array(
@@ -2235,7 +2231,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\t\tremove_filter( 'http_allowed_safe_ports', \$allow, 10 );",
 		'replace' => "/* removed */",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly' ),
 		'expect'  => '/testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly/',
 	),
 	array(
@@ -2244,7 +2240,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( 0 !== strpos( \$url, \$base . '/' ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheFetcherAsksNothingOutsideTheStoredAddress' ),
 		'expect'  => '/testTheFetcherAsksNothingOutsideTheStoredAddress/',
 	),
 	array(
@@ -2253,7 +2249,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( 0 !== strpos( \$url, \$base . '/' ) ) {",
 		'replace' => "\t\tif ( 0 !== strpos( \$url, \$base ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testTheFetcherAsksNothingOutsideTheStoredAddress' ),
 		'expect'  => '/testTheFetcherAsksNothingOutsideTheStoredAddress/',
 	),
 	array(
@@ -2262,7 +2258,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAPathWithASegmentDotOrDotDotIsRefused' ),
 		'expect'  => '/testAPathWithASegmentDotOrDotDotIsRefused(?: with data set "|#)\\.\\./',
 	),
 	array(
@@ -2271,7 +2267,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( preg_match( '~/\\.{1,2}(?:/|\\z)~i', \$path ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAPathWithASegmentDotOrDotDotIsRefused' ),
 		'expect'  => '/testAPathWithASegmentDotOrDotDotIsRefused(?: with data set "|#)%2e%2e/',
 	),
 	array(
@@ -2280,7 +2276,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~', \$path ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAPathWithASegmentDotOrDotDotIsRefused' ),
 		'expect'  => '/testAPathWithASegmentDotOrDotDotIsRefused(?: with data set "|#)%2E/',
 	),
 	array(
@@ -2289,7 +2285,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( preg_match( '~/(?:\\.|%2e){2}(?:/|\\z)~i', \$path ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAPathWithASegmentDotOrDotDotIsRefused' ),
 		'expect'  => '/testAPathWithASegmentDotOrDotDotIsRefused(?: with data set "|#)\\./',
 	),
 	array(
@@ -2298,7 +2294,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}/~i', \$path ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testAPathWithASegmentDotOrDotDotIsRefused' ),
 		'expect'  => '/testAPathWithASegmentDotOrDotDotIsRefused(?: with data set "|#)\\.\\. at the end/',
 	),
 	array(
@@ -2307,7 +2303,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', \$path ) ) {",
 		'replace' => "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}~i', \$path ) ) {",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testDotsThatAreNoSegmentOfThePathAreAsked' ),
 		'expect'  => '/testDotsThatAreNoSegmentOfThePathAreAsked/',
 	),
 	array(
@@ -2316,7 +2312,7 @@ return array(
 		'file'    => $f,
 		'search'  => "\t\t\$path = substr( \$url, 0, strcspn( \$url, '?' ) );\n",
 		'replace' => "\t\t\$path = \$url;\n",
-		'run'     => $address,
+		'run'     => $unit( 'SyncTrustAddressTest', 'testDotsThatAreNoSegmentOfThePathAreAsked' ),
 		'expect'  => '/testDotsThatAreNoSegmentOfThePathAreAsked/',
 	),
 	array(
@@ -2325,7 +2321,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( count( \$objects ) > \$max['objects'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEachLimitOfTheManifestIsHeldByName' ),
 		'expect'  => '/testEachLimitOfTheManifestIsHeldByName(?: with data set "|#)objects/',
 	),
 	array(
@@ -2334,7 +2330,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( \$unpacked > \$max['unpacked'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEachLimitOfTheManifestIsHeldByName' ),
 		'expect'  => '/testEachLimitOfTheManifestIsHeldByName(?: with data set "|#)unpacked/',
 	),
 	array(
@@ -2343,7 +2339,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( count( \$chunks ) > \$max['chunks'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEachLimitOfTheManifestIsHeldByName' ),
 		'expect'  => '/testEachLimitOfTheManifestIsHeldByName(?: with data set "|#)chunks/',
 	),
 	array(
@@ -2352,7 +2348,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( \$bytes > \$max['bytes'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEachLimitOfTheManifestIsHeldByName' ),
 		'expect'  => '/testEachLimitOfTheManifestIsHeldByName(?: with data set "|#)bytes/',
 	),
 	array(
@@ -2361,7 +2357,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( '' === \$line || strlen( \$line ) + 1 > \$size ) {",
 		'replace' => "\t\t\tif ( '' === \$line || strlen( \$line ) > \$size ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectThatNoChunkHoldsIsRefused' ),
 		'expect'  => '/testAnObjectThatNoChunkHoldsIsRefused(?: with data set "|#)one byte too large/',
 	),
 	array(
@@ -2370,7 +2366,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( '' === \$line || strlen( \$line ) + 1 > \$size ) {",
 		'replace' => "\t\t\tif ( strlen( \$line ) + 1 > \$size ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectThatNoChunkHoldsIsRefused' ),
 		'expect'  => '/testAnObjectThatNoChunkHoldsIsRefused(?: with data set "|#)not encodable/',
 	),
 	array(
@@ -2379,7 +2375,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( strlen( \$slice ) + strlen( \$line ) + 1 > \$size ) {",
 		'replace' => "\t\t\tif ( strlen( \$slice ) + strlen( \$line ) + 1 >= \$size ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEachObjectIsOneLineAndNoLineIsSplitBetweenChunks' ),
 		'expect'  => '/testEachObjectIsOneLineAndNoLineIsSplitBetweenChunks/',
 	),
 	array(
@@ -2388,7 +2384,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t'objects'  => AB_MCP_Sync_Manifest::MAX_OBJECTS,",
 		'replace' => "\t\t\t'objects'  => AB_MCP_Sync_Manifest::MAX_OBJECTS + 1,",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheLimitsAreTheManifestsWhereNoneIsPassed' ),
 		'expect'  => '/testTheLimitsAreTheManifestsWhereNoneIsPassed/',
 	),
 	array(
@@ -2397,7 +2393,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\$size = null === \$slice ? self::SLICE : (int) \$slice;",
 		'replace' => "\$size = null === \$slice ? 100 : (int) \$slice;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheGzipOfTheLargestSliceStaysWithinAChunk' ),
 		'expect'  => '/testTheGzipOfTheLargestSliceStaysWithinAChunk/',
 	),
 	array(
@@ -2406,7 +2402,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\$chunks[] = \$slice;\n\t\tif ( \$unpacked",
 		'replace' => "\t\tif ( \$unpacked",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageHasAChunkAlsoWithoutAnObject' ),
 		'expect'  => '/testAPackageHasAChunkAlsoWithoutAnObject/',
 	),
 	array(
@@ -2415,7 +2411,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'complete' => \$at >= \$start && \$at < \$end && ! isset( \$incomplete[ \$key ] ),",
 		'replace' => "\t\t\t\t'complete' => \$at < \$end && ! isset( \$incomplete[ \$key ] ),",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd' ),
 		'expect'  => '/testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd(?: with data set "|#)began in the terms/',
 	),
 	array(
@@ -2424,7 +2420,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'complete' => \$at >= \$start && \$at < \$end && ! isset( \$incomplete[ \$key ] ),",
 		'replace' => "\t\t\t\t'complete' => \$at >= \$start && ! isset( \$incomplete[ \$key ] ),",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd' ),
 		'expect'  => '/testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd(?: with data set "|#)ended in the terms/',
 	),
 	array(
@@ -2433,7 +2429,7 @@ return array(
 		'file'    => $ex,
 		'search'  => " + ( null === \$from['inner'] ? 0 : 1 );",
 		'replace' => " + 0;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd' ),
 		'expect'  => '/testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd(?: with data set "|#)began in the terms/',
 	),
 	array(
@@ -2442,7 +2438,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\treturn 0 !== \$by ? \$by : strcmp( \$a['subtype'], \$b['subtype'] );",
 		'replace' => "\t\t\t\treturn 0;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testKindsCarryTheirSubtypeAscendingAndOnce' ),
 		'expect'  => '/testKindsCarryTheirSubtypeAscendingAndOnce/',
 	),
 	array(
@@ -2451,7 +2447,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "( isset( \$identity['taxonomy'] ) ? \$identity['taxonomy'] : '' )",
 		'replace' => "''",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testKindsCarryTheirSubtypeAscendingAndOnce' ),
 		'expect'  => '/testKindsCarryTheirSubtypeAscendingAndOnce/',
 	),
 	array(
@@ -2460,7 +2456,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\t\tif ( null === \$mac ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite' ),
 		'expect'  => '/testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite/',
 	),
 	array(
@@ -2469,7 +2465,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "( null === \$now ? time() : (int) \$now ) + self::GRANT_TTL;",
 		'replace' => "( null === \$now ? time() : (int) \$now ) + 0;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite' ),
 		'expect'  => '/testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite/',
 	),
 	array(
@@ -2478,7 +2474,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
 		'replace' => "\t\tif ( self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)POST/',
 	),
 	array(
@@ -2487,7 +2483,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
 		'replace' => "\t\tif ( 'GET' !== \$request->get_method() || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)another parameter/',
 	),
 	array(
@@ -2496,7 +2492,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
 		'replace' => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || '' !== (string) \$request->get_body() ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)a form field/',
 	),
 	array(
@@ -2505,7 +2501,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() || '' !== (string) \$request->get_body() ) {",
 		'replace' => "\t\tif ( 'GET' !== \$request->get_method() || self::QUERY !== self::sorted_keys( \$query ) || array() !== \$request->get_body_params() ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)a body/',
 	),
 	array(
@@ -2514,7 +2510,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\t\tif ( ! is_string( \$value ) ) {\n\t\t\t\treturn null;",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn null;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)a parameter as a list/',
 	),
 	array(
@@ -2523,7 +2519,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "'/^(0|[1-9][0-9]{0,3})\\z/'",
 		'replace' => "'/^[0-9]{1,4}\\z/'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)the chunk as 02/',
 	),
 	array(
@@ -2532,7 +2528,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "'/^[1-9][0-9]{0,11}\\z/'",
 		'replace' => "'/^[0-9]{1,12}\\z/'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)until when as 01600/',
 	),
 	array(
@@ -2541,7 +2537,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( \$expires <= \$now || \$expires > \$now + self::GRANT_TTL ) {",
 		'replace' => "\t\tif ( \$expires < \$now || \$expires > \$now + self::GRANT_TTL ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAFetchAddressHoldsTenMinutesFromNowAtMost' ),
 		'expect'  => '/testAFetchAddressHoldsTenMinutesFromNowAtMost(?: with data set "|#)at its end/',
 	),
 	array(
@@ -2550,7 +2546,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( \$expires <= \$now || \$expires > \$now + self::GRANT_TTL ) {",
 		'replace' => "\t\tif ( \$expires <= \$now ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAFetchAddressHoldsTenMinutesFromNowAtMost' ),
 		'expect'  => '/testAFetchAddressHoldsTenMinutesFromNowAtMost(?: with data set "|#)valid too long/',
 	),
 	array(
@@ -2559,7 +2555,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( null === \$mac || ! hash_equals( \$mac, \$query['sig'] ) ) {",
 		'replace' => "\t\tif ( ! hash_equals( \$mac, \$query['sig'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnTheProductionSiteNoRequestIsRight' ),
 		'expect'  => '/testOnTheProductionSiteNoRequestIsRight/',
 	),
 	array(
@@ -2568,7 +2564,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( null === \$mac || ! hash_equals( \$mac, \$query['sig'] ) ) {",
 		'replace' => "\t\tif ( null === \$mac ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestIsNone' ),
 		'expect'  => '/testEveryOtherRequestIsNone(?: with data set "|#)another signature/',
 	),
 	array(
@@ -2577,7 +2573,7 @@ return array(
 		'file'    => $gr,
 		'search'  => " || ! \$request instanceof WP_REST_Request",
 		'replace' => "/* removed */",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testEveryOtherRequestAndPathGoesOnToWordPress' ),
 		'expect'  => '/testEveryOtherRequestAndPathGoesOnToWordPress/',
 	),
 	array(
@@ -2586,7 +2582,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( is_ssl() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress' ),
 		'expect'  => '/testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress/',
 	),
 	array(
@@ -2595,7 +2591,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "if ( 'local' === AB_MCP_Outbound::public_addresses(",
 		'replace' => "if ( 'none' === AB_MCP_Outbound::public_addresses(",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress' ),
 		'expect'  => '/testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress/',
 	),
 	array(
@@ -2604,7 +2600,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\$relay = self::relay_refusal();\n\t\tif ( null !== \$relay ) {\n\t\t\treturn \$relay;\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheStagingSiteGivesNoChunkOverHttpWhereItIsPublic' ),
 		'expect'  => '/testTheStagingSiteGivesNoChunkOverHttpWhereItIsPublic/',
 	),
 	array(
@@ -2613,7 +2609,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( is_multisite() ) {\n\t\t\treturn self::multisite();",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn self::multisite();",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -2622,7 +2618,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -2631,7 +2627,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === AB_MCP_Staging::record()['pair'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -2640,7 +2636,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === AB_MCP_Sync_Key::current() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -2649,7 +2645,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! in_array( \$purpose, self::PURPOSES, true ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testThisVersionMakesPackagesOfTheInventoryOnly' ),
 		'expect'  => '/testThisVersionMakesPackagesOfTheInventoryOnly/',
 	),
 	array(
@@ -2658,7 +2654,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! is_array( \$cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( \$cursor ) || ! is_string( \$cursor['kind'] ) ) {",
 		'replace' => "\t\tif ( array( 'inner', 'kind', 'package' ) !== self::sorted_keys( \$cursor ) || ! is_string( \$cursor['kind'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testACursorIsOneAnAnswerGave' ),
 		'expect'  => '/testACursorIsOneAnAnswerGave(?: with data set "|#)text/',
 	),
 	array(
@@ -2667,7 +2663,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! is_array( \$cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( \$cursor ) || ! is_string( \$cursor['kind'] ) ) {",
 		'replace' => "\t\tif ( ! is_array( \$cursor ) || ! is_string( \$cursor['kind'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testACursorIsOneAnAnswerGave' ),
 		'expect'  => '/testACursorIsOneAnAnswerGave(?: with data set "|#)no package/',
 	),
 	array(
@@ -2676,7 +2672,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! is_array( \$cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( \$cursor ) || ! is_string( \$cursor['kind'] ) ) {",
 		'replace' => "\t\tif ( ! is_array( \$cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( \$cursor ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testACursorIsOneAnAnswerGave' ),
 		'expect'  => '/testACursorIsOneAnAnswerGave(?: with data set "|#)a kind that is a list/',
 	),
 	array(
@@ -2685,7 +2681,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( is_multisite() ) {\n\t\t\treturn AB_MCP_Sync_Export::multisite();",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Export::multisite();",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses' ),
 		'expect'  => '/testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses/',
 	),
 	array(
@@ -2694,7 +2690,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_string( \$package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, \$package_id ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses' ),
 		'expect'  => '/testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses/',
 	),
 	array(
@@ -2703,7 +2699,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( \$has_data && \$has_fetch ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses' ),
 		'expect'  => '/testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses/',
 	),
 	array(
@@ -2712,7 +2708,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\$relay = \$has_data ? AB_MCP_Sync_Export::relay_refusal() : null;",
 		'replace' => "\$relay = null;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesNoRelayedChunkOverHttpWhereItIsPublic' ),
 		'expect'  => '/testTheProductionSiteTakesNoRelayedChunkOverHttpWhereItIsPublic/',
 	),
 	array(
@@ -2721,7 +2717,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( \$has_fetch && ! self::grants_shaped( \$a['fetch'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)an empty list/',
 	),
 	array(
@@ -2730,7 +2726,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$grants ) || ! array_is_list( \$grants ) || array() === \$grants ) {",
 		'replace' => "\t\tif ( ! array_is_list( \$grants ) || array() === \$grants ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)text/',
 	),
 	array(
@@ -2739,7 +2735,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$grants ) || ! array_is_list( \$grants ) || array() === \$grants ) {",
 		'replace' => "\t\tif ( ! is_array( \$grants ) || array() === \$grants ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)not a list/',
 	),
 	array(
@@ -2748,7 +2744,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$grants ) || ! array_is_list( \$grants ) || array() === \$grants ) {",
 		'replace' => "\t\tif ( ! is_array( \$grants ) || ! array_is_list( \$grants ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)an empty list/',
 	),
 	array(
@@ -2757,7 +2753,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)an item that is text/',
 	),
 	array(
@@ -2766,7 +2762,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)a key more/',
 	),
 	array(
@@ -2775,7 +2771,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)the chunk as text/',
 	),
 	array(
@@ -2784,7 +2780,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)until when as text/',
 	),
 	array(
@@ -2793,7 +2789,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)the signature as a list/',
 	),
 	array(
@@ -2802,7 +2798,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$grant['signature'] ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( \$grant ) || ! is_int( \$grant['chunk'] ) || ! is_int( \$grant['expires'] ) || ! is_string( \$grant['signature'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem' ),
 		'expect'  => '/testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem(?: with data set "|#)the signature with &/',
 	),
 	array(
@@ -2811,7 +2807,7 @@ return array(
 		'file'    => $im,
 		'search'  => "return AB_MCP_Sync_Key::site_form( \$partner ) . '/?rest_route=/'",
 		'replace' => "return \$partner . '/?rest_route=/'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteBuildsTheAddressFromTheStoredAddressOfItsStagingSite' ),
 		'expect'  => '/testTheProductionSiteBuildsTheAddressFromTheStoredAddressOfItsStagingSite/',
 	),
 	array(
@@ -2820,7 +2816,7 @@ return array(
 		'file'    => $ts,
 		'search'  => "\t\tif ( array_key_exists( 'package_id', \$a ) ) {\n\t\t\treturn AB_MCP_Sync_Export::again( \$a['package_id'] );",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Export::again( \$a['package_id'] );",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheToolsHandTheirArgumentsOn' ),
 		'expect'  => '/testTheToolsHandTheirArgumentsOn/',
 	),
 	array(
@@ -2829,7 +2825,7 @@ return array(
 		'file'    => $ts,
 		'search'  => "isset( \$a['cursor'] ) ? \$a['cursor'] : null",
 		'replace' => "null",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheToolsHandTheirArgumentsOn' ),
 		'expect'  => '/testTheToolsHandTheirArgumentsOn/',
 	),
 	array(
@@ -2838,7 +2834,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( \$context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\\z~', \$context ) ) {",
 		'replace' => "\t\tif ( ! is_string( \$context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\\z~', \$context ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -2847,7 +2843,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( \$context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\\z~', \$context ) ) {",
 		'replace' => "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( \$context ) || 1 !== preg_match( '~^[a-z0-9/-]{0,65}\\z~', \$context ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -2856,7 +2852,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$secret ) {\n\t\t\treturn null;\n\t\t}\n\t\treturn hash_hmac(",
 		'replace' => "\t\treturn hash_hmac(",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -2865,7 +2861,7 @@ return array(
 		'file'    => $k,
 		'search'  => "'ab-sync-mac/1' . \"\\n\" . \$context . \"\\n\"",
 		'replace' => "'ab-sync-mac/1' . \"\\n\" . 'x' . \"\\n\"",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -2874,7 +2870,7 @@ return array(
 		'file'    => $inv,
 		'search'  => "\t\tif ( isset( \$source['objects'] ) && self::\$made >= (int) \$source['objects'] ) {",
 		'replace' => "\t\tif ( isset( \$source['objects'] ) && self::\$made > (int) \$source['objects'] ) {",
-		'run'     => $dbkinds,
+		'run'     => $unit( 'SyncDbKindsTest', 'testASourceMayBoundTheObjectsOfAnInventory' ),
 		'expect'  => '/testASourceMayBoundTheObjectsOfAnInventory/',
 	),
 	array(
@@ -2883,7 +2879,7 @@ return array(
 		'file'    => $inv,
 		'search'  => "\t\tif ( isset( \$source['objects'] ) && self::\$made >= (int) \$source['objects'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $dbkinds,
+		'run'     => $unit( 'SyncDbKindsTest', 'testASourceMayBoundTheObjectsOfAnInventory' ),
 		'expect'  => '/testASourceMayBoundTheObjectsOfAnInventory/',
 	),
 	array(
@@ -2892,7 +2888,7 @@ return array(
 		'file'    => $inv,
 		'search'  => "\t\t++self::\$made;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $dbkinds,
+		'run'     => $unit( 'SyncDbKindsTest', 'testASourceMayBoundTheObjectsOfAnInventory' ),
 		'expect'  => '/testASourceMayBoundTheObjectsOfAnInventory/',
 	),
 	array(
@@ -2901,7 +2897,7 @@ return array(
 		'file'    => $inv,
 		'search'  => "\t\tself::\$made  = 0;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $dbkinds,
+		'run'     => $unit( 'SyncDbKindsTest', 'testASourceMayBoundTheObjectsOfAnInventory' ),
 		'expect'  => '/testASourceMayBoundTheObjectsOfAnInventory/',
 	),
 	array(
@@ -2910,7 +2906,7 @@ return array(
 		'file'    => $inv,
 		'search'  => "max( 1, (int) \$objects )",
 		'replace' => "(int) \$objects",
-		'run'     => $dbkinds,
+		'run'     => $unit( 'SyncDbKindsTest', 'testASourceMayBoundTheObjectsOfAnInventory' ),
 		'expect'  => '/testASourceMayBoundTheObjectsOfAnInventory/',
 	),
 	array(
@@ -2919,7 +2915,7 @@ return array(
 		'file'    => $g,
 		'search'  => "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );",
 		'replace' => "'wp_site_export', 'wp_site_export_chunk' );",
-		'run'     => $gate,
+		'run'     => $unit( 'StagingGateTest', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds' ),
 		'expect'  => '/testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds/',
 	),
 	array(
@@ -2928,7 +2924,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\t\$key = AB_MCP_Sync_Key::renew();",
 		'replace' => "\t\t\t\$key = array();",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testTheStagingSiteGivesItsPublicKeyOverHttpAndKeepsThePrivateOne' ),
 		'expect'  => '/testTheStagingSiteGivesItsPublicKeyOverHttpAndKeepsThePrivateOne/',
 	),
 	array(
@@ -2937,7 +2933,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\$quiet   = null !== \$db ? \$db->suppress_errors( true ) : false;",
 		'replace' => "\$quiet   = null !== \$db ? \$db->suppress_errors( false ) : false;",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testAWriteOfThePrivateKeyMariaDBRefusesLeavesItInNoReport' ),
 		'expect'  => '/testAWriteOfThePrivateKeyMariaDBRefusesLeavesItInNoReport/',
 	),
 	array(
@@ -2946,7 +2942,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\t\tarray_splice( \$GLOBALS['EZSQL_ERROR'], \$errors );",
 		'replace' => "/* removed */",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testAWriteOfThePrivateKeyMariaDBRefusesLeavesItInNoReport' ),
 		'expect'  => '/testAWriteOfThePrivateKeyMariaDBRefusesLeavesItInNoReport/',
 	),
 	array(
@@ -2955,7 +2951,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\tself::forget();\n\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_key_failed',",
 		'replace' => "\t\t\treturn new WP_Error(\n\t\t\t\t'ab_mcp_sync_key_failed',",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testARenewalWhoseWritesAreRefusedConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalWhoseWritesAreRefusedConfirmsNothingAndLeavesNoKey/',
 	),
 	array(
@@ -2964,7 +2960,7 @@ return array(
 		'file'    => $o,
 		'search'  => "\t\tadd_filter( 'http_allowed_safe_ports', \$allow, 10, 3 );",
 		'replace' => "/* removed */",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testWordPressAsksThePortOfTheStoredStagingSiteForThatRequestOnly' ),
 		'expect'  => '/testWordPressAsksThePortOfTheStoredStagingSiteForThatRequestOnly/',
 	),
 	array(
@@ -2973,7 +2969,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( 0 !== strpos( \$partner, 'https://' ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testTheProductionSiteReadsTheRouteAndTheCodeButAsksOnlyOverHttps' ),
 		'expect'  => '/testTheProductionSiteReadsTheRouteAndTheCodeButAsksOnlyOverHttps/',
 	),
 	array(
@@ -2982,7 +2978,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\t\tif ( null !== AB_MCP_Sync_Anchor::prepared() ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testAManifestOfTheStagingSiteIsReadOnlyWithTheKeyAPersonConfirmed' ),
 		'expect'  => '/testAManifestOfTheStagingSiteIsReadOnlyWithTheKeyAPersonConfirmed/',
 	),
 	array(
@@ -2991,7 +2987,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( '' === \$us || AB_MCP_Sync_Key::site_form( \$manifest['target'] ) !== \$us ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testAManifestForAnotherAddressOfTheProductionSiteIsRefused' ),
 		'expect'  => '/testAManifestForAnotherAddressOfTheProductionSiteIsRefused/',
 	),
 	array(
@@ -3000,7 +2996,7 @@ return array(
 		'file'    => $m,
 		'search'  => "\t\tif ( \$manifest['source_id'] !== \$anchor['source_id'] || \$manifest['key_id'] !== \$anchor['key_id'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $it,
+		'run'     => $it( 'SyncTrustTest', 'testAnotherConfirmationOfTheStagingRoleNeedsTheNewKeyConfirmed' ),
 		'expect'  => '/testAnotherConfirmationOfTheStagingRoleNeedsTheNewKeyConfirmed/',
 	),
 	array(
@@ -3009,7 +3005,7 @@ return array(
 		'file'    => $rc,
 		'search'  => "\t\tadd_filter( 'rest_pre_dispatch', array( \$this, 'serve_package' ), 10, 3 );",
 		'replace' => "/* removed */",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRouteAnswersEveryOtherRequestAsARouteWordPressDoesNotKnow' ),
 		'expect'  => '/testTheRouteAnswersEveryOtherRequestAsARouteWordPressDoesNotKnow/',
 	),
 	array(
@@ -3018,7 +3014,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( ! empty( \$result ) || ! \$request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== \$request->get_route() ) {",
 		'replace' => "\t\tif ( ! \$request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== \$request->get_route() ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3027,7 +3023,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( ! empty( \$result ) || ! \$request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== \$request->get_route() ) {",
 		'replace' => "\t\tif ( ! empty( \$result ) || ! \$request instanceof WP_REST_Request ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3036,7 +3032,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tif ( \$served || null === self::\$serving || self::\$serving[0] !== \$result ) {",
 		'replace' => "\t\tif ( \$served || null === self::\$serving ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3045,7 +3041,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\tself::\$serving = null;\n\t\techo \$bytes;",
 		'replace' => "\t\techo \$bytes;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3054,7 +3050,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\$found['manifest']['expires'] <= \$now || ",
 		'replace' => "/* removed */",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3063,7 +3059,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( array() === \$records ) {\n\t\t\treturn null;\n\t\t}\n\t\t\$name = reset( \$records );\n\t\t\$text = AB_MCP_Protected_Store::get( 'out',",
 		'replace' => "\t\t\$name = reset( \$records );\n\t\t\$text = AB_MCP_Protected_Store::get( 'out',",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk' ),
 		'expect'  => '/testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk/',
 	),
 	array(
@@ -3072,7 +3068,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === \$found || (int) \$found['user_id'] !== (int) get_current_user_id() || \$found['manifest']['expires'] <= ( null === \$now ? time() : (int) \$now ) ) {",
 		'replace' => "\t\tif ( null === \$found || \$found['manifest']['expires'] <= ( null === \$now ? time() : (int) \$now ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageIsGivenOutToItsAccountAndRemovedAfterADay' ),
 		'expect'  => '/testAPackageIsGivenOutToItsAccountAndRemovedAfterADay/',
 	),
 	array(
@@ -3081,7 +3077,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === \$found || (int) \$found['user_id'] !== (int) get_current_user_id() || \$found['manifest']['expires'] <= ( null === \$now ? time() : (int) \$now ) ) {",
 		'replace' => "\t\tif ( null === \$found || (int) \$found['user_id'] !== (int) get_current_user_id() || \$found['manifest']['expires'] < ( null === \$now ? time() : (int) \$now ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageIsGivenOutToItsAccountAndRemovedAfterADay' ),
 		'expect'  => '/testAPackageIsGivenOutToItsAccountAndRemovedAfterADay/',
 	),
 	array(
@@ -3090,7 +3086,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! is_int( \$chunk ) || ! isset( \$found['manifest']['chunks'][ \$chunk ] ) ) {",
 		'replace' => "\t\tif ( ! is_int( \$chunk ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite' ),
 		'expect'  => '/testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite/',
 	),
 	array(
@@ -3099,7 +3095,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\$read   = AB_MCP_Sync_Inventory::run( \$source, \$from );",
 		'replace' => "\$read   = AB_MCP_Sync_Inventory::run( \$source, null );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3108,7 +3104,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\$kinds = self::kinds( \$read['objects'], \$from, \$read['cursor'], \$sorted['incomplete'] );",
 		'replace' => "\$kinds = self::kinds( \$read['objects'], null, \$read['cursor'], \$sorted['incomplete'] );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3117,7 +3113,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t'label'    => self::LABEL . \$manifest['package_id'],",
 		'replace' => "\t\t\t\t'label'    => 'other',",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3126,7 +3122,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\$checked = AB_MCP_Sync_Manifest::verify( \$found['signed'], \$expect );\n\t\tif ( is_wp_error( \$checked ) ) {\n\t\t\treturn \$checked;\n\t\t}\n\t\t// The pair it was begun with",
 		'replace' => "\t\t// The pair it was begun with",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteChecksTheManifestOnEveryCall' ),
 		'expect'  => '/testTheProductionSiteChecksTheManifestOnEveryCall/',
 	),
 	array(
@@ -3135,7 +3131,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array_key_exists( 'manifest', \$a ) && ( ! is_array( \$a['manifest'] )",
 		'replace' => "\t\tif ( false && ( ! is_array( \$a['manifest'] )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteChecksTheManifestOnEveryCall' ),
 		'expect'  => '/testTheProductionSiteChecksTheManifestOnEveryCall/',
 	),
 	array(
@@ -3144,7 +3140,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( null === \$expect ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteChecksTheManifestOnEveryCall' ),
 		'expect'  => '/testTheProductionSiteChecksTheManifestOnEveryCall/',
 	),
 	array(
@@ -3153,7 +3149,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( isset( \$have[ AB_MCP_Sync_Export::chunk_name( \$i ) ] ) ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3162,7 +3158,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( \$left < self::MIN_FETCH ) {\n\t\t\t\tbreak;\n\t\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testACallFetchesAsFarAsItsTimeReaches' ),
 		'expect'  => '/testACallFetchesAsFarAsItsTimeReaches/',
 	),
 	array(
@@ -3171,7 +3167,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! isset( \$held['manifest']['chunks'][ \$grant['chunk'] ] ) ) {\n\t\t\t\treturn self::grants_refusal();",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn self::grants_refusal();",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3180,7 +3176,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( 200 !== \$status ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3189,7 +3185,7 @@ return array(
 		'file'    => $im,
 		'search'  => "'limit_response_size' => \$bytes + 1,",
 		'replace' => "'limit_response_size' => \$bytes + 2,",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3198,7 +3194,7 @@ return array(
 		'file'    => $im,
 		'search'  => " && 'ab_mcp_store_exists' !== \$put->get_error_code()",
 		'replace' => "/* removed */",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite' ),
 		'expect'  => '/testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite/',
 	),
 	array(
@@ -3207,7 +3203,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( is_wp_error( \$ok ) ) {\n\t\t\t\treturn \$ok;\n\t\t\t}\n\t\t\t// Unpacked within",
 		'replace' => "\t\t\t// Unpacked within",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageIsCheckedWholeOnceEveryChunkIsThere' ),
 		'expect'  => '/testAPackageIsCheckedWholeOnceEveryChunkIsThere/',
 	),
 	array(
@@ -3216,7 +3212,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$put = AB_MCP_Protected_Store::put( 'in', \$held['gid'], self::COMPLETE, \$held['manifest']['sha256'] );",
 		'replace' => "\t\t\t\$put = true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3225,7 +3221,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array() !== \$failed ) {",
 		'replace' => "\t\tif ( true ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain' ),
 		'expect'  => '/testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain/',
 	),
 	array(
@@ -3234,7 +3230,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( '' === \$text || base64_encode( (string) \$data ) !== \$text ) {",
 		'replace' => "\t\tif ( base64_encode( (string) \$data ) !== \$text ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite' ),
 		'expect'  => '/testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite/',
 	),
 	array(
@@ -3243,7 +3239,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( '' === \$text || base64_encode( (string) \$data ) !== \$text ) {",
 		'replace' => "\t\tif ( '' === \$text ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite' ),
 		'expect'  => '/testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite/',
 	),
 	array(
@@ -3252,7 +3248,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( 'b9' === \$object['status'] || array() !== \$credentials['mixed'] || self::credential_locked( \$object['locks'] ) ) {",
 		'replace' => "\t\tif ( array() !== \$credentials['mixed'] || self::credential_locked( \$object['locks'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly' ),
 		'expect'  => '/testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly(?: with data set "|#)the name of a credential/',
 	),
 	array(
@@ -3261,7 +3257,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( 'b9' === \$object['status'] || array() !== \$credentials['mixed'] || self::credential_locked( \$object['locks'] ) ) {",
 		'replace' => "\t\tif ( 'b9' === \$object['status'] || self::credential_locked( \$object['locks'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly' ),
 		'expect'  => '/testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly(?: with data set "|#)a field of a credential in it/',
 	),
 	array(
@@ -3270,7 +3266,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "'possible' => self::fields( \$object['possible'], array( 'at' ) ),",
 		'replace' => "'possible' => \$object['possible'],",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent' ),
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
 	),
 	array(
@@ -3279,7 +3275,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "'refs'     => self::fields( \$object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),",
 		'replace' => "'refs'     => \$object['refs'],",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent' ),
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
 	),
 	array(
@@ -3288,7 +3284,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "'locks'    => self::fields( \$object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),",
 		'replace' => "'locks'    => \$object['locks'],",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent' ),
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
 	),
 	array(
@@ -3297,7 +3293,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t'locks'    => self::fields( \$object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( \$object, array_flip( array( 'reason_code', 'target' ) ) );",
 		'replace' => "\t\t\t'locks'    => self::fields( \$object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( \$object, array_flip( array( 'reason', 'reason_code', 'target' ) ) );",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent' ),
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
 	),
 	array(
@@ -3306,7 +3302,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "self::pack( array_map( array( __CLASS__, 'line' ), \$sorted['packed'] ) )",
 		'replace' => "self::pack( \$sorted['packed'] )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testNoValueOfTheContentLeavesTheStagingSite' ),
 		'expect'  => '/testNoValueOfTheContentLeavesTheStagingSite/',
 	),
 	array(
@@ -3315,7 +3311,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['key_id'], \$raw['mac'] ) || ! is_string( \$raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$raw['mac'] ) ) {",
 		'replace' => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['key_id'], \$raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$raw['mac'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -3324,7 +3320,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['key_id'], \$raw['mac'] ) || ! is_string( \$raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', \$raw['mac'] ) ) {",
 		'replace' => "\t\tif ( ! is_array( \$raw ) || ! isset( \$raw['key_id'], \$raw['mac'] ) || ! is_string( \$raw['mac'] ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -3333,7 +3329,7 @@ return array(
 		'file'    => $k,
 		'search'  => " || \$raw['key_id'] !== \$source['key_id']",
 		'replace' => "/* removed */",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -3342,7 +3338,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tdelete_option( self::OPTION_MAC );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -3351,7 +3347,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null === \$found || \$found['key']['source_id'] !== \$source || self::mac_secret() !== hex2bin( \$mac ) ) {",
 		'replace' => "\t\tif ( null === \$found || \$found['key']['source_id'] !== \$source ) {",
-		'run'     => $storage,
+		'run'     => $unit( 'SyncTrustStorageTest', 'testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey' ),
 		'expect'  => '/testARenewalTheOptionsDoNotKeepConfirmsNothingAndLeavesNoKey(?: with data set "|#)the old key under the new source/',
 	),
 	array(
@@ -3360,7 +3356,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tself::store_secret(\n\t\t\tself::OPTION_MAC,\n\t\t\tarray(\n\t\t\t\t'key_id' => \$key_id,",
 		'replace' => "\t\tarray(\n\t\t\tself::OPTION_MAC,\n\t\t\tarray(\n\t\t\t\t'key_id' => \$key_id,",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose' ),
 		'expect'  => '/testTheMacOfAStagingSiteIsItsOwnAndPerPurpose/',
 	),
 	array(
@@ -3369,7 +3365,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'key'    => array( \$key['source_id'], \$key['key_id'] ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3378,7 +3374,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'source' => AB_MCP_Sync_Key::site_form( home_url() ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3387,7 +3383,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'role'   => array( \$role['value'], \$role['user_id'], \$role['source'], \$role['at'] ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3396,7 +3392,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'pair'   => array( \$pair['partner_url'], \$pair['partner_role'], \$pair['user_id'], \$pair['source'], \$pair['at'] ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3405,7 +3401,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === \$key || null === \$record['pair'] || null === \$bind ) {",
 		'replace' => "\t\tif ( null === \$record['pair'] || null === \$bind ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3414,7 +3410,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === \$key || null === \$record['pair'] || null === \$bind ) {",
 		'replace' => "\t\tif ( null === \$key || null === \$bind ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations' ),
 		'expect'  => '/testAPackageIsBoundToTheKeyThePairAndTheirConfirmations/',
 	),
 	array(
@@ -3423,7 +3419,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {",
 		'replace' => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly' ),
 		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryOnly/',
 	),
 	array(
@@ -3432,7 +3428,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array_key_exists( 'manifest', \$a ) ) {\n\t\t\t\$expect = self::expect(",
 		'replace' => "\t\tif ( false ) {\n\t\t\t\$expect = self::expect(",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly' ),
 		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryOnly/',
 	),
 	array(
@@ -3441,7 +3437,7 @@ return array(
 		'file'    => $bud,
 		'search'  => "\$key          = isset( \$entry['label'] ) && 1 === preg_match( self::SERIES, (string) \$entry['label'] ) ? (string) \$entry['label'] : \$i;",
 		'replace' => "\$key          = \$i;",
-		'run'     => $budget,
+		'run'     => $unit( 'StoreBudgetTest', 'testThePackagesOfASeriesCountAsOneExportAndOnePackage' ),
 		'expect'  => '/testThePackagesOfASeriesCountAsOneExportAndOnePackage/',
 	),
 	array(
@@ -3450,7 +3446,7 @@ return array(
 		'file'    => $bud,
 		'search'  => "\t\t\tif ( ! empty( \$entry['closed'] ) ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $budget,
+		'run'     => $unit( 'StoreBudgetTest', 'testAClosedPackageCountsAsOpenNoMoreButItsBytesDo' ),
 		'expect'  => '/testAClosedPackageCountsAsOpenNoMoreButItsBytesDo/',
 	),
 	array(
@@ -3459,7 +3455,7 @@ return array(
 		'file'    => $bud,
 		'search'  => "\t\t\t\$bytes += max( 0, (int) \$entry['declared'] );\n\t\t\tif ( ! empty( \$entry['closed'] ) ) {",
 		'replace' => "\t\t\tif ( ! empty( \$entry['closed'] ) ) {",
-		'run'     => $budget,
+		'run'     => $unit( 'StoreBudgetTest', 'testAClosedPackageCountsAsOpenNoMoreButItsBytesDo' ),
 		'expect'  => '/testAClosedPackageCountsAsOpenNoMoreButItsBytesDo/',
 	),
 	array(
@@ -3468,7 +3464,7 @@ return array(
 		'file'    => $bud,
 		'search'  => "\$exports = \$joins && isset( \$exports[ \$label ] ) ? 0 : count( \$exports );",
 		'replace' => "\$exports = count( \$exports );",
-		'run'     => $budget,
+		'run'     => $unit( 'StoreBudgetTest', 'testThePackagesOfASeriesCountAsOneExportAndOnePackage' ),
 		'expect'  => '/testThePackagesOfASeriesCountAsOneExportAndOnePackage/',
 	),
 	array(
@@ -3477,7 +3473,7 @@ return array(
 		'file'    => $bud,
 		'search'  => "\$open    = \$joins && isset( \$open[ \$label ] ) ? 0 : count( \$open );",
 		'replace' => "\$open    = count( \$open );",
-		'run'     => $budget,
+		'run'     => $unit( 'StoreBudgetTest', 'testThePackagesOfASeriesCountAsOneExportAndOnePackage' ),
 		'expect'  => '/testThePackagesOfASeriesCountAsOneExportAndOnePackage/',
 	),
 	array(
@@ -3486,7 +3482,7 @@ return array(
 		'file'    => $st,
 		'search'  => "\t\t\t\t\$entry['closed'] = true;",
 		'replace' => "\t\t\t\t\$entry['closed'] = false;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft' ),
 		'expect'  => '/testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft/',
 	),
 	array(
@@ -3495,7 +3491,7 @@ return array(
 		'file'    => $st,
 		'search'  => "\t\t\t'closed'   => isset( \$e['closed'] ) && true === \$e['closed'],",
 		'replace' => "\t\t\t'closed'   => false,",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft' ),
 		'expect'  => '/testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft/',
 	),
 	array(
@@ -3504,7 +3500,7 @@ return array(
 		'file'    => $st,
 		'search'  => "\$entry['declared'], \$entry['label'] );",
 		'replace' => "\$entry['declared'] );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3513,7 +3509,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$closed = AB_MCP_Protected_Store::close( 'in', \$held['gid'] );",
 		'replace' => "\t\t\t\$closed = true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft' ),
 		'expect'  => '/testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft/',
 	),
 	array(
@@ -3522,7 +3518,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$closed = AB_MCP_Protected_Store::close( 'in', \$held['gid'] );",
 		'replace' => "\t\t\t\$closed = true;",
-		'run'     => $itseries,
+		'run'     => $it( 'SyncPackageSeriesTest', 'testTheProductionSiteTakesASeriesOfMorePackagesThanItKeepsOpen' ),
 		'expect'  => '/testTheProductionSiteTakesASeriesOfMorePackagesThanItKeepsOpen/',
 	),
 	array(
@@ -3531,7 +3527,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! self::bound( \$found ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_stale'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_stale'",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageIsGivenOutOnlyAsLongAsThePairAndTheKeyHold' ),
 		'expect'  => '/testAPackageIsGivenOutOnlyAsLongAsThePairAndTheKeyHold/',
 	),
 	array(
@@ -3540,7 +3536,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "! self::bound( \$found ) || ",
 		'replace' => "/* removed */",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testABindingThatChangedWithoutANewKeyIsNoBindingEither' ),
 		'expect'  => '/testABindingThatChangedWithoutANewKeyIsNoBindingEither/',
 	),
 	array(
@@ -3549,7 +3545,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tAB_MCP_Protected_Store::remove( 'out', \$found['manifest']['package_id'] );\n\t\treturn false;",
 		'replace' => "\t\treturn false;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testABindingThatChangedWithoutANewKeyIsNoBindingEither' ),
 		'expect'  => '/testABindingThatChangedWithoutANewKeyIsNoBindingEither/',
 	),
 	array(
@@ -3558,7 +3554,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tself::discard_stale();\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testABindingThatChangedWithoutANewKeyIsNoBindingEither' ),
 		'expect'  => '/testABindingThatChangedWithoutANewKeyIsNoBindingEither/',
 	),
 	array(
@@ -3567,7 +3563,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( AB_MCP_Sync_Canon::encode( \$before['cursor'] ) !== AB_MCP_Sync_Canon::encode( \$from ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3576,7 +3572,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "return array( \$before['cursor'], \$before['series'] );",
 		'replace' => "return array( \$before['cursor'], bin2hex( random_bytes( 16 ) ) );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3585,7 +3581,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'package' => \$manifest['package_id'],",
 		'replace' => "\t\t\t\t'package' => str_repeat( 'f', 32 ),",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3594,7 +3590,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'label'    => 'series:' . \$series,",
 		'replace' => "\t\t\t\t'label'    => \$purpose,",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs' ),
 		'expect'  => '/testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs/',
 	),
 	array(
@@ -3603,7 +3599,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( is_wp_error( \$put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', \$gid );\n\t\t\t\treturn \$put;",
 		'replace' => "\t\t\tif ( is_wp_error( \$put ) ) {\n\t\t\t\treturn \$put;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade' ),
 		'expect'  => '/testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade/',
 	),
 	array(
@@ -3612,7 +3608,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( is_wp_error( \$put ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'out', \$gid );\n\t\t\treturn \$put;\n\t\t}\n\t\treturn self::answer(",
 		'replace' => "\t\tif ( is_wp_error( \$put ) ) {\n\t\t\treturn \$put;\n\t\t}\n\t\treturn self::answer(",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade' ),
 		'expect'  => '/testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade/',
 	),
 	array(
@@ -3621,7 +3617,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tAB_MCP_Protected_Store::remove( 'in', \$gid );\n\t\t\treturn \$put;",
 		'replace' => "\t\t\treturn \$put;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft' ),
 		'expect'  => '/testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft/',
 	),
 	array(
@@ -3630,7 +3626,7 @@ return array(
 		'file'    => $im,
 		'search'  => " || (int) \$group['user_id'] !== (int) get_current_user_id()",
 		'replace' => "/* removed */",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportBelongsToTheAccountThatBeganIt' ),
 		'expect'  => '/testAnImportBelongsToTheAccountThatBeganIt/',
 	),
 	array(
@@ -3639,7 +3635,7 @@ return array(
 		'file'    => $im,
 		'search'  => "'timeout'             => min( (float) self::TIMEOUT, \$left ),",
 		'replace' => "'timeout'             => (float) self::TIMEOUT,",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAFetchTakesNoLongerThanWhatIsLeftOfTheBudget' ),
 		'expect'  => '/testAFetchTakesNoLongerThanWhatIsLeftOfTheBudget/',
 	),
 	array(
@@ -3648,7 +3644,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( \$left < self::MIN_FETCH ) {",
 		'replace' => "\t\t\tif ( \$left < 0 ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAFetchTakesNoLongerThanWhatIsLeftOfTheBudget' ),
 		'expect'  => '/testAFetchTakesNoLongerThanWhatIsLeftOfTheBudget/',
 	),
 	array(
@@ -3657,7 +3653,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\$have = AB_MCP_Protected_Store::files( 'in', \$held['gid'] );\n\t\tif ( is_wp_error( \$have ) ) {\n\t\t\treturn \$have;\n\t\t}\n\t\t\$missing",
 		'replace' => "\t\t\$have = AB_MCP_Protected_Store::files( 'in', \$held['gid'] );\n\t\t\$missing",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft' ),
 		'expect'  => '/testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft/',
 	),
 	array(
@@ -3666,7 +3662,7 @@ return array(
 		'file'    => $gr,
 		'search'  => "\t\t\$now   = time();\n\t\t\$grant = self::grant( \$request, \$now );",
 		'replace' => "\t\t\$now   = time();\n\t\trequire_once __DIR__ . '/class-sync-export.php';\n\t\t\$grant = self::grant( \$request, \$now );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRouteChecksTheMacBeforeItLoadsTheExport' ),
 		'expect'  => '/testTheRouteChecksTheMacBeforeItLoadsTheExport/',
 	),
 	array(
@@ -3675,7 +3671,7 @@ return array(
 		'file'    => $rc,
 		'search'  => "\t\treturn AB_MCP_Sync_Grant::serve( \$result, \$server, \$request );",
 		'replace' => "\t\trequire_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';\n\t\treturn AB_MCP_Sync_Grant::serve( \$result, \$server, \$request );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRouteChecksTheMacBeforeItLoadsTheExport' ),
 		'expect'  => '/testTheRouteChecksTheMacBeforeItLoadsTheExport/',
 	),
 	array(
@@ -3684,7 +3680,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( 'b9' === \$object['status'] || array() !== \$credentials['mixed'] || self::credential_locked( \$object['locks'] ) ) {",
 		'replace' => "\t\tif ( 'b9' === \$object['status'] || array() !== \$credentials['mixed'] ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly' ),
 		'expect'  => '/testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly(?: with data set "|#)a lock \\*:script/',
 	),
 	array(
@@ -3693,7 +3689,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( in_array( \$op, self::CREDENTIAL_LOCKS, true ) ) {",
 		'replace' => "\t\t\tif ( in_array( \$key, self::CREDENTIAL_LOCKS, true ) ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly' ),
 		'expect'  => '/testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly(?: with data set "|#)a lock \\*:credential_field/',
 	),
 	array(
@@ -3702,7 +3698,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "'php_object', 'unreadable_value', 'unread_credential' );",
 		'replace' => "'php_object', 'unreadable_value' );",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheLocksOfTheCredentialCheckAreTheOnesItGives' ),
 		'expect'  => '/testTheLocksOfTheCredentialCheckAreTheOnesItGives/',
 	),
 	array(
@@ -3711,7 +3707,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "'password_protected', 'script', 'html_outside_kses',",
 		'replace' => "'password_protected', 'html_outside_kses',",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnObjectAnyLockOfTheCredentialCheckHoldsCarriesItsIdentityAndTheReasonOnly' ),
 		'expect'  => '/testAnObjectAnyLockOfTheCredentialCheckHoldsCarriesItsIdentityAndTheReasonOnly/',
 	),
 	array(
@@ -3720,7 +3716,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'bind'   => \$bind,\n",
 		'replace' => "/* removed */\n",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding' ),
 		'expect'  => '/testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding/',
 	),
 	array(
@@ -3729,7 +3725,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\t'bind'   => \$bind,\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPairThatGoesAndComesBackGivesNoPackageOfBeforeOut' ),
 		'expect'  => '/testAPairThatGoesAndComesBackGivesNoPackageOfBeforeOut/',
 	),
 	array(
@@ -3738,7 +3734,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === \$key || null === \$record['pair'] || null === \$bind ) {",
 		'replace' => "\t\tif ( null === \$key || null === \$record['pair'] ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding' ),
 		'expect'  => '/testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding/',
 	),
 	array(
@@ -3747,7 +3743,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\tAB_MCP_Settings::set( self::KEY, self::rebind( \$raw ) );\n\t\t}\n\t\t// A connection",
 		'replace' => "\t\t\tAB_MCP_Settings::set( self::KEY, \$raw );\n\t\t}\n\t\t// A connection",
-		'run'     => $status,
+		'run'     => $unit( 'StagingStatusTest', 'testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo' ),
 		'expect'  => '/testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo/',
 	),
 	array(
@@ -3756,7 +3752,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\tunset( \$raw['pair'] );\n\t\t\tAB_MCP_Settings::set( self::KEY, self::rebind( \$raw ) );",
 		'replace' => "\t\t\tunset( \$raw['pair'] );\n\t\t\tAB_MCP_Settings::set( self::KEY, \$raw );",
-		'run'     => $status,
+		'run'     => $unit( 'StagingStatusTest', 'testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo' ),
 		'expect'  => '/testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo/',
 	),
 	array(
@@ -3765,7 +3761,7 @@ return array(
 		'file'    => $s,
 		'search'  => "&& 1 === preg_match( '/^[0-9a-f]{32}\\z/', \$raw['bind'] ) ? \$raw['bind'] : null;",
 		'replace' => "? \$raw['bind'] : null;",
-		'run'     => $status,
+		'run'     => $unit( 'StagingStatusTest', 'testABindOnlyReadsAsItIsWritten' ),
 		'expect'  => '/testABindOnlyReadsAsItIsWritten/',
 	),
 	array(
@@ -3774,7 +3770,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\treturn self::bind() === \$raw['bind'] ? \$raw['bind'] : null;",
 		'replace' => "\t\treturn \$raw['bind'];",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding' ),
 		'expect'  => '/testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding/',
 	),
 	array(
@@ -3783,7 +3779,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === AB_MCP_Staging::bind() && null === AB_MCP_Staging::new_bind() ) {",
 		'replace' => "\t\tif ( null === AB_MCP_Staging::bind() ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding' ),
 		'expect'  => '/testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding/',
 	),
 	array(
@@ -3792,7 +3788,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null === AB_MCP_Staging::bind() && null === AB_MCP_Staging::new_bind() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding' ),
 		'expect'  => '/testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding/',
 	),
 	array(
@@ -3801,7 +3797,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! AB_MCP_Sync_Key::mac_ready() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck' ),
 		'expect'  => '/testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck/',
 	),
 	array(
@@ -3810,7 +3806,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\treturn self::mac_secret() === hex2bin( \$mac );\n\t}",
 		'replace' => "\t\treturn true;\n\t}",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck' ),
 		'expect'  => '/testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck/',
 	),
 	array(
@@ -3819,7 +3815,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\tif ( null !== self::mac_secret() ) {\n\t\t\treturn true;\n\t\t}\n\t\ttry {",
 		'replace' => "\t\ttry {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck' ),
 		'expect'  => '/testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck/',
 	),
 	array(
@@ -3828,7 +3824,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\tif ( ! self::mac_ready() ) {\n\t\t\t\treturn self::mac_refusal();",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn self::mac_refusal();",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck' ),
 		'expect'  => '/testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck/',
 	),
 	array(
@@ -3837,7 +3833,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$current && is_string( \$fingerprint ) && hash_equals( \$current['fingerprint'], \$fingerprint ) && ( null === \$prepared || \$prepared['key_id'] === \$current['key_id'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingTheActiveKeyOnceMoreChangesNothing' ),
 		'expect'  => '/testConfirmingTheActiveKeyOnceMoreChangesNothing/',
 	),
 	array(
@@ -3846,7 +3842,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$current && is_string( \$fingerprint ) && hash_equals( \$current['fingerprint'], \$fingerprint ) && ( null === \$prepared || \$prepared['key_id'] === \$current['key_id'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheFirstImportWaitsForThePersonAndThenRunsAsItWas' ),
 		'expect'  => '/testTheFirstImportWaitsForThePersonAndThenRunsAsItWas/',
 	),
 	array(
@@ -3855,7 +3851,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$current && is_string( \$fingerprint ) && hash_equals( \$current['fingerprint'], \$fingerprint ) && ( null === \$prepared || \$prepared['key_id'] === \$current['key_id'] ) ) {",
 		'replace' => "\t\tif ( null !== \$current && is_string( \$fingerprint ) && hash_equals( \$current['fingerprint'], \$fingerprint ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testConfirmingTheActiveKeyOnceMoreChangesNothing' ),
 		'expect'  => '/testConfirmingTheActiveKeyOnceMoreChangesNothing/',
 	),
 	array(
@@ -3864,7 +3860,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( self::retired( \$prepared['key_id'] ) ) {\n\t\t\treturn self::retired_refusal();\n\t\t}\n\t\t// The key it replaces",
 		'replace' => "\t\t// The key it replaces",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPreparedKeyRetiredSinceIsNotConfirmed' ),
 		'expect'  => '/testAPreparedKeyRetiredSinceIsNotConfirmed/',
 	),
 	array(
@@ -3873,7 +3869,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( self::retired( \$key['key_id'] ) ) {\n\t\t\treturn self::retired_refusal();\n\t\t}\n\t\t\$prepared = array(",
 		'replace' => "\t\t\$prepared = array(",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain' ),
 		'expect'  => '/testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain/',
 	),
 	array(
@@ -3882,7 +3878,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$state['active'] && \$state['active']['key_id'] !== \$prepared['key_id'] && ! self::retire( \$state['active']['key_id'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain' ),
 		'expect'  => '/testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain/',
 	),
 	array(
@@ -3891,7 +3887,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$state['active'] && \$state['active']['key_id'] !== \$prepared['key_id'] && ! self::retire( \$state['active']['key_id'] ) ) {",
 		'replace' => "\t\tif ( null !== \$state['active'] && \$state['active']['key_id'] !== \$prepared['key_id'] && false && self::retire( \$state['active']['key_id'] ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced' ),
 		'expect'  => '/testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced/',
 	),
 	array(
@@ -3900,7 +3896,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$active && ! self::retire( \$active['key_id'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain' ),
 		'expect'  => '/testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain/',
 	),
 	array(
@@ -3909,7 +3905,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\treturn array_slice( \$out, -self::MAX_RETIRED );",
 		'replace' => "\t\treturn \$out;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten' ),
 		'expect'  => '/testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten/',
 	),
 	array(
@@ -3918,7 +3914,7 @@ return array(
 		'file'    => $a,
 		'search'  => "if ( is_string( \$hash ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', \$hash ) ) {",
 		'replace' => "if ( is_string( \$hash ) ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten' ),
 		'expect'  => '/testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten/',
 	),
 	array(
@@ -3927,7 +3923,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\t\$list   = array_slice( \$list, -self::MAX_RETIRED );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten' ),
 		'expect'  => '/testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten/',
 	),
 	array(
@@ -3936,7 +3932,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\treturn self::retired_list() === \$list;",
 		'replace' => "\t\treturn true;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced' ),
 		'expect'  => '/testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced/',
 	),
 	array(
@@ -3945,7 +3941,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tupdate_option( self::OPTION_RETIRED, \$list, false );",
 		'replace' => "\t\tupdate_option( self::OPTION_RETIRED, \$list );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain' ),
 		'expect'  => '/testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain/',
 	),
 	array(
@@ -3954,7 +3950,7 @@ return array(
 		'file'    => $un,
 		'search'  => "\t'ab_mcp_sync_anchor_retired',\n",
 		'replace' => "/* removed */\n",
-		'run'     => $uninstall,
+		'run'     => $unit( 'UninstallTest', 'testUninstallDeletesEveryOptionThePluginDeclares' ),
 		'expect'  => '/testUninstallDeletesEveryOptionThePluginDeclares/',
 	),
 	array(
@@ -3963,7 +3959,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t'print'     => \$print,\n",
 		'replace' => "\t\t\t\t'print'     => null,\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportEndsWhereThePairChangedSinceItBegan' ),
 		'expect'  => '/testAnImportEndsWhereThePairChangedSinceItBegan/',
 	),
 	array(
@@ -3972,7 +3968,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$found['print'] || ! hash_equals( \$found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportEndsWhereThePairChangedSinceItBegan' ),
 		'expect'  => '/testAnImportEndsWhereThePairChangedSinceItBegan/',
 	),
 	array(
@@ -3981,7 +3977,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$found['print'] || ! hash_equals( \$found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {",
 		'replace' => "\t\tif ( null !== \$found['print'] && ! hash_equals( \$found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAGroupWithoutThePrintOfItsBeginningIsEnded' ),
 		'expect'  => '/testAGroupWithoutThePrintOfItsBeginningIsEnded/',
 	),
 	array(
@@ -3990,7 +3986,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$found['print'] || ! hash_equals( \$found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'in', \$found['gid'] );\n",
 		'replace' => "\t\tif ( null === \$found['print'] || ! hash_equals( \$found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportEndsWhereThePairChangedSinceItBegan' ),
 		'expect'  => '/testAnImportEndsWhereThePairChangedSinceItBegan/',
 	),
 	array(
@@ -3999,7 +3995,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$expect ) || ! isset( \$expect['purpose'] ) || ! in_array( \$expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn' ),
 		'expect'  => '/testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn/',
 	),
 	array(
@@ -4008,7 +4004,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$expect ) || ! isset( \$expect['purpose'] ) || ! in_array( \$expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'in', \$found['gid'] );\n",
 		'replace' => "\t\tif ( ! is_array( \$expect ) || ! isset( \$expect['purpose'] ) || ! in_array( \$expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn' ),
 		'expect'  => '/testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn/',
 	),
 	array(
@@ -4017,7 +4013,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t} elseif ( null === \$found && \$group['created'] < time() - self::ABANDONED ) {",
 		'replace' => "\t\t\t} elseif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAMakingStoppedBetweenItsChunksAndItsRecordIsNeverGivenOutAndGoesLater' ),
 		'expect'  => '/testAMakingStoppedBetweenItsChunksAndItsRecordIsNeverGivenOutAndGoesLater/',
 	),
 	array(
@@ -4026,7 +4022,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t} elseif ( null === \$found && \$group['created'] < time() - self::ABANDONED ) {",
 		'replace' => "\t\t\t} elseif ( null === \$found ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAMakingStoppedBetweenItsChunksAndItsRecordIsNeverGivenOutAndGoesLater' ),
 		'expect'  => '/testAMakingStoppedBetweenItsChunksAndItsRecordIsNeverGivenOutAndGoesLater/',
 	),
 	array(
@@ -4035,7 +4031,7 @@ return array(
 		'file'    => $pf,
 		'search'  => "\t\tif ( false === \$written ) {\n\t\t\t@unlink( \$tmp );",
 		'replace' => "\t\tif ( false === \$written ) {\n\t\t\t",
-		'run'     => $payload,
+		'run'     => $unit( 'PayloadFileTest', 'testAWriteOfFewerBytesThanGivenLeavesNothing' ),
 		'expect'  => '/testAWriteOfFewerBytesThanGivenLeavesNothing/',
 	),
 	array(
@@ -4044,7 +4040,7 @@ return array(
 		'file'    => $pf,
 		'search'  => "\$written = @file_put_contents( \$tmp, \$blob );",
 		'replace' => "\$written = file_put_contents( \$tmp, \$blob );",
-		'run'     => $payload,
+		'run'     => $unit( 'PayloadFileTest', 'testAWriteThatFailsGivesNoWarningWithItsPath' ),
 		'expect'  => '/testAWriteThatFailsGivesNoWarningWithItsPath/',
 	),
 	array(
@@ -4053,7 +4049,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( null !== \$active && ! self::retire( \$active['key_id'] ) ) {",
 		'replace' => "\t\tif ( null !== \$active && ! self::retire( \$active['key_id'] ) && false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor' ),
 		'expect'  => '/testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor/',
 	),
 	array(
@@ -4062,7 +4058,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\t\$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t\tif ( is_wp_error( \$forgot ) ) {\n\t\t\t\treturn \$forgot;\n\t\t\t}\n\t\t}\n\n\t\t// The key of a staging source",
 		'replace' => "\t\t\t\$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t}\n\n\t\t// The key of a staging source",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor' ),
 		'expect'  => '/testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor/',
 	),
 	array(
@@ -4071,7 +4067,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\t\$forgot = AB_MCP_Sync_Anchor::forget();\n\t\tif ( is_wp_error( \$forgot ) ) {\n\t\t\treturn \$forgot;\n\t\t}\n\t\t\$had",
 		'replace' => "\t\t\$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t\$had",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor' ),
 		'expect'  => '/testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor/',
 	),
 	array(
@@ -4080,7 +4076,7 @@ return array(
 		'file'    => $s,
 		'search'  => "\t\tif ( is_wp_error( \$removed ) ) {\n\t\t\treturn \$removed;\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor' ),
 		'expect'  => '/testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor/',
 	),
 	array(
@@ -4089,7 +4085,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t'staging_trust_sync_anchor_revoke_failed'  => array( 'error',",
 		'replace' => "\t\t'staging_trust_sync_anchor_revoke_failedx' => array( 'error',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor' ),
 		'expect'  => '/testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor/',
 	),
 	array(
@@ -4098,7 +4094,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t'staging_trust_sync_anchor_retired'        => array( 'error',",
 		'replace' => "\t\t'staging_trust_sync_anchor_retiredx'       => array( 'error',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4107,7 +4103,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t'staging_trust_sync_anchor_retire_failed'  => array( 'error',",
 		'replace' => "\t\t'staging_trust_sync_anchor_retire_failedx' => array( 'error',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEveryNoticeOfTheFormsIsOneThePageShows' ),
 		'expect'  => '/testEveryNoticeOfTheFormsIsOneThePageShows/',
 	),
 	array(
@@ -4116,7 +4112,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t'staging_trust_sync_mac_failed'            => array( 'error',",
 		'replace' => "\t\t'staging_trust_sync_mac_failedx'           => array( 'error',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testEveryNoticeOfTheFormsIsOneThePageShows' ),
 		'expect'  => '/testEveryNoticeOfTheFormsIsOneThePageShows/',
 	),
 	array(
@@ -4125,7 +4121,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t'staging_key_renewed'                      => array( 'success',",
 		'replace' => "\t\t'staging_key_renewedx'                     => array( 'success',",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4134,7 +4130,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tadd_action( 'admin_post_ab_mcp_staging_key_renew', array( \$this, 'handle_staging_key_renew' ) );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testTheFormsAreHookedForAdminPost' ),
 		'expect'  => '/testTheFormsAreHookedForAdminPost/',
 	),
 	array(
@@ -4143,7 +4139,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );",
 		'replace' => "\t\tcheck_admin_referer( 'ab_mcp_staging_key' );",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4152,7 +4148,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t\$this->guard();\n\t\t// The form of the page only",
 		'replace' => "\t\t// The form of the page only",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4161,7 +4157,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\t\$html .= '<input type=\"hidden\" name=\"action\" value=\"ab_mcp_staging_key_renew\">';\n",
 		'replace' => "/* removed */\n",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4170,7 +4166,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\tpublic static function replace() {\n\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {",
 		'replace' => "\tpublic static function replace() {\n\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4179,7 +4175,7 @@ return array(
 		'file'    => $k,
 		'search'  => "\t\t\treturn self::role_refusal();\n\t\t}\n\t\treturn self::renew();",
 		'replace' => "\t\t\treturn self::role_refusal();\n\t\t}\n\t\treturn self::current();",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne' ),
 		'expect'  => '/testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne/',
 	),
 	array(
@@ -4188,7 +4184,7 @@ return array(
 		'file'    => $a,
 		'search'  => "On the staging site, click «Renew the key» under «Key of this staging site» on its page AlphaBridge → Staging;",
 		'replace' => "Renew the key on the staging site;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4197,7 +4193,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\t\tif ( self::read()['active'] !== \$active ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAConfirmationThatDoesNotReadBackIsNone' ),
 		'expect'  => '/testAConfirmationThatDoesNotReadBackIsNone/',
 	),
 	array(
@@ -4206,7 +4202,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\$active['partner_url'] === self::partner() && ! self::retired( \$active['key_id'] ) ? \$active : null;",
 		'replace' => "\$active['partner_url'] === self::partner() ? \$active : null;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAConfirmationThatDoesNotReadBackIsNone' ),
 		'expect'  => '/testAConfirmationThatDoesNotReadBackIsNone/',
 	),
 	array(
@@ -4215,7 +4211,7 @@ return array(
 		'file'    => $a,
 		'search'  => "\$state['active']['partner_url'] === \$partner && ! self::retired( \$state['active']['key_id'] ) ? \$state['active'] : null;",
 		'replace' => "\$state['active']['partner_url'] === \$partner ? \$state['active'] : null;",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAConfirmationThatDoesNotReadBackIsNone' ),
 		'expect'  => '/testAConfirmationThatDoesNotReadBackIsNone/',
 	),
 	array(
@@ -4224,7 +4220,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "\t\tif ( 'POST' !== \$method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»",
 		'replace' => "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4233,7 +4229,7 @@ return array(
 		'file'    => $ad,
 		'search'  => "? wp_unslash( \$_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly",
 		'replace' => "? strtoupper( sanitize_key( wp_unslash( \$_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly",
-		'run'     => $trust,
+		'run'     => $unit( 'SyncTrustTest', 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey' ),
 		'expect'  => '/testAPairEnteredAgainShowsAndOpensTheWayToANewKey/',
 	),
 	array(
@@ -4242,7 +4238,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -4251,7 +4247,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'",
 		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage' ),
 		'expect'  => '/testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage/',
 	),
 	array(
@@ -4260,7 +4256,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {",
 		'replace' => "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testWithWriteAccessOffAStagingSiteMakesAndGivesOutNothing' ),
 		'expect'  => '/testWithWriteAccessOffAStagingSiteMakesAndGivesOutNothing/',
 	),
 	array(
@@ -4269,7 +4265,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( 'b9' === \$object['status'] ) {\n\t\t\t\t++\$credentials['names'];",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\t++\$credentials['names'];",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4278,7 +4274,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\tif ( null !== \$needs ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4287,7 +4283,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t\$incomplete[ \$object['kind'] . \"\\0\" . \$subtype ] = true;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4296,7 +4292,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\tif ( count( \$withheld ) < self::WITHHELD_LIST ) {",
 		'replace' => "\t\t\t\tif ( true ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnAnswerNamesTheFirstTwoHundredWithheldObjectsAndCountsAll' ),
 		'expect'  => '/testAnAnswerNamesTheFirstTwoHundredWithheldObjectsAndCountsAll/',
 	),
 	array(
@@ -4305,7 +4301,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t++\$count;\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4314,7 +4310,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\$credentials['units'] += count( \$object['credentials']['b9'] );\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4323,7 +4319,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t++\$credentials['held'];\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4332,7 +4328,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'complete' => \$at >= \$start && \$at < \$end && ! isset( \$incomplete[ \$key ] ),",
 		'replace' => "\t\t\t\t'complete' => \$at >= \$start && \$at < \$end,",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAKindAndSubtypeWithAWithheldObjectIsNotComplete' ),
 		'expect'  => '/testAKindAndSubtypeWithAWithheldObjectIsNotComplete/',
 	),
 	array(
@@ -4341,7 +4337,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "( \$report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )",
 		'replace' => "( \$report['withheld']['count'] >= 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4350,7 +4346,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t\t\t'report'    => \$report,\n",
 		'replace' => "\t\t\t\t'report'    => array( 'credentials' => array( 'held' => 0, 'names' => 0, 'units' => 0 ), 'withheld' => array( 'count' => 0, 'objects' => array() ) ),\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest' ),
 		'expect'  => '/testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest/',
 	),
 	array(
@@ -4359,7 +4355,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( ! current_user_can( 'read_post', \$post->ID ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4368,7 +4364,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\treturn is_post_publicly_viewable( \$post ) ? null : 'edit_post';",
 		'replace' => "\t\treturn 'edit_post';",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4377,7 +4373,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\treturn is_post_publicly_viewable( \$post ) ? null : 'edit_post';",
 		'replace' => "\t\treturn null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4386,7 +4382,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\t\$post = 1 === preg_match( '/^[1-9][0-9]*\\z/', \$ref ) ? get_post( (int) \$ref ) : null;",
 		'replace' => "\t\t\$post = get_post( (int) \$ref );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4395,7 +4391,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( null === get_post_type_object( \$post->post_type ) ) {\n\t\t\treturn current_user_can( 'edit_others_posts' ) ? null : 'edit_others_posts';\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4404,7 +4400,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( ! is_taxonomy_viewable( \$taxonomy ) && ! current_user_can( 'edit_term', \$term->term_id ) ) {",
 		'replace' => "\t\tif ( ! current_user_can( 'edit_term', \$term->term_id ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4413,7 +4409,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( ! is_taxonomy_viewable( \$taxonomy ) && ! current_user_can( 'edit_term', \$term->term_id ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4422,7 +4418,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( ! taxonomy_exists( \$taxonomy ) ) {\n\t\t\treturn current_user_can( 'manage_categories' ) ? null : 'manage_categories';\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4431,7 +4427,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( '' === \$taxonomy || 1 !== preg_match( '/^[1-9][0-9]*\\z/', \$ref ) ) {",
 		'replace' => "\t\tif ( 1 !== preg_match( '/^[1-9][0-9]*\\z/', \$ref ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4440,7 +4436,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( '' === \$taxonomy || 1 !== preg_match( '/^[1-9][0-9]*\\z/', \$ref ) ) {",
 		'replace' => "\t\tif ( '' === \$taxonomy ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4449,7 +4445,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\t\treturn current_user_can( 'edit_theme_options' ) ? null : 'edit_theme_options';",
 		'replace' => "\t\t\treturn null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4458,7 +4454,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "'theme_mod', 'custom_css' );",
 		'replace' => "'theme_mod' );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4467,7 +4463,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\treturn 'option' === \$kind ? null : 'kind';",
 		'replace' => "\t\treturn null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4476,7 +4472,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\treturn 'option' === \$kind ? null : 'kind';",
 		'replace' => "\t\treturn 'kind';",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4485,7 +4481,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$lines = self::unpacked( \$held );",
 		'replace' => "\t\t\t\$lines = array();",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4494,7 +4490,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( is_wp_error( \$lines ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'in', \$held['gid'] );",
 		'replace' => "\t\t\tif ( is_wp_error( \$lines ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4503,7 +4499,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$kept = self::keep_held( \$held, \$lines );",
 		'replace' => "\t\t\t\$kept = true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4512,7 +4508,7 @@ return array(
 		'file'    => $im,
 		'search'  => "self::inflate( \$data, min( \$declared, \$limits['object_bytes'] ) )",
 		'replace' => "self::inflate( \$data, \$declared )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4521,7 +4517,7 @@ return array(
 		'file'    => $im,
 		'search'  => "self::inflate( \$data, min( \$declared, \$limits['object_bytes'] ) )",
 		'replace' => "self::inflate( \$data, \$limits['object_bytes'] )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4530,7 +4526,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( null === \$text && \$declared > \$limits['object_bytes'] ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4539,7 +4535,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( '' === \$text ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4548,7 +4544,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\$refused = AB_MCP_Store_Budget::unpack_refusal( array( 'objects' => \$count ) );",
 		'replace' => "\t\t\t\t\$refused = null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4557,7 +4553,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\tif ( JSON_ERROR_DEPTH === json_last_error() ) {",
 		'replace' => "\t\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4566,7 +4562,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\tif ( ! is_array( \$object ) || AB_MCP_Sync_Canon::encode( \$object ) !== \$line ) {",
 		'replace' => "\t\t\t\tif ( ! is_array( \$object ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4575,7 +4571,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\tif ( ! self::line_shaped( \$object ) ) {",
 		'replace' => "\t\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4584,7 +4580,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( self::named_credential( \$named, \$extra ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4593,7 +4589,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( \$count !== \$manifest['objects'] || \$total !== \$manifest['unpacked'] ) {",
 		'replace' => "\t\tif ( \$total !== \$manifest['unpacked'] ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4602,7 +4598,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( \$count !== \$manifest['objects'] || \$total !== \$manifest['unpacked'] ) {",
 		'replace' => "\t\tif ( \$count !== \$manifest['objects'] ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4611,7 +4607,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t// No type: no field of a line.\n\t\t\t\treturn false;",
 		'replace' => "\t\t\t\t// No type: no field of a line.\n\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4620,7 +4616,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! array_key_exists( \$field, \$object ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4629,7 +4625,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\tconst STATUSES = array( 'z8', 'locked', 'guarded', 'unreachable', 'unreadable' );",
 		'replace' => "\tconst STATUSES = array( 'z8', 'locked', 'guarded', 'unreachable', 'unreadable', 'b9' );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4638,7 +4634,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! is_array( \$record ) || array() !== array_diff_key( array_flip( \$needs ), \$record ) ) {",
 		'replace' => "\t\t\tif ( ! is_array( \$record ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4647,7 +4643,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn ! AB_MCP_Sync_Export::credential_locked( \$object['locks'] ) || array() === array_intersect_key( \$object, array_flip( self::LINE_OPEN ) );",
 		'replace' => "\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4656,7 +4652,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tforeach ( array( 'name', 'theme_mod', 'target' ) as \$field ) {",
 		'replace' => "\t\tforeach ( array( 'name', 'target' ) as \$field ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4665,7 +4661,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn \$list['objects'];\n\t}",
 		'replace' => "\t\treturn array();\n\t}",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4674,7 +4670,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$out .= \$more;\n\t\t\tif ( strlen( \$out ) > \$cap ) {\n\t\t\t\treturn null;\n\t\t\t}",
 		'replace' => "\t\t\t\$out .= \$more;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAChunkIsInflatedNoFurtherThanItMay' ),
 		'expect'  => '/testAChunkIsInflatedNoFurtherThanItMay/',
 	),
 	array(
@@ -4683,7 +4679,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( false === \$more || ZLIB_STREAM_END !== inflate_get_status( \$context ) ) {",
 		'replace' => "\t\t\tif ( false === \$more ) {",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAChunkIsInflatedNoFurtherThanItMay' ),
 		'expect'  => '/testAChunkIsInflatedNoFurtherThanItMay/',
 	),
 	array(
@@ -4692,7 +4688,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn self::held_name( \$hex ) === \$name ? \$hex : null;",
 		'replace' => "\t\treturn \$hex;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testTheListOfHeldObjectsIsNamedByItsHashInBase32' ),
 		'expect'  => '/testTheListOfHeldObjectsIsNamedByItsHashInBase32/',
 	),
 	array(
@@ -4701,7 +4697,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\tif ( current_user_can( 'edit_post', \$post->ID ) ) {\n\t\t\treturn null;\n\t\t}\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAFieldGroupOfAcfIsInThePackageOfAnAdministrator' ),
 		'expect'  => '/testAFieldGroupOfAcfIsInThePackageOfAnAdministrator/',
 	),
 	array(
@@ -4710,7 +4706,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\t\treturn current_user_can( 'edit_others_posts' ) ? null : 'edit_others_posts';",
 		'replace' => "\t\t\treturn null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4719,7 +4715,7 @@ return array(
 		'file'    => $rt,
 		'search'  => "\t\t\treturn current_user_can( 'manage_categories' ) ? null : 'manage_categories';",
 		'replace' => "\t\t\treturn null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheRightsOfAnObjectAreAskedOfWordPress' ),
 		'expect'  => '/testTheRightsOfAnObjectAreAskedOfWordPress/',
 	),
 	array(
@@ -4728,7 +4724,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! self::identity_fits( \$object['kind'], \$object['ref'], \$object['identity'] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4737,7 +4733,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( \$given !== \$want ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4746,7 +4742,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( ! self::typed( \$identity[ \$field ], \$type ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4755,7 +4751,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( in_array( \$kind, self::ID_KINDS, true ) && ! \$id_ref ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4764,7 +4760,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn \$text['area'] === \$ref;",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4773,7 +4769,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn \$text['name'] === \$ref;",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4782,7 +4778,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn 0 === strpos( \$text['name'], 'theme_mods_' ) &&",
 		'replace' => "\t\t\t\treturn true ||",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4791,7 +4787,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn \$text['stylesheet'] . ( \$identity['linked'] ? '' : '@' . \$identity['post'] ) === \$ref;",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4800,7 +4796,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( 'theme_mod' === \$kind && array( 'name' ) === array_keys( \$identity ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4809,7 +4805,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\$fits = self::records( \$value, self::LOCK_FIELDS, array_keys( self::LOCK_FIELDS ) ) &&",
 		'replace' => "\$fits = is_array( \$value ) &&",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4818,7 +4814,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\$fits = self::records( \$value, self::REF_FIELDS, self::REF_NEEDS );",
 		'replace' => "\t\t\t\t\$fits = is_array( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4827,7 +4823,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\$fits = self::records( \$value, self::POSSIBLE_FIELDS, array( 'at' ) );",
 		'replace' => "\t\t\t\t\$fits = is_array( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4836,7 +4832,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! is_array( \$list ) || ! array_is_list( \$list ) ) {",
 		'replace' => "\t\tif ( ! is_array( \$list ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4845,7 +4841,7 @@ return array(
 		'file'    => $im,
 		'search'  => " || array() !== array_diff_key( array_flip( \$needs ), \$record ) ) {",
 		'replace' => " ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4854,7 +4850,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\tif ( ! isset( \$fields[ \$field ] ) || ! self::typed( \$value, \$fields[ \$field ] ) ) {",
 		'replace' => "\t\t\t\tif ( isset( \$fields[ \$field ] ) && ! self::typed( \$value, \$fields[ \$field ] ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4863,7 +4859,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\tif ( ! isset( \$fields[ \$field ] ) || ! self::typed( \$value, \$fields[ \$field ] ) ) {",
 		'replace' => "\t\t\t\tif ( ! isset( \$fields[ \$field ] ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4872,7 +4868,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\$fits = 'identity' === \$type || self::typed( \$value, \$type );",
 		'replace' => "\t\t\t\t\$fits = true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4881,7 +4877,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn is_string( \$value );\n\t\t\tcase 'text':",
 		'replace' => "\t\t\t\treturn true;\n\t\t\tcase 'text':",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4890,7 +4886,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn null === \$value || is_string( \$value );",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4899,7 +4895,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn is_int( \$value ) || ( is_string( \$value ) && 1 === preg_match( '/^[0-9]{1,20}\\z/', \$value ) );",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4908,7 +4904,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn is_bool( \$value );",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4917,7 +4913,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\tif ( ! is_int( \$item ) ) {",
 		'replace' => "\t\t\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4926,7 +4922,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn null === \$value || ( is_string( \$value ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', \$value ) );",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4935,7 +4931,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn is_int( \$value ) && \$value >= 0;",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4944,7 +4940,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn in_array( \$value, self::STATUSES, true );",
 		'replace' => "\t\t\t\treturn is_string( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4953,7 +4949,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( \"\\n\" !== substr( \$text, -1 ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4962,7 +4958,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn inflate_get_read_len( \$context ) === strlen( \$data ) ? \$out : false;",
 		'replace' => "\t\treturn \$out;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAChunkIsInflatedNoFurtherThanItMay' ),
 		'expect'  => '/testAChunkIsInflatedNoFurtherThanItMay/',
 	),
 	array(
@@ -4971,7 +4967,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn inflate_get_read_len( \$context ) === strlen( \$data ) ? \$out : false;",
 		'replace' => "\t\treturn \$out;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -4980,7 +4976,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\tconst INFLATE_PIECE = 512;",
 		'replace' => "\tconst INFLATE_PIECE = 4096;",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testAChunkIsInflatedNoFurtherThanItMay' ),
 		'expect'  => '/testAChunkIsInflatedNoFurtherThanItMay/',
 	),
 	array(
@@ -4989,7 +4985,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( null !== \$found['report'] && \$found['binding']",
 		'replace' => "\t\tif ( \$found['binding']",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testARecordOfAnOlderVersionIsDiscardedWithTheWay' ),
 		'expect'  => '/testARecordOfAnOlderVersionIsDiscardedWithTheWay/',
 	),
 	array(
@@ -4998,7 +4994,7 @@ return array(
 		'file'    => $ex,
 		'search'  => " || array( true, true, true ) !== array_values( array_map( 'is_int', \$report['credentials'] ) ) ) {",
 		'replace' => " ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testARecordOfAnOlderVersionIsDiscardedWithTheWay' ),
 		'expect'  => '/testARecordOfAnOlderVersionIsDiscardedWithTheWay/',
 	),
 	array(
@@ -5007,7 +5003,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( is_wp_error( \$list ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'in', \$held['gid'] );",
 		'replace' => "\t\t\tif ( is_wp_error( \$list ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew' ),
 		'expect'  => '/testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew/',
 	),
 	array(
@@ -5016,7 +5012,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn AB_MCP_Sync_Canon::VERSION === \$value;",
 		'replace' => "\t\t\t\treturn is_string( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5025,7 +5021,7 @@ return array(
 		'file'    => $im,
 		'search'  => " && array() === array_filter( \$value, static fn( \$lock ) => ! self::lock_known( \$lock ) );",
 		'replace' => ";",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5034,7 +5030,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn ( isset( \$entry['stage'] ) ? \$entry['stage'] : null ) === \$lock['stage'] && ( isset( \$entry['reason'] ) ? \$entry['reason'] : null ) === \$lock['reason'];",
 		'replace' => "\t\treturn ( isset( \$entry['reason'] ) ? \$entry['reason'] : null ) === \$lock['reason'];",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5043,7 +5039,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\treturn ( isset( \$entry['stage'] ) ? \$entry['stage'] : null ) === \$lock['stage'] && ( isset( \$entry['reason'] ) ? \$entry['reason'] : null ) === \$lock['reason'];",
 		'replace' => "\t\treturn ( isset( \$entry['stage'] ) ? \$entry['stage'] : null ) === \$lock['stage'];",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5052,7 +5048,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t} elseif ( isset( AB_MCP_Sync_Kinds::OWNERSHIP[ \$lock['key'] ] ) ) {",
 		'replace' => "\t\t} elseif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testTheInventoryOfBothSitesOverEveryKindPassesTheCheckOfTheImport' ),
 		'expect'  => '/testTheInventoryOfBothSitesOverEveryKindPassesTheCheckOfTheImport/',
 	),
 	array(
@@ -5061,7 +5057,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( isset( AB_MCP_Sync_Kinds::LOCKS[ \$lock['key'] ] ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5070,7 +5066,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn in_array( \$value, self::SPACES, true );",
 		'replace' => "\t\t\t\treturn is_string( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5079,7 +5075,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn in_array( \$value, self::STRENGTHS, true );",
 		'replace' => "\t\t\t\treturn is_string( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5088,7 +5084,7 @@ return array(
 		'file'    => $im,
 		'search'  => "1 === preg_match( '/^-?[0-9]{1,19}\\z/', \$value )",
 		'replace' => "1 === preg_match( '/^[0-9]{1,19}\\z/', \$value )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5097,7 +5093,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn null !== self::bytes( \$value );",
 		'replace' => "\t\t\t\treturn is_string( \$value );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5106,7 +5102,7 @@ return array(
 		'file'    => $im,
 		'search'  => " && 1 !== preg_match( '//u', \$bytes ) ? \$bytes : null;",
 		'replace' => " ? \$bytes : null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5115,7 +5111,7 @@ return array(
 		'file'    => $im,
 		'search'  => " && base64_encode( \$bytes ) === \$value['~b'] &&",
 		'replace' => " &&",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5124,7 +5120,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array() === \$object['identity'] && ( ! isset( \$object['complete'], \$object['unread'] ) || false !== \$object['complete'] || array() === array_intersect( \$object['unread'], self::ROW_UNREAD ) ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5133,7 +5129,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array() === \$object['identity'] && ( ! isset( \$object['complete'], \$object['unread'] ) || false !== \$object['complete'] || array() === array_intersect( \$object['unread'], self::ROW_UNREAD ) ) ) {",
 		'replace' => "\t\tif ( array() === \$object['identity'] && ( ! isset( \$object['complete'], \$object['unread'] ) || array() === array_intersect( \$object['unread'], self::ROW_UNREAD ) ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5142,7 +5138,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array() === \$object['identity'] && ( ! isset( \$object['complete'], \$object['unread'] ) || false !== \$object['complete'] || array() === array_intersect( \$object['unread'], self::ROW_UNREAD ) ) ) {",
 		'replace' => "\t\tif ( array() === \$object['identity'] && ( ! isset( \$object['complete'], \$object['unread'] ) || false !== \$object['complete'] ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5151,7 +5147,7 @@ return array(
 		'file'    => $im,
 		'search'  => "'menu_item', 'theme_mods', 'options' );",
 		'replace' => "'menu_item', 'theme_mods' );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5160,7 +5156,7 @@ return array(
 		'file'    => $im,
 		'search'  => "array() === \$object['identity'] ? array( 'name' => \$object['ref'] ) : \$object['identity']",
 		'replace' => "\$object['identity']",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5169,7 +5165,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\tif ( null === self::bytes( \$item ) ) {",
 		'replace' => "\t\t\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5178,7 +5174,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tcase 'names':\n\t\t\t\tif ( ! is_array( \$value ) || ! array_is_list( \$value ) ) {",
 		'replace' => "\t\t\tcase 'names':\n\t\t\t\tif ( ! is_array( \$value ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5187,7 +5183,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\treturn null === \$value || null !== self::bytes( \$value );",
 		'replace' => "\t\t\t\treturn true;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5196,7 +5192,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\$fields = array( 'name' => 'name' );",
 		'replace' => "\t\t\t\$fields = array( 'name' => 'string' );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5205,7 +5201,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\$code = self::held_code( \$object, \$extra );",
 		'replace' => "\t\t\t\t\$code = null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5214,7 +5210,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
 		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ) );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5223,7 +5219,7 @@ return array(
 		'file'    => $im,
 		'search'  => " + array_intersect_key( \$object, array( 'target' => true ) );",
 		'replace' => ";",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5232,7 +5228,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tforeach ( array( 'name', 'theme_mod', 'target' ) as \$field ) {",
 		'replace' => "\t\tforeach ( array( 'name', 'theme_mod' ) as \$field ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5241,7 +5237,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( 'mixed' === \$check['state'] ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5250,7 +5246,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( 'unreadable' === \$check['state'] ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5259,7 +5255,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\$out    = array_values( \$object['identity'] );",
 		'replace' => "\t\t\$out    = array();",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5268,7 +5264,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tarray( array( \$object ), self::LINE_FIELDS ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5277,7 +5273,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tarray( \$object['locks'], self::LOCK_FIELDS ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5286,7 +5282,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tarray( isset( \$object['refs'] ) ? \$object['refs'] : array(), self::REF_FIELDS ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5295,7 +5291,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tarray( isset( \$object['possible'] ) ? \$object['possible'] : array(), self::POSSIBLE_FIELDS ),\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5304,7 +5300,7 @@ return array(
 		'file'    => $im,
 		'search'  => "'names' === \$type ? \$record[ \$field ] : array( \$record[ \$field ] )",
 		'replace' => "array( \$record[ \$field ] )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5313,7 +5309,7 @@ return array(
 		'file'    => $im,
 		'search'  => "array( 'name', 'names', 'login' ), true )",
 		'replace' => "array( 'name', 'names' ), true )",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5322,7 +5318,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\tconst HELD_FORMAT = 'ab-sync-held/3';",
 		'replace' => "\tconst HELD_FORMAT = 'ab-sync-held/1';",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew' ),
 		'expect'  => '/testACompleteImportWithoutItsListOfHeldObjectsIsFetchedAnew/',
 	),
 	array(
@@ -5331,7 +5327,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$codes ? array_key_exists( 'reason_code', \$object ) : ! in_array( isset( \$object['reason_code'] ) ? \$object['reason_code'] : null, \$codes, true ) ) {",
 		'replace' => "\t\tif ( null === \$codes ? false : ! in_array( isset( \$object['reason_code'] ) ? \$object['reason_code'] : null, \$codes, true ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5340,7 +5336,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$codes ? array_key_exists( 'reason_code', \$object ) : ! in_array( isset( \$object['reason_code'] ) ? \$object['reason_code'] : null, \$codes, true ) ) {",
 		'replace' => "\t\tif ( null === \$codes ? array_key_exists( 'reason_code', \$object ) : ! isset( \$object['reason_code'] ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5349,7 +5345,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( null === \$codes ? array_key_exists( 'reason_code', \$object ) : ! in_array( isset( \$object['reason_code'] ) ? \$object['reason_code'] : null, \$codes, true ) ) {",
 		'replace' => "\t\tif ( null === \$codes ? array_key_exists( 'reason_code', \$object ) : ! in_array( isset( \$object['reason_code'] ) ? \$object['reason_code'] : \$codes[0], \$codes, true ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5358,7 +5354,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ( 'unreachable' === \$object['status'] ) !== array_key_exists( 'target', \$object ) ) {",
 		'replace' => "\t\tif ( 'unreachable' !== \$object['status'] && array_key_exists( 'target', \$object ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5367,7 +5363,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ( 'unreachable' === \$object['status'] ) !== array_key_exists( 'target', \$object ) ) {",
 		'replace' => "\t\tif ( 'unreachable' === \$object['status'] && ! array_key_exists( 'target', \$object ) ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5376,7 +5372,7 @@ return array(
 		'file'    => $os,
 		'search'  => "\t\t'unreadable'  => array( 'lookup_failed', 'not_settled' ),",
 		'replace' => "\t\t'unreadable'  => array( 'not_settled' ),",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5385,7 +5381,7 @@ return array(
 		'file'    => $os,
 		'search'  => " + array( 'code' => 'option_guard' );",
 		'replace' => ";",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5394,7 +5390,7 @@ return array(
 		'file'    => $os,
 		'search'  => "\t\t\t\t'code'   => 'read_as_other_row',\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5403,7 +5399,7 @@ return array(
 		'file'    => $os,
 		'search'  => "\t\t\t\t'target' => \$resolved['name'],\n",
 		'replace' => "/* removed */\n",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5412,7 +5408,7 @@ return array(
 		'file'    => $os,
 		'search'  => " + array( 'code' => \$resolved->get_error_data()['code'] );",
 		'replace' => ";",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5421,7 +5417,7 @@ return array(
 		'file'    => $os,
 		'search'  => "the database error log names the cause.', array( 'code' => 'lookup_failed' ) );",
 		'replace' => "the database error log names the cause.', array( 'code' => 'not_settled' ) );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5430,7 +5426,7 @@ return array(
 		'file'    => $dk,
 		'search'  => "\t\t\$why = isset( AB_MCP_Sync_Option_Schema::REASON_CODES[ \$class['status'] ] ) ? array_intersect_key( \$class, array_flip( array( 'code', 'target' ) ) ) : array();",
 		'replace' => "\t\t\$why = array();",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5439,7 +5435,7 @@ return array(
 		'file'    => $dk,
 		'search'  => "\t\t\$why = isset( AB_MCP_Sync_Option_Schema::REASON_CODES[ \$class['status'] ] ) ? array_intersect_key( \$class, array_flip( array( 'code', 'target' ) ) ) : array();",
 		'replace' => "\t\t\$why = array_intersect_key( \$class, array_flip( array( 'code', 'target' ) ) );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testEveryFormOfALineTheReadersMakeGoesThroughTheImport' ),
 		'expect'  => '/testEveryFormOfALineTheReadersMakeGoesThroughTheImport/',
 	),
 	array(
@@ -5448,7 +5444,7 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\t) + array_intersect_key( \$object, array_flip( array( 'reason_code', 'target' ) ) );",
 		'replace' => "\t\t);",
-		'run'     => $package,
+		'run'     => $unit( 'SyncPackageTest', 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent' ),
 		'expect'  => '/testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent/',
 	),
 	array(
@@ -5457,7 +5453,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
 		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], \$object['ref'], \$code );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5466,7 +5462,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( \$object['ref'] ) ), \$code );",
 		'replace' => "\t\t\t\t\t\$out[] = array( \$object['kind'], hash( 'sha256', (string) AB_MCP_Sync_Import::bytes( \$object['ref'] ) ), \$code );",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5475,7 +5471,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( 'credential' === \$net ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5484,7 +5480,7 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\t\tif ( 'unreadable' === \$net ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5493,7 +5489,7 @@ return array(
 		'file'    => $net,
 		'search'  => "\t\t\tif ( array() !== self::credentials( \$layer[1], \$extra, \$undecidable, '/code' === substr( \$layer[0], -5 ) ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5502,7 +5498,7 @@ return array(
 		'file'    => $net,
 		'search'  => "\$undecidable, '/code' === substr( \$layer[0], -5 ) ) ) {\n\t\t\t\treturn 'credential';",
 		'replace' => "\$undecidable, false ) ) {\n\t\t\t\treturn 'credential';",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5511,7 +5507,7 @@ return array(
 		'file'    => $net,
 		'search'  => "\t\t\tif ( \$undecidable ) {\n\t\t\t\treturn 'unreadable';",
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn 'unreadable';",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5520,7 +5516,7 @@ return array(
 		'file'    => $net,
 		'search'  => "\t\treturn \$deep || array() !== \$unread ? 'unreadable' : null;",
 		'replace' => "\t\treturn array() !== \$unread ? 'unreadable' : null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 	array(
@@ -5529,7 +5525,7 @@ return array(
 		'file'    => $net,
 		'search'  => "\t\treturn \$deep || array() !== \$unread ? 'unreadable' : null;",
 		'replace' => "\t\treturn \$deep ? 'unreadable' : null;",
-		'run'     => $itpkg,
+		'run'     => $it( 'SyncPackageTest', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain' ),
 		'expect'  => '/testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain/',
 	),
 );

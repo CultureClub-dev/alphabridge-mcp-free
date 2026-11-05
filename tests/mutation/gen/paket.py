@@ -9,7 +9,8 @@ checked to occur exactly once in its file before the list is written.
 Run it again after a change of these classes, then the list
 (tests/mutation/run.php). Development only: /tests ships with no release.
 """
-import os, sys
+import os
+import re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 K = 'includes/sync/class-sync-key.php'
@@ -1587,6 +1588,31 @@ e('paket/p3r4-over-name-deep', 'over_name(): deeper than the net reads (two site
 e('paket/p3r4-over-name-unread', 'over_name(): a body that is no text (two sites)', NET, ON, ON.replace(" || array() !== $unread", ''), 'itpkg', P3['unpack_it'])
 
 # ----------------------------------------------------------------- check
+# Each run: its suite and the test class it names; an entry runs the test
+# its expect names, alone (the class of the integration suite takes more
+# than a minute, and the CI runs every entry).
+RUNS = {
+    'trust': ('unit', 'SyncTrustTest'),
+    'storage': ('unit', 'SyncTrustStorageTest'),
+    'address': ('unit', 'SyncTrustAddressTest'),
+    'manifest': ('unit', 'SyncManifestTest'),
+    'status': ('unit', 'StagingStatusTest'),
+    'it': ('it', 'SyncTrustTest'),
+    'package': ('unit', 'SyncPackageTest'),
+    'dbkinds': ('unit', 'SyncDbKindsTest'),
+    'gate': ('unit', 'StagingGateTest'),
+    'itpkg': ('it', 'SyncPackageTest'),
+    'itseries': ('it', 'SyncPackageSeriesTest'),
+    'budget': ('unit', 'StoreBudgetTest'),
+    'payload': ('unit', 'PayloadFileTest'),
+    'uninstall': ('unit', 'UninstallTest'),
+}
+
+
+def test_of(expect):
+    return expect.split(' with data set "', 1)[0]
+
+
 ids = set()
 for (id_, clause, file, search, replace, run, expect) in entries:
     if id_ in ids:
@@ -1598,6 +1624,12 @@ for (id_, clause, file, search, replace, run, expect) in entries:
         sys.exit('%s: search occurs %d times in %s:\n%s' % (id_, n, file, search))
     if search == replace:
         sys.exit(id_ + ': replace equals search')
+    if run not in RUNS:
+        sys.exit(id_ + ': no run ' + run)
+    suite, cls = RUNS[run]
+    path = os.path.join(ROOT, 'tests', 'integration' if 'it' == suite else '', cls + '.php')
+    if not re.search(r'\bfunction\s+' + re.escape(test_of(expect)) + r'\s*\(', open(path).read()):
+        sys.exit('%s: %s is no test of %s' % (id_, test_of(expect), path))
 
 
 def php(s):
@@ -1680,20 +1712,16 @@ out.append('''<?php
  * @package AlphaBridge_MCP
  */
 
-$trust    = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustTest' );
-$storage  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustStorageTest' );
-$address  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrustAddressTest' );
-$manifest = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncManifestTest' );
-$status   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingStatusTest' );
-$it       = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncTrustTest' );
-$package  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPackageTest' );
-$dbkinds  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncDbKindsTest' );
-$gate     = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingGateTest' );
-$itpkg    = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageTest' );
-$itseries = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageSeriesTest' );
-$budget   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StoreBudgetTest' );
-$payload  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'PayloadFileTest' );
-$uninstall = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'UninstallTest' );
+/*
+ * The run of an entry: the test its expect names, alone, in the unit suite
+ * or in the integration suite (-c; the sites running). A whole class of
+ * the integration suite takes more than a minute, and the CI runs every
+ * entry in it (paket.py checks that the test is a method of the class).
+ * The filter matches the class after its namespace and the test with or
+ * without a data set, as PHPUnit names it (Class::test with data set …).
+ */
+$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
+$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
 
 $k  = 'includes/sync/class-sync-key.php';
 $a  = 'includes/sync/class-sync-anchor.php';
@@ -1726,7 +1754,8 @@ for (id_, clause, file, search, replace, run, expect) in entries:
     out.append("\t\t'file'    => %s," % FILEVAR[file])
     out.append("\t\t'search'  => %s," % php(search))
     out.append("\t\t'replace' => %s," % php(replace))
-    out.append("\t\t'run'     => $%s," % run)
+    suite, cls = RUNS[run]
+    out.append("\t\t'run'     => $%s( %s, %s )," % (suite, php_single(cls), php_single(test_of(expect))))
     out.append("\t\t'expect'  => %s," % php_single(regex(expect)))
     out.append('\t),')
 out.append(');')
