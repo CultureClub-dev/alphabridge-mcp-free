@@ -405,8 +405,10 @@ class AB_MCP_Staging {
 	 * @param int         $user_id      Who confirms.
 	 * @param string      $source       SOURCE_FORM or SOURCE_HUB.
 	 * @return array{role_changed:bool,pair_changed:bool}|WP_Error The
-	 *         refusal of validate(), or of AB_MCP_Sync_Key::renew() where
-	 *         the key of a confirmed staging site was not stored.
+	 *         refusal of validate(), of AB_MCP_Sync_Anchor::forget() where
+	 *         the anchored key of the old pair cannot be kept as revoked,
+	 *         or of AB_MCP_Sync_Key::renew() where the key of a confirmed
+	 *         staging site was not stored.
 	 */
 	public static function save( $role, $partner_url, $partner_role, $user_id, $source ) {
 		$checked = self::validate( $role, $partner_url, $partner_role, $source );
@@ -457,6 +459,16 @@ class AB_MCP_Staging {
 			$confirmed   = $confirmed || $keep_pair;
 		}
 
+		// Another pair takes the anchor of the old one away (a new role never
+		// keeps the pair, see above); before anything is written, so that a
+		// key that cannot be kept as revoked leaves the pair as it was.
+		if ( $pair_changed ) {
+			$forgot = AB_MCP_Sync_Anchor::forget();
+			if ( is_wp_error( $forgot ) ) {
+				return $forgot;
+			}
+		}
+
 		// The key of a staging source (Z8, decision 4): a person who confirms
 		// the role staging site (the role written now, as a new role or as the
 		// form's confirmation of the hub's) gives the site a new source id and
@@ -478,14 +490,9 @@ class AB_MCP_Staging {
 		if ( $role_changed && class_exists( 'AB_MCP_Staging_Gate' ) ) {
 			AB_MCP_Staging_Gate::on_role_changed();
 		}
-		// A site with any other role keeps no key; another pair takes the
-		// anchor of the old one away (a new role never keeps the pair, see
-		// above).
+		// A site with any other role keeps no key.
 		if ( self::ROLE_STAGING !== $role ) {
 			AB_MCP_Sync_Key::forget();
-		}
-		if ( $pair_changed ) {
-			AB_MCP_Sync_Anchor::forget();
 		}
 		return array(
 			'role_changed' => $role_changed,
@@ -1377,11 +1384,15 @@ class AB_MCP_Staging {
 		if ( is_wp_error( $rate ) ) {
 			return new WP_Error( $rate->get_error_code(), $rate->get_error_message(), array( 'status' => 429 ) );
 		}
+		$removed = self::remove_pair();
+		if ( is_wp_error( $removed ) ) {
+			return $removed;
+		}
 		return self::respond(
 			array_merge(
 				array(
 					'role_changed' => false,
-					'pair_changed' => self::remove_pair(),
+					'pair_changed' => $removed,
 				),
 				self::summary()
 			)
@@ -1390,19 +1401,24 @@ class AB_MCP_Staging {
 
 	/**
 	 * Remove the stored pair, also one that reads as no pair (a broken
-	 * record), and nothing else of the record; with it the anchor of the
-	 * key of that pair's staging site (Z8, decision 4).
+	 * record), and nothing else of the record; with it, first, the anchor
+	 * of the key of that pair's staging site (Z8, decision 4). Where that
+	 * key cannot be kept as revoked, nothing is removed.
 	 *
-	 * @return bool Whether a pair was in force.
+	 * @return bool|WP_Error Whether a pair was in force; the refusal of
+	 *                       AB_MCP_Sync_Anchor::forget().
 	 */
 	public static function remove_pair() {
+		$forgot = AB_MCP_Sync_Anchor::forget();
+		if ( is_wp_error( $forgot ) ) {
+			return $forgot;
+		}
 		$had = null !== self::record()['pair'];
 		$raw = AB_MCP_Settings::get( self::KEY, array() );
 		if ( is_array( $raw ) && array_key_exists( 'pair', $raw ) ) {
 			unset( $raw['pair'] );
 			AB_MCP_Settings::set( self::KEY, self::rebind( $raw ) );
 		}
-		AB_MCP_Sync_Anchor::forget();
 		return $had;
 	}
 

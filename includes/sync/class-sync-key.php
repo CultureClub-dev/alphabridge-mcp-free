@@ -12,7 +12,9 @@
  * key that signs on). A site whose role is anything else keeps neither
  * (forget()). A staging site whose role was confirmed before there were
  * keys has none until a person makes it on that page (make()), which never
- * replaces a key that is there.
+ * replaces a key that is there. A new key for the same role a person makes
+ * there with «Renew the key» (replace()): the way where the production
+ * site revoked or replaced the old one.
  *
  * WHERE. Two options of their own, without autoload:
  *  - OPTION_SOURCE: the source id, the key id, the public key, when made;
@@ -169,7 +171,7 @@ final class AB_MCP_Sync_Key {
 			self::forget();
 			return new WP_Error(
 				'ab_mcp_sync_key_failed',
-				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s, %2$s and %3$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site again on the page AlphaBridge → Staging.', self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ),
+				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s, %2$s and %3$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site on the page AlphaBridge → Staging, or, where it is confirmed, make the key there under «Key of this staging site».', self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ),
 				array( 'options' => array( self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ) )
 			);
 		}
@@ -206,6 +208,24 @@ final class AB_MCP_Sync_Key {
 			'made' => true,
 			'key'  => $key,
 		);
+	}
+
+	/**
+	 * A new key for this confirmed staging site, made by a person on the
+	 * page AlphaBridge → Staging («Renew the key»): where the production
+	 * site no longer accepts the old one (it was replaced or revoked there)
+	 * or it may be known. The role stays as it is; the production site reads
+	 * packages of this site again once a person confirmed the new key there,
+	 * and packages made with the old one are no longer given out (their
+	 * binding names it, AB_MCP_Sync_Export::binding()).
+	 *
+	 * @return array|WP_Error The new key.
+	 */
+	public static function replace() {
+		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {
+			return self::role_refusal();
+		}
+		return self::renew();
 	}
 
 	/**

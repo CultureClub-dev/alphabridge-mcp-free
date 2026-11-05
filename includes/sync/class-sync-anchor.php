@@ -38,9 +38,11 @@
  * revoked (forget(): another pair, another role) is never confirmed here
  * again: its key id is kept as a SHA-256 in an option of its own without
  * autoload (OPTION_RETIRED, the last MAX_RETIRED), written and read back
- * before the anchor changes, and hold() and confirm() refuse it; the way
- * is a new key on the staging site. Confirming the active key once more is
- * no new confirmation: it stays as it is, with its print.
+ * before the anchor changes (where that fails, nothing changes), and
+ * hold() and confirm() refuse it, active() does not read it; the way is a
+ * new key on the staging site («Renew the key», AB_MCP_Sync_Key::replace()).
+ * Confirming the active key once more is no new confirmation: it stays as
+ * it is, with its print. A confirmation counts only as it reads back.
  *
  * Stored in one option without autoload (OPTION); a part that is not
  * exactly what this class writes reads as absent.
@@ -198,7 +200,7 @@ final class AB_MCP_Sync_Anchor {
 		}
 		$state    = self::read();
 		$prepared = $state['prepared'];
-		$current  = null !== $state['active'] && $state['active']['partner_url'] === $partner ? $state['active'] : null;
+		$current  = null !== $state['active'] && $state['active']['partner_url'] === $partner && ! self::retired( $state['active']['key_id'] ) ? $state['active'] : null;
 		// The active key confirmed once more (a second click, the same key
 		// prepared again): it stays as it is, no new confirmation, no new print.
 		if ( null !== $current && is_string( $fingerprint ) && hash_equals( $current['fingerprint'], $fingerprint ) && ( null === $prepared || $prepared['key_id'] === $current['key_id'] ) ) {
@@ -234,6 +236,14 @@ final class AB_MCP_Sync_Anchor {
 			)
 		);
 		self::write( null, $active );
+		// Confirmed only as it reads back.
+		if ( self::read()['active'] !== $active ) {
+			return new WP_Error(
+				'ab_mcp_sync_anchor_write_failed',
+				sprintf( 'The key was not confirmed: the anchor did not read back from the option %s (the database refused or changed the write). Ask the host to check that the database accepts writes to the options of this site, then confirm the key again on the page AlphaBridge → Staging.', self::OPTION ),
+				array( 'option' => self::OPTION )
+			);
+		}
 		return $active;
 	}
 
@@ -242,13 +252,14 @@ final class AB_MCP_Sync_Anchor {
 	/**
 	 * The active anchor, while this site is the confirmed production site
 	 * paired with its address as the staging site (partner() is that
-	 * address, or an error that equals no address); else null.
+	 * address, or an error that equals no address) and its key is not
+	 * retired (a replacement whose anchor was not stored); else null.
 	 *
 	 * @return array|null
 	 */
 	public static function active() {
 		$active = self::read()['active'];
-		return null !== $active && $active['partner_url'] === self::partner() ? $active : null;
+		return null !== $active && $active['partner_url'] === self::partner() && ! self::retired( $active['key_id'] ) ? $active : null;
 	}
 
 	/**
@@ -265,14 +276,23 @@ final class AB_MCP_Sync_Anchor {
 	/**
 	 * Remove the anchor, prepared and active: the pair or the role changed.
 	 * Its active key is revoked with it, never confirmed here again
-	 * (retire(); the anchor goes also where that cannot be kept).
+	 * (retire()); where that cannot be kept, the anchor stays and the
+	 * refusal names the way (AB_MCP_Staging then changes nothing either).
+	 * uninstall.php removes the options as they are.
+	 *
+	 * @return true|WP_Error
 	 */
 	public static function forget() {
 		$active = self::read()['active'];
-		if ( null !== $active ) {
-			self::retire( $active['key_id'] );
+		if ( null !== $active && ! self::retire( $active['key_id'] ) ) {
+			return new WP_Error(
+				'ab_mcp_sync_anchor_revoke_failed',
+				sprintf( 'Nothing was changed: the confirmed key of the staging site could not be kept as revoked in the option %s (the database refused or changed the write), and without that it could be confirmed here again, so the pair and the key stay as they were. Ask the host to check that the database accepts writes to the options of this site, then remove or change the pair again.', self::OPTION_RETIRED ),
+				array( 'option' => self::OPTION_RETIRED )
+			);
 		}
 		delete_option( self::OPTION );
+		return true;
 	}
 
 	/**
@@ -501,7 +521,7 @@ final class AB_MCP_Sync_Anchor {
 	 * @return WP_Error A key confirmed here before is not confirmed again.
 	 */
 	private static function retired_refusal() {
-		return new WP_Error( 'ab_mcp_sync_anchor_retired', 'This key of the staging site was confirmed here before and then replaced or revoked, so it is not confirmed again. Renew the key on the staging site (confirm the role staging site again on its page AlphaBridge → Staging), then prepare the anchor anew here with its new pairing code or by fetching it, and confirm it.' );
+		return new WP_Error( 'ab_mcp_sync_anchor_retired', 'This key of the staging site was confirmed here before and then replaced or revoked, so it is not confirmed again. On the staging site, click «Renew the key» under «Key of this staging site» on its page AlphaBridge → Staging; then, on the page AlphaBridge → Staging of this site, enter its new pairing code or fetch the key again, compare the fingerprint and confirm it.' );
 	}
 
 	/**

@@ -306,12 +306,12 @@ e('paket/staging-check-partner-port', 'check_partner(): the other site on the po
   "$response = AB_MCP_Outbound::get_partner(", "$response = AB_MCP_Outbound::get(",
   'status', 'testTheConnectionIsTiedToTheCheckedAddresses with data set "its own port"')
 e('paket/staging-pair-forgets-anchor', 'save(): another pair takes the anchor away', S,
-  "\t\tif ( $pair_changed ) {\n\t\t\tAB_MCP_Sync_Anchor::forget();\n\t\t}",
-  "",
+  "\t\tif ( $pair_changed ) {\n\t\t\t$forgot = AB_MCP_Sync_Anchor::forget();",
+  "\t\tif ( false ) {\n\t\t\t$forgot = AB_MCP_Sync_Anchor::forget();",
   'trust', 'testAnotherPairOrRoleTakesTheAnchorAway')
 e('paket/staging-remove-pair-forgets-anchor', 'remove_pair(): the hub taking the pair back takes the anchor', S,
-  "\t\tAB_MCP_Sync_Anchor::forget();\n\t\treturn $had;",
-  "\t\treturn $had;",
+  "\t\t$forgot = AB_MCP_Sync_Anchor::forget();\n\t\tif ( is_wp_error( $forgot ) ) {\n\t\t\treturn $forgot;\n\t\t}\n\t\t$had",
+  "\t\t$forgot = true;\n\t\tif ( is_wp_error( $forgot ) ) {\n\t\t\treturn $forgot;\n\t\t}\n\t\t$had",
   'trust', 'testAnotherPairOrRoleTakesTheAnchorAway')
 
 # --------------------------------------------------------------- fetcher
@@ -390,8 +390,8 @@ e('paket/anchor-confirm-clears', 'confirm(): nothing is left prepared', A,
   "\t\tself::write( $prepared, $active );",
   'trust', 'testAPreparedKeyIsNotActiveUntilAPersonConfirmsTheFingerprintShown')
 e('paket/anchor-active-partner', 'active(): only for the stored staging site of a production site', A,
-  "\t\treturn null !== $active && $active['partner_url'] === self::partner() ? $active : null;",
-  "\t\treturn $active;",
+  "\t\treturn null !== $active && $active['partner_url'] === self::partner() && ! self::retired( $active['key_id'] ) ? $active : null;",
+  "\t\treturn null !== $active && ! self::retired( $active['key_id'] ) ? $active : null;",
   'trust', 'testAnAnchorHoldsOnlyForTheStoredStagingSiteOfAProductionSite')
 e('paket/anchor-prepared-partner', 'prepared(): only for the stored staging site', A,
   "\t\treturn null !== $prepared && $prepared['partner_url'] === self::partner() ? $prepared : null;",
@@ -1168,8 +1168,8 @@ e('paket/r5-anchor-hold-retired', 'hold(): a retired key is not prepared (point 
 RET = "\t\tif ( null !== $state['active'] && $state['active']['key_id'] !== $prepared['key_id'] && ! self::retire( $state['active']['key_id'] ) ) {"
 e('paket/r5-anchor-retire-replaced', 'confirm(): the key it replaces is retired (point 3)', A, RET, "\t\tif ( false ) {", 'trust', R5['retired'])
 e('paket/r5-anchor-retire-failed', 'confirm(): no new key where the old one cannot be kept as replaced (point 3)', A, RET, RET.replace("! self::retire(", "false && self::retire("), 'trust', R5['retire_failed'])
-e('paket/r5-anchor-forget-retire', 'forget(): the active key is revoked with it (point 3)', A,
-  "\t\tif ( null !== $active ) {\n\t\t\tself::retire( $active['key_id'] );\n\t\t}", "", 'trust', R5['retired'])
+FORGET = "\t\tif ( null !== $active && ! self::retire( $active['key_id'] ) ) {"
+e('paket/r5-anchor-forget-retire', 'forget(): the active key is revoked with it (point 3)', A, FORGET, "\t\tif ( false ) {", 'trust', R5['retired'])
 e('paket/r5-anchor-retired-last', 'retired_list(): the last MAX_RETIRED (point 3)', A,
   "\t\treturn array_slice( $out, -self::MAX_RETIRED );", "\t\treturn $out;", 'trust', R5['retired_fifty'])
 e('paket/r5-anchor-retired-shape', 'retired_list(): only SHA-256 in hex (point 3)', A,
@@ -1204,6 +1204,61 @@ e('paket/r5-payload-tmp', 'write(): a failed write, also one that falls short, l
   "\t\tif ( false === $written ) {\n\t\t\t@unlink( $tmp );", "\t\tif ( false === $written ) {\n\t\t\t", 'payload', R5['short'])
 e('paket/r5-payload-silent', 'write(): no warning with the path (B-4)', PF,
   "$written = @file_put_contents( $tmp, $blob );", "$written = file_put_contents( $tmp, $blob );", 'payload', R5['silent'])
+
+# ------------------------------------------------------ Codex round 6
+R6 = {
+    'revoke': 'testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor',
+    'flow': 'testAPairEnteredAgainShowsAndOpensTheWayToANewKey',
+    'it_flow': 'testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne',
+    'readback': 'testAConfirmationThatDoesNotReadBackIsNone',
+    'notices': 'testEveryNoticeOfTheFormsIsOneThePageShows',
+    'hooks': 'testTheFormsAreHookedForAdminPost',
+}
+# F1: a revocation that cannot be kept changes nothing.
+e('paket/r6-forget-fail-closed', 'forget(): where the key cannot be kept as revoked, the anchor stays (F1)', A,
+  FORGET, FORGET.replace(" ) ) {", " ) && false ) {"), 'trust', R6['revoke'])
+e('paket/r6-save-forget-first', 'save(): a pair whose anchor cannot be revoked is not changed (F1)', S,
+  "\t\t\t$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t\tif ( is_wp_error( $forgot ) ) {\n\t\t\t\treturn $forgot;\n\t\t\t}\n\t\t}\n\n\t\t// The key of a staging source",
+  "\t\t\t$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t}\n\n\t\t// The key of a staging source", 'trust', R6['revoke'])
+e('paket/r6-remove-pair-forget-first', 'remove_pair(): nothing removed where the anchor cannot be revoked (F1)', S,
+  "\t\t$forgot = AB_MCP_Sync_Anchor::forget();\n\t\tif ( is_wp_error( $forgot ) ) {\n\t\t\treturn $forgot;\n\t\t}\n\t\t$had",
+  "\t\t$forgot = AB_MCP_Sync_Anchor::forget();\n\t\t$had", 'trust', R6['revoke'])
+e('paket/r6-rest-delete-refusal', 'rest_delete(): the hub gets the refusal (F1)', S,
+  "\t\tif ( is_wp_error( $removed ) ) {\n\t\t\treturn $removed;\n\t\t}\n", "", 'trust', R6['revoke'])
+e('paket/r6-notice-revoke-failed', 'TRUST_NOTICES: the page says the pair stays, with the way (F1)', AD,
+  "\t\t'staging_trust_sync_anchor_revoke_failed'  => array( 'error',", "\t\t'staging_trust_sync_anchor_revoke_failedx' => array( 'error',", 'trust', R6['revoke'])
+
+# F2: the way to a new key, visible and working.
+e('paket/r6-notice-retired', 'TRUST_NOTICES: a retired key, shown with its steps (F2)', AD,
+  "\t\t'staging_trust_sync_anchor_retired'        => array( 'error',", "\t\t'staging_trust_sync_anchor_retiredx'       => array( 'error',", 'trust', R6['flow'])
+e('paket/r6-notice-retire-failed', 'TRUST_NOTICES: a replacement that cannot be kept (F2)', AD,
+  "\t\t'staging_trust_sync_anchor_retire_failed'  => array( 'error',", "\t\t'staging_trust_sync_anchor_retire_failedx' => array( 'error',", 'trust', R6['notices'])
+e('paket/r6-notice-mac-failed', 'TRUST_NOTICES: the secret of the MACs that cannot be stored (F2)', AD,
+  "\t\t'staging_trust_sync_mac_failed'            => array( 'error',", "\t\t'staging_trust_sync_mac_failedx'           => array( 'error',", 'trust', R6['notices'])
+e('paket/r6-notice-renewed', 'TRUST_NOTICES: the renewed key, with the steps on the production site (F2)', AD,
+  "\t\t'staging_key_renewed'                      => array( 'success',", "\t\t'staging_key_renewedx'                     => array( 'success',", 'trust', R6['flow'])
+e('paket/r6-renew-hook', 'the form «Renew the key» is hooked (F2)', AD,
+  "\t\tadd_action( 'admin_post_ab_mcp_staging_key_renew', array( $this, 'handle_staging_key_renew' ) );\n", "", 'trust', R6['hooks'])
+e('paket/r6-renew-nonce', 'handle_staging_key_renew(): behind its own nonce (F2)', AD,
+  "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", "\t\tcheck_admin_referer( 'ab_mcp_staging_key' );", 'trust', R6['flow'])
+e('paket/r6-renew-guard', 'handle_staging_key_renew(): manage_options (F2)', AD,
+  "\t\t$this->guard();\n\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", "\t\tcheck_admin_referer( 'ab_mcp_staging_key_renew' );", 'trust', R6['flow'])
+e('paket/r6-renew-form', 'the page of the staging site offers «Renew the key» (F2)', AD,
+  "\t\t$html .= '<input type=\"hidden\" name=\"action\" value=\"ab_mcp_staging_key_renew\">';\n", "", 'trust', R6['flow'])
+e('paket/r6-replace-role', 'replace(): only a confirmed staging site renews its key (F2)', K,
+  "\tpublic static function replace() {\n\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {", "\tpublic static function replace() {\n\t\tif ( false ) {", 'trust', R6['flow'])
+e('paket/r6-it-replace-renews', 'replace(): a new key, the role as it was (two sites, F2)', K,
+  "\t\t\treturn self::role_refusal();\n\t\t}\n\t\treturn self::renew();", "\t\t\treturn self::role_refusal();\n\t\t}\n\t\treturn self::current();", 'itpkg', R6['it_flow'])
+e('paket/r6-retired-way', 'retired_refusal(): names «Renew the key» on the staging site (F2)', A,
+  "On the staging site, click «Renew the key» under «Key of this staging site» on its page AlphaBridge → Staging;", "Renew the key on the staging site;", 'trust', R6['flow'])
+
+# F4: a confirmation counts as it reads back; a retired key is no active one.
+e('paket/r6-confirm-readback', 'confirm(): confirmed only as the anchor reads back (F4)', A,
+  "\t\tif ( self::read()['active'] !== $active ) {", "\t\tif ( false ) {", 'trust', R6['readback'])
+e('paket/r6-active-retired', 'active(): an anchor whose key is retired is none (F4)', A,
+  "$active['partner_url'] === self::partner() && ! self::retired( $active['key_id'] ) ? $active : null;", "$active['partner_url'] === self::partner() ? $active : null;", 'trust', R6['readback'])
+e('paket/r6-confirm-current-retired', 'confirm(): a retired anchor is not confirmed once more (F4)', A,
+  "$state['active']['partner_url'] === $partner && ! self::retired( $state['active']['key_id'] ) ? $state['active'] : null;", "$state['active']['partner_url'] === $partner ? $state['active'] : null;", 'trust', R6['readback'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -1268,7 +1323,9 @@ out.append('''<?php
  * the random value of a binding, the print and the purpose of a continuing
  * import, the retired keys of the anchor and the second confirmation, the
  * secret of the MACs made where it is missing, a making stopped before its
- * record, a write of the store that fails or falls short.
+ * record, a write of the store that fails or falls short. Codex round 6: a
+ * revocation that cannot be kept changes nothing, the notices and the way
+ * «Renew the key», a confirmation that reads back.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.

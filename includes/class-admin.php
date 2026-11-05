@@ -75,6 +75,7 @@ class AB_MCP_Admin {
 	const TRUST_NOTICES = array(
 		'staging_key_made'                         => array( 'success', 'The key of this staging site was made. Its fingerprint and pairing code are below: confirm it on the page AlphaBridge → Staging of the production site.' ),
 		'staging_key_kept'                         => array( 'success', 'This staging site has its key already; nothing was changed.' ),
+		'staging_key_renewed'                      => array( 'success', 'The key of this staging site was renewed; packages made with the old key are no longer given out. 1. On the production site, open AlphaBridge → Staging. 2. Enter the new pairing code shown below, or fetch the key again. 3. Compare the fingerprint with the one below and confirm it there. Until then the production site reads no package of this site.' ),
 		'staging_anchor_prepared'                  => array( 'success', 'The key of the staging site is prepared, not confirmed. Compare its fingerprint below with the one the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same.' ),
 		'staging_anchor_confirmed'                 => array( 'success', 'The key of the staging site is confirmed: this site reads the packages signed with it.' ),
 		'staging_anchor_unknown'                   => array( 'error', 'Nothing was changed: the action was not to fetch the key, to enter a pairing code or to confirm the key.' ),
@@ -91,6 +92,11 @@ class AB_MCP_Admin {
 		'staging_trust_sync_anchor_nothing'        => array( 'error', 'There is no prepared key to confirm. Fetch the key, or enter the pairing code of the staging site, first.' ),
 		'staging_trust_sync_anchor_stale'          => array( 'error', 'Not confirmed: the prepared key belongs to another address than the staging site stored now. Fetch the key, or enter the pairing code, again.' ),
 		'staging_trust_sync_anchor_fingerprint'    => array( 'error', 'Not confirmed: the fingerprint is not the one of the prepared key. Load this page again, compare the fingerprint with the one the staging site shows, and confirm again.' ),
+		'staging_trust_sync_anchor_retired'        => array( 'error', 'Nothing was prepared or confirmed: this key of the staging site was confirmed here before and then replaced or revoked (the pair was removed or changed), so it is not confirmed again. 1. On the staging site, open AlphaBridge → Staging and click «Renew the key» under «Key of this staging site». 2. Here, enter its new pairing code or fetch the key again. 3. Compare the fingerprint with the one the staging site shows and confirm it.' ),
+		'staging_trust_sync_anchor_retire_failed'  => array( 'error', 'The new key was not confirmed: the key it replaces could not be kept as replaced (the database refused the write), and without that the old key could be confirmed again. The old key stays confirmed. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then confirm the new key again here.' ),
+		'staging_trust_sync_anchor_revoke_failed'  => array( 'error', 'Nothing was saved: the pair stays as it was, because the confirmed key of the staging site could not be kept as revoked (the database refused the write), and without that it could be confirmed here again. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then remove or change the pair again.' ),
+		'staging_trust_sync_anchor_write_failed'   => array( 'error', 'The key was not confirmed: the anchor did not read back from the database. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then confirm the key again here.' ),
+		'staging_trust_sync_mac_failed'            => array( 'error', 'This staging site has its key, but the secret its fetch addresses are signed with could not be stored (the database refused the write). 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then make the package again; the key and its confirmation on the production site stay.' ),
 	);
 
 	/**
@@ -194,6 +200,7 @@ class AB_MCP_Admin {
 		// (Z8, decision 4): made, fetched, entered and confirmed by a person
 		// here; a tool or the hub prepares at most. Plain forms.
 		add_action( 'admin_post_ab_mcp_staging_key', array( $this, 'handle_staging_key' ) );
+		add_action( 'admin_post_ab_mcp_staging_key_renew', array( $this, 'handle_staging_key_renew' ) );
 		add_action( 'admin_post_ab_mcp_staging_anchor', array( $this, 'handle_staging_anchor' ) );
 		// The card «Staging» folded or unfolded: the details element folds
 		// at once, and admin.js keeps the choice for this user over ajax.
@@ -988,6 +995,17 @@ class AB_MCP_Admin {
 			$this->redirect( self::trust_notice( $made ), self::STAGING_TRUST );
 		}
 		$this->redirect( $made['made'] ? 'staging_key_made' : 'staging_key_kept', self::STAGING_TRUST );
+	}
+
+	/**
+	 * A new key of this staging site, by a person («Renew the key»,
+	 * AB_MCP_Sync_Key::replace()); the role stays. Z8, decision 4.
+	 */
+	public function handle_staging_key_renew() {
+		$this->guard();
+		check_admin_referer( 'ab_mcp_staging_key_renew' );
+		$key = AB_MCP_Sync_Key::replace();
+		$this->redirect( is_wp_error( $key ) ? self::trust_notice( $key ) : 'staging_key_renewed', self::STAGING_TRUST );
 	}
 
 	/**
@@ -2119,8 +2137,12 @@ class AB_MCP_Admin {
 			return $html;
 		}
 		$html .= '<p class="ab-direct__status">' . esc_html( 'Fingerprint:' ) . ' <code class="ab-staging-trust__fingerprint">' . esc_html( $answer['fingerprint'] ) . '</code></p>';
-		$html .= '<p class="ab-note">' . esc_html( 'On the production site, fetch this key over https or enter the pairing code below on its page AlphaBridge → Staging, compare the fingerprint it shows with this one, and confirm it there. Confirming the role of this site again makes a new key, which the production site confirms again.' ) . '</p>';
+		$html .= '<p class="ab-note">' . esc_html( 'On the production site, fetch this key over https or enter the pairing code below on its page AlphaBridge → Staging, compare the fingerprint it shows with this one, and confirm it there.' ) . '</p>';
 		$html .= '<p class="ab-field"><label>' . esc_html( 'Pairing code' ) . ' <textarea class="large-text code ab-staging-trust__code" rows="3" readonly>' . esc_textarea( (string) AB_MCP_Sync_Key::pairing_code() ) . '</textarea></label></p>';
+		$html .= '<p class="ab-note ab-staging-trust__renew">' . esc_html( 'Renew the key where the production site no longer accepts this one (it was replaced or revoked there, for instance when the pair was removed), or where it may be known to others. The role of this site stays. Afterwards the production site reads packages of this site only once a person has confirmed the new key there, with its new pairing code or by fetching it, and packages made with this key are no longer given out.' ) . '</p>';
+		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_staging_key_renew', '_wpnonce', true, false );
+		$html .= '<input type="hidden" name="action" value="ab_mcp_staging_key_renew">';
+		$html .= '<p><button class="ab-btn ab-btn--ghost">' . esc_html( 'Renew the key' ) . '</button></p></form>';
 		return $html;
 	}
 

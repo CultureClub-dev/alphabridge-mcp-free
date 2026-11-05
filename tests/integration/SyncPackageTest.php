@@ -1196,6 +1196,70 @@ final class SyncPackageTest extends TestCase {
 		self::refused( AB_MCP_Sync_Import::call( $begin ), 'ab_mcp_sync_import_pair_changed' );
 	}
 
+	public function testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne(): void {
+		self::pair();
+		$old  = self::export();
+		$code = self::b( array( array( 'op' => 'pairing_code', 'as' => 'code' ) ) )['code'];
+		// A: the pair removed, the same staging site entered again, the code of before.
+		self::assertIsArray( AB_MCP_Staging::save( 'production', '', null, self::admin(), 'form' ) );
+		self::assertIsArray( AB_MCP_Staging::save( 'production', AB_MCP_IT_Sites::url( 'b' ), 'staging', self::admin(), 'form' ) );
+		$refused = AB_MCP_Sync_Anchor::prepare_from_code( $code, self::admin() );
+		self::refused( $refused, 'ab_mcp_sync_anchor_retired' );
+		self::assertStringContainsString( '«Renew the key»', $refused->get_error_message() );
+		// The page shows it (the notice of the form, with its steps).
+		require_once AB_MCP_DIR . 'includes/class-admin.php';
+		$_GET = array( 'ab_notice' => 'staging_trust_sync_anchor_retired' );
+		ob_start();
+		( new \ReflectionMethod( \AB_MCP_Admin::class, 'notice' ) )->invoke( new \AB_MCP_Admin() );
+		$shown = (string) ob_get_clean();
+		$_GET  = array();
+		self::assertStringContainsString( 'notice-error', $shown );
+		self::assertStringContainsString( esc_html( '1. On the staging site, open AlphaBridge → Staging and click «Renew the key»' ), $shown );
+
+		// B: «Renew the key»; the role stays.
+		$b = self::b(
+			array(
+				array( 'op' => 'staging_raw', 'as' => 'before' ),
+				array( 'op' => 'key_replace', 'as' => 'key' ),
+				array( 'op' => 'pairing_code', 'as' => 'code' ),
+				array( 'op' => 'staging_raw', 'as' => 'after' ),
+			)
+		);
+		self::assertSame( $b['before'], $b['after'], 'The role and the pair as they were.' );
+		self::assertNotSame( $code, $b['code'] );
+		// A: the new code, confirmed.
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $b['code'], self::admin() );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertSame( $b['key']['key_id'], $prepared['key_id'] );
+		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
+
+		// Export and import work again.
+		$package = self::export();
+		$state   = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => $package['package_id'],
+				'manifest'   => $package['manifest'],
+				'purpose'    => 'inventory',
+				'fetch'      => $package['fetch'],
+			),
+			AB_MCP_Test_Sync_Fetcher::for_sites()
+		);
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'] );
+		// A manifest of the old key is refused, and B gives its package out no more.
+		self::refused(
+			AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $old['package_id'],
+					'manifest'   => $old['manifest'],
+					'purpose'    => 'inventory',
+				)
+			),
+			'ab_mcp_sync_manifest_key'
+		);
+		self::assertSame( 404, self::route( self::query( $old['package_id'], $old['fetch'][0] ) )['status'] );
+	}
+
 	/* --------------------------------- the purpose of a continuation (B-3) */
 
 	public function testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn(): void {

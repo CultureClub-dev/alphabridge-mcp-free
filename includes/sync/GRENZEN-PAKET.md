@@ -2,7 +2,7 @@
 
 Gesammelte Grenzen der Vertrauensschicht (Schlüssel der Staging-Quelle,
 Anker, signiertes Manifest; Entscheide 4 und 5) und des Transports der Pakete
-(Entscheid 6) aus den Codex-Runden 1 bis 5 von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
+(Entscheid 6) aus den Codex-Runden 1 bis 6 von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
 umgangen werden, und was ein späterer Zweig schliesst. Je Grenze ein Satz
 mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 
@@ -188,9 +188,12 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   anderen Live-Site gekoppelt ist: ein reiner Paarwechsel auf der
   Staging-Site ist dem Relay und der Live-Site unbekannt. Grund: der Anker
   auf der Live-Site ist die Wurzel des Vertrauens, und das Ziel jedes
-  Manifests bleibt genau diese Site. Abschneiden: den Schlüssel auf der
-  Staging-Site erneuern (die alten Schlüssel-IDs lehnt die Live-Site ab)
-  oder den Anker auf der Live-Site widerrufen.
+  Manifests bleibt genau diese Site. Abschneiden geht nur auf der
+  Live-Site: den Anker widerrufen (das Paar entfernen) oder den erneuerten
+  Schlüssel der Staging-Site dort bestätigen, womit der alte abgelöst ist.
+  Erneuert die Staging-Site nur ihren Schlüssel, schneidet das die
+  ausgelieferten Kopien nicht ab, solange der Anker der Live-Site den alten
+  Schlüssel hält (Codex-Runde 6, F3; berichtigt den Nachtrag von Runde 5).
 
 ## Anker
 
@@ -200,10 +203,24 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `ab_mcp_sync_anchor_retired` (ohne Autoload, zurückgelesen, die letzten
   50; `forget()` und `uninstall.php`), und Vorbereiten wie Bestätigen
   lehnen ihn ab (`ab_mcp_sync_anchor_retired`, Weg: auf der Staging-Site
-  den Schlüssel erneuern, dann den Anker neu vorbereiten und bestätigen).
-  Lässt sich der ersetzte Schlüssel nicht als ersetzt speichern, wird der
-  neue nicht bestätigt (`ab_mcp_sync_anchor_retire_failed`); beim Widerruf
-  geht der Anker auch dann (Codex-Runde 5, Nachtrag zu Punkt 3).
+  unter AlphaBridge → Staging «Renew the key», dann hier den neuen
+  Kopplungscode eingeben oder den Schlüssel abrufen und bestätigen; die
+  Seite zeigt die Ablehnung mit nummerierten Schritten). «Renew the key»
+  (`AB_MCP_Sync_Key::replace()`, `manage_options`, Nonce, POST) erneuert
+  den Schlüssel einer bestätigten Staging-Site, ohne die Rolle zu ändern;
+  Pakete des alten Schlüssels gibt sie nicht mehr aus (Codex-Runde 6, F2).
+- Lässt sich der ersetzte Schlüssel nicht als ersetzt speichern, wird der
+  neue nicht bestätigt (`ab_mcp_sync_anchor_retire_failed`). Lässt sich
+  beim Widerruf (Paar entfernt oder geändert, Rolle geändert, Hub nimmt
+  das Paar zurück) der Schlüssel nicht als widerrufen speichern, bleiben
+  Anker und Paar, wie sie waren, und die Seite oder der Hub erhält
+  `ab_mcp_sync_anchor_revoke_failed` mit Weg (Datenbank prüfen, erneut
+  entfernen); `uninstall.php` löscht alles wie bisher (Codex-Runde 6, F1).
+- Eine Bestätigung gilt erst, wenn der Anker so zurückgelesen wird, wie er
+  geschrieben wurde (sonst `ab_mcp_sync_anchor_write_failed`), und ein
+  Anker, dessen Schlüssel-ID in der Sperrliste steht, gilt nicht als
+  aktiv: ein halbes Ersetzen (Sperrliste geschrieben, Anker nicht) führt
+  zu «Schlüssel bestätigen», nicht zum alten Schlüssel (Codex-Runde 6, F4).
 - Ein zweiter Klick auf «Bestätigen» für den aktiven Schlüssel bestätigt
   nichts neu: der Anker bleibt, wie er ist, mit seinem `pair_print`.
 - Mehr als 50 ersetzte Schlüssel ein und derselben Live-Site: der älteste

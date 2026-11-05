@@ -154,7 +154,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
 		),
 		'class-sync-key.php'      => array(
-			'AB_MCP_Staging::role' => array( 4, 'make(), sign(), mac(), answer(): only a confirmed staging site has a key.' ),
+			'AB_MCP_Staging::role' => array( 5, 'make(), replace(), sign(), mac(), answer(): only a confirmed staging site has a key.' ),
 			'get_option'           => array( 4, 'found(), secret() and mac_secret(): the key and the secret of its MACs, in the three options this class writes itself.' ),
 			'update_option'        => array( 2, 'renew() and store_secret(): those three options, without autoload.' ),
 			'delete_option'        => array( 3, 'forget(): removes them.' ),

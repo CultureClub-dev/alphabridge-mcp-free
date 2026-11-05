@@ -1034,6 +1034,128 @@ final class SyncTrustTest extends TestCase {
 		$admin = new AB_MCP_Admin();
 		self::assertSame( 10, has_action( 'admin_post_ab_mcp_staging_key', array( $admin, 'handle_staging_key' ) ) );
 		self::assertSame( 10, has_action( 'admin_post_ab_mcp_staging_anchor', array( $admin, 'handle_staging_anchor' ) ) );
+		self::assertSame( 10, has_action( 'admin_post_ab_mcp_staging_key_renew', array( $admin, 'handle_staging_key_renew' ) ) );
+	}
+
+	/** The notice the page shows for a code, as HTML. */
+	private static function shown( string $notice ): string {
+		$_GET = array( 'ab_notice' => $notice );
+		ob_start();
+		( new ReflectionMethod( AB_MCP_Admin::class, 'notice' ) )->invoke( new AB_MCP_Admin() );
+		$_GET = array();
+		return (string) ob_get_clean();
+	}
+
+	public function testAPairEnteredAgainShowsAndOpensTheWayToANewKey(): void {
+		$this->paired();
+		$old  = $this->anchored();
+		$code = $this->code();
+		$this->on( 'live' );
+		// The pair removed and the same staging site entered again.
+		self::assertIsArray( AB_MCP_Staging::save( 'production', '', null, 3, 'form' ) );
+		self::assertIsArray( AB_MCP_Staging::save( 'production', self::address( 'staging' ), null, 3, 'form' ) );
+		// The code of before: refused, and the page says why and the way.
+		self::landed( $this->submit( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'code', 'pairing_code' => $code ) ), 'staging_trust_sync_anchor_retired' );
+		$shown = self::shown( 'staging_trust_sync_anchor_retired' );
+		self::assertStringContainsString( 'notice-error', $shown );
+		self::assertStringContainsString( esc_html( '«Renew the key»' ), $shown );
+		self::assertStringContainsString( '«Renew the key»', AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 )->get_error_message(), 'The refusal names the same way.' );
+
+		// On the staging site: «Renew the key», behind its nonce and manage_options.
+		$this->on( 'staging' );
+		$role = AB_MCP_Staging::record()['role'];
+		self::assertStringContainsString( 'value="ab_mcp_staging_key_renew"', $this->card() );
+		self::assertStringContainsString( 'Renew the key where the production site no longer accepts this one', $this->card() );
+		self::assertSame( 'die', $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key' ) )->kind, 'Another form\'s nonce.' );
+		$GLOBALS['ab_test_can'] = static fn(): bool => false;
+		self::assertSame( 'die', $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ) )->kind );
+		self::assertSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' === $cap;
+		self::landed( $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ) ), 'staging_key_renewed' );
+		self::assertNotSame( $old['key_id'], AB_MCP_Sync_Key::current()['key_id'] );
+		self::assertSame( $role, AB_MCP_Staging::record()['role'], 'The role stays as it was.' );
+		self::assertStringContainsString( 'notice-success', self::shown( 'staging_key_renewed' ) );
+		$new = $this->code();
+
+		// The production site: the new code, compared and confirmed.
+		$this->on( 'live' );
+		self::landed( $this->submit( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'code', 'pairing_code' => $new ) ), 'staging_anchor_prepared' );
+		$prepared = AB_MCP_Sync_Anchor::prepared();
+		self::landed( $this->submit( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'confirm', 'fingerprint' => $prepared['fingerprint'] ) ), 'staging_anchor_confirmed' );
+		self::assertNotSame( $old['key_id'], AB_MCP_Sync_Anchor::active()['key_id'] );
+		// Only a confirmed staging site renews its key.
+		self::landed( $this->submit( 'handle_staging_key_renew', array( '_wpnonce' => 'nonce-ab_mcp_staging_key_renew' ) ), 'staging_trust_sync_key_role' );
+		self::assertSame( 'ab_mcp_sync_key_role', AB_MCP_Sync_Key::replace()->get_error_code() );
+	}
+
+	public function testARevocationThatCannotBeKeptLeavesThePairAndTheAnchor(): void {
+		$this->paired();
+		$active = $this->anchored();
+		$this->on( 'live' );
+		$record = AB_MCP_Staging::record();
+		$print  = AB_MCP_Sync_Anchor::pair_print();
+		$block  = static fn( $value, $old ) => $old;
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Anchor::OPTION_RETIRED, $block, 10, 2 );
+		$refused = AB_MCP_Sync_Anchor::forget();
+		self::assertSame( 'ab_mcp_sync_anchor_revoke_failed', $refused->get_error_code() );
+		self::assertStringContainsString( AB_MCP_Sync_Anchor::OPTION_RETIRED, $refused->get_error_message() );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::active(), 'The anchor stays.' );
+		// The pair removed on the page: nothing is saved, and the page says so.
+		self::landed( $this->submit( 'handle_staging_record', array( '_wpnonce' => 'nonce-ab_mcp_staging', 'staging_role' => 'production', 'partner_url' => '', 'host' => '' ) ), 'staging_trust_sync_anchor_revoke_failed' );
+		self::assertStringContainsString( 'notice-error', self::shown( 'staging_trust_sync_anchor_revoke_failed' ) );
+		self::assertSame( $record, AB_MCP_Staging::record(), 'Nothing removed half.' );
+		// Another pair, another role, the hub: the same.
+		self::assertSame( 'ab_mcp_sync_anchor_revoke_failed', AB_MCP_Staging::save( 'production', 'https://other.example.com', null, 3, 'form' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_anchor_revoke_failed', AB_MCP_Staging::save( 'unconfirmed', '', null, 3, 'form' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_anchor_revoke_failed', AB_MCP_Staging::remove_pair()->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_anchor_revoke_failed', AB_MCP_Staging::rest_delete( null )->get_error_code() );
+		self::assertSame( $record, AB_MCP_Staging::record() );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::active() );
+		self::assertSame( $print, AB_MCP_Sync_Anchor::pair_print() );
+		self::assertFalse( AB_MCP_Sync_Anchor::retired( $active['key_id'] ) );
+		// The database writes again: removed, the key revoked.
+		remove_filter( 'pre_update_option_' . AB_MCP_Sync_Anchor::OPTION_RETIRED, $block, 10 );
+		self::assertIsArray( AB_MCP_Staging::save( 'production', '', null, 3, 'form' ) );
+		self::assertNull( AB_MCP_Staging::record()['pair'] );
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( $active['key_id'] ) );
+		self::assertFalse( get_option( AB_MCP_Sync_Anchor::OPTION ) );
+		self::assertTrue( AB_MCP_Sync_Anchor::forget(), 'Without an anchor there is nothing to keep.' );
+	}
+
+	public function testAConfirmationThatDoesNotReadBackIsNone(): void {
+		$this->paired();
+		$old = $this->anchored();
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::replace() );
+		$code = $this->code();
+		$this->on( 'live' );
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 );
+		$block    = static fn( $value, $previous ) => $previous;
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Anchor::OPTION, $block, 10, 2 );
+		$refused = AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], 3 );
+		self::assertSame( 'ab_mcp_sync_anchor_write_failed', $refused->get_error_code() );
+		self::assertStringContainsString( AB_MCP_Sync_Anchor::OPTION, $refused->get_error_message() );
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( $old['key_id'] ), 'The old key was kept as replaced first.' );
+		self::assertSame( $old['key_id'], get_option( AB_MCP_Sync_Anchor::OPTION )['active']['key_id'], 'The anchor as stored is the old one.' );
+		self::assertNull( AB_MCP_Sync_Anchor::active(), 'Which counts no more: the key is to be confirmed, not the old one active.' );
+		self::assertNull( AB_MCP_Sync_Anchor::pair_print() );
+		self::assertSame( $prepared, AB_MCP_Sync_Anchor::prepared() );
+		self::landed( $this->submit( 'handle_staging_anchor', array( '_wpnonce' => 'nonce-ab_mcp_staging_anchor', 'do' => 'confirm', 'fingerprint' => $prepared['fingerprint'] ) ), 'staging_trust_sync_anchor_write_failed' );
+		self::assertSame( 'ab_mcp_sync_anchor_fingerprint', AB_MCP_Sync_Anchor::confirm( $old['fingerprint'], 3 )->get_error_code(), 'The old key, from a page before, is not confirmed as if it were active.' );
+		self::assertStringContainsString( 'No key of the staging site https://staging.example.com is confirmed here yet', $this->card() );
+		// The database writes again: confirmed anew.
+		remove_filter( 'pre_update_option_' . AB_MCP_Sync_Anchor::OPTION, $block, 10 );
+		$active = AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], 3 );
+		self::assertIsArray( $active );
+		self::assertSame( $prepared['key_id'], $active['key_id'] );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::active() );
+
+		// A revocation whose anchor did not go (the key retired, the option
+		// left): a second click on «Confirm» confirms nothing.
+		update_option( AB_MCP_Sync_Anchor::OPTION_RETIRED, array_merge( get_option( AB_MCP_Sync_Anchor::OPTION_RETIRED ), array( hash( 'sha256', $active['key_id'] ) ) ), false );
+		self::assertNull( AB_MCP_Sync_Anchor::active() );
+		self::assertNull( AB_MCP_Sync_Anchor::prepared() );
+		self::assertSame( 'ab_mcp_sync_anchor_nothing', AB_MCP_Sync_Anchor::confirm( $active['fingerprint'], 3 )->get_error_code() );
 	}
 
 	public function testTheKeyIsMadeBehindTheNonceAndTheCapability(): void {
@@ -1097,7 +1219,7 @@ final class SyncTrustTest extends TestCase {
 		}
 		$_GET = array();
 		// Every refusal the forms can meet has its notice.
-		foreach ( array( 'sync_key_role', 'sync_key_failed', 'sync_anchor_role', 'sync_anchor_pair', 'sync_anchor_not_https', 'sync_anchor_unreached', 'sync_anchor_no_key', 'sync_key_answer', 'sync_key_code', 'sync_anchor_site', 'sync_anchor_nothing', 'sync_anchor_stale', 'sync_anchor_fingerprint' ) as $code ) {
+		foreach ( array( 'sync_key_role', 'sync_key_failed', 'sync_anchor_role', 'sync_anchor_pair', 'sync_anchor_not_https', 'sync_anchor_unreached', 'sync_anchor_no_key', 'sync_key_answer', 'sync_key_code', 'sync_anchor_site', 'sync_anchor_nothing', 'sync_anchor_stale', 'sync_anchor_fingerprint', 'sync_anchor_retired', 'sync_anchor_retire_failed', 'sync_anchor_revoke_failed', 'sync_anchor_write_failed', 'sync_mac_failed' ) as $code ) {
 			self::assertArrayHasKey( 'staging_trust_' . $code, AB_MCP_Admin::TRUST_NOTICES, $code );
 		}
 	}

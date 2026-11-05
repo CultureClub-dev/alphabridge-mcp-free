@@ -13,7 +13,8 @@
  * (name, value), canonical (kind, ref, addresses), inventory (addresses);
  * for the trust of the takeover (Z8 branch 5): staging_save (role,
  * partner_url, partner_role, source; as the administrator), sync_key (the
- * key of the site), pairing_code, anchor_code (code: prepared and confirmed
+ * key of the site), pairing_code, key_replace («Renew the key»), anchor_code
+ * (code: prepared and confirmed
  * as a person does), sign_manifest (package); for its packages: export
  * (purpose, cursor, objects), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
@@ -140,6 +141,9 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'pairing_code':
 			$ab_it_out = AB_MCP_Sync_Key::pairing_code();
+			break;
+		case 'key_replace':
+			$ab_it_out = AB_MCP_Sync_Key::replace();
 			break;
 		case 'sign_manifest':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-manifest.php';
