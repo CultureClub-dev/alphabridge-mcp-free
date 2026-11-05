@@ -191,15 +191,16 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Grenze ablehnen lassen, mit ihrem Weg). Beim Beginn wird
   keine Gruppe entfernt: die eigene Fortsetzung entfernt ihre Gruppe bei
   einem geänderten Paar (mit Weg), alles Übrige die Ablage nach ihrer Zeit.
-  Ein Abdruck, den ein Aufruf aus einem alten Cache liest, verschiebt so
-  höchstens die Zählung vorübergehend (eine Gruppe zählt oder fehlt bis zur
-  nächsten Fortsetzung oder ihrem Ablauf) und löscht nie eine Gruppe,
-  auch keine eines anderen Kontos (Codex zu d51833c und 5f626da, A).
+  Ein Abdruck, den ein Aufruf beim Beginn aus einem alten Cache liest,
+  verschiebt so höchstens die Zählung vorübergehend (eine Gruppe zählt oder fehlt bis zur
+  nächsten Fortsetzung oder ihrem Ablauf) und löscht beim Beginn nie
+  eine Gruppe, auch keine eines anderen Kontos (Codex zu d51833c und 5f626da, A).
   Übrig bleiben drei seltene Fälle (Codex zu dfb477d): Ein Aufruf mit
   altem Abdruck im Cache kann die Gruppe desselben Kontos entfernen, die
   dasselbe Konto inzwischen für dieselbe Paket-ID unter dem neuen Paar
-  begonnen hat (nur eigene Daten; die nächste Fortsetzung beginnt neu, mit
-  Weg). Eine Gruppe ohne gespeicherte Bindung (angelegt vor dieser Regel,
+  begonnen hat (nur eigene Daten; nötig ist ein Neubeginn mit gültigem
+  Manifest und Zweck, die Meldung nennt den Weg, empfangene Stücke kommen
+  neu). Eine Gruppe ohne gespeicherte Bindung (angelegt vor dieser Regel,
   nur Entwicklungsstände) zählt weiter, bis die Ablage sie entfernt.
   Exporte öffnen ohne Bindung und zählen darum liegengebliebene
   Importgruppen voll mit; das trifft nur eine Site, die nach Importen als
