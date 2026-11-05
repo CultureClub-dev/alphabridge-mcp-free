@@ -1592,10 +1592,26 @@ P5_IT = 'testImportsOfAKeyOfBeforeHoldNoPlaceOnceTheKeyIsRenewed'
 e('paket/p5-held-bound-before-verify', 'held(): a group of another pair is ended before its manifest is checked again (two sites)', IM,
   PRN, "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) && ! is_wp_error( AB_MCP_Sync_Manifest::verify( $found['signed'], $expect ) ) ) {", 'itpkg', P5_IT)
 e('paket/p5-begin-discard', 'begin(): the groups of a pair of before removed before a new one is opened (two sites)', IM,
-  "\t\tself::discard_stale( $print );\n", "", 'itpkg', P5_IT)
-DS = "\t\t\tif ( is_array( $found ) && ! self::bound( $found, $print ) ) {"
-e('paket/p5-discard-bound', 'discard_stale(): every group of another pair, of any account (two sites)', IM, DS, "\t\t\tif ( false ) {", 'itpkg', P5_IT)
-e('paket/p5-discard-only-stale', 'discard_stale(): a group of the pair of now stays (two sites)', IM, DS, "\t\t\tif ( is_array( $found ) ) {", 'itpkg', P5_IT)
+  "\t\t\t\t'before'   => static fn() => self::stale( $print ),\n", "", 'itpkg', P5_IT)
+DS = "\t\t\tif ( is_array( $found ) && ! self::bound( $found, $now ) ) {"
+e('paket/p5-discard-bound', 'stale(): every group of another pair, of any account (two sites)', IM, DS, "\t\t\tif ( false ) {", 'itpkg', P5_IT)
+e('paket/p5-discard-only-stale', 'stale(): a group of the pair of now stays (two sites)', IM, DS, "\t\t\tif ( is_array( $found ) ) {", 'itpkg', P5_IT)
+# Codex on d51833c, A: the pair read afresh under the lock of the store.
+P6_IT = 'testAPackageBegunWhileThePairChangesRemovesNoPackageOfTheNewPair'
+e('paket/p6-stale-pair-changed', 'stale(): a pair changed under the call ends it and removes nothing (two sites)', IM,
+  "\t\tif ( null === $now || ! hash_equals( (string) $held, $now ) ) {", "\t\tif ( null === $now ) {", 'itpkg', P6_IT)
+e('paket/p6-stale-fresh', 'stale(): the pair of now read afresh (two sites)', IM,
+  "\t\t$now = AB_MCP_Sync_Anchor::fresh_print();", "\t\t$now = AB_MCP_Sync_Anchor::pair_print();", 'itpkg', P6_IT)
+e('paket/p6-fresh-alloptions', 'fresh_print(): the autoloaded options read again (two sites)', A,
+  "\t\t\twp_cache_delete( 'alloptions', 'options' );\n", "", 'itpkg', P6_IT)
+e('paket/p6-fresh-anchor', 'fresh_print(): the anchor and the settings read again where they are no autoloaded option (two sites)', A,
+  "\t\t\tforeach ( array( AB_MCP_Settings::OPT_OPTIONS, self::OPTION ) as $name ) {\n\t\t\t\twp_cache_delete( $name, 'options' );\n\t\t\t}\n", "", 'itpkg', P6_IT)
+e('paket/p6-open-before-refusal', 'open(): a refusal of before ends the opening, nothing made (two sites)', ST,
+  "\t\t\t\t\tif ( is_wp_error( $stale ) ) {\n\t\t\t\t\t\treturn $stale;\n\t\t\t\t\t}\n", "", 'itpkg', P6_IT)
+e('paket/p6-open-before-run', 'open(): before runs under the lock (two sites)', ST,
+  "\t\t\t\tif ( null !== $before ) {", "\t\t\t\tif ( false ) {", 'itpkg', P5_IT)
+e('paket/p6-open-before-remove', 'open(): the groups before names are removed first (two sites)', ST,
+  "\t\t\t\t\t\t\tself::remove_group( $root, $entry['area'], $name );\n", "", 'itpkg', P5_IT)
 
 # ----------------------------------------------------------------- check
 # Each run: its suite and the test class it names; an entry runs the test

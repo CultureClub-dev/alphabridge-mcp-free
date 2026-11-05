@@ -327,6 +327,27 @@ final class AB_MCP_Sync_Anchor {
 	/* -------------------------------------------------------------- print */
 
 	/**
+	 * The print of the pair as the database holds it now: what this request
+	 * cached of the options it reads is forgotten first (the autoloaded ones,
+	 * the role and the pair of the settings with the address of this site
+	 * among them; the anchor, without autoload, and the settings where they
+	 * are stored so), so a change another request made meanwhile counts
+	 * (AB_MCP_Sync_Import, under the lock of the protected store before it
+	 * removes a group of another pair).
+	 *
+	 * @return string|null pair_print().
+	 */
+	public static function fresh_print() {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( 'alloptions', 'options' );
+			foreach ( array( AB_MCP_Settings::OPT_OPTIONS, self::OPTION ) as $name ) {
+				wp_cache_delete( $name, 'options' );
+			}
+		}
+		return self::pair_print();
+	}
+
+	/**
 	 * The print of the pair: SHA-256 over this site's address (in the form
 	 * AB_MCP_Sync_Key::site_form() gives), the confirmed role and pair (who,
 	 * when, where) and the active anchor (key, who confirmed it, when); null

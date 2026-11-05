@@ -183,7 +183,17 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   bleiben. Ein neuer Import entfernt vorher jede Gruppe eines früheren
   Paares, jedes Kontos, so dass keine einen der fünf Plätze belegt; fünf
   unterbrochene Importe sperren nach einem Schlüsselwechsel keinen neuen
-  (GitHub-Codex P2 zu PR 132). Ein Manifest, das während eines offenen
+  (GitHub-Codex P2 zu PR 132). Entschieden wird unter der Sperre der
+  Ablage, die auch das Kontingent prüft, mit dem Paar unmittelbar davor aus
+  der Datenbank gelesen (`fresh_print()`): hat es sich unter dem Aufruf
+  geändert (ein neuer Schlüssel bestätigt, ein anderes Konto begann schon
+  ein Paket des neuen Paares), endet der Aufruf mit
+  `ab_mcp_sync_import_pair_changed` und Weg und entfernt nichts; entfernt
+  wird nur eine Gruppe, deren Paar von dem frisch gelesenen abweicht
+  (Codex zu d51833c, A). Das Ändern des Paares selbst nimmt die Sperre der
+  Ablage nicht; zwischen dem frischen Lesen und dem Entfernen bleiben
+  Mikrosekunden, in denen ein weiterer Wechsel unbemerkt bliebe
+  (konstruiert). Ein Manifest, das während eines offenen
   Imports abläuft, lehnt die nächste Fortsetzung ab
   (`ab_mcp_sync_manifest_expired`); diese Gruppe bleibt, bis die Ablage sie
   einen Tag nach ihrem Beginn entfernt, und belegt bis dahin ihren Platz

@@ -1425,6 +1425,95 @@ final class SyncPackageTest extends TestCase {
 		self::assertCount( 2, AB_MCP_Protected_Store::groups( 'in' ) );
 	}
 
+	/** What this request cached of the options the print of the pair and a manifest read. */
+	private static function cached_options(): array {
+		$out = array();
+		foreach ( array( 'alloptions', 'notoptions', \AB_MCP_Settings::OPT_OPTIONS, AB_MCP_Sync_Anchor::OPTION, AB_MCP_Sync_Anchor::OPTION_RETIRED ) as $name ) {
+			$out[ $name ] = wp_cache_get( $name, 'options' );
+		}
+		return $out;
+	}
+
+	/** This request back to what it had cached, as a request that read them before another changed them. */
+	private static function cache_options( array $cached ): void {
+		foreach ( $cached as $name => $value ) {
+			if ( false === $value ) {
+				wp_cache_delete( $name, 'options' );
+			} else {
+				wp_cache_set( $name, $value, 'options' );
+			}
+		}
+	}
+
+	public function testAPackageBegunWhileThePairChangesRemovesNoPackageOfTheNewPair(): void {
+		self::pair();
+		$other = wp_insert_user( array( 'user_login' => 'zz_second_admin', 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'zz2@example.test', 'role' => 'administrator' ) );
+		self::assertIsInt( $other );
+		$begin = static function ( string $id ): array {
+			$package = self::package_of( $id, array( array( self::option_line( 'zz_' . $id ) ) ) );
+			return array(
+				'package_id' => $id,
+				'manifest'   => self::signed_by_b( $package['package'] ),
+				'purpose'    => 'inventory',
+			);
+		};
+		// Twice: the role confirmed anew (an option with autoload), and a new
+		// key of the staging site confirmed (an option without).
+		$changes = array(
+			'role' => static function (): void {
+				$raw               = \AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+				$raw['role']['at'] = (int) $raw['role']['at'] + 1;
+				\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+			},
+			'key'  => static function (): void {
+				$code     = self::b(
+					array(
+						array( 'op' => 'key_replace', 'as' => 'key' ),
+						array( 'op' => 'pairing_code', 'as' => 'code' ),
+					)
+				)['code'];
+				$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $code, self::admin() );
+				self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+				self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
+			},
+		);
+		$ids     = array(
+			'role' => array( 'f2', 'f3' ),
+			'key'  => array( 'f4', 'f5' ),
+		);
+		foreach ( $changes as $what => $change ) {
+			list( $mine, $theirs ) = array( str_repeat( $ids[ $what ][0], 16 ), str_repeat( $ids[ $what ][1], 16 ) );
+			// This request has read the pair and signed its manifest, as a call
+			// does before it begins its package.
+			$call   = $begin( $mine );
+			$held   = AB_MCP_Sync_Anchor::pair_print();
+			$cached = self::cached_options();
+			// Meanwhile another request changes the pair, and another account
+			// begins a package of the new pair.
+			$change();
+			wp_set_current_user( $other );
+			$state = AB_MCP_Sync_Import::call( $begin( $theirs ) );
+			self::assertIsArray( $state, $what . ': ' . ( is_wp_error( $state ) ? $state->get_error_message() : '' ) );
+			wp_set_current_user( self::admin() );
+			// This request still holds what it read before.
+			self::cache_options( $cached );
+			self::assertSame( $held, AB_MCP_Sync_Anchor::pair_print(), $what );
+			self::assertNotSame( $held, AB_MCP_Sync_Anchor::fresh_print(), $what . ': the pair changed in the database.' );
+			self::cache_options( $cached );
+			// Its package: the pair read afresh under the lock is no longer the
+			// one it holds, so it ends with the way and removes nothing.
+			$ended = AB_MCP_Sync_Import::call( $call );
+			self::refused( $ended, 'ab_mcp_sync_import_pair_changed' );
+			self::assertStringContainsString( 'Fetch the package anew', $ended->get_error_message() );
+			self::assertCount( 1, self::groups_of( $theirs ), $what . ': the package of the other account, of the new pair, stays.' );
+			self::assertSame( array(), self::groups_of( $mine ), $what );
+		}
+		// The way: begun anew with the pair of now, beside the others.
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin( str_repeat( 'f6', 16 ) ) ) );
+		self::assertCount( 1, self::groups_of( str_repeat( 'f6', 16 ) ) );
+		self::assertCount( 1, self::groups_of( str_repeat( 'f5', 16 ) ) );
+	}
+
 	public function testAPairEnteredAgainGoesOnWithARenewedKeyAndNotWithTheOldOne(): void {
 		self::pair();
 		$old  = self::export();

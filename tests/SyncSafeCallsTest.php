@@ -154,6 +154,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_option'          => array( 2, 'write() and retire(): those options, without autoload.' ),
 			'delete_option'          => array( 1, 'forget(): removes it.' ),
 			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
+			'wp_cache_delete'        => array( 2, 'fresh_print(): forgets what this request cached of the options the print reads (alloptions, the settings, the anchor), so they are read from the database; it reads no value itself.' ),
 		),
 		'class-sync-key.php'      => array(
 			'AB_MCP_Staging::role' => array( 5, 'make(), replace(), sign(), mac(), answer(): only a confirmed staging site has a key.' ),
