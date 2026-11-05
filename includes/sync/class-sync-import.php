@@ -6,10 +6,12 @@
  * Every call first checks the signed manifest (AB_MCP_Sync_Manifest::
  * verify(): the key a person confirmed, this site's address exactly, the
  * staging site's address exactly, not expired, the purpose the caller reads
- * it for). The first call brings the manifest; this site keeps it in a group
- * of the area in of the protected store and checks it again on every call
+ * it for; in this version the inventory only). The first call brings the
+ * manifest; this site keeps it in a group of the area in of the protected
+ * store, of the account that brought it, and checks it again on every call
  * after, so a new key, another pair or the end of its day stops the package
- * where it is. Then it takes chunks, each checked against its SHA-256 in the
+ * where it is. Another account does not see that group: it begins a group
+ * of its own. Then it takes chunks, each checked against its SHA-256 in the
  * manifest before it is stored (AB_MCP_Sync_Manifest::chunk()):
  *
  *  - relayed: the client hands the bytes over as base64 (data), over https
@@ -26,9 +28,14 @@
  * missing, so a call with fresh fetch addresses (wp_site_export with the
  * package_id) or the relay takes up where the last one ended. Once every
  * chunk is there, the package is checked whole against its SHA-256
- * (AB_MCP_Sync_Manifest::whole()) and marked complete. What is in it is
- * read only by the takeover, which checks the manifest again for its
- * purpose and report. The store removes the group a day after it was made.
+ * (AB_MCP_Sync_Manifest::whole()), closed (it counts as an open package no
+ * more, AB_MCP_Store_Budget) and marked complete. What is in it is read
+ * only by the takeover, which checks the manifest again for its purpose
+ * and report. The store removes the group a day after it was made.
+ *
+ * A fetch takes no longer than what is left of BUDGET (its timeout is that
+ * rest at most); where less than MIN_FETCH is left, the call ends and the
+ * next one goes on.
  *
  * Messages are English without gettext, as the other classes of the
  * takeover; each names the way.
@@ -64,6 +71,9 @@ final class AB_MCP_Sync_Import {
 	/** Seconds one chunk may take to arrive. */
 	const TIMEOUT = 30;
 
+	/** Seconds of BUDGET at least left for one more fetch. */
+	const MIN_FETCH = 5;
+
 	/** The clock of the budget; a callable returning seconds, null for microtime(). Set by tests only. */
 	public static $clock = null;
 
@@ -97,7 +107,14 @@ final class AB_MCP_Sync_Import {
 		if ( $has_fetch && ! self::grants_shaped( $a['fetch'] ) ) {
 			return self::grants_refusal();
 		}
-		$held = self::held( $package_id, $a );
+		$expect = null;
+		if ( array_key_exists( 'manifest', $a ) ) {
+			$expect = self::expect( $a, $package_id );
+			if ( is_wp_error( $expect ) ) {
+				return $expect;
+			}
+		}
+		$held = self::held( $package_id, $a, $expect );
 		if ( is_wp_error( $held ) ) {
 			return $held;
 		}
@@ -143,22 +160,19 @@ final class AB_MCP_Sync_Import {
 	 * area in), from the kept one after; a manifest of a later call must be
 	 * that one.
 	 *
-	 * @param string $package_id Package.
-	 * @param array  $a          Arguments.
-	 * @return array|WP_Error gid, manifest, signed, expect, files.
+	 * @param string     $package_id Package.
+	 * @param array      $a          Arguments.
+	 * @param array|null $expect     expect(), where the call brings a manifest.
+	 * @return array|WP_Error gid, manifest, signed, expect.
 	 */
-	private static function held( $package_id, array $a ) {
+	private static function held( $package_id, array $a, $expect ) {
 		$found = self::find( $package_id );
 		if ( is_wp_error( $found ) ) {
 			return $found;
 		}
 		if ( null === $found ) {
-			if ( ! array_key_exists( 'manifest', $a ) ) {
-				return new WP_Error( 'ab_mcp_sync_import_unknown', 'This site holds no package of that id yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.' );
-			}
-			$expect = self::expect( $a, $package_id );
-			if ( is_wp_error( $expect ) ) {
-				return $expect;
+			if ( null === $expect ) {
+				return new WP_Error( 'ab_mcp_sync_import_unknown', 'This site holds no package of that id begun by this account yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.' );
 			}
 			$checked = AB_MCP_Sync_Manifest::verify( $a['manifest'], $expect );
 			if ( is_wp_error( $checked ) ) {
@@ -185,17 +199,13 @@ final class AB_MCP_Sync_Import {
 	 */
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
-		if ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', sprintf( 'purpose says what the package is read for: one of %s, as wp_site_export made it. Pass it with the manifest.', implode( ', ', AB_MCP_Sync_Manifest::PURPOSES ) ) );
+		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
+			return new WP_Error( 'ab_mcp_sync_import_purpose', sprintf( 'This version takes packages of the inventory of the staging site only (purpose says what a package is read for); packages of objects, media and the environment come with the takeover. Pass purpose=%s with the manifest.', AB_MCP_Sync_Export::PURPOSES[0] ) );
 		}
-		$expect = array(
+		return array(
 			'purpose'    => $purpose,
 			'package_id' => $package_id,
 		);
-		if ( isset( $a['report_hash'] ) ) {
-			$expect['report_hash'] = $a['report_hash'];
-		}
-		return $expect;
 	}
 
 	/**
@@ -243,10 +253,11 @@ final class AB_MCP_Sync_Import {
 	}
 
 	/**
-	 * The group of a package, the oldest of its label, with its record.
+	 * The group of a package this account began, the oldest of its label,
+	 * with its record.
 	 *
 	 * @param string $package_id Package.
-	 * @return array|WP_Error|null held(), null where this site holds none.
+	 * @return array|WP_Error|null held(), null where this account holds none.
 	 */
 	private static function find( $package_id ) {
 		$groups = AB_MCP_Protected_Store::groups( 'in' );
@@ -254,7 +265,7 @@ final class AB_MCP_Sync_Import {
 			return $groups;
 		}
 		foreach ( $groups as $group ) {
-			if ( self::LABEL . $package_id !== $group['label'] ) {
+			if ( self::LABEL . $package_id !== $group['label'] || (int) $group['user_id'] !== (int) get_current_user_id() ) {
 				continue;
 			}
 			$files = AB_MCP_Protected_Store::files( 'in', $group['gid'] );
@@ -323,7 +334,10 @@ final class AB_MCP_Sync_Import {
 			return $partner;
 		}
 		$fetcher  = null === $fetcher ? new AB_MCP_Sync_Fetcher() : $fetcher;
-		$have     = self::files( $held );
+		$have     = AB_MCP_Protected_Store::files( 'in', $held['gid'] );
+		if ( is_wp_error( $have ) ) {
+			return $have;
+		}
 		$deadline = self::now() + self::BUDGET;
 		$failed   = array();
 		foreach ( $grants as $grant ) {
@@ -331,14 +345,16 @@ final class AB_MCP_Sync_Import {
 			if ( isset( $have[ AB_MCP_Sync_Export::chunk_name( $i ) ] ) ) {
 				continue;
 			}
-			if ( self::now() >= $deadline ) {
+			// What is left of the budget, and no fetch that could not end in it.
+			$left = $deadline - self::now();
+			if ( $left < self::MIN_FETCH ) {
 				break;
 			}
 			$bytes  = $held['manifest']['chunks'][ $i ]['bytes'];
 			$answer = $fetcher->get(
 				self::url( $partner, $held['manifest']['package_id'], $i, $grant['expires'], $grant['signature'] ),
 				array(
-					'timeout'             => self::TIMEOUT,
+					'timeout'             => min( (float) self::TIMEOUT, $left ),
 					'limit_response_size' => $bytes + 1,
 					'headers'             => array( 'Accept' => 'application/octet-stream' ),
 				)
@@ -399,7 +415,10 @@ final class AB_MCP_Sync_Import {
 	 * @return array|WP_Error
 	 */
 	private static function state( array $held, array $failed ) {
-		$have    = self::files( $held );
+		$have = AB_MCP_Protected_Store::files( 'in', $held['gid'] );
+		if ( is_wp_error( $have ) ) {
+			return $have;
+		}
 		$missing = array();
 		foreach ( array_keys( $held['manifest']['chunks'] ) as $i ) {
 			if ( ! isset( $have[ AB_MCP_Sync_Export::chunk_name( $i ) ] ) ) {
@@ -420,6 +439,11 @@ final class AB_MCP_Sync_Import {
 			if ( is_wp_error( $ok ) ) {
 				return $ok;
 			}
+			// Done with: it counts as an open package no more; then marked.
+			$closed = AB_MCP_Protected_Store::close( 'in', $held['gid'] );
+			if ( is_wp_error( $closed ) ) {
+				return $closed;
+			}
 			$put = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::COMPLETE, $held['manifest']['sha256'] );
 			if ( is_wp_error( $put ) ) {
 				return $put;
@@ -439,17 +463,6 @@ final class AB_MCP_Sync_Import {
 			$out['failed'] = $failed;
 		}
 		return $out;
-	}
-
-	/**
-	 * The files of the group of a package, by name.
-	 *
-	 * @param array $held held().
-	 * @return array<string,int>
-	 */
-	private static function files( array $held ) {
-		$files = AB_MCP_Protected_Store::files( 'in', $held['gid'] );
-		return is_array( $files ) ? $files : array();
 	}
 
 	/**

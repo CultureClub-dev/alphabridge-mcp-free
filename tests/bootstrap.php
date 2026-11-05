@@ -53,6 +53,7 @@ $GLOBALS['ab_test_core_delay'] = 0;
 function ab_test_reset(): void {
 	$GLOBALS['ab_test_current_user'] = 0;
 	unset( $GLOBALS['ab_test_ssl'] );
+	$GLOBALS['ab_test_option_reads'] = array();
 	$GLOBALS['ab_test_doing_ajax']   = false;
 	$GLOBALS['ab_test_autoload']     = array();
 	$GLOBALS['ab_test_translations'] = array();
@@ -145,6 +146,8 @@ function get_option( $name, $default = false ) {
 			return round( timezone_offset_get( $zone, date_create() ) / HOUR_IN_SECONDS, 2 );
 		}
 	}
+	// How often each option was read, for a test that a way reads none.
+	$GLOBALS['ab_test_option_reads'][ $name ] = ( $GLOBALS['ab_test_option_reads'][ $name ] ?? 0 ) + 1;
 	return array_key_exists( $name, $GLOBALS['ab_test_options'] ) ? $GLOBALS['ab_test_options'][ $name ] : $default;
 }
 

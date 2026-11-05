@@ -85,6 +85,13 @@ final class AB_MCP_Sync_Key {
 	/** The private key and its key id. No autoload; read only here. */
 	const OPTION_SECRET = 'ab_mcp_sync_secret';
 
+	/**
+	 * The option of the secret of the MACs of this site (mac()): 32 random
+	 * bytes as hex with the key id they belong to, made, written and removed
+	 * with the key, without autoload, written as the private key is.
+	 */
+	const OPTION_MAC = 'ab_mcp_sync_mac';
+
 	/** The format of the public part, the route's answer and the pairing code. */
 	const FORMAT = 'ab-sync-key/1';
 
@@ -123,14 +130,23 @@ final class AB_MCP_Sync_Key {
 			$secret = sodium_crypto_sign_secretkey( $pair );
 			$public = sodium_crypto_sign_publickey( $pair );
 			$source = bin2hex( random_bytes( 16 ) );
+			$mac    = bin2hex( random_bytes( 32 ) );
 		} catch ( Throwable $e ) {
 			return new WP_Error( 'ab_mcp_sync_key_failed', 'No key was made: PHP could not make an Ed25519 key pair or random bytes on this server. Ask the host to enable the sodium extension of PHP, then make the key on the page AlphaBridge → Staging.' );
 		}
 		$key_id = self::key_id( $public );
 		self::store_secret(
+			self::OPTION_SECRET,
 			array(
 				'key_id'     => $key_id,
 				'secret_key' => self::to_base64( $secret ),
+			)
+		);
+		self::store_secret(
+			self::OPTION_MAC,
+			array(
+				'key_id' => $key_id,
+				'mac'    => $mac,
 			)
 		);
 		update_option(
@@ -144,15 +160,17 @@ final class AB_MCP_Sync_Key {
 			),
 			false
 		);
-		// What was made, not any key that reads: its source id and its key id
-		// (the private key of that key id is the one of its seed, found()).
+		// What was made, not any key that reads: its source id, and the secret
+		// of the MACs made with it, which reads only for the key id stored now
+		// (mac_secret()), so the key read is the one made (the private key of
+		// that key id is the one of its seed, found()).
 		$found = self::found();
-		if ( null === $found || $found['key']['source_id'] !== $source || $found['key']['key_id'] !== $key_id ) {
+		if ( null === $found || $found['key']['source_id'] !== $source || self::mac_secret() !== hex2bin( $mac ) ) {
 			self::forget();
 			return new WP_Error(
 				'ab_mcp_sync_key_failed',
-				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s and %2$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site again on the page AlphaBridge → Staging.', self::OPTION_SECRET, self::OPTION_SOURCE ),
-				array( 'options' => array( self::OPTION_SECRET, self::OPTION_SOURCE ) )
+				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s, %2$s and %3$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site again on the page AlphaBridge → Staging.', self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ),
+				array( 'options' => array( self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ) )
 			);
 		}
 		return $found['key'];
@@ -192,6 +210,7 @@ final class AB_MCP_Sync_Key {
 	public static function forget() {
 		delete_option( self::OPTION_SECRET );
 		delete_option( self::OPTION_SOURCE );
+		delete_option( self::OPTION_MAC );
 	}
 
 	/* ------------------------------------------------------------- read */
@@ -235,12 +254,15 @@ final class AB_MCP_Sync_Key {
 
 	/**
 	 * A message authentication code of this confirmed staging site: HMAC
-	 * SHA-256 keyed with its private key, for one purpose (the context) and
+	 * SHA-256 keyed with the secret of its MACs (OPTION_MAC: random, made
+	 * with the key, not derived from it), for one purpose (the context) and
 	 * one message, as lower-case hex. Only this site makes and checks it (the
-	 * signed addresses of its packages, AB_MCP_Sync_Export); the key never
-	 * leaves this method. A new key, made when the role is confirmed again,
-	 * makes every code before it worthless. Null on a site that is no
-	 * confirmed staging site or has no usable key.
+	 * signed addresses of its packages, AB_MCP_Sync_Export). It reads two
+	 * options and computes one HMAC, never the private key, so a check that
+	 * fails costs what any other answer costs. A new key, made when the role
+	 * is confirmed again, comes with a new secret and makes every code before
+	 * it worthless. Null on a site that is no confirmed staging site, or whose
+	 * secret is missing or belongs to another key.
 	 *
 	 * @param string $context What the code is for: a-z, 0-9, "-" and "/".
 	 * @param string $message Bytes.
@@ -250,11 +272,11 @@ final class AB_MCP_Sync_Key {
 		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( $context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\z~', $context ) ) {
 			return null;
 		}
-		$found = self::found();
-		if ( null === $found ) {
+		$secret = self::mac_secret();
+		if ( null === $secret ) {
 			return null;
 		}
-		return hash_hmac( 'sha256', 'ab-sync-mac/1' . "\n" . $context . "\n" . (string) $message, $found['secret'] );
+		return hash_hmac( 'sha256', 'ab-sync-mac/1' . "\n" . $context . "\n" . (string) $message, $secret );
 	}
 
 	/**
@@ -519,8 +541,26 @@ final class AB_MCP_Sync_Key {
 	/* ---------------------------------------------------------- private */
 
 	/**
-	 * Write the private key so that no report of a database error carries
-	 * it. While update_option() writes it, wpdb neither logs nor shows an
+	 * The secret of the MACs, where OPTION_MAC holds it for the key id of the
+	 * key stored now (OPTION_SOURCE, read without the private key).
+	 *
+	 * @return string|null 32 bytes.
+	 */
+	private static function mac_secret() {
+		$raw    = get_option( self::OPTION_MAC, null );
+		$source = get_option( self::OPTION_SOURCE, null );
+		if ( ! is_array( $raw ) || ! isset( $raw['key_id'], $raw['mac'] ) || ! is_string( $raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $raw['mac'] ) ) {
+			return null;
+		}
+		if ( ! is_array( $source ) || ! isset( $source['key_id'] ) || $raw['key_id'] !== $source['key_id'] ) {
+			return null;
+		}
+		return (string) hex2bin( $raw['mac'] );
+	}
+
+	/**
+	 * Write a secret of the key (the private key, the secret of the MACs) so
+	 * that no report of a database error carries it. While update_option() writes it, wpdb neither logs nor shows an
 	 * error (suppress_errors(), hide_errors()); afterwards both are as they
 	 * were, and what wpdb keeps of that query is taken away: last_query,
 	 * func_call and last_error (a syntax error quotes the query), the
@@ -529,9 +569,10 @@ final class AB_MCP_Sync_Key {
 	 * SAVEQUERIES. A database layer without wpdb's switches (a drop-in that
 	 * does not extend wpdb) is written to as it is.
 	 *
-	 * @param array $value key_id and secret_key.
+	 * @param string $option OPTION_SECRET or OPTION_MAC.
+	 * @param array  $value  What it holds.
 	 */
-	private static function store_secret( array $value ) {
+	private static function store_secret( $option, array $value ) {
 		global $wpdb;
 		$db      = is_object( $wpdb ) && method_exists( $wpdb, 'suppress_errors' ) && method_exists( $wpdb, 'hide_errors' ) && method_exists( $wpdb, 'show_errors' ) ? $wpdb : null;
 		$errors  = isset( $GLOBALS['EZSQL_ERROR'] ) && is_array( $GLOBALS['EZSQL_ERROR'] ) ? count( $GLOBALS['EZSQL_ERROR'] ) : 0;
@@ -539,7 +580,7 @@ final class AB_MCP_Sync_Key {
 		$quiet   = null !== $db ? $db->suppress_errors( true ) : false;
 		$visible = null !== $db ? $db->hide_errors() : false;
 		try {
-			update_option( self::OPTION_SECRET, $value, false );
+			update_option( $option, $value, false );
 		} finally {
 			if ( null !== $db ) {
 				$db->suppress_errors( $quiet );

@@ -16,12 +16,23 @@
  * WHAT IS IN IT, in this version: the inventory of this site
  * (AB_MCP_Sync_Inventory), as far as the budget of one call reaches (time,
  * and OBJECTS objects, below AB_MCP_Sync_Manifest::MAX_OBJECTS because a
- * row may give several). What is left is the next package: the answer
- * carries the cursor to go on from. The manifest lists each kind and
- * subtype of the package; complete is true only where the package holds
- * every object of it (it began that kind of the database at its start and
- * read it to its end, kinds()). Packages of objects, media and the
- * environment follow with the takeover.
+ * row may give several), each object as line() writes it from a list of
+ * what it may carry: identity, status, locks, hash, size, references by
+ * id, the places of possible references, never a value of its content; an
+ * object a credential holds only with its identity and the reason. What is
+ * left is the next package: the answer carries the cursor to go on from,
+ * which names this package; the packages of one inventory are one series
+ * and count as one open export (AB_MCP_Store_Budget). The manifest lists
+ * each kind and subtype of the package; complete is true only where the
+ * package holds every object of it (it began that kind of the database at
+ * its start and read it to its end, kinds()). Packages of objects, media
+ * and the environment follow with the takeover.
+ *
+ * WHAT IT IS BOUND TO (binding()): the key, both addresses, the confirmed
+ * role and the pair. A package whose binding is not the site's any more
+ * (the pair or the role confirmed again, a new key) is given out no more,
+ * neither by the route nor by the relay nor with fresh fetch addresses,
+ * and is discarded where it is met and before a new package is made.
  *
  * HOW IT LEAVES THE SITE.
  *
@@ -29,8 +40,10 @@
  *    chunk, at an address it builds itself from the address of its staging
  *    site (AB_MCP_Sync_Import), with four values from the client: the
  *    package, the chunk, until when, and the signature of this site over
- *    those three (grants(): a MAC of this site's key, AB_MCP_Sync_Key::mac(),
- *    valid GRANT_TTL seconds). The route is no route of WordPress: serve()
+ *    those three (grants(): a MAC with the secret this site keeps for its
+ *    MACs, AB_MCP_Sync_Key::mac(), valid GRANT_TTL seconds). The MAC is
+ *    checked before anything else is read, so a wrong one costs what an
+ *    unknown route costs. The route is no route of WordPress: serve()
  *    answers on rest_pre_dispatch a request that is exactly right and
  *    returns every other one to WordPress, which answers it as it answers a
  *    route it does not know (rest_no_route), byte for byte; so is a
@@ -102,11 +115,13 @@ final class AB_MCP_Sync_Export {
 	 * Make a package on this confirmed staging site, for the production site
 	 * it is paired with.
 	 *
-	 * @param mixed $purpose What the package is for (PURPOSES).
-	 * @param mixed $cursor  Where the package before ended, or null.
+	 * @param mixed    $purpose What the package is for (PURPOSES).
+	 * @param mixed    $cursor  The cursor of the answer for the package
+	 *                          before, or null for the first of a series.
+	 * @param int|null $objects Objects the package reads at most; OBJECTS.
 	 * @return array|WP_Error The package (answer()).
 	 */
-	public static function make( $purpose, $cursor = null ) {
+	public static function make( $purpose, $cursor = null, $objects = null ) {
 		$refused = self::refusal();
 		if ( null !== $refused ) {
 			return $refused;
@@ -114,24 +129,126 @@ final class AB_MCP_Sync_Export {
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
 			return new WP_Error( 'ab_mcp_sync_export_purpose', sprintf( 'This version makes packages of the inventory of the staging site only; packages of objects, media and the environment come with the takeover. Pass purpose=%s.', self::PURPOSES[0] ) );
 		}
-		if ( null !== $cursor && ( ! is_array( $cursor ) || array( 'inner', 'kind' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_cursor_invalid', 'The cursor is not one an answer of wp_site_export gave. Pass the cursor of the answer before as it is, or none to begin with the first package.' );
+		$from = null;
+		try {
+			$series = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+		}
+		if ( null !== $cursor ) {
+			$follows = self::follows( $cursor );
+			if ( is_wp_error( $follows ) ) {
+				return $follows;
+			}
+			list( $from, $series ) = $follows;
 		}
 		$pair   = AB_MCP_Staging::record()['pair'];
-		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, self::OBJECTS );
-		$read   = AB_MCP_Sync_Inventory::run( $source, $cursor );
+		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null === $objects ? self::OBJECTS : (int) $objects );
+		$read   = AB_MCP_Sync_Inventory::run( $source, $from );
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
-		$packed = self::pack( $read['objects'] );
+		$packed = self::pack( array_map( array( __CLASS__, 'line' ), $read['objects'] ) );
 		if ( is_wp_error( $packed ) ) {
 			return $packed;
 		}
-		$kinds = self::kinds( $read['objects'], $cursor, $read['cursor'] );
+		$kinds = self::kinds( $read['objects'], $from, $read['cursor'] );
 		if ( is_wp_error( $kinds ) ) {
 			return $kinds;
 		}
-		return self::store( $purpose, $packed, $kinds, $read['cursor'] );
+		return self::store( $purpose, $packed, $kinds, $read['cursor'], $series );
+	}
+
+	/**
+	 * Where a package goes on from the one before: the cursor of the answer
+	 * names that package, which must be one of this account, kept, bound as
+	 * this site is now, and whose next cursor it is; the inventory goes on
+	 * from the cursor that package recorded, and the package belongs to its
+	 * series (one open export for the budgets, AB_MCP_Store_Budget).
+	 *
+	 * @param mixed $cursor The cursor of the answer before.
+	 * @return array{0:array,1:string}|WP_Error The cursor of the inventory and the series.
+	 */
+	private static function follows( $cursor ) {
+		if ( ! is_array( $cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) {
+			return self::cursor_refusal();
+		}
+		$before = self::own( $cursor['package'], null );
+		if ( is_wp_error( $before ) ) {
+			return $before;
+		}
+		$from = array(
+			'kind'  => $cursor['kind'],
+			'inner' => $cursor['inner'],
+		);
+		// The last package of a series has no next cursor: null encodes as no cursor does.
+		if ( AB_MCP_Sync_Canon::encode( $before['cursor'] ) !== AB_MCP_Sync_Canon::encode( $from ) ) {
+			return self::cursor_refusal();
+		}
+		return array( $before['cursor'], $before['series'] );
+	}
+
+	/**
+	 * @return WP_Error The cursor is not one an answer gave.
+	 */
+	private static function cursor_refusal() {
+		return new WP_Error( 'ab_mcp_sync_cursor_invalid', 'The cursor is not one an answer of wp_site_export gave. Pass the cursor of the answer before as it is, or none to begin with the first package.' );
+	}
+
+	/**
+	 * The line of an object in a package of the inventory, from a list of
+	 * what it may carry (contract A): its identity, status and locks with
+	 * their reasons, and unless a credential holds it (a name of a
+	 * credential, B9, or a field of one in it), its hash, size, whether it
+	 * was read whole, what was not read, its references by id, the places
+	 * of possible references and of the units left out as credentials. Of
+	 * its content nothing: a possible reference only by its place, never its
+	 * value; what the inventory adds later is not in it until it stands on
+	 * this list.
+	 *
+	 * @param array $object An object of the inventory (AB_MCP_Sync_Inventory::entry()).
+	 * @return array
+	 */
+	public static function line( array $object ) {
+		$line = array(
+			'kind'     => (string) $object['kind'],
+			'ref'      => (string) $object['ref'],
+			'identity' => $object['identity'],
+			'status'   => $object['status'],
+			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
+		);
+		if ( isset( $object['reason'] ) ) {
+			$line['reason'] = (string) $object['reason'];
+		}
+		$credentials = $object['credentials'];
+		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] ) {
+			return $line;
+		}
+		return $line + array(
+			'canon'    => $object['canon'],
+			'hash'     => $object['hash'],
+			'size'     => $object['size'],
+			'complete' => $object['complete'],
+			'unread'   => isset( $object['unread'] ) ? array_values( array_map( 'strval', $object['unread'] ) ) : array(),
+			'refs'     => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),
+			'possible' => self::fields( $object['possible'], array( 'at' ) ),
+			'b9'       => array_values( array_map( 'strval', $credentials['b9'] ) ),
+		);
+	}
+
+	/**
+	 * Entries of a list with the fields named and no other.
+	 *
+	 * @param array    $list   Entries.
+	 * @param string[] $fields Fields.
+	 * @return array[]
+	 */
+	private static function fields( array $list, array $fields ) {
+		$out = array();
+		foreach ( $list as $entry ) {
+			$out[] = array_intersect_key( (array) $entry, array_flip( $fields ) );
+		}
+		return $out;
 	}
 
 	/**
@@ -469,7 +586,7 @@ final class AB_MCP_Sync_Export {
 			return null;
 		}
 		$found = self::find( $grant['package'] );
-		if ( ! is_array( $found ) || $found['manifest']['expires'] <= $now || ! isset( $found['manifest']['chunks'][ $grant['chunk'] ] ) ) {
+		if ( ! is_array( $found ) || ! self::bound( $found ) || $found['manifest']['expires'] <= $now || ! isset( $found['manifest']['chunks'][ $grant['chunk'] ] ) ) {
 			return null;
 		}
 		$data = AB_MCP_Protected_Store::get( 'out', $grant['package'], self::chunk_name( $grant['chunk'] ), $found['manifest']['chunks'][ $grant['chunk'] ]['sha256'] );
@@ -560,9 +677,11 @@ final class AB_MCP_Sync_Export {
 	 * @param array      $packed  pack().
 	 * @param array[]    $kinds   kinds().
 	 * @param array|null $cursor  The cursor of the next package.
+	 * @param string     $series  The series (32 hex).
 	 * @return array|WP_Error answer().
 	 */
-	private static function store( $purpose, array $packed, array $kinds, $cursor ) {
+	private static function store( $purpose, array $packed, array $kinds, $cursor, $series ) {
+		self::discard_stale();
 		$bytes = 0;
 		$whole = hash_init( 'sha256' );
 		$list  = array();
@@ -578,7 +697,7 @@ final class AB_MCP_Sync_Export {
 			'out',
 			array(
 				'declared' => $bytes + self::RECORD_MAX,
-				'label'    => $purpose,
+				'label'    => 'series:' . $series,
 			)
 		);
 		if ( is_wp_error( $gid ) ) {
@@ -610,9 +729,11 @@ final class AB_MCP_Sync_Export {
 		}
 		$record = AB_MCP_Sync_Canon::encode(
 			array(
+				'binding'   => self::binding(),
 				'cursor'    => $cursor,
 				'format'    => self::RECORD,
 				'manifest'  => $signed['manifest'],
+				'series'    => $series,
 				'signature' => $signed['signature'],
 			)
 		);
@@ -626,7 +747,8 @@ final class AB_MCP_Sync_Export {
 
 	/**
 	 * The answer for a package: what it is, its manifest, the cursor of the
-	 * next package, and fresh fetch addresses.
+	 * next package (where the inventory goes on, and this package, which the
+	 * next one follows), and fresh fetch addresses.
 	 *
 	 * @param array      $manifest Manifest.
 	 * @param array      $signed   manifest, signature.
@@ -647,13 +769,18 @@ final class AB_MCP_Sync_Export {
 			'kinds'      => $manifest['kinds'],
 			'expires'    => $manifest['expires'],
 			'manifest'   => $signed,
-			'cursor'     => $cursor,
+			'cursor'     => null === $cursor ? null : array(
+				'kind'    => $cursor['kind'],
+				'inner'   => $cursor['inner'],
+				'package' => $manifest['package_id'],
+			),
 			'fetch'      => $grants,
 		);
 	}
 
 	/**
-	 * A package this account made, as find() reads it, until it expires.
+	 * A package this account made, as find() reads it, until it expires and
+	 * while it is bound as this site is now (bound()).
 	 *
 	 * @param mixed    $package_id Package.
 	 * @param int|null $now        Time; now when null.
@@ -667,7 +794,72 @@ final class AB_MCP_Sync_Export {
 		if ( null === $found || (int) $found['user_id'] !== (int) get_current_user_id() || $found['manifest']['expires'] <= ( null === $now ? time() : (int) $now ) ) {
 			return new WP_Error( 'ab_mcp_sync_export_unknown', 'This site keeps no package of that id made by this account: packages are kept a day, and each account reads its own. Make a new one with wp_site_export.' );
 		}
+		if ( ! self::bound( $found ) ) {
+			return new WP_Error( 'ab_mcp_sync_export_stale', 'The package was made for another pair or with another key of this staging site: the pair or the role was confirmed again since, so it was discarded. Make a new one with wp_site_export.' );
+		}
 		return $found;
+	}
+
+	/**
+	 * What a package of this site is bound to: the key (source id and key
+	 * id), the address of this site, the confirmed role and the pair (with
+	 * the address of the production site), each with who confirmed it, when
+	 * and where. Another key, a pair confirmed again or another production site
+	 * is another binding.
+	 *
+	 * @return string|null SHA-256; null without a key or a pair.
+	 */
+	public static function binding() {
+		$key    = AB_MCP_Sync_Key::current();
+		$record = AB_MCP_Staging::record();
+		if ( null === $key || null === $record['pair'] ) {
+			return null;
+		}
+		$role = $record['role'];
+		$pair = $record['pair'];
+		return hash(
+			'sha256',
+			AB_MCP_Sync_Canon::encode(
+				array(
+					'key'    => array( $key['source_id'], $key['key_id'] ),
+					'source' => AB_MCP_Sync_Key::site_form( home_url() ),
+					'role'   => array( $role['value'], $role['user_id'], $role['source'], $role['at'] ),
+					'pair'   => array( $pair['partner_url'], $pair['partner_role'], $pair['user_id'], $pair['source'], $pair['at'] ),
+				)
+			)
+		);
+	}
+
+	/**
+	 * Whether a package is bound as this site is now; one that is not is
+	 * discarded here.
+	 *
+	 * @param array       $found   find().
+	 * @param string|null $binding binding(), where the caller has it.
+	 * @return bool
+	 */
+	private static function bound( array $found, $binding = null ) {
+		if ( $found['binding'] === ( null === $binding ? self::binding() : $binding ) ) {
+			return true;
+		}
+		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
+		return false;
+	}
+
+	/**
+	 * Discard every package of this site that is not bound as it is now
+	 * (another pair, another key): before a new one is made, so they hold
+	 * no place in the budgets.
+	 */
+	private static function discard_stale() {
+		$groups  = AB_MCP_Protected_Store::groups( 'out' );
+		$binding = self::binding();
+		foreach ( is_array( $groups ) ? $groups : array() as $group ) {
+			$found = self::find( $group['gid'] );
+			if ( is_array( $found ) ) {
+				self::bound( $found, $binding );
+			}
+		}
 	}
 
 	/**
@@ -676,7 +868,7 @@ final class AB_MCP_Sync_Export {
 	 * is none, or none whole.
 	 *
 	 * @param mixed $package_id Package.
-	 * @return array|WP_Error|null user_id, signed, manifest, cursor.
+	 * @return array|WP_Error|null user_id, signed, manifest, cursor, series, binding.
 	 */
 	private static function find( $package_id ) {
 		if ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
@@ -719,6 +911,8 @@ final class AB_MCP_Sync_Export {
 			),
 			'manifest' => json_decode( $record['manifest'], true, 8 ),
 			'cursor'   => $record['cursor'],
+			'series'   => $record['series'],
+			'binding'  => $record['binding'],
 		);
 	}
 

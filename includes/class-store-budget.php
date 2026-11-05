@@ -9,7 +9,12 @@
  *   will hold (declared) and never grows past them
  *   (AB_MCP_Protected_Store::put()), so the declared bytes bound what the
  *   packages hold. A package counts until it is removed: a day after it was
- *   made, or later while a run that is not closed holds it.
+ *   made, or later while a run that is not closed holds it. Two rules count
+ *   fewer (branch 5): the packages of one series, the parts of one
+ *   inventory a cursor leads from one to the next (label SERIES and the
+ *   same id), count as one open package and one open export; and a package
+ *   that is closed (AB_MCP_Protected_Store::close(), an import checked
+ *   whole) counts as open no more. Their bytes count all the same.
  * - Runs: a run books what it needs before its first write (backups,
  *   incoming packages, new media files, temporary files: book()); the
  *   bookings of all runs that are not closed, with this one, must leave
@@ -48,6 +53,9 @@ final class AB_MCP_Store_Budget {
 
 	/** Open exports (out) per account at most. */
 	const MAX_EXPORTS = 3;
+
+	/** The label of a package of a series: this and the id of the series (32 hex). */
+	const SERIES = '/^series:[0-9a-f]{32}\z/';
 
 	/** The filters of the three limits, read after the count. */
 	const FILTER_PACKAGES = 'ab_mcp_store_max_packages';
@@ -89,27 +97,37 @@ final class AB_MCP_Store_Budget {
 	 * AB_MCP_Protected_Store::open() under the store's lock, between the count
 	 * and the creation.
 	 *
-	 * @param array[] $packages Entries of the open packages (out and in).
+	 * @param array[] $packages Entries of the packages (out and in).
 	 * @param string  $area     'out' or 'in'.
 	 * @param int     $user_id  Account that opens it.
 	 * @param int     $declared Bytes it will hold.
+	 * @param string  $label    Its label: SERIES joins the open package of
+	 *                          that series, which counts already.
 	 * @return WP_Error|null
 	 */
-	public static function package_refusal( array $packages, $area, $user_id, $declared ) {
+	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '' ) {
 		$declared = (int) $declared;
 		if ( $declared < 1 ) {
 			return new WP_Error( 'ab_mcp_store_declare', 'A package is opened with the number of bytes it will hold, and it never grows past them. Pass the size as declared when you open it.' );
 		}
-		$open    = 0;
+		// Each open package counts once, the packages of a series together.
+		$open    = array();
+		$exports = array();
 		$bytes   = 0;
-		$exports = 0;
-		foreach ( $packages as $entry ) {
-			++$open;
+		foreach ( array_values( $packages ) as $i => $entry ) {
 			$bytes += max( 0, (int) $entry['declared'] );
+			if ( ! empty( $entry['closed'] ) ) {
+				continue;
+			}
+			$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;
+			$open[ $key ] = true;
 			if ( 'out' === $entry['area'] && (int) $entry['user_id'] === (int) $user_id ) {
-				++$exports;
+				$exports[ $key ] = true;
 			}
 		}
+		$joins   = 1 === preg_match( self::SERIES, (string) $label );
+		$exports = $joins && isset( $exports[ $label ] ) ? 0 : count( $exports );
+		$open    = $joins && isset( $open[ $label ] ) ? 0 : count( $open );
 		// The limits after the count, as Pro reads its own.
 		if ( 'out' === $area ) {
 			$max_exports = max( 0, (int) apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );

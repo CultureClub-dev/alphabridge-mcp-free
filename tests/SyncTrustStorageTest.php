@@ -144,16 +144,16 @@ final class SyncTrustStorageTest extends TestCase {
 	 *
 	 * @return array{0:mixed,1:string,2:string,3:array} save()'s answer, the key written, the output, the switches during the write.
 	 */
-	private function confirm_while( SyncTrustReportingWpdb $db, bool $fails, string &$logged ): array {
+	private function confirm_while( SyncTrustReportingWpdb $db, bool $fails, string &$logged, string $option = AB_MCP_Sync_Key::OPTION_SECRET, string $field = 'secret_key' ): array {
 		$GLOBALS['wpdb'] = $db;
 		$secret          = '';
 		$during          = array();
 		add_filter(
-			'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET,
-			static function ( $value, $old ) use ( $db, $fails, &$secret, &$during ) {
-				$secret   = (string) $value['secret_key'];
+			'pre_update_option_' . $option,
+			static function ( $value, $old ) use ( $db, $fails, &$secret, &$during, $option, $field ) {
+				$secret   = (string) $value[ $field ];
 				$during[] = array( $db->suppress_errors, $db->show_errors );
-				$query    = "INSERT INTO `wp_options` (`option_name`, `option_value`, `autoload`) VALUES ('ab_mcp_sync_secret', '" . serialize( $value ) . "', 'off')";
+				$query    = "INSERT INTO `wp_options` (`option_name`, `option_value`, `autoload`) VALUES ('" . $option . "', '" . serialize( $value ) . "', 'off')";
 				if ( $fails ) {
 					$db->fail( $query );
 					return $old;
@@ -186,7 +186,16 @@ final class SyncTrustStorageTest extends TestCase {
 		}
 	}
 
-	public function testAFailedWriteOfThePrivateKeyIsReportedWithoutIt(): void {
+	/** @return array<string,array{0:string,1:string}> The secrets of a key: option, field. */
+	public static function secrets(): array {
+		return array(
+			'the private key'        => array( AB_MCP_Sync_Key::OPTION_SECRET, 'secret_key' ),
+			'the secret of the MACs' => array( AB_MCP_Sync_Key::OPTION_MAC, 'mac' ),
+		);
+	}
+
+	#[DataProvider( 'secrets' )]
+	public function testAFailedWriteOfThePrivateKeyIsReportedWithoutIt( string $option, string $field ): void {
 		$this->on( 'staging' );
 		$db                     = new SyncTrustReportingWpdb();
 		$db->queries            = array( array( 'SELECT 1', 0.0, 'before', 0.0, array() ) );
@@ -197,7 +206,7 @@ final class SyncTrustStorageTest extends TestCase {
 			),
 		);
 		$logged                 = '';
-		list( $saved, $secret, $out, $during ) = $this->confirm_while( $db, true, $logged );
+		list( $saved, $secret, $out, $during ) = $this->confirm_while( $db, true, $logged, $option, $field );
 
 		self::assertSame( array( array( true, false ) ), $during, 'While the key was written, wpdb neither logged nor showed an error.' );
 		self::assertFalse( $db->suppress_errors, 'Afterwards errors are reported again,' );
@@ -229,14 +238,15 @@ final class SyncTrustStorageTest extends TestCase {
 		);
 		self::assertSame( array( array( 'SELECT 1', 0.0, 'before', 0.0, array() ) ), $db->queries, 'The queries before stay.' );
 		self::assertSame( 'ab_mcp_sync_key_failed', $saved->get_error_code() );
-		self::assertStringContainsString( AB_MCP_Sync_Key::OPTION_SECRET, $saved->get_error_message(), 'The refusal names the option.' );
+		self::assertStringContainsString( $option, $saved->get_error_message(), 'The refusal names the option.' );
 	}
 
-	public function testAWriteThatWorksLeavesNoTraceOfItsQuery(): void {
+	#[DataProvider( 'secrets' )]
+	public function testAWriteThatWorksLeavesNoTraceOfItsQuery( string $option, string $field ): void {
 		$this->on( 'staging' );
 		$db     = new SyncTrustReportingWpdb();
 		$logged = '';
-		list( $saved, $secret ) = $this->confirm_while( $db, false, $logged );
+		list( $saved, $secret ) = $this->confirm_while( $db, false, $logged, $option, $field );
 		self::assertIsArray( $saved );
 		self::assertNotNull( AB_MCP_Sync_Key::current() );
 		self::assertNothingShows(
@@ -286,6 +296,22 @@ final class SyncTrustStorageTest extends TestCase {
 					);
 				},
 			),
+			'only the secret of the MACs refused' => array(
+				static function () use ( $refuse ) {
+					add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_MAC, $refuse, 10, 2 );
+				},
+			),
+			'the secret of the MACs changed'    => array(
+				static function () {
+					add_filter(
+						'pre_update_option_' . AB_MCP_Sync_Key::OPTION_MAC,
+						static function ( $value ) {
+							$value['mac'] = str_repeat( 'e', 64 );
+							return $value;
+						}
+					);
+				},
+			),
 			'the old key under the new source'  => array(
 				static function () use ( $refuse ) {
 					add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_SECRET, $refuse, 10, 2 );
@@ -318,6 +344,8 @@ final class SyncTrustStorageTest extends TestCase {
 		self::assertSame( $record, self::record_raw(), 'Nothing of the record was saved: the role is not confirmed by the form.' );
 		self::assertNull( AB_MCP_Sync_Key::current(), 'No key, not the old one either.' );
 		self::assertFalse( get_option( AB_MCP_Sync_Key::OPTION_SECRET ) );
+		self::assertFalse( get_option( AB_MCP_Sync_Key::OPTION_MAC ) );
+		self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ), 'Nothing is signed with a MAC either.' );
 		self::assertInstanceOf( \WP_Error::class, AB_MCP_Sync_Key::sign( 'x', $old['key_id'] ), 'Nothing signs.' );
 		self::assertNull( AB_MCP_Sync_Key::answer() );
 		self::assertStringContainsString( 'AlphaBridge → Staging', $saved->get_error_message() );

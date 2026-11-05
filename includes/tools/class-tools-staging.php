@@ -27,12 +27,11 @@ require_once dirname( __DIR__ ) . '/class-staging.php';
 class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 
 	/**
-	 * The purposes of a package (AB_MCP_Sync_Manifest::PURPOSES) and those
-	 * wp_site_export makes in this version (AB_MCP_Sync_Export::PURPOSES),
-	 * named here so that registering the tools loads no class of the
-	 * takeover; a test holds them equal.
+	 * The purposes of the packages wp_site_export makes and
+	 * wp_site_import_chunk takes in this version (AB_MCP_Sync_Export::
+	 * PURPOSES), named here so that registering the tools loads no class of
+	 * the takeover; a test holds them equal.
 	 */
-	const PURPOSES        = array( 'inventory', 'objects', 'media', 'env' );
 	const EXPORT_PURPOSES = array( 'inventory' );
 
 	/**
@@ -147,7 +146,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_import_chunk',
 			array(
-				'description' => 'On the production site: take a package of the staging site it is paired with. The call that begins a package passes package_id, manifest and purpose as wp_site_export gave them; this site checks the manifest (signed with the key of the staging site a person confirmed on the page AlphaBridge → Staging, for the address of this site exactly, from the stored address of the staging site exactly, made less than a day ago) and keeps it. Each call then either hands over one chunk (chunk and data from wp_site_export_chunk; only over https where this site has a public address) or passes fetch (the fetch addresses from wp_site_export): this site then fetches the chunks itself from the staging site over https, at an address it builds from the stored address of the staging site, following no redirect, for up to 60 seconds a call. Every chunk is checked against its SHA-256 in the manifest before it is kept; once all are there, the package is checked whole. Returns chunks, received, missing (call again for those, with fresh fetch addresses after 10 minutes), complete, and failed with the reason for each chunk a fetch did not bring. Writes nothing but the protected store of this site, where the package is kept a day; what is in it is taken over only by the takeover. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'description' => 'On the production site: take a package of the staging site it is paired with; in this version a package of the inventory. The call that begins a package passes package_id, manifest and purpose as wp_site_export gave them; this site checks the manifest (signed with the key of the staging site a person confirmed on the page AlphaBridge → Staging, for the address of this site exactly, from the stored address of the staging site exactly, made less than a day ago) and keeps it. Each call then either hands over one chunk (chunk and data from wp_site_export_chunk; only over https where this site has a public address) or passes fetch (the fetch addresses from wp_site_export): this site then fetches the chunks itself from the staging site over https, at an address it builds from the stored address of the staging site, following no redirect, for up to 60 seconds a call. Every chunk is checked against its SHA-256 in the manifest before it is kept; once all are there, the package is checked whole. A package belongs to the account that began it; another account begins its own. Returns chunks, received, missing (call again for those, with fresh fetch addresses after 10 minutes), complete, and failed with the reason for each chunk a fetch did not bring. Writes nothing but the protected store of this site, where the package is kept a day; what is in it is taken over only by the takeover. Refused on a multisite network. Needs manage_options and the access level Full.',
 				'capability'  => 'manage_options',
 				'readonly'    => false,
 				'destructive' => false,
@@ -170,12 +169,8 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 						),
 						'purpose'     => array(
 							'type'        => 'string',
-							'enum'        => self::PURPOSES,
-							'description' => 'What the package is read for, as wp_site_export made it; with the manifest.',
-						),
-						'report_hash' => array(
-							'type'        => 'string',
-							'description' => 'For a package of objects or media: the report it is for (64 hex); with the manifest.',
+							'enum'        => self::EXPORT_PURPOSES,
+							'description' => 'What the package is read for, as wp_site_export made it; with the manifest. In this version inventory.',
 						),
 						'chunk'       => array(
 							'type'        => 'integer',

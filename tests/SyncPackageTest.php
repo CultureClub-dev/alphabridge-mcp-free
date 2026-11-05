@@ -273,13 +273,35 @@ final class SyncPackageTest extends TestCase {
 	public function testTheMacOfAStagingSiteIsItsOwnAndPerPurpose(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$mac = AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' );
-		self::assertSame( hash_hmac( 'sha256', "ab-sync-mac/1\nab-sync-fetch/1\ntext", $this->secret() ), $mac );
+		$mac    = AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' );
+		$stored = get_option( AB_MCP_Sync_Key::OPTION_MAC );
+		self::assertSame( array( 'key_id', 'mac' ), array_keys( $stored ) );
+		self::assertSame( AB_MCP_Sync_Key::current()['key_id'], $stored['key_id'] );
+		self::assertSame( hash_hmac( 'sha256', "ab-sync-mac/1\nab-sync-fetch/1\ntext", (string) hex2bin( $stored['mac'] ) ), $mac, 'Keyed with the secret of the MACs.' );
+		self::assertNotSame( hash_hmac( 'sha256', "ab-sync-mac/1\nab-sync-fetch/1\ntext", $this->secret() ), $mac, 'Not with the private key.' );
+		self::assertFalse( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Key::OPTION_MAC ], 'Without autoload.' );
 		self::assertNotSame( $mac, AB_MCP_Sync_Key::mac( 'ab-sync-other/1', 'text' ), 'Another purpose, another code.' );
 		foreach ( array( '', 'Ab', "a\nb", str_repeat( 'a', 65 ), 7 ) as $context ) {
 			self::assertNull( AB_MCP_Sync_Key::mac( $context, 'text' ), var_export( $context, true ) );
 		}
 		self::assertNotNull( AB_MCP_Sync_Key::mac( str_repeat( 'a', 64 ), 'text' ) );
+		foreach ( array(
+			'of another key'   => array( 'key_id' => str_repeat( 'f', 32 ) ) + $stored,
+			'not hex'          => array( 'mac' => str_repeat( 'g', 64 ) ) + $stored,
+			'short'            => array( 'mac' => substr( $stored['mac'], 1 ) ) + $stored,
+			'a list as secret' => array( 'mac' => array() ) + $stored,
+			'no key id'        => array( 'mac' => $stored['mac'] ),
+			'no array'         => 'x',
+		) as $case => $odd ) {
+			update_option( AB_MCP_Sync_Key::OPTION_MAC, $odd, false );
+			self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' ), 'A secret ' . $case . ' makes no MAC.' );
+		}
+		update_option( AB_MCP_Sync_Key::OPTION_MAC, $stored, false );
+		$source = get_option( AB_MCP_Sync_Key::OPTION_SOURCE );
+		update_option( AB_MCP_Sync_Key::OPTION_SOURCE, 'x', false );
+		self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' ), 'Not without the key it belongs to.' );
+		update_option( AB_MCP_Sync_Key::OPTION_SOURCE, $source, false );
+		self::assertSame( $mac, AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' ) );
 		// The role written past save(), which would remove the key: a site
 		// that is no confirmed staging site has no MAC, whatever its options hold.
 		$raw                                = get_option( 'ab_mcp_options' );
@@ -291,6 +313,7 @@ final class SyncPackageTest extends TestCase {
 		update_option( 'ab_mcp_options', $kept );
 		self::assertNotNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' ) );
 		AB_MCP_Sync_Key::forget();
+		self::assertFalse( get_option( AB_MCP_Sync_Key::OPTION_MAC ), 'Removed with the key.' );
 		self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'text' ), 'Not without its key.' );
 	}
 
@@ -492,11 +515,12 @@ final class SyncPackageTest extends TestCase {
 	/** @return array<string,array{0:mixed}> */
 	public static function cursors(): array {
 		return array(
-			'text'               => array( 'post' ),
-			'a list'             => array( array( 'post', null ) ),
-			'no inner cursor'    => array( array( 'kind' => 'post' ) ),
-			'another key'        => array( array( 'kind' => 'post', 'inner' => null, 'x' => 1 ) ),
-			'a kind that is a list'  => array( array( 'kind' => array( 'post' ), 'inner' => null ) ),
+			'text'                  => array( 'post' ),
+			'a list'                => array( array( 'post', null, self::ID ) ),
+			'no package'            => array( array( 'kind' => 'post', 'inner' => null ) ),
+			'no inner cursor'       => array( array( 'kind' => 'post', 'package' => self::ID ) ),
+			'another key'           => array( array( 'kind' => 'post', 'inner' => null, 'package' => self::ID, 'x' => 1 ) ),
+			'a kind that is a list' => array( array( 'kind' => array( 'post' ), 'inner' => null, 'package' => self::ID ) ),
 		);
 	}
 
@@ -583,9 +607,9 @@ final class SyncPackageTest extends TestCase {
 		}
 		self::assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_site_import_chunk', $r->get( 'wp_site_import_chunk' ) ), 'With fetch it asks the staging site.' );
 		self::assertSame( AB_MCP_Sync_Export::PURPOSES, AB_MCP_Tools_Staging::EXPORT_PURPOSES );
-		self::assertSame( AB_MCP_Sync_Manifest::PURPOSES, AB_MCP_Tools_Staging::PURPOSES );
 		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_export' )['inputSchema']['properties']['purpose']['enum'] );
-		self::assertSame( AB_MCP_Tools_Staging::PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'] );
+		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'], 'The import takes the inventory only in this version.' );
+		self::assertArrayNotHasKey( 'report_hash', $r->get( 'wp_site_import_chunk' )['inputSchema']['properties'] );
 		foreach ( array( 'wp_site_export' => '10 minutes', 'wp_site_export_chunk' => 'without passing it through the model', 'wp_site_import_chunk' => 'following no redirect' ) as $name => $says ) {
 			self::assertStringContainsString( $says, $r->get( $name )['description'], $name );
 		}
@@ -599,5 +623,138 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_export_unknown', AB_MCP_Tools_Staging::site_export( array( 'package_id' => 'x', 'purpose' => 'objects' ) )->get_error_code(), 'With package_id, the package made before.' );
 		self::assertSame( 'ab_mcp_sync_export_unknown', AB_MCP_Tools_Staging::site_export_chunk( array( 'package_id' => 'x', 'chunk' => 0 ) )->get_error_code() );
 		self::assertSame( 'ab_mcp_sync_import_package', AB_MCP_Tools_Staging::site_import_chunk( array( 'package_id' => 'x' ) )->get_error_code() );
+	}
+
+	/* ------------------------------------------------- the line of an object */
+
+	/** An object of the inventory with every field it may have, and some it may not. */
+	private static function object( array $over = array() ): array {
+		return array_merge(
+			array(
+				'kind'        => 'post',
+				'ref'         => '12',
+				'identity'    => array( 'post_type' => 'page', 'post_name' => 'about', 'theme' => '' ),
+				'canon'       => 'canon/1',
+				'hash'        => str_repeat( 'd', 64 ),
+				'size'        => 321,
+				'refs'        => array( array( 'space' => 'post', 'id' => 7, 'at' => 'meta:_thumbnail_id', 'strength' => 'strong', 'value' => 'RAW-REF' ) ),
+				'possible'    => array( array( 'value' => 987654321, 'at' => 'meta:service_settings.count' ) ),
+				'locks'       => array( array( 'key' => 'post:builder', 'stage' => 'Z8b', 'reason' => 'A builder.', 'at' => 'meta:_elementor_data', 'value' => 'RAW-LOCK' ) ),
+				'credentials' => array( 'b9' => array( 'meta:api_token' ), 'mixed' => array() ),
+				'complete'    => true,
+				'unread'      => array(),
+				'status'      => 'z8',
+				'form'        => array( 'RAW-FORM' ),
+				'other'       => 'RAW-OTHER',
+			),
+			$over
+		);
+	}
+
+	public function testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent(): void {
+		self::assertSame(
+			array(
+				'kind'     => 'post',
+				'ref'      => '12',
+				'identity' => array( 'post_type' => 'page', 'post_name' => 'about', 'theme' => '' ),
+				'status'   => 'z8',
+				'locks'    => array( array( 'key' => 'post:builder', 'stage' => 'Z8b', 'reason' => 'A builder.', 'at' => 'meta:_elementor_data' ) ),
+				'canon'    => 'canon/1',
+				'hash'     => str_repeat( 'd', 64 ),
+				'size'     => 321,
+				'complete' => true,
+				'unread'   => array(),
+				'refs'     => array( array( 'space' => 'post', 'id' => 7, 'at' => 'meta:_thumbnail_id', 'strength' => 'strong' ) ),
+				'possible' => array( array( 'at' => 'meta:service_settings.count' ) ),
+				'b9'       => array( 'meta:api_token' ),
+			),
+			AB_MCP_Sync_Export::line( self::object() )
+		);
+		$line = AB_MCP_Sync_Export::line( self::object( array( 'reason' => 'Never compared.', 'unread' => array( 'postmeta' ) ) ) );
+		self::assertSame( 'Never compared.', $line['reason'] );
+		self::assertSame( array( 'postmeta' ), $line['unread'] );
+		self::assertSame( array(), AB_MCP_Sync_Export::line( array_diff_key( self::object(), array( 'unread' => true ) ) )['unread'], 'An option without its own list of what was not read.' );
+		self::assertStringNotContainsString( 'RAW', (string) json_encode( AB_MCP_Sync_Export::line( self::object() ) ) );
+		self::assertStringNotContainsString( '987654321', (string) json_encode( AB_MCP_Sync_Export::line( self::object() ) ) );
+	}
+
+	/** @return array<string,array{0:array}> */
+	public static function heldByACredential(): array {
+		return array(
+			'a field of a credential in it' => array( array( 'credentials' => array( 'b9' => array(), 'mixed' => array( array( 'unit' => 'meta:service_settings', 'fields' => array( 'api_key' ) ) ) ) ) ),
+			'the name of a credential'      => array( array( 'status' => 'b9', 'hash' => null, 'reason' => 'The name is the name of a credential (B9).' ) ),
+		);
+	}
+
+	#[DataProvider( 'heldByACredential' )]
+	public function testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly( array $over ): void {
+		$line = AB_MCP_Sync_Export::line( self::object( $over ) );
+		self::assertSame( array( 'kind', 'ref', 'identity', 'status', 'locks' ), array_values( array_diff( array_keys( $line ), array( 'reason' ) ) ) );
+		self::assertArrayNotHasKey( 'hash', $line, 'Not even its hash.' );
+	}
+
+	/* ------------------------------------------------------------ binding */
+
+	public function testAPackageIsBoundToTheKeyThePairAndTheirConfirmations(): void {
+		$this->paired();
+		$this->on( 'staging' );
+		$binding = AB_MCP_Sync_Export::binding();
+		self::assertMatchesRegularExpression( '/^[0-9a-f]{64}\z/', $binding );
+		self::assertSame( $binding, AB_MCP_Sync_Export::binding() );
+		$GLOBALS['ab_test_home'] = 'https://staging.example.com/other';
+		self::assertNotSame( $binding, AB_MCP_Sync_Export::binding(), 'Another address of this site.' );
+		$GLOBALS['ab_test_home'] = self::address( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$renewed = AB_MCP_Sync_Export::binding();
+		self::assertNotSame( $binding, $renewed, 'A new key.' );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', 'https://shop.example.com', null, 3, 'form' ) );
+		self::assertNotSame( $renewed, AB_MCP_Sync_Export::binding(), 'Another production site.' );
+		$paired = AB_MCP_Sync_Export::binding();
+		$raw    = get_option( 'ab_mcp_options' );
+		$raw['staging']['pair']['at'] = $raw['staging']['pair']['at'] + 1;
+		update_option( 'ab_mcp_options', $raw );
+		self::assertNotSame( $paired, AB_MCP_Sync_Export::binding(), 'The pair confirmed again.' );
+		$raw['staging']['role']['at'] = $raw['staging']['role']['at'] + 1;
+		$again = AB_MCP_Sync_Export::binding();
+		update_option( 'ab_mcp_options', $raw );
+		self::assertNotSame( $again, AB_MCP_Sync_Export::binding(), 'The role confirmed again.' );
+		AB_MCP_Sync_Key::forget();
+		self::assertNotNull( AB_MCP_Staging::record()['pair'] );
+		self::assertNull( AB_MCP_Sync_Export::binding(), 'No key, no binding.' );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', '', null, 3, 'form' ) );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		self::assertNull( AB_MCP_Staging::record()['pair'] );
+		self::assertNull( AB_MCP_Sync_Export::binding(), 'No pair, no binding.' );
+	}
+
+	/* ------------------------------------------------- what a wrong MAC costs */
+
+	public function testAWrongMacReadsNeitherThePrivateKeyNorAPackage(): void {
+		$GLOBALS['wpdb'] = new \AbTestSyncWpdb();
+		\AB_MCP_Protected_Store::forget();
+		$this->paired();
+		$this->on( 'staging' );
+		$grant  = AB_MCP_Sync_Export::grants( self::ID, 1, time() )[0];
+		$wrong  = array( 'signature' => str_repeat( 'a', 64 ) ) + $grant;
+		$before = count( $GLOBALS['wpdb']->queries );
+		$GLOBALS['ab_test_option_reads'] = array();
+		self::assertNull( AB_MCP_Sync_Export::requested( self::request( self::query( $wrong ) ), time() ) );
+		self::assertArrayNotHasKey( AB_MCP_Sync_Key::OPTION_SECRET, $GLOBALS['ab_test_option_reads'], 'The private key is not read.' );
+		self::assertSame( $before, count( $GLOBALS['wpdb']->queries ), 'No package is looked up.' );
+		self::assertSame( 1, $GLOBALS['ab_test_option_reads'][ AB_MCP_Sync_Key::OPTION_MAC ], 'The secret of the MACs, once.' );
+		self::assertNull( AB_MCP_Sync_Export::requested( self::request( self::query( $grant ) ), time() ) );
+		self::assertGreaterThan( $before, count( $GLOBALS['wpdb']->queries ), 'A right MAC: the package is looked up.' );
+	}
+
+	/* --------------------------------------------------- the import, in Teil 2 */
+
+	public function testTheProductionSiteTakesPackagesOfTheInventoryOnly(): void {
+		foreach ( array( 'objects', 'media', 'env', null, 'Inventory' ) as $purpose ) {
+			$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array( 'manifest' => 'x', 'signature' => 'y' ), 'purpose' => $purpose ) );
+			self::assertSame( 'ab_mcp_sync_import_purpose', $refused->get_error_code(), var_export( $purpose, true ) . ': before anything is read.' );
+			self::assertStringContainsString( 'purpose=inventory', $refused->get_error_message() );
+		}
+		$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array(), 'report_hash' => str_repeat( 'c', 64 ) ) );
+		self::assertSame( 'ab_mcp_sync_import_purpose', $refused->get_error_code(), 'No purpose, and a report is no purpose.' );
 	}
 }

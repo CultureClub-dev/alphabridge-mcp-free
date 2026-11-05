@@ -254,7 +254,9 @@ final class SyncPackageTest extends TestCase {
 		$titles = array();
 		foreach ( $objects as $object ) {
 			self::assertArrayNotHasKey( 'form', $object, 'The inventory, without the content.' );
-			self::assertArrayHasKey( 'hash', $object );
+			if ( ! array_key_exists( 'hash', $object ) ) {
+				self::assertSame( 'b9', $object['status'], $object['kind'] . ':' . $object['ref'] . ': without its hash only where a credential holds it.' );
+			}
 			$titles[] = $object['kind'] . ':' . $object['ref'];
 		}
 		self::assertContains( 'option:blogname', $titles );
@@ -277,43 +279,80 @@ final class SyncPackageTest extends TestCase {
 		self::assertCount( $package['chunks'], $again['fetch'] );
 	}
 
-	public function testAPackageFromACursorHoldsTheKindsFromThere(): void {
+	public function testTheInventoryInASeriesOfPackagesHoldsEachObjectOnceAndAKindWholeWhereItIs(): void {
 		self::pair();
-		$package = self::b(
-			array(
-				array(
-					'op'      => 'export',
-					'purpose' => 'inventory',
-					'cursor'  => array(
-						'kind'  => 'term',
-						'inner' => null,
-					),
-					'as'      => 'package',
-				),
-			)
-		)['package'];
-		$kinds = array_column( $package['kinds'], 'kind' );
-		self::assertNotContains( 'post', $kinds, 'The posts were before the cursor.' );
-		self::assertContains( 'option', $kinds );
-		foreach ( $package['kinds'] as $kind ) {
-			self::assertTrue( $kind['complete'], $kind['kind'] . ': begun at its start, read to its end.' );
+		// The whole inventory in one package (twice: the account holds two
+		// open exports), then the same in packages of at most 25 objects,
+		// which go on as its third, one series.
+		self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'as' => 'p' ) ) );
+		$whole = self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'as' => 'p' ) ) )['p'];
+		$all   = self::objects_of( $whole );
+		self::assertNull( $whole['cursor'] );
+		$series = array();
+		$cursor = null;
+		do {
+			$step = array( 'op' => 'export', 'purpose' => 'inventory', 'objects' => 25, 'as' => 'p' );
+			if ( null !== $cursor ) {
+				$step['cursor'] = $cursor;
+			}
+			$package  = self::b( array( $step ) )['p'];
+			$series[] = $package;
+			$cursor   = $package['cursor'];
+			if ( null !== $cursor ) {
+				self::assertSame( $package['package_id'], $cursor['package'], 'The cursor names the package it goes on from.' );
+			}
+		} while ( null !== $cursor && count( $series ) < 50 );
+		self::assertNull( $cursor, 'The series ends.' );
+		self::assertGreaterThan( 3, count( $series ), 'More packages than open exports an account keeps: one series is one export.' );
+		$seen = array();
+		foreach ( $series as $package ) {
+			$objects = self::objects_of( $package );
+			foreach ( $objects as $key => $object ) {
+				self::assertArrayNotHasKey( $key, $seen, $key . ' once.' );
+				$seen[ $key ] = $object;
+			}
+			foreach ( $package['kinds'] as $kind ) {
+				if ( ! $kind['complete'] ) {
+					continue;
+				}
+				foreach ( $all as $key => $object ) {
+					if ( $object['kind'] === $kind['kind'] && ( $object['identity']['post_type'] ?? $object['identity']['taxonomy'] ?? '' ) === $kind['subtype'] ) {
+						self::assertArrayHasKey( $key, $objects, $kind['kind'] . ' ' . $kind['subtype'] . ' is complete only where every object of it is.' );
+					}
+				}
+			}
 		}
-		$within = self::b(
-			array(
-				array(
-					'op'      => 'export',
-					'purpose' => 'inventory',
-					'cursor'  => array(
-						'kind'  => 'option',
-						'inner' => array( 'after' => 1 ),
-					),
-					'as'      => 'package',
-				),
-			)
-		)['package'];
-		foreach ( $within['kinds'] as $kind ) {
-			self::assertFalse( $kind['complete'], $kind['kind'] . ': begun within the kind.' );
+		ksort( $seen );
+		ksort( $all );
+		self::assertSame( array_keys( $all ), array_keys( $seen ), 'Together, the whole inventory.' );
+
+		// A cursor no answer gave, or of another package, goes nowhere.
+		$second = $series[1];
+		foreach ( array(
+			'no package'         => array( 'kind' => $second['cursor']['kind'] ?? 'post', 'inner' => null ),
+			'another package'    => array( 'package' => $whole['package_id'] ) + ( $series[0]['cursor'] ),
+			'another place'      => array( 'inner' => array( 'after' => 1 ) ) + ( $series[0]['cursor'] ),
+		) as $case => $odd ) {
+			$refused = self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'cursor' => $odd, 'expect' => 'error', 'as' => 'p' ) ) )['p'];
+			self::assertSame( 'ab_mcp_sync_cursor_invalid', $refused['code'], $case );
 		}
+	}
+
+	/** The objects of a package of B, by kind and ref, through the relay of B. */
+	private static function objects_of( array $package ): array {
+		$steps = array();
+		foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
+			$steps[] = array( 'op' => 'export_chunk', 'package_id' => $package['package_id'], 'chunk' => $i, 'as' => 'c' . $i );
+		}
+		$chunks = array();
+		foreach ( self::b( $steps ) as $chunk ) {
+			$chunks[] = (string) base64_decode( $chunk['data'] );
+		}
+		$out = array();
+		foreach ( self::lines( $chunks ) as $object ) {
+			$out[ $object['kind'] . ':' . $object['ref'] ] = $object;
+		}
+		return $out;
 	}
 
 	/* --------------------------------------------------------------- route */
@@ -388,7 +427,7 @@ final class SyncPackageTest extends TestCase {
 		self::assertFalse( $first['complete'] );
 		self::assertSame( range( 0, $package['chunks'] - 1 ), $first['missing'] );
 		self::assertSame( 'ab_mcp_sync_import_fetch', $first['failed'][0]['code'], 'B answered 404.' );
-		self::assertSame( 30, $fetcher->calls[0]['args']['timeout'] );
+		self::assertEquals( 30, $fetcher->calls[0]['args']['timeout'] );
 		$bytes = AB_MCP_Sync_Manifest::verify( $package['manifest'], array( 'purpose' => 'inventory' ) )['manifest']['chunks'][0]['bytes'];
 		self::assertSame( $bytes + 1, $fetcher->calls[0]['args']['limit_response_size'], 'No more than the chunk: one byte more is a chunk that is not it.' );
 		self::assertSame( 'application/octet-stream', $fetcher->calls[0]['args']['headers']['Accept'] );
@@ -449,7 +488,7 @@ final class SyncPackageTest extends TestCase {
 			'manifest'   => $package['manifest'],
 			'purpose'    => 'inventory',
 		);
-		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects', 'report_hash' => str_repeat( 'c', 64 ) ) + $args ), 'ab_mcp_sync_manifest_purpose' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects' ) + $args ), 'ab_mcp_sync_import_purpose' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'cd', 16 ) ) + $args ), 'ab_mcp_sync_manifest_package' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) ), 'ab_mcp_sync_import_unknown' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'nothing' ) + $args ), 'ab_mcp_sync_import_purpose' );
@@ -662,5 +701,299 @@ final class SyncPackageTest extends TestCase {
 		$req   = new \WP_REST_Request( 'GET', '/alphabridge/v1/staging-package' );
 		$req->set_query_params( self::query( $gid, $grant ) );
 		self::assertNull( AB_MCP_Sync_Export::requested( $req, time() ) );
+	}
+
+	/* ------------------------------------- no value of the content (A-1) */
+
+	public function testNoValueOfTheContentLeavesTheStagingSite(): void {
+		self::pair();
+		$raw = array( 'zzraw', '987650001', '123456789', '555666777', '444555666', '333444555', '222333444', '111222333' );
+		self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => array( 'post_title' => 'Probe', 'post_status' => 'publish', 'post_content' => '<p>zzrawpost 987650001</p>' ), 'as' => 'post' ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'service_settings', 'value' => '{"api_key":"123456789","enabled":true}' ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'plain_note', 'value' => 'zzrawmeta 555666777' ),
+				array( 'op' => 'insert_term', 'name' => 'Probe term', 'taxonomy' => 'category', 'args' => array( 'description' => 'zzrawterm 444555666' ) ),
+				array( 'op' => 'update_option', 'name' => 'zz_custom_setting', 'value' => 'zzrawoption 333444555' ),
+				array( 'op' => 'update_option', 'name' => 'password_1', 'value' => 'zzrawsecret 222333444' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => array( 2 => array( 'title' => 'Probe', 'text' => 'zzrawwidget 111222333' ), '_multiwidget' => 1 ) ),
+			)
+		);
+		$package = self::export();
+		$chunks  = array();
+		foreach ( $package['fetch'] as $grant ) {
+			$chunks[] = self::route( self::query( $package['package_id'], $grant ) )['raw'];
+		}
+		$text = '';
+		foreach ( $chunks as $chunk ) {
+			$text .= (string) gzdecode( $chunk );
+		}
+		foreach ( $raw as $value ) {
+			self::assertStringNotContainsString( $value, $text, 'No value of the content: ' . $value );
+		}
+		$held = null;
+		foreach ( self::lines( $chunks ) as $object ) {
+			if ( 'post' === $object['kind'] && 'probe' === ( $object['identity']['post_name'] ?? '' ) ) {
+				$held = $object;
+			}
+		}
+		self::assertNotNull( $held, 'The post with the credential is there.' );
+		self::assertSame( array( 'identity', 'kind', 'locks', 'ref', 'status' ), self::sorted( array_keys( array_diff_key( $held, array( 'reason' => true ) ) ) ), 'With its identity and the reason only.' );
+		self::assertContains( 'credential_field', array_map( static fn( $lock ) => substr( $lock['key'], strpos( $lock['key'], ':' ) + 1 ), $held['locks'] ) );
+	}
+
+	private static function sorted( array $list ): array {
+		sort( $list );
+		return $list;
+	}
+
+	/* ------------------------------------------------ the binding (A-2) */
+
+	public function testAPackageIsGivenOutOnlyAsLongAsThePairAndTheKeyHold(): void {
+		self::pair();
+		$package = self::export();
+		$right   = self::query( $package['package_id'], $package['fetch'][0] );
+		self::assertSame( 200, self::route( $right )['status'] );
+
+		// B paired again, with another production site.
+		$steps = self::b(
+			array(
+				array( 'op' => 'staging_save', 'role' => 'staging', 'partner_url' => 'https://shop.example.com', 'source' => 'form' ),
+				array( 'op' => 'export_again', 'package_id' => $package['package_id'], 'expect' => 'error', 'as' => 'again' ),
+			)
+		);
+		self::assertNoRoute( $right, 'GET', 'the address of a package of the pair before' );
+		self::assertSame( 'ab_mcp_sync_export_stale', $steps['again']['code'] );
+		self::assertSame( 'ab_mcp_sync_export_unknown', self::b( array( array( 'op' => 'export_again', 'package_id' => $package['package_id'], 'expect' => 'error', 'as' => 'again' ) ) )['again']['code'], 'Discarded where it was met.' );
+
+		// The role of B confirmed anew (production, then staging again): a new key.
+		self::b( array( array( 'op' => 'staging_save', 'role' => 'staging', 'partner_url' => AB_MCP_IT_Sites::url( 'a' ), 'source' => 'form' ) ) );
+		$second = self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'as' => 'p' ) ) )['p'];
+		$steps  = self::b(
+			array(
+				array( 'op' => 'sync_key', 'as' => 'before' ),
+				array( 'op' => 'staging_save', 'role' => 'production', 'partner_url' => AB_MCP_IT_Sites::url( 'a' ), 'source' => 'form' ),
+				array( 'op' => 'staging_save', 'role' => 'staging', 'partner_url' => AB_MCP_IT_Sites::url( 'a' ), 'source' => 'form' ),
+				array( 'op' => 'sync_key', 'as' => 'after' ),
+				array( 'op' => 'export_again', 'package_id' => $second['package_id'], 'expect' => 'error', 'as' => 'again' ),
+			)
+		);
+		self::assertNotSame( $steps['before']['key_id'], $steps['after']['key_id'], 'A new key.' );
+		self::assertSame( 'ab_mcp_sync_export_stale', $steps['again']['code'], 'No fresh fetch addresses for a package of the key before.' );
+	}
+
+	public function testABindingThatChangedWithoutANewKeyIsNoBindingEither(): void {
+		// A as the staging site of B, in this process.
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$package = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertIsArray( $package, is_wp_error( $package ) ? $package->get_error_message() : '' );
+		$request = new \WP_REST_Request( 'GET', '/alphabridge/v1/staging-package' );
+		$request->set_query_params( self::query( $package['package_id'], $package['fetch'][0] ) );
+		self::assertIsString( AB_MCP_Sync_Export::requested( $request, time() ) );
+
+		// The pair confirmed again, the key as it was.
+		$raw                          = \AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+		$raw['pair']['at']            = (int) $raw['pair']['at'] + 1;
+		\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+		self::assertNull( AB_MCP_Sync_Export::requested( $request, time() ), 'Given out no more.' );
+		self::refused( AB_MCP_Sync_Export::again( $package['package_id'] ), 'ab_mcp_sync_export_unknown' );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'out' ), 'And discarded.' );
+
+		// A package of a binding before is discarded before a new one is made.
+		$first = AB_MCP_Sync_Export::make( 'inventory' );
+		$raw['pair']['at'] = (int) $raw['pair']['at'] + 1;
+		\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+		$next = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertSame( array( $next['package_id'] ), array_column( AB_MCP_Protected_Store::groups( 'out' ), 'gid' ), 'Only the new package: ' . $first['package_id'] . ' is gone.' );
+	}
+
+	/* -------------------------------------------- the account (A-3) */
+
+	public function testAnImportBelongsToTheAccountThatBeganIt(): void {
+		self::pair();
+		$package = self::export();
+		$data    = self::b( array( array( 'op' => 'export_chunk', 'package_id' => $package['package_id'], 'chunk' => 0, 'as' => 'c' ) ) )['c']['data'];
+		$args    = array(
+			'package_id' => $package['package_id'],
+			'manifest'   => $package['manifest'],
+			'purpose'    => 'inventory',
+		);
+		self::assertIsArray( AB_MCP_Sync_Import::call( $args ) );
+		$other = wp_insert_user(
+			array(
+				'user_login' => 'second-admin',
+				'user_pass'  => wp_generate_password( 24 ),
+				'user_email' => 'second-admin@example.invalid',
+				'role'       => 'administrator',
+			)
+		);
+		self::assertIsInt( $other );
+		wp_set_current_user( $other );
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) ), 'ab_mcp_sync_import_unknown' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => 0, 'data' => $data ) ), 'ab_mcp_sync_import_unknown' );
+		$own = AB_MCP_Sync_Import::call( $args );
+		self::assertSame( range( 0, $package['chunks'] - 1 ), $own['missing'], 'Its own group, from the start.' );
+		$groups = AB_MCP_Protected_Store::groups( 'in' );
+		$owners = array_map( 'intval', array_column( $groups, 'user_id' ) );
+		sort( $owners );
+		self::assertSame( array( self::admin(), $other ), $owners, 'Two groups, one of each account.' );
+
+		wp_set_current_user( self::admin() );
+		$done = AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => 0, 'data' => $data ) );
+		self::assertTrue( $done['complete'] );
+		wp_set_current_user( $other );
+		self::assertFalse( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) )['complete'], 'The other account\'s package stays its own.' );
+	}
+
+	/* ------------------------------------------- the time of a fetch (B-2) */
+
+	public function testAFetchTakesNoLongerThanWhatIsLeftOfTheBudget(): void {
+		self::pair();
+		$package = self::export();
+		$args    = array(
+			'package_id' => $package['package_id'],
+			'manifest'   => $package['manifest'],
+			'purpose'    => 'inventory',
+			'fetch'      => $package['fetch'],
+		);
+		foreach ( array( 'twelve seconds left' => array( 1048.0, 12.0 ), 'thirty and more left' => array( 1000.0, 30.0 ), 'four seconds left' => array( 1056.0, null ) ) as $case => list( $then, $timeout ) ) {
+			$fetcher = AB_MCP_Test_Sync_Fetcher::for_sites();
+			$times   = array( 1000.0, $then );
+			AB_MCP_Sync_Import::$clock = static function () use ( &$times ) {
+				return count( $times ) > 1 ? array_shift( $times ) : $times[0];
+			};
+			try {
+				$state = AB_MCP_Sync_Import::call( $args, $fetcher );
+			} finally {
+				AB_MCP_Sync_Import::$clock = null;
+			}
+			self::assertIsArray( $state, $case );
+			if ( null === $timeout ) {
+				self::assertSame( array(), $fetcher->calls, $case . ': less than ' . AB_MCP_Sync_Import::MIN_FETCH . ' seconds, no fetch.' );
+				continue;
+			}
+			self::assertEquals( $timeout, $fetcher->calls[0]['args']['timeout'], $case );
+			self::assertTrue( $state['complete'], $case );
+			AB_MCP_Protected_Store::remove( 'in', AB_MCP_Protected_Store::groups( 'in' )[0]['gid'] );
+		}
+		self::assertSame( 5, AB_MCP_Sync_Import::MIN_FETCH );
+	}
+
+	/* --------------------------------------- a write that fails (B-4) */
+
+	/**
+	 * Run $fn while every read of the record of the store's proof from the
+	 * $from-th on fails, as a store that cannot be used any more; the reads
+	 * counted.
+	 */
+	private static function store_failing_from( int $from, callable $fn, int &$reads ) {
+		global $wpdb;
+		$reads = 0;
+		$table = $wpdb->options;
+		$break = static function ( $query ) use ( &$reads, $from, $table ) {
+			if ( 0 === strpos( ltrim( (string) $query ), 'SELECT option_value FROM ' . $table . " WHERE option_name = 'ab_mcp_store_proof'" ) ) {
+				++$reads;
+				if ( $reads >= $from ) {
+					return 'SELECT option_value FROM ab_it_no_such_table WHERE 1 = 0';
+				}
+			}
+			return $query;
+		};
+		$quiet = $wpdb->suppress_errors( true );
+		add_filter( 'query', $break );
+		try {
+			return $fn();
+		} finally {
+			remove_filter( 'query', $break );
+			$wpdb->suppress_errors( $quiet );
+			AB_MCP_Protected_Store::forget();
+		}
+	}
+
+	public function testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		// The store proved once, so every run below reads it alike.
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'out' ) );
+		AB_MCP_Protected_Store::forget();
+		$reads = 0;
+		$made  = self::store_failing_from( PHP_INT_MAX, static fn() => AB_MCP_Sync_Export::make( 'inventory' ), $reads );
+		self::assertIsArray( $made );
+		$all = $reads;
+		self::assertGreaterThan( 2, $all, 'The store is asked before each write.' );
+		AB_MCP_Protected_Store::remove( 'out', $made['package_id'] );
+		// The store fails at every point of the making in turn: a package is
+		// there whole, or not at all.
+		$failed = 0;
+		for ( $from = 1; $from <= $all; $from++ ) {
+			$result = self::store_failing_from( $from, static fn() => AB_MCP_Sync_Export::make( 'inventory' ), $reads );
+			$failed = $failed + ( is_wp_error( $result ) ? 1 : 0 );
+			foreach ( AB_MCP_Protected_Store::groups( 'out' ) as $group ) {
+				self::assertIsArray( AB_MCP_Sync_Export::again( $group['gid'] ), 'Read ' . $from . ': a package that is there is whole, nothing half made.' );
+				AB_MCP_Protected_Store::remove( 'out', $group['gid'] );
+			}
+		}
+		self::assertGreaterThan( 1, $failed, 'The making failed at several points.' );
+	}
+
+	public function testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft(): void {
+		self::pair();
+		$signed = self::b(
+			array(
+				array(
+					'op'      => 'sign_manifest',
+					'package' => array(
+						'package_id'  => str_repeat( 'ab', 16 ),
+						'purpose'     => 'inventory',
+						'report_hash' => null,
+						'kinds'       => array(),
+						'objects'     => 0,
+						'unpacked'    => 0,
+						'chunks'      => array(
+							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'abc' ) ),
+							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'def' ) ),
+						),
+						'bytes'       => 6,
+						'sha256'      => hash( 'sha256', 'abcdef' ),
+					),
+					'as'      => 'signed',
+				),
+			)
+		)['signed'];
+		$id    = str_repeat( 'ab', 16 );
+		$begin = array( 'package_id' => $id, 'manifest' => $signed, 'purpose' => 'inventory' );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'in' ) );
+		AB_MCP_Protected_Store::forget();
+		$reads = 0;
+		self::store_failing_from( PHP_INT_MAX, static fn() => AB_MCP_Sync_Import::call( $begin ), $reads );
+		AB_MCP_Protected_Store::remove( 'in', AB_MCP_Protected_Store::groups( 'in' )[0]['gid'] );
+		$all = $reads;
+		// The store fails at every point of the beginning in turn: what is
+		// there has its record and goes on, nothing is half made.
+		$errors = 0;
+		for ( $from = 1; $from <= $all; $from++ ) {
+			$failed = self::store_failing_from( $from, static fn() => AB_MCP_Sync_Import::call( $begin ), $reads );
+			$errors = $errors + ( is_wp_error( $failed ) ? 1 : 0 );
+			foreach ( AB_MCP_Protected_Store::groups( 'in' ) as $group ) {
+				self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => $id ) ), 'Read ' . $from . ': a beginning that is there goes on.' );
+				AB_MCP_Protected_Store::remove( 'in', $group['gid'] );
+			}
+		}
+		self::assertGreaterThan( 1, $errors, 'The beginning failed at several points.' );
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
+		self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( 'abc' ) ) ) );
+		$refused = self::store_failing_from( 1, static fn() => AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( 'def' ) ) ), $reads );
+		self::assertInstanceOf( WP_Error::class, $refused );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id ) );
+		self::assertSame( array( 1 ), $state['missing'], 'What arrived stays: only the chunk that failed is missing.' );
+
+		// Interrupted after the last chunk was kept, before it was checked whole.
+		$gid = AB_MCP_Protected_Store::groups( 'in' )[0]['gid'];
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 1 ), 'def' ) );
+		self::assertFalse( AB_MCP_Protected_Store::groups( 'in' )[0]['closed'] );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id ) );
+		self::assertTrue( $state['complete'], 'The next call checks it whole and ends it.' );
+		self::assertTrue( AB_MCP_Protected_Store::groups( 'in' )[0]['closed'], 'Closed: it counts as an open package no more.' );
 	}
 }

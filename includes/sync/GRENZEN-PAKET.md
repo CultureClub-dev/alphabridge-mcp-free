@@ -84,7 +84,9 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `?_envelope` hüllt auch die Antwort «keine Route» ein, und ein Plugin, das
   die REST-API ohne Anmeldung sperrt, sperrt auch den Abruf.
 - Ein Inventar, das ein Aufruf nicht fasst (60 Sekunden, 4000 Objekte), wird
-  zu mehreren Paketen: die Antwort trägt den Cursor für das nächste. Eine
+  zu mehreren Paketen: die Antwort trägt den Cursor für das nächste. Die
+  Pakete einer Reihe zählen als ein offener Export und ein offenes Paket;
+  ein abgeschlossener Import zählt nicht mehr als offen. Eine
   Art gilt in einem Paket nur als vollständig, wenn es sie von ihrem Anfang
   bis zu ihrem Ende gelesen hat; das Zusammensetzen mehrerer Pakete ist
   Sache des Berichts (Zweig 6).
@@ -111,6 +113,24 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   räumt die Bereinigung nach einem Tag.
 - Ohne die PHP-Erweiterung zlib entsteht kein Paket (Ablehnung mit Weg);
   dieser Zweig hat keinen Test, weil die Prüfumgebung zlib hat.
+- Optionen ohne Hash (ein Name einer Zugangsangabe, B9, und andere, die nie
+  verglichen werden) zählt die Objektgrenze des Inventars nicht. 5001
+  Optionen `password_1` … `password_5001` bleiben unter den 4000 Objekten
+  eines Aufrufs, das Paket überschreitet dann aber 5000 Objekte, `pack()`
+  lehnt ab, und derselbe Cursor scheitert wieder (konstruiert; Codex-Runde 4).
+- Pakete einer früheren Bindung (anderes Paar, Rolle neu bestätigt, neuer
+  Schlüssel) gibt die Staging-Site nie mehr aus; verworfen werden sie, wo
+  sie ihr begegnen: beim nächsten Export, beim Abruf und bei
+  `wp_site_export`/`wp_site_export_chunk` mit ihrer Kennung, sonst nach
+  einem Tag durch die Bereinigung. Das Speichern der Rolle fasst die Ablage
+  nicht an (es müsste sonst bei jeder Bestätigung die Ablage prüfen).
+- Bricht ein Export zwischen Stück und Datensatz ab (der Prozess endet),
+  bleibt eine Gruppe ohne Datensatz: sie gilt als kein Paket und wird nie
+  ausgegeben, zählt aber als offener Export ihrer Reihe, bis die
+  Bereinigung sie nach einem Tag entfernt.
+- Ein Import gehört dem Konto, das ihn begann; ein anderes Konto beginnt
+  eine eigene Gruppe. Jede offene Gruppe zählt bis zu ihrem Abschluss gegen
+  die fünf offenen Pakete der Site.
 
 ## Privater Schlüssel
 

@@ -119,6 +119,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'AB_MCP_Protected_Store::groups'       => 'The sidecars of an area of the store.',
 		'AB_MCP_Protected_Store::files'        => 'The files of a group, by name.',
 		'AB_MCP_Protected_Store::remove'       => 'Removes a group of the store.',
+		'AB_MCP_Protected_Store::close'        => 'Marks a group of the store as closed (its sidecar).',
 		'AB_MCP_Outbound::public_addresses'    => 'Looks the host of this site up in the DNS (or the filter ab_mcp_outbound_addresses); no stored value.',
 		'->get_route'                          => 'WP_REST_Request: the path of the request.',
 		'->get_method'                         => 'WP_REST_Request: its method.',
@@ -154,15 +155,15 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-key.php'      => array(
 			'AB_MCP_Staging::role' => array( 4, 'make(), sign(), mac(), answer(): only a confirmed staging site has a key.' ),
-			'get_option'           => array( 2, 'found() and secret(): the key, in the two options this class writes itself.' ),
-			'update_option'        => array( 2, 'renew(): those two options, without autoload.' ),
-			'delete_option'        => array( 2, 'forget(): removes them.' ),
+			'get_option'           => array( 4, 'found(), secret() and mac_secret(): the key and the secret of its MACs, in the three options this class writes itself.' ),
+			'update_option'        => array( 2, 'renew() and store_secret(): those three options, without autoload.' ),
+			'delete_option'        => array( 3, 'forget(): removes them.' ),
 			'home_url'             => array( 1, 'answer(): the own address the key names.' ),
 		),
 		'class-sync-export.php'   => array(
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
-			'AB_MCP_Staging::record' => array( 2, 'refusal() and make(): the pair, whose production site a package is for.' ),
-			'home_url'               => array( 2, 'make() and relay_refusal(): the own address, for the inventory and whether it is public.' ),
+			'AB_MCP_Staging::record' => array( 3, 'refusal(), make() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
+			'home_url'               => array( 3, 'make(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
 		),
 		'class-sync-manifest.php' => array(
 			'AB_MCP_Staging::record' => array( 1, 'sign(): the pair, whose production site a package is for.' ),

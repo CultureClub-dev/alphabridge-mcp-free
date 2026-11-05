@@ -13,8 +13,10 @@
  * (name, value), canonical (kind, ref, addresses), inventory (addresses);
  * for the trust of the takeover (Z8 branch 5): staging_save (role,
  * partner_url, partner_role, source; as the administrator), sync_key (the
- * key of the site), pairing_code, sign_manifest (package); for its packages:
- * export (purpose, cursor), export_again (package_id, now), export_chunk
+ * key of the site), pairing_code, anchor_code (code: prepared and confirmed
+ * as a person does), sign_manifest (package); for its packages: export
+ * (purpose, cursor, objects), import (the arguments of wp_site_import_chunk,
+ * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
  * (now), add_admin (login), as_user (user) and write_access (the site mode
  * Full, as a person switches it on). A step with "expect": "error"
@@ -140,7 +142,17 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'export':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
-			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null );
+			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
+			break;
+		case 'import':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
+			$ab_it_out = AB_MCP_Sync_Import::call( $ab_it_step['args'] );
+			break;
+		case 'anchor_code':
+			$ab_it_out = AB_MCP_Sync_Anchor::prepare_from_code( $ab_it_step['code'], get_current_user_id() );
+			if ( is_array( $ab_it_out ) ) {
+				$ab_it_out = AB_MCP_Sync_Anchor::confirm( $ab_it_out['fingerprint'], get_current_user_id() );
+			}
 			break;
 		case 'export_again':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
