@@ -389,8 +389,10 @@ final class AB_MCP_Sync_Key {
 	 *
 	 * The host of such an address is read from its text, as
 	 * AB_MCP_Outbound::get_bound() reads an authority, not through
-	 * parse_url(): that turns the bytes 0x80 to 0x9F into "_", so «straße» or
-	 * «BÜCHER» would come out as another host.
+	 * parse_url(): that turns every byte the C library counts as a control
+	 * character into "_", and macOS's counts 0x80 to 0x9F and 0xAD as such in
+	 * the locale C.UTF-8 PHP sets for LC_CTYPE (since PHP 8.1.2), so there
+	 * «straße» or «BÜCHER» would come out as another host (glibc keeps them).
 	 *
 	 * @param mixed               $url Address.
 	 * @param callable|false|null $idn idn_to_ascii() or a stand-in; false for

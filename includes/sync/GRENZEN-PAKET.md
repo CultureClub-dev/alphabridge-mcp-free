@@ -21,14 +21,21 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 
 ## Adressen
 
-- `parse_url()` macht aus den Bytes 0x80 bis 0x9F ein «_»; darunter sind die
-  UTF-8-Folgen von ß, Ä, Ö und Ü. `AB_MCP_Staging::normalize_url()` (Z6)
-  speichert eine Partneradresse wie `https://straße.example` darum als
-  anderen Host. Anker und Manifest lesen den Host aus dem Text
+- Auf macOS beschädigt `parse_url()` internationale Namen: es macht jedes
+  Byte, das die C-Bibliothek als Steuerzeichen zählt, zu «_», und die von
+  macOS zählt im Gebietsschema C.UTF-8, das PHP seit 8.1.2 für `LC_CTYPE`
+  setzt (Bug #81598), die Bytes 0x80 bis 0x9F und 0xAD dazu (gemessen: PHP 8.5.10 auf
+  macOS; mit `LC_CTYPE` C bleiben sie). Betroffen ist jedes Zeichen mit einem
+  solchen Byte in seiner UTF-8-Folge, etwa ß, Ä, Ö, Ü, É und í.
+  `AB_MCP_Staging::normalize_url()` (Z6) speichert dort eine Partneradresse
+  wie `https://straße.example` als anderen Host. Unter Linux (glibc) bleiben
+  die Bytes heil (CI: PHP 8.2 bis 8.4), und ein so gespeicherter Name koppelt
+  in beiden Schreibweisen. Anker und Manifest lesen den Host aus dem Text
   (`AB_MCP_Sync_Key::site_form()`), die Staging-Site nennt sich in der
   xn--Form, und ein so gespeichertes Paar lehnt die Kopplung mit dem Weg
   ab, die xn--Form einzutragen (`idn_hint()`). Die Speicherung selbst zu
-  ändern ist eine Änderung von Z6 mit neuen Texten in neun Sprachen. Die
+  ändern ist eine Änderung von Z6 mit neuen Texten in neun Sprachen; Hosts
+  für WordPress laufen fast immer unter Linux, macOS vor allem lokal. Die
   eigene Adresse ist davon nicht betroffen: Ziel des Pakets und `pair_print`
   lesen sie aus `home_url()` direkt über `site_form()`, ohne
   `normalize_url()` davor (Codex-Runde 2); eine eigene Adresse, die
@@ -36,10 +43,13 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 - Ohne die PHP-Erweiterung intl werden internationale Domainnamen Byte für
   Byte verglichen: `https://bücher.example` und `https://xn--bcher-kva.example`
   sind dann verschiedene Sites, und die Ablehnung nennt die xn--Form als Weg.
-- Ohne intl hat eine Staging-Site, deren eigene Adresse solche Bytes hat,
-  keinen Kopplungscode, und ihre Route antwortet mit einem Kodierungsfehler,
-  weil die so gelesene Adresse kein UTF-8 mehr ist und kein JSON sie trägt;
-  der Weg ist derselbe: die Adresse in der xn--Form.
+- Auf macOS trifft dasselbe Pfade mit solchen Bytes: `normalize_url()`
+  beschädigt auch sie, und `site_form()` übernimmt den Pfad so, wie
+  `normalize_url()` ihn schreibt. Ohne intl nennt eine Staging-Site einen
+  solchen Host in Unicode; eine Live-Site auf macOS nimmt diesen Schlüssel
+  nicht an, weil sie die Adresse mit `normalize_url()` prüft (`offer()`).
+  Der Weg ist derselbe: die Adresse in der xn--Form, einen Pfad
+  prozentkodiert.
 - Der Port der gespeicherten Partneradresse wird für genau diese Adresse
   und einmal erlaubt (`AB_MCP_Outbound::get_partner()`): die erste Prüfung
   der Adresse verbraucht die Freigabe, eine Weiterleitung folgt ohnehin

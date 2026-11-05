@@ -273,8 +273,9 @@ final class AB_MCP_Sync_Anchor {
 			return null;
 		}
 		// This site's address as anchor and manifest compare it, from
-		// home_url() as it is (normalize_url() would break a name like
-		// straße); one site_form() cannot read gives no print.
+		// home_url() as it is (normalize_url() breaks a name like straße on
+		// macOS, AB_MCP_Sync_Key::site_form()); one site_form() cannot read
+		// gives no print.
 		$site = AB_MCP_Sync_Key::site_form( home_url() );
 		if ( '' === $site ) {
 			return null;

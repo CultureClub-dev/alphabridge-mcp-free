@@ -258,7 +258,8 @@ final class AB_MCP_Sync_Manifest {
 		// Compared as AB_MCP_Sync_Key::site_form() gives them (an international
 		// domain name in either spelling); an address it cannot read is none.
 		// This site's own address goes to site_form() as home_url() gives it:
-		// normalize_url() before would break a name like straße (parse_url()).
+		// normalize_url() before breaks a name like straße on macOS
+		// (parse_url(), AB_MCP_Sync_Key::site_form()).
 		$own = home_url();
 		$us  = AB_MCP_Sync_Key::site_form( $own );
 		if ( '' === $us || AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us ) {

@@ -53,6 +53,15 @@ final class SyncTrustAddressTest extends TestCase {
 	/** A host idn_to_ascii() does not take: a label of 64 characters. */
 	private const UNREADABLE = 'https://üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü.example';
 
+	/**
+	 * https://straße.example as AB_MCP_Staging::normalize_url() stores it on
+	 * macOS: parse_url() turns the byte 0x9F of the ß (C3 9F) into "_" where
+	 * the C library counts it as a control character, as macOS's does in the
+	 * locale C.UTF-8 PHP sets for LC_CTYPE (since PHP 8.1.2); glibc does not,
+	 * and on Linux the name is stored as it is.
+	 */
+	private const BROKEN = "https://stra\xC3_e.example";
+
 	protected function setUp(): void {
 		ab_test_reset();
 		$GLOBALS['ab_test_can']         = static fn(): bool => true;
@@ -161,21 +170,53 @@ final class SyncTrustAddressTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_anchor_site', $refused->get_error_code() );
 	}
 
+	/**
+	 * The production site with the address of its staging site stored as it
+	 * is given here, past AB_MCP_Staging::save(), which stores it by
+	 * normalize_url() of this platform; read back as stored.
+	 */
+	private function store_partner( string $partner ): void {
+		$this->on( 'live' );
+		$raw                                   = get_option( 'ab_mcp_options' );
+		$raw['staging']['pair']['partner_url'] = $partner;
+		update_option( 'ab_mcp_options', $raw );
+		self::assertSame( $partner, AB_MCP_Staging::record()['pair']['partner_url'], 'Read back as stored.' );
+	}
+
 	#[RequiresPhpExtension( 'intl' )]
-	public function testANameNormalizeUrlChangedWhenItWasStoredIsRefusedWithTheWay(): void {
-		// parse_url() turns the bytes 0x80 to 0x9F into "_": the ß of
-		// straße.example is stored as another host (AB_MCP_Staging::normalize_url()).
-		$refused = $this->pair_at( 'https://www.example.com', 'https://straße.example', 'https://straße.example', 'https://www.example.com' );
+	public function testANameStoredWithBrokenBytesIsRefusedWithTheWay(): void {
+		// As macOS stores straße.example (BROKEN), on every platform.
+		$this->on( 'staging' );
+		$GLOBALS['ab_test_home'] = 'https://straße.example';
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', 'https://www.example.com', null, 3, 'form' ) );
+		$code = AB_MCP_Sync_Key::pairing_code();
+		self::assertIsString( $code );
+		$this->on( 'live' );
+		$GLOBALS['ab_test_home'] = 'https://www.example.com';
+		self::assertIsArray( AB_MCP_Staging::save( 'production', 'https://xn--strae-oqa.example', null, 3, 'form' ) );
+		$this->store_partner( self::BROKEN );
+		$refused = AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 );
 		self::assertInstanceOf( \WP_Error::class, $refused );
 		self::assertSame( 'ab_mcp_sync_anchor_site', $refused->get_error_code() );
 		self::assertStringContainsString( 'cannot read the international domain name as it is stored: store the address on both sites in its xn-- form (Punycode), here https://xn--strae-oqa.example.', $refused->get_error_message(), 'The staging site names itself in its xn-- form, and the way names it.' );
-		$this->on( 'live' );
-		AB_MCP_Staging::save( 'production', 'https://xn--strae-oqa.example', null, 3, 'form' );
-		$this->on( 'staging' );
-		$GLOBALS['ab_test_home'] = 'https://straße.example';
-		$code                    = AB_MCP_Sync_Key::pairing_code();
-		$this->on( 'live' );
+		$this->store_partner( 'https://xn--strae-oqa.example' );
 		self::assertIsArray( AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 ), 'Stored in that form, it anchors.' );
+	}
+
+	#[RequiresPhpExtension( 'intl' )]
+	public function testAStrasseNameAnchorsWhereThisPlatformStoresItWhole(): void {
+		// Through save(), as a person enters it: where normalize_url() keeps
+		// the bytes (Linux), the name stored whole anchors in either spelling;
+		// where it breaks them (macOS), the refusal names the way.
+		$whole   = 'https://straße.example' === AB_MCP_Staging::normalize_url( 'https://straße.example' );
+		$result  = $this->pair_at( 'https://www.example.com', 'https://straße.example', 'https://xn--strae-oqa.example', 'https://www.example.com' );
+		$message = is_object( $result ) ? $result->get_error_message() : '';
+		if ( $whole ) {
+			self::assertIsArray( $result, $message );
+		} else {
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertStringContainsString( 'store the address on both sites in its xn-- form (Punycode), here https://xn--strae-oqa.example.', $message );
+		}
 	}
 
 	/** A pairing code of the key of the staging site that names this site. */
@@ -266,7 +307,8 @@ final class SyncTrustAddressTest extends TestCase {
 
 	#[RequiresPhpExtension( 'intl' )]
 	public function testThisSiteReadsItsOwnNameAsHomeUrlGivesIt(): void {
-		// ß is the bytes C3 9F, of which parse_url() breaks the second.
+		// ß is the bytes C3 9F, of which parse_url() breaks the second on
+		// macOS (BROKEN); this site's own name is read whole on every platform.
 		$this->on( 'staging' );
 		AB_MCP_Staging::save( 'staging', 'https://xn--strae-oqa.example', null, 3, 'form' );
 		$code = AB_MCP_Sync_Key::pairing_code();

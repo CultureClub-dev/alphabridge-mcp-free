@@ -262,7 +262,7 @@ e('paket/idn-hint-read', 'idn_hint(): nothing to say where both names were read'
   "\t\tif ( $read && '' !== self::site_form( $a, $idn ) && '' !== self::site_form( $b, $idn ) ) {", "\t\tif ( false ) {", 'address', HINT)
 e('paket/key-answer-site-form', 'answer(): the staging site names itself as site_form() writes it', K,
   "\t\t$site = self::site_form( home_url() );", "\t\t$site = AB_MCP_Staging::normalize_url( home_url() );",
-  'address', 'testANameNormalizeUrlChangedWhenItWasStoredIsRefusedWithTheWay')
+  'address', 'testANameStoredWithBrokenBytesIsRefusedWithTheWay')
 
 e('paket/key-route-none', 'rest_key(): 404 where there is no key to give', K,
   "\t\tif ( null === $answer ) {\n\t\t\treturn new WP_Error( 'ab_mcp_staging_key_none'",
@@ -551,8 +551,10 @@ SOURCE = "\t\tif ( '' === $from || AB_MCP_Sync_Key::site_form( $anchor['partner_
 UNREAD = 'testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike'
 e('paket/manifest-target', 'verify(): the target is exactly this site\'s address', M, TARGET, "\t\tif ( '' === $us ) {",
   'manifest', 'testAManifestForAnotherAddressThanThisSiteIsRefused')
-e('paket/manifest-target-own', 'verify(): this site\'s own address from home_url() as it is, not after normalize_url()', M,
-  "\t\t$own = home_url();", "\t\t$own = AB_MCP_Staging::normalize_url( home_url() );", 'address', 'testThisSiteReadsItsOwnNameAsHomeUrlGivesIt')
+# verify() reads this site's own address from home_url() as it is: where
+# normalize_url() keeps the bytes of the name (Linux, glibc), normalize_url()
+# before site_form() changes nothing, so no entry here; on macOS
+# testThisSiteReadsItsOwnNameAsHomeUrlGivesIt holds the order.
 e('paket/manifest-target-unreadable', 'verify(): this site\'s own name that cannot be read is no target', M, TARGET, TARGET.replace("'' === $us || ", ''), 'address', UNREAD)
 e('paket/manifest-target-idn', 'verify(): the target in either spelling of an international name', M,
   "AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us", "$manifest['target'] !== $us", 'address', 'testThePackageIsForThisSiteInEitherSpelling')

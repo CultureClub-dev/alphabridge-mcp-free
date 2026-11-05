@@ -656,7 +656,7 @@ return array(
 		'search'  => "\t\t\$site = self::site_form( home_url() );",
 		'replace' => "\t\t\$site = AB_MCP_Staging::normalize_url( home_url() );",
 		'run'     => $address,
-		'expect'  => '/testANameNormalizeUrlChangedWhenItWasStoredIsRefusedWithTheWay/',
+		'expect'  => '/testANameStoredWithBrokenBytesIsRefusedWithTheWay/',
 	),
 	array(
 		'id'      => 'paket/key-route-none',
@@ -1395,15 +1395,6 @@ return array(
 		'replace' => "\t\tif ( '' === \$us ) {",
 		'run'     => $manifest,
 		'expect'  => '/testAManifestForAnotherAddressThanThisSiteIsRefused/',
-	),
-	array(
-		'id'      => 'paket/manifest-target-own',
-		'clause'  => 'verify(): this site\'s own address from home_url() as it is, not after normalize_url()',
-		'file'    => $m,
-		'search'  => "\t\t\$own = home_url();",
-		'replace' => "\t\t\$own = AB_MCP_Staging::normalize_url( home_url() );",
-		'run'     => $address,
-		'expect'  => '/testThisSiteReadsItsOwnNameAsHomeUrlGivesIt/',
 	),
 	array(
 		'id'      => 'paket/manifest-target-unreadable',
