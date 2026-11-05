@@ -13,10 +13,17 @@
  *   byte for byte, with a refusal that names the xn-- form; a name
  *   idn_to_ascii() does not take is no site. The key is fetched from the
  *   xn-- form of the stored address.
+ * - This site reads its own address from home_url() as it is, for the
+ *   target of a package and for the print of the pair: a name like
+ *   straße, which normalize_url() breaks, is this site in either spelling;
+ *   a name that cannot be read gives no print (Codex round 2, 1).
  * - The staging site is asked on the port of its stored address also where
  *   WordPress would not ask it (8443): for that one address and request
- *   only, and the port is taken off again in every case, an exception
- *   included. The fetcher asks nothing outside the stored address.
+ *   only, once (a request started while it runs is not allowed it, even
+ *   for the same address), and the port is taken off again in every case,
+ *   an exception included. The fetcher asks nothing outside the stored
+ *   address and nothing whose path has a segment . or .., also written as
+ *   %2e (Codex round 2, 2 and 3).
  *
  * @package AlphaBridge_MCP
  */
@@ -257,6 +264,46 @@ final class SyncTrustAddressTest extends TestCase {
 		self::assertIsArray( AB_MCP_Sync_Manifest::verify( $unicode, $expect ), 'The target in either spelling.' );
 	}
 
+	#[RequiresPhpExtension( 'intl' )]
+	public function testThisSiteReadsItsOwnNameAsHomeUrlGivesIt(): void {
+		// ß is the bytes C3 9F, of which parse_url() breaks the second.
+		$this->on( 'staging' );
+		AB_MCP_Staging::save( 'staging', 'https://xn--strae-oqa.example', null, 3, 'form' );
+		$code = AB_MCP_Sync_Key::pairing_code();
+		$this->on( 'live' );
+		$GLOBALS['ab_test_home'] = 'https://straße.example';
+		AB_MCP_Staging::save( 'production', 'https://staging.example.com', null, 3, 'form' );
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 );
+		AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], 3 );
+		$signed = $this->signed();
+		$this->on( 'live' );
+		$GLOBALS['ab_test_home'] = 'https://straße.example';
+		$expect                  = array(
+			'purpose'     => 'objects',
+			'report_hash' => str_repeat( 'c', 64 ),
+		);
+		$read                    = AB_MCP_Sync_Manifest::verify( $signed, $expect );
+		self::assertIsArray( $read, is_object( $read ) ? $read->get_error_message() : '' );
+		self::assertSame( 'https://xn--strae-oqa.example', $read['manifest']['target'], 'Signed for the xn-- form, read by the site at the Unicode name.' );
+
+		$print = AB_MCP_Sync_Anchor::pair_print();
+		self::assertIsString( $print, 'The print of the pair, with the name read.' );
+		$GLOBALS['ab_test_home'] = 'https://xn--strae-oqa.example';
+		self::assertSame( $print, AB_MCP_Sync_Anchor::pair_print(), 'The same site in either spelling.' );
+		$GLOBALS['ab_test_home'] = 'https://strasse.example';
+		self::assertNotSame( $print, AB_MCP_Sync_Anchor::pair_print(), 'strasse is another name.' );
+	}
+
+	#[RequiresPhpExtension( 'intl' )]
+	public function testASiteWhoseOwnNameCannotBeReadHasNoPrint(): void {
+		$this->paired();
+		$this->anchored();
+		$this->on( 'live' );
+		self::assertIsString( AB_MCP_Sync_Anchor::pair_print() );
+		$GLOBALS['ab_test_home'] = self::UNREADABLE;
+		self::assertNull( AB_MCP_Sync_Anchor::pair_print() );
+	}
+
 	public function testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike(): void {
 		$this->paired();
 		$active = $this->anchored();
@@ -303,19 +350,58 @@ final class SyncTrustAddressTest extends TestCase {
 		AB_MCP_Staging::save( 'production', 'https://staging.example.com:8443/blog', null, 3, 'form' );
 		$url                            = 'https://staging.example.com:8443/blog/?rest_route=/alphabridge/v1/staging-key';
 		$seen                           = array();
-		$GLOBALS['ab_test_http_answer'] = static function ( string $asked ) use ( $url, $body, &$seen ) {
-			$seen = array(
-				'asked' => apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), 'staging.example.com', $url ),
-				'other' => apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), 'staging.example.com', 'https://staging.example.com:8443/elsewhere' ),
-			);
+		// Another address asked before the check of the request (while its
+		// host is looked up), which uses nothing up.
+		add_filter(
+			'ab_mcp_outbound_addresses',
+			static function ( $found ) use ( &$seen ) {
+				$seen['other'] = apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), 'staging.example.com', 'https://staging.example.com:8443/elsewhere' );
+				return $found;
+			},
+			20
+		);
+		// What the check of the request gets, after the filter of get_partner().
+		$watch = static function ( $ports, $host, $asked ) use ( &$seen ) {
+			$seen['checked'][ $asked ][] = $ports;
+			return $ports;
+		};
+		add_filter( 'http_allowed_safe_ports', $watch, 20, 3 );
+		$GLOBALS['ab_test_http_answer'] = static function ( string $asked ) use ( $url, $body ) {
 			return $url === $asked ? ab_test_http_response( 200, $body ) : ab_test_http_response( 404, '' );
 		};
 		$prepared                       = AB_MCP_Sync_Anchor::prepare_from_partner( 3 );
 		self::assertIsArray( $prepared, is_object( $prepared ) ? $prepared->get_error_message() : '' );
 		self::assertSame( array( $url ), array_column( $GLOBALS['ab_test_http'], 'url' ) );
-		self::assertSame( array( 80, 443, 8080, 8443 ), $seen['asked'], 'Its port, for that address.' );
+		self::assertSame( array( array( 80, 443, 8080, 8443 ) ), $seen['checked'][ $url ], 'Its port, for that address.' );
 		self::assertSame( array( 80, 443, 8080 ), $seen['other'], 'Not for another address.' );
+		remove_filter( 'http_allowed_safe_ports', $watch, 20 );
 		self::assertFalse( has_filter( 'http_allowed_safe_ports' ), 'And taken off again.' );
+	}
+
+	public function testARequestStartedWhileTheFirstRunsIsNotAllowedThePort(): void {
+		$this->on( 'staging' );
+		$GLOBALS['ab_test_home'] = 'https://staging.example.com:8443/blog';
+		AB_MCP_Staging::save( 'staging', 'https://www.example.com', null, 3, 'form' );
+		$body = (string) wp_json_encode( AB_MCP_Sync_Key::answer() );
+		$this->on( 'live' );
+		AB_MCP_Staging::save( 'production', 'https://staging.example.com:8443/blog', null, 3, 'form' );
+		$url    = 'https://staging.example.com:8443/blog/?rest_route=/alphabridge/v1/staging-key';
+		$nested = null;
+		// A hook that runs while the request is under way asks the same
+		// address again (once, whatever it gets).
+		$GLOBALS['ab_test_http_answer'] = static function ( string $asked ) use ( $url, $body, &$nested ) {
+			if ( null === $nested ) {
+				$nested = false;
+				$nested = wp_safe_remote_get( $url );
+			}
+			return $url === $asked ? ab_test_http_response( 200, $body ) : ab_test_http_response( 404, '' );
+		};
+		$prepared                       = AB_MCP_Sync_Anchor::prepare_from_partner( 3 );
+		self::assertIsArray( $prepared, is_object( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertInstanceOf( \WP_Error::class, $nested, 'The second request is not allowed the port.' );
+		self::assertSame( 'A valid URL was not provided.', $nested->get_error_message() );
+		self::assertSame( array( $url ), array_column( $GLOBALS['ab_test_http'], 'url' ), 'Only the first was sent.' );
+		self::assertFalse( has_filter( 'http_allowed_safe_ports' ) );
 	}
 
 	public function testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays(): void {
@@ -362,5 +448,46 @@ final class SyncTrustAddressTest extends TestCase {
 		AB_MCP_Staging::save( 'unconfirmed', '', null, 3, 'form' );
 		self::assertSame( 'ab_mcp_sync_not_partner', ( new AB_MCP_Sync_Fetcher() )->get( 'https://staging.example.com:8443/blog/x' )->get_error_code(), 'Nothing without a stored staging site.' );
 		self::assertSame( array(), $GLOBALS['ab_test_http'] );
+	}
+
+	/** @return array<string, array{string}> */
+	public static function dotSegments(): array {
+		return array(
+			'..'             => array( '/blog/../outside' ),
+			'%2e%2e'         => array( '/blog/%2e%2e/outside' ),
+			'.%2e'           => array( '/blog/.%2e/x' ),
+			'.'              => array( '/blog/./x' ),
+			'%2E'            => array( '/blog/%2E/x' ),
+			'.. at the end'  => array( '/blog/x/..' ),
+			'.. before a ?'  => array( '/blog/x/..?rest_route=/x' ),
+		);
+	}
+
+	#[DataProvider( 'dotSegments' )]
+	public function testAPathWithASegmentDotOrDotDotIsRefused( string $path ): void {
+		$this->paired();
+		$this->on( 'live' );
+		AB_MCP_Staging::save( 'production', 'https://staging.example.com:8443/blog', null, 3, 'form' );
+		$answer = ( new AB_MCP_Sync_Fetcher() )->get( 'https://staging.example.com:8443' . $path );
+		self::assertInstanceOf( \WP_Error::class, $answer );
+		self::assertSame( 'ab_mcp_sync_dot_segment', $answer->get_error_code() );
+		self::assertSame( array(), $GLOBALS['ab_test_http'], 'Nothing asked.' );
+	}
+
+	public function testDotsThatAreNoSegmentOfThePathAreAsked(): void {
+		$this->paired();
+		$this->on( 'live' );
+		AB_MCP_Staging::save( 'production', 'https://staging.example.com:8443/blog', null, 3, 'form' );
+		$GLOBALS['ab_test_http_answer'] = static fn() => ab_test_http_response( 404, '' );
+		$urls                           = array(
+			'https://staging.example.com:8443/blog/.well-known/x',
+			'https://staging.example.com:8443/blog/x../y',
+			'https://staging.example.com:8443/blog/x?next=/../y',
+		);
+		foreach ( $urls as $url ) {
+			$answer = ( new AB_MCP_Sync_Fetcher() )->get( $url );
+			self::assertIsArray( $answer, $url . ': ' . ( is_object( $answer ) ? $answer->get_error_message() : '' ) );
+		}
+		self::assertSame( $urls, array_column( $GLOBALS['ab_test_http'], 'url' ) );
 	}
 }

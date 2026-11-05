@@ -1,8 +1,8 @@
 # Grenzen des Pakets (Z8, Zweig «Paket»)
 
 Gesammelte Grenzen der Vertrauensschicht (Schlüssel der Staging-Quelle,
-Anker, signiertes Manifest; Entscheide 4 und 5) aus der Codex-Runde 1 von
-Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
+Anker, signiertes Manifest; Entscheide 4 und 5) aus den Codex-Runden 1 und 2
+von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
 umgangen werden, und was ein späterer Zweig schliesst. Je Grenze ein Satz
 mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 
@@ -28,7 +28,11 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   (`AB_MCP_Sync_Key::site_form()`), die Staging-Site nennt sich in der
   xn--Form, und ein so gespeichertes Paar lehnt die Kopplung mit dem Weg
   ab, die xn--Form einzutragen (`idn_hint()`). Die Speicherung selbst zu
-  ändern ist eine Änderung von Z6 mit neuen Texten in neun Sprachen.
+  ändern ist eine Änderung von Z6 mit neuen Texten in neun Sprachen. Die
+  eigene Adresse ist davon nicht betroffen: Ziel des Pakets und `pair_print`
+  lesen sie aus `home_url()` direkt über `site_form()`, ohne
+  `normalize_url()` davor (Codex-Runde 2); eine eigene Adresse, die
+  `site_form()` nicht lesen kann, gibt kein `pair_print`.
 - Ohne die PHP-Erweiterung intl werden internationale Domainnamen Byte für
   Byte verglichen: `https://bücher.example` und `https://xn--bcher-kva.example`
   sind dann verschiedene Sites, und die Ablehnung nennt die xn--Form als Weg.
@@ -36,10 +40,21 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   keinen Kopplungscode, und ihre Route antwortet mit einem Kodierungsfehler,
   weil die so gelesene Adresse kein UTF-8 mehr ist und kein JSON sie trägt;
   der Weg ist derselbe: die Adresse in der xn--Form.
-- Der Port der gespeicherten Partneradresse wird für genau die eine Anfrage
-  und genau diese Adresse erlaubt (`AB_MCP_Outbound::get_partner()`), eine
-  Weiterleitung folgt ohnehin nicht. `AB_MCP_Staging::check_partner()` (Z6)
-  nutzt denselben Weg.
+- Der Port der gespeicherten Partneradresse wird für genau diese Adresse
+  und einmal erlaubt (`AB_MCP_Outbound::get_partner()`): die erste Prüfung
+  der Adresse verbraucht die Freigabe, eine Weiterleitung folgt ohnehin
+  nicht. Eine Anfrage, die ein Haken während der ersten startet, erhält den
+  Port nicht, auch für dieselbe Adresse. Startet ein Haken vor der Prüfung
+  (`pre_http_request`) eine Anfrage derselben Adresse, erhält diese die
+  Freigabe und die eigentliche Anfrage wird abgelehnt («A valid URL was not
+  provided.»). `AB_MCP_Staging::check_partner()` (Z6) nutzt denselben Weg.
+- Der Abruf (`AB_MCP_Sync_Fetcher`) lehnt eine Adresse ab, deren Pfad ein
+  Segment `.` oder `..` hat, auch als `%2e` in beliebiger Schreibweise
+  (`ab_mcp_sync_dot_segment`); er löst sie nicht auf. Eine gespeicherte
+  Partneradresse mit einem solchen Segment, etwa `https://s.example/blog/..`,
+  speichert `normalize_url()` (Z6) so; jeder Abruf scheitert dann, und die
+  Ablehnung nennt den Weg, die Adresse ohne das Segment zu speichern
+  (Codex-Runde 2).
 
 ## Privater Schlüssel
 
@@ -53,10 +68,11 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   hält ihn wie jede Option, `$wpdb->last_result` hält die gelesene Zeile
   bis zur nächsten Abfrage. Ein Plugin mit Code auf der Site liest die
   Option ohnehin.
-- Verweigert die Datenbank jedes Schreiben, scheitert die Erneuerung,
-  `forget()` versucht zu löschen, und bleibt auch das Löschen aus, bleibt
-  der alte Schlüssel zum unveränderten alten Datensatz (die Rolle bleibt,
-  wie sie vorher bestätigt war); die Person sieht die Ablehnung mit Weg.
+- Vollständiger Schreibausfall der Datenbank: Verweigert sie jedes
+  Schreiben, scheitert die Erneuerung, und `forget()` versucht zu löschen.
+  Bleibt auch das Löschen aus, bleibt der alte Schlüssel beim unveränderten
+  alten Datensatz, die Rolle beim alten, vorher bestätigten Stand; die
+  Person sieht die Ablehnung mit Weg (Codex-Runden 1 und 2).
 
 ## Offen für spätere Zweige
 

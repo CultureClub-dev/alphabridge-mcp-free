@@ -257,7 +257,9 @@ final class AB_MCP_Sync_Manifest {
 		// For this site, from its staging site, exactly.
 		// Compared as AB_MCP_Sync_Key::site_form() gives them (an international
 		// domain name in either spelling); an address it cannot read is none.
-		$own = AB_MCP_Staging::normalize_url( home_url() );
+		// This site's own address goes to site_form() as home_url() gives it:
+		// normalize_url() before would break a name like straße (parse_url()).
+		$own = home_url();
 		$us  = AB_MCP_Sync_Key::site_form( $own );
 		if ( '' === $us || AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us ) {
 			return new WP_Error(

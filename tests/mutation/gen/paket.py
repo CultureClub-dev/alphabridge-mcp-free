@@ -454,14 +454,20 @@ e('paket/anchor-part-prepared-at-positive', 'part(): prepared after 0', A,
   "|| ! is_int( $raw['prepared_at'] ) || $raw['prepared_at'] < 0 ) {",
   'trust', 'testTheAnchorReadsOnlyWhatItWrites with data set "prepared at 0"')
 e('paket/print-needs-anchor', 'pair_print(): no print without an active anchor', A,
-  "\t\t$active = self::active();\n\t\tif ( null === $active ) {\n\t\t\treturn null;\n\t\t}\n\t\t$record = AB_MCP_Staging::record();",
-  "\t\t$active = self::active();\n\t\t$record = AB_MCP_Staging::record();",
+  "\t\t$active = self::active();\n\t\tif ( null === $active ) {\n\t\t\treturn null;\n\t\t}\n",
+  "\t\t$active = self::active();\n",
   'trust', 'testThePairPrintChangesWithTheRoleThePairAndTheAnchor')
+e('paket/print-site-form', 'pair_print(): this site\'s address from home_url() as it is, in the form site_form() gives', A,
+  "\t\t$site = AB_MCP_Sync_Key::site_form( home_url() );", "\t\t$site = AB_MCP_Staging::normalize_url( home_url() );",
+  'address', 'testThisSiteReadsItsOwnNameAsHomeUrlGivesIt')
+e('paket/print-site-unreadable', 'pair_print(): no print for an own address site_form() cannot read', A,
+  "\t\tif ( '' === $site ) {\n\t\t\treturn null;\n\t\t}\n", "",
+  'address', 'testASiteWhoseOwnNameCannotBeReadHasNoPrint')
 PRINT_ROLE = "array( $role['value'], $role['user_id'], $role['source'], $role['at'] )"
 PRINT_PAIR = "array( $pair['partner_url'], $pair['partner_role'], $pair['user_id'], $pair['source'], $pair['at'] )"
 PRINT_ANCHOR = "array( $active['source_id'], $active['key_id'], $active['public_key'], $active['via'], $active['user_id'], $active['at'] )"
 for name, search, replace in (
-    ('site', "\t\t\t\t'site'   => AB_MCP_Staging::normalize_url( home_url() ),\n", ''),
+    ('site', "\t\t\t\t'site'   => $site,\n", ''),
     ('role-at', PRINT_ROLE, "array( $role['value'], $role['user_id'], $role['source'] )"),
     ('role-who', PRINT_ROLE, "array( $role['value'], $role['source'], $role['at'] )"),
     ('role-where', PRINT_ROLE, "array( $role['value'], $role['user_id'], $role['at'] )"),
@@ -545,6 +551,8 @@ SOURCE = "\t\tif ( '' === $from || AB_MCP_Sync_Key::site_form( $anchor['partner_
 UNREAD = 'testAnUnreadableNameIsNoTargetAndNoSourceEvenWhereBothSpellItAlike'
 e('paket/manifest-target', 'verify(): the target is exactly this site\'s address', M, TARGET, "\t\tif ( '' === $us ) {",
   'manifest', 'testAManifestForAnotherAddressThanThisSiteIsRefused')
+e('paket/manifest-target-own', 'verify(): this site\'s own address from home_url() as it is, not after normalize_url()', M,
+  "\t\t$own = home_url();", "\t\t$own = AB_MCP_Staging::normalize_url( home_url() );", 'address', 'testThisSiteReadsItsOwnNameAsHomeUrlGivesIt')
 e('paket/manifest-target-unreadable', 'verify(): this site\'s own name that cannot be read is no target', M, TARGET, TARGET.replace("'' === $us || ", ''), 'address', UNREAD)
 e('paket/manifest-target-idn', 'verify(): the target in either spelling of an international name', M,
   "AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us", "$manifest['target'] !== $us", 'address', 'testThePackageIsForThisSiteInEitherSpelling')
@@ -720,13 +728,17 @@ e('paket/admin-fetch-https-only', 'staging_anchor_html(): the fetch is offered f
   "\t\tif ( 0 === strpos( $partner, 'https://' ) ) {", "\t\tif ( true ) {", 'trust', 'testTheProductionSiteShowsTheAnchorAndConfirmsOnlyThePreparedFingerprint')
 
 # ------------------------------------------------- port of the partner
-PORTS = "\t\t\treturn is_array( $ports ) && is_int( $port ) && $asked === $url ? array_merge( $ports, array( $port ) ) : $ports;"
-e('paket/outbound-port-for-url', 'get_partner(): the port only for the very address asked', O, PORTS, PORTS.replace(" && $asked === $url", ''),
+PORTS = "\t\t\tif ( ! $left || ! is_array( $ports ) || ! is_int( $port ) || $asked !== $url ) {"
+e('paket/outbound-port-for-url', 'get_partner(): the port only for the very address asked', O, PORTS, PORTS.replace(" || $asked !== $url", ''),
   'address', 'testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly')
-e('paket/outbound-port-named', 'get_partner(): nothing added where the address names no port', O, PORTS, PORTS.replace(" && is_int( $port )", ''),
+e('paket/outbound-port-named', 'get_partner(): nothing added where the address names no port', O, PORTS, PORTS.replace(" || ! is_int( $port )", ''),
   'address', 'testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays')
-e('paket/outbound-port-list', 'get_partner(): another filter\'s answer that is no list stays', O, PORTS, PORTS.replace("is_array( $ports ) && ", ''),
+e('paket/outbound-port-list', 'get_partner(): another filter\'s answer that is no list stays', O, PORTS, PORTS.replace(" || ! is_array( $ports )", ''),
   'address', 'testWithoutAPortNothingIsAddedAndAnotherFiltersAnswerStays')
+e('paket/outbound-port-once', 'get_partner(): the port once, not for a request started while the first runs', O, PORTS, PORTS.replace("! $left || ", ''),
+  'address', 'testARequestStartedWhileTheFirstRunsIsNotAllowedThePort')
+e('paket/outbound-port-used-up', 'get_partner(): the first check of the address uses the port up', O,
+  "\t\t\t$left = false;\n", "", 'address', 'testARequestStartedWhileTheFirstRunsIsNotAllowedThePort')
 e('paket/outbound-port-added', 'get_partner(): the port is allowed for the request', O,
   "\t\tadd_filter( 'http_allowed_safe_ports', $allow, 10, 3 );", "",
   'address', 'testTheStagingSiteIsAskedOnThePortOfItsStoredAddressOnly')
@@ -738,6 +750,18 @@ e('paket/fetcher-partner-only', 'get(): nothing outside the stored address of th
   'address', 'testTheFetcherAsksNothingOutsideTheStoredAddress')
 e('paket/fetcher-partner-path', 'get(): under the stored path, not beside it', F, FPREFIX, FPREFIX.replace("$base . '/'", '$base'),
   'address', 'testTheFetcherAsksNothingOutsideTheStoredAddress')
+
+DOT = "\t\tif ( preg_match( '~/(?:\\.|%2e){1,2}(?:/|\\z)~i', $path ) ) {"
+DOTS = 'testAPathWithASegmentDotOrDotDotIsRefused with data set "%s"'
+e('paket/fetcher-dot-segment', 'get(): no segment .. in the path', F, DOT, "\t\tif ( false ) {", 'address', DOTS % '..')
+e('paket/fetcher-dot-encoded', 'get(): no segment written as %2e', F, DOT, DOT.replace("(?:\\.|%2e)", "\\."), 'address', DOTS % '%2e%2e')
+e('paket/fetcher-dot-case', 'get(): %2E as %2e', F, DOT, DOT.replace("~i'", "~'"), 'address', DOTS % '%2E')
+e('paket/fetcher-dot-one', 'get(): no segment . either', F, DOT, DOT.replace("{1,2}", "{2}"), 'address', DOTS % '.')
+e('paket/fetcher-dot-end', 'get(): a segment .. at the end of the path', F, DOT, DOT.replace("(?:/|\\z)", "/"), 'address', DOTS % '.. at the end')
+e('paket/fetcher-dot-whole', 'get(): only a whole segment, not a name that begins with dots', F, DOT, DOT.replace("(?:/|\\z)", ""),
+  'address', 'testDotsThatAreNoSegmentOfThePathAreAsked')
+e('paket/fetcher-dot-query', 'get(): the path ends at ?, the query is no path', F,
+  "\t\t$path = substr( $url, 0, strcspn( $url, '?' ) );\n", "\t\t$path = $url;\n", 'address', 'testDotsThatAreNoSegmentOfThePathAreAsked')
 
 # ----------------------------------------------------------- integration
 e('paket/it-renews', 'save(): the staging site confirmed by a person has a key (two sites)', S,
@@ -808,7 +832,9 @@ out.append('''<?php
  * chunk and the whole against their hashes; the forms of wp-admin. Since
  * Codex round 1: the private key in no report of a failed write, the
  * renewal read back exactly, international domain names in either
- * spelling, the port of the stored address of the staging site.
+ * spelling, the port of the stored address of the staging site. Since
+ * Codex round 2: this site's own address from home_url() as it is, the
+ * port once, no segment . or .. in the path of a fetch.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.

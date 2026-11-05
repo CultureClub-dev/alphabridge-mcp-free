@@ -260,9 +260,10 @@ final class AB_MCP_Sync_Anchor {
 	/* -------------------------------------------------------------- print */
 
 	/**
-	 * The print of the pair: SHA-256 over this site's address, the confirmed
-	 * role and pair (who, when, where) and the active anchor (key, who
-	 * confirmed it, when); null while there is no active anchor.
+	 * The print of the pair: SHA-256 over this site's address (in the form
+	 * AB_MCP_Sync_Key::site_form() gives), the confirmed role and pair (who,
+	 * when, where) and the active anchor (key, who confirmed it, when); null
+	 * while there is no active anchor or this site's address cannot be read.
 	 *
 	 * @return string|null
 	 */
@@ -271,13 +272,20 @@ final class AB_MCP_Sync_Anchor {
 		if ( null === $active ) {
 			return null;
 		}
+		// This site's address as anchor and manifest compare it, from
+		// home_url() as it is (normalize_url() would break a name like
+		// straße); one site_form() cannot read gives no print.
+		$site = AB_MCP_Sync_Key::site_form( home_url() );
+		if ( '' === $site ) {
+			return null;
+		}
 		$record = AB_MCP_Staging::record();
 		$role   = $record['role'];
 		$pair   = $record['pair'];
 		$json   = wp_json_encode(
 			array(
 				'format' => self::PRINT_FORMAT,
-				'site'   => AB_MCP_Staging::normalize_url( home_url() ),
+				'site'   => $site,
 				'role'   => array( $role['value'], $role['user_id'], $role['source'], $role['at'] ),
 				'pair'   => array( $pair['partner_url'], $pair['partner_role'], $pair['user_id'], $pair['source'], $pair['at'] ),
 				'anchor' => array( $active['source_id'], $active['key_id'], $active['public_key'], $active['via'], $active['user_id'], $active['at'] ),
