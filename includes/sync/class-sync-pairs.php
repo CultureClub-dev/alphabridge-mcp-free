@@ -372,6 +372,55 @@ final class AB_MCP_Sync_Pairs {
 		return 1 === (int) $done ? true : self::changed();
 	}
 
+	/**
+	 * Run writes of pairs in one transaction of the database: committed when
+	 * $fn returns anything but a WP_Error, rolled back otherwise, on an
+	 * exception and, by the database itself, when the process ends before
+	 * the commit (wp_site_pairs confirm and discard, all or nothing). Only on
+	 * a table whose engine keeps transactions (InnoDB); another one refuses
+	 * with the way, before anything is written.
+	 *
+	 * @param callable $fn function(): mixed|WP_Error.
+	 * @return mixed|WP_Error What $fn returned.
+	 */
+	public static function transaction( callable $fn ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		$table  = AB_MCP_Sync_Schema::table( 'pairs' );
+		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
+		if ( '' !== $wpdb->last_error ) {
+			return self::db_error();
+		}
+		if ( ! is_string( $engine ) || 0 !== strcasecmp( $engine, 'InnoDB' ) ) {
+			return new WP_Error(
+				'ab_mcp_staging_pairs_engine',
+				sprintf( 'The table of the object pairs (%1$s) is stored with the engine %2$s, which keeps no transactions, so pairs are not written: a confirmation writes all of its pairs or none. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', $table, is_string( $engine ) ? $engine : 'unknown' ),
+				array( 'engine' => is_string( $engine ) ? $engine : null )
+			);
+		}
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return self::db_error();
+		}
+		try {
+			$result = call_user_func( $fn );
+		} catch ( Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			throw $e;
+		}
+		if ( is_wp_error( $result ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return $result;
+		}
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return self::db_error();
+		}
+		return $result;
+	}
+
 	/* -------------------------------------------- snapshot (steps.before) */
 
 	/**

@@ -288,7 +288,8 @@ final class AB_MCP_Sync_Export {
 	 * text) and the row WordPress reads instead (target), and unless a
 	 * credential holds it (a name of a
 	 * credential, B9, a field of one in it, or any lock of the credential
-	 * check, CREDENTIAL_LOCKS), its hash, size, whether it was read whole,
+	 * check, CREDENTIAL_LOCKS), its hash and the hash of its mapped form
+	 * (AB_MCP_Sync_Inventory::entry()), size, whether it was read whole,
 	 * what was not read, its references by id, the places of possible
 	 * references and of the units left out as credentials. Of its content
 	 * nothing: a possible reference only by its place, never its value;
@@ -313,6 +314,7 @@ final class AB_MCP_Sync_Export {
 		return $line + array(
 			'canon'    => $object['canon'],
 			'hash'     => $object['hash'],
+			'mapped'   => isset( $object['mapped'] ) ? $object['mapped'] : null,
 			'size'     => $object['size'],
 			'complete' => $object['complete'],
 			'unread'   => isset( $object['unread'] ) ? array_values( array_map( 'strval', $object['unread'] ) ) : array(),

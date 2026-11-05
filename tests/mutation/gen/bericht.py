@@ -21,7 +21,7 @@ IM = 'includes/sync/class-sync-import.php'
 OS = 'includes/sync/class-sync-option-schema.php'
 TS = 'includes/tools/class-tools-staging.php'
 G = 'includes/class-staging-gate.php'
-FILEVAR = {P: '$p', T: '$t', IM: '$im', OS: '$os', TS: '$ts', G: '$g'}
+FILEVAR = {P: '$p', T: '$t', IM: '$im', OS: '$os', TS: '$ts', G: '$g', 'includes/sync/class-sync-pairs.php': '$pa', 'includes/sync/class-sync-identity.php': '$id', 'includes/sync/class-sync-inventory.php': '$inv', 'includes/sync/class-sync-export.php': '$ex', 'includes/sync/class-sync-db-kinds.php': '$dk'}
 
 RUNS = {
     'prop': ('unit', 'SyncProposalTest'),
@@ -98,8 +98,8 @@ e('compose-whole-elsewhere', 'compose(): objects of a kind whole in another pack
   "\t\t\t\tif ( isset( $db[ $kind ], $whole[ $db[ $kind ] ] ) && $whole[ $db[ $kind ] ] !== $i ) {", "\t\t\t\tif ( false ) {", 'prop', 'testAKindWholeInOnePackageWithObjectsInAnotherIsRefused')
 e('compose-whole-complete', 'compose(): only a kind a package read whole is whole', P,
   "\t\t\t\tif ( ! $entry['complete'] || ! isset( $db[ $entry['kind'] ] ) ) {", "\t\t\t\tif ( ! isset( $db[ $entry['kind'] ] ) ) {", 'prop', 'testAKindReadAcrossPackagesIsCompleteInNone')
-e('compose-held', 'compose(): a line of the list of held objects is held', P,
-  "\t\t\t\tif ( isset( $codes[ $kind . \"\\0\" . $sha ] ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testTheListOfHeldObjectsMarksTheirLines')
+e('compose-held', 'compose(): a line of the list of held objects is reduced', P,
+  "\t\t\t\tif ( isset( $codes[ $kind . \"\\0\" . $sha ] ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testTheListOfHeldObjectsReducesTheirLines')
 e('compose-expires', 'compose(): the earliest package', P,
   "\t\t\t$expires = min( $expires, (int) $one['manifest']['expires'] );", "\t\t\t$expires = (int) $one['manifest']['expires'];", 'prop', 'testPackagesOfOneSeriesAreOneInventory')
 e('complete-whole', 'complete(): not without a package that read its kind whole', P,
@@ -112,8 +112,8 @@ e('complete-none', 'complete(): a subtype it names nowhere had no object', P,
 # ------------------------------------------------------------------ step
 e('step-b9', 'step(): an object whose name is a credential is counted, never listed', P,
   "\t\t\tif ( 'b9' === $object['status'] ) {", "\t\t\tif ( false ) {", 'it', 'testANameHoldingACredentialIsShownByTheHashOfItsRefOnly')
-e('step-held', 'step(): a line of this site a credential holds is held', P,
-  "\t\t\tif ( null !== $code ) {\n\t\t\t\t$line['held'] = $code;", "\t\t\tif ( false ) {\n\t\t\t\t$line['held'] = $code;", 'it', 'testANameHoldingACredentialIsShownByTheHashOfItsRefOnly')
+e('step-held', 'step(): a line of this site a credential holds is reduced before it is stored', P,
+  "\t\t\t$lines[] = null === $code ? $line : self::reduced( $line, $code );", "\t\t\t$lines[] = null === $code ? $line : array( 'held' => $code ) + $line;", 'it', 'testAHeldNameReachesNeitherTheStoreNorARealignAnswer')
 e('step-finish', 'step(): the inventory read to its end is worked out in the same call', P,
   "\t\tif ( null === $read['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
 e('step-read', 'step(): an inventory read to its end is not read again', P,
@@ -135,81 +135,129 @@ e('canon-run', 'finish(): the canon change runs', P,
   "\t\t$canon = array( 'rebased' => 0, 'unclear' => 0, 'waiting' => 0 );", 'it', 'testACanonChangeGivesEqualFormsNewBasesAndMakesTheOthersUnclear')
 e('canon-reread', 'finish(): the pairs read again after a canon change', P,
   "\t\tif ( $canon['rebased'] + $canon['unclear'] > 0 ) {", "\t\tif ( false ) {", 'it', 'testACanonChangeGivesEqualFormsNewBasesAndMakesTheOthersUnclear')
-CF = "\t\t\treturn is_array( $line ) && isset( $line['hash'] ) && is_string( $line['hash'] ) && ! empty( $line['complete'] ) && ! isset( $line['held'] ) ? $line['hash'] : null;"
-CANON = 'testTheTargetOfACanonChangeIsTheStagingHashOnlyWhereNothingMapsIt'
-e('canon-form-complete', 'canon_forms(): a form not read whole is none', P, CF, CF.replace(" && ! empty( $line['complete'] )", ''), 'prop', CANON)
-e('canon-form-held', 'canon_forms(): a held line has no form', P, CF, CF.replace(" && ! isset( $line['held'] )", ''), 'prop', CANON)
+CU = "\t\t\treturn is_array( $line ) && isset( $line['hash'] ) && is_string( $line['hash'] ) && ! empty( $line['complete'] ) && ! isset( $line['held'] );"
+CANON = 'testTheTargetOfACanonChangeIsTheLiveHashOnlyWhereTheMappedFormsAreTheSame'
+e('canon-form-complete', 'canon_forms(): a form not read whole is none', P, CU, CU.replace(" && ! empty( $line['complete'] )", ''), 'prop', CANON)
+e('canon-form-held', 'canon_forms(): a held line has no form', P, CU, CU.replace(" && ! isset( $line['held'] )", ''), 'prop', CANON)
+CS = "\t\t$same   = null !== $s && null !== $l && isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && hash_equals( $staging['mapped'], (string) $live['mapped'] );"
+e('canon-same-mapped', 'canon_forms(): the target only where the mapped forms are the same', P, CS, "\t\t$same   = null !== $s && null !== $l;", 'prop', CANON)
+e('canon-same-unresolved', 'canon_forms(): not where a side has no mapped form', P, CS, CS.replace("isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && ", ''), 'prop', CANON)
 e('canon-target-override', 'canon_forms(): an override changes the target', P,
-  "\t\t\t'target'  => null === $pair['override'] && ! $mapped ? $s : null,", "\t\t\t'target'  => ! $mapped ? $s : null,", 'prop', CANON)
-e('canon-target-mapped', 'canon_forms(): a post or term named by its id maps the form', P,
-  "\t\t\t'target'  => null === $pair['override'] && ! $mapped ? $s : null,", "\t\t\t'target'  => null === $pair['override'] ? $s : null,", 'prop', CANON)
-e('canon-target-term', 'canon_forms(): a term too', P,
-  "in_array( $ref['space'], array( 'post', 'term' ), true )", "in_array( $ref['space'], array( 'post' ), true )", 'prop', CANON)
-e('canon-target-possible', 'canon_forms(): a possible reference maps the form', P,
-  "\t\t\t$mapped = $mapped || ! empty( $staging['possible'] );", "", 'prop', CANON)
+  "\t\t\t'target'  => null === $pair['override'] && $same ? $l : null,", "\t\t\t'target'  => $same ? $l : null,", 'prop', CANON)
 
 # ----------------------------------------------------------------- match
 e('match-taken', 'match(): objects of a pair are not proposed again', P,
   "\t\t\t\tif ( isset( $taken[ $side ][ $i ] ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testObjectsOfAnActivePairAreNotProposedAgain')
 e('match-realign', 'match(): only unclear and residual pairs are aligned anew', P,
   "\t\t\tif ( ! in_array( $pair['state'], array( 'unclear', 'residual' ), true ) ) {", "\t\t\tif ( false ) {", 'prop', 'testObjectsOfAnActivePairAreNotProposedAgain')
+e('match-held', 'match(): a held object stands alone, by the hash of its ref', P,
+  "\t\t\t\tif ( null !== $item['held'] ) {\n\t\t\t\t\t$entries[] = self::held_entry( $item );", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$entries[] = self::held_entry( $item );", 'prop', 'testAHeldObjectIsShownByTheHashOfItsRefOnly')
 e('match-unread', 'match(): an object without identity is not compared', P,
   "\t\t\t\tif ( null === $item['key'] ) {", "\t\t\t\tif ( false ) {", 'prop', 'testARowNotReadIsNotComparedByItself')
-VR = "\t\t\t\tif ( ! AB_MCP_Sync_Pairs::valid_ref( $item['ref'] ) && null === $item['held'] ) {"
-e('match-ref', 'match(): a name no pair holds is not compared', P, VR, "\t\t\t\tif ( false ) {", 'prop', 'testANameNoPairHoldsIsNotCompared')
-e('match-ref-held', 'match(): a held one stays held', P, VR, VR.replace(" && null === $item['held']", ''), 'prop', 'testANameNoPairHoldsIsNotCompared')
-e('resolve-held', 'resolve(): a held object holds its group', P,
-  "\t\t\tif ( null !== $item['held'] ) {\n\t\t\t\treturn array( self::held_entry( $s, $l ) );", "\t\t\tif ( false ) {\n\t\t\t\treturn array( self::held_entry( $s, $l ) );", 'prop', 'testAGroupWithAHeldObjectOnEitherSideIsHeldAsAWhole')
+e('match-ref', 'match(): a name no pair holds is not compared', P,
+  "\t\t\t\tif ( ! AB_MCP_Sync_Pairs::valid_ref( $item['ref'] ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testANameNoPairHoldsIsNotCompared')
+e('lookup-held', 'lookup(): a pair takes its held object by the hash of its ref', P,
+  "\t\tforeach ( array( $encoded, 'sha:' . hash( 'sha256', $encoded ) ) as $key ) {", "\t\tforeach ( array( $encoded ) as $key ) {", 'prop', 'testAPairOfAHeldObjectTakesItAway')
+e('reduced', 'reduced(): a held line keeps its kind, the hash of its ref and its code only', P,
+  "\t\t\t'ref_sha256' => hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ),\n\t\t\t'held'       => (string) $code,\n\t\t);",
+  "\t\t\t'ref_sha256' => hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ),\n\t\t\t'held'       => (string) $code,\n\t\t) + $line;", 'prop', 'testAHeldLineIsReducedToItsKindTheHashOfItsRefAndItsCode')
+e('doubt-slug', 'doubt(): a post without a slug is paired only by a choice', P,
+  "\t\tif ( 'post' === $kind && '' === ( $identity['post_name'] ?? '' ) ) {", "\t\tif ( false ) {", 'prop', 'testPostsWithoutASlugAreUncertainNeverAPair')
+DM = "\t\tif ( 'menu_item' === $kind && ( ! isset( $identity['target'] ) || ! isset( $identity['parent'] ) ) ) {"
+e('doubt-target', 'doubt(): a menu item without the identity of its target', P, DM, DM.replace("! isset( $identity['target'] ) || ", ''), 'prop', 'testAMenuItemWithoutTheIdentityOfItsTargetOrParentIsUncertain')
+e('doubt-parent', 'doubt(): a menu item without the identity of its parent', P, DM, DM.replace(" || ! isset( $identity['parent'] )", ''), 'prop', 'testAMenuItemWithoutTheIdentityOfItsTargetOrParentIsUncertain')
+e('resolve-doubt', 'resolve(): a group with a doubt is left to a choice', P,
+  "\t\tif ( null !== $doubt ) {\n\t\t\t$left = array(", "\t\tif ( false ) {\n\t\t\t$left = array(", 'prop', 'testPostsWithoutASlugAreUncertainNeverAPair')
 e('resolve-path', 'resolve(): one to one on a path is a pair', P,
-  "\t\t\tif ( 1 === count( $ss ) && 1 === count( $ll ) ) {", "\t\t\tif ( false ) {", 'prop', 'testThePathOfParentsTellsPagesOfTheSameSlugApart')
-HU = "\t\t\t\tif ( null !== $item['hash'] && 1 === ( $hl[ $item['hash'] ] ?? 0 ) && 1 === ( $hs[ $item['hash'] ] ?? 0 ) ) {"
-e('resolve-hash', 'resolve(): an equal hash unique on both sides is a pair', P, HU, "\t\t\t\tif ( false ) {", 'prop', 'testAnEqualHashUniqueOnBothSidesIsAPair')
-e('resolve-hash-live', 'resolve(): unique on this site', P, HU, HU.replace(" && 1 === ( $hl[ $item['hash'] ] ?? 0 )", ''), 'prop', 'testAnEqualHashTwiceOnASideIsNoPair')
-e('resolve-hash-staging', 'resolve(): unique on the staging site', P, HU, HU.replace(" && 1 === ( $hs[ $item['hash'] ] ?? 0 )", ''), 'prop', 'testAnEqualHashTwiceOnASideIsNoPair')
-e('resolve-left', 'resolve(): what is left one to one is a pair', P,
-  "\t\tif ( 1 === count( $left['s'] ) && 1 === count( $left['l'] ) ) {", "\t\tif ( false ) {", 'prop', 'testWhatThePathLeavesOneToOneIsAPair')
-e('resolve-ambiguous', 'resolve(): more left on both sides is ambiguous', P,
-  "\t\t} elseif ( array() !== $left['s'] && array() !== $left['l'] ) {", "\t\t} elseif ( false ) {", 'prop', 'testMoreCandidatesOnASideAreAmbiguousWithAllOfThem')
+  "\t\t\t\tif ( 1 === count( $ss ) && 1 === count( $ll ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testThePathOfParentsTellsPagesOfTheSameSlugApart')
+HU = "\t\t\t\t\tif ( null !== $item['mapped'] && 1 === ( $hl[ $item['mapped'] ] ?? 0 ) && 1 === ( $hs[ $item['mapped'] ] ?? 0 ) ) {"
+e('resolve-hash', 'resolve(): an equal mapped form unique on both sides of a path is a pair', P, HU, "\t\t\t\t\tif ( false ) {", 'prop', 'testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair')
+e('resolve-hash-live', 'resolve(): unique on this site', P, HU, HU.replace(" && 1 === ( $hl[ $item['mapped'] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
+e('resolve-hash-staging', 'resolve(): unique on the staging site', P, HU, HU.replace(" && 1 === ( $hs[ $item['mapped'] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
+e('resolve-ambiguous', 'resolve(): more of the same identity on a path are ambiguous', P,
+  "\t\t\t\tif ( array() !== $rest && array() !== $rest_l ) {", "\t\t\t\tif ( false ) {", 'prop', 'testMoreOfTheSameIdentityOnAPathAreAmbiguousWithAllOfThem')
+e('resolve-uncertain', 'resolve(): the same identity left on other paths is uncertain, no pair by exclusion', P,
+  "\t\tif ( array() !== $left['s'] && array() !== $left['l'] ) {", "\t\tif ( false ) {", 'prop', 'testTheSameSlugOnAnotherPathIsUncertainNeverAPair')
 e('live-alone', 'live_alone(): only live only where the staging side is complete', P,
   "\t\tif ( true === call_user_func( $complete, $item['kind'], $item['subtype'] ) ) {", "\t\tif ( true ) {", 'prop', 'testAnObjectOnlyOnThisSiteIsLiveOnlyOnlyWhereStagingIsComplete')
 NH = "\t\tif ( null === $s['hash'] || null === $l['hash'] ) {"
 e('pair-no-hash-staging', 'pair_entry(): no hash on the staging side, not compared', P, NH, NH.replace("null === $s['hash'] || ", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
 e('pair-no-hash-live', 'pair_entry(): no hash on this site, not compared', P, NH, NH.replace(" || null === $l['hash']", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
-EQ = "\t\t$equal = $s['complete'] && $l['complete'] && hash_equals( $s['hash'], $l['hash'] );"
-e('equal-staging-whole', 'pair_entry(): equal only read whole on the staging site', P, EQ, EQ.replace("$s['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
-e('equal-live-whole', 'pair_entry(): equal only read whole on this site', P, EQ, EQ.replace("$l['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
-e('equal-hash', 'pair_entry(): equal only with the same hash', P, EQ, "\t\t$equal = $s['complete'] && $l['complete'];", 'prop', 'testTheSameIdentityWithOtherContentDiffersAndIsConfirmedUnclear')
-RD = "\t\t$ready = null !== ( $s['hash'] ?? null ) && null !== ( $l['hash'] ?? null ) && null === $s['held'] && null === $l['held'];"
-e('realign-staging-hash', 'realign_entry(): not without the staging object and its hash', P, RD, RD.replace("null !== ( $s['hash'] ?? null ) && ", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnew')
-e('realign-live-hash', 'realign_entry(): not without the object of this site and its hash', P, RD, RD.replace("null !== ( $l['hash'] ?? null ) && ", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnew')
-e('realign-staging-held', 'realign_entry(): not with a held staging object', P, RD, RD.replace(" && null === $s['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnew')
-e('realign-live-held', 'realign_entry(): not with a held object of this site', P, RD, RD.replace(" && null === $l['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnew')
+SA = "\t\treturn $s['complete'] && $l['complete'] && null !== $s['mapped'] && null !== $l['mapped'] && hash_equals( $s['mapped'], $l['mapped'] );"
+e('same-staging-whole', 'same(): only read whole on the staging site', P, SA, SA.replace("$s['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
+e('same-live-whole', 'same(): only read whole on this site', P, SA, SA.replace("$l['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
+e('same-mapped', 'same(): the same mapped form, not the same hash', P, SA, "\t\treturn $s['complete'] && $l['complete'] && hash_equals( (string) $s['hash'], (string) $l['hash'] );", 'prop', 'testOtherIdsOfTheSameTargetsAreEqualOnceMapped')
+e('same-unresolved', 'same(): a side naming a target without identity is no equal, also where both sides do alike', P, SA, SA.replace("null !== $s['mapped'] && null !== $l['mapped'] && ", '').replace("hash_equals( $s['mapped'], $l['mapped'] )", "hash_equals( (string) $s['mapped'], (string) $l['mapped'] )"), 'prop', 'testAReferenceWithoutATargetIsADifference')
+RD = "\t\t$ready = null !== $s && null !== $l && null === $s['held'] && null === $l['held'] && null !== $s['hash'] && null !== $l['hash'];"
+e('realign-staging-held', 'realign_entry(): not with a held staging object', P, RD, RD.replace(" && null === $s['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
+e('realign-live-held', 'realign_entry(): not with a held object of this site', P, RD, RD.replace(" && null === $l['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
+e('realign-staging-hash', 'realign_entry(): not without the hash of the staging object', P, RD, RD.replace(" && null !== $s['hash']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
+e('realign-live-hash', 'realign_entry(): not without the hash of the object of this site', P, RD, RD.replace(" && null !== $l['hash']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('realign-note', 'realign_entry(): sides that differ now are named', P,
-  "\t\tif ( ! ( $s['complete'] && $l['complete'] && hash_equals( $s['hash'], $l['hash'] ) ) ) {", "\t\tif ( false ) {", 'prop', 'testUnclearAndResidualPairsAreProposedForANewAlignment')
+  "\t\tif ( ! self::same( $s, $l ) ) {", "\t\tif ( false ) {", 'prop', 'testUnclearAndResidualPairsAreProposedForANewAlignment')
 e('alone-why', 'alone(): an object alone without a hash says why', P,
   "( null === $item['hash'] && null !== $item['reason_code'] ? self::why_no_hash( $item ) : null )", "null", 'prop', 'testAnObjectAloneWithoutAHashSaysWhy')
 e('why-code', 'why_no_hash(): the words of the reason code', P,
   "\t\tif ( null !== $text ) {\n\t\t\treturn $text;", "\t\tif ( false ) {\n\t\t\treturn $text;", 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
 e('key-unread', 'identity_key(): none without an identity', P,
-  "\t\tif ( array() === $identity ) {\n\t\t\treturn null;", "\t\tif ( false ) {\n\t\t\treturn null;", 'prop', 'testTheIdentityKeyOfEachKind')
+  "\t\tif ( array() === $identity ) {\n\t\t\treturn null;\n\t\t}\n\t\tswitch ( $kind ) {", "\t\tif ( false ) {\n\t\t\treturn null;\n\t\t}\n\t\tswitch ( $kind ) {", 'prop', 'testTheIdentityKeyOfEachKind')
 e('key-menu-slug', 'identity_key(): a menu item by the slug of its menu', P,
   "isset( $menus[ (string) $menu ] ) ? AB_MCP_Sync_Canon::encode( $menus[ (string) $menu ] ) : '?'", "'?'", 'prop', 'testAMenuItemMatchesByTheSlugOfItsMenuNotItsId')
+KM = "\t\t\t\t$parts = array( $slugs, $identity['type'] ?? null, $identity['object'] ?? null, $identity['target'] ?? null, $identity['parent'] ?? null );"
+e('key-menu-position', 'identity_key(): a menu item not by its position', P, KM, KM.replace(" );", ", $identity['position'] ?? null );"), 'prop', 'testAMenuSortedAnewPairsEachItemWithItsTarget')
+e('key-menu-target', 'identity_key(): a menu item by its target', P, KM, KM.replace(" $identity['target'] ?? null,", ''), 'prop', 'testAMenuSortedAnewPairsEachItemWithItsTarget')
+e('key-menu-parent', 'identity_key(): a menu item by its parent item', P, KM, KM.replace(", $identity['parent'] ?? null", ''), 'prop', 'testTheSameTargetTwiceUnderOneParentIsAmbiguous')
 e('key-css-linked', 'identity_key(): the CSS of a stylesheet and a CSS post apart', P,
   "\t\t\t\t$parts = array( $identity['stylesheet'] ?? null, ! empty( $identity['linked'] ) );", "\t\t\t\t$parts = array( $identity['stylesheet'] ?? null );", 'prop', 'testTheIdentityKeyOfEachKind')
 e('key-theme', 'identity_key(): the theme of a template', P,
   "$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null );", "$parts = array( $identity['post_type'] ?? null, $identity['post_name'] ?? null );", 'prop', 'testTheIdentityKeyOfEachKind')
 e('parent-at', 'parent_of(): only the post_parent is a parent', P,
   "\t\t\tif ( 'post_parent' === ( $ref['at'] ?? null ) && 'post' === ( $ref['space'] ?? null ) ) {", "\t\t\tif ( 'post' === ( $ref['space'] ?? null ) ) {", 'prop', 'testOnlyThePostParentIsAParentNotAnotherReferenceToAPost')
-e('shown-hash', 'shown(): no hash of a side', P,
-  "\t\t\t\tunset( $entry[ $side ]['hash'] );", "", 'prop', 'testAnAnswerShowsNoHashOrSnapshot')
-e('shown-candidates', 'shown(): no hash of a candidate', P,
-  "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'] );", "", 'prop', 'testAnAnswerShowsNoHashOrSnapshot')
+e('side-held', 'side(): a held object by the hash of its ref only', P,
+  "\t\tif ( null !== $item['held'] ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
+e('side-path', 'side(): the path of parents shown with a post', P,
+  "\t\tif ( 'post' === $item['kind'] ) {\n\t\t\t$out['path'] = $item['names'];", "\t\tif ( false ) {\n\t\t\t$out['path'] = $item['names'];", 'prop', 'testTheSameSlugOnAnotherPathIsUncertainNeverAPair')
+e('shown-hash', 'shown(): no hash or mapped form of a side', P,
+  "\t\t\t\tunset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-candidates', 'shown(): no hash or mapped form of a candidate', P,
+  "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('shown-snapshot', 'shown(): no snapshot of a pair', P,
-  "\t\t\tunset( $entry['pair']['snapshot'] );", "", 'prop', 'testAnAnswerShowsNoHashOrSnapshot')
+  "\t\t\tunset( $entry['pair']['snapshot'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('page-shown', 'page(): the entries as shown', P,
   "\t\t$entries = array_map( array( __CLASS__, 'shown' ), $page['entries'] );", "\t\t$entries = $page['entries'];", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
 e('parse-name', 'parse_name(): only the one spelling of name()', P,
   "\t\tif ( self::name( $prefix, $seq, $hex ) !== $name ) {", "\t\tif ( false ) {", 'prop', 'testTheNamesOfTheFilesOfAProposal')
+e('live-now-gone', 'live_now(): an object that is no more is gone', P,
+  "$out[ $object['kind'] . \"\\0\" . $object['ref'] ] = is_array( $read ) && isset( $read['hash'] ) ? (string) $read['hash'] : 'gone';", "$out[ $object['kind'] . \"\\0\" . $object['ref'] ] = is_array( $read ) && isset( $read['hash'] ) ? (string) $read['hash'] : 'x';", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+
+# ------------------------------------------------------- mapped forms
+ID = 'includes/sync/class-sync-identity.php'
+INV = 'includes/sync/class-sync-inventory.php'
+EXF = 'includes/sync/class-sync-export.php'
+DK = 'includes/sync/class-sync-db-kinds.php'
+MAPPED = 'testTheSameObjectsWithOtherIdsAreEqualOnceMapped'
+e('entry-mapped', 'entry(): the mapped form of an object', INV,
+  "\t\t$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;",
+  "\t\t$result['mapped'] = isset( $result['hash'] ) ? $result['hash'] : null;", 'it', MAPPED)
+e('export-mapped', 'line(): the mapped form goes into the package', EXF,
+  "\t\t\t'mapped'   => isset( $object['mapped'] ) ? $object['mapped'] : null,", "\t\t\t'mapped'   => null,", 'it', MAPPED)
+e('identity-attachment', 'post(): an attachment by its file', ID,
+  "\t\t\t\t$out   = is_array( $files ) && 1 === count( $files ) && '' !== $files[0] ? array( 'attachment', $files[0] ) : null;",
+  "\t\t\t\t$out   = null;", 'it', MAPPED)
+e('identity-parent', 'post(): a post with the identity of its parents', ID,
+  "\t\t\t\t$up     = 0 === $parent ? array() : self::post( $parent, $ctx, $depth + 1 );", "\t\t\t\t$up     = 0 === $parent ? array() : null;", 'it', MAPPED)
+e('identity-slug', 'post(): a post without a slug has no identity', ID,
+  "\t\t\t} elseif ( '' !== (string) $row['post_name'] ) {", "\t\t\t} elseif ( true ) {", 'it', 'testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike')
+e('identity-term', 'term(): a term by taxonomy and slug', ID,
+  "\t\t\t$out = array( 'term', (string) $row['taxonomy'], (string) $row['slug'] );", "\t\t\t$out = array( 'term', (string) $row['term_id'] );", 'it', MAPPED)
+e('identity-unresolved', 'map(): a reference without an identity gives no mapped form', ID,
+  "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = false;", "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = true;", 'it', 'testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike')
+e('identity-ref', 'map(): a reference names its target by identity', ID,
+  "\t\t\tunset( $value['id'] );\n\t\t\treturn array( 'as' => $as ) + $value;", "\t\t\treturn array( 'as' => $as ) + $value;", 'it', MAPPED)
+e('identity-menu-target', 'item(): a menu item with the identity of its target', DK,
+  "\t\t\t'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),", "\t\t\t'target'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
+e('identity-custom-url', 'target(): a custom link by the neutral form of its address', ID,
+  "\t\t\t\treturn array( 'custom', AB_MCP_Sync_Canon::text( (string) $url, $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", "\t\t\t\treturn array( 'custom' );", 'it', 'testACustomLinkIsNamedByItsAddress')
 
 # ------------------------------------------------------------------ tool
 e('plan-action', 'plan(): confirm and discard only', T,
@@ -228,8 +276,6 @@ e('sel-choice-shape', 'plan_confirm(): a choice names entry, staging_ref and liv
   "\t\t\tif ( ! is_array( $choice ) ) {", 'it', SEL)
 e('sel-entry', 'plan_confirm(): an entry of the proposal', T,
   "\t\t\tif ( ! isset( $entries[ $n ] ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
-e('sel-ambiguous', 'plan_confirm(): an ambiguous entry needs a choice', T,
-  "\t\t\tif ( 'ambiguous' === $entry['category'] ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-category', 'plan_confirm(): only equal, differs and realign are paired', T,
   "\t\t\tif ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-realign-ready', 'plan_confirm(): a realign entry that cannot be aligned is refused', T,
@@ -240,8 +286,6 @@ e('sel-room', 'plan_confirm(): categories only where select and choices leave ro
   "\t\t\tif ( $room < 1 ) {", "\t\t\tif ( false ) {", 'it', 'testAConfirmationMakesAtMost500PairsAndTheRestInAPartAfter')
 e('sel-rest', 'plan_confirm(): what is left of the categories is named', T,
   "\t\t\tif ( $more['more'] && array() !== $more['entries'] ) {", "\t\t\tif ( false ) {", 'it', 'testAConfirmationMakesAtMost500PairsAndTheRestInAPartAfter')
-e('sel-choice-ambiguous', 'plan_confirm(): a choice for an ambiguous entry only', T,
-  "\t\t\tif ( 'ambiguous' !== $entry['category'] ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-choice-refs', 'plan_confirm(): the refs of a choice among its candidates', T,
   "\t\t\tif ( null === $s || null === $l ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-choice-hash', 'plan_confirm(): a candidate without a hash is not paired', T,
@@ -265,12 +309,36 @@ e('discard-max', 'plan_discard(): at most MAX', T, DI, DI.replace('count( $ids )
 e('discard-once', 'plan_discard(): each once', T, DI, DI.replace(' || count( array_unique( $ids ) ) !== count( $ids )', ''), 'tool', TOOL_IDS)
 e('discard-source', 'plan_discard(): a pair of this source only', T,
   "\t\t\tif ( null === $pair || $source !== $pair['source_id'] ) {", "\t\t\tif ( null === $pair ) {", 'it', 'testADiscardThatCannotEndAPairEndsNone')
-e('confirm-rollback', 'undone(): what a failed confirmation wrote is taken back', T,
-  "\t\tforeach ( array_reverse( $done ) as list( $what, $id, $before ) ) {", "\t\tforeach ( array() as list( $what, $id, $before ) ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
-e('confirm-rollback-restore', 'undone(): a pair aligned anew is put back to its snapshot', T,
-  "\t\t\t\t: AB_MCP_Sync_Pairs::restore( $id, $before, AB_MCP_Sync_Pairs::snapshot_hash( $now ) ) );", "\t\t\t\t: true );", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
-e('discard-rollback', 'discard(): pairs ended before a failure are made again', T,
-  "\t\t\t\t\t$again  = AB_MCP_Sync_Pairs::create( $fields );", "\t\t\t\t\t$again  = true;", 'it', 'testADiscardThatCannotEndAPairEndsNone')
+e('sel-by-choice', 'plan_confirm(): an ambiguous or uncertain entry needs a choice', T,
+  "\t\t\tif ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", "\t\t\tif ( false ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", 'it', SEL)
+e('sel-choice-by-choice', 'plan_confirm(): a choice for an ambiguous or uncertain entry only', T,
+  "\t\t\tif ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
+CE = "\t\t\t$equal = $s['complete'] && $l['complete'] && is_string( $s['mapped'] ) && is_string( $l['mapped'] ) && hash_equals( $s['mapped'], $l['mapped'] );"
+e('choice-equal', 'plan_confirm(): a chosen pair of the same mapped form is active', T, CE, "\t\t\t$equal = false;", 'it', SEL)
+e('choice-unequal', 'plan_confirm(): a chosen pair of other content is unclear', T, CE, "\t\t\t$equal = true;", 'it', SEL)
+e('live-bound', 'plan_confirm(): the state binds the objects of this site read fresh', T,
+  "\t\t\t$op['live_now'] = $live[ $op['kind'] . \"\\0\" . $op['live_ref'] ];", "\t\t\t$op['live_now'] = 'x';", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+e('live-gone', 'plan_confirm(): an object gone since the proposal is skipped', T,
+  "$now            = 'gone' === $op['live_now'] ? 'the object of this site is gone since the proposal' : self::now( $source, $op );", "$now            = self::now( $source, $op );", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+e('live-changed-shown', 'named(): the preview says an object changed since the proposal', T,
+  "\t\t\t$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];", "\t\t\t$op['changed_since_proposal'] = false;", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+e('state-connection', 'plan(): the state binds the connection', T,
+  "\t\t\t'connection' => AB_MCP_Sync_Proposal::connection(),\n\t\t\t'ops'", "\t\t\t'ops'", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
+e('state-print', 'plan(): the state binds the print of the pair of sites', T,
+  "\t\t\t'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),\n\t\t);\n\t\treturn $plan;", "\t\t);\n\t\treturn $plan;", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
+e('confirm-transaction', 'confirm(): one transaction, nothing kept where a pair fails', T,
+  "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, &$out ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan, &$out ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
+e('confirm-transaction-read', 'confirm(): nothing kept where the read after an insert fails', T,
+  "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, &$out ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan, &$out ) {", 'it', 'testAConfirmationWhoseReadBackFailsAfterItsInsertKeepsNothing')
+e('discard-transaction', 'discard(): one transaction, nothing ended where a pair fails', T,
+  "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan ) {", 'it', 'testADiscardThatCannotEndAPairEndsNone')
+PA = 'includes/sync/class-sync-pairs.php'
+e('tx-engine', 'transaction(): only on a table that keeps transactions', PA,
+  "\t\tif ( ! is_string( $engine ) || 0 !== strcasecmp( $engine, 'InnoDB' ) ) {", "\t\tif ( false ) {", 'it', 'testATableWithoutTransactionsTakesNoPairs')
+e('tx-rollback', 'transaction(): an error rolls back', PA,
+  "\t\tif ( is_wp_error( $result ) ) {\n\t\t\t$wpdb->query( 'ROLLBACK' );", "\t\tif ( is_wp_error( $result ) ) {\n\t\t\t$wpdb->query( 'COMMIT' );", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
+e('tx-begin', 'transaction(): it begins one', PA,
+  "\t\tif ( false === $wpdb->query( 'START TRANSACTION' ) ) {", "\t\tif ( false === $wpdb->query( 'SELECT 1' ) ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
 LF = "\t\t\tif ( ( null !== $kind && $kind !== $pair['kind'] ) || ( null !== $state && $state !== $pair['state'] ) ) {"
 e('list-kind', 'listed(): only pairs of the kind asked', T, LF, LF.replace("( null !== $kind && $kind !== $pair['kind'] ) || ", ''), 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
 e('list-state', 'listed(): only pairs of the state asked', T, LF, LF.replace(" || ( null !== $state && $state !== $pair['state'] )", ''), 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
@@ -292,12 +360,14 @@ e('gate-carry-over', 'CARRY_OVER: wp_site_pairs is not held by «Staging first»
 
 # ---------------------------------------------------------------- import
 e('taken-id', 'taken(): a package id is 32 hex', IM,
-  "\t\tif ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named",
+  "\t\tif ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named",
   "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named", 'tool', TOOL_IDS)
 e('taken-unknown', 'taken(): a package this account took over only', IM,
   "\t\tif ( null === $found ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", 'it', 'testOnlyAPackageTakenOverCompletelyIsRead')
+e('taken-purpose', 'taken(): a package held for the inventory only', IM,
+  "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || AB_MCP_Sync_Export::PURPOSES[0] !== $expect['purpose'] ) {", "\t\tif ( ! is_array( $expect ) ) {", 'it', 'testTakenReadsOnlyAPackageOfTheInventoryWithItsChunksAsSigned')
 e('taken-bound', 'taken(): a package of the pair of sites as it is now', IM,
-  "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
+  "\t\tif ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
 e('taken-verify', 'taken(): its manifest checked again', IM,
   "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t$manifest = $checked['manifest'];",
   "\t\t$checked = array( 'manifest' => $found['manifest'] );\n\t\t$manifest = $checked['manifest'];", 'it', 'testAPackageWhoseManifestExpiredIsNotRead')
@@ -317,22 +387,26 @@ def test_of(expect):
 
 
 ids = set()
+problems = []
 for (id_, clause, file, search, replace, run, expect) in entries:
     if id_ in ids:
-        sys.exit('duplicate id ' + id_)
+        problems.append('duplicate id ' + id_)
     ids.add(id_)
     text = open(os.path.join(ROOT, file)).read()
     n = text.count(search)
     if n != 1:
-        sys.exit('%s: search occurs %d times in %s:\n%s' % (id_, n, file, search))
+        problems.append('%s: search occurs %d times in %s:\n%s' % (id_, n, file, search))
     if search == replace:
-        sys.exit(id_ + ': the replacement is the search')
+        problems.append(id_ + ': the replacement is the search')
     if run not in RUNS:
-        sys.exit(id_ + ': no run ' + run)
+        problems.append(id_ + ': no run ' + run)
+        continue
     suite, cls = RUNS[run]
     path = os.path.join(ROOT, 'tests', 'integration' if 'it' == suite else '', cls + '.php')
     if not re.search(r'\bfunction\s+' + re.escape(test_of(expect)) + r'\s*\(', open(path).read()):
-        sys.exit('%s: %s is no test of %s' % (id_, test_of(expect), path))
+        problems.append('%s: %s is no test of %s' % (id_, test_of(expect), path))
+if problems:
+    sys.exit('\n'.join(problems))
 
 
 def php(s):
@@ -364,12 +438,18 @@ out.append('''<?php
  * identity, path and hash, works out the canon change of active pairs, and
  * confirms, discards and lists with the token of the confirmation in the same
  * call, for the account and connection that made the proposal, all or
- * nothing.
+ * nothing. Codex round 1: equality of the mapped forms (every reference
+ * named by the identity of its target, AB_MCP_Sync_Identity), no pair by
+ * exclusion (another path of parents, no slug, a menu item without the
+ * identity of its target or parent: uncertain), a menu item by its target
+ * and parent, never its position, held lines reduced before they are stored
+ * or shown, one transaction of the database per call, the token over the
+ * objects of this site read fresh, the connection and the print.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.
  *
- * Held by the unit suite (SyncProposalTest, SyncPairsToolTest) and, for what
+ * Held by the unit suite (SyncProposalTest, SyncPairsToolTest, SyncPackageTest) and, for what
  * two WordPress sites show, by the integration suite (SyncProposalTest; the
  * sites running, AB_IT_ROOT set). Not listed: the type guards after a read
  * against the SHA-256 of what this code wrote itself (no input reaches them),
@@ -391,6 +471,11 @@ $im = 'includes/sync/class-sync-import.php';
 $os = 'includes/sync/class-sync-option-schema.php';
 $ts = 'includes/tools/class-tools-staging.php';
 $g  = 'includes/class-staging-gate.php';
+$pa = 'includes/sync/class-sync-pairs.php';
+$id = 'includes/sync/class-sync-identity.php';
+$inv = 'includes/sync/class-sync-inventory.php';
+$ex = 'includes/sync/class-sync-export.php';
+$dk = 'includes/sync/class-sync-db-kinds.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

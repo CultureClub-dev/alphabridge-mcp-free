@@ -16,8 +16,9 @@
  * objects); the next call takes it up where it stopped. An object whose name
  * is the name of a credential (B9) is counted, never listed; an object a
  * credential holds by a name of its line (AB_MCP_Sync_Import::held_reason(),
- * the import's list for the staging side) is listed by the SHA-256 of its ref
- * and its code only, never by a name, and is never proposed as a pair.
+ * the import's list for the staging side) is reduced to its kind, the
+ * SHA-256 of its ref and its code before it is stored or answered with,
+ * never named, and never proposed as a pair.
  *
  * A SERIES. The packages of one inventory together: an object twice, or a
  * kind of the database read whole in one package while another package holds
@@ -31,18 +32,27 @@
  * GRENZEN-BERICHT.md).
  *
  * THE MATCH (match(), no database): objects of both sides are grouped by kind
- * and identity (identity_key()); within a group of more than one object on a
- * side, by the path of parents (posts), then by an equal hash that is unique
- * on both sides; what is left one to one is a pair, more is «ambiguous».
- * Categories (CATEGORIES): equal (one to one, both hashes there, read whole
- * and equal: confirmed as active), differs (the same identity, other content:
- * confirmed as unclear), ambiguous (the person names the pair), realign (a
+ * and identity (identity_key(); a menu item by its menus, the identity of
+ * its target and of its parent item, never by its position), then by the
+ * path of parents (posts). Equality is that of the mapped forms (decision
+ * 10: every reference names its target by identity, AB_MCP_Sync_Identity),
+ * so the same objects with other ids on the two sites are equal. No pair by
+ * exclusion: one object a side of the same identity and path is a pair; more
+ * on a path are paired only where an equal mapped form is unique on both
+ * sides, the rest is ambiguous; the same identity left on another path, a
+ * post without a slug and a menu item whose target or parent has no
+ * identity are uncertain. Categories (CATEGORIES): equal (both read whole,
+ * the same mapped form: confirmed as active), differs (the same identity,
+ * other content, or a reference without a target: confirmed as unclear),
+ * ambiguous and uncertain (only a person's choice pairs them), realign (a
  * pair in the state unclear or residual, both objects there: confirmed with
  * the bases of both sides now, the only way out of these states, decision
  * 14), staging_only and live_only (no counterpart; live_only only where the
  * staging side is complete), not_compared (a side without a hash, a row not
- * read, a ref no pair can hold, the staging side not complete) and held. An
- * object of a pair is not proposed again.
+ * read, a ref no pair can hold, the staging side not complete) and held
+ * (reduced to the SHA-256 of the ref and the code before it is stored or
+ * shown). An object of a pair is not proposed again; the bases of a pair
+ * stay the hashes of each side in its own ID space (decision 10).
  *
  * THE CANON (decision 10). An active pair whose bases are of another version
  * of the canonical form is worked out again in this one
@@ -91,10 +101,13 @@ final class AB_MCP_Sync_Proposal {
 	const LABEL = 'proposal';
 
 	/** The categories of an entry, in the order of the entries. */
-	const CATEGORIES = array( 'equal', 'differs', 'ambiguous', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' );
+	const CATEGORIES = array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' );
 
 	/** The categories a person confirms. */
-	const CONFIRMABLE = array( 'equal', 'differs', 'ambiguous', 'realign' );
+	const CONFIRMABLE = array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign' );
+
+	/** The categories a person confirms only by a choice of the pair. */
+	const BY_CHOICE = array( 'ambiguous', 'uncertain' );
 
 	/** Entries of one answer at most (the first 200, then a cursor). */
 	const PAGE = 200;
@@ -444,7 +457,8 @@ final class AB_MCP_Sync_Proposal {
 					return self::mixed();
 				}
 				if ( isset( $codes[ $kind . "\0" . $sha ] ) ) {
-					$line['held'] = $codes[ $kind . "\0" . $sha ];
+					// Reduced before it goes anywhere (Codex A3).
+					$line = self::reduced( $line, $codes[ $kind . "\0" . $sha ] );
 					++$held;
 				}
 				$lines[] = $line;
@@ -525,12 +539,11 @@ final class AB_MCP_Sync_Proposal {
 				return self::finish( $found );
 			}
 		}
-		$partner = AB_MCP_Sync_Anchor::partner();
-		if ( is_wp_error( $partner ) ) {
-			return $partner;
+		$source = self::inventory_source( max( 1, AB_MCP_Sync_Inventory::BUDGET - self::RESERVE ), null === self::$limit ? self::LIMIT : (int) self::$limit );
+		if ( is_wp_error( $source ) ) {
+			return $source;
 		}
-		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $partner ), max( 1, AB_MCP_Sync_Inventory::BUDGET - self::RESERVE ), null, null === self::$limit ? self::LIMIT : (int) self::$limit );
-		$read   = AB_MCP_Sync_Inventory::run( $source, $cursor );
+		$read = AB_MCP_Sync_Inventory::run( $source, $cursor );
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
@@ -543,10 +556,8 @@ final class AB_MCP_Sync_Proposal {
 			}
 			$line = AB_MCP_Sync_Export::line( $object );
 			$code = AB_MCP_Sync_Import::held_reason( $line );
-			if ( null !== $code ) {
-				$line['held'] = $code;
-			}
-			$lines[] = $line;
+			// A held line is reduced before it is stored (Codex A3).
+			$lines[] = null === $code ? $line : self::reduced( $line, $code );
 		}
 		$part = self::put_part( $found['gid'], $seq + 1, $lines, $read['cursor'], $b9 );
 		if ( is_wp_error( $part ) ) {
@@ -566,6 +577,51 @@ final class AB_MCP_Sync_Proposal {
 			'expires'     => (int) $found['head']['expires'],
 			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (%d objects so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
 		);
+	}
+
+	/**
+	 * The source of an inventory of this site, with its own address and the
+	 * one of its staging site neutral, as the staging site reads its own
+	 * (AB_MCP_Sync_Export::make()).
+	 *
+	 * @param int|float $budget  Seconds.
+	 * @param int|null  $objects Objects at most.
+	 * @return array|WP_Error
+	 */
+	private static function inventory_source( $budget = AB_MCP_Sync_Inventory::BUDGET, $objects = null ) {
+		$partner = AB_MCP_Sync_Anchor::partner();
+		if ( is_wp_error( $partner ) ) {
+			return $partner;
+		}
+		return AB_MCP_Sync_Inventory::source( array( home_url(), $partner ), $budget, null, $objects );
+	}
+
+	/**
+	 * The objects of this site as they are now, read fresh (Codex B3: the
+	 * token of a confirmation binds them): kind NUL ref => the SHA-256 of
+	 * its canonical form, or 'gone'.
+	 *
+	 * @param array[] $objects kind, ref.
+	 * @return array<string,string>|WP_Error
+	 */
+	public static function live_now( array $objects ) {
+		$source = self::inventory_source();
+		if ( is_wp_error( $source ) ) {
+			return $source;
+		}
+		$out = array();
+		foreach ( $objects as $object ) {
+			$kind = AB_MCP_Sync_Db_Kinds::for_pair( $object['kind'] );
+			$read = null === $kind ? null : $kind->canonical(
+				array(
+					'kind'   => $object['kind'],
+					'ref'    => $object['ref'],
+					'source' => $source,
+				)
+			);
+			$out[ $object['kind'] . "\0" . $object['ref'] ] = is_array( $read ) && isset( $read['hash'] ) ? (string) $read['hash'] : 'gone';
+		}
+		return $out;
 	}
 
 	/**
@@ -806,7 +862,7 @@ final class AB_MCP_Sync_Proposal {
 			'live'        => $index['live'],
 			'entries'     => $entries,
 			'next_after'  => $page['more'] ? $last : null,
-			'next'        => 'Show the entries to the person; nothing is paired yet. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an ambiguous entry: its staging_ref and live_ref). equal is paired as active, differs and an ambiguous pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
+			'next'        => 'Show the entries to the person; nothing is paired yet. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an ambiguous or uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
 		);
 	}
 
@@ -819,13 +875,13 @@ final class AB_MCP_Sync_Proposal {
 	public static function shown( array $entry ) {
 		foreach ( array( 'staging', 'live' ) as $side ) {
 			if ( isset( $entry[ $side ] ) && is_array( $entry[ $side ] ) ) {
-				unset( $entry[ $side ]['hash'] );
+				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'] );
 			}
 		}
 		if ( isset( $entry['candidates'] ) ) {
 			foreach ( $entry['candidates'] as $side => $list ) {
 				foreach ( $list as $i => $one ) {
-					unset( $entry['candidates'][ $side ][ $i ]['hash'] );
+					unset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'] );
 				}
 			}
 		}
@@ -907,8 +963,10 @@ final class AB_MCP_Sync_Proposal {
 
 	/**
 	 * The forms of a pair in the version of now, from the lines of both
-	 * sides: the target is the staging hash only where nothing maps it (no
-	 * override, no post or term named by its id, no possible reference).
+	 * sides: live and staging are the hashes of each side; the target equals
+	 * the live hash where the mapped forms are the same (decision 10) and no
+	 * override changes the target, else it is none (the pair becomes
+	 * unclear).
 	 *
 	 * @param array      $pair    Pair.
 	 * @param array|null $staging Its staging line.
@@ -916,33 +974,44 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array live, staging, target (SHA-256 or null).
 	 */
 	public static function canon_forms( array $pair, $staging, $live ) {
-		$hash   = static function ( $line ) {
-			return is_array( $line ) && isset( $line['hash'] ) && is_string( $line['hash'] ) && ! empty( $line['complete'] ) && ! isset( $line['held'] ) ? $line['hash'] : null;
+		$usable = static function ( $line ) {
+			return is_array( $line ) && isset( $line['hash'] ) && is_string( $line['hash'] ) && ! empty( $line['complete'] ) && ! isset( $line['held'] );
 		};
-		$mapped = false;
-		if ( is_array( $staging ) ) {
-			foreach ( isset( $staging['refs'] ) ? $staging['refs'] : array() as $ref ) {
-				if ( isset( $ref['space'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) ) {
-					$mapped = true;
-				}
-			}
-			$mapped = $mapped || ! empty( $staging['possible'] );
-		}
-		$s = $hash( $staging );
+		$s      = $usable( $staging ) ? $staging['hash'] : null;
+		$l      = $usable( $live ) ? $live['hash'] : null;
+		$same   = null !== $s && null !== $l && isset( $staging['mapped'], $live['mapped'] ) && is_string( $staging['mapped'] ) && hash_equals( $staging['mapped'], (string) $live['mapped'] );
 		return array(
-			'live'    => $hash( $live ),
+			'live'    => $l,
 			'staging' => $s,
-			'target'  => null === $pair['override'] && ! $mapped ? $s : null,
+			'target'  => null === $pair['override'] && $same ? $l : null,
 		);
 	}
 
 	/* ------------------------------------------------------------ match */
 
 	/**
+	 * A line a credential holds, reduced to what may be kept and shown: its
+	 * kind, the SHA-256 of its ref (in the spelling of AB_MCP_Sync_Canon::
+	 * encode()) and the code of why. Every held line is reduced before it is
+	 * stored or answered with (Codex A3).
+	 *
+	 * @param array  $line Line.
+	 * @param string $code Code (AB_MCP_Sync_Import::HELD_CODES).
+	 * @return array
+	 */
+	public static function reduced( array $line, $code ) {
+		return array(
+			'kind'       => (string) $line['kind'],
+			'ref_sha256' => hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ),
+			'held'       => (string) $code,
+		);
+	}
+
+	/**
 	 * The proposal from the lines of both sides (no database).
 	 *
-	 * @param array[]  $staging  Lines of the staging side (a held one with 'held').
-	 * @param array[]  $live     Lines of the production side (a held one with 'held').
+	 * @param array[]  $staging  Lines of the staging side (a held one reduced(), or with 'held').
+	 * @param array[]  $live     Lines of the production side (likewise).
 	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode()).
 	 * @param callable $complete function( kind, subtype ): bool, whether the staging side is complete.
 	 * @return array entries (numbered), counts, paired, held (staging, live), subtypes.
@@ -968,8 +1037,8 @@ final class AB_MCP_Sync_Proposal {
 		$entries = array();
 		$paired  = 0;
 		foreach ( $pairs as $pair ) {
-			$si = $by['s'][ $pair['kind'] . "\0" . AB_MCP_Sync_Canon::encode( $pair['staging_ref'] ) ] ?? null;
-			$li = $by['l'][ $pair['kind'] . "\0" . AB_MCP_Sync_Canon::encode( $pair['live_ref'] ) ] ?? null;
+			$si = self::lookup( $by['s'], $pair['kind'], $pair['staging_ref'] );
+			$li = self::lookup( $by['l'], $pair['kind'], $pair['live_ref'] );
 			if ( null !== $si ) {
 				$taken['s'][ $si ] = true;
 			}
@@ -988,11 +1057,15 @@ final class AB_MCP_Sync_Proposal {
 				if ( isset( $taken[ $side ][ $i ] ) ) {
 					continue;
 				}
+				if ( null !== $item['held'] ) {
+					$entries[] = self::held_entry( $item );
+					continue;
+				}
 				if ( null === $item['key'] ) {
 					$entries[] = self::alone( $item, 'not_compared', self::why_unread( $item ) );
 					continue;
 				}
-				if ( ! AB_MCP_Sync_Pairs::valid_ref( $item['ref'] ) && null === $item['held'] ) {
+				if ( ! AB_MCP_Sync_Pairs::valid_ref( $item['ref'] ) ) {
 					$entries[] = self::alone( $item, 'not_compared', 'Its name cannot be held by a pair (longer than 191 characters, a control character, or not UTF-8), so it is not paired. Take it over by hand.' );
 					continue;
 				}
@@ -1019,11 +1092,12 @@ final class AB_MCP_Sync_Proposal {
 			$entries[ $n ] = array( 'n' => $n + 1 ) + $entries[ $n ];
 			++$counts[ $entry['category'] ];
 		}
-		foreach ( $sides['l'] as $item ) {
-			$subtypes[ $item['kind'] . "\0" . $item['subtype'] ] = true;
-		}
-		foreach ( $sides['s'] as $item ) {
-			$subtypes[ $item['kind'] . "\0" . $item['subtype'] ] = true;
+		foreach ( array( 's', 'l' ) as $side ) {
+			foreach ( $sides[ $side ] as $item ) {
+				if ( null === $item['held'] ) {
+					$subtypes[ $item['kind'] . "\0" . $item['subtype'] ] = true;
+				}
+			}
 		}
 		ksort( $subtypes, SORT_STRING );
 		return array(
@@ -1039,7 +1113,27 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The objects of one side, each with its identity key and its path.
+	 * The object of a side a pair names by its ref: by the ref itself, or by
+	 * the SHA-256 of its ref where its line is held.
+	 *
+	 * @param array<string,int> $by   kind NUL ref key => index.
+	 * @param string            $kind Kind.
+	 * @param string            $ref  Ref of the pair.
+	 * @return int|null
+	 */
+	private static function lookup( array $by, $kind, $ref ) {
+		$encoded = AB_MCP_Sync_Canon::encode( $ref );
+		foreach ( array( $encoded, 'sha:' . hash( 'sha256', $encoded ) ) as $key ) {
+			if ( isset( $by[ $kind . "\0" . $key ] ) ) {
+				return $by[ $kind . "\0" . $key ];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The objects of one side, each with its identity key, its path and what
+	 * keeps it from a pair by identity alone (doubt).
 	 *
 	 * @param array[] $lines Lines.
 	 * @param string  $side  s or l.
@@ -1049,6 +1143,9 @@ final class AB_MCP_Sync_Proposal {
 		$posts = array();
 		$menus = array();
 		foreach ( $lines as $line ) {
+			if ( isset( $line['held'] ) ) {
+				continue;
+			}
 			$id = isset( $line['identity'] ) && is_array( $line['identity'] ) ? $line['identity'] : array();
 			if ( 'post' === $line['kind'] && is_string( $line['ref'] ) && isset( $id['post_name'] ) ) {
 				$posts[ $line['ref'] ] = array(
@@ -1062,8 +1159,21 @@ final class AB_MCP_Sync_Proposal {
 		}
 		$out = array();
 		foreach ( $lines as $line ) {
+			$kind = (string) $line['kind'];
+			if ( isset( $line['held'] ) ) {
+				$sha   = isset( $line['ref_sha256'] ) ? (string) $line['ref_sha256'] : hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) );
+				$out[] = array(
+					'side'    => $side,
+					'kind'    => $kind,
+					'ref_key' => 'sha:' . $sha,
+					'ref_sha' => $sha,
+					'held'    => (string) $line['held'],
+					'subtype' => '',
+					'key'     => null,
+				);
+				continue;
+			}
 			$identity = isset( $line['identity'] ) && is_array( $line['identity'] ) ? $line['identity'] : array();
-			$kind     = (string) $line['kind'];
 			$locks    = array();
 			foreach ( isset( $line['locks'] ) && is_array( $line['locks'] ) ? $line['locks'] : array() as $lock ) {
 				$locks[] = array(
@@ -1071,6 +1181,7 @@ final class AB_MCP_Sync_Proposal {
 					'stage' => $lock['stage'] ?? null,
 				);
 			}
+			$names = 'post' === $kind ? self::path( $line, $posts ) : array();
 			$out[] = array(
 				'side'        => $side,
 				'kind'        => $kind,
@@ -1080,21 +1191,48 @@ final class AB_MCP_Sync_Proposal {
 				'identity'    => $identity,
 				'status'      => (string) ( $line['status'] ?? '' ),
 				'hash'        => isset( $line['hash'] ) && is_string( $line['hash'] ) ? $line['hash'] : null,
+				'mapped'      => isset( $line['mapped'] ) && is_string( $line['mapped'] ) ? $line['mapped'] : null,
 				'complete'    => ! empty( $line['complete'] ),
-				'held'        => isset( $line['held'] ) ? (string) $line['held'] : null,
+				'held'        => null,
 				'locks'       => $locks,
 				'reason_code' => $line['reason_code'] ?? null,
 				'target'      => $line['target'] ?? null,
 				'key'         => self::identity_key( $kind, $identity, $menus ),
-				'path'        => 'post' === $kind ? self::path( $line, $posts ) : '',
+				'names'       => $names,
+				'path'        => AB_MCP_Sync_Canon::encode( $names ),
+				'doubt'       => self::doubt( $kind, $identity ),
 			);
 		}
 		return $out;
 	}
 
 	/**
+	 * What keeps an object from a pair by its identity alone, so that only a
+	 * person's choice pairs it (Codex A1, A2): a post without a slug, a menu
+	 * item whose target or parent has no identity. Null for none.
+	 *
+	 * @param string $kind     Kind.
+	 * @param array  $identity Identity.
+	 * @return string|null
+	 */
+	private static function doubt( $kind, array $identity ) {
+		if ( array() === $identity ) {
+			return null;
+		}
+		if ( 'post' === $kind && '' === ( $identity['post_name'] ?? '' ) ) {
+			return 'Without a slug, an object is named by nothing but its id, so it is paired only by the choice of a person.';
+		}
+		if ( 'menu_item' === $kind && ( ! isset( $identity['target'] ) || ! isset( $identity['parent'] ) ) ) {
+			return 'What the menu item shows, or the item it hangs under, has no identity on its site (a target that is gone or has no slug), so it is paired only by the choice of a person.';
+		}
+		return null;
+	}
+
+	/**
 	 * The key an object is matched by: its kind and what names it apart from
-	 * its id (concept section 4); null where the identity was not read.
+	 * its id (concept section 4); null where the identity was not read. A
+	 * menu item by its menus, type, object, target and parent item, never by
+	 * its position, which a site changes by sorting (Codex A2).
 	 *
 	 * @param string $kind     Pair kind.
 	 * @param array  $identity Identity.
@@ -1119,7 +1257,7 @@ final class AB_MCP_Sync_Proposal {
 					$slugs[] = isset( $menus[ (string) $menu ] ) ? AB_MCP_Sync_Canon::encode( $menus[ (string) $menu ] ) : '?';
 				}
 				sort( $slugs, SORT_STRING );
-				$parts = array( $slugs, $identity['type'] ?? null, $identity['object'] ?? null, $identity['position'] ?? null );
+				$parts = array( $slugs, $identity['type'] ?? null, $identity['object'] ?? null, $identity['target'] ?? null, $identity['parent'] ?? null );
 				break;
 			case 'widget_area':
 				$parts = array( $identity['area'] ?? null );
@@ -1155,12 +1293,12 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The path of a post: the names of its parents from the top, as far as
-	 * the side names them.
+	 * The path of a post: the slugs of its parents from the top, as far as
+	 * the side names them ('?' for one it does not).
 	 *
 	 * @param array $line  Line.
 	 * @param array $posts Post ref => name, parent of the same side.
-	 * @return string
+	 * @return array
 	 */
 	private static function path( array $line, array $posts ) {
 		$names  = array();
@@ -1175,11 +1313,16 @@ final class AB_MCP_Sync_Proposal {
 			$names[]         = $posts[ $parent ]['name'];
 			$parent          = $posts[ $parent ]['parent'];
 		}
-		return AB_MCP_Sync_Canon::encode( array_reverse( $names ) );
+		return array_reverse( $names );
 	}
 
 	/**
-	 * The entries of one group of the same kind and identity.
+	 * The entries of one group of the same kind and identity. No pair by
+	 * exclusion (Codex A1): a pair only where the identity, the path of
+	 * parents included, is the same on both sides, one to one, or where an
+	 * equal mapped form is unique on both sides of the same path; objects of
+	 * the same identity left on another path, or with a doubt, are offered
+	 * for a person's choice (uncertain), never paired by themselves.
 	 *
 	 * @param array[]  $s        Staging objects.
 	 * @param array[]  $l        Production objects.
@@ -1187,9 +1330,10 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array[]
 	 */
 	private static function resolve( array $s, array $l, callable $complete ) {
+		$doubt = null;
 		foreach ( array_merge( $s, $l ) as $item ) {
-			if ( null !== $item['held'] ) {
-				return array( self::held_entry( $s, $l ) );
+			if ( null !== $item['doubt'] ) {
+				$doubt = $item['doubt'];
 			}
 		}
 		$out  = array();
@@ -1197,49 +1341,63 @@ final class AB_MCP_Sync_Proposal {
 			's' => array(),
 			'l' => array(),
 		);
-		$by_path = array();
-		foreach ( $s as $item ) {
-			$by_path[ $item['path'] ]['s'][] = $item;
-		}
-		foreach ( $l as $item ) {
-			$by_path[ $item['path'] ]['l'][] = $item;
-		}
-		ksort( $by_path, SORT_STRING );
-		foreach ( $by_path as $sub ) {
-			$ss = isset( $sub['s'] ) ? $sub['s'] : array();
-			$ll = isset( $sub['l'] ) ? $sub['l'] : array();
-			if ( 1 === count( $ss ) && 1 === count( $ll ) ) {
-				$out[] = self::pair_entry( $ss[0], $ll[0] );
-				continue;
+		if ( null !== $doubt ) {
+			$left = array(
+				's' => $s,
+				'l' => $l,
+			);
+		} else {
+			$by_path = array();
+			foreach ( $s as $item ) {
+				$by_path[ $item['path'] ]['s'][] = $item;
 			}
-			// An equal hash that is unique on both sides of the subgroup.
-			$hs = array_count_values( array_filter( array_column( $ss, 'hash' ), 'is_string' ) );
-			$hl = array_count_values( array_filter( array_column( $ll, 'hash' ), 'is_string' ) );
-			$by = array();
-			foreach ( $ll as $j => $item ) {
-				if ( null !== $item['hash'] && 1 === ( $hl[ $item['hash'] ] ?? 0 ) && 1 === ( $hs[ $item['hash'] ] ?? 0 ) ) {
-					$by[ $item['hash'] ] = $j;
-				}
+			foreach ( $l as $item ) {
+				$by_path[ $item['path'] ]['l'][] = $item;
 			}
-			$used = array();
-			foreach ( $ss as $item ) {
-				if ( null !== $item['hash'] && isset( $by[ $item['hash'] ] ) ) {
-					$used[ $by[ $item['hash'] ] ] = true;
-					$out[]                         = self::pair_entry( $item, $ll[ $by[ $item['hash'] ] ] );
+			ksort( $by_path, SORT_STRING );
+			foreach ( $by_path as $sub ) {
+				$ss = isset( $sub['s'] ) ? $sub['s'] : array();
+				$ll = isset( $sub['l'] ) ? $sub['l'] : array();
+				if ( 1 === count( $ss ) && 1 === count( $ll ) ) {
+					$out[] = self::pair_entry( $ss[0], $ll[0] );
 					continue;
 				}
-				$left['s'][] = $item;
-			}
-			foreach ( $ll as $j => $item ) {
-				if ( ! isset( $used[ $j ] ) ) {
-					$left['l'][] = $item;
+				// An equal mapped form that is unique on both sides of the path.
+				$hs = array_count_values( array_filter( array_column( $ss, 'mapped' ), 'is_string' ) );
+				$hl = array_count_values( array_filter( array_column( $ll, 'mapped' ), 'is_string' ) );
+				$by = array();
+				foreach ( $ll as $j => $item ) {
+					if ( null !== $item['mapped'] && 1 === ( $hl[ $item['mapped'] ] ?? 0 ) && 1 === ( $hs[ $item['mapped'] ] ?? 0 ) ) {
+						$by[ $item['mapped'] ] = $j;
+					}
 				}
+				$used = array();
+				$rest = array();
+				foreach ( $ss as $item ) {
+					if ( null !== $item['mapped'] && isset( $by[ $item['mapped'] ] ) ) {
+						$used[ $by[ $item['mapped'] ] ] = true;
+						$out[]                           = self::pair_entry( $item, $ll[ $by[ $item['mapped'] ] ] );
+						continue;
+					}
+					$rest[] = $item;
+				}
+				$rest_l = array();
+				foreach ( $ll as $j => $item ) {
+					if ( ! isset( $used[ $j ] ) ) {
+						$rest_l[] = $item;
+					}
+				}
+				if ( array() !== $rest && array() !== $rest_l ) {
+					// More than one of the same identity on the same path.
+					$out[] = self::choice_entry( 'ambiguous', $rest, $rest_l, null );
+					continue;
+				}
+				$left['s'] = array_merge( $left['s'], $rest );
+				$left['l'] = array_merge( $left['l'], $rest_l );
 			}
 		}
-		if ( 1 === count( $left['s'] ) && 1 === count( $left['l'] ) ) {
-			$out[] = self::pair_entry( $left['s'][0], $left['l'][0] );
-		} elseif ( array() !== $left['s'] && array() !== $left['l'] ) {
-			$out[] = self::ambiguous_entry( $left['s'], $left['l'] );
+		if ( array() !== $left['s'] && array() !== $left['l'] ) {
+			$out[] = self::choice_entry( 'uncertain', $left['s'], $left['l'], null !== $doubt ? $doubt : 'The same slug on another path of parents: another object, or one that moved. It is paired only by the choice of a person.' );
 		} else {
 			foreach ( $left['s'] as $item ) {
 				$out[] = self::alone( $item, 'staging_only', null );
@@ -1264,13 +1422,15 @@ final class AB_MCP_Sync_Proposal {
 		if ( true === call_user_func( $complete, $item['kind'], $item['subtype'] ) ) {
 			return self::alone( $item, 'live_only', null );
 		}
-		return self::alone( $item, 'not_compared', 'The inventory of the staging site does not hold every object of this kind (it was read across packages, or objects were withheld from the account that made it), so an object of this site without a counterpart is not called only live. Make the inventory again on the staging site with an account that may read every object (wp_site_export), take it over here, then propose again.' );
+		return self::alone( $item, 'not_compared', 'The inventory of the staging site does not show that it holds every object of this kind: it was read across packages (a package does not say which other packages belong to its series, so this site cannot tell a whole series from one with a package left out), or objects of it were withheld from the account that made it. So an object of this site without a counterpart is not called only live. Where objects were withheld, export again with an account that may read every object (wp_site_export); a kind read across packages stays so in this version.' );
 	}
 
 	/**
 	 * The entry of one staging object and one production object of the same
-	 * identity: equal (both hashes, both read whole, the same hash), differs,
-	 * or not compared where a side has no hash.
+	 * identity and path: equal where both are read whole and their mapped
+	 * forms are the same (decision 10); differs where they are not, or where
+	 * a side names a target that has no identity; not compared where a side
+	 * has no hash.
 	 *
 	 * @param array $s Staging object.
 	 * @param array $l Production object.
@@ -1281,19 +1441,35 @@ final class AB_MCP_Sync_Proposal {
 			$why = self::why_no_hash( null === $s['hash'] ? $s : $l );
 			return self::entry( 'not_compared', $s, $l ) + array( 'reason' => $why );
 		}
-		$equal = $s['complete'] && $l['complete'] && hash_equals( $s['hash'], $l['hash'] );
+		$equal = self::same( $s, $l );
 		return self::entry( $equal ? 'equal' : 'differs', $s, $l ) + array( 'confirm' => $equal ? 'active' : 'unclear' );
 	}
 
 	/**
-	 * The entry of a group with more than one candidate on a side.
+	 * Whether two objects are the same once mapped: both read whole, both
+	 * with a mapped form, the same.
 	 *
-	 * @param array[] $s Staging objects.
-	 * @param array[] $l Production objects.
+	 * @param array $s Staging object.
+	 * @param array $l Production object.
+	 * @return bool
+	 */
+	private static function same( array $s, array $l ) {
+		return $s['complete'] && $l['complete'] && null !== $s['mapped'] && null !== $l['mapped'] && hash_equals( $s['mapped'], $l['mapped'] );
+	}
+
+	/**
+	 * The entry of objects only a person pairs: ambiguous (more than one of
+	 * the same identity on a side) or uncertain (the same identity on another
+	 * path, or a doubt).
+	 *
+	 * @param string      $category ambiguous or uncertain.
+	 * @param array[]     $s        Staging objects.
+	 * @param array[]     $l        Production objects.
+	 * @param string|null $reason   Why.
 	 * @return array
 	 */
-	private static function ambiguous_entry( array $s, array $l ) {
-		$entry               = self::entry( 'ambiguous', $s[0], $l[0] );
+	private static function choice_entry( $category, array $s, array $l, $reason ) {
+		$entry               = self::entry( $category, $s[0], $l[0] );
 		$entry['staging']    = null;
 		$entry['live']       = null;
 		$entry['candidates'] = array(
@@ -1301,40 +1477,41 @@ final class AB_MCP_Sync_Proposal {
 			'live'    => array_map( array( __CLASS__, 'side' ), $l ),
 		);
 		$entry['confirm']    = 'choice';
+		if ( null !== $reason ) {
+			$entry['reason'] = $reason;
+		}
 		return $entry;
 	}
 
 	/**
-	 * The entry of a group that holds an object a credential holds: by the
-	 * SHA-256 of each ref and its code, never by a name.
+	 * The entry of an object a credential holds: by the SHA-256 of its ref
+	 * and its code, never by a name.
 	 *
-	 * @param array[] $s Staging objects.
-	 * @param array[] $l Production objects.
+	 * @param array $item Held object.
 	 * @return array
 	 */
-	private static function held_entry( array $s, array $l ) {
-		$one   = array() === $s ? $l[0] : $s[0];
-		$named = static function ( array $item ) {
-			return array(
-				'ref_sha256' => hash( 'sha256', $item['ref_key'] ),
+	private static function held_entry( array $item ) {
+		$named = array(
+			array(
 				'held'       => $item['held'],
-			);
-		};
+				'ref_sha256' => $item['ref_sha'],
+			),
+		);
 		return array(
 			'category' => 'held',
-			'kind'     => $one['kind'],
+			'kind'     => $item['kind'],
 			'subtype'  => '',
-			'staging'  => array_map( $named, $s ),
-			'live'     => array_map( $named, $l ),
-			'reason'   => 'A name of this object or of its counterpart holds a credential by the rules of this site (held: credential_name, credential_field or unreadable_name), so it is shown by the SHA-256 of its ref only and is not paired. Take it over by hand.',
-			'sort'     => hash( 'sha256', $one['key'] ),
+			'staging'  => 's' === $item['side'] ? $named : array(),
+			'live'     => 'l' === $item['side'] ? $named : array(),
+			'reason'   => 'A name of this object holds a credential by the rules of this site (held: credential_name, credential_field or unreadable_name), so it is shown by the SHA-256 of its ref only and is not paired. Take it over by hand.',
+			'sort'     => $item['side'] . $item['ref_sha'],
 		);
 	}
 
 	/**
 	 * The entry of a pair in the state unclear or residual: its new alignment
-	 * with the bases of both sides now, where both objects are there and
-	 * compared.
+	 * with the bases of both sides now, where both objects are there,
+	 * compared and not held. A held side is named by the SHA-256 of its ref.
 	 *
 	 * @param array      $pair Pair.
 	 * @param array|null $s    Its staging object.
@@ -1345,7 +1522,7 @@ final class AB_MCP_Sync_Proposal {
 		$entry = array(
 			'category' => 'realign',
 			'kind'     => $pair['kind'],
-			'subtype'  => null !== $s ? $s['subtype'] : ( null !== $l ? $l['subtype'] : '' ),
+			'subtype'  => null !== $s && null === $s['held'] ? $s['subtype'] : ( null !== $l && null === $l['held'] ? $l['subtype'] : '' ),
 			'staging'  => null === $s ? array( 'ref' => $pair['staging_ref'] ) : self::side( $s ),
 			'live'     => null === $l ? array( 'ref' => $pair['live_ref'] ) : self::side( $l ),
 			'pair'     => array(
@@ -1355,16 +1532,16 @@ final class AB_MCP_Sync_Proposal {
 			),
 			'sort'     => sprintf( '%020d', (int) $pair['id'] ),
 		);
-		$ready = null !== ( $s['hash'] ?? null ) && null !== ( $l['hash'] ?? null ) && null === $s['held'] && null === $l['held'];
+		$ready = null !== $s && null !== $l && null === $s['held'] && null === $l['held'] && null !== $s['hash'] && null !== $l['hash'];
 		if ( ! $ready ) {
 			$entry['confirm'] = null;
 			$entry['reason']  = null === $l
 				? ( 'residual' === $pair['state'] ? 'Rest removed: the object is no longer on this site.' : 'The object is no longer on this site.' ) . ' A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id.'
-				: ( null === $s ? 'The object is not in the inventory of the staging site. A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id.' : 'A side of this pair is not compared (no hash or held by a credential), so it is not aligned anew. Take it over by hand, or call wp_site_pairs with action=discard and its pair id.' );
+				: ( null === $s ? 'The object is not in the inventory of the staging site. A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id.' : 'A side of this pair is not compared (no hash, or a credential holds it), so it is not aligned anew. Take it over by hand, or call wp_site_pairs with action=discard and its pair id.' );
 			return $entry;
 		}
 		$entry['confirm'] = 'active';
-		if ( ! ( $s['complete'] && $l['complete'] && hash_equals( $s['hash'], $l['hash'] ) ) ) {
+		if ( ! self::same( $s, $l ) ) {
 			$entry['note'] = 'The two sides differ now. Confirming makes the state of each side now its new base: the difference is then no change to carry over.';
 		}
 		return $entry;
@@ -1430,20 +1607,31 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * One side of an entry: ref, identity, status, locks, whether it was read
-	 * whole, its hash (stored, not shown).
+	 * One side of an entry: ref, identity with the path of parents of a
+	 * post, status, locks, whether it was read whole, its hashes (stored,
+	 * not shown); a held object by the SHA-256 of its ref only.
 	 *
 	 * @param array $item Object.
 	 * @return array
 	 */
 	private static function side( array $item ) {
+		if ( null !== $item['held'] ) {
+			return array(
+				'held'       => $item['held'],
+				'ref_sha256' => $item['ref_sha'],
+			);
+		}
 		$out = array(
 			'ref'      => $item['ref'],
 			'identity' => $item['identity'],
 			'status'   => $item['status'],
 			'complete' => $item['complete'],
 			'hash'     => $item['hash'],
+			'mapped'   => $item['mapped'],
 		);
+		if ( 'post' === $item['kind'] ) {
+			$out['path'] = $item['names'];
+		}
 		if ( array() !== $item['locks'] ) {
 			$out['locks'] = $item['locks'];
 		}
@@ -1477,7 +1665,7 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * Lines by kind NUL the encoded ref.
+	 * Lines by kind NUL the ref (held lines are reduced and named by none).
 	 *
 	 * @param array[] $lines Lines.
 	 * @return array<string,array>
@@ -1485,6 +1673,9 @@ final class AB_MCP_Sync_Proposal {
 	private static function by_ref( array $lines ) {
 		$out = array();
 		foreach ( $lines as $line ) {
+			if ( isset( $line['held'] ) ) {
+				continue;
+			}
 			$out[ $line['kind'] . "\0" . ( is_string( $line['ref'] ) ? $line['ref'] : AB_MCP_Sync_Canon::encode( $line['ref'] ) ) ] = $line;
 		}
 		return $out;

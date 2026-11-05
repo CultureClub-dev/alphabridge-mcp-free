@@ -903,7 +903,7 @@ e('paket/inventory-count', 'entry(): every object counts', INV_F, "\t\t++self::$
 e('paket/inventory-count-anew', 'source(): a new source counts anew', INV_F, "\t\tself::$made  = 0;\n", "", 'dbkinds', INV)
 e('paket/inventory-at-least-one', 'source(): a bound of at least one object', INV_F, "max( 1, (int) $objects )", "(int) $objects", 'dbkinds', INV)
 e('paket/gate-carry-over', 'CARRY_OVER: the packages are the carrying over', G,
-  "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );", "'wp_site_export', 'wp_site_export_chunk' );", 'gate', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds')
+  "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk', 'wp_site_pairs' );", "'wp_site_export', 'wp_site_export_chunk', 'wp_site_pairs' );", 'gate', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds')
 
 # ----------------------------------------------------------- integration
 e('paket/it-renews', 'save(): the staging site confirmed by a person has a key (two sites)', S,

@@ -135,6 +135,7 @@ final class AB_MCP_Sync_Import {
 		'identity'    => 'identity',
 		'kind'        => 'string',
 		'locks'       => 'locks',
+		'mapped'      => 'hash',
 		'possible'    => 'possible',
 		'reason_code' => 'string',
 		'ref'         => 'name',
@@ -185,7 +186,9 @@ final class AB_MCP_Sync_Import {
 		'menu_item'   => array(
 			'menus'    => 'ints',
 			'object'   => 'name',
+			'parent'   => 'hash',
 			'position' => 'integer',
+			'target'   => 'hash',
 			'type'     => 'name',
 		),
 		'widget_area' => array( 'area' => 'name' ),
@@ -233,7 +236,7 @@ final class AB_MCP_Sync_Import {
 	const POSSIBLE_FIELDS = array( 'at' => 'name' );
 
 	/** The fields of a line besides its identity, status and locks, which a line a credential holds never carries. */
-	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'possible', 'refs', 'size', 'unread' );
+	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'mapped', 'possible', 'refs', 'size', 'unread' );
 
 	/** Seconds one call fetches at most; what is left, the next one does. */
 	const BUDGET = 60;
@@ -322,7 +325,7 @@ final class AB_MCP_Sync_Import {
 	 *                        ref, code of each object held here).
 	 */
 	public static function taken( $package_id ) {
-		if ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
+		if ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_package', 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.' );
 		}
 		$found = self::find( $package_id );
@@ -336,7 +339,7 @@ final class AB_MCP_Sync_Import {
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || AB_MCP_Sync_Export::PURPOSES[0] !== $expect['purpose'] ) {
 			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %s for a purpose this version does not take, so it is not read. Fetch it anew: call wp_site_export on the staging site, then wp_site_import_chunk here with purpose=%s.', $package_id, AB_MCP_Sync_Export::PURPOSES[0] ) );
 		}
-		if ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
+		if ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', $package_id ) );
 		}
 		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );

@@ -38,6 +38,7 @@ require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-builder-lock.php';
 require_once __DIR__ . '/class-sync-inventory.php';
+require_once __DIR__ . '/class-sync-identity.php';
 
 /**
  * Class AB_MCP_Sync_Db_Kind: what the kinds of the database share.
@@ -842,6 +843,11 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				$object = $m['value'];
 			}
 		}
+		// What the item shows and where it hangs, by identity (the SHA-256 of
+		// AB_MCP_Sync_Identity's), so that two sites with other ids and
+		// another order of the items name the same item alike; null where it
+		// has none.
+		$whole    = AB_MCP_Sync_Identity::menu_item( (int) $id, $ctx );
 		$identity = array(
 			'menus'    => array_map( 'intval', array_column( array_filter( $tax, static function ( $t ) {
 				return 'nav_menu' === $t['taxonomy'];
@@ -849,6 +855,8 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 			'type'     => $type,
 			'object'   => $object,
 			'position' => $position,
+			'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),
+			'parent'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[5] ),
 		);
 		return AB_MCP_Sync_Canon::finish( 'menu_item', $ref, $identity, $form, $acc );
 	}

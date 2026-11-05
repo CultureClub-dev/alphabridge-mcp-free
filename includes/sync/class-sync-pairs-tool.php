@@ -145,15 +145,15 @@ final class AB_MCP_Sync_Pairs_Tool {
 			return $plan;
 		}
 		$plan['action'] = $action;
-		$plan['state']  = array(
-			'action'     => $action,
+		$plan['source'] = $source;
+		// The arguments bind the action, the proposal and the choice; the
+		// state binds what they meet now: each operation with the pair it
+		// finds and the object of this site read fresh, the print of the pair
+		// of sites, the connection.
+		$plan['state'] = array(
 			'connection' => AB_MCP_Sync_Proposal::connection(),
 			'ops'        => $plan['ops'],
 			'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),
-			'proposal'   => isset( $plan['proposal'] ) ? $plan['proposal'] : null,
-			'rest'       => isset( $plan['rest'] ) ? $plan['rest'] : null,
-			'skipped'    => $plan['skipped'],
-			'source'     => $source,
 		);
 		return $plan;
 	}
@@ -187,7 +187,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$want  = $select;
 		foreach ( $choices as $choice ) {
 			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['staging_ref'], $choice['live_ref'] ) || null === self::numbers( array( $choice['entry'] ) ) ) {
-				return self::selection( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that ambiguous entry.' );
+				return self::selection( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that ambiguous or uncertain entry.' );
 			}
 			$want[] = (int) $choice['entry'];
 		}
@@ -204,8 +204,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$skipped = array();
 		foreach ( $select as $n ) {
 			$entry = $entries[ $n ];
-			if ( 'ambiguous' === $entry['category'] ) {
-				return self::selection( sprintf( 'Entry %d is ambiguous: name the pair the person chose in choices (entry, staging_ref, live_ref).', $n ) );
+			if ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {
+				return self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only by the choice of a person. Name the pair the person chose in choices (entry, staging_ref, live_ref).', $n, $entry['category'] ) );
 			}
 			if ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {
 				return self::selection( sprintf( 'Entry %1$d is %2$s and is not paired: %3$s', $n, $entry['category'], isset( $entry['reason'] ) ? $entry['reason'] : 'it has no counterpart to pair it with.' ) );
@@ -248,18 +248,19 @@ final class AB_MCP_Sync_Pairs_Tool {
 		foreach ( $choices as $choice ) {
 			$n     = (int) $choice['entry'];
 			$entry = $entries[ $n ];
-			if ( 'ambiguous' !== $entry['category'] ) {
-				return self::selection( sprintf( 'Entry %d is not ambiguous; choose it with select.', $n ) );
+			if ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {
+				return self::selection( sprintf( 'Entry %d is neither ambiguous nor uncertain; choose it with select.', $n ) );
 			}
 			$s = self::candidate( $entry['candidates']['staging'], $choice['staging_ref'] );
 			$l = self::candidate( $entry['candidates']['live'], $choice['live_ref'] );
 			if ( null === $s || null === $l ) {
 				return self::selection( sprintf( 'The refs of a choice for entry %d are not among its candidates.', $n ) );
 			}
-			$equal = $s['complete'] && $l['complete'] && is_string( $s['hash'] ) && is_string( $l['hash'] ) && hash_equals( $s['hash'], $l['hash'] );
 			if ( ! is_string( $s['hash'] ) || ! is_string( $l['hash'] ) ) {
 				return self::selection( sprintf( 'A candidate of entry %d is not compared (it has no hash), so it is not paired; take it over by hand.', $n ) );
 			}
+			// The same once mapped (decision 10): active; else unclear.
+			$equal = $s['complete'] && $l['complete'] && is_string( $s['mapped'] ) && is_string( $l['mapped'] ) && hash_equals( $s['mapped'], $l['mapped'] );
 			$ops[] = self::create_op( $n, $entry['kind'], $s, $l, $equal ? 'active' : 'unclear' );
 		}
 		if ( count( $ops ) > self::MAX ) {
@@ -277,9 +278,25 @@ final class AB_MCP_Sync_Pairs_Tool {
 				$used[ $key ] = $op['entry'];
 			}
 		}
+		// The objects of this site read fresh (Codex B3): the state binds them.
+		$live = AB_MCP_Sync_Proposal::live_now(
+			array_map(
+				static function ( $op ) {
+					return array(
+						'kind' => $op['kind'],
+						'ref'  => $op['live_ref'],
+					);
+				},
+				$ops
+			)
+		);
+		if ( is_wp_error( $live ) ) {
+			return $live;
+		}
 		$fresh = array();
 		foreach ( $ops as $op ) {
-			$now = self::now( $source, $op );
+			$op['live_now'] = $live[ $op['kind'] . "\0" . $op['live_ref'] ];
+			$now            = 'gone' === $op['live_now'] ? 'the object of this site is gone since the proposal' : self::now( $source, $op );
 			if ( is_wp_error( $now ) ) {
 				return $now;
 			}
@@ -293,16 +310,20 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$fresh[] = $op;
 		}
 		if ( array() === $fresh ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_nothing', sprintf( 'Nothing is left to confirm: %d of the entries chosen are paired already or changed since the proposal (%s). Propose again (wp_site_pairs action=propose) to see the pairs as they are.', count( $skipped ), implode( '; ', array_map( static fn( $s ) => 'entry ' . $s['entry'] . ': ' . $s['reason'], array_slice( $skipped, 0, 5 ) ) ) ) );
+			return new WP_Error(
+				'ab_mcp_sync_pairs_nothing',
+				sprintf(
+					'Nothing is left to confirm here: %1$d of the entries chosen are paired already, gone or changed since the proposal (%2$s). Propose again (wp_site_pairs action=propose) to see the pairs as they are%3$s.',
+					count( $skipped ),
+					implode( '; ', array_map( static fn( $s ) => 'entry ' . $s['entry'] . ': ' . $s['reason'], array_slice( $skipped, 0, 5 ) ) ),
+					null === $rest ? '' : sprintf( ', or go on with the same categories and after=%d, where more entries of them are left', $rest )
+				)
+			);
 		}
 		return array(
-			'ops'      => $fresh,
-			'skipped'  => $skipped,
-			'rest'     => $rest,
-			'proposal' => array(
-				'id'    => $found['gid'],
-				'index' => hash( 'sha256', AB_MCP_Sync_Canon::encode( $found['index'] ) ),
-			),
+			'ops'     => $fresh,
+			'skipped' => $skipped,
+			'rest'    => $rest,
 		);
 	}
 
@@ -449,59 +470,65 @@ final class AB_MCP_Sync_Pairs_Tool {
 	/* ------------------------------------------------------------ write */
 
 	/**
-	 * Make and align the pairs of a plan, all or nothing.
+	 * Make and align the pairs of a plan in one transaction of the database
+	 * (Codex B2): all or nothing, also where the process ends in between.
 	 *
 	 * @param array $plan plan().
 	 * @return array|WP_Error
 	 */
 	private static function confirm( array $plan ) {
-		$done = array();
 		$out  = array();
-		foreach ( $plan['ops'] as $op ) {
-			if ( 'create' === $op['op'] ) {
-				$pair = AB_MCP_Sync_Pairs::create(
-					array(
-						'source_id'    => $plan['state']['source'],
-						'kind'         => $op['kind'],
-						'live_ref'     => $op['live_ref'],
-						'staging_ref'  => $op['staging_ref'],
-						'state'        => $op['state'],
-						'canon'        => $op['canon'],
-						'base_live'    => $op['base_live'],
-						'base_staging' => $op['base_staging'],
-						'base_origin'  => 'proposal',
-					)
-				);
-				if ( is_wp_error( $pair ) ) {
-					return self::undone( $done, $op, $pair );
+		$done = AB_MCP_Sync_Pairs::transaction(
+			static function () use ( $plan, &$out ) {
+				foreach ( $plan['ops'] as $op ) {
+					if ( 'create' === $op['op'] ) {
+						$pair = AB_MCP_Sync_Pairs::create(
+							array(
+								'source_id'    => $plan['source'],
+								'kind'         => $op['kind'],
+								'live_ref'     => $op['live_ref'],
+								'staging_ref'  => $op['staging_ref'],
+								'state'        => $op['state'],
+								'canon'        => $op['canon'],
+								'base_live'    => $op['base_live'],
+								'base_staging' => $op['base_staging'],
+								'base_origin'  => 'proposal',
+							)
+						);
+					} else {
+						$pair = AB_MCP_Sync_Pairs::realign(
+							$op['pair_id'],
+							array(
+								'canon'        => $op['canon'],
+								'base_live'    => $op['base_live'],
+								'base_staging' => $op['base_staging'],
+							),
+							$op['expected'],
+							true
+						);
+					}
+					if ( is_wp_error( $pair ) ) {
+						return new WP_Error(
+							'ab_mcp_sync_pairs_confirm_failed',
+							sprintf( 'Entry %1$d could not be paired (%2$s), so the confirmation kept nothing: the database took back all of it. Propose again (wp_site_pairs action=propose) and confirm anew.', $op['entry'], $pair->get_error_message() ),
+							array( 'entry' => $op['entry'] )
+						);
+					}
+					$out[] = array(
+						'entry'       => $op['entry'],
+						'pair_id'     => (int) $pair['id'],
+						'kind'        => $pair['kind'],
+						'live_ref'    => $pair['live_ref'],
+						'staging_ref' => $pair['staging_ref'],
+						'state'       => $pair['state'],
+						'done'        => 'create' === $op['op'] ? 'made' : 'aligned anew',
+					);
 				}
-				$done[] = array( 'create', (int) $pair['id'], null );
-			} else {
-				$before = AB_MCP_Sync_Pairs::snapshot( $op['pair_id'] );
-				$pair   = is_wp_error( $before ) ? $before : AB_MCP_Sync_Pairs::realign(
-					$op['pair_id'],
-					array(
-						'canon'        => $op['canon'],
-						'base_live'    => $op['base_live'],
-						'base_staging' => $op['base_staging'],
-					),
-					$op['expected'],
-					true
-				);
-				if ( is_wp_error( $pair ) ) {
-					return self::undone( $done, $op, $pair );
-				}
-				$done[] = array( 'realign', (int) $pair['id'], $before );
+				return true;
 			}
-			$out[] = array(
-				'entry'       => $op['entry'],
-				'pair_id'     => (int) $pair['id'],
-				'kind'        => $pair['kind'],
-				'live_ref'    => $pair['live_ref'],
-				'staging_ref' => $pair['staging_ref'],
-				'state'       => $pair['state'],
-				'done'        => 'create' === $op['op'] ? 'made' : 'aligned anew',
-			);
+		);
+		if ( is_wp_error( $done ) ) {
+			return $done;
 		}
 		$answer = array(
 			'done'   => true,
@@ -520,81 +547,46 @@ final class AB_MCP_Sync_Pairs_Tool {
 	}
 
 	/**
-	 * End the pairs of a plan, all or nothing: where one cannot be ended, the
-	 * ones ended before are made again from their snapshots (with new ids).
+	 * End the pairs of a plan in one transaction of the database: all or
+	 * nothing. Any account with manage_options and the access level Full may
+	 * (pairs are data of the site, not of an account; the log of the tool
+	 * calls names the account).
 	 *
 	 * @param array $plan plan().
 	 * @return array|WP_Error
 	 */
 	private static function discard( array $plan ) {
-		$done = array();
-		foreach ( $plan['ops'] as $op ) {
-			$pair   = AB_MCP_Sync_Pairs::get( $op['pair_id'] );
-			$result = is_array( $pair ) ? AB_MCP_Sync_Pairs::discard( $op['pair_id'], $op['expected'] ) : ( is_wp_error( $pair ) ? $pair : new WP_Error( 'ab_mcp_staging_pair_missing', 'missing' ) );
-			if ( is_wp_error( $result ) ) {
-				$rest = array();
-				foreach ( array_reverse( $done ) as $gone ) {
-					$fields = array_intersect_key( $gone, array_flip( AB_MCP_Sync_Pairs::SNAPSHOT_COLUMNS ) );
-					$again  = AB_MCP_Sync_Pairs::create( $fields );
-					if ( is_wp_error( $again ) ) {
-						$rest[] = sprintf( 'pair %1$d (%2$s %3$s) stays ended: %4$s', (int) $gone['id'], $gone['kind'], $gone['live_ref'], $again->get_error_message() );
+		$done = AB_MCP_Sync_Pairs::transaction(
+			static function () use ( $plan ) {
+				foreach ( $plan['ops'] as $op ) {
+					$result = AB_MCP_Sync_Pairs::discard( $op['pair_id'], $op['expected'] );
+					if ( is_wp_error( $result ) ) {
+						return new WP_Error( 'ab_mcp_sync_pairs_discard_failed', sprintf( 'Pair %1$d could not be ended (%2$s), so the confirmation ended nothing: the database took back all of it. Read the pairs again (wp_site_pairs action=list) and discard them anew.', $op['pair_id'], $result->get_error_message() ) );
 					}
 				}
-				return new WP_Error(
-					'ab_mcp_sync_pairs_discard_failed',
-					sprintf( 'Pair %1$d could not be ended (%2$s), so the confirmation ended nothing: %3$s Read the pairs again (wp_site_pairs action=list) and discard them anew.', $op['pair_id'], $result->get_error_message(), array() === $rest ? 'the pairs ended before it were made again with new ids.' : 'not every pair ended before it could be made again: ' . implode( '; ', $rest ) . '.' )
-				);
+				return true;
 			}
-			$done[] = $pair;
+		);
+		if ( is_wp_error( $done ) ) {
+			return $done;
 		}
 		return array(
 			'done'   => true,
-			'counts' => array( 'discarded' => count( $done ) ),
+			'counts' => array( 'discarded' => count( $plan['ops'] ) ),
 			'pairs'  => array_map(
-				static function ( $pair ) {
+				static function ( $op ) {
 					return array(
-						'pair_id'     => (int) $pair['id'],
-						'kind'        => $pair['kind'],
-						'live_ref'    => $pair['live_ref'],
-						'staging_ref' => $pair['staging_ref'],
-						'state'       => $pair['state'],
+						'pair_id'     => $op['pair_id'],
+						'kind'        => $op['kind'],
+						'live_ref'    => $op['live_ref'],
+						'staging_ref' => $op['staging_ref'],
+						'state'       => $op['state'],
 						'done'        => 'ended',
 					);
 				},
-				array_slice( $done, 0, self::NAMED )
+				array_slice( $plan['ops'], 0, self::NAMED )
 			),
 			'next'   => 'The objects of these pairs are without a pair now; no content changed. Propose again (wp_site_pairs action=propose) to pair them anew.',
-		);
-	}
-
-	/**
-	 * Take back what a confirmation wrote before an operation failed.
-	 *
-	 * @param array[]  $done  What it wrote: create or realign, id, snapshot before.
-	 * @param array    $op    The operation that failed.
-	 * @param WP_Error $error Its error.
-	 * @return WP_Error
-	 */
-	private static function undone( array $done, array $op, WP_Error $error ) {
-		$rest = array();
-		foreach ( array_reverse( $done ) as list( $what, $id, $before ) ) {
-			$now = AB_MCP_Sync_Pairs::snapshot( $id );
-			$res = is_wp_error( $now ) ? $now : ( 'create' === $what
-				? AB_MCP_Sync_Pairs::discard( $id, AB_MCP_Sync_Pairs::snapshot_hash( $now ) )
-				: AB_MCP_Sync_Pairs::restore( $id, $before, AB_MCP_Sync_Pairs::snapshot_hash( $now ) ) );
-			if ( is_wp_error( $res ) ) {
-				$rest[] = sprintf( 'pair %1$d stays %2$s: %3$s', $id, 'create' === $what ? 'made' : 'aligned anew', $res->get_error_message() );
-			}
-		}
-		return new WP_Error(
-			'ab_mcp_sync_pairs_confirm_failed',
-			sprintf(
-				'Entry %1$d could not be paired (%2$s), so the confirmation kept nothing: %3$s Propose again (wp_site_pairs action=propose) and confirm anew.',
-				$op['entry'],
-				$error->get_error_message(),
-				array() === $rest ? 'what it wrote before was taken back.' : 'not everything it wrote before could be taken back: ' . implode( '; ', $rest ) . '.'
-			),
-			array( 'entry' => $op['entry'] )
 		);
 	}
 
@@ -671,7 +663,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return array
 	 */
 	private static function named( array $op ) {
-		unset( $op['base_live'], $op['base_staging'], $op['expected'], $op['canon'] );
+		if ( isset( $op['live_now'] ) ) {
+			$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];
+		}
+		unset( $op['base_live'], $op['base_staging'], $op['expected'], $op['canon'], $op['live_now'] );
 		return $op;
 	}
 

@@ -3,29 +3,33 @@
  * The proposal of object pairs as far as a test without a database shows it
  * (AB_MCP_Sync_Proposal, Z8 decisions 10, 13 and 14; branch 6, part 1):
  *
- * - match(): one to one by kind and identity, equal only with both hashes,
- *   both read whole and the same; differs; more candidates on a side
- *   ambiguous, split by the path of parents, then by an equal hash unique on
- *   both sides, what is left one to one paired; staging_only, live_only only
- *   where the staging side is complete, else not_compared; a credential in a
- *   name holds the whole group (no name in its entry); a side without a hash,
- *   a row not read and a ref no pair holds are not compared, with the words
- *   of the reason code; objects of a pair are not proposed again, unclear and
- *   residual pairs are proposed for a new alignment; the entries numbered in
- *   the order of the categories.
+ * - match(): equality of the mapped forms (decision 10: the same objects
+ *   with other ids are equal), only both read whole; differs otherwise and
+ *   where a side names a target without identity. No pair by exclusion: one
+ *   to one on the same identity and path is a pair; more on a path are paired
+ *   only by a mapped form unique on both sides, the rest ambiguous; the same
+ *   identity on another path, a post without a slug and a menu item without
+ *   the identity of its target or parent are uncertain; staging_only,
+ *   live_only only where the staging side is complete, else not_compared; a
+ *   held line is shown by the SHA-256 of its ref only; a side without a
+ *   hash, a row not read and a ref no pair holds are not compared, with the
+ *   words of the reason code; objects of a pair are not proposed again,
+ *   unclear and residual pairs are proposed for a new alignment; entries
+ *   numbered in the order of the categories.
  * - identity_key(): what names an object apart from its id, by kind; a menu
- *   item by the slug of its menu, not its id.
+ *   item by the slug of its menu, its target and parent, never its position.
  * - compose(): packages of one series as one inventory: an object twice or a
  *   kind read whole in one package with objects in another refused; a kind
  *   and subtype complete only where one package read its kind of the
- *   database whole and withheld nothing; held lines marked.
- * - canon_forms(): the target is the staging hash only where nothing maps
- *   it.
+ *   database whole and withheld nothing; held lines reduced.
+ * - canon_forms(): the target is the live hash only where the mapped forms
+ *   are the same and no override changes it.
  * - The names of the files of a proposal, the words of the reason codes.
  *
  * The proposal over two WordPress sites (packages, the inventory of this
- * site in parts, the store, the canon change on rows, the confirmation with
- * its token): tests/integration/SyncProposalTest.php.
+ * site in parts, the mapped forms of real rows, the store, the canon change
+ * on rows, the confirmation with its token in a transaction):
+ * tests/integration/SyncProposalTest.php.
  *
  * @package AlphaBridge_MCP
  */
@@ -54,7 +58,10 @@ final class SyncProposalTest extends TestCase {
 		return hash( 'sha256', $text );
 	}
 
-	/** A line as AB_MCP_Sync_Export::line() writes one. */
+	/**
+	 * A line as AB_MCP_Sync_Export::line() writes one: its mapped form the
+	 * same as its hash unless told (both sites with the same ids).
+	 */
 	private static function line( string $kind, $ref, array $identity, ?string $hash, array $over = array() ): array {
 		$line = array(
 			'kind'     => $kind,
@@ -64,6 +71,7 @@ final class SyncProposalTest extends TestCase {
 			'locks'    => array(),
 			'canon'    => 'canon/1',
 			'hash'     => $hash,
+			'mapped'   => $hash,
 			'size'     => 10,
 			'complete' => true,
 			'unread'   => array(),
@@ -104,6 +112,17 @@ final class SyncProposalTest extends TestCase {
 		return self::line( 'option', $name, array( 'name' => $name ), $hash, $over );
 	}
 
+	/** A held line, reduced as the import and the inventory store it. */
+	private static function held( string $kind, $ref, string $code ): array {
+		return AB_MCP_Sync_Proposal::reduced(
+			array(
+				'kind' => $kind,
+				'ref'  => $ref,
+			),
+			$code
+		);
+	}
+
 	/** match() with every kind complete on the staging side unless told. */
 	private static function match( array $s, array $l, array $pairs = array(), ?callable $complete = null ): array {
 		return AB_MCP_Sync_Proposal::match( $s, $l, $pairs, $complete ?? static fn(): bool => true );
@@ -112,6 +131,18 @@ final class SyncProposalTest extends TestCase {
 	/** The entries of a category. */
 	private static function of( array $result, string $category ): array {
 		return array_values( array_filter( $result['entries'], static fn( $e ) => $category === $e['category'] ) );
+	}
+
+	/** The pairs of entries of these categories: staging ref => live ref. */
+	private static function paired( array $result, array $categories = array( 'equal', 'differs' ) ): array {
+		$pairs = array();
+		foreach ( $categories as $category ) {
+			foreach ( self::of( $result, $category ) as $e ) {
+				$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
+			}
+		}
+		ksort( $pairs, SORT_STRING );
+		return $pairs;
 	}
 
 	/** A pair as AB_MCP_Sync_Pairs::decode() gives it. */
@@ -140,7 +171,7 @@ final class SyncProposalTest extends TestCase {
 
 	/* --------------------------------------------------------- one to one */
 
-	public function testTheSameIdentityAndHashIsEqualAndConfirmedActive(): void {
+	public function testTheSameIdentityAndMappedFormIsEqualAndConfirmedActive(): void {
 		$r = self::match( array( self::page( '34', 'about', self::h( 'x' ) ) ), array( self::page( '12', 'about', self::h( 'x' ) ) ) );
 		self::assertCount( 1, $r['entries'] );
 		$e = $r['entries'][0];
@@ -148,8 +179,29 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 'active', $e['confirm'] );
 		self::assertSame( '34', $e['staging']['ref'] );
 		self::assertSame( '12', $e['live']['ref'] );
+		self::assertSame( array(), $e['live']['path'], 'The path of parents is shown.' );
 		self::assertSame( 1, $e['n'] );
 		self::assertSame( 1, $r['counts']['equal'] );
+	}
+
+	public function testOtherIdsOfTheSameTargetsAreEqualOnceMapped(): void {
+		// Parent 1 on staging, 11 here: each hash in its own ID space differs,
+		// the mapped forms (the parent by its identity) are the same.
+		$s = self::page( '3', 'team-page', self::h( 'with 1' ), null, array( 'mapped' => self::h( 'mapped' ) ) );
+		$l = self::page( '13', 'team-page', self::h( 'with 11' ), null, array( 'mapped' => self::h( 'mapped' ) ) );
+		self::assertSame( 'equal', self::match( array( $s ), array( $l ) )['entries'][0]['category'] );
+		$l['mapped'] = self::h( 'other' );
+		self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], 'Another mapped form: other content.' );
+		$s['hash']   = self::h( 'with 11' );
+		self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], 'The same hash in another ID space is no proof.' );
+	}
+
+	public function testAReferenceWithoutATargetIsADifference(): void {
+		foreach ( array( 's', 'l', 'both' ) as $side ) {
+			$s = self::page( '34', 'about', self::h( 'x' ), null, 'l' !== $side ? array( 'mapped' => null ) : array() );
+			$l = self::page( '12', 'about', self::h( 'x' ), null, 's' !== $side ? array( 'mapped' => null ) : array() );
+			self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], $side . ': also where both sides name targets without identity alike.' );
+		}
 	}
 
 	public function testTheSameIdentityWithOtherContentDiffersAndIsConfirmedUnclear(): void {
@@ -162,7 +214,7 @@ final class SyncProposalTest extends TestCase {
 		foreach ( array( 's', 'l' ) as $side ) {
 			$s = self::page( '34', 'about', self::h( 'x' ), null, 's' === $side ? array( 'complete' => false ) : array() );
 			$l = self::page( '12', 'about', self::h( 'x' ), null, 'l' === $side ? array( 'complete' => false ) : array() );
-			self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], $side . ': the same hash of a form not read to its end says nothing.' );
+			self::assertSame( 'differs', self::match( array( $s ), array( $l ) )['entries'][0]['category'], $side . ': the same form not read to its end says nothing.' );
 		}
 	}
 
@@ -176,12 +228,12 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 2, $r['counts']['live_only'] );
 	}
 
-	/* ------------------------------------------------------- more than one */
+	/* --------------------------------------------- no pair by exclusion */
 
-	public function testMoreCandidatesOnASideAreAmbiguousWithAllOfThem(): void {
+	public function testMoreOfTheSameIdentityOnAPathAreAmbiguousWithAllOfThem(): void {
 		$r = self::match(
-			array( self::page( '34', '', self::h( 'a' ), null, array(), 'post' ), self::page( '35', '', self::h( 'b' ), null, array(), 'post' ) ),
-			array( self::page( '12', '', self::h( 'c' ), null, array(), 'post' ), self::page( '13', '', self::h( 'd' ), null, array(), 'post' ), self::page( '14', '', self::h( 'e' ), null, array(), 'post' ) )
+			array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ),
+			array( self::page( '12', 'dup', self::h( 'c' ) ), self::page( '13', 'dup', self::h( 'd' ) ), self::page( '14', 'dup', self::h( 'e' ) ) )
 		);
 		$e = self::of( $r, 'ambiguous' );
 		self::assertCount( 1, $e );
@@ -195,20 +247,32 @@ final class SyncProposalTest extends TestCase {
 		$s = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'about', self::h( 'a1' ), '1' ), self::page( '4', 'about', self::h( 'a2' ), '2' ) );
 		$l = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'about', self::h( 'a1x' ), '11' ), self::page( '14', 'about', self::h( 'a2x' ), '12' ) );
 		$r = self::match( $s, $l );
-		self::assertSame( 0, $r['counts']['ambiguous'] );
-		$pairs = array();
-		foreach ( self::of( $r, 'differs' ) as $e ) {
-			$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
-		}
-		ksort( $pairs );
-		self::assertSame( array( '3' => '13', '4' => '14' ), $pairs, 'team/about with team/about, shop/about with shop/about.' );
+		self::assertSame( 0, $r['counts']['ambiguous'] + $r['counts']['uncertain'] );
+		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14' ), self::paired( $r ), 'team/about with team/about, shop/about with shop/about.' );
+		$about = array_values( array_filter( self::of( $r, 'differs' ), static fn( $e ) => '13' === $e['live']['ref'] ) )[0];
+		self::assertSame( array( array( 'team' ), array( 'team' ) ), array( $about['staging']['path'], $about['live']['path'] ), 'The path shown with the identity.' );
 	}
 
-	public function testAPageMovedOnStagingStillMatchesByItsSlug(): void {
-		$s = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '3', 'about', self::h( 'a' ), '1' ) );
-		$l = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '13', 'about', self::h( 'b' ) ) );
-		$e = array_values( array_filter( self::match( $s, $l )['entries'], static fn( $e ) => 'about' === ( $e['staging']['identity']['post_name'] ?? null ) ) );
-		self::assertSame( 'differs', $e[0]['category'], 'One about on each side: a pair, whatever its path.' );
+	public function testTheSameSlugOnAnotherPathIsUncertainNeverAPair(): void {
+		// /team/kontakt on staging, /shop/kontakt here: two objects, or one that moved.
+		$s = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'kontakt', self::h( 'k' ), '1' ) );
+		$l = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'kontakt', self::h( 'k' ), '12' ) );
+		$r = self::match( $s, $l );
+		$e = self::of( $r, 'uncertain' );
+		self::assertCount( 1, $e, 'Not paired by exclusion, even with the same content.' );
+		self::assertSame( 'choice', $e[0]['confirm'] );
+		self::assertSame( array( array( 'team' ) ), array_column( $e[0]['candidates']['staging'], 'path' ) );
+		self::assertSame( array( array( 'shop' ) ), array_column( $e[0]['candidates']['live'], 'path' ) );
+		self::assertStringContainsString( 'another path of parents', $e[0]['reason'] );
+		self::assertSame( array( '1' => '11', '2' => '12' ), self::paired( $r ) );
+	}
+
+	public function testPostsWithoutASlugAreUncertainNeverAPair(): void {
+		$r = self::match( array( self::page( '34', '', self::h( 'draft' ), null, array(), 'post' ) ), array( self::page( '12', '', self::h( 'draft' ), null, array(), 'post' ) ) );
+		self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ), 'One each, the same content: still the person\'s choice.' );
+		self::assertStringContainsString( 'Without a slug', $r['entries'][0]['reason'] );
+		$r = self::match( array( self::page( '34', '', self::h( 'draft' ), null, array(), 'post' ) ), array() );
+		self::assertSame( array( 'staging_only' ), array_column( $r['entries'], 'category' ) );
 	}
 
 	public function testOnlyThePostParentIsAParentNotAnotherReferenceToAPost(): void {
@@ -224,47 +288,22 @@ final class SyncProposalTest extends TestCase {
 		);
 		$s     = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'about', self::h( 'a' ), '1' ), self::page( '4', 'about', self::h( 'b' ), null, $thumb ), self::page( '5', 'about', self::h( 'c' ), '2' ) );
 		$l     = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'about', self::h( 'x' ), '11' ), self::page( '14', 'about', self::h( 'y' ) ), self::page( '15', 'about', self::h( 'z' ), '12' ) );
-		$r     = self::match( $s, $l );
-		$pairs = array();
-		foreach ( self::of( $r, 'differs' ) as $e ) {
-			$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
-		}
-		ksort( $pairs );
-		self::assertSame( array( '3' => '13', '4' => '14', '5' => '15' ), $pairs, 'The page with a featured image stays at the top.' );
+		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14', '5' => '15' ), self::paired( self::match( $s, $l ) ), 'The page with a featured image stays at the top.' );
 	}
 
-	public function testWhatThePathLeavesOneToOneIsAPair(): void {
-		// Two about on each side; one in the same place, the other moved.
-		$s = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'about', self::h( 'a' ), '1' ), self::page( '4', 'about', self::h( 'b' ), '2' ) );
-		$l = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'about', self::h( 'a' ), '11' ), self::page( '14', 'about', self::h( 'c' ) ) );
-		$r     = self::match( $s, $l );
-		$pairs = array();
-		foreach ( array_merge( self::of( $r, 'equal' ), self::of( $r, 'differs' ) ) as $e ) {
-			$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
-		}
-		ksort( $pairs );
-		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14' ), $pairs );
-		self::assertSame( 0, $r['counts']['ambiguous'] + $r['counts']['staging_only'] + $r['counts']['live_only'] );
-	}
-
-	public function testAnEqualHashUniqueOnBothSidesIsAPair(): void {
+	public function testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair(): void {
 		$r = self::match(
-			array( self::page( '34', '', self::h( 'a' ), null, array(), 'post' ), self::page( '35', '', self::h( 'b' ), null, array(), 'post' ) ),
-			array( self::page( '12', '', self::h( 'b' ), null, array(), 'post' ), self::page( '13', '', self::h( 'a' ), null, array(), 'post' ) )
+			array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ),
+			array( self::page( '12', 'dup', self::h( 'b' ) ), self::page( '13', 'dup', self::h( 'a' ) ) )
 		);
-		$pairs = array();
-		foreach ( self::of( $r, 'equal' ) as $e ) {
-			$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
-		}
-		ksort( $pairs );
-		self::assertSame( array( '34' => '13', '35' => '12' ), $pairs );
+		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ) );
 		self::assertSame( 0, $r['counts']['ambiguous'] );
 	}
 
-	public function testAnEqualHashTwiceOnASideIsNoPair(): void {
+	public function testAnEqualMappedFormTwiceOnASideIsNoPair(): void {
 		foreach ( array( 's', 'l' ) as $twice ) {
-			$s = array( self::page( '34', '', self::h( 'a' ), null, array(), 'post' ), self::page( '35', '', self::h( 's' === $twice ? 'a' : 'b' ), null, array(), 'post' ) );
-			$l = array( self::page( '12', '', self::h( 'a' ), null, array(), 'post' ), self::page( '13', '', self::h( 'l' === $twice ? 'a' : 'c' ), null, array(), 'post' ) );
+			$s = array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 's' === $twice ? 'a' : 'b' ) ) );
+			$l = array( self::page( '12', 'dup', self::h( 'a' ) ), self::page( '13', 'dup', self::h( 'l' === $twice ? 'a' : 'c' ) ) );
 			$r = self::match( $s, $l );
 			self::assertSame( 0, $r['counts']['equal'], $twice );
 			self::assertSame( 1, $r['counts']['ambiguous'], $twice );
@@ -303,34 +342,39 @@ final class SyncProposalTest extends TestCase {
 
 		$e = self::match( array(), array( self::page( '12', 'old', self::h( 'x' ) ) ), array(), static fn(): bool => false )['entries'][0];
 		self::assertSame( 'not_compared', $e['category'] );
-		self::assertStringContainsString( 'does not hold every object of this kind', $e['reason'] );
-		self::assertStringContainsString( 'wp_site_export', $e['reason'] );
+		self::assertStringContainsString( 'it was read across packages', $e['reason'] );
+		self::assertStringContainsString( 'a kind read across packages stays so in this version', $e['reason'], 'The way is true: a new export does not help a size.' );
 	}
 
 	/* ---------------------------------------------------------------- held */
 
-	public function testAnObjectACredentialHoldsIsShownByTheHashOfItsRefOnly(): void {
+	public function testAHeldObjectIsShownByTheHashOfItsRefOnly(): void {
 		$secret = 'api_key=CANARY-ONLY';
-		$r      = self::match( array( self::option( $secret, self::h( 'x' ), array( 'held' => 'credential_name' ) ) ), array( self::option( $secret, self::h( 'x' ), array( 'held' => 'credential_name' ) ) ) );
-		self::assertSame( 1, $r['counts']['held'] );
+		$r      = self::match( array( self::held( 'option', $secret, 'credential_name' ) ), array( self::held( 'option', $secret, 'credential_name' ) ) );
+		self::assertSame( 2, $r['counts']['held'] );
 		self::assertSame( 0, $r['counts']['equal'] );
-		$e = $r['entries'][0];
-		self::assertSame( array( array( 'ref_sha256' => self::h( '"' . $secret . '"' ), 'held' => 'credential_name' ) ), $e['staging'] );
-		self::assertStringNotContainsString( 'CANARY', (string) json_encode( $e ) );
+		self::assertSame( array( array( 'held' => 'credential_name', 'ref_sha256' => self::h( '"' . $secret . '"' ) ) ), $r['entries'][0]['live'] ?: $r['entries'][0]['staging'] );
+		self::assertStringNotContainsString( 'CANARY', (string) json_encode( $r ) );
 		self::assertSame( array( 'staging' => 1, 'live' => 1 ), $r['held'] );
+		self::assertSame( array(), $r['subtypes'], 'A held line names no subtype.' );
 	}
 
-	public function testAGroupWithAHeldObjectOnEitherSideIsHeldAsAWhole(): void {
-		foreach ( array( 's', 'l' ) as $side ) {
-			$s = self::option( 'x_token', self::h( 'a' ), 's' === $side ? array( 'held' => 'credential_field' ) : array() );
-			$l = self::option( 'x_token', self::h( 'a' ), 'l' === $side ? array( 'held' => 'credential_field' ) : array() );
-			$r = self::match( array( $s ), array( $l ) );
-			self::assertSame( array( 'held' ), array_column( $r['entries'], 'category' ), $side );
-		}
-		// A held staging object makes no live object «only live».
-		$r = self::match( array( self::option( 'y', self::h( 'a' ), array( 'held' => 'unreadable_name' ) ) ), array() );
-		self::assertSame( 'held', $r['entries'][0]['category'] );
-		self::assertSame( array(), $r['entries'][0]['live'] );
+	public function testAHeldLineIsReducedToItsKindTheHashOfItsRefAndItsCode(): void {
+		self::assertSame(
+			array(
+				'kind'       => 'post',
+				'ref_sha256' => self::h( '"12"' ),
+				'held'       => 'credential_field',
+			),
+			AB_MCP_Sync_Proposal::reduced( self::page( '12', '{"password":"CANARY-ONLY"}', self::h( 'x' ) ), 'credential_field' )
+		);
+	}
+
+	public function testAHeldObjectStandsAloneAndHoldsNoGroup(): void {
+		$r = self::match( array( self::held( 'option', 'x_token', 'credential_field' ) ), array( self::option( 'x_token', self::h( 'a' ) ) ) );
+		self::assertSame( array( 'live_only', 'held' ), array_column( $r['entries'], 'category' ) );
+		$long = str_repeat( 'o', 200 );
+		self::assertSame( array( 'held' ), array_column( self::match( array( self::held( 'option', $long, 'credential_field' ) ), array() )['entries'], 'category' ), 'A ref no pair holds, held: held.' );
 	}
 
 	/* -------------------------------------------------------- not compared */
@@ -381,8 +425,6 @@ final class SyncProposalTest extends TestCase {
 			self::assertSame( array( 'not_compared', 'not_compared' ), array_column( $r['entries'], 'category' ), (string) $i );
 			self::assertStringContainsString( 'cannot be held by a pair', $r['entries'][0]['reason'] );
 		}
-		$held = self::match( array( self::option( 'x', self::h( 'x' ), array( 'ref' => $long, 'identity' => array( 'name' => $long ), 'held' => 'credential_field' ) ) ), array() );
-		self::assertSame( array( 'held' ), array_column( $held['entries'], 'category' ), 'A held one stays held, by the hash of its ref.' );
 		$ok = str_repeat( 'o', 191 );
 		self::assertSame( 'equal', self::match( array( self::option( $ok, self::h( 'x' ) ) ), array( self::option( $ok, self::h( 'x' ) ) ) )['entries'][0]['category'], '191 characters fit.' );
 	}
@@ -398,6 +440,12 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 1, $r['paired'] );
 		self::assertSame( array( 'equal' ), array_column( $r['entries'], 'category' ) );
 		self::assertSame( '35', $r['entries'][0]['staging']['ref'] );
+	}
+
+	public function testAPairOfAHeldObjectTakesItAway(): void {
+		$r = self::match( array( self::held( 'option', 'api_key', 'credential_name' ) ), array( self::held( 'option', 'api_key', 'credential_name' ) ), array( self::pair( 7, 'option', 'api_key', 'api_key', 'active' ) ) );
+		self::assertSame( 1, $r['paired'] );
+		self::assertSame( array(), $r['entries'] );
 	}
 
 	public function testAPairOfAnotherKindTakesNoObjectAway(): void {
@@ -437,19 +485,17 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( '14', $e[2]['live']['ref'] );
 	}
 
-	public function testAPairWithAHeldSideIsNotAlignedAnew(): void {
-		$r = self::match(
-			array( self::page( '34', 'about', self::h( 'x' ), null, array( 'held' => 'credential_field' ) ) ),
-			array( self::page( '12', 'about', self::h( 'x' ) ) ),
-			array( self::pair( 7, 'post', '12', '34', 'unclear' ) )
-		);
-		self::assertNull( self::of( $r, 'realign' )[0]['confirm'] );
-		$r = self::match(
-			array( self::page( '34', 'about', self::h( 'x' ) ) ),
-			array( self::page( '12', 'about', self::h( 'x' ), null, array( 'held' => 'credential_name' ) ) ),
-			array( self::pair( 7, 'post', '12', '34', 'unclear' ) )
-		);
-		self::assertNull( self::of( $r, 'realign' )[0]['confirm'], 'Held on this site.' );
+	public function testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash(): void {
+		foreach ( array( 's', 'l' ) as $side ) {
+			$r = self::match(
+				array( 's' === $side ? self::held( 'post', '34', 'credential_field' ) : self::page( '34', 'about', self::h( 'x' ) ) ),
+				array( 'l' === $side ? self::held( 'post', '12', 'credential_field' ) : self::page( '12', 'about', self::h( 'x' ) ) ),
+				array( self::pair( 7, 'post', '12', '34', 'unclear' ) )
+			);
+			$e = self::of( $r, 'realign' )[0];
+			self::assertNull( $e['confirm'], $side );
+			self::assertSame( array( 'held' => 'credential_field', 'ref_sha256' => self::h( '"' . ( 's' === $side ? '34' : '12' ) . '"' ) ), 's' === $side ? $e['staging'] : $e['live'], $side . ': named by the hash of its ref.' );
+		}
 		foreach ( array( 's', 'l' ) as $side ) {
 			$r = self::match(
 				array( self::page( '34', 'about', 's' === $side ? null : self::h( 'x' ) ) ),
@@ -464,27 +510,61 @@ final class SyncProposalTest extends TestCase {
 
 	/* ------------------------------------------------------------ kinds */
 
-	public function testAMenuItemMatchesByTheSlugOfItsMenuNotItsId(): void {
-		$item = static fn( string $ref, int $menu, string $hash ): array => self::line(
+	/** A menu item line with its target and parent by identity. */
+	private static function item( string $ref, int $menu, string $target, int $position, string $hash, ?string $parent = 'none' ): array {
+		return self::line(
 			'menu_item',
 			$ref,
 			array(
 				'menus'    => array( $menu ),
 				'object'   => 'page',
-				'position' => 1,
+				'parent'   => null === $parent ? null : self::h( $parent ),
+				'position' => $position,
+				'target'   => '' === $target ? null : self::h( $target ),
 				'type'     => 'post_type',
 			),
 			self::h( $hash )
 		);
-		$menu = static fn( string $ref, string $slug ): array => self::line( 'menu', $ref, array( 'slug' => $slug, 'taxonomy' => 'nav_menu' ), self::h( 'm' . $slug ) );
-		// The same hash for both items: only the slug of the menu tells them apart.
-		$r    = self::match( array( $menu( '5', 'main' ), $menu( '6', 'footer' ), $item( '50', 5, 'i' ), $item( '60', 6, 'i' ) ), array( $menu( '15', 'footer' ), $menu( '16', 'main' ), $item( '150', 16, 'i' ), $item( '160', 15, 'i' ) ) );
-		$pairs = array();
-		foreach ( self::of( $r, 'equal' ) as $e ) {
-			$pairs[ $e['staging']['ref'] ] = $e['live']['ref'];
+	}
+
+	private static function menu( string $ref, string $slug ): array {
+		return self::line( 'menu', $ref, array( 'slug' => $slug, 'taxonomy' => 'nav_menu' ), self::h( 'm' . $slug ) );
+	}
+
+	public function testAMenuItemMatchesByTheSlugOfItsMenuNotItsId(): void {
+		// The same target and hash in both menus: only the slug of the menu tells them apart.
+		$r = self::match( array( self::menu( '5', 'main' ), self::menu( '6', 'footer' ), self::item( '50', 5, 'about', 1, 'i' ), self::item( '60', 6, 'about', 1, 'i' ) ), array( self::menu( '15', 'footer' ), self::menu( '16', 'main' ), self::item( '150', 16, 'about', 1, 'i' ), self::item( '160', 15, 'about', 1, 'i' ) ) );
+		self::assertSame( array( '5' => '16', '50' => '150', '6' => '15', '60' => '160' ), self::paired( $r, array( 'equal' ) ) );
+	}
+
+	public function testAMenuSortedAnewPairsEachItemWithItsTarget(): void {
+		// Here: 1 «Über uns», 2 «Kontakt»; on staging the other way round.
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::item( '51', 5, 'kontakt', 1, 'k1' ), self::item( '52', 5, 'ueber-uns', 2, 'u2' ) ),
+			array( self::menu( '15', 'main' ), self::item( '151', 15, 'ueber-uns', 1, 'u1' ), self::item( '152', 15, 'kontakt', 2, 'k2' ) )
+		);
+		self::assertSame( array( '5' => '15', '51' => '152', '52' => '151' ), self::paired( $r ), 'Kontakt with Kontakt, whatever its position.' );
+	}
+
+	public function testTheSameTargetTwiceUnderOneParentIsAmbiguous(): void {
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::item( '51', 5, 'shop', 1, 'a' ), self::item( '52', 5, 'shop', 2, 'b' ) ),
+			array( self::menu( '15', 'main' ), self::item( '151', 15, 'shop', 1, 'c' ), self::item( '152', 15, 'shop', 2, 'd' ) )
+		);
+		self::assertSame( 1, $r['counts']['ambiguous'] );
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::item( '51', 5, 'shop', 1, 'a', 'top' ), self::item( '52', 5, 'shop', 2, 'b', 'other' ) ),
+			array( self::menu( '15', 'main' ), self::item( '151', 15, 'shop', 1, 'c', 'top' ), self::item( '152', 15, 'shop', 2, 'd', 'other' ) )
+		);
+		self::assertSame( array( '5' => '15', '51' => '151', '52' => '152' ), self::paired( $r ), 'Under another parent item: another identity.' );
+	}
+
+	public function testAMenuItemWithoutTheIdentityOfItsTargetOrParentIsUncertain(): void {
+		foreach ( array( 'target' => array( '', 'none' ), 'parent' => array( 'about', null ) ) as $what => list( $target, $parent ) ) {
+			$r = self::match( array( self::menu( '5', 'main' ), self::item( '51', 5, $target, 1, 'x', $parent ) ), array( self::menu( '15', 'main' ), self::item( '151', 15, $target, 1, 'x', $parent ) ) );
+			self::assertSame( 1, $r['counts']['uncertain'], $what );
+			self::assertStringContainsString( 'has no identity on its site', self::of( $r, 'uncertain' )[0]['reason'], $what );
 		}
-		ksort( $pairs, SORT_STRING );
-		self::assertSame( array( '5' => '16', '50' => '150', '6' => '15', '60' => '160' ), $pairs );
 	}
 
 	public function testTheIdentityKeyOfEachKind(): void {
@@ -498,31 +578,39 @@ final class SyncProposalTest extends TestCase {
 		self::assertNotSame( $k( 'theme_mod', array( 'name' => 'theme_mods_a', 'theme_mod' => 'x' ) ), $k( 'theme_mod', array( 'name' => 'theme_mods_a', 'theme_mod' => 'y' ) ) );
 		self::assertSame( $k( 'widget_area', array( 'area' => 'sidebar-1' ) ), $k( 'widget_area', array( 'area' => 'sidebar-1' ) ) );
 		self::assertNotSame( $k( 'option', array( 'name' => 'a' ) ), $k( 'option', array( 'name' => 'b' ) ) );
-		self::assertNotSame( $k( 'menu_item', array( 'menus' => array( 1 ), 'object' => 'page', 'position' => 1, 'type' => 'post_type' ) ), $k( 'menu_item', array( 'menus' => array( 1 ), 'object' => 'page', 'position' => 2, 'type' => 'post_type' ) ) );
+		$item = array( 'menus' => array( 1 ), 'object' => 'page', 'parent' => 'p', 'position' => 1, 'target' => 't', 'type' => 'post_type' );
+		self::assertSame( $k( 'menu_item', $item ), $k( 'menu_item', array( 'position' => 2 ) + $item ), 'Not by its position.' );
+		self::assertNotSame( $k( 'menu_item', $item ), $k( 'menu_item', array( 'target' => 'u' ) + $item ) );
+		self::assertNotSame( $k( 'menu_item', $item ), $k( 'menu_item', array( 'parent' => 'q' ) + $item ) );
 	}
 
 	/* ------------------------------------------------------------ order */
 
 	public function testTheEntriesAreNumberedInTheOrderOfTheCategories(): void {
 		$r = self::match(
-			array( self::page( '1', 'only-s', self::h( 'a' ) ), self::page( '2', 'diff', self::h( 'b' ) ), self::page( '3', 'same', self::h( 'c' ) ) ),
-			array( self::page( '11', 'only-l', self::h( 'd' ) ), self::page( '12', 'diff', self::h( 'e' ) ), self::page( '13', 'same', self::h( 'c' ) ) )
+			array( self::page( '1', 'only-s', self::h( 'a' ) ), self::page( '2', 'diff', self::h( 'b' ) ), self::page( '3', 'same', self::h( 'c' ) ), self::page( '4', '', self::h( 'd' ) ) ),
+			array( self::page( '11', 'only-l', self::h( 'd' ) ), self::page( '12', 'diff', self::h( 'e' ) ), self::page( '13', 'same', self::h( 'c' ) ), self::page( '14', '', self::h( 'd' ) ) )
 		);
-		self::assertSame( array( 'equal', 'differs', 'staging_only', 'live_only' ), array_column( $r['entries'], 'category' ) );
-		self::assertSame( array( 1, 2, 3, 4 ), array_column( $r['entries'], 'n' ) );
+		self::assertSame( array( 'equal', 'differs', 'uncertain', 'staging_only', 'live_only' ), array_column( $r['entries'], 'category' ) );
+		self::assertSame( array( 1, 2, 3, 4, 5 ), array_column( $r['entries'], 'n' ) );
 		self::assertArrayNotHasKey( 'sort', $r['entries'][0] );
-		self::assertSame( array( 'equal', 'differs', 'ambiguous', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' ), AB_MCP_Sync_Proposal::CATEGORIES );
+		self::assertSame( array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' ), AB_MCP_Sync_Proposal::CATEGORIES );
+		self::assertSame( array( 'ambiguous', 'uncertain' ), AB_MCP_Sync_Proposal::BY_CHOICE );
 	}
 
-	public function testAnAnswerShowsNoHashOrSnapshot(): void {
+	public function testAnAnswerShowsNoHashMappedFormOrSnapshot(): void {
 		$r = self::match( array( self::page( '34', 'about', self::h( 'x' ) ) ), array( self::page( '12', 'about', self::h( 'x' ) ) ), array( self::pair( 7, 'post', '13', '35', 'unclear' ) ) );
 		foreach ( $r['entries'] as $entry ) {
 			$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $entry ) );
 			self::assertStringNotContainsString( self::h( 'x' ), $shown );
 			self::assertStringNotContainsString( '"snapshot"', $shown );
+			self::assertStringNotContainsString( '"mapped"', $shown );
 		}
-		$amb = self::match( array( self::page( '1', '', self::h( 'p' ), null, array(), 'post' ), self::page( '2', '', self::h( 'q' ), null, array(), 'post' ) ), array( self::page( '3', '', self::h( 'r' ), null, array(), 'post' ), self::page( '4', '', self::h( 's' ), null, array(), 'post' ) ) )['entries'][0];
-		self::assertStringNotContainsString( self::h( 'p' ), (string) json_encode( AB_MCP_Sync_Proposal::shown( $amb ) ) );
+		$amb = self::match( array( self::page( '1', 'd', self::h( 'p' ) ), self::page( '2', 'd', self::h( 'q' ) ) ), array( self::page( '3', 'd', self::h( 'r' ) ), self::page( '4', 'd', self::h( 's' ) ) ) )['entries'][0];
+		self::assertSame( 'ambiguous', $amb['category'] );
+		$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $amb ) );
+		self::assertStringNotContainsString( self::h( 'p' ), $shown );
+		self::assertStringNotContainsString( '"mapped"', $shown );
 	}
 
 	/* ------------------------------------------------------------- series */
@@ -602,10 +690,18 @@ final class SyncProposalTest extends TestCase {
 		self::assertIsArray( AB_MCP_Sync_Proposal::compose( array( $whole, $term ) ), 'Another kind is no conflict.' );
 	}
 
-	public function testTheListOfHeldObjectsMarksTheirLines(): void {
+	public function testTheListOfHeldObjectsReducesTheirLines(): void {
 		$ref = 'api_key=x';
-		$all = AB_MCP_Sync_Proposal::compose( array( self::taken( array( self::option( $ref, null ), self::option( 'blogname', self::h( 'o' ) ) ), array(), array( array( 'option', self::h( '"' . $ref . '"' ), 'credential_name' ), array( 'post', self::h( '"blogname"' ), 'credential_name' ) ) ) ) );
-		self::assertSame( 'credential_name', $all['lines'][0]['held'] );
+		$all = AB_MCP_Sync_Proposal::compose( array( self::taken( array( self::option( $ref, self::h( 'v' ) ), self::option( 'blogname', self::h( 'o' ) ) ), array(), array( array( 'option', self::h( '"' . $ref . '"' ), 'credential_name' ), array( 'post', self::h( '"blogname"' ), 'credential_name' ) ) ) ) );
+		self::assertSame(
+			array(
+				'kind'       => 'option',
+				'ref_sha256' => self::h( '"' . $ref . '"' ),
+				'held'       => 'credential_name',
+			),
+			$all['lines'][0],
+			'Reduced: no name, no hash.'
+		);
 		self::assertArrayNotHasKey( 'held', $all['lines'][1], 'Kind and ref both.' );
 		self::assertSame( 1, $all['held'] );
 	}
@@ -628,21 +724,17 @@ final class SyncProposalTest extends TestCase {
 
 	/* -------------------------------------------------------------- canon */
 
-	public function testTheTargetOfACanonChangeIsTheStagingHashOnlyWhereNothingMapsIt(): void {
+	public function testTheTargetOfACanonChangeIsTheLiveHashOnlyWhereTheMappedFormsAreTheSame(): void {
 		$pair = self::pair( 7, 'post', '12', '34', 'active', array( 'canon' => 'canon/9' ) );
-		$s    = self::page( '34', 'a', self::h( 's' ) );
-		$l    = self::page( '12', 'a', self::h( 'l' ) );
-		self::assertSame( array( 'live' => self::h( 'l' ), 'staging' => self::h( 's' ), 'target' => self::h( 's' ) ), AB_MCP_Sync_Proposal::canon_forms( $pair, $s, $l ) );
+		$s    = self::page( '34', 'a', self::h( 's' ), null, array( 'mapped' => self::h( 'm' ) ) );
+		$l    = self::page( '12', 'a', self::h( 'l' ), null, array( 'mapped' => self::h( 'm' ) ) );
+		self::assertSame( array( 'live' => self::h( 'l' ), 'staging' => self::h( 's' ), 'target' => self::h( 'l' ) ), AB_MCP_Sync_Proposal::canon_forms( $pair, $s, $l ), 'Other ids, the same mapped form.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( array( 'override' => array( 'post_status' => 'draft' ) ) + $pair, $s, $l )['target'], 'An override changes the target.' );
-		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, self::page( '34', 'a', self::h( 's' ), '9' ), $l )['target'], 'A post named by its id.' );
-		$term = self::page( '34', 'a', self::h( 's' ), null, array( 'refs' => array( array( 'at' => 'terms', 'id' => 3, 'space' => 'term', 'strength' => 'strong' ) ) ) );
-		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $term, $l )['target'], 'A term named by its id.' );
-		$user = self::page( '34', 'a', self::h( 's' ), null, array( 'refs' => array( array( 'at' => 'post_author', 'id' => 1, 'login' => 'admin', 'space' => 'user', 'strength' => 'strong' ) ) ) );
-		self::assertSame( self::h( 's' ), AB_MCP_Sync_Proposal::canon_forms( $pair, $user, $l )['target'], 'An author is named by the login.' );
-		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, self::page( '34', 'a', self::h( 's' ), null, array( 'possible' => array( array( 'at' => 'post_content' ) ) ) ), $l )['target'], 'A possible reference.' );
+		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, array( 'mapped' => self::h( 'other' ) ) + $s, $l )['target'], 'Another mapped form.' );
+		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, array( 'mapped' => null ) + $s, $l )['target'], 'A target without identity.' );
 		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, null, $l )['staging'] );
-		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, self::page( '12', 'a', self::h( 'l' ), null, array( 'complete' => false ) ) )['live'], 'Not read whole: no form.' );
-		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, self::page( '12', 'a', self::h( 'l' ), null, array( 'held' => 'credential_field' ) ) )['live'], 'Held: no form.' );
+		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, array( 'complete' => false ) + $l )['live'], 'Not read whole: no form.' );
+		self::assertNull( AB_MCP_Sync_Proposal::canon_forms( $pair, $s, array( 'held' => 'credential_field' ) + $l )['live'], 'Held: no form.' );
 	}
 
 	/* ------------------------------------------------------------- names */

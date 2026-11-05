@@ -676,7 +676,8 @@ final class SyncProposalTest extends TestCase {
 		$answer = self::proposal( self::staged() );
 		$id     = $answer['proposal_id'];
 		$pick   = static fn( string $category ): array => array_values( array_filter( $answer['all'], static fn( $e ) => $category === $e['category'] ) );
-		$amb    = array_values( array_filter( $pick( 'ambiguous' ), static fn( $e ) => 'page' === $e['subtype'] ) );
+		// Drafts without a slug are paired only by a choice (uncertain).
+		$amb    = array_values( array_filter( $pick( 'uncertain' ), static fn( $e ) => 'page' === $e['subtype'] ) );
 		self::assertCount( 1, $amb );
 		$amb    = $amb[0];
 		self::assertCount( 5, $amb['candidates']['staging'] );
@@ -698,10 +699,10 @@ final class SyncProposalTest extends TestCase {
 		self::assertStringContainsString( 'choices a list of entry', self::refused( AB_MCP_Tools_Staging::pairs_state( $c( array( 'choices' => 'x' ) ) ), 'ab_mcp_sync_pairs_selection' ) );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'] ) ) ), 'A choice is an object of entry' );
 		$say( array( 'select' => array( 99999 ) ), 'The proposal has no entry 99999' );
-		$say( array( 'select' => array( $amb['n'] ) ), 'is ambiguous: name the pair' );
+		$say( array( 'select' => array( $amb['n'] ) ), 'is uncertain: it is paired only by the choice of a person' );
 		$say( array( 'select' => array( $staging['n'] ) ), 'is staging_only and is not paired' );
 		$say( array( 'select' => array( $realign[0]['n'] ) ), 'cannot be aligned anew' );
-		$say( array( 'choices' => array( array( 'entry' => $about['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $about['live']['ref'] ) ) ), 'is not ambiguous; choose it with select' );
+		$say( array( 'choices' => array( array( 'entry' => $about['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $about['live']['ref'] ) ) ), 'is neither ambiguous nor uncertain; choose it with select' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $drafts_a['x1'] ) ) ), 'not among its candidates' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $about['live']['ref'] ) ) ), 'not among its candidates' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['locked'], 'live_ref' => $drafts_a['x1'] ) ) ), 'is not compared (it has no hash)' );
@@ -847,13 +848,30 @@ final class SyncProposalTest extends TestCase {
 		);
 		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		remove_all_filters( 'query' );
-		self::assertStringContainsString( 'the pairs ended before it were made again with new ids', self::refused( $result, 'ab_mcp_sync_pairs_discard_failed' ) );
-		$rows = array_values( array_filter( self::pair_rows(), static fn( $r ) => $source === $r['source_id'] ) );
-		self::assertCount( 2, $rows );
-		$back = array_values( array_filter( $rows, static fn( $r ) => $a['about'] === $r['live_ref'] ) )[0];
-		self::assertNotSame( $ids['about'], (int) $back['id'] );
-		self::assertSame( array( $b['about'], 'residual', '{"post_status":"draft"}', 'proposal' ), array( $back['staging_ref'], $back['state'], $back['override'], $back['base_origin'] ), 'Made again as it was.' );
-		self::assertTrue( isset( self::pair_rows()[ $ids['team'] ] ) );
+		self::assertSame( 2, $deletes );
+		self::assertStringContainsString( 'the database took back all of it', self::refused( $result, 'ab_mcp_sync_pairs_discard_failed' ) );
+		$rows = self::pair_rows();
+		self::assertTrue( isset( $rows[ $ids['about'] ], $rows[ $ids['team'] ] ), 'Both pairs stay, with their ids.' );
+		self::assertSame( array( $b['about'], 'residual', '{"post_status":"draft"}', 'proposal' ), array( $rows[ $ids['about'] ]['staging_ref'], $rows[ $ids['about'] ]['state'], $rows[ $ids['about'] ]['override'], $rows[ $ids['about'] ]['base_origin'] ), 'As it was.' );
+
+		// Any account with manage_options ends pairs (pairs are data of the site); the log names it.
+		$other = wp_insert_user(
+			array(
+				'user_login' => 'second',
+				'user_pass'  => wp_generate_password( 24 ),
+				'user_email' => 'second@example.invalid',
+				'role'       => 'administrator',
+			)
+		);
+		self::assertIsInt( $other );
+		wp_set_current_user( $other );
+		$done = self::confirmed( $args );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( array( 'discarded' => 2 ), $done['counts'] );
+		self::assertFalse( isset( self::pair_rows()[ $ids['about'] ] ) );
+		$log  = (array) get_option( 'ab_mcp_audit', array() );
+		$last = end( $log );
+		self::assertSame( array( 'wp_site_pairs', $other ), array( $last['tool'] ?? null, (int) ( $last['user'] ?? 0 ) ), 'The log names the account.' );
 	}
 
 	/* --------------------------------------------------------------- store */
@@ -952,6 +970,399 @@ final class SyncProposalTest extends TestCase {
 			sleep( 1 );
 		}
 		self::refused( self::here( array( 'action' => 'propose', 'packages' => array( $package['id'] ) ) ), 'ab_mcp_sync_manifest_expired' );
+	}
+
+	/* -------------------------------------------------- mapped forms (B1) */
+
+	/** On A: $n posts and a category first, so that the ids of A run ahead of those of B. */
+	private static function shift_ids_on_a( int $n = 7 ): void {
+		foreach ( range( 1, $n ) as $i ) {
+			self::assertIsInt( wp_insert_post( array( 'post_type' => 'post', 'post_status' => 'draft', 'post_title' => 'Filler ' . $i, 'post_name' => 'filler-' . $i ) ) );
+		}
+		self::assertIsArray( wp_insert_term( 'Filler', 'category' ) );
+	}
+
+	/** The same structure on A (in this process) and on B: parent, category, image, menu. */
+	private static function structure( string $category_b = 'news' ): array {
+		$a                 = array();
+		$a['eltern']       = (int) wp_insert_post( wp_slash( self::page( 'eltern', 'Parent.' ) ) );
+		$a['kind']         = (int) wp_insert_post( wp_slash( self::page( 'kind', 'Child.', array( 'post_parent' => $a['eltern'] ) ) ) );
+		$a['enkel']        = (int) wp_insert_post( wp_slash( self::page( 'enkel', 'Grandchild.', array( 'post_parent' => $a['kind'] ) ) ) );
+		$a['news']       = (int) wp_insert_term( 'News', 'category', array( 'slug' => 'news' ) )['term_id'];
+		$a['other']        = (int) wp_insert_term( 'Other', 'category', array( 'slug' => 'other' ) )['term_id'];
+		$a['meldung']      = (int) wp_insert_post( wp_slash( self::page( 'meldung', 'News item.', array( 'post_type' => 'post' ) ) ) );
+		wp_set_object_terms( $a['meldung'], array( $a['news'] ), 'category' );
+		$a['bild']         = (int) wp_insert_post( wp_slash( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild', 'post_name' => 'bild', 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE ) ) );
+		update_post_meta( $a['bild'], '_wp_attached_file', '2026/10/bild.jpg' );
+		$a['mit-bild']     = (int) wp_insert_post( wp_slash( self::page( 'mit-bild', 'With an image.' ) ) );
+		update_post_meta( $a['mit-bild'], '_thumbnail_id', (string) $a['bild'] );
+		$a['menu']         = (int) wp_create_nav_menu( 'Haupt' );
+		$a['item']         = (int) wp_update_nav_menu_item( $a['menu'], 0, array( 'menu-item-object-id' => $a['eltern'], 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) );
+		$b = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( 'eltern', 'Parent.' ), 'as' => 'eltern' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'kind', 'Child.', array( 'post_parent' => '$eltern' ) ), 'as' => 'kind' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'enkel', 'Grandchild.', array( 'post_parent' => '$kind' ) ), 'as' => 'enkel' ),
+				array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'args' => array( 'slug' => 'news' ), 'as' => 'news' ),
+				array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'args' => array( 'slug' => 'other' ), 'as' => 'other' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'meldung', 'News item.', array( 'post_type' => 'post' ) ), 'as' => 'meldung' ),
+				array( 'op' => 'set_terms', 'post' => '$meldung', 'terms' => array( '$' . $category_b ), 'taxonomy' => 'category' ),
+				array( 'op' => 'insert_post', 'args' => array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_title' => 'Bild', 'post_name' => 'bild', 'post_mime_type' => 'image/jpeg', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE ), 'as' => 'bild' ),
+				array( 'op' => 'add_meta', 'post' => '$bild', 'key' => '_wp_attached_file', 'value' => '2026/10/bild.jpg' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'mit-bild', 'With an image.' ), 'as' => 'mit-bild' ),
+				array( 'op' => 'add_meta', 'post' => '$mit-bild', 'key' => '_thumbnail_id', 'value' => '{$bild}' ),
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-object-id' => '$eltern', 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'item' ),
+			)
+		);
+		return array(
+			'a' => array_map( 'strval', $a ),
+			'b' => array_map( static fn( $v ) => is_scalar( $v ) ? (string) $v : '', $b ),
+		);
+	}
+
+	/** The entry of an object of A by kind and ref. */
+	private static function entry_by_live( array $entries, string $kind, string $ref ): array {
+		foreach ( $entries as $entry ) {
+			if ( $kind === $entry['kind'] && $ref === (string) ( $entry['live']['ref'] ?? '' ) ) {
+				return $entry;
+			}
+		}
+		self::fail( "No entry for $kind $ref." );
+	}
+
+	public function testTheSameObjectsWithOtherIdsAreEqualOnceMapped(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		$ids    = self::structure();
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'eltern', 'kind', 'enkel', 'meldung', 'mit-bild' ) as $name ) {
+			self::assertNotSame( $ids['a'][ $name ], $ids['b'][ $name ], $name . ': other ids on the two sites.' );
+		}
+		foreach ( array( 'kind' => 'post', 'enkel' => 'post', 'meldung' => 'post', 'mit-bild' => 'post', 'item' => 'menu_item', 'news' => 'term' ) as $name => $kind ) {
+			$entry = self::entry_by_live( $answer['all'], $kind, $ids['a'][ $name ] );
+			self::assertSame( 'equal', $entry['category'], $name . ': the same once its references name their targets.' );
+			self::assertSame( $ids['b'][ $name ], $entry['staging']['ref'], $name );
+		}
+	}
+
+	public function testAnotherTargetOfAReferenceIsADifference(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		$ids    = self::structure( 'other' );
+		$answer = self::proposal( self::staged() );
+		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', $ids['a']['meldung'] )['category'], 'In another category on staging.' );
+		self::assertSame( 'equal', self::entry_by_live( $answer['all'], 'post', $ids['a']['kind'] )['category'] );
+	}
+
+	public function testAReferenceToATargetWithoutIdentityIsADifferenceAlsoWhereBothSidesAreAlike(): void {
+		self::pair();
+		$draft = (int) wp_insert_post( wp_slash( self::page( '', 'A draft.', array( 'post_status' => 'draft' ) ) ) );
+		$under = (int) wp_insert_post( wp_slash( self::page( 'unter-entwurf', 'Under a draft.', array( 'post_parent' => $draft ) ) ) );
+		$gone  = (int) wp_insert_post( wp_slash( self::page( 'ohne-bild', 'An image that is gone.' ) ) );
+		update_post_meta( $gone, '_thumbnail_id', '987654' );
+		self::assertNull( get_post( 987654 ) );
+		self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( '', 'A draft.', array( 'post_status' => 'draft' ) ), 'as' => 'draft' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'unter-entwurf', 'Under a draft.', array( 'post_parent' => '$draft' ) ), 'as' => 'under' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'ohne-bild', 'An image that is gone.' ), 'as' => 'gone' ),
+				array( 'op' => 'add_meta', 'post' => '$gone', 'key' => '_thumbnail_id', 'value' => '987654' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		$entry  = self::entry_by_live( $answer['all'], 'post', (string) $under );
+		self::assertSame( 'unter-entwurf', $entry['staging']['identity']['post_name'] ?? null, 'Paired by its slug and the path of its parent.' );
+		self::assertSame( 'differs', $entry['category'], 'A parent without a slug names nothing: no equal.' );
+		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $gone )['category'], 'The same id of an object that is on neither site names nothing: no equal.' );
+	}
+
+	public function testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget(): void {
+		self::pair();
+		$a          = self::pages_on_a( array( 'ueber-uns' => 'U', 'kontakt' => 'K' ) );
+		$menu       = (int) wp_create_nav_menu( 'Haupt' );
+		$item_ueber = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-object-id' => (int) $a['ueber-uns'], 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) );
+		$item_kont  = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-object-id' => (int) $a['kontakt'], 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 2 ) );
+		$b          = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( 'ueber-uns', 'U' ), 'as' => 'ueber' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'kontakt', 'K' ), 'as' => 'kontakt' ),
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-object-id' => '$kontakt', 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'item_kont' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-object-id' => '$ueber', 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 2 ), 'as' => 'item_ueber' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		foreach ( array( 'item_ueber' => $item_ueber, 'item_kont' => $item_kont ) as $name => $live ) {
+			$entry = self::entry_by_live( $answer['all'], 'menu_item', (string) $live );
+			self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $name . ': paired with the item of the same target, not the same position.' );
+			self::assertSame( 'differs', $entry['category'], $name . ': its position differs.' );
+		}
+	}
+
+	public function testACustomLinkIsNamedByItsAddress(): void {
+		self::pair();
+		$menu  = (int) wp_create_nav_menu( 'Haupt' );
+		$items = array();
+		foreach ( array( 'own' => AB_MCP_IT_Sites::url( 'a', '/kontakt/' ), 'external' => 'https://example.org/partner' ) as $name => $url ) {
+			$items[ $name ] = (int) wp_update_nav_menu_item( $menu, 0, array( 'menu-item-title' => ucfirst( $name ), 'menu-item-url' => $url, 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 'own' === $name ? 1 : 2 ) );
+		}
+		$b      = self::b(
+			array(
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'External', 'menu-item-url' => 'https://example.org/partner', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ), 'as' => 'external' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Own', 'menu-item-url' => AB_MCP_IT_Sites::url( 'b', '/kontakt/' ), 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 2 ), 'as' => 'own' ),
+			)
+		);
+		$answer = self::proposal( self::staged() );
+		foreach ( $items as $name => $live ) {
+			$entry = self::entry_by_live( $answer['all'], 'menu_item', (string) $live );
+			self::assertSame( (string) $b[ $name ], $entry['staging']['ref'], $name . ': by its address, the address of the own site neutral on both.' );
+		}
+	}
+
+	/* ------------------------------------------------ no pair by exclusion */
+
+	public function testPagesOnOtherPathsAndDraftsWithoutASlugAreOnlyChosen(): void {
+		self::pair();
+		$a = self::pages_on_a( array( 'team' => 'T', 'shop' => 'S' ) );
+		self::assertIsInt( wp_insert_post( wp_slash( self::page( 'kontakt', 'Kontakt', array( 'post_parent' => (int) $a['shop'] ) ) ) ) );
+		self::assertIsInt( wp_insert_post( wp_slash( self::page( '', 'A draft.', array( 'post_status' => 'draft' ) ) ) ) );
+		self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( 'team', 'T' ), 'as' => 'team' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'shop', 'S' ), 'as' => 'shop' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'kontakt', 'Kontakt', array( 'post_parent' => '$team' ) ), 'as' => 'kontakt' ),
+				array( 'op' => 'insert_post', 'args' => self::page( '', 'Another draft.', array( 'post_status' => 'draft' ) ), 'as' => 'draft' ),
+			)
+		);
+		$answer    = self::proposal( self::staged() );
+		$uncertain = array_values( array_filter( $answer['all'], static fn( $e ) => 'uncertain' === $e['category'] && 'page' === $e['subtype'] ) );
+		self::assertCount( 2, $uncertain, '/team/kontakt and /shop/kontakt; the two drafts.' );
+		$kontakt = array_values( array_filter( $uncertain, static fn( $e ) => 'kontakt' === $e['candidates']['staging'][0]['identity']['post_name'] ) )[0];
+		self::assertSame( array( 'team' ), $kontakt['candidates']['staging'][0]['path'] );
+		self::assertSame( array( 'shop' ), $kontakt['candidates']['live'][0]['path'] );
+		$confirm = self::gated( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'categories' => array( 'equal', 'differs' ) ) );
+		self::assertIsArray( $confirm );
+		foreach ( $confirm['preview']['pairs'] as $op ) {
+			self::assertNotSame( 'kontakt', $op['identity']['live']['post_name'] ?? null, 'Never confirmed by category.' );
+			self::assertNotSame( '', $op['identity']['live']['post_name'] ?? null );
+		}
+	}
+
+	/* ---------------------------------------------------------- held (A3) */
+
+	public function testAHeldNameReachesNeitherTheStoreNorARealignAnswer(): void {
+		global $wpdb;
+		self::pair();
+		$a    = self::pages_on_a( array( 'plain' => 'x' ) );
+		$slug = '{"password":"CANARY-ONLY"}';
+		$wpdb->update( $wpdb->posts, array( 'post_name' => $slug ), array( 'ID' => (int) $a['plain'] ) );
+		clean_post_cache( (int) $a['plain'] );
+		$b = self::pages_on_b( array( 'plain' => 'x' ) );
+		self::assertIsArray(
+			AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
+					'kind'         => 'post',
+					'live_ref'     => $a['plain'],
+					'staging_ref'  => $b['plain'],
+					'canon'        => 'canon/1',
+					'base_live'    => hash( 'sha256', 'l' ),
+					'base_staging' => hash( 'sha256', 's' ),
+					'base_origin'  => 'push',
+					'state'        => 'unclear',
+				)
+			)
+		);
+		AB_MCP_Sync_Proposal::$limit = 5;
+		$answer                      = self::proposal( self::staged() );
+		$realign                     = array_values( array_filter( $answer['all'], static fn( $e ) => 'realign' === $e['category'] ) );
+		self::assertCount( 1, $realign );
+		self::assertSame( array( 'held' => 'credential_field', 'ref_sha256' => hash( 'sha256', '"' . $a['plain'] . '"' ) ), $realign[0]['live'] );
+		self::assertNull( $realign[0]['confirm'] );
+		self::assertStringNotContainsString( 'CANARY', (string) json_encode( $answer ) );
+		// Every file of the proposal, read against its hash.
+		$text = '';
+		foreach ( array_keys( AB_MCP_Protected_Store::files( 'reports', $answer['proposal_id'] ) ) as $name ) {
+			$parsed = AB_MCP_Sync_Proposal::parse_name( (string) $name );
+			self::assertNotNull( $parsed, (string) $name );
+			$text .= (string) AB_MCP_Protected_Store::get( 'reports', $answer['proposal_id'], $parsed['name'], $parsed['sha'] );
+		}
+		self::assertStringContainsString( 'ref_sha256', $text );
+		self::assertStringNotContainsString( 'CANARY', $text, 'Reduced before it was stored.' );
+	}
+
+	/* ---------------------------------------------------- transaction (B2) */
+
+	public function testAConfirmationWhoseReadBackFailsAfterItsInsertKeepsNothing(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$answer  = self::proposal( self::staged() );
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		$preview = self::gated( $args );
+		$table   = AB_MCP_Sync_Schema::table( 'pairs' );
+		$after   = false;
+		add_filter(
+			'query',
+			static function ( $sql ) use ( $table, &$after ) {
+				if ( 0 === strpos( (string) $sql, 'INSERT INTO `' . $table . '`' ) ) {
+					$after = true;
+				} elseif ( $after && 0 === strpos( (string) $sql, 'SELECT * FROM ' . $table . ' WHERE id = ' ) ) {
+					$after = false;
+					return 'SELECT broken FROM nowhere_at_all';
+				}
+				return $sql;
+			}
+		);
+		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		remove_all_filters( 'query' );
+		self::assertStringContainsString( 'kept nothing', self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' ) );
+		self::assertSame( array(), self::pair_rows(), 'The row written before the failed read is gone.' );
+	}
+
+	public function testATableWithoutTransactionsTakesNoPairs(): void {
+		global $wpdb;
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$answer = self::proposal( self::staged() );
+		$table  = AB_MCP_Sync_Schema::table( 'pairs' );
+		self::assertSame( 'InnoDB', $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) ) );
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		$preview = self::gated( $args );
+		$wpdb->query( "ALTER TABLE `$table` ENGINE=MyISAM" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+		$msg = self::refused( self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_staging_pairs_engine' );
+		self::assertStringContainsString( 'ENGINE=InnoDB', $msg );
+		self::assertSame( array(), self::pair_rows() );
+	}
+
+	/* ------------------------------------------------------ the token (B3) */
+
+	public function testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed(): void {
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$answer  = self::proposal( self::staged() );
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		$preview = self::gated( $args );
+		self::assertFalse( $preview['preview']['pairs'][0]['changed_since_proposal'] );
+		$before = AB_MCP_Tools_Staging::pairs_state( $args );
+		// The editor changes the page in between.
+		self::assertIsInt( wp_update_post( array( 'ID' => (int) $a['about'], 'post_content' => 'About us, changed.' ) ) );
+		self::assertNotSame( $before, AB_MCP_Tools_Staging::pairs_state( $args ) );
+		self::assertStringContainsString( 'does not match this call', self::refused( self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_confirm_mismatch' ) );
+		self::assertSame( array(), self::pair_rows() );
+		$fresh = self::gated( $args );
+		self::assertTrue( $fresh['preview']['pairs'][0]['changed_since_proposal'], 'The new preview says so.' );
+		self::assertIsArray( self::gated( $args + array( 'confirm_token' => $fresh['confirm_token'] ) ) );
+		self::assertCount( 1, self::pair_rows() );
+		// Gone since the proposal: skipped.
+		self::assertInstanceOf( \WP_Post::class, wp_delete_post( (int) $a['about'], true ) );
+		$rows = self::pair_rows();
+		AB_MCP_Sync_Pairs::discard( (int) array_keys( $rows )[0], AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) array_keys( $rows )[0] ) ) );
+		self::assertStringContainsString( 'gone since the proposal', self::refused( self::gated( $args ), 'ab_mcp_sync_pairs_nothing' ) );
+	}
+
+	public function testEachPartOfTheStateOfADiscardBindsItsToken(): void {
+		self::pair();
+		$a    = self::pages_on_a( array( 'about' => 'About us.' ) );
+		$b    = self::pages_on_b( array( 'about' => 'About us.' ) );
+		$pair = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
+				'kind'         => 'post',
+				'live_ref'     => $a['about'],
+				'staging_ref'  => $b['about'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'proposal',
+			)
+		);
+		$args = array(
+			'action'   => 'discard',
+			'pair_ids' => array( (int) $pair['id'] ),
+		);
+
+		// The connection: a token of MCP does not run in this process.
+		$over = self::tool( 'a', 'wp_site_pairs', $args );
+		self::assertIsArray( $over, is_string( $over ) ? $over : '' );
+		self::refused( self::gated( $args + array( 'confirm_token' => $over['confirm_token'] ) ), 'ab_mcp_confirm_mismatch' );
+
+		// The pair: changed in between.
+		$preview = self::gated( $args );
+		self::assertIsArray( AB_MCP_Sync_Pairs::set_state( $pair['id'], 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair['id'] ) ) ) );
+		self::refused( self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_confirm_mismatch' );
+
+		// The print of the pair of sites: the role confirmed again.
+		$preview = self::gated( $args );
+		$raw     = \AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+		$raw['role']['at'] = (int) $raw['role']['at'] + 1;
+		\AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+		self::refused( self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_confirm_mismatch' );
+		self::assertCount( 1, self::pair_rows(), 'Nothing ended.' );
+		$done = self::confirmed( $args );
+		self::assertIsArray( $done );
+		self::assertSame( array(), self::pair_rows() );
+	}
+
+	/* -------------------------------------------------- taken() (hash, purpose) */
+
+	public function testTakenReadsOnlyAPackageOfTheInventoryWithItsChunksAsSigned(): void {
+		self::pair();
+		$cases = array(
+			'purpose' => array( 'objects', 'ab_mcp_sync_import_purpose_held' ),
+			'chunk'   => array( 'inventory', 'ab_mcp_store_corrupt' ),
+		);
+		foreach ( $cases as $case => list( $purpose, $code ) ) {
+			$id      = bin2hex( random_bytes( 16 ) );
+			$text    = \AB_MCP_Sync_Canon::encode( self::option_line( 'blogname' ) ) . "\n";
+			$chunk   = (string) gzencode( $text, 6 );
+			$package = array(
+				'package_id'  => $id,
+				'purpose'     => $purpose,
+				'report_hash' => 'objects' === $purpose ? str_repeat( 'c', 64 ) : null,
+				'kinds'       => array(),
+				'objects'     => 1,
+				'unpacked'    => strlen( $text ),
+				'chunks'      => array( array( 'bytes' => strlen( $chunk ), 'sha256' => hash( 'sha256', $chunk ) ) ),
+				'bytes'       => strlen( $chunk ),
+				'sha256'      => hash( 'sha256', $chunk ),
+			);
+			$signed  = self::b( array( array( 'op' => 'sign_manifest', 'as' => 'signed', 'package' => $package ) ) )['signed'];
+			$gid     = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 1048576 + AB_MCP_Sync_Import::RECORD_MAX + AB_MCP_Sync_Import::HELD_MAX, 'label' => AB_MCP_Sync_Import::LABEL . $id, 'binding' => (string) AB_MCP_Sync_Anchor::pair_print() ) );
+			self::assertIsString( $gid );
+			$record  = \AB_MCP_Sync_Canon::encode(
+				array(
+					'expect'    => array( 'package_id' => $id, 'purpose' => $purpose ),
+					'format'    => AB_MCP_Sync_Import::RECORD,
+					'manifest'  => $signed['manifest'],
+					'print'     => AB_MCP_Sync_Anchor::pair_print(),
+					'signature' => $signed['signature'],
+				)
+			);
+			self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record ) );
+			// The chunk kept is not the one the manifest names.
+			self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 0 ), (string) gzencode( "x\n", 6 ) ) );
+			self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::COMPLETE, hash( 'sha256', $chunk ) ) );
+			$held = \AB_MCP_Sync_Canon::encode( array( 'format' => AB_MCP_Sync_Import::HELD_FORMAT, 'objects' => array() ) );
+			self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::held_name( hash( 'sha256', $held ) ), $held ) );
+			self::refused( AB_MCP_Sync_Import::taken( $id ), $code );
+		}
 	}
 
 	/* ------------------------------------------------------- calls, owner */
@@ -1244,7 +1655,7 @@ final class SyncProposalTest extends TestCase {
 				'state'        => 'unclear',
 			)
 		);
-		// Drafts without a slug: an ambiguous group, whose choice comes last.
+		// Drafts without a slug: an uncertain group, whose choice comes last.
 		$drafts_a = array();
 		foreach ( array( 'd1', 'd2' ) as $content ) {
 			$drafts_a[ $content ] = (string) wp_insert_post( wp_slash( self::page( '', $content, array( 'post_status' => 'draft', 'post_title' => 'Draft' ) ) ) );
@@ -1261,7 +1672,7 @@ final class SyncProposalTest extends TestCase {
 		$before  = AB_MCP_Sync_Pairs::snapshot( $pair['id'] );
 		$answer  = self::proposal( self::staged() );
 		$realign = array_values( array_filter( $answer['all'], static fn( $e ) => 'realign' === $e['category'] ) )[0];
-		$amb     = array_values( array_filter( $answer['all'], static fn( $e ) => 'ambiguous' === $e['category'] && 'page' === $e['subtype'] ) )[0];
+		$amb     = array_values( array_filter( $answer['all'], static fn( $e ) => 'uncertain' === $e['category'] && 'page' === $e['subtype'] ) )[0];
 		$args    = array(
 			'action'      => 'confirm',
 			'proposal_id' => $answer['proposal_id'],
@@ -1284,7 +1695,7 @@ final class SyncProposalTest extends TestCase {
 		remove_all_filters( 'query' );
 		self::assertSame( 2, $inserts );
 		$msg = self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' );
-		self::assertStringContainsString( 'what it wrote before was taken back', $msg );
+		self::assertStringContainsString( 'the database took back all of it', $msg );
 		self::assertSame( array( (int) $pair['id'] ), array_keys( self::pair_rows() ), 'The pair made before is gone.' );
 		self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( $pair['id'] ), 'The pair to align was not reached.' );
 
@@ -1314,8 +1725,8 @@ final class SyncProposalTest extends TestCase {
 		);
 		$result = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		remove_all_filters( 'query' );
-		self::assertSame( 2, $updates, 'Aligned, then put back.' );
-		self::assertStringContainsString( 'what it wrote before was taken back', self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' ) );
+		self::assertSame( 1, $updates, 'Aligned once; the database takes it back.' );
+		self::assertStringContainsString( 'the database took back all of it', self::refused( $result, 'ab_mcp_sync_pairs_confirm_failed' ) );
 		$now = AB_MCP_Sync_Pairs::get( $pair['id'] );
 		self::assertSame( array( 'unclear', 'push', hash( 'sha256', 'l' ) ), array( $now['state'], $now['base_origin'], $now['base_live'] ), 'Back as it was.' );
 		self::assertSame( array( (int) $pair['id'] ), array_keys( self::pair_rows() ) );

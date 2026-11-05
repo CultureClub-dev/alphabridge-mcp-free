@@ -24,7 +24,8 @@
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
  * (whether export, inventory and kinds are loaded), menu_css_mods (a menu
- * with an item, the additional CSS and two theme mods), serve (query: the route
+ * with an item, the additional CSS and two theme mods), nav_menu (name) and
+ * nav_menu_item (menu, args of wp_update_nav_menu_item()), serve (query: the route
  * of the chunks asked through the REST server of this process, its status). The process
  * loads only what WordPress and the plugin load and what an op needs. A step with "expect": "error"
  * gives { code, message } of its WP_Error instead of ending the steps.
@@ -195,6 +196,12 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				'item' => $ab_it_item,
 				'css'  => $ab_it_css instanceof WP_Post ? $ab_it_css->ID : 0,
 			);
+			break;
+		case 'nav_menu':
+			$ab_it_out = wp_create_nav_menu( $ab_it_step['name'] );
+			break;
+		case 'nav_menu_item':
+			$ab_it_out = wp_update_nav_menu_item( (int) $ab_it_step['menu'], 0, $ab_it_step['args'] );
 			break;
 		case 'staging_raw':
 			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );

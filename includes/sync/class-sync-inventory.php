@@ -24,6 +24,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-identity.php';
 
 /**
  * Class AB_MCP_Sync_Inventory
@@ -38,6 +39,9 @@ final class AB_MCP_Sync_Inventory {
 
 	/** Objects entry() made since the last source(). */
 	private static $made = 0;
+
+	/** The context of the last source(), for the mapped form of entry(). */
+	private static $ctx = null;
 
 	/**
 	 * The source of an inventory on this site.
@@ -62,6 +66,8 @@ final class AB_MCP_Sync_Inventory {
 		// The tags read in UTF-8 only where the site writes in it.
 		$ctx['utf8'] = AB_MCP_Sync_Rows::utf8();
 		self::$made  = 0;
+		self::$ctx   = $ctx;
+		AB_MCP_Sync_Identity::reset();
 		return array(
 			'ctx'      => $ctx,
 			'deadline' => self::now() + max( 0, (float) $budget ),
@@ -147,13 +153,17 @@ final class AB_MCP_Sync_Inventory {
 	}
 
 	/**
-	 * An object of the inventory: the result without its form.
+	 * An object of the inventory: the result without its form, with the
+	 * SHA-256 of its mapped form (mapped: every reference by id naming the
+	 * identity of its target, AB_MCP_Sync_Identity; null where a target has
+	 * none or there is no form), which the two sites compare (decision 10).
 	 *
 	 * @param array $result AB_MCP_Sync_Canon::finish().
 	 * @return array
 	 */
 	public static function entry( array $result ) {
 		++self::$made;
+		$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;
 		unset( $result['form'] );
 		if ( ! isset( $result['status'] ) ) {
 			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';
