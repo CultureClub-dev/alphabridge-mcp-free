@@ -194,7 +194,17 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Ein Abdruck, den ein Aufruf aus einem alten Cache liest, verschiebt so
   höchstens die Zählung vorübergehend (eine Gruppe zählt oder fehlt bis zur
   nächsten Fortsetzung oder ihrem Ablauf) und löscht nie eine Gruppe,
-  auch keine eines anderen Kontos (Codex zu d51833c und 5f626da, A). Ein
+  auch keine eines anderen Kontos (Codex zu d51833c und 5f626da, A).
+  Übrig bleiben drei seltene Fälle (Codex zu dfb477d): Ein Aufruf mit
+  altem Abdruck im Cache kann die Gruppe desselben Kontos entfernen, die
+  dasselbe Konto inzwischen für dieselbe Paket-ID unter dem neuen Paar
+  begonnen hat (nur eigene Daten; die nächste Fortsetzung beginnt neu, mit
+  Weg). Eine Gruppe ohne gespeicherte Bindung (angelegt vor dieser Regel,
+  nur Entwicklungsstände) zählt weiter, bis die Ablage sie entfernt.
+  Exporte öffnen ohne Bindung und zählen darum liegengebliebene
+  Importgruppen voll mit; das trifft nur eine Site, die nach Importen als
+  Live die Rolle Staging bekommt, bis die Ablage die alten Gruppen
+  entfernt. Ein
   Manifest, das während eines offenen Imports abläuft, lehnt die nächste
   Fortsetzung ab
   (`ab_mcp_sync_manifest_expired`); diese Gruppe bleibt, bis die Ablage sie
