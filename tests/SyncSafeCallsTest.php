@@ -120,6 +120,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'AB_MCP_Protected_Store::files'        => 'The files of a group, by name.',
 		'AB_MCP_Protected_Store::remove'       => 'Removes a group of the store.',
 		'AB_MCP_Protected_Store::close'        => 'Marks a group of the store as closed (its sidecar).',
+		'AB_MCP_Store_Budget::unpack_refusal'  => 'Compares the counts it is given with the limits of unpacking (UNPACK); no stored value.',
 		'AB_MCP_Outbound::public_addresses'    => 'Looks the host of this site up in the DNS (or the filter ab_mcp_outbound_addresses); no stored value.',
 		'->get_route'                          => 'WP_REST_Request: the path of the request.',
 		'->get_method'                         => 'WP_REST_Request: its method.',
@@ -160,7 +161,22 @@ final class SyncSafeCallsTest extends TestCase {
 			'delete_option'        => array( 3, 'forget(): removes them.' ),
 			'home_url'             => array( 1, 'answer(): the own address the key names.' ),
 		),
+		// What the account that makes a package may read (decision 9): its
+		// capabilities and the object as WordPress has it, never a value the
+		// package compares.
+		'class-sync-export-rights.php' => array(
+			'current_user_can'          => array( 4, 'withheld(), post(), term(): the capabilities of the account that makes the package, per object.' ),
+			'get_post'                  => array( 1, 'post(): the post whose rights are asked, for read_post, edit_post and whether it is publicly viewable.' ),
+			'get_post_type_object'      => array( 1, 'post(): whether WordPress knows its type (no rule of its own otherwise).' ),
+			'get_term'                  => array( 1, 'term(): the term whose rights are asked.' ),
+			'is_post_publicly_viewable' => array( 1, 'post(): whether the post is public, else edit_post as well.' ),
+			'is_taxonomy_viewable'      => array( 1, 'term(): whether its taxonomy is public, else edit_term.' ),
+			'taxonomy_exists'           => array( 1, 'term(): whether WordPress knows its taxonomy.' ),
+		),
 		'class-sync-export.php'   => array(
+			'current_user_can'       => array( 1, 'refusal(): only an account with manage_options makes and reads packages (decision 9).' ),
+			'AB_MCP_Site_Mode::is_full' => array( 2, 'refusal() and deliver(): only with write access on (the access level Full, decision 9).' ),
+			'AB_MCP_Site_Mode::way_text' => array( 1, 'refusal(): the way to switch write access on.' ),
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
 			'AB_MCP_Staging::bind'   => array( 2, 'binding() and refusal(): the random value of the role and pair a package is bound to.' ),
 			'AB_MCP_Staging::new_bind' => array( 1, 'refusal(): that value, made where the record has none.' ),

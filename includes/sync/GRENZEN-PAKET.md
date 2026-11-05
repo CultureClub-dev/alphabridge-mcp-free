@@ -195,6 +195,55 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   ausgelieferten Kopien nicht ab, solange der Anker der Live-Site den alten
   Schlüssel hält (Codex-Runde 6, F3; berichtigt den Nachtrag von Runde 5).
 
+## Inhalt, Rechte und Entpacken (Teil 3, Entscheide 8 und 9)
+
+- Ein Paket macht nur die bestätigte Staging-Site mit Paar auf eine
+  Produktivsite (das Paar einer Staging-Site ist immer eines auf eine
+  Produktivsite, `record()`), mit Schreibzugriff (Stufe `full`) und für ein
+  Konto mit `manage_options`; sonst `ab_mcp_sync_export_capability` oder
+  `ab_mcp_sync_export_mode` mit nummerierten Schritten. Mit Schreibzugriff
+  aus gibt die Route auch gemachte Pakete nicht aus.
+- Rechte je Objekt (`AB_MCP_Sync_Export_Rights`): Inhalte mit `read_post`,
+  nicht Öffentliches (`is_post_publicly_viewable()`: Status oder Typ nicht
+  öffentlich) zusätzlich mit `edit_post`; Begriffe einer öffentlichen
+  Taxonomie wie für jeden auf der Site, sonst mit `edit_term` (der Plan
+  nennt Begriffe nicht; die Regel folgt der für Inhalte); Menüs, ihre
+  Einträge, Widget-Bereiche, Theme-Mods und das zusätzliche CSS mit
+  `edit_theme_options`; Optionen mit `manage_options`, das jeder Export
+  zuerst verlangt. Ein Post eines Typs oder ein Begriff einer Taxonomie,
+  die WordPress nicht kennt (das Plugin ist aus), hat keine Regel des Kerns
+  (`map_meta_cap()` meldete «doing it wrong» oder `do_not_allow`); er wird
+  mit `manage_options` gelesen, gesperrt ist er ohnehin. Was das Konto nicht
+  darf, ein nicht mehr vorhandenes Objekt und eine Art ohne Regel kommen
+  nicht ins Paket, werden gezählt und (die ersten 200) mit Art, Untertyp,
+  Kennung und fehlendem Recht benannt (`withheld`, mit Weg); Art und
+  Untertyp sind dann nicht `complete`.
+- Zugangsdaten vor dem Paket (die vorhandene Prüfung des Inventars): ein
+  Objekt, dessen Name der einer Zugangsangabe ist (B9), kommt nicht ins
+  Paket und wird gezählt (`credentials.names`); seine Art bleibt
+  `complete`, weil es auf keiner Site verglichen wird. Ein Feld darin oder
+  eine Sperre der Zugangsdatenprüfung hält die Zeile auf Identität und
+  Grund (A-1, `credentials.held`); ausgelassene B9-Einheiten in gepackten
+  Objekten zählt `credentials.units`. Optionen, die das Inventar als
+  geschützt führt (Status `guarded`, etwa `password_1`), sind kein B9: ihre
+  Zeile trägt wie bisher Name und Status, keinen Hash und keinen Wert.
+- Beim Import, sobald das Paket ganz geprüft ist, wird es entpackt und
+  jede Zeile erneut geprüft, bevor es als vollständig gilt: jedes Stück
+  stückweise aufgeblasen (je 4096 Bytes Eingabe) und nie weiter als bis zum
+  Rest der deklarierten Grösse und zu 8 MiB (ein Stück fasst ganze Zeilen
+  von höchstens `SLICE` Bytes, so bleibt auch jede Zeile darunter);
+  höchstens 5000 Objekte; JSON höchstens 64 tief, in der einen Schreibweise
+  von `AB_MCP_Sync_Canon::encode()`, mit den Feldern einer Inventarzeile und
+  keinem anderen, kein B9-Objekt, keine von einer Zugangsdatensperre
+  gehaltene Zeile mit mehr als ihrer Identität; so viele Zeilen und Bytes,
+  wie das Manifest nennt. Die deklarierten Höchstwerte (5000 Objekte,
+  256 MiB) prüft schon das Manifest (`MAX_OBJECTS`, `MAX_UNPACKED`, gleich
+  `AB_MCP_Store_Budget::UNPACK`). Ein Paket, das nicht hält, wird entfernt
+  (`ab_mcp_store_unpack_limit` oder `ab_mcp_sync_import_lines`, je mit
+  Schritten). Ein Name, den erst die Regeln der Live-Site als Zugangsangabe
+  lesen (`ab_mcp_redact_keys`), wird als gehalten gelistet (`held`); die
+  Werte selbst waren nie im Paket.
+
 ## Anker
 
 - Ein Schlüssel, den die Live-Site bestätigt und dann ersetzt oder
@@ -253,8 +302,16 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 - Multisite: Export und Import lehnen ab (Entscheid 3), mit Weg
   (`ab_mcp_sync_multisite`).
 - Pakete von Objekten, Medien und Umgebung (`objects`, `media`, `env`):
-  der Export lehnt sie in Teil 2 mit Weg ab; Rechte je Objekt, `complete`
-  je Art und Untertyp nach Entscheid 9 und die Zugangsdatenprüfung folgen
-  in Teil 3, die Entpack-Grenzen beim Lesen eines Pakets ebenda.
+  Export und Import lehnen sie weiterhin mit Weg ab. Ein Paket `objects`
+  oder `media` gehört zu einem Bericht (`report_hash`, Zweig 6), und den
+  Inhalt eines Objekts liest erst `export()` der Arten (ab Zweig 8); bis
+  dahin erzeugt der Export keinen solchen Zweck, und die Grenze des Imports
+  aus B-3 bleibt zu. Die Rechte je Objekt, die Zugangsdatenprüfung und die
+  Entpack-Grenzen dieses Zweigs gelten dann für sie ebenso; die Prüfung der
+  Inhalte beim Schreiben (Rechte je Meta-Schlüssel, Entscheid 28) bringt
+  Zweig 8.
+- Die Liste der Objekte, die eine Zugangsangabe nach den Regeln der
+  Live-Site hält (`held-…` in der Gruppe), liest die Übernahme ab Zweig 6;
+  in diesem Zweig wird sie geschrieben, gezählt und zurückgelesen.
 - Den Anker aus der Paar-Route des Hubs oder per Werkzeug vorbereiten:
   frühestens mit dem Hub-Zweig 14, dann nur als Vorbereitung.

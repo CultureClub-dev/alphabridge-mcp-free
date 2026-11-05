@@ -25,8 +25,19 @@
  * and count as one open export (AB_MCP_Store_Budget). The manifest lists
  * each kind and subtype of the package; complete is true only where the
  * package holds every object of it (it began that kind of the database at
- * its start and read it to its end, kinds()). Packages of objects, media
- * and the environment follow with the takeover.
+ * its start and read it to its end, and no object of that kind and subtype
+ * was withheld, kinds()). Packages of objects, media and the environment
+ * follow with the takeover.
+ *
+ * WHO MAKES IT (decision 9): the confirmed staging site paired with a
+ * production site, with write access on (the access level Full), for an
+ * account with manage_options (refusal()). Of each object only what that
+ * account may read (AB_MCP_Sync_Export_Rights): any other is not in the
+ * package, counted and named in the answer (withheld). An object whose name
+ * is the name of a credential (B9) is not in the package and is counted
+ * (credentials.names); one with a field of a credential in it, or any lock
+ * of the credential check, is held to its identity and the reason
+ * (credentials.held, line()).
  *
  * WHAT IT IS BOUND TO (binding()): the key, both addresses, the confirmed
  * role and the pair. A package whose binding is not the site's any more
@@ -61,6 +72,7 @@ require_once __DIR__ . '/class-sync-manifest.php';
 require_once __DIR__ . '/class-sync-grant.php';
 require_once __DIR__ . '/class-sync-inventory.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
+require_once __DIR__ . '/class-sync-export-rights.php';
 
 /**
  * Class AB_MCP_Sync_Export
@@ -85,6 +97,12 @@ final class AB_MCP_Sync_Export {
 
 	/** Objects one package reads at most (see the class). */
 	const OBJECTS = 4000;
+
+	/** Withheld objects an answer names at most (all are counted). */
+	const WITHHELD_LIST = 200;
+
+	/** The way an answer names for withheld objects. */
+	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
 	/** The purposes this version makes packages for. */
 	const PURPOSES = array( 'inventory' );
@@ -141,15 +159,89 @@ final class AB_MCP_Sync_Export {
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
-		$packed = self::pack( array_map( array( __CLASS__, 'line' ), $read['objects'] ) );
+		$sorted = self::sort( $read['objects'] );
+		$packed = self::pack( array_map( array( __CLASS__, 'line' ), $sorted['packed'] ) );
 		if ( is_wp_error( $packed ) ) {
 			return $packed;
 		}
-		$kinds = self::kinds( $read['objects'], $from, $read['cursor'] );
+		$kinds = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );
 		if ( is_wp_error( $kinds ) ) {
 			return $kinds;
 		}
-		return self::store( $purpose, $packed, $kinds, $read['cursor'], $series );
+		return self::store( $purpose, $packed, $kinds, $read['cursor'], $series, $sorted['report'] );
+	}
+
+	/**
+	 * The objects of the inventory sorted for the package (decision 9): an
+	 * object whose name is the name of a credential (B9) is left out and
+	 * counted; one the account may not read is left out, counted and named
+	 * (its kind and subtype are not complete); the others are packed, those
+	 * a credential holds counted.
+	 *
+	 * @param array[] $objects Objects of the inventory.
+	 * @return array{packed:array[],incomplete:array<string,true>,report:array}
+	 */
+	private static function sort( array $objects ) {
+		$packed      = array();
+		$incomplete  = array();
+		$withheld    = array();
+		$count       = 0;
+		// Keys in the order the record keeps them (AB_MCP_Sync_Canon::encode()),
+		// so again() answers alike.
+		$credentials = array(
+			'held'  => 0,
+			'names' => 0,
+			'units' => 0,
+		);
+		foreach ( $objects as $object ) {
+			if ( 'b9' === $object['status'] ) {
+				++$credentials['names'];
+				continue;
+			}
+			$needs = AB_MCP_Sync_Export_Rights::withheld( $object );
+			if ( null !== $needs ) {
+				++$count;
+				$subtype = self::subtype( $object );
+				$incomplete[ $object['kind'] . "\0" . $subtype ] = true;
+				if ( count( $withheld ) < self::WITHHELD_LIST ) {
+					$withheld[] = array(
+						'kind'    => (string) $object['kind'],
+						'needs'   => $needs,
+						'ref'     => (string) $object['ref'],
+						'subtype' => $subtype,
+					);
+				}
+				continue;
+			}
+			$credentials['units'] += count( $object['credentials']['b9'] );
+			if ( array() !== $object['credentials']['mixed'] || self::credential_locked( $object['locks'] ) ) {
+				++$credentials['held'];
+			}
+			$packed[] = $object;
+		}
+		return array(
+			'packed'     => $packed,
+			'incomplete' => $incomplete,
+			'report'     => array(
+				'withheld'    => array(
+					'count'   => $count,
+					'objects' => $withheld,
+				),
+				'credentials' => $credentials,
+			),
+		);
+	}
+
+	/**
+	 * The subtype of an object in the list of kinds: its post type or its
+	 * taxonomy, else ''.
+	 *
+	 * @param array $object Object.
+	 * @return string
+	 */
+	private static function subtype( array $object ) {
+		$identity = $object['identity'];
+		return (string) ( isset( $identity['post_type'] ) ? $identity['post_type'] : ( isset( $identity['taxonomy'] ) ? $identity['taxonomy'] : '' ) );
 	}
 
 	/**
@@ -237,7 +329,7 @@ final class AB_MCP_Sync_Export {
 	 * @param array $locks Locks.
 	 * @return bool
 	 */
-	private static function credential_locked( array $locks ) {
+	public static function credential_locked( array $locks ) {
 		foreach ( $locks as $lock ) {
 			$key = isset( $lock['key'] ) ? (string) $lock['key'] : '';
 			$op  = false === strpos( $key, ':' ) ? $key : (string) substr( $key, strpos( $key, ':' ) + 1 );
@@ -361,14 +453,16 @@ final class AB_MCP_Sync_Export {
 	 * true only for the kinds of the database the package began at their
 	 * start (the cursor it began with points before them, or to one of them
 	 * without its inner cursor) and read to their end (the cursor it ended
-	 * with points past them, or there is none).
+	 * with points past them, or there is none), and where no object of that
+	 * kind and subtype was withheld (sort()).
 	 *
-	 * @param array[]    $objects Objects of the package.
-	 * @param array|null $from    The cursor the package began with.
-	 * @param array|null $to      The cursor it ended with.
+	 * @param array[]           $objects    Objects read for the package.
+	 * @param array|null        $from       The cursor the package began with.
+	 * @param array|null        $to         The cursor it ended with.
+	 * @param array<string,true> $incomplete kind NUL subtype of the objects withheld.
 	 * @return array[]|WP_Error kind, subtype, complete.
 	 */
-	public static function kinds( array $objects, $from, $to ) {
+	public static function kinds( array $objects, $from, $to, array $incomplete = array() ) {
 		$kinds = AB_MCP_Sync_Db_Kinds::all();
 		if ( is_wp_error( $kinds ) ) {
 			return $kinds;
@@ -385,11 +479,11 @@ final class AB_MCP_Sync_Export {
 		$end   = null === $to ? count( $kinds ) : $order[ $to['kind'] ];
 		$out   = array();
 		foreach ( $objects as $object ) {
-			$identity = $object['identity'];
-			$subtype  = (string) ( isset( $identity['post_type'] ) ? $identity['post_type'] : ( isset( $identity['taxonomy'] ) ? $identity['taxonomy'] : '' ) );
-			$at       = $of[ $object['kind'] ];
-			$out[ $object['kind'] . "\0" . $subtype ] = array(
-				'complete' => $at >= $start && $at < $end,
+			$subtype = self::subtype( $object );
+			$at      = $of[ $object['kind'] ];
+			$key     = $object['kind'] . "\0" . $subtype;
+			$out[ $key ] = array(
+				'complete' => $at >= $start && $at < $end && ! isset( $incomplete[ $key ] ),
 				'kind'     => $object['kind'],
 				'subtype'  => $subtype,
 			);
@@ -423,7 +517,7 @@ final class AB_MCP_Sync_Export {
 		if ( is_wp_error( $found ) ) {
 			return $found;
 		}
-		return self::answer( $found['manifest'], $found['signed'], $found['cursor'] );
+		return self::answer( $found['manifest'], $found['signed'], $found['cursor'], $found['report'] );
 	}
 
 	/**
@@ -517,6 +611,10 @@ final class AB_MCP_Sync_Export {
 	 * @return string|null
 	 */
 	public static function deliver( array $grant, $now ) {
+		// With write access off, a staging site gives nothing out.
+		if ( ! AB_MCP_Site_Mode::is_full() ) {
+			return null;
+		}
 		$found = self::find( $grant['package'] );
 		if ( ! is_array( $found ) || ! self::bound( $found ) || $found['manifest']['expires'] <= $now || ! isset( $found['manifest']['chunks'][ $grant['chunk'] ] ) ) {
 			return null;
@@ -528,7 +626,8 @@ final class AB_MCP_Sync_Export {
 	/* ------------------------------------------------------------ private */
 
 	/**
-	 * Why this site makes or gives out no package: a network, no confirmed
+	 * Why this site makes or gives out no package: a network, an account
+	 * without manage_options, write access off (decision 9), no confirmed
 	 * staging site with a pair, no usable key; the secret of the MACs of a
 	 * key and the value of bind() are made where missing, and refused only
 	 * where they cannot be stored.
@@ -538,6 +637,12 @@ final class AB_MCP_Sync_Export {
 	private static function refusal() {
 		if ( is_multisite() ) {
 			return self::multisite();
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_Error( 'ab_mcp_sync_export_capability', 'This account may not make or read packages of this staging site: that takes manage_options. 1. Connect with an administrator account of this site, or ask an administrator to give this account that capability. 2. Call again.' );
+		}
+		if ( ! AB_MCP_Site_Mode::is_full() ) {
+			return new WP_Error( 'ab_mcp_sync_export_mode', 'Write access is off on this staging site, so it makes and gives out no package (a package is kept in its protected store). 1. Switch write access on: ' . AB_MCP_Site_Mode::way_text() . ' 2. Call again.' );
 		}
 		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {
 			return new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes and gives out packages: confirm the role staging site on the page AlphaBridge → Staging of this site first.' );
@@ -580,9 +685,10 @@ final class AB_MCP_Sync_Export {
 	 * @param array[]    $kinds   kinds().
 	 * @param array|null $cursor  The cursor of the next package.
 	 * @param string     $series  The series (32 hex).
+	 * @param array      $report  What was withheld and the credentials (sort()).
 	 * @return array|WP_Error answer().
 	 */
-	private static function store( $purpose, array $packed, array $kinds, $cursor, $series ) {
+	private static function store( $purpose, array $packed, array $kinds, $cursor, $series, array $report ) {
 		self::discard_stale();
 		$bytes = 0;
 		$whole = hash_init( 'sha256' );
@@ -635,6 +741,7 @@ final class AB_MCP_Sync_Export {
 				'cursor'    => $cursor,
 				'format'    => self::RECORD,
 				'manifest'  => $signed['manifest'],
+				'report'    => $report,
 				'series'    => $series,
 				'signature' => $signed['signature'],
 			)
@@ -644,7 +751,7 @@ final class AB_MCP_Sync_Export {
 			AB_MCP_Protected_Store::remove( 'out', $gid );
 			return $put;
 		}
-		return self::answer( json_decode( $signed['manifest'], true ), $signed, $cursor );
+		return self::answer( json_decode( $signed['manifest'], true ), $signed, $cursor, $report );
 	}
 
 	/**
@@ -655,9 +762,10 @@ final class AB_MCP_Sync_Export {
 	 * @param array      $manifest Manifest.
 	 * @param array      $signed   manifest, signature.
 	 * @param array|null $cursor   Cursor of the next package.
+	 * @param array      $report   What was withheld and the credentials (sort()).
 	 * @return array|WP_Error
 	 */
-	private static function answer( array $manifest, array $signed, $cursor ) {
+	private static function answer( array $manifest, array $signed, $cursor, array $report ) {
 		$grants = AB_MCP_Sync_Grant::grants( $manifest['package_id'], count( $manifest['chunks'] ) );
 		if ( is_wp_error( $grants ) ) {
 			return $grants;
@@ -669,6 +777,8 @@ final class AB_MCP_Sync_Export {
 			'bytes'      => $manifest['bytes'],
 			'chunks'     => count( $manifest['chunks'] ),
 			'kinds'      => $manifest['kinds'],
+			'withheld'   => $report['withheld'] + ( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() ),
+			'credentials' => $report['credentials'],
 			'expires'    => $manifest['expires'],
 			'manifest'   => $signed,
 			'cursor'     => null === $cursor ? null : array(
@@ -822,6 +932,7 @@ final class AB_MCP_Sync_Export {
 			'cursor'   => $record['cursor'],
 			'series'   => $record['series'],
 			'binding'  => $record['binding'],
+			'report'   => $record['report'],
 		);
 	}
 

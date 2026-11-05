@@ -49,13 +49,18 @@ trait SyncTrustSites {
 		$this->here                 = $site;
 	}
 
-	/** Both sites confirmed and paired by a person on the form; the staging site has its key. */
+	/**
+	 * Both sites confirmed and paired by a person on the form, both with
+	 * write access on; the staging site has its key.
+	 */
 	private function paired(): void {
 		ab_test_add_user( 3 );
 		$GLOBALS['ab_test_current_user'] = 3;
 		$this->on( 'staging' );
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
 		self::assertIsArray( AB_MCP_Staging::save( 'staging', self::address( 'live' ), null, 3, 'form' ) );
 		$this->on( 'live' );
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
 		self::assertIsArray( AB_MCP_Staging::save( 'production', self::address( 'staging' ), null, 3, 'form' ) );
 	}
 

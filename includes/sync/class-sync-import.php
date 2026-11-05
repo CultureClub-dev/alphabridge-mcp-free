@@ -31,8 +31,11 @@
  * missing, so a call with fresh fetch addresses (wp_site_export with the
  * package_id) or the relay takes up where the last one ended. Once every
  * chunk is there, the package is checked whole against its SHA-256
- * (AB_MCP_Sync_Manifest::whole()), closed (it counts as an open package no
- * more, AB_MCP_Store_Budget) and marked complete. What is in it is read
+ * (AB_MCP_Sync_Manifest::whole()), unpacked within the limits of decision 8
+ * with each line checked again (decision 9, unpacked(); a package that does
+ * not hold is removed), the objects a credential holds by the rules of this
+ * site listed (held), closed (it counts as an open package no more,
+ * AB_MCP_Store_Budget) and marked complete. What is in it is read
  * only by the takeover, which checks the manifest again for its purpose
  * and report. The store removes the group a day after it was made.
  *
@@ -48,6 +51,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once dirname( __DIR__ ) . '/class-store-budget.php';
 require_once __DIR__ . '/class-sync-export.php';
 require_once __DIR__ . '/class-sync-fetcher.php';
 
@@ -67,6 +71,27 @@ final class AB_MCP_Sync_Import {
 
 	/** The name of the mark of a package checked whole. */
 	const COMPLETE = 'complete';
+
+	/** The beginning of the name of the list of objects a credential holds by the rules of this site (then its SHA-256 in base32, held_name()). */
+	const HELD = 'held-';
+
+	/** The letters of base32 (RFC 4648, in lower case), which fit the names of the protected store. */
+	const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
+
+	/** The format of that list. */
+	const HELD_FORMAT = 'ab-sync-held/1';
+
+	/** Bytes of that list at most: the kind and ref of every object a package holds. */
+	const HELD_MAX = 2097152;
+
+	/** Bytes of a chunk inflated at a time (inflate()). */
+	const INFLATE_PIECE = 4096;
+
+	/** The fields a line of the inventory carries at most (AB_MCP_Sync_Export::line()). */
+	const LINE_KEYS = array( 'b9', 'canon', 'complete', 'hash', 'identity', 'kind', 'locks', 'possible', 'reason', 'ref', 'refs', 'size', 'status', 'unread' );
+
+	/** The fields of a line besides its identity, status, locks and reason, which a line a credential holds never carries. */
+	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'possible', 'refs', 'size', 'unread' );
 
 	/** Seconds one call fetches at most; what is left, the next one does. */
 	const BUDGET = 60;
@@ -240,7 +265,7 @@ final class AB_MCP_Sync_Import {
 		$gid   = AB_MCP_Protected_Store::open(
 			'in',
 			array(
-				'declared' => $manifest['bytes'] + self::RECORD_MAX,
+				'declared' => $manifest['bytes'] + self::RECORD_MAX + self::HELD_MAX,
 				'label'    => self::LABEL . $manifest['package_id'],
 			)
 		);
@@ -447,7 +472,8 @@ final class AB_MCP_Sync_Import {
 				$missing[] = $i;
 			}
 		}
-		$complete = isset( $have[ self::COMPLETE ] );
+		$complete   = isset( $have[ self::COMPLETE ] );
+		$held_count = null;
 		if ( ! $complete && array() === $missing ) {
 			$whole = hash_init( 'sha256' );
 			foreach ( $held['manifest']['chunks'] as $i => $chunk ) {
@@ -461,6 +487,18 @@ final class AB_MCP_Sync_Import {
 			if ( is_wp_error( $ok ) ) {
 				return $ok;
 			}
+			// Unpacked within the limits of decision 8, each line checked
+			// again (decision 9); a package that does not is not used.
+			$lines = self::unpacked( $held );
+			if ( is_wp_error( $lines ) ) {
+				AB_MCP_Protected_Store::remove( 'in', $held['gid'] );
+				return $lines;
+			}
+			$kept = self::keep_held( $held, $lines );
+			if ( is_wp_error( $kept ) ) {
+				return $kept;
+			}
+			$held_count = count( $lines );
 			// Done with: it counts as an open package no more; then marked.
 			$closed = AB_MCP_Protected_Store::close( 'in', $held['gid'] );
 			if ( is_wp_error( $closed ) ) {
@@ -481,10 +519,273 @@ final class AB_MCP_Sync_Import {
 			'complete'   => $complete,
 			'expires'    => $held['manifest']['expires'],
 		);
+		if ( $complete && null === $held_count ) {
+			$list = self::held_list( $held, $have );
+			if ( is_wp_error( $list ) ) {
+				return $list;
+			}
+			$held_count = count( $list );
+		}
+		if ( $complete ) {
+			$out['held'] = $held_count;
+		}
 		if ( array() !== $failed ) {
 			$out['failed'] = $failed;
 		}
 		return $out;
+	}
+
+	/**
+	 * The lines of a package checked whole, unpacked within the limits of
+	 * decision 8 (AB_MCP_Store_Budget::UNPACK) and each checked again
+	 * (decision 9): the manifest declares at most UNPACK's objects and
+	 * unpacked size (AB_MCP_Sync_Manifest::MAX_OBJECTS, ::MAX_UNPACKED);
+	 * each chunk is inflated no further than what the manifest has left and
+	 * than the raw size of one object (a chunk holds whole lines of at most
+	 * AB_MCP_Sync_Export::SLICE bytes, so no line passes that size either),
+	 * so a chunk that would inflate further is not inflated past it; no more
+	 * objects than the limit; JSON no deeper than the limit, in the one spelling
+	 * AB_MCP_Sync_Canon::encode() writes, with the fields of a line of the
+	 * inventory and no other, no object whose name is the name of a
+	 * credential (those are never packed), and no line a lock of the
+	 * credential check holds that carries more than its identity; as many
+	 * lines and bytes as the manifest declares. What a credential holds by
+	 * the rules of this site (its name, AB_MCP_Redactor::extra_keys()
+	 * included) is listed.
+	 *
+	 * @param array $held held().
+	 * @return array[]|WP_Error kind and ref of the objects held by this site.
+	 */
+	private static function unpacked( array $held ) {
+		$manifest = $held['manifest'];
+		$limits   = AB_MCP_Store_Budget::UNPACK;
+		$extra    = AB_MCP_Redactor::extra_keys();
+		$total = 0;
+		$count = 0;
+		$out   = array();
+		foreach ( $manifest['chunks'] as $i => $chunk ) {
+			$data = AB_MCP_Protected_Store::get( 'in', $held['gid'], AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'] );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			$declared = $manifest['unpacked'] - $total;
+			$text     = self::inflate( $data, min( $declared, $limits['object_bytes'] ) );
+			if ( null === $text && $declared > $limits['object_bytes'] ) {
+				return AB_MCP_Store_Budget::unpack_refusal( array( 'object_bytes' => $limits['object_bytes'] + 1 ) );
+			}
+			if ( ! is_string( $text ) ) {
+				return self::unpack_refusal( 'A chunk does not unpack within the package: it is no gzip, or it inflates to more than the manifest declares.' );
+			}
+			$total += strlen( $text );
+			if ( '' === $text ) {
+				continue;
+			}
+			// Each line ends with a line break; a chunk without one at its end
+			// leaves its last line cut, which is no object in its one spelling.
+			foreach ( explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
+				++$count;
+				$refused = AB_MCP_Store_Budget::unpack_refusal( array( 'objects' => $count ) );
+				if ( null !== $refused ) {
+					return $refused;
+				}
+				$object = json_decode( $line, true, $limits['depth'] );
+				if ( JSON_ERROR_DEPTH === json_last_error() ) {
+					return AB_MCP_Store_Budget::unpack_refusal( array( 'depth' => $limits['depth'] + 1 ) );
+				}
+				if ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== $line ) {
+					return self::unpack_refusal( 'A line is not an object in the one spelling of the staging site.' );
+				}
+				if ( ! self::line_shaped( $object ) ) {
+					return self::unpack_refusal( 'A line carries what a line of the inventory does not: a field it has no place for, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
+				}
+				if ( self::named_credential( $object['identity'], $extra ) ) {
+					$out[] = array( $object['kind'], $object['ref'] );
+				}
+			}
+		}
+		if ( $count !== $manifest['objects'] || $total !== $manifest['unpacked'] ) {
+			return self::unpack_refusal( 'The lines are not as many, or not as long, as the manifest declares.' );
+		}
+		return $out;
+	}
+
+	/**
+	 * A chunk inflated as far as $cap bytes and no further: its input fed in
+	 * pieces of INFLATE_PIECE bytes, so what one piece adds stays bounded
+	 * (zlib inflates at most about 1032 times), and the inflation stops once
+	 * the output passes $cap.
+	 *
+	 * @param string $data Chunk (gzip).
+	 * @param int    $cap  Bytes at most.
+	 * @return string|false|null The bytes; false where it is no whole gzip;
+	 *                           null where it inflates past $cap.
+	 */
+	public static function inflate( $data, $cap ) {
+		$context = '' === $data ? false : inflate_init( ZLIB_ENCODING_GZIP );
+		if ( false === $context ) {
+			return false;
+		}
+		$out = '';
+		foreach ( str_split( $data, self::INFLATE_PIECE ) as $piece ) {
+			$more = @inflate_add( $context, $piece, ZLIB_SYNC_FLUSH ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- no gzip is answered as false.
+			if ( false === $more ) {
+				return false;
+			}
+			$out .= $more;
+			if ( strlen( $out ) > $cap ) {
+				return null;
+			}
+		}
+		if ( ZLIB_STREAM_END !== inflate_get_status( $context ) ) {
+			$more = @inflate_add( $context, '', ZLIB_FINISH ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a cut gzip is answered as false.
+			if ( false === $more || ZLIB_STREAM_END !== inflate_get_status( $context ) ) {
+				return false;
+			}
+			// With ZLIB_SYNC_FLUSH each piece gave all it holds: the end adds
+			// nothing the check in the loop has not seen.
+			$out .= $more;
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an object of a line has the fields of a line of the inventory
+	 * and no other, is no object whose name is the name of a credential (B9,
+	 * never packed), and, where a lock of the credential check holds it,
+	 * carries no more than its identity, status, locks and reason.
+	 *
+	 * @param array $object Object.
+	 * @return bool
+	 */
+	private static function line_shaped( array $object ) {
+		if ( array() !== array_diff( array_map( 'strval', array_keys( $object ) ), self::LINE_KEYS ) ) {
+			return false;
+		}
+		if ( ! isset( $object['kind'], $object['ref'], $object['identity'], $object['status'], $object['locks'] ) || ! is_string( $object['kind'] ) || ! is_string( $object['ref'] ) || ! is_string( $object['status'] ) || ! is_array( $object['identity'] ) || ! is_array( $object['locks'] ) ) {
+			return false;
+		}
+		if ( 'b9' === $object['status'] ) {
+			return false;
+		}
+		foreach ( $object['locks'] as $lock ) {
+			if ( ! is_array( $lock ) ) {
+				return false;
+			}
+		}
+		return ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );
+	}
+
+	/**
+	 * Whether the identity of an object names a credential by the rules of
+	 * this site: the name of an option or of a row of theme mods, the key of
+	 * a theme mod.
+	 *
+	 * @param array    $identity Identity.
+	 * @param string[] $extra    AB_MCP_Redactor::extra_keys().
+	 * @return bool
+	 */
+	private static function named_credential( array $identity, array $extra ) {
+		foreach ( array( 'name', 'theme_mod' ) as $field ) {
+			if ( isset( $identity[ $field ] ) && is_string( $identity[ $field ] ) && AB_MCP_Sync_Credentials::names_credential( $identity[ $field ], $extra ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Keep the list of objects a credential holds by the rules of this site
+	 * in the group, named by its SHA-256; the same list kept before by an
+	 * interrupted call is the one.
+	 *
+	 * @param array   $held  held().
+	 * @param array[] $lines unpacked().
+	 * @return true|WP_Error
+	 */
+	private static function keep_held( array $held, array $lines ) {
+		$text = AB_MCP_Sync_Canon::encode(
+			array(
+				'format'  => self::HELD_FORMAT,
+				'objects' => $lines,
+			)
+		);
+		$sha  = hash( 'sha256', $text );
+		$put  = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::held_name( $sha ), $text );
+		if ( is_wp_error( $put ) && ! ( 'ab_mcp_store_exists' === $put->get_error_code() && is_string( AB_MCP_Protected_Store::get( 'in', $held['gid'], self::held_name( $sha ), $sha ) ) ) ) {
+			return $put;
+		}
+		return true;
+	}
+
+	/**
+	 * The name of the list of held objects: HELD and its SHA-256 in base32
+	 * (52 letters; in hex it would not fit the 64 characters of a name of
+	 * the protected store, and a name of 64 hex is the record's).
+	 *
+	 * @param string $sha SHA-256 in hex.
+	 * @return string
+	 */
+	public static function held_name( $sha ) {
+		$bits = '';
+		foreach ( str_split( (string) hex2bin( $sha ) ) as $byte ) {
+			$bits .= str_pad( decbin( ord( $byte ) ), 8, '0', STR_PAD_LEFT );
+		}
+		$name = self::HELD;
+		foreach ( str_split( $bits, 5 ) as $five ) {
+			$name .= self::BASE32[ bindec( str_pad( $five, 5, '0' ) ) ];
+		}
+		return $name;
+	}
+
+	/**
+	 * The SHA-256 in hex a name of held_name() carries, or null where it is
+	 * no such name.
+	 *
+	 * @param string $name Name.
+	 * @return string|null
+	 */
+	public static function held_sha( $name ) {
+		if ( 1 !== preg_match( '/^' . self::HELD . '[a-z2-7]{52}\z/', (string) $name ) ) {
+			return null;
+		}
+		$bits = '';
+		foreach ( str_split( substr( $name, strlen( self::HELD ) ) ) as $letter ) {
+			$bits .= str_pad( decbin( strpos( self::BASE32, $letter ) ), 5, '0', STR_PAD_LEFT );
+		}
+		$hex = '';
+		foreach ( str_split( substr( $bits, 0, 256 ), 4 ) as $four ) {
+			$hex .= dechex( bindec( $four ) );
+		}
+		// The last letter carries four bits more, which held_name() leaves 0.
+		return self::held_name( $hex ) === $name ? $hex : null;
+	}
+
+	/**
+	 * The list of objects a credential holds by the rules of this site, of a
+	 * package marked complete: exactly one list, read against its SHA-256.
+	 *
+	 * @param array             $held held().
+	 * @param array<string,int> $have The files of its group.
+	 * @return array[]|WP_Error
+	 */
+	private static function held_list( array $held, array $have ) {
+		$names = array_values( array_filter( array_map( 'strval', array_keys( $have ) ), static fn( $name ) => null !== self::held_sha( $name ) ) );
+		$text  = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ) ) : null;
+		$list  = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
+		if ( ! is_array( $list ) || ! isset( $list['format'], $list['objects'] ) || self::HELD_FORMAT !== $list['format'] || ! is_array( $list['objects'] ) ) {
+			return new WP_Error( 'ab_mcp_sync_import_held', 'The package is marked complete, but the list of its objects a credential holds on this site does not read back, so it is not used. 1. Export the package again on the staging site (wp_site_export). 2. Import it again with the new package_id and manifest.' );
+		}
+		return $list['objects'];
+	}
+
+	/**
+	 * A package whose lines do not unpack as they must.
+	 *
+	 * @param string $what What is wrong.
+	 * @return WP_Error
+	 */
+	private static function unpack_refusal( $what ) {
+		return new WP_Error( 'ab_mcp_sync_import_lines', $what . ' So the package is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.' );
 	}
 
 	/**

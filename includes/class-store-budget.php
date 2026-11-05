@@ -288,7 +288,7 @@ final class AB_MCP_Store_Budget {
 			if ( isset( $measured[ $key ] ) && (int) $measured[ $key ] > $max ) {
 				return new WP_Error(
 					'ab_mcp_store_unpack_limit',
-					sprintf( 'The package passes the limit for %1$s (%2$d, at most %3$d), so it is not unpacked and nothing of it is used. Export it again on the staging site in smaller packages, then try again.', self::UNPACK_WHAT[ $key ], (int) $measured[ $key ], $max ),
+					sprintf( 'The package passes the limit for %1$s (%2$d, at most %3$d), so it is not unpacked and nothing of it is used; a staging site of this version never makes such a package. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.', self::UNPACK_WHAT[ $key ], (int) $measured[ $key ], $max ),
 					array(
 						'limit' => $key,
 						'found' => (int) $measured[ $key ],

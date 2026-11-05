@@ -30,7 +30,8 @@ ST = 'includes/class-protected-store.php'
 GRANT_F = 'includes/sync/class-sync-grant.php'
 PF = 'includes/class-payload-file.php'
 UN = 'uninstall.php'
-FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st', GRANT_F: '$gr', PF: '$pf', UN: '$un'}
+RT = 'includes/sync/class-sync-export-rights.php'
+FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st', GRANT_F: '$gr', PF: '$pf', UN: '$un', RT: '$rt'}
 
 entries = []
 
@@ -794,10 +795,10 @@ e('paket/pack-default-slice', 'pack(): SLICE where none is passed', EX,
   "$size = null === $slice ? self::SLICE : (int) $slice;", "$size = null === $slice ? 100 : (int) $slice;", 'package', 'testTheGzipOfTheLargestSliceStaysWithinAChunk')
 e('paket/pack-last-chunk', 'pack(): a package has a chunk also without an object', EX,
   "\t\t$chunks[] = $slice;\n\t\tif ( $unpacked", "\t\tif ( $unpacked", 'package', 'testAPackageHasAChunkAlsoWithoutAnObject')
-DONE = "\t\t\t\t'complete' => $at >= $start && $at < $end,"
+DONE = "\t\t\t\t'complete' => $at >= $start && $at < $end && ! isset( $incomplete[ $key ] ),"
 REACH = 'testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd with data set "%s"'
-e('paket/kinds-from-start', 'kinds(): complete only for a kind begun at its start', EX, DONE, "\t\t\t\t'complete' => $at < $end,", 'package', REACH % 'began in the terms')
-e('paket/kinds-to-end', 'kinds(): complete only for a kind read to its end', EX, DONE, "\t\t\t\t'complete' => $at >= $start,", 'package', REACH % 'ended in the terms')
+e('paket/kinds-from-start', 'kinds(): complete only for a kind begun at its start', EX, DONE, DONE.replace("$at >= $start && ", ''), 'package', REACH % 'began in the terms')
+e('paket/kinds-to-end', 'kinds(): complete only for a kind read to its end', EX, DONE, DONE.replace(" && $at < $end", ''), 'package', REACH % 'ended in the terms')
 e('paket/kinds-inner', 'kinds(): a cursor within a kind begins past it', EX,
   " + ( null === $from['inner'] ? 0 : 1 );", " + 0;", 'package', REACH % 'began in the terms')
 e('paket/kinds-sorted', 'kinds(): ascending by kind and subtype', EX,
@@ -953,7 +954,7 @@ e('paket/it-chunk-index', 'chunk(): a chunk the manifest lists', EX,
 e('paket/it-export-cursor', 'make(): the inventory from the cursor', EX,
   "$read   = AB_MCP_Sync_Inventory::run( $source, $from );", "$read   = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-export-kinds-from', 'make(): complete by the cursor the package began with', EX,
-  "$kinds = self::kinds( $read['objects'], $from, $read['cursor'] );", "$kinds = self::kinds( $read['objects'], null, $read['cursor'] );", 'itpkg', PKG_IT['cursor'])
+  "$kinds = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );", "$kinds = self::kinds( $read['objects'], null, $read['cursor'], $sorted['incomplete'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-import-label', 'begin(): the group named by the package', IM,
   "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
 e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
@@ -975,8 +976,8 @@ e('paket/it-fetch-limit', 'fetched(): no more than the chunk', IM,
 e('paket/it-keep-exists', 'keep(): a chunk that is there stays, no refusal', IM,
   " && 'ab_mcp_store_exists' !== $put->get_error_code()", "", 'itpkg', PKG_IT['relay'])
 e('paket/it-state-whole', 'state(): the whole against its hash', IM,
-  "\t\t\tif ( is_wp_error( $ok ) ) {\n\t\t\t\treturn $ok;\n\t\t\t}\n\t\t\t// Done with:",
-  "\t\t\t// Done with:", 'itpkg', PKG_IT['whole'])
+  "\t\t\tif ( is_wp_error( $ok ) ) {\n\t\t\t\treturn $ok;\n\t\t\t}\n\t\t\t// Unpacked within",
+  "\t\t\t// Unpacked within", 'itpkg', PKG_IT['whole'])
 e('paket/it-state-mark', 'state(): a package checked whole is marked complete', IM,
   "\t\t\t$put = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::COMPLETE, $held['manifest']['sha256'] );", "\t\t\t$put = true;", 'itpkg', PKG_IT['fetch'])
 e('paket/it-state-failed', 'state(): failed only where a fetch failed', IM, "\t\tif ( array() !== $failed ) {", "\t\tif ( true ) {", 'itpkg', PKG_IT['fetch'])
@@ -1007,7 +1008,7 @@ e('paket/line-locks', 'line(): locks by key, stage, reason and place only', EX,
   "'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),", "'locks'    => $object['locks'],", 'package', LINE)
 e('paket/line-reason', 'line(): the reason of an object that is never compared', EX, "\t\tif ( isset( $object['reason'] ) ) {", "\t\tif ( false ) {", 'package', LINE)
 e('paket/it-export-lines', 'make(): the package holds lines, not the objects of the inventory (two sites)', EX,
-  "self::pack( array_map( array( __CLASS__, 'line' ), $read['objects'] ) )", "self::pack( $read['objects'] )", 'itpkg', PKG_IT['gegen'])
+  "self::pack( array_map( array( __CLASS__, 'line' ), $sorted['packed'] ) )", "self::pack( $sorted['packed'] )", 'itpkg', PKG_IT['gegen'])
 MS = "\t\tif ( ! is_array( $raw ) || ! isset( $raw['key_id'], $raw['mac'] ) || ! is_string( $raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $raw['mac'] ) ) {"
 MACC = 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose'
 e('paket/mac-secret-text', 'mac_secret(): the secret as text', K, MS, MS.replace(" || ! is_string( $raw['mac'] )", ''), 'package', MACC)
@@ -1266,6 +1267,124 @@ e('paket/r7-renew-post-only', 'handle_staging_key_renew(): a POST only, nothing 
 e('paket/r8-renew-post-exact', 'handle_staging_key_renew(): the method exactly POST, not as normalised (R1)', AD,
   "? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly", "? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly", 'trust', R6['flow'])
 
+# ------------------------------------------- part 3 (decisions 9 and 8)
+T3 = {
+    'cond': 'testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage',
+    'kinds': 'testAKindAndSubtypeWithAWithheldObjectIsNotComplete',
+    'inflate': 'testAChunkIsInflatedNoFurtherThanItMay',
+    'held_name': 'testTheListOfHeldObjectsIsNamedByItsHashInBase32',
+    'mode_it': 'testWithWriteAccessOffAStagingSiteMakesAndGivesOutNothing',
+    'package_it': 'testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest',
+    'cap_it': 'testAnAnswerNamesTheFirstTwoHundredWithheldObjectsAndCountsAll',
+    'rights_it': 'testTheRightsOfAnObjectAreAskedOfWordPress',
+    'unpack_it': 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain',
+}
+# Who makes a package.
+e('paket/t3-refusal-capability', 'refusal(): an account with manage_options (decision 9)', EX,
+  "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", 'package', T3['cond'])
+e('paket/t3-refusal-mode', 'refusal(): write access on, the access level Full (decision 9)', EX,
+  "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", 'package', T3['cond'])
+e('paket/t3-deliver-mode', 'deliver(): nothing given out with write access off (two sites)', EX,
+  "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {", "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( false ) {", 'itpkg', T3['mode_it'])
+# What goes into it.
+e('paket/t3-sort-b9', 'sort(): a name of a credential is not packed, counted (two sites)', EX,
+  "\t\t\tif ( 'b9' === $object['status'] ) {\n\t\t\t\t++$credentials['names'];", "\t\t\tif ( false ) {\n\t\t\t\t++$credentials['names'];", 'itpkg', T3['package_it'])
+e('paket/t3-sort-withheld', 'sort(): what the account may not read is not packed (two sites)', EX,
+  "\t\t\tif ( null !== $needs ) {", "\t\t\tif ( false ) {", 'itpkg', T3['package_it'])
+e('paket/t3-sort-incomplete', 'sort(): its kind and subtype not complete (two sites)', EX,
+  "\t\t\t\t$incomplete[ $object['kind'] . \"\\0\" . $subtype ] = true;\n", "", 'itpkg', T3['package_it'])
+e('paket/t3-sort-named-cap', 'sort(): the first WITHHELD_LIST named, all counted (two sites)', EX,
+  "\t\t\t\tif ( count( $withheld ) < self::WITHHELD_LIST ) {", "\t\t\t\tif ( true ) {", 'itpkg', T3['cap_it'])
+e('paket/t3-sort-count', 'sort(): every withheld object counted (two sites)', EX,
+  "\t\t\t\t++$count;\n", "", 'itpkg', T3['package_it'])
+e('paket/t3-sort-units', 'sort(): units named as credentials in packed objects counted (two sites)', EX,
+  "\t\t\t$credentials['units'] += count( $object['credentials']['b9'] );\n", "", 'itpkg', T3['package_it'])
+e('paket/t3-sort-held', 'sort(): objects a credential holds counted (two sites)', EX,
+  "\t\t\t\t++$credentials['held'];\n", "", 'itpkg', T3['package_it'])
+e('paket/t3-kinds-incomplete', 'kinds(): not complete where an object was withheld', EX,
+  DONE, DONE.replace(" && ! isset( $incomplete[ $key ] )", ''), 'package', T3['kinds'])
+e('paket/t3-answer-way', 'answer(): the way only where something was withheld (two sites)', EX,
+  "( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", "( $report['withheld']['count'] >= 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", 'itpkg', T3['package_it'])
+e('paket/t3-record-report', 'store(): the record keeps what was withheld, for again() (two sites)', EX,
+  "\t\t\t\t'report'    => $report,\n", "\t\t\t\t'report'    => array( 'credentials' => array( 'held' => 0, 'names' => 0, 'units' => 0 ), 'withheld' => array( 'count' => 0, 'objects' => array() ) ),\n", 'itpkg', T3['package_it'])
+# The rights of an object.
+e('paket/t3-rights-post-read', 'post(): read_post (two sites)', RT,
+  "\t\tif ( ! current_user_can( 'read_post', $post->ID ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-public', 'post(): edit_post only where it is not public (two sites)', RT,
+  "\t\tif ( ! is_post_publicly_viewable( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {", "\t\tif ( ! current_user_can( 'edit_post', $post->ID ) ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-edit', 'post(): not public, edit_post as well (two sites)', RT,
+  "\t\tif ( ! is_post_publicly_viewable( $post ) && ! current_user_can( 'edit_post', $post->ID ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-id', 'post(): only an id, no leading digits (two sites)', RT,
+  "\t\t$post = 1 === preg_match( '/^[1-9][0-9]*\\z/', $ref ) ? get_post( (int) $ref ) : null;", "\t\t$post = get_post( (int) $ref );", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-post-unregistered', 'post(): a type WordPress does not know, without doing it wrong (two sites)', RT,
+  "\t\tif ( null === get_post_type_object( $post->post_type ) ) {\n\t\t\treturn null;\n\t\t}\n", "", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-term-public', 'term(): a public taxonomy as anyone reads it (two sites)', RT,
+  "\t\tif ( ! is_taxonomy_viewable( $taxonomy ) && ! current_user_can( 'edit_term', $term->term_id ) ) {", "\t\tif ( ! current_user_can( 'edit_term', $term->term_id ) ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-term-edit', 'term(): the others with edit_term (two sites)', RT,
+  "\t\tif ( ! is_taxonomy_viewable( $taxonomy ) && ! current_user_can( 'edit_term', $term->term_id ) ) {", "\t\tif ( false ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-term-unregistered', 'term(): a taxonomy WordPress does not know (two sites)', RT,
+  "\t\tif ( ! taxonomy_exists( $taxonomy ) ) {\n\t\t\treturn null;\n\t\t}\n", "", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-term-no-taxonomy', 'term(): without its taxonomy, gone (two sites)', RT,
+  "\t\tif ( '' === $taxonomy || 1 !== preg_match( '/^[1-9][0-9]*\\z/', $ref ) ) {", "\t\tif ( 1 !== preg_match( '/^[1-9][0-9]*\\z/', $ref ) ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-term-id', 'term(): only an id, no leading digits (two sites)', RT,
+  "\t\tif ( '' === $taxonomy || 1 !== preg_match( '/^[1-9][0-9]*\\z/', $ref ) ) {", "\t\tif ( '' === $taxonomy ) {", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-theme', 'withheld(): the theme with edit_theme_options (two sites)', RT,
+  "\t\t\treturn current_user_can( 'edit_theme_options' ) ? null : 'edit_theme_options';", "\t\t\treturn null;", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-theme-css', 'THEME: the additional CSS too (two sites)', RT,
+  "'theme_mod', 'custom_css' );", "'theme_mod' );", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-kind', 'withheld(): a kind without a rule is withheld (two sites)', RT,
+  "\t\treturn 'option' === $kind ? null : 'kind';", "\t\treturn null;", 'itpkg', T3['rights_it'])
+e('paket/t3-rights-option', 'withheld(): options with manage_options, asked first (two sites)', RT,
+  "\t\treturn 'option' === $kind ? null : 'kind';", "\t\treturn 'kind';", 'itpkg', T3['rights_it'])
+# Unpacked within the limits, each line checked again.
+e('paket/t3-unpack-run', 'state(): a package checked whole is unpacked and checked before it is complete (two sites)', IM,
+  "\t\t\t$lines = self::unpacked( $held );", "\t\t\t$lines = array();", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-remove', 'state(): a package that does not unpack is removed (two sites)', IM,
+  "\t\t\tif ( is_wp_error( $lines ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'in', $held['gid'] );", "\t\t\tif ( is_wp_error( $lines ) ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-keep-held', 'state(): the list of held objects kept (two sites)', IM,
+  "\t\t\t$kept = self::keep_held( $held, $lines );", "\t\t\t$kept = true;", 'itpkg', T3['unpack_it'])
+e('paket/t3-inflate-object', 'unpacked(): a chunk no further than the raw size of one object (two sites)', IM,
+  "self::inflate( $data, min( $declared, $limits['object_bytes'] ) )", "self::inflate( $data, $declared )", 'itpkg', T3['unpack_it'])
+e('paket/t3-inflate-declared', 'unpacked(): a chunk no further than the manifest declares (two sites)', IM,
+  "self::inflate( $data, min( $declared, $limits['object_bytes'] ) )", "self::inflate( $data, $limits['object_bytes'] )", 'itpkg', T3['unpack_it'])
+e('paket/t3-inflate-object-limit', 'unpacked(): past one object, the limit of decision 8 named (two sites)', IM,
+  "\t\t\tif ( null === $text && $declared > $limits['object_bytes'] ) {", "\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-empty', 'unpacked(): an empty chunk holds no line (two sites)', IM,
+  "\t\t\tif ( '' === $text ) {\n\t\t\t\tcontinue;\n\t\t\t}\n", "", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-objects', 'unpacked(): no more than 5000 objects (two sites)', IM,
+  "\t\t\t\t$refused = AB_MCP_Store_Budget::unpack_refusal( array( 'objects' => $count ) );", "\t\t\t\t$refused = null;", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-depth', 'unpacked(): no deeper than 64 (two sites)', IM,
+  "\t\t\t\tif ( JSON_ERROR_DEPTH === json_last_error() ) {", "\t\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-spelling', 'unpacked(): each line in its one spelling (two sites)', IM,
+  "\t\t\t\tif ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== $line ) {", "\t\t\t\tif ( ! is_array( $object ) ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-shape', 'unpacked(): each line with the fields of a line (two sites)', IM,
+  "\t\t\t\tif ( ! self::line_shaped( $object ) ) {", "\t\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-held', 'unpacked(): a name of a credential by the rules of this site listed (two sites)', IM,
+  "\t\t\t\tif ( self::named_credential( $object['identity'], $extra ) ) {", "\t\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+UEND = "\t\tif ( $count !== $manifest['objects'] || $total !== $manifest['unpacked'] ) {"
+e('paket/t3-unpack-count', 'unpacked(): as many lines as declared (two sites)', IM, UEND, UEND.replace("$count !== $manifest['objects'] || ", ''), 'itpkg', T3['unpack_it'])
+e('paket/t3-unpack-total', 'unpacked(): as many bytes as declared (two sites)', IM, UEND, UEND.replace(" || $total !== $manifest['unpacked']", ''), 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-keys', 'line_shaped(): no field a line has no place for (two sites)', IM,
+  "\t\tif ( array() !== array_diff( array_map( 'strval', array_keys( $object ) ), self::LINE_KEYS ) ) {", "\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-required', 'line_shaped(): kind, ref, identity, status and locks (two sites)', IM,
+  "\t\tif ( ! isset( $object['kind'], $object['ref'], $object['identity'], $object['status'], $object['locks'] ) ||", "\t\tif ( false ||", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-b9', 'line_shaped(): no object whose name is a credential (two sites)', IM,
+  "\t\tif ( 'b9' === $object['status'] ) {\n\t\t\treturn false;", "\t\tif ( false ) {\n\t\t\treturn false;", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-locks', 'line_shaped(): each lock a lock (two sites)', IM,
+  "\t\t\tif ( ! is_array( $lock ) ) {", "\t\t\tif ( false ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-shape-held', 'line_shaped(): a line a credential holds carries its identity only (two sites)', IM,
+  "\t\treturn ! AB_MCP_Sync_Export::credential_locked( $object['locks'] ) || array() === array_intersect_key( $object, array_flip( self::LINE_OPEN ) );", "\t\treturn true;", 'itpkg', T3['unpack_it'])
+e('paket/t3-named-theme-mod', 'named_credential(): the key of a theme mod as well (two sites)', IM,
+  "\t\tforeach ( array( 'name', 'theme_mod' ) as $field ) {", "\t\tforeach ( array( 'name' ) as $field ) {", 'itpkg', T3['unpack_it'])
+e('paket/t3-held-list', 'held_list(): the list read back on a later call (two sites)', IM,
+  "\t\treturn $list['objects'];\n\t}", "\t\treturn array();\n\t}", 'itpkg', T3['unpack_it'])
+e('paket/t3-inflate-stop', 'inflate(): stops once past its cap', IM,
+  "\t\t\t$out .= $more;\n\t\t\tif ( strlen( $out ) > $cap ) {\n\t\t\t\treturn null;\n\t\t\t}", "\t\t\t$out .= $more;", 'package', T3['inflate'])
+e('paket/t3-inflate-cut', 'inflate(): a cut gzip is none', IM,
+  "\t\t\tif ( false === $more || ZLIB_STREAM_END !== inflate_get_status( $context ) ) {", "\t\t\tif ( false === $more ) {", 'package', T3['inflate'])
+e('paket/t3-held-name-pad', 'held_sha(): only the name held_name() writes', IM,
+  "\t\treturn self::held_name( $hex ) === $name ? $hex : null;", "\t\treturn $hex;", 'package', T3['held_name'])
+
 # ----------------------------------------------------------------- check
 ids = set()
 for (id_, clause, file, search, replace, run, expect) in entries:
@@ -1332,7 +1451,10 @@ out.append('''<?php
  * record, a write of the store that fails or falls short. Codex round 6: a
  * revocation that cannot be kept changes nothing, the notices and the way
  * «Renew the key», a confirmation that reads back. Codex round 7: «Renew
- * the key» on a POST only.
+ * the key» on a POST only. Part 3 (decisions 9 and 8): who makes a package,
+ * the rights of each object, complete per kind and subtype, the credentials
+ * before the package, the unpacking within the limits and each line checked
+ * again at the import.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
@@ -1381,6 +1503,7 @@ $st = 'includes/class-protected-store.php';
 $gr = 'includes/sync/class-sync-grant.php';
 $pf = 'includes/class-payload-file.php';
 $un = 'uninstall.php';
+$rt = 'includes/sync/class-sync-export-rights.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

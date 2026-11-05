@@ -251,6 +251,18 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( array_values( array_diff( $complete, array( 'custom_css' ) ) ), $found );
 	}
 
+	public function testAKindAndSubtypeWithAWithheldObjectIsNotComplete(): void {
+		$complete = array();
+		foreach ( AB_MCP_Sync_Export::kinds( self::objects(), null, null, array( "post\0page" => true, "menu\0" => true ) ) as $kind ) {
+			$complete[ $kind['kind'] . ':' . $kind['subtype'] ] = $kind['complete'];
+		}
+		self::assertFalse( $complete['post:page'] );
+		self::assertTrue( $complete['post:post'], 'Another subtype of the same kind stays complete.' );
+		self::assertFalse( $complete['menu:'] );
+		self::assertTrue( $complete['menu_item:'] );
+		self::assertSame( 6, count( array_filter( $complete ) ) );
+	}
+
 	/* ------------------------------------------------ the fetch address */
 
 	public function testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite(): void {
@@ -491,6 +503,7 @@ final class SyncPackageTest extends TestCase {
 			ab_test_reset();
 			$GLOBALS['ab_test_can'] = static fn(): bool => true;
 			ab_test_add_user( 3 );
+			\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
 			self::assertSame( 'ab_mcp_sync_manifest_role', AB_MCP_Sync_Export::$method( ...$args )->get_error_code(), $method . ': no confirmed role.' );
 			self::assertIsArray( AB_MCP_Staging::save( 'staging', '', null, 3, 'form' ) );
 			self::assertSame( 'ab_mcp_sync_manifest_pair', AB_MCP_Sync_Export::$method( ...$args )->get_error_code(), $method . ': no pair.' );
@@ -573,6 +586,68 @@ final class SyncPackageTest extends TestCase {
 		add_filter( 'pre_update_option_ab_mcp_options', static fn( $value, $old ) => $old, 10, 2 );
 		self::assertNull( AB_MCP_Staging::new_bind() );
 		self::assertSame( 'ab_mcp_sync_export_unbound', AB_MCP_Sync_Export::make( 'inventory' )->get_error_code() );
+	}
+
+	public function testOnlyAnAccountWithManageOptionsAndWriteAccessOnMakesOrGivesOutAPackage(): void {
+		$this->paired();
+		$this->on( 'staging' );
+		foreach ( array( 'make' => array( 'objects' ), 'again' => array( self::ID ), 'chunk' => array( self::ID, 0 ) ) as $method => $args ) {
+			$GLOBALS['ab_test_can'] = static fn( string $cap ): bool => 'manage_options' !== $cap;
+			$refused                = AB_MCP_Sync_Export::$method( ...$args );
+			self::assertSame( 'ab_mcp_sync_export_capability', $refused->get_error_code(), $method );
+			self::assertStringContainsString( 'manage_options', $refused->get_error_message() );
+			$GLOBALS['ab_test_can'] = static fn(): bool => true;
+			\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::READ );
+			$refused = AB_MCP_Sync_Export::$method( ...$args );
+			self::assertSame( 'ab_mcp_sync_export_mode', $refused->get_error_code(), $method );
+			self::assertStringContainsString( \AB_MCP_Site_Mode::way_text(), $refused->get_error_message() );
+			\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		}
+		// The way: with both, the request goes on to what it asks.
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		$GLOBALS['ab_test_ssl'] = false;
+		self::assertSame( 'ab_mcp_sync_relay_http', AB_MCP_Sync_Export::chunk( self::ID, 0 )->get_error_code() );
+	}
+
+	public function testAChunkIsInflatedNoFurtherThanItMay(): void {
+		$text = str_repeat( "a line\n", 1000 );
+		self::assertSame( $text, AB_MCP_Sync_Import::inflate( (string) gzencode( $text ), strlen( $text ) ) );
+		self::assertNull( AB_MCP_Sync_Import::inflate( (string) gzencode( $text ), strlen( $text ) - 1 ), 'One byte past the cap.' );
+		self::assertFalse( AB_MCP_Sync_Import::inflate( 'no gzip', 100 ) );
+		self::assertFalse( AB_MCP_Sync_Import::inflate( '', 100 ) );
+		self::assertFalse( AB_MCP_Sync_Import::inflate( substr( (string) gzencode( $text ), 0, 20 ), 100000 ), 'A cut gzip.' );
+		self::assertSame( '', AB_MCP_Sync_Import::inflate( (string) gzencode( '' ), 0 ) );
+		// A chunk that inflates far: the inflation stops at the cap.
+		// 24 MiB of zeros, compressed piece by piece (no 24 MiB string here).
+		$deflate = deflate_init( ZLIB_ENCODING_GZIP, array( 'level' => 9 ) );
+		$zeros   = str_repeat( "\0", 1048576 );
+		$bomb    = '';
+		for ( $i = 0; $i < 24; $i++ ) {
+			$bomb .= deflate_add( $deflate, $zeros, ZLIB_NO_FLUSH );
+		}
+		$bomb .= deflate_add( $deflate, '', ZLIB_FINISH );
+		unset( $zeros );
+		memory_reset_peak_usage();
+		$before = memory_get_peak_usage();
+		self::assertNull( AB_MCP_Sync_Import::inflate( $bomb, 1048576 ) );
+		self::assertLessThan( 12582912, memory_get_peak_usage() - $before, 'Not inflated to its end (24 MiB).' );
+		self::assertSame( 4096, AB_MCP_Sync_Import::INFLATE_PIECE );
+	}
+
+	public function testTheListOfHeldObjectsIsNamedByItsHashInBase32(): void {
+		$sha  = hash( 'sha256', 'held' );
+		$name = AB_MCP_Sync_Import::held_name( $sha );
+		self::assertMatchesRegularExpression( '/^held-[a-z2-7]{52}\z/', $name );
+		self::assertLessThanOrEqual( 64, strlen( $name ), 'A name of the protected store.' );
+		self::assertSame( $sha, AB_MCP_Sync_Import::held_sha( $name ) );
+		foreach ( array( str_repeat( '0', 64 ), str_repeat( 'f', 64 ), hash( 'sha256', '' ) ) as $other ) {
+			self::assertSame( $other, AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::held_name( $other ) ) );
+		}
+		$last = substr( $name, -1 );
+		// The last letter carries one bit and four bits of 0: another one there is no such name.
+		foreach ( array( 'held', $sha, 'held-' . $sha, substr( $name, 0, -1 ), $name . 'a', strtoupper( $name ), substr( $name, 0, -1 ) . ( 'b' === $last ? 'c' : 'b' ) ) as $wrong ) {
+			self::assertNull( AB_MCP_Sync_Import::held_sha( $wrong ), $wrong );
+		}
 	}
 
 	public function testThisVersionMakesPackagesOfTheInventoryOnly(): void {

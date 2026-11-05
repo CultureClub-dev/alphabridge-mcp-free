@@ -218,6 +218,119 @@ final class SyncPackageTest extends TestCase {
 		return $out;
 	}
 
+	/** A line of the inventory for an option, as AB_MCP_Sync_Export::line() writes one. */
+	private static function option_line( string $name, array $over = array() ): array {
+		return array_merge(
+			array(
+				'identity' => array( 'name' => $name ),
+				'kind'     => 'option',
+				'locks'    => array(),
+				'ref'      => $name,
+				'status'   => 'z8',
+			),
+			$over
+		);
+	}
+
+	/**
+	 * A package of the given lines, a list per chunk (a line as an array is
+	 * encoded as the staging site encodes it, a string is taken as it is; a
+	 * chunk given as a string is its text as it is):
+	 * what its manifest names and the chunks. $over changes the manifest.
+	 */
+	private static function package_of( string $id, array $chunks, array $over = array(), bool $gzip = true ): array {
+		$data     = array();
+		$list     = array();
+		$unpacked = 0;
+		$objects  = 0;
+		$all      = '';
+		foreach ( $chunks as $lines ) {
+			$text = is_string( $lines ) ? $lines : '';
+			foreach ( is_string( $lines ) ? array() : $lines as $line ) {
+				$text .= ( is_string( $line ) ? $line : \AB_MCP_Sync_Canon::encode( $line ) ) . "\n";
+				++$objects;
+			}
+			$unpacked += strlen( $text );
+			$chunk     = $gzip ? (string) gzencode( $text, 6 ) : $text;
+			$data[]    = $chunk;
+			$list[]    = array(
+				'bytes'  => strlen( $chunk ),
+				'sha256' => hash( 'sha256', $chunk ),
+			);
+			$all      .= $chunk;
+		}
+		return array(
+			'package' => array_merge(
+				array(
+					'package_id'  => $id,
+					'purpose'     => 'inventory',
+					'report_hash' => null,
+					'kinds'       => array(),
+					'objects'     => $objects,
+					'unpacked'    => $unpacked,
+					'chunks'      => $list,
+					'bytes'       => strlen( $all ),
+					'sha256'      => hash( 'sha256', $all ),
+				),
+				$over
+			),
+			'data'    => $data,
+		);
+	}
+
+	/** B signs a package. */
+	private static function signed_by_b( array $package ): array {
+		return self::b(
+			array(
+				array(
+					'op'      => 'sign_manifest',
+					'as'      => 'signed',
+					'package' => $package,
+				),
+			)
+		)['signed'];
+	}
+
+	/** A begins a package B signed and takes its chunks over the relay: the last answer. */
+	private static function import_relayed( array $package ) {
+		$id    = $package['package']['package_id'];
+		$state = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => $id,
+				'manifest'   => self::signed_by_b( $package['package'] ),
+				'purpose'    => 'inventory',
+			)
+		);
+		foreach ( $package['data'] as $i => $data ) {
+			if ( is_wp_error( $state ) ) {
+				return $state;
+			}
+			$state = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $id,
+					'chunk'      => $i,
+					'data'       => base64_encode( $data ),
+				)
+			);
+		}
+		return $state;
+	}
+
+	/** The groups of A's area in for a package. */
+	private static function groups_of( string $id ): array {
+		return array_values( array_filter( AB_MCP_Protected_Store::groups( 'in' ), static fn( $group ) => 'package-' . $id === $group['label'] ) );
+	}
+
+	/** The lines of a package A made in this process, read from its store. */
+	private static function lines_out( array $package ): array {
+		$manifest = json_decode( $package['manifest']['manifest'], true );
+		$chunks   = array();
+		foreach ( $manifest['chunks'] as $i => $chunk ) {
+			$chunks[] = AB_MCP_Protected_Store::get( 'out', $package['package_id'], AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'] );
+		}
+		return self::lines( $chunks );
+	}
+
 	private static function refused( $result, string $code ): void {
 		self::assertInstanceOf( WP_Error::class, $result );
 		self::assertSame( $code, $result->get_error_code(), $result->get_error_message() );
@@ -1053,29 +1166,9 @@ final class SyncPackageTest extends TestCase {
 
 	public function testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft(): void {
 		self::pair();
-		$signed = self::b(
-			array(
-				array(
-					'op'      => 'sign_manifest',
-					'package' => array(
-						'package_id'  => str_repeat( 'ab', 16 ),
-						'purpose'     => 'inventory',
-						'report_hash' => null,
-						'kinds'       => array(),
-						'objects'     => 0,
-						'unpacked'    => 0,
-						'chunks'      => array(
-							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'abc' ) ),
-							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'def' ) ),
-						),
-						'bytes'       => 6,
-						'sha256'      => hash( 'sha256', 'abcdef' ),
-					),
-					'as'      => 'signed',
-				),
-			)
-		)['signed'];
-		$id    = str_repeat( 'ab', 16 );
+		$id     = str_repeat( 'ab', 16 );
+		$two    = self::package_of( $id, array( array( self::option_line( 'zz_a' ) ), array( self::option_line( 'zz_b' ) ) ) );
+		$signed = self::signed_by_b( $two['package'] );
 		$begin = array( 'package_id' => $id, 'manifest' => $signed, 'purpose' => 'inventory' );
 		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'in' ) );
 		AB_MCP_Protected_Store::forget();
@@ -1096,15 +1189,15 @@ final class SyncPackageTest extends TestCase {
 		}
 		self::assertGreaterThan( 1, $errors, 'The beginning failed at several points.' );
 		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
-		self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( 'abc' ) ) ) );
-		$refused = self::store_failing_from( 1, static fn() => AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( 'def' ) ) ), $reads );
+		self::assertIsArray( AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( $two['data'][0] ) ) ) );
+		$refused = self::store_failing_from( 1, static fn() => AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( $two['data'][1] ) ) ), $reads );
 		self::assertInstanceOf( WP_Error::class, $refused );
 		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id ) );
 		self::assertSame( array( 1 ), $state['missing'], 'What arrived stays: only the chunk that failed is missing.' );
 
 		// Interrupted after the last chunk was kept, before it was checked whole.
 		$gid = AB_MCP_Protected_Store::groups( 'in' )[0]['gid'];
-		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 1 ), 'def' ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Export::chunk_name( 1 ), $two['data'][1] ) );
 		self::assertFalse( AB_MCP_Protected_Store::groups( 'in' )[0]['closed'] );
 		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id ) );
 		self::assertTrue( $state['complete'], 'The next call checks it whole and ends it.' );
@@ -1497,28 +1590,8 @@ final class SyncPackageTest extends TestCase {
 		self::needs_real_permissions();
 		self::pair();
 		$id     = str_repeat( 'ef', 16 );
-		$signed = self::b(
-			array(
-				array(
-					'op'      => 'sign_manifest',
-					'as'      => 'signed',
-					'package' => array(
-						'package_id'  => $id,
-						'purpose'     => 'inventory',
-						'report_hash' => null,
-						'kinds'       => array(),
-						'objects'     => 0,
-						'unpacked'    => 0,
-						'chunks'      => array(
-							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'abc' ) ),
-							array( 'bytes' => 3, 'sha256' => hash( 'sha256', 'def' ) ),
-						),
-						'bytes'       => 6,
-						'sha256'      => hash( 'sha256', 'abcdef' ),
-					),
-				),
-			)
-		)['signed'];
+		$two    = self::package_of( $id, array( array( self::option_line( 'zz_a' ) ), array( self::option_line( 'zz_b' ) ) ) );
+		$signed = self::signed_by_b( $two['package'] );
 		$begin = array( 'package_id' => $id, 'manifest' => $signed, 'purpose' => 'inventory' );
 		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'in' ) );
 		AB_MCP_Protected_Store::forget();
@@ -1545,14 +1618,332 @@ final class SyncPackageTest extends TestCase {
 
 		// The first chunk arrives; the store fails for real at the second.
 		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
-		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( 'abc' ) ) );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 0, 'data' => base64_encode( $two['data'][0] ) ) );
 		self::assertSame( array( 1, array( 1 ) ), array( $state['received'], $state['missing'] ) );
-		$refused = self::write_failing_at( 'in', 1, static fn() => AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( 'def' ) ) ), $reads );
+		$refused = self::write_failing_at( 'in', 1, static fn() => AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( $two['data'][1] ) ) ), $reads );
 		self::refused( $refused, 'ab_mcp_store_write' );
 		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id ) );
 		self::assertSame( array( 2, 1, array( 1 ), false ), array( $state['chunks'], $state['received'], $state['missing'], $state['complete'] ), 'What arrived stays; only the chunk that failed is missing.' );
 		// The same chunk again: done, checked whole.
-		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( 'def' ) ) );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $id, 'chunk' => 1, 'data' => base64_encode( $two['data'][1] ) ) );
 		self::assertSame( array( 2, 2, array(), true ), array( $state['chunks'], $state['received'], $state['missing'], $state['complete'] ) );
+	}
+
+	/* -------------------------------------- what goes into a package (9) */
+
+	public function testAPackageHoldsWhatTheAccountMayReadAndNamesTheRest(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$public  = wp_insert_post( array( 'post_title' => 'Rights public', 'post_status' => 'publish' ), true );
+		$private = wp_insert_post( array( 'post_title' => 'Rights private', 'post_status' => 'private' ), true );
+		$draft   = wp_insert_post( array( 'post_title' => 'Rights draft', 'post_status' => 'draft' ), true );
+		$menu    = wp_create_nav_menu( 'Rights menu' );
+		self::assertIsInt( $menu );
+		update_post_meta( $draft, 'service_settings', '{"api_key":"123456789","enabled":true}' );
+		update_post_meta( $public, 'api_token', 'zz 987650001' );
+		$deny  = static function ( $caps, $cap, $user_id, $args ) use ( $public, $private ) {
+			unset( $user_id );
+			if ( 'read_post' === $cap && isset( $args[0] ) && (int) $args[0] === $public ) {
+				return array( 'do_not_allow' );
+			}
+			if ( 'edit_post' === $cap && isset( $args[0] ) && (int) $args[0] === $private ) {
+				return array( 'do_not_allow' );
+			}
+			return $caps;
+		};
+		$theme = static function ( $allcaps ) {
+			unset( $allcaps['edit_theme_options'] );
+			return $allcaps;
+		};
+		add_filter( 'map_meta_cap', $deny, 10, 4 );
+		add_filter( 'user_has_cap', $theme );
+		try {
+			$package = AB_MCP_Sync_Export::make( 'inventory' );
+		} finally {
+			remove_filter( 'map_meta_cap', $deny, 10 );
+			remove_filter( 'user_has_cap', $theme );
+		}
+		self::assertIsArray( $package, is_wp_error( $package ) ? $package->get_error_message() : '' );
+		self::assertNull( $package['cursor'], 'One package holds the inventory of this site.' );
+		$posts = array();
+		$refs  = array();
+		foreach ( self::lines_out( $package ) as $line ) {
+			$refs[] = $line['kind'] . ':' . $line['ref'];
+			if ( 'post' === $line['kind'] ) {
+				$posts[ (int) $line['ref'] ] = $line;
+			}
+		}
+		self::assertArrayNotHasKey( $public, $posts, 'A post the account may not read.' );
+		self::assertArrayNotHasKey( $private, $posts, 'A post that is not public, which the account may not edit.' );
+		self::assertArrayHasKey( $draft, $posts );
+		self::assertNotContains( 'menu:' . $menu, $refs, 'A menu without edit_theme_options.' );
+		self::assertNotContains( 'option:mailserver_pass', $refs, 'A name of a credential (B9, a core option) is never packed.' );
+		// Counted and named, with the capability each needs and the way.
+		$named = array();
+		foreach ( $package['withheld']['objects'] as $object ) {
+			$named[ $object['kind'] . ':' . $object['ref'] ] = $object['needs'];
+		}
+		self::assertSame( 'read_post', $named[ 'post:' . $public ] );
+		self::assertSame( 'edit_post', $named[ 'post:' . $private ] );
+		self::assertSame( 'edit_theme_options', $named[ 'menu:' . $menu ] );
+		self::assertSame( count( $package['withheld']['objects'] ), $package['withheld']['count'] );
+		self::assertStringContainsString( 'Call wp_site_export again', $package['withheld']['way'] );
+		self::assertGreaterThanOrEqual( 1, $package['credentials']['names'] );
+		self::assertGreaterThanOrEqual( 1, $package['credentials']['held'], 'The draft with a field of a credential.' );
+		self::assertSame( 0, $package['credentials']['units'], 'The post with a unit named as a credential was withheld.' );
+		self::assertSame( array( 'identity', 'kind', 'locks', 'ref', 'status' ), self::sorted( array_keys( array_diff_key( $posts[ $draft ], array( 'reason' => true ) ) ) ) );
+		$complete = array();
+		foreach ( $package['kinds'] as $kind ) {
+			$complete[ $kind['kind'] . ':' . $kind['subtype'] ] = $kind['complete'];
+		}
+		self::assertFalse( $complete['post:post'], 'Not complete: posts were withheld.' );
+		$menus = array_filter( $package['kinds'], static fn( $kind ) => 'menu' === $kind['kind'] );
+		self::assertNotSame( array(), $menus );
+		self::assertNotContains( true, array_column( $menus, 'complete' ), 'Menus withheld: not complete.' );
+		self::assertTrue( $complete['option:'], 'A name of a credential leaves its kind complete: it is never compared on either site.' );
+
+		// The way: with the rights, a new package holds them, complete.
+		$again = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertIsArray( $again );
+		self::assertSame( 0, $again['withheld']['count'] );
+		self::assertArrayNotHasKey( 'way', $again['withheld'] );
+		self::assertSame( 1, $again['credentials']['units'], 'meta:api_token of the public post, left out of it.' );
+		$refs = array_map( static fn( $line ) => $line['kind'] . ':' . $line['ref'], self::lines_out( $again ) );
+		foreach ( array( 'post:' . $public, 'post:' . $private, 'menu:' . $menu ) as $ref ) {
+			self::assertContains( $ref, $refs );
+		}
+		foreach ( $again['kinds'] as $kind ) {
+			self::assertTrue( $kind['complete'], $kind['kind'] . ':' . $kind['subtype'] );
+		}
+		self::assertSame( array_diff_key( $again, array( 'fetch' => true ) ), array_diff_key( AB_MCP_Sync_Export::again( $again['package_id'] ), array( 'fetch' => true ) ), 'again() answers the same, the report included.' );
+		$first = AB_MCP_Sync_Export::again( $package['package_id'] );
+		self::assertSame( $package['withheld'], $first['withheld'], 'Also what was withheld, named.' );
+		self::assertSame( $package['credentials'], $first['credentials'] );
+	}
+
+	public function testAnAnswerNamesTheFirstTwoHundredWithheldObjectsAndCountsAll(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$ids = array();
+		for ( $i = 0; $i < 201; $i++ ) {
+			$ids[] = (int) wp_insert_post( array( 'post_title' => 'Withheld ' . $i, 'post_status' => 'publish' ) );
+		}
+		$deny = static fn( $caps, $cap, $user_id, $args ) => 'read_post' === $cap && isset( $args[0] ) && in_array( (int) $args[0], $ids, true ) ? array( 'do_not_allow' ) : $caps;
+		add_filter( 'map_meta_cap', $deny, 10, 4 );
+		try {
+			$package = AB_MCP_Sync_Export::make( 'inventory' );
+		} finally {
+			remove_filter( 'map_meta_cap', $deny, 10 );
+		}
+		self::assertIsArray( $package );
+		self::assertSame( 201, $package['withheld']['count'] );
+		self::assertCount( 200, $package['withheld']['objects'] );
+		self::assertSame( 200, AB_MCP_Sync_Export::WITHHELD_LIST );
+	}
+
+	public function testTheRightsOfAnObjectAreAskedOfWordPress(): void {
+		$rights  = static fn( string $kind, string $ref, array $identity = array() ) => \AB_MCP_Sync_Export_Rights::withheld(
+			array(
+				'kind'     => $kind,
+				'ref'      => $ref,
+				'identity' => $identity,
+			)
+		);
+		$public  = (string) wp_insert_post( array( 'post_title' => 'R public', 'post_status' => 'publish' ) );
+		$private = (string) wp_insert_post( array( 'post_title' => 'R private', 'post_status' => 'private' ) );
+		$draft   = (string) wp_insert_post( array( 'post_title' => 'R draft', 'post_status' => 'draft' ) );
+		register_post_type( 'zz_gone_type' );
+		$gone_type = (string) wp_insert_post( array( 'post_title' => 'R gone type', 'post_status' => 'publish', 'post_type' => 'zz_gone_type' ) );
+		unregister_post_type( 'zz_gone_type' );
+		register_taxonomy( 'zz_gone_tax', 'post' );
+		$gone_tax = wp_insert_term( 'R gone tax', 'zz_gone_tax' );
+		unregister_taxonomy( 'zz_gone_tax' );
+		$category = wp_insert_term( 'R category', 'category' );
+		$pattern  = wp_insert_term( 'R pattern', 'wp_pattern_category' );
+		$denied   = array();
+		$deny     = static function ( $caps, $cap, $user_id, $args ) use ( &$denied ) {
+			unset( $user_id );
+			return isset( $args[0], $denied[ $cap ] ) && in_array( (int) $args[0], $denied[ $cap ], true ) ? array( 'do_not_allow' ) : $caps;
+		};
+		$wrong    = 0;
+		$count    = static function () use ( &$wrong ) {
+			++$wrong;
+		};
+		add_filter( 'map_meta_cap', $deny, 10, 4 );
+		add_action( 'doing_it_wrong_run', $count );
+		try {
+			// Content: read_post; not public, edit_post as well.
+			self::assertNull( $rights( 'post', $public ) );
+			self::assertNull( $rights( 'post', $private ) );
+			self::assertNull( $rights( 'post', $draft ) );
+			$denied = array( 'read_post' => array( (int) $public ) );
+			self::assertSame( 'read_post', $rights( 'post', $public ) );
+			$denied = array( 'edit_post' => array( (int) $private, (int) $public ) );
+			self::assertSame( 'edit_post', $rights( 'post', $private ), 'Not public: edit_post as well.' );
+			self::assertNull( $rights( 'post', $public ), 'Public: read_post is enough.' );
+			$denied = array();
+			// Gone, or no id: withheld.
+			self::assertSame( 'gone', $rights( 'post', '999999' ) );
+			self::assertSame( 'gone', $rights( 'post', 'abc' ) );
+			self::assertSame( 'gone', $rights( 'post', $public . 'x' ), 'Not another post by its leading digits.' );
+			// A type WordPress does not know: no rule of its own, read with manage_options.
+			self::assertNull( $rights( 'post', $gone_type ) );
+			self::assertSame( 0, $wrong, 'Without a notice of doing it wrong.' );
+			// Terms: a public taxonomy as anyone reads it, the others with edit_term.
+			$denied = array( 'edit_term' => array( (int) $category['term_id'], (int) $pattern['term_id'] ) );
+			self::assertNull( $rights( 'term', (string) $category['term_id'], array( 'taxonomy' => 'category' ) ) );
+			self::assertSame( 'edit_term', $rights( 'term', (string) $pattern['term_id'], array( 'taxonomy' => 'wp_pattern_category' ) ) );
+			$denied = array();
+			self::assertNull( $rights( 'term', (string) $pattern['term_id'], array( 'taxonomy' => 'wp_pattern_category' ) ) );
+			self::assertNull( $rights( 'term', (string) $gone_tax['term_id'], array( 'taxonomy' => 'zz_gone_tax' ) ), 'A taxonomy WordPress does not know.' );
+			self::assertSame( 'gone', $rights( 'term', '999999', array( 'taxonomy' => 'category' ) ) );
+			self::assertSame( 'gone', $rights( 'term', (string) $category['term_id'] ), 'Without its taxonomy.' );
+			self::assertSame( 'gone', $rights( 'term', 'x', array( 'taxonomy' => 'category' ) ) );
+			self::assertSame( 'gone', $rights( 'term', $category['term_id'] . 'x', array( 'taxonomy' => 'category' ) ) );
+			// The theme: edit_theme_options.
+			$theme = static function ( $allcaps ) {
+				unset( $allcaps['edit_theme_options'] );
+				return $allcaps;
+			};
+			foreach ( \AB_MCP_Sync_Export_Rights::THEME as $kind ) {
+				self::assertNull( $rights( $kind, 'x' ), $kind );
+			}
+			add_filter( 'user_has_cap', $theme );
+			try {
+				foreach ( \AB_MCP_Sync_Export_Rights::THEME as $kind ) {
+					self::assertSame( 'edit_theme_options', $rights( $kind, 'x' ), $kind );
+				}
+			} finally {
+				remove_filter( 'user_has_cap', $theme );
+			}
+			self::assertSame( array( 'menu', 'menu_item', 'widget_area', 'theme_mod', 'custom_css' ), \AB_MCP_Sync_Export_Rights::THEME );
+			// Options with manage_options, which every export asks first.
+			self::assertNull( $rights( 'option', 'blogname' ) );
+			// A kind without a rule here: withheld.
+			self::assertSame( 'kind', $rights( 'attachment', $public ) );
+		} finally {
+			remove_filter( 'map_meta_cap', $deny, 10 );
+			remove_action( 'doing_it_wrong_run', $count );
+		}
+	}
+
+	public function testWithWriteAccessOffAStagingSiteMakesAndGivesOutNothing(): void {
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$package = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertIsArray( $package );
+		$request = new \WP_REST_Request( 'GET', '/alphabridge/v1/staging-package' );
+		$request->set_query_params( self::query( $package['package_id'], $package['fetch'][0] ) );
+		self::assertIsString( AB_MCP_Sync_Export::requested( $request, time() ) );
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::READ );
+		self::assertNull( AB_MCP_Sync_Export::requested( $request, time() ), 'No chunk given out.' );
+		self::refused( AB_MCP_Sync_Export::make( 'inventory' ), 'ab_mcp_sync_export_mode' );
+		self::refused( AB_MCP_Sync_Export::again( $package['package_id'] ), 'ab_mcp_sync_export_mode' );
+		// Switched on again: given out again.
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsString( AB_MCP_Sync_Export::requested( $request, time() ) );
+	}
+
+	/* ------------------------------------------ unpacked within limits (8) */
+
+	public function testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain(): void {
+		self::pair();
+		// A name only this site counts as a credential: listed as held.
+		$keys = static fn( $list ) => array_merge( (array) $list, array( 'zz_live_only_name' ) );
+		add_filter( 'ab_mcp_redact_keys', $keys );
+		try {
+			$mod   = array(
+				'identity' => array( 'name' => 'theme_mods_zz', 'theme_mod' => 'zz_live_only_name' ),
+				'kind'     => 'theme_mod',
+				'locks'    => array(),
+				'ref'      => 'zz/zz_live_only_name',
+				'status'   => 'locked',
+			);
+			$state = self::import_relayed( self::package_of( str_repeat( '1a', 16 ), array( array( self::option_line( 'zz_live_only_name' ), self::option_line( 'zz_plain' ) ), array( self::option_line( 'zz_other' ), $mod ) ) ) );
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+			self::assertTrue( $state['complete'] );
+			self::assertSame( 2, $state['held'], 'The option and the theme mod.' );
+			self::assertSame( 2, AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( '1a', 16 ) ) )['held'], 'Read back on a later call.' );
+			$files = AB_MCP_Protected_Store::files( 'in', self::groups_of( str_repeat( '1a', 16 ) )[0]['gid'] );
+			$held  = array_values( array_filter( array_map( 'strval', array_keys( $files ) ), static fn( $name ) => null !== AB_MCP_Sync_Import::held_sha( $name ) ) );
+			self::assertCount( 1, $held );
+			$name = $held[0];
+			$list = json_decode( (string) AB_MCP_Protected_Store::get( 'in', self::groups_of( str_repeat( '1a', 16 ) )[0]['gid'], $name, AB_MCP_Sync_Import::held_sha( $name ) ), true );
+			self::assertSame( array( array( 'option', 'zz_live_only_name' ), array( 'theme_mod', 'zz/zz_live_only_name' ) ), $list['objects'] );
+		} finally {
+			remove_filter( 'ab_mcp_redact_keys', $keys );
+		}
+		$state = self::import_relayed( self::package_of( str_repeat( '1b', 16 ), array( array( self::option_line( 'zz_live_only_name' ) ) ) ) );
+		self::assertSame( 0, $state['held'], 'Without that rule, nothing held.' );
+		// A package without an object: one empty chunk.
+		$state = self::import_relayed( self::package_of( str_repeat( '1c', 16 ), array( array() ) ) );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertSame( array( true, 0 ), array( $state['complete'], $state['held'] ) );
+
+		// Packages that do not unpack as they must: refused, removed.
+		$deep = '1';
+		for ( $i = 0; $i < 70; $i++ ) {
+			$deep = '{"d":' . $deep . '}';
+		}
+		$many = array();
+		for ( $i = 0; $i < 5001; $i++ ) {
+			$many[] = self::option_line( 'o' . $i );
+		}
+		$lock   = array(
+			array(
+				'at'     => 'option_value',
+				'key'    => '*:credential_field',
+				'reason' => 'Held.',
+				'stage'  => 'Z8d',
+			),
+		);
+		$base   = self::package_of( str_repeat( '2a', 16 ), array( array( self::option_line( 'zz_a' ) ) ) );
+		$big    = self::package_of( str_repeat( '2c', 16 ), array( array( self::option_line( 'zz_big', array( 'reason' => str_repeat( 'a', 8388608 ) ) ) ) ) );
+		$cases  = array(
+			'no gzip'                  => array( self::package_of( str_repeat( '2b', 16 ), array( array( self::option_line( 'zz_a' ) ) ), array(), false ), 'ab_mcp_sync_import_lines' ),
+			'more than declared'       => array( self::package_of( str_repeat( '2a', 16 ), array( array( self::option_line( 'zz_a' ) ) ), array( 'unpacked' => $base['package']['unpacked'] - 1 ) ), 'ab_mcp_sync_import_lines' ),
+			'a chunk past one object'  => array( $big, 'ab_mcp_store_unpack_limit' ),
+			'too deep'                 => array( self::package_of( str_repeat( '2d', 16 ), array( array( '{"identity":' . $deep . ',"kind":"option","locks":[],"ref":"x","status":"z8"}' ) ) ), 'ab_mcp_store_unpack_limit' ),
+			'more than 5000 objects'   => array( self::package_of( str_repeat( '2e', 16 ), array( $many ), array( 'objects' => 5000 ) ), 'ab_mcp_store_unpack_limit' ),
+			'another spelling'         => array( self::package_of( str_repeat( '2f', 16 ), array( array( '{"identity": {"name":"x"},"kind":"option","locks":[],"ref":"x","status":"z8"}' ) ) ), 'ab_mcp_sync_import_lines' ),
+			'no JSON'                  => array( self::package_of( str_repeat( '3a', 16 ), array( array( 'zz' ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a field of content'       => array( self::package_of( str_repeat( '3b', 16 ), array( array( self::option_line( 'zz_v', array( 'value' => 'content' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a field missing'          => array( self::package_of( str_repeat( '3c', 16 ), array( array( array_diff_key( self::option_line( 'zz_m' ), array( 'locks' => true ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a name of a credential'   => array( self::package_of( str_repeat( '3d', 16 ), array( array( self::option_line( 'password_9', array( 'status' => 'b9' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a held line with a hash'  => array( self::package_of( str_repeat( '3e', 16 ), array( array( self::option_line( 'zz_h', array( 'locks' => $lock, 'hash' => str_repeat( 'a', 64 ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'fewer lines than declared' => array( self::package_of( str_repeat( '3f', 16 ), array( array( self::option_line( 'zz_f' ) ) ), array( 'objects' => 2 ) ), 'ab_mcp_sync_import_lines' ),
+			'shorter than declared'    => array( self::package_of( str_repeat( '4b', 16 ), array( array( self::option_line( 'zz_a' ) ) ), array( 'unpacked' => $base['package']['unpacked'] + 1 ) ), 'ab_mcp_sync_import_lines' ),
+			'a lock that is no lock'   => array( self::package_of( str_repeat( '4c', 16 ), array( array( self::option_line( 'zz_l', array( 'locks' => array( 'x' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'no whole line'            => array( self::package_of( str_repeat( '4a', 16 ), array( \AB_MCP_Sync_Canon::encode( self::option_line( 'zz_w' ) ) ), array( 'objects' => 1 ) ), 'ab_mcp_sync_import_lines' ),
+		);
+		foreach ( $cases as $case => $given ) {
+			$result = self::import_relayed( $given[0] );
+			self::assertInstanceOf( WP_Error::class, $result, $case );
+			self::assertSame( $given[1], $result->get_error_code(), $case . ': ' . $result->get_error_message() );
+			self::assertSame( array(), self::groups_of( $given[0]['package']['package_id'] ), $case . ': what arrived was removed.' );
+		}
+		self::assertSame( 'depth', self::import_relayed( $cases['too deep'][0] )->get_error_data()['limit'] );
+		self::assertSame( 'objects', self::import_relayed( $cases['more than 5000 objects'][0] )->get_error_data()['limit'] );
+		self::assertSame( 'object_bytes', self::import_relayed( $big )->get_error_data()['limit'] );
+		self::assertStringContainsString( 'Export the package again', self::import_relayed( $cases['no gzip'][0] )->get_error_message() );
+		self::assertStringContainsString( 'inflates to more than the manifest declares', self::import_relayed( $cases['more than declared'][0] )->get_error_message(), 'Inflated no further than declared.' );
+		self::assertStringContainsString( 'not as many, or not as long', self::import_relayed( $cases['shorter than declared'][0] )->get_error_message() );
+		// The limits of the manifest are those of unpacking.
+		self::assertSame( \AB_MCP_Store_Budget::UNPACK['package_bytes'], AB_MCP_Sync_Manifest::MAX_UNPACKED );
+		self::assertSame( \AB_MCP_Store_Budget::UNPACK['objects'], AB_MCP_Sync_Manifest::MAX_OBJECTS );
+		// The way: a package as the staging site makes it goes through.
+		$package = self::export();
+		$state   = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => $package['package_id'],
+				'manifest'   => $package['manifest'],
+				'purpose'    => 'inventory',
+				'fetch'      => $package['fetch'],
+			),
+			AB_MCP_Test_Sync_Fetcher::for_sites()
+		);
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'] );
+		self::assertSame( 0, $state['held'] );
 	}
 }
