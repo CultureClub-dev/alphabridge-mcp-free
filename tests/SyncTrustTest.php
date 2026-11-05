@@ -637,7 +637,145 @@ final class SyncTrustTest extends TestCase {
 		self::assertSame( 3, $active['prepared_by'] );
 		self::assertSame( $prepared['key_id'], $active['key_id'] );
 		self::assertNull( AB_MCP_Sync_Anchor::prepared(), 'Nothing is left prepared.' );
-		self::assertSame( 'ab_mcp_sync_anchor_nothing', AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], 4 )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_anchor_nothing', AB_MCP_Sync_Anchor::confirm( 'AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA', 4 )->get_error_code(), 'Nothing prepared, and not the active key.' );
+	}
+
+	public function testConfirmingTheActiveKeyOnceMoreChangesNothing(): void {
+		$this->paired();
+		$active = $this->anchored();
+		$print  = AB_MCP_Sync_Anchor::pair_print();
+		$writes = ab_test_writes( AB_MCP_Sync_Anchor::OPTION );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::confirm( $active['fingerprint'], 4, 1800000000 ), 'A second click.' );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Sync_Anchor::OPTION ), 'Nothing written.' );
+		self::assertSame( $print, AB_MCP_Sync_Anchor::pair_print(), 'No new print.' );
+		// The same key prepared again (fetched once more) and confirmed: the
+		// active one stays as it was, nothing is left prepared.
+		$code = $this->code();
+		$this->on( 'live' );
+		self::assertIsArray( AB_MCP_Sync_Anchor::prepare_from_code( $code, 4 ) );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::confirm( $active['fingerprint'], 4, 1800000000 ) );
+		self::assertSame( $print, AB_MCP_Sync_Anchor::pair_print() );
+		self::assertNull( AB_MCP_Sync_Anchor::prepared() );
+		self::assertFalse( AB_MCP_Sync_Anchor::retired( $active['key_id'] ), 'No re-confirmation, nothing retired.' );
+		// A new key prepared: the fingerprint of the active one (a page from
+		// before) confirms nothing and leaves the new key prepared.
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$code = $this->code();
+		$this->on( 'live' );
+		$new = AB_MCP_Sync_Anchor::prepare_from_code( $code, 4 );
+		self::assertSame( 'ab_mcp_sync_anchor_fingerprint', AB_MCP_Sync_Anchor::confirm( $active['fingerprint'], 4 )->get_error_code() );
+		self::assertSame( $new, AB_MCP_Sync_Anchor::prepared() );
+		self::assertSame( $active, AB_MCP_Sync_Anchor::active() );
+	}
+
+	public function testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain(): void {
+		$this->paired();
+		$old  = $this->anchored();
+		$code = $this->code();
+		// The staging site renews its key; the production site confirms the new one.
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$new = $this->anchored();
+		$this->on( 'live' );
+		self::assertNotSame( $old['key_id'], $new['key_id'] );
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( $old['key_id'] ), 'The replaced key.' );
+		self::assertFalse( AB_MCP_Sync_Anchor::retired( $new['key_id'] ) );
+		self::assertFalse( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Anchor::OPTION_RETIRED ] );
+		self::assertSame( array( hash( 'sha256', $old['key_id'] ) ), get_option( AB_MCP_Sync_Anchor::OPTION_RETIRED ), 'As its SHA-256 only.' );
+		$refused = AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 );
+		self::assertSame( 'ab_mcp_sync_anchor_retired', $refused->get_error_code(), 'The old code is not prepared again.' );
+		self::assertSame( $new, AB_MCP_Sync_Anchor::active() );
+
+		// Revoked with the pair: also never again, until the staging site renews it.
+		AB_MCP_Staging::remove_pair();
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( $new['key_id'] ) );
+		AB_MCP_Staging::save( 'production', self::address( 'staging' ), null, 3, 'form' );
+		$again = $this->code();
+		$this->on( 'live' );
+		self::assertSame( 'ab_mcp_sync_anchor_retired', AB_MCP_Sync_Anchor::prepare_from_code( $again, 3 )->get_error_code() );
+		self::assertNull( AB_MCP_Sync_Anchor::active() );
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$renewed = $this->anchored();
+		self::assertNotSame( $new['key_id'], $renewed['key_id'], 'After the renewal it works.' );
+
+		// A key prepared before it was retired is not confirmed either.
+		$this->on( 'staging' );
+		$stale = AB_MCP_Sync_Key::pairing_code();
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		self::assertNotSame( $renewed['key_id'], $this->anchored()['key_id'] );
+		$this->on( 'live' );
+		self::assertSame( 'ab_mcp_sync_anchor_retired', AB_MCP_Sync_Anchor::prepare_from_code( $stale, 3 )->get_error_code(), 'The code of the key before.' );
+	}
+
+	public function testAManifestOfTheKeyBeforeIsRefusedAfterTheRenewal(): void {
+		$this->paired();
+		$this->anchored();
+		$old    = $this->signed( array( 'purpose' => 'objects' ) );
+		$expect = array( 'purpose' => 'objects', 'report_hash' => str_repeat( 'c', 64 ) );
+		$this->on( 'live' );
+		self::assertIsArray( AB_MCP_Sync_Manifest::verify( $old, $expect ), 'Read while its key is the anchor.' );
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$this->anchored();
+		$new = $this->signed( array( 'purpose' => 'objects' ) );
+		$this->on( 'live' );
+		self::assertSame( 'ab_mcp_sync_manifest_key', AB_MCP_Sync_Manifest::verify( $old, $expect )->get_error_code(), 'The key before.' );
+		self::assertIsArray( AB_MCP_Sync_Manifest::verify( $new, $expect ) );
+	}
+
+	public function testAPreparedKeyRetiredSinceIsNotConfirmed(): void {
+		$this->paired();
+		$first = $this->anchored();
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$second = $this->anchored();
+		$this->on( 'live' );
+		// The first key prepared past hold() (as before it was retired).
+		$raw             = get_option( AB_MCP_Sync_Anchor::OPTION );
+		$raw['prepared'] = array_diff_key( $raw['active'], array( 'prepared_by' => true, 'prepared_at' => true ) );
+		foreach ( array( 'source_id', 'key_id', 'public_key', 'fingerprint' ) as $field ) {
+			$raw['prepared'][ $field ] = $first[ $field ];
+		}
+		update_option( AB_MCP_Sync_Anchor::OPTION, $raw, false );
+		self::assertSame( $first['key_id'], AB_MCP_Sync_Anchor::prepared()['key_id'] );
+		self::assertSame( 'ab_mcp_sync_anchor_retired', AB_MCP_Sync_Anchor::confirm( $first['fingerprint'], 3 )->get_error_code() );
+		self::assertSame( $second['key_id'], AB_MCP_Sync_Anchor::active()['key_id'] );
+	}
+
+	public function testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten(): void {
+		$this->paired();
+		$this->on( 'live' );
+		$ids = array();
+		for ( $i = 0; $i < 51; $i++ ) {
+			$ids[] = hash( 'sha256', 'key' . $i );
+		}
+		update_option( AB_MCP_Sync_Anchor::OPTION_RETIRED, array_merge( $ids, array( 'nonsense', 7 ) ), false );
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( 'key50' ) );
+		self::assertTrue( AB_MCP_Sync_Anchor::retired( 'key1' ) );
+		self::assertFalse( AB_MCP_Sync_Anchor::retired( 'key0' ), 'Only the last fifty.' );
+		self::assertSame( 50, AB_MCP_Sync_Anchor::MAX_RETIRED );
+		$active = $this->anchored();
+		$this->on( 'live' );
+		AB_MCP_Sync_Anchor::forget();
+		$stored = get_option( AB_MCP_Sync_Anchor::OPTION_RETIRED );
+		self::assertCount( 50, $stored, 'Bounded.' );
+		self::assertSame( hash( 'sha256', $active['key_id'] ), end( $stored ), 'The newest last.' );
+		self::assertFalse( AB_MCP_Sync_Anchor::retired( 'key1' ), 'The oldest went.' );
+	}
+
+	public function testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced(): void {
+		$this->paired();
+		$old = $this->anchored();
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
+		$code = $this->code();
+		$this->on( 'live' );
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $code, 3 );
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Anchor::OPTION_RETIRED, static fn( $value, $old_value ) => $old_value, 10, 2 );
+		$refused = AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], 3 );
+		self::assertSame( 'ab_mcp_sync_anchor_retire_failed', $refused->get_error_code() );
+		self::assertSame( $old['key_id'], AB_MCP_Sync_Anchor::active()['key_id'], 'The old one stays active.' );
 	}
 
 	public function testANewKeyStaysPreparedBesideTheActiveOneUntilConfirmed(): void {
@@ -697,12 +835,17 @@ final class SyncTrustTest extends TestCase {
 		AB_MCP_Staging::save( 'production', 'https://staging.example.com', null, 3, 'form' );
 		self::assertNull( AB_MCP_Sync_Anchor::active(), 'Back to the old pair: confirmed anew, not revived.' );
 
+		// Anchored anew with a new key (the old one was revoked here).
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
 		$this->anchored();
 		$this->on( 'live' );
 		AB_MCP_Staging::remove_pair();
 		self::assertFalse( get_option( AB_MCP_Sync_Anchor::OPTION ), 'The hub takes the pair back: the anchor too.' );
 
 		$this->paired();
+		$this->on( 'staging' );
+		self::assertIsArray( AB_MCP_Sync_Key::renew() );
 		$this->anchored();
 		$this->on( 'live' );
 		AB_MCP_Staging::save( 'unconfirmed', '', null, 3, 'form' );

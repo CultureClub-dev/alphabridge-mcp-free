@@ -148,8 +148,8 @@ final class SyncSafeCallsTest extends TestCase {
 		// compares: its own options, the record of the site and its address.
 		'class-sync-anchor.php'   => array(
 			'AB_MCP_Staging::record' => array( 2, 'partner() and pair_print(): the confirmed role and pair of this site, which the anchor belongs to.' ),
-			'get_option'             => array( 1, 'read(): the anchor, an option this class writes itself (OPTION).' ),
-			'update_option'          => array( 1, 'write(): that option, without autoload.' ),
+			'get_option'             => array( 2, 'read() and retired_list(): the anchor and the key ids it retired, options this class writes itself (OPTION, OPTION_RETIRED).' ),
+			'update_option'          => array( 2, 'write() and retire(): those options, without autoload.' ),
 			'delete_option'          => array( 1, 'forget(): removes it.' ),
 			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
 		),
@@ -162,6 +162,8 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-export.php'   => array(
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
+			'AB_MCP_Staging::bind'   => array( 2, 'binding() and refusal(): the random value of the role and pair a package is bound to.' ),
+			'AB_MCP_Staging::new_bind' => array( 1, 'refusal(): that value, made where the record has none.' ),
 			'AB_MCP_Staging::record' => array( 3, 'refusal(), make() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
 			'home_url'               => array( 3, 'make(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
 		),

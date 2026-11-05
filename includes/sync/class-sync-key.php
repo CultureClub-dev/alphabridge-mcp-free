@@ -189,6 +189,10 @@ final class AB_MCP_Sync_Key {
 		}
 		$key = self::current();
 		if ( null !== $key ) {
+			// A key without the secret of its MACs gets one here as well.
+			if ( ! self::mac_ready() ) {
+				return self::mac_refusal();
+			}
 			return array(
 				'made' => false,
 				'key'  => $key,
@@ -201,6 +205,47 @@ final class AB_MCP_Sync_Key {
 		return array(
 			'made' => true,
 			'key'  => $key,
+		);
+	}
+
+	/**
+	 * Whether the key of this confirmed staging site has the secret of its
+	 * MACs; where it has none (a key stored before it, or one whose secret
+	 * went), one is made for it with the protected writer and read back.
+	 *
+	 * @return bool
+	 */
+	public static function mac_ready() {
+		$key = self::current();
+		if ( null === $key ) {
+			return false;
+		}
+		if ( null !== self::mac_secret() ) {
+			return true;
+		}
+		try {
+			$mac = bin2hex( random_bytes( 32 ) );
+		} catch ( Throwable $e ) {
+			return false;
+		}
+		self::store_secret(
+			self::OPTION_MAC,
+			array(
+				'key_id' => $key['key_id'],
+				'mac'    => $mac,
+			)
+		);
+		return self::mac_secret() === hex2bin( $mac );
+	}
+
+	/**
+	 * @return WP_Error The secret of the MACs could not be stored.
+	 */
+	public static function mac_refusal() {
+		return new WP_Error(
+			'ab_mcp_sync_mac_failed',
+			sprintf( 'This staging site has its key, but the secret its fetch addresses are signed with is missing and could not be stored in the option %s (the database refused or changed the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site, then call again; the key and its confirmation on the production site stay.', self::OPTION_MAC ),
+			array( 'option' => self::OPTION_MAC )
 		);
 	}
 

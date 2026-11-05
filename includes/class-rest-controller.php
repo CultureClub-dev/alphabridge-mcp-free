@@ -305,7 +305,7 @@ class AB_MCP_REST_Controller {
 		// route of WordPress. A request that is exactly right gets its chunk
 		// before WordPress looks for a handler; every other one goes on and
 		// is answered as for any route WordPress does not know
-		// (AB_MCP_Sync_Export::serve()).
+		// (AB_MCP_Sync_Grant::serve()).
 		add_filter( 'rest_pre_dispatch', array( $this, 'serve_package' ), 10, 3 );
 
 		// Apply the no-referrer / no-store headers to EVERY response from these
@@ -353,8 +353,9 @@ class AB_MCP_REST_Controller {
 	}
 
 	/**
-	 * The route of the chunks of a staging site's packages, loaded only for
-	 * its path (AB_MCP_Sync_Export::serve()).
+	 * The route of the chunks of a staging site's packages
+	 * (AB_MCP_Sync_Grant::serve(), loaded with the plugin: the MAC is checked
+	 * before the export is loaded).
 	 *
 	 * @param mixed           $result  Response another filter already chose, or null.
 	 * @param WP_REST_Server  $server  Server.
@@ -365,8 +366,7 @@ class AB_MCP_REST_Controller {
 		if ( ! is_object( $request ) || '/' . AB_MCP_REST_NAMESPACE . '/staging-package' !== $request->get_route() ) {
 			return $result;
 		}
-		require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
-		return AB_MCP_Sync_Export::serve( $result, $server, $request );
+		return AB_MCP_Sync_Grant::serve( $result, $server, $request );
 	}
 
 	/**

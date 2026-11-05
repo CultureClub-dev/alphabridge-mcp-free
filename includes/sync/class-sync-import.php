@@ -10,8 +10,11 @@
  * manifest; this site keeps it in a group of the area in of the protected
  * store, of the account that brought it, and checks it again on every call
  * after, so a new key, another pair or the end of its day stops the package
- * where it is. Another account does not see that group: it begins a group
- * of its own. Then it takes chunks, each checked against its SHA-256 in the
+ * where it is; with it the print of the pair it was begun with
+ * (AB_MCP_Sync_Anchor::pair_print()), and a call after the role, the pair or
+ * the anchor changed ends the group (decision 15), as one that holds it for
+ * a purpose this version does not take. Another account does not see that
+ * group: it begins a group of its own. Then it takes chunks, each checked against its SHA-256 in the
  * manifest before it is stored (AB_MCP_Sync_Manifest::chunk()):
  *
  *  - relayed: the client hands the bytes over as base64 (data), over https
@@ -148,7 +151,7 @@ final class AB_MCP_Sync_Import {
 	 * @return string
 	 */
 	public static function url( $partner, $package_id, $chunk, $expires, $signature ) {
-		return AB_MCP_Sync_Key::site_form( $partner ) . '/?rest_route=/' . AB_MCP_REST_NAMESPACE . AB_MCP_Sync_Export::ROUTE
+		return AB_MCP_Sync_Key::site_form( $partner ) . '/?rest_route=/' . AB_MCP_REST_NAMESPACE . AB_MCP_Sync_Grant::ROUTE
 			. '&package=' . $package_id . '&chunk=' . (int) $chunk . '&expires=' . (int) $expires . '&sig=' . $signature;
 	}
 
@@ -180,12 +183,26 @@ final class AB_MCP_Sync_Import {
 			}
 			return self::begin( $checked['manifest'], $a['manifest'], $expect );
 		}
+		// What it was begun for, before anything else of it is read: a
+		// purpose this version takes (a group of another version, or one
+		// changed in the store, is ended; verify() holds it to this package).
+		$expect = $found['expect'];
+		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
+			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site held the package for a purpose this version does not take (it takes purpose=%s only), so what arrived of it was removed. Call again with the manifest and purpose=%s as wp_site_export gave them on the staging site.', AB_MCP_Sync_Export::PURPOSES[0], AB_MCP_Sync_Export::PURPOSES[0] ) );
+		}
 		if ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] ) || array( 'manifest', 'signature' ) !== self::sorted_keys( $a['manifest'] ) || $found['signed']['manifest'] !== $a['manifest']['manifest'] || $found['signed']['signature'] !== $a['manifest']['signature'] ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_other_manifest', 'This site holds the package with another manifest than the one passed now. Pass the manifest of the first call, or leave it out.' );
 		}
-		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $found['expect'] );
+		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
 		if ( is_wp_error( $checked ) ) {
 			return $checked;
+		}
+		// The pair it was begun with (decision 15): a new confirmation of the
+		// role, another pair or another anchor ends it.
+		if ( null === $found['print'] || ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {
+			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
+			return new WP_Error( 'ab_mcp_sync_import_pair_changed', 'The role of this site, its pair or the confirmed key of the staging site changed since this package was begun, so it is not continued, and what arrived of it was removed. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.' );
 		}
 		return $found;
 	}
@@ -218,7 +235,9 @@ final class AB_MCP_Sync_Import {
 	 * @return array|WP_Error held().
 	 */
 	private static function begin( array $manifest, array $signed, array $expect ) {
-		$gid = AB_MCP_Protected_Store::open(
+		// verify() read the manifest with the active anchor: there is a print.
+		$print = AB_MCP_Sync_Anchor::pair_print();
+		$gid   = AB_MCP_Protected_Store::open(
 			'in',
 			array(
 				'declared' => $manifest['bytes'] + self::RECORD_MAX,
@@ -233,6 +252,7 @@ final class AB_MCP_Sync_Import {
 				'expect'    => $expect,
 				'format'    => self::RECORD,
 				'manifest'  => $signed['manifest'],
+				'print'     => $print,
 				'signature' => $signed['signature'],
 			)
 		);
@@ -249,6 +269,7 @@ final class AB_MCP_Sync_Import {
 				'signature' => $signed['signature'],
 			),
 			'expect'   => $expect,
+			'print'    => $print,
 		);
 	}
 
@@ -290,6 +311,7 @@ final class AB_MCP_Sync_Import {
 					'signature' => $record['signature'],
 				),
 				'expect'   => $record['expect'],
+				'print'    => isset( $record['print'] ) && is_string( $record['print'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['print'] ) ? $record['print'] : null,
 			);
 		}
 		return null;

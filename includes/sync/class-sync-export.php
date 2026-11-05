@@ -36,21 +36,12 @@
  *
  * HOW IT LEAVES THE SITE.
  *
- * 1. Direct: the production site asks the route ROUTE of this site for each
+ * 1. Direct: the production site asks the route of this site for each
  *    chunk, at an address it builds itself from the address of its staging
- *    site (AB_MCP_Sync_Import), with four values from the client: the
- *    package, the chunk, until when, and the signature of this site over
- *    those three (grants(): a MAC with the secret this site keeps for its
- *    MACs, AB_MCP_Sync_Key::mac(), valid GRANT_TTL seconds). The MAC is
- *    checked before anything else is read, so a wrong one costs what an
- *    unknown route costs. The route is no route of WordPress: serve()
- *    answers on rest_pre_dispatch a request that is exactly right and
- *    returns every other one to WordPress, which answers it as it answers a
- *    route it does not know (rest_no_route), byte for byte; so is a
- *    signature that is wrong, late or for another chunk, a package that is
- *    gone, another method, any other parameter. The chunk is sent as it is
- *    (send()), nothing is redirected. The known limit (decision 6): whoever
- *    sees such an address within its ten minutes reads that chunk.
+ *    site (AB_MCP_Sync_Import), with the four values of a fetch address
+ *    this site signed (AB_MCP_Sync_Grant: the route, its MAC, the known
+ *    limit of ten minutes). With a MAC of this site, deliver() gives the
+ *    chunk of a package this site keeps and that is bound as it is now.
  * 2. Relay: wp_site_export_chunk gives a chunk of a package this account
  *    made as base64 to the client, which hands it to wp_site_import_chunk
  *    on the production site. Both refuse a request that did not come over
@@ -67,6 +58,7 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/class-protected-store.php';
 require_once dirname( __DIR__ ) . '/class-outbound.php';
 require_once __DIR__ . '/class-sync-manifest.php';
+require_once __DIR__ . '/class-sync-grant.php';
 require_once __DIR__ . '/class-sync-inventory.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 
@@ -74,15 +66,6 @@ require_once __DIR__ . '/class-sync-db-kinds.php';
  * Class AB_MCP_Sync_Export
  */
 final class AB_MCP_Sync_Export {
-
-	/** The route of the chunks, in the namespace of the plugin. */
-	const ROUTE = '/staging-package';
-
-	/** Seconds a signed fetch address is valid (decision 6). */
-	const GRANT_TTL = 600;
-
-	/** The purpose of the MAC of a fetch address (AB_MCP_Sync_Key::mac()). */
-	const MAC = 'ab-sync-fetch/1';
 
 	/** The format of the record of a package in its group. */
 	const RECORD = 'ab-sync-export/1';
@@ -93,21 +76,31 @@ final class AB_MCP_Sync_Export {
 	/** Bytes of the lines of one chunk at most: its gzip stays within MAX_CHUNK. */
 	const SLICE = 5177344;
 
+	/**
+	 * Seconds after which a group of the area out without its record is a
+	 * making that ended between its chunks and its record and is discarded
+	 * (discard_stale()); a making writes both within seconds.
+	 */
+	const ABANDONED = 600;
+
 	/** Objects one package reads at most (see the class). */
 	const OBJECTS = 4000;
 
 	/** The purposes this version makes packages for. */
 	const PURPOSES = array( 'inventory' );
 
-	/** The parameters of the route, sorted. */
-	const QUERY = array( 'chunk', 'expires', 'package', 'sig' );
-
 	/**
-	 * The response serve() accepted and its bytes, until send() writes them.
-	 *
-	 * @var array{0:WP_REST_Response,1:string}|null
+	 * The operations of the locks the credential check gives (line()): a
+	 * field of a credential and a post protected by a password
+	 * (AB_MCP_Sync_Credentials::column(), ::note()), a unit it could not
+	 * read to its end with its why (a script, HTML outside kses, an object,
+	 * a value that does not unpack or nests too deep), a name of a
+	 * credential in a layer no reader read (AB_MCP_Sync_Net). The readers
+	 * of the canonical form give the last two of the unread for the same
+	 * values; they count as well (fail closed).
 	 */
-	private static $serving = null;
+	const CREDENTIAL_LOCKS = array( 'credential_field', 'password_protected', 'script', 'html_outside_kses', 'php_object', 'unreadable_value', 'unread_credential' );
+
 
 	/* --------------------------------------------------------------- make */
 
@@ -199,12 +192,13 @@ final class AB_MCP_Sync_Export {
 	 * The line of an object in a package of the inventory, from a list of
 	 * what it may carry (contract A): its identity, status and locks with
 	 * their reasons, and unless a credential holds it (a name of a
-	 * credential, B9, or a field of one in it), its hash, size, whether it
-	 * was read whole, what was not read, its references by id, the places
-	 * of possible references and of the units left out as credentials. Of
-	 * its content nothing: a possible reference only by its place, never its
-	 * value; what the inventory adds later is not in it until it stands on
-	 * this list.
+	 * credential, B9, a field of one in it, or any lock of the credential
+	 * check, CREDENTIAL_LOCKS), its hash, size, whether it was read whole,
+	 * what was not read, its references by id, the places of possible
+	 * references and of the units left out as credentials. Of its content
+	 * nothing: a possible reference only by its place, never its value;
+	 * what the inventory adds later is not in it until it stands on this
+	 * list.
 	 *
 	 * @param array $object An object of the inventory (AB_MCP_Sync_Inventory::entry()).
 	 * @return array
@@ -221,7 +215,7 @@ final class AB_MCP_Sync_Export {
 			$line['reason'] = (string) $object['reason'];
 		}
 		$credentials = $object['credentials'];
-		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] ) {
+		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
 			return $line;
 		}
 		return $line + array(
@@ -234,6 +228,24 @@ final class AB_MCP_Sync_Export {
 			'possible' => self::fields( $object['possible'], array( 'at' ) ),
 			'b9'       => array_values( array_map( 'strval', $credentials['b9'] ) ),
 		);
+	}
+
+	/**
+	 * Whether a lock of the credential check is among the locks of an
+	 * object (by the operation of its key, kind:operation).
+	 *
+	 * @param array $locks Locks.
+	 * @return bool
+	 */
+	private static function credential_locked( array $locks ) {
+		foreach ( $locks as $lock ) {
+			$key = isset( $lock['key'] ) ? (string) $lock['key'] : '';
+			$op  = false === strpos( $key, ':' ) ? $key : (string) substr( $key, strpos( $key, ':' ) + 1 );
+			if ( in_array( $op, self::CREDENTIAL_LOCKS, true ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -453,44 +465,6 @@ final class AB_MCP_Sync_Export {
 	}
 
 	/**
-	 * The fetch addresses of a package: per chunk until when and the MAC of
-	 * this site over package, chunk and that time.
-	 *
-	 * @param string   $package_id Package.
-	 * @param int      $count      Chunks.
-	 * @param int|null $now        Time; now when null.
-	 * @return array[]|WP_Error chunk, expires, signature.
-	 */
-	public static function grants( $package_id, $count, $now = null ) {
-		$expires = ( null === $now ? time() : (int) $now ) + self::GRANT_TTL;
-		$out     = array();
-		for ( $i = 0; $i < (int) $count; $i++ ) {
-			$mac = AB_MCP_Sync_Key::mac( self::MAC, self::grant_text( $package_id, $i, $expires ) );
-			if ( null === $mac ) {
-				return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
-			}
-			$out[] = array(
-				'chunk'     => $i,
-				'expires'   => $expires,
-				'signature' => $mac,
-			);
-		}
-		return $out;
-	}
-
-	/**
-	 * What a fetch address signs.
-	 *
-	 * @param string $package_id Package.
-	 * @param int    $chunk      Chunk.
-	 * @param int    $expires    Until when.
-	 * @return string
-	 */
-	public static function grant_text( $package_id, $chunk, $expires ) {
-		return (string) $package_id . "\n" . (int) $chunk . "\n" . (int) $expires;
-	}
-
-	/**
 	 * The name of a chunk in its group.
 	 *
 	 * @param int $chunk Index.
@@ -520,71 +494,29 @@ final class AB_MCP_Sync_Export {
 	/* -------------------------------------------------------------- route */
 
 	/**
-	 * The route of the chunks, on rest_pre_dispatch: a request that is
-	 * exactly right gets its chunk; every other one goes on to WordPress,
-	 * which knows no such route and answers as for any it does not know.
-	 *
-	 * @param mixed           $result  What another filter chose, or null.
-	 * @param WP_REST_Server  $server  Server (unused).
-	 * @param WP_REST_Request $request Request.
-	 * @return mixed
-	 */
-	public static function serve( $result, $server, $request ) {
-		unset( $server );
-		// Like WordPress, which serves whatever is not empty here.
-		if ( ! empty( $result ) || ! $request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route() ) {
-			return $result;
-		}
-		$bytes = self::requested( $request, time() );
-		if ( null === $bytes ) {
-			return $result;
-		}
-		$response = new WP_REST_Response( null, 200 );
-		$response->header( 'Content-Type', 'application/octet-stream' );
-		$response->header( 'Cache-Control', 'no-store' );
-		$response->header( 'X-Content-Type-Options', 'nosniff' );
-		self::$serving = array( $response, $bytes );
-		if ( false === has_filter( 'rest_pre_serve_request', array( __CLASS__, 'send' ) ) ) {
-			add_filter( 'rest_pre_serve_request', array( __CLASS__, 'send' ), 10, 3 );
-		}
-		return $response;
-	}
-
-	/**
-	 * Send the bytes of the response serve() accepted, as they are (on
-	 * rest_pre_serve_request, after WordPress sent status and headers).
-	 *
-	 * @param bool             $served  Whether the request was served.
-	 * @param WP_REST_Response $result  Response.
-	 * @param WP_REST_Request  $request Request (unused).
-	 * @return bool
-	 */
-	public static function send( $served, $result, $request ) {
-		unset( $request );
-		if ( $served || null === self::$serving || self::$serving[0] !== $result ) {
-			return $served;
-		}
-		$bytes         = self::$serving[1];
-		self::$serving = null;
-		echo $bytes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the bytes of a chunk, application/octet-stream.
-		return true;
-	}
-
-	/**
-	 * The bytes a request of the route asks for, or null for every request
-	 * that is not exactly right (grant()), for a package this site does not
-	 * keep or that has expired, and for a chunk it does not have; read
-	 * against the hash of the chunk in the manifest.
+	 * The bytes a request of the route asks for, or null: the request is
+	 * checked by AB_MCP_Sync_Grant::grant() first, then deliver().
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @param int             $now     Time.
 	 * @return string|null
 	 */
 	public static function requested( WP_REST_Request $request, $now ) {
-		$grant = self::grant( $request, $now );
-		if ( null === $grant ) {
-			return null;
-		}
+		$grant = AB_MCP_Sync_Grant::grant( $request, $now );
+		return null === $grant ? null : self::deliver( $grant, $now );
+	}
+
+	/**
+	 * The chunk a request signed by this site asks for (AB_MCP_Sync_Grant::
+	 * grant() checked it), or null for a package this site does not keep,
+	 * that is not bound as this site is now or has expired, and for a chunk
+	 * it does not have; read against the hash of the chunk in the manifest.
+	 *
+	 * @param array{package:string,chunk:int} $grant What the request is signed for.
+	 * @param int                             $now   Time.
+	 * @return string|null
+	 */
+	public static function deliver( array $grant, $now ) {
 		$found = self::find( $grant['package'] );
 		if ( ! is_array( $found ) || ! self::bound( $found ) || $found['manifest']['expires'] <= $now || ! isset( $found['manifest']['chunks'][ $grant['chunk'] ] ) ) {
 			return null;
@@ -593,53 +525,13 @@ final class AB_MCP_Sync_Export {
 		return is_string( $data ) ? $data : null;
 	}
 
-	/**
-	 * What a request of the route is signed for, or null where it is not
-	 * exactly right: GET without a body, the four parameters and no other
-	 * (rest_route aside, which routed it), chunk and until when in their one
-	 * spelling, until when later than now and at most GRANT_TTL from now,
-	 * and the MAC of this site over package, chunk and that time (which
-	 * holds package and signature to their one spelling: another one is
-	 * another text or another code).
-	 *
-	 * @param WP_REST_Request $request Request.
-	 * @param int             $now     Time.
-	 * @return array{package:string,chunk:int}|null
-	 */
-	public static function grant( WP_REST_Request $request, $now ) {
-		$query = $request->get_query_params();
-		unset( $query['rest_route'] );
-		if ( 'GET' !== $request->get_method() || self::QUERY !== self::sorted_keys( $query ) || array() !== $request->get_body_params() || '' !== (string) $request->get_body() ) {
-			return null;
-		}
-		foreach ( $query as $value ) {
-			if ( ! is_string( $value ) ) {
-				return null;
-			}
-		}
-		if ( 1 !== preg_match( '/^(0|[1-9][0-9]{0,3})\z/', $query['chunk'] ) || 1 !== preg_match( '/^[1-9][0-9]{0,11}\z/', $query['expires'] ) ) {
-			return null;
-		}
-		$chunk   = (int) $query['chunk'];
-		$expires = (int) $query['expires'];
-		if ( $expires <= $now || $expires > $now + self::GRANT_TTL ) {
-			return null;
-		}
-		$mac = AB_MCP_Sync_Key::mac( self::MAC, self::grant_text( $query['package'], $chunk, $expires ) );
-		if ( null === $mac || ! hash_equals( $mac, $query['sig'] ) ) {
-			return null;
-		}
-		return array(
-			'package' => $query['package'],
-			'chunk'   => $chunk,
-		);
-	}
-
 	/* ------------------------------------------------------------ private */
 
 	/**
 	 * Why this site makes or gives out no package: a network, no confirmed
-	 * staging site with a pair, no usable key.
+	 * staging site with a pair, no usable key; the secret of the MACs of a
+	 * key and the value of bind() are made where missing, and refused only
+	 * where they cannot be stored.
 	 *
 	 * @return WP_Error|null
 	 */
@@ -655,6 +547,16 @@ final class AB_MCP_Sync_Export {
 		}
 		if ( null === AB_MCP_Sync_Key::current() ) {
 			return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
+		}
+		// A key without the secret of its MACs gets one (a key stored before
+		// it, or one whose secret went); the way where it cannot be stored.
+		if ( ! AB_MCP_Sync_Key::mac_ready() ) {
+			return AB_MCP_Sync_Key::mac_refusal();
+		}
+		// A record of the role and pair without the value a package binds to
+		// gets one; nothing made before was bound to it.
+		if ( null === AB_MCP_Staging::bind() && null === AB_MCP_Staging::new_bind() ) {
+			return new WP_Error( 'ab_mcp_sync_export_unbound', 'No package was made: the value a package of this staging site is bound to could not be stored with the role and pair in the options of this site (the database refused the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site and that PHP has random bytes, then call again.' );
 		}
 		return null;
 	}
@@ -756,7 +658,7 @@ final class AB_MCP_Sync_Export {
 	 * @return array|WP_Error
 	 */
 	private static function answer( array $manifest, array $signed, $cursor ) {
-		$grants = self::grants( $manifest['package_id'], count( $manifest['chunks'] ) );
+		$grants = AB_MCP_Sync_Grant::grants( $manifest['package_id'], count( $manifest['chunks'] ) );
 		if ( is_wp_error( $grants ) ) {
 			return $grants;
 		}
@@ -812,7 +714,8 @@ final class AB_MCP_Sync_Export {
 	public static function binding() {
 		$key    = AB_MCP_Sync_Key::current();
 		$record = AB_MCP_Staging::record();
-		if ( null === $key || null === $record['pair'] ) {
+		$bind   = AB_MCP_Staging::bind();
+		if ( null === $key || null === $record['pair'] || null === $bind ) {
 			return null;
 		}
 		$role = $record['role'];
@@ -821,6 +724,7 @@ final class AB_MCP_Sync_Export {
 			'sha256',
 			AB_MCP_Sync_Canon::encode(
 				array(
+					'bind'   => $bind,
 					'key'    => array( $key['source_id'], $key['key_id'] ),
 					'source' => AB_MCP_Sync_Key::site_form( home_url() ),
 					'role'   => array( $role['value'], $role['user_id'], $role['source'], $role['at'] ),
@@ -848,8 +752,9 @@ final class AB_MCP_Sync_Export {
 
 	/**
 	 * Discard every package of this site that is not bound as it is now
-	 * (another pair, another key): before a new one is made, so they hold
-	 * no place in the budgets.
+	 * (another pair, another key), and every group of a making that ended
+	 * before its record, ABANDONED seconds after it began: before a new one
+	 * is made, so they hold no place in the budgets.
 	 */
 	private static function discard_stale() {
 		$groups  = AB_MCP_Protected_Store::groups( 'out' );
@@ -858,6 +763,10 @@ final class AB_MCP_Sync_Export {
 			$found = self::find( $group['gid'] );
 			if ( is_array( $found ) ) {
 				self::bound( $found, $binding );
+			} elseif ( null === $found && $group['created'] < time() - self::ABANDONED ) {
+				// A making that ended between its chunks and its record (the
+				// process stopped): never given out, and no longer counted.
+				AB_MCP_Protected_Store::remove( 'out', $group['gid'] );
 			}
 		}
 	}

@@ -38,6 +38,7 @@ namespace AlphaBridge\Tests;
 use AB_MCP_Staging;
 use AB_MCP_Staging_Gate;
 use AB_MCP_Sync_Export;
+use AB_MCP_Sync_Grant;
 use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Key;
 use AB_MCP_Sync_Kinds;
@@ -183,7 +184,7 @@ final class SyncPackageTest extends TestCase {
 	public function testTheGzipOfTheLargestSliceStaysWithinAChunk(): void {
 		self::assertSame( AB_MCP_Sync_Manifest::MAX_CHUNK - 65536, AB_MCP_Sync_Export::SLICE );
 		self::assertSame( AB_MCP_Sync_Manifest::MAX_OBJECTS - 1000, AB_MCP_Sync_Export::OBJECTS );
-		self::assertSame( 600, AB_MCP_Sync_Export::GRANT_TTL );
+		self::assertSame( 600, AB_MCP_Sync_Grant::GRANT_TTL );
 		// Text that does not compress: one line of a full slice.
 		$text   = substr( base64_encode( random_bytes( AB_MCP_Sync_Export::SLICE ) ), 0, AB_MCP_Sync_Export::SLICE - 12 );
 		$packed = AB_MCP_Sync_Export::pack( array( array( 't' => $text ) ) );
@@ -255,17 +256,17 @@ final class SyncPackageTest extends TestCase {
 	public function testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grants = AB_MCP_Sync_Export::grants( self::ID, 2, 1000 );
+		$grants = AB_MCP_Sync_Grant::grants( self::ID, 2, 1000 );
 		self::assertSame( array( 0, 1 ), array_column( $grants, 'chunk' ) );
 		self::assertSame( array( 1600, 1600 ), array_column( $grants, 'expires' ) );
 		self::assertSame( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', self::ID . "\n1\n1600" ), $grants[1]['signature'] );
 		self::assertMatchesRegularExpression( '/^[0-9a-f]{64}\z/', $grants[0]['signature'] );
 		self::assertNotSame( $grants[0]['signature'], $grants[1]['signature'] );
-		self::assertSame( self::ID . "\n1\n1600", AB_MCP_Sync_Export::grant_text( self::ID, 1, 1600 ) );
+		self::assertSame( self::ID . "\n1\n1600", AB_MCP_Sync_Grant::grant_text( self::ID, 1, 1600 ) );
 		self::assertSame( 'chunk-0007', AB_MCP_Sync_Export::chunk_name( 7 ) );
 
 		$this->on( 'live' );
-		$none = AB_MCP_Sync_Export::grants( self::ID, 2, 1000 );
+		$none = AB_MCP_Sync_Grant::grants( self::ID, 2, 1000 );
 		self::assertInstanceOf( \WP_Error::class, $none, 'The production site has no key.' );
 		self::assertSame( 'ab_mcp_sync_key_missing', $none->get_error_code() );
 	}
@@ -320,10 +321,10 @@ final class SyncPackageTest extends TestCase {
 	public function testANewKeyMakesEveryFetchAddressBeforeItWorthless(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grant = AB_MCP_Sync_Export::grants( self::ID, 1, 1000 )[0];
-		self::assertNotNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), 1000 ) );
+		$grant = AB_MCP_Sync_Grant::grants( self::ID, 1, 1000 )[0];
+		self::assertNotNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), 1000 ) );
 		self::assertIsArray( AB_MCP_Sync_Key::renew() );
-		self::assertNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), 1000 ) );
+		self::assertNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), 1000 ) );
 	}
 
 	/* ---------------------------------------------------------- the route */
@@ -332,7 +333,7 @@ final class SyncPackageTest extends TestCase {
 	private static function request( array $query, string $method = 'GET' ): WP_REST_Request {
 		$request = new WP_REST_Request();
 		$request->set_method( $method );
-		$request->set_route( '/alphabridge/v1' . AB_MCP_Sync_Export::ROUTE );
+		$request->set_route( '/alphabridge/v1' . AB_MCP_Sync_Grant::ROUTE );
 		$request->set_query_params( $query );
 		return $request;
 	}
@@ -350,11 +351,11 @@ final class SyncPackageTest extends TestCase {
 	public function testTheRouteTakesARequestThatIsExactlyRight(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grant = AB_MCP_Sync_Export::grants( self::ID, 3, 1000 )[2];
-		self::assertSame( array( 'package' => self::ID, 'chunk' => 2 ), AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), 1000 ) );
-		self::assertSame( array( 'package' => self::ID, 'chunk' => 2 ), AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) + array( 'rest_route' => '/alphabridge/v1/staging-package' ) ), 1000 ), 'rest_route routed it.' );
-		self::assertNotNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), 1599 ), 'A second before its end.' );
-		self::assertSame( array( 'chunk', 'expires', 'package', 'sig' ), AB_MCP_Sync_Export::QUERY );
+		$grant = AB_MCP_Sync_Grant::grants( self::ID, 3, 1000 )[2];
+		self::assertSame( array( 'package' => self::ID, 'chunk' => 2 ), AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), 1000 ) );
+		self::assertSame( array( 'package' => self::ID, 'chunk' => 2 ), AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) + array( 'rest_route' => '/alphabridge/v1/staging-package' ) ), 1000 ), 'rest_route routed it.' );
+		self::assertNotNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), 1599 ), 'A second before its end.' );
+		self::assertSame( array( 'chunk', 'expires', 'package', 'sig' ), AB_MCP_Sync_Grant::QUERY );
 	}
 
 	/** @return array<string,array{0:callable}> What turns a right request into another one. */
@@ -390,12 +391,12 @@ final class SyncPackageTest extends TestCase {
 	public function testEveryOtherRequestIsNone( ?callable $change, string $method = 'GET', array $form = array(), string $body = '' ): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grant   = AB_MCP_Sync_Export::grants( self::ID, 3, 1000 )[2];
+		$grant   = AB_MCP_Sync_Grant::grants( self::ID, 3, 1000 )[2];
 		$query   = null === $change ? self::query( $grant ) : $change( self::query( $grant ) );
 		$request = self::request( $query, $method );
 		$request->set_body_params( $form );
 		$request->set_body( $body );
-		self::assertNull( AB_MCP_Sync_Export::grant( $request, 1000 ) );
+		self::assertNull( AB_MCP_Sync_Grant::grant( $request, 1000 ) );
 	}
 
 	/** @return array<string,array{0:int,1:int}> Time the address is signed at, time it is asked. */
@@ -412,17 +413,17 @@ final class SyncPackageTest extends TestCase {
 	public function testAFetchAddressHoldsTenMinutesFromNowAtMost( int $signed, int $asked ): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grant = AB_MCP_Sync_Export::grants( self::ID, 1, $signed )[0];
-		self::assertNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), $asked ) );
-		self::assertNotNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), $signed ), 'Within its time.' );
+		$grant = AB_MCP_Sync_Grant::grants( self::ID, 1, $signed )[0];
+		self::assertNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), $asked ) );
+		self::assertNotNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), $signed ), 'Within its time.' );
 	}
 
 	public function testOnTheProductionSiteNoRequestIsRight(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		$grant = AB_MCP_Sync_Export::grants( self::ID, 1, 1000 )[0];
+		$grant = AB_MCP_Sync_Grant::grants( self::ID, 1, 1000 )[0];
 		$this->on( 'live' );
-		self::assertNull( AB_MCP_Sync_Export::grant( self::request( self::query( $grant ) ), 1000 ) );
+		self::assertNull( AB_MCP_Sync_Grant::grant( self::request( self::query( $grant ) ), 1000 ) );
 	}
 
 	public function testEveryOtherRequestAndPathGoesOnToWordPress(): void {
@@ -431,19 +432,19 @@ final class SyncPackageTest extends TestCase {
 		\AB_MCP_Protected_Store::forget();
 		$this->paired();
 		$this->on( 'staging' );
-		$grant = AB_MCP_Sync_Export::grants( self::ID, 1, time() )[0];
+		$grant = AB_MCP_Sync_Grant::grants( self::ID, 1, time() )[0];
 		$other = self::request( self::query( $grant ) );
 		$other->set_route( '/alphabridge/v1/staging-key' );
-		self::assertNull( AB_MCP_Sync_Export::serve( null, null, $other ), 'Another path.' );
-		self::assertSame( 'x', AB_MCP_Sync_Export::serve( 'x', null, self::request( self::query( $grant ) ) ), 'What another filter chose.' );
-		self::assertNull( AB_MCP_Sync_Export::serve( null, null, self::request( array() ) ), 'A request that is not right.' );
-		self::assertNull( AB_MCP_Sync_Export::serve( null, null, self::request( self::query( $grant ) ) ), 'A right request for a package this site does not keep.' );
-		self::assertNull( AB_MCP_Sync_Export::serve( null, null, null ) );
-		self::assertTrue( AB_MCP_Sync_Export::send( true, null, null ), 'What another filter served stays served.' );
-		self::assertFalse( AB_MCP_Sync_Export::send( false, new \WP_REST_Response( null ), null ), 'An answer serve() did not accept is not written.' );
+		self::assertNull( AB_MCP_Sync_Grant::serve( null, null, $other ), 'Another path.' );
+		self::assertSame( 'x', AB_MCP_Sync_Grant::serve( 'x', null, self::request( self::query( $grant ) ) ), 'What another filter chose.' );
+		self::assertNull( AB_MCP_Sync_Grant::serve( null, null, self::request( array() ) ), 'A request that is not right.' );
+		self::assertNull( AB_MCP_Sync_Grant::serve( null, null, self::request( self::query( $grant ) ) ), 'A right request for a package this site does not keep.' );
+		self::assertNull( AB_MCP_Sync_Grant::serve( null, null, null ) );
+		self::assertTrue( AB_MCP_Sync_Grant::send( true, null, null ), 'What another filter served stays served.' );
+		self::assertFalse( AB_MCP_Sync_Grant::send( false, new \WP_REST_Response( null ), null ), 'An answer serve() did not accept is not written.' );
 
 		// Through the REST server: answered as a route WordPress does not know.
-		add_filter( 'rest_pre_dispatch', array( 'AB_MCP_Sync_Export', 'serve' ), 10, 3 );
+		add_filter( 'rest_pre_dispatch', array( 'AB_MCP_Sync_Grant', 'serve' ), 10, 3 );
 		$unknown = new WP_REST_Request();
 		$unknown->set_method( 'GET' );
 		$unknown->set_route( '/alphabridge/v1/staging-nothing' );
@@ -501,6 +502,77 @@ final class SyncPackageTest extends TestCase {
 			self::assertSame( 'ab_mcp_sync_multisite', AB_MCP_Sync_Export::$method( ...$args )->get_error_code(), $method . ': a network.' );
 		}
 		self::assertStringContainsString( 'wp_export_content', AB_MCP_Sync_Export::multisite()->get_error_message() );
+	}
+
+	public function testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck(): void {
+		$this->paired();
+		$this->on( 'staging' );
+		$key  = AB_MCP_Sync_Key::current();
+		$kept = get_option( AB_MCP_Sync_Key::OPTION_MAC );
+		self::assertTrue( AB_MCP_Sync_Key::mac_ready() );
+		self::assertSame( $kept, get_option( AB_MCP_Sync_Key::OPTION_MAC ), 'A secret that is there stays.' );
+		delete_option( AB_MCP_Sync_Key::OPTION_MAC );
+		self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ), 'No secret, no MAC.' );
+		// The next export makes it: refused for the package, not for the key.
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertNotNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ) );
+		self::assertSame( $key, AB_MCP_Sync_Key::current(), 'The key and its confirmation stay.' );
+		self::assertFalse( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Key::OPTION_MAC ] );
+		// So does make() of the key.
+		delete_option( AB_MCP_Sync_Key::OPTION_MAC );
+		$made = AB_MCP_Sync_Key::make();
+		self::assertFalse( $made['made'] );
+		self::assertSame( $key, $made['key'] );
+		self::assertNotNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ) );
+		// A secret of another key id is none and is made anew.
+		$raw           = get_option( AB_MCP_Sync_Key::OPTION_MAC );
+		$raw['key_id'] = str_repeat( '0', 32 );
+		update_option( AB_MCP_Sync_Key::OPTION_MAC, $raw, false );
+		self::assertTrue( AB_MCP_Sync_Key::mac_ready() );
+		self::assertSame( $key['key_id'], get_option( AB_MCP_Sync_Key::OPTION_MAC )['key_id'] );
+		// A write that does not stick: the way, which names the option.
+		delete_option( AB_MCP_Sync_Key::OPTION_MAC );
+		add_filter( 'pre_update_option_' . AB_MCP_Sync_Key::OPTION_MAC, static fn( $value, $old ) => $old, 10, 2 );
+		self::assertFalse( AB_MCP_Sync_Key::mac_ready() );
+		$refused = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertSame( 'ab_mcp_sync_mac_failed', $refused->get_error_code() );
+		self::assertStringContainsString( AB_MCP_Sync_Key::OPTION_MAC, $refused->get_error_message() );
+		self::assertSame( 'ab_mcp_sync_mac_failed', AB_MCP_Sync_Key::make()->get_error_code() );
+		AB_MCP_Sync_Key::forget();
+		self::assertFalse( AB_MCP_Sync_Key::mac_ready(), 'No key, nothing to make it for.' );
+	}
+
+	public function testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding(): void {
+		$this->paired();
+		$this->on( 'staging' );
+		$first = AB_MCP_Sync_Export::binding();
+		$was   = get_option( 'ab_mcp_options' )['staging'];
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', 'https://shop.example.com', null, 3, 'form' ) );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', self::address( 'live' ), null, 3, 'form' ) );
+		$opts = get_option( 'ab_mcp_options' );
+		$bind = $opts['staging']['bind'];
+		self::assertNotSame( $was['bind'], $bind );
+		// All as it was, who and when to the second, but the random value.
+		$opts['staging'] = array( 'bind' => $bind ) + $was;
+		update_option( 'ab_mcp_options', $opts );
+		self::assertNotSame( $first, AB_MCP_Sync_Export::binding() );
+		$opts['staging']['bind'] = $was['bind'];
+		update_option( 'ab_mcp_options', $opts );
+		self::assertSame( $first, AB_MCP_Sync_Export::binding(), 'Only the random value differed.' );
+		// Without it no binding; the next export makes one.
+		unset( $opts['staging']['bind'] );
+		update_option( 'ab_mcp_options', $opts );
+		self::assertNull( AB_MCP_Sync_Export::binding() );
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertNotNull( AB_MCP_Staging::bind() );
+		self::assertNotSame( $first, AB_MCP_Sync_Export::binding() );
+		// Where it cannot be stored: no package, and the way.
+		$opts = get_option( 'ab_mcp_options' );
+		unset( $opts['staging']['bind'] );
+		update_option( 'ab_mcp_options', $opts );
+		add_filter( 'pre_update_option_ab_mcp_options', static fn( $value, $old ) => $old, 10, 2 );
+		self::assertNull( AB_MCP_Staging::new_bind() );
+		self::assertSame( 'ab_mcp_sync_export_unbound', AB_MCP_Sync_Export::make( 'inventory' )->get_error_code() );
 	}
 
 	public function testThisVersionMakesPackagesOfTheInventoryOnly(): void {
@@ -680,10 +752,39 @@ final class SyncPackageTest extends TestCase {
 
 	/** @return array<string,array{0:array}> */
 	public static function heldByACredential(): array {
-		return array(
+		$out = array(
 			'a field of a credential in it' => array( array( 'credentials' => array( 'b9' => array(), 'mixed' => array( array( 'unit' => 'meta:service_settings', 'fields' => array( 'api_key' ) ) ) ) ) ),
 			'the name of a credential'      => array( array( 'status' => 'b9', 'hash' => null, 'reason' => 'The name is the name of a credential (B9).' ) ),
 		);
+		foreach ( AB_MCP_Sync_Export::CREDENTIAL_LOCKS as $op ) {
+			$key                         = ( 'password_protected' === $op ? 'post:' : '*:' ) . $op;
+			$out[ 'a lock ' . $key ] = array( array( 'locks' => array( self::object()['locks'][0], array( 'key' => $key, 'stage' => 'Z8d', 'reason' => 'Held.', 'at' => 'post_content' ) ) ) );
+		}
+		return $out;
+	}
+
+	public static function otherLocks(): array {
+		$out = array();
+		foreach ( array( '*:possible_reference', '*:reference_spelling', '*:unread_reference', 'option:off_schema', '*:meta_without_rule', 'attachment:shared_path' ) as $key ) {
+			$out[ $key ] = array( $key );
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'otherLocks' )]
+	public function testAnObjectWithAnotherLockKeepsItsLineAsBefore( string $key ): void {
+		$object = self::object( array( 'locks' => array( array( 'key' => $key, 'stage' => 'Z8d', 'reason' => 'Other.', 'at' => 'post_content' ) ) ) );
+		$line   = AB_MCP_Sync_Export::line( $object );
+		self::assertSame( str_repeat( 'd', 64 ), $line['hash'] );
+		self::assertSame( array( array( 'space' => 'post', 'id' => 7, 'at' => 'meta:_thumbnail_id', 'strength' => 'strong' ) ), $line['refs'] );
+		self::assertSame( array( array( 'at' => 'meta:service_settings.count' ) ), $line['possible'] );
+	}
+
+	public function testTheLocksOfTheCredentialCheckAreTheOnesItGives(): void {
+		self::assertSame( array( 'credential_field', 'password_protected', 'script', 'html_outside_kses', 'php_object', 'unreadable_value', 'unread_credential' ), AB_MCP_Sync_Export::CREDENTIAL_LOCKS );
+		foreach ( \AB_MCP_Sync_Net::UNREADABLE as $op ) {
+			self::assertContains( $op, AB_MCP_Sync_Export::CREDENTIAL_LOCKS, 'Every lock that makes a unit never clean: ' . $op );
+		}
 	}
 
 	#[DataProvider( 'heldByACredential' )]
@@ -734,7 +835,7 @@ final class SyncPackageTest extends TestCase {
 		\AB_MCP_Protected_Store::forget();
 		$this->paired();
 		$this->on( 'staging' );
-		$grant  = AB_MCP_Sync_Export::grants( self::ID, 1, time() )[0];
+		$grant  = AB_MCP_Sync_Grant::grants( self::ID, 1, time() )[0];
 		$wrong  = array( 'signature' => str_repeat( 'a', 64 ) ) + $grant;
 		$before = count( $GLOBALS['wpdb']->queries );
 		$GLOBALS['ab_test_option_reads'] = array();

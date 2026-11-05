@@ -19,7 +19,12 @@
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
  * (now), add_admin (login), as_user (user) and write_access (the site mode
- * Full, as a person switches it on). A step with "expect": "error"
+ * Full, as a person switches it on), staging_raw and staging_raw_set
+ * (value: the record of role and pair as stored, past save()); for what the
+ * route loads: loaded
+ * (whether export, inventory and kinds are loaded), serve (query: the route
+ * of the chunks asked through the REST server of this process, its status). The process
+ * loads only what WordPress and the plugin load and what an op needs. A step with "expect": "error"
  * gives { code, message } of its WP_Error instead of ending the steps.
  * Prints { name: result, … } as JSON.
  *
@@ -39,8 +44,6 @@ $ab_it_key = $argv[2];
 $_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ), array( 'DOCUMENT_ROOT' => AB_MCP_IT_Sites::docroot( $ab_it_key ) ) );
 define( 'WP_USE_THEMES', false );
 require AB_MCP_IT_Sites::docroot( $ab_it_key ) . '/wp-load.php';
-require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
-require_once AB_MCP_DIR . 'includes/sync/class-sync-inventory.php';
 
 wp_set_current_user( (int) AB_MCP_IT_Sites::site( $ab_it_key )['admin']['user_id'] );
 
@@ -100,6 +103,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_out = update_option( $ab_it_step['name'], $ab_it_step['value'] );
 			break;
 		case 'canonical':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_kind = null;
 			foreach ( AB_MCP_Sync_Db_Kinds::all() as $ab_it_candidate ) {
 				if ( $ab_it_candidate->kind() === $ab_it_step['kind'] ) {
@@ -114,6 +118,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			);
 			break;
 		case 'inventory':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_source = AB_MCP_Sync_Inventory::source( $ab_it_step['addresses'] );
 			$ab_it_cursor = null;
 			$ab_it_out    = array();
@@ -163,8 +168,26 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_out = AB_MCP_Sync_Export::chunk( $ab_it_step['package_id'], $ab_it_step['chunk'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
 			break;
 		case 'grants':
-			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
-			$ab_it_out = AB_MCP_Sync_Export::grants( $ab_it_step['package_id'], (int) $ab_it_step['count'], (int) $ab_it_step['now'] );
+			$ab_it_out = AB_MCP_Sync_Grant::grants( $ab_it_step['package_id'], (int) $ab_it_step['count'], (int) $ab_it_step['now'] );
+			break;
+		case 'staging_raw':
+			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+			break;
+		case 'staging_raw_set':
+			AB_MCP_Settings::set( AB_MCP_Staging::KEY, $ab_it_step['value'] );
+			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
+			break;
+		case 'loaded':
+			$ab_it_out = array(
+				'export'    => class_exists( 'AB_MCP_Sync_Export', false ),
+				'inventory' => class_exists( 'AB_MCP_Sync_Inventory', false ),
+				'kinds'     => class_exists( 'AB_MCP_Sync_Db_Kinds', false ),
+			);
+			break;
+		case 'serve':
+			$ab_it_request = new WP_REST_Request( 'GET', '/' . AB_MCP_REST_NAMESPACE . AB_MCP_Sync_Grant::ROUTE );
+			$ab_it_request->set_query_params( $ab_it_step['query'] );
+			$ab_it_out = rest_do_request( $ab_it_request )->get_status();
 			break;
 		case 'store_cleanup':
 			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );

@@ -86,6 +86,39 @@ final class PayloadFileTest extends TestCase {
 		self::assertSame( array(), self::listing( $this->dir ) );
 	}
 
+	public function testAWriteThatFailsGivesNoWarningWithItsPath(): void {
+		$seen  = array();
+		$level = error_reporting();
+		set_error_handler(
+			static function () use ( &$seen, $level ): bool {
+				// What @ silenced reaches a handler with a lower error_reporting().
+				$seen[] = error_reporting() === $level;
+				return true;
+			}
+		);
+		try {
+			self::assertFalse( AB_MCP_Payload_File::write( $this->dir . '/missing/file.bin', 'x' ) );
+		} finally {
+			restore_error_handler();
+		}
+		self::assertNotSame( array(), $seen, 'The write did fail.' );
+		self::assertNotContains( true, $seen, 'No warning shown or logged.' );
+		self::assertSame( array(), self::listing( $this->dir ) );
+	}
+
+	public function testAWriteOfFewerBytesThanGivenLeavesNothing(): void {
+		if ( ! in_array( 'abshort', stream_get_wrappers(), true ) ) {
+			stream_wrapper_register( 'abshort', AbShortWriteStream::class );
+		}
+		AbShortWriteStream::$files = array();
+		self::assertFalse( AB_MCP_Payload_File::write( 'abshort://store/file.bin', 'abcdef' ), 'A full disk: three bytes of six.' );
+		self::assertSame( array(), AbShortWriteStream::$files, 'Its temp file is removed, nothing put in place.' );
+		AbShortWriteStream::$limit = PHP_INT_MAX;
+		self::assertTrue( AB_MCP_Payload_File::write( 'abshort://store/file.bin', 'abcdef' ) );
+		self::assertSame( array( 'abshort://store/file.bin' => 'abcdef' ), AbShortWriteStream::$files );
+		AbShortWriteStream::$limit = 3;
+	}
+
 	public function testEachRefusalOfTheReadHasItsCode(): void {
 		$raw = 'payload';
 		self::assertSame( 'missing', AB_MCP_Payload_File::read( $this->dir . '/none', hash( 'sha256', $raw ), 100, 100 )->get_error_code() );
@@ -113,5 +146,48 @@ final class PayloadFileTest extends TestCase {
 		$out = array_values( array_diff( (array) scandir( $dir ), array( '.', '..' ) ) );
 		sort( $out );
 		return $out;
+	}
+}
+
+/**
+ * A stream that takes at most $limit bytes of a file, as a full disk.
+ */
+final class AbShortWriteStream {
+
+	/** @var array<string,string> The files, by path. */
+	public static array $files = array();
+
+	/** @var int Bytes one write takes at most. */
+	public static int $limit = 3;
+
+	/** @var resource|null Context. */
+	public $context;
+
+	private string $path = '';
+
+	public function stream_open( string $path, string $mode ): bool {
+		$this->path            = $path;
+		self::$files[ $path ] = '';
+		return true;
+	}
+
+	public function stream_write( string $data ): int {
+		$part                        = substr( $data, 0, max( 0, self::$limit - strlen( self::$files[ $this->path ] ) ) );
+		self::$files[ $this->path ] .= $part;
+		return strlen( $part );
+	}
+
+	public function stream_close(): void {
+	}
+
+	public function rename( string $from, string $to ): bool {
+		self::$files[ $to ] = self::$files[ $from ];
+		unset( self::$files[ $from ] );
+		return true;
+	}
+
+	public function unlink( string $path ): bool {
+		unset( self::$files[ $path ] );
+		return true;
 	}
 }

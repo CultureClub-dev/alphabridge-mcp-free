@@ -67,15 +67,19 @@ final class AB_MCP_Payload_File {
 	/**
 	 * Write bytes to a path through a sibling temp file and rename() into
 	 * place: an interrupted write must never leave a half-written file that
-	 * later reads as a valid-looking one.
+	 * later reads as a valid-looking one. A write that fails, also one that
+	 * writes fewer bytes (a full disk: file_put_contents() then gives false),
+	 * leaves no temp file and no warning with the path.
 	 *
 	 * @param string $path Final path.
 	 * @param string $blob Bytes.
 	 * @return bool Whether the file is in place.
 	 */
 	public static function write( $path, $blob ) {
-		$tmp = $path . '.' . bin2hex( self::random_bytes( 4 ) ) . '.tmp';
-		if ( false === file_put_contents( $tmp, $blob ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		$tmp     = $path . '.' . bin2hex( self::random_bytes( 4 ) ) . '.tmp';
+		$written = @file_put_contents( $tmp, $blob ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		if ( false === $written ) {
+			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 			return false;
 		}
 		if ( ! @rename( $tmp, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename

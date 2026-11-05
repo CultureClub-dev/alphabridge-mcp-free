@@ -174,6 +174,55 @@ class AB_MCP_Staging {
 	}
 
 	/**
+	 * The random value every write of the role or the pair renews (save(),
+	 * remove_pair()), stored beside them in the record: what a package of
+	 * the takeover is bound to besides who confirmed what and when
+	 * (AB_MCP_Sync_Export::binding()), so a pair that goes and comes back
+	 * within the same second is no longer the pair it was. Null where none
+	 * is stored as rebind() writes it.
+	 *
+	 * @return string|null 32 hex digits.
+	 */
+	public static function bind() {
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		return is_array( $raw ) && isset( $raw['bind'] ) && is_string( $raw['bind'] ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $raw['bind'] ) ? $raw['bind'] : null;
+	}
+
+	/**
+	 * Store a new value of bind() in the record, on its own: for a record
+	 * without one (AB_MCP_Sync_Export). A value that does not read back is
+	 * none.
+	 *
+	 * @return string|null The value, or null.
+	 */
+	public static function new_bind() {
+		$raw = AB_MCP_Settings::get( self::KEY, array() );
+		$raw = self::rebind( is_array( $raw ) ? $raw : array() );
+		if ( ! isset( $raw['bind'] ) ) {
+			return null;
+		}
+		AB_MCP_Settings::set( self::KEY, $raw );
+		return self::bind() === $raw['bind'] ? $raw['bind'] : null;
+	}
+
+	/**
+	 * A record with a new random value of bind(), or with none where PHP
+	 * has no random bytes (a package then binds to nothing and is given out
+	 * to nobody).
+	 *
+	 * @param array $raw The stored record.
+	 * @return array
+	 */
+	private static function rebind( array $raw ) {
+		try {
+			$raw['bind'] = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			unset( $raw['bind'] );
+		}
+		return $raw;
+	}
+
+	/**
 	 * The confirmed role, or ROLE_UNCONFIRMED.
 	 *
 	 * @return string
@@ -422,7 +471,7 @@ class AB_MCP_Staging {
 		}
 
 		if ( $role_changed || $pair_changed || $confirmed ) {
-			AB_MCP_Settings::set( self::KEY, $raw );
+			AB_MCP_Settings::set( self::KEY, self::rebind( $raw ) );
 		}
 		// A connection that asked «Staging first» to ask no more said so for
 		// the site as it was; with another role it is asked again.
@@ -1351,7 +1400,7 @@ class AB_MCP_Staging {
 		$raw = AB_MCP_Settings::get( self::KEY, array() );
 		if ( is_array( $raw ) && array_key_exists( 'pair', $raw ) ) {
 			unset( $raw['pair'] );
-			AB_MCP_Settings::set( self::KEY, $raw );
+			AB_MCP_Settings::set( self::KEY, self::rebind( $raw ) );
 		}
 		AB_MCP_Sync_Anchor::forget();
 		return $had;

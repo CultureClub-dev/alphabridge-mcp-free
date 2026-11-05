@@ -346,12 +346,47 @@ final class StagingStatusTest extends TestCase {
 		self::confirm( 'production', self::STAGING );
 		$saved = AB_MCP_Staging::save( 'unconfirmed', '', null, 7, AB_MCP_Staging::SOURCE_FORM );
 		self::assertSame( array( 'role_changed' => true, 'pair_changed' => true ), $saved );
-		self::assertSame( array(), self::raw() );
+		self::assertSame( array( 'bind' ), array_keys( self::raw() ), 'Nothing but a new value a package binds to.' );
 		self::assertSame( 'unconfirmed', AB_MCP_Staging::role() );
 
 		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
 		self::assertSame( array( 'role_changed' => false, 'pair_changed' => false ), AB_MCP_Staging::save( 'unconfirmed', '', null, 7, AB_MCP_Staging::SOURCE_FORM ) );
 		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ) );
+	}
+
+	public function testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo(): void {
+		self::assertNull( AB_MCP_Staging::bind(), 'None before the first.' );
+		self::confirm( 'production', self::STAGING );
+		$seen = array( AB_MCP_Staging::bind() );
+		self::assertMatchesRegularExpression( '/^[0-9a-f]{32}\z/', $seen[0] );
+		AB_MCP_Staging::save( 'production', 'https://other.example.com', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		$seen[] = AB_MCP_Staging::bind();
+		AB_MCP_Staging::save( 'production', self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
+		$seen[] = AB_MCP_Staging::bind();
+		AB_MCP_Staging::remove_pair();
+		$seen[] = AB_MCP_Staging::bind();
+		self::assertCount( 4, array_unique( $seen ), 'Each write a new one, the pair back as it was too.' );
+		$writes = ab_test_writes( AB_MCP_Settings::OPT_OPTIONS );
+		AB_MCP_Staging::save( 'production', '', null, 7, AB_MCP_Staging::SOURCE_FORM );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Settings::OPT_OPTIONS ), 'A save that changes nothing writes nothing.' );
+		self::assertSame( $seen[3], AB_MCP_Staging::bind() );
+		self::assertTrue( AB_MCP_Staging::set_host( 'kinsta', 7 ) );
+		self::assertSame( $seen[3], AB_MCP_Staging::bind(), 'The host is no part of the pair.' );
+	}
+
+	public function testABindOnlyReadsAsItIsWritten(): void {
+		self::confirm( 'production', self::STAGING );
+		foreach ( array( 'ABCDEF0123456789ABCDEF0123456789', str_repeat( 'a', 31 ), str_repeat( 'a', 33 ), 7, null ) as $value ) {
+			$raw         = self::raw();
+			$raw['bind'] = $value;
+			AB_MCP_Settings::set( AB_MCP_Staging::KEY, $raw );
+			self::assertNull( AB_MCP_Staging::bind(), var_export( $value, true ) );
+		}
+		$made = AB_MCP_Staging::new_bind();
+		self::assertMatchesRegularExpression( '/^[0-9a-f]{32}\z/', $made );
+		self::assertSame( $made, AB_MCP_Staging::bind() );
+		self::assertSame( 'production', AB_MCP_Staging::role(), 'The role and the pair stay.' );
+		self::assertSame( self::STAGING, AB_MCP_Staging::record()['pair']['partner_url'] );
 	}
 
 	public function testAnEmptyAddressRemovesThePairAndKeepsTheRole(): void {

@@ -2,7 +2,7 @@
 
 Gesammelte Grenzen der Vertrauensschicht (Schlüssel der Staging-Quelle,
 Anker, signiertes Manifest; Entscheide 4 und 5) und des Transports der Pakete
-(Entscheid 6) aus den Codex-Runden 1 und 2 von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
+(Entscheid 6) aus den Codex-Runden 1 bis 5 von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
 umgangen werden, und was ein späterer Zweig schliesst. Je Grenze ein Satz
 mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 
@@ -78,11 +78,21 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   der Staging-Site (`AB_MCP_Sync_Key::mac()`); ein neuer Schlüssel macht alle
   Abrufadressen davor wertlos.
 - Die Route `alphabridge/v1/staging-package` ist keine Route von WordPress:
-  eine Anfrage, die genau stimmt, beantwortet `AB_MCP_Sync_Export::serve()`
+  eine Anfrage, die genau stimmt, beantwortet `AB_MCP_Sync_Grant::serve()`
   auf `rest_pre_dispatch`, jede andere beantwortet WordPress wie eine
   unbekannte Route. Was WordPress bei jeder Route tut, gilt hier ebenso:
   `?_envelope` hüllt auch die Antwort «keine Route» ein, und ein Plugin, das
   die REST-API ohne Anmeldung sperrt, sperrt auch den Abruf.
+- Vor dem MAC lädt die Route nur `AB_MCP_Sync_Grant` und den Schlüssel, die
+  mit dem Plugin geladen sind; Export, Inventar und Arten erst nach einem
+  gültigen MAC (Codex-Runde 5, A-4). Was bleibt: die Prüfung liest die
+  Rolle (in `ab_mcp_options`, mit dem Plugin geladen) und auf einer
+  bestätigten Staging-Site die beiden Optionen ohne Autoload
+  `ab_mcp_sync_mac` und `ab_mcp_sync_source` aus der Datenbank. An der Zeit
+  einer falschen Anfrage lässt sich darum höchstens erkennen, ob die Site
+  eine bestätigte Staging-Site ist, nie ein Paket, ein Stück oder etwas des
+  Schlüssels; dieselbe Rolle zeigt ohnehin die Route
+  `alphabridge/v1/staging-key`.
 - Ein Inventar, das ein Aufruf nicht fasst (60 Sekunden, 4000 Objekte), wird
   zu mehreren Paketen: die Antwort trägt den Cursor für das nächste. Die
   Pakete einer Reihe zählen als ein offener Export und ein offenes Paket;
@@ -123,14 +133,82 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   sie ihr begegnen: beim nächsten Export, beim Abruf und bei
   `wp_site_export`/`wp_site_export_chunk` mit ihrer Kennung, sonst nach
   einem Tag durch die Bereinigung. Das Speichern der Rolle fasst die Ablage
-  nicht an (es müsste sonst bei jeder Bestätigung die Ablage prüfen).
+  nicht an (es müsste sonst bei jeder Bestätigung die Ablage prüfen). Das
+  genügt, weil keine alte Bindung wieder entstehen kann: jedes Speichern
+  von Rolle oder Paar schreibt einen neuen Zufallswert in den Datensatz
+  (`AB_MCP_Staging::bind()`), den die Bindung enthält; ein Paar A → B → A
+  in derselben Sekunde ist eine neue Bindung (Codex-Runde 5, A-2). Fehlt
+  der Wert (ein Datensatz von vorher), macht ihn der nächste Export; kein
+  Paket davor war an ihn gebunden.
 - Bricht ein Export zwischen Stück und Datensatz ab (der Prozess endet),
   bleibt eine Gruppe ohne Datensatz: sie gilt als kein Paket und wird nie
-  ausgegeben, zählt aber als offener Export ihrer Reihe, bis die
-  Bereinigung sie nach einem Tag entfernt.
+  ausgegeben. Der nächste Export entfernt sie, sobald sie `ABANDONED`
+  (600 Sekunden) alt ist; bis dahin kann sie ein Export eines anderen
+  Aufrufs sein, der gerade schreibt, und zählt als offener Export ihrer
+  Reihe (Codex-Runde 5, B-4).
+- Ein Schreiben in die Ablage, das scheitert oder weniger Bytes schreibt
+  (volle Platte), hinterlässt keine temporäre Datei und keine Warnung mit
+  dem Pfad (`AB_MCP_Payload_File::write()`; gefunden mit den echten
+  Schreibfehlern der Tests von Runde 5).
+- Ein Objekt mit einer Sperre der Zugangsdatenprüfung (ein Feld einer
+  Zugangsangabe, ein Passwort, ein Skript, HTML ausserhalb von kses, ein
+  PHP-Objekt, ein Wert, der nicht entpackt, ein Name einer Zugangsangabe in
+  einer Schicht, die kein Leser las) steht im Paket nur mit Identität,
+  Status, Sperren und Grund, ohne Hash, Verweise und mögliche Verweise
+  (`CREDENTIAL_LOCKS`, Codex-Runde 5, A-1). `php_object` und
+  `unreadable_value` geben auch die Leser der kanonischen Form (zu tief,
+  nicht entpackbar); für denselben Wert gibt sie die Zugangsdatenprüfung
+  ebenso, und sie zählen mit (fail-closed). Andere Sperren (Builder, Typ,
+  mögliche Verweise, Schreibweise) behalten ihre Zeile.
+- Ein Schlüssel ohne das Geheimnis seiner MACs (ein Schlüssel von vorher,
+  ein gelöschtes Geheimnis) bleibt nicht hängen: der nächste Export und das
+  Erstellen des Schlüssels auf der Seite (`AB_MCP_Sync_Key::make()`) machen
+  es mit dem geschützten Schreiber; nur wo es
+  sich nicht speichern lässt, lehnt der Export mit Weg ab
+  (`ab_mcp_sync_mac_failed`), Schlüssel und Bestätigung bleiben.
 - Ein Import gehört dem Konto, das ihn begann; ein anderes Konto beginnt
   eine eigene Gruppe. Jede offene Gruppe zählt bis zu ihrem Abschluss gegen
   die fünf offenen Pakete der Site.
+- Ein Import hält das `pair_print` seines Beginns und den Zweck, für den er
+  begann; jede Fortsetzung prüft beide, bevor sie etwas des Pakets liest,
+  und endet, wo sich Rolle, Paar oder Anker geändert haben
+  (`ab_mcp_sync_import_pair_changed`, Weg: Paket neu holen) oder der Zweck
+  keiner dieser Version ist (`ab_mcp_sync_import_purpose_held`); was ankam,
+  wird entfernt (Codex-Runde 5, B-3 und Punkt 3).
+- Bestätigt eine Person auf der Live-Site nur die Rolle neu und bleibt der
+  Anker unverändert, bleiben Manifeste desselben Schlüssels innerhalb ihrer
+  24 Stunden annehmbar: derselbe Anker, dasselbe Vertrauen. Offene Importe
+  und Pläne enden je für sich über ihr `pair_print`; ein Paket wird mit
+  demselben oder einem neuen Manifest neu begonnen. Zwischen Staging- und
+  Live-Site wird keine Uhr verglichen: über die Zeit entscheidet die Live-Site
+  allein (`created`, `expires` des Manifests gegen ihre Uhr).
+- Bereits ausgelieferte Manifeste und Kopien von Stücken bleiben auf der
+  bisherigen Live-Site innerhalb ihrer 24 Stunden annehmbar, solange deren
+  Anker unverändert ist, auch wenn die Staging-Site inzwischen mit einer
+  anderen Live-Site gekoppelt ist: ein reiner Paarwechsel auf der
+  Staging-Site ist dem Relay und der Live-Site unbekannt. Grund: der Anker
+  auf der Live-Site ist die Wurzel des Vertrauens, und das Ziel jedes
+  Manifests bleibt genau diese Site. Abschneiden: den Schlüssel auf der
+  Staging-Site erneuern (die alten Schlüssel-IDs lehnt die Live-Site ab)
+  oder den Anker auf der Live-Site widerrufen.
+
+## Anker
+
+- Ein Schlüssel, den die Live-Site bestätigt und dann ersetzt oder
+  widerrufen hat (anderes Paar, andere Rolle, Paar entfernt), wird dort nie
+  wieder bestätigt: seine Schlüssel-ID steht als SHA-256 in
+  `ab_mcp_sync_anchor_retired` (ohne Autoload, zurückgelesen, die letzten
+  50; `forget()` und `uninstall.php`), und Vorbereiten wie Bestätigen
+  lehnen ihn ab (`ab_mcp_sync_anchor_retired`, Weg: auf der Staging-Site
+  den Schlüssel erneuern, dann den Anker neu vorbereiten und bestätigen).
+  Lässt sich der ersetzte Schlüssel nicht als ersetzt speichern, wird der
+  neue nicht bestätigt (`ab_mcp_sync_anchor_retire_failed`); beim Widerruf
+  geht der Anker auch dann (Codex-Runde 5, Nachtrag zu Punkt 3).
+- Ein zweiter Klick auf «Bestätigen» für den aktiven Schlüssel bestätigt
+  nichts neu: der Anker bleibt, wie er ist, mit seinem `pair_print`.
+- Mehr als 50 ersetzte Schlüssel ein und derselben Live-Site: der älteste
+  fällt aus der Liste und wäre wieder bestätigbar, wenn eine Staging-Site
+  ihn noch hätte; eine Staging-Site erneuert ihren Schlüssel nie zurück.
 
 ## Privater Schlüssel
 

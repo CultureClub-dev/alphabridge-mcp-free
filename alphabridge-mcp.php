@@ -151,6 +151,7 @@ require_once AB_MCP_DIR . 'includes/class-staging.php';
 // (AB_MCP_Sync_Manifest) is loaded where a package is made or read.
 require_once AB_MCP_DIR . 'includes/sync/class-sync-key.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-anchor.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-grant.php';
 // «Staging first» (free since 4.15.0): the pre-check of a write on a site
 // that counts as the production site, in run_tool(), and its setting.
 require_once AB_MCP_DIR . 'includes/class-staging-gate.php';

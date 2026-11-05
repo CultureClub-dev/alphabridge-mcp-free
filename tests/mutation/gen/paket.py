@@ -27,7 +27,10 @@ TS = 'includes/tools/class-tools-staging.php'
 G = 'includes/class-staging-gate.php'
 BUD = 'includes/class-store-budget.php'
 ST = 'includes/class-protected-store.php'
-FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st'}
+GRANT_F = 'includes/sync/class-sync-grant.php'
+PF = 'includes/class-payload-file.php'
+UN = 'uninstall.php'
+FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g', BUD: '$bud', ST: '$st', GRANT_F: '$gr', PF: '$pf', UN: '$un'}
 
 entries = []
 
@@ -91,8 +94,8 @@ e('paket/key-make-role', 'make(): only a confirmed staging site, also with a key
   "\tpublic static function make() {\n\t\tif ( false ) {",
   'trust', 'testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond')
 e('paket/key-make-keeps', 'make(): a key that is there stays', K,
-  "\t\tif ( null !== $key ) {\n\t\t\treturn array(\n\t\t\t\t'made' => false,",
-  "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'made' => false,",
+  "\t\tif ( null !== $key ) {\n\t\t\t// A key without the secret of its MACs gets one here as well.",
+  "\t\tif ( false ) {\n\t\t\t// A key without the secret of its MACs gets one here as well.",
   'trust', 'testAStagingSiteWithoutAKeyGetsOneOnlyFromAPersonAndNeverASecond')
 e('paket/key-forget-secret', 'forget(): the private key goes too', K,
   "\t\tdelete_option( self::OPTION_SECRET );\n\t\tdelete_option( self::OPTION_SOURCE );",
@@ -801,31 +804,31 @@ e('paket/kinds-sorted', 'kinds(): ascending by kind and subtype', EX,
   "\t\t\t\treturn 0 !== $by ? $by : strcmp( $a['subtype'], $b['subtype'] );", "\t\t\t\treturn 0;", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
 e('paket/kinds-taxonomy', 'kinds(): the taxonomy of a term is its subtype', EX,
   "( isset( $identity['taxonomy'] ) ? $identity['taxonomy'] : '' )", "''", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
-e('paket/grants-no-key', 'grants(): no fetch address without the key', EX,
+e('paket/grants-no-key', 'grants(): no fetch address without the key', GRANT_F,
   "\t\t\tif ( null === $mac ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
   'package', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite')
-e('paket/grants-ttl', 'grants(): valid GRANT_TTL seconds', EX,
+e('paket/grants-ttl', 'grants(): valid GRANT_TTL seconds', GRANT_F,
   "( null === $now ? time() : (int) $now ) + self::GRANT_TTL;", "( null === $now ? time() : (int) $now ) + 0;", 'package', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite')
 GR = "\t\tif ( 'GET' !== $request->get_method() || self::QUERY !== self::sorted_keys( $query ) || array() !== $request->get_body_params() || '' !== (string) $request->get_body() ) {"
 DEV = 'testEveryOtherRequestIsNone with data set "%s"'
-e('paket/grant-get', 'grant(): GET only', EX, GR, GR.replace("'GET' !== $request->get_method() || ", ''), 'package', DEV % 'POST')
-e('paket/grant-query', 'grant(): the four parameters and no other', EX, GR, GR.replace("self::QUERY !== self::sorted_keys( $query ) || ", ''), 'package', DEV % 'another parameter')
-e('paket/grant-form', 'grant(): no form field', EX, GR, GR.replace("array() !== $request->get_body_params() || ", ''), 'package', DEV % 'a form field')
-e('paket/grant-body', 'grant(): no body', EX, GR, GR.replace(" || '' !== (string) $request->get_body()", ''), 'package', DEV % 'a body')
-e('paket/grant-text', 'grant(): each parameter text', EX,
+e('paket/grant-get', 'grant(): GET only', GRANT_F, GR, GR.replace("'GET' !== $request->get_method() || ", ''), 'package', DEV % 'POST')
+e('paket/grant-query', 'grant(): the four parameters and no other', GRANT_F, GR, GR.replace("self::QUERY !== self::sorted_keys( $query ) || ", ''), 'package', DEV % 'another parameter')
+e('paket/grant-form', 'grant(): no form field', GRANT_F, GR, GR.replace("array() !== $request->get_body_params() || ", ''), 'package', DEV % 'a form field')
+e('paket/grant-body', 'grant(): no body', GRANT_F, GR, GR.replace(" || '' !== (string) $request->get_body()", ''), 'package', DEV % 'a body')
+e('paket/grant-text', 'grant(): each parameter text', GRANT_F,
   "\t\t\tif ( ! is_string( $value ) ) {\n\t\t\t\treturn null;", "\t\t\tif ( false ) {\n\t\t\t\treturn null;", 'package', DEV % 'a parameter as a list')
-e('paket/grant-chunk-spelling', 'grant(): the chunk in its one spelling', EX,
+e('paket/grant-chunk-spelling', 'grant(): the chunk in its one spelling', GRANT_F,
   "'/^(0|[1-9][0-9]{0,3})\\z/'", "'/^[0-9]{1,4}\\z/'", 'package', DEV % 'the chunk as 02')
-e('paket/grant-expires-spelling', 'grant(): until when in its one spelling', EX,
+e('paket/grant-expires-spelling', 'grant(): until when in its one spelling', GRANT_F,
   "'/^[1-9][0-9]{0,11}\\z/'", "'/^[0-9]{1,12}\\z/'", 'package', DEV % 'until when as 01600')
 TIMES = 'testAFetchAddressHoldsTenMinutesFromNowAtMost with data set "%s"'
 WIN = "\t\tif ( $expires <= $now || $expires > $now + self::GRANT_TTL ) {"
-e('paket/grant-not-after', 'grant(): not at its end or after', EX, WIN, WIN.replace('$expires <= $now', '$expires < $now'), 'package', TIMES % 'at its end')
-e('paket/grant-ttl', 'grant(): valid at most GRANT_TTL from now', EX, WIN, WIN.replace(' || $expires > $now + self::GRANT_TTL', ''), 'package', TIMES % 'valid too long')
+e('paket/grant-not-after', 'grant(): not at its end or after', GRANT_F, WIN, WIN.replace('$expires <= $now', '$expires < $now'), 'package', TIMES % 'at its end')
+e('paket/grant-ttl', 'grant(): valid at most GRANT_TTL from now', GRANT_F, WIN, WIN.replace(' || $expires > $now + self::GRANT_TTL', ''), 'package', TIMES % 'valid too long')
 MACQ = "\t\tif ( null === $mac || ! hash_equals( $mac, $query['sig'] ) ) {"
-e('paket/grant-mac-none', 'grant(): nothing on a site without the key', EX, MACQ, MACQ.replace('null === $mac || ', ''), 'package', 'testOnTheProductionSiteNoRequestIsRight')
-e('paket/grant-mac', 'grant(): the MAC of this site', EX, MACQ, MACQ.replace(" || ! hash_equals( $mac, $query['sig'] )", ''), 'package', DEV % 'another signature')
-e('paket/serve-request', 'serve(): only a REST request', EX,
+e('paket/grant-mac-none', 'grant(): nothing on a site without the key', GRANT_F, MACQ, MACQ.replace('null === $mac || ', ''), 'package', 'testOnTheProductionSiteNoRequestIsRight')
+e('paket/grant-mac', 'grant(): the MAC of this site', GRANT_F, MACQ, MACQ.replace(" || ! hash_equals( $mac, $query['sig'] )", ''), 'package', DEV % 'another signature')
+e('paket/serve-request', 'serve(): only a REST request', GRANT_F,
   " || ! $request instanceof WP_REST_Request", "", 'package', 'testEveryOtherRequestAndPathGoesOnToWordPress')
 e('paket/relay-https', 'relay_refusal(): over https', EX, "\t\tif ( is_ssl() ) {", "\t\tif ( false ) {", 'package', 'testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress')
 e('paket/relay-local', 'relay_refusal(): a site without a public address', EX,
@@ -932,12 +935,12 @@ PKG_IT = {
 e('paket/it-route-hook', 'the route of the chunks is answered (two sites)', RC,
   "\t\tadd_filter( 'rest_pre_dispatch', array( $this, 'serve_package' ), 10, 3 );", "", 'itpkg', PKG_IT['route'])
 SERVE = "\t\tif ( ! empty( $result ) || ! $request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route() ) {"
-e('paket/it-serve-other-filter', 'serve(): what another filter answered stays', EX, SERVE, SERVE.replace('! empty( $result ) || ', ''), 'itpkg', PKG_IT['serve'])
-e('paket/it-serve-path', 'serve(): only the path of the route', EX, SERVE, SERVE.replace(" || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route()", ''), 'itpkg', PKG_IT['serve'])
+e('paket/it-serve-other-filter', 'serve(): what another filter answered stays', GRANT_F, SERVE, SERVE.replace('! empty( $result ) || ', ''), 'itpkg', PKG_IT['serve'])
+e('paket/it-serve-path', 'serve(): only the path of the route', GRANT_F, SERVE, SERVE.replace(" || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route()", ''), 'itpkg', PKG_IT['serve'])
 SEND = "\t\tif ( $served || null === self::$serving || self::$serving[0] !== $result ) {"
-e('paket/it-send-own', 'send(): only the answer serve() accepted', EX, SEND, SEND.replace(' || self::$serving[0] !== $result', ''), 'itpkg', PKG_IT['serve'])
-e('paket/it-send-once', 'send(): once', EX, "\t\tself::$serving = null;\n\t\techo $bytes;", "\t\techo $bytes;", 'itpkg', PKG_IT['serve'])
-e('paket/it-requested-expired', 'requested(): nothing of a package whose manifest expired', EX,
+e('paket/it-send-own', 'send(): only the answer serve() accepted', GRANT_F, SEND, SEND.replace(' || self::$serving[0] !== $result', ''), 'itpkg', PKG_IT['serve'])
+e('paket/it-send-once', 'send(): once', GRANT_F, "\t\tself::$serving = null;\n\t\techo $bytes;", "\t\techo $bytes;", 'itpkg', PKG_IT['serve'])
+e('paket/it-requested-expired', 'deliver(): nothing of a package whose manifest expired', EX,
   "$found['manifest']['expires'] <= $now || ", "", 'itpkg', PKG_IT['serve'])
 e('paket/it-find-record', 'find(): a package without its record is none', EX,
   "\t\tif ( array() === $records ) {\n\t\t\treturn null;\n\t\t}\n\t\t$name = reset( $records );\n\t\t$text = AB_MCP_Protected_Store::get( 'out',",
@@ -954,8 +957,8 @@ e('paket/it-export-kinds-from', 'make(): complete by the cursor the package bega
 e('paket/it-import-label', 'begin(): the group named by the package', IM,
   "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
 e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
-  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $found['expect'] );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\treturn $found;",
-  "\t\treturn $found;", 'itpkg', PKG_IT['manifest'])
+  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t// The pair it was begun with",
+  "\t\t// The pair it was begun with", 'itpkg', PKG_IT['manifest'])
 e('paket/it-import-other-manifest', 'held(): a later manifest is the kept one', IM,
   "\t\tif ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] )", "\t\tif ( false && ( ! is_array( $a['manifest'] )", 'itpkg', PKG_IT['manifest'])
 e('paket/it-import-unknown', 'held(): the first call brings the manifest', IM,
@@ -991,7 +994,7 @@ PKG_IT.update({
     'whole_write': 'testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade',
     'import_write': 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft',
 })
-LH = "\t\tif ( 'b9' === $object['status'] || array() !== $credentials['mixed'] ) {"
+LH = "\t\tif ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {"
 HELD = 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly with data set "%s"'
 LINE = 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent'
 e('paket/line-held-name', 'line(): an object whose name is a credential: identity and reason only', EX, LH, LH.replace("'b9' === $object['status'] || ", ''), 'package', HELD % 'the name of a credential')
@@ -1015,7 +1018,7 @@ e('paket/key-forget-mac', 'forget(): the secret of the MACs goes with the key', 
 e('paket/key-renew-mac', 'renew(): the secret of the MACs reads back, for the key id stored now (so the key read is the one made)', K, RB, RB.replace(" || self::mac_secret() !== hex2bin( $mac )", ''),
   'storage', STORAGE_RB % 'the old key under the new source')
 e('paket/key-store-mac', 'renew(): the secret of the MACs is written, as the private key is', K,
-  "\t\tself::store_secret(\n\t\t\tself::OPTION_MAC,", "\t\tarray(\n\t\t\tself::OPTION_MAC,", 'package', MACC)
+  "\t\tself::store_secret(\n\t\t\tself::OPTION_MAC,\n\t\t\tarray(\n\t\t\t\t'key_id' => $key_id,", "\t\tarray(\n\t\t\tself::OPTION_MAC,\n\t\t\tarray(\n\t\t\t\t'key_id' => $key_id,", 'package', MACC)
 BIND = 'testAPackageIsBoundToTheKeyThePairAndTheirConfirmations'
 for name, line in (
     ('key', "\t\t\t\t\t'key'    => array( $key['source_id'], $key['key_id'] ),\n"),
@@ -1024,7 +1027,7 @@ for name, line in (
     ('pair', "\t\t\t\t\t'pair'   => array( $pair['partner_url'], $pair['partner_role'], $pair['user_id'], $pair['source'], $pair['at'] ),\n"),
 ):
     e('paket/binding-' + name, 'binding(): the ' + name + ' is in it', EX, line, "", 'package', BIND)
-BN = "\t\tif ( null === $key || null === $record['pair'] ) {"
+BN = "\t\tif ( null === $key || null === $record['pair'] || null === $bind ) {"
 e('paket/binding-no-key', 'binding(): none without a key', EX, BN, BN.replace('null === $key || ', ''), 'package', BIND)
 e('paket/binding-no-pair', 'binding(): none without a pair', EX, BN, BN.replace(" || null === $record['pair']", ''), 'package', BIND)
 e('paket/import-purpose-inventory', 'expect(): the inventory only, in this version', IM,
@@ -1081,6 +1084,126 @@ e('paket/it-fetch-min', 'fetched(): no fetch with less than MIN_FETCH left (two 
   "\t\t\tif ( $left < self::MIN_FETCH ) {", "\t\t\tif ( $left < 0 ) {", 'itpkg', PKG_IT['budget'])
 e('paket/it-state-files', 'state(): a state that cannot be read is no state (two sites)', IM,
   "\t\t$have = AB_MCP_Protected_Store::files( 'in', $held['gid'] );\n\t\tif ( is_wp_error( $have ) ) {\n\t\t\treturn $have;\n\t\t}\n\t\t$missing", "\t\t$have = AB_MCP_Protected_Store::files( 'in', $held['gid'] );\n\t\t$missing", 'itpkg', PKG_IT['import_write'])
+
+# ------------------------------------------------------ Codex round 5
+R5 = {
+    'mac_first': 'testTheRouteChecksTheMacBeforeItLoadsTheExport',
+    'it_script': 'testAnObjectAnyLockOfTheCredentialCheckHoldsCarriesItsIdentityAndTheReasonOnly',
+    'locks_list': 'testTheLocksOfTheCredentialCheckAreTheOnesItGives',
+    'bind_unit': 'testAPairThatGoesAndComesBackWithinASecondIsAnotherBinding',
+    'bind_it': 'testAPairThatGoesAndComesBackGivesNoPackageOfBeforeOut',
+    'bind_write': 'testEveryWriteOfTheRoleOrThePairRenewsTheValueAPackageBindsTo',
+    'bind_read': 'testABindOnlyReadsAsItIsWritten',
+    'mac': 'testAKeyWithoutTheSecretOfItsMacsGetsOneAndIsNotStuck',
+    'idem': 'testConfirmingTheActiveKeyOnceMoreChangesNothing',
+    'retired': 'testAKeyReplacedOrRevokedHereIsNeverConfirmedAgain',
+    'retired_prepared': 'testAPreparedKeyRetiredSinceIsNotConfirmed',
+    'retired_fifty': 'testTheRetiredKeyIdsAreTheLastFiftyAndOnlyAsWritten',
+    'retire_failed': 'testANewKeyIsNotConfirmedWhereTheOldOneCannotBeKeptAsReplaced',
+    'first_flow': 'testTheFirstImportWaitsForThePersonAndThenRunsAsItWas',
+    'print_it': 'testAnImportEndsWhereThePairChangedSinceItBegan',
+    'print_none': 'testAGroupWithoutThePrintOfItsBeginningIsEnded',
+    'purpose_it': 'testAGroupHeldForAnotherPurposeIsEndedBeforeItIsReadOn',
+    'abandoned': 'testAMakingStoppedBetweenItsChunksAndItsRecordIsNeverGivenOutAndGoesLater',
+    'export_write': 'testAPackageWhoseWriteFailsIsNeitherLeftNorGivenOutAndIsMadeAgain',
+    'import_write': 'testAnImportWhoseWriteFailsKeepsWhatArrivedAndGoesOn',
+    'short': 'testAWriteOfFewerBytesThanGivenLeavesNothing',
+    'silent': 'testAWriteThatFailsGivesNoWarningWithItsPath',
+    'uninstall': 'testUninstallDeletesEveryOptionThePluginDeclares',
+}
+e('paket/r5-grant-before-export', 'serve(): the export is loaded only after a right MAC (A-4)', GRANT_F,
+  "\t\t$now   = time();\n\t\t$grant = self::grant( $request, $now );",
+  "\t\t$now   = time();\n\t\trequire_once __DIR__ . '/class-sync-export.php';\n\t\t$grant = self::grant( $request, $now );", 'itpkg', R5['mac_first'])
+e('paket/r5-controller-no-export', 'serve_package(): the controller loads no export before the MAC (A-4)', RC,
+  "\t\treturn AB_MCP_Sync_Grant::serve( $result, $server, $request );",
+  "\t\trequire_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';\n\t\treturn AB_MCP_Sync_Grant::serve( $result, $server, $request );", 'itpkg', R5['mac_first'])
+
+# A-1: every lock of the credential check holds the line to identity and reason.
+e('paket/r5-line-credential-lock', 'line(): an object with any lock of the credential check: identity and reason only (A-1)', EX,
+  LH, LH.replace(" || self::credential_locked( $object['locks'] )", ''), 'package', HELD % 'a lock *:script')
+e('paket/r5-credential-locked-op', 'credential_locked(): by the operation of the key, kind:operation (A-1)', EX,
+  "\t\t\tif ( in_array( $op, self::CREDENTIAL_LOCKS, true ) ) {", "\t\t\tif ( in_array( $key, self::CREDENTIAL_LOCKS, true ) ) {", 'package', HELD % 'a lock *:credential_field')
+e('paket/r5-credential-locks-list', 'CREDENTIAL_LOCKS: also a name of a credential no reader read (A-1)', EX,
+  "'php_object', 'unreadable_value', 'unread_credential' );", "'php_object', 'unreadable_value' );", 'package', R5['locks_list'])
+e('paket/r5-it-credential-script', 'CREDENTIAL_LOCKS: a script, as in the example of Codex (two sites, A-1)', EX,
+  "'password_protected', 'script', 'html_outside_kses',", "'password_protected', 'html_outside_kses',", 'itpkg', R5['it_script'])
+
+# A-2: the random value of the role and pair.
+e('paket/r5-binding-bind', 'binding(): the random value of the role and pair (A-2)', EX,
+  "\t\t\t\t\t'bind'   => $bind,\n", "", 'package', R5['bind_unit'])
+e('paket/r5-it-binding-bind', 'binding(): A → B → A gives no package of before out (two sites, A-2)', EX,
+  "\t\t\t\t\t'bind'   => $bind,\n", "", 'itpkg', R5['bind_it'])
+e('paket/r5-binding-no-bind', 'binding(): none without the random value (A-2)', EX, BN, BN.replace(" || null === $bind", ''), 'package', R5['bind_unit'])
+e('paket/r5-save-rebind', 'save(): every write of the role or the pair a new random value (A-2)', S,
+  "\t\t\tAB_MCP_Settings::set( self::KEY, self::rebind( $raw ) );\n\t\t}\n\t\t// A connection", "\t\t\tAB_MCP_Settings::set( self::KEY, $raw );\n\t\t}\n\t\t// A connection", 'status', R5['bind_write'])
+e('paket/r5-remove-pair-rebind', 'remove_pair(): a new random value (A-2)', S,
+  "\t\t\tunset( $raw['pair'] );\n\t\t\tAB_MCP_Settings::set( self::KEY, self::rebind( $raw ) );", "\t\t\tunset( $raw['pair'] );\n\t\t\tAB_MCP_Settings::set( self::KEY, $raw );", 'status', R5['bind_write'])
+e('paket/r5-bind-shape', 'bind(): only as rebind() writes it (A-2)', S,
+  "&& 1 === preg_match( '/^[0-9a-f]{32}\\z/', $raw['bind'] ) ? $raw['bind'] : null;", "? $raw['bind'] : null;", 'status', R5['bind_read'])
+e('paket/r5-new-bind-readback', 'new_bind(): a value that does not read back is none (A-2)', S,
+  "\t\treturn self::bind() === $raw['bind'] ? $raw['bind'] : null;", "\t\treturn $raw['bind'];", 'package', R5['bind_unit'])
+REFB = "\t\tif ( null === AB_MCP_Staging::bind() && null === AB_MCP_Staging::new_bind() ) {"
+e('paket/r5-refusal-new-bind', 'refusal(): a record without the random value gets one (A-2)', EX, REFB, REFB.replace(" && null === AB_MCP_Staging::new_bind()", ''), 'package', R5['bind_unit'])
+e('paket/r5-refusal-unbound', 'refusal(): no package where it cannot be stored (A-2)', EX, REFB, "\t\tif ( false ) {", 'package', R5['bind_unit'])
+
+# C: a key without the secret of its MACs.
+e('paket/r5-refusal-mac-ready', 'refusal(): the secret of the MACs made where missing, else the way (C)', EX,
+  "\t\tif ( ! AB_MCP_Sync_Key::mac_ready() ) {", "\t\tif ( false ) {", 'package', R5['mac'])
+e('paket/r5-mac-ready-readback', 'mac_ready(): the secret made reads back (C)', K,
+  "\t\treturn self::mac_secret() === hex2bin( $mac );\n\t}", "\t\treturn true;\n\t}", 'package', R5['mac'])
+e('paket/r5-mac-ready-keeps', 'mac_ready(): a secret that is there stays (C)', K,
+  "\t\tif ( null !== self::mac_secret() ) {\n\t\t\treturn true;\n\t\t}\n\t\ttry {", "\t\ttry {", 'package', R5['mac'])
+e('paket/r5-key-make-mac', 'make(): a key without the secret of its MACs gets one (C)', K,
+  "\t\t\tif ( ! self::mac_ready() ) {\n\t\t\t\treturn self::mac_refusal();", "\t\t\tif ( false ) {\n\t\t\t\treturn self::mac_refusal();", 'package', R5['mac'])
+
+# Point 3 and its addendum: the anchor.
+IDEM = "\t\tif ( null !== $current && is_string( $fingerprint ) && hash_equals( $current['fingerprint'], $fingerprint ) && ( null === $prepared || $prepared['key_id'] === $current['key_id'] ) ) {"
+e('paket/r5-anchor-idempotent', 'confirm(): the active key once more changes nothing (point 3)', A, IDEM, "\t\tif ( false ) {", 'trust', R5['idem'])
+e('paket/r5-it-anchor-idempotent', 'confirm(): a second click leaves the import running (two sites, point 3)', A, IDEM, "\t\tif ( false ) {", 'itpkg', R5['first_flow'])
+e('paket/r5-anchor-idempotent-same-key', 'confirm(): not where another key is prepared (point 3)', A, IDEM, IDEM.replace(" && ( null === $prepared || $prepared['key_id'] === $current['key_id'] )", ''), 'trust', R5['idem'])
+e('paket/r5-anchor-confirm-retired', 'confirm(): a retired key is not confirmed (point 3)', A,
+  "\t\tif ( self::retired( $prepared['key_id'] ) ) {\n\t\t\treturn self::retired_refusal();\n\t\t}\n\t\t// The key it replaces", "\t\t// The key it replaces", 'trust', R5['retired_prepared'])
+e('paket/r5-anchor-hold-retired', 'hold(): a retired key is not prepared (point 3)', A,
+  "\t\tif ( self::retired( $key['key_id'] ) ) {\n\t\t\treturn self::retired_refusal();\n\t\t}\n\t\t$prepared = array(", "\t\t$prepared = array(", 'trust', R5['retired'])
+RET = "\t\tif ( null !== $state['active'] && $state['active']['key_id'] !== $prepared['key_id'] && ! self::retire( $state['active']['key_id'] ) ) {"
+e('paket/r5-anchor-retire-replaced', 'confirm(): the key it replaces is retired (point 3)', A, RET, "\t\tif ( false ) {", 'trust', R5['retired'])
+e('paket/r5-anchor-retire-failed', 'confirm(): no new key where the old one cannot be kept as replaced (point 3)', A, RET, RET.replace("! self::retire(", "false && self::retire("), 'trust', R5['retire_failed'])
+e('paket/r5-anchor-forget-retire', 'forget(): the active key is revoked with it (point 3)', A,
+  "\t\tif ( null !== $active ) {\n\t\t\tself::retire( $active['key_id'] );\n\t\t}", "", 'trust', R5['retired'])
+e('paket/r5-anchor-retired-last', 'retired_list(): the last MAX_RETIRED (point 3)', A,
+  "\t\treturn array_slice( $out, -self::MAX_RETIRED );", "\t\treturn $out;", 'trust', R5['retired_fifty'])
+e('paket/r5-anchor-retired-shape', 'retired_list(): only SHA-256 in hex (point 3)', A,
+  "if ( is_string( $hash ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $hash ) ) {", "if ( is_string( $hash ) ) {", 'trust', R5['retired_fifty'])
+e('paket/r5-anchor-retire-bounded', 'retire(): written bounded (point 3)', A,
+  "\t\t$list   = array_slice( $list, -self::MAX_RETIRED );\n", "", 'trust', R5['retired_fifty'])
+e('paket/r5-anchor-retire-readback', 'retire(): read back (point 3)', A,
+  "\t\treturn self::retired_list() === $list;", "\t\treturn true;", 'trust', R5['retire_failed'])
+e('paket/r5-anchor-retired-noautoload', 'retire(): without autoload (point 3)', A,
+  "\t\tupdate_option( self::OPTION_RETIRED, $list, false );", "\t\tupdate_option( self::OPTION_RETIRED, $list );", 'trust', R5['retired'])
+e('paket/r5-uninstall-retired', 'uninstall.php: the retired key ids go (point 3)', UN,
+  "\t'ab_mcp_sync_anchor_retired',\n", "", 'uninstall', R5['uninstall'])
+
+# Point 3: the print at the import; B-3: the purpose of a continuation.
+e('paket/r5-import-print-kept', 'begin(): the print of the pair kept with the record (point 3)', IM,
+  "\t\t\t\t'print'     => $print,\n", "\t\t\t\t'print'     => null,\n", 'itpkg', R5['print_it'])
+PRN = "\t\tif ( null === $found['print'] || ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {"
+e('paket/r5-import-print-check', 'held(): a continuation ends where the print changed (point 3)', IM, PRN, "\t\tif ( false ) {", 'itpkg', R5['print_it'])
+e('paket/r5-import-print-none', 'held(): a group without the print of its beginning ends (point 3)', IM, PRN, "\t\tif ( null !== $found['print'] && ! hash_equals( $found['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {", 'itpkg', R5['print_none'])
+e('paket/r5-import-print-removed', 'held(): what arrived of it is removed (point 3)', IM,
+  PRN + "\n\t\t\tAB_MCP_Protected_Store::remove( 'in', $found['gid'] );\n", PRN + "\n", 'itpkg', R5['print_it'])
+PUR = "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {"
+e('paket/r5-import-purpose-held', 'held(): every continuation a purpose this version takes (B-3)', IM, PUR, "\t\tif ( false ) {", 'itpkg', R5['purpose_it'])
+e('paket/r5-import-purpose-removed', 'held(): a group for another purpose is ended (B-3)', IM,
+  PUR + "\n\t\t\tAB_MCP_Protected_Store::remove( 'in', $found['gid'] );\n", PUR + "\n", 'itpkg', R5['purpose_it'])
+
+# B-4: writes that fail for real, a making stopped before its record.
+DIS = "\t\t\t} elseif ( null === $found && $group['created'] < time() - self::ABANDONED ) {"
+e('paket/r5-discard-abandoned', 'discard_stale(): a making stopped before its record goes after ABANDONED (B-4)', EX, DIS, "\t\t\t} elseif ( false ) {", 'itpkg', R5['abandoned'])
+e('paket/r5-discard-abandoned-age', 'discard_stale(): not before ABANDONED, it may still be written (B-4)', EX, DIS, "\t\t\t} elseif ( null === $found ) {", 'itpkg', R5['abandoned'])
+e('paket/r5-payload-tmp', 'write(): a failed write, also one that falls short, leaves no temp file (B-4)', PF,
+  "\t\tif ( false === $written ) {\n\t\t\t@unlink( $tmp );", "\t\tif ( false === $written ) {\n\t\t\t", 'payload', R5['short'])
+e('paket/r5-payload-silent', 'write(): no warning with the path (B-4)', PF,
+  "$written = @file_put_contents( $tmp, $blob );", "$written = file_put_contents( $tmp, $blob );", 'payload', R5['silent'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -1140,14 +1263,19 @@ out.append('''<?php
  * of the inventory; the three tools. Codex round 4: the line of an object
  * from a list of what it may carry, the binding of a package, the import of
  * an account, the secret of the MACs, series and closed packages in the
- * budgets, the time of a fetch, a write that fails.
+ * budgets, the time of a fetch, a write that fails. Codex round 5: the MAC
+ * checked before the export is loaded, every lock of the credential check,
+ * the random value of a binding, the print and the purpose of a continuing
+ * import, the retired keys of the anchor and the second confirmation, the
+ * secret of the MACs made where it is missing, a making stopped before its
+ * record, a write of the store that fails or falls short.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
  *
  * Held by the unit suite (SyncTrustTest, SyncTrustStorageTest,
  * SyncTrustAddressTest, SyncManifestTest, StagingStatusTest, SyncPackageTest,
- * SyncDbKindsTest, StagingGateTest) and, for what
+ * SyncDbKindsTest, StagingGateTest, PayloadFileTest, UninstallTest) and, for what
  * two WordPress sites show, by the integration suite (the sites running,
  * AB_IT_ROOT set). Where a check could change no outcome (sodium or a
  * check before it refuses the same input), it was taken out of the code
@@ -1168,6 +1296,8 @@ $gate     = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingGa
 $itpkg    = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageTest' );
 $itseries = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageSeriesTest' );
 $budget   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StoreBudgetTest' );
+$payload  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'PayloadFileTest' );
+$uninstall = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'UninstallTest' );
 
 $k  = 'includes/sync/class-sync-key.php';
 $a  = 'includes/sync/class-sync-anchor.php';
@@ -1184,6 +1314,9 @@ $ts = 'includes/tools/class-tools-staging.php';
 $g  = 'includes/class-staging-gate.php';
 $bud = 'includes/class-store-budget.php';
 $st = 'includes/class-protected-store.php';
+$gr = 'includes/sync/class-sync-grant.php';
+$pf = 'includes/class-payload-file.php';
+$un = 'uninstall.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:
