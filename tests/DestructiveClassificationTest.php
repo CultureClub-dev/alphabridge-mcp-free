@@ -85,6 +85,12 @@ final class DestructiveClassificationTest extends TestCase {
 		// the switch back and nothing of the site is overwritten
 		// (PreviewProtectionTest).
 		'wp_set_preview_protection',
+		// Z8 (branch 5): by their names alone, as this count goes; their
+		// definitions say destructive => false, since they write the
+		// protected store of the site only (SyncPackageTest).
+		'wp_site_export',
+		'wp_site_export_chunk',
+		'wp_site_import_chunk',
 	);
 
 	/**

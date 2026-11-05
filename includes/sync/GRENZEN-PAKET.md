@@ -1,8 +1,8 @@
 # Grenzen des Pakets (Z8, Zweig «Paket»)
 
 Gesammelte Grenzen der Vertrauensschicht (Schlüssel der Staging-Quelle,
-Anker, signiertes Manifest; Entscheide 4 und 5) aus den Codex-Runden 1 und 2
-von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
+Anker, signiertes Manifest; Entscheide 4 und 5) und des Transports der Pakete
+(Entscheid 6) aus den Codex-Runden 1 und 2 von Zweig 5 und aus dem Bau: seltene oder konstruierte Fälle, die abgelehnt statt
 umgangen werden, und was ein späterer Zweig schliesst. Je Grenze ein Satz
 mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 
@@ -65,6 +65,52 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   speichert `normalize_url()` (Z6) so; jeder Abruf scheitert dann, und die
   Ablehnung nennt den Weg, die Adresse ohne das Segment zu speichern
   (Codex-Runde 2).
+- Der Abruf prüft den Pfad bis `?`; ein `#` bleibt im geprüften Teil. Eine
+  Adresse mit einem Fragment, in dem `/../` steht (`…/file#/../note`), wird
+  darum abgelehnt, obwohl eine Anfrage kein Fragment sendet. Die Adressen,
+  die der Abruf baut (Schlüssel, Stücke), haben keines (Codex-Bestätigung
+  auf d6ceb11).
+
+## Pakete und Transport
+
+- Wer eine Abrufadresse innerhalb ihrer zehn Minuten sieht, liest das Stück
+  (bekannte Grenze von Entscheid 6). Die Signatur ist ein MAC des Schlüssels
+  der Staging-Site (`AB_MCP_Sync_Key::mac()`); ein neuer Schlüssel macht alle
+  Abrufadressen davor wertlos.
+- Die Route `alphabridge/v1/staging-package` ist keine Route von WordPress:
+  eine Anfrage, die genau stimmt, beantwortet `AB_MCP_Sync_Export::serve()`
+  auf `rest_pre_dispatch`, jede andere beantwortet WordPress wie eine
+  unbekannte Route. Was WordPress bei jeder Route tut, gilt hier ebenso:
+  `?_envelope` hüllt auch die Antwort «keine Route» ein, und ein Plugin, das
+  die REST-API ohne Anmeldung sperrt, sperrt auch den Abruf.
+- Ein Inventar, das ein Aufruf nicht fasst (60 Sekunden, 4000 Objekte), wird
+  zu mehreren Paketen: die Antwort trägt den Cursor für das nächste. Eine
+  Art gilt in einem Paket nur als vollständig, wenn es sie von ihrem Anfang
+  bis zu ihrem Ende gelesen hat; das Zusammensetzen mehrerer Pakete ist
+  Sache des Berichts (Zweig 6).
+- Eine Zeile der Datenbank mit vielen Objekten (ein Menü mit seinen
+  Einträgen, die Theme-Mods eines Themes) wird ganz gelesen; ein Paket kann
+  so über 4000 Objekte hinausgehen. Trägt eine solche Zeile ein Paket über
+  5000 Objekte (ein Menü mit mehr als 1000 Einträgen genau an der Grenze),
+  lehnt der Export ab, und derselbe Cursor scheitert wieder (konstruiert).
+- Ein Objekt, das kein Stück fasst (eine Zeile des Inventars über 5 MiB),
+  oder eines, das JSON nicht schreibt (tiefer als 4096 Ebenen), lehnt den
+  Export ab; Zeilen des Inventars tragen keinen Inhalt und sind klein.
+- Das Relay prüft `is_ssl()`: hinter einem Proxy, der TLS beendet, meldet
+  WordPress `http`, solange die Site es nicht einrichtet (in
+  `wp-config.php` `$_SERVER['HTTPS']` nach `HTTP_X_FORWARDED_PROTO`
+  setzen); eine öffentliche Site lehnt
+  das Relay dann ab, der direkte Abruf bleibt. Ob eine Adresse öffentlich
+  ist, entscheidet ihr DNS (`AB_MCP_Outbound::public_addresses()`); ein
+  Name, der vom Server aus nicht auflöst, gilt als öffentlich.
+- Ändert eine Person den Anker, während ein Aufruf Stücke holt, nimmt
+  dieser Aufruf seine Stücke noch an; der nächste Aufruf prüft das Manifest
+  erneut und lehnt das Paket ab.
+- Beginnen zwei Aufrufe dasselbe Paket zur selben Zeit, entstehen zwei
+  Gruppen mit derselben Bezeichnung; benutzt wird die älteste, die andere
+  räumt die Bereinigung nach einem Tag.
+- Ohne die PHP-Erweiterung zlib entsteht kein Paket (Ablehnung mit Weg);
+  dieser Zweig hat keinen Test, weil die Prüfumgebung zlib hat.
 
 ## Privater Schlüssel
 
@@ -89,6 +135,11 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
 - «Offene Pläne verfallen» (Entscheid 4): mit den Plänen der Zweige 6 und 8
   über `pair_print` im Zustand ihres Tokens; ein offener Lauf hält über das
   `pair_print` in `runs` (Zweig 8).
-- Multisite: Export und Import lehnen in Teil 2 ab (Entscheid 3), mit Weg.
+- Multisite: Export und Import lehnen ab (Entscheid 3), mit Weg
+  (`ab_mcp_sync_multisite`).
+- Pakete von Objekten, Medien und Umgebung (`objects`, `media`, `env`):
+  der Export lehnt sie in Teil 2 mit Weg ab; Rechte je Objekt, `complete`
+  je Art und Untertyp nach Entscheid 9 und die Zugangsdatenprüfung folgen
+  in Teil 3, die Entpack-Grenzen beim Lesen eines Pakets ebenda.
 - Den Anker aus der Paar-Route des Hubs oder per Werkzeug vorbereiten:
   frühestens mit dem Hub-Zweig 14, dann nur als Vorbereitung.

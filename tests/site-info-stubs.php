@@ -28,7 +28,8 @@ if ( ! function_exists( 'wp_max_upload_size' ) ) {
 
 if ( ! function_exists( 'is_ssl' ) ) {
 	function is_ssl() {
-		return true;
+		// https unless a test says otherwise (the relay of Z8).
+		return ! isset( $GLOBALS['ab_test_ssl'] ) || (bool) $GLOBALS['ab_test_ssl'];
 	}
 }
 

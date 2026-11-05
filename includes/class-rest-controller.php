@@ -301,6 +301,13 @@ class AB_MCP_REST_Controller {
 		// handler would change that header on every answer of this endpoint.
 		add_filter( 'rest_pre_dispatch', array( $this, 'refuse_delete' ), 10, 3 );
 
+		// The chunks of the packages of a staging site (Z8, decision 6): no
+		// route of WordPress. A request that is exactly right gets its chunk
+		// before WordPress looks for a handler; every other one goes on and
+		// is answered as for any route WordPress does not know
+		// (AB_MCP_Sync_Export::serve()).
+		add_filter( 'rest_pre_dispatch', array( $this, 'serve_package' ), 10, 3 );
+
 		// Apply the no-referrer / no-store headers to EVERY response from these
 		// routes — GET, POST and error responses (e.g. 401) alike.
 		add_filter( 'rest_post_dispatch', array( $this, 'add_security_headers' ), 10, 3 );
@@ -343,6 +350,23 @@ class AB_MCP_REST_Controller {
 			return $result;
 		}
 		return self::method_not_allowed( 'This MCP endpoint keeps no sessions, so there is none to end. Send JSON-RPC 2.0 requests via HTTP POST.' );
+	}
+
+	/**
+	 * The route of the chunks of a staging site's packages, loaded only for
+	 * its path (AB_MCP_Sync_Export::serve()).
+	 *
+	 * @param mixed           $result  Response another filter already chose, or null.
+	 * @param WP_REST_Server  $server  Server.
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public function serve_package( $result, $server, $request ) {
+		if ( ! is_object( $request ) || '/' . AB_MCP_REST_NAMESPACE . '/staging-package' !== $request->get_route() ) {
+			return $result;
+		}
+		require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+		return AB_MCP_Sync_Export::serve( $result, $server, $request );
 	}
 
 	/**

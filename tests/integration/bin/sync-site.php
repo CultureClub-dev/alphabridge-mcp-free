@@ -13,7 +13,12 @@
  * (name, value), canonical (kind, ref, addresses), inventory (addresses);
  * for the trust of the takeover (Z8 branch 5): staging_save (role,
  * partner_url, partner_role, source; as the administrator), sync_key (the
- * key of the site), pairing_code, sign_manifest (package).
+ * key of the site), pairing_code, sign_manifest (package); for its packages:
+ * export (purpose, cursor), export_again (package_id, now), export_chunk
+ * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
+ * (now), add_admin (login), as_user (user) and write_access (the site mode
+ * Full, as a person switches it on). A step with "expect": "error"
+ * gives { code, message } of its WP_Error instead of ending the steps.
  * Prints { name: result, … } as JSON.
  *
  * @package AlphaBridge_MCP
@@ -27,7 +32,9 @@ require dirname( __DIR__ ) . '/support/class-it-sites.php';
 
 putenv( 'AB_IT_STATE=' . $argv[1] );
 $ab_it_key = $argv[2];
-$_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ) );
+// The document root as the web server of the site has it, so the protected
+// store chooses its place as in a request to the site.
+$_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ), array( 'DOCUMENT_ROOT' => AB_MCP_IT_Sites::docroot( $ab_it_key ) ) );
 define( 'WP_USE_THEMES', false );
 require AB_MCP_IT_Sites::docroot( $ab_it_key ) . '/wp-load.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
@@ -131,11 +138,53 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-manifest.php';
 			$ab_it_out = AB_MCP_Sync_Manifest::sign( $ab_it_step['package'] );
 			break;
+		case 'export':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null );
+			break;
+		case 'export_again':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::again( $ab_it_step['package_id'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
+			break;
+		case 'export_chunk':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::chunk( $ab_it_step['package_id'], $ab_it_step['chunk'], isset( $ab_it_step['now'] ) ? (int) $ab_it_step['now'] : null );
+			break;
+		case 'grants':
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			$ab_it_out = AB_MCP_Sync_Export::grants( $ab_it_step['package_id'], (int) $ab_it_step['count'], (int) $ab_it_step['now'] );
+			break;
+		case 'store_cleanup':
+			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );
+			break;
+		case 'add_admin':
+			$ab_it_out = wp_insert_user(
+				array(
+					'user_login' => $ab_it_step['login'],
+					'user_pass'  => wp_generate_password( 24 ),
+					'user_email' => $ab_it_step['login'] . '@example.invalid',
+					'role'       => 'administrator',
+				)
+			);
+			break;
+		case 'write_access':
+			AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY, AB_MCP_Site_Mode::FULL );
+			$ab_it_out = AB_MCP_Site_Mode::get();
+			break;
+		case 'as_user':
+			wp_set_current_user( (int) $ab_it_step['user'] );
+			$ab_it_out = get_current_user_id();
+			break;
 		default:
 			fwrite( STDERR, "Unknown op {$ab_it_step['op']}.\n" );
 			exit( 2 );
 	}
-	if ( is_wp_error( $ab_it_out ) ) {
+	if ( is_wp_error( $ab_it_out ) && isset( $ab_it_step['expect'] ) && 'error' === $ab_it_step['expect'] ) {
+		$ab_it_out = array(
+			'code'    => $ab_it_out->get_error_code(),
+			'message' => $ab_it_out->get_error_message(),
+		);
+	} elseif ( is_wp_error( $ab_it_out ) ) {
 		fwrite( STDERR, "Step $ab_it_i ({$ab_it_step['op']}): " . $ab_it_out->get_error_message() . "\n" );
 		exit( 1 );
 	}

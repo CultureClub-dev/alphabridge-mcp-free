@@ -7,7 +7,10 @@
  * stands on the way to a staging site and what to do next (AB_MCP_Staging).
  * With the second come the guided prompt staging_workflow and, in the
  * server instructions, the question whether to work on staging first.
- * The group «Staging» grows with the later stages of the staging workflow.
+ * The group «Staging» grows with the later stages of the staging workflow:
+ * since Z8 the packages of the takeover (wp_site_export, wp_site_export_chunk
+ * on the staging site, wp_site_import_chunk on the production site;
+ * AB_MCP_Sync_Export, AB_MCP_Sync_Import).
  *
  * @package AlphaBridge_MCP
  */
@@ -22,6 +25,15 @@ require_once dirname( __DIR__ ) . '/class-staging.php';
  * Class AB_MCP_Tools_Staging
  */
 class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
+
+	/**
+	 * The purposes of a package (AB_MCP_Sync_Manifest::PURPOSES) and those
+	 * wp_site_export makes in this version (AB_MCP_Sync_Export::PURPOSES),
+	 * named here so that registering the tools loads no class of the
+	 * takeover; a test holds them equal.
+	 */
+	const PURPOSES        = array( 'inventory', 'objects', 'media', 'env' );
+	const EXPORT_PURPOSES = array( 'inventory' );
 
 	/**
 	 * Register tools.
@@ -74,6 +86,122 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 					),
 				),
 				'callback'    => array( __CLASS__, 'staging_status' ),
+			)
+		);
+
+		$r->register(
+			'wp_site_export',
+			array(
+				'description' => 'On a confirmed staging site paired with a production site: make a package for that production site, signed with the key of this staging site and kept a day in the protected store of this site. In this version the package holds the inventory of this site: each object with its identity, hash, references, size and whether it was read completely, no content. One call reads as far as 60 seconds and 4000 objects reach; when the answer carries a cursor, call again with it for the next package. Returns package_id, objects, bytes, chunks, kinds (each kind and subtype, complete true where the package holds every object of it), expires, manifest (pass it unchanged to wp_site_import_chunk on the production site) and fetch: per chunk a fetch address signed by this site and valid for 10 minutes, with which the production site fetches the chunk itself over https (pass fetch unchanged to wp_site_import_chunk). With package_id instead, it returns that package of this account again, with fresh fetch addresses for chunks still missing. Limit: whoever sees a fetch address within its 10 minutes can read that chunk. Changes nothing on the site but its protected store. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => false,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'purpose'    => array(
+							'type'        => 'string',
+							'enum'        => self::EXPORT_PURPOSES,
+							'description' => 'What the package is for. In this version inventory: the inventory of this staging site.',
+						),
+						'cursor'     => array(
+							'type'        => 'object',
+							'description' => 'The cursor of the answer before, unchanged, for the next package of the inventory; without it, the first package.',
+						),
+						'package_id' => array(
+							'type'        => 'string',
+							'description' => 'A package made before by this account (32 hex): returned again with fresh fetch addresses; purpose and cursor are then not needed.',
+						),
+					),
+				),
+				'callback'    => array( __CLASS__, 'site_export' ),
+			)
+		);
+
+		$r->register(
+			'wp_site_export_chunk',
+			array(
+				'description' => 'On the staging site: give one chunk of a package this account made with wp_site_export, as base64, for the relay: pass package_id, chunk and data unchanged to wp_site_import_chunk on the production site. A chunk is at most 5 MiB, its base64 about 7 MB, so the relay suits a client that hands data on without passing it through the model (a script, Claude Code); a chat client cannot carry it. The direct way (fetch addresses, wp_site_import_chunk with fetch) needs no relay. Refused unless the request comes over https, where this site has a public address. Returns package_id, chunk, bytes, sha256 and data. Changes nothing. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => false,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'package_id' => array(
+							'type'        => 'string',
+							'description' => 'The package, as wp_site_export named it (32 hex).',
+						),
+						'chunk'      => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'The chunk, from 0 to chunks - 1 of the answer of wp_site_export.',
+						),
+					),
+					'required'   => array( 'package_id', 'chunk' ),
+				),
+				'callback'    => array( __CLASS__, 'site_export_chunk' ),
+			)
+		);
+
+		$r->register(
+			'wp_site_import_chunk',
+			array(
+				'description' => 'On the production site: take a package of the staging site it is paired with. The call that begins a package passes package_id, manifest and purpose as wp_site_export gave them; this site checks the manifest (signed with the key of the staging site a person confirmed on the page AlphaBridge → Staging, for the address of this site exactly, from the stored address of the staging site exactly, made less than a day ago) and keeps it. Each call then either hands over one chunk (chunk and data from wp_site_export_chunk; only over https where this site has a public address) or passes fetch (the fetch addresses from wp_site_export): this site then fetches the chunks itself from the staging site over https, at an address it builds from the stored address of the staging site, following no redirect, for up to 60 seconds a call. Every chunk is checked against its SHA-256 in the manifest before it is kept; once all are there, the package is checked whole. Returns chunks, received, missing (call again for those, with fresh fetch addresses after 10 minutes), complete, and failed with the reason for each chunk a fetch did not bring. Writes nothing but the protected store of this site, where the package is kept a day; what is in it is taken over only by the takeover. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => false,
+				// With fetch it asks the staging site of the pair.
+				'open_world'  => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'package_id'  => array(
+							'type'        => 'string',
+							'description' => 'The package, as wp_site_export named it (32 hex).',
+						),
+						'manifest'    => array(
+							'type'        => 'object',
+							'description' => 'The manifest from the answer of wp_site_export, unchanged (manifest and signature). Required while this site holds no package of that id yet.',
+							'properties'  => array(
+								'manifest'  => array( 'type' => 'string' ),
+								'signature' => array( 'type' => 'string' ),
+							),
+						),
+						'purpose'     => array(
+							'type'        => 'string',
+							'enum'        => self::PURPOSES,
+							'description' => 'What the package is read for, as wp_site_export made it; with the manifest.',
+						),
+						'report_hash' => array(
+							'type'        => 'string',
+							'description' => 'For a package of objects or media: the report it is for (64 hex); with the manifest.',
+						),
+						'chunk'       => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'Relay: the chunk data holds.',
+						),
+						'data'        => array(
+							'type'        => 'string',
+							'description' => 'Relay: the chunk as base64, unchanged from wp_site_export_chunk.',
+						),
+						'fetch'       => array(
+							'type'        => 'array',
+							'description' => 'Direct: the fetch addresses from the answer of wp_site_export, unchanged.',
+							'items'       => array(
+								'type'       => 'object',
+								'properties' => array(
+									'chunk'     => array( 'type' => 'integer' ),
+									'expires'   => array( 'type' => 'integer' ),
+									'signature' => array( 'type' => 'string' ),
+								),
+							),
+						),
+					),
+					'required'   => array( 'package_id' ),
+				),
+				'callback'    => array( __CLASS__, 'site_import_chunk' ),
 			)
 		);
 
@@ -137,6 +265,42 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function staging_status( array $a ) {
 		return AB_MCP_Staging::report( self::b( $a, 'check_partner' ) );
+	}
+
+	/**
+	 * wp_site_export.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_export( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-export.php';
+		if ( array_key_exists( 'package_id', $a ) ) {
+			return AB_MCP_Sync_Export::again( $a['package_id'] );
+		}
+		return AB_MCP_Sync_Export::make( isset( $a['purpose'] ) ? $a['purpose'] : null, isset( $a['cursor'] ) ? $a['cursor'] : null );
+	}
+
+	/**
+	 * wp_site_export_chunk.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_export_chunk( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-export.php';
+		return AB_MCP_Sync_Export::chunk( isset( $a['package_id'] ) ? $a['package_id'] : null, isset( $a['chunk'] ) ? $a['chunk'] : null );
+	}
+
+	/**
+	 * wp_site_import_chunk.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_import_chunk( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-import.php';
+		return AB_MCP_Sync_Import::call( $a );
 	}
 
 	/**

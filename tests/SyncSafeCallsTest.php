@@ -110,6 +110,25 @@ final class SyncSafeCallsTest extends TestCase {
 		'->show_errors'                        => '$wpdb: errors shown again as before, afterwards.',
 		'->header'                             => 'WP_REST_Response: a header of the answer.',
 		'new WP_REST_Response'                 => 'An answer object.',
+		// The packages of the takeover (Z8, decision 6): the protected store,
+		// which reads its files and its own rows through $wpdb; the request
+		// of the route; the account and the scheme of this request.
+		'AB_MCP_Protected_Store::open'         => 'Opens a group in the folder of the store (its id and proof as raw rows through $wpdb).',
+		'AB_MCP_Protected_Store::put'          => 'Writes one file of a group.',
+		'AB_MCP_Protected_Store::get'          => 'Reads one file of a group against its SHA-256.',
+		'AB_MCP_Protected_Store::groups'       => 'The sidecars of an area of the store.',
+		'AB_MCP_Protected_Store::files'        => 'The files of a group, by name.',
+		'AB_MCP_Protected_Store::remove'       => 'Removes a group of the store.',
+		'AB_MCP_Outbound::public_addresses'    => 'Looks the host of this site up in the DNS (or the filter ab_mcp_outbound_addresses); no stored value.',
+		'->get_route'                          => 'WP_REST_Request: the path of the request.',
+		'->get_method'                         => 'WP_REST_Request: its method.',
+		'->get_query_params'                   => 'WP_REST_Request: its query.',
+		'->get_body_params'                    => 'WP_REST_Request: its form fields.',
+		'->get_body'                           => 'WP_REST_Request: its body.',
+		'add_filter'                           => 'Hooks a function into this request.',
+		'get_current_user_id'                  => 'The account of this request, as the authentication set it.',
+		'is_ssl'                               => 'Whether this request came over https ($_SERVER).',
+		'wp_parse_url'                         => 'Parses the address it is given.',
 		// Constructors.
 		'new WP_Block_Parser'                  => 'The parser of the core, without the filter block_parser_class.',
 		'new WP_Error'                         => 'An error object.',
@@ -134,11 +153,16 @@ final class SyncSafeCallsTest extends TestCase {
 			'home_url'               => array( 1, 'pair_print(): the own address of this site, which the print binds.' ),
 		),
 		'class-sync-key.php'      => array(
-			'AB_MCP_Staging::role' => array( 3, 'make(), sign(), answer(): only a confirmed staging site has a key.' ),
+			'AB_MCP_Staging::role' => array( 4, 'make(), sign(), mac(), answer(): only a confirmed staging site has a key.' ),
 			'get_option'           => array( 2, 'found() and secret(): the key, in the two options this class writes itself.' ),
 			'update_option'        => array( 2, 'renew(): those two options, without autoload.' ),
 			'delete_option'        => array( 2, 'forget(): removes them.' ),
 			'home_url'             => array( 1, 'answer(): the own address the key names.' ),
+		),
+		'class-sync-export.php'   => array(
+			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
+			'AB_MCP_Staging::record' => array( 2, 'refusal() and make(): the pair, whose production site a package is for.' ),
+			'home_url'               => array( 2, 'make() and relay_refusal(): the own address, for the inventory and whether it is public.' ),
 		),
 		'class-sync-manifest.php' => array(
 			'AB_MCP_Staging::record' => array( 1, 'sign(): the pair, whose production site a package is for.' ),

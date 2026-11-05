@@ -36,7 +36,7 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-100 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+103 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 

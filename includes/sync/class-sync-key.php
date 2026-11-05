@@ -234,6 +234,30 @@ final class AB_MCP_Sync_Key {
 	}
 
 	/**
+	 * A message authentication code of this confirmed staging site: HMAC
+	 * SHA-256 keyed with its private key, for one purpose (the context) and
+	 * one message, as lower-case hex. Only this site makes and checks it (the
+	 * signed addresses of its packages, AB_MCP_Sync_Export); the key never
+	 * leaves this method. A new key, made when the role is confirmed again,
+	 * makes every code before it worthless. Null on a site that is no
+	 * confirmed staging site or has no usable key.
+	 *
+	 * @param string $context What the code is for: a-z, 0-9, "-" and "/".
+	 * @param string $message Bytes.
+	 * @return string|null 64 hex.
+	 */
+	public static function mac( $context, $message ) {
+		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( $context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\z~', $context ) ) {
+			return null;
+		}
+		$found = self::found();
+		if ( null === $found ) {
+			return null;
+		}
+		return hash_hmac( 'sha256', 'ab-sync-mac/1' . "\n" . $context . "\n" . (string) $message, $found['secret'] );
+	}
+
+	/**
 	 * What the route answers and the page shows: the public part of the key
 	 * of a confirmed staging site and its own address, or null. The address
 	 * in the form site_form() gives (an international domain name in its

@@ -52,6 +52,7 @@ $GLOBALS['ab_test_core_delay'] = 0;
  */
 function ab_test_reset(): void {
 	$GLOBALS['ab_test_current_user'] = 0;
+	unset( $GLOBALS['ab_test_ssl'] );
 	$GLOBALS['ab_test_doing_ajax']   = false;
 	$GLOBALS['ab_test_autoload']     = array();
 	$GLOBALS['ab_test_translations'] = array();
@@ -1505,6 +1506,22 @@ class WP_REST_Request {
 	/** @param array<string,mixed> $params */
 	public function set_query_params( array $params ): void {
 		$this->query_params = $params;
+	}
+
+	/** @return array<string,mixed> */
+	public function get_query_params(): array {
+		return $this->query_params;
+	}
+
+	/** @var string The raw body. */
+	private $raw = '';
+
+	public function set_body( string $body ): void {
+		$this->raw = $body;
+	}
+
+	public function get_body(): string {
+		return $this->raw;
 	}
 
 	public function set_route( string $route ): void {

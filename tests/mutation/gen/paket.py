@@ -20,7 +20,12 @@ S = 'includes/class-staging.php'
 AD = 'includes/class-admin.php'
 RC = 'includes/class-rest-controller.php'
 O = 'includes/class-outbound.php'
-FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o'}
+EX = 'includes/sync/class-sync-export.php'
+IM = 'includes/sync/class-sync-import.php'
+INV_F = 'includes/sync/class-sync-inventory.php'
+TS = 'includes/tools/class-tools-staging.php'
+G = 'includes/class-staging-gate.php'
+FILEVAR = {K: '$k', A: '$a', M: '$m', F: '$f', S: '$s', AD: '$ad', RC: '$rc', O: '$o', EX: '$ex', IM: '$im', INV_F: '$inv', TS: '$ts', G: '$g'}
 
 entries = []
 
@@ -765,6 +770,133 @@ e('paket/fetcher-dot-whole', 'get(): only a whole segment, not a name that begin
 e('paket/fetcher-dot-query', 'get(): the path ends at ?, the query is no path', F,
   "\t\t$path = substr( $url, 0, strcspn( $url, '?' ) );\n", "\t\t$path = $url;\n", 'address', 'testDotsThatAreNoSegmentOfThePathAreAsked')
 
+# ------------------------------------------------------------- packages (Teil 2)
+PK = 'testEachLimitOfTheManifestIsHeldByName with data set "%s"'
+for what, line in (
+    ('objects', "\t\tif ( count( $objects ) > $max['objects'] ) {"),
+    ('unpacked', "\t\tif ( $unpacked > $max['unpacked'] ) {"),
+    ('chunks', "\t\tif ( count( $chunks ) > $max['chunks'] ) {"),
+    ('bytes', "\t\tif ( $bytes > $max['bytes'] ) {"),
+):
+    e('paket/pack-limit-' + what, 'pack(): no package past the limit of its ' + what, EX, line, "\t\tif ( false ) {", 'package', PK % what)
+LINE = "\t\t\tif ( '' === $line || strlen( $line ) + 1 > $size ) {"
+NOCHUNK = 'testAnObjectThatNoChunkHoldsIsRefused with data set "%s"'
+e('paket/pack-line-size', 'pack(): a line with its line break within a chunk', EX, LINE, LINE.replace('strlen( $line ) + 1 > $size', 'strlen( $line ) > $size'), 'package', NOCHUNK % 'one byte too large')
+e('paket/pack-line-encodable', 'pack(): an object JSON does not write is no line', EX, LINE, LINE.replace("'' === $line || ", ''), 'package', NOCHUNK % 'not encodable')
+FIT = "\t\t\tif ( strlen( $slice ) + strlen( $line ) + 1 > $size ) {"
+e('paket/pack-slice-fit', 'pack(): a chunk holds as many lines as fit exactly', EX, FIT, FIT.replace(' > $size', ' >= $size'), 'package', 'testEachObjectIsOneLineAndNoLineIsSplitBetweenChunks')
+e('paket/pack-default-objects', 'pack(): the limits of the manifest where none is passed', EX,
+  "\t\t\t'objects'  => AB_MCP_Sync_Manifest::MAX_OBJECTS,", "\t\t\t'objects'  => AB_MCP_Sync_Manifest::MAX_OBJECTS + 1,", 'package', 'testTheLimitsAreTheManifestsWhereNoneIsPassed')
+e('paket/pack-default-slice', 'pack(): SLICE where none is passed', EX,
+  "$size = null === $slice ? self::SLICE : (int) $slice;", "$size = null === $slice ? 100 : (int) $slice;", 'package', 'testTheGzipOfTheLargestSliceStaysWithinAChunk')
+e('paket/pack-last-chunk', 'pack(): a package has a chunk also without an object', EX,
+  "\t\t$chunks[] = $slice;\n\t\tif ( $unpacked", "\t\tif ( $unpacked", 'package', 'testAPackageHasAChunkAlsoWithoutAnObject')
+DONE = "\t\t\t\t'complete' => $at >= $start && $at < $end,"
+REACH = 'testAKindIsCompleteOnlyWhereThePackageReadItFromItsStartToItsEnd with data set "%s"'
+e('paket/kinds-from-start', 'kinds(): complete only for a kind begun at its start', EX, DONE, "\t\t\t\t'complete' => $at < $end,", 'package', REACH % 'began in the terms')
+e('paket/kinds-to-end', 'kinds(): complete only for a kind read to its end', EX, DONE, "\t\t\t\t'complete' => $at >= $start,", 'package', REACH % 'ended in the terms')
+e('paket/kinds-inner', 'kinds(): a cursor within a kind begins past it', EX,
+  " + ( null === $from['inner'] ? 0 : 1 );", " + 0;", 'package', REACH % 'began in the terms')
+e('paket/kinds-sorted', 'kinds(): ascending by kind and subtype', EX,
+  "\t\t\t\treturn 0 !== $by ? $by : strcmp( $a['subtype'], $b['subtype'] );", "\t\t\t\treturn 0;", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
+e('paket/kinds-taxonomy', 'kinds(): the taxonomy of a term is its subtype', EX,
+  "( isset( $identity['taxonomy'] ) ? $identity['taxonomy'] : '' )", "''", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
+e('paket/grants-no-key', 'grants(): no fetch address without the key', EX,
+  "\t\t\tif ( null === $mac ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_key_missing'",
+  'package', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite')
+e('paket/grants-ttl', 'grants(): valid GRANT_TTL seconds', EX,
+  "( null === $now ? time() : (int) $now ) + self::GRANT_TTL;", "( null === $now ? time() : (int) $now ) + 0;", 'package', 'testAFetchAddressIsTheMacOfTheKeyOfThisStagingSite')
+GR = "\t\tif ( 'GET' !== $request->get_method() || self::QUERY !== self::sorted_keys( $query ) || array() !== $request->get_body_params() || '' !== (string) $request->get_body() ) {"
+DEV = 'testEveryOtherRequestIsNone with data set "%s"'
+e('paket/grant-get', 'grant(): GET only', EX, GR, GR.replace("'GET' !== $request->get_method() || ", ''), 'package', DEV % 'POST')
+e('paket/grant-query', 'grant(): the four parameters and no other', EX, GR, GR.replace("self::QUERY !== self::sorted_keys( $query ) || ", ''), 'package', DEV % 'another parameter')
+e('paket/grant-form', 'grant(): no form field', EX, GR, GR.replace("array() !== $request->get_body_params() || ", ''), 'package', DEV % 'a form field')
+e('paket/grant-body', 'grant(): no body', EX, GR, GR.replace(" || '' !== (string) $request->get_body()", ''), 'package', DEV % 'a body')
+e('paket/grant-text', 'grant(): each parameter text', EX,
+  "\t\t\tif ( ! is_string( $value ) ) {\n\t\t\t\treturn null;", "\t\t\tif ( false ) {\n\t\t\t\treturn null;", 'package', DEV % 'a parameter as a list')
+e('paket/grant-chunk-spelling', 'grant(): the chunk in its one spelling', EX,
+  "'/^(0|[1-9][0-9]{0,3})\\z/'", "'/^[0-9]{1,4}\\z/'", 'package', DEV % 'the chunk as 02')
+e('paket/grant-expires-spelling', 'grant(): until when in its one spelling', EX,
+  "'/^[1-9][0-9]{0,11}\\z/'", "'/^[0-9]{1,12}\\z/'", 'package', DEV % 'until when as 01600')
+TIMES = 'testAFetchAddressHoldsTenMinutesFromNowAtMost with data set "%s"'
+WIN = "\t\tif ( $expires <= $now || $expires > $now + self::GRANT_TTL ) {"
+e('paket/grant-not-after', 'grant(): not at its end or after', EX, WIN, WIN.replace('$expires <= $now', '$expires < $now'), 'package', TIMES % 'at its end')
+e('paket/grant-ttl', 'grant(): valid at most GRANT_TTL from now', EX, WIN, WIN.replace(' || $expires > $now + self::GRANT_TTL', ''), 'package', TIMES % 'valid too long')
+MACQ = "\t\tif ( null === $mac || ! hash_equals( $mac, $query['sig'] ) ) {"
+e('paket/grant-mac-none', 'grant(): nothing on a site without the key', EX, MACQ, MACQ.replace('null === $mac || ', ''), 'package', 'testOnTheProductionSiteNoRequestIsRight')
+e('paket/grant-mac', 'grant(): the MAC of this site', EX, MACQ, MACQ.replace(" || ! hash_equals( $mac, $query['sig'] )", ''), 'package', DEV % 'another signature')
+e('paket/serve-request', 'serve(): only a REST request', EX,
+  " || ! $request instanceof WP_REST_Request", "", 'package', 'testEveryOtherRequestAndPathGoesOnToWordPress')
+e('paket/relay-https', 'relay_refusal(): over https', EX, "\t\tif ( is_ssl() ) {", "\t\tif ( false ) {", 'package', 'testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress')
+e('paket/relay-local', 'relay_refusal(): a site without a public address', EX,
+  "if ( 'local' === AB_MCP_Outbound::public_addresses(", "if ( 'none' === AB_MCP_Outbound::public_addresses(", 'package', 'testTheRelayNeedsHttpsWhereTheSiteHasAPublicAddress')
+e('paket/export-chunk-relay', 'chunk(): no chunk over http where the site is public', EX,
+  "\t\t$relay = self::relay_refusal();\n\t\tif ( null !== $relay ) {\n\t\t\treturn $relay;\n\t\t}\n", "", 'package', 'testTheStagingSiteGivesNoChunkOverHttpWhereItIsPublic')
+REFUSE = 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage'
+for name, search in (
+    ('network', "\t\tif ( is_multisite() ) {\n\t\t\treturn self::multisite();"),
+    ('role', "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes"),
+    ('pair', "\t\tif ( null === AB_MCP_Staging::record()['pair'] ) {"),
+    ('key', "\t\tif ( null === AB_MCP_Sync_Key::current() ) {"),
+):
+    e('paket/export-refuse-' + name, 'refusal(): no package ' + {'network': 'on a network', 'role': 'but on the confirmed staging site', 'pair': 'without a pair', 'key': 'without a key'}[name], EX,
+      search, search.replace(search.split('\n')[0], "\t\tif ( false ) {"), 'package', REFUSE)
+e('paket/export-purpose', 'make(): the inventory only, in this version', EX,
+  "\t\tif ( ! in_array( $purpose, self::PURPOSES, true ) ) {", "\t\tif ( false ) {", 'package', 'testThisVersionMakesPackagesOfTheInventoryOnly')
+CUR = "\t\tif ( null !== $cursor && ( ! is_array( $cursor ) || array( 'inner', 'kind' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) ) {"
+CURS = 'testACursorIsOneAnAnswerGave with data set "%s"'
+e('paket/export-cursor-array', 'make(): a cursor is a pair of kind and inner cursor', EX, CUR, CUR.replace('! is_array( $cursor ) || ', ''), 'package', CURS % 'text')
+e('paket/export-cursor-keys', 'make(): a cursor has kind and inner, nothing else', EX, CUR, CUR.replace("array( 'inner', 'kind' ) !== self::sorted_keys( $cursor ) || ", ''), 'package', CURS % 'another key')
+e('paket/export-cursor-kind', 'make(): the kind of a cursor is text (no warning for a list; run() refuses any other kind)', EX, CUR, CUR.replace(" || ! is_string( $cursor['kind'] )", ''), 'package', CURS % 'a kind that is a list')
+IMP = 'testTheProductionSiteTakesAPackageIdAndEitherAChunkOrFetchAddresses'
+e('paket/import-network', 'call(): no package on a network', IM, "\t\tif ( is_multisite() ) {\n\t\t\treturn AB_MCP_Sync_Export::multisite();", "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Export::multisite();", 'package', IMP)
+e('paket/import-package-id', 'call(): the package id as wp_site_export gave it', IM,
+  "\t\tif ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {", "\t\tif ( false ) {", 'package', IMP)
+e('paket/import-both', 'call(): a chunk or fetch addresses, not both', IM, "\t\tif ( $has_data && $has_fetch ) {", "\t\tif ( false ) {", 'package', IMP)
+e('paket/import-relay', 'call(): no relayed chunk over http where the site is public', IM,
+  "$relay = $has_data ? AB_MCP_Sync_Export::relay_refusal() : null;", "$relay = null;", 'package', 'testTheProductionSiteTakesNoRelayedChunkOverHttpWhereItIsPublic')
+FL = 'testFetchIsAListOfFetchAddressesAsTheStagingSiteGivesThem with data set "%s"'
+e('paket/import-fetch-shape', 'call(): fetch as wp_site_export gives it, before anything is read', IM,
+  "\t\tif ( $has_fetch && ! self::grants_shaped( $a['fetch'] ) ) {", "\t\tif ( false ) {", 'package', FL % 'an empty list')
+GL = "\t\tif ( ! is_array( $grants ) || ! array_is_list( $grants ) || array() === $grants ) {"
+e('paket/grants-shape-array', 'grants_shaped(): a list', IM, GL, GL.replace('! is_array( $grants ) || ', ''), 'package', FL % 'text')
+e('paket/grants-shape-list', 'grants_shaped(): a list, not a map', IM, GL, GL.replace('! array_is_list( $grants ) || ', ''), 'package', FL % 'not a list')
+e('paket/grants-shape-empty', 'grants_shaped(): not empty', IM, GL, GL.replace(' || array() === $grants', ''), 'package', FL % 'an empty list')
+GI = "\t\t\tif ( ! is_array( $grant ) || array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( $grant ) || ! is_int( $grant['chunk'] ) || ! is_int( $grant['expires'] ) || ! is_string( $grant['signature'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $grant['signature'] ) ) {"
+for name, part, case in (
+    ('item', '! is_array( $grant ) || ', 'an item that is text'),
+    ('keys', "array( 'chunk', 'expires', 'signature' ) !== self::sorted_keys( $grant ) || ", 'a key more'),
+    ('chunk', "! is_int( $grant['chunk'] ) || ", 'the chunk as text'),
+    ('expires', "! is_int( $grant['expires'] ) || ", 'until when as text'),
+    ('signature-text', "! is_string( $grant['signature'] ) || ", 'the signature as a list'),
+    ('signature-hex', " || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $grant['signature'] )", 'the signature with &'),
+):
+    e('paket/grants-shape-' + name, 'grants_shaped(): each fetch address as wp_site_export gives it (' + name + ')', IM, GI, GI.replace(part, ''), 'package', FL % case)
+e('paket/import-url-form', 'url(): the stored address in the form the anchor compares', IM,
+  "return AB_MCP_Sync_Key::site_form( $partner ) . '/?rest_route=/'", "return $partner . '/?rest_route=/'", 'package', 'testTheProductionSiteBuildsTheAddressFromTheStoredAddressOfItsStagingSite')
+TOOLS = 'testTheToolsHandTheirArgumentsOn'
+e('paket/tool-export-again', 'wp_site_export: with package_id the package made before', TS,
+  "\t\tif ( array_key_exists( 'package_id', $a ) ) {\n\t\t\treturn AB_MCP_Sync_Export::again( $a['package_id'] );", "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Export::again( $a['package_id'] );", 'package', TOOLS)
+e('paket/tool-export-cursor', 'wp_site_export: the cursor passed on', TS,
+  "isset( $a['cursor'] ) ? $a['cursor'] : null", "null", 'package', TOOLS)
+MACK = "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ! is_string( $context ) || 1 !== preg_match( '~^[a-z0-9/-]{1,64}\\z~', $context ) ) {"
+MAC = 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose'
+e('paket/mac-role', 'mac(): only a confirmed staging site', K, MACK, MACK.replace('AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() || ', ''), 'package', MAC)
+e('paket/mac-context', 'mac(): a purpose of a-z, 0-9, - and /, up to 64', K, MACK, MACK.replace('{1,64}', '{0,65}'), 'package', MAC)
+e('paket/mac-key', 'mac(): not without the key', K,
+  "\t\tif ( null === $found ) {\n\t\t\treturn null;\n\t\t}\n\t\treturn hash_hmac(", "\t\treturn hash_hmac(", 'package', MAC)
+e('paket/mac-purpose', 'mac(): the purpose in what it signs', K,
+  "'ab-sync-mac/1' . \"\\n\" . $context . \"\\n\"", "'ab-sync-mac/1' . \"\\n\" . 'x' . \"\\n\"", 'package', MAC)
+INV = 'testASourceMayBoundTheObjectsOfAnInventory'
+BOUND = "\t\tif ( isset( $source['objects'] ) && self::$made >= (int) $source['objects'] ) {"
+e('paket/inventory-bound', 'out_of_time(): the bound of objects reached', INV_F, BOUND, BOUND.replace('>=', '>'), 'dbkinds', INV)
+e('paket/inventory-bound-on', 'out_of_time(): a source that bounds its objects', INV_F, BOUND, "\t\tif ( false ) {", 'dbkinds', INV)
+e('paket/inventory-count', 'entry(): every object counts', INV_F, "\t\t++self::$made;\n", "", 'dbkinds', INV)
+e('paket/inventory-count-anew', 'source(): a new source counts anew', INV_F, "\t\tself::$made  = 0;\n", "", 'dbkinds', INV)
+e('paket/inventory-at-least-one', 'source(): a bound of at least one object', INV_F, "max( 1, (int) $objects )", "(int) $objects", 'dbkinds', INV)
+e('paket/gate-carry-over', 'CARRY_OVER: the packages are the carrying over', G,
+  "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );", "'wp_site_export', 'wp_site_export_chunk' );", 'gate', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds')
+
 # ----------------------------------------------------------- integration
 e('paket/it-renews', 'save(): the staging site confirmed by a person has a key (two sites)', S,
   "\t\t\t$key = AB_MCP_Sync_Key::renew();", "\t\t\t$key = array();", 'it', 'testTheStagingSiteGivesItsPublicKeyOverHttpAndKeepsThePrivateOne')
@@ -784,6 +916,70 @@ e('paket/it-confirmed-anchor', 'verify(): nothing read with a prepared key (two 
 e('paket/it-target', 'verify(): another path, port or scheme of the production site (two sites)', M,
   TARGET, "\t\tif ( false ) {", 'it', 'testAManifestForAnotherAddressOfTheProductionSiteIsRefused')
 e('paket/it-key-id', 'verify(): the key of an older confirmation (two sites)', M, KEYS, "\t\tif ( false ) {", 'it', 'testAnotherConfirmationOfTheStagingRoleNeedsTheNewKeyConfirmed')
+
+PKG_IT = {
+    'export': 'testTheStagingSiteMakesAPackageOfItsInventoryInItsProtectedStore',
+    'cursor': 'testAPackageFromACursorHoldsTheKindsFromThere',
+    'route': 'testTheRouteAnswersEveryOtherRequestAsARouteWordPressDoesNotKnow',
+    'fetch': 'testTheProductionSiteFetchesThePackageItselfAndTakesItUpAgain',
+    'manifest': 'testTheProductionSiteChecksTheManifestOnEveryCall',
+    'relay': 'testTheRelayCarriesAChunkFromTheStagingSiteToTheProductionSite',
+    'whole': 'testAPackageIsCheckedWholeOnceEveryChunkIsThere',
+    'own': 'testAPackageIsGivenOutToItsAccountAndRemovedAfterADay',
+    'time': 'testACallFetchesAsFarAsItsTimeReaches',
+    'serve': 'testAStagingSiteAnswersOnlyTheRequestOfItsRouteWithTheBytesOfTheChunk',
+}
+e('paket/it-route-hook', 'the route of the chunks is answered (two sites)', RC,
+  "\t\tadd_filter( 'rest_pre_dispatch', array( $this, 'serve_package' ), 10, 3 );", "", 'itpkg', PKG_IT['route'])
+SERVE = "\t\tif ( ! empty( $result ) || ! $request instanceof WP_REST_Request || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route() ) {"
+e('paket/it-serve-other-filter', 'serve(): what another filter answered stays', EX, SERVE, SERVE.replace('! empty( $result ) || ', ''), 'itpkg', PKG_IT['serve'])
+e('paket/it-serve-path', 'serve(): only the path of the route', EX, SERVE, SERVE.replace(" || '/' . AB_MCP_REST_NAMESPACE . self::ROUTE !== $request->get_route()", ''), 'itpkg', PKG_IT['serve'])
+SEND = "\t\tif ( $served || null === self::$serving || self::$serving[0] !== $result ) {"
+e('paket/it-send-own', 'send(): only the answer serve() accepted', EX, SEND, SEND.replace(' || self::$serving[0] !== $result', ''), 'itpkg', PKG_IT['serve'])
+e('paket/it-send-once', 'send(): once', EX, "\t\tself::$serving = null;\n\t\techo $bytes;", "\t\techo $bytes;", 'itpkg', PKG_IT['serve'])
+e('paket/it-requested-expired', 'requested(): nothing of a package whose manifest expired', EX,
+  "$found['manifest']['expires'] <= $now || ", "", 'itpkg', PKG_IT['serve'])
+e('paket/it-find-record', 'find(): a package without its record is none', EX,
+  "\t\tif ( array() === $records ) {\n\t\t\treturn null;\n\t\t}\n\t\t$name = reset( $records );\n\t\t$text = AB_MCP_Protected_Store::get( 'out',",
+  "\t\t$name = reset( $records );\n\t\t$text = AB_MCP_Protected_Store::get( 'out',", 'itpkg', PKG_IT['serve'])
+OWN = "\t\tif ( null === $found || (int) $found['user_id'] !== (int) get_current_user_id() || $found['manifest']['expires'] <= ( null === $now ? time() : (int) $now ) ) {"
+e('paket/it-own-account', 'own(): a package of this account', EX, OWN, OWN.replace("(int) $found['user_id'] !== (int) get_current_user_id() || ", ''), 'itpkg', PKG_IT['own'])
+e('paket/it-own-expires', 'own(): not at the end of its manifest or after', EX, OWN, OWN.replace("$found['manifest']['expires'] <= (", "$found['manifest']['expires'] < ("), 'itpkg', PKG_IT['own'])
+e('paket/it-chunk-index', 'chunk(): a chunk the manifest lists', EX,
+  "\t\tif ( ! is_int( $chunk ) || ! isset( $found['manifest']['chunks'][ $chunk ] ) ) {", "\t\tif ( ! is_int( $chunk ) ) {", 'itpkg', PKG_IT['relay'])
+e('paket/it-export-cursor', 'make(): the inventory from the cursor', EX,
+  "$read   = AB_MCP_Sync_Inventory::run( $source, $cursor );", "$read   = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
+e('paket/it-export-kinds-from', 'make(): complete by the cursor the package began with', EX,
+  "$kinds = self::kinds( $read['objects'], $cursor, $read['cursor'] );", "$kinds = self::kinds( $read['objects'], null, $read['cursor'] );", 'itpkg', PKG_IT['cursor'])
+e('paket/it-import-label', 'begin(): the group named by the package', IM,
+  "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
+e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
+  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $found['expect'] );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\treturn $found;",
+  "\t\treturn $found;", 'itpkg', PKG_IT['manifest'])
+e('paket/it-import-other-manifest', 'held(): a later manifest is the kept one', IM,
+  "\t\tif ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] )", "\t\tif ( false && ( ! is_array( $a['manifest'] )", 'itpkg', PKG_IT['manifest'])
+e('paket/it-import-unknown', 'held(): the first call brings the manifest', IM,
+  "\t\t\tif ( ! array_key_exists( 'manifest', $a ) ) {", "\t\t\tif ( false ) {", 'itpkg', PKG_IT['manifest'])
+e('paket/it-fetch-skip', 'fetched(): a chunk that is there is not asked again', IM,
+  "\t\t\tif ( isset( $have[ AB_MCP_Sync_Export::chunk_name( $i ) ] ) ) {\n\t\t\t\tcontinue;\n\t\t\t}\n", "", 'itpkg', PKG_IT['fetch'])
+e('paket/it-fetch-deadline', 'fetched(): as far as BUDGET reaches', IM,
+  "\t\t\tif ( self::now() >= $deadline ) {\n\t\t\t\tbreak;\n\t\t\t}\n", "", 'itpkg', PKG_IT['time'])
+e('paket/it-fetch-range', 'fetched(): a chunk of the package', IM,
+  "\t\t\tif ( ! isset( $held['manifest']['chunks'][ $grant['chunk'] ] ) ) {\n\t\t\t\treturn self::grants_refusal();", "\t\t\tif ( false ) {\n\t\t\t\treturn self::grants_refusal();", 'itpkg', PKG_IT['fetch'])
+e('paket/it-fetch-status', 'arrived(): only an answer 200', IM, "\t\tif ( 200 !== $status ) {", "\t\tif ( false ) {", 'itpkg', PKG_IT['fetch'])
+e('paket/it-fetch-limit', 'fetched(): no more than the chunk', IM,
+  "'limit_response_size' => $bytes + 1,", "'limit_response_size' => $bytes + 2,", 'itpkg', PKG_IT['fetch'])
+e('paket/it-keep-exists', 'keep(): a chunk that is there stays, no refusal', IM,
+  " && 'ab_mcp_store_exists' !== $put->get_error_code()", "", 'itpkg', PKG_IT['relay'])
+e('paket/it-state-whole', 'state(): the whole against its hash', IM,
+  "\t\t\tif ( is_wp_error( $ok ) ) {\n\t\t\t\treturn $ok;\n\t\t\t}\n\t\t\t$put = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::COMPLETE",
+  "\t\t\t$put = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::COMPLETE", 'itpkg', PKG_IT['whole'])
+e('paket/it-state-mark', 'state(): a package checked whole is marked complete', IM,
+  "\t\t\t$put = AB_MCP_Protected_Store::put( 'in', $held['gid'], self::COMPLETE, $held['manifest']['sha256'] );", "\t\t\t$put = true;", 'itpkg', PKG_IT['fetch'])
+e('paket/it-state-failed', 'state(): failed only where a fetch failed', IM, "\t\tif ( array() !== $failed ) {", "\t\tif ( true ) {", 'itpkg', PKG_IT['fetch'])
+RD = "\t\tif ( '' === $text || base64_encode( (string) $data ) !== $text ) {"
+e('paket/it-relay-empty', 'relayed(): a chunk has a byte at least', IM, RD, RD.replace("'' === $text || ", ''), 'itpkg', PKG_IT['relay'])
+e('paket/it-relay-spelling', 'relayed(): base64 in its one spelling', IM, RD, RD.replace(" || base64_encode( (string) $data ) !== $text", ''), 'itpkg', PKG_IT['relay'])
 
 # ----------------------------------------------------------------- check
 ids = set()
@@ -836,13 +1032,18 @@ out.append('''<?php
  * renewal read back exactly, international domain names in either
  * spelling, the port of the stored address of the staging site. Since
  * Codex round 2: this site's own address from home_url() as it is, the
- * port once, no segment . or .. in the path of a fetch.
+ * port once, no segment . or .. in the path of a fetch. Part 2 (decision
+ * 6): the package of the inventory in chunks, the kinds it holds whole, the
+ * signed fetch addresses and the route that answers only them, the direct
+ * fetch and the relay, taken up again, checked whole; the bound of objects
+ * of the inventory; the three tools.
  *
  * Written by tests/mutation/gen/paket.py from the source; change the
  * entries there and run it again.
  *
  * Held by the unit suite (SyncTrustTest, SyncTrustStorageTest,
- * SyncTrustAddressTest, SyncManifestTest, StagingStatusTest) and, for what
+ * SyncTrustAddressTest, SyncManifestTest, StagingStatusTest, SyncPackageTest,
+ * SyncDbKindsTest, StagingGateTest) and, for what
  * two WordPress sites show, by the integration suite (the sites running,
  * AB_IT_ROOT set). Where a check could change no outcome (sodium or a
  * check before it refuses the same input), it was taken out of the code
@@ -857,6 +1058,10 @@ $address  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncTrust
 $manifest = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncManifestTest' );
 $status   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingStatusTest' );
 $it       = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncTrustTest' );
+$package  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPackageTest' );
+$dbkinds  = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncDbKindsTest' );
+$gate     = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'StagingGateTest' );
+$itpkg    = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', 'SyncPackageTest' );
 
 $k  = 'includes/sync/class-sync-key.php';
 $a  = 'includes/sync/class-sync-anchor.php';
@@ -866,6 +1071,11 @@ $s  = 'includes/class-staging.php';
 $ad = 'includes/class-admin.php';
 $rc = 'includes/class-rest-controller.php';
 $o  = 'includes/class-outbound.php';
+$ex = 'includes/sync/class-sync-export.php';
+$im = 'includes/sync/class-sync-import.php';
+$inv = 'includes/sync/class-sync-inventory.php';
+$ts = 'includes/tools/class-tools-staging.php';
+$g  = 'includes/class-staging-gate.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:
