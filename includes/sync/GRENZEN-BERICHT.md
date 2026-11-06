@@ -88,13 +88,16 @@ Weg.
   darauf bleibt unaufgelöst («anderer Inhalt»), und ein Objekt, dessen eigene
   Identität sie enthält, hat keine (ein Menüeintrag unter einem solchen
   Eltern-Eintrag, eine Seite unter einer solchen Elternseite heissen
-  «unsicher»). Jede Zeile einer solchen Identität heisst «unsicher» (Codex
-  Runde 4): die Site sagt es in der Zeile selbst (`twin`), so dass das auch
-  gilt, wo ein Paket nur einen der Zwillinge hält oder der andere schon durch
-  eine Wahl gepaart ist (der Rest wird nie «gleich»); ebenso eine Seite unter
-  einem Zwilling, auch wo das Paket nur diesen einen Elternteil hält
-  (Elternpfad `?`). Beispiele: zwei eigene Links «#» mit derselben Beschriftung
-  unter demselben Eltern-Eintrag, zwei Posts eines Typs, Slugs und einer
+  «unsicher»). Die Site sagt in der Zeile selbst, dass ein Objekt ein
+  Zwilling ist und wie viele Objekte die Identität haben (`twin`, Codex
+  Runde 4 und 5): Zwillinge paart nur eine gleiche abgebildete Form, und nur
+  wo alle beider Sites im Vergleich vorliegen (unten, «Zwillinge über ihre
+  Form»); sonst heisst jede Zeile «unsicher», auch wo ein Paket nur einen der
+  Zwillinge hält oder der andere schon durch eine Wahl gepaart ist (der Rest
+  wird nie «gleich»); ebenso eine Seite unter einem Zwilling, auch wo das
+  Paket nur diesen einen Elternteil hält (Elternpfad `?`). Beispiele: zwei
+  eigene Links «#» mit derselben Beschriftung unter demselben Eltern-Eintrag,
+  zwei Posts eines Typs, Slugs und einer
   Sprache unter derselben Elternseite (ein Entwurf behält seinen Slug), zwei
   Anhänge derselben Datei und Sprache, zwei Terme einer Taxonomie, eines
   Slugs und einer Sprache (der Kern vergibt einen Slug je Taxonomie nur
@@ -119,7 +122,8 @@ Weg.
   als eine Sprache, hat es keine Identität (`language` `?`). Die Pakete beider
   Sites tragen die Sprache nur, wo beide dieselbe Fassung haben.
 - **Grosse Sites** (Codex Runde 4, B): Der Index der Identitäten ist kompakt:
-  je Post ein Satz von 43 Bytes (ID, Sprache, SHA-256 seiner Identität), je
+  je Post ein Satz von 43 Bytes (ID, Sprache, SHA-256 seiner Identität; bei
+  einem Zwilling stattdessen, wie viele Objekte sie haben), je
   Term einer von 53 Bytes, sortiert und durch Halbieren gefunden; während des
   Aufbaus je Post einer von 51 Bytes mit der ID seines Elternteils, gezählt
   wird je SHA-256. Gemessen für 20 000 Seiten und 50 000 Anhänge, jeder mit
@@ -193,7 +197,8 @@ Weg.
   «anderer Inhalt»).
 - Keine Paarung durch Ausschluss: Nur ein Objekt je Seite derselben Identität
   auf demselben Pfad ist ein Paar; mehrere auf einem Pfad sind Zwillinge ihrer
-  Site und heissen alle «unsicher». Der Pfad nennt jeden Elternteil mit Typ,
+  Site, die nur eine gleiche abgebildete Form paart (unten), sonst heissen sie
+  «unsicher». Der Pfad nennt jeden Elternteil mit Typ,
   Theme, Slug und Sprache (Codex Runde 4): `kontakt` unter `team` (de) gegen
   `kontakt` unter `team` (en) ist ein anderer Pfad, «unsicher», nie «anderer
   Inhalt». Dieselbe Identität auf einem anderen Elternpfad (`/team/kontakt`
@@ -220,14 +225,28 @@ Weg.
   Seiten eindeutig wären, und was unter ihnen hängt, ebenso (Codex Runde 3,
   A2). Ein Ziel ausserhalb der Bestandsaufnahme ohne Identität (ein
   gelöschter Post) macht den Eintrag «unsicher».
-- Mehrere Kandidaten derselben Identität auf einem Pfad werden nicht mehr über
-  eine eindeutige gleiche abgebildete Form gepaart (so Codex Runde 3, B3; in
-  Runde 4 ersetzt): Zwillinge sind keine Identität, jede Zeile heisst
-  «unsicher», und die Person wählt. Die Kategorie «mehrdeutig» entfällt damit.
-  Betroffen sind Objekte, die ihre Site doppelt führt: Entwürfe mit dem Slug
-  einer veröffentlichten Seite, Übersetzungen mit gemeinsamem Slug, wo das
-  Sprach-Plugin nicht gelesen wird (Polylang und WPML werden gelesen), und von
-  Hand oder durch ein Plugin doppelt geschriebene Slugs; selten.
+- **Zwillinge über ihre Form** (Codex Runde 3, B3; in Runde 5 wiederhergestellt,
+  nur als positiver Beleg): Mehrere Kandidaten derselben Identität auf einem
+  Pfad werden über eine gleiche abgebildete Form gepaart, zuerst `mapped`, dann
+  `mapped_possible`, wo diese Form unter dem Rest auf jeder Seite genau einmal
+  vorkommt und beide Objekte ganz gelesen sind. Das gilt nur, wo alle
+  Zwillinge beider Sites im Vergleich vorliegen: so viele auf dem Pfad, wie die
+  Zeile jeder Site sagt (`twin`, gezählt vom Index der Identitäten). Was danach
+  bleibt, heisst «unsicher», nie «gleich» und nie «anderer Inhalt» durch
+  Ausschluss; ebenso Zwillinge gleicher Form, ein Paket mit nur einem Teil der
+  Zwillinge, der Rest nach einer gewählten Paarung, ein gehaltener oder nicht
+  gelesener Zwilling und Menüeinträge (nur ihr Platz trennt sie, Codex
+  Runde 3, A2). Gewöhnlich ist das bei einer veröffentlichten Seite und einem
+  Entwurf mit ihrem Slug: WordPress prüft den Slug eines Entwurfs nicht auf
+  Eindeutigkeit (`wp_unique_post_slug()`), so entstehen sie etwa als Kopie
+  einer Seite. Unverändert sind beide «gleich»; ist eine geändert, ist die
+  andere «gleich» und die geänderte «unsicher». Die Kategorie «mehrdeutig»
+  entfällt (seit Runde 4). Grenze C: Unterscheiden sich beide Zwillinge
+  zwischen den Sites oder gleichen sie einander, wählt die Person (`choices`;
+  selten, die sichere Seite); ebenso bei Übersetzungen mit gemeinsamem Slug,
+  wo das Sprach-Plugin nicht gelesen wird (Polylang und WPML werden gelesen),
+  und bei von Hand oder durch ein Plugin doppelt geschriebenen Slugs, soweit
+  ihr Inhalt sie nicht trennt.
 - Eine Kennung, die kein Paar hält (länger als 191 Zeichen, ein
   Steuerzeichen, kein UTF-8; etwa ein Schlüssel eines Theme-Mods, der mit dem
   Stylesheet über 191 Zeichen kommt), heisst «nicht verglichen» mit dem Weg

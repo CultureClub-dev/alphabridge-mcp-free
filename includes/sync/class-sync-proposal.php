@@ -41,14 +41,17 @@
  * references so as well, mapped_same(), Codex round 2, B-1), so the same
  * objects with other ids on the two sites are equal. No pair by exclusion:
  * one object a side of the same identity and path is a pair. An identity
- * that is there more than once on a site (its line says twin, or a side
- * holds it twice on a path: Codex round 4) is uncertain with every object
- * of it on that path, also where a package holds only one of them or the
- * other one was paired by a choice; so are the same identity left on
- * another path, a post without a slug or with a path of parents not known
- * whole ("?", Codex round 2, A-2), a menu item whose target or parent has no
- * identity of its own, and menu items of one identity in one menu (only
- * their place tells them apart, Codex round 3, A2). A post or term carries
+ * that is there more than once on a site (its line says twin with how many
+ * its site has, or a side holds it twice on a path: Codex round 4) pairs on
+ * that path only by an equal mapped form there once on each side, where
+ * every object of it of both sites is at hand (Codex round 5: a published
+ * page and a draft of its slug); the rest is uncertain, also where a package
+ * holds only one of them or another one was paired by a choice; so are the
+ * same identity left on another path, a post without a slug or with a path
+ * of parents not known whole ("?", Codex round 2, A-2), a menu item whose
+ * target or parent has no identity of its own, and menu items of one
+ * identity in one menu (only their place tells them apart, Codex round 3,
+ * A2). A post or term carries
  * its language where its site names one (Codex round 3, B2). Categories
  * (CATEGORIES): equal (both read whole,
  * the same mapped form: confirmed as active), differs (the same identity,
@@ -1267,6 +1270,8 @@ final class AB_MCP_Sync_Proposal {
 				'names'           => $names,
 				'path'            => AB_MCP_Sync_Canon::encode( $whole ),
 				'twin'            => ! empty( $line['twin'] ),
+				// How many objects of its site have its identity (AB_MCP_Sync_Identity::twins()), 1 for none but this one.
+				'twins'           => empty( $line['twin'] ) ? 1 : $line['twin'],
 				'doubt'           => self::doubt( $kind, $identity, $names ),
 			);
 		}
@@ -1410,11 +1415,14 @@ final class AB_MCP_Sync_Proposal {
 	 * exclusion (Codex A1): a pair only where the identity, the path of
 	 * parents included, is the same on both sides, one to one. An identity
 	 * that is there more than once on its site is no identity (Codex round
-	 * 4): each object of it on its path is offered for a person's choice
-	 * (uncertain), whether its site says so (twin, also where a package holds
-	 * only one of them or the other one was paired by a choice) or a side
-	 * holds it twice on one path; so are objects of the same identity left
-	 * on another path, or with a doubt. None is paired by itself.
+	 * 4), whether its site says so (twin) or a side holds it twice on one
+	 * path: its objects on a path are paired only by an equal mapped form,
+	 * one to one, where every one of them of both sites is at hand (by_form(),
+	 * Codex round 5; a published page and a draft of its slug, unchanged).
+	 * The others are offered for a person's choice (uncertain), also where a
+	 * package holds only one of them or another one was paired by a choice;
+	 * so are objects of the same identity left on another path, or with a
+	 * doubt. None is paired by exclusion.
 	 *
 	 * @param array[]  $s        Staging objects.
 	 * @param array[]  $l        Production objects.
@@ -1455,8 +1463,15 @@ final class AB_MCP_Sync_Proposal {
 					$twin = $twin || $item['twin'];
 				}
 				if ( $twin && array() !== $ss && array() !== $ll ) {
-					$out[] = self::choice_entry( 'uncertain', $ss, $ll, self::twin_reason( $ss[0]['kind'] ) );
-					continue;
+					list( $pairs, $ss, $ll ) = self::by_form( $ss, $ll );
+					foreach ( $pairs as $pair ) {
+						$out[] = self::pair_entry( $pair[0], $pair[1] );
+					}
+					if ( array() !== $ss && array() !== $ll ) {
+						$out[] = self::choice_entry( 'uncertain', $ss, $ll, self::twin_reason( $ss[0]['kind'] ) );
+						continue;
+					}
+					// What is left on one side only has no counterpart on its path.
 				}
 				if ( 1 === count( $ss ) && 1 === count( $ll ) ) {
 					$out[] = self::pair_entry( $ss[0], $ll[0] );
@@ -1480,6 +1495,93 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
+	 * Twins of one path paired by an equal mapped form, as a proof only
+	 * (Codex round 3, B3; round 5): the form with the typed references by
+	 * identity, then the one with the possible references so as well, each
+	 * pair where that form is there once on each side among what is left,
+	 * both read whole. Only where every object of the identity of both sites
+	 * is at hand (all_at_hand()), never for menu items (only their
+	 * place tells them apart, Codex round 3, A2). What is left is never paired
+	 * by exclusion.
+	 *
+	 * @param array[] $ss Staging objects of the path.
+	 * @param array[] $ll Production objects of the path.
+	 * @return array pairs (staging, production), the rest of each side.
+	 */
+	private static function by_form( array $ss, array $ll ) {
+		$pairs = array();
+		if ( 'menu_item' === $ss[0]['kind'] || ! self::all_at_hand( $ss ) || ! self::all_at_hand( $ll ) ) {
+			return array( $pairs, $ss, $ll );
+		}
+		foreach ( array( 'mapped', 'mapped_possible' ) as $form ) {
+			list( $found, $ss, $ll ) = self::unique_pairs( $ss, $ll, $form );
+			$pairs                   = array_merge( $pairs, $found );
+		}
+		return array( $pairs, $ss, $ll );
+	}
+
+	/**
+	 * Whether the objects of one side on one path are every object its site
+	 * has of their identity: as many as each line says its site has (twin; a
+	 * line that is none says one, a twin that does not say how many is never
+	 * all). Not so where a package holds only some of them, one is held or
+	 * not read, or one was paired by a choice before (Codex round 4).
+	 *
+	 * @param array[] $items Objects of one side and path.
+	 * @return bool
+	 */
+	private static function all_at_hand( array $items ) {
+		foreach ( $items as $item ) {
+			if ( count( $items ) !== $item['twins'] ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The objects of the two sides whose mapped form (of $form) is equal and
+	 * there once on each side, as pairs, where both are read whole (an equal
+	 * form not read to its end says nothing); the rest of each side.
+	 *
+	 * @param array[] $ss   Staging objects.
+	 * @param array[] $ll   Production objects.
+	 * @param string  $form mapped or mapped_possible.
+	 * @return array pairs (staging, production), the rest of each side.
+	 */
+	private static function unique_pairs( array $ss, array $ll, $form ) {
+		$proof = static function ( array $item ) use ( $form ) {
+			return is_string( $item[ $form ] ) && $item['complete'];
+		};
+		$hs    = array_count_values( array_filter( array_column( $ss, $form ), 'is_string' ) );
+		$hl    = array_count_values( array_filter( array_column( $ll, $form ), 'is_string' ) );
+		$by    = array();
+		foreach ( $ll as $j => $item ) {
+			if ( $proof( $item ) && 1 === $hl[ $item[ $form ] ] && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {
+				$by[ $item[ $form ] ] = $j;
+			}
+		}
+		$pairs = array();
+		$used  = array();
+		$rest  = array();
+		foreach ( $ss as $item ) {
+			if ( $proof( $item ) && isset( $by[ $item[ $form ] ] ) ) {
+				$used[ $by[ $item[ $form ] ] ] = true;
+				$pairs[]                        = array( $item, $ll[ $by[ $item[ $form ] ] ] );
+				continue;
+			}
+			$rest[] = $item;
+		}
+		$rest_l = array();
+		foreach ( $ll as $j => $item ) {
+			if ( ! isset( $used[ $j ] ) ) {
+				$rest_l[] = $item;
+			}
+		}
+		return array( $pairs, $rest, $rest_l );
+	}
+
+	/**
 	 * Why the objects of an identity that is there more than once on a site
 	 * are paired only by a choice.
 	 *
@@ -1491,7 +1593,7 @@ final class AB_MCP_Sync_Proposal {
 			// Only the place tells them apart, which is no identity (Codex round 3, A2).
 			return 'Another item of its menu has the same identity on its site (two links of one address and label, or one target, under one parent), so only its place tells them apart: it is paired only by the choice of a person.';
 		}
-		return 'Another object of its site has the same identity (a post of the same type, slug, language and parent; a term of the same taxonomy, slug and language), so neither is named by it: it is paired only by the choice of a person, also where a package holds only one of them or the other one was paired.';
+		return 'Another object of its site has the same identity (a post of the same type, slug, language and parent, such as a published page and a draft of its slug; a term of the same taxonomy, slug and language), so neither is named by it. Such objects are paired by an equal content only where it is there once on each side and every one of them of both sites is at hand; this one is paired only by the choice of a person, also where a package holds only one of them or the other one was paired.';
 	}
 
 	/**

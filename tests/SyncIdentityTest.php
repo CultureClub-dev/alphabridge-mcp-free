@@ -12,7 +12,8 @@
  * - one identity per object of the site: an identity another object has as
  *   well names none and both are twins (posts under one parent, templates of
  *   one theme, attachments of one file, terms of one taxonomy and slug, menu
- *   items of one target under one parent); under a parent without one, none;
+ *   items of one target under one parent), each saying how many objects have
+ *   it, also in an index taken up; under a parent without one, none;
  *   the language of Polylang, else of WPML;
  * - a table that cannot be read is named, and every identity is none.
  *
@@ -480,6 +481,76 @@ final class SyncIdentityTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Identity::post( 999, $ctx ), 'Not there.' );
 	}
 
+	public function testATwinSaysHowManyObjectsOfItsSiteHaveItsIdentity(): void {
+		$s = new SyncIdentitySite();
+		foreach ( array( 1, 2, 3 ) as $id ) {
+			$s->post( $id, 'page', 'drei' );
+		}
+		$s->post( 4, 'page', 'zwei' );
+		$s->post( 5, 'page', 'zwei' );
+		$s->post( 6, 'page', 'allein' );
+		$s->post( 7, 'page', 'drei', 6 );
+		foreach ( array( 10, 11, 12 ) as $id ) {
+			$s->post( $id, 'attachment', 'f' . $id );
+			$s->meta( $id, '_wp_attached_file', '2026/11/same.jpg' );
+		}
+		$s->term( 20, 200, 'category', 'news' );
+		$s->term( 21, 201, 'category', 'news' );
+		$s->term( 23, 203, 'category', 'news' );
+		$s->term( 22, 202, 'post_tag', 'news' );
+		$s->term( 24, 204, 'post_tag', 'tipps' );
+		$s->term( 25, 205, 'post_tag', 'tipps' );
+		$s->item( 30, 'Firma', array( '_menu_item_type' => 'custom', '_menu_item_url' => '#', '_menu_item_menu_item_parent' => 0 ) );
+		$s->item( 31, 'Firma', array( '_menu_item_type' => 'custom', '_menu_item_url' => '#', '_menu_item_menu_item_parent' => 0 ) );
+		$ctx    = self::ctx();
+		$counts = static function () use ( $ctx ): array {
+			$out = array();
+			foreach ( array( 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 30, 31 ) as $id ) {
+				$out[ 'post ' . $id ] = AB_MCP_Sync_Identity::twins( array( 'kind' => $id >= 30 ? 'menu_item' : 'post', 'ref' => (string) $id ), $ctx );
+			}
+			foreach ( array( 20 => 'category', 21 => 'category', 23 => 'category', 22 => 'post_tag', 24 => 'post_tag', 25 => 'post_tag' ) as $id => $taxonomy ) {
+				$out[ 'term ' . $id ] = AB_MCP_Sync_Identity::twins( array( 'kind' => 'term', 'ref' => (string) $id, 'identity' => array( 'taxonomy' => $taxonomy ) ), $ctx );
+			}
+			return $out;
+		};
+		self::serve( $s );
+		$expected = array(
+			'post 1'  => 3,
+			'post 2'  => 3,
+			'post 3'  => 3,
+			'post 4'  => 2,
+			'post 5'  => 2,
+			'post 6'  => 0,
+			'post 7'  => 0,
+			'post 10' => 3,
+			'post 11' => 3,
+			'post 12' => 3,
+			'post 30' => 2,
+			'post 31' => 2,
+			'term 20' => 3,
+			'term 21' => 3,
+			'term 23' => 3,
+			'term 22' => 0,
+			'term 24' => 2,
+			'term 25' => 2,
+		);
+		self::assertSame( $expected, $counts(), 'Three posts of one slug, two of another, one alone and one under another parent; three attachments of one file; three terms of one slug, one of it in another taxonomy and two of another slug there; two links of one address and label.' );
+		self::assertFalse( AB_MCP_Sync_Identity::twin( array( 'kind' => 'post', 'ref' => '6' ), $ctx ) );
+		self::assertTrue( AB_MCP_Sync_Identity::twin( array( 'kind' => 'post', 'ref' => '1' ), $ctx ) );
+		self::assertSame( 0, AB_MCP_Sync_Identity::twins( array( 'kind' => 'option', 'ref' => 'blogname' ), $ctx ), 'Another kind is never a twin.' );
+		// A page a call: the counts are the same in the index taken up.
+		self::serve( $s );
+		$stored = null;
+		$calls  = 0;
+		do {
+			AB_MCP_Sync_Identity::reset( $ctx, $stored );
+			$done   = AB_MCP_Sync_Identity::build( static fn(): bool => true );
+			$stored = AB_MCP_Sync_Identity::stored();
+		} while ( true !== $done && ++$calls < 50 );
+		AB_MCP_Sync_Identity::reset( $ctx, $stored );
+		self::assertSame( $expected, $counts(), 'Built in parts.' );
+	}
+
 	public function testAPostUnderAParentThatIsNotThereHasNone(): void {
 		$s = new SyncIdentitySite();
 		$s->post( 1, 'attachment', 'erstes-bild' );
@@ -676,14 +747,14 @@ final class SyncIdentityTest extends TestCase {
 		self::serve( $s );
 		AB_MCP_Sync_Inventory::source( array( 'https://live.example', 'https://staging.example' ) );
 		$object = static fn( string $kind, string $ref, array $identity = array() ): array => AB_MCP_Sync_Inventory::entry( array( 'kind' => $kind, 'ref' => $ref, 'identity' => $identity, 'locks' => array(), 'status' => 'core', 'credentials' => array( 'b9' => array(), 'mixed' => array() ) ) );
-		self::assertTrue( $object( 'post', '2' )['twin'] );
+		self::assertSame( 2, $object( 'post', '2' )['twin'], 'How many objects of the site have its identity (Codex round 5).' );
 		self::assertArrayNotHasKey( 'twin', $object( 'post', '3' ), 'Only where it is one.' );
-		self::assertTrue( $object( 'term', '30', array( 'taxonomy' => 'category' ) )['twin'] );
+		self::assertSame( 2, $object( 'term', '30', array( 'taxonomy' => 'category' ) )['twin'] );
 		self::assertArrayNotHasKey( 'twin', $object( 'menu', '30', array( 'taxonomy' => 'nav_menu' ) ), 'A menu by its taxonomy.' );
-		self::assertTrue( $object( 'menu', '32', array( 'taxonomy' => 'nav_menu' ) )['twin'], 'Two menus of one slug.' );
+		self::assertSame( 2, $object( 'menu', '32', array( 'taxonomy' => 'nav_menu' ) )['twin'], 'Two menus of one slug.' );
 		$line = static fn( array $o ): array => AB_MCP_Sync_Export::line( $o + array( 'canon' => 'canon/1', 'hash' => str_repeat( 'a', 64 ), 'size' => 1, 'complete' => true, 'refs' => array(), 'possible' => array() ) );
-		self::assertTrue( $line( $object( 'post', '1' ) )['twin'], 'The line of a twin says so.' );
+		self::assertSame( 2, $line( $object( 'post', '1' ) )['twin'], 'The line of a twin says so, with how many.' );
 		self::assertArrayNotHasKey( 'twin', $line( $object( 'post', '3' ) ) );
-		self::assertTrue( $line( array( 'status' => 'b9' ) + $object( 'post', '1' ) )['twin'], 'Also the line that carries no more than its identity.' );
+		self::assertSame( 2, $line( array( 'status' => 'b9' ) + $object( 'post', '1' ) )['twin'], 'Also the line that carries no more than its identity.' );
 	}
 }

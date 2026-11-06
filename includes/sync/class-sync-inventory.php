@@ -202,17 +202,20 @@ final class AB_MCP_Sync_Inventory {
 	 * none or there is no form), which the two sites compare (decision 10),
 	 * and of the mapped form with its possible references by identity
 	 * (mapped_possible, AB_MCP_Sync_Identity::possible_hash(); null where
-	 * none hits an object), and twin true where another object of this site
-	 * has its identity (AB_MCP_Sync_Identity::twin(): every line of such an
-	 * identity is uncertain, also in a package that holds only one of them).
+	 * none hits an object), and twin where another object of this site has
+	 * its identity: how many objects of the site have it
+	 * (AB_MCP_Sync_Identity::twins(): such objects are paired only where
+	 * every one of them is at hand, also in a package that holds only one of
+	 * them; Codex rounds 4 and 5).
 	 *
 	 * @param array $result AB_MCP_Sync_Canon::finish().
 	 * @return array
 	 */
 	public static function entry( array $result ) {
 		++self::$made;
-		if ( null !== self::$ctx && AB_MCP_Sync_Identity::twin( $result, self::$ctx ) ) {
-			$result['twin'] = true;
+		$twins = null === self::$ctx ? 0 : AB_MCP_Sync_Identity::twins( $result, self::$ctx );
+		if ( $twins > 1 ) {
+			$result['twin'] = $twins;
 		}
 		$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;
 		// The same with the possible references by identity (Codex round 2, B-1).

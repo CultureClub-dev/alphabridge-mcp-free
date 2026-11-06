@@ -34,12 +34,15 @@
  * A-1), and each of them is a twin (twin(): two custom links «#» with one
  * label under one parent, two posts of one type, slug and language under one
  * parent, two attachments of one file and language, two terms of one
- * taxonomy, slug and language). Nothing is kept before it is final: the order
- * of reading cannot change an identity.
+ * taxonomy, slug and language), which says how many objects of the site have
+ * it (twins(): so a proposal knows whether all of them are at hand, Codex
+ * round 5). Nothing is kept before it is final: the order of reading cannot
+ * change an identity.
  *
  * COMPACT (Codex round 4, B): the index holds, for each post, its id, its
  * language and the SHA-256 of its identity in one record of POST bytes, for
- * each term one of TERM bytes, sorted by id and found by halving; while it is
+ * each term one of TERM bytes, sorted by id and found by halving (a twin has
+ * no identity, its 32 bytes hold how many objects have it); while it is
  * built, each post read is one record of READ bytes with the id of its
  * parent and the SHA-256 of what names it but its parent, and each count is
  * one per SHA-256. For 20 000 posts and 50 000 attachments that is some
@@ -95,8 +98,8 @@ final class AB_MCP_Sync_Identity {
 	/** The meta a menu item is named by. */
 	const ITEM_META = array( '_menu_item_type', '_menu_item_object', '_menu_item_object_id', '_menu_item_url', '_menu_item_menu_item_parent' );
 
-	/** The format of an index as stored() gives it. */
-	const FORMAT = 'ab-sync-identity/1';
+	/** The format of an index as stored() gives it (2: a twin holds its count, Codex round 5). */
+	const FORMAT = 'ab-sync-identity/2';
 
 	/** Bytes of a slice of what stored() gives, as a file of the store holds it (8 MiB). */
 	const SLICE = 8388608;
@@ -127,7 +130,7 @@ final class AB_MCP_Sync_Identity {
 	/** A flag of a record: it has an identity. */
 	const HAS = 1;
 
-	/** A flag of a record: another object of the site has the same identity. */
+	/** A flag of a record: another object of the site has the same identity (its 32 bytes then say how many, counted()). */
 	const TWIN = 2;
 
 	/** The language of a record that names more than one. */
@@ -420,6 +423,20 @@ final class AB_MCP_Sync_Identity {
 	 * @return bool
 	 */
 	public static function twin( array $result, array $ctx ) {
+		return self::twins( $result, $ctx ) > 1;
+	}
+
+	/**
+	 * How many objects of this site have the identity of an object of the
+	 * inventory, where another one has it as well (2 or more); 0 where none
+	 * has it but this one, or it has none. So a proposal pairs twins only
+	 * where every one of them is at hand (Codex round 5).
+	 *
+	 * @param array $result AB_MCP_Sync_Canon::finish(): kind, ref, identity.
+	 * @param array $ctx    Context.
+	 * @return int
+	 */
+	public static function twins( array $result, array $ctx ) {
 		$kind = isset( $result['kind'] ) ? (string) $result['kind'] : '';
 		$ref  = isset( $result['ref'] ) ? (int) $result['ref'] : 0;
 		if ( 'post' === $kind || 'menu_item' === $kind ) {
@@ -428,9 +445,13 @@ final class AB_MCP_Sync_Identity {
 			$taxonomy = isset( $result['identity']['taxonomy'] ) ? (string) $result['identity']['taxonomy'] : ( 'menu' === $kind ? 'nav_menu' : null );
 			$record   = null === $taxonomy ? null : self::term_record( $ref, $ctx, $taxonomy, 0 );
 		} else {
-			return false;
+			return 0;
 		}
-		return null !== $record && 0 !== ( $record['flags'] & self::TWIN );
+		if ( null === $record || 0 === ( $record['flags'] & self::TWIN ) ) {
+			return 0;
+		}
+		// A twin is at least two, whatever its bytes say.
+		return max( 2, unpack( 'J', $record['identity'] )[1] );
 	}
 
 	/**
@@ -775,9 +796,10 @@ final class AB_MCP_Sync_Identity {
 		foreach ( self::records( self::$read_terms, self::TERM ) as $rec ) {
 			$head  = unpack( 'Jid/Jttid/ntax', $rec );
 			$named = 0 !== ( ord( $rec[20] ) & self::HAS );
-			$twin  = $named && isset( $doubled[ substr( $rec, 21, 32 ) ] );
+			$n     = $named ? ( $doubled[ substr( $rec, 21, 32 ) ] ?? 0 ) : 0;
+			$twin  = $n > 1;
 			$has   = $named && ! $twin;
-			$sorted[ substr( $rec, 0, 16 ) ] = substr( $rec, 0, 20 ) . chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::zero() );
+			$sorted[ substr( $rec, 0, 16 ) ] = substr( $rec, 0, 20 ) . chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::counted( $n ) );
 			$tfinal[ $head['id'] . "\0" . self::$taxes[ $head['tax'] ] ] = $has ? substr( $rec, 21, 32 ) : false;
 		}
 		ksort( $sorted, SORT_STRING );
@@ -841,26 +863,26 @@ final class AB_MCP_Sync_Identity {
 		foreach ( self::records( self::$read, self::READ ) as $rec ) {
 			$head = unpack( 'Jid/Ckind/Jparent/nlang', $rec );
 			$id   = $head['id'];
-			$twin = false;
+			$n    = 0;
 			switch ( $head['kind'] ) {
 				case self::FILE:
 					$file     = substr( $rec, 19, 32 );
-					$twin     = isset( $files[ $file ] );
-					$identity = $twin ? false : $file;
+					$n        = $files[ $file ] ?? 0;
+					$identity = $n > 1 ? false : $file;
 					break;
 				case self::ITEM:
 					$identity = $ifinal[ $id ] ?? false;
-					$twin     = isset( $itwins[ $id ] );
+					$n        = $itwins[ $id ] ?? 0;
 					break;
 				case self::NAMED:
 				case self::UNNAMED:
 					$identity = $final[ $id ] ?? false;
-					$twin     = isset( $twins[ $id ] );
+					$n        = $twins[ $id ] ?? 0;
 					break;
 				default:
 					$identity = false;
 			}
-			$out[] = pack( 'JCn', $id, ( false === $identity ? 0 : self::HAS ) | ( $twin ? self::TWIN : 0 ), $head['lang'] ) . ( false === $identity ? self::zero() : $identity );
+			$out[] = pack( 'JCn', $id, ( false === $identity ? 0 : self::HAS ) | ( $n > 1 ? self::TWIN : 0 ), $head['lang'] ) . ( false === $identity ? self::counted( $n ) : $identity );
 			if ( count( $out ) >= 4096 ) {
 				self::$posts .= implode( '', $out );
 				$out          = array();
@@ -888,7 +910,7 @@ final class AB_MCP_Sync_Identity {
 	 * @param int      $width   Bytes of one.
 	 * @param int      $offset  Where its part begins.
 	 * @param int|null $kind    Only records of this kind (the byte at 8), null for those with HAS (the byte at 20).
-	 * @return array<string,true> Part => true.
+	 * @return array<string,int> Part => how many records have it (2 or more).
 	 */
 	private static function twice( $records, $width, $offset, $kind ) {
 		$which = static function ( $rec ) use ( $kind ) {
@@ -905,10 +927,10 @@ final class AB_MCP_Sync_Identity {
 		foreach ( self::records( $records, $width ) as $rec ) {
 			if ( $which( $rec ) && $first[ unpack( 'J', $rec, $offset )[1] ] ) {
 				$part           = substr( $rec, $offset, 32 );
-				$whole[ $part ] = isset( $whole[ $part ] );
+				$whole[ $part ] = ( $whole[ $part ] ?? 0 ) + 1;
 			}
 		}
-		return array_filter( $whole );
+		return array_filter( $whole, static fn( $n ) => $n > 1 );
 	}
 
 	/**
@@ -926,7 +948,7 @@ final class AB_MCP_Sync_Identity {
 	 *                               the identity of a parent final in $final (a
 	 *                               level above) or of another kind, null where
 	 *                               it is not final.
-	 * @param array          $twins  Set: id => true for each twin.
+	 * @param array          $twins  id => how many objects of its level have its identity, for each twin.
 	 * @return array<int,string|false> id => identity, false for none; an object
 	 *                                 left open is not in it (none).
 	 */
@@ -951,8 +973,8 @@ final class AB_MCP_Sync_Identity {
 			$count = array_count_values( array_filter( $made, 'is_string' ) );
 			foreach ( $made as $id => $identity ) {
 				if ( false !== $identity && $count[ $identity ] > 1 ) {
-					$identity      = false;
-					$twins[ $id ] = true;
+					$twins[ $id ] = $count[ $identity ];
+					$identity     = false;
 				}
 				$final[ $id ] = $identity;
 				unset( $open[ $id ] );
@@ -969,7 +991,7 @@ final class AB_MCP_Sync_Identity {
 	 * them; null for no attachment with a file.
 	 *
 	 * @param int               $id    Post id.
-	 * @param array<string,true> $twice The files and languages more than one attachment has.
+	 * @param array<string,int> $twice The files and languages more than one attachment has, with how many.
 	 * @return string|false|null
 	 */
 	private static function attachment( $id, array $twice ) {
@@ -1257,6 +1279,17 @@ final class AB_MCP_Sync_Identity {
 	 */
 	private static function zero() {
 		return str_repeat( "\0", 32 );
+	}
+
+	/**
+	 * The 32 bytes of a record without an identity: of a twin, how many
+	 * objects of the site have its identity (twins()); else zero.
+	 *
+	 * @param int $n How many; 0 for no twin.
+	 * @return string 32 bytes.
+	 */
+	private static function counted( $n ) {
+		return pack( 'J', $n > 1 ? (int) $n : 0 ) . str_repeat( "\0", 24 );
 	}
 
 	/* ------------------------------------------------------ the forms */

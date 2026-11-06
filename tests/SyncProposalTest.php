@@ -8,8 +8,11 @@
  *   where a side names a target without identity. No pair by exclusion: one
  *   to one on the same identity and path is a pair (each parent by its type,
  *   theme, slug and language); an identity there more than once on a site
- *   (twice on a path of a side, or a line its site names a twin) is
- *   uncertain, also with one of them at hand or the other one paired; the
+ *   (twice on a path of a side, or a line its site names a twin) pairs only
+ *   by an equal mapped form there once on each side, where every twin of
+ *   both sites is at hand (a published page and a draft of its slug); else,
+ *   what is left, twins of one form and menu items are uncertain, also with
+ *   one of them at hand or the other one paired; the
  *   same identity on another path, a post without a slug and a menu item
  *   without the identity of its target or parent are uncertain; staging_only,
  *   live_only only where the staging side is complete, else not_compared; a
@@ -341,26 +344,29 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14', '5' => '15' ), self::paired( self::match( $s, $l ) ), 'The page with a featured image stays at the top.' );
 	}
 
-	public function testAnIdentityTwiceIsNeverPairedNotEvenByAnEqualForm(): void {
-		// Each form unique and equal on both sides: still no identity (Codex round 4).
+	public function testAnEqualMappedFormThereOnceOnEachSideOfAPathPairsTwins(): void {
+		// Each form there once on each side, every twin of both sites at hand: a pair (Codex round 3, B3; round 5).
 		$r = self::match(
-			array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ),
-			array( self::page( '12', 'dup', self::h( 'b' ) ), self::page( '13', 'dup', self::h( 'a' ) ) )
+			array( self::twin( self::page( '34', 'dup', self::h( 'a' ) ) ), self::twin( self::page( '35', 'dup', self::h( 'b' ) ) ) ),
+			array( self::twin( self::page( '12', 'dup', self::h( 'b' ) ) ), self::twin( self::page( '13', 'dup', self::h( 'a' ) ) ) )
 		);
-		self::assertSame( array(), self::paired( $r, array( 'equal', 'differs' ) ) );
-		self::assertSame( 1, $r['counts']['uncertain'] );
+		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ) );
+		self::assertSame( array( 'equal', 'equal' ), array_column( $r['entries'], 'category' ) );
+		self::assertSame( array( 'active', 'active' ), array_column( $r['entries'], 'confirm' ) );
+		// Other ids of the images in their meta: the mapped forms differ, the second ones pair.
 		$r = self::match(
-			array( self::page( '34', 'dup', self::h( 'a' ), null, array( 'mapped' => self::h( 's1' ), 'mapped_possible' => self::h( 'p1' ) ) ), self::page( '35', 'dup', self::h( 'b' ), null, array( 'mapped' => self::h( 's2' ), 'mapped_possible' => self::h( 'p2' ) ) ) ),
-			array( self::page( '12', 'dup', self::h( 'c' ), null, array( 'mapped' => self::h( 'l2' ), 'mapped_possible' => self::h( 'p2' ) ) ), self::page( '13', 'dup', self::h( 'd' ), null, array( 'mapped' => self::h( 'l1' ), 'mapped_possible' => self::h( 'p1' ) ) ) )
+			array( self::twin( self::page( '34', 'dup', self::h( 'a' ), null, array( 'mapped' => self::h( 's1' ), 'mapped_possible' => self::h( 'p1' ) ) ) ), self::twin( self::page( '35', 'dup', self::h( 'b' ), null, array( 'mapped' => self::h( 's2' ), 'mapped_possible' => self::h( 'p2' ) ) ) ) ),
+			array( self::twin( self::page( '12', 'dup', self::h( 'c' ), null, array( 'mapped' => self::h( 'l2' ), 'mapped_possible' => self::h( 'p2' ) ) ) ), self::twin( self::page( '13', 'dup', self::h( 'd' ), null, array( 'mapped' => self::h( 'l1' ), 'mapped_possible' => self::h( 'p1' ) ) ) ) )
 		);
-		self::assertSame( array(), self::paired( $r, array( 'equal', 'differs' ) ), 'Nor by the second form.' );
+		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ), 'By the second form as well.' );
+		self::assertSame( 0, $r['counts']['uncertain'] );
 	}
 
 	/* -------------------------------------- twins of a site (Codex round 4) */
 
-	/** A line its site names a twin of another object of the site. */
-	private static function twin( array $line ): array {
-		return array( 'twin' => true ) + $line;
+	/** A line its site names a twin of another object of the site: how many objects of it have its identity. */
+	private static function twin( array $line, int $twins = 2 ): array {
+		return array( 'twin' => $twins ) + $line;
 	}
 
 	public function testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand(): void {
@@ -408,6 +414,109 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( 'uncertain', $kontakt[0]['category'] );
 		self::assertSame( array( array( '?' ) ), array_column( $kontakt[0]['candidates']['staging'], 'path' ), 'Its parent names nothing on staging.' );
 		self::assertStringContainsString( 'path of its parents is not known whole', $kontakt[0]['reason'] );
+	}
+
+	/* --------------------------- twins paired by their form (Codex round 5) */
+
+	public function testAPublishedPageAndADraftOfItsSlugUnchangedAreTwoEqualPairs(): void {
+		// WordPress keeps the slug of a draft as it is (wp_unique_post_slug()): a copy of a page.
+		$published = static fn( string $ref, string $content = 'published' ): array => self::twin( self::page( $ref, 'kontakt', self::h( $content ) ) );
+		$draft     = static fn( string $ref, string $content = 'draft' ): array => self::twin( self::page( $ref, 'kontakt', self::h( $content ) ) );
+		$r         = self::match( array( $published( '34' ), $draft( '35' ) ), array( $draft( '13' ), $published( '12' ) ) );
+		self::assertSame( array( '34' => '12', '35' => '13' ), self::paired( $r, array( 'equal' ) ), 'Both unchanged: two pairs, each by its content.' );
+		self::assertSame( array( 'equal', 'equal' ), array_column( $r['entries'], 'category' ) );
+		// One of them changed on staging: the other is equal, the changed one only a choice.
+		foreach ( array( 'the draft' => array( $published( '34' ), $draft( '35', 'draft changed' ), '34', '12', '35', '13' ), 'the page' => array( $published( '34', 'published changed' ), $draft( '35' ), '35', '13', '34', '12' ) ) as $what => list( $p, $d, $same_s, $same_l, $changed_s, $changed_l ) ) {
+			$r = self::match( array( $p, $d ), array( $published( '12' ), $draft( '13' ) ) );
+			self::assertSame( array( 'equal', 'uncertain' ), array_column( $r['entries'], 'category' ), $what );
+			self::assertSame( array( $same_s => $same_l ), self::paired( $r, array( 'equal', 'differs' ) ), $what . ': the unchanged one is a pair, the changed one never differs (no pair by exclusion).' );
+			$uncertain = self::of( $r, 'uncertain' )[0];
+			self::assertSame( array( $changed_s ), array_column( $uncertain['candidates']['staging'], 'ref' ), $what );
+			self::assertSame( array( $changed_l ), array_column( $uncertain['candidates']['live'], 'ref' ), $what );
+			self::assertSame( 'choice', $uncertain['confirm'] );
+			self::assertStringContainsString( 'Another object of its site has the same identity', $uncertain['reason'] );
+		}
+		// The draft on one site only: the page is a pair, the draft has no counterpart.
+		$r = self::match( array( $published( '34' ), $draft( '35' ) ), array( self::page( '12', 'kontakt', self::h( 'published' ) ) ) );
+		self::assertSame( array( 'equal', 'staging_only' ), array_column( $r['entries'], 'category' ) );
+		self::assertSame( '35', $r['entries'][1]['staging']['ref'] );
+		$r = self::match( array( self::page( '34', 'kontakt', self::h( 'published' ) ) ), array( $published( '12' ), $draft( '13' ) ) );
+		self::assertSame( array( 'equal', 'live_only' ), array_column( $r['entries'], 'category' ) );
+		self::assertSame( '13', $r['entries'][1]['live']['ref'] );
+	}
+
+	public function testTwinsAreNotPairedByTheirFormWhereNotAllOfThemAreAtHand(): void {
+		$s = array( self::twin( self::page( '34', 'dup', self::h( 'a' ) ) ), self::twin( self::page( '35', 'dup', self::h( 'b' ) ) ) );
+		$l = array( self::twin( self::page( '12', 'dup', self::h( 'a' ) ) ), self::twin( self::page( '13', 'dup', self::h( 'b' ) ) ) );
+		$cases = array(
+			'a package with one of the twins'          => array( array( $s[0] ), $l, array(), array( '34' ), array( '12', '13' ) ),
+			'one of the twins here held'               => array( $s, array( $l[0], self::held( 'post', '13', 'credential_name' ) ), array(), array( '34', '35' ), array( '12' ) ),
+			'the rest after a choice, the same form'   => array( $s, $l, array( self::pair( 1, 'post', '12', '34', 'active' ) ), array( '35' ), array( '13' ) ),
+			'the rest after a choice, another form'    => array( $s, array( $l[0], self::twin( self::page( '13', 'dup', self::h( 'c' ) ) ) ), array( self::pair( 1, 'post', '12', '34', 'active' ) ), array( '35' ), array( '13' ) ),
+			'three on staging, a package with two'     => array( array( self::twin( $s[0], 3 ), self::twin( $s[1], 3 ) ), $l, array(), array( '34', '35' ), array( '12', '13' ) ),
+			'a twin that does not say how many'        => array( array( array( 'twin' => true ) + $s[0], array( 'twin' => true ) + $s[1] ), $l, array(), array( '34', '35' ), array( '12', '13' ) ),
+			'twice on a path, no twin of its site'     => array( array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ), $l, array(), array( '34', '35' ), array( '12', '13' ) ),
+		);
+		foreach ( $cases as $what => list( $staging, $live, $pairs, $on_s, $on_l ) ) {
+			$r = self::match( $staging, $live, $pairs );
+			self::assertSame( 0, $r['counts']['equal'] + $r['counts']['differs'], $what . ': never paired by its form, nor by exclusion.' );
+			$uncertain = self::of( $r, 'uncertain' );
+			self::assertCount( 1, $uncertain, $what );
+			self::assertSame( $on_s, array_column( $uncertain[0]['candidates']['staging'], 'ref' ), $what );
+			self::assertSame( $on_l, array_column( $uncertain[0]['candidates']['live'], 'ref' ), $what );
+		}
+	}
+
+	public function testTwinsOfOneFormAreUncertain(): void {
+		$cases = array(
+			'one form on all four'          => array( array( 'x', 'x' ), array( 'x', 'x' ) ),
+			'one form twice on staging'     => array( array( 'x', 'x' ), array( 'x', 'y' ) ),
+			'one form twice here'           => array( array( 'x', 'y' ), array( 'x', 'x' ) ),
+		);
+		foreach ( $cases as $what => list( $s, $l ) ) {
+			$r = self::match(
+				array( self::twin( self::page( '34', 'dup', self::h( $s[0] ) ) ), self::twin( self::page( '35', 'dup', self::h( $s[1] ) ) ) ),
+				array( self::twin( self::page( '12', 'dup', self::h( $l[0] ) ) ), self::twin( self::page( '13', 'dup', self::h( $l[1] ) ) ) )
+			);
+			self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ), $what );
+			self::assertCount( 2, $r['entries'][0]['candidates']['staging'], $what );
+			self::assertCount( 2, $r['entries'][0]['candidates']['live'], $what );
+		}
+		// Two twins of one form on staging, the one page of that form here.
+		$r = self::match( array( self::twin( self::page( '34', 'dup', self::h( 'x' ) ) ), self::twin( self::page( '35', 'dup', self::h( 'x' ) ) ) ), array( self::page( '12', 'dup', self::h( 'x' ) ) ) );
+		self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ) );
+		// The second form twice: no pair by it either.
+		$possible = static fn( string $ref, string $m, string $p ): array => self::twin( self::page( $ref, 'dup', self::h( $ref ), null, array( 'mapped' => self::h( $m ), 'mapped_possible' => self::h( $p ) ) ) );
+		$r        = self::match( array( $possible( '34', 's1', 'p' ), $possible( '35', 's2', 'p' ) ), array( $possible( '12', 'l1', 'p' ), $possible( '13', 'l2', 'q' ) ) );
+		self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ) );
+	}
+
+	public function testTwinsNotReadWholeAreNotPairedByTheirForm(): void {
+		foreach ( array( 's', 'l' ) as $side ) {
+			$s = array( self::twin( self::page( '34', 'dup', self::h( 'a' ), null, 's' === $side ? array( 'complete' => false ) : array() ) ), self::twin( self::page( '35', 'dup', self::h( 'b' ) ) ) );
+			$l = array( self::twin( self::page( '12', 'dup', self::h( 'a' ), null, 'l' === $side ? array( 'complete' => false ) : array() ) ), self::twin( self::page( '13', 'dup', self::h( 'b' ) ) ) );
+			$r = self::match( $s, $l );
+			self::assertSame( array( '35' => '13' ), self::paired( $r, array( 'equal', 'differs' ) ), $side . ': the form not read to its end says nothing.' );
+			self::assertSame( array( 'equal', 'uncertain' ), array_column( $r['entries'], 'category' ), $side );
+			self::assertSame( array( '34' ), array_column( self::of( $r, 'uncertain' )[0]['candidates']['staging'], 'ref' ), $side );
+		}
+	}
+
+	public function testMenuItemTwinsStayUncertainAlsoWhereAllAreAtHand(): void {
+		// Every form there once on each side, both items of each menu at hand: only their place tells them apart (Codex round 3, A2).
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::twin( self::item( '51', 5, 'shop', 1, 'a' ) ), self::twin( self::item( '52', 5, 'shop', 2, 'b' ) ) ),
+			array( self::menu( '15', 'main' ), self::twin( self::item( '151', 15, 'shop', 1, 'a' ) ), self::twin( self::item( '152', 15, 'shop', 2, 'b' ) ) )
+		);
+		self::assertSame( array( '5' => '15' ), self::paired( $r ), 'Only the menu.' );
+		self::assertCount( 1, self::of( $r, 'uncertain' ) );
+		self::assertStringContainsString( 'only its place tells them apart', self::of( $r, 'uncertain' )[0]['reason'] );
+		// Terms and menus of one slug twice are paired by their form.
+		$r = self::match(
+			array( self::twin( self::line( 'term', '7', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 'n1' ) ) ), self::twin( self::line( 'term', '8', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 'n2' ) ) ), self::twin( self::menu( '5', 'main' ) ), self::twin( self::line( 'menu', '6', array( 'slug' => 'main', 'taxonomy' => 'nav_menu' ), self::h( 'other' ) ) ) ),
+			array( self::twin( self::line( 'term', '17', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 'n2' ) ) ), self::twin( self::line( 'term', '18', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 'n1' ) ) ), self::menu( '15', 'main' ) )
+		);
+		self::assertSame( array( '5' => '15', '7' => '18', '8' => '17' ), self::paired( $r, array( 'equal' ) ) );
 	}
 
 	/* --------------------------------- the whole parent (Codex round 4) */

@@ -314,7 +314,8 @@ final class AB_MCP_Sync_Export {
 	 * their reasons, for a row the takeover never reads the code of its
 	 * reason (reason_code, AB_MCP_Sync_Option_Schema::REASON_CODES; never a
 	 * text) and the row WordPress reads instead (target), twin where another
-	 * object of this site has its identity (AB_MCP_Sync_Identity::twin()),
+	 * object of this site has its identity (how many have it,
+	 * AB_MCP_Sync_Identity::twins()),
 	 * and unless a
 	 * credential holds it (a name of a
 	 * credential, B9, a field of one in it, or any lock of the credential
@@ -338,7 +339,7 @@ final class AB_MCP_Sync_Export {
 			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
 		) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );
 		if ( ! empty( $object['twin'] ) ) {
-			$line['twin'] = true;
+			$line['twin'] = (int) $object['twin'];
 		}
 		$credentials = $object['credentials'];
 		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {

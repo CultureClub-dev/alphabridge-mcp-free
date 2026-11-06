@@ -2376,6 +2376,9 @@ final class SyncPackageTest extends TestCase {
 			'unread that is no list'         => array( self::package_of( str_repeat( 'd1', 16 ), array( array( self::option_line( 'zz_ul', array( 'unread' => array( 'a' => 'options' ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a place in a broken byte form'  => array( self::package_of( str_repeat( 'c9', 16 ), array( array( self::option_line( 'zz_bb', array( 'possible' => array( array( 'at' => array( '~b' => 'x' ) ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a position that is a word' => array( self::package_of( str_repeat( '8f', 16 ), array( array( array( 'identity' => array( 'menus' => array( 3 ), 'object' => '', 'parent' => null, 'position' => 'x', 'target' => null, 'type' => 'custom' ), 'kind' => 'menu_item', 'locks' => array(), 'ref' => '9', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a twin that does not say how many' => array( self::package_of( str_repeat( 'e1', 16 ), array( array( self::option_line( 'zz_tw', array( 'twin' => true ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a twin of one'                  => array( self::package_of( str_repeat( 'e2', 16 ), array( array( self::option_line( 'zz_t1', array( 'twin' => 1 ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a twin count as text'           => array( self::package_of( str_repeat( 'e3', 16 ), array( array( self::option_line( 'zz_t2', array( 'twin' => '2' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 		);
 		foreach ( $cases as $case => $given ) {
 			$result = self::import_relayed( $given[0] );

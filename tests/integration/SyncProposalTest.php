@@ -1208,9 +1208,11 @@ final class SyncProposalTest extends TestCase {
 		);
 		$answer = self::proposal( self::staged() );
 		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $post )['category'], 'Its category names nothing here: no equal.' );
-		$terms = array_values( array_filter( $answer['all'], static fn( $e ) => 'term' === $e['kind'] && 'category' === $e['subtype'] && 'uncertain' === $e['category'] ) );
-		self::assertCount( 1, $terms, 'The slug twice here: no identity, each of them only by a choice (Codex round 4).' );
-		self::assertEqualsCanonicalizing( array( (string) $news, (string) $twin ), array_map( 'strval', array_column( $terms[0]['candidates']['live'], 'ref' ) ) );
+		// The slug twice here is no identity (Codex round 4); both twins at hand, the
+		// content of one there once on each side: that one is a pair (Codex round 5).
+		self::assertSame( 'equal', self::entry_by_live( $answer['all'], 'term', (string) $news )['category'] );
+		self::assertSame( array(), array_values( array_filter( $answer['all'], static fn( $e ) => 'term' === $e['kind'] && 'uncertain' === $e['category'] ) ) );
+		self::assertNotContains( self::entry_by_live( $answer['all'], 'term', (string) $twin )['category'], array( 'equal', 'differs' ), 'The other one has no counterpart.' );
 		\AB_MCP_Sync_Identity::reset();
 		$ctx = \AB_MCP_Sync_Canon::context( array( home_url() ) );
 		self::assertNull( \AB_MCP_Sync_Identity::term( $news, $ctx, 'category' ) );
@@ -1621,7 +1623,7 @@ final class SyncProposalTest extends TestCase {
 				continue;
 			}
 			if ( in_array( $line['kind'] . ':' . $line['ref'], array( 'menu_item:' . $b['item_1'], 'post:' . $b['dup_1'] ), true ) ) {
-				self::assertTrue( $line['twin'] ?? false, $line['kind'] . ': the line of a twin says so.' );
+				self::assertSame( 2, $line['twin'] ?? null, $line['kind'] . ': the line of a twin says so, with how many its site has (Codex round 5).' );
 			}
 			$lines[] = $line;
 		}
@@ -1631,10 +1633,14 @@ final class SyncProposalTest extends TestCase {
 			self::assertSame( 'uncertain', $entry['category'], $kind . ': one of two on staging, never equal.' );
 			self::assertSame( array( (string) $staging ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
 		}
-		// Twins on both sites: a person pairs one of them; what is left stays uncertain.
+		// Twins on both sites, both pages changed here (so no content pairs them,
+		// Codex round 5): a person pairs one of them; what is left stays
+		// uncertain, also once its content is the same again.
 		$a_item_2 = (int) wp_update_nav_menu_item( $menu, 0, $heading + array( 'menu-item-position' => 2 ) );
-		$a_dup_2  = (int) wp_insert_post( wp_slash( self::page( 'dup-2', 'Dup' ) ) );
+		$a_dup_2  = (int) wp_insert_post( wp_slash( self::page( 'dup-2', 'Dup here' ) ) );
 		$wpdb->update( $wpdb->posts, array( 'post_name' => 'dup' ), array( 'ID' => $a_dup_2 ) );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => 'Dup here' ), array( 'ID' => $a_dup ) );
+		clean_post_cache( $a_dup );
 		clean_post_cache( $a_dup_2 );
 		$staged  = self::staged();
 		$answer  = self::proposal( $staged );
@@ -1647,12 +1653,56 @@ final class SyncProposalTest extends TestCase {
 		}
 		$done = self::confirmed( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'choices' => $choices ) );
 		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$wpdb->update( $wpdb->posts, array( 'post_content' => 'Dup' ), array( 'ID' => $a_dup_2 ) );
+		clean_post_cache( $a_dup_2 );
 		$again = self::proposal( $staged );
 		foreach ( array( 'menu_item' => array( $a_item_2, $b['item_2'] ), 'post' => array( $a_dup_2, $b['dup_2'] ) ) as $kind => list( $live, $staging ) ) {
 			$entry = self::entry_with_live( $again['all'], $kind, (string) $live );
 			self::assertSame( 'uncertain', $entry['category'], $kind . ': the rest after a choice, never equal.' );
 			self::assertSame( array( (string) $staging ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
 		}
+	}
+
+	public function testAPublishedPageAndADraftOfItsSlugArePairedByTheirContent(): void {
+		self::pair();
+		// WordPress keeps the slug of a draft as it is given (wp_unique_post_slug()): a copy of a page as a draft.
+		$a_page  = (int) wp_insert_post( wp_slash( self::page( 'kontakt', 'Kontakt' ) ) );
+		$a_draft = (int) wp_insert_post( wp_slash( self::page( 'kontakt', 'Kontakt, neu', array( 'post_status' => 'draft' ) ) ) );
+		self::assertSame( 'kontakt', get_post( $a_draft )->post_name, 'The draft keeps the slug of the page.' );
+		$draft = self::page( 'kontakt', 'Kontakt, neu', array( 'post_status' => 'draft' ) );
+		$b     = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( 'kontakt', 'Kontakt' ), 'as' => 'page' ),
+				array( 'op' => 'insert_post', 'args' => $draft, 'as' => 'draft' ),
+			)
+		);
+		$staged = self::staged();
+		foreach ( AB_MCP_Sync_Import::taken( $staged[0] )['lines'] as $line ) {
+			if ( 'post' === $line['kind'] && in_array( (string) $line['ref'], array( (string) $b['page'], (string) $b['draft'] ), true ) ) {
+				self::assertSame( 2, $line['twin'] ?? null, 'Each line says how many objects of its site have its identity.' );
+			}
+		}
+		// Both unchanged: two pairs, each by its content (Codex round 5).
+		$answer = self::proposal( $staged );
+		foreach ( array( 'page' => $a_page, 'draft' => $a_draft ) as $name => $live ) {
+			$entry = self::entry_by_live( $answer['all'], 'post', (string) $live );
+			self::assertSame( 'equal', $entry['category'], $name );
+			self::assertSame( (string) $b[ $name ], (string) $entry['staging']['ref'], $name );
+		}
+		// The draft changed on staging: the page is equal, the draft only a choice, never differs.
+		self::b( array( array( 'op' => 'insert_post', 'args' => array( 'ID' => (int) $b['draft'], 'post_content' => 'Kontakt, neuer' ) + $draft ) ) );
+		$answer = self::proposal( self::staged() );
+		$page   = self::entry_by_live( $answer['all'], 'post', (string) $a_page );
+		self::assertSame( array( 'equal', (string) $b['page'] ), array( $page['category'], (string) $page['staging']['ref'] ) );
+		$entry = self::entry_with_live( $answer['all'], 'post', (string) $a_draft );
+		self::assertSame( 'uncertain', $entry['category'] );
+		self::assertSame( array( (string) $b['draft'] ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
+		self::assertSame( array( (string) $a_draft ), array_map( 'strval', array_column( $entry['candidates']['live'], 'ref' ) ) );
+		// Confirmed by category: the page only.
+		$done = self::confirmed( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'categories' => array( 'equal', 'differs' ) ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$rows = array_values( array_filter( self::pair_rows(), static fn( $row ) => 'post' === $row['kind'] && in_array( (string) $row['live_ref'], array( (string) $a_page, (string) $a_draft ), true ) ) );
+		self::assertSame( array( array( (string) $a_page, (string) $b['page'], 'active' ) ), array_map( static fn( $row ) => array( (string) $row['live_ref'], (string) $row['staging_ref'], $row['state'] ), $rows ) );
 	}
 
 	/* --------------------------------- the index of identities in parts (round 4, B) */

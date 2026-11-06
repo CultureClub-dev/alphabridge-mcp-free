@@ -30,6 +30,7 @@ RUNS = {
     'it': ('it', 'SyncProposalTest'),
     'ident': ('unit', 'SyncIdentityTest'),
     'kinds': ('unit', 'SyncDbKindsTest'),
+    'pkg': ('it', 'SyncPackageTest'),
 }
 
 entries = []
@@ -221,6 +222,45 @@ e('resolve-twin-rest', 'resolve(): what is left of twins after a choice is uncer
   "\t\t\t\t\t$twin = $twin || $item['twin'];", "\t\t\t\t\t$twin = $twin;", 'prop', 'testTheRestOfTwinsAfterAChosenPairIsUncertainNeverEqual')
 e('resolve-twin-uncertain', 'resolve(): twins on a path with candidates on both sides are one uncertain entry', P,
   "\t\t\t\tif ( $twin && array() !== $ss && array() !== $ll ) {", "\t\t\t\tif ( false ) {", 'prop', 'testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand')
+FORM = 'testAnEqualMappedFormThereOnceOnEachSideOfAPathPairsTwins'
+DRAFT = 'testAPublishedPageAndADraftOfItsSlugUnchangedAreTwoEqualPairs'
+HAND = 'testTwinsAreNotPairedByTheirFormWhereNotAllOfThemAreAtHand'
+e('resolve-form-pairs', 'resolve(): twins paired by their form are pairs (Codex round 5)', P,
+  "\t\t\t\t\t\t$out[] = self::pair_entry( $pair[0], $pair[1] );", "\t\t\t\t\t\t/* removed */", 'prop', FORM)
+RR = "\t\t\t\t\tif ( array() !== $ss && array() !== $ll ) {\n\t\t\t\t\t\t$out[] = self::choice_entry( 'uncertain', $ss, $ll, self::twin_reason( $ss[0]['kind'] ) );"
+e('resolve-form-rest', 'resolve(): what is left of twins after their form is uncertain, never a pair by exclusion (Codex round 5)', P, RR, RR.replace('if ( array() !== $ss && array() !== $ll ) {', 'if ( false ) {'), 'prop', DRAFT)
+e('resolve-form-rest-hand', 'resolve(): twins not all at hand are uncertain, never a pair by exclusion (Codex round 4)', P, RR, RR.replace('if ( array() !== $ss && array() !== $ll ) {', 'if ( false ) {'), 'prop', HAND)
+BF = "\t\tif ( 'menu_item' === $ss[0]['kind'] || ! self::all_at_hand( $ss ) || ! self::all_at_hand( $ll ) ) {"
+ITD = 'testAPublishedPageAndADraftOfItsSlugArePairedByTheirContent'
+e('resolve-form-pairs-it', 'resolve(): a published page and a draft of its slug are pairs by their form (two sites, Codex round 5)', P,
+  "\t\t\t\t\t\t$out[] = self::pair_entry( $pair[0], $pair[1] );", "\t\t\t\t\t\t/* removed */", 'it', ITD)
+e('resolve-form-rest-it', 'resolve(): the changed one of them is uncertain, never differs (two sites, Codex round 5)', P, RR, RR.replace('if ( array() !== $ss && array() !== $ll ) {', 'if ( false ) {'), 'it', ITD)
+e('form-menu', 'by_form(): never menu items, only their place tells them apart (Codex round 3, A2)', P, BF, BF.replace("'menu_item' === $ss[0]['kind'] || ", ''), 'prop', 'testMenuItemTwinsStayUncertainAlsoWhereAllAreAtHand')
+e('form-staging-hand', 'by_form(): only with every twin of the staging site at hand (Codex round 5)', P, BF, BF.replace(' || ! self::all_at_hand( $ss )', ''), 'prop', HAND)
+e('form-live-hand', 'by_form(): only with every twin of this site at hand (Codex round 5)', P, BF, BF.replace(' || ! self::all_at_hand( $ll )', ''), 'prop', HAND)
+BL = "\t\tforeach ( array( 'mapped', 'mapped_possible' ) as $form ) {"
+e('form-mapped', 'by_form(): by the form with the typed references (Codex round 3, B3)', P, BL, BL.replace("'mapped', ", ''), 'prop', FORM)
+e('form-possible', 'by_form(): then by the form with the possible references (Codex round 3, B3)', P, BL, BL.replace(", 'mapped_possible'", ''), 'prop', FORM)
+e('form-both', 'by_form(): the pairs of both forms', P,
+  "\t\t\t$pairs                   = array_merge( $pairs, $found );", "\t\t\t$pairs                   = $found;", 'prop', FORM)
+e('at-hand', 'all_at_hand(): as many on the path as the site says it has (Codex round 5)', P,
+  "\t\t\tif ( count( $items ) !== $item['twins'] ) {", "\t\t\tif ( false ) {", 'prop', HAND)
+IT = "\t\t\t\t'twins'           => empty( $line['twin'] ) ? 1 : $line['twin'],"
+e('items-twins-none', 'items(): a line that is no twin is all its site has (Codex round 5)', P, IT, IT.replace('? 1 :', '? 0 :'), 'prop', DRAFT)
+e('items-twins-count', 'items(): a twin as many as its site says (Codex round 5)', P, IT, IT.replace(": $line['twin'],", ': 2,'), 'prop', HAND)
+e('unique-whole', 'unique_pairs(): only objects read whole (Codex round 5)', P,
+  "\t\t\treturn is_string( $item[ $form ] ) && $item['complete'];", "\t\t\treturn is_string( $item[ $form ] );", 'prop', 'testTwinsNotReadWholeAreNotPairedByTheirForm')
+UQ = "\t\t\tif ( $proof( $item ) && 1 === $hl[ $item[ $form ] ] && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {"
+ONEFORM = 'testTwinsOfOneFormAreUncertain'
+e('unique-live', 'unique_pairs(): a form there once on this site', P, UQ, UQ.replace('1 === $hl[ $item[ $form ] ]', '$hl[ $item[ $form ] ] >= 1'), 'prop', ONEFORM)
+e('unique-staging', 'unique_pairs(): a form there once on the staging site', P, UQ, UQ.replace('1 === ( $hs[ $item[ $form ] ] ?? 0 )', 'isset( $hs[ $item[ $form ] ] )'), 'prop', ONEFORM)
+e('unique-proof-live', 'unique_pairs(): an object of this site read whole', P, UQ, UQ.replace('$proof( $item ) && ', ''), 'prop', 'testTwinsNotReadWholeAreNotPairedByTheirForm')
+e('unique-proof-staging', 'unique_pairs(): an object of the staging site read whole', P,
+  "\t\t\tif ( $proof( $item ) && isset( $by[ $item[ $form ] ] ) ) {", "\t\t\tif ( is_string( $item[ $form ] ) && isset( $by[ $item[ $form ] ] ) ) {", 'prop', 'testTwinsNotReadWholeAreNotPairedByTheirForm')
+e('unique-rest-staging', 'unique_pairs(): a staging object paired is not left', P,
+  "\t\t\t\t$pairs[]                        = array( $item, $ll[ $by[ $item[ $form ] ] ] );\n\t\t\t\tcontinue;", "\t\t\t\t$pairs[]                        = array( $item, $ll[ $by[ $item[ $form ] ] ] );", 'prop', DRAFT)
+e('unique-rest-live', 'unique_pairs(): an object of this site paired is not left', P,
+  "\t\t\tif ( ! isset( $used[ $j ] ) ) {", "\t\t\tif ( true ) {", 'prop', DRAFT)
 e('twin-reason-menu', 'twin_reason(): menu items told apart by their place only', P,
   "\t\tif ( 'menu_item' === $kind ) {\n\t\t\t// Only the place", "\t\tif ( false ) {\n\t\t\t// Only the place", 'prop', 'testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart')
 RD = "\t\t$ready = null !== $s && null !== $l && null === $s['held'] && null === $l['held'] && null !== $s['hash'] && null !== $l['hash'];"
@@ -322,6 +362,7 @@ LANG = 'testTheLanguageOfPolylangThenWpml'
 ITEM = 'testAMenuItemByItsTargetAndParentAndTwinsNameNone'
 PART = 'testAnIndexBuiltInPartsIsTheIndexBuiltAtOnce'
 GONE = 'testATableThatCannotBeReadIsNamedAndEveryIdentityIsNone'
+COUNT = 'testATwinSaysHowManyObjectsOfItsSiteHaveItsIdentity'
 e('index-load', 'reset(): a stored index of the run is taken up', ID,
   "\t\tif ( is_string( $stored ) && null !== self::$print && ! self::load( $stored ) ) {", "\t\tif ( false ) {", 'ident', PART)
 e('index-load-large', 'reset(): a stored index asks the database nothing', ID,
@@ -412,7 +453,9 @@ e('index-under-attachment', 'compute(): an attachment is a final parent', ID,
 e('index-term-twins', 'compute(): terms of one taxonomy, slug and language name none', ID,
   "\t\t$doubled = self::twice( self::$read_terms, self::TERM, 21, null );", "\t\t$doubled = array();", 'ident', ONE)
 e('index-term-twin-flag', 'compute(): such a term is a twin', ID,
-  "chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::zero() );", "chr( ( $has ? self::HAS : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::zero() );", 'ident', ONE)
+  "chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::counted( $n ) );", "chr( ( $has ? self::HAS : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::counted( $n ) );", 'ident', ONE)
+e('index-term-count', 'compute(): such a term says how many have its identity (Codex round 5)', ID,
+  "chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::counted( $n ) );", "chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::counted( 0 ) );", 'ident', COUNT)
 e('index-item-under-none', 'compute(): a menu item under one without an identity has none', ID,
   "\t\t\t\tif ( false === $above ) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t$item = $items[ $id ];", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t$item = $items[ $id ];", 'ident', ITEM)
 e('index-item-attachment', 'compute(): a menu item showing an attachment by its identity', ID,
@@ -426,11 +469,18 @@ e('index-item-no-target', 'compute(): a menu item showing what has no identity h
 e('index-item-top', 'compute(): a menu item at the top under «none»', ID,
   "\t\t\t\t$top          = 0 === $parent ? self::top() : bin2hex( $above );", "\t\t\t\t$top          = bin2hex( $above );", 'ident', ITEM)
 e('index-attachment-twin-flag', 'compute(): an attachment of a file twice is a twin', ID,
-  "\t\t\t\t\t$twin     = isset( $files[ $file ] );", "\t\t\t\t\t$twin     = false;", 'ident', ONE)
+  "\t\t\t\t\t$n        = $files[ $file ] ?? 0;", "\t\t\t\t\t$n        = 0;", 'ident', ONE)
 e('index-item-twin-flag', 'compute(): a menu item of one line twice is a twin', ID,
-  "\t\t\t\t\t$twin     = isset( $itwins[ $id ] );", "\t\t\t\t\t$twin     = false;", 'ident', ITEM)
+  "\t\t\t\t\t$n        = $itwins[ $id ] ?? 0;", "\t\t\t\t\t$n        = 0;", 'ident', ITEM)
 e('index-post-twin-flag', 'compute(): a post of one identity twice is a twin', ID,
-  "\t\t\t\t\t$twin     = isset( $twins[ $id ] );", "\t\t\t\t\t$twin     = false;", 'ident', ONE)
+  "\t\t\t\t\t$n        = $twins[ $id ] ?? 0;", "\t\t\t\t\t$n        = 0;", 'ident', ONE)
+RC = "\t\t\t$out[] = pack( 'JCn', $id, ( false === $identity ? 0 : self::HAS ) | ( $n > 1 ? self::TWIN : 0 ), $head['lang'] ) . ( false === $identity ? self::counted( $n ) : $identity );"
+e('index-record-twin', 'compute(): the record of a post, attachment or menu item twice says twin', ID, RC, RC.replace(' | ( $n > 1 ? self::TWIN : 0 )', ''), 'ident', ONE)
+e('index-record-count', 'compute(): and how many objects have its identity (Codex round 5)', ID, RC, RC.replace('self::counted( $n )', 'self::counted( 0 )'), 'ident', COUNT)
+e('index-level-count', 'levels(): a twin with how many of its level have its identity (Codex round 5)', ID,
+  "\t\t\t\t\t$twins[ $id ] = $count[ $identity ];", "\t\t\t\t\t$twins[ $id ] = 2;", 'ident', COUNT)
+e('index-twice-count', 'twice(): each record of a part counted (Codex round 5)', ID,
+  "\t\t\t\t$whole[ $part ] = ( $whole[ $part ] ?? 0 ) + 1;", "\t\t\t\t$whole[ $part ] = isset( $whole[ $part ] ) ? 2 : 1;", 'ident', COUNT)
 e('index-level-top', 'levels(): the objects under no parent first', ID,
   "\t\t\t\tif ( 0 === $up ) {\n\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, 0, '' );", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, 0, '' );", 'ident', ONE)
 e('index-level-final', 'levels(): a parent once it is final', ID,
@@ -453,6 +503,10 @@ e('index-term-ttid', 'term_record(): the term of the term_taxonomy_id asked', ID
 e('index-term-one', 'term_record(): a term id in two taxonomies names none by the id alone', ID,
   "\t\treturn 1 === count( $found ) ? $found[0] : null;", "\t\treturn $found[0] ?? null;", 'ident', ONE)
 TV = "\t\tif ( 'post' === $kind || 'menu_item' === $kind ) {"
+TF = "\t\tif ( null === $record || 0 === ( $record['flags'] & self::TWIN ) ) {"
+e('twins-flag', 'twins(): only a record that says twin (Codex round 5)', ID, TF, "\t\tif ( null === $record ) {", 'ident', ONE)
+e('twins-count', 'twins(): the count its record holds (Codex round 5)', ID,
+  "\t\treturn max( 2, unpack( 'J', $record['identity'] )[1] );", "\t\treturn 2;", 'ident', COUNT)
 e('twin-post', 'twin(): a post by its record', ID, TV, TV.replace("'post' === $kind || ", ''), 'ident', ONE)
 e('twin-item', 'twin(): a menu item by its record', ID, TV, TV.replace(" || 'menu_item' === $kind", ''), 'ident', ITEM)
 TM = "\t\t} elseif ( 'term' === $kind || 'menu' === $kind ) {"
@@ -476,13 +530,21 @@ e('inventory-index', 'run(): what to keep of the index for the next call', INV,
   "\t\treturn $read + array( 'index' => AB_MCP_Sync_Identity::stored() );", "\t\treturn $read + array( 'index' => null );", 'ident', INX)
 e('inventory-index-proposal', 'run(): the finished index kept for the calls after it', INV,
   "\t\treturn $read + array( 'index' => AB_MCP_Sync_Identity::stored() );", "\t\treturn $read + array( 'index' => null );", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
-ET = "\t\tif ( null !== self::$ctx && AB_MCP_Sync_Identity::twin( $result, self::$ctx ) ) {"
-e('entry-twin', 'entry(): an object its site names a twin says so (Codex round 4)', INV, ET, "\t\tif ( false ) {", 'ident', 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin')
-e('entry-twin-context', 'entry(): only with the context of a source', INV, ET, ET.replace('null !== self::$ctx && ', ''), 'kinds', 'testTheStatusOfAnObjectOfTheInventory')
-e('line-twin', 'line(): the line of a twin says so (Codex round 4)', EXF,
-  "\t\tif ( ! empty( $object['twin'] ) ) {\n\t\t\t$line['twin'] = true;", "\t\tif ( false ) {\n\t\t\t$line['twin'] = true;", 'ident', 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin')
+ET = "\t\t$twins = null === self::$ctx ? 0 : AB_MCP_Sync_Identity::twins( $result, self::$ctx );"
+TWO = 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin'
+e('entry-twin', 'entry(): an object its site names a twin says so (Codex round 4)', INV, "\t\tif ( $twins > 1 ) {", "\t\tif ( false ) {", 'ident', TWO)
+e('entry-twin-count', 'entry(): with how many objects of its site have its identity (Codex round 5)', INV,
+  "\t\t\t$result['twin'] = $twins;", "\t\t\t$result['twin'] = true;", 'ident', TWO)
+e('entry-twin-context', 'entry(): only with the context of a source', INV, ET, "\t\t$twins = AB_MCP_Sync_Identity::twins( $result, self::$ctx );", 'kinds', 'testTheStatusOfAnObjectOfTheInventory')
+LT = "\t\tif ( ! empty( $object['twin'] ) ) {\n\t\t\t$line['twin'] = (int) $object['twin'];"
+e('line-twin', 'line(): the line of a twin says so (Codex round 4)', EXF, LT, LT.replace("! empty( $object['twin'] )", 'false'), 'ident', TWO)
+e('line-twin-count', 'line(): with how many (Codex round 5)', EXF, LT, LT.replace("(int) $object['twin']", 'true'), 'ident', TWO)
+e('line-twin-count-it', 'line(): the count of a twin reaches the other site (two sites, Codex round 5)', EXF, LT, LT.replace("(int) $object['twin']", 'true'), 'it', ITD)
 e('import-twin', 'LINE_FIELDS: a line may say twin', IM,
-  "\t\t'twin'            => 'bool',\n", "", 'it', 'testATwinIsUncertainInAPackageOfItsOwnAndWhatIsLeftAfterAChoiceToo')
+  "\t\t'twin'            => 'twins',\n", "", 'it', 'testATwinIsUncertainInAPackageOfItsOwnAndWhatIsLeftAfterAChoiceToo')
+TT2 = "\t\t\t\treturn is_int( $value ) && $value > 1;"
+e('import-twins-int', 'typed(): twin is a number of objects, not its digits (Codex round 5)', IM, TT2, "\t\t\t\treturn $value > 1;", 'pkg', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain')
+e('import-twins-two', 'typed(): twin is two or more (Codex round 5)', IM, TT2, "\t\t\t\treturn is_int( $value );", 'pkg', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain')
 e('step-index-take', 'step(): the index the part before kept', P,
   "\t\t\t$index = $last['index'] ?? null;", "\t\t\t$index = null;", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
 e('step-index-keep', 'step(): the index as this call left it, kept with its part', P,
@@ -699,20 +761,24 @@ out.append('''<?php
  * (AB_MCP_Sync_Identity, the inventory, the proposal and the export series),
  * each line of an identity a site has twice uncertain (twin, also alone in
  * its package or after a choice), each parent of a path by its whole
- * identity.
+ * identity. Codex round 5: twins paired by an equal mapped form there once on
+ * each side, only where every twin of both sites is at hand (twin says how
+ * many its site has); the rest, twins of one form and menu items uncertain.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.
  *
  * Held by the unit suite (SyncProposalTest, SyncPairsToolTest, SyncPackageTest,
  * SyncIdentityTest, SyncDbKindsTest) and, for what
- * two WordPress sites show, by the integration suite (SyncProposalTest; the
- * sites running, AB_IT_ROOT set). Not listed: the type guards after a read
- * against the SHA-256 of what this code wrote itself (no input reaches them;
- * the structure of a stored index of identities as well), splitting into
- * files and parts, which changes no outcome, and what only lets memory go
- * (the index after a run, the objects before a package is packed, the
- * prefix count of twice(); measured instead, GRENZEN-BERICHT.md).
+ * two WordPress sites show, by the integration suite (SyncProposalTest,
+ * SyncPackageTest; the sites running, AB_IT_ROOT set). Not listed: the type
+ * guards after a read against the SHA-256 of what this code wrote itself (no
+ * input reaches them; the structure of a stored index of identities as well,
+ * and the floor of two of twins()), splitting into files and parts, which
+ * changes no outcome, what only keeps a form that is none out of the counts of
+ * unique_pairs() (null is no key; the counts hold strings only), and what only
+ * lets memory go (the index after a run, the objects before a package is
+ * packed, the prefix count of twice(); measured instead, GRENZEN-BERICHT.md).
  *
  * @package AlphaBridge_MCP
  */

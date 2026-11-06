@@ -144,7 +144,7 @@ final class AB_MCP_Sync_Import {
 		'size'            => 'size',
 		'status'          => 'status',
 		'target'          => 'name',
-		'twin'            => 'bool',
+		'twin'            => 'twins',
 		'unread'          => 'names',
 	);
 
@@ -1121,8 +1121,9 @@ final class AB_MCP_Sync_Import {
 	 * tables of AB_MCP_Sync_Kinds hold is compared with them, lock_known());
 	 * canon (the version of the canonical form); space and strength (of the
 	 * readers); integer (an int or the digits of one, negative too); number
-	 * (an int or the digits of one); bool; ints (a list of ints); hash (64
-	 * hex or null); size (an int from 0); status (of STATUSES).
+	 * (an int or the digits of one); bool; twins (an int from 2); ints (a
+	 * list of ints); hash (64 hex or null); size (an int from 0); status (of
+	 * STATUSES).
 	 *
 	 * @param mixed  $value Value.
 	 * @param string $type  Type.
@@ -1160,6 +1161,9 @@ final class AB_MCP_Sync_Import {
 				return is_int( $value ) || ( is_string( $value ) && 1 === preg_match( '/^[0-9]{1,20}\z/', $value ) );
 			case 'bool':
 				return is_bool( $value );
+			case 'twins':
+				// How many objects of the site have the identity: two or more (Codex round 5).
+				return is_int( $value ) && $value > 1;
 			case 'ints':
 				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
 					return false;
