@@ -97,6 +97,7 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( 'https://www.example.com', $m['target'] );
 		self::assertSame( 1800000000, $m['created'] );
 		self::assertSame( 1800000000 + 86400, $m['expires'] );
+		self::assertSame( '6.9.1', $m['wordpress'], 'The version of WordPress of the staging site ($wp_version), for the report (branch 6, part 2).' );
 		self::assertSame( AB_MCP_Sync_Canon::encode( self::package() ), AB_MCP_Sync_Canon::encode( array_intersect_key( $m, self::package() ) ), 'What the maker named, as named.' );
 		self::assertSame( AB_MCP_Sync_Canon::encode( $m ), $signed['manifest'] );
 
@@ -500,8 +501,37 @@ final class SyncManifestTest extends TestCase {
 			'a chunk with a field more'     => array( static fn( array $m ): array => array_merge( $m, array( 'chunks' => array( $m['chunks'][0] + array( 'note' => 'x' ) ) ) ), 'ab_mcp_sync_manifest_shape', 'chunks' ),
 			'too many chunks'               => array( static fn( array $m ): array => array_merge( $m, self::chunks( 2001, 1 ) ), 'ab_mcp_sync_manifest_shape', 'chunks' ),
 			'bytes not the sum'             => array( static fn( array $m ): array => array_merge( $m, array( 'bytes' => $m['bytes'] + 1 ) ), 'ab_mcp_sync_manifest_shape', 'bytes' ),
+			// The version of WordPress on the staging site (branch 6, part 2).
+			'no version of WordPress'       => array( static fn( array $m ): array => array_diff_key( $m, array( 'wordpress' => 1 ) ), 'ab_mcp_sync_manifest_shape', 'wordpress' ),
+			'a version that is none'        => array( static fn( array $m ): array => array_merge( $m, array( 'wordpress' => 'latest' ) ), 'ab_mcp_sync_manifest_shape', 'wordpress' ),
+			'a version as a number'         => array( static fn( array $m ): array => array_merge( $m, array( 'wordpress' => 7 ) ), 'ab_mcp_sync_manifest_shape', 'wordpress' ),
+			'a version with a line break'   => array( static fn( array $m ): array => array_merge( $m, array( 'wordpress' => "7.1.3\n" ) ), 'ab_mcp_sync_manifest_shape', 'wordpress' ),
+			'an empty version'              => array( static fn( array $m ): array => array_merge( $m, array( 'wordpress' => '' ) ), 'ab_mcp_sync_manifest_shape', 'wordpress' ),
 			'a package over 64 MiB'         => array( static fn( array $m ): array => array_merge( $m, self::chunks( 13, 5 * $mb ) ), 'ab_mcp_sync_manifest_shape', 'bytes' ),
 		);
+	}
+
+	public function testTheVersionOfWordPressIsReadAsVersionPhpSetsIt(): void {
+		$before = $GLOBALS['wp_version'];
+		try {
+			foreach ( array( '7.1.3', '7.2', '7.2-beta1', '7.2-alpha-61234-src', '10.0.1.2' ) as $version ) {
+				$GLOBALS['wp_version'] = $version;
+				self::assertSame( $version, AB_MCP_Sync_Manifest::wordpress(), $version );
+			}
+			foreach ( array( '', '7', 'seven', ' 7.1.3', "7.1.3\n", '7.1.3-', '7..1', null, 713 ) as $version ) {
+				$GLOBALS['wp_version'] = $version;
+				self::assertSame( '', AB_MCP_Sync_Manifest::wordpress(), (string) json_encode( $version ) );
+			}
+			unset( $GLOBALS['wp_version'] );
+			self::assertSame( '', AB_MCP_Sync_Manifest::wordpress() );
+			$this->paired();
+			$this->anchored();
+			$this->on( 'staging' );
+			$refused = AB_MCP_Sync_Manifest::sign( self::package() );
+			self::refused( $refused, 'ab_mcp_sync_manifest_shape', 'wordpress' );
+		} finally {
+			$GLOBALS['wp_version'] = $before;
+		}
 	}
 
 	#[DataProvider( 'badFields' )]

@@ -903,7 +903,7 @@ e('paket/inventory-count', 'entry(): every object counts', INV_F, "\t\t++self::$
 e('paket/inventory-count-anew', 'source(): a new source counts anew', INV_F, "\t\tself::$made  = 0;\n", "", 'dbkinds', INV)
 e('paket/inventory-at-least-one', 'source(): a bound of at least one object', INV_F, "max( 1, (int) $objects )", "(int) $objects", 'dbkinds', INV)
 e('paket/gate-carry-over', 'CARRY_OVER: the packages are the carrying over', G,
-  "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );", "'wp_site_export', 'wp_site_export_chunk' );", 'gate', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds')
+  "'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk', 'wp_site_pairs' );", "'wp_site_export', 'wp_site_export_chunk', 'wp_site_pairs' );", 'gate', 'testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds')
 
 # ----------------------------------------------------------- integration
 e('paket/it-renews', 'save(): the staging site confirmed by a person has a key (two sites)', S,
@@ -956,9 +956,9 @@ e('paket/it-own-expires', 'own(): not at the end of its manifest or after', EX, 
 e('paket/it-chunk-index', 'chunk(): a chunk the manifest lists', EX,
   "\t\tif ( ! is_int( $chunk ) || ! isset( $found['manifest']['chunks'][ $chunk ] ) ) {", "\t\tif ( ! is_int( $chunk ) ) {", 'itpkg', PKG_IT['relay'])
 e('paket/it-export-cursor', 'make(): the inventory from the cursor', EX,
-  "$read   = AB_MCP_Sync_Inventory::run( $source, $from );", "$read   = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
+  "$read = AB_MCP_Sync_Inventory::run( $source, $from );", "$read = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-export-kinds-from', 'make(): complete by the cursor the package began with', EX,
-  "$kinds = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );", "$kinds = self::kinds( $read['objects'], null, $read['cursor'], $sorted['incomplete'] );", 'itpkg', PKG_IT['cursor'])
+  "$kinds  = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );", "$kinds  = self::kinds( $read['objects'], null, $read['cursor'], $sorted['incomplete'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-import-label', 'begin(): the group named by the package', IM,
   "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
 e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
@@ -1005,15 +1005,15 @@ LINE = 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent'
 e('paket/line-held-name', 'line(): an object whose name is a credential: identity and reason only', EX, LH, LH.replace("'b9' === $object['status'] || ", ''), 'package', HELD % 'the name of a credential')
 e('paket/line-held-field', 'line(): an object with a field of a credential: identity and reason only', EX, LH, LH.replace(" || array() !== $credentials['mixed']", ''), 'package', HELD % 'a field of a credential in it')
 e('paket/line-possible', 'line(): a possible reference by its place, never its value', EX,
-  "'possible' => self::fields( $object['possible'], array( 'at' ) ),", "'possible' => $object['possible'],", 'package', LINE)
+  "'possible'        => self::fields( $object['possible'], array( 'at' ) ),", "'possible'        => $object['possible'],", 'package', LINE)
 e('paket/line-refs', 'line(): references by id and place only', EX,
-  "'refs'     => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),", "'refs'     => $object['refs'],", 'package', LINE)
+  "'refs'            => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),", "'refs'            => $object['refs'],", 'package', LINE)
 e('paket/line-locks', 'line(): locks by key, stage, reason and place only', EX,
   "'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),", "'locks'    => $object['locks'],", 'package', LINE)
 e('paket/line-reason', 'line(): no free text of the object, the reasons are those of its locks', EX,
   "\t\t\t'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );", "\t\t\t'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( $object, array_flip( array( 'reason', 'reason_code', 'target' ) ) );", 'package', LINE)
 e('paket/it-export-lines', 'make(): the package holds lines, not the objects of the inventory (two sites)', EX,
-  "self::pack( array_map( array( __CLASS__, 'line' ), $sorted['packed'] ) )", "self::pack( $sorted['packed'] )", 'itpkg', PKG_IT['gegen'])
+  "$lines = array_map( array( __CLASS__, 'line' ), $sorted['packed'] );", "$lines = $sorted['packed'];", 'itpkg', PKG_IT['gegen'])
 MS = "\t\tif ( ! is_array( $raw ) || ! isset( $raw['key_id'], $raw['mac'] ) || ! is_string( $raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $raw['mac'] ) ) {"
 MACC = 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose'
 e('paket/mac-secret-text', 'mac_secret(): the secret as text', K, MS, MS.replace(" || ! is_string( $raw['mac'] )", ''), 'package', MACC)
@@ -1071,13 +1071,13 @@ e('paket/it-discard-stale', 'store(): the packages of another binding go before 
 e('paket/it-follows-cursor', 'follows(): the cursor the package before recorded (two sites)', EX,
   "\t\tif ( AB_MCP_Sync_Canon::encode( $before['cursor'] ) !== AB_MCP_Sync_Canon::encode( $from ) ) {", "\t\tif ( false ) {", 'itpkg', PKG_IT['cursor'])
 e('paket/it-follows-series', 'follows(): the series of the package before (two sites)', EX,
-  "return array( $before['cursor'], $before['series'] );", "return array( $before['cursor'], bin2hex( random_bytes( 16 ) ) );", 'itpkg', PKG_IT['cursor'])
+  "return array( $before['cursor'], $before['series'], $before['index'] );", "return array( $before['cursor'], bin2hex( random_bytes( 16 ) ), $before['index'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-answer-package', 'answer(): the cursor names this package (two sites)', EX,
   "\t\t\t\t'package' => $manifest['package_id'],", "\t\t\t\t'package' => str_repeat( 'f', 32 ),", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-series-label', 'store(): the group named by its series (two sites)', EX,
   "\t\t\t\t'label'    => 'series:' . $series,", "\t\t\t\t'label'    => $purpose,", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-chunk-cleanup', 'store(): a chunk that could not be written leaves nothing (two sites)', EX,
-  "\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\t\treturn $put;", "\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\treturn $put;", 'itpkg', PKG_IT['whole_write'])
+  "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\t\treturn $put;", "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\treturn $put;", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-store-record-cleanup', 'store(): a record that could not be written leaves nothing (two sites)', EX,
   "\t\tif ( is_wp_error( $put ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", "\t\tif ( is_wp_error( $put ) ) {\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-begin-cleanup', 'begin(): a record that could not be written leaves nothing (two sites)', IM,
@@ -1413,9 +1413,9 @@ e('paket/p3r1-unknown-taxonomy', 'term(): a taxonomy WordPress does not know, ma
 e('paket/p3r1-identity-fits', 'line_shaped(): the identity as its kind has it (two sites)', IM,
   "\t\tif ( ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-fields', 'identity_fits(): exactly the fields of the kind (two sites)', IM,
-  "\t\tif ( $given !== $want ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+  "\t\tif ( array() !== array_diff( $given, $want ) || array() !== array_diff( $needs, $given ) ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-typed', 'identity_fits(): each field typed (two sites)', IM,
-  "\t\t\tif ( ! self::typed( $identity[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+  "\t\t\tif ( array_key_exists( $field, $identity ) && ! self::typed( $identity[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-id-ref', 'identity_fits(): a post, term or menu (item) by its id (two sites)', IM,
   "\t\tif ( in_array( $kind, self::ID_KINDS, true ) && ! $id_ref ) {", "\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r1-identity-widget', 'identity_fits(): a widget area by its area (two sites)', IM,

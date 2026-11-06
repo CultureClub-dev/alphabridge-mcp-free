@@ -120,7 +120,7 @@ final class SyncDbKindsTest extends TestCase {
 
 	public function testTheStatusOfAnObjectOfTheInventory(): void {
 		$base = array( 'form' => array( 'x' ), 'locks' => array() );
-		self::assertSame( array( 'locks' => array(), 'status' => 'z8' ), AB_MCP_Sync_Inventory::entry( $base ) );
+		self::assertSame( array( 'locks' => array(), 'mapped' => null, 'mapped_possible' => null, 'status' => 'z8' ), AB_MCP_Sync_Inventory::entry( $base ), 'Without a hash, no mapped form (Z8 branch 6).' );
 		self::assertSame( 'locked', AB_MCP_Sync_Inventory::entry( array( 'locks' => array( array( 'key' => 'post:builder' ) ) ) + $base )['status'] );
 		self::assertSame( 'z8', AB_MCP_Sync_Inventory::entry( array( 'status' => 'core' ) + $base )['status'] );
 		self::assertSame( 'locked', AB_MCP_Sync_Inventory::entry( array( 'status' => 'core', 'locks' => array( array( 'key' => 'option:off_schema' ) ) ) + $base )['status'] );

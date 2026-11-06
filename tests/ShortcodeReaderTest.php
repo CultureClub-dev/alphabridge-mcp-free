@@ -262,8 +262,15 @@ final class ShortcodeReaderTest extends TestCase {
 	}
 
 	public function testLongTextsStayLinear(): void {
-		$start = microtime( true );
-		$r     = AB_MCP_Shortcode_Reader::parse( str_repeat( '[a ', 100000 ) . ']' );
+		// The memory of these two texts alone: the peak of the process holds
+		// the code and the data providers of the whole suite, which grow with
+		// every branch (Z8 branch 6: some 0.8 MB, before any test ran), not
+		// what this reader takes.
+		gc_collect_cycles();
+		memory_reset_peak_usage();
+		$memory = memory_get_usage();
+		$start  = microtime( true );
+		$r      = AB_MCP_Shortcode_Reader::parse( str_repeat( '[a ', 100000 ) . ']' );
 		self::assertLessThan( 2.0, microtime( true ) - $start, '100k unterminated tags in under two seconds.' );
 		self::assertSame( array( '#text', 'a' ), array_column( $r['nodes'], 'tag' ), 'Every "[a" with a "[" after it is text; the last one is a tag.' );
 
@@ -273,7 +280,9 @@ final class ShortcodeReaderTest extends TestCase {
 		self::assertCount( AB_MCP_Shortcode_Reader::MAX_ATTS, $r['nodes'][0]['attrs'], 'Its attributes are read up to the cap …' );
 		self::assertTrue( $r['nodes'][0]['attrs_truncated'], '… and say so.' );
 		self::assertTrue( $r['truncated'] );
-		self::assertLessThan( 64 * 1024 * 1024, memory_get_peak_usage(), 'Without filling the memory.' );
+		// Both texts and both results take some 1 MB; a copy of the text per
+		// unterminated tag, or a node for each, would take far more than 8 MiB.
+		self::assertLessThan( 8 * 1024 * 1024, memory_get_peak_usage() - $memory, 'Without filling the memory.' );
 
 		$r = AB_MCP_Shortcode_Reader::parse( str_repeat( '[b]', AB_MCP_Shortcode_Reader::MAX_NODES + 5 ) );
 		self::assertTrue( $r['truncated'] );

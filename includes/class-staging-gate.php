@@ -183,11 +183,12 @@ class AB_MCP_Staging_Gate {
 	 * staging concept), named here before it exists so that the setting
 	 * REQUIRE does not refuse it once it does. The signed fetch of packages
 	 * of Z8 is in it: wp_site_export and wp_site_export_chunk on the staging
-	 * site, wp_site_import_chunk on the production site.
+	 * site, wp_site_import_chunk on the production site; so are the object
+	 * pairs it carries over by (wp_site_pairs).
 	 */
 	const WAYS_BACK  = array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache' );
 	const OPERATION  = array( 'wp_moderate_comment', 'wp_reply_comment', 'wp_wc_update_order_status' );
-	const CARRY_OVER = array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk' );
+	const CARRY_OVER = array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk', 'wp_site_pairs' );
 
 	/**
 	 * The tools the gate never holds: the three groups, and what the filter

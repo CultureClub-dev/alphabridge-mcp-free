@@ -91,6 +91,9 @@ final class DestructiveClassificationTest extends TestCase {
 		'wp_site_export',
 		'wp_site_export_chunk',
 		'wp_site_import_chunk',
+		// Z8 (branch 6): confirm aligns existing pairs anew, discard ends them;
+		// its definition says destructive => true as well (SyncPairsToolTest).
+		'wp_site_pairs',
 	);
 
 	/**
@@ -100,6 +103,9 @@ final class DestructiveClassificationTest extends TestCase {
 	 */
 	private const READS_BY_DEFINITION = array(
 		'wp_staging_status',
+		// Z8 (branch 6, part 2): the report reads, 'readonly' => true in its
+		// definition; it writes nothing but its report into the protected store.
+		'wp_site_diff',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

@@ -140,7 +140,8 @@ final class AB_MCP_Sync_Export {
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
 			return new WP_Error( 'ab_mcp_sync_export_purpose', sprintf( 'This version makes packages of the inventory of the staging site only; packages of objects, media and the environment come with the takeover. Pass purpose=%s.', self::PURPOSES[0] ) );
 		}
-		$from = null;
+		$from  = null;
+		$index = null;
 		try {
 			$series = bin2hex( random_bytes( 16 ) );
 		} catch ( Throwable $e ) {
@@ -151,24 +152,50 @@ final class AB_MCP_Sync_Export {
 			if ( is_wp_error( $follows ) ) {
 				return $follows;
 			}
-			list( $from, $series ) = $follows;
+			list( $from, $series, $index ) = $follows;
+		}
+		// The index of identities of the series, as the package before kept
+		// it (AB_MCP_Sync_Identity: built once for the series, in parts).
+		$text = null;
+		if ( null !== $index ) {
+			$text = '';
+			foreach ( $index['parts'] as $part ) {
+				$slice = AB_MCP_Protected_Store::get( 'out', $index['gid'], $part['name'], $part['sha'] );
+				if ( is_wp_error( $slice ) ) {
+					return new WP_Error( 'ab_mcp_sync_export_index', 'The index of the identities this series of packages began with is no longer in the protected store of this site (it is kept with a package of the series, a day), so the series does not go on. Begin a new series: call wp_site_export without a cursor.' );
+				}
+				$text .= $slice;
+			}
+			unset( $slice );
 		}
 		$pair   = AB_MCP_Staging::record()['pair'];
-		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null === $objects ? self::OBJECTS : (int) $objects );
-		$read   = AB_MCP_Sync_Inventory::run( $source, $from );
+		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null === $objects ? self::OBJECTS : (int) $objects, $text );
+		unset( $text );
+		$read = AB_MCP_Sync_Inventory::run( $source, $from );
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
+		// The objects carry what they need of the index: it goes before the
+		// package is made (its text, where this call built on it, goes with
+		// the package), and the objects go once their lines are written, so
+		// that a package needs no more memory than before the index (Codex
+		// round 4, B).
+		AB_MCP_Sync_Identity::reset();
 		$sorted = self::sort( $read['objects'] );
-		$packed = self::pack( array_map( array( __CLASS__, 'line' ), $sorted['packed'] ) );
-		if ( is_wp_error( $packed ) ) {
-			return $packed;
-		}
-		$kinds = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );
+		$kinds  = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );
 		if ( is_wp_error( $kinds ) ) {
 			return $kinds;
 		}
-		return self::store( $purpose, $packed, $kinds, $read['cursor'], $series, $sorted['report'] );
+		$lines = array_map( array( __CLASS__, 'line' ), $sorted['packed'] );
+		$next  = $read['cursor'];
+		$text  = $read['index'];
+		unset( $read, $sorted['packed'] );
+		$packed = self::pack( $lines );
+		unset( $lines );
+		if ( is_wp_error( $packed ) ) {
+			return $packed;
+		}
+		return self::store( $purpose, $packed, $kinds, $next, $series, $sorted['report'], $index, $text );
 	}
 
 	/**
@@ -252,7 +279,8 @@ final class AB_MCP_Sync_Export {
 	 * series (one open export for the budgets, AB_MCP_Store_Budget).
 	 *
 	 * @param mixed $cursor The cursor of the answer before.
-	 * @return array{0:array,1:string}|WP_Error The cursor of the inventory and the series.
+	 * @return array{0:array,1:string,2:array|null}|WP_Error The cursor of the
+	 *         inventory, the series and where its index of identities is kept.
 	 */
 	private static function follows( $cursor ) {
 		if ( ! is_array( $cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) {
@@ -270,7 +298,7 @@ final class AB_MCP_Sync_Export {
 		if ( AB_MCP_Sync_Canon::encode( $before['cursor'] ) !== AB_MCP_Sync_Canon::encode( $from ) ) {
 			return self::cursor_refusal();
 		}
-		return array( $before['cursor'], $before['series'] );
+		return array( $before['cursor'], $before['series'], $before['index'] );
 	}
 
 	/**
@@ -285,12 +313,19 @@ final class AB_MCP_Sync_Export {
 	 * what it may carry (contract A): its identity, status and locks with
 	 * their reasons, for a row the takeover never reads the code of its
 	 * reason (reason_code, AB_MCP_Sync_Option_Schema::REASON_CODES; never a
-	 * text) and the row WordPress reads instead (target), and unless a
+	 * text) and the row WordPress reads instead (target), twin where another
+	 * object of this site has its identity (how many have it,
+	 * AB_MCP_Sync_Identity::twins()),
+	 * and unless a
 	 * credential holds it (a name of a
 	 * credential, B9, a field of one in it, or any lock of the credential
-	 * check, CREDENTIAL_LOCKS), its hash, size, whether it was read whole,
+	 * check, CREDENTIAL_LOCKS), its hash and the hashes of its mapped forms
+	 * (AB_MCP_Sync_Inventory::entry()), size, whether it was read whole,
 	 * what was not read, its references by id, the places of possible
-	 * references and of the units left out as credentials. Of its content
+	 * references and of the units left out as credentials; for the report
+	 * (branch 6, part 2) the status of a post (post_status), how many meta
+	 * rows its form holds (meta) and the instances of a widget area by their
+	 * ids (instances). Of its content
 	 * nothing: a possible reference only by its place, never its value;
 	 * what the inventory adds later is not in it until it stands on this
 	 * list.
@@ -306,20 +341,25 @@ final class AB_MCP_Sync_Export {
 			'status'   => $object['status'],
 			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
 		) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );
+		if ( ! empty( $object['twin'] ) ) {
+			$line['twin'] = (int) $object['twin'];
+		}
 		$credentials = $object['credentials'];
 		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
 			return $line;
 		}
 		return $line + array(
-			'canon'    => $object['canon'],
-			'hash'     => $object['hash'],
-			'size'     => $object['size'],
-			'complete' => $object['complete'],
-			'unread'   => isset( $object['unread'] ) ? array_values( array_map( 'strval', $object['unread'] ) ) : array(),
-			'refs'     => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),
-			'possible' => self::fields( $object['possible'], array( 'at' ) ),
-			'b9'       => array_values( array_map( 'strval', $credentials['b9'] ) ),
-		);
+			'canon'           => $object['canon'],
+			'hash'            => $object['hash'],
+			'mapped'          => isset( $object['mapped'] ) ? $object['mapped'] : null,
+			'mapped_possible' => isset( $object['mapped_possible'] ) ? $object['mapped_possible'] : null,
+			'size'            => $object['size'],
+			'complete'        => $object['complete'],
+			'unread'          => isset( $object['unread'] ) ? array_values( array_map( 'strval', $object['unread'] ) ) : array(),
+			'refs'            => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),
+			'possible'        => self::fields( $object['possible'], array( 'at' ) ),
+			'b9'              => array_values( array_map( 'strval', $credentials['b9'] ) ),
+		) + array_intersect_key( $object, array_flip( array( 'instances', 'meta', 'post_status' ) ) );
 	}
 
 	/**
@@ -676,19 +716,24 @@ final class AB_MCP_Sync_Export {
 	}
 
 	/**
-	 * Store a package: its chunks, then its signed manifest and the cursor in
-	 * a record named by its own SHA-256, which find() reads back. Nothing of
-	 * it stays where a step fails.
+	 * Store a package: its chunks, the index of identities of the series
+	 * where this call built it on (AB_MCP_Sync_Identity::stored(): kept in
+	 * this package, which the next one takes it from; else where the package
+	 * before kept it), then its signed manifest and the cursor in a record
+	 * named by its own SHA-256, which find() reads back. Nothing of it stays
+	 * where a step fails.
 	 *
-	 * @param string     $purpose Purpose.
-	 * @param array      $packed  pack().
-	 * @param array[]    $kinds   kinds().
-	 * @param array|null $cursor  The cursor of the next package.
-	 * @param string     $series  The series (32 hex).
-	 * @param array      $report  What was withheld and the credentials (sort()).
+	 * @param string      $purpose Purpose.
+	 * @param array       $packed  pack().
+	 * @param array[]     $kinds   kinds().
+	 * @param array|null  $cursor  The cursor of the next package.
+	 * @param string      $series  The series (32 hex).
+	 * @param array       $report  What was withheld and the credentials (sort()).
+	 * @param array|null  $index   Where the package before kept the index (gid, parts).
+	 * @param string|null $text    The index as this call left it; null where it stays.
 	 * @return array|WP_Error answer().
 	 */
-	private static function store( $purpose, array $packed, array $kinds, $cursor, $series, array $report ) {
+	private static function store( $purpose, array $packed, array $kinds, $cursor, $series, array $report, $index = null, $text = null ) {
 		self::discard_stale();
 		$bytes = 0;
 		$whole = hash_init( 'sha256' );
@@ -704,7 +749,7 @@ final class AB_MCP_Sync_Export {
 		$gid = AB_MCP_Protected_Store::open(
 			'out',
 			array(
-				'declared' => $bytes + self::RECORD_MAX,
+				'declared' => $bytes + self::RECORD_MAX + ( null === $text ? 0 : strlen( $text ) ),
 				'label'    => 'series:' . $series,
 			)
 		);
@@ -716,6 +761,27 @@ final class AB_MCP_Sync_Export {
 			if ( is_wp_error( $put ) ) {
 				AB_MCP_Protected_Store::remove( 'out', $gid );
 				return $put;
+			}
+		}
+		if ( null !== $text ) {
+			// In slices: a file of the store holds 16 MiB at most.
+			$index = array(
+				'gid'   => $gid,
+				'parts' => array(),
+			);
+			for ( $at = 0, $n = 0; $at < strlen( $text ); $at += AB_MCP_Sync_Identity::slice(), $n++ ) {
+				$slice = (string) substr( $text, $at, AB_MCP_Sync_Identity::slice() );
+				$sha   = hash( 'sha256', $slice );
+				$name  = sprintf( 'index-%03d-%s', $n, substr( $sha, 0, 32 ) );
+				$put   = AB_MCP_Protected_Store::put( 'out', $gid, $name, $slice );
+				if ( is_wp_error( $put ) ) {
+					AB_MCP_Protected_Store::remove( 'out', $gid );
+					return $put;
+				}
+				$index['parts'][] = array(
+					'name' => $name,
+					'sha'  => $sha,
+				);
 			}
 		}
 		$signed = AB_MCP_Sync_Manifest::sign(
@@ -740,6 +806,7 @@ final class AB_MCP_Sync_Export {
 				'binding'   => self::binding(),
 				'cursor'    => $cursor,
 				'format'    => self::RECORD,
+				'index'     => $index,
 				'manifest'  => $signed['manifest'],
 				'report'    => $report,
 				'series'    => $series,
@@ -888,7 +955,7 @@ final class AB_MCP_Sync_Export {
 	 * is none, or none whole.
 	 *
 	 * @param mixed $package_id Package.
-	 * @return array|WP_Error|null user_id, signed, manifest, cursor, series, binding.
+	 * @return array|WP_Error|null user_id, signed, manifest, cursor, series, index, binding.
 	 */
 	private static function find( $package_id ) {
 		if ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
@@ -932,9 +999,29 @@ final class AB_MCP_Sync_Export {
 			'manifest' => json_decode( $record['manifest'], true, 8 ),
 			'cursor'   => $record['cursor'],
 			'series'   => $record['series'],
+			'index'    => self::index_shaped( $record['index'] ?? null ),
 			'binding'  => $record['binding'],
 			'report'   => self::report_shaped( isset( $record['report'] ) ? $record['report'] : null ),
 		);
+	}
+
+	/**
+	 * Where a record keeps the index of its series, as store() writes it:
+	 * a group and its slices, each by name and SHA-256; null for none.
+	 *
+	 * @param mixed $index Index.
+	 * @return array{gid:string,parts:array[]}|null
+	 */
+	private static function index_shaped( $index ) {
+		if ( ! is_array( $index ) || array( 'gid', 'parts' ) !== self::sorted_keys( $index ) || ! is_string( $index['gid'] ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $index['gid'] ) || ! is_array( $index['parts'] ) || array() === $index['parts'] || ! array_is_list( $index['parts'] ) ) {
+			return null;
+		}
+		foreach ( $index['parts'] as $n => $part ) {
+			if ( ! is_array( $part ) || array( 'name', 'sha' ) !== self::sorted_keys( $part ) || ! is_string( $part['sha'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $part['sha'] ) || sprintf( 'index-%03d-%s', $n, substr( $part['sha'], 0, 32 ) ) !== $part['name'] ) {
+				return null;
+			}
+		}
+		return $index;
 	}
 
 	/**

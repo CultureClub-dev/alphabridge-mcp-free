@@ -172,6 +172,43 @@ final class AB_MCP_Sync_Pairs {
 		);
 	}
 
+	/**
+	 * The pairs of a source over every kind, by id, a page at a time
+	 * (wp_site_pairs list and the proposal, branch 6).
+	 *
+	 * @param string $source_id Source.
+	 * @param int    $after     The last id of the page before (0: from the start).
+	 * @param int    $limit     At most this many (1 to PER_PAGE).
+	 * @return array{pairs:array[],next:int|null}|WP_Error next is the $after of the next page.
+	 */
+	public static function page_source( $source_id, $after = 0, $limit = self::PER_PAGE ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		$bad = self::check_fields( array( 'source_id' => $source_id ) );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		global $wpdb;
+		$limit = max( 1, min( self::PER_PAGE, (int) $limit ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours; the values are prepared.
+		$sql  = 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE ' . self::exact( 'source_id', $source_id ) . $wpdb->prepare( ' AND id > %d ORDER BY id ASC LIMIT %d', max( 0, (int) $after ), $limit + 1 );
+		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- built from prepared parts above.
+		if ( '' !== $wpdb->last_error || ! is_array( $rows ) ) {
+			return self::db_error();
+		}
+		$next = null;
+		if ( count( $rows ) > $limit ) {
+			$rows = array_slice( $rows, 0, $limit );
+			$next = (int) $rows[ $limit - 1 ]['id'];
+		}
+		return array(
+			'pairs' => array_map( array( __CLASS__, 'decode' ), $rows ),
+			'next'  => $next,
+		);
+	}
+
 	/* ----------------------------------------------------------- write */
 
 	/**
@@ -333,6 +370,55 @@ final class AB_MCP_Sync_Pairs {
 			return self::db_error();
 		}
 		return 1 === (int) $done ? true : self::changed();
+	}
+
+	/**
+	 * Run writes of pairs in one transaction of the database: committed when
+	 * $fn returns anything but a WP_Error, rolled back otherwise, on an
+	 * exception and, by the database itself, when the process ends before
+	 * the commit (wp_site_pairs confirm and discard, all or nothing). Only on
+	 * a table whose engine keeps transactions (InnoDB); another one refuses
+	 * with the way, before anything is written.
+	 *
+	 * @param callable $fn function(): mixed|WP_Error.
+	 * @return mixed|WP_Error What $fn returned.
+	 */
+	public static function transaction( callable $fn ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		$table  = AB_MCP_Sync_Schema::table( 'pairs' );
+		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
+		if ( '' !== $wpdb->last_error ) {
+			return self::db_error();
+		}
+		if ( ! is_string( $engine ) || 0 !== strcasecmp( $engine, 'InnoDB' ) ) {
+			return new WP_Error(
+				'ab_mcp_staging_pairs_engine',
+				sprintf( 'The table of the object pairs (%1$s) is stored with the engine %2$s, which keeps no transactions, so pairs are not written: a confirmation writes all of its pairs or none. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', $table, is_string( $engine ) ? $engine : 'unknown' ),
+				array( 'engine' => is_string( $engine ) ? $engine : null )
+			);
+		}
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return self::db_error();
+		}
+		try {
+			$result = call_user_func( $fn );
+		} catch ( Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			throw $e;
+		}
+		if ( is_wp_error( $result ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return $result;
+		}
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return self::db_error();
+		}
+		return $result;
 	}
 
 	/* -------------------------------------------- snapshot (steps.before) */
@@ -956,6 +1042,18 @@ final class AB_MCP_Sync_Pairs {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a pair can hold this ref (the rule of the columns live_ref and
+	 * staging_ref): text of valid UTF-8 without control characters, 1 to
+	 * MAX_REF characters.
+	 *
+	 * @param mixed $ref Ref.
+	 * @return bool
+	 */
+	public static function valid_ref( $ref ) {
+		return null === self::check_fields( array( 'live_ref' => $ref ) );
 	}
 
 	/**

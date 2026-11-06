@@ -38,6 +38,7 @@ require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-builder-lock.php';
 require_once __DIR__ . '/class-sync-inventory.php';
+require_once __DIR__ . '/class-sync-identity.php';
 
 /**
  * Class AB_MCP_Sync_Db_Kind: what the kinds of the database share.
@@ -423,6 +424,12 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 			'post_name' => $row['post_name'],
 			'theme'     => $theme,
 		);
+		// Its language where the rows of the site say one (Polylang, WPML;
+		// Codex round 3, B2): translations may share a slug.
+		$language = AB_MCP_Sync_Identity::language( 'post', $id, $ctx );
+		if ( '' !== $language ) {
+			$identity['language'] = null === $language ? '?' : (string) $language;
+		}
 		return AB_MCP_Sync_Canon::finish( 'post', (string) $id, $identity, $form, $acc );
 	}
 
@@ -588,17 +595,17 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 			'row'  => self::term_form( $row, $ctx, $acc, $this->kind() ),
 			'meta' => self::meta_form( $meta, $ctx, $acc, $this->kind(), false ),
 		);
-		$form = $this->more( $row, $form, $acc );
-		return AB_MCP_Sync_Canon::finish(
-			$this->kind(),
-			(string) $row['term_id'],
-			array(
-				'taxonomy' => $row['taxonomy'],
-				'slug'     => $row['slug'],
-			),
-			$form,
-			$acc
+		$form     = $this->more( $row, $form, $acc );
+		$identity = array(
+			'taxonomy' => $row['taxonomy'],
+			'slug'     => $row['slug'],
 		);
+		// Its language where the rows of the site say one (Codex round 3, B2).
+		$language = 'term' === $this->kind() ? AB_MCP_Sync_Identity::language( 'term', (int) $row['term_id'], $ctx, (int) $row['term_taxonomy_id'] ) : '';
+		if ( '' !== $language ) {
+			$identity['language'] = null === $language ? '?' : (string) $language;
+		}
+		return AB_MCP_Sync_Canon::finish( $this->kind(), (string) $row['term_id'], $identity, $form, $acc );
 	}
 
 	/**
@@ -842,6 +849,11 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				$object = $m['value'];
 			}
 		}
+		// What the item shows and where it hangs, by identity
+		// (AB_MCP_Sync_Identity, a SHA-256), so that two sites with other ids
+		// and another order of the items name the same item alike; null where
+		// it has none.
+		$whole    = AB_MCP_Sync_Identity::menu_item( (int) $id, $ctx );
 		$identity = array(
 			'menus'    => array_map( 'intval', array_column( array_filter( $tax, static function ( $t ) {
 				return 'nav_menu' === $t['taxonomy'];
@@ -849,6 +861,8 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 			'type'     => $type,
 			'object'   => $object,
 			'position' => $position,
+			'target'   => null === $whole ? null : $whole[0],
+			'parent'   => null === $whole ? null : $whole[1],
 		);
 		return AB_MCP_Sync_Canon::finish( 'menu_item', $ref, $identity, $form, $acc );
 	}
@@ -960,6 +974,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 		}
 		$rows      = array();
 		$instances = array();
+		$ids       = array();
 		foreach ( is_array( $areas[ $ref ] ) ? $areas[ $ref ] : array() as $widget ) {
 			$widget = (string) $widget;
 			if ( ! preg_match( '/^(.+)-(\d+)\z/', $widget, $m ) ) {
@@ -967,6 +982,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 					'base'     => $widget,
 					'settings' => null,
 				);
+				$ids[]       = $widget;
 				continue;
 			}
 			$base = $m[1];
@@ -987,10 +1003,16 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 				'base'     => $base,
 				'settings' => null === $settings ? array( '~missing' => true ) : AB_MCP_Sync_Canon::structure( $settings, $ctx, $acc, 'widget_area', $at, self::leaf( $base, $ctx, $acc, $at ) ),
 			);
+			$ids[]       = $widget;
 			// The net over the raw value, after the readers of the instance.
 			AB_MCP_Sync_Net::check( $acc, $mark, 'widget_area', $at, $settings, $ctx );
 		}
-		return AB_MCP_Sync_Canon::finish( 'widget_area', $ref, array( 'area' => $ref ), array( 'area' => $ref, 'instances' => $instances ), $acc );
+		$result = AB_MCP_Sync_Canon::finish( 'widget_area', $ref, array( 'area' => $ref ), array( 'area' => $ref, 'instances' => $instances ), $acc );
+		// The ids of the instances of its form, in order, beside the form
+		// (branch 6, part 2): the report tells an instance removed on staging
+		// from those at its base (decision 21).
+		$result['instances'] = $ids;
+		return $result;
 	}
 
 	/**

@@ -20,7 +20,11 @@
  *    (decision 9), ascending by kind and subtype, each pair once;
  *  - objects (how many) and unpacked (bytes once unpacked);
  *  - chunks: per chunk its bytes and SHA-256, in order; bytes (their sum)
- *    and sha256 (the SHA-256 of the whole package).
+ *    and sha256 (the SHA-256 of the whole package);
+ *  - wordpress: the version of WordPress on the staging site, which the
+ *    report compares with this site's (decision 14: a staging site with a
+ *    newer WordPress is refused, the way is wp_update_core; branch 6,
+ *    part 2).
  *
  * Limits (decision 8, contract B): a chunk at most MAX_CHUNK (5 MiB), a
  * package at most MAX_BYTES (64 MiB) in chunks, at most MAX_UNPACKED
@@ -111,7 +115,14 @@ final class AB_MCP_Sync_Manifest {
 	const MAX_TEXT = 1048576;
 
 	/** The fields of a manifest, sorted. */
-	const FIELDS = array( 'bytes', 'canon', 'chunks', 'created', 'expires', 'format', 'key_id', 'kinds', 'objects', 'package_id', 'purpose', 'report_hash', 'sha256', 'source', 'source_id', 'target', 'unpacked' );
+	const FIELDS = array( 'bytes', 'canon', 'chunks', 'created', 'expires', 'format', 'key_id', 'kinds', 'objects', 'package_id', 'purpose', 'report_hash', 'sha256', 'source', 'source_id', 'target', 'unpacked', 'wordpress' );
+
+	/**
+	 * A version of WordPress as wp-includes/version.php names it: digits
+	 * and dots, a pre-release after a hyphen (7.1.3, 7.2-beta1,
+	 * 7.2-alpha-61234-src).
+	 */
+	const WORDPRESS = '/^[0-9]{1,4}(?:\.[0-9]{1,4}){1,3}(?:-[0-9A-Za-z.-]{1,40})?\z/';
 
 	/** The fields the maker of a package names; sign() adds the others. */
 	const PACKAGE_FIELDS = array( 'bytes', 'chunks', 'kinds', 'objects', 'package_id', 'purpose', 'report_hash', 'sha256', 'unpacked' );
@@ -166,6 +177,7 @@ final class AB_MCP_Sync_Manifest {
 				'target'    => $target,
 				'created'   => $now,
 				'expires'   => $now + self::TTL,
+				'wordpress' => self::wordpress(),
 			)
 		);
 		$bad = self::shape( $manifest );
@@ -346,6 +358,17 @@ final class AB_MCP_Sync_Manifest {
 		return true;
 	}
 
+	/**
+	 * The version of WordPress on this site, as wp-includes/version.php sets
+	 * it ($wp_version; code, no stored value); '' where it is none.
+	 *
+	 * @return string
+	 */
+	public static function wordpress() {
+		$version = isset( $GLOBALS['wp_version'] ) ? $GLOBALS['wp_version'] : null;
+		return is_string( $version ) && 1 === preg_match( self::WORDPRESS, $version ) ? $version : '';
+	}
+
 	/* ------------------------------------------------------------ private */
 
 	/**
@@ -394,6 +417,7 @@ final class AB_MCP_Sync_Manifest {
 			'objects'    => $count( $m['objects'], self::MAX_OBJECTS ),
 			'unpacked'   => $count( $m['unpacked'], self::MAX_UNPACKED ),
 			'sha256'     => $hex64( $m['sha256'] ),
+			'wordpress'  => is_string( $m['wordpress'] ) && 1 === preg_match( self::WORDPRESS, $m['wordpress'] ),
 		);
 		foreach ( $checks as $field => $ok ) {
 			if ( ! $ok ) {

@@ -16,15 +16,20 @@
  * key of the site), pairing_code, key_replace («Renew the key»), anchor_code
  * (code: prepared and confirmed
  * as a person does), sign_manifest (package); for its packages: export
- * (purpose, cursor, objects), import (the arguments of wp_site_import_chunk,
+ * (purpose, cursor, objects; slow_index: out of time after each page of the
+ * index of identities; index_slice: its slices this many bytes),
+ * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
- * (now), add_admin (login), as_user (user) and write_access (the site mode
+ * (now), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
+ * (post, for good), trash_post (post), add_term_meta (term, key, value) and wp_version (version: the
+ * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
  * (whether export, inventory and kinds are loaded), menu_css_mods (a menu
- * with an item, the additional CSS and two theme mods), serve (query: the route
+ * with an item, the additional CSS and two theme mods), nav_menu (name) and
+ * nav_menu_item (menu, args of wp_update_nav_menu_item()), serve (query: the route
  * of the chunks asked through the REST server of this process, its status). The process
  * loads only what WordPress and the plugin load and what an op needs. A step with "expect": "error"
  * gives { code, message } of its WP_Error instead of ending the steps.
@@ -104,6 +109,9 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'update_option':
 			$ab_it_out = update_option( $ab_it_step['name'], $ab_it_step['value'] );
 			break;
+		case 'delete_option':
+			$ab_it_out = delete_option( $ab_it_step['name'] );
+			break;
 		case 'canonical':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_kind = null;
@@ -152,6 +160,19 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'export':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			AB_MCP_Sync_Identity::$slice = isset( $ab_it_step['index_slice'] ) ? (int) $ab_it_step['index_slice'] : null;
+			if ( ! empty( $ab_it_step['slow_index'] ) ) {
+				// Out of time after each page of the index of identities, and
+				// only there: the index goes on over the calls of a series.
+				AB_MCP_Sync_Inventory::$clock = static function () {
+					foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $ab_it_frame ) {
+						if ( 'AB_MCP_Sync_Identity' === ( $ab_it_frame['class'] ?? '' ) && 'build' === $ab_it_frame['function'] ) {
+							return microtime( true ) + 3600;
+						}
+					}
+					return microtime( true );
+				};
+			}
 			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
 			break;
 		case 'import':
@@ -196,6 +217,21 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				'css'  => $ab_it_css instanceof WP_Post ? $ab_it_css->ID : 0,
 			);
 			break;
+		case 'nav_menu':
+			$ab_it_out = wp_create_nav_menu( $ab_it_step['name'] );
+			break;
+		case 'nav_menu_item':
+			$ab_it_out = wp_update_nav_menu_item( (int) $ab_it_step['menu'], 0, $ab_it_step['args'] );
+			break;
+		case 'register_taxonomy':
+			// A taxonomy of a plugin this site does not run (the data of Polylang, nachgebildet).
+			$ab_it_out = register_taxonomy( $ab_it_step['name'], $ab_it_step['types'], array( 'public' => false ) ) instanceof WP_Taxonomy;
+			break;
+		case 'raw_slug':
+			// A slug as the plugin writes it past wp_unique_post_slug() (shared slugs of translations).
+			$ab_it_out = $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, array( 'post_name' => $ab_it_step['slug'] ), array( 'ID' => (int) $ab_it_step['post'] ) );
+			clean_post_cache( (int) $ab_it_step['post'] );
+			break;
 		case 'staging_raw':
 			$ab_it_out = AB_MCP_Settings::get( AB_MCP_Staging::KEY, array() );
 			break;
@@ -215,6 +251,14 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_request->set_query_params( $ab_it_step['query'] );
 			$ab_it_out = rest_do_request( $ab_it_request )->get_status();
 			break;
+		case 'bulk_attachments':
+			// Attachment rows past wp_insert_post(), for an index of identities of some MiB.
+			$ab_it_digits = '(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)';
+			$ab_it_out    = $GLOBALS['wpdb']->query( $GLOBALS['wpdb']->prepare( "INSERT INTO {$GLOBALS['wpdb']->posts} (post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type) SELECT 1, '2026-10-01 10:00:00', '2026-10-01 10:00:00', '', CONCAT('Bild ', n), '', 'inherit', 'open', 'closed', CONCAT('bild-', n), '', '', '2026-10-01 10:00:00', '2026-10-01 10:00:00', '', 0, '', 0, 'attachment', 'image/jpeg' FROM ( SELECT a.d + 10 * b.d + 100 * c.d + 1000 * e.d + 10000 * f.d AS n FROM {$ab_it_digits} a CROSS JOIN {$ab_it_digits} b CROSS JOIN {$ab_it_digits} c CROSS JOIN {$ab_it_digits} e CROSS JOIN {$ab_it_digits} f ) AS numbers WHERE n < %d", (int) $ab_it_step['count'] ) ); // phpcs:ignore WordPress.DB
+			break;
+		case 'store_remove':
+			$ab_it_out = AB_MCP_Protected_Store::remove( $ab_it_step['area'], $ab_it_step['gid'] );
+			break;
 		case 'store_cleanup':
 			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );
 			break;
@@ -231,6 +275,21 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'write_access':
 			AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY, AB_MCP_Site_Mode::FULL );
 			$ab_it_out = AB_MCP_Site_Mode::get();
+			break;
+		case 'delete_post':
+			// Deleted for good, as wp-admin does past the trash (the report, branch 6).
+			$ab_it_out = wp_delete_post( (int) $ab_it_step['post'], true ) instanceof WP_Post;
+			break;
+		case 'trash_post':
+			$ab_it_out = wp_trash_post( (int) $ab_it_step['post'] ) instanceof WP_Post;
+			break;
+		case 'add_term_meta':
+			$ab_it_out = add_term_meta( (int) $ab_it_step['term'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
+			break;
+		case 'wp_version':
+			// The version of WordPress the steps after it see, as version.php would set it.
+			$GLOBALS['wp_version'] = (string) $ab_it_step['version'];
+			$ab_it_out             = $GLOBALS['wp_version'];
 			break;
 		case 'as_user':
 			wp_set_current_user( (int) $ab_it_step['user'] );

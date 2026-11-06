@@ -10,7 +10,9 @@
  * The group «Staging» grows with the later stages of the staging workflow:
  * since Z8 the packages of the takeover (wp_site_export, wp_site_export_chunk
  * on the staging site, wp_site_import_chunk on the production site;
- * AB_MCP_Sync_Export, AB_MCP_Sync_Import).
+ * AB_MCP_Sync_Export, AB_MCP_Sync_Import), the object pairs
+ * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool) and the
+ * report (wp_site_diff on the production site; AB_MCP_Sync_Report).
  *
  * @package AlphaBridge_MCP
  */
@@ -91,7 +93,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_export',
 			array(
-				'description' => 'On a confirmed staging site paired with a production site: make a package for that production site, signed with the key of this staging site and kept a day in the protected store of this site. In this version the package holds the inventory of this site: each object with its identity, hash, references, size and whether it was read completely, no content. Only what the calling account may read goes in (content with read_post or edit_post, and edit_post where it is not public; terms of a taxonomy that is not public with edit_term; menus, widgets, theme mods and the additional CSS with edit_theme_options; options with manage_options); the rest is counted and named in withheld, and its kinds are not complete. An object whose name is the name of a credential is left out and counted, one with a credential in it carries only its identity, status and locks with their reasons (credentials). One call reads as far as 60 seconds and 4000 objects reach; when the answer carries a cursor, call again with it for the next package. Returns package_id, objects, bytes, chunks, kinds (each kind and subtype, complete true where the package holds every object of it), withheld (count, the objects named with the capability they need, and the way), credentials (names left out, units left out, objects held), expires, manifest (pass it unchanged to wp_site_import_chunk on the production site) and fetch: per chunk a fetch address signed by this site and valid for 10 minutes, with which the production site fetches the chunk itself over https (pass fetch unchanged to wp_site_import_chunk). With package_id instead, it returns that package of this account again, with fresh fetch addresses for chunks still missing. Limit: whoever sees a fetch address within its 10 minutes can read that chunk. Changes nothing on the site but its protected store. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'description' => 'On a confirmed staging site paired with a production site: make a package for that production site, signed with the key of this staging site and kept a day in the protected store of this site. In this version the package holds the inventory of this site: each object with its identity, hash, references, size and whether it was read completely, no content. Only what the calling account may read goes in (content with read_post or edit_post, and edit_post where it is not public; terms of a taxonomy that is not public with edit_term; menus, widgets, theme mods and the additional CSS with edit_theme_options; options with manage_options); the rest is counted and named in withheld, and its kinds are not complete. An object whose name is the name of a credential is left out and counted, one with a credential in it carries only its identity, status and locks with their reasons (credentials). One call reads as far as 60 seconds and 4000 objects reach; when the answer carries a cursor, call again with it for the next package (on a large site the first packages may hold no object, while this site works out the identities of its objects). Returns package_id, objects, bytes, chunks, kinds (each kind and subtype, complete true where the package holds every object of it), withheld (count, the objects named with the capability they need, and the way), credentials (names left out, units left out, objects held), expires, manifest (pass it unchanged to wp_site_import_chunk on the production site) and fetch: per chunk a fetch address signed by this site and valid for 10 minutes, with which the production site fetches the chunk itself over https (pass fetch unchanged to wp_site_import_chunk). With package_id instead, it returns that package of this account again, with fresh fetch addresses for chunks still missing. Limit: whoever sees a fetch address within its 10 minutes can read that chunk. Changes nothing on the site but its protected store. Refused on a multisite network. Needs manage_options and the access level Full.',
 				'capability'  => 'manage_options',
 				'readonly'    => false,
 				'destructive' => false,
@@ -200,6 +202,118 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 			)
 		);
 
+		$r->register(
+			'wp_site_pairs',
+			array(
+				'description' => 'On the production site: pair the objects of this site with those of its staging site, where the staging site is no copy made with the same ids. action=propose with packages (the package_ids of the inventory of the staging site this site took over completely with wp_site_import_chunk: one package, or the packages of one series) compares that inventory with the inventory of this site, read in parts of at most 4000 objects and 45 seconds a call (call again with action=propose and the proposal_id until done is true), and proposes by kind and identity (post type, theme, slug, language and the path of parents; taxonomy, slug and language; the menu, target and parent item of a menu item, not its position; the name of an option or area; the stylesheet of the additional CSS), comparing the content with each reference by id naming its target by identity (an identity another object of the same site has as well names none; a custom link by its address and label; a whole number of a stored value that hits an object, such as an image id of a builder or field, compared by that object as well), so the same objects with other ids on the two sites are equal: equal (the same identity and content), differs (the same identity, other content), uncertain (an identity that is there more than once on a site, also where a package holds only one of them; the same slug on another path of parents, a path of parents not known whole, a post without a slug, a menu item whose target or parent has no identity of its own): paired only by a choice of the person, never by itself, realign (a pair that is unclear or residual: both sides now as its new bases), staging_only and live_only (no counterpart; live_only only where the inventory of the staging site holds every object of that kind, else not_compared), not_compared (with the reason: a row not read, a name no pair holds, an option the takeover never reads, an object a credential holds) and held (a name holds a credential: shown by the SHA-256 of its ref only, never paired). Objects of a pair are not proposed again, and an active pair whose bases are of another version of the comparison data is worked out again where both objects are at hand (equal → new bases, else unclear). The answer carries counts, the first 200 entries and next_after (call again with proposal_id and after for the next ones). action=confirm with the proposal_id and select (entry numbers), categories (equal, differs, realign; at most 500 a call, after for the next part) or choices (for an uncertain entry: its staging_ref and live_ref) makes the pairs: equal as active, differs and a chosen pair of other content as unclear, realign as active with the states of both sides now; in one transaction of the database, all or nothing (the table must use InnoDB); its token also covers the objects of this site as they are when confirmed. action=discard with pair_ids ends pairs, for any account with manage_options; their objects stay. action=list with after, kind and state lists the pairs. A proposal belongs to the account and connection that made it, holds as long as its packages (a day at most), and a new proposal of the same connection replaces it. Writes the table of object pairs and the protected store of this site only; no content of either site changes. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'action'      => array(
+							'type'        => 'string',
+							'enum'        => array( 'propose', 'confirm', 'discard', 'list' ),
+							'description' => 'propose: work out or page a proposal; confirm: make the pairs chosen; discard: end pairs; list: the pairs.',
+						),
+						'packages'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'propose: the package_ids of the inventory of the staging site, taken over completely here, of one series.',
+						),
+						'proposal_id' => array(
+							'type'        => 'string',
+							'description' => 'propose: go on with this proposal or page it; confirm: the proposal the entries are of.',
+						),
+						'after'       => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'propose: the entries after this number; confirm with categories: the entries after this number; list: the pairs after this pair id.',
+						),
+						'select'      => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'confirm: the numbers of the entries to pair (equal, differs or realign).',
+						),
+						'categories'  => array(
+							'type'        => 'array',
+							'items'       => array(
+								'type' => 'string',
+								'enum' => array( 'equal', 'differs', 'realign' ),
+							),
+							'description' => 'confirm: every entry of these categories after the number in after, at most 500 a call.',
+						),
+						'choices'     => array(
+							'type'        => 'array',
+							'description' => 'confirm: for an uncertain entry, the pair the person chose: entry, staging_ref and live_ref among its candidates.',
+							'items'       => array(
+								'type'       => 'object',
+								'properties' => array(
+									'entry'       => array( 'type' => 'integer' ),
+									'staging_ref' => array( 'type' => 'string' ),
+									'live_ref'    => array( 'type' => 'string' ),
+								),
+							),
+						),
+						'pair_ids'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'discard: the ids of the pairs to end, from action=list.',
+						),
+						'kind'        => array(
+							'type'        => 'string',
+							'description' => 'list: only pairs of this kind (post, term, menu, menu_item, widget_area, custom_css, option, theme_mod).',
+						),
+						'state'       => array(
+							'type'        => 'string',
+							'enum'        => array( 'active', 'unclear', 'residual', 'deleted' ),
+							'description' => 'list: only pairs in this state.',
+						),
+					),
+					'required'   => array( 'action' ),
+				),
+				'confirm'     => array(
+					'when'    => array( __CLASS__, 'pairs_when' ),
+					'state'   => array( __CLASS__, 'pairs_state' ),
+					'preview' => array( __CLASS__, 'pairs_preview' ),
+					'note'    => 'action=confirm and action=discard run in two steps: without confirm_token such a call changes nothing and returns a preview with a confirm_token, and the same call with that token runs it; propose and list run at once. The token holds for this account and connection, while the proposal and the pairs it covers are unchanged. This guards against a call nobody meant; it does not make the change reversible.',
+				),
+				'callback'    => array( __CLASS__, 'site_pairs' ),
+			)
+		);
+
+		$r->register(
+			'wp_site_diff',
+			array(
+				'description' => 'On the production site: report what differs between this site and its staging site, object by object over every kind the takeover reads (posts of the core types, templates and navigations, terms, menus and their items, widget areas, the additional CSS, options and theme mods), and what a takeover would do with each. A report begins with packages: the package_ids of the inventory of the staging site that this site took over completely (wp_site_import_chunk), one package or the packages of one series. Checked first, each refusal with its way: this site is the confirmed production site with a staging site paired; the key of that staging site is confirmed by a person on the page AlphaBridge → Staging; each manifest is signed with that key, for this site and from its staging site exactly, not expired, of the same format and version of the comparison data; WordPress on the staging site is not newer than here (else update this site first, with wp_update_core). The inventory of this site is read in parts of at most 4000 objects and 60 seconds a call (call again with report_id until done is true). Each object pair is decided from the state of each side against its base (unchanged, changed, deleted, where the trash counts as deleted; a side the inventory does not hold whole is not compared, never deleted): equal, changed on staging (take_over), changed here (keep), changed on both differently (conflict: a person chooses) or alike, deleted on staging, deleted here. A pair that is unclear is treated as a conflict; a pair left as rest after a way back or an error (residual) is shown as rest, or as rest removed, and never taken over; a pair with a confirmed target (such as status draft) is compared against it and names it. Without a pair: only on staging (create), only here (keep), new on both sides (pair them first with wp_site_pairs). References an object needs are followed: one whose target is locked, unclear, without a pair or not in the inventory (an attachment, before media are compared) waits, and objects that need each other to be created are locked (mutual references). Not done, shown as locked with its reason and the stage that brings it: no object is deleted (an object deleted on staging shows as deleted on staging, taken over from Z8d), a menu with an item removed on staging and a widget area with an instance removed on staging are locked as a whole, and roles, Customizer changesets, options of plugins, theme mods other than the menu positions, documents of page builders other than six block libraries, post types and taxonomies of plugins, creating additional CSS and creating terms with meta are locked. Returns report_id, report_hash, done, counts (by result and action), blocked (each lock with its reason, stage and how many entries), pairs, staging, live, wordpress, the first 200 entries (result, rule and row of the table, action, the state of each side, locks, waits_for, choices) and cursor (call again with report_id and cursor for the next entries). A name holding a credential is shown by the SHA-256 of its ref only. Writes nothing but the report into the protected store of this site, where it is kept a day for this account and connection. Refused on a multisite network. Needs manage_options.',
+				'capability'  => 'manage_options',
+				'readonly'    => true,
+				// It reads what the staging site packed, another site.
+				'open_world'  => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'packages'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'To begin: the package_ids of the inventory of the staging site, taken over completely here, of one series.',
+						),
+						'report_id' => array(
+							'type'        => 'string',
+							'description' => 'Go on with this report, or page it once it is done.',
+						),
+						'cursor'    => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'With report_id: the entries after this number (the cursor of the answer before).',
+						),
+					),
+				),
+				'callback'    => array( __CLASS__, 'site_diff' ),
+			)
+		);
+
 		if ( false === has_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ) ) ) {
 			add_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ), 10, 2 );
 		}
@@ -296,6 +410,62 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	public static function site_import_chunk( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-import.php';
 		return AB_MCP_Sync_Import::call( $a );
+	}
+
+	/**
+	 * Whether a call of wp_site_pairs needs the token: a strict false for
+	 * propose and list only, true for any other (confirm, discard, none),
+	 * asked without loading the classes of the takeover.
+	 *
+	 * @param array $a Arguments.
+	 * @return bool
+	 */
+	public static function pairs_when( array $a ) {
+		return ! ( isset( $a['action'] ) && in_array( $a['action'], array( 'propose', 'list' ), true ) );
+	}
+
+	/**
+	 * The state a token of wp_site_pairs is bound to.
+	 *
+	 * @param array $a Arguments.
+	 * @return string|WP_Error
+	 */
+	public static function pairs_state( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::state( $a );
+	}
+
+	/**
+	 * The preview of wp_site_pairs confirm and discard.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function pairs_preview( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::preview( $a );
+	}
+
+	/**
+	 * wp_site_pairs.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_pairs( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
+		return AB_MCP_Sync_Pairs_Tool::call( $a );
+	}
+
+	/**
+	 * wp_site_diff.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_diff( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-report.php';
+		return AB_MCP_Sync_Report::call( $a );
 	}
 
 	/**
