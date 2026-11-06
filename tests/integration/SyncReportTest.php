@@ -321,8 +321,9 @@ final class SyncReportTest extends TestCase {
 			self::assertLessThan( 300, $calls );
 		}
 		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
-		$all  = $answer['entries'];
-		$page = $answer;
+		$all   = $answer['entries'];
+		$page  = $answer;
+		$pages = 0;
 		while ( null !== $page['cursor'] ) {
 			$page = AB_MCP_Sync_Report::call(
 				array(
@@ -332,6 +333,10 @@ final class SyncReportTest extends TestCase {
 			);
 			self::assertIsArray( $page );
 			$all = array_merge( $all, $page['entries'] );
+			// A cursor that does not move on would page for ever; the test
+			// fails instead (mutation bericht/rep-page-after, CI 06.11.2026).
+			++$pages;
+			self::assertLessThan( 300, $pages, 'The cursor moves on.' );
 		}
 		$answer['all'] = $all;
 		return $answer;
