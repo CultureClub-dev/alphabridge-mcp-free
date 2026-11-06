@@ -50,9 +50,13 @@ final class AB_MCP_Sync_Inventory {
 	 * @param int|float     $budget    Seconds.
 	 * @param callable|null $users     Reader of user logins.
 	 * @param int|null      $objects   Objects at most (see the class), null for no bound.
+	 * @param string|null   $index     The index of identities of this run as
+	 *                                 the call before kept it (run(): index;
+	 *                                 AB_MCP_Sync_Identity::stored()), null to
+	 *                                 begin one.
 	 * @return array ctx, deadline, objects.
 	 */
-	public static function source( array $addresses, $budget = self::BUDGET, $users = null, $objects = null ) {
+	public static function source( array $addresses, $budget = self::BUDGET, $users = null, $objects = null, $index = null ) {
 		// The rewrite rules of this site route its paths, and its own
 		// addresses, both from its rows (AB_MCP_Sync_Urls). What cannot be
 		// read locks where it counts.
@@ -67,7 +71,7 @@ final class AB_MCP_Sync_Inventory {
 		$ctx['utf8'] = AB_MCP_Sync_Rows::utf8();
 		self::$made  = 0;
 		self::$ctx   = $ctx;
-		AB_MCP_Sync_Identity::reset();
+		AB_MCP_Sync_Identity::reset( $ctx, $index );
 		return array(
 			'ctx'      => $ctx,
 			'deadline' => self::now() + max( 0, (float) $budget ),
@@ -91,12 +95,19 @@ final class AB_MCP_Sync_Inventory {
 	}
 
 	/**
-	 * Every kind of the database, as far as the budget reaches.
+	 * Every kind of the database, as far as the budget reaches: first the
+	 * index of identities of the site (AB_MCP_Sync_Identity), which the
+	 * mapped forms need, then the kinds. Where the budget ends before the
+	 * index is done, no object is read: the cursor says where to go on (the
+	 * first kind at its start, or the cursor given), and index what to keep
+	 * for the next call, which source() takes up.
 	 *
 	 * @param array      $source source().
 	 * @param array|null $cursor array( 'kind' => name, 'inner' => the kind's
 	 *                           cursor ); null at the start.
-	 * @return array|WP_Error objects, cursor (null when every kind is done).
+	 * @return array|WP_Error objects, cursor (null when every kind is done),
+	 *                        index (AB_MCP_Sync_Identity::stored(): the text
+	 *                        to keep, null where the one taken up stays).
 	 */
 	public static function run( array $source, $cursor = null ) {
 		require_once __DIR__ . '/class-sync-db-kinds.php';
@@ -116,6 +127,38 @@ final class AB_MCP_Sync_Inventory {
 			}
 			$at = (int) $found;
 		}
+		$ready = AB_MCP_Sync_Identity::build(
+			static function () use ( $source ) {
+				return self::out_of_time( $source );
+			}
+		);
+		if ( is_string( $ready ) ) {
+			return self::unreadable( $ready );
+		}
+		$read = false === $ready ? array(
+			'objects' => array(),
+			'cursor'  => is_array( $cursor ) && isset( $cursor['kind'] ) ? $cursor : array(
+				'kind'  => $names[0],
+				'inner' => null,
+			),
+		) : self::kinds( $kinds, $names, $at, $source, $cursor );
+		if ( is_wp_error( $read ) ) {
+			return $read;
+		}
+		return $read + array( 'index' => AB_MCP_Sync_Identity::stored() );
+	}
+
+	/**
+	 * The kinds from the one a cursor names, as far as the budget reaches.
+	 *
+	 * @param AB_MCP_Sync_Db_Kind[] $kinds  Kinds.
+	 * @param string[]              $names  Their names.
+	 * @param int                   $at     The kind to begin with.
+	 * @param array                 $source source().
+	 * @param array|null            $cursor Cursor.
+	 * @return array|WP_Error objects, cursor.
+	 */
+	private static function kinds( array $kinds, array $names, $at, array $source, $cursor ) {
 		$inner   = is_array( $cursor ) && isset( $cursor['inner'] ) ? $cursor['inner'] : null;
 		$objects = array();
 		for ( $i = $at; $i < count( $kinds ); $i++ ) {
@@ -159,13 +202,18 @@ final class AB_MCP_Sync_Inventory {
 	 * none or there is no form), which the two sites compare (decision 10),
 	 * and of the mapped form with its possible references by identity
 	 * (mapped_possible, AB_MCP_Sync_Identity::possible_hash(); null where
-	 * none hits an object).
+	 * none hits an object), and twin true where another object of this site
+	 * has its identity (AB_MCP_Sync_Identity::twin(): every line of such an
+	 * identity is uncertain, also in a package that holds only one of them).
 	 *
 	 * @param array $result AB_MCP_Sync_Canon::finish().
 	 * @return array
 	 */
 	public static function entry( array $result ) {
 		++self::$made;
+		if ( null !== self::$ctx && AB_MCP_Sync_Identity::twin( $result, self::$ctx ) ) {
+			$result['twin'] = true;
+		}
 		$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;
 		// The same with the possible references by identity (Codex round 2, B-1).
 		$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;

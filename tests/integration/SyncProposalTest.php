@@ -35,7 +35,9 @@ use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
 use AB_MCP_Sync_Export;
+use AB_MCP_Sync_Identity;
 use AB_MCP_Sync_Import;
+use AB_MCP_Sync_Inventory;
 use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Pairs_Tool;
 use AB_MCP_Sync_Proposal;
@@ -79,6 +81,8 @@ final class SyncProposalTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Proposal::$limit = null;
 		AB_MCP_Sync_Proposal::$clock = null;
+		AB_MCP_Sync_Inventory::$clock = null;
+		AB_MCP_Sync_Identity::$slice  = null;
 		remove_all_filters( 'query' );
 	}
 
@@ -727,7 +731,7 @@ final class SyncProposalTest extends TestCase {
 		$say( array( 'select' => array( $amb['n'] ) ), 'is uncertain: it is paired only by the choice of a person' );
 		$say( array( 'select' => array( $staging['n'] ) ), 'is staging_only and is not paired' );
 		$say( array( 'select' => array( $realign[0]['n'] ) ), 'cannot be aligned anew' );
-		$say( array( 'choices' => array( array( 'entry' => $about['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $about['live']['ref'] ) ) ), 'is neither ambiguous nor uncertain; choose it with select' );
+		$say( array( 'choices' => array( array( 'entry' => $about['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $about['live']['ref'] ) ) ), 'is not uncertain; choose it with select' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $about['staging']['ref'], 'live_ref' => $drafts_a['x1'] ) ) ), 'not among its candidates' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['x3'], 'live_ref' => $about['live']['ref'] ) ) ), 'not among its candidates' );
 		$say( array( 'choices' => array( array( 'entry' => $amb['n'], 'staging_ref' => $drafts_b['locked'], 'live_ref' => $drafts_a['x1'] ) ) ), 'is not compared (it has no hash)' );
@@ -1057,6 +1061,16 @@ final class SyncProposalTest extends TestCase {
 		self::fail( "No entry for $kind $ref." );
 	}
 
+	/** The identity of an attachment, term or menu item of these parts (AB_MCP_Sync_Identity), in hex. */
+	private static function identity( array $parts ): string {
+		return bin2hex( \AB_MCP_Sync_Identity::part( $parts ) );
+	}
+
+	/** The identity of a post at the top, in hex. */
+	private static function post_identity( string $type, string $theme, string $slug, string $lang ): string {
+		return bin2hex( \AB_MCP_Sync_Identity::under( \AB_MCP_Sync_Identity::part( array( 'post', $type, $theme, $slug, $lang ) ), '' ) );
+	}
+
 	/** The entry of an object of B by kind and ref. */
 	private static function entry_by_staging( array $entries, string $kind, string $ref ): array {
 		foreach ( $entries as $entry ) {
@@ -1194,7 +1208,9 @@ final class SyncProposalTest extends TestCase {
 		);
 		$answer = self::proposal( self::staged() );
 		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', (string) $post )['category'], 'Its category names nothing here: no equal.' );
-		self::assertSame( 'live_only', self::entry_by_live( $answer['all'], 'term', (string) $twin )['category'], 'The slug twice here: the other one is paired by its whole form only.' );
+		$terms = array_values( array_filter( $answer['all'], static fn( $e ) => 'term' === $e['kind'] && 'category' === $e['subtype'] && 'uncertain' === $e['category'] ) );
+		self::assertCount( 1, $terms, 'The slug twice here: no identity, each of them only by a choice (Codex round 4).' );
+		self::assertEqualsCanonicalizing( array( (string) $news, (string) $twin ), array_map( 'strval', array_column( $terms[0]['candidates']['live'], 'ref' ) ) );
 		\AB_MCP_Sync_Identity::reset();
 		$ctx = \AB_MCP_Sync_Canon::context( array( home_url() ) );
 		self::assertNull( \AB_MCP_Sync_Identity::term( $news, $ctx, 'category' ) );
@@ -1234,14 +1250,14 @@ final class SyncProposalTest extends TestCase {
 		\AB_MCP_Sync_Identity::reset();
 		self::assertNull( \AB_MCP_Sync_Identity::post( $one, $ctx ), 'A slug twice under one parent.' );
 		self::assertNull( \AB_MCP_Sync_Identity::post( $two, $ctx ) );
-		self::assertSame( array( 'post', 'page', '', array(), 'team', '' ), \AB_MCP_Sync_Identity::post( $alone, $ctx ) );
+		self::assertSame( self::post_identity( 'page', '', 'team', '' ), \AB_MCP_Sync_Identity::post( $alone, $ctx ) );
 		self::assertNull( \AB_MCP_Sync_Identity::post( $under, $ctx ), 'Under a parent without an identity.' );
 		foreach ( $infos as $info ) {
 			self::assertNotNull( \AB_MCP_Sync_Identity::post( $info, $ctx ), 'One slug under two parents: two identities.' );
 		}
-		self::assertSame( array( 'post', 'wp_template', 'theme-a', array(), 'index', '' ), \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'The template of another theme is another identity.' );
+		self::assertSame( self::post_identity( 'wp_template', 'theme-a', 'index', '' ), \AB_MCP_Sync_Identity::post( $index['theme-a'], $ctx ), 'The template of another theme is another identity.' );
 		self::assertNull( \AB_MCP_Sync_Identity::post( $files['f1'], $ctx ), 'One file twice.' );
-		self::assertSame( array( 'attachment', '2026/10/other.jpg', '' ), \AB_MCP_Sync_Identity::post( $files['f3'], $ctx ) );
+		self::assertSame( self::identity( array( 'attachment', '2026/10/other.jpg', '' ) ), \AB_MCP_Sync_Identity::post( $files['f3'], $ctx ) );
 		$again = $named( array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index' ), 'index' );
 		wp_set_object_terms( $again, array( 'theme-a' ), 'wp_theme' );
 		\AB_MCP_Sync_Identity::reset();
@@ -1402,9 +1418,9 @@ final class SyncProposalTest extends TestCase {
 			$wpdb->insert( $table, array( 'element_type' => 'tax_category', 'element_id' => (int) $news['term_taxonomy_id'], 'trid' => 2, 'language_code' => 'de' ) );
 			$ctx = \AB_MCP_Sync_Canon::context( array( home_url() ) );
 			\AB_MCP_Sync_Identity::reset();
-			self::assertSame( array( 'attachment', '2026/10/bild.jpg', 'de' ), \AB_MCP_Sync_Identity::post( $files['de'], $ctx ), 'One file in two languages: two identities.' );
-			self::assertSame( array( 'attachment', '2026/10/bild.jpg', 'en' ), \AB_MCP_Sync_Identity::post( $files['en'], $ctx ) );
-			self::assertSame( array( 'term', 'category', 'news', 'de' ), \AB_MCP_Sync_Identity::term( (int) $news['term_id'], $ctx ) );
+			self::assertSame( self::identity( array( 'attachment', '2026/10/bild.jpg', 'de' ) ), \AB_MCP_Sync_Identity::post( $files['de'], $ctx ), 'One file in two languages: two identities.' );
+			self::assertSame( self::identity( array( 'attachment', '2026/10/bild.jpg', 'en' ) ), \AB_MCP_Sync_Identity::post( $files['en'], $ctx ) );
+			self::assertSame( self::identity( array( 'term', 'category', 'news', 'de' ) ), \AB_MCP_Sync_Identity::term( (int) $news['term_id'], $ctx ) );
 			self::assertSame( 'en', \AB_MCP_Sync_Identity::language( 'post', $files['en'], $ctx ) );
 		} finally {
 			$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" ); // phpcs:ignore WordPress.DB
@@ -1544,6 +1560,231 @@ final class SyncProposalTest extends TestCase {
 			self::assertNotSame( 'kontakt', $op['identity']['live']['post_name'] ?? null, 'Never confirmed by category.' );
 			self::assertNotSame( '', $op['identity']['live']['post_name'] ?? null );
 		}
+	}
+
+	/* ------------------------------------------- the whole parent (round 4) */
+
+	public function testAPageUnderAParentOfAnotherLanguageIsAnotherPathNeverDiffers(): void {
+		self::pair();
+		register_taxonomy( 'language', array( 'page' ), array( 'public' => false ) );
+		try {
+			// kontakt under team/en here, under team/de on staging (Codex round 4).
+			$en   = (int) wp_insert_term( 'EN', 'language', array( 'slug' => 'en' ) )['term_id'];
+			$team = (int) wp_insert_post( wp_slash( self::page( 'team', 'Team' ) ) );
+			wp_set_object_terms( $team, array( $en ), 'language' );
+			$kontakt = (int) wp_insert_post( wp_slash( self::page( 'kontakt', 'Kontakt', array( 'post_parent' => $team ) ) ) );
+			$b       = self::b(
+				array(
+					array( 'op' => 'register_taxonomy', 'name' => 'language', 'types' => array( 'page' ) ),
+					array( 'op' => 'insert_term', 'name' => 'DE', 'taxonomy' => 'language', 'args' => array( 'slug' => 'de' ), 'as' => 'de' ),
+					array( 'op' => 'insert_post', 'args' => self::page( 'team', 'Team' ), 'as' => 'team' ),
+					array( 'op' => 'set_terms', 'post' => '$team', 'terms' => array( '$de' ), 'taxonomy' => 'language' ),
+					array( 'op' => 'insert_post', 'args' => self::page( 'kontakt', 'Kontakt', array( 'post_parent' => '$team' ) ), 'as' => 'kontakt' ),
+				)
+			);
+			$answer = self::proposal( self::staged() );
+			$entry  = self::entry_with_live( $answer['all'], 'post', (string) $kontakt );
+			self::assertSame( 'uncertain', $entry['category'], 'Another path: never differs.' );
+			self::assertSame( array( (string) $b['kontakt'] ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
+			self::assertStringContainsString( 'a parent of another type, theme or language', $entry['reason'] );
+			self::assertSame( 'live_only', self::entry_by_live( $answer['all'], 'post', (string) $team )['category'], 'team/en and team/de are two pages.' );
+		} finally {
+			unregister_taxonomy( 'language' );
+		}
+	}
+
+	/* ------------------------------------------- twins of a site (round 4) */
+
+	public function testATwinIsUncertainInAPackageOfItsOwnAndWhatIsLeftAfterAChoiceToo(): void {
+		global $wpdb;
+		self::pair();
+		$heading = array( 'menu-item-title' => 'Privat', 'menu-item-url' => '#', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish' );
+		$menu    = (int) wp_create_nav_menu( 'Haupt' );
+		$a_item  = (int) wp_update_nav_menu_item( $menu, 0, $heading + array( 'menu-item-position' => 1 ) );
+		$a_dup   = (int) wp_insert_post( wp_slash( self::page( 'dup', 'Dup' ) ) );
+		$b       = self::b(
+			array(
+				array( 'op' => 'nav_menu', 'name' => 'Haupt', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $heading + array( 'menu-item-position' => 1 ), 'as' => 'item_1' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $heading + array( 'menu-item-position' => 2 ), 'as' => 'item_2' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'dup', 'Dup' ), 'as' => 'dup_1' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'dup-2', 'Dup' ), 'as' => 'dup_2' ),
+				array( 'op' => 'raw_slug', 'post' => '$dup_2', 'slug' => 'dup' ),
+			)
+		);
+		// A package that holds one twin of each: its line says twin (Codex round 4).
+		$staged = self::staged();
+		self::assertCount( 1, $staged );
+		$lines = array();
+		foreach ( AB_MCP_Sync_Import::taken( $staged[0] )['lines'] as $line ) {
+			if ( in_array( $line['kind'] . ':' . $line['ref'], array( 'menu_item:' . $b['item_2'], 'post:' . $b['dup_2'] ), true ) ) {
+				continue;
+			}
+			if ( in_array( $line['kind'] . ':' . $line['ref'], array( 'menu_item:' . $b['item_1'], 'post:' . $b['dup_1'] ), true ) ) {
+				self::assertTrue( $line['twin'] ?? false, $line['kind'] . ': the line of a twin says so.' );
+			}
+			$lines[] = $line;
+		}
+		$answer = self::proposal( array( self::crafted( $lines, time() )['id'] ) );
+		foreach ( array( 'menu_item' => array( $a_item, $b['item_1'] ), 'post' => array( $a_dup, $b['dup_1'] ) ) as $kind => list( $live, $staging ) ) {
+			$entry = self::entry_with_live( $answer['all'], $kind, (string) $live );
+			self::assertSame( 'uncertain', $entry['category'], $kind . ': one of two on staging, never equal.' );
+			self::assertSame( array( (string) $staging ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
+		}
+		// Twins on both sites: a person pairs one of them; what is left stays uncertain.
+		$a_item_2 = (int) wp_update_nav_menu_item( $menu, 0, $heading + array( 'menu-item-position' => 2 ) );
+		$a_dup_2  = (int) wp_insert_post( wp_slash( self::page( 'dup-2', 'Dup' ) ) );
+		$wpdb->update( $wpdb->posts, array( 'post_name' => 'dup' ), array( 'ID' => $a_dup_2 ) );
+		clean_post_cache( $a_dup_2 );
+		$staged  = self::staged();
+		$answer  = self::proposal( $staged );
+		$choices = array();
+		foreach ( array( 'menu_item' => array( $a_item, $b['item_1'] ), 'post' => array( $a_dup, $b['dup_1'] ) ) as $kind => list( $live, $staging ) ) {
+			$entry = self::entry_with_live( $answer['all'], $kind, (string) $live );
+			self::assertSame( 'uncertain', $entry['category'], $kind );
+			self::assertCount( 2, $entry['candidates']['staging'], $kind );
+			$choices[] = array( 'entry' => $entry['n'], 'staging_ref' => (string) $staging, 'live_ref' => (string) $live );
+		}
+		$done = self::confirmed( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'choices' => $choices ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$again = self::proposal( $staged );
+		foreach ( array( 'menu_item' => array( $a_item_2, $b['item_2'] ), 'post' => array( $a_dup_2, $b['dup_2'] ) ) as $kind => list( $live, $staging ) ) {
+			$entry = self::entry_with_live( $again['all'], $kind, (string) $live );
+			self::assertSame( 'uncertain', $entry['category'], $kind . ': the rest after a choice, never equal.' );
+			self::assertSame( array( (string) $staging ), array_map( 'strval', array_column( $entry['candidates']['staging'], 'ref' ) ) );
+		}
+	}
+
+	/* --------------------------------- the index of identities in parts (round 4, B) */
+
+	/** Out of time after each page of the index of identities, and only there. */
+	private static function slow_index(): void {
+		AB_MCP_Sync_Inventory::$clock = static function (): float {
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'AB_MCP_Sync_Identity' === ( $frame['class'] ?? '' ) && 'build' === $frame['function'] ) {
+					return microtime( true ) + 3600;
+				}
+			}
+			return microtime( true );
+		};
+	}
+
+	/** The categories of a proposal by the refs of their sides. */
+	private static function by_refs( array $entries ): array {
+		$out = array();
+		foreach ( $entries as $entry ) {
+			$refs = array();
+			foreach ( array( 'staging', 'live' ) as $side ) {
+				$refs[] = (string) ( $entry[ $side ]['ref'] ?? '' );
+				foreach ( $entry['candidates'][ $side ] ?? array() as $candidate ) {
+					$refs[] = (string) ( $candidate['ref'] ?? '' );
+				}
+			}
+			$out[ $entry['kind'] . ' ' . implode( ',', $refs ) ] = $entry['category'];
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	public function testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce(): void {
+		self::pair();
+		self::structure();
+		$staged = self::staged();
+		$once   = self::by_refs( self::proposal( $staged )['all'] );
+		// A page of the index a call, at most 20 objects a call after it, the
+		// index kept in slices of 256 bytes.
+		self::slow_index();
+		AB_MCP_Sync_Proposal::$limit = 20;
+		AB_MCP_Sync_Identity::$slice = 256;
+		$asked = 0;
+		add_filter(
+			'query',
+			static function ( $q ) use ( &$asked ) {
+				$asked += false !== strpos( (string) $q, "post_type <> 'revision'" ) ? 1 : 0;
+				return $q;
+			}
+		);
+		$answer = self::here( array( 'action' => 'propose', 'packages' => $staged ) );
+		$calls  = 1;
+		$built  = 0;
+		while ( is_array( $answer ) && false === $answer['done'] ) {
+			if ( $answer['live']['objects'] > 0 && 0 === $built ) {
+				$built = $calls;
+				$asked = 0;
+			}
+			$answer = self::here( array( 'action' => 'propose', 'proposal_id' => $answer['proposal_id'] ) );
+			++$calls;
+			self::assertLessThan( 200, $calls );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		self::assertGreaterThan( 5, $built, 'The index over several calls before the first object.' );
+		self::assertGreaterThan( $built + 1, $calls, 'The objects over calls after it.' );
+		self::assertSame( 0, $asked, 'Once done, the index is taken up, never built again.' );
+		$seqs = array();
+		foreach ( array_keys( AB_MCP_Protected_Store::files( 'reports', $answer['proposal_id'] ) ) as $name ) {
+			$parsed = AB_MCP_Sync_Proposal::parse_name( (string) $name );
+			if ( 'i' === ( $parsed['prefix'] ?? '' ) ) {
+				$seqs[] = $parsed['seq'];
+			}
+		}
+		self::assertCount( $built, array_unique( $seqs ), 'An index a call that built on it, none after.' );
+		self::assertGreaterThan( $built, count( $seqs ), 'The larger ones in slices.' );
+		$all = self::proposal( $staged );
+		AB_MCP_Sync_Inventory::$clock = null;
+		self::assertSame( $once, self::by_refs( $all['all'] ), 'The same proposal as with the index of one call.' );
+	}
+
+	public function testAnExportBuildsTheIndexInPartsAndItsSeriesTakesItUp(): void {
+		self::pair();
+		self::structure();
+		// Packages of 40 objects (a kind read across packages is complete in none).
+		$once = self::by_refs( self::proposal( self::staged( 40 ) )['all'] );
+		$run  = static function ( ?array $cursor ): array {
+			$step = array( 'op' => 'export', 'purpose' => 'inventory', 'as' => 'package', 'slow_index' => true, 'objects' => 40, 'index_slice' => 256, 'expect' => 'error' );
+			if ( null !== $cursor ) {
+				$step['cursor'] = $cursor;
+			}
+			return (array) self::b( array( $step ) )['package'];
+		};
+		$packages = array();
+		$cursor   = null;
+		do {
+			$package    = $run( $cursor );
+			self::assertArrayHasKey( 'package_id', $package, (string) json_encode( $package ) );
+			$packages[] = $package;
+			$cursor     = $package['cursor'];
+		} while ( null !== $cursor && count( $packages ) < 60 );
+		self::assertNull( $cursor );
+		$first = 0;
+		while ( 0 === $packages[ $first ]['objects'] ) {
+			self::assertSame( array(), $packages[ $first ]['kinds'], 'A package of the index only names no kind.' );
+			++$first;
+		}
+		self::assertGreaterThan( 5, $first, 'The first calls build the index only.' );
+		self::assertGreaterThan( $first + 1, count( $packages ), 'Packages of objects after it.' );
+		$ids = array();
+		foreach ( $packages as $package ) {
+			self::assertTrue( self::import( $package )['complete'] );
+			$ids[] = $package['package_id'];
+		}
+		self::assertSame( $once, self::by_refs( self::proposal( $ids )['all'] ), 'The same proposal as from a series with the index in one call.' );
+		// The index is kept with the package in which it was done; a series
+		// whose package of the index is gone does not go on.
+		self::b( array( array( 'op' => 'store_remove', 'area' => 'out', 'gid' => $packages[ $first ]['package_id'], 'as' => 'gone' ) ) );
+		$refused = $run( $packages[ $first + 1 ]['cursor'] );
+		self::assertSame( 'ab_mcp_sync_export_index', $refused['code'] ?? null, (string) json_encode( $refused ) );
+	}
+
+	public function testAPackageDeclaresTheBytesOfAnIndexOfSomeMegabytes(): void {
+		self::pair();
+		// 55 000 attachments: an index of some 2.4 MiB, beyond the room a
+		// package keeps for its record.
+		self::b( array( array( 'op' => 'bulk_attachments', 'count' => 55000, 'as' => 'rows' ) ) );
+		$first = (array) self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'objects' => 40, 'as' => 'package', 'expect' => 'error' ) ) )['package'];
+		self::assertArrayHasKey( 'package_id', $first, (string) json_encode( $first ) );
+		self::assertNotNull( $first['cursor'] );
+		$next = (array) self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'objects' => 40, 'cursor' => $first['cursor'], 'as' => 'package', 'expect' => 'error' ) ) )['package'];
+		self::assertArrayHasKey( 'package_id', $next, 'The next package takes the index up: ' . json_encode( $next ) );
 	}
 
 	/* ---------------------------------------------------------- held (A3) */

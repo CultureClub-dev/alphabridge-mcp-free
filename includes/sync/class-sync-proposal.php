@@ -34,23 +34,26 @@
  * THE MATCH (match(), no database): objects of both sides are grouped by kind
  * and identity (identity_key(); a menu item by its menus, the identity of
  * its target and of its parent item, never by its position), then by the
- * path of parents (posts). Equality is that of the mapped forms (decision
+ * path of parents (posts; each parent with its type, theme, slug and
+ * language, Codex round 4). Equality is that of the mapped forms (decision
  * 10: every reference names its target by identity, AB_MCP_Sync_Identity;
  * either the form with the typed references so or the one with the possible
  * references so as well, mapped_same(), Codex round 2, B-1), so the same
  * objects with other ids on the two sites are equal. No pair by exclusion:
- * one object a side of the same identity and path is a pair; more on a path
- * are paired only where an equal mapped form (the one with the typed
- * references, then the one with the possible references, Codex round 3,
- * B3) is unique on both sides, the rest is ambiguous; the same identity left
- * on another path, a post without a slug or with a path of parents not known
+ * one object a side of the same identity and path is a pair. An identity
+ * that is there more than once on a site (its line says twin, or a side
+ * holds it twice on a path: Codex round 4) is uncertain with every object
+ * of it on that path, also where a package holds only one of them or the
+ * other one was paired by a choice; so are the same identity left on
+ * another path, a post without a slug or with a path of parents not known
  * whole ("?", Codex round 2, A-2), a menu item whose target or parent has no
  * identity of its own, and menu items of one identity in one menu (only
- * their place tells them apart, Codex round 3, A2) are uncertain. A post or
- * term carries its language where its site names one (Codex round 3, B2). Categories (CATEGORIES): equal (both read whole,
+ * their place tells them apart, Codex round 3, A2). A post or term carries
+ * its language where its site names one (Codex round 3, B2). Categories
+ * (CATEGORIES): equal (both read whole,
  * the same mapped form: confirmed as active), differs (the same identity,
  * other content, or a reference without a target: confirmed as unclear),
- * ambiguous and uncertain (only a person's choice pairs them), realign (a
+ * uncertain (only a person's choice pairs them), realign (a
  * pair in the state unclear or residual, both objects there: confirmed with
  * the bases of both sides now, the only way out of these states, decision
  * 14), staging_only and live_only (no counterpart; live_only only where the
@@ -74,8 +77,10 @@
  * one per connection (a new proposal removes the earlier ones of its
  * connection):
  * its head (packages, the print of the pair, the connection, the source, the
- * canon, until when), the parts of the production inventory and, once done,
- * the entries in parts with an index. Each file is written once and named by
+ * canon, until when), the parts of the production inventory with the index
+ * of the identities of this site as far as it is built (AB_MCP_Sync_Identity,
+ * once for the proposal, taken up by the next part) and, once done, the
+ * entries in parts with an index. Each file is written once and named by
  * its SHA-256 (base32), read only against it. The proposal id is the id of
  * the group; it holds for that account and connection, while the print of the
  * pair and the packages hold, until the earliest package expires.
@@ -107,13 +112,13 @@ final class AB_MCP_Sync_Proposal {
 	const LABEL = 'proposal';
 
 	/** The categories of an entry, in the order of the entries. */
-	const CATEGORIES = array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' );
+	const CATEGORIES = array( 'equal', 'differs', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' );
 
 	/** The categories a person confirms. */
-	const CONFIRMABLE = array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign' );
+	const CONFIRMABLE = array( 'equal', 'differs', 'uncertain', 'realign' );
 
 	/** The categories a person confirms only by a choice of the pair. */
-	const BY_CHOICE = array( 'ambiguous', 'uncertain' );
+	const BY_CHOICE = array( 'uncertain' );
 
 	/** Entries of one answer at most (the first 200, then a cursor). */
 	const PAGE = 200;
@@ -537,6 +542,7 @@ final class AB_MCP_Sync_Proposal {
 	 */
 	private static function step( array $found ) {
 		$cursor = null;
+		$index  = null;
 		$seq    = count( $found['parts'] );
 		if ( $seq > 0 ) {
 			$last   = $found['parts'][ $seq - 1 ];
@@ -544,8 +550,24 @@ final class AB_MCP_Sync_Proposal {
 			if ( null === $cursor ) {
 				return self::finish( $found );
 			}
+			$index = $last['index'] ?? null;
 		}
-		$source = self::inventory_source( max( 1, AB_MCP_Sync_Inventory::BUDGET - self::RESERVE ), null === self::$limit ? self::LIMIT : (int) self::$limit );
+		// The index of identities of this site, as the part before kept it
+		// (AB_MCP_Sync_Identity: built once for the proposal, in parts).
+		$text = null;
+		if ( is_array( $index ) ) {
+			$text = '';
+			foreach ( $index as $file ) {
+				$slice = is_array( $file ) ? AB_MCP_Protected_Store::get( 'reports', $found['gid'], (string) ( $file['name'] ?? '' ), (string) ( $file['sha'] ?? '' ) ) : null;
+				if ( ! is_string( $slice ) ) {
+					return self::concurrent();
+				}
+				$text .= $slice;
+			}
+			unset( $slice );
+		}
+		$source = self::inventory_source( max( 1, AB_MCP_Sync_Inventory::BUDGET - self::RESERVE ), null === self::$limit ? self::LIMIT : (int) self::$limit, $text );
+		unset( $text );
 		if ( is_wp_error( $source ) ) {
 			return $source;
 		}
@@ -553,6 +575,25 @@ final class AB_MCP_Sync_Proposal {
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
+		if ( null !== $read['index'] ) {
+			// In slices: a file of the store holds 16 MiB at most.
+			$index = array();
+			for ( $at = 0; $at < strlen( $read['index'] ); $at += AB_MCP_Sync_Identity::slice() ) {
+				$slice = (string) substr( $read['index'], $at, AB_MCP_Sync_Identity::slice() );
+				$sha   = hash( 'sha256', $slice );
+				$put   = AB_MCP_Protected_Store::put( 'reports', $found['gid'], self::name( 'i', $seq + 1, $sha ), $slice );
+				if ( is_wp_error( $put ) ) {
+					return $put;
+				}
+				$index[] = array(
+					'name' => self::name( 'i', $seq + 1, $sha ),
+					'sha'  => $sha,
+				);
+			}
+			unset( $read['index'], $slice );
+		}
+		// The objects carry what they need of the index; it goes before the part is stored.
+		AB_MCP_Sync_Identity::reset();
 		$lines = array();
 		$b9    = 0;
 		foreach ( $read['objects'] as $object ) {
@@ -565,7 +606,7 @@ final class AB_MCP_Sync_Proposal {
 			// A held line is reduced before it is stored (Codex A3).
 			$lines[] = null === $code ? $line : self::reduced( $line, $code );
 		}
-		$part = self::put_part( $found['gid'], $seq + 1, $lines, $read['cursor'], $b9 );
+		$part = self::put_part( $found['gid'], $seq + 1, $lines, $read['cursor'], $b9, $index );
 		if ( is_wp_error( $part ) ) {
 			return $part;
 		}
@@ -581,7 +622,7 @@ final class AB_MCP_Sync_Proposal {
 				'objects' => $read_so_far,
 			),
 			'expires'     => (int) $found['head']['expires'],
-			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (%d objects so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
+			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
 		);
 	}
 
@@ -590,16 +631,17 @@ final class AB_MCP_Sync_Proposal {
 	 * one of its staging site neutral, as the staging site reads its own
 	 * (AB_MCP_Sync_Export::make()).
 	 *
-	 * @param int|float $budget  Seconds.
-	 * @param int|null  $objects Objects at most.
+	 * @param int|float   $budget  Seconds.
+	 * @param int|null    $objects Objects at most.
+	 * @param string|null $index   The index of identities of the proposal so far.
 	 * @return array|WP_Error
 	 */
-	private static function inventory_source( $budget = AB_MCP_Sync_Inventory::BUDGET, $objects = null ) {
+	private static function inventory_source( $budget = AB_MCP_Sync_Inventory::BUDGET, $objects = null, $index = null ) {
 		$partner = AB_MCP_Sync_Anchor::partner();
 		if ( is_wp_error( $partner ) ) {
 			return $partner;
 		}
-		return AB_MCP_Sync_Inventory::source( array( home_url(), $partner ), $budget, null, $objects );
+		return AB_MCP_Sync_Inventory::source( array( home_url(), $partner ), $budget, null, $objects, $index );
 	}
 
 	/**
@@ -633,18 +675,20 @@ final class AB_MCP_Sync_Proposal {
 	/**
 	 * Store one part of the production inventory: its lines in files of at
 	 * most SLICE bytes, then the file that closes the part (its cursor, its
-	 * count of credentials and the names of its files). A part without that
-	 * file is no part (a call that ended in between); two parts of one number
-	 * are two calls that went on at once.
+	 * count of credentials, the names of its files and of the file of the
+	 * index of identities so far). A part without that file is no part (a
+	 * call that ended in between); two parts of one number are two calls
+	 * that went on at once.
 	 *
 	 * @param string     $gid    Group.
 	 * @param int        $seq    Number of the part, from 1.
 	 * @param array[]    $lines  Lines.
 	 * @param array|null $cursor Cursor of the inventory after it.
 	 * @param int        $b9     Objects left out as credentials.
+	 * @param array|null $index  The slices of the index of identities (i), each name and sha; null for none.
 	 * @return array|WP_Error The part as parts() reads it.
 	 */
-	private static function put_part( $gid, $seq, array $lines, $cursor, $b9 ) {
+	private static function put_part( $gid, $seq, array $lines, $cursor, $b9, $index = null ) {
 		$files = array();
 		$slice = array();
 		$size  = 0;
@@ -674,6 +718,7 @@ final class AB_MCP_Sync_Proposal {
 			'cursor'  => $cursor,
 			'files'   => $files,
 			'format'  => self::FORMAT,
+			'index'   => $index,
 			'objects' => count( $lines ),
 			'seq'     => (int) $seq,
 		);
@@ -868,7 +913,7 @@ final class AB_MCP_Sync_Proposal {
 			'live'        => $index['live'],
 			'entries'     => $entries,
 			'next_after'  => $page['more'] ? $last : null,
-			'next'        => 'Show the entries to the person; nothing is paired yet. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an ambiguous or uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
+			'next'        => 'Show the entries to the person; nothing is paired yet. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
 		);
 	}
 
@@ -1160,6 +1205,7 @@ final class AB_MCP_Sync_Proposal {
 					'type'     => (string) ( $id['post_type'] ?? '' ),
 					'theme'    => (string) ( $id['theme'] ?? '' ),
 					'language' => (string) ( $id['language'] ?? '' ),
+					'twin'     => ! empty( $line['twin'] ),
 				);
 			}
 			if ( 'menu' === $line['kind'] && is_string( $line['ref'] ) && isset( $id['slug'] ) ) {
@@ -1192,7 +1238,15 @@ final class AB_MCP_Sync_Proposal {
 					'stage' => $lock['stage'] ?? null,
 				);
 			}
-			$names = 'post' === $kind ? self::path( $line, $posts, $twins ) : array();
+			$parents = 'post' === $kind ? self::path( $line, $posts, $twins ) : array();
+			$names   = array();
+			$whole   = array();
+			foreach ( $parents as $parent ) {
+				$names[] = '?' === $parent ? '?' : $parent['name'];
+				// Each parent by its whole identity (Codex round 4): another
+				// language, type or theme of the same slug is another path.
+				$whole[] = '?' === $parent ? '?' : array( $parent['type'], $parent['theme'], (string) $parent['name'], $parent['language'] );
+			}
 			$out[] = array(
 				'side'            => $side,
 				'kind'            => $kind,
@@ -1211,7 +1265,8 @@ final class AB_MCP_Sync_Proposal {
 				'target'          => $line['target'] ?? null,
 				'key'             => self::identity_key( $kind, $identity, $menus ),
 				'names'           => $names,
-				'path'            => AB_MCP_Sync_Canon::encode( $names ),
+				'path'            => AB_MCP_Sync_Canon::encode( $whole ),
+				'twin'            => ! empty( $line['twin'] ),
 				'doubt'           => self::doubt( $kind, $identity, $names ),
 			);
 		}
@@ -1323,39 +1378,43 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The path of a post: the slugs of its parents from the top, as far as
-	 * the side names them ('?' for one it does not: not read, without a
-	 * slug, or with the type, slug, theme and parent of another post of the
-	 * side; Codex round 2, A-1 and A-2).
+	 * The path of a post: its parents from the top, each with its type,
+	 * theme, slug and language, as far as the side names them ('?' for one
+	 * it does not: not read, without a slug, with the type, slug, theme,
+	 * language and parent of another post of the side, or one its site says
+	 * another post has the identity of; Codex round 2, A-1 and A-2; round 4).
 	 *
 	 * @param array $line  Line.
-	 * @param array $posts Post ref => name, parent, type, theme of the same side.
+	 * @param array $posts Post ref => name, parent, type, theme, language, twin of the same side.
 	 * @param array $twins twin_key() => how many posts of the side have it.
-	 * @return array
+	 * @return array Parents (as in $posts) or '?'.
 	 */
 	private static function path( array $line, array $posts, array $twins = array() ) {
-		$names  = array();
-		$parent = self::parent_of( $line );
-		$seen   = array();
-		while ( null !== $parent && count( $names ) < self::MAX_PATH ) {
-			if ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {
-				$names[] = '?';
+		$parents = array();
+		$parent  = self::parent_of( $line );
+		$seen    = array();
+		while ( null !== $parent && count( $parents ) < self::MAX_PATH ) {
+			if ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || $posts[ $parent ]['twin'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {
+				$parents[] = '?';
 				break;
 			}
 			$seen[ $parent ] = true;
-			$names[]         = $posts[ $parent ]['name'];
+			$parents[]       = $posts[ $parent ];
 			$parent          = $posts[ $parent ]['parent'];
 		}
-		return array_reverse( $names );
+		return array_reverse( $parents );
 	}
 
 	/**
 	 * The entries of one group of the same kind and identity. No pair by
 	 * exclusion (Codex A1): a pair only where the identity, the path of
-	 * parents included, is the same on both sides, one to one, or where an
-	 * equal mapped form is unique on both sides of the same path; objects of
-	 * the same identity left on another path, or with a doubt, are offered
-	 * for a person's choice (uncertain), never paired by themselves.
+	 * parents included, is the same on both sides, one to one. An identity
+	 * that is there more than once on its site is no identity (Codex round
+	 * 4): each object of it on its path is offered for a person's choice
+	 * (uncertain), whether its site says so (twin, also where a package holds
+	 * only one of them or the other one was paired by a choice) or a side
+	 * holds it twice on one path; so are objects of the same identity left
+	 * on another path, or with a doubt. None is paired by itself.
 	 *
 	 * @param array[]  $s        Staging objects.
 	 * @param array[]  $l        Production objects.
@@ -1379,15 +1438,6 @@ final class AB_MCP_Sync_Proposal {
 				's' => $s,
 				'l' => $l,
 			);
-		} elseif ( 'menu_item' === ( $s[0]['kind'] ?? ( $l[0]['kind'] ?? '' ) ) && ( count( $s ) > 1 || count( $l ) > 1 ) ) {
-			// One identity twice in a menu (Codex round 3, 1): only the place
-			// tells them apart, which is no identity; nothing under them names
-			// its parent either.
-			$doubt = 'Another item of its menu has the same identity on its site (two links of one address and label, or one target, under one parent), so only its place tells them apart: it is paired only by the choice of a person.';
-			$left  = array(
-				's' => $s,
-				'l' => $l,
-			);
 		} else {
 			$by_path = array();
 			foreach ( $s as $item ) {
@@ -1398,34 +1448,26 @@ final class AB_MCP_Sync_Proposal {
 			}
 			ksort( $by_path, SORT_STRING );
 			foreach ( $by_path as $sub ) {
-				$ss = isset( $sub['s'] ) ? $sub['s'] : array();
-				$ll = isset( $sub['l'] ) ? $sub['l'] : array();
+				$ss   = isset( $sub['s'] ) ? $sub['s'] : array();
+				$ll   = isset( $sub['l'] ) ? $sub['l'] : array();
+				$twin = count( $ss ) > 1 || count( $ll ) > 1;
+				foreach ( array_merge( $ss, $ll ) as $item ) {
+					$twin = $twin || $item['twin'];
+				}
+				if ( $twin && array() !== $ss && array() !== $ll ) {
+					$out[] = self::choice_entry( 'uncertain', $ss, $ll, self::twin_reason( $ss[0]['kind'] ) );
+					continue;
+				}
 				if ( 1 === count( $ss ) && 1 === count( $ll ) ) {
 					$out[] = self::pair_entry( $ss[0], $ll[0] );
 					continue;
 				}
-				// An equal mapped form that is unique on both sides of the path:
-				// the one with the typed references by identity, then the one
-				// with the possible references so as well (Codex round 3, B3).
-				$rest   = $ss;
-				$rest_l = $ll;
-				foreach ( array( 'mapped', 'mapped_possible' ) as $form ) {
-					list( $pairs, $rest, $rest_l ) = self::unique_pairs( $rest, $rest_l, $form );
-					foreach ( $pairs as $pair ) {
-						$out[] = self::pair_entry( $pair[0], $pair[1] );
-					}
-				}
-				if ( array() !== $rest && array() !== $rest_l ) {
-					// More than one of the same identity on the same path.
-					$out[] = self::choice_entry( 'ambiguous', $rest, $rest_l, null );
-					continue;
-				}
-				$left['s'] = array_merge( $left['s'], $rest );
-				$left['l'] = array_merge( $left['l'], $rest_l );
+				$left['s'] = array_merge( $left['s'], $ss );
+				$left['l'] = array_merge( $left['l'], $ll );
 			}
 		}
 		if ( array() !== $left['s'] && array() !== $left['l'] ) {
-			$out[] = self::choice_entry( 'uncertain', $left['s'], $left['l'], null !== $doubt ? $doubt : 'The same slug on another path of parents: another object, or one that moved. It is paired only by the choice of a person.' );
+			$out[] = self::choice_entry( 'uncertain', $left['s'], $left['l'], null !== $doubt ? $doubt : 'The same slug on another path of parents (another parent, or a parent of another type, theme or language): another object, or one that moved. It is paired only by the choice of a person.' );
 		} else {
 			foreach ( $left['s'] as $item ) {
 				$out[] = self::alone( $item, 'staging_only', null );
@@ -1438,41 +1480,18 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The objects of the two sides whose mapped form (of $form) is equal and
-	 * unique on both sides, as pairs; the rest of each side.
+	 * Why the objects of an identity that is there more than once on a site
+	 * are paired only by a choice.
 	 *
-	 * @param array[] $ss   Staging objects.
-	 * @param array[] $ll   Production objects.
-	 * @param string  $form mapped or mapped_possible.
-	 * @return array pairs (staging, production), the rest of each side.
+	 * @param string $kind Kind.
+	 * @return string
 	 */
-	private static function unique_pairs( array $ss, array $ll, $form ) {
-		$hs = array_count_values( array_filter( array_column( $ss, $form ), 'is_string' ) );
-		$hl = array_count_values( array_filter( array_column( $ll, $form ), 'is_string' ) );
-		$by = array();
-		foreach ( $ll as $j => $item ) {
-			if ( null !== $item[ $form ] && 1 === ( $hl[ $item[ $form ] ] ?? 0 ) && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {
-				$by[ $item[ $form ] ] = $j;
-			}
+	private static function twin_reason( $kind ) {
+		if ( 'menu_item' === $kind ) {
+			// Only the place tells them apart, which is no identity (Codex round 3, A2).
+			return 'Another item of its menu has the same identity on its site (two links of one address and label, or one target, under one parent), so only its place tells them apart: it is paired only by the choice of a person.';
 		}
-		$pairs = array();
-		$used  = array();
-		$rest  = array();
-		foreach ( $ss as $item ) {
-			if ( null !== $item[ $form ] && isset( $by[ $item[ $form ] ] ) ) {
-				$used[ $by[ $item[ $form ] ] ] = true;
-				$pairs[]                        = array( $item, $ll[ $by[ $item[ $form ] ] ] );
-				continue;
-			}
-			$rest[] = $item;
-		}
-		$rest_l = array();
-		foreach ( $ll as $j => $item ) {
-			if ( ! isset( $used[ $j ] ) ) {
-				$rest_l[] = $item;
-			}
-		}
-		return array( $pairs, $rest, $rest_l );
+		return 'Another object of its site has the same identity (a post of the same type, slug, language and parent; a term of the same taxonomy, slug and language), so neither is named by it: it is paired only by the choice of a person, also where a package holds only one of them or the other one was paired.';
 	}
 
 	/**
@@ -1546,11 +1565,11 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The entry of objects only a person pairs: ambiguous (more than one of
-	 * the same identity on a side) or uncertain (the same identity on another
-	 * path, or a doubt).
+	 * The entry of objects only a person pairs: uncertain (an identity there
+	 * more than once on a site, the same identity on another path, or a
+	 * doubt).
 	 *
-	 * @param string      $category ambiguous or uncertain.
+	 * @param string      $category uncertain.
 	 * @param array[]     $s        Staging objects.
 	 * @param array[]     $l        Production objects.
 	 * @param string|null $reason   Why.
@@ -1776,7 +1795,7 @@ final class AB_MCP_Sync_Proposal {
 	 * Write one file of a proposal, named by its prefix, number and SHA-256.
 	 *
 	 * @param string   $gid    Group.
-	 * @param string   $prefix h, c, d, e or x.
+	 * @param string   $prefix h, c, d, e or x (i: put directly, as text).
 	 * @param int|null $seq    Number (c, d, e).
 	 * @param mixed    $data   What it holds (d and e: a list, wrapped).
 	 * @return array|WP_Error name, sha.
@@ -1876,7 +1895,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array|null prefix, seq, sha, name.
 	 */
 	public static function parse_name( $name ) {
-		if ( 1 !== preg_match( '/^([hx])([a-z2-7]{52})\z|^([cde])([0-9]{4})-([a-z2-7]{52})\z/', $name, $m ) ) {
+		if ( 1 !== preg_match( '/^([hx])([a-z2-7]{52})\z|^([cdei])([0-9]{4})-([a-z2-7]{52})\z/', $name, $m ) ) {
 			return null;
 		}
 		$prefix  = '' !== $m[1] ? $m[1] : $m[3];

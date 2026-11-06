@@ -91,7 +91,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$out['more_after'] = $plan['rest'];
 		}
 		$out['effect'] = 'confirm' === $plan['action']
-			? 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or an ambiguous choice of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.'
+			? 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.'
 			: 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).';
 		return $out;
 	}
@@ -187,7 +187,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$want  = $select;
 		foreach ( $choices as $choice ) {
 			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['staging_ref'], $choice['live_ref'] ) || null === self::numbers( array( $choice['entry'] ) ) ) {
-				return self::selection( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that ambiguous or uncertain entry.' );
+				return self::selection( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that uncertain entry.' );
 			}
 			$want[] = (int) $choice['entry'];
 		}
@@ -249,7 +249,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$n     = (int) $choice['entry'];
 			$entry = $entries[ $n ];
 			if ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {
-				return self::selection( sprintf( 'Entry %d is neither ambiguous nor uncertain; choose it with select.', $n ) );
+				return self::selection( sprintf( 'Entry %d is not uncertain; choose it with select.', $n ) );
 			}
 			$s = self::candidate( $entry['candidates']['staging'], $choice['staging_ref'] );
 			$l = self::candidate( $entry['candidates']['live'], $choice['live_ref'] );
@@ -452,7 +452,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 	}
 
 	/**
-	 * A candidate of an ambiguous entry by its ref.
+	 * A candidate of an uncertain entry by its ref.
 	 *
 	 * @param array[] $list Candidates.
 	 * @param mixed   $ref  Ref.

@@ -144,6 +144,7 @@ final class AB_MCP_Sync_Import {
 		'size'            => 'size',
 		'status'          => 'status',
 		'target'          => 'name',
+		'twin'            => 'bool',
 		'unread'          => 'names',
 	);
 

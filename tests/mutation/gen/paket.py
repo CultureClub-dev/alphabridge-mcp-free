@@ -956,9 +956,9 @@ e('paket/it-own-expires', 'own(): not at the end of its manifest or after', EX, 
 e('paket/it-chunk-index', 'chunk(): a chunk the manifest lists', EX,
   "\t\tif ( ! is_int( $chunk ) || ! isset( $found['manifest']['chunks'][ $chunk ] ) ) {", "\t\tif ( ! is_int( $chunk ) ) {", 'itpkg', PKG_IT['relay'])
 e('paket/it-export-cursor', 'make(): the inventory from the cursor', EX,
-  "$read   = AB_MCP_Sync_Inventory::run( $source, $from );", "$read   = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
+  "$read = AB_MCP_Sync_Inventory::run( $source, $from );", "$read = AB_MCP_Sync_Inventory::run( $source, null );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-export-kinds-from', 'make(): complete by the cursor the package began with', EX,
-  "$kinds = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );", "$kinds = self::kinds( $read['objects'], null, $read['cursor'], $sorted['incomplete'] );", 'itpkg', PKG_IT['cursor'])
+  "$kinds  = self::kinds( $read['objects'], $from, $read['cursor'], $sorted['incomplete'] );", "$kinds  = self::kinds( $read['objects'], null, $read['cursor'], $sorted['incomplete'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-import-label', 'begin(): the group named by the package', IM,
   "\t\t\t\t'label'    => self::LABEL . $manifest['package_id'],", "\t\t\t\t'label'    => 'other',", 'itpkg', PKG_IT['fetch'])
 e('paket/it-import-reverify', 'held(): the kept manifest checked again on every call', IM,
@@ -1013,7 +1013,7 @@ e('paket/line-locks', 'line(): locks by key, stage, reason and place only', EX,
 e('paket/line-reason', 'line(): no free text of the object, the reasons are those of its locks', EX,
   "\t\t\t'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );", "\t\t\t'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),\n\t\t) + array_intersect_key( $object, array_flip( array( 'reason', 'reason_code', 'target' ) ) );", 'package', LINE)
 e('paket/it-export-lines', 'make(): the package holds lines, not the objects of the inventory (two sites)', EX,
-  "self::pack( array_map( array( __CLASS__, 'line' ), $sorted['packed'] ) )", "self::pack( $sorted['packed'] )", 'itpkg', PKG_IT['gegen'])
+  "$lines = array_map( array( __CLASS__, 'line' ), $sorted['packed'] );", "$lines = $sorted['packed'];", 'itpkg', PKG_IT['gegen'])
 MS = "\t\tif ( ! is_array( $raw ) || ! isset( $raw['key_id'], $raw['mac'] ) || ! is_string( $raw['mac'] ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $raw['mac'] ) ) {"
 MACC = 'testTheMacOfAStagingSiteIsItsOwnAndPerPurpose'
 e('paket/mac-secret-text', 'mac_secret(): the secret as text', K, MS, MS.replace(" || ! is_string( $raw['mac'] )", ''), 'package', MACC)
@@ -1071,13 +1071,13 @@ e('paket/it-discard-stale', 'store(): the packages of another binding go before 
 e('paket/it-follows-cursor', 'follows(): the cursor the package before recorded (two sites)', EX,
   "\t\tif ( AB_MCP_Sync_Canon::encode( $before['cursor'] ) !== AB_MCP_Sync_Canon::encode( $from ) ) {", "\t\tif ( false ) {", 'itpkg', PKG_IT['cursor'])
 e('paket/it-follows-series', 'follows(): the series of the package before (two sites)', EX,
-  "return array( $before['cursor'], $before['series'] );", "return array( $before['cursor'], bin2hex( random_bytes( 16 ) ) );", 'itpkg', PKG_IT['cursor'])
+  "return array( $before['cursor'], $before['series'], $before['index'] );", "return array( $before['cursor'], bin2hex( random_bytes( 16 ) ), $before['index'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-answer-package', 'answer(): the cursor names this package (two sites)', EX,
   "\t\t\t\t'package' => $manifest['package_id'],", "\t\t\t\t'package' => str_repeat( 'f', 32 ),", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-series-label', 'store(): the group named by its series (two sites)', EX,
   "\t\t\t\t'label'    => 'series:' . $series,", "\t\t\t\t'label'    => $purpose,", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-chunk-cleanup', 'store(): a chunk that could not be written leaves nothing (two sites)', EX,
-  "\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\t\treturn $put;", "\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\treturn $put;", 'itpkg', PKG_IT['whole_write'])
+  "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\t\treturn $put;", "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\treturn $put;", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-store-record-cleanup', 'store(): a record that could not be written leaves nothing (two sites)', EX,
   "\t\tif ( is_wp_error( $put ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", "\t\tif ( is_wp_error( $put ) ) {\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-begin-cleanup', 'begin(): a record that could not be written leaves nothing (two sites)', IM,

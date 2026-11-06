@@ -16,10 +16,12 @@
  * key of the site), pairing_code, key_replace («Renew the key»), anchor_code
  * (code: prepared and confirmed
  * as a person does), sign_manifest (package); for its packages: export
- * (purpose, cursor, objects), import (the arguments of wp_site_import_chunk,
+ * (purpose, cursor, objects; slow_index: out of time after each page of the
+ * index of identities; index_slice: its slices this many bytes),
+ * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
- * (now), add_admin (login), as_user (user) and write_access (the site mode
+ * (now), store_remove (area, gid), add_admin (login), as_user (user) and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
@@ -153,6 +155,19 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'export':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+			AB_MCP_Sync_Identity::$slice = isset( $ab_it_step['index_slice'] ) ? (int) $ab_it_step['index_slice'] : null;
+			if ( ! empty( $ab_it_step['slow_index'] ) ) {
+				// Out of time after each page of the index of identities, and
+				// only there: the index goes on over the calls of a series.
+				AB_MCP_Sync_Inventory::$clock = static function () {
+					foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $ab_it_frame ) {
+						if ( 'AB_MCP_Sync_Identity' === ( $ab_it_frame['class'] ?? '' ) && 'build' === $ab_it_frame['function'] ) {
+							return microtime( true ) + 3600;
+						}
+					}
+					return microtime( true );
+				};
+			}
 			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
 			break;
 		case 'import':
@@ -230,6 +245,14 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_request = new WP_REST_Request( 'GET', '/' . AB_MCP_REST_NAMESPACE . AB_MCP_Sync_Grant::ROUTE );
 			$ab_it_request->set_query_params( $ab_it_step['query'] );
 			$ab_it_out = rest_do_request( $ab_it_request )->get_status();
+			break;
+		case 'bulk_attachments':
+			// Attachment rows past wp_insert_post(), for an index of identities of some MiB.
+			$ab_it_digits = '(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)';
+			$ab_it_out    = $GLOBALS['wpdb']->query( $GLOBALS['wpdb']->prepare( "INSERT INTO {$GLOBALS['wpdb']->posts} (post_author, post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, comment_status, ping_status, post_name, to_ping, pinged, post_modified, post_modified_gmt, post_content_filtered, post_parent, guid, menu_order, post_type, post_mime_type) SELECT 1, '2026-10-01 10:00:00', '2026-10-01 10:00:00', '', CONCAT('Bild ', n), '', 'inherit', 'open', 'closed', CONCAT('bild-', n), '', '', '2026-10-01 10:00:00', '2026-10-01 10:00:00', '', 0, '', 0, 'attachment', 'image/jpeg' FROM ( SELECT a.d + 10 * b.d + 100 * c.d + 1000 * e.d + 10000 * f.d AS n FROM {$ab_it_digits} a CROSS JOIN {$ab_it_digits} b CROSS JOIN {$ab_it_digits} c CROSS JOIN {$ab_it_digits} e CROSS JOIN {$ab_it_digits} f ) AS numbers WHERE n < %d", (int) $ab_it_step['count'] ) ); // phpcs:ignore WordPress.DB
+			break;
+		case 'store_remove':
+			$ab_it_out = AB_MCP_Protected_Store::remove( $ab_it_step['area'], $ab_it_step['gid'] );
 			break;
 		case 'store_cleanup':
 			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );

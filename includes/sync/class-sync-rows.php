@@ -600,19 +600,23 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
-	 * Every assignment to the terms of one taxonomy (the themes of the
-	 * templates, the menus of the menu items, the languages of Polylang):
-	 * object, term and slug.
+	 * The assignments to the terms of one taxonomy (the themes of the
+	 * templates, the menus of the menu items, the languages of Polylang)
+	 * after an object and term_taxonomy_id, in that order: object,
+	 * term_taxonomy_id and slug.
 	 *
-	 * @param string $taxonomy Taxonomy, compared byte for byte.
-	 * @return array<int,array{object_id:int,term_id:int,slug:string}>|null
+	 * @param string $taxonomy   Taxonomy, compared byte for byte.
+	 * @param int    $after      object_id the page before ended with; 0 at the start.
+	 * @param int    $after_ttid term_taxonomy_id it ended with.
+	 * @param int    $limit      Rows at most (INDEX_PAGE).
+	 * @return array<int,array{object_id:int,ttid:int,slug:string}>|null
 	 */
-	public static function relations( $taxonomy ) {
+	public static function relations( $taxonomy, $after, $after_ttid, $limit ) {
 		global $wpdb;
 		if ( ! self::has( array( 'term_relationships', 'term_taxonomy', 'terms' ) ) ) {
 			return null;
 		}
-		$rows = self::select( $wpdb->prepare( "SELECT tr.object_id, tt.term_id, t.slug FROM {$wpdb->term_relationships} AS tr INNER JOIN {$wpdb->term_taxonomy} AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN {$wpdb->terms} AS t ON t.term_id = tt.term_id WHERE tt.taxonomy = BINARY %s ORDER BY tr.object_id ASC, tt.term_taxonomy_id ASC", (string) $taxonomy ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- tables from $wpdb.
+		$rows = self::select( $wpdb->prepare( "SELECT tr.object_id, tr.term_taxonomy_id, t.slug FROM {$wpdb->term_relationships} AS tr INNER JOIN {$wpdb->term_taxonomy} AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN {$wpdb->terms} AS t ON t.term_id = tt.term_id WHERE tt.taxonomy = BINARY %s AND ( tr.object_id > %d OR ( tr.object_id = %d AND tr.term_taxonomy_id > %d ) ) ORDER BY tr.object_id ASC, tr.term_taxonomy_id ASC LIMIT %d", (string) $taxonomy, (int) $after, (int) $after, (int) $after_ttid, max( 1, min( self::INDEX_PAGE, (int) $limit ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- tables from $wpdb.
 		if ( null === $rows ) {
 			return null;
 		}
@@ -620,7 +624,7 @@ final class AB_MCP_Sync_Rows {
 		foreach ( $rows as $row ) {
 			$out[] = array(
 				'object_id' => (int) $row['object_id'],
-				'term_id'   => (int) $row['term_id'],
+				'ttid'      => (int) $row['term_taxonomy_id'],
 				'slug'      => (string) $row['slug'],
 			);
 		}
@@ -628,32 +632,42 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
-	 * The languages of WPML (its table icl_translations): element type, id
-	 * (a post id for post_*, a term_taxonomy_id for tax_*) and language;
-	 * none where the site has no such table.
+	 * Whether the site has the table of WPML (icl_translations).
 	 *
-	 * @return array<int,array{type:string,id:int,language:string}>|null
+	 * @return bool|null
 	 */
-	public static function wpml_languages() {
+	public static function wpml_table() {
+		global $wpdb;
+		if ( ! self::has( array( 'posts' ) ) || ! isset( $wpdb->prefix ) ) {
+			return null;
+		}
+		$found = self::select( $wpdb->prepare( 'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', (string) $wpdb->prefix . 'icl_translations' ) );
+		return null === $found ? null : array() !== $found;
+	}
+
+	/**
+	 * The languages of WPML (its table icl_translations, wpml_table()) after
+	 * a translation_id, in that order: the row, element type, id (a post id
+	 * for post_*, a term_taxonomy_id for tax_*) and language.
+	 *
+	 * @param int $after translation_id the page before ended with; 0 at the start.
+	 * @param int $limit Rows at most (INDEX_PAGE).
+	 * @return array<int,array{row:int,type:string,id:int,language:string}>|null
+	 */
+	public static function wpml_languages( $after, $limit ) {
 		global $wpdb;
 		if ( ! self::has( array( 'posts' ) ) || ! isset( $wpdb->prefix ) ) {
 			return null;
 		}
 		$table = (string) $wpdb->prefix . 'icl_translations';
-		$found = self::select( $wpdb->prepare( 'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
-		if ( null === $found ) {
-			return null;
-		}
-		if ( array() === $found ) {
-			return array();
-		}
-		$rows = self::select( "SELECT element_type, element_id, language_code FROM `{$table}` WHERE element_id IS NOT NULL ORDER BY translation_id ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the name of the table of WPML, found above.
+		$rows  = self::select( $wpdb->prepare( "SELECT translation_id, element_type, element_id, language_code FROM `{$table}` WHERE element_id IS NOT NULL AND translation_id > %d ORDER BY translation_id ASC LIMIT %d", (int) $after, max( 1, min( self::INDEX_PAGE, (int) $limit ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the name of the table of WPML (wpml_table()).
 		if ( null === $rows ) {
 			return null;
 		}
 		$out = array();
 		foreach ( $rows as $row ) {
 			$out[] = array(
+				'row'      => (int) $row['translation_id'],
 				'type'     => (string) $row['element_type'],
 				'id'       => (int) $row['element_id'],
 				'language' => null === $row['language_code'] ? '' : (string) $row['language_code'],

@@ -28,6 +28,8 @@ RUNS = {
     'tool': ('unit', 'SyncPairsToolTest'),
     'gate': ('unit', 'StagingGateTest'),
     'it': ('it', 'SyncProposalTest'),
+    'ident': ('unit', 'SyncIdentityTest'),
+    'kinds': ('unit', 'SyncDbKindsTest'),
 }
 
 entries = []
@@ -169,22 +171,12 @@ e('resolve-doubt', 'resolve(): a group with a doubt is left to a choice', P,
   "\t\tif ( null !== $doubt ) {\n\t\t\t$left = array(", "\t\tif ( false ) {\n\t\t\t$left = array(", 'prop', 'testPostsWithoutASlugAreUncertainNeverAPair')
 e('resolve-path', 'resolve(): one to one on a path is a pair', P,
   "\t\t\t\tif ( 1 === count( $ss ) && 1 === count( $ll ) ) {", "\t\t\t\tif ( false ) {", 'prop', 'testThePathOfParentsTellsPagesOfTheSameSlugApart')
-HU = "\t\t\tif ( null !== $item[ $form ] && 1 === ( $hl[ $item[ $form ] ] ?? 0 ) && 1 === ( $hs[ $item[ $form ] ] ?? 0 ) ) {"
-e('resolve-hash', 'unique_pairs(): an equal mapped form unique on both sides of a path is a pair', P, HU, "\t\t\tif ( false ) {", 'prop', 'testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair')
-e('resolve-hash-live', 'unique_pairs(): unique on this site', P, HU, HU.replace(" && 1 === ( $hl[ $item[ $form ] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
-e('resolve-hash-staging', 'unique_pairs(): unique on the staging site', P, HU, HU.replace(" && 1 === ( $hs[ $item[ $form ] ] ?? 0 )", ''), 'prop', 'testAnEqualMappedFormTwiceOnASideIsNoPair')
-e('resolve-possible', 'resolve(): then the second mapped form, unique on both sides (Codex round 3, B3)', P,
-  "\t\t\t\tforeach ( array( 'mapped', 'mapped_possible' ) as $form ) {", "\t\t\t\tforeach ( array( 'mapped' ) as $form ) {", 'prop', 'testAnEqualSecondMappedFormUniqueOnBothSidesOfAPathIsAPair')
-e('resolve-menu-twins', 'resolve(): items of one identity in one menu are uncertain (Codex round 3, A2)', P,
-  "\t\t} elseif ( 'menu_item' === ( $s[0]['kind'] ?? ( $l[0]['kind'] ?? '' ) ) && ( count( $s ) > 1 || count( $l ) > 1 ) ) {", "\t\t} elseif ( false ) {", 'prop', 'testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart')
 e('key-language-post', 'identity_key(): a post with its language (Codex round 3, B2)', P,
   "\t\t\t\t$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null, $identity['language'] ?? '' );",
   "\t\t\t\t$parts = array( $identity['post_type'] ?? null, $identity['theme'] ?? null, $identity['post_name'] ?? null );", 'prop', 'testTranslationsSharingASlugAreTwoObjects')
 e('twin-language', 'twin_key(): a parent with its language', P,
   "\t\treturn AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['language'] ?? '', $post['parent'] ) );",
   "\t\treturn AB_MCP_Sync_Canon::encode( array( $post['type'] ?? '', $post['theme'] ?? '', (string) $post['name'], $post['parent'] ) );", 'prop', 'testTranslationsSharingASlugAreTwoObjects')
-e('resolve-ambiguous', 'resolve(): more of the same identity on a path are ambiguous', P,
-  "\t\t\t\tif ( array() !== $rest && array() !== $rest_l ) {", "\t\t\t\tif ( false ) {", 'prop', 'testMoreOfTheSameIdentityOnAPathAreAmbiguousWithAllOfThem')
 e('resolve-uncertain', 'resolve(): the same identity left on other paths is uncertain, no pair by exclusion', P,
   "\t\tif ( array() !== $left['s'] && array() !== $left['l'] ) {", "\t\tif ( false ) {", 'prop', 'testTheSameSlugOnAnotherPathIsUncertainNeverAPair')
 e('live-alone', 'live_alone(): only live only where the staging side is complete', P,
@@ -205,9 +197,32 @@ e('items-possible', 'items(): the second mapped form of a line', P,
   "\t\t\t\t'mapped_possible' => isset( $line['mapped_possible'] ) && is_string( $line['mapped_possible'] ) ? $line['mapped_possible'] : null,", "\t\t\t\t'mapped_possible' => null,", 'prop', 'testEitherMappedFormMakesTheSame')
 e('path-doubt', 'doubt(): a path of parents not known whole is uncertain (Codex round 2, A-2)', P,
   "\t\tif ( 'post' === $kind && in_array( '?', $names, true ) ) {", "\t\tif ( false ) {", 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
-PQ = "\t\t\tif ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {"
+PQ = "\t\t\tif ( isset( $seen[ $parent ] ) || ! isset( $posts[ $parent ] ) || '' === (string) $posts[ $parent ]['name'] || $posts[ $parent ]['twin'] || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1 ) {"
 e('path-no-slug', 'path(): a parent without a slug is "?"', P, PQ, PQ.replace(" || '' === (string) $posts[ $parent ]['name']", ''), 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
 e('path-twin', 'path(): a parent whose type, slug and parent another post of its side has is "?"', P, PQ, PQ.replace(" || ( $twins[ self::twin_key( $posts[ $parent ] ) ] ?? 0 ) > 1", ''), 'prop', 'testAPathNotKnownWholeIsUncertainNeverAPair')
+e('path-twin-flag', 'path(): a parent its site names a twin is "?" (Codex round 4)', P, PQ, PQ.replace(" || $posts[ $parent ]['twin']", ''), 'prop', 'testAPageUnderATwinIsUncertainAlsoWhereOnlyOneTwinIsAtHand')
+e('items-parent-twin', 'items(): a parent carries the twin of its line (Codex round 4)', P,
+  "\t\t\t\t\t'twin'     => ! empty( $line['twin'] ),", "\t\t\t\t\t'twin'     => false,", 'prop', 'testAPageUnderATwinIsUncertainAlsoWhereOnlyOneTwinIsAtHand')
+e('items-twin', 'items(): an object carries the twin of its line (Codex round 4)', P,
+  "\t\t\t\t'twin'            => ! empty( $line['twin'] ),", "\t\t\t\t'twin'            => false,", 'prop', 'testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand')
+WH = "\t\t\t\t$whole[] = '?' === $parent ? '?' : array( $parent['type'], $parent['theme'], (string) $parent['name'], $parent['language'] );"
+WHOLE = 'testAParentOfAnotherLanguageTypeOrThemeIsAnotherPath'
+e('path-whole-language', 'items(): a parent by its language (Codex round 4)', P, WH, WH.replace(", $parent['language']", ''), 'prop', WHOLE)
+e('path-whole-type', 'items(): a parent by its type (Codex round 4)', P, WH, WH.replace("$parent['type'], ", ''), 'prop', WHOLE)
+e('path-whole-theme', 'items(): a parent by its theme (Codex round 4)', P, WH, WH.replace(" $parent['theme'],", ''), 'prop', WHOLE)
+e('path-whole', 'items(): the path by the whole parents, not their slugs', P,
+  "\t\t\t\t'path'            => AB_MCP_Sync_Canon::encode( $whole ),", "\t\t\t\t'path'            => AB_MCP_Sync_Canon::encode( $names ),", 'prop', WHOLE)
+TW = "\t\t\t\t$twin = count( $ss ) > 1 || count( $ll ) > 1;"
+e('resolve-twice-staging', 'resolve(): an identity twice on a path of the staging side is uncertain (Codex round 4)', P, TW, TW.replace('count( $ss ) > 1 || ', ''), 'prop', 'testMoreOfTheSameIdentityOnAPathAreUncertainWithAllOfThem')
+e('resolve-twice-live', 'resolve(): an identity twice on a path of this site is uncertain (Codex round 4)', P, TW, TW.replace(' || count( $ll ) > 1', ''), 'prop', 'testMoreOfTheSameIdentityOnAPathAreUncertainWithAllOfThem')
+e('resolve-twin-flag', 'resolve(): a line its site names a twin is uncertain, also alone in its package (Codex round 4)', P,
+  "\t\t\t\t\t$twin = $twin || $item['twin'];", "\t\t\t\t\t$twin = $twin;", 'prop', 'testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand')
+e('resolve-twin-rest', 'resolve(): what is left of twins after a choice is uncertain, never equal (Codex round 4)', P,
+  "\t\t\t\t\t$twin = $twin || $item['twin'];", "\t\t\t\t\t$twin = $twin;", 'prop', 'testTheRestOfTwinsAfterAChosenPairIsUncertainNeverEqual')
+e('resolve-twin-uncertain', 'resolve(): twins on a path with candidates on both sides are one uncertain entry', P,
+  "\t\t\t\tif ( $twin && array() !== $ss && array() !== $ll ) {", "\t\t\t\tif ( false ) {", 'prop', 'testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand')
+e('twin-reason-menu', 'twin_reason(): menu items told apart by their place only', P,
+  "\t\tif ( 'menu_item' === $kind ) {\n\t\t\t// Only the place", "\t\tif ( false ) {\n\t\t\t// Only the place", 'prop', 'testTheSameTargetTwiceUnderOneParentIsUncertainEvenWhereTheFormsTellThemApart')
 RD = "\t\t$ready = null !== $s && null !== $l && null === $s['held'] && null === $l['held'] && null !== $s['hash'] && null !== $l['hash'];"
 e('realign-staging-held', 'realign_entry(): not with a held staging object', P, RD, RD.replace(" && null === $s['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('realign-live-held', 'realign_entry(): not with a held object of this site', P, RD, RD.replace(" && null === $l['held']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
@@ -272,31 +287,6 @@ e('entry-possible', 'entry(): the second mapped form of an object', INV,
   "\t\t$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;",
   "\t\t$result['mapped_possible'] = null;", 'it', B1)
 PL = 'testTranslationsOfPolylangSharingSlugsAndAFileAreEqualByLanguage'
-e('identity-attachment', 'build(): an attachment by its file', ID,
-  "\t\t\t\t$candidates[ $id ] = 1 === count( $list ) && '' !== $list[0] && null !== $lang ? array( 'attachment', $list[0], $lang ) : null;", "\t\t\t\t$candidates[ $id ] = null;", 'it', MAPPED)
-e('identity-unique', 'unique(): an identity another object of the site has names none (Codex round 2, A-1)', ID,
-  "\t\t\tif ( null !== $identity && 1 !== $count[ AB_MCP_Sync_Canon::encode( $identity ) ] ) {", "\t\t\tif ( false ) {", 'it', UNIQ)
-e('identity-unique-attachment', 'build(): the files of the attachments unique', ID,
-  "\t\t$index['posts'] = self::unique( $candidates );", "\t\t$index['posts'] = $candidates;", 'it', UNIQ)
-e('identity-unique-term', 'build(): the slugs of the terms unique', ID,
-  "\t\t$index['terms'] = self::unique( $candidates );", "\t\t$index['terms'] = $candidates;", 'it', 'testATermWhoseSlugIsThereTwiceNamesNothing')
-e('identity-unique-level', 'levels(): each level unique over its finished identities (Codex round 3, 1)', ID,
-  "\t\t\tforeach ( self::unique( $made ) as $id => $identity ) {", "\t\t\tforeach ( $made as $id => $identity ) {", 'it', HEAD)
-e('identity-parent', 'levels(): an object with the identity of its parent', ID,
-  "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, $out[ $up ] );", "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, array() );", 'it', UNIQ)
-e('identity-parent-none', 'levels(): under a parent without an identity, none', ID,
-  "\t\t\t\t\t$made[ $id ] = null === $out[ $up ] ? null : call_user_func( $make, $id, $row, $out[ $up ] );", "\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, $row, $out[ $up ] ?? array() );", 'it', UNIQ)
-e('identity-parent-final', 'levels(): a parent only once it is final', ID,
-  "\t\t\t\t} elseif ( ! isset( $open[ $up ] ) && array_key_exists( $up, $out ) ) {", "\t\t\t\t} elseif ( true ) {", 'it', HEAD)
-e('identity-theme', 'build(): a template with its theme', ID,
-  "\t\t\t\t\t$theme = array() === $list ? '' : ( 1 === count( $list ) ? $list[0] : null );", "\t\t\t\t\t$theme = '';", 'it', UNIQ)
-PM = "\t\t\t\treturn '' === $row['post_name'] || null === $theme || null === $lang ? null : array( 'post', $row['post_type'], $theme, $up, $row['post_name'], $lang );"
-e('identity-slug', 'build(): a post without a slug has no identity', ID, PM, PM.replace("'' === $row['post_name'] || ", ''), 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
-e('identity-language', 'build(): a post with its language (Codex round 3, B2)', ID, PM, PM.replace("$row['post_name'], $lang );", "$row['post_name'], '' );"), 'it', PL)
-e('identity-polylang', 'lang(): the language of Polylang', ID,
-  "\t\tif ( array() !== $polylang ) {", "\t\tif ( false ) {", 'it', PL)
-e('identity-wpml', 'lang(): else the language of WPML', ID,
-  "\t\tif ( array() !== $wpml ) {", "\t\tif ( false ) {", 'it', 'testTheLanguagesOfWpmlNameTranslationsApart')
 e('identity-line-language', 'read(): the line of a post with its language', DK,
   "\t\tif ( '' !== $language ) {\n\t\t\t$identity['language'] = null === $language ? '?' : (string) $language;\n\t\t}\n\t\treturn AB_MCP_Sync_Canon::finish( 'post',", "\t\tif ( false ) {\n\t\t\t$identity['language'] = null === $language ? '?' : (string) $language;\n\t\t}\n\t\treturn AB_MCP_Sync_Canon::finish( 'post',", 'it', PL)
 e('identity-open', 'identity_fits(): a line without a language is whole', IM,
@@ -321,18 +311,203 @@ e('possible-inside', 'inside(): a text that holds JSON of no producer by its val
   "\t\t$out   = self::noted( $inner, $at, $set, $ctx, $found, $layers + 1, 0 );", "\t\t$out   = $inner;", 'it', B1)
 e('possible-flat', 'flat(): a part that is text again by its parts', ID,
   "\t\t\t} elseif ( is_array( $part ) && array( '~s' ) === array_keys( $part ) && is_array( $part['~s'] ) ) {", "\t\t\t} elseif ( false ) {", 'it', B1)
-e('identity-term', 'build(): a term by taxonomy and slug', ID,
-  "\t\t\t$candidates[ $id . \"\\0\" . $row['taxonomy'] ] = '' === (string) $row['slug'] || null === $lang ? null : array( 'term', (string) $row['taxonomy'], (string) $row['slug'], $lang );",
-  "\t\t\t$candidates[ $id . \"\\0\" . $row['taxonomy'] ] = array( 'term', (string) $row['term_id'] );", 'it', MAPPED)
 e('identity-unresolved', 'map(): a reference without an identity gives no mapped form', ID,
   "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = false;", "\t\t\tif ( null === $as ) {\n\t\t\t\t$ok = true;", 'it', 'testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike')
 e('identity-ref', 'map(): a reference names its target by identity', ID,
   "\t\t\tunset( $value['id'] );\n\t\t\treturn array( 'as' => $as ) + $value;", "\t\t\treturn array( 'as' => $as ) + $value;", 'it', MAPPED)
+
+# ------------------------------------- the index of identities (Codex round 4)
+ONE  = 'testAnIdentityAnotherObjectHasNamesNoneAndBothAreTwins'
+LANG = 'testTheLanguageOfPolylangThenWpml'
+ITEM = 'testAMenuItemByItsTargetAndParentAndTwinsNameNone'
+PART = 'testAnIndexBuiltInPartsIsTheIndexBuiltAtOnce'
+GONE = 'testATableThatCannotBeReadIsNamedAndEveryIdentityIsNone'
+e('index-load', 'reset(): a stored index of the run is taken up', ID,
+  "\t\tif ( is_string( $stored ) && null !== self::$print && ! self::load( $stored ) ) {", "\t\tif ( false ) {", 'ident', PART)
+e('index-load-large', 'reset(): a stored index asks the database nothing', ID,
+  "\t\tif ( is_string( $stored ) && null !== self::$print && ! self::load( $stored ) ) {", "\t\tif ( false ) {", 'ident', 'testTheIndexOfALargeSiteStaysCompact')
+LH = "\t\tif ( ! is_array( $head ) || self::FORMAT !== ( $head['format'] ?? null ) || self::$print !== ( $head['print'] ?? null ) || ! is_int( $head['at'] ?? null ) || $head['at'] < 0 || $head['at'] > count( self::STEPS ) || ! is_array( $head['sections'] ?? null ) ) {"
+e('index-load-format', 'load(): an index of another format is none', ID, LH, LH.replace(" || self::FORMAT !== ( $head['format'] ?? null )", ''), 'ident', 'testAStoredIndexOfAnotherContextOrFormatIsNone')
+e('index-load-context', 'load(): an index of another context (addresses, routes) is none', ID, LH, LH.replace(" || self::$print !== ( $head['print'] ?? null )", ''), 'ident', 'testAStoredIndexOfAnotherContextOrFormatIsNone')
+e('index-failed', 'build(): a table that could not be read stays so in the call', ID,
+  "\t\tif ( null !== self::$failed ) {\n\t\t\treturn self::$failed;", "\t\tif ( false ) {\n\t\t\treturn self::$failed;", 'ident', GONE)
+e('index-context', 'build(): without a context, that of no site', ID,
+  "\t\tif ( null === self::$ctx ) {\n\t\t\tself::$ctx   = AB_MCP_Sync_Canon::context( array() );", "\t\tif ( false ) {\n\t\t\tself::$ctx   = AB_MCP_Sync_Canon::context( array() );", 'ident', ITEM)
+TT = "\t\t\tif ( $worked && null !== $out_of_time && call_user_func( $out_of_time ) ) {"
+e('index-time', 'build(): as far as the time reaches, a page after the other', ID, TT, "\t\t\tif ( false ) {", 'ident', PART)
+e('index-time-one', 'build(): at least one page a call', ID, TT, TT.replace('$worked && ', ''), 'ident', PART)
+e('index-unreadable', 'build(): a table that could not be read is named', ID,
+  "\t\t\tif ( true !== $step ) {", "\t\t\tif ( false ) {", 'ident', GONE)
+SN = "\t\tif ( ! self::$changed || null !== self::$failed || null === self::$print ) {"
+e('index-stored-same', 'stored(): nothing new to keep where it was taken up as it was', ID, SN, SN.replace('! self::$changed || ', ''), 'ident', 'testTheIndexOfALargeSiteStaysCompact')
+e('index-stored-failed', 'stored(): nothing to keep where a table could not be read', ID, SN, SN.replace(' || null !== self::$failed', ''), 'ident', GONE)
+e('index-stored-done', 'stored(): a finished index as such', ID,
+  "\t\tif ( self::$at >= count( self::STEPS ) ) {\n\t\t\t$head['lines']", "\t\tif ( false ) {\n\t\t\t$head['lines']", 'ident', 'testTheIndexOfALargeSiteStaysCompact')
+e('index-relations-unread', 'work(): assignments that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'term_relationships';", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'term_relationships';", 'ident', GONE)
+e('index-themes', 'work(): a template of two themes has none', ID,
+  "\t\t\t\t\t\tself::$themes[ $id ] = array_key_exists( $id, self::$themes ) ? null : $row['slug'];", "\t\t\t\t\t\tself::$themes[ $id ] = $row['slug'];", 'ident', ONE)
+e('index-menus', 'work(): a menu item by the slugs of its menus', ID,
+  "\t\t\t\t\t\tself::$menus[ $id ][] = $row['slug'];", "\t\t\t\t\t\tself::$menus[ $id ] = array();", 'ident', ITEM)
+e('index-polylang-two', 'work(): an object of two languages of Polylang has none', ID,
+  "\t\t\t\t\t\tself::$langs[ $step ][ $id ] = isset( self::$langs[ $step ][ $id ] ) ? self::MANY : self::code( $row['slug'] );", "\t\t\t\t\t\tself::$langs[ $step ][ $id ] = self::code( $row['slug'] );", 'ident', LANG)
+e('index-wpml-table-unread', 'work(): the table of WPML that cannot be asked for', ID,
+  "\t\t\t\t\tif ( null === $there ) {", "\t\t\t\t\tif ( false ) {", 'ident', GONE)
+e('index-wpml-none', 'work(): no table of WPML, no row of it asked', ID,
+  "\t\t\t\t\treturn $there ? true : self::paged( 0, 1 );", "\t\t\t\t\treturn true;", 'it', MAPPED)
+e('index-wpml-unread', 'work(): rows of WPML that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'icl_translations';", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'icl_translations';", 'ident', GONE)
+WS = "\t\t\t\t\t$space = 0 === strpos( $row['type'], 'post_' ) ? 'wpml_post' : ( 0 === strpos( $row['type'], 'tax_' ) ? 'wpml_tax' : null );"
+e('index-wpml-tax', 'work(): a term of WPML by its term_taxonomy_id', ID, WS, WS.replace("( 0 === strpos( $row['type'], 'tax_' ) ? 'wpml_tax' : null )", 'null'), 'ident', LANG)
+e('index-wpml-post', 'work(): only an element of a post type is a post', ID, WS, WS.replace("0 === strpos( $row['type'], 'post_' ) ?", 'true ?'), 'ident', LANG)
+WC = "\t\t\t\t\t\tself::$langs[ $space ][ $row['id'] ] = ! isset( self::$langs[ $space ][ $row['id'] ] ) || $code === self::$langs[ $space ][ $row['id'] ] ? $code : self::MANY;"
+e('index-wpml-same', 'work(): rows of one language of WPML name it', ID, WC, WC.replace(" || $code === self::$langs[ $space ][ $row['id'] ]", ''), 'ident', LANG)
+e('index-wpml-two', 'work(): rows of two languages of WPML name none', ID, WC, "\t\t\t\t\t\tself::$langs[ $space ][ $row['id'] ] = $code;", 'ident', LANG)
+e('index-files-unread', 'work(): the files of the attachments that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'postmeta';\n\t\t\t\t}\n\t\t\t\tforeach ( $rows as $row ) {\n\t\t\t\t\t$id = $row['post_id'];", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'postmeta';\n\t\t\t\t}\n\t\t\t\tforeach ( $rows as $row ) {\n\t\t\t\t\t$id = $row['post_id'];", 'ident', GONE)
+e('index-files-two', 'work(): an attachment of two files has none', ID,
+  "\t\t\t\t\tif ( array_key_exists( $id, self::$files ) ) {", "\t\t\t\t\tif ( false ) {", 'ident', ONE)
+FF = "\t\t\t\t\t\tself::$files[ $id ] = '' === $row['value'] || null === $lang ? false : self::part( array( 'attachment', $row['value'], $lang ) );"
+e('index-file-empty', 'work(): an attachment of an empty file has none', ID, FF, FF.replace("'' === $row['value'] || ", ''), 'ident', ONE)
+e('index-file-languages', 'work(): an attachment of two languages has none', ID, FF, FF.replace(" || null === $lang", ''), 'ident', LANG)
+e('index-file-language', 'work(): an attachment by its file and language', ID, FF, FF.replace("$row['value'], $lang ) )", "$row['value'], '' ) )"), 'ident', LANG)
+e('index-posts-unread', 'work(): the posts that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'posts';", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'posts';", 'ident', GONE)
+e('index-terms-unread', 'work(): the terms that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'terms';", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'terms';", 'ident', GONE)
+TN = "\t\t\t\t\t$none   = '' === (string) $row['slug'] || null === $lang;"
+e('index-term-slug', 'work(): a term without a slug has none', ID, TN, TN.replace("'' === (string) $row['slug'] || ", ''), 'ident', ONE)
+e('index-term-languages', 'work(): a term of two languages has none', ID, TN, TN.replace(" || null === $lang", ''), 'ident', LANG)
+e('index-term-language', 'work(): a term by taxonomy, slug and language', ID,
+  "self::part( array( 'term', (string) $row['taxonomy'], (string) $row['slug'], $lang ) )", "self::part( array( 'term', (string) $row['taxonomy'], (string) $row['slug'], '' ) )", 'ident', LANG)
+e('index-items-unread', 'work(): the menu items that cannot be read', ID,
+  "\t\t\t\tif ( null === $rows ) {\n\t\t\t\t\treturn 'postmeta';\n\t\t\t\t}\n\t\t\t\tself::read_items( $rows );", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn 'postmeta';\n\t\t\t\t}\n\t\t\t\tself::read_items( $rows );", 'ident', GONE)
+e('index-no-file', 'read_post(): an attachment without a file has none', ID,
+  "\t\t\t$kind = false === $file ? self::NO_FILE : self::FILE;", "\t\t\t$kind = self::FILE;", 'ident', ITEM)
+e('index-item', 'read_post(): a menu item by its line, not as a post', ID,
+  "\t\t} elseif ( 'nav_menu_item' === $row['post_type'] ) {", "\t\t} elseif ( false ) {", 'ident', ITEM)
+e('index-theme', 'read_post(): a template with its theme', ID,
+  "\t\t\tif ( in_array( $row['post_type'], self::THEMED, true ) ) {", "\t\t\tif ( false ) {", 'ident', ONE)
+PK = "\t\t\t$kind = '' === $row['post_name'] || null === $theme || null === $lang ? self::UNNAMED : self::NAMED;"
+e('index-slug', 'read_post(): a post without a slug has none', ID, PK, PK.replace("'' === $row['post_name'] || ", ''), 'ident', ONE)
+e('index-themes-two', 'read_post(): a template of two themes has none', ID, PK, PK.replace(' || null === $theme', ''), 'ident', ONE)
+e('index-languages-two', 'read_post(): a post of two languages has none', ID, PK, PK.replace(' || null === $lang', ''), 'ident', LANG)
+PP = "\t\t\t\t$part = self::part( array( 'post', $row['post_type'], $theme, $row['post_name'], $lang ) );"
+e('index-post-language', 'read_post(): a post by its language (Codex round 3, B2)', ID, PP, PP.replace(", $lang ) );", ", '' ) );"), 'ident', LANG)
+e('index-post-type', 'read_post(): a post by its type', ID, PP, PP.replace("$row['post_type'], ", ''), 'ident', ONE)
+e('index-custom', 'read_items(): a custom link by its address and label', ID,
+  "\t\t\tif ( 'custom' === $type ) {", "\t\t\tif ( false ) {", 'ident', ITEM)
+CU = "\t\t\t\t$custom = bin2hex( self::part( array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), self::$ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $title ) ) );"
+e('index-custom-url', 'read_items(): a custom link by the neutral form of its address', ID, CU, CU.replace("AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), self::$ctx, array(), $acc, 'meta:_menu_item_url', true ), ", ''), 'ident', ITEM)
+e('index-custom-label', 'read_items(): a custom link by its label as well (Codex round 2, A-1)', ID, CU, CU.replace(", (string) $title ) ) );", " ) ) );"), 'ident', ITEM)
+e('index-attachment-twins', 'compute(): attachments of one file and language name none', ID,
+  "\t\t$files  = self::twice( self::$read, self::READ, 19, self::FILE );", "\t\t$files  = array();", 'ident', ONE)
+MK = "\t\t\t\tif ( self::NAMED !== ord( self::$read[ $offset + 8 ] ) || false === $above ) {"
+e('index-unnamed', 'compute(): a post without what names it has none', ID, MK, MK.replace('self::NAMED !== ord( self::$read[ $offset + 8 ] ) || ', ''), 'ident', ONE)
+e('index-under-none', 'compute(): under a parent without an identity, none', ID, MK, MK.replace(' || false === $above', ''), 'ident', ONE)
+e('index-parent', 'compute(): a post with the identity of its parent', ID,
+  "\t\t\t\treturn self::under( substr( self::$read, $offset + 19, 32 ), 0 === $up ? '' : $above );", "\t\t\t\treturn self::under( substr( self::$read, $offset + 19, 32 ), '' );", 'ident', ONE)
+e('index-under-attachment', 'compute(): an attachment is a final parent', ID,
+  "\t\t\t\treturn array_key_exists( $up, $final ) ? $final[ $up ] : self::attachment( $up, $files );", "\t\t\t\treturn array_key_exists( $up, $final ) ? $final[ $up ] : null;", 'ident', ONE)
+e('index-term-twins', 'compute(): terms of one taxonomy, slug and language name none', ID,
+  "\t\t$doubled = self::twice( self::$read_terms, self::TERM, 21, null );", "\t\t$doubled = array();", 'ident', ONE)
+e('index-term-twin-flag', 'compute(): such a term is a twin', ID,
+  "chr( ( $has ? self::HAS : 0 ) | ( $twin ? self::TWIN : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::zero() );", "chr( ( $has ? self::HAS : 0 ) ) . ( $has ? substr( $rec, 21, 32 ) : self::zero() );", 'ident', ONE)
+e('index-item-under-none', 'compute(): a menu item under one without an identity has none', ID,
+  "\t\t\t\tif ( false === $above ) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t$item = $items[ $id ];", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t$item = $items[ $id ];", 'ident', ITEM)
+e('index-item-attachment', 'compute(): a menu item showing an attachment by its identity', ID,
+  "\t\t\t\t\t\t$target = array_key_exists( $item['o'], $final ) ? $final[ $item['o'] ] : self::attachment( $item['o'], $files );", "\t\t\t\t\t\t$target = array_key_exists( $item['o'], $final ) ? $final[ $item['o'] ] : null;", 'ident', ITEM)
+e('index-item-term', 'compute(): a menu item showing a term by its identity', ID,
+  "\t\t\t\t\t\t$target = $tfinal[ $item['o'] . \"\\0\" . $of ] ?? false;", "\t\t\t\t\t\t$target = false;", 'ident', ITEM)
+e('index-item-other', 'compute(): another menu item by its type and object', ID,
+  "\t\t\t\t\t\t$target = bin2hex( self::part( array( $type, $of ) ) );", "\t\t\t\t\t\t$target = bin2hex( self::part( array( $type ) ) );", 'ident', ITEM)
+e('index-item-no-target', 'compute(): a menu item showing what has no identity has none', ID,
+  "\t\t\t\tif ( null === $target ) {\n\t\t\t\t\treturn false;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;", 'ident', ITEM)
+e('index-item-top', 'compute(): a menu item at the top under «none»', ID,
+  "\t\t\t\t$top          = 0 === $parent ? self::top() : bin2hex( $above );", "\t\t\t\t$top          = bin2hex( $above );", 'ident', ITEM)
+e('index-attachment-twin-flag', 'compute(): an attachment of a file twice is a twin', ID,
+  "\t\t\t\t\t$twin     = isset( $files[ $file ] );", "\t\t\t\t\t$twin     = false;", 'ident', ONE)
+e('index-item-twin-flag', 'compute(): a menu item of one line twice is a twin', ID,
+  "\t\t\t\t\t$twin     = isset( $itwins[ $id ] );", "\t\t\t\t\t$twin     = false;", 'ident', ITEM)
+e('index-post-twin-flag', 'compute(): a post of one identity twice is a twin', ID,
+  "\t\t\t\t\t$twin     = isset( $twins[ $id ] );", "\t\t\t\t\t$twin     = false;", 'ident', ONE)
+e('index-level-top', 'levels(): the objects under no parent first', ID,
+  "\t\t\t\tif ( 0 === $up ) {\n\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, 0, '' );", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$made[ $id ] = call_user_func( $make, $id, 0, '' );", 'ident', ONE)
+e('index-level-final', 'levels(): a parent once it is final', ID,
+  "\t\t\t\tif ( null !== $of ) {", "\t\t\t\tif ( true ) {", 'ident', ONE)
+e('index-level-unique', 'levels(): an identity another of the level has names none (Codex round 2, A-1)', ID,
+  "\t\t\t\tif ( false !== $identity && $count[ $identity ] > 1 ) {", "\t\t\t\tif ( false ) {", 'ident', ONE)
+e('index-attachment-not', 'attachment(): no post there, no parent', ID,
+  "\t\tif ( null === $at ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( self::FILE !== ord(", "\t\tif ( false ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( self::FILE !== ord(", 'ident', 'testAPostUnderAParentThatIsNotThereHasNone')
+e('index-attachment-kind', 'attachment(): only an attachment with a file', ID,
+  "\t\tif ( self::FILE !== ord( self::$read[ $at + 8 ] ) ) {", "\t\tif ( false ) {", 'ident', ONE)
+e('index-attachment-twin', 'attachment(): one of a file twice names none', ID,
+  "\t\treturn isset( $twice[ $file ] ) ? false : $file;", "\t\treturn $file;", 'ident', ONE)
+e('index-ready', 'ready(): a question builds the index where it is not done', ID,
+  "\t\tif ( self::$at < count( self::STEPS ) ) {", "\t\tif ( false ) {", 'ident', ONE)
+e('index-ready-context', 'ready(): with the context of the question where the run named none', ID,
+  "\t\t\tif ( null === self::$ctx ) {\n\t\t\t\tself::$ctx   = $ctx;", "\t\t\tif ( false ) {\n\t\t\t\tself::$ctx   = $ctx;", 'ident', ITEM)
+TR = "\t\t\tif ( ( null === $taxonomy || $tax === (string) $taxonomy ) && ( 0 === $ttid || $head['ttid'] === $ttid ) ) {"
+e('index-term-taxonomy', 'term_record(): the term of the taxonomy asked', ID, TR, TR.replace(" || $tax === (string) $taxonomy", ' || true'), 'ident', ONE)
+e('index-term-ttid', 'term_record(): the term of the term_taxonomy_id asked', ID, TR, TR.replace(" || $head['ttid'] === $ttid", ' || true'), 'ident', LANG)
+e('index-term-one', 'term_record(): a term id in two taxonomies names none by the id alone', ID,
+  "\t\treturn 1 === count( $found ) ? $found[0] : null;", "\t\treturn $found[0] ?? null;", 'ident', ONE)
+TV = "\t\tif ( 'post' === $kind || 'menu_item' === $kind ) {"
+e('twin-post', 'twin(): a post by its record', ID, TV, TV.replace("'post' === $kind || ", ''), 'ident', ONE)
+e('twin-item', 'twin(): a menu item by its record', ID, TV, TV.replace(" || 'menu_item' === $kind", ''), 'ident', ITEM)
+TM = "\t\t} elseif ( 'term' === $kind || 'menu' === $kind ) {"
+e('twin-term', 'twin(): a term by its taxonomy', ID, TM, TM.replace("'term' === $kind || ", ''), 'ident', ONE)
+e('twin-menu', 'twin(): a menu by its taxonomy', ID, TM, TM.replace(" || 'menu' === $kind", ''), 'ident', 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin')
 e('identity-menu-target', 'item(): a menu item with the identity of its target', DK,
-  "\t\t\t'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),", "\t\t\t'target'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
-CL = "\t\t\t\t\t\t$target = array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), $ctx, array(), $acc, 'meta:_menu_item_url', true ), (string) $m['~title'] );"
-e('identity-custom-url', 'build(): a custom link by the neutral form of its address', ID, CL, "\t\t\t\t\t\t$target = array( 'custom', (string) $m['~title'] );", 'it', 'testACustomLinkIsNamedByItsAddress')
-e('identity-custom-label', 'build(): a custom link by its label as well (Codex round 2, A-1)', ID, CL, "\t\t\t\t\t\t$target = array( 'custom', AB_MCP_Sync_Canon::text( (string) ( $m['_menu_item_url'] ?? '' ), $ctx, array(), $acc, 'meta:_menu_item_url', true ) );", 'it', HEAD)
+  "\t\t\t'target'   => null === $whole ? null : $whole[0],", "\t\t\t'target'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
+e('identity-menu-parent', 'item(): a menu item with the identity of its parent', DK,
+  "\t\t\t'parent'   => null === $whole ? null : $whole[1],", "\t\t\t'parent'   => null,", 'it', 'testAMenuSortedAnewOnStagingPairsEachItemWithItsTarget')
+
+# --------------------------------- the index in the inventory and its runs
+INX = 'testAnInventoryReadsNoObjectBeforeItsIndexIsDone'
+e('inventory-unreadable', 'run(): a table of the index that cannot be read stops the inventory', INV,
+  "\t\tif ( is_string( $ready ) ) {", "\t\tif ( false ) {", 'ident', INX)
+e('inventory-not-ready', 'run(): no object before the index is done', INV,
+  "\t\t$read = false === $ready ? array(", "\t\t$read = false ? array(", 'ident', INX)
+IC = "\t\t\t'cursor'  => is_array( $cursor ) && isset( $cursor['kind'] ) ? $cursor : array("
+e('inventory-not-ready-cursor', 'run(): the cursor given stays while the index is built', INV, IC, "\t\t\t'cursor'  => false ? $cursor : array(", 'ident', INX)
+e('inventory-not-ready-start', 'run(): at the start, the first kind', INV, IC, "\t\t\t'cursor'  => true ? $cursor : array(", 'ident', INX)
+e('inventory-index', 'run(): what to keep of the index for the next call', INV,
+  "\t\treturn $read + array( 'index' => AB_MCP_Sync_Identity::stored() );", "\t\treturn $read + array( 'index' => null );", 'ident', INX)
+e('inventory-index-proposal', 'run(): the finished index kept for the calls after it', INV,
+  "\t\treturn $read + array( 'index' => AB_MCP_Sync_Identity::stored() );", "\t\treturn $read + array( 'index' => null );", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+ET = "\t\tif ( null !== self::$ctx && AB_MCP_Sync_Identity::twin( $result, self::$ctx ) ) {"
+e('entry-twin', 'entry(): an object its site names a twin says so (Codex round 4)', INV, ET, "\t\tif ( false ) {", 'ident', 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin')
+e('entry-twin-context', 'entry(): only with the context of a source', INV, ET, ET.replace('null !== self::$ctx && ', ''), 'kinds', 'testTheStatusOfAnObjectOfTheInventory')
+e('line-twin', 'line(): the line of a twin says so (Codex round 4)', EXF,
+  "\t\tif ( ! empty( $object['twin'] ) ) {\n\t\t\t$line['twin'] = true;", "\t\tif ( false ) {\n\t\t\t$line['twin'] = true;", 'ident', 'testAnObjectOfTheInventoryAndItsLineSayWhereItIsATwin')
+e('import-twin', 'LINE_FIELDS: a line may say twin', IM,
+  "\t\t'twin'            => 'bool',\n", "", 'it', 'testATwinIsUncertainInAPackageOfItsOwnAndWhatIsLeftAfterAChoiceToo')
+e('step-index-take', 'step(): the index the part before kept', P,
+  "\t\t\t$index = $last['index'] ?? null;", "\t\t\t$index = null;", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+e('step-index-keep', 'step(): the index as this call left it, kept with its part', P,
+  "\t\tif ( null !== $read['index'] ) {", "\t\tif ( false ) {", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+e('step-index-whole', 'step(): the index from all its slices', P,
+  "\t\t\t\t$text .= $slice;", "\t\t\t\t$text = $slice;", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+e('step-index-slice', 'step(): the index in slices a file of the store holds', P,
+  "\t\t\t\t$slice = (string) substr( $read['index'], $at, AB_MCP_Sync_Identity::slice() );", "\t\t\t\t$slice = (string) $read['index'];", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+EXI = 'testAnExportBuildsTheIndexInPartsAndItsSeriesTakesItUp'
+e('export-index-take', 'make(): the index the package before kept', EXF,
+  "\t\tif ( null !== $index ) {\n\t\t\t$text = '';", "\t\tif ( false ) {\n\t\t\t$text = '';", 'it', EXI)
+e('export-index-gone', 'make(): a series whose index is gone does not go on', EXF,
+  "\t\t\t\tif ( is_wp_error( $slice ) ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_export_index'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_export_index'", 'it', EXI)
+e('export-index-whole', 'make(): the index from all its slices', EXF,
+  "\t\t\t\t$text .= $slice;", "\t\t\t\t$text = $slice;", 'it', EXI)
+e('export-index-keep', 'store(): the index as this call left it, kept with the package', EXF,
+  "\t\tif ( null !== $text ) {\n\t\t\t// In slices", "\t\tif ( false ) {\n\t\t\t// In slices", 'it', EXI)
+e('export-index-slice', 'store(): the index in slices a file of the store holds', EXF,
+  "\t\t\t\t$slice = (string) substr( $text, $at, AB_MCP_Sync_Identity::slice() );", "\t\t\t\t$slice = (string) $text;", 'it', EXI)
+e('export-index-declared', 'store(): the package declares the bytes of its index', EXF,
+  "\t\t\t\t'declared' => $bytes + self::RECORD_MAX + ( null === $text ? 0 : strlen( $text ) ),", "\t\t\t\t'declared' => $bytes + self::RECORD_MAX,", 'it', 'testAPackageDeclaresTheBytesOfAnIndexOfSomeMegabytes')
+e('export-index-record', 'store(): the record names where the index is kept', EXF,
+  "\t\t\t\t'index'     => $index,", "\t\t\t\t'index'     => null,", 'it', EXI)
+e('export-index-follows', 'follows(): the index of the package before', EXF,
+  "return array( $before['cursor'], $before['series'], $before['index'] );", "return array( $before['cursor'], $before['series'], null );", 'it', EXI)
 
 # ------------------------------------------------------------------ tool
 e('plan-action', 'plan(): confirm and discard only', T,
@@ -519,16 +694,25 @@ out.append('''<?php
  * identity of its target or parent: uncertain), a menu item by its target
  * and parent, never its position, held lines reduced before they are stored
  * or shown, one transaction of the database per call, the token over the
- * objects of this site read fresh, the connection and the print.
+ * objects of this site read fresh, the connection and the print. Codex round
+ * 4: the compact index of identities, built in parts and once per run
+ * (AB_MCP_Sync_Identity, the inventory, the proposal and the export series),
+ * each line of an identity a site has twice uncertain (twin, also alone in
+ * its package or after a choice), each parent of a path by its whole
+ * identity.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.
  *
- * Held by the unit suite (SyncProposalTest, SyncPairsToolTest, SyncPackageTest) and, for what
+ * Held by the unit suite (SyncProposalTest, SyncPairsToolTest, SyncPackageTest,
+ * SyncIdentityTest, SyncDbKindsTest) and, for what
  * two WordPress sites show, by the integration suite (SyncProposalTest; the
  * sites running, AB_IT_ROOT set). Not listed: the type guards after a read
- * against the SHA-256 of what this code wrote itself (no input reaches them),
- * and splitting into files and parts, which changes no outcome.
+ * against the SHA-256 of what this code wrote itself (no input reaches them;
+ * the structure of a stored index of identities as well), splitting into
+ * files and parts, which changes no outcome, and what only lets memory go
+ * (the index after a run, the objects before a package is packed, the
+ * prefix count of twice(); measured instead, GRENZEN-BERICHT.md).
  *
  * @package AlphaBridge_MCP
  */

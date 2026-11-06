@@ -849,10 +849,10 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				$object = $m['value'];
 			}
 		}
-		// What the item shows and where it hangs, by identity (the SHA-256 of
-		// AB_MCP_Sync_Identity's), so that two sites with other ids and
-		// another order of the items name the same item alike; null where it
-		// has none.
+		// What the item shows and where it hangs, by identity
+		// (AB_MCP_Sync_Identity, a SHA-256), so that two sites with other ids
+		// and another order of the items name the same item alike; null where
+		// it has none.
 		$whole    = AB_MCP_Sync_Identity::menu_item( (int) $id, $ctx );
 		$identity = array(
 			'menus'    => array_map( 'intval', array_column( array_filter( $tax, static function ( $t ) {
@@ -861,8 +861,8 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 			'type'     => $type,
 			'object'   => $object,
 			'position' => $position,
-			'target'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[4] ),
-			'parent'   => null === $whole ? null : AB_MCP_Sync_Identity::print_of( $whole[5] ),
+			'target'   => null === $whole ? null : $whole[0],
+			'parent'   => null === $whole ? null : $whole[1],
 		);
 		return AB_MCP_Sync_Canon::finish( 'menu_item', $ref, $identity, $form, $acc );
 	}

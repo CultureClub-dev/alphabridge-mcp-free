@@ -6,10 +6,12 @@
  * - match(): equality of the mapped forms (decision 10: the same objects
  *   with other ids are equal), only both read whole; differs otherwise and
  *   where a side names a target without identity. No pair by exclusion: one
- *   to one on the same identity and path is a pair; more on a path are paired
- *   only by a mapped form unique on both sides, the rest ambiguous; the same
- *   identity on another path, a post without a slug and a menu item without
- *   the identity of its target or parent are uncertain; staging_only,
+ *   to one on the same identity and path is a pair (each parent by its type,
+ *   theme, slug and language); an identity there more than once on a site
+ *   (twice on a path of a side, or a line its site names a twin) is
+ *   uncertain, also with one of them at hand or the other one paired; the
+ *   same identity on another path, a post without a slug and a menu item
+ *   without the identity of its target or parent are uncertain; staging_only,
  *   live_only only where the staging side is complete, else not_compared; a
  *   held line is shown by the SHA-256 of its ref only; a side without a
  *   hash, a row not read and a ref no pair holds are not compared, with the
@@ -272,24 +274,30 @@ final class SyncProposalTest extends TestCase {
 
 	/* --------------------------------------------- no pair by exclusion */
 
-	public function testMoreOfTheSameIdentityOnAPathAreAmbiguousWithAllOfThem(): void {
+	public function testMoreOfTheSameIdentityOnAPathAreUncertainWithAllOfThem(): void {
 		$r = self::match(
 			array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ),
 			array( self::page( '12', 'dup', self::h( 'c' ) ), self::page( '13', 'dup', self::h( 'd' ) ), self::page( '14', 'dup', self::h( 'e' ) ) )
 		);
-		$e = self::of( $r, 'ambiguous' );
+		$e = self::of( $r, 'uncertain' );
 		self::assertCount( 1, $e );
 		self::assertSame( 'choice', $e[0]['confirm'] );
 		self::assertSame( array( '34', '35' ), array_column( $e[0]['candidates']['staging'], 'ref' ) );
 		self::assertSame( array( '12', '13', '14' ), array_column( $e[0]['candidates']['live'], 'ref' ) );
 		self::assertNull( $e[0]['staging'] );
+		self::assertStringContainsString( 'Another object of its site has the same identity', $e[0]['reason'] );
+		foreach ( array( 's' => array( 2, 1 ), 'l' => array( 1, 2 ) ) as $twice => list( $on_s, $on_l ) ) {
+			$r = self::match( array_slice( array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ), 0, $on_s ), array_slice( array( self::page( '12', 'dup', self::h( 'a' ) ), self::page( '13', 'dup', self::h( 'b' ) ) ), 0, $on_l ) );
+			self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ), $twice . ': twice on one side is enough.' );
+			self::assertStringContainsString( 'Another object of its site has the same identity', $r['entries'][0]['reason'], $twice . ': as twins, not as another path.' );
+		}
 	}
 
 	public function testThePathOfParentsTellsPagesOfTheSameSlugApart(): void {
 		$s = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'about', self::h( 'a1' ), '1' ), self::page( '4', 'about', self::h( 'a2' ), '2' ) );
 		$l = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'about', self::h( 'a1x' ), '11' ), self::page( '14', 'about', self::h( 'a2x' ), '12' ) );
 		$r = self::match( $s, $l );
-		self::assertSame( 0, $r['counts']['ambiguous'] + $r['counts']['uncertain'] );
+		self::assertSame( 0, $r['counts']['uncertain'] );
 		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14' ), self::paired( $r ), 'team/about with team/about, shop/about with shop/about.' );
 		$about = array_values( array_filter( self::of( $r, 'differs' ), static fn( $e ) => '13' === $e['live']['ref'] ) )[0];
 		self::assertSame( array( array( 'team' ), array( 'team' ) ), array( $about['staging']['path'], $about['live']['path'] ), 'The path shown with the identity.' );
@@ -333,23 +341,107 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14', '5' => '15' ), self::paired( self::match( $s, $l ) ), 'The page with a featured image stays at the top.' );
 	}
 
-	public function testAnEqualMappedFormUniqueOnBothSidesOfAPathIsAPair(): void {
+	public function testAnIdentityTwiceIsNeverPairedNotEvenByAnEqualForm(): void {
+		// Each form unique and equal on both sides: still no identity (Codex round 4).
 		$r = self::match(
 			array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 'b' ) ) ),
 			array( self::page( '12', 'dup', self::h( 'b' ) ), self::page( '13', 'dup', self::h( 'a' ) ) )
 		);
-		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ) );
-		self::assertSame( 0, $r['counts']['ambiguous'] );
-	}
-
-	public function testAnEqualSecondMappedFormUniqueOnBothSidesOfAPathIsAPair(): void {
-		// Other ids of the images in their meta: the mapped forms differ, the second ones pair.
+		self::assertSame( array(), self::paired( $r, array( 'equal', 'differs' ) ) );
+		self::assertSame( 1, $r['counts']['uncertain'] );
 		$r = self::match(
 			array( self::page( '34', 'dup', self::h( 'a' ), null, array( 'mapped' => self::h( 's1' ), 'mapped_possible' => self::h( 'p1' ) ) ), self::page( '35', 'dup', self::h( 'b' ), null, array( 'mapped' => self::h( 's2' ), 'mapped_possible' => self::h( 'p2' ) ) ) ),
 			array( self::page( '12', 'dup', self::h( 'c' ), null, array( 'mapped' => self::h( 'l2' ), 'mapped_possible' => self::h( 'p2' ) ) ), self::page( '13', 'dup', self::h( 'd' ), null, array( 'mapped' => self::h( 'l1' ), 'mapped_possible' => self::h( 'p1' ) ) ) )
 		);
-		self::assertSame( array( '34' => '13', '35' => '12' ), self::paired( $r, array( 'equal' ) ), 'Codex round 3, B3.' );
-		self::assertSame( 0, $r['counts']['ambiguous'] );
+		self::assertSame( array(), self::paired( $r, array( 'equal', 'differs' ) ), 'Nor by the second form.' );
+	}
+
+	/* -------------------------------------- twins of a site (Codex round 4) */
+
+	/** A line its site names a twin of another object of the site. */
+	private static function twin( array $line ): array {
+		return array( 'twin' => true ) + $line;
+	}
+
+	public function testATwinOfItsSiteIsUncertainAlsoWhereOnlyOneIsAtHand(): void {
+		foreach ( array( 's', 'l', 'both' ) as $side ) {
+			$s = self::page( '34', 'dup', self::h( 'x' ) );
+			$l = self::page( '12', 'dup', self::h( 'x' ) );
+			$r = self::match( array( 'l' === $side ? $s : self::twin( $s ) ), array( 's' === $side ? $l : self::twin( $l ) ) );
+			self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ), $side . ': the package holds one of the twins, never equal.' );
+			self::assertStringContainsString( 'also where a package holds only one of them', $r['entries'][0]['reason'] );
+		}
+		// A twin without a counterpart on its path is only on its side.
+		$r = self::match( array( self::twin( self::page( '34', 'dup', self::h( 'x' ) ) ) ), array() );
+		self::assertSame( array( 'staging_only' ), array_column( $r['entries'], 'category' ) );
+		$r = self::match( array( self::twin( self::page( '34', 'dup', self::h( 'x' ) ) ) ), array( self::page( '11', 'team', self::h( 't' ) ), self::page( '12', 'dup', self::h( 'x' ), '11' ) ) );
+		self::assertSame( 1, $r['counts']['uncertain'], 'On another path: still the person\'s choice.' );
+		self::assertSame( 0, $r['counts']['equal'] );
+	}
+
+	public function testTheRestOfTwinsAfterAChosenPairIsUncertainNeverEqual(): void {
+		// 34 and 12 were paired by a choice; 35 and 13 are what is left of the twins.
+		$r = self::match(
+			array( self::twin( self::page( '34', 'dup', self::h( 'a' ) ) ), self::twin( self::page( '35', 'dup', self::h( 'b' ) ) ) ),
+			array( self::twin( self::page( '12', 'dup', self::h( 'a' ) ) ), self::twin( self::page( '13', 'dup', self::h( 'b' ) ) ) ),
+			array( self::pair( 1, 'post', '12', '34', 'active' ) )
+		);
+		self::assertSame( array( 'uncertain' ), array_column( $r['entries'], 'category' ) );
+		self::assertSame( array( '35' ), array_column( $r['entries'][0]['candidates']['staging'], 'ref' ) );
+		self::assertSame( array( '13' ), array_column( $r['entries'][0]['candidates']['live'], 'ref' ) );
+		// Menu items, terms and menus alike.
+		$r = self::match(
+			array( self::menu( '5', 'main' ), self::twin( self::item( '51', 5, 'shop', 1, 'a' ) ), self::twin( self::line( 'term', '7', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 't' ) ) ) ),
+			array( self::twin( self::menu( '15', 'main' ) ), self::item( '151', 15, 'shop', 1, 'a' ), self::line( 'term', '17', array( 'slug' => 'news', 'taxonomy' => 'category' ), self::h( 't' ) ) )
+		);
+		self::assertSame( array( 'uncertain', 'uncertain', 'uncertain' ), array_column( $r['entries'], 'category' ) );
+		$item = array_values( array_filter( $r['entries'], static fn( $e ) => 'menu_item' === $e['kind'] ) )[0];
+		self::assertStringContainsString( 'only its place tells them apart', $item['reason'] );
+	}
+
+	public function testAPageUnderATwinIsUncertainAlsoWhereOnlyOneTwinIsAtHand(): void {
+		$s = array( self::twin( self::page( '8', 'team', self::h( 't' ) ) ), self::page( '34', 'kontakt', self::h( 'x' ), '8' ) );
+		$l = array( self::page( '18', 'team', self::h( 't' ) ), self::page( '12', 'kontakt', self::h( 'x' ), '18' ) );
+		$r = self::match( $s, $l );
+		$kontakt = array_values( array_filter( $r['entries'], static fn( $e ) => 'kontakt' === ( $e['candidates']['staging'][0]['identity']['post_name'] ?? null ) ) );
+		self::assertCount( 1, $kontakt );
+		self::assertSame( 'uncertain', $kontakt[0]['category'] );
+		self::assertSame( array( array( '?' ) ), array_column( $kontakt[0]['candidates']['staging'], 'path' ), 'Its parent names nothing on staging.' );
+		self::assertStringContainsString( 'path of its parents is not known whole', $kontakt[0]['reason'] );
+	}
+
+	/* --------------------------------- the whole parent (Codex round 4) */
+
+	public function testAParentOfAnotherLanguageTypeOrThemeIsAnotherPath(): void {
+		$with = static fn( array $line, array $identity ): array => array( 'identity' => $identity + $line['identity'] ) + $line;
+		$cases = array(
+			'language' => array( array( 'language' => 'de' ), array( 'language' => 'en' ) ),
+			'type'     => array( array(), array( 'post_type' => 'team_page' ) ),
+			'theme'    => array( array( 'theme' => 'one' ), array( 'theme' => 'two' ) ),
+		);
+		foreach ( $cases as $what => list( $here, $there ) ) {
+			// kontakt under team/de on staging, under team/en here (the same content).
+			$s = array( $with( self::page( '8', 'team', self::h( 't' ) ), $here ), self::page( '34', 'kontakt', self::h( 'x' ), '8' ) );
+			$l = array( $with( self::page( '18', 'team', self::h( 't' ) ), $there ), self::page( '12', 'kontakt', self::h( 'x' ), '18' ) );
+			$r = self::match( $s, $l );
+			$kontakt = array_values( array_filter( $r['entries'], static fn( $e ) => 'kontakt' === ( ( $e['candidates']['staging'][0] ?? $e['staging'] ?? array() )['identity']['post_name'] ?? null ) ) );
+			self::assertCount( 1, $kontakt, $what );
+			self::assertSame( 'uncertain', $kontakt[0]['category'], $what . ': another path, never differs.' );
+			self::assertStringContainsString( 'a parent of another type, theme or language', $kontakt[0]['reason'], $what );
+			self::assertSame( array( array( 'team' ) ), array_column( $kontakt[0]['candidates']['live'], 'path' ), $what . ': the path shown by its slugs.' );
+			$s[0] = $with( $s[0], $there );
+			self::assertSame( 'equal', self::entry_of( self::match( $s, $l ), '34' )['category'], $what . ': the same whole parent, the same path.' );
+		}
+	}
+
+	/** The entry of a staging ref. */
+	private static function entry_of( array $result, string $ref ): array {
+		foreach ( $result['entries'] as $entry ) {
+			if ( $ref === ( $entry['staging']['ref'] ?? null ) ) {
+				return $entry;
+			}
+		}
+		self::fail( 'No entry of ' . $ref );
 	}
 
 	public function testTranslationsSharingASlugAreTwoObjects(): void {
@@ -359,17 +451,7 @@ final class SyncProposalTest extends TestCase {
 			array( array_merge( self::page( '12', 'kontakt', self::h( 'en-changed' ) ), $lang( 'en' ) ), array_merge( self::page( '13', 'kontakt', self::h( 'de' ) ), $lang( 'de' ) ), self::page( '14', 'team', self::h( 't' ), '12' ) )
 		);
 		self::assertSame( array( '34' => '13', '35' => '12', '36' => '14' ), self::paired( $r ), 'By language (Codex round 3, B2); the page under one of them has a whole path.' );
-		self::assertSame( 0, $r['counts']['ambiguous'] + $r['counts']['uncertain'] );
-	}
-
-	public function testAnEqualMappedFormTwiceOnASideIsNoPair(): void {
-		foreach ( array( 's', 'l' ) as $twice ) {
-			$s = array( self::page( '34', 'dup', self::h( 'a' ) ), self::page( '35', 'dup', self::h( 's' === $twice ? 'a' : 'b' ) ) );
-			$l = array( self::page( '12', 'dup', self::h( 'a' ) ), self::page( '13', 'dup', self::h( 'l' === $twice ? 'a' : 'c' ) ) );
-			$r = self::match( $s, $l );
-			self::assertSame( 0, $r['counts']['equal'], $twice );
-			self::assertSame( 1, $r['counts']['ambiguous'], $twice );
-		}
+		self::assertSame( 0, $r['counts']['uncertain'] );
 	}
 
 	/* ------------------------------------------------------ no counterpart */
@@ -664,8 +746,8 @@ final class SyncProposalTest extends TestCase {
 		self::assertSame( array( 'equal', 'differs', 'uncertain', 'staging_only', 'live_only' ), array_column( $r['entries'], 'category' ) );
 		self::assertSame( array( 1, 2, 3, 4, 5 ), array_column( $r['entries'], 'n' ) );
 		self::assertArrayNotHasKey( 'sort', $r['entries'][0] );
-		self::assertSame( array( 'equal', 'differs', 'ambiguous', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' ), AB_MCP_Sync_Proposal::CATEGORIES );
-		self::assertSame( array( 'ambiguous', 'uncertain' ), AB_MCP_Sync_Proposal::BY_CHOICE );
+		self::assertSame( array( 'equal', 'differs', 'uncertain', 'realign', 'staging_only', 'live_only', 'not_compared', 'held' ), AB_MCP_Sync_Proposal::CATEGORIES );
+		self::assertSame( array( 'uncertain' ), AB_MCP_Sync_Proposal::BY_CHOICE );
 	}
 
 	public function testAnAnswerShowsNoHashMappedFormOrSnapshot(): void {
@@ -679,7 +761,7 @@ final class SyncProposalTest extends TestCase {
 			self::assertStringNotContainsString( self::h( 'possible' ), $shown );
 		}
 		$amb = self::match( array( self::page( '1', 'd', self::h( 'p' ), null, $possible ), self::page( '2', 'd', self::h( 'q' ) ) ), array( self::page( '3', 'd', self::h( 'r' ) ), self::page( '4', 'd', self::h( 's' ) ) ) )['entries'][0];
-		self::assertSame( 'ambiguous', $amb['category'] );
+		self::assertSame( 'uncertain', $amb['category'] );
 		$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $amb ) );
 		self::assertStringNotContainsString( self::h( 'p' ), $shown );
 		self::assertStringNotContainsString( '"mapped', $shown );

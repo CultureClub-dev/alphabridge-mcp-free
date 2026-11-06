@@ -94,8 +94,9 @@ final class SyncRowsTest extends TestCase {
 			'post_type_of' => AB_MCP_Sync_Rows::post_type_of( 5 ),
 			'meta_by_key'  => AB_MCP_Sync_Rows::meta_by_key( '_wp_attached_file', 0, 10 ),
 			'menu_items'   => AB_MCP_Sync_Rows::menu_items( array( '_menu_item_type' ) ),
-			'relations'    => AB_MCP_Sync_Rows::relations( 'language' ),
-			'wpml'         => AB_MCP_Sync_Rows::wpml_languages(),
+			'relations'    => AB_MCP_Sync_Rows::relations( 'language', 0, 0, 10 ),
+			'wpml_table'   => AB_MCP_Sync_Rows::wpml_table(),
+			'wpml'         => AB_MCP_Sync_Rows::wpml_languages( 0, 10 ),
 		);
 	}
 
@@ -118,7 +119,7 @@ final class SyncRowsTest extends TestCase {
 	public function testNoneIsFalseForOneRowAndEmptyForMany(): void {
 		self::db()->answer = array();
 		$all               = self::all();
-		foreach ( array( 'post', 'term', 'user_login', 'post_type_of' ) as $one ) {
+		foreach ( array( 'post', 'term', 'user_login', 'post_type_of', 'wpml_table' ) as $one ) {
 			self::assertFalse( $all[ $one ], $one );
 		}
 		foreach ( array( 'post_ids', 'meta', 'object_terms', 'term_objects', 'terms', 'options', 'taxonomies', 'post_index', 'meta_by_key', 'relations', 'wpml' ) as $many ) {

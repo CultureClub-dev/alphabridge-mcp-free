@@ -88,7 +88,12 @@ Weg.
   darauf bleibt unaufgelöst («anderer Inhalt»), und ein Objekt, dessen eigene
   Identität sie enthält, hat keine (ein Menüeintrag unter einem solchen
   Eltern-Eintrag, eine Seite unter einer solchen Elternseite heissen
-  «unsicher»). Beispiele: zwei eigene Links «#» mit derselben Beschriftung
+  «unsicher»). Jede Zeile einer solchen Identität heisst «unsicher» (Codex
+  Runde 4): die Site sagt es in der Zeile selbst (`twin`), so dass das auch
+  gilt, wo ein Paket nur einen der Zwillinge hält oder der andere schon durch
+  eine Wahl gepaart ist (der Rest wird nie «gleich»); ebenso eine Seite unter
+  einem Zwilling, auch wo das Paket nur diesen einen Elternteil hält
+  (Elternpfad `?`). Beispiele: zwei eigene Links «#» mit derselben Beschriftung
   unter demselben Eltern-Eintrag, zwei Posts eines Typs, Slugs und einer
   Sprache unter derselben Elternseite (ein Entwurf behält seinen Slug), zwei
   Anhänge derselben Datei und Sprache, zwei Terme einer Taxonomie, eines
@@ -113,10 +118,33 @@ Weg.
   Übersetzungen selbst wählen (`choices`). Nennt die Site für ein Objekt mehr
   als eine Sprache, hat es keine Identität (`language` `?`). Die Pakete beider
   Sites tragen die Sprache nur, wo beide dieselbe Fassung haben.
-- **Grosse Sites:** Der erste Durchgang liest je Aufruf die ganze Site (Posts
-  ohne Revisionen, Dateien der Anhänge, Menüeinträge, Terme, Sprachen) in den
-  Speicher; gemessen bis zu rund 500 Objekten je Seite (Prüffälle), grosse
-  Sites misst Z11c.
+- **Grosse Sites** (Codex Runde 4, B): Der Index der Identitäten ist kompakt:
+  je Post ein Satz von 43 Bytes (ID, Sprache, SHA-256 seiner Identität), je
+  Term einer von 53 Bytes, sortiert und durch Halbieren gefunden; während des
+  Aufbaus je Post einer von 51 Bytes mit der ID seines Elternteils, gezählt
+  wird je SHA-256. Gemessen für 20 000 Seiten und 50 000 Anhänge, jeder mit
+  einer Sprache von WPML: Aufbau unter 18 MiB, fertig rund 2,9 MiB
+  (`SyncIdentityTest`, ohne WordPress; auf MariaDB mit WordPress 17,3 MiB in
+  0,3 s), vorher rund 150 MiB. Er wird mit der Zeitgrenze der
+  Bestandsaufnahme in Teilen aufgebaut, Seite für Seite, und je Lauf einmal:
+  ein Vorschlag hält ihn bei seinen Teilen, eine Reihe von Paketen beim
+  Paket, in dem er fertig wurde (in Scheiben zu 8 MiB, eine Datei der Ablage
+  hält höchstens 16 MiB; das Paket meldet ihre Bytes an); die Folgeaufrufe
+  nehmen ihn auf und fragen die Datenbank nicht mehr. Ein Exportaufruf braucht so nicht mehr Speicher
+  als vor dem Index (gemessen, 4000 Objekte je Paket: 71,7 und 68,8 MiB
+  gegen 71,8 und 71,8 MiB). Grenzen: Der Index eines Laufs ist die Site, wie
+  sie war, als der Lauf ihn las; ein Objekt, das während eines Vorschlags
+  oder einer Reihe von Paketen neu entsteht, umbenannt oder verschoben wird,
+  heisst so, wie der Index es sagt (ein neuer Post hat keine Identität, ein
+  Verweis darauf heisst «anderer Inhalt», seine Zeile trägt keine Sprache);
+  Weg: nach Änderungen neu exportieren und neu vorschlagen (wie bei der
+  Bestandsaufnahme in Teilen, die sich ebenso über Aufrufe erstreckt). Auf
+  einer grossen Site können die ersten Pakete einer Reihe kein Objekt halten
+  (nur den Index); sie gehören zur Reihe und schaden dem Vorschlag nicht. Ist
+  das Paket mit dem Index weg (vor dem Ende der Reihe entfernt), geht die
+  Reihe nicht weiter (`ab_mcp_sync_export_index`, Weg: neue Reihe). Der
+  zweite Durchgang (die Ebenen) läuft in einem Aufruf, nicht in Teilen
+  (gemessen 0,2 s für 70 000 Posts).
 - **Mögliche Verweise** (Entscheid 12; Codex Runde 2, B-1): Ganze Zahlen ohne
   belegtes Schema in gespeicherten Werten (Meta von Posts, Termen und
   Menüeinträgen, auch in serialisierten Werten und gespeichertem JSON, etwa
@@ -164,9 +192,11 @@ Weg.
   (beide Sites gleiche Fassung; eine ältere Zeile ohne `mapped` heisst
   «anderer Inhalt»).
 - Keine Paarung durch Ausschluss: Nur ein Objekt je Seite derselben Identität
-  auf demselben Pfad ist ein Paar; mehrere auf einem Pfad nur über eine auf
-  beiden Seiten eindeutige gleiche abgebildete Form, der Rest ist
-  «mehrdeutig». Dieselbe Identität auf einem anderen Elternpfad (`/team/kontakt`
+  auf demselben Pfad ist ein Paar; mehrere auf einem Pfad sind Zwillinge ihrer
+  Site und heissen alle «unsicher». Der Pfad nennt jeden Elternteil mit Typ,
+  Theme, Slug und Sprache (Codex Runde 4): `kontakt` unter `team` (de) gegen
+  `kontakt` unter `team` (en) ist ein anderer Pfad, «unsicher», nie «anderer
+  Inhalt». Dieselbe Identität auf einem anderen Elternpfad (`/team/kontakt`
   gegen `/shop/kontakt`), ein Post ohne Slug (Entwürfe) und ein Menüeintrag,
   dessen Ziel oder Eltern-Eintrag keine Identität hat, heissen «unsicher»
   (`uncertain`) und werden nur durch eine ausdrückliche Wahl gepaart, nie über
@@ -175,9 +205,9 @@ Weg.
 - Ein **unvollständiger Elternpfad** führt nach «unsicher», wo beide Seiten
   Kandidaten derselben Identität haben (Codex Runde 2, A-2): eine Elternseite,
   die die Bestandsaufnahme ihrer Seite nicht hält (nicht gelesen, in einem
-  fehlenden Teilpaket, gehalten), keinen Slug hat oder deren Typ, Slug,
-  Sprache und Eltern ein zweiter Post derselben Seite auch hat, steht im Pfad
-  als `?`; `?` ist nie ein gemeinsamer Pfad beider Seiten. Hat die andere
+  fehlenden Teilpaket, gehalten), keinen Slug hat, deren Typ, Slug, Sprache
+  und Eltern ein zweiter Post derselben Seite auch hat oder deren Zeile ihre
+  Site als Zwilling nennt, steht im Pfad als `?`; `?` ist nie ein gemeinsamer Pfad beider Seiten. Hat die andere
   Seite keinen Kandidaten dieser Identität, bleibt das Objekt «nur live» oder
   «nur Staging» (Codex Runde 3, C1; selten, keine Fehlpaarung: es gibt nichts
   zu paaren).
@@ -190,10 +220,14 @@ Weg.
   Seiten eindeutig wären, und was unter ihnen hängt, ebenso (Codex Runde 3,
   A2). Ein Ziel ausserhalb der Bestandsaufnahme ohne Identität (ein
   gelöschter Post) macht den Eintrag «unsicher».
-- Mehrere Kandidaten derselben Identität auf einem Pfad werden über eine auf
-  beiden Seiten eindeutige gleiche abgebildete Form gepaart, erst die mit den
-  getypten Verweisen, dann die mit den möglichen Verweisen über die Identität
-  (Codex Runde 3, B3); der Rest ist «mehrdeutig».
+- Mehrere Kandidaten derselben Identität auf einem Pfad werden nicht mehr über
+  eine eindeutige gleiche abgebildete Form gepaart (so Codex Runde 3, B3; in
+  Runde 4 ersetzt): Zwillinge sind keine Identität, jede Zeile heisst
+  «unsicher», und die Person wählt. Die Kategorie «mehrdeutig» entfällt damit.
+  Betroffen sind Objekte, die ihre Site doppelt führt: Entwürfe mit dem Slug
+  einer veröffentlichten Seite, Übersetzungen mit gemeinsamem Slug, wo das
+  Sprach-Plugin nicht gelesen wird (Polylang und WPML werden gelesen), und von
+  Hand oder durch ein Plugin doppelt geschriebene Slugs; selten.
 - Eine Kennung, die kein Paar hält (länger als 191 Zeichen, ein
   Steuerzeichen, kein UTF-8; etwa ein Schlüssel eines Theme-Mods, der mit dem
   Stylesheet über 191 Zeichen kommt), heisst «nicht verglichen» mit dem Weg
@@ -252,8 +286,8 @@ Weg.
 - Zwei Aufrufe, die denselben Vorschlag zugleich fortsetzen, schreiben zwei
   Teile derselben Nummer; der Vorschlag gilt dann nicht mehr, Weg: neu
   vorschlagen, ein Aufruf nach dem anderen (selten).
-- Die 45 s begrenzen die Bestandsaufnahme dieser Site je Aufruf, nicht den
-  ganzen Aufruf: im letzten Aufruf folgen das Lesen der Pakete und die
+- Die 45 s begrenzen die Bestandsaufnahme dieser Site je Aufruf (mit dem
+  Index der Identitäten), nicht den ganzen Aufruf: im letzten Aufruf folgen das Lesen der Pakete und die
   Zuordnung über beide Inventare (15 s dafür vorgesehen, nicht erzwungen).
 - Grosse Sites: Ausgearbeitet wird ein Vorschlag im Speicher (die Zeilen
   beider Seiten); gemessen ist das bis zu rund 500 Objekten je Seite
