@@ -111,8 +111,10 @@ Weg.
   Beitrag auf beiden Sites genau in diesen zwei Termen, nennen beide Seiten
   dasselbe Paar und dieselbe Menge von Identitäten: «gleich», wie in 7111bc4,
   obwohl der ungepaarte Term ein anderer ist. Der gepaarte Term selbst
-  erscheint in demselben Vorschlag oder Bericht als geändert; ein Paar für
-  den zweiten Term hebt die Grenze auf.
+  erscheint in demselben Vorschlag oder Bericht als geändert, sofern das
+  Paket seine Zeile trägt; in einem Teilpaket ohne die Term-Zeilen steht er
+  nur als «nicht verglichen» (Codex Runde 4). Ein Paar für den zweiten Term
+  hebt die Grenze auf.
 - **Ein Ziel je Identität** (Codex Runde 2, A-1; Runde 3, 1): Die Identität
   ist eine Funktion der ganzen Site. `AB_MCP_Sync_Identity` liest in einem
   ersten Durchgang, was jedes Objekt nennt (Typ, Slug, Datei, Ziel, Verweis
