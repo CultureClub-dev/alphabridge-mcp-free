@@ -5503,6 +5503,10 @@ msgctxt "tool label"
 msgid "Pair objects with the staging site"
 msgstr "Objekte mit der Staging-Site paaren"
 
+msgctxt "tool label"
+msgid "Compare with the staging site"
+msgstr "Mit der Staging-Site vergleichen"
+
 msgid "Off: nothing is asked."
 msgstr "Aus: Es wird nichts gefragt."
 

@@ -206,7 +206,8 @@ final class AB_MCP_Sync_Inventory {
 	 * its identity: how many objects of the site have it
 	 * (AB_MCP_Sync_Identity::twins(): such objects are paired only where
 	 * every one of them is at hand, also in a package that holds only one of
-	 * them; Codex rounds 4 and 5).
+	 * them; Codex rounds 4 and 5); for the report (branch 6, part 2) the
+	 * post_status of a post and the number of meta rows of a form (meta).
 	 *
 	 * @param array $result AB_MCP_Sync_Canon::finish().
 	 * @return array
@@ -220,6 +221,16 @@ final class AB_MCP_Sync_Inventory {
 		$result['mapped'] = isset( $result['form'], $result['hash'] ) && is_array( $result['form'] ) && null !== self::$ctx ? AB_MCP_Sync_Identity::mapped_hash( $result['form'], self::$ctx ) : null;
 		// The same with the possible references by identity (Codex round 2, B-1).
 		$result['mapped_possible'] = null !== $result['mapped'] && isset( $result['possible'] ) && is_array( $result['possible'] ) ? AB_MCP_Sync_Identity::possible_hash( $result['form'], $result['possible'], self::$ctx ) : null;
+		// What the report reads of an object beside its hashes (branch 6,
+		// part 2), no value of its content: the status of a post (the
+		// trash is a deletion, an auto-draft no content), how many meta rows
+		// its form holds (a new term with meta is locked, decision 28).
+		if ( 'post' === ( $result['kind'] ?? null ) && isset( $result['form']['row']['post_status'] ) && is_string( $result['form']['row']['post_status'] ) ) {
+			$result['post_status'] = $result['form']['row']['post_status'];
+		}
+		if ( isset( $result['form']['meta'] ) && is_array( $result['form']['meta'] ) ) {
+			$result['meta'] = count( $result['form']['meta'] );
+		}
 		unset( $result['form'] );
 		if ( ! isset( $result['status'] ) ) {
 			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';

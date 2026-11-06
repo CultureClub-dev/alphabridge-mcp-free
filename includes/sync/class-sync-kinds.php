@@ -194,6 +194,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'No object is deleted in Z8, and no status stands in for a deletion: an object deleted on staging is shown as such.',
 		),
+		'*:restore_deleted'            => array(
+			'stage'  => 'Z8d',
+			'reason' => 'Bringing back an object deleted on one site, from the other site or from a backup, follows with the deletions and their way back.',
+		),
 		'menu:remove_item'             => array(
 			'stage'  => 'Z8d',
 			'reason' => 'Removing a menu item is a deletion with the consequences of wp_delete_post(); a menu with an item removed on staging is locked as a whole.',

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Writes tests/mutation/lists/bericht.php: one entry per clause of the object
-pairs of the takeover (Z8 branch 6, part 1: wp_site_pairs). Every search is
+pairs of the takeover (Z8 branch 6, part 1: wp_site_pairs) and of the report
+(part 2: wp_site_diff). Every search is
 checked to occur exactly once in its file, and the test of its expect to be a
 method of the class its run names, before the list is written; each entry
 runs that test only.
@@ -21,7 +22,7 @@ IM = 'includes/sync/class-sync-import.php'
 OS = 'includes/sync/class-sync-option-schema.php'
 TS = 'includes/tools/class-tools-staging.php'
 G = 'includes/class-staging-gate.php'
-FILEVAR = {P: '$p', T: '$t', IM: '$im', OS: '$os', TS: '$ts', G: '$g', 'includes/sync/class-sync-pairs.php': '$pa', 'includes/sync/class-sync-identity.php': '$id', 'includes/sync/class-sync-inventory.php': '$inv', 'includes/sync/class-sync-export.php': '$ex', 'includes/sync/class-sync-db-kinds.php': '$dk'}
+FILEVAR = {P: '$p', T: '$t', IM: '$im', OS: '$os', TS: '$ts', G: '$g', 'includes/sync/class-sync-pairs.php': '$pa', 'includes/sync/class-sync-identity.php': '$id', 'includes/sync/class-sync-inventory.php': '$inv', 'includes/sync/class-sync-export.php': '$ex', 'includes/sync/class-sync-db-kinds.php': '$dk', 'includes/sync/class-sync-decision.php': '$de', 'includes/sync/class-sync-report.php': '$re', 'includes/sync/class-sync-manifest.php': '$m'}
 
 RUNS = {
     'prop': ('unit', 'SyncProposalTest'),
@@ -31,6 +32,9 @@ RUNS = {
     'ident': ('unit', 'SyncIdentityTest'),
     'kinds': ('unit', 'SyncDbKindsTest'),
     'pkg': ('it', 'SyncPackageTest'),
+    'rep': ('unit', 'SyncReportTest'),
+    'itrep': ('it', 'SyncReportTest'),
+    'man': ('unit', 'SyncManifestTest'),
 }
 
 entries = []
@@ -118,7 +122,7 @@ e('step-b9', 'step(): an object whose name is a credential is counted, never lis
 e('step-held', 'step(): a line of this site a credential holds is reduced before it is stored', P,
   "\t\t\t$lines[] = null === $code ? $line : self::reduced( $line, $code );", "\t\t\t$lines[] = null === $code ? $line : array( 'held' => $code ) + $line;", 'it', 'testAHeldNameReachesNeitherTheStoreNorARealignAnswer')
 e('step-finish', 'step(): the inventory read to its end is worked out in the same call', P,
-  "\t\tif ( null === $read['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
+  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
 e('step-read', 'step(): an inventory read to its end is not read again', P,
   "\t\t\tif ( null === $cursor ) {\n\t\t\t\treturn self::finish( $found );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::finish( $found );", 'it', 'testAProposalWhoseWorkingOutFailedIsWorkedOutByTheNextCall')
 e('parts-twice', 'parts(): two parts of one number void it', P,
@@ -546,7 +550,7 @@ TT2 = "\t\t\t\treturn is_int( $value ) && $value > 1;"
 e('import-twins-int', 'typed(): twin is a number of objects, not its digits (Codex round 5)', IM, TT2, "\t\t\t\treturn $value > 1;", 'pkg', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain')
 e('import-twins-two', 'typed(): twin is two or more (Codex round 5)', IM, TT2, "\t\t\t\treturn is_int( $value );", 'pkg', 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain')
 e('step-index-take', 'step(): the index the part before kept', P,
-  "\t\t\t$index = $last['index'] ?? null;", "\t\t\t$index = null;", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
+  "\t\t\t$index  = $last['index'] ?? null;", "\t\t\t$index  = null;", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
 e('step-index-keep', 'step(): the index as this call left it, kept with its part', P,
   "\t\tif ( null !== $read['index'] ) {", "\t\tif ( false ) {", 'it', 'testTheIndexOfIdentitiesOfAProposalIsBuiltInPartsAndOnce')
 e('step-index-whole', 'step(): the index from all its slices', P,
@@ -693,6 +697,323 @@ e('reason-target', 'reason_text(): the target in its words', OS,
   "\t\treturn 'read_as_other_row' === $code ? sprintf( self::REASON_TEXTS[ $code ], is_string( $target ) ? $target : 'of another name' ) : self::REASON_TEXTS[ $code ];",
   "\t\treturn self::REASON_TEXTS[ $code ];", 'prop', 'testEachReasonCodeHasTheWordsTheSiteThatReadTheRowWrites')
 
+# =================================================================
+# Part 2: the report (wp_site_diff; decisions 1, 14, 16, 21 and 22)
+# =================================================================
+D = 'includes/sync/class-sync-decision.php'
+R = 'includes/sync/class-sync-report.php'
+MF = 'includes/sync/class-sync-manifest.php'
+ROWS = 'testEachRowOfTheTableOfAnActivePair'
+R0 = 'testRuleZeroAResidualPairIsARestAndNothingAppliesToIt'
+R1 = 'testRuleOneAnUnclearPairIsLikeAConflict'
+R2 = 'testRuleTwoAPairTakenOverAsDeleted'
+NC = 'testASideNotComparedLeavesThePairNotCompared'
+TRASH = 'testTheTrashIsADeletionAndAnAutoDraftNoContent'
+WITHOUT = 'testEachRowOfTheTableWithoutAPair'
+ALONE = 'testAnObjectWithoutAPairThatIsHeldOrNotComparedIsNotTakenOver'
+LOCKS = 'testTheLocksOfTheLinesHoldATakeoverAndAreShownWithTheirStage'
+CSS = 'testCreatingAdditionalCssIsLockedAndOnlyLinkedCssIsUpdated'
+TERM = 'testCreatingATermWithMetaIsLocked'
+MENU = 'testAMenuWithAnItemRemovedOnStagingIsLockedAsAWhole'
+WIDGET = 'testAWidgetAreaWithAnInstanceRemovedOnStagingIsLockedAsAWhole'
+EDGE = 'testATargetCreatedInTheSameRunIsAnEdgeNotAWait'
+NAMED = 'testATargetWithAnActivePairIsNamedByItsPairAlsoWhereItIsLocked'
+WAIT = 'testATargetThatCannotBeNamedHereMakesItWait'
+MUTUAL = 'testObjectsThatNeedEachOtherToBeCreatedAreLocked'
+CHAIN = 'testWaitingIsPassedOnAlongAChain'
+CYCLES = 'testTheCyclesOfTheEdges'
+CHECK = 'testTheCheckBeforeNamesTheWayForANetworkThePairAndTheAnchor'
+LIST = 'testAReportBeginsWithTheListOfPackagesOfOneSeries'
+WP = 'testWordPressOnStagingNewerThanHereIsRefusedWithTheWayOfAnUpdate'
+IT_MCP = 'testAReportOverMcpDecidesEachObjectAndWritesNothingButTheReport'
+IT_WP = 'testWordPressNewerOnStagingIsRefusedWithTheWayOfAnUpdate'
+IT_DAY = 'testTheCheckBeforeAndAReportOfAnotherAccountPairOrDay'
+IT_PARTS = 'testTheInventoryOfThisSiteIsReadInPartsAndGivesTheSameReport'
+IT_HEAD = 'testAReportOfAnotherCanonSourceFormatOrLabelIsNone'
+IT_FAIL = 'testAReportWhoseWorkingOutFailedIsWorkedOutByTheNextCall'
+IT_B9 = 'testAnObjectOfAPairWhoseNameHoldsACredentialHereSinceIsNotDeleted'
+IT_WIDGET = 'testAWidgetAreaWithAnInstanceRemovedOnStagingIsLockedAsAWhole'
+IT_REALIGN = 'testANewAlignmentOfAWidgetAreaKeepsWhatItsBaseExtraHolds'
+IT_TERM = 'testANewTermWithMetaIsLockedAndOneWithoutIsCreated'
+IT_KINDS = 'testTheKindsZ8LocksAreShownWithTheirReasonAndStage'
+IT_MENU = 'testAMenuWithAnItemRemovedOnStagingIsLockedAsAWhole'
+
+# ---------------------------------------------------- the order (rules 0-3)
+e('r0-residual', 'rule 0: a residual pair is a rest, no row applies', D,
+  "\t\tif ( 'residual' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R0)
+e('r0-removed', 'rule 0: a rest gone here is «rest removed»', D,
+  "'deleted' === $ls[0] ? 'residual_removed' : 'residual'", "'residual'", 'rep', R0)
+e('r0-canon', 'rule 3: bases of another version of the canon are not compared', D,
+  "\t\tif ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {", "\t\tif ( false ) {", 'rep', NC)
+e('r1-unclear', 'rule 1: an unclear pair is like a conflict', D,
+  "\t\tif ( 'unclear' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R1)
+e('r2-deleted', 'rule 2: a pair taken over as deleted', D,
+  "\t\tif ( 'deleted' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R2)
+e('r2-live-again', 'rule 2: there again here, its state the base, then the table', D,
+  "\t\t\tif ( null !== $l && ! isset( $l['held'] ) ) {", "\t\t\tif ( false ) {", 'rep', R2)
+e('r2-live-base', 'rule 2: the live side is its base (unchanged)', D,
+  "\t\t\t\t$item['sides']['live'] = 'unchanged';\n", "", 'rep', R2)
+e('r2-done', 'rule 2: deleted on staging as well, nothing', D,
+  "\t\t\tif ( 'deleted' === $ss[0] ) {\n\t\t\t\treturn self::result( $item, 'deleted_done'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::result( $item, 'deleted_done'", 'rep', R2)
+e('r2-restore-lock', 'rule 2: there again on staging, locked until Z8d', D,
+  "\t\t\t$item['locks'][] = self::lock( '*:restore_deleted' );\n", "", 'rep', R2)
+e('r3-not-compared', 'rule 3: a side not compared leaves the pair not compared', D,
+  "\t\t\tif ( 'not_compared' === $state[0] ) {", "\t\t\tif ( false ) {", 'rep', NC)
+e('r3-alike', 'rule 3: changed alike by the mapped forms (row 6, not 5)', D,
+  "'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l )", "false", 'rep', ROWS + ' with data set "row 6: changed, changed, alike"')
+e('r3-other-forms', 'rule 3: changed differently is a conflict (row 5, not 6)', D,
+  "'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l )", "'changed' === $ss[0] && 'changed' === $ls[0]", 'rep', ROWS + ' with data set "row 5: changed, changed, other forms"')
+TR = "\t\tif ( 3 === $row || 7 === $row ) {"
+e('row-delete-3', 'table_result(): row 3 locks the deletion', D, TR, "\t\tif ( 7 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
+e('row-delete-7', 'table_result(): row 7 locks the deletion', D, TR, "\t\tif ( 3 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
+e('row-restore-9', 'table_result(): row 9 locks bringing it back', D,
+  "\t\tif ( 9 === $row ) {", "\t\tif ( false ) {", 'rep', 'testChangedHereAndDeletedThereNamesTheWayBackAsLocked')
+e('row-five-alike', 'row(): changed on both with the same form is not row 5', D,
+  "\t\t\tif ( 5 === $n && $alike ) {", "\t\t\tif ( false ) {", 'rep', 'testTheTableHasOneRowForEachStateOfBothSidesAndTwoForChangedOnBoth')
+
+# ------------------------------------------------- the state of a side
+e('side-kinds', 'side_state(): an object of a kind this site does not read is never deleted', D,
+  "\t\t\tif ( ! isset( $ctx['kinds'][ $pair['kind'] ] ) ) {", "\t\t\tif ( false ) {", 'rep', 'testAKindThisSiteDoesNotReadIsNeverDeleted')
+e('side-incomplete', 'side_state(): incomplete never means deleted', D,
+  "return true === call_user_func( $ctx['complete'], (string) $pair['kind'], $subtype )", "return true", 'rep', 'testIncompleteNeverMeansDeleted')
+e('side-subtype', 'side_state(): asked by the subtype the line of this site names', D,
+  "\t\t$subtype = self::subtype( null !== $l ? $l : $s );", "\t\t$subtype = null;", 'rep', 'testIncompleteNeverMeansDeleted')
+e('side-b9', 'side_state(): an object here whose name holds a credential is not deleted', D,
+  "\t\t\tif ( isset( $ctx['b9'][ $pair['kind'] . \"\\0\" . hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $pair['live_ref'] ) ) ] ) ) {", "\t\t\tif ( false ) {", 'rep', 'testAnObjectHereWhoseNameHoldsACredentialIsNotDeleted')
+e('rep-side-held', 'side_state(): a held line is not compared', D,
+  "\t\tif ( isset( $line['held'] ) ) {\n\t\t\treturn array( 'not_compared', self::WORDS['held'] );", "\t\tif ( false ) {\n\t\t\treturn array( 'not_compared', self::WORDS['held'] );", 'rep', NC)
+e('side-trash', 'side_state(): the trash is a deletion', D,
+  "\t\tif ( 'trash' === $status ) {\n\t\t\treturn array( 'deleted', null );", "\t\tif ( false ) {\n\t\t\treturn array( 'deleted', null );", 'rep', TRASH)
+e('side-auto-draft', 'side_state(): an auto-draft of a pair is no content', D,
+  "\t\tif ( 'auto-draft' === $status ) {\n\t\t\treturn array( 'not_compared'", "\t\tif ( false ) {\n\t\t\treturn array( 'not_compared'", 'rep', TRASH)
+e('side-hash', 'side_state(): a line without a hash is not compared', D,
+  "\t\tif ( ! isset( $line['hash'] ) || ! is_string( $line['hash'] ) ) {", "\t\tif ( false ) {", 'rep', NC)
+e('side-whole', 'side_state(): a line not read whole is not compared', D,
+  "\t\tif ( empty( $line['complete'] ) ) {", "\t\tif ( false ) {", 'rep', NC)
+e('side-line-canon', 'side_state(): a line of another canon is not compared', D,
+  "\t\tif ( ( $line['canon'] ?? null ) !== $pair['canon'] ) {", "\t\tif ( false ) {", 'rep', NC)
+e('side-base', 'side_state(): unchanged where its hash is its base', D,
+  "hash_equals( (string) $base, (string) $line['hash'] ) ? 'unchanged' : 'changed'", "'changed'", 'rep', ROWS + ' with data set "row 1: unchanged, unchanged"')
+
+# ------------------------------------------------------------ no pair
+e('lone-trash', 'report(): an object without a pair in the trash or an auto-draft stands alone', D,
+  "\t\t\t\tif ( ! isset( $taken[ $side ][ $i ] ) && in_array( $status, array( 'trash', 'auto-draft' ), true ) ) {", "\t\t\t\tif ( false ) {", 'rep', TRASH)
+e('lone-unpaired', 'report(): only without a pair', D,
+  "\t\t\t\tif ( ! isset( $taken[ $side ][ $i ] ) && in_array( $status, array( 'trash', 'auto-draft' ), true ) ) {", "\t\t\t\tif ( in_array( $status, array( 'trash', 'auto-draft' ), true ) ) {", 'rep', TRASH)
+e('rep-match-realign', 'report(): the new alignment of the proposal is no entry of the report', D,
+  "\t\t\tif ( 'realign' === $entry['category'] ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'rep', R1)
+e('rep-match-held', 'match_item(): a held object stands alone, by the hash of its ref', D,
+  "\t\t\t\treturn self::result( $item, 'held', '4', null, 'none' );", "\t\t\t\treturn self::result( $item, 'not_compared', '4', null, 'none' );", 'rep', ALONE)
+e('match-staging-hash', 'match_item(): an object only on staging without a hash or read in part is not created', D,
+  "\t\t\t\tif ( null === $s || ! isset( $s['hash'] ) || ! is_string( $s['hash'] ) || empty( $s['complete'] ) ) {", "\t\t\t\tif ( false ) {", 'rep', ALONE)
+e('match-proposal', 'match_item(): new on both sides names the category of the proposal', D,
+  "\t\t$item['proposal'] = $entry['category'];\n", "", 'rep', 'testNewOnBothSidesOfOtherContentOrUncertainArePairedFirst')
+
+# ------------------------------------------------- operation locks
+e('op-rest', 'operation_locks(): nothing applies to a rest', D,
+  "\t\t\tif ( '0' === $item['rule'] ) {\n\t\t\t\t// A rest", "\t\t\tif ( false ) {\n\t\t\t\t// A rest", 'rep', 'testRuleZeroHoldsAWidgetAreaAsAWholeWithItsInstanceMapping')
+e('op-rest-menu', 'operation_locks(): a rest removed on staging locks its menu', D,
+  "\t\t\t\t\tforeach ( self::menus_of( $item['l'] ) as $menu ) {\n\t\t\t\t\t\t$menus['l'][ $menu ] = true;", "\t\t\t\t\tforeach ( array() as $menu ) {\n\t\t\t\t\t\t$menus['l'][ $menu ] = true;", 'rep', MENU)
+CC = "\t\t\tif ( 'custom_css' === $item['kind'] && $writes && ( 'create' === $item['action'] || ! self::linked( $item['l'] ) ) ) {"
+e('op-css', 'operation_locks(): creating Additional CSS is locked', D, CC, "\t\t\tif ( false ) {", 'rep', CSS)
+e('op-css-linked', 'operation_locks(): CSS this site does not link is not updated', D, CC, CC.replace(" || ! self::linked( $item['l'] )", ''), 'rep', CSS)
+e('op-css-writes', 'operation_locks(): the CSS lock holds what is written only', D,
+  "\t\t\t$writes = in_array( $item['action'], array( 'create', 'take_over', 'choose' ), true );", "\t\t\t$writes = true;", 'rep', CSS)
+TM = "\t\t\tif ( in_array( $item['kind'], array( 'term', 'menu' ), true ) && 'create' === $item['action'] && self::has_meta( $item['s'] ) ) {"
+e('op-term-meta', 'operation_locks(): a new term with meta is locked', D, TM, "\t\t\tif ( false ) {", 'rep', TERM)
+e('op-term-create', 'operation_locks(): only a new term, one there on both sides changes its meta', D, TM, TM.replace("'create' === $item['action'] && ", ''), 'rep', TERM)
+e('meta-count', 'has_meta(): a line without the count fails closed', D,
+  "\t\tif ( ! isset( $line['meta'] ) || ! is_int( $line['meta'] ) || $line['meta'] > 0 ) {", "\t\tif ( isset( $line['meta'] ) && $line['meta'] > 0 ) {", 'rep', TERM)
+e('meta-rows', 'has_meta(): rows of meta', D,
+  "\t\tif ( ! isset( $line['meta'] ) || ! is_int( $line['meta'] ) || $line['meta'] > 0 ) {", "\t\tif ( ! isset( $line['meta'] ) || ! is_int( $line['meta'] ) || $line['meta'] > 2 ) {", 'rep', TERM)
+e('meta-b9', 'has_meta(): meta left out as a credential', D,
+  "\t\t\tif ( is_string( $at ) && 0 === strpos( $at, 'meta:' ) ) {", "\t\t\tif ( false ) {", 'rep', TERM)
+e('op-widget', 'operation_locks(): a widget area with an instance removed on staging is locked as a whole', D,
+  "\t\t\tif ( 'widget_area' === $item['kind'] && null !== $item['pair'] && 'changed' === ( $item['sides']['staging'] ?? null ) && self::removed_instances( $item ) ) {", "\t\t\tif ( false ) {", 'rep', WIDGET)
+e('widget-unknown', 'removed_instances(): the instances of the base not known fail closed', D,
+  "\t\tif ( ! is_array( $base ) || ! is_array( $now ) ) {\n\t\t\treturn true;", "\t\tif ( ! is_array( $base ) || ! is_array( $now ) ) {\n\t\t\treturn false;", 'rep', WIDGET)
+e('widget-removed', 'removed_instances(): an instance of the base gone now', D,
+  "\t\t\tif ( ! isset( $have[ AB_MCP_Sync_Canon::encode( $id ) ] ) ) {\n\t\t\t\treturn true;", "\t\t\tif ( false ) {\n\t\t\t\treturn true;", 'rep', WIDGET)
+e('op-menu-removed', 'operation_locks(): an item removed on staging marks its menus', D,
+  "\t\t\tif ( 'menu_item' === $item['kind'] && null !== $item['pair'] && 'deleted' === ( $item['sides']['staging'] ?? null ) && 'deleted' !== ( $item['sides']['live'] ?? null ) ) {\n\t\t\t\tforeach",
+  "\t\t\tif ( false ) {\n\t\t\t\tforeach", 'rep', MENU)
+e('op-menu-staging', 'operation_locks(): the staging menu of such a menu by its pair', D,
+  "\t\t\tif ( 'menu' === $item['kind'] && null !== $item['pair'] && isset( $menus['l'][ (string) $item['pair']['live_ref'] ] ) ) {", "\t\t\tif ( false ) {", 'rep', MENU)
+e('op-menu-term', 'operation_locks(): the menu itself is locked', D,
+  "\t\t\t\t$hit = ( null !== $item['l'] && isset( $menus['l'][ (string) $item['l']['ref'] ] ) ) || ( null !== $item['s'] && isset( $menus['s'][ (string) $item['s']['ref'] ] ) );", "\t\t\t\t$hit = false;", 'rep', MENU)
+e('op-menu-new-item', 'operation_locks(): an item of the staging menu is locked, a new one too', D,
+  "\t\t\t\t\t$hit = $hit || isset( $menus['s'][ $menu ] );", "\t\t\t\t\t$hit = $hit;", 'rep', MENU)
+e('op-menu-lock', 'operation_locks(): the lock of the menu as a whole', D,
+  "\t\t\t\t$items[ $i ]['locks'][] = self::lock( 'menu:remove_item' );\n", "", 'rep', MENU)
+e('op-menu-rest', 'operation_locks(): a rest in such a menu takes no lock', D,
+  "\t\t\tif ( '0' === $item['rule'] ) {\n\t\t\t\tcontinue;\n\t\t\t} elseif ( 'menu' === $item['kind'] ) {", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;\n\t\t\t} elseif ( 'menu' === $item['kind'] ) {", 'rep', MENU)
+
+# ------------------------------------------------------------ graph
+e('graph-candidates', 'graph(): the staging candidates of an object new on both sides are targets', D,
+  "\t\t\tforeach ( $item['shown']['candidates']['staging'] ?? array() as $candidate ) {", "\t\t\tforeach ( array() as $candidate ) {", 'rep', WAIT)
+e('graph-named', 'graph(): a target its pair names is no wait', D,
+  "\t\t\t\tif ( true === $why ) {\n\t\t\t\t\tcontinue;", "\t\t\t\tif ( false ) {\n\t\t\t\t\tcontinue;", 'rep', NAMED)
+e('graph-edge', 'graph(): a target created in the same run is an edge', D,
+  "\t\t\t\tif ( 'edge' === $why ) {", "\t\t\t\tif ( false ) {", 'rep', EDGE)
+e('graph-mutual', 'graph(): objects that need each other are locked', D,
+  "\t\t\t\t$items[ $i ]['locks'][] = self::lock( '*:mutual_references' );\n", "", 'rep', MUTUAL)
+e('graph-pass-on', 'graph(): waiting is passed on', D,
+  "\t\t\t\t$queue[] = $i;\n\t\t\t}\n\t\t}\n\t}", "\t\t\t}\n\t\t}\n\t}", 'rep', CHAIN)
+e('graph-held-back', 'held_back(): a locked target holds back what needs it', D,
+  "( array() !== self::locks_of( $item ) || ! empty( $item['waits'] ) )", "( ! empty( $item['waits'] ) )", 'rep', WAIT)
+e('graph-held-waits', 'held_back(): a waiting target holds back what needs it', D,
+  "( array() !== self::locks_of( $item ) || ! empty( $item['waits'] ) )", "( array() !== self::locks_of( $item ) )", 'rep', CHAIN)
+e('target-unclear', 'target(): an unclear pair waits', D,
+  "\t\t\tif ( 'unclear' === $p['state'] ) {", "\t\t\tif ( false ) {", 'rep', WAIT)
+e('target-deleted-pair', 'target(): a pair taken over as deleted waits', D,
+  "\t\t\tif ( 'deleted' === $p['state'] ) {", "\t\t\tif ( false ) {", 'rep', WAIT)
+e('target-pair-missing', 'target(): a pair whose staging object is missing waits', D,
+  "\t\t\tif ( null === $j ) {\n\t\t\t\treturn sprintf( 'Its target, the %1$s of its pair", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'Its target, the %1$s of its pair", 'rep', WAIT)
+e('target-gone-here', 'target(): a pair whose object is gone here waits', D,
+  "\t\t\tif ( 'deleted' === ( $items[ $j ]['sides']['live'] ?? null ) ) {", "\t\t\tif ( false ) {", 'rep', WAIT)
+e('target-trash-there', 'target(): a pair whose staging object is in the trash waits', D,
+  "\t\t\tif ( 'deleted' === ( $items[ $j ]['sides']['staging'] ?? null ) ) {", "\t\t\tif ( false ) {", 'rep', WAIT)
+e('target-unknown', 'target(): a target not in the inventory of the staging site waits', D,
+  "\t\tif ( null === $j ) {\n\t\t\treturn sprintf( 'Its target, the %s of the staging site, is not in its inventory", "\t\tif ( false ) {\n\t\t\treturn sprintf( 'Its target, the %s of the staging site, is not in its inventory", 'rep', WAIT)
+e('target-create', 'target(): a target created in the run is an edge', D,
+  "\t\tif ( 'create' === $items[ $j ]['action'] ) {\n\t\t\treturn 'edge';", "\t\tif ( false ) {\n\t\t\treturn 'edge';", 'rep', EDGE)
+e('target-pair-first', 'target(): a target new on both sides is paired first', D,
+  "\t\tif ( 'new_both' === $items[ $j ]['result'] ) {", "\t\tif ( false ) {", 'rep', WAIT)
+CY = "\t\t\t\t\tif ( count( $group ) > 1 || isset( $edges[ $v ][ $v ] ) ) {"
+e('cycles-group', 'cycles(): a group of more than one', D, CY, "\t\t\t\t\tif ( isset( $edges[ $v ][ $v ] ) ) {", 'rep', CYCLES)
+e('cycles-self', 'cycles(): one with an edge to itself', D, CY, "\t\t\t\t\tif ( count( $group ) > 1 ) {", 'rep', CYCLES)
+e('cycles-low', 'cycles(): the lowest index reached on the stack', D,
+  "\t\t\t\t\t\t$low[ $v ] = min( $low[ $v ], $index[ $w ] );\n", "", 'rep', CYCLES)
+e('cycles-parent', 'cycles(): passed up to the parent', D,
+  "\t\t\t\t\t$low[ $parent ] = min( $low[ $parent ], $low[ $v ] );\n", "", 'rep', CYCLES)
+
+# ------------------------------------------------------------ entry
+EA = "\t\tif ( in_array( $action, array( 'take_over', 'create', 'delete', 'choose' ), true ) && array() !== $locks ) {"
+e('entry-locked', 'entry(): a takeover with a lock is locked', D, EA, "\t\tif ( false ) {", 'rep', LOCKS)
+e('entry-locked-choose', 'entry(): a conflict whose staging side is locked is locked', D, EA, EA.replace(", 'choose'", ''), 'rep', LOCKS)
+e('entry-waits', 'entry(): a takeover with a wait waits', D,
+  "\t\t} elseif ( in_array( $action, array( 'take_over', 'create', 'choose' ), true ) && ! empty( $item['waits'] ) ) {", "\t\t} elseif ( false ) {", 'rep', WAIT)
+e('entry-note', 'entry(): an override is named', D,
+  "\t\tif ( null !== $item['pair'] && null !== $item['pair']['override'] ) {", "\t\tif ( false ) {", 'rep', 'testAPairWithAnOverrideIsComparedAgainstItsTargetAndNamesIt')
+e('entry-choices', 'entry(): choices only where a person chooses', D,
+  "\t\tif ( 'choose' === $action ) {", "\t\tif ( true ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
+e('show-held', 'show(): a held side by the SHA-256 of its ref only', D,
+  "\t\tif ( isset( $line['held'] ) ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => (string) $line['held'],", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => (string) $line['held'],", 'rep', NC)
+e('show-status', 'show(): the status of a post', D,
+  "\t\t\t$out['post_status'] = $line['post_status'];\n", "", 'itrep', IT_MCP)
+e('show-instances', 'show(): the instances of a widget area', D,
+  "\t\tif ( 'widget_area' === $item['kind'] && isset( $line['instances'] ) ) {", "\t\tif ( false ) {", 'rep', WIDGET)
+e('plain-hash', 'plain(): no hash of a side of the match', D,
+  "\t\tunset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'] );", "\t\tunset( $side['complete'], $side['locks'] );", 'rep', 'testNewOnBothSidesOfOtherContentOrUncertainArePairedFirst')
+e('blocked-count', 'finish(): what is locked with how many entries', D,
+  "\t\t\t\t++$blocked[ $lock['key'] ]['entries'];\n", "", 'rep', LOCKS)
+
+# ---------------------------------------------------------- the report
+e('rep-multisite', 'precheck(): no report on a network', R,
+  "\t\tif ( is_multisite() ) {", "\t\tif ( false ) {", 'rep', CHECK)
+e('rep-pair', 'precheck(): only the confirmed production site of a pair', R,
+  "\t\tif ( is_wp_error( $partner ) ) {", "\t\tif ( false ) {", 'rep', CHECK)
+e('rep-anchor', 'precheck(): only with the key a person confirmed', R,
+  "\t\tif ( null === $anchor ) {", "\t\tif ( false ) {", 'rep', CHECK)
+e('rep-prepared', 'precheck(): a key prepared but not confirmed names its way', R,
+  "\t\t\treturn null !== AB_MCP_Sync_Anchor::prepared()", "\t\t\treturn false", 'rep', CHECK)
+PKR = "\t\tif ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || count( array_unique( array_map( 'strval', $packages ) ) ) !== count( $packages ) ) {"
+e('rep-packages-list', 'call(): packages is a list', R, PKR, PKR.replace('! array_is_list( $packages ) || ', ''), 'rep', LIST)
+e('rep-packages-empty', 'call(): at least one package', R, PKR, PKR.replace('array() === $packages || ', ''), 'rep', LIST)
+e('rep-packages-max', 'call(): at most MAX_PACKAGES', R, PKR, PKR.replace('count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || ', ''), 'rep', LIST)
+e('rep-packages-once', 'call(): each package once', R, PKR, PKR.replace(" || count( array_unique( array_map( 'strval', $packages ) ) ) !== count( $packages )", ''), 'rep', LIST)
+e('rep-taken-way', 'packages(): the refusal of a package with the way of the page', R,
+  "\t\t\t\treturn self::refusal( $one->get_error_code(), $one->get_error_message(), '', self::ANCHOR_TRUST );", "\t\t\t\treturn $one;", 'rep', LIST)
+e('rep-wp-highest', 'wordpress_of(): the highest version of a series', R,
+  "\t\t\tif ( '' === $wordpress || version_compare( $version, $wordpress, '>' ) ) {", "\t\t\tif ( '' === $wordpress ) {", 'rep', 'testTheVersionOfWordPressOfASeriesIsTheHighestItsManifestsName')
+WR = "\t\tif ( 1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $staging ) || 1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $live ) ) {"
+e('rep-wp-staging', 'wordpress_refusal(): a version of staging that is none', R, WR, WR.replace('1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $staging ) || ', ''), 'rep', WP)
+e('rep-wp-live', 'wordpress_refusal(): a version here that is none', R, WR, WR.replace(' || 1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $live )', ''), 'rep', WP)
+WN = "\t\tif ( version_compare( $staging, $live, '>' ) ) {"
+e('rep-wp-newer', 'wordpress_refusal(): a newer WordPress on staging is refused', R, WN, "\t\tif ( false ) {", 'rep', WP)
+e('rep-wp-same', 'wordpress_refusal(): the same is no newer', R, WN, WN.replace("'>'", "'>='"), 'rep', WP)
+e('rep-wp-call', 'call(): the version is checked before a report begins', R,
+  "\t\tif ( null !== $version ) {\n\t\t\treturn $version;", "\t\tif ( false ) {\n\t\t\treturn $version;", 'itrep', IT_WP)
+e('rep-replace-own', 'replace_own(): a new report removes the earlier ones of its connection', R,
+  "\t\t\tif ( is_array( $head ) && isset( $head['connection'] ) && hash_equals( (string) $head['connection'], $mine ) ) {", "\t\t\tif ( false ) {", 'itrep', IT_PARTS)
+e('rep-step-read', 'step(): an inventory read to its end is not read again', R,
+  "\t\tif ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {", "\t\tif ( true ) {", 'itrep', IT_FAIL)
+e('rep-step-finish', 'step(): the inventory read to its end is worked out', R,
+  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'itrep', IT_PARTS)
+e('rep-find-connection', 'find(): the connection that made it only', R,
+  "\t\tif ( ! hash_equals( (string) $head['connection'], AB_MCP_Sync_Proposal::connection() ) ) {", "\t\tif ( false ) {", 'itrep', IT_HEAD)
+e('rep-find-account', 'find(): another account, another connection', R,
+  "\t\tif ( ! hash_equals( (string) $head['connection'], AB_MCP_Sync_Proposal::connection() ) ) {", "\t\tif ( false ) {", 'itrep', IT_DAY)
+FS = "\t\tif ( AB_MCP_Sync_Canon::VERSION !== $head['canon'] || $source !== $head['source_id'] || ! hash_equals( (string) $head['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {"
+e('rep-find-canon', 'find(): the version of the canon of now', R, FS, FS.replace("AB_MCP_Sync_Canon::VERSION !== $head['canon'] || ", ''), 'itrep', IT_HEAD)
+e('rep-find-source', 'find(): the source of the confirmed key', R, FS, FS.replace("$source !== $head['source_id'] || ", ''), 'itrep', IT_HEAD)
+e('rep-find-print', 'find(): the print of the pair of sites of now', R, FS, FS.replace(" || ! hash_equals( (string) $head['print'], (string) AB_MCP_Sync_Anchor::pair_print() )", ''), 'itrep', IT_HEAD)
+FE = "\t\tif ( self::now() >= (int) $head['expires'] ) {"
+e('rep-find-expires', 'find(): not after it expired', R, FE, "\t\tif ( false ) {", 'itrep', IT_DAY)
+e('rep-find-expires-at', 'find(): at its expiry it holds no more', R, FE, FE.replace('>=', '>'), 'itrep', IT_DAY)
+e('rep-find-format', 'find(): a head of this format', R,
+  "\t\tif ( ! is_array( $head ) || self::FORMAT !== ( $head['format'] ?? null ) ) {", "\t\tif ( ! is_array( $head ) ) {", 'itrep', IT_HEAD)
+e('rep-find-label', 'find(): a group of the label of reports only', R,
+  "\t\t\tif ( $report_id === $entry['gid'] && self::LABEL === $entry['label'] ) {", "\t\t\tif ( $report_id === $entry['gid'] ) {", 'itrep', IT_HEAD)
+e('rep-find-id', 'find(): a report id is 32 hex', R,
+  "\t\tif ( ! is_string( $report_id ) || 1 !== preg_match( '/^[0-9a-f]{32}\\z/', $report_id ) ) {", "\t\tif ( ! is_string( $report_id ) ) {", 'rep', LIST)
+e('rep-hash', 'finish(): the report_hash', R,
+  "\t\t$index['report_hash'] = self::report_hash( $head, $index );", "\t\t$index['report_hash'] = '';", 'itrep', IT_MCP)
+e('rep-hash-head', 'report_hash(): not the connection, the time it was made or its expiry', R,
+  "\t\tunset( $index['report_hash'], $head['connection'], $head['created'], $head['expires'] );", "\t\tunset( $index['report_hash'] );", 'rep', 'testTheReportHashBindsTheHeadAndTheEntriesNotTheConnection')
+e('rep-b9', 'finish(): the objects here whose name holds a credential', R,
+  "\t\t\t$live['b9_refs']\n", "\t\t\tarray()\n", 'itrep', IT_B9)
+e('rep-page-cursor', 'page(): the cursor of the next page', R,
+  "\t\t\t'cursor'      => $more ? $last : null,", "\t\t\t'cursor'      => null,", 'itrep', IT_MCP)
+e('rep-page-after', 'page(): the entries after the cursor', R,
+  "\t\t\t\tif ( $entry['n'] <= $after ) {", "\t\t\t\tif ( false ) {", 'itrep', IT_MCP)
+e('rep-complete-sub', 'complete(): with the subtype not known, every subtype', R,
+  "\t\t\tif ( 0 === strpos( $key, $kind . \"\\0\" ) && ! $whole ) {", "\t\t\tif ( false ) {", 'rep', 'testTheStagingSideIsCompleteForAKindWithEverySubtypeWhereTheSubtypeIsNotKnown')
+e('rep-complete-kind', 'complete(): a kind read whole', R,
+  "\t\tif ( ! AB_MCP_Sync_Proposal::complete( $staging, $kind, '' ) ) {", "\t\tif ( false ) {", 'rep', 'testTheStagingSideIsCompleteForAKindWithEverySubtypeWhereTheSubtypeIsNotKnown')
+e('rep-type-lock', 'type_lock(): a locked type held back by the export named with its lock', R,
+  "\t\treturn 'locked' === $answer['status'] ? array(", "\t\treturn false ? array(", 'itrep', IT_KINDS)
+
+# --------------------------------------- shared reading, lines, manifest
+e('read-b9-refs', 'read_on(): an object here whose name holds a credential kept by the SHA-256 of its ref', P,
+  "\t\t\t\t$b9_refs[] = array( (string) $object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $object['ref'] ) ) );\n", "", 'itrep', IT_B9)
+e('live-b9-refs', 'live(): those refs of every part', P,
+  "\t\t\t\t\t$refs[ $one[0] . \"\\0\" . $one[1] ] = true;\n", "", 'itrep', IT_B9)
+e('entry-post-status', 'entry(): the status of a post for the report', INV,
+  "\t\t\t$result['post_status'] = $result['form']['row']['post_status'];\n", "", 'itrep', IT_MCP)
+e('entry-meta', 'entry(): how many meta rows its form holds', INV,
+  "\t\t\t$result['meta'] = count( $result['form']['meta'] );\n", "", 'itrep', IT_TERM)
+e('export-report-fields', 'line(): post_status, meta and instances go into the package', EXF,
+  "\t\t) + array_intersect_key( $object, array_flip( array( 'instances', 'meta', 'post_status' ) ) );", "\t\t);", 'itrep', IT_TERM)
+e('import-instances', 'LINE_FIELDS: a line may name its instances', IM,
+  "\t\t'instances'       => 'names',\n", "", 'itrep', IT_WIDGET)
+e('import-meta', 'LINE_FIELDS: a line may count its meta', IM,
+  "\t\t'meta'            => 'size',\n", "", 'itrep', IT_TERM)
+e('import-post-status', 'LINE_FIELDS: a line may carry the status of a post', IM,
+  "\t\t'post_status'     => 'name',\n", "", 'itrep', IT_MCP)
+e('widget-ids', 'read(): the ids of the instances of a widget area', DK,
+  "\t\t$result['instances'] = $ids;\n", "", 'itrep', IT_WIDGET)
+e('widget-id-each', 'read(): each instance of the form by its id', DK,
+  "\t\t\t$ids[]       = $widget;\n\t\t\t// The net over the raw value, after the readers of the instance.", "\t\t\t// The net over the raw value, after the readers of the instance.", 'itrep', IT_WIDGET)
+e('items-instances', 'items(): the instances of a widget area line', P,
+  "\t\t\t\t'instances'       => isset( $line['instances'] ) && is_array( $line['instances'] ) ? $line['instances'] : null,", "\t\t\t\t'instances'       => null,", 'itrep', IT_WIDGET)
+e('side-instances', 'side(): the instances of a widget area with its side', P,
+  "\t\tif ( 'widget_area' === $item['kind'] && null !== $item['instances'] ) {", "\t\tif ( false ) {", 'itrep', IT_WIDGET)
+e('confirm-instances-of', 'instances_of(): the instances of both sides of a widget area', T,
+  "\t\tif ( 'widget_area' !== $kind || ! isset( $s['instances'], $l['instances'] ) || ! is_array( $s['instances'] ) || ! is_array( $l['instances'] ) ) {", "\t\tif ( true ) {", 'itrep', IT_WIDGET)
+e('confirm-instances-create', 'confirm(): a new pair keeps them in base_extra', T,
+  "\t\t\t\t\t\t) + ( isset( $op['instances'] ) ? array( 'base_extra' => array( 'instances' => $op['instances'] ) ) : array() )", "\t\t\t\t\t\t)", 'itrep', IT_WIDGET)
+e('confirm-instances-realign', 'confirm(): a new alignment sets them beside what base_extra holds', T,
+  "\t\t\t\t\t\t$bases['base_extra'] = array( 'instances' => $op['instances'] ) + $kept;", "\t\t\t\t\t\t$bases['base_extra'] = array( 'instances' => $op['instances'] );", 'itrep', IT_REALIGN)
+e('confirm-instances-realign-now', 'confirm(): a new alignment with the instances of now', T,
+  "\t\t\t\t\t\t$bases['base_extra'] = array( 'instances' => $op['instances'] ) + $kept;", "\t\t\t\t\t\t$bases['base_extra'] = $kept;", 'itrep', IT_REALIGN)
+e('manifest-wordpress', 'sign(): the manifest names the version of WordPress', MF,
+  "\t\t\t\t'wordpress' => self::wordpress(),", "\t\t\t\t'wordpress' => '7.1.3',", 'man', 'testAManifestSignedOnTheStagingSiteIsReadOnTheProductionSite')
+e('manifest-wordpress-shape', 'shape(): a version of WordPress only', MF,
+  "\t\t\t'wordpress'  => is_string( $m['wordpress'] ) && 1 === preg_match( self::WORDPRESS, $m['wordpress'] ),", "\t\t\t'wordpress'  => true,", 'man', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature with data set "a version that is none"')
+e('manifest-wordpress-read', 'wordpress(): only a version as version.php sets it', MF,
+  "\t\treturn is_string( $version ) && 1 === preg_match( self::WORDPRESS, $version ) ? $version : '';", "\t\treturn (string) $version;", 'man', 'testTheVersionOfWordPressIsReadAsVersionPhpSetsIt')
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -764,14 +1085,29 @@ out.append('''<?php
  * identity. Codex round 5: twins paired by an equal mapped form there once on
  * each side, only where every twin of both sites is at hand (twin says how
  * many its site has); the rest, twins of one form and menu items uncertain.
+ * Part 2, the report (wp_site_diff; decisions 1, 14, 16, 21 and 22): the
+ * check before (a network, the pair, the anchor, the packages, the version
+ * of WordPress), the order of the decision (rule 0 for a rest, 1 unclear, 2
+ * taken over as deleted, 3 the ten rows of the table, 4 without a pair), the
+ * state of each side (incomplete never deleted, the trash a deletion, an
+ * auto-draft no content, a credential here not deleted), what is locked (the
+ * locks of the lines, a deletion, bringing back, creating Additional CSS, a
+ * new term with meta, a menu or widget area with an item removed on staging
+ * as a whole), the graph of the necessary references (edges, waits, mutual
+ * references, passed on), the store with its report_hash and cursor, and
+ * what the lines, the manifest and the confirmation carry for it.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.
  *
  * Held by the unit suite (SyncProposalTest, SyncPairsToolTest, SyncPackageTest,
- * SyncIdentityTest, SyncDbKindsTest) and, for what
- * two WordPress sites show, by the integration suite (SyncProposalTest,
- * SyncPackageTest; the sites running, AB_IT_ROOT set). Not listed: the type
+ * SyncIdentityTest, SyncDbKindsTest, SyncReportTest, SyncManifestTest) and, for
+ * what two WordPress sites show, by the integration suite (SyncProposalTest,
+ * SyncPackageTest, SyncReportTest; the sites running, AB_IT_ROOT set). Not
+ * listed for part 2: the strength of a reference (every reference of Z8 is
+ * strong, so the test of it changes nothing until a weak one exists), the
+ * fields of LINE_OPEN (only a forged line, which the signature excludes,
+ * would carry them where a credential holds it). Not listed: the type
  * guards after a read against the SHA-256 of what this code wrote itself (no
  * input reaches them; the structure of a stored index of identities as well,
  * and the floor of two of twins()), splitting into files and parts, which
@@ -801,6 +1137,9 @@ $id = 'includes/sync/class-sync-identity.php';
 $inv = 'includes/sync/class-sync-inventory.php';
 $ex = 'includes/sync/class-sync-export.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$de = 'includes/sync/class-sync-decision.php';
+$re = 'includes/sync/class-sync-report.php';
+$m  = 'includes/sync/class-sync-manifest.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

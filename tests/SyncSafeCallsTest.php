@@ -195,6 +195,12 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call (the hash of its token, or its account), which a proposal and a confirmation are bound to (decision 15); no value the proposal compares.' ),
 			'home_url'                        => array( 1, 'step(): the own address, for the inventory of this site with the addresses of both sites neutral, as the export reads its own.' ),
 		),
+		// The report (Z8, branch 6, part 2): the way of a refusal of the whole
+		// call (decision 32), a text of the plugin and the address of its page.
+		'class-sync-report.php' => array(
+			'AB_MCP_Guidance::compose'      => array( 1, 'refusal(): the reason, the steps, the link and the handover of a refusal; no stored value.' ),
+			'AB_MCP_Guidance::settings_url' => array( 1, 'refusal(): the address of the page «Staging» at an anchor (admin_url()); no value the report compares.' ),
+		),
 		'class-sync-schema.php' => array(
 			'get_option'    => array( 2, 'maybe_upgrade() and status(): the version of the tables, a string this plugin writes itself and compares with VERSION; no value of a site the takeover compares.' ),
 			'update_option' => array( 2, 'install(): writes that version (or that it failed).' ),

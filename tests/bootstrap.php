@@ -2050,6 +2050,11 @@ define( 'AB_MCP_DIR', dirname( __DIR__ ) . '/' );
 define( 'AB_MCP_URL', 'https://example.test/wp-content/plugins/alphabridge-mcp/' );
 define( 'AB_MCP_BASENAME', 'alphabridge-mcp/alphabridge-mcp.php' );
 
+// What wp-includes/version.php sets in every request: the version
+// get_bloginfo( 'version' ) answers below (the manifest of the takeover
+// names it, Z8 branch 6).
+$GLOBALS['wp_version'] = '6.9.1';
+
 /* --------------------------------------------------------- classes to test */
 
 require_once __DIR__ . '/../includes/class-tool-registry.php';

@@ -393,6 +393,30 @@ final class AB_MCP_Sync_Pairs_Tool {
 				'live'    => $l['identity'],
 				'staging' => $s['identity'],
 			),
+		) + self::instances_of( $kind, $s, $l );
+	}
+
+	/**
+	 * The instances of a widget area on both sides at its new bases, which
+	 * the confirmation keeps in base_extra (instances: live, staging): the
+	 * report tells an instance removed on staging from them (decision 21;
+	 * branch 6, part 2). None for another kind, or where a side does not
+	 * name its instances.
+	 *
+	 * @param string $kind Kind.
+	 * @param array  $s    Staging side.
+	 * @param array  $l    Production side.
+	 * @return array instances, or nothing.
+	 */
+	private static function instances_of( $kind, array $s, array $l ) {
+		if ( 'widget_area' !== $kind || ! isset( $s['instances'], $l['instances'] ) || ! is_array( $s['instances'] ) || ! is_array( $l['instances'] ) ) {
+			return array();
+		}
+		return array(
+			'instances' => array(
+				'live'    => array_values( $l['instances'] ),
+				'staging' => array_values( $s['instances'] ),
+			),
 		);
 	}
 
@@ -420,7 +444,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				'live'    => $entry['live']['identity'],
 				'staging' => $entry['staging']['identity'],
 			),
-		);
+		) + self::instances_of( $entry['kind'], $entry['staging'], $entry['live'] );
 	}
 
 	/**
@@ -493,19 +517,22 @@ final class AB_MCP_Sync_Pairs_Tool {
 								'base_live'    => $op['base_live'],
 								'base_staging' => $op['base_staging'],
 								'base_origin'  => 'proposal',
-							)
+							) + ( isset( $op['instances'] ) ? array( 'base_extra' => array( 'instances' => $op['instances'] ) ) : array() )
 						);
 					} else {
-						$pair = AB_MCP_Sync_Pairs::realign(
-							$op['pair_id'],
-							array(
-								'canon'        => $op['canon'],
-								'base_live'    => $op['base_live'],
-								'base_staging' => $op['base_staging'],
-							),
-							$op['expected'],
-							true
+						$bases = array(
+							'canon'        => $op['canon'],
+							'base_live'    => $op['base_live'],
+							'base_staging' => $op['base_staging'],
 						);
+						if ( isset( $op['instances'] ) ) {
+							// The instances of both sides now, beside what base_extra
+							// holds already (the mapping a run kept stays, decision 23).
+							$now  = AB_MCP_Sync_Pairs::get( $op['pair_id'] );
+							$kept = is_array( $now ) && is_array( $now['base_extra'] ) ? $now['base_extra'] : array();
+							$bases['base_extra'] = array( 'instances' => $op['instances'] ) + $kept;
+						}
+						$pair = AB_MCP_Sync_Pairs::realign( $op['pair_id'], $bases, $op['expected'], true );
 					}
 					if ( is_wp_error( $pair ) ) {
 						return new WP_Error(
@@ -666,7 +693,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( isset( $op['live_now'] ) ) {
 			$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];
 		}
-		unset( $op['base_live'], $op['base_staging'], $op['expected'], $op['canon'], $op['live_now'] );
+		unset( $op['base_live'], $op['base_staging'], $op['expected'], $op['canon'], $op['live_now'], $op['instances'] );
 		return $op;
 	}
 

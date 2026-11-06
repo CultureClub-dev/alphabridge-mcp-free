@@ -10,8 +10,9 @@
  * The group «Staging» grows with the later stages of the staging workflow:
  * since Z8 the packages of the takeover (wp_site_export, wp_site_export_chunk
  * on the staging site, wp_site_import_chunk on the production site;
- * AB_MCP_Sync_Export, AB_MCP_Sync_Import) and the object pairs
- * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool).
+ * AB_MCP_Sync_Export, AB_MCP_Sync_Import), the object pairs
+ * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool) and the
+ * report (wp_site_diff on the production site; AB_MCP_Sync_Report).
  *
  * @package AlphaBridge_MCP
  */
@@ -282,6 +283,37 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 			)
 		);
 
+		$r->register(
+			'wp_site_diff',
+			array(
+				'description' => 'On the production site: report what differs between this site and its staging site, object by object over every kind the takeover reads (posts of the core types, templates and navigations, terms, menus and their items, widget areas, the additional CSS, options and theme mods), and what a takeover would do with each. A report begins with packages: the package_ids of the inventory of the staging site that this site took over completely (wp_site_import_chunk), one package or the packages of one series. Checked first, each refusal with its way: this site is the confirmed production site with a staging site paired; the key of that staging site is confirmed by a person on the page AlphaBridge → Staging; each manifest is signed with that key, for this site and from its staging site exactly, not expired, of the same format and version of the comparison data; WordPress on the staging site is not newer than here (else update this site first, with wp_update_core). The inventory of this site is read in parts of at most 4000 objects and 60 seconds a call (call again with report_id until done is true). Each object pair is decided from the state of each side against its base (unchanged, changed, deleted, where the trash counts as deleted; a side the inventory does not hold whole is not compared, never deleted): equal, changed on staging (take_over), changed here (keep), changed on both differently (conflict: a person chooses) or alike, deleted on staging, deleted here. A pair that is unclear is treated as a conflict; a pair left as rest after a way back or an error (residual) is shown as rest, or as rest removed, and never taken over; a pair with a confirmed target (such as status draft) is compared against it and names it. Without a pair: only on staging (create), only here (keep), new on both sides (pair them first with wp_site_pairs). References an object needs are followed: one whose target is locked, unclear, without a pair or not in the inventory (an attachment, before media are compared) waits, and objects that need each other to be created are locked (mutual references). Not done, shown as locked with its reason and the stage that brings it: no object is deleted (an object deleted on staging shows as deleted on staging, taken over from Z8d), a menu with an item removed on staging and a widget area with an instance removed on staging are locked as a whole, and roles, Customizer changesets, options of plugins, theme mods other than the menu positions, documents of page builders other than six block libraries, post types and taxonomies of plugins, creating additional CSS and creating terms with meta are locked. Returns report_id, report_hash, done, counts (by result and action), blocked (each lock with its reason, stage and how many entries), pairs, staging, live, wordpress, the first 200 entries (result, rule and row of the table, action, the state of each side, locks, waits_for, choices) and cursor (call again with report_id and cursor for the next entries). A name holding a credential is shown by the SHA-256 of its ref only. Writes nothing but the report into the protected store of this site, where it is kept a day for this account and connection. Refused on a multisite network. Needs manage_options.',
+				'capability'  => 'manage_options',
+				'readonly'    => true,
+				// It reads what the staging site packed, another site.
+				'open_world'  => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'packages'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'To begin: the package_ids of the inventory of the staging site, taken over completely here, of one series.',
+						),
+						'report_id' => array(
+							'type'        => 'string',
+							'description' => 'Go on with this report, or page it once it is done.',
+						),
+						'cursor'    => array(
+							'type'        => 'integer',
+							'minimum'     => 0,
+							'description' => 'With report_id: the entries after this number (the cursor of the answer before).',
+						),
+					),
+				),
+				'callback'    => array( __CLASS__, 'site_diff' ),
+			)
+		);
+
 		if ( false === has_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ) ) ) {
 			add_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ), 10, 2 );
 		}
@@ -423,6 +455,17 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	public static function site_pairs( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
 		return AB_MCP_Sync_Pairs_Tool::call( $a );
+	}
+
+	/**
+	 * wp_site_diff.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_diff( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-report.php';
+		return AB_MCP_Sync_Report::call( $a );
 	}
 
 	/**

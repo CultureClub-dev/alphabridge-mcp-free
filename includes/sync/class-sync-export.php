@@ -322,7 +322,10 @@ final class AB_MCP_Sync_Export {
 	 * check, CREDENTIAL_LOCKS), its hash and the hashes of its mapped forms
 	 * (AB_MCP_Sync_Inventory::entry()), size, whether it was read whole,
 	 * what was not read, its references by id, the places of possible
-	 * references and of the units left out as credentials. Of its content
+	 * references and of the units left out as credentials; for the report
+	 * (branch 6, part 2) the status of a post (post_status), how many meta
+	 * rows its form holds (meta) and the instances of a widget area by their
+	 * ids (instances). Of its content
 	 * nothing: a possible reference only by its place, never its value;
 	 * what the inventory adds later is not in it until it stands on this
 	 * list.
@@ -356,7 +359,7 @@ final class AB_MCP_Sync_Export {
 			'refs'            => self::fields( $object['refs'], array( 'at', 'id', 'login', 'space', 'strength' ) ),
 			'possible'        => self::fields( $object['possible'], array( 'at' ) ),
 			'b9'              => array_values( array_map( 'strval', $credentials['b9'] ) ),
-		);
+		) + array_intersect_key( $object, array_flip( array( 'instances', 'meta', 'post_status' ) ) );
 	}
 
 	/**

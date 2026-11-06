@@ -229,6 +229,10 @@ return array(
 			'core' => array( array( 'wp-includes/post.php', 3923, "\$wpdb->update( \$wpdb->posts, \$parent_data, \$parent_where + array( 'post_type' => 'attachment' ) );" ) ),
 			'plan' => 'Einleitung; Entscheid 21 und 22',
 		),
+		'*:restore_deleted'            => array(
+			'why'  => 'A pair whose object was deleted on one site and is there or changed on the other (a row of the table of the report, or a pair taken over as deleted) is brought back only with the deletions and their way back; the report names it, Z8 writes nothing for it.',
+			'plan' => 'Konzept Abschnitt 4 (Vorrang 2, Zeile «live gelöscht, Staging geändert»); Entscheid 22',
+		),
 		'menu:remove_item'             => array(
 			'why'  => 'Removing a menu item runs wp_delete_post() and _wp_delete_post_menu_item(), which deletes items of other menus that point to it.',
 			'core' => array( array( 'wp-includes/nav-menu.php', 1097, 'function _wp_delete_post_menu_item(' ) ),

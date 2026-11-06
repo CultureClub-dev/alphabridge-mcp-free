@@ -974,6 +974,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 		}
 		$rows      = array();
 		$instances = array();
+		$ids       = array();
 		foreach ( is_array( $areas[ $ref ] ) ? $areas[ $ref ] : array() as $widget ) {
 			$widget = (string) $widget;
 			if ( ! preg_match( '/^(.+)-(\d+)\z/', $widget, $m ) ) {
@@ -981,6 +982,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 					'base'     => $widget,
 					'settings' => null,
 				);
+				$ids[]       = $widget;
 				continue;
 			}
 			$base = $m[1];
@@ -1001,10 +1003,16 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 				'base'     => $base,
 				'settings' => null === $settings ? array( '~missing' => true ) : AB_MCP_Sync_Canon::structure( $settings, $ctx, $acc, 'widget_area', $at, self::leaf( $base, $ctx, $acc, $at ) ),
 			);
+			$ids[]       = $widget;
 			// The net over the raw value, after the readers of the instance.
 			AB_MCP_Sync_Net::check( $acc, $mark, 'widget_area', $at, $settings, $ctx );
 		}
-		return AB_MCP_Sync_Canon::finish( 'widget_area', $ref, array( 'area' => $ref ), array( 'area' => $ref, 'instances' => $instances ), $acc );
+		$result = AB_MCP_Sync_Canon::finish( 'widget_area', $ref, array( 'area' => $ref ), array( 'area' => $ref, 'instances' => $instances ), $acc );
+		// The ids of the instances of its form, in order, beside the form
+		// (branch 6, part 2): the report tells an instance removed on staging
+		// from those at its base (decision 21).
+		$result['instances'] = $ids;
+		return $result;
 	}
 
 	/**

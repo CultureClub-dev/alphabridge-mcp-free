@@ -103,6 +103,9 @@ final class DestructiveClassificationTest extends TestCase {
 	 */
 	private const READS_BY_DEFINITION = array(
 		'wp_staging_status',
+		// Z8 (branch 6, part 2): the report reads, 'readonly' => true in its
+		// definition; it writes nothing but its report into the protected store.
+		'wp_site_diff',
 	);
 
 	/** Tools that only ever add something new, and keep it inside the site. */

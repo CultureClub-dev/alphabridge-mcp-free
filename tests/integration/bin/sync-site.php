@@ -21,7 +21,9 @@
  * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
- * (now), store_remove (area, gid), add_admin (login), as_user (user) and write_access (the site mode
+ * (now), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
+ * (post, for good), trash_post (post), add_term_meta (term, key, value) and wp_version (version: the
+ * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
@@ -270,6 +272,21 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'write_access':
 			AB_MCP_Settings::set( AB_MCP_Site_Mode::KEY, AB_MCP_Site_Mode::FULL );
 			$ab_it_out = AB_MCP_Site_Mode::get();
+			break;
+		case 'delete_post':
+			// Deleted for good, as wp-admin does past the trash (the report, branch 6).
+			$ab_it_out = wp_delete_post( (int) $ab_it_step['post'], true ) instanceof WP_Post;
+			break;
+		case 'trash_post':
+			$ab_it_out = wp_trash_post( (int) $ab_it_step['post'] ) instanceof WP_Post;
+			break;
+		case 'add_term_meta':
+			$ab_it_out = add_term_meta( (int) $ab_it_step['term'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
+			break;
+		case 'wp_version':
+			// The version of WordPress the steps after it see, as version.php would set it.
+			$GLOBALS['wp_version'] = (string) $ab_it_step['version'];
+			$ab_it_out             = $GLOBALS['wp_version'];
 			break;
 		case 'as_user':
 			wp_set_current_user( (int) $ab_it_step['user'] );

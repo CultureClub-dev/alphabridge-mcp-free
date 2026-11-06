@@ -311,3 +311,132 @@ Weg.
 - Grosse Sites: Ausgearbeitet wird ein Vorschlag im Speicher (die Zeilen
   beider Seiten); gemessen ist das bis zu rund 500 Objekten je Seite
   (Prüffälle), grosse Sites misst Z11c.
+
+## Teil 2: der Bericht (`wp_site_diff`)
+
+### Vorprüfung und Pakete
+
+- Die Version von WordPress der Staging-Site steht seit diesem Teil im
+  signierten Manifest (Feld `wordpress`, wie `wp-includes/version.php` sie
+  setzt; `AB_MCP_Sync_Manifest::WORDPRESS`). Ein Manifest ohne das Feld (ein
+  Paket des Zwischenstands `81db5c5`, den keine Installation hat) lehnt die
+  Prüfung des Formats ab (`ab_mcp_sync_manifest_shape`, Weg: beide Sites auf
+  dieselbe Fassung, neu exportieren; Grenze C wie in Teil 1). Liegt in einer
+  Reihe ein Update zwischen zwei Paketen, gilt die höhere Version. Ist
+  WordPress live neuer als auf Staging, berichtet der Bericht trotzdem
+  (abgelehnt wird nur die neuere Staging-Site, Konzept A17).
+- Ein Customizer-Changeset darf ausserhalb des Customizers kein Konto
+  bearbeiten (WordPress: `edit_post` wird `customize`, eine Fähigkeit, die
+  keine Rolle als solche hat; geplante zudem `do_not_allow`). Der Export hält
+  darum jeden Changeset zurück (Entscheid 9: nicht Öffentliches nur mit
+  `edit_post`), und der Bericht nennt den Untertyp `customize_changeset` in
+  `staging.incomplete` mit seiner Sperre (`post_type:customize_changeset`,
+  Z8d) statt eines Eintrags je Changeset. Changesets dieser Site erscheinen
+  als «nicht verglichen» mit derselben Sperre. Übernommen wird in Z8 keiner;
+  nur die Anzeige ist gröber.
+
+### Zustände einer Seite
+
+- «Gelöscht» auf Staging nur aus einer vollständigen Bestandsaufnahme der
+  Staging-Seite (Art und Untertyp, bei unbekanntem Untertyp jeder Untertyp
+  der Art, `AB_MCP_Sync_Report::complete()`); sonst «nicht verglichen». Der
+  Papierkorb gilt als gelöscht (kein Status ersetzt eine Löschung), ein
+  Entwurf `auto-draft` als kein Inhalt. Ein Objekt ohne Paar im Papierkorb
+  wird nicht angelegt; liegt die Elternseite einer neuen Seite im Papierkorb,
+  ist ihr Pfad `?` und sie «unsicher» (selten).
+- Gilt der Name eines gepaarten Objekts seit der Paarung auf dieser Site als
+  Zugangsangabe (Regeln `ab_mcp_redact_keys`), fehlt es in ihrer
+  Bestandsaufnahme; der Bericht kennt es über Art und SHA-256 seiner
+  Kennung (`b9_refs` der Teile) und nennt es «nicht verglichen», nie
+  gelöscht. Auf der Staging-Seite fehlt dafür ein solcher Nachweis im Paket
+  (es zählt nur `credentials.names`): ein gepaartes Objekt, dessen Name dort
+  seither eine Zugangsangabe ist, erscheint als «auf Staging gelöscht –
+  Übernahme ab Z8d», ohne Schreibweg (konstruiert: die Regeln einer Site
+  ändern sich nach der Paarung).
+- Ein Paar einer Art, die die Bestandsaufnahme dieser Fassung nicht liest
+  (etwa `attachment` vor Zweig 10), heisst auf beiden Seiten «nicht
+  verglichen», nie gelöscht.
+
+### Ordnung (Regel 0, Vorrang 1–4)
+
+- Vorrang 2 (*gelöscht übernommen*) tritt in Z8 nicht ein. Der Bericht
+  entscheidet ihn trotzdem nach dem Konzept: live wieder da → der Live-Stand
+  ist die Basis, danach die Tabelle mit der Staging-Seite; auf Staging
+  gelöscht → nichts; auf Staging wieder da → «auf Staging wiederhergestellt»,
+  gesperrt bis Z8d (`*:restore_deleted`). Er schreibt kein Paar: «Paar aktiv,
+  B := Live-Stand» (Vorrang 2), «B := gemeinsamer Stand» (Zeile 6), «Paar
+  gelöscht übernommen» (Zeile 8) und «Paar schliessen» (Zeile 10) folgen mit
+  dem Lauf beziehungsweise mit `wp_site_pairs action=discard`; der Bericht
+  nennt den Weg.
+- Zeile 9 (live gelöscht, Staging geändert): Standard «live behalten»; die
+  Wahl «aus Staging wiederherstellen» braucht ein neues Live-Objekt unter
+  einem bestehenden Paar und ist bis Z8d gesperrt (`*:restore_deleted`).
+- Ein Paar mit `override` vergleicht die Live-Seite gegen den Sollwert
+  (`base_live` ist sein Hash, Entscheid 17) und nennt ihn («taken over with
+  post_status draft»). «Beidseitig gleich geändert» heisst dann: beide Seiten
+  haben jetzt dieselbe abgebildete Form, der Sollwert gilt live nicht mehr.
+
+### Gesperrtes
+
+- Rollen erscheinen als eine Option (`option:{prefix}user_roles`, Z8d) mit
+  «gleich» oder einer Änderung, nicht mit der Abweichung je Rolle und Recht
+  (Entscheid 29): das Paket trägt Hashes, keine Werte. Die Aufstellung je
+  Rolle folgt mit der Rollen-Engine (Z8d); Theme-Mods erscheinen je Schlüssel
+  (je Schlüssel ein Objekt).
+- Ein Menü, aus dem auf Staging ein Eintrag entfernt wurde, sperrt das Menü
+  und jeden Eintrag darin auf beiden Seiten, auch einen auf Staging neuen
+  (`menu:remove_item`). Auch ein Rest (`residual`), den Staging entfernt hat,
+  sperrt sein Menü (die sichere Seite); der Rest selbst bekommt keine Sperre
+  (Regel 0).
+- Ein Widget-Bereich: entfernt heisst, eine Instanz seiner Basis fehlt auf
+  Staging. Die Instanzen der Basis hält das Paar seit diesem Teil in
+  `base_extra` (`instances`: `live`, `staging`), geschrieben von
+  `wp_site_pairs confirm`; ein Neuabgleich ersetzt sie und lässt die übrigen
+  Schlüssel (die Zuordnung eines Laufs) stehen. Ein Paar ohne sie (ein
+  Entwicklungsstand vor diesem Teil, keine Installation) und eine Zeile ohne
+  `instances` sperren einen auf Staging geänderten Bereich als Ganzes (fail
+  closed; Weg: das Paar verwerfen und neu paaren).
+- Neue Terme mit Meta (`term:create_with_meta`): die Zeile zählt die
+  Meta-Zeilen ihrer Form (`meta`); eine Meta-Zeile, die als Zugangsangabe
+  ausgelassen ist (`b9` mit `meta:`), zählt mit, eine Zeile ohne die Zahl
+  sperrt (fail closed). Ob ein neuer Post einen Meta-Schlüssel trägt, dessen
+  Recht erst am Objekt prüfbar ist (`post:create_with_object_meta`,
+  Entscheid 28), und ob eine Seite der obersten Ebene bei Menü-Automatik
+  veröffentlicht würde (Entscheid 21), entscheidet die Gesamtvorprüfung des
+  Laufs (Zweig 9) auf dieser Site; der Bericht nennt solche Posts «anlegen».
+- Zusätzliches CSS: anlegen ist gesperrt (`custom_css:create`); ändern nur,
+  wo diese Site das CSS mit ihrem Stylesheet verknüpft (`linked`), sonst
+  ebenso gesperrt (das Schreiben setzte die Verknüpfung).
+
+### Abhängigkeiten
+
+- Gefolgt wird den notwendigen Verweisen der Staging-Zeile (`refs`: Post-
+  und Term-IDs; Autoren gehen über das Login, Benutzer sind Gruppe B). Jeder
+  Verweis in Z8 ist «strong»; schwache Verweise (Elternteil eines Anhangs)
+  kommen mit den Medien.
+- Bis zu den Medien (Zweig 10) ist kein Anhang in der Bestandsaufnahme:
+  jedes Objekt, das auf einen Anhang verweist (Beitragsbild, Bildblock,
+  Galerie), wartet («not in its inventory»). Der Bericht unterscheidet einen
+  Anhang nicht von einem anderen nicht gelesenen Objekt; der Grund nennt
+  beides und die Stelle (`at`).
+- Gegenseitige Verweise sperren nur unter Objekten, die im Lauf angelegt
+  würden (eine Kante zeigt nur auf ein anzulegendes Ziel); bestehende Objekte,
+  die einander nennen, nennen sich über ihre Paare. Ein neues Objekt, das
+  sich selbst über seine ID nennt, ist gesperrt (seine ID gibt es erst nach
+  dem Anlegen; selten). Ein Ziel mit aktivem Paar und vorhandenem
+  Live-Objekt gilt als benannt, auch wo es selbst gesperrt ist (es bleibt
+  live, wie es ist); ein *ungeklärtes* Paar, ein gelöschtes Ziel, ein Ziel
+  ohne Paar, das nicht angelegt wird (gesperrt, beidseitig neu, nicht
+  verglichen, gehalten), lassen warten. Ein Rest (`residual`) als Ziel gilt
+  mit seiner Zuordnung als benannt.
+
+### Ablage, Seiten, Grösse
+
+- Der Bericht ist ein Schnappschuss: Seiten mit `cursor` liest er aus der
+  Ablage, nicht neu. Er gilt so lange wie sein frühestes Paket (höchstens
+  einen Tag) und gehört Konto und Verbindung, die ihn machten; ein neuer
+  Bericht derselben Verbindung ersetzt den früheren. `report_hash` bindet
+  Pakete, Abdruck des Paars, Quelle, Kanon, Versionen und die Teile der
+  Einträge, nicht Verbindung und Zeit.
+- Wie der Vorschlag hält der letzte Aufruf beide Bestandsaufnahmen im
+  Speicher; gemessen in den Prüffällen, grosse Sites misst Z11c.

@@ -544,26 +544,68 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array|WP_Error
 	 */
 	private static function step( array $found ) {
+		$seq = count( $found['parts'] );
+		if ( $seq > 0 ) {
+			$cursor = $found['parts'][ $seq - 1 ]['cursor'];
+			if ( null === $cursor ) {
+				return self::finish( $found );
+			}
+		}
+		$found = self::read_on( $found, self::FORMAT );
+		if ( is_wp_error( $found ) ) {
+			return $found;
+		}
+		if ( null === end( $found['parts'] )['cursor'] ) {
+			return self::finish( $found );
+		}
+		$read_so_far = array_sum( array_column( $found['parts'], 'objects' ) );
+		return array(
+			'proposal_id' => $found['gid'],
+			'done'        => false,
+			'live'        => array(
+				'objects' => $read_so_far,
+			),
+			'expires'     => (int) $found['head']['expires'],
+			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
+		);
+	}
+
+	/**
+	 * The next part of the inventory of this site, for a group of the area
+	 * reports whose parts it reads one call after the other: a proposal, or
+	 * a report of wp_site_diff (AB_MCP_Sync_Report, branch 6, part 2), the
+	 * same inventory and the same index of identities. The index as the part
+	 * before kept it, then the inventory as far as one call reaches
+	 * (AB_MCP_Sync_Inventory::BUDGET less RESERVE, at most LIMIT objects),
+	 * stored as the next part: an object whose name is the name of a
+	 * credential (B9) counted and kept by its kind and the SHA-256 of its ref
+	 * only, a line a credential holds reduced (Codex A3).
+	 *
+	 * @param array         $found      gid, parts (and the rest of find()).
+	 * @param string        $format     The format of the files of the group.
+	 * @param WP_Error|null $concurrent The refusal where its files are not as
+	 *                                  one call after the other wrote them;
+	 *                                  that of a proposal when null.
+	 * @return array|WP_Error $found with the part read.
+	 */
+	public static function read_on( array $found, $format, $concurrent = null ) {
 		$cursor = null;
 		$index  = null;
 		$seq    = count( $found['parts'] );
 		if ( $seq > 0 ) {
 			$last   = $found['parts'][ $seq - 1 ];
 			$cursor = $last['cursor'];
-			if ( null === $cursor ) {
-				return self::finish( $found );
-			}
-			$index = $last['index'] ?? null;
+			$index  = $last['index'] ?? null;
 		}
 		// The index of identities of this site, as the part before kept it
-		// (AB_MCP_Sync_Identity: built once for the proposal, in parts).
+		// (AB_MCP_Sync_Identity: built once for the group, in parts).
 		$text = null;
 		if ( is_array( $index ) ) {
 			$text = '';
 			foreach ( $index as $file ) {
 				$slice = is_array( $file ) ? AB_MCP_Protected_Store::get( 'reports', $found['gid'], (string) ( $file['name'] ?? '' ), (string) ( $file['sha'] ?? '' ) ) : null;
 				if ( ! is_string( $slice ) ) {
-					return self::concurrent();
+					return null === $concurrent ? self::concurrent() : $concurrent;
 				}
 				$text .= $slice;
 			}
@@ -597,11 +639,16 @@ final class AB_MCP_Sync_Proposal {
 		}
 		// The objects carry what they need of the index; it goes before the part is stored.
 		AB_MCP_Sync_Identity::reset();
-		$lines = array();
-		$b9    = 0;
+		$lines   = array();
+		$b9      = 0;
+		$b9_refs = array();
 		foreach ( $read['objects'] as $object ) {
 			if ( 'b9' === $object['status'] ) {
 				++$b9;
+				// Kept by its kind and the SHA-256 of its ref only: so a
+				// report tells an object of a pair whose name holds a
+				// credential from one that is gone (never by its name).
+				$b9_refs[] = array( (string) $object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $object['ref'] ) ) );
 				continue;
 			}
 			$line = AB_MCP_Sync_Export::line( $object );
@@ -609,24 +656,12 @@ final class AB_MCP_Sync_Proposal {
 			// A held line is reduced before it is stored (Codex A3).
 			$lines[] = null === $code ? $line : self::reduced( $line, $code );
 		}
-		$part = self::put_part( $found['gid'], $seq + 1, $lines, $read['cursor'], $b9, $index );
+		$part = self::put_part( $found['gid'], $seq + 1, $lines, $read['cursor'], $b9, $index, $b9_refs, $format );
 		if ( is_wp_error( $part ) ) {
 			return $part;
 		}
 		$found['parts'][] = $part;
-		if ( null === $read['cursor'] ) {
-			return self::finish( $found );
-		}
-		$read_so_far = array_sum( array_column( $found['parts'], 'objects' ) );
-		return array(
-			'proposal_id' => $found['gid'],
-			'done'        => false,
-			'live'        => array(
-				'objects' => $read_so_far,
-			),
-			'expires'     => (int) $found['head']['expires'],
-			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
-		);
+		return $found;
 	}
 
 	/**
@@ -678,27 +713,29 @@ final class AB_MCP_Sync_Proposal {
 	/**
 	 * Store one part of the production inventory: its lines in files of at
 	 * most SLICE bytes, then the file that closes the part (its cursor, its
-	 * count of credentials, the names of its files and of the file of the
-	 * index of identities so far). A part without that file is no part (a
-	 * call that ended in between); two parts of one number are two calls
-	 * that went on at once.
+	 * count of credentials with the kind and SHA-256 of the ref of each, the
+	 * names of its files and of the file of the index of identities so far).
+	 * A part without that file is no part (a call that ended in between); two
+	 * parts of one number are two calls that went on at once.
 	 *
-	 * @param string     $gid    Group.
-	 * @param int        $seq    Number of the part, from 1.
-	 * @param array[]    $lines  Lines.
-	 * @param array|null $cursor Cursor of the inventory after it.
-	 * @param int        $b9     Objects left out as credentials.
-	 * @param array|null $index  The slices of the index of identities (i), each name and sha; null for none.
+	 * @param string     $gid     Group.
+	 * @param int        $seq     Number of the part, from 1.
+	 * @param array[]    $lines   Lines.
+	 * @param array|null $cursor  Cursor of the inventory after it.
+	 * @param int        $b9      Objects left out as credentials.
+	 * @param array|null $index   The slices of the index of identities (i), each name and sha; null for none.
+	 * @param array[]    $b9_refs Of each of those objects its kind and the SHA-256 of its ref.
+	 * @param string     $format  The format of the files of the group.
 	 * @return array|WP_Error The part as parts() reads it.
 	 */
-	private static function put_part( $gid, $seq, array $lines, $cursor, $b9, $index = null ) {
+	private static function put_part( $gid, $seq, array $lines, $cursor, $b9, $index = null, array $b9_refs = array(), $format = self::FORMAT ) {
 		$files = array();
 		$slice = array();
 		$size  = 0;
 		foreach ( $lines as $line ) {
 			$text = AB_MCP_Sync_Canon::encode( $line );
 			if ( array() !== $slice && $size + strlen( $text ) + 1 > self::SLICE ) {
-				$put = self::put( $gid, 'd', $seq, $slice );
+				$put = self::put( $gid, 'd', $seq, $slice, $format );
 				if ( is_wp_error( $put ) ) {
 					return $put;
 				}
@@ -710,7 +747,7 @@ final class AB_MCP_Sync_Proposal {
 			$size   += strlen( $text ) + 1;
 		}
 		if ( array() !== $slice ) {
-			$put = self::put( $gid, 'd', $seq, $slice );
+			$put = self::put( $gid, 'd', $seq, $slice, $format );
 			if ( is_wp_error( $put ) ) {
 				return $put;
 			}
@@ -718,14 +755,15 @@ final class AB_MCP_Sync_Proposal {
 		}
 		$close = array(
 			'b9'      => (int) $b9,
+			'b9_refs' => $b9_refs,
 			'cursor'  => $cursor,
 			'files'   => $files,
-			'format'  => self::FORMAT,
+			'format'  => $format,
 			'index'   => $index,
 			'objects' => count( $lines ),
 			'seq'     => (int) $seq,
 		);
-		$put   = self::put( $gid, 'c', $seq, $close );
+		$put   = self::put( $gid, 'c', $seq, $close, $format );
 		return is_wp_error( $put ) ? $put : $close;
 	}
 
@@ -733,19 +771,24 @@ final class AB_MCP_Sync_Proposal {
 	 * The parts of the production inventory, in order: each one closed, one
 	 * per number, without a gap.
 	 *
-	 * @param string            $gid   Group.
-	 * @param array<string,int> $files Files of the group.
+	 * @param string            $gid        Group.
+	 * @param array<string,int> $files      Files of the group.
+	 * @param string            $format     The format of the files of the group.
+	 * @param WP_Error|null     $concurrent The refusal where they are not as
+	 *                                      one call after the other wrote
+	 *                                      them; that of a proposal when null.
 	 * @return array[]|WP_Error
 	 */
-	private static function parts( $gid, array $files ) {
-		$closes = array();
+	public static function parts( $gid, array $files, $format = self::FORMAT, $concurrent = null ) {
+		$refused = null === $concurrent ? self::concurrent() : $concurrent;
+		$closes  = array();
 		foreach ( array_keys( $files ) as $name ) {
 			$parsed = self::parse_name( (string) $name );
 			if ( null === $parsed || 'c' !== $parsed['prefix'] ) {
 				continue;
 			}
 			if ( isset( $closes[ $parsed['seq'] ] ) ) {
-				return self::concurrent();
+				return $refused;
 			}
 			$closes[ $parsed['seq'] ] = $parsed;
 		}
@@ -754,12 +797,12 @@ final class AB_MCP_Sync_Proposal {
 		$at  = 1;
 		foreach ( $closes as $seq => $parsed ) {
 			if ( $seq !== $at ) {
-				return self::concurrent();
+				return $refused;
 			}
 			$text  = AB_MCP_Protected_Store::get( 'reports', $gid, $parsed['name'], $parsed['sha'] );
 			$close = is_string( $text ) ? json_decode( $text, true, 64 ) : null;
-			if ( ! is_array( $close ) || self::FORMAT !== ( $close['format'] ?? null ) || $seq !== ( $close['seq'] ?? null ) ) {
-				return self::concurrent();
+			if ( ! is_array( $close ) || $format !== ( $close['format'] ?? null ) || $seq !== ( $close['seq'] ?? null ) ) {
+				return $refused;
 			}
 			$out[] = $close;
 			++$at;
@@ -768,16 +811,24 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The lines of the production inventory of a proposal.
+	 * The lines of the production inventory of a group (a proposal, a
+	 * report).
 	 *
-	 * @param array $found find().
-	 * @return array|WP_Error lines, b9.
+	 * @param array         $found      find().
+	 * @param WP_Error|null $concurrent See parts().
+	 * @return array|WP_Error lines, b9 (how many), b9_refs (kind NUL SHA-256 of the ref => true).
 	 */
-	private static function live( array $found ) {
+	public static function live( array $found, $concurrent = null ) {
 		$lines = array();
 		$b9    = 0;
+		$refs  = array();
 		foreach ( $found['parts'] as $part ) {
 			$b9 += (int) $part['b9'];
+			foreach ( isset( $part['b9_refs'] ) && is_array( $part['b9_refs'] ) ? $part['b9_refs'] : array() as $one ) {
+				if ( is_array( $one ) && isset( $one[0], $one[1] ) ) {
+					$refs[ $one[0] . "\0" . $one[1] ] = true;
+				}
+			}
 			foreach ( $part['files'] as $file ) {
 				$text = AB_MCP_Protected_Store::get( 'reports', $found['gid'], $file['name'], $file['sha'] );
 				if ( is_wp_error( $text ) ) {
@@ -785,7 +836,7 @@ final class AB_MCP_Sync_Proposal {
 				}
 				$list = json_decode( $text, true, 128 );
 				if ( ! is_array( $list ) || ! is_array( $list['data'] ?? null ) ) {
-					return self::concurrent();
+					return null === $concurrent ? self::concurrent() : $concurrent;
 				}
 				foreach ( $list['data'] as $line ) {
 					$lines[] = $line;
@@ -793,8 +844,9 @@ final class AB_MCP_Sync_Proposal {
 			}
 		}
 		return array(
-			'lines' => $lines,
-			'b9'    => $b9,
+			'lines'   => $lines,
+			'b9'      => $b9,
+			'b9_refs' => $refs,
 		);
 	}
 
@@ -1273,6 +1325,9 @@ final class AB_MCP_Sync_Proposal {
 				// How many objects of its site have its identity (AB_MCP_Sync_Identity::twins()), 1 for none but this one.
 				'twins'           => empty( $line['twin'] ) ? 1 : $line['twin'],
 				'doubt'           => self::doubt( $kind, $identity, $names ),
+				// The instances of a widget area, in order (branch 6, part 2):
+				// a confirmation keeps those of both sides with the bases.
+				'instances'       => isset( $line['instances'] ) && is_array( $line['instances'] ) ? $line['instances'] : null,
 			);
 		}
 		return $out;
@@ -1842,6 +1897,9 @@ final class AB_MCP_Sync_Proposal {
 		if ( 'post' === $item['kind'] ) {
 			$out['path'] = $item['names'];
 		}
+		if ( 'widget_area' === $item['kind'] && null !== $item['instances'] ) {
+			$out['instances'] = $item['instances'];
+		}
 		if ( array() !== $item['locks'] ) {
 			$out['locks'] = $item['locks'];
 		}
@@ -1854,7 +1912,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @param array $item Object.
 	 * @return string
 	 */
-	private static function why_no_hash( array $item ) {
+	public static function why_no_hash( array $item ) {
 		$text = AB_MCP_Sync_Option_Schema::reason_text( $item['reason_code'], $item['target'] );
 		if ( null !== $text ) {
 			return $text;
@@ -1868,7 +1926,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @param array $item Object.
 	 * @return string
 	 */
-	private static function why_unread( array $item ) {
+	public static function why_unread( array $item ) {
 		return 's' === $item['side']
 			? 'The staging site could not read this row, so it has no identity to match. Make the inventory again on the staging site (wp_site_export), take it over here, then propose again.'
 			: 'This site could not read this row, so it has no identity to match. Try again; if it keeps failing, the database error log names the cause.';
@@ -1894,19 +1952,21 @@ final class AB_MCP_Sync_Proposal {
 	/* ------------------------------------------------------------ files */
 
 	/**
-	 * Write one file of a proposal, named by its prefix, number and SHA-256.
+	 * Write one file of a proposal (or of a report, with its format), named
+	 * by its prefix, number and SHA-256.
 	 *
 	 * @param string   $gid    Group.
 	 * @param string   $prefix h, c, d, e or x (i: put directly, as text).
 	 * @param int|null $seq    Number (c, d, e).
 	 * @param mixed    $data   What it holds (d and e: a list, wrapped).
+	 * @param string   $format The format of the files of the group.
 	 * @return array|WP_Error name, sha.
 	 */
-	private static function put( $gid, $prefix, $seq, $data ) {
+	public static function put( $gid, $prefix, $seq, $data, $format = self::FORMAT ) {
 		if ( in_array( $prefix, array( 'd', 'e' ), true ) ) {
 			$data = array(
 				'data'   => $data,
-				'format' => self::FORMAT,
+				'format' => $format,
 			);
 		}
 		$text = AB_MCP_Sync_Canon::encode( $data );
@@ -1926,12 +1986,13 @@ final class AB_MCP_Sync_Proposal {
 	 * The one file of a prefix without a number (h, x), read against its
 	 * SHA-256; null where there is none.
 	 *
-	 * @param string            $gid    Group.
-	 * @param array<string,int> $files  Files.
-	 * @param string            $prefix h or x.
+	 * @param string            $gid        Group.
+	 * @param array<string,int> $files      Files.
+	 * @param string            $prefix     h or x.
+	 * @param WP_Error|null     $concurrent See parts().
 	 * @return array|null|WP_Error
 	 */
-	private static function read_one( $gid, array $files, $prefix ) {
+	public static function read_one( $gid, array $files, $prefix, $concurrent = null ) {
 		$found = array();
 		foreach ( array_keys( $files ) as $name ) {
 			$parsed = self::parse_name( (string) $name );
@@ -1943,30 +2004,31 @@ final class AB_MCP_Sync_Proposal {
 			return null;
 		}
 		if ( count( $found ) > 1 ) {
-			return self::concurrent();
+			return null === $concurrent ? self::concurrent() : $concurrent;
 		}
 		$text = AB_MCP_Protected_Store::get( 'reports', $gid, $found[0]['name'], $found[0]['sha'] );
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
 		$data = json_decode( $text, true, 64 );
-		return is_array( $data ) ? $data : self::concurrent();
+		return is_array( $data ) ? $data : ( null === $concurrent ? self::concurrent() : $concurrent );
 	}
 
 	/**
 	 * The entries of one stored part.
 	 *
-	 * @param string $gid  Group.
-	 * @param array  $part name, sha.
+	 * @param string        $gid        Group.
+	 * @param array         $part       name, sha.
+	 * @param WP_Error|null $concurrent See parts().
 	 * @return array[]|WP_Error
 	 */
-	private static function read_part( $gid, array $part ) {
+	public static function read_part( $gid, array $part, $concurrent = null ) {
 		$text = AB_MCP_Protected_Store::get( 'reports', $gid, $part['name'], $part['sha'] );
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
 		$list = json_decode( $text, true, 128 );
-		return is_array( $list ) && is_array( $list['data'] ?? null ) ? $list['data'] : self::concurrent();
+		return is_array( $list ) && is_array( $list['data'] ?? null ) ? $list['data'] : ( null === $concurrent ? self::concurrent() : $concurrent );
 	}
 
 	/**

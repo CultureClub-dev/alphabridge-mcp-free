@@ -133,11 +133,14 @@ final class AB_MCP_Sync_Import {
 		'complete'        => 'bool',
 		'hash'            => 'hash',
 		'identity'        => 'identity',
+		'instances'       => 'names',
 		'kind'            => 'string',
 		'locks'           => 'locks',
 		'mapped'          => 'hash',
 		'mapped_possible' => 'hash',
+		'meta'            => 'size',
 		'possible'        => 'possible',
+		'post_status'     => 'name',
 		'reason_code'     => 'string',
 		'ref'             => 'name',
 		'refs'            => 'refs',
@@ -246,7 +249,7 @@ final class AB_MCP_Sync_Import {
 	const POSSIBLE_FIELDS = array( 'at' => 'name' );
 
 	/** The fields of a line besides its identity, status and locks, which a line a credential holds never carries. */
-	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'mapped', 'mapped_possible', 'possible', 'refs', 'size', 'unread' );
+	const LINE_OPEN = array( 'b9', 'canon', 'complete', 'hash', 'instances', 'mapped', 'mapped_possible', 'meta', 'possible', 'post_status', 'refs', 'size', 'unread' );
 
 	/** Seconds one call fetches at most; what is left, the next one does. */
 	const BUDGET = 60;

@@ -1,0 +1,1205 @@
+<?php
+/**
+ * The decision function of the report (Z8, decisions 1, 14, 16, 21 and 22
+ * of the plan of 01.11.2026; concept «Echtes Staging», section 4; branch 6,
+ * part 2): what each object of the two inventories is, and what a takeover
+ * would do with it, from the lines of both sides and the pairs alone (no
+ * database). wp_site_diff (AB_MCP_Sync_Report) gives it the lines and stores
+ * what it decides.
+ *
+ * THE STATE OF A SIDE of a pair, against the base of that side in its own ID
+ * space (decision 10): unchanged (its hash is the base), changed, deleted
+ * (not on its site, or in the trash) or not compared (held by a credential,
+ * without a hash, not read whole, an auto-draft, or of another version of the
+ * canonical form). A missing staging object is deleted only where the
+ * inventory of the staging site holds every object of its kind (the packages
+ * of one series, AB_MCP_Sync_Proposal::complete()): incomplete never means
+ * deleted. This site's inventory is read whole; an object of it missing
+ * because its name holds a credential (B9, counted by its kind and the
+ * SHA-256 of its ref) is not compared, never deleted.
+ *
+ * THE ORDER (concept section 4, «Vorrang»), the first that applies:
+ *
+ *  0. A pair residual (made by a run and left after its way back or an
+ *     error, decision 14, finding R6-4): it keeps its mapping and is shown as
+ *     rest with its run and object; no row of the table applies, nothing is
+ *     taken over or created for it, also where staging changes it. Its
+ *     object gone from this site: «rest removed». A widget area so as a
+ *     whole, its instance mapping (base_extra) as it is (decision 23).
+ *  1. A pair unclear: like a conflict (a person chooses per object) until a
+ *     person confirms its bases (wp_site_pairs).
+ *  2. A pair taken over as deleted (not reached in Z8, decision 22): this
+ *     site has it again → the live state is its base, then rule 3 with the
+ *     staging side; else deleted on staging → nothing; there again on
+ *     staging → «restored on staging», which Z8 does not bring back.
+ *  3. A pair active: the table TABLE, one row for each of the nine states of
+ *     both sides, two for changed on both (the mapped forms the same or
+ *     not); a pair with an override (a confirmed target such as status
+ *     draft, decision 17) is compared against that target (base_live is its
+ *     hash) and names it.
+ *  4. No pair: WITHOUT (only staging, only live, new on both; the match of
+ *     AB_MCP_Sync_Proposal::match(), so the report and the proposal name an
+ *     object alike).
+ *
+ * LOCKED (decisions 1, 21, 22, 25, 28): an entry carries the locks of the
+ * lines of both sides (the type, the builder, an option of a plugin, a theme
+ * mod, roles, a changeset, the credential check) and those of what it would
+ * do: a deletion (*:delete; nothing is deleted in Z8, an object deleted on
+ * staging shows as «deleted on staging – taken over from Z8d»), bringing back
+ * a deleted object (*:restore_deleted), creating Additional CSS
+ * (custom_css:create), creating a term with meta (term:create_with_meta), a
+ * menu with an item removed on staging (menu:remove_item, the menu with all
+ * its items), a widget area with an instance removed on staging
+ * (widget_area:remove_instance, against the instances of its base in
+ * base_extra), and mutual references. Each with its reason and stage.
+ *
+ * THE GRAPH (decision 16): the necessary references of the staging object of
+ * every entry a takeover would write (take over, create) or a person may
+ * choose. A reference whose target has an active pair with its object on
+ * this site is named by that pair (the target stays as it is here, also
+ * where it is locked). A target created in the same run is an edge: the
+ * target is created first. Any other target makes the entry wait: an
+ * unclear pair, a pair whose object is gone on a side, a target without a
+ * pair that is not created (locked, new on both sides, not compared, held)
+ * or not in the inventory of the staging site (an attachment before media are
+ * compared, an object the takeover does not read). Objects that need each
+ * other to be created (a cycle of edges, one object referring to itself
+ * included) are locked (*:mutual_references, Z11c), and whatever needs a
+ * locked or waiting target waits for it.
+ *
+ * Messages are English without gettext, as the other classes of the
+ * takeover.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+require_once __DIR__ . '/class-sync-proposal.php';
+
+/**
+ * Class AB_MCP_Sync_Decision
+ */
+final class AB_MCP_Sync_Decision {
+
+	/**
+	 * The table of an active pair (concept section 4): the state of the
+	 * staging side, of this side, the result and what a takeover does. Row 5
+	 * is changed on both with other mapped forms, row 6 with the same.
+	 */
+	const TABLE = array(
+		1  => array( 'unchanged', 'unchanged', 'equal', 'none' ),
+		2  => array( 'changed', 'unchanged', 'changed_on_staging', 'take_over' ),
+		3  => array( 'deleted', 'unchanged', 'deleted_on_staging', 'delete' ),
+		4  => array( 'unchanged', 'changed', 'changed_live', 'keep' ),
+		5  => array( 'changed', 'changed', 'conflict', 'choose' ),
+		6  => array( 'changed', 'changed', 'changed_alike', 'none' ),
+		7  => array( 'deleted', 'changed', 'deleted_against_changed_live', 'keep' ),
+		8  => array( 'unchanged', 'deleted', 'deleted_live', 'none' ),
+		9  => array( 'changed', 'deleted', 'deleted_live_changed_staging', 'keep' ),
+		10 => array( 'deleted', 'deleted', 'deleted_both', 'none' ),
+	);
+
+	/** The table without a pair: the staging side, this side, the result, what a takeover does. */
+	const WITHOUT = array(
+		1 => array( 'new', 'absent', 'only_staging', 'create' ),
+		2 => array( 'absent', 'new', 'only_live', 'keep' ),
+		3 => array( 'new', 'new', 'new_both', 'pair' ),
+	);
+
+	/** What each result says. */
+	const WORDS = array(
+		'equal'                        => 'Equal on both sides: nothing to take over.',
+		'changed_on_staging'           => 'Changed on staging, unchanged on this site: taken over.',
+		'deleted_on_staging'           => 'Deleted on staging – taken over from Z8d: nothing is deleted in this version, and no status stands in for a deletion. Delete it here by hand in wp-admin where it should go.',
+		'changed_live'                 => 'Changed on this site, unchanged on staging: kept and shown.',
+		'conflict'                     => 'Changed on both sides, differently: a conflict. A person chooses: staging wins, keep this site, or leave it open.',
+		'changed_alike'                => 'Changed on both sides alike: nothing to take over; the bases of the pair move on with the next run.',
+		'deleted_against_changed_live' => 'Deleted on staging, changed on this site: a conflict, kept on this site by default; the deletion is taken over from Z8d.',
+		'deleted_live'                 => 'Deleted on this site, unchanged on staging: nothing to do, the deletion holds.',
+		'deleted_live_changed_staging' => 'Deleted on this site, changed on staging: a conflict, deleted here by default; bringing it back from staging follows with Z8d.',
+		'deleted_both'                 => 'Deleted on both sides: nothing to do; wp_site_pairs action=discard ends the pair.',
+		'only_staging'                 => 'Only on staging, new: created on this site.',
+		'only_live'                    => 'Only on this site, new (written here): kept and shown. Refresh the staging site to have it there as well.',
+		'new_both'                     => 'New on both sides, without a pair: pair them first (wp_site_pairs action=propose, then confirm).',
+		'unclear'                      => 'An unclear pair: treated as a conflict, a person chooses which side wins, until a person confirms its bases (wp_site_pairs action=propose shows it for a new alignment, confirm sets them).',
+		'residual'                     => 'Rest after a way back or an error: the pair keeps its mapping, and nothing is taken over or created for it, also where staging changes it. Only a confirmed new alignment moves it on (wp_site_pairs action=propose shows it, confirm makes it active with the bases of both sides now, discard ends the pair).',
+		'residual_removed'             => 'Rest removed: the object of this rest is no longer on this site. wp_site_pairs action=discard ends the pair.',
+		'deleted_done'                 => 'Taken over as deleted and deleted on staging: nothing to do.',
+		'restored_on_staging'          => 'Taken over as deleted, and there again on staging: bringing it back here follows with Z8d.',
+		'not_compared'                 => 'Not compared.',
+		'held'                         => 'A name of this object holds a credential by the rules of this site: shown by the SHA-256 of its ref only, never compared. Take it over by hand.',
+		'in_trash'                     => 'In the trash on its site, without a pair: not taken over.',
+	);
+
+	/** The order of the entries by what a takeover does, then by result. */
+	const ACTION_ORDER = array( 'choose', 'take_over', 'create', 'waits', 'locked', 'pair', 'keep', 'none' );
+
+	/** The pair kinds whose objects are in the ID space of posts, and of terms. */
+	const SPACES = array(
+		'post' => array( 'post', 'menu_item', 'attachment' ),
+		'term' => array( 'term', 'menu' ),
+	);
+
+	/* ------------------------------------------------------------ report */
+
+	/**
+	 * Every entry of a report, from the lines of both sides and the pairs.
+	 *
+	 * @param array[]  $staging  Lines of the staging site (a held one reduced).
+	 * @param array[]  $live     Lines of this site (likewise).
+	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode()).
+	 * @param callable $complete function( string $kind, ?string $subtype ): bool,
+	 *                           whether the staging side holds every object of
+	 *                           a kind and subtype (null: of every subtype).
+	 * @param array    $b9       kind NUL SHA-256 of the ref => true: objects of
+	 *                           this site whose name holds a credential.
+	 * @return array entries (numbered), counts, blocked, pairs.
+	 */
+	public static function report( array $staging, array $live, array $pairs, callable $complete, array $b9 = array() ) {
+		$ctx   = self::context( $complete, $b9 );
+		$by    = array(
+			's' => self::index( $staging ),
+			'l' => self::index( $live ),
+		);
+		$items = array();
+		$taken = array(
+			's' => array(),
+			'l' => array(),
+		);
+		foreach ( $pairs as $pair ) {
+			$s = self::lookup( $by['s'], $pair['kind'], $pair['staging_ref'] );
+			$l = self::lookup( $by['l'], $pair['kind'], $pair['live_ref'] );
+			if ( null !== $s ) {
+				$taken['s'][ $s ] = true;
+			}
+			if ( null !== $l ) {
+				$taken['l'][ $l ] = true;
+			}
+			$items[] = self::pair_item( $pair, null === $s ? null : $staging[ $s ], null === $l ? null : $live[ $l ], $ctx );
+		}
+		// Without a pair: an auto-draft and an object in the trash stand
+		// alone; every other line goes to the match, with the lines of the
+		// pairs, so the path of a post under a paired parent is known.
+		$rest = array(
+			's' => array(),
+			'l' => array(),
+		);
+		foreach ( array(
+			's' => $staging,
+			'l' => $live,
+		) as $side => $lines ) {
+			foreach ( $lines as $i => $line ) {
+				$status = isset( $line['post_status'] ) && is_string( $line['post_status'] ) ? $line['post_status'] : '';
+				if ( ! isset( $taken[ $side ][ $i ] ) && in_array( $status, array( 'trash', 'auto-draft' ), true ) ) {
+					$items[] = self::lone_item( $side, $line, 'trash' === $status );
+					continue;
+				}
+				$rest[ $side ][] = $line;
+			}
+		}
+		$matched = AB_MCP_Sync_Proposal::match(
+			$rest['s'],
+			$rest['l'],
+			$pairs,
+			static function ( $kind, $subtype ) use ( $complete ) {
+				return true === call_user_func( $complete, $kind, $subtype );
+			}
+		);
+		$lines = array(
+			's' => self::by_ref( $staging ),
+			'l' => self::by_ref( $live ),
+		);
+		foreach ( $matched['entries'] as $entry ) {
+			if ( 'realign' === $entry['category'] ) {
+				continue;
+			}
+			$items[] = self::match_item( $entry, $lines );
+		}
+		self::operation_locks( $items );
+		self::graph( $items, $pairs );
+		return self::finish( $items, $pairs );
+	}
+
+	/**
+	 * What the decision of a pair needs beside its lines.
+	 *
+	 * @param callable $complete See report().
+	 * @param array    $b9       See report().
+	 * @return array complete, b9, kinds (the pair kinds this site's inventory
+	 *               reads: an object of another one missing here is not
+	 *               deleted, it was never read).
+	 */
+	public static function context( callable $complete, array $b9 = array() ) {
+		return array(
+			'complete' => $complete,
+			'b9'       => $b9,
+			'kinds'    => AB_MCP_Sync_Proposal::db_kinds(),
+		);
+	}
+
+	/* ------------------------------------------------------------ a pair */
+
+	/**
+	 * The item of a pair, by the order: rule 0, then 1 to 3.
+	 *
+	 * @param array      $pair Pair.
+	 * @param array|null $s    Its staging line.
+	 * @param array|null $l    Its line on this site.
+	 * @param array      $ctx  context().
+	 * @return array
+	 */
+	public static function pair_item( array $pair, $s, $l, array $ctx ) {
+		$subtype = self::subtype( null !== $l ? $l : $s );
+		$ss      = self::side_state( 's', $s, $pair, $pair['base_staging'], $ctx, $subtype );
+		$ls      = self::side_state( 'l', $l, $pair, $pair['base_live'], $ctx, $subtype );
+		$item    = array(
+			'kind'    => (string) $pair['kind'],
+			'subtype' => $subtype,
+			's'       => $s,
+			'l'       => $l,
+			'pair'    => $pair,
+			'sides'   => array(
+				'staging' => $ss[0],
+				'live'    => $ls[0],
+			),
+		);
+		// Rule 0: a rest keeps its mapping, nothing applies to it.
+		if ( 'residual' === $pair['state'] ) {
+			return self::result( $item, 'deleted' === $ls[0] ? 'residual_removed' : 'residual', '0', null, 'none' );
+		}
+		if ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
+			return self::result( $item, 'not_compared', '3', null, 'none', sprintf( 'The bases of this pair are of the version %1$s of the comparison data, this site reads %2$s, so they are not compared here. Propose again (wp_site_pairs action=propose), which works the pair out in the version of now.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ) );
+		}
+		// Rule 1: unclear, like a conflict.
+		if ( 'unclear' === $pair['state'] ) {
+			return self::result( $item, 'unclear', '1', null, 'choose' );
+		}
+		// Rule 2: taken over as deleted (not reached in Z8).
+		if ( 'deleted' === $pair['state'] ) {
+			if ( null !== $l && ! isset( $l['held'] ) ) {
+				// This site has it again: its state is the base, then rule 3.
+				$item['sides']['live'] = 'unchanged';
+				$row                   = self::row( $ss[0], 'unchanged', false );
+				if ( null === $row ) {
+					return self::result( $item, 'not_compared', '2', null, 'none', $ss[1] );
+				}
+				return self::table_result( $item, '2', $row, 'Taken over as deleted, and there again on this site: its state here is the base, then the table with the staging side.' );
+			}
+			if ( 'deleted' === $ss[0] ) {
+				return self::result( $item, 'deleted_done', '2', null, 'none' );
+			}
+			if ( 'not_compared' === $ss[0] ) {
+				return self::result( $item, 'not_compared', '2', null, 'none', $ss[1] );
+			}
+			$item['locks'][] = self::lock( '*:restore_deleted' );
+			return self::result( $item, 'restored_on_staging', '2', null, 'locked' );
+		}
+		// Rule 3: the table.
+		foreach ( array( $ss, $ls ) as $state ) {
+			if ( 'not_compared' === $state[0] ) {
+				return self::result( $item, 'not_compared', '3', null, 'none', $state[1] );
+			}
+		}
+		return self::table_result( $item, '3', self::row( $ss[0], $ls[0], 'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l ) ), null );
+	}
+
+	/**
+	 * The item of a row of the table, with the locks of what the row would
+	 * do in Z8: a deletion on staging (rows 3 and 7, decision 22), bringing
+	 * back from staging what this site deleted (row 9).
+	 *
+	 * @param array       $item Item.
+	 * @param string      $rule 2 or 3.
+	 * @param int         $row  Row.
+	 * @param string|null $note Why, where it says more than its words.
+	 * @return array
+	 */
+	private static function table_result( array $item, $rule, $row, $note ) {
+		$out = self::result( $item, self::TABLE[ $row ][2], $rule, $row, self::TABLE[ $row ][3], $note );
+		if ( 3 === $row || 7 === $row ) {
+			$out['locks'][] = self::lock( '*:delete' );
+		}
+		if ( 9 === $row ) {
+			$out['locks'][] = self::lock( '*:restore_deleted' );
+		}
+		return $out;
+	}
+
+	/**
+	 * The state of one side of a pair, and why where it is not compared.
+	 *
+	 * @param string      $side    s or l.
+	 * @param array|null  $line    Its line.
+	 * @param array       $pair    Pair.
+	 * @param string      $base    The base of that side.
+	 * @param array       $ctx     context().
+	 * @param string|null $subtype The subtype of the object, where a line names it.
+	 * @return array{0:string,1:string|null} unchanged, changed, deleted or not_compared; why.
+	 */
+	public static function side_state( $side, $line, array $pair, $base, array $ctx, $subtype ) {
+		if ( null === $line ) {
+			if ( ! isset( $ctx['kinds'][ $pair['kind'] ] ) ) {
+				return array( 'not_compared', sprintf( 'The inventory of this version reads no objects of the kind %s, so a missing one is not called deleted.', (string) $pair['kind'] ) );
+			}
+			if ( 's' === $side ) {
+				// Incomplete never means deleted.
+				return true === call_user_func( $ctx['complete'], (string) $pair['kind'], $subtype )
+					? array( 'deleted', null )
+					: array( 'not_compared', 'The inventory of the staging site does not show that it holds every object of this kind (it was read across packages, or objects of it were withheld from the account that made it), so an object missing there is not called deleted. Where objects were withheld, export again with an account that may read every object (wp_site_export).' );
+			}
+			if ( isset( $ctx['b9'][ $pair['kind'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $pair['live_ref'] ) ) ] ) ) {
+				return array( 'not_compared', self::WORDS['held'] );
+			}
+			return array( 'deleted', null );
+		}
+		if ( isset( $line['held'] ) ) {
+			return array( 'not_compared', self::WORDS['held'] );
+		}
+		$status = isset( $line['post_status'] ) && is_string( $line['post_status'] ) ? $line['post_status'] : '';
+		if ( 'trash' === $status ) {
+			return array( 'deleted', null );
+		}
+		if ( 'auto-draft' === $status ) {
+			return array( 'not_compared', 'An auto-draft WordPress made for the editor (an object nobody saved yet, removed by WordPress after seven days): no content, never taken over.' );
+		}
+		if ( ! isset( $line['hash'] ) || ! is_string( $line['hash'] ) ) {
+			return array( 'not_compared', AB_MCP_Sync_Proposal::why_no_hash( array( 'reason_code' => $line['reason_code'] ?? null, 'target' => $line['target'] ?? null ) ) );
+		}
+		if ( empty( $line['complete'] ) ) {
+			return array( 'not_compared', 's' === $side ? 'The staging site did not read this object whole (a part of its rows could not be read), so it is not compared. Make the inventory again on the staging site (wp_site_export).' : 'This site did not read this object whole (a part of its rows could not be read), so it is not compared. Try again; if it keeps failing, the database error log names the cause.' );
+		}
+		if ( ( $line['canon'] ?? null ) !== $pair['canon'] ) {
+			return array( 'not_compared', 'The line is of another version of the comparison data than the bases of its pair. Make the inventory of both sites with the same version of AlphaBridge MCP.' );
+		}
+		return array( hash_equals( (string) $base, (string) $line['hash'] ) ? 'unchanged' : 'changed', null );
+	}
+
+	/**
+	 * The row of the table for the states of both sides.
+	 *
+	 * @param string $s     State of the staging side.
+	 * @param string $l     State of this side.
+	 * @param bool   $alike Changed on both with the same mapped form.
+	 * @return int|null
+	 */
+	public static function row( $s, $l, $alike ) {
+		foreach ( self::TABLE as $n => $row ) {
+			if ( $row[0] !== $s || $row[1] !== $l ) {
+				continue;
+			}
+			// Changed on both: row 5 unless the mapped forms are the same, then 6.
+			if ( 5 === $n && $alike ) {
+				continue;
+			}
+			return $n;
+		}
+		return null;
+	}
+
+	/* -------------------------------------------------------- no pair */
+
+	/**
+	 * The item of an entry of the match: an object without a pair (rule 4).
+	 *
+	 * @param array $entry An entry of AB_MCP_Sync_Proposal::match().
+	 * @param array $lines Lines by side: kind NUL encoded ref => line.
+	 * @return array
+	 */
+	private static function match_item( array $entry, array $lines ) {
+		$s    = self::line_of( $entry['staging'], $entry['kind'], $lines['s'] );
+		$l    = self::line_of( $entry['live'], $entry['kind'], $lines['l'] );
+		$item = array(
+			'kind'    => (string) $entry['kind'],
+			'subtype' => (string) $entry['subtype'],
+			's'       => $s,
+			'l'       => $l,
+			'pair'    => null,
+			'shown'   => array(
+				'staging' => $entry['staging'],
+				'live'    => $entry['live'],
+			),
+		);
+		switch ( $entry['category'] ) {
+			case 'held':
+				$item['sides'] = array(
+					'staging' => array() === $entry['staging'] ? 'absent' : 'new',
+					'live'    => array() === $entry['live'] ? 'absent' : 'new',
+				);
+				return self::result( $item, 'held', '4', null, 'none' );
+			case 'not_compared':
+				$item['sides'] = array(
+					'staging' => null === $entry['staging'] ? 'absent' : 'new',
+					'live'    => null === $entry['live'] ? 'absent' : 'new',
+				);
+				return self::result( $item, 'not_compared', '4', null, 'none', $entry['reason'] ?? null );
+			case 'staging_only':
+				$item['sides'] = array(
+					'staging' => 'new',
+					'live'    => 'absent',
+				);
+				if ( null === $s || ! isset( $s['hash'] ) || ! is_string( $s['hash'] ) || empty( $s['complete'] ) ) {
+					return self::result( $item, 'not_compared', '4', 1, 'none', $entry['reason'] ?? 'The staging site did not read this object whole, so it is not created here. Make the inventory again on the staging site (wp_site_export).' );
+				}
+				return self::result( $item, 'only_staging', '4', 1, 'create' );
+			case 'live_only':
+				$item['sides'] = array(
+					'staging' => 'absent',
+					'live'    => 'new',
+				);
+				return self::result( $item, 'only_live', '4', 2, 'keep', $entry['reason'] ?? null );
+		}
+		// equal, differs, uncertain: the same identity new on both sides.
+		$item['sides']    = array(
+			'staging' => 'new',
+			'live'    => 'new',
+		);
+		$item['proposal'] = $entry['category'];
+		if ( isset( $entry['candidates'] ) ) {
+			$item['shown']['candidates'] = $entry['candidates'];
+		}
+		return self::result( $item, 'new_both', '4', 3, 'pair', 'uncertain' === $entry['category'] ? ( $entry['reason'] ?? null ) : null );
+	}
+
+	/**
+	 * The item of an object without a pair that stands alone: in the trash,
+	 * or an auto-draft.
+	 *
+	 * @param string $side  s or l.
+	 * @param array  $line  Line.
+	 * @param bool   $trash In the trash (else an auto-draft).
+	 * @return array
+	 */
+	private static function lone_item( $side, array $line, $trash ) {
+		$item = array(
+			'kind'    => (string) $line['kind'],
+			'subtype' => self::subtype( $line ),
+			's'       => 's' === $side ? $line : null,
+			'l'       => 'l' === $side ? $line : null,
+			'pair'    => null,
+			'sides'   => array(
+				'staging' => 's' === $side ? ( $trash ? 'deleted' : 'not_compared' ) : 'absent',
+				'live'    => 'l' === $side ? ( $trash ? 'deleted' : 'not_compared' ) : 'absent',
+			),
+		);
+		return $trash
+			? self::result( $item, 'in_trash', '4', null, 'none' )
+			: self::result( $item, 'not_compared', '4', null, 'none', 'An auto-draft WordPress made for the editor (an object nobody saved yet, removed by WordPress after seven days): no content, never taken over.' );
+	}
+
+	/**
+	 * The line of a side of an entry of the match.
+	 *
+	 * @param mixed  $side  The side as the match shows it.
+	 * @param string $kind  Kind.
+	 * @param array  $lines kind NUL encoded ref => line.
+	 * @return array|null
+	 */
+	private static function line_of( $side, $kind, array $lines ) {
+		if ( ! is_array( $side ) || ! array_key_exists( 'ref', $side ) ) {
+			return null;
+		}
+		return $lines[ $kind . "\0" . AB_MCP_Sync_Canon::encode( $side['ref'] ) ] ?? null;
+	}
+
+	/* ------------------------------------------------- operation locks */
+
+	/**
+	 * The locks of what a takeover would do (decisions 21, 25, 28): creating
+	 * Additional CSS, or updating CSS this site does not link to its
+	 * stylesheet; creating a term (or menu) with meta; a menu with an item
+	 * removed on staging, as a whole; a widget area with an instance removed
+	 * on staging, against the instances of its base.
+	 *
+	 * @param array[] $items Items (changed in place).
+	 */
+	private static function operation_locks( array &$items ) {
+		$menus = array(
+			'l' => array(),
+			's' => array(),
+		);
+		foreach ( $items as $i => $item ) {
+			if ( '0' === $item['rule'] ) {
+				// A rest: nothing applies to it (rule 0), its own removal on
+				// staging still holds its menu below.
+				if ( 'menu_item' === $item['kind'] && 'deleted' === ( $item['sides']['staging'] ?? null ) && 'deleted' !== ( $item['sides']['live'] ?? null ) ) {
+					foreach ( self::menus_of( $item['l'] ) as $menu ) {
+						$menus['l'][ $menu ] = true;
+					}
+				}
+				continue;
+			}
+			$writes = in_array( $item['action'], array( 'create', 'take_over', 'choose' ), true );
+			if ( 'custom_css' === $item['kind'] && $writes && ( 'create' === $item['action'] || ! self::linked( $item['l'] ) ) ) {
+				$items[ $i ]['locks'][] = self::lock( 'custom_css:create' );
+			}
+			if ( in_array( $item['kind'], array( 'term', 'menu' ), true ) && 'create' === $item['action'] && self::has_meta( $item['s'] ) ) {
+				$items[ $i ]['locks'][] = self::lock( 'term:create_with_meta' );
+			}
+			if ( 'widget_area' === $item['kind'] && null !== $item['pair'] && 'changed' === ( $item['sides']['staging'] ?? null ) && self::removed_instances( $item ) ) {
+				$items[ $i ]['locks'][] = self::lock( 'widget_area:remove_instance' );
+			}
+			// An item of a menu removed on staging: its menus, on both sides.
+			if ( 'menu_item' === $item['kind'] && null !== $item['pair'] && 'deleted' === ( $item['sides']['staging'] ?? null ) && 'deleted' !== ( $item['sides']['live'] ?? null ) ) {
+				foreach ( self::menus_of( $item['l'] ) as $menu ) {
+					$menus['l'][ $menu ] = true;
+				}
+			}
+		}
+		if ( array() === $menus['l'] ) {
+			return;
+		}
+		// The staging menus of those menus, by their pairs.
+		foreach ( $items as $item ) {
+			if ( 'menu' === $item['kind'] && null !== $item['pair'] && isset( $menus['l'][ (string) $item['pair']['live_ref'] ] ) ) {
+				$menus['s'][ (string) $item['pair']['staging_ref'] ] = true;
+			}
+		}
+		foreach ( $items as $i => $item ) {
+			$hit = false;
+			if ( '0' === $item['rule'] ) {
+				continue;
+			} elseif ( 'menu' === $item['kind'] ) {
+				$hit = ( null !== $item['l'] && isset( $menus['l'][ (string) $item['l']['ref'] ] ) ) || ( null !== $item['s'] && isset( $menus['s'][ (string) $item['s']['ref'] ] ) );
+			} elseif ( 'menu_item' === $item['kind'] ) {
+				foreach ( self::menus_of( $item['l'] ) as $menu ) {
+					$hit = $hit || isset( $menus['l'][ $menu ] );
+				}
+				foreach ( self::menus_of( $item['s'] ) as $menu ) {
+					$hit = $hit || isset( $menus['s'][ $menu ] );
+				}
+			}
+			if ( $hit ) {
+				$items[ $i ]['locks'][] = self::lock( 'menu:remove_item' );
+			}
+		}
+	}
+
+	/**
+	 * Whether this site links its CSS to the stylesheet (custom_css_post_id):
+	 * only then is it updated (decision 25).
+	 *
+	 * @param array|null $line Line of this site.
+	 * @return bool
+	 */
+	private static function linked( $line ) {
+		return is_array( $line ) && ! isset( $line['held'] ) && ! empty( $line['identity']['linked'] );
+	}
+
+	/**
+	 * Whether a staging object has meta: rows in its form, or a unit of meta
+	 * left out as a credential.
+	 *
+	 * @param array|null $line Line.
+	 * @return bool
+	 */
+	private static function has_meta( $line ) {
+		if ( ! is_array( $line ) ) {
+			return false;
+		}
+		if ( ! isset( $line['meta'] ) || ! is_int( $line['meta'] ) || $line['meta'] > 0 ) {
+			// Without the count (a line of another version): fail closed.
+			return true;
+		}
+		foreach ( isset( $line['b9'] ) && is_array( $line['b9'] ) ? $line['b9'] : array() as $at ) {
+			if ( is_string( $at ) && 0 === strpos( $at, 'meta:' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether an instance of the base of a widget area is missing on staging
+	 * now; true where the instances of either are not known (fail closed).
+	 *
+	 * @param array $item Item of a pair.
+	 * @return bool
+	 */
+	private static function removed_instances( array $item ) {
+		$base = $item['pair']['base_extra']['instances']['staging'] ?? null;
+		$now  = is_array( $item['s'] ) ? ( $item['s']['instances'] ?? null ) : null;
+		if ( ! is_array( $base ) || ! is_array( $now ) ) {
+			return true;
+		}
+		$have = array();
+		foreach ( $now as $id ) {
+			$have[ AB_MCP_Sync_Canon::encode( $id ) ] = true;
+		}
+		foreach ( $base as $id ) {
+			if ( ! isset( $have[ AB_MCP_Sync_Canon::encode( $id ) ] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The menus of a menu item line, as term ids of its site.
+	 *
+	 * @param array|null $line Line.
+	 * @return string[]
+	 */
+	private static function menus_of( $line ) {
+		if ( ! is_array( $line ) || isset( $line['held'] ) || ! isset( $line['identity']['menus'] ) || ! is_array( $line['identity']['menus'] ) ) {
+			return array();
+		}
+		return array_map( 'strval', $line['identity']['menus'] );
+	}
+
+	/* ------------------------------------------------------------ graph */
+
+	/**
+	 * The necessary references between the entries (decision 16): edges to
+	 * targets created in the same run, waits for targets that cannot be
+	 * named on this site, mutual references locked, waiting passed on.
+	 *
+	 * @param array[] $items Items (changed in place).
+	 * @param array[] $pairs Pairs.
+	 */
+	private static function graph( array &$items, array $pairs ) {
+		$at_staging = array();
+		foreach ( $items as $i => $item ) {
+			$refs = array();
+			if ( null !== $item['s'] && ! isset( $item['s']['held'] ) ) {
+				$refs[] = (string) $item['s']['ref'];
+			}
+			// The staging candidates of an object new on both sides.
+			foreach ( $item['shown']['candidates']['staging'] ?? array() as $candidate ) {
+				if ( isset( $candidate['ref'] ) && is_string( $candidate['ref'] ) ) {
+					$refs[] = $candidate['ref'];
+				}
+			}
+			foreach ( self::SPACES as $space => $kinds ) {
+				if ( in_array( $item['kind'], $kinds, true ) ) {
+					foreach ( $refs as $ref ) {
+						$at_staging[ $space ][ $ref ] = $i;
+					}
+				}
+			}
+		}
+		$paired = array();
+		foreach ( $pairs as $pair ) {
+			foreach ( self::SPACES as $space => $kinds ) {
+				if ( in_array( $pair['kind'], $kinds, true ) ) {
+					$paired[ $space ][ (string) $pair['staging_ref'] ] = $pair;
+				}
+			}
+		}
+		$edges = array();
+		foreach ( $items as $i => $item ) {
+			if ( ! in_array( $item['action'], array( 'take_over', 'create', 'choose' ), true ) || null === $item['s'] ) {
+				continue;
+			}
+			foreach ( isset( $item['s']['refs'] ) && is_array( $item['s']['refs'] ) ? $item['s']['refs'] : array() as $ref ) {
+				$space = $ref['space'] ?? null;
+				if ( ! isset( self::SPACES[ $space ] ) || 'strong' !== ( $ref['strength'] ?? null ) ) {
+					continue;
+				}
+				$id = (string) $ref['id'];
+				$j  = $at_staging[ $space ][ $id ] ?? null;
+				$p  = $paired[ $space ][ $id ] ?? null;
+				$why = self::target( $items, $j, $p, $space, $id );
+				if ( true === $why ) {
+					continue;
+				}
+				if ( 'edge' === $why ) {
+					$edges[ $i ][ $j ] = true;
+					continue;
+				}
+				$items[ $i ]['waits'][] = array(
+					'space' => $space,
+					'id'    => (int) $ref['id'],
+					'at'    => (string) ( $ref['at'] ?? '' ),
+					'why'   => $why,
+				);
+			}
+		}
+		// Cycles of objects created in the run: none of them comes first.
+		foreach ( self::cycles( $edges ) as $members ) {
+			foreach ( $members as $i ) {
+				$items[ $i ]['locks'][] = self::lock( '*:mutual_references' );
+			}
+		}
+		// What needs a target that is held back waits for it.
+		$back = array();
+		foreach ( $edges as $i => $targets ) {
+			foreach ( array_keys( $targets ) as $j ) {
+				$back[ $j ][] = $i;
+			}
+		}
+		$queue = array();
+		$told  = array();
+		foreach ( $items as $i => $item ) {
+			if ( self::held_back( $item ) ) {
+				$queue[] = $i;
+			}
+		}
+		$done = array();
+		while ( array() !== $queue ) {
+			$j = array_shift( $queue );
+			if ( isset( $done[ $j ] ) ) {
+				continue;
+			}
+			$done[ $j ] = true;
+			foreach ( $back[ $j ] ?? array() as $i ) {
+				if ( isset( $told[ $i ][ $j ] ) ) {
+					continue;
+				}
+				$told[ $i ][ $j ]      = true;
+				$items[ $i ]['waits'][] = array(
+					'space' => in_array( $items[ $j ]['kind'], self::SPACES['term'], true ) ? 'term' : 'post',
+					'id'    => (int) $items[ $j ]['s']['ref'],
+					'at'    => '',
+					'why'   => sprintf( 'It needs the %1$s %2$s of the staging site, which is created in the same run but is held back itself (locked, or waiting for another).', $items[ $j ]['kind'], (string) $items[ $j ]['s']['ref'] ),
+				);
+				$queue[] = $i;
+			}
+		}
+	}
+
+	/**
+	 * How a necessary reference to a staging object is named on this site:
+	 * true where its pair names it, edge where it is created in the same
+	 * run, else why the entry waits.
+	 *
+	 * @param array[]    $items Items.
+	 * @param int|null   $j     The item of the target on the staging side.
+	 * @param array|null $p     The pair of the target.
+	 * @param string     $space post or term.
+	 * @param string     $id    Its staging id.
+	 * @return true|string
+	 */
+	private static function target( array $items, $j, $p, $space, $id ) {
+		$what = null === $j ? $space . ' ' . $id : $items[ $j ]['kind'] . ' ' . $id;
+		if ( null !== $p ) {
+			if ( 'unclear' === $p['state'] ) {
+				return sprintf( 'Its target, the %1$s of the staging site, has an unclear pair (pair %2$d): a person confirms which side wins first.', $what, (int) $p['id'] );
+			}
+			if ( 'deleted' === $p['state'] ) {
+				return sprintf( 'Its target, the %1$s of the staging site, was taken over as deleted (pair %2$d).', $what, (int) $p['id'] );
+			}
+			if ( null === $j ) {
+				return sprintf( 'Its target, the %1$s of its pair %2$d, is not in the inventory of the staging site (deleted there, or not read).', $what, (int) $p['id'] );
+			}
+			if ( 'deleted' === ( $items[ $j ]['sides']['live'] ?? null ) ) {
+				return sprintf( 'Its target, the %1$s of the staging site, is gone on this site (pair %2$d).', $what, (int) $p['id'] );
+			}
+			if ( 'deleted' === ( $items[ $j ]['sides']['staging'] ?? null ) ) {
+				return sprintf( 'Its target, the %1$s of the staging site, is in the trash there (pair %2$d).', $what, (int) $p['id'] );
+			}
+			return true;
+		}
+		if ( null === $j ) {
+			return sprintf( 'Its target, the %s of the staging site, is not in its inventory: an attachment (media are compared from branch 10 of Z8 on), or an object of a type the takeover does not read. Until it is, this object is not taken over.', $what );
+		}
+		if ( 'create' === $items[ $j ]['action'] ) {
+			return 'edge';
+		}
+		if ( 'new_both' === $items[ $j ]['result'] ) {
+			return sprintf( 'Its target, the %s of the staging site, has no pair yet but an object of its identity on this site: pair them first (wp_site_pairs).', $what );
+		}
+		return sprintf( 'Its target, the %1$s of the staging site, has no pair and is not created here (%2$s).', $what, $items[ $j ]['result'] );
+	}
+
+	/**
+	 * The groups of the edges that reach themselves (strongly connected,
+	 * more than one, or one with an edge to itself): Tarjan, without
+	 * recursion.
+	 *
+	 * @param array<int,array<int,true>> $edges From => targets.
+	 * @return int[][]
+	 */
+	public static function cycles( array $edges ) {
+		$index  = array();
+		$low    = array();
+		$stack  = array();
+		$on     = array();
+		$out    = array();
+		$next   = 0;
+		$nodes  = array_keys( $edges );
+		foreach ( $edges as $targets ) {
+			$nodes = array_merge( $nodes, array_keys( $targets ) );
+		}
+		foreach ( array_unique( $nodes ) as $start ) {
+			if ( isset( $index[ $start ] ) ) {
+				continue;
+			}
+			$work = array( array( $start, array_keys( $edges[ $start ] ?? array() ), 0 ) );
+			$index[ $start ] = $next;
+			$low[ $start ]   = $next;
+			++$next;
+			$stack[]        = $start;
+			$on[ $start ]   = true;
+			while ( array() !== $work ) {
+				$top = count( $work ) - 1;
+				list( $v, $targets, $k ) = $work[ $top ];
+				if ( $k < count( $targets ) ) {
+					$work[ $top ][2] = $k + 1;
+					$w               = $targets[ $k ];
+					if ( ! isset( $index[ $w ] ) ) {
+						$index[ $w ] = $next;
+						$low[ $w ]   = $next;
+						++$next;
+						$stack[] = $w;
+						$on[ $w ] = true;
+						$work[]  = array( $w, array_keys( $edges[ $w ] ?? array() ), 0 );
+					} elseif ( isset( $on[ $w ] ) ) {
+						$low[ $v ] = min( $low[ $v ], $index[ $w ] );
+					}
+					continue;
+				}
+				array_pop( $work );
+				if ( array() !== $work ) {
+					$parent         = $work[ count( $work ) - 1 ][0];
+					$low[ $parent ] = min( $low[ $parent ], $low[ $v ] );
+				}
+				if ( $low[ $v ] === $index[ $v ] ) {
+					$group = array();
+					do {
+						$w = array_pop( $stack );
+						unset( $on[ $w ] );
+						$group[] = $w;
+					} while ( $w !== $v );
+					if ( count( $group ) > 1 || isset( $edges[ $v ][ $v ] ) ) {
+						sort( $group );
+						$out[] = $group;
+					}
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an item a takeover would write is held back: locked, or
+	 * waiting.
+	 *
+	 * @param array $item Item.
+	 * @return bool
+	 */
+	private static function held_back( array $item ) {
+		return in_array( $item['action'], array( 'create', 'take_over', 'choose' ), true ) && ( array() !== self::locks_of( $item ) || ! empty( $item['waits'] ) );
+	}
+
+	/**
+	 * Every lock of an item: those of the lines of both sides (a held line
+	 * names none) and those of what it would do, one per key.
+	 *
+	 * @param array $item Item.
+	 * @return array[] key => key, stage, reason; by key.
+	 */
+	private static function locks_of( array $item ) {
+		$locks = array();
+		foreach ( array( 's', 'l' ) as $side ) {
+			$line = $item[ $side ];
+			foreach ( is_array( $line ) && ! isset( $line['held'] ) && isset( $line['locks'] ) && is_array( $line['locks'] ) ? $line['locks'] : array() as $lock ) {
+				$locks[ (string) ( $lock['key'] ?? '' ) ] = array(
+					'key'    => (string) ( $lock['key'] ?? '' ),
+					'stage'  => $lock['stage'] ?? null,
+					'reason' => $lock['reason'] ?? null,
+				);
+			}
+		}
+		foreach ( $item['locks'] ?? array() as $lock ) {
+			$locks[ $lock['key'] ] = $lock;
+		}
+		ksort( $locks );
+		return $locks;
+	}
+
+	/* ------------------------------------------------------------ finish */
+
+	/**
+	 * The entries of the items: the action once locks and waits are known,
+	 * in the order of ACTION_ORDER, numbered; the counts and what is locked.
+	 *
+	 * @param array[] $items Items.
+	 * @param array[] $pairs Pairs.
+	 * @return array entries, counts, blocked, pairs.
+	 */
+	private static function finish( array $items, array $pairs ) {
+		$entries = array();
+		foreach ( $items as $item ) {
+			$entries[] = self::entry( $item );
+		}
+		$order = array_flip( self::ACTION_ORDER );
+		usort(
+			$entries,
+			static function ( $a, $b ) use ( $order ) {
+				return array( $order[ $a['action'] ], $a['result'], $a['kind'], $a['sort'] ) <=> array( $order[ $b['action'] ], $b['result'], $b['kind'], $b['sort'] );
+			}
+		);
+		$results = array();
+		$actions = array_fill_keys( self::ACTION_ORDER, 0 );
+		$blocked = array();
+		foreach ( $entries as $n => $entry ) {
+			unset( $entries[ $n ]['sort'] );
+			$entries[ $n ] = array( 'n' => $n + 1 ) + $entries[ $n ];
+			$results[ $entry['result'] ] = ( $results[ $entry['result'] ] ?? 0 ) + 1;
+			++$actions[ $entry['action'] ];
+			foreach ( $entry['locks'] ?? array() as $lock ) {
+				if ( ! isset( $blocked[ $lock['key'] ] ) ) {
+					$blocked[ $lock['key'] ] = $lock + array( 'entries' => 0 );
+				}
+				++$blocked[ $lock['key'] ]['entries'];
+			}
+		}
+		ksort( $results );
+		ksort( $blocked );
+		$states = array_fill_keys( AB_MCP_Sync_Pairs::STATES, 0 );
+		foreach ( $pairs as $pair ) {
+			if ( isset( $states[ $pair['state'] ] ) ) {
+				++$states[ $pair['state'] ];
+			}
+		}
+		return array(
+			'entries' => array_values( $entries ),
+			'counts'  => array(
+				'entries' => count( $entries ),
+				'results' => $results,
+				'actions' => $actions,
+			),
+			'blocked' => array_values( $blocked ),
+			'pairs'   => $states,
+		);
+	}
+
+	/**
+	 * The entry of an item, as the report stores and shows it: no hash, no
+	 * mapped form, no value; a held side by the SHA-256 of its ref.
+	 *
+	 * @param array $item Item.
+	 * @return array
+	 */
+	private static function entry( array $item ) {
+		$locks  = self::locks_of( $item );
+		$action = $item['action'];
+		// What a takeover would write, held back: locked, or waiting.
+		if ( in_array( $action, array( 'take_over', 'create', 'delete', 'choose' ), true ) && array() !== $locks ) {
+			$action = 'locked';
+		} elseif ( in_array( $action, array( 'take_over', 'create', 'choose' ), true ) && ! empty( $item['waits'] ) ) {
+			$action = 'waits';
+		}
+		$out = array(
+			'kind'    => $item['kind'],
+			'subtype' => $item['subtype'],
+			'result'  => $item['result'],
+			'rule'    => $item['rule'],
+			'row'     => $item['row'],
+			'action'  => $action,
+			'sides'   => $item['sides'],
+			'staging' => self::show( $item, 's' ),
+			'live'    => self::show( $item, 'l' ),
+			'pair'    => null === $item['pair'] ? null : array(
+				'id'       => (int) $item['pair']['id'],
+				'state'    => $item['pair']['state'],
+				'override' => $item['pair']['override'],
+				'last_run' => $item['pair']['last_run'],
+			),
+			'words'   => self::WORDS[ $item['result'] ],
+		);
+		if ( null !== $item['reason'] ) {
+			$out['reason'] = $item['reason'];
+		}
+		if ( isset( $item['proposal'] ) ) {
+			$out['proposal'] = $item['proposal'];
+		}
+		if ( isset( $item['shown']['candidates'] ) ) {
+			$out['candidates'] = array(
+				'staging' => array_map( array( __CLASS__, 'plain' ), $item['shown']['candidates']['staging'] ),
+				'live'    => array_map( array( __CLASS__, 'plain' ), $item['shown']['candidates']['live'] ),
+			);
+		}
+		if ( null !== $item['pair'] && null !== $item['pair']['override'] ) {
+			$fields = array();
+			foreach ( $item['pair']['override'] as $field => $value ) {
+				$fields[] = $field . ' ' . ( is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value );
+			}
+			$out['note'] = 'Compared against the confirmed target: taken over with ' . implode( ', ', $fields ) . '.';
+		}
+		if ( array() !== $locks ) {
+			$out['locks'] = array_values( $locks );
+		}
+		if ( ! empty( $item['waits'] ) ) {
+			$out['waits_for'] = $item['waits'];
+		}
+		if ( 'choose' === $action ) {
+			$out['choices'] = array( 'staging_wins', 'keep_live', 'leave_open' );
+		}
+		$one         = null !== $item['s'] ? $item['s'] : $item['l'];
+		$out['sort'] = AB_MCP_Sync_Canon::encode( array( is_array( $one ) && isset( $one['identity'] ) ? $one['identity'] : array(), is_array( $one ) ? ( $one['ref'] ?? ( $one['ref_sha256'] ?? '' ) ) : '', null === $item['pair'] ? 0 : (int) $item['pair']['id'] ) );
+		return $out;
+	}
+
+	/**
+	 * One side of an entry as shown: its ref, identity, status and the
+	 * status of a post (and the path of parents and the instances of a widget
+	 * area, as the match shows them); a held one by the SHA-256 of its ref;
+	 * a side not there by the ref of its pair.
+	 *
+	 * @param array  $item Item.
+	 * @param string $side s or l.
+	 * @return array|null
+	 */
+	private static function show( array $item, $side ) {
+		$shown = $item['shown'][ 's' === $side ? 'staging' : 'live' ] ?? null;
+		$line  = $item[ $side ];
+		if ( null === $line ) {
+			if ( null !== $item['pair'] ) {
+				return array( 'ref' => (string) $item['pair'][ 's' === $side ? 'staging_ref' : 'live_ref' ] );
+			}
+			if ( ! is_array( $shown ) || array() === $shown ) {
+				return null;
+			}
+			return isset( $shown[0]['held'] ) ? $shown : self::plain( $shown );
+		}
+		if ( isset( $line['held'] ) ) {
+			return array(
+				'held'       => (string) $line['held'],
+				'ref_sha256' => (string) $line['ref_sha256'],
+			);
+		}
+		$out = array(
+			'ref'      => $line['ref'],
+			'identity' => $line['identity'] ?? array(),
+			'status'   => (string) ( $line['status'] ?? '' ),
+		);
+		if ( isset( $line['post_status'] ) ) {
+			$out['post_status'] = $line['post_status'];
+		}
+		if ( is_array( $shown ) && isset( $shown['path'] ) ) {
+			$out['path'] = $shown['path'];
+		}
+		if ( 'widget_area' === $item['kind'] && isset( $line['instances'] ) ) {
+			$out['instances'] = $line['instances'];
+		}
+		return $out;
+	}
+
+	/**
+	 * A side of the match without its hashes and what only the match uses.
+	 *
+	 * @param mixed $side Side.
+	 * @return mixed
+	 */
+	private static function plain( $side ) {
+		if ( ! is_array( $side ) ) {
+			return $side;
+		}
+		unset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'] );
+		return $side;
+	}
+
+	/* ---------------------------------------------------------- helpers */
+
+	/**
+	 * An item with its result.
+	 *
+	 * @param array       $item   Item.
+	 * @param string      $result Result (WORDS).
+	 * @param string      $rule   The rule of the order (0 to 4).
+	 * @param int|null    $row    The row of its table.
+	 * @param string      $action What a takeover does.
+	 * @param string|null $reason Why, where it says more than its words.
+	 * @return array
+	 */
+	private static function result( array $item, $result, $rule, $row, $action, $reason = null ) {
+		return array_merge(
+			array(
+				'locks' => array(),
+				'waits' => array(),
+			),
+			$item,
+			array(
+				'result' => $result,
+				'rule'   => $rule,
+				'row'    => $row,
+				'action' => $action,
+				'reason' => $reason,
+			)
+		);
+	}
+
+	/**
+	 * A lock of the table, with its reason and stage.
+	 *
+	 * @param string $key Key of AB_MCP_Sync_Kinds::LOCKS.
+	 * @return array
+	 */
+	private static function lock( $key ) {
+		return array(
+			'key'    => $key,
+			'stage'  => AB_MCP_Sync_Kinds::LOCKS[ $key ]['stage'],
+			'reason' => AB_MCP_Sync_Kinds::LOCKS[ $key ]['reason'],
+		);
+	}
+
+	/**
+	 * The subtype of a line: its post type or taxonomy, else ''; null for
+	 * none (a held line, no line).
+	 *
+	 * @param array|null $line Line.
+	 * @return string|null
+	 */
+	private static function subtype( $line ) {
+		if ( ! is_array( $line ) || isset( $line['held'] ) || ! isset( $line['identity'] ) || ! is_array( $line['identity'] ) || array() === $line['identity'] ) {
+			return null;
+		}
+		return (string) ( $line['identity']['post_type'] ?? ( $line['identity']['taxonomy'] ?? '' ) );
+	}
+
+	/**
+	 * Lines by kind NUL the key of their ref: the encoded ref, and for a
+	 * held line the SHA-256 of it.
+	 *
+	 * @param array[] $lines Lines.
+	 * @return array<string,int>
+	 */
+	private static function index( array $lines ) {
+		$out = array();
+		foreach ( $lines as $i => $line ) {
+			$kind = (string) ( $line['kind'] ?? '' );
+			if ( isset( $line['held'] ) ) {
+				$out[ $kind . "\0sha:" . (string) ( $line['ref_sha256'] ?? '' ) ] = $i;
+				continue;
+			}
+			$out[ $kind . "\0" . AB_MCP_Sync_Canon::encode( $line['ref'] ) ] = $i;
+		}
+		return $out;
+	}
+
+	/**
+	 * The line a pair names by its ref, or by the SHA-256 of it.
+	 *
+	 * @param array<string,int> $by   index().
+	 * @param string            $kind Kind.
+	 * @param string            $ref  Ref.
+	 * @return int|null
+	 */
+	private static function lookup( array $by, $kind, $ref ) {
+		$encoded = AB_MCP_Sync_Canon::encode( (string) $ref );
+		foreach ( array( $encoded, 'sha:' . hash( 'sha256', $encoded ) ) as $key ) {
+			if ( isset( $by[ $kind . "\0" . $key ] ) ) {
+				return $by[ $kind . "\0" . $key ];
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Lines that are not held, by kind NUL the encoded ref.
+	 *
+	 * @param array[] $lines Lines.
+	 * @return array<string,array>
+	 */
+	private static function by_ref( array $lines ) {
+		$out = array();
+		foreach ( $lines as $line ) {
+			if ( ! isset( $line['held'] ) ) {
+				$out[ $line['kind'] . "\0" . AB_MCP_Sync_Canon::encode( $line['ref'] ) ] = $line;
+			}
+		}
+		return $out;
+	}
+}

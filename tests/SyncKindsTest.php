@@ -222,6 +222,7 @@ final class SyncKindsTest extends TestCase {
 		$all = array_keys( self::OWNS );
 		return array(
 			'*:delete'                     => array( $all, 'delete', 'Z8d' ),
+			'*:restore_deleted'            => array( $all, 'restore_deleted', 'Z8d' ),
 			'menu:remove_item'             => array( array( 'menu' ), 'remove_item', 'Z8d' ),
 			'widget_area:remove_instance'  => array( array( 'widget_area' ), 'remove_instance', 'Z8d' ),
 			'custom_css:create'            => array( array( 'custom_css' ), 'create', 'Z8d' ),
