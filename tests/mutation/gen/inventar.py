@@ -72,8 +72,8 @@ e('walk-after', 'walk(): it goes on after the last path it counted, not at it', 
   "\t\t\t\t} elseif ( self::order( $path, $after ) <= 0 ) {", "\t\t\t\t} elseif ( self::order( $path, $after ) < 0 ) {", 'env', 'testAWalkStoppedByTheClockGoesOnAfterTheLastPathWithTheSameCounts')
 e('walk-after-into', 'walk(): into the folder the last path lies in', EN,
   "\t\t\t\tif ( 0 === strpos( $after, $path . '/' ) ) {", "\t\t\t\tif ( false ) {", 'env', 'testAWalkStoppedByTheClockGoesOnAfterTheLastPathWithTheSameCounts')
-e('walk-after-mark', 'walk(): the last path counted is kept', EN,
-  "\t\t\t} else {\n\t\t\t\t++$acc['skipped'];\n\t\t\t}\n\t\t\t$acc['after'] = $path;", "\t\t\t} else {\n\t\t\t\t++$acc['skipped'];\n\t\t\t}", 'env', 'testAWalkCountsAndSumsTheFilesOfARoot')
+e('walk-after-mark', 'walk(): the last file counted is where the next part goes on', EN,
+  "\t\t\t} else {\n\t\t\t\t++$acc['skipped'];\n\t\t\t}\n\t\t\t$acc['after'] = $path;", "\t\t\t} else {\n\t\t\t\t++$acc['skipped'];\n\t\t\t}", 'env', 'testAWalkOverOneLargeFolderMovesOnInEveryPart')
 
 # ----------------------------------------------------------- the host
 BLOCK = 'testTheWordPressBlockOfTheHtaccessIsTheLinesBetweenItsMarkers'
@@ -114,16 +114,13 @@ e('mu-php', 'loaded_mu(): the PHP files of its top level only', EN,
   "\t\treturn '.php' === substr( $name, -4 ) && is_file( $dir . '/' . $name );", "\t\treturn is_file( $dir . '/' . $name );", 'env', LOADER)
 e('mu-file', 'loaded_mu(): files only', EN,
   "\t\treturn '.php' === substr( $name, -4 ) && is_file( $dir . '/' . $name );", "\t\treturn '.php' === substr( $name, -4 );", 'env', LOADER)
-e('hash-file', 'file_hash(): no hash of what is no file', EN,
-  "\t\t$sha  = is_file( $path ) && is_readable( $path ) ? @hash_file( 'sha256', $path ) : false;", "\t\t$sha  = is_readable( $path ) ? @hash_file( 'sha256', $path ) : false;", 'env', LOADER)
 
 PLUG = 'testThePluginsAreFoundAsGetPluginsFindsThem'
 e('plugins-dot', 'plugin_files(): no name beginning with a dot', EN,
   "\t\t\tif ( '.' === $name[0] ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'env', PLUG)
-PF = "\t\t\t\tif ( ( null !== $file && '.' === $file[0] ) || '.php' !== substr( $rel, -4 ) || ! is_file( $dir . '/' . $rel ) ) {"
+PF = "\t\t\t\tif ( ( null !== $file && '.' === $file[0] ) || '.php' !== substr( $rel, -4 ) ) {"
 e('plugins-dot-inner', 'plugin_files(): no file beginning with a dot one level down', EN, PF, PF.replace("( null !== $file && '.' === $file[0] ) || ", ''), 'env', PLUG)
 e('plugins-php', 'plugin_files(): PHP files only', EN, PF, PF.replace(" || '.php' !== substr( $rel, -4 )", ''), 'env', PLUG)
-e('plugins-file', 'plugin_files(): files only', EN, PF, PF.replace(" || ! is_file( $dir . '/' . $rel )", ''), 'env', PLUG)
 e('plugins-name', 'plugin_files(): a file whose head names a plugin only', EN,
   "\t\t\t\tif ( '' !== $head['Plugin Name'] ) {", "\t\t\t\tif ( true ) {", 'env', PLUG)
 e('plugins-version', 'plugin_files(): no version where its head names none', EN,
@@ -263,8 +260,6 @@ e('show-not-shown', 'show(): a value held by its SHA-256 not shown', EN,
   "\t\t\t} elseif ( 0 === strpos( $line['value'], 'sha256:' ) ) {", "\t\t\t} elseif ( false ) {", 'env', 'testAValueHeldByItsHashIsNotShown')
 e('counted-blocked', 'counted(): each lock with how many entries', EN,
   "\t\t\t\t++$blocked[ $lock['key'] ]['entries'];", '', 'env', 'testEachLockHasItsKeyArtStageAndReason')
-e('by-ref-page', 'by_ref(): the pages are no entries', EN,
-  "\t\t\tif ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) || 'page' === $line['env'] ) {", "\t\t\tif ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) ) {", 'env', 'testTheEntriesComeInTheOrderOfTheirKindThenByRef')
 
 # --------------------------------------------- reading, on a WordPress site
 UP = 'testTheUploadsAreCountedOverPartsOutsideTheFileListsOfAttachments'
@@ -283,7 +278,7 @@ e('tables-after', 'table_lines(): after the table the part before ended with', E
 e('tables-one', 'table_lines(): one table a part at least', EN,
   "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('tables-room', 'table_lines(): a part ends at its room', EN,
-  "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( array() !== $lines && ( self::now() >= $deadline ) ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
+  "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( array() !== $lines && ( self::now() >= $deadline ) ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-core', 'tables(): no table of the core', EN,
   "\t\tforeach ( (array) $wpdb->tables( 'all', true ) as $table ) {\n\t\t\t$known[ (string) $table ] = true;", "\t\tforeach ( array() as $table ) {\n\t\t\t$known[ (string) $table ] = true;", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-own', 'tables(): no table of the takeover', EN,
@@ -409,7 +404,10 @@ out.append('''<?php
  *
  * Held by the unit suite (SyncEnvTest) and, for what two WordPress sites
  * show, by the integration suite (SyncEnvTest; the sites running,
- * AB_IT_ROOT set). Not listed: the guards against a stored part of the
+ * AB_IT_ROOT set). Not listed: is_file() before hash_file() in file_hash()
+ * (without it a FIFO in the place of a drop-in would block the call, so a
+ * test of it ends in the time limit of the runner, not red), the guards
+ * against a stored part of the
  * environment of the report that is not as this code wrote it (named by its
  * own SHA-256 in the store; no input reaches them), the expiry of a report
  * by the packages of the environment (made within seconds of the packages of

@@ -497,7 +497,8 @@ final class AB_MCP_Sync_Env {
 			$inner = is_dir( $dir . '/' . $name ) ? (array) self::names( $dir . '/' . $name ) : array( null );
 			foreach ( $inner as $file ) {
 				$rel = null === $file ? $name : $name . '/' . $file;
-				if ( ( null !== $file && '.' === $file[0] ) || '.php' !== substr( $rel, -4 ) || ! is_file( $dir . '/' . $rel ) ) {
+				// head() reads files only: a folder named *.php names no plugin.
+				if ( ( null !== $file && '.' === $file[0] ) || '.php' !== substr( $rel, -4 ) ) {
 					continue;
 				}
 				$head = self::head( $dir . '/' . $rel, array( 'Plugin Name', 'Version' ) );
@@ -1462,7 +1463,7 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
-	 * Lines by kind and ref, the pages left out.
+	 * Lines by kind and ref (a page is of no kind of ORDER, so no entry).
 	 *
 	 * @param array[] $lines Lines.
 	 * @return array<string,array<string,array>>
@@ -1470,7 +1471,7 @@ final class AB_MCP_Sync_Env {
 	private static function by_ref( array $lines ) {
 		$out = array();
 		foreach ( $lines as $line ) {
-			if ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) || 'page' === $line['env'] ) {
+			if ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) ) {
 				continue;
 			}
 			$out[ (string) $line['env'] ][ (string) $line['ref'] ] = $line;

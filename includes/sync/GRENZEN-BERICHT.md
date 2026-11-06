@@ -662,3 +662,21 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   beim Inventar (`held`) gibt es dafür nicht, weil die Namen Dateien,
   Plugins und Tabellen nennen, keine gespeicherten Werte; Werte von
   Konstanten kommen nur aus der festen Liste.
+
+### Prüfung
+
+- Unit (`tests/SyncEnvTest.php`) hält die Klauseln ohne WordPress (Lauf der
+  Wurzeln, Kopf einer Datei, Plugins und Themes in Ordnern, `.htaccess`,
+  Schema, Konstanten, Struktur der Zeilen, Vergleich); Integration
+  (`tests/integration/SyncEnvTest.php`) den Bericht über zwei Sites, die
+  Reihe der Pakete, die Teile dieser Site und dass keine geheime Konstante in
+  Antwort oder Ablage steht. Mutationen: `tests/mutation/lists/inventar.php`
+  (aus `tests/mutation/gen/inventar.py`).
+- Nicht als Mutation geführt: `is_file()` vor `hash_file()` in
+  `file_hash()` (ohne diese Prüfung blockierte eine FIFO an der Stelle eines
+  Drop-ins den Aufruf; ein Test darauf liefe in die Zeitgrenze des Runners
+  statt rot), die Ablauf-Zeit eines Berichts über die Pakete der Umgebung
+  (sie entstehen Sekunden nach denen des Inventars) und die Fehlerwege der
+  Leser, die eine Test-Site nicht auslöst (`SHOW TABLES`, `COUNT`, `SHOW
+  CREATE TABLE`, unlesbare Zeilen `WPLANG`, `stylesheet`, `template`,
+  `active_plugins`).

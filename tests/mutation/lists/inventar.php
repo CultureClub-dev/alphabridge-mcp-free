@@ -19,7 +19,10 @@
  *
  * Held by the unit suite (SyncEnvTest) and, for what two WordPress sites
  * show, by the integration suite (SyncEnvTest; the sites running,
- * AB_IT_ROOT set). Not listed: the guards against a stored part of the
+ * AB_IT_ROOT set). Not listed: is_file() before hash_file() in file_hash()
+ * (without it a FIFO in the place of a drop-in would block the call, so a
+ * test of it ends in the time limit of the runner, not red), the guards
+ * against a stored part of the
  * environment of the report that is not as this code wrote it (named by its
  * own SHA-256 in the store; no input reaches them), the expiry of a report
  * by the packages of the environment (made within seconds of the packages of
@@ -173,12 +176,12 @@ return array(
 	),
 	array(
 		'id'      => 'inventar/walk-after-mark',
-		'clause'  => 'walk(): the last path counted is kept',
+		'clause'  => 'walk(): the last file counted is where the next part goes on',
 		'file'    => $en,
 		'search'  => "\t\t\t} else {\n\t\t\t\t++\$acc['skipped'];\n\t\t\t}\n\t\t\t\$acc['after'] = \$path;",
 		'replace' => "\t\t\t} else {\n\t\t\t\t++\$acc['skipped'];\n\t\t\t}",
-		'run'     => $unit( 'SyncEnvTest', 'testAWalkCountsAndSumsTheFilesOfARoot' ),
-		'expect'  => '/testAWalkCountsAndSumsTheFilesOfARoot/',
+		'run'     => $unit( 'SyncEnvTest', 'testAWalkOverOneLargeFolderMovesOnInEveryPart' ),
+		'expect'  => '/testAWalkOverOneLargeFolderMovesOnInEveryPart/',
 	),
 	array(
 		'id'      => 'inventar/block-end',
@@ -325,15 +328,6 @@ return array(
 		'expect'  => '/testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin/',
 	),
 	array(
-		'id'      => 'inventar/hash-file',
-		'clause'  => 'file_hash(): no hash of what is no file',
-		'file'    => $en,
-		'search'  => "\t\t\$sha  = is_file( \$path ) && is_readable( \$path ) ? @hash_file( 'sha256', \$path ) : false;",
-		'replace' => "\t\t\$sha  = is_readable( \$path ) ? @hash_file( 'sha256', \$path ) : false;",
-		'run'     => $unit( 'SyncEnvTest', 'testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin' ),
-		'expect'  => '/testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin/',
-	),
-	array(
 		'id'      => 'inventar/plugins-dot',
 		'clause'  => 'plugin_files(): no name beginning with a dot',
 		'file'    => $en,
@@ -346,8 +340,8 @@ return array(
 		'id'      => 'inventar/plugins-dot-inner',
 		'clause'  => 'plugin_files(): no file beginning with a dot one level down',
 		'file'    => $en,
-		'search'  => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) || ! is_file( \$dir . '/' . \$rel ) ) {",
-		'replace' => "\t\t\t\tif ( '.php' !== substr( \$rel, -4 ) || ! is_file( \$dir . '/' . \$rel ) ) {",
+		'search'  => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) ) {",
+		'replace' => "\t\t\t\tif ( '.php' !== substr( \$rel, -4 ) ) {",
 		'run'     => $unit( 'SyncEnvTest', 'testThePluginsAreFoundAsGetPluginsFindsThem' ),
 		'expect'  => '/testThePluginsAreFoundAsGetPluginsFindsThem/',
 	),
@@ -355,17 +349,8 @@ return array(
 		'id'      => 'inventar/plugins-php',
 		'clause'  => 'plugin_files(): PHP files only',
 		'file'    => $en,
-		'search'  => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) || ! is_file( \$dir . '/' . \$rel ) ) {",
-		'replace' => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || ! is_file( \$dir . '/' . \$rel ) ) {",
-		'run'     => $unit( 'SyncEnvTest', 'testThePluginsAreFoundAsGetPluginsFindsThem' ),
-		'expect'  => '/testThePluginsAreFoundAsGetPluginsFindsThem/',
-	),
-	array(
-		'id'      => 'inventar/plugins-file',
-		'clause'  => 'plugin_files(): files only',
-		'file'    => $en,
-		'search'  => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) || ! is_file( \$dir . '/' . \$rel ) ) {",
-		'replace' => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) ) {",
+		'search'  => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) || '.php' !== substr( \$rel, -4 ) ) {",
+		'replace' => "\t\t\t\tif ( ( null !== \$file && '.' === \$file[0] ) ) {",
 		'run'     => $unit( 'SyncEnvTest', 'testThePluginsAreFoundAsGetPluginsFindsThem' ),
 		'expect'  => '/testThePluginsAreFoundAsGetPluginsFindsThem/',
 	),
@@ -1027,15 +1012,6 @@ return array(
 		'expect'  => '/testEachLockHasItsKeyArtStageAndReason/',
 	),
 	array(
-		'id'      => 'inventar/by-ref-page',
-		'clause'  => 'by_ref(): the pages are no entries',
-		'file'    => $en,
-		'search'  => "\t\t\tif ( ! is_array( \$line ) || ! isset( \$line['env'], \$line['ref'] ) || 'page' === \$line['env'] ) {",
-		'replace' => "\t\t\tif ( ! is_array( \$line ) || ! isset( \$line['env'], \$line['ref'] ) ) {",
-		'run'     => $unit( 'SyncEnvTest', 'testTheEntriesComeInTheOrderOfTheirKindThenByRef' ),
-		'expect'  => '/testTheEntriesComeInTheOrderOfTheirKindThenByRef/',
-	),
-	array(
 		'id'      => 'inventar/read-seq',
 		'clause'  => 'read(): the next part has the next number',
 		'file'    => $en,
@@ -1104,8 +1080,8 @@ return array(
 		'file'    => $en,
 		'search'  => "\t\t\tif ( array() !== \$lines && ( count( \$lines ) >= (int) \$room - 1 || self::now() >= \$deadline ) ) {",
 		'replace' => "\t\t\tif ( array() !== \$lines && ( self::now() >= \$deadline ) ) {",
-		'run'     => $it( 'SyncEnvTest', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries' ),
-		'expect'  => '/testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries/',
+		'run'     => $it( 'SyncEnvTest', 'testTheDropInsAndTheTablesAreThoseOfWordPress' ),
+		'expect'  => '/testTheDropInsAndTheTablesAreThoseOfWordPress/',
 	),
 	array(
 		'id'      => 'inventar/tables-core',

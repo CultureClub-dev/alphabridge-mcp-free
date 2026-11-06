@@ -222,6 +222,22 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( array( 1, 1 ), array( $acc['files'], $acc['bytes'] ) );
 	}
 
+	public function testAWalkOverOneLargeFolderMovesOnInEveryPart(): void {
+		for ( $i = 0; $i < 200; $i++ ) {
+			$this->file( sprintf( 'big/f%03d.txt', $i ), 'x' );
+		}
+		AB_MCP_Sync_Env::$clock = static fn(): float => 10.0;
+		$acc   = self::acc();
+		$parts = 0;
+		do {
+			$walked = AB_MCP_Sync_Env::walk( $this->dir, $acc['after'], $acc, 1.0, self::none() );
+			++$parts;
+		} while ( 'stopped' === $walked && $parts < 50 );
+		self::assertSame( 'done', $walked );
+		self::assertGreaterThan( 2, $parts, 'The last file counted is where the next part goes on, also within one folder.' );
+		self::assertSame( array( 200, 200 ), array( $acc['files'], $acc['bytes'] ) );
+	}
+
 	/* ----------------------------------------------------------- the host */
 
 	public function testTheWordPressBlockOfTheHtaccessIsTheLinesBetweenItsMarkers(): void {
@@ -570,6 +586,9 @@ final class SyncEnvTest extends TestCase {
 		$t       = array( 'env' => 'table', 'ref' => 'gf_form', 'rows' => 3, 'schema' => str_repeat( 'c', 64 ) );
 		$whole   = array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' );
 		$unread  = array( 'complete' => false, 'count' => 0 ) + $whole;
+		$out = AB_MCP_Sync_Env::compare( array( $unread, $t ), array( $whole, $t ) );
+		self::assertSame( array( 'not_compared', 'not_compared' ), array_column( $out['entries'], 'result' ), 'A list of the staging site not read whole.' );
+		self::assertStringContainsString( 'the staging site', $out['entries'][0]['why'] );
 		$out     = AB_MCP_Sync_Env::compare( array( $whole, $t ), array( $unread ) );
 		$results = array_column( $out['entries'], 'result', 'ref' );
 		self::assertSame( array( '*' => 'not_compared', 'gf_form' => 'not_compared' ), $results, 'Never only on staging where the list here was not read.' );
@@ -683,7 +702,8 @@ final class SyncEnvTest extends TestCase {
 		$this->file( AB_MCP_Sync_Env::LOADER, '<?php' );
 		$this->file( 'sub/inner.php', '<?php' );
 		$this->file( 'b.php', '<?php' );
-		self::assertSame( array( 'b.php', 'site.php' ), AB_MCP_Sync_Env::mu_files( $this->dir ), 'The PHP files WordPress loads, without the loader, by strcmp().' );
+		mkdir( $this->dir . '/folder.php' );
+		self::assertSame( array( 'b.php', 'site.php' ), AB_MCP_Sync_Env::mu_files( $this->dir ), 'The PHP files WordPress loads, without the loader and a folder named so, by strcmp().' );
 		self::assertSame( array(), AB_MCP_Sync_Env::mu_files( $this->dir . '/none' ) );
 		self::assertSame( array( 'bytes' => 5, 'sha256' => hash( 'sha256', '<?php' ) ), AB_MCP_Sync_Env::file_hash( $this->dir . '/site.php' ) );
 		self::assertSame( array( 'bytes' => null, 'sha256' => null ), AB_MCP_Sync_Env::file_hash( $this->dir . '/sub' ), 'A folder is no file.' );
@@ -708,6 +728,7 @@ final class SyncEnvTest extends TestCase {
 		$this->file( 'shop/.hidden.php', "<?php\n/* Plugin Name: Hidden */" );
 		$this->file( '.git/x.php', "<?php\n/* Plugin Name: Hidden folder */" );
 		$this->file( 'b/b.php', "<?php\n/* Plugin Name: B\n * Version: 0.1 */" );
+		mkdir( $this->dir . '/folder.php' );
 		self::assertSame( array( 'b/b.php' => '0.1', 'hello.php' => '1.7', 'shop/shop.php' => null ), AB_MCP_Sync_Env::plugin_files( $this->dir ), 'Its top level and one level down, with a name; a version null without one.' );
 		self::assertSame( array(), AB_MCP_Sync_Env::plugin_files( $this->dir . '/none' ) );
 		self::assertSame( array(), AB_MCP_Sync_Env::plugin_files( '' ) );

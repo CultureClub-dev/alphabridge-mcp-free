@@ -477,7 +477,7 @@ final class SyncEnvTest extends TestCase {
 		self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $inventory, 'environment' => array( $env[0], $env[0] ) ) ), 'ab_mcp_sync_report_environment' );
 		self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $inventory, 'environment' => 'x' ) ), 'ab_mcp_sync_report_environment' );
 		self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $inventory, 'environment' => array( 'a' => $env[0] ) ) ), 'ab_mcp_sync_report_environment' );
-		self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $inventory, 'environment' => array_fill( 0, AB_MCP_Sync_Report::MAX_ENVIRONMENT + 1, $env[0] ) ) ), 'ab_mcp_sync_report_environment' );
+		self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $inventory, 'environment' => array_map( static fn( $i ) => sprintf( '%032x', $i ), range( 1, AB_MCP_Sync_Report::MAX_ENVIRONMENT + 1 ) ) ) ), 'ab_mcp_sync_report_environment' );
 
 		// A cursor of the environment goes on with the environment only.
 		self::gone_on_b( $another );
@@ -485,6 +485,11 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( 'env', $first['cursor']['kind'] );
 		$wrong = self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'cursor' => $first['cursor'], 'as' => 'p', 'expect' => 'error' ) ) )['p'];
 		self::assertSame( 'ab_mcp_sync_cursor_invalid', $wrong['code'] );
+		self::gone_on_b( array( $first['package_id'] ) );
+		$inventory_first = self::b( array( array( 'op' => 'export', 'purpose' => 'inventory', 'objects' => 2, 'as' => 'p' ) ) )['p'];
+		self::assertNotNull( $inventory_first['cursor'] );
+		$wrong = self::b( array( array( 'op' => 'export', 'purpose' => 'env', 'cursor' => $inventory_first['cursor'], 'as' => 'p', 'expect' => 'error' ) ) )['p'];
+		self::assertSame( 'ab_mcp_sync_cursor_invalid', $wrong['code'], 'And a cursor of the inventory with the inventory only.' );
 	}
 
 	public function testALineOfTheEnvironmentOfAnotherShapeRefusesThePackage(): void {
@@ -604,6 +609,22 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( array_merge( array_fill( 0, count( $parts ) - 1, false ), array( true ) ), array_column( $pages, 'last' ) );
 		$uploads_lines = array_values( array_filter( array_merge( ...$parts ), static fn( $l ) => 'files' === $l['env'] && 'uploads' === $l['ref'] ) );
 		self::assertSame( array( $want ), $uploads_lines, 'Each file counted once, over parts.' );
+
+		// A part whose time ran out between two steps begins no further one.
+		$state = array(
+			'after'    => null,
+			'attached' => 0,
+			'bytes'    => 0,
+			'files'    => 0,
+			'seq'      => 1,
+			'skipped'  => 0,
+			'step'     => array_search( 'languages', AB_MCP_Sync_Env::STEPS, true ),
+			'walk'     => str_repeat( 'ab', 16 ),
+		);
+		$read  = AB_MCP_Sync_Env::read( $state, 0.5 );
+		self::assertIsArray( $read );
+		self::assertSame( array( 'page', 'files' ), array_column( $read['lines'], 'env' ), 'The language files, then the part ends.' );
+		self::assertSame( 'fonts', AB_MCP_Sync_Env::STEPS[ $read['state']['step'] ] );
 	}
 
 	public function testTheDropInsAndTheTablesAreThoseOfWordPress(): void {
