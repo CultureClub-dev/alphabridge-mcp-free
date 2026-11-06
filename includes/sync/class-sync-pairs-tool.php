@@ -259,8 +259,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 			if ( ! is_string( $s['hash'] ) || ! is_string( $l['hash'] ) ) {
 				return self::selection( sprintf( 'A candidate of entry %d is not compared (it has no hash), so it is not paired; take it over by hand.', $n ) );
 			}
-			// The same once mapped (decision 10): active; else unclear.
-			$equal = $s['complete'] && $l['complete'] && AB_MCP_Sync_Proposal::mapped_same( $s, $l );
+			// The same once mapped (decision 10), each reference to the
+			// object of a pair naming its other object (Codex round 2 of
+			// part 2, b): active; else unclear.
+			$equal = AB_MCP_Sync_Proposal::alike( $s, $l );
 			$ops[] = self::create_op( $n, $entry['kind'], $s, $l, $equal ? 'active' : 'unclear' );
 		}
 		if ( count( $ops ) > self::MAX ) {

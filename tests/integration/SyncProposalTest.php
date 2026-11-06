@@ -1564,6 +1564,70 @@ final class SyncProposalTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Codex round 2 of part 2, b: the page «team» of a pair is renamed
+	 * «team-alt» here, and another page takes «team». «kontakt», new on both
+	 * sites, on staging under the page of the pair, here under the other one,
+	 * has the same mapped form on both: uncertain, never equal, and chosen by
+	 * a person unclear. «faq» under «shop» of a pair on both sites is equal.
+	 */
+	public function testAPageUnderThePageOfAPairThereAndAnotherHereIsOnlyChosenAndThenUnclear(): void {
+		self::pair();
+		$a      = self::pages_on_a( array( 'team-alt' => 'T', 'team' => 'T2', 'shop' => 'S' ) );
+		$b      = self::pages_on_b( array( 'team' => 'T', 'shop' => 'S' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		foreach ( array( array( $a['team-alt'], $b['team'] ), array( $a['shop'], $b['shop'] ) ) as list( $live, $staging ) ) {
+			$pair = AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => $source,
+					'kind'         => 'post',
+					'live_ref'     => $live,
+					'staging_ref'  => $staging,
+					'canon'        => 'canon/1',
+					'base_live'    => hash( 'sha256', 'l' . $live ),
+					'base_staging' => hash( 'sha256', 's' . $staging ),
+					'base_origin'  => 'proposal',
+					'state'        => 'active',
+				)
+			);
+			self::assertIsArray( $pair, is_wp_error( $pair ) ? $pair->get_error_message() : '' );
+		}
+		$a_kontakt = wp_insert_post( wp_slash( self::page( 'kontakt', 'Kontakt', array( 'post_parent' => (int) $a['team'] ) ) ), true );
+		$a_faq     = wp_insert_post( wp_slash( self::page( 'faq', 'FAQ', array( 'post_parent' => (int) $a['shop'] ) ) ), true );
+		self::assertIsInt( $a_kontakt );
+		self::assertIsInt( $a_faq );
+		$kids    = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::page( 'kontakt', 'Kontakt', array( 'post_parent' => (int) $b['team'] ) ), 'as' => 'kontakt' ),
+				array( 'op' => 'insert_post', 'args' => self::page( 'faq', 'FAQ', array( 'post_parent' => (int) $b['shop'] ) ), 'as' => 'faq' ),
+			)
+		);
+		$answer  = self::proposal( self::staged() );
+		$kontakt = self::entry_with_live( $answer['all'], 'post', (string) $a_kontakt );
+		self::assertSame( 'uncertain', $kontakt['category'], (string) json_encode( $kontakt ) );
+		self::assertSame( array( (string) $kids['kontakt'] ), array_map( 'strval', array_column( $kontakt['candidates']['staging'], 'ref' ) ) );
+		self::assertSame( array( array( 'team' ), array( 'team' ) ), array( $kontakt['candidates']['staging'][0]['path'], $kontakt['candidates']['live'][0]['path'] ), 'The same path by the slugs.' );
+		self::assertStringContainsString( 'the object of a pair on one side and another object on the other', $kontakt['reason'] );
+		$faq = self::entry_with_live( $answer['all'], 'post', (string) $a_faq );
+		self::assertSame( array( 'equal', 'active' ), array( $faq['category'], $faq['confirm'] ), 'Under the pages of a pair on both sites.' );
+		self::assertStringNotContainsString( '"places"', (string) json_encode( $answer ), 'What the comparison keeps of the references is not shown.' );
+		// Chosen by a person: unclear (the report asks which side wins), not active.
+		$done = self::confirmed(
+			array(
+				'action'      => 'confirm',
+				'proposal_id' => $answer['proposal_id'],
+				'choices'     => array( array( 'entry' => $kontakt['n'], 'staging_ref' => (string) $kids['kontakt'], 'live_ref' => (string) $a_kontakt ) ),
+				'select'      => array( $faq['n'] ),
+			)
+		);
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$states = array();
+		foreach ( self::pair_rows() as $row ) {
+			$states[ (string) $row['live_ref'] ] = $row['state'];
+		}
+		self::assertSame( array( 'unclear', 'active' ), array( $states[ (string) $a_kontakt ] ?? null, $states[ (string) $a_faq ] ?? null ) );
+	}
+
 	/* ------------------------------------------- the whole parent (round 4) */
 
 	public function testAPageUnderAParentOfAnotherLanguageIsAnotherPathNeverDiffers(): void {

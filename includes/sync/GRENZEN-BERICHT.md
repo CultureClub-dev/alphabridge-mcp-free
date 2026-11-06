@@ -76,6 +76,22 @@ Weg.
   Login). Dieselben Objekte mit anderen IDs auf beiden Sites sind so «gleich».
   Die Ausgangsstände eines Paars bleiben die Hashes je Seite im eigenen
   ID-Raum.
+- **Verweise auf Objekte eines Paars** (Codex Runde 2 von Teil 2, b): «Gleich»
+  verlangt zudem, dass jeder Verweis auf ein Objekt eines Paars auf der
+  anderen Seite das andere Objekt desselben Paars nennt
+  (`AB_MCP_Sync_Proposal::refs_agree()`, dieselbe Regel wie Zeile 6 des
+  Berichts). Grund: die abgebildete Form nennt ein Ziel über seine Identität,
+  und ein umbenanntes Objekt eines Paars, dessen Slug ein anderes Objekt
+  übernimmt, hätte sonst dieselbe Form wie das andere. Widerspricht ein
+  Verweis, der das Objekt benennt (der Elternteil eines Posts; Ziel,
+  Eltern-Eintrag oder Menü eines Menüeintrags), heisst es «unsicher» (eine
+  Person wählt, die Bestätigung über `categories` nimmt es nicht); ein anderer
+  Verweis (Terme, Beitragsbild, Blöcke) heisst «anderer Inhalt» und wird als
+  *ungeklärt* bestätigt. Geprüft wird je Objekt der eigene Verweis: eine
+  Seite unter einer neuen Elternseite, deren eigener Elternteil widerspricht,
+  bleibt gegen diese Elternseite «gleich»; die Elternseite selbst heisst
+  «unsicher» und wird nur durch eine Wahl gepaart (selten: Umbenennung mit
+  Slug-Übernahme und darunter neue Seiten auf beiden Sites).
 - **Ein Ziel je Identität** (Codex Runde 2, A-1; Runde 3, 1): Die Identität
   ist eine Funktion der ganzen Site. `AB_MCP_Sync_Identity` liest in einem
   ersten Durchgang, was jedes Objekt nennt (Typ, Slug, Datei, Ziel, Verweis
@@ -278,7 +294,13 @@ Weg.
   und Vorschau nennen das (`note`).
 - «Anderer Inhalt» und ein gewähltes Paar anderen Inhalts werden als
   *ungeklärt* bestätigt; welche Seite gewinnt, fragt der Bericht (Vorrang 1)
-  und entscheidet der Plan des Laufs (Zweig 8).
+  und entscheidet der Plan des Laufs (Zweig 8). Ein gewähltes Paar beginnt
+  *aktiv* nur, wo beide ganz gelesen sind, die abgebildeten Formen gleich
+  sind und die Verweise auf Objekte eines Paars einander nennen
+  (`AB_MCP_Sync_Proposal::alike()`, Codex Runde 2 von Teil 2, b); ein Eintrag
+  eines Vorschlags aus einer Fassung vor dieser Regel trägt die Verweise
+  nicht und wird gewählt als *ungeklärt* bestätigt (ein Vorschlag gilt
+  höchstens einen Tag).
 - Ein Vorschlag gilt so lange wie sein frühestes Paket (höchstens einen Tag)
   und gehört der Verbindung, die ihn machte (und damit ihrem Konto): über eine
   andere Verbindung, etwa den Hub statt der direkten, wird neu vorgeschlagen.
@@ -391,12 +413,26 @@ Weg.
   dessen Slug ein anderes Objekt übernimmt, hätte sonst dieselbe Form wie
   das andere. Sonst heisst es Konflikt (Zeile 5, eine Person wählt). In einer
   Menge der kanonischen Form (Terme einer Taxonomie, Menüs eines
-  Menüeintrags) zählt die Reihenfolge nicht, aber nur, wo jedes Ziel der
-  Stelle auf beiden Seiten ein Paar hat; mischt die Menge Ziele mit und ohne
-  Paar, heisst es Konflikt (die Zeile sagt nicht, welches Objekt ohne Paar
-  für welches steht; ein auf beiden Seiten neuer Term ist ohnehin zuerst zu
-  paaren). Eine Stelle ohne Ziel eines Paars entscheidet weiter die
-  abgebildete Form.
+  Menüeintrags) zählt die Reihenfolge nicht: die Ziele mit Paar vergleicht
+  der Bericht als Menge der Paare (jede Seite nennt die Objekte derselben
+  Paare), die ohne Paar als Menge ihrer Identitäten (Taxonomie, Slug,
+  Sprache aus den Zeilen ihrer Seite); gleich nur, wo beides gleich ist
+  (Codex Runde 2 von Teil 2, B: ein Beitrag in «news» eines Paars und in
+  «events» ohne Paar auf beiden Seiten bleibt Zeile 6). Nennt eine Seite ein
+  Ziel eines Paars und die andere an seiner Stelle ein Objekt ohne Paar, auch
+  eines derselben Identität, ist es nicht gleich; ebenso, wo die Zeile eines
+  Terms ohne Paar fehlt (etwa zurückgehalten), die sichere Seite. Eine Liste
+  vergleicht weiter je Stelle; eine Stelle ohne Ziel eines Paars entscheidet
+  die abgebildete Form.
+- Vorrang 1 (*ungeklärt*): Hält eine Zugangsangabe eine Seite (eine
+  zurückgehaltene Zeile, oder der Name gilt hier seit der Paarung als
+  Zugangsangabe), heisst der Eintrag «nicht verglichen» mit Grund und bietet
+  keine Wahl an, wie in den übrigen Zuständen eines Paars (Codex Runde 2 von
+  Teil 2, a). Grund: ein solches Objekt wird von Hand übernommen (wie beim
+  aktiven Paar), eine Wahl hätte keinen Weg. Eine sonst
+  nicht verglichene Seite eines ungeklärten Paars (nicht ganz gelesen,
+  unvollständige Staging-Seite) behält die Wahl; vor dem ersten Schreiben
+  prüft der Lauf nach Entscheid 16 alle Paare seines Plans frisch (Zweig 8).
 - Zeile 9 (live gelöscht, Staging geändert): Standard «live behalten»; die
   Wahl «aus Staging wiederherstellen» braucht ein neues Live-Objekt unter
   einem bestehenden Paar und ist bis Z8d gesperrt (`*:restore_deleted`).

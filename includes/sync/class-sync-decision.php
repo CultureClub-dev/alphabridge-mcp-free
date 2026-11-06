@@ -31,7 +31,8 @@
  *     still the rest (Codex round 1 of part 2, C). A widget area so as a
  *     whole, its instance mapping (base_extra) as it is (decision 23).
  *  1. A pair unclear: like a conflict (a person chooses per object) until a
- *     person confirms its bases (wp_site_pairs).
+ *     person confirms its bases (wp_site_pairs); a side a credential holds
+ *     (B9) is not compared, and offers no choice (Codex round 2 of part 2).
  *  2. A pair taken over as deleted (not reached in Z8, decision 22): this
  *     site has it again (there and not in the trash: one in the trash is
  *     still deleted, Codex round 1 of part 2, C) → the live state is its
@@ -39,7 +40,8 @@
  *     nothing; there again on staging → «restored on staging», which Z8 does
  *     not bring back.
  *  3. A pair active: the table TABLE, one row for each of the nine states of
- *     both sides, two for changed on both (alike or not: refs_agree()); row
+ *     both sides, two for changed on both (alike or not: the mapped forms and
+ *     refs_agree(), the rule of the proposal as well); row
  *     10 ends the pair only where both objects are removed, in the trash on
  *     a side the pair is taken over as deleted (with Z8d); a pair with an
  *     override (a confirmed target such as status draft, decision 17) is
@@ -147,10 +149,7 @@ final class AB_MCP_Sync_Decision {
 	const ACTION_ORDER = array( 'choose', 'take_over', 'create', 'waits', 'locked', 'pair', 'keep', 'none' );
 
 	/** The pair kinds whose objects are in the ID space of posts, and of terms. */
-	const SPACES = array(
-		'post' => array( 'post', 'menu_item', 'attachment' ),
-		'term' => array( 'term', 'menu' ),
-	);
+	const SPACES = AB_MCP_Sync_Proposal::SPACES;
 
 	/* ------------------------------------------------------------ report */
 
@@ -168,7 +167,7 @@ final class AB_MCP_Sync_Decision {
 	 * @return array entries (numbered), counts, blocked, pairs.
 	 */
 	public static function report( array $staging, array $live, array $pairs, callable $complete, array $b9 = array() ) {
-		$ctx   = self::context( $complete, $b9, $pairs );
+		$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );
 		$by    = array(
 			's' => self::index( $staging ),
 			'l' => self::index( $live ),
@@ -238,30 +237,25 @@ final class AB_MCP_Sync_Decision {
 	 * @param callable $complete See report().
 	 * @param array    $b9       See report().
 	 * @param array[]  $pairs    See report().
+	 * @param array[]  $staging  See report().
+	 * @param array[]  $live     See report().
 	 * @return array complete, b9, kinds (the pair kinds this site's inventory
 	 *               reads: an object of another one missing here is not
 	 *               deleted, it was never read), paired (by side and ID space,
-	 *               the id of the pair of each object a pair names, for
-	 *               refs_agree()).
+	 *               the id of the pair of each object a pair names) and named
+	 *               (by side, the identities of the terms and menus), for
+	 *               refs_agree().
 	 */
-	public static function context( callable $complete, array $b9 = array(), array $pairs = array() ) {
-		$paired = array(
-			's' => array(),
-			'l' => array(),
-		);
-		foreach ( $pairs as $pair ) {
-			foreach ( self::SPACES as $space => $kinds ) {
-				if ( in_array( $pair['kind'], $kinds, true ) ) {
-					$paired['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];
-					$paired['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];
-				}
-			}
-		}
+	public static function context( callable $complete, array $b9 = array(), array $pairs = array(), array $staging = array(), array $live = array() ) {
 		return array(
 			'complete' => $complete,
 			'b9'       => $b9,
 			'kinds'    => AB_MCP_Sync_Proposal::db_kinds(),
-			'paired'   => $paired,
+			'paired'   => AB_MCP_Sync_Proposal::paired( $pairs ),
+			'named'    => array(
+				's' => AB_MCP_Sync_Proposal::named( $staging ),
+				'l' => AB_MCP_Sync_Proposal::named( $live ),
+			),
 		);
 	}
 
@@ -312,8 +306,14 @@ final class AB_MCP_Sync_Decision {
 		if ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
 			return self::result( $item, 'not_compared', '3', null, 'none', sprintf( 'The bases of this pair are of the version %1$s of the comparison data, this site reads %2$s, so they are not compared here. Propose again (wp_site_pairs action=propose), which works the pair out in the version of now.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ) );
 		}
-		// Rule 1: unclear, like a conflict.
+		// Rule 1: unclear, like a conflict. A side a credential holds (a line
+		// held, or its name a credential here since it was paired) is not
+		// compared and offers no choice, as in the other states of a pair
+		// (Codex round 2 of part 2, a).
 		if ( 'unclear' === $pair['state'] ) {
+			if ( $b9 || isset( $s['held'] ) || isset( $l['held'] ) ) {
+				return self::result( $item, 'not_compared', '1', null, 'none', self::WORDS['held'] );
+			}
 			return self::result( $item, 'unclear', '1', null, 'choose' );
 		}
 		// Rule 2: taken over as deleted (not reached in Z8).
@@ -348,25 +348,12 @@ final class AB_MCP_Sync_Decision {
 
 	/**
 	 * Whether the references of the two lines of a pair name the same
-	 * objects where a pair names their targets (Codex round 1 of part 2, A).
-	 * The mapped forms compare a reference by the identity of its target;
-	 * an object of a pair renamed on one side while another object there
-	 * takes its slug has the identity of that other one, so the same mapped
-	 * form can point to the object of a pair on one side and to another
-	 * object on the other. A reference whose target an object of a pair is,
-	 * on either side, is the same only where the other side names the other
-	 * object of that same pair:
-	 *  - by the place of each reference (its ID space and where it stands,
-	 *    at), in its order, each target as the id of its pair or as none;
-	 *  - a place no target of which has a pair on either side is left to the
-	 *    mapped forms (both name objects without a pair, by identity);
-	 *  - in a set of the canonical form (AB_MCP_Sync_Canon::set(): the terms
-	 *    of a taxonomy, at term:<taxonomy>, and the menus of a menu item, at
-	 *    menu) the order does not count, but only where every target of the
-	 *    place has a pair on both sides; a set that mixes targets with and
-	 *    without a pair is not alike (the line does not say which object
-	 *    without a pair stands for which: fail closed, the person chooses);
-	 *  - a place on one side only, with a target of a pair: not alike.
+	 * objects where a pair names their targets (Codex round 1 of part 2, A;
+	 * round 2, B): AB_MCP_Sync_Proposal::refs_agree(), the rule the proposal
+	 * applies to «equal» as well, of the places of both lines by the pairs
+	 * and the identities of the terms of their sides. In a set of the
+	 * canonical form the targets of pairs compare by their pairs, those
+	 * without a pair by their identities.
 	 *
 	 * @param array $s   The staging line.
 	 * @param array $l   This site's line.
@@ -374,41 +361,10 @@ final class AB_MCP_Sync_Decision {
 	 * @return bool
 	 */
 	public static function refs_agree( array $s, array $l, array $ctx ) {
-		$by = array(
-			's' => array(),
-			'l' => array(),
+		return AB_MCP_Sync_Proposal::refs_agree(
+			AB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'], $ctx['named']['s'] ),
+			AB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'], $ctx['named']['l'] )
 		);
-		foreach ( array(
-			's' => $s,
-			'l' => $l,
-		) as $side => $line ) {
-			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
-				$space = (string) ( $ref['space'] ?? '' );
-				$at    = (string) ( $ref['at'] ?? '' );
-				$pair  = $ctx['paired'][ $side ][ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';
-				$by[ $side ][ $space . "\0" . $at ][] = $pair;
-			}
-		}
-		foreach ( array_unique( array_merge( array_keys( $by['s'] ), array_keys( $by['l'] ) ) ) as $key ) {
-			$there = $by['s'][ $key ] ?? array();
-			$here  = $by['l'][ $key ] ?? array();
-			$all   = array_merge( $there, $here );
-			if ( array() === array_diff( $all, array( '' ) ) ) {
-				continue;
-			}
-			$at = explode( "\0", $key, 2 )[1];
-			if ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {
-				if ( in_array( '', $all, true ) ) {
-					return false;
-				}
-				sort( $there );
-				sort( $here );
-			}
-			if ( $there !== $here ) {
-				return false;
-			}
-		}
-		return true;
 	}
 
 	/**
@@ -1211,7 +1167,7 @@ final class AB_MCP_Sync_Decision {
 		if ( ! is_array( $side ) ) {
 			return $side;
 		}
-		unset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'] );
+		unset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'], $side['places'] );
 		return $side;
 	}
 

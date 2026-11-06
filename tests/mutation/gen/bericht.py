@@ -189,10 +189,39 @@ e('live-alone', 'live_alone(): only live only where the staging side is complete
 NH = "\t\tif ( null === $s['hash'] || null === $l['hash'] ) {"
 e('pair-no-hash-staging', 'pair_entry(): no hash on the staging side, not compared', P, NH, NH.replace("null === $s['hash'] || ", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
 e('pair-no-hash-live', 'pair_entry(): no hash on this site, not compared', P, NH, NH.replace(" || null === $l['hash']", ''), 'prop', 'testASideWithoutAHashIsNotComparedWithTheWordsOfItsCode')
-SA = "\t\treturn $s['complete'] && $l['complete'] && self::mapped_same( $s, $l );"
-e('same-staging-whole', 'same(): only read whole on the staging site', P, SA, SA.replace("$s['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
-e('same-live-whole', 'same(): only read whole on this site', P, SA, SA.replace("$l['complete'] && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
-e('same-mapped', 'same(): the same mapped form, not the same hash', P, SA, "\t\treturn $s['complete'] && $l['complete'] && hash_equals( (string) $s['hash'], (string) $l['hash'] );", 'prop', 'testOtherIdsOfTheSameTargetsAreEqualOnceMapped')
+# alike() (Codex round 2 of part 2, b): what same() was, and the references
+# to the objects of pairs.
+SA = "\t\treturn ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && self::mapped_same( $s, $l )\n"
+e('alike-staging-whole', 'alike(): only read whole on the staging site', P, SA, SA.replace("! empty( $s['complete'] ) && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
+e('alike-live-whole', 'alike(): only read whole on this site', P, SA, SA.replace("! empty( $l['complete'] ) && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
+e('alike-mapped', 'alike(): the same mapped form, not the same hash', P, SA, "\t\treturn ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && hash_equals( (string) $s['hash'], (string) $l['hash'] )\n", 'prop', 'testOtherIdsOfTheSameTargetsAreEqualOnceMapped')
+PA_REF = 'testAReferenceToTheObjectOfAPairIsEqualOnlyWhereTheOtherSideNamesItsPartner'
+PA_PARENT = 'testAPageUnderTheObjectOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain'
+PA_MENU = 'testAMenuItemOfATargetOrMenuOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain'
+e('alike-places', 'alike(): a side kept without its places (a proposal before them) is not alike', P,
+  "\t\t\t&& isset( $s['places'], $l['places'] ) && is_array( $s['places'] ) && is_array( $l['places'] )\n", "\t\t\t&& true\n", 'prop', PA_PARENT)
+e('alike-refs', 'alike(): the references to the objects of pairs agree', P,
+  "\t\t\t&& self::refs_agree( $s['places'], $l['places'] );", "\t\t\t&& true;", 'prop', PA_REF)
+e('pair-entry-alike', 'pair_entry(): equal only where alike, the references included', P,
+  "\t\t$equal = self::alike( $s, $l );", "\t\t$equal = ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && self::mapped_same( $s, $l );", 'prop', PA_REF)
+PE = "\t\tif ( ! self::refs_agree( self::at( $s['places'], $named ), self::at( $l['places'], $named ) ) ) {"
+e('pair-entry-named-by', 'pair_entry(): a reference that names the object, of a pair on one side only, makes it uncertain', P, PE, "\t\tif ( false ) {", 'prop', PA_PARENT)
+e('pair-entry-at', 'at(): only the places that name the object make it uncertain', P,
+  "\t\t\tif ( in_array( explode( \"\\0\", (string) $key, 2 )[1] ?? '', $ats, true ) ) {", "\t\t\tif ( true ) {", 'prop', PA_REF)
+e('named-by-post', 'NAMED_BY: the parent of a post names it', P,
+  "\t\t'post'      => array( 'post_parent' ),", "\t\t'post'      => array(),", 'prop', PA_PARENT)
+NB = "\t\t'menu_item' => array( 'meta:_menu_item_object_id', 'meta:_menu_item_menu_item_parent', 'menu' ),"
+e('named-by-target', 'NAMED_BY: the target of a menu item names it', P, NB, NB.replace("'meta:_menu_item_object_id', ", ''), 'prop', PA_MENU)
+e('named-by-parent', 'NAMED_BY: the parent item of a menu item names it', P, NB, NB.replace("'meta:_menu_item_menu_item_parent', ", ''), 'prop', PA_MENU)
+e('named-by-menu', 'NAMED_BY: the menus of a menu item name it', P, NB, NB.replace(", 'menu'", ''), 'prop', PA_MENU)
+e('match-paired', 'match(): the objects of the pairs on each side', P,
+  "\t\t\t's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),", "\t\t\t's' => self::items( $staging, 's', array(), self::named( $staging ) ),", 'prop', PA_PARENT)
+e('match-named-staging', 'match(): the identities of the terms of staging', P,
+  "\t\t\t's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),", "\t\t\t's' => self::items( $staging, 's', $paired['s'], array() ),", 'prop', PA_REF)
+e('match-named-live', 'match(): the identities of the terms of this site', P,
+  "\t\t\t'l' => self::items( $live, 'l', $paired['l'], self::named( $live ) ),", "\t\t\t'l' => self::items( $live, 'l', $paired['l'], array() ),", 'prop', PA_REF)
+e('side-places', 'side(): the places of the references are kept for a choice', P,
+  "\t\t\t'places'          => $item['places'],\n", "", 'prop', PA_PARENT)
 MS = "\t\t\tif ( isset( $s[ $key ], $l[ $key ] ) && is_string( $s[ $key ] ) && is_string( $l[ $key ] ) && hash_equals( $s[ $key ], $l[ $key ] ) ) {"
 e('same-unresolved', 'mapped_same(): a side without a mapped form is no equal, also where both sides have none', P, MS, "\t\t\tif ( hash_equals( (string) ( $s[ $key ] ?? '' ), (string) ( $l[ $key ] ?? '' ) ) ) {", 'prop', 'testAReferenceWithoutATargetIsADifference')
 MK = "\t\tforeach ( array( 'mapped', 'mapped_possible' ) as $key ) {"
@@ -273,7 +302,7 @@ e('realign-live-held', 'realign_entry(): not with a held object of this site', P
 e('realign-staging-hash', 'realign_entry(): not without the hash of the staging object', P, RD, RD.replace(" && null !== $s['hash']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('realign-live-hash', 'realign_entry(): not without the hash of the object of this site', P, RD, RD.replace(" && null !== $l['hash']", ''), 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('realign-note', 'realign_entry(): sides that differ now are named', P,
-  "\t\tif ( ! self::same( $s, $l ) ) {", "\t\tif ( false ) {", 'prop', 'testUnclearAndResidualPairsAreProposedForANewAlignment')
+  "\t\tif ( ! self::alike( $s, $l ) ) {", "\t\tif ( false ) {", 'prop', 'testUnclearAndResidualPairsAreProposedForANewAlignment')
 e('alone-why', 'alone(): an object alone without a hash says why', P,
   "( null === $item['hash'] && null !== $item['reason_code'] ? self::why_no_hash( $item ) : null )", "null", 'prop', 'testAnObjectAloneWithoutAHashSaysWhy')
 e('why-code', 'why_no_hash(): the words of the reason code', P,
@@ -296,11 +325,13 @@ e('side-held', 'side(): a held object by the hash of its ref only', P,
   "\t\tif ( null !== $item['held'] ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'held'       => $item['held'],", 'prop', 'testAPairWithAHeldSideIsNotAlignedAnewAndNamesItByItsHash')
 e('side-path', 'side(): the path of parents shown with a post', P,
   "\t\tif ( 'post' === $item['kind'] ) {\n\t\t\t$out['path'] = $item['names'];", "\t\tif ( false ) {\n\t\t\t$out['path'] = $item['names'];", 'prop', 'testTheSameSlugOnAnotherPathIsUncertainNeverAPair')
-SH_S = "\t\t\t\tunset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'] );"
-SH_C = "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'] );"
-e('shown-hash', 'shown(): no hash or mapped form of a side', P, SH_S, "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+SH_S = "\t\t\t\tunset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'], $entry[ $side ]['places'] );"
+SH_C = "\t\t\t\t\tunset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'], $entry['candidates'][ $side ][ $i ]['places'] );"
+e('shown-hash', 'shown(): no hash or mapped form of a side', P, SH_S, SH_S.replace("$entry[ $side ]['hash'], $entry[ $side ]['mapped'], ", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-places', 'shown(): no places of the references of a side', P, SH_S, SH_S.replace(", $entry[ $side ]['places']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-candidates-places', 'shown(): no places of the references of a candidate', P, SH_C, SH_C.replace(", $entry['candidates'][ $side ][ $i ]['places']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('shown-possible', 'shown(): no second mapped form of a side', P, SH_S, SH_S.replace(", $entry[ $side ]['mapped_possible']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
-e('shown-candidates', 'shown(): no hash or mapped form of a candidate', P, SH_C, "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
+e('shown-candidates', 'shown(): no hash or mapped form of a candidate', P, SH_C, SH_C.replace("$entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], ", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('shown-candidates-possible', 'shown(): no second mapped form of a candidate', P, SH_C, SH_C.replace(", $entry['candidates'][ $side ][ $i ]['mapped_possible']", ''), 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
 e('shown-snapshot', 'shown(): no snapshot of a pair', P,
   "\t\t\tunset( $entry['pair']['snapshot'] );", "", 'prop', 'testAnAnswerShowsNoHashMappedFormOrSnapshot')
@@ -629,9 +660,10 @@ e('sel-by-choice', 'plan_confirm(): an ambiguous or uncertain entry needs a choi
   "\t\t\tif ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", "\t\t\tif ( false ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", 'it', SEL)
 e('sel-choice-by-choice', 'plan_confirm(): a choice for an ambiguous or uncertain entry only', T,
   "\t\t\tif ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
-CE = "\t\t\t$equal = $s['complete'] && $l['complete'] && AB_MCP_Sync_Proposal::mapped_same( $s, $l );"
+CE = "\t\t\t$equal = AB_MCP_Sync_Proposal::alike( $s, $l );"
 e('choice-equal', 'plan_confirm(): a chosen pair of the same mapped form is active', T, CE, "\t\t\t$equal = false;", 'it', SEL)
 e('choice-unequal', 'plan_confirm(): a chosen pair of other content is unclear', T, CE, "\t\t\t$equal = true;", 'it', SEL)
+e('choice-refs', 'plan_confirm(): a chosen pair is active only where its references to the objects of pairs agree (Codex round 2 of part 2, b)', T, CE, "\t\t\t$equal = $s['complete'] && $l['complete'] && AB_MCP_Sync_Proposal::mapped_same( $s, $l );", 'it', 'testAPageUnderThePageOfAPairThereAndAnotherHereIsOnlyChosenAndThenUnclear')
 e('live-bound', 'plan_confirm(): the state binds the objects of this site read fresh', T,
   "\t\t\t$op['live_now'] = $live[ $op['kind'] . \"\\0\" . $op['live_ref'] ];", "\t\t\t$op['live_now'] = 'x';", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('live-gone', 'plan_confirm(): an object gone since the proposal is skipped', T,
@@ -776,27 +808,59 @@ e('r3-other-forms', 'rule 3: changed differently is a conflict (row 5, not 6)', 
 e('r3-refs', 'rule 3: changed alike only where the references to objects of pairs agree', D,
   " && self::refs_agree( $s, $l, $ctx )", "", 'rep', CODEX)
 e('report-context-pairs', 'report(): the decision knows the pairs', D,
-  "\t\t$ctx   = self::context( $complete, $b9, $pairs );", "\t\t$ctx   = self::context( $complete, $b9 );", 'rep', CODEX)
-e('context-paired-staging', 'context(): the pairs by their staging objects', D,
-  "\t\t\t\t\t$paired['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];\n", "", 'rep', CODEX)
-e('context-paired-live', 'context(): the pairs by their objects here', D,
-  "\t\t\t\t\t$paired['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];\n", "", 'rep', CODEX)
-e('refs-pair', 'refs_agree(): a target by the id of its pair', D,
-  "\t\t\t\t$pair  = $ctx['paired'][ $side ][ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';", "\t\t\t\t$pair  = '';", 'rep', CODEX)
-e('refs-unpaired-place', 'refs_agree(): a place without a target of a pair is left to the mapped forms', D,
-  "\t\t\tif ( array() === array_diff( $all, array( '' ) ) ) {", "\t\t\tif ( false ) {", 'rep', PARTNER)
-e('refs-places-both', 'refs_agree(): the places of both sides', D,
-  "\t\tforeach ( array_unique( array_merge( array_keys( $by['s'] ), array_keys( $by['l'] ) ) ) as $key ) {", "\t\tforeach ( array_keys( $by['s'] ) as $key ) {", 'rep', PARTNER)
+  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, array(), $staging, $live );", 'rep', CODEX)
+e('report-context-staging', 'report(): the decision knows the terms of staging', D,
+  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, $pairs, array(), $live );", 'rep', PARTNER)
+e('report-context-live', 'report(): the decision knows the terms of this site', D,
+  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging );", 'rep', PARTNER)
+e('context-named-staging', 'context(): the identities of the terms of staging', D,
+  "\t\t\t\t's' => AB_MCP_Sync_Proposal::named( $staging ),", "\t\t\t\t's' => array(),", 'rep', PARTNER)
+e('context-named-live', 'context(): the identities of the terms of this site', D,
+  "\t\t\t\t'l' => AB_MCP_Sync_Proposal::named( $live ),", "\t\t\t\t'l' => array(),", 'rep', PARTNER)
+e('refs-places-staging', 'refs_agree(): the staging line by its pairs and the terms of its side', D,
+  "\t\t\tAB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'], $ctx['named']['s'] ),", "\t\t\tAB_MCP_Sync_Proposal::places( $s, array(), $ctx['named']['s'] ),", 'rep', CODEX)
+e('refs-places-live', 'refs_agree(): the line of this site by its pairs and the terms of its side', D,
+  "\t\t\tAB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'], $ctx['named']['l'] )", "\t\t\tAB_MCP_Sync_Proposal::places( $l, array(), $ctx['named']['l'] )", 'rep', CODEX)
+# The rule itself, shared by the proposal and the report (AB_MCP_Sync_Proposal).
+e('context-paired-staging', 'paired(): the pairs by their staging objects', P,
+  "\t\t\t\t\t$out['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];\n", "", 'rep', CODEX)
+e('context-paired-live', 'paired(): the pairs by their objects here', P,
+  "\t\t\t\t\t$out['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];\n", "", 'rep', CODEX)
+NM = "\t\t\tif ( isset( $line['held'] ) || ! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ! isset( $line['identity'] ) || ! is_array( $line['identity'] ) || array() === $line['identity'] ) {"
+e('named-held', 'named(): a held line names nothing (not in what the store keeps)', P, NM, NM.replace("isset( $line['held'] ) || ", ''), 'prop', PA_REF)
+e('named-kinds', 'named(): the identities of terms and menus only (a post of the same id is none)', P, NM, NM.replace("! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ", ''), 'rep', PARTNER)
+e('named-unread', 'named(): a term not read has no identity', P, NM, NM.replace(" || array() === $line['identity']", ''), 'rep', PARTNER)
+e('refs-pair', 'places(): a target by the id of its pair', P,
+  "\t\t\t$pair  = $paired[ $space ][ $id ] ?? '';", "\t\t\t$pair  = '';", 'rep', CODEX)
+e('places-named', 'places(): a target without a pair by its identity', P,
+  "\t\t\t\t$out[ $key ]['named'][] = $named[ $id ] ?? null;", "\t\t\t\t$out[ $key ]['named'][] = null;", 'rep', PARTNER)
+e('refs-unpaired-place', 'places(): a place without a target of a pair is left to the mapped forms', P,
+  "\t\t\tif ( array() === array_diff( $place['pairs'], array( '' ) ) ) {", "\t\t\tif ( false ) {", 'rep', PARTNER)
+e('refs-places-both', 'refs_agree(): the places of both sides', P,
+  "\t\tforeach ( array_unique( array_merge( array_keys( $s ), array_keys( $l ) ) ) as $key ) {", "\t\tforeach ( array_keys( $s ) as $key ) {", 'rep', PARTNER)
 RS = "\t\t\tif ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {"
-e('refs-set', 'refs_agree(): in a set of the canonical form the order does not count', D, RS, "\t\t\tif ( false ) {", 'rep', PARTNER)
-e('refs-set-menu', 'refs_agree(): the menus of a menu item are a set', D, RS, RS.replace("'menu' === $at || ", ''), 'rep', PARTNER)
-e('refs-set-terms', 'refs_agree(): the terms of a taxonomy are a set', D, RS, RS.replace(" || 0 === strpos( $at, 'term:' )", ''), 'rep', PARTNER)
-e('refs-set-mixed', 'refs_agree(): a set mixing targets with and without a pair is not alike', D,
-  "\t\t\t\tif ( in_array( '', $all, true ) ) {\n\t\t\t\t\treturn false;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;", 'rep', PARTNER)
-e('refs-set-sort', 'refs_agree(): a set compared in one order', D,
-  "\t\t\t\tsort( $there );\n\t\t\t\tsort( $here );\n", "", 'rep', PARTNER)
-e('refs-place', 'refs_agree(): each place in its order, by the ids of the pairs', D,
+e('refs-set', 'refs_agree(): in a set of the canonical form the order does not count', P, RS, "\t\t\tif ( false ) {", 'rep', PARTNER)
+e('refs-set-menu', 'refs_agree(): the menus of a menu item are a set', P, RS, RS.replace("'menu' === $at || ", ''), 'rep', PARTNER)
+e('refs-set-terms', 'refs_agree(): the terms of a taxonomy are a set', P, RS, RS.replace(" || 0 === strpos( $at, 'term:' )", ''), 'rep', PARTNER)
+e('refs-set-unknown', 'refs_agree(): in a set, a target without a pair whose identity is not known is not alike', P,
+  "\t\t\t\tif ( in_array( null, array_merge( $named[0], $named[1] ), true ) ) {", "\t\t\t\tif ( false ) {", 'rep', PARTNER)
+e('refs-set-named', 'refs_agree(): in a set, the targets without a pair by their identities (Codex round 2 of part 2, B)', P,
+  "\t\t\t\tif ( $named[0] !== $named[1] ) {\n\t\t\t\t\treturn false;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;", 'rep', PARTNER)
+e('refs-set-sort', 'refs_agree(): a set compared in one order, by its pairs', P,
+  "\t\t\t\tsort( $there, SORT_STRING );\n\t\t\t\tsort( $here, SORT_STRING );\n", "", 'rep', PARTNER)
+e('refs-set-sort-named', 'refs_agree(): a set compared in one order, by the identities of the others', P,
+  "\t\t\t\tsort( $named[0], SORT_STRING );\n\t\t\t\tsort( $named[1], SORT_STRING );\n", "", 'rep', PARTNER)
+e('refs-place', 'refs_agree(): each place in its order, by the ids of the pairs', P,
   "\t\t\tif ( $there !== $here ) {\n\t\t\t\treturn false;", "\t\t\tif ( false ) {\n\t\t\t\treturn false;", 'rep', PARTNER)
+# Rule 1 (Codex round 2 of part 2, a).
+B9R1 = "\t\t\tif ( $b9 || isset( $s['held'] ) || isset( $l['held'] ) ) {"
+R1H = 'testRuleOneAnUnclearPairWithASideHeldByACredentialOffersNoChoice'
+e('r1-held', 'rule 1: an unclear pair a credential holds a side of is not compared, no choice', D, B9R1, "\t\t\tif ( false ) {", 'rep', R1H)
+e('r1-held-b9', 'rule 1: so where its name is a credential here since', D, B9R1, B9R1.replace('$b9 || ', ''), 'rep', R1H)
+e('r1-held-staging', 'rule 1: so where the staging line is held', D, B9R1, B9R1.replace("isset( $s['held'] ) || ", ''), 'rep', R1H)
+e('r1-held-live', 'rule 1: so where the line of this site is held', D, B9R1, B9R1.replace(" || isset( $l['held'] )", ''), 'rep', R1H)
+e('r1-held-why', 'rule 1: with the reason of a credential', D,
+  "\t\t\t\treturn self::result( $item, 'not_compared', '1', null, 'none', self::WORDS['held'] );", "\t\t\t\treturn self::result( $item, 'not_compared', '1', null, 'none' );", 'rep', R1H)
 TR = "\t\tif ( 3 === $row || 7 === $row ) {"
 e('row-delete-3', 'table_result(): row 3 locks the deletion', D, TR, "\t\tif ( 7 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
 e('row-delete-7', 'table_result(): row 7 locks the deletion', D, TR, "\t\tif ( 3 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
@@ -956,8 +1020,9 @@ e('show-status', 'show(): the status of a post', D,
   "\t\t\t$out['post_status'] = $line['post_status'];\n", "", 'itrep', IT_MCP)
 e('show-instances', 'show(): the instances of a widget area', D,
   "\t\tif ( 'widget_area' === $item['kind'] && isset( $line['instances'] ) ) {", "\t\tif ( false ) {", 'rep', WIDGET)
-e('plain-hash', 'plain(): no hash of a side of the match', D,
-  "\t\tunset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'] );", "\t\tunset( $side['complete'], $side['locks'] );", 'rep', 'testNewOnBothSidesOfOtherContentOrUncertainArePairedFirst')
+PL = "\t\tunset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'], $side['places'] );"
+e('plain-hash', 'plain(): no hash of a side of the match', D, PL, "\t\tunset( $side['complete'], $side['locks'], $side['places'] );", 'rep', 'testNewOnBothSidesOfOtherContentOrUncertainArePairedFirst')
+e('plain-places', 'plain(): no places of the references of a side of the match', D, PL, PL.replace(", $side['places']", ''), 'rep', 'testNewOnBothSidesUnderTheObjectOfAPairHereAndAnotherThereIsUncertain')
 e('blocked-count', 'finish(): what is locked with how many entries', D,
   "\t\t\t\t++$blocked[ $lock['key'] ]['entries'];\n", "", 'rep', LOCKS)
 
@@ -1148,7 +1213,12 @@ out.append('''<?php
  * new term with meta, a menu or widget area with an item removed on staging
  * as a whole), the graph of the necessary references (edges, waits, mutual
  * references, passed on), the store with its report_hash and cursor, and
- * what the lines, the manifest and the confirmation carry for it.
+ * what the lines, the manifest and the confirmation carry for it. Codex
+ * round 2 of part 2: the references to the objects of pairs, one rule for
+ * the proposal and the report (AB_MCP_Sync_Proposal::refs_agree(): a set by
+ * its pairs and the identities of the others; equal, differs or uncertain
+ * by where a reference stands; a chosen pair active only so), and an unclear
+ * pair a credential holds a side of not compared, without a choice.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.

@@ -10,8 +10,11 @@
  *   deleted in its three cases, a live object in the trash still deleted, 3
  *   active, 4 no pair); row 10 removed on both, in the trash on both or on
  *   one; changed alike only where both sides name the objects of one pair
- *   (Codex's case with the real index of identities, a set, a list);
- *   incomplete never deleted, the trash a deletion, an auto-draft no
+ *   (Codex's case with the real index of identities, a set, a list; a set
+ *   mixing targets with and without a pair by the pairs and the identities
+ *   of the others), and new on both sides under the object of a pair here
+ *   and another there uncertain; an unclear pair a credential holds a side
+ *   of not compared, without a choice; incomplete never deleted, the trash a deletion, an auto-draft no
  *   content, a name holding a credential here not deleted and neither side
  *   by its name, an override compared against its target and named;
  * - what is locked, with its reason and stage: the locks of the lines, a
@@ -322,24 +325,81 @@ final class SyncReportTest extends TestCase {
 		self::assertSame( array( 'changed_alike', 6, 'none' ), array( $entry['result'], $entry['row'], $entry['action'] ) );
 	}
 
+	/**
+	 * Codex round 2 of part 2, b: the same case for pages new on both sides,
+	 * without a pair of their own. The proposal the report shows is uncertain
+	 * (a person chooses), not equal; under the objects of the pair on both
+	 * sides it stays equal.
+	 */
+	public function testNewOnBothSidesUnderTheObjectOfAPairHereAndAnotherThereIsUncertain(): void {
+		$s     = self::mapped_under( array( 34 => array( 'team', 0 ), 50 => array( 'kontakt', 34 ) ), 34 );
+		$l     = self::mapped_under( array( 12 => array( 'team-alt', 0 ), 13 => array( 'team', 0 ), 20 => array( 'kontakt', 13 ) ), 13 );
+		$r     = self::report(
+			array( self::page( '34', 'team', 's0' ), self::page( '50', 'kontakt', 'k', array( 'mapped' => $s, 'refs' => array( self::ref( 'post', 34 ) ) ) ) ),
+			array( self::page( '12', 'team-alt', 'l1' ), self::page( '13', 'team', 'n' ), self::page( '20', 'kontakt', 'k', array( 'mapped' => $l, 'refs' => array( self::ref( 'post', 13 ) ) ) ) ),
+			array( self::pair( 1, 'post', '12', '34' ) )
+		);
+		$entry = array_values( array_filter( $r['entries'], static fn( $e ) => array( '50' ) === array_column( $e['candidates']['staging'] ?? array(), 'ref' ) ) );
+		self::assertCount( 1, $entry, (string) json_encode( $r['entries'] ) );
+		self::assertSame( array( 'new_both', 'pair', 'uncertain' ), array( $entry[0]['result'], $entry[0]['action'], $entry[0]['proposal'] ) );
+		self::assertSame( array( '20' ), array_column( $entry[0]['candidates']['live'], 'ref' ) );
+		self::assertStringNotContainsString( '"places"', (string) json_encode( $r ), 'What the comparison keeps of the references is not shown.' );
+		// Under the objects of the pair on both sides: equal.
+		$l = self::mapped_under( array( 12 => array( 'team', 0 ), 13 => array( 'team-neu', 0 ), 20 => array( 'kontakt', 12 ) ), 12 );
+		$r = self::report(
+			array( self::page( '34', 'team', 's0' ), self::page( '50', 'kontakt', 'k', array( 'mapped' => $s, 'refs' => array( self::ref( 'post', 34 ) ) ) ) ),
+			array( self::page( '12', 'team', 'l0' ), self::page( '13', 'team-neu', 'n' ), self::page( '20', 'kontakt', 'k', array( 'mapped' => $l, 'refs' => array( self::ref( 'post', 12 ) ) ) ) ),
+			array( self::pair( 1, 'post', '12', '34' ) )
+		);
+		self::assertSame( array( 'new_both', 'equal' ), array( self::of( $r, 'post', '50' )['result'], self::of( $r, 'post', '50' )['proposal'] ) );
+	}
+
+	/** A term of a taxonomy, its identity its slug. */
+	private static function term( string $ref, string $slug, string $taxonomy = 'category' ): array {
+		return self::line( 'term', $ref, array( 'slug' => $slug, 'taxonomy' => $taxonomy ), self::h( 't' . $ref ), array( 'meta' => 0 ) );
+	}
+
 	public function testAReferenceToAPairedTargetIsAlikeOnlyWhereTheOtherSideNamesItsPartner(): void {
-		$alike = static fn( array $s_refs, array $l_refs, array $pairs ): array => self::of(
+		// The terms of both sides by their slugs: 5 and 15 news, 6 and 16
+		// sport (each two of a pair), 8 and 18 misc, 9 and 19 events
+		// (without a pair); here 17 news as well, without a pair (the
+		// identity of 15 once more); staging 7 and here 27 without a line, 4
+		// and 24 not read (no identity), the page 9 of staging no term.
+		$unread = static fn( string $ref ): array => self::line( 'term', $ref, array(), self::h( 't' . $ref ), array( 'meta' => 0 ) );
+		$alike  = static fn( array $s_refs, array $l_refs, array $pairs ): array => self::of(
 			self::report(
-				array( self::page( '50', 'kontakt', 's1', array( 'mapped' => self::h( 'same' ), 'refs' => $s_refs ) ) ),
-				array( self::page( '20', 'kontakt', 'l1', array( 'mapped' => self::h( 'same' ), 'refs' => $l_refs ) ) ),
+				array( self::page( '50', 'kontakt', 's1', array( 'mapped' => self::h( 'same' ), 'refs' => $s_refs ) ), self::term( '5', 'news' ), self::term( '6', 'sport' ), self::term( '8', 'misc' ), self::term( '9', 'events' ), $unread( '4' ), self::page( '9', 'events', 'p9' ) ),
+				array( self::page( '20', 'kontakt', 'l1', array( 'mapped' => self::h( 'same' ), 'refs' => $l_refs ) ), self::term( '15', 'news' ), self::term( '16', 'sport' ), self::term( '17', 'news' ), self::term( '18', 'misc' ), self::term( '19', 'events' ), $unread( '24' ) ),
 				array_merge( array( self::pair( 2, 'post', '20', '50' ) ), $pairs )
 			),
 			'post',
 			'50'
 		);
 		$terms = array( self::pair( 3, 'term', '15', '5' ), self::pair( 4, 'term', '16', '6' ) );
+		$cat   = static fn( int $id ): array => self::ref( 'term', $id, 'term:category' );
+		$tag   = static fn( int $id ): array => self::ref( 'term', $id, 'term:post_tag' );
 		$cases = array(
 			'an unpaired target here, a paired one there'      => array( array( self::ref( 'post', 99 ) ), array( self::ref( 'post', 12 ) ), array( self::pair( 1, 'post', '12', '34' ) ), 5 ),
 			'targets of two other pairs'                       => array( array( self::ref( 'post', 34 ) ), array( self::ref( 'post', 13 ) ), array( self::pair( 1, 'post', '12', '34' ), self::pair( 5, 'post', '13', '35' ) ), 5 ),
 			'no target paired: the mapped forms decide'        => array( array( self::ref( 'post', 99 ) ), array( self::ref( 'post', 98 ) ), array(), 6 ),
-			'a set without a pair, in another order'          => array( array( self::ref( 'term', 9, 'term:category' ), self::ref( 'term', 8, 'term:category' ) ), array( self::ref( 'term', 18, 'term:category' ), self::ref( 'term', 19, 'term:category' ) ), $terms, 6 ),
-			'the terms of a set in another order, all paired'  => array( array( self::ref( 'term', 5, 'term:category' ), self::ref( 'term', 6, 'term:category' ) ), array( self::ref( 'term', 16, 'term:category' ), self::ref( 'term', 15, 'term:category' ) ), $terms, 6 ),
-			'a set with a target without a pair'              => array( array( self::ref( 'term', 5, 'term:category' ), self::ref( 'term', 9, 'term:category' ) ), array( self::ref( 'term', 15, 'term:category' ), self::ref( 'term', 19, 'term:category' ) ), $terms, 5 ),
+			'a set without a pair, in another order'          => array( array( $cat( 9 ), $cat( 8 ) ), array( $cat( 18 ), $cat( 19 ) ), $terms, 6 ),
+			'the terms of a set in another order, all paired'  => array( array( $cat( 5 ), $cat( 6 ) ), array( $cat( 16 ), $cat( 15 ) ), $terms, 6 ),
+			// Codex round 2 of part 2, B: news of a pair, events without one on both sides.
+			'a set with a target without a pair of one identity on both sides' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 6 ),
+			'a mixed set in another order'                    => array( array( $cat( 9 ), $cat( 6 ), $cat( 8 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 18 ), $cat( 16 ), $cat( 19 ) ), $terms, 6 ),
+			'categories and tags, some of them paired'        => array( array( $cat( 5 ), $cat( 9 ), $tag( 8 ) ), array( $cat( 15 ), $cat( 19 ), $tag( 18 ) ), $terms, 6 ),
+			'the menus of an item, one of a pair, one without' => array( array( self::ref( 'term', 8, 'menu' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'term', 15, 'menu' ), self::ref( 'term', 18, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ) ), 6 ),
+			'the target of an item, of a pair on both sides'  => array( array( self::ref( 'post', 34, 'meta:_menu_item_object_id' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'post', 12, 'meta:_menu_item_object_id' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 1, 'post', '12', '34' ), self::pair( 3, 'menu', '15', '5' ) ), 6 ),
+			'the target of an item without a pair, its menu of one' => array( array( self::ref( 'post', 99, 'meta:_menu_item_object_id' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'post', 98, 'meta:_menu_item_object_id' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ) ), 6 ),
+			'a target of a pair there, here another object of its identity' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 17 ), $cat( 19 ) ), array( self::pair( 3, 'term', '15', '5' ) ), 5 ),
+			'a target of a pair there, here one without a pair in its place' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 18 ), $cat( 19 ) ), $terms, 5 ),
+			'the targets without a pair are others'           => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 18 ) ), $terms, 5 ),
+			'a target without a pair whose line is not at hand' => array( array( $cat( 5 ), $cat( 7 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 5 ),
+			'targets without a pair, their lines not at hand on both sides' => array( array( $cat( 5 ), $cat( 7 ) ), array( $cat( 15 ), $cat( 27 ) ), $terms, 5 ),
+			'targets without a pair not read on both sides'   => array( array( $cat( 5 ), $cat( 4 ) ), array( $cat( 15 ), $cat( 24 ) ), $terms, 5 ),
+			'a set without a pair, a line not at hand: the mapped forms decide' => array( array( $cat( 7 ), $cat( 9 ) ), array( $cat( 19 ), $cat( 18 ) ), $terms, 6 ),
+			'a reference without a pair on one side only: the mapped forms decide' => array( array( self::ref( 'post', 99, 'post_content' ) ), array(), array(), 6 ),
+			'a target of a pair more on one side'             => array( array( $cat( 5 ), $cat( 6 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 5 ),
 			'a list keeps its places'                         => array( array( self::ref( 'term', 5, 'meta:ids' ), self::ref( 'term', 6, 'meta:ids' ) ), array( self::ref( 'term', 16, 'meta:ids' ), self::ref( 'term', 15, 'meta:ids' ) ), $terms, 5 ),
 			'a list in its places'                            => array( array( self::ref( 'term', 5, 'meta:ids' ), self::ref( 'term', 9, 'meta:ids' ) ), array( self::ref( 'term', 15, 'meta:ids' ), self::ref( 'term', 19, 'meta:ids' ) ), $terms, 6 ),
 			'the menus of an item in another order, all paired' => array( array( self::ref( 'term', 5, 'menu' ), self::ref( 'term', 6, 'menu' ) ), array( self::ref( 'term', 16, 'menu' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ), self::pair( 4, 'menu', '16', '6' ) ), 6 ),
@@ -439,6 +499,38 @@ final class SyncReportTest extends TestCase {
 			self::assertSame( array( 'staging_wins', 'keep_live', 'leave_open' ), $entry['choices'] );
 		}
 		self::assertCount( 1, self::report( array( self::page( '34', 'about', 's1' ) ), array( self::page( '12', 'about', 'l0' ) ), array( self::pair( 7, 'post', '12', '34', 'unclear' ) ) )['entries'], 'One entry: the proposal\'s new alignment is not one of the report.' );
+		// A side deleted is still a choice of a person.
+		$entry = self::decided( array( self::page( '34', 'about', 's1' ) ), array(), self::pair( 7, 'post', '12', '34', 'unclear' ) );
+		self::assertSame( array( 'unclear', 'choose' ), array( $entry['result'], $entry['action'] ) );
+	}
+
+	/**
+	 * Codex round 2 of part 2, a: an unclear pair a side of which a credential
+	 * holds (its name a credential here since it was paired, or a line held)
+	 * is not compared and offers no choice, as in the other states of a pair.
+	 */
+	public function testRuleOneAnUnclearPairWithASideHeldByACredentialOffersNoChoice(): void {
+		$words = 'A name of this object holds a credential by the rules of this site: shown by the SHA-256 of its ref only, never compared. Take it over by hand.';
+		$b9    = array( "option\0" . self::h( '"my_setting"' ) => true );
+		$line  = self::line( 'option', 'my_setting', array( 'name' => 'my_setting' ), self::h( 's1' ) );
+		foreach ( array( 'its staging line there' => array( array( $line ), 'not_compared' ), 'its staging line gone' => array( array(), 'deleted' ) ) as $case => list( $staging, $state ) ) {
+			$entry = self::decided( $staging, array(), self::pair( 7, 'option', 'my_setting', 'my_setting', 'unclear' ), null, $b9 );
+			self::assertSame( array( 'not_compared', '1', null, 'none' ), array( $entry['result'], $entry['rule'], $entry['row'], $entry['action'] ), $case );
+			self::assertSame( array( 'staging' => $state, 'live' => 'not_compared' ), $entry['sides'], $case );
+			self::assertArrayNotHasKey( 'choices', $entry, $case );
+			self::assertSame( $words, $entry['reason'], $case );
+		}
+		$held = static fn( string $ref ): array => array(
+			'kind'       => 'post',
+			'ref_sha256' => self::h( '"' . $ref . '"' ),
+			'held'       => 'credential_field',
+		);
+		foreach ( array( 'held on staging' => array( array( $held( '34' ) ), array( self::page( '12', 'about', 'l1' ) ) ), 'held here' => array( array( self::page( '34', 'about', 's1' ) ), array( $held( '12' ) ) ) ) as $case => list( $staging, $live ) ) {
+			$entry = self::decided( $staging, $live, self::pair( 7, 'post', '12', '34', 'unclear' ) );
+			self::assertSame( array( 'not_compared', '1', 'none' ), array( $entry['result'], $entry['rule'], $entry['action'] ), $case );
+			self::assertArrayNotHasKey( 'choices', $entry, $case );
+			self::assertSame( $words, $entry['reason'], $case );
+		}
 	}
 
 	public function testRuleTwoAPairTakenOverAsDeleted(): void {

@@ -20,7 +20,11 @@
  *   hash, a row not read and a ref no pair holds are not compared, with the
  *   words of the reason code; objects of a pair are not proposed again,
  *   unclear and residual pairs are proposed for a new alignment; entries
- *   numbered in the order of the categories.
+ *   numbered in the order of the categories. A reference to the object of a
+ *   pair is equal only where the other side names its other object
+ *   (refs_agree()): else differs, or uncertain where it names the object
+ *   (the parent of a post, the target or menu of a menu item); a chosen
+ *   pair is active only so (alike(), also as the store keeps the sides).
  * - identity_key(): what names an object apart from its id, by kind; a menu
  *   item by the slug of its menu, its target and parent, never its position.
  * - compose(): packages of one series as one inventory: an object twice or a
@@ -342,6 +346,127 @@ final class SyncProposalTest extends TestCase {
 		$s     = array( self::page( '1', 'team', self::h( 'team' ) ), self::page( '2', 'shop', self::h( 'shop' ) ), self::page( '3', 'about', self::h( 'a' ), '1' ), self::page( '4', 'about', self::h( 'b' ), null, $thumb ), self::page( '5', 'about', self::h( 'c' ), '2' ) );
 		$l     = array( self::page( '11', 'team', self::h( 'team' ) ), self::page( '12', 'shop', self::h( 'shop' ) ), self::page( '13', 'about', self::h( 'x' ), '11' ), self::page( '14', 'about', self::h( 'y' ) ), self::page( '15', 'about', self::h( 'z' ), '12' ) );
 		self::assertSame( array( '1' => '11', '2' => '12', '3' => '13', '4' => '14', '5' => '15' ), self::paired( self::match( $s, $l ) ), 'The page with a featured image stays at the top.' );
+	}
+
+	/* -------------------- references to the objects of pairs (part 2, b) */
+
+	/** A reference of a line to a post or term of its side. */
+	private static function to( string $space, int $id, string $at ): array {
+		return array(
+			'at'       => $at,
+			'id'       => $id,
+			'space'    => $space,
+			'strength' => 'strong',
+		);
+	}
+
+	/** A term of a taxonomy, its identity its slug. */
+	private static function term( string $ref, string $slug, string $taxonomy = 'category' ): array {
+		return self::line( 'term', $ref, array( 'slug' => $slug, 'taxonomy' => $taxonomy ), self::h( 't' . $ref ) );
+	}
+
+	/** An entry as the store gives it back (JSON, as AB_MCP_Sync_Proposal::put() writes it). */
+	private static function stored( array $entry ): array {
+		return json_decode( \AB_MCP_Sync_Canon::encode( $entry ), true );
+	}
+
+	/**
+	 * Codex round 2 of part 2, b: the pair S34 → L12 began as «team»; L12 is
+	 * renamed «team-alt» here and L13 takes «team». A page «kontakt» new on
+	 * both sides, on staging under S34, here under L13, has the same mapped
+	 * form on both (its parent by the identity «team»), but staging names L12
+	 * through the pair: another parent, so uncertain, never equal; chosen by a
+	 * person it is confirmed unclear.
+	 */
+	public function testAPageUnderTheObjectOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain(): void {
+		$pairs = array( self::pair( 1, 'post', '12', '34', 'active' ) );
+		$same  = array( 'mapped' => self::h( 'kontakt under team' ) );
+		$r     = self::match(
+			array( self::page( '34', 'team', self::h( 't' ) ), self::page( '50', 'kontakt', self::h( 'k50' ), '34', $same ) ),
+			array( self::page( '12', 'team-alt', self::h( 't2' ) ), self::page( '13', 'team', self::h( 'n' ) ), self::page( '20', 'kontakt', self::h( 'k20' ), '13', $same ) ),
+			$pairs
+		);
+		$e = array_values( array_filter( self::of( $r, 'uncertain' ), static fn( $e ) => '50' === $e['candidates']['staging'][0]['ref'] ) );
+		self::assertCount( 1, $e, (string) json_encode( $r['entries'] ) );
+		self::assertSame( array( 'choice', array( '50' ), array( '20' ) ), array( $e[0]['confirm'], array_column( $e[0]['candidates']['staging'], 'ref' ), array_column( $e[0]['candidates']['live'], 'ref' ) ) );
+		self::assertStringContainsString( 'the object of a pair on one side and another object on the other', $e[0]['reason'] );
+		self::assertSame( array(), self::of( $r, 'equal' ) );
+		// A person who chooses it pairs it unclear (AB_MCP_Sync_Pairs_Tool), also from the store.
+		$stored = self::stored( $e[0] );
+		self::assertFalse( AB_MCP_Sync_Proposal::alike( $stored['candidates']['staging'][0], $stored['candidates']['live'][0] ) );
+		self::assertTrue( AB_MCP_Sync_Proposal::mapped_same( $stored['candidates']['staging'][0], $stored['candidates']['live'][0] ), 'The same mapped form: the case of the finding.' );
+		// Under the objects of the pair on both sides, or with no parent of a pair: equal and active.
+		$cases = array(
+			'under the objects of the pair'   => array( array( self::page( '34', 'team', self::h( 't' ) ), self::page( '50', 'kontakt', self::h( 'k50' ), '34', $same ) ), array( self::page( '12', 'team', self::h( 't' ) ), self::page( '13', 'team-neu', self::h( 'n' ) ), self::page( '20', 'kontakt', self::h( 'k20' ), '12', $same ) ), $pairs ),
+			'parents without a pair'         => array( array( self::page( '34', 'team', self::h( 't' ) ), self::page( '50', 'kontakt', self::h( 'k50' ), '34', $same ) ), array( self::page( '12', 'team', self::h( 't' ) ), self::page( '20', 'kontakt', self::h( 'k20' ), '12', $same ) ), array() ),
+			'grandchildren under the pair'   => array( array( self::page( '34', 'team', self::h( 't' ) ), self::page( '40', 'a', self::h( 'a' ), '34' ), self::page( '50', 'kontakt', self::h( 'k50' ), '40', $same ) ), array( self::page( '12', 'team', self::h( 't' ) ), self::page( '41', 'a', self::h( 'a' ), '12' ), self::page( '20', 'kontakt', self::h( 'k20' ), '41', $same ) ), $pairs ),
+		);
+		foreach ( $cases as $case => list( $s, $l, $p ) ) {
+			$r = self::match( $s, $l, $p );
+			$e = array_values( array_filter( $r['entries'], static fn( $e ) => '50' === ( $e['staging']['ref'] ?? null ) ) );
+			self::assertSame( array( 'equal', 'active', '20' ), array( $e[0]['category'] ?? null, $e[0]['confirm'] ?? null, $e[0]['live']['ref'] ?? null ), $case . ': ' . json_encode( $r['entries'] ) );
+			self::assertTrue( AB_MCP_Sync_Proposal::alike( self::stored( $e[0] )['staging'], self::stored( $e[0] )['live'] ), $case );
+		}
+		$old = self::stored( $e[0] );
+		unset( $old['live']['places'] );
+		self::assertFalse( AB_MCP_Sync_Proposal::alike( $old['staging'], $old['live'] ), 'A side kept without its places (a proposal before them): not alike.' );
+	}
+
+	public function testAReferenceToTheObjectOfAPairIsEqualOnlyWhereTheOtherSideNamesItsPartner(): void {
+		// 5 and 15 news (a pair), 9 and 19 events (none); here 16 news as
+		// well, without a pair (it took the slug where 15 was renamed).
+		$terms = array( self::term( '5', 'news' ), self::term( '9', 'events' ) );
+		$here  = array( self::term( '15', 'news' ), self::term( '16', 'news' ), self::term( '19', 'events' ) );
+		$cat   = static fn( int $id ): array => self::to( 'term', $id, 'term:category' );
+		$post  = static fn( string $ref, array $refs ): array => self::page( $ref, 'neu', self::h( 'p' . $ref ), null, array( 'mapped' => self::h( 'same' ), 'refs' => $refs ), 'post' );
+		$pairs = array( self::pair( 3, 'term', '15', '5', 'active' ) );
+		$cases = array(
+			'a category of a pair there, here another of its identity' => array( array( $cat( 5 ) ), array( $cat( 16 ) ), 'differs' ),
+			'and one without a pair beside it'                       => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 16 ), $cat( 19 ) ), 'differs' ),
+			'the categories of the pair'                             => array( array( $cat( 5 ) ), array( $cat( 15 ) ), 'equal' ),
+			'categories without a pair'                              => array( array( $cat( 9 ) ), array( $cat( 19 ) ), 'equal' ),
+			'a category of the pair and one without'                 => array( array( $cat( 9 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 19 ) ), 'equal' ),
+			'and a tag without a pair'                               => array( array( $cat( 5 ), self::to( 'term', 9, 'term:post_tag' ) ), array( $cat( 15 ), self::to( 'term', 19, 'term:post_tag' ) ), 'equal' ),
+		);
+		foreach ( $cases as $case => list( $s_refs, $l_refs, $category ) ) {
+			$r = self::match( array_merge( $terms, array( $post( '60', $s_refs ) ) ), array_merge( $here, array( $post( '70', $l_refs ) ) ), $pairs );
+			$e = array_values( array_filter( $r['entries'], static fn( $e ) => '60' === ( $e['staging']['ref'] ?? null ) ) );
+			self::assertSame( array( $category, 'equal' === $category ? 'active' : 'unclear' ), array( $e[0]['category'] ?? null, $e[0]['confirm'] ?? null ), $case );
+		}
+		// A term a credential holds names nothing, also not in what the
+		// comparison keeps (the store holds the entries): not alike.
+		$held = array( 'held' => 'credential_name' ) + self::term( '9', 'secret-events' );
+		$r    = self::match( array( self::term( '5', 'news' ), $held, $post( '60', array( $cat( 5 ), $cat( 9 ) ) ) ), array_merge( $here, array( self::term( '29', 'secret-events' ), $post( '70', array( $cat( 15 ), $cat( 29 ) ) ) ) ), $pairs );
+		$e    = array_values( array_filter( $r['entries'], static fn( $e ) => '60' === ( $e['staging']['ref'] ?? null ) ) );
+		self::assertSame( 'differs', $e[0]['category'] ?? null );
+		self::assertStringNotContainsString( 'secret-events', (string) json_encode( $e[0]['staging'] ) );
+	}
+
+	public function testAMenuItemOfATargetOrMenuOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain(): void {
+		$with  = static fn( array $line, array $refs ): array => array( 'refs' => $refs ) + $line;
+		$item  = static fn( string $ref, int $menu, int $target ): array => $with( self::item( $ref, $menu, 'team', 1, 'i' ), array( self::to( 'post', $target, 'meta:_menu_item_object_id' ), self::to( 'term', $menu, 'menu' ) ) );
+		$page  = self::pair( 1, 'post', '12', '34', 'active' );
+		$menu  = self::pair( 3, 'menu', '15', '5', 'active' );
+		// The menu 5 «main» of the pair 3 with 15, here «main» as well, or
+		// renamed «main-alt» where 16 took «main»; the page S34 of the pair 1
+		// with L12, the target of the item by the identity «team» on both.
+		$cases = array(
+			'its target of a pair there, here another page' => array( $item( '151', 15, 13 ), 'main', array( $menu, $page ), 'uncertain' ),
+			'its menu of a pair there, here another menu'   => array( $item( '151', 16, 13 ), 'main-alt', array( $menu ), 'uncertain' ),
+			'the target and menu of the pairs'              => array( $item( '151', 15, 12 ), 'main', array( $menu, $page ), 'equal' ),
+			'a target without a pair'                       => array( $item( '151', 15, 13 ), 'main', array( $menu ), 'equal' ),
+			'a menu and target without a pair'              => array( $item( '151', 15, 13 ), 'main', array(), 'equal' ),
+			'its parent item of a pair there, here another' => array( $with( $item( '151', 15, 13 ), array_merge( $item( '151', 15, 13 )['refs'], array( self::to( 'post', 161, 'meta:_menu_item_menu_item_parent' ) ) ) ), 'main', array( $menu, self::pair( 5, 'menu_item', '160', '60', 'active' ) ), 'uncertain' ),
+			'its parent item of the pair'                   => array( $with( $item( '151', 15, 13 ), array_merge( $item( '151', 15, 13 )['refs'], array( self::to( 'post', 160, 'meta:_menu_item_menu_item_parent' ) ) ) ), 'main', array( $menu, self::pair( 5, 'menu_item', '160', '60', 'active' ) ), 'equal' ),
+		);
+		foreach ( $cases as $case => list( $l, $slug, $pairs, $category ) ) {
+			$here = 'main' === $slug ? array( self::menu( '15', 'main' ) ) : array( self::menu( '15', $slug ), self::menu( '16', 'main' ) );
+			$s    = $with( $item( '51', 5, 34 ), array_merge( $item( '51', 5, 34 )['refs'], array( self::to( 'post', 60, 'meta:_menu_item_menu_item_parent' ) ) ) );
+			$r    = self::match( array( self::menu( '5', 'main' ), $s ), array_merge( $here, array( $l ) ), $pairs );
+			$e = array_values( array_filter( $r['entries'], static fn( $e ) => 'menu_item' === $e['kind'] ) );
+			self::assertCount( 1, $e, $case . ': ' . json_encode( $r['entries'] ) );
+			self::assertSame( $category, $e[0]['category'], $case );
+		}
 	}
 
 	public function testAnEqualMappedFormThereOnceOnEachSideOfAPathPairsTwins(): void {
@@ -869,9 +994,13 @@ final class SyncProposalTest extends TestCase {
 			self::assertStringNotContainsString( '"mapped', $shown );
 			self::assertStringNotContainsString( self::h( 'possible' ), $shown );
 		}
+		self::assertStringContainsString( '"places"', (string) json_encode( $r['entries'] ), 'Kept for a choice.' );
+		self::assertStringNotContainsString( '"places"', (string) json_encode( array_map( array( AB_MCP_Sync_Proposal::class, 'shown' ), $r['entries'] ) ), 'Not shown.' );
 		$amb = self::match( array( self::page( '1', 'd', self::h( 'p' ), null, $possible ), self::page( '2', 'd', self::h( 'q' ) ) ), array( self::page( '3', 'd', self::h( 'r' ) ), self::page( '4', 'd', self::h( 's' ) ) ) )['entries'][0];
 		self::assertSame( 'uncertain', $amb['category'] );
 		$shown = (string) json_encode( AB_MCP_Sync_Proposal::shown( $amb ) );
+		self::assertStringContainsString( '"places"', (string) json_encode( $amb ) );
+		self::assertStringNotContainsString( '"places"', $shown );
 		self::assertStringNotContainsString( self::h( 'p' ), $shown );
 		self::assertStringNotContainsString( '"mapped', $shown );
 		self::assertStringNotContainsString( self::h( 'possible' ), $shown );

@@ -39,7 +39,12 @@
  * 10: every reference names its target by identity, AB_MCP_Sync_Identity;
  * either the form with the typed references so or the one with the possible
  * references so as well, mapped_same(), Codex round 2, B-1), so the same
- * objects with other ids on the two sites are equal. No pair by exclusion:
+ * objects with other ids on the two sites are equal; a reference to the
+ * object of a pair is the same only where the other side names the other
+ * object of that pair (refs_agree(), the rule of the report as well; Codex
+ * round 2 of part 2, b): else other content (differs), or, where the
+ * reference names the object (the parent of a post, the target, parent item
+ * or menus of a menu item, NAMED_BY), uncertain. No pair by exclusion:
  * one object a side of the same identity and path is a pair. An identity
  * that is there more than once on a site (its line says twin with how many
  * its site has, or a side holds it twice on a path: Codex round 4) pairs on
@@ -143,6 +148,25 @@ final class AB_MCP_Sync_Proposal {
 
 	/** Parents of a post followed at most for its path. */
 	const MAX_PATH = 64;
+
+	/** The pair kinds whose objects are in the ID space of posts, and of terms. */
+	const SPACES = array(
+		'post' => array( 'post', 'menu_item', 'attachment' ),
+		'term' => array( 'term', 'menu' ),
+	);
+
+	/**
+	 * The places of the references that name an object, by its kind (its
+	 * identity and path, identity_key()): the parent of a post; the target,
+	 * the parent item and the menus of a menu item. Where such a reference
+	 * names the object of a pair on one side and another object on the
+	 * other, the two objects are uncertain, not of other content
+	 * (pair_entry(); Codex round 2 of part 2, b).
+	 */
+	const NAMED_BY = array(
+		'post'      => array( 'post_parent' ),
+		'menu_item' => array( 'meta:_menu_item_object_id', 'meta:_menu_item_menu_item_parent', 'menu' ),
+	);
 
 	/** Objects a call reads at most; LIMIT when null. Set by tests only. */
 	public static $limit = null;
@@ -973,7 +997,8 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * An entry as an answer shows it: without the hashes.
+	 * An entry as an answer shows it: without the hashes and the places of
+	 * the references (what only the comparison uses).
 	 *
 	 * @param array $entry Entry.
 	 * @return array
@@ -981,13 +1006,13 @@ final class AB_MCP_Sync_Proposal {
 	public static function shown( array $entry ) {
 		foreach ( array( 'staging', 'live' ) as $side ) {
 			if ( isset( $entry[ $side ] ) && is_array( $entry[ $side ] ) ) {
-				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'] );
+				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'], $entry[ $side ]['places'] );
 			}
 		}
 		if ( isset( $entry['candidates'] ) ) {
 			foreach ( $entry['candidates'] as $side => $list ) {
 				foreach ( $list as $i => $one ) {
-					unset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'] );
+					unset( $entry['candidates'][ $side ][ $i ]['hash'], $entry['candidates'][ $side ][ $i ]['mapped'], $entry['candidates'][ $side ][ $i ]['mapped_possible'], $entry['candidates'][ $side ][ $i ]['places'] );
 				}
 			}
 		}
@@ -1123,9 +1148,10 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array entries (numbered), counts, paired, held (staging, live), subtypes.
 	 */
 	public static function match( array $staging, array $live, array $pairs, callable $complete ) {
-		$sides = array(
-			's' => self::items( $staging, 's' ),
-			'l' => self::items( $live, 'l' ),
+		$paired = self::paired( $pairs );
+		$sides  = array(
+			's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),
+			'l' => self::items( $live, 'l', $paired['l'], self::named( $live ) ),
 		);
 		$by    = array(
 			's' => array(),
@@ -1241,11 +1267,13 @@ final class AB_MCP_Sync_Proposal {
 	 * The objects of one side, each with its identity key, its path and what
 	 * keeps it from a pair by identity alone (doubt).
 	 *
-	 * @param array[] $lines Lines.
-	 * @param string  $side  s or l.
+	 * @param array[] $lines  Lines.
+	 * @param string  $side   s or l.
+	 * @param array   $paired paired() of the side.
+	 * @param array   $named  named() of the side.
 	 * @return array[]
 	 */
-	private static function items( array $lines, $side ) {
+	private static function items( array $lines, $side, array $paired = array(), array $named = array() ) {
 		$posts = array();
 		$menus = array();
 		foreach ( $lines as $line ) {
@@ -1328,6 +1356,8 @@ final class AB_MCP_Sync_Proposal {
 				// The instances of a widget area, in order (branch 6, part 2):
 				// a confirmation keeps those of both sides with the bases.
 				'instances'       => isset( $line['instances'] ) && is_array( $line['instances'] ) ? $line['instances'] : null,
+				// Its references to the objects of pairs (Codex round 2 of part 2, b).
+				'places'          => self::places( $line, $paired, $named ),
 			);
 		}
 		return $out;
@@ -1669,10 +1699,15 @@ final class AB_MCP_Sync_Proposal {
 
 	/**
 	 * The entry of one staging object and one production object of the same
-	 * identity and path: equal where both are read whole and their mapped
-	 * forms are the same (decision 10); differs where they are not, or where
-	 * a side names a target that has no identity; not compared where a side
-	 * has no hash.
+	 * identity and path: equal where both are read whole, their mapped forms
+	 * are the same (decision 10) and every reference to the object of a pair
+	 * names, on the other side, the other object of that pair (alike(), Codex
+	 * round 2 of part 2, b); differs where they are not, or where a side
+	 * names a target that has no identity; not compared where a side has no
+	 * hash. Where a reference that names the object (NAMED_BY: the parent of
+	 * a post, the target, parent item or menus of a menu item) is the object
+	 * of a pair on one side and another object on the other, the two are no
+	 * objects of one identity: uncertain, only a person's choice pairs them.
 	 *
 	 * @param array $s Staging object.
 	 * @param array $l Production object.
@@ -1683,20 +1718,176 @@ final class AB_MCP_Sync_Proposal {
 			$why = self::why_no_hash( null === $s['hash'] ? $s : $l );
 			return self::entry( 'not_compared', $s, $l ) + array( 'reason' => $why );
 		}
-		$equal = self::same( $s, $l );
+		$named = self::NAMED_BY[ $s['kind'] ] ?? array();
+		if ( ! self::refs_agree( self::at( $s['places'], $named ), self::at( $l['places'], $named ) ) ) {
+			return self::choice_entry( 'uncertain', array( $s ), array( $l ), 'What names it on its site (the parent of a post; the target, parent item or menu of a menu item) is the object of a pair on one side and another object on the other (the object of the pair renamed, and another object of its site took its slug): another object, or one that moved. It is paired only by the choice of a person.' );
+		}
+		$equal = self::alike( $s, $l );
 		return self::entry( $equal ? 'equal' : 'differs', $s, $l ) + array( 'confirm' => $equal ? 'active' : 'unclear' );
 	}
 
 	/**
-	 * Whether two objects are the same once mapped: both read whole, both
-	 * with a mapped form, the same.
+	 * Whether two objects are alike so that their pair begins active: both
+	 * read whole, the same mapped form, and each reference to the object of a
+	 * pair naming, on the other side, the other object of that pair
+	 * (refs_agree()). Also for two sides as an entry of a proposal keeps them
+	 * (the choice of a person, AB_MCP_Sync_Pairs_Tool); a side kept without
+	 * its places (a proposal of an earlier version) is not alike.
 	 *
-	 * @param array $s Staging object.
-	 * @param array $l Production object.
+	 * @param array $s Staging object or side.
+	 * @param array $l Production object or side.
 	 * @return bool
 	 */
-	private static function same( array $s, array $l ) {
-		return $s['complete'] && $l['complete'] && self::mapped_same( $s, $l );
+	public static function alike( array $s, array $l ) {
+		return ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && self::mapped_same( $s, $l )
+			&& isset( $s['places'], $l['places'] ) && is_array( $s['places'] ) && is_array( $l['places'] )
+			&& self::refs_agree( $s['places'], $l['places'] );
+	}
+
+	/**
+	 * The pairs by the objects they name: by side (s, l), ID space and ref,
+	 * the id of the pair (for places()).
+	 *
+	 * @param array[] $pairs Pairs (AB_MCP_Sync_Pairs::decode()).
+	 * @return array
+	 */
+	public static function paired( array $pairs ) {
+		$out = array(
+			's' => array(),
+			'l' => array(),
+		);
+		foreach ( $pairs as $pair ) {
+			foreach ( self::SPACES as $space => $kinds ) {
+				if ( in_array( $pair['kind'], $kinds, true ) ) {
+					$out['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];
+					$out['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The identities of the terms and menus of the lines of one side, by
+	 * ref (identity_key()): in a set, a target without a pair is compared by
+	 * its identity (places()). A held line names none.
+	 *
+	 * @param array[] $lines Lines of one side.
+	 * @return array<string,string>
+	 */
+	public static function named( array $lines ) {
+		$out = array();
+		foreach ( $lines as $line ) {
+			if ( isset( $line['held'] ) || ! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ! isset( $line['identity'] ) || ! is_array( $line['identity'] ) || array() === $line['identity'] ) {
+				continue;
+			}
+			$out[ (string) $line['ref'] ] = (string) self::identity_key( (string) $line['kind'], $line['identity'] );
+		}
+		return $out;
+	}
+
+	/**
+	 * The references of a line by their place (ID space NUL at), where a
+	 * target of the place is the object of a pair on its side: each target
+	 * of the place in its order as the id of its pair, '' for none (pairs),
+	 * and the identity of each term without a pair, null where its line is
+	 * not at hand (named). A place without a target of a pair is left out:
+	 * the mapped forms compare it.
+	 *
+	 * @param array $line   Line.
+	 * @param array $paired paired() of its side.
+	 * @param array $named  named() of its side.
+	 * @return array
+	 */
+	public static function places( array $line, array $paired, array $named ) {
+		$out = array();
+		foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
+			$space = (string) ( $ref['space'] ?? '' );
+			$id    = (string) ( $ref['id'] ?? '' );
+			$key   = $space . "\0" . (string) ( $ref['at'] ?? '' );
+			$pair  = $paired[ $space ][ $id ] ?? '';
+			$out[ $key ]['pairs'][] = $pair;
+			if ( '' === $pair ) {
+				// Read in a set only (terms and menus, refs_agree()).
+				$out[ $key ]['named'][] = $named[ $id ] ?? null;
+			}
+		}
+		foreach ( $out as $key => $place ) {
+			if ( array() === array_diff( $place['pairs'], array( '' ) ) ) {
+				unset( $out[ $key ] );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether the references of two objects name the same objects where a
+	 * pair names their targets (Codex round 1 of part 2, A; round 2, B and
+	 * b), from their places(): the mapped forms compare a reference by the
+	 * identity of its target, and an object of a pair renamed on one side,
+	 * whose slug another object there takes, has the identity of that other
+	 * one. A reference to the object of a pair, on either side, is the same
+	 * only where the other side names the other object of that pair:
+	 *  - by the place of each reference (its ID space and where it stands,
+	 *    at), in its order, each target by the id of its pair or none;
+	 *  - a place no target of which has a pair on either side is left to the
+	 *    mapped forms (both name objects without a pair, by identity);
+	 *  - in a set of the canonical form (AB_MCP_Sync_Canon::set(): the terms
+	 *    of a taxonomy, at term:<taxonomy>, and the menus of a menu item, at
+	 *    menu) the order does not count: the targets of pairs are compared
+	 *    as the ids of their pairs, those without a pair as their identities
+	 *    (a term whose line is not at hand: not alike); alike only where both
+	 *    are, so a target of a pair on one side against an object without a
+	 *    pair in its place on the other (also of the same identity) is not;
+	 *  - a place on one side only, with a target of a pair: not alike.
+	 *
+	 * @param array $s places() of the staging object.
+	 * @param array $l places() of the production object.
+	 * @return bool
+	 */
+	public static function refs_agree( array $s, array $l ) {
+		foreach ( array_unique( array_merge( array_keys( $s ), array_keys( $l ) ) ) as $key ) {
+			$there = $s[ $key ]['pairs'] ?? array();
+			$here  = $l[ $key ]['pairs'] ?? array();
+			$at    = explode( "\0", (string) $key, 2 )[1] ?? '';
+			if ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {
+				// The targets without a pair by their identities: as many
+				// as the ids '' of the place, so the ids in one order then
+				// compare the pairs.
+				$named = array( $s[ $key ]['named'] ?? array(), $l[ $key ]['named'] ?? array() );
+				if ( in_array( null, array_merge( $named[0], $named[1] ), true ) ) {
+					return false;
+				}
+				sort( $there, SORT_STRING );
+				sort( $here, SORT_STRING );
+				sort( $named[0], SORT_STRING );
+				sort( $named[1], SORT_STRING );
+				if ( $named[0] !== $named[1] ) {
+					return false;
+				}
+			}
+			if ( $there !== $here ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The places of these kinds of references (by at).
+	 *
+	 * @param array    $places places().
+	 * @param string[] $ats    The places (at) to keep.
+	 * @return array
+	 */
+	private static function at( array $places, array $ats ) {
+		$out = array();
+		foreach ( $places as $key => $place ) {
+			if ( in_array( explode( "\0", (string) $key, 2 )[1] ?? '', $ats, true ) ) {
+				$out[ $key ] = $place;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1805,7 +1996,7 @@ final class AB_MCP_Sync_Proposal {
 			return $entry;
 		}
 		$entry['confirm'] = 'active';
-		if ( ! self::same( $s, $l ) ) {
+		if ( ! self::alike( $s, $l ) ) {
 			$entry['note'] = 'The two sides differ now. Confirming makes the state of each side now its new base: the difference is then no change to carry over.';
 		}
 		return $entry;
@@ -1872,8 +2063,10 @@ final class AB_MCP_Sync_Proposal {
 
 	/**
 	 * One side of an entry: ref, identity with the path of parents of a
-	 * post, status, locks, whether it was read whole, its hashes (stored,
-	 * not shown); a held object by the SHA-256 of its ref only.
+	 * post, status, locks, whether it was read whole, its hashes and its
+	 * references to the objects of pairs (places(), for the choice of a
+	 * person; stored, not shown); a held object by the SHA-256 of its ref
+	 * only.
 	 *
 	 * @param array $item Object.
 	 * @return array
@@ -1893,6 +2086,7 @@ final class AB_MCP_Sync_Proposal {
 			'hash'            => $item['hash'],
 			'mapped'          => $item['mapped'],
 			'mapped_possible' => $item['mapped_possible'],
+			'places'          => $item['places'],
 		);
 		if ( 'post' === $item['kind'] ) {
 			$out['path'] = $item['names'];
