@@ -233,16 +233,20 @@ final class SyncProposalTest extends TestCase {
 		return $packages;
 	}
 
-	/** A takes a package of B over the relay, in this process: the last answer. */
-	private static function import( array $package, ?int $chunks = null ) {
-		$state = AB_MCP_Sync_Import::call(
+	/**
+	 * A takes a package of B over the relay, in this process (or over MCP:
+	 * a package belongs to the connection that took it over): the last answer.
+	 */
+	private static function import( array $package, ?int $chunks = null, bool $mcp = false ) {
+		$import = static fn( array $args ) => $mcp ? self::tool( 'a', 'wp_site_import_chunk', $args ) : AB_MCP_Sync_Import::call( $args );
+		$state  = $import(
 			array(
 				'package_id' => $package['package_id'],
 				'manifest'   => $package['manifest'],
 				'purpose'    => 'inventory',
 			)
 		);
-		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : ( is_string( $state ) ? $state : '' ) );
 		$steps = array();
 		foreach ( range( 0, ( $chunks ?? $package['chunks'] ) - 1 ) as $i ) {
 			$steps[] = array(
@@ -254,23 +258,23 @@ final class SyncProposalTest extends TestCase {
 		}
 		$data = self::b( $steps );
 		foreach ( range( 0, ( $chunks ?? $package['chunks'] ) - 1 ) as $i ) {
-			$state = AB_MCP_Sync_Import::call(
+			$state = $import(
 				array(
 					'package_id' => $package['package_id'],
 					'chunk'      => $i,
 					'data'       => $data[ 'c' . $i ]['data'],
 				)
 			);
-			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : ( is_string( $state ) ? $state : '' ) );
 		}
 		return $state;
 	}
 
-	/** B packs and A takes over: the package ids. */
-	private static function staged( ?int $objects = null ): array {
+	/** B packs and A takes over (in this process, or over MCP): the package ids. */
+	private static function staged( ?int $objects = null, bool $mcp = false ): array {
 		$ids = array();
 		foreach ( self::export_b( $objects ) as $package ) {
-			self::assertTrue( self::import( $package )['complete'] );
+			self::assertTrue( self::import( $package, null, $mcp )['complete'] );
 			$ids[] = $package['package_id'];
 		}
 		return $ids;
@@ -482,7 +486,7 @@ final class SyncProposalTest extends TestCase {
 				'staging-new' => 'Only on staging.',
 			)
 		);
-		$ids = self::staged();
+		$ids = self::staged( null, true );
 		self::assertCount( 1, $ids, 'A small site in one package.' );
 
 		$answer = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
@@ -2163,11 +2167,12 @@ final class SyncProposalTest extends TestCase {
 			self::assertIsString( $gid );
 			$record  = \AB_MCP_Sync_Canon::encode(
 				array(
-					'expect'    => array( 'package_id' => $id, 'purpose' => $purpose ),
-					'format'    => AB_MCP_Sync_Import::RECORD,
-					'manifest'  => $signed['manifest'],
-					'print'     => AB_MCP_Sync_Anchor::pair_print(),
-					'signature' => $signed['signature'],
+					'connection' => AB_MCP_Sync_Import::connection(),
+					'expect'     => array( 'package_id' => $id, 'purpose' => $purpose ),
+					'format'     => AB_MCP_Sync_Import::RECORD,
+					'manifest'   => $signed['manifest'],
+					'print'      => AB_MCP_Sync_Anchor::pair_print(),
+					'signature'  => $signed['signature'],
 				)
 			);
 			self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record ) );
@@ -2210,8 +2215,10 @@ final class SyncProposalTest extends TestCase {
 		self::assertIsString( $confirm );
 		self::assertStringContainsString( 'belongs to another account or connection', $confirm );
 
-		// A proposal over MCP removes none of this process, nor the other way.
-		$mcp = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+		// A proposal over MCP removes none of this process, nor the other way;
+		// from packages taken over over MCP (a package belongs to its connection).
+		self::assertStringContainsString( 'this connection', (string) self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) ) );
+		$mcp = self::tool( 'a', 'wp_site_pairs', array( 'action' => 'propose', 'packages' => self::staged( null, true ) ) );
 		self::assertIsArray( $mcp );
 		self::assertTrue( self::here( array( 'action' => 'propose', 'proposal_id' => $parts['proposal_id'] ) )['done'] );
 		AB_MCP_Sync_Proposal::$limit = null;

@@ -26,8 +26,12 @@
  * each kind and subtype of the package; complete is true only where the
  * package holds every object of it (it began that kind of the database at
  * its start and read it to its end, and no object of that kind and subtype
- * was withheld, kinds()). Packages of objects, media and the environment
- * follow with the takeover.
+ * was withheld, kinds()). A package of the environment (purpose env,
+ * make_env(), branch 7) holds the lines of the environment of this site
+ * instead (AB_MCP_Sync_Env: versions, hashes of must-use plugins and
+ * drop-ins, counts of files and tables, group U), no object; each package
+ * of its series begins with its page. Packages of objects and media follow
+ * with the takeover.
  *
  * WHO MAKES IT (decision 9): the confirmed staging site paired with a
  * production site, with write access on (the access level Full), for an
@@ -73,6 +77,7 @@ require_once __DIR__ . '/class-sync-grant.php';
 require_once __DIR__ . '/class-sync-inventory.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 require_once __DIR__ . '/class-sync-export-rights.php';
+require_once __DIR__ . '/class-sync-env.php';
 
 /**
  * Class AB_MCP_Sync_Export
@@ -104,8 +109,8 @@ final class AB_MCP_Sync_Export {
 	/** The way an answer names for withheld objects. */
 	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
-	/** The purposes this version makes packages for. */
-	const PURPOSES = array( 'inventory' );
+	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env). */
+	const PURPOSES = array( 'inventory', 'env' );
 
 	/**
 	 * The operations of the locks the credential check gives (line()): a
@@ -138,7 +143,10 @@ final class AB_MCP_Sync_Export {
 			return $refused;
 		}
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_purpose', sprintf( 'This version makes packages of the inventory of the staging site only; packages of objects, media and the environment come with the takeover. Pass purpose=%s.', self::PURPOSES[0] ) );
+			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site; packages of objects and media come with the takeover. Pass purpose=inventory or purpose=env.' );
+		}
+		if ( 'env' === $purpose ) {
+			return self::make_env( $cursor, null === $objects ? self::OBJECTS : (int) $objects );
 		}
 		$from  = null;
 		$index = null;
@@ -148,7 +156,7 @@ final class AB_MCP_Sync_Export {
 			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
 		}
 		if ( null !== $cursor ) {
-			$follows = self::follows( $cursor );
+			$follows = self::follows( $cursor, 'inventory' );
 			if ( is_wp_error( $follows ) ) {
 				return $follows;
 			}
@@ -196,6 +204,64 @@ final class AB_MCP_Sync_Export {
 			return $packed;
 		}
 		return self::store( $purpose, $packed, $kinds, $next, $series, $sorted['report'], $index, $text );
+	}
+
+	/**
+	 * Make a package of the environment of this staging site
+	 * (AB_MCP_Sync_Env): as far as the budget of one call reaches
+	 * (AB_MCP_Sync_Inventory::BUDGET, OBJECTS lines), each package beginning with
+	 * its page; the cursor goes on where it ended, in the same series.
+	 * Nothing of an object is in it, and no value of a credential
+	 * (AB_MCP_Sync_Env: group U shows no constant that holds a secret); a
+	 * name of the site a credential holds only by its SHA-256 in the lines
+	 * (AB_MCP_Sync_Env::held()), and no name at all in the cursor, only the
+	 * SHA-256 of where the reading stopped (AB_MCP_Sync_Env::place()).
+	 *
+	 * @param mixed $cursor The cursor of the answer before, or null.
+	 * @param int   $lines  Lines one package holds at most.
+	 * @return array|WP_Error The package (answer()).
+	 */
+	private static function make_env( $cursor, $lines ) {
+		$state = null;
+		try {
+			$series = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+		}
+		if ( null !== $cursor ) {
+			$follows = self::follows( $cursor, 'env' );
+			if ( is_wp_error( $follows ) ) {
+				return $follows;
+			}
+			$state  = $follows[0]['inner'];
+			$series = $follows[1];
+		}
+		$read = AB_MCP_Sync_Env::read( $state, AB_MCP_Sync_Inventory::BUDGET, $lines );
+		if ( is_wp_error( $read ) ) {
+			return $read;
+		}
+		$packed = self::pack( $read['lines'] );
+		if ( is_wp_error( $packed ) ) {
+			return $packed;
+		}
+		$report = array(
+			'withheld'    => array(
+				'count'   => 0,
+				'objects' => array(),
+			),
+			// A name of the site a credential holds is in the package by its
+			// SHA-256 only (AB_MCP_Sync_Env::held()): held counts those lines.
+			'credentials' => array(
+				'held'  => count( array_filter( $read['lines'], static fn( $line ) => isset( $line['held'] ) ) ),
+				'names' => 0,
+				'units' => 0,
+			),
+		);
+		$next   = null === $read['state'] ? null : array(
+			'kind'  => 'env',
+			'inner' => $read['state'],
+		);
+		return self::store( 'env', $packed, array(), $next, $series, $report );
 	}
 
 	/**
@@ -278,17 +344,22 @@ final class AB_MCP_Sync_Export {
 	 * from the cursor that package recorded, and the package belongs to its
 	 * series (one open export for the budgets, AB_MCP_Store_Budget).
 	 *
-	 * @param mixed $cursor The cursor of the answer before.
+	 * @param mixed  $cursor  The cursor of the answer before.
+	 * @param string $purpose The purpose of the package to make: the package
+	 *                        before is one of it.
 	 * @return array{0:array,1:string,2:array|null}|WP_Error The cursor of the
 	 *         inventory, the series and where its index of identities is kept.
 	 */
-	private static function follows( $cursor ) {
+	private static function follows( $cursor, $purpose ) {
 		if ( ! is_array( $cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) {
 			return self::cursor_refusal();
 		}
 		$before = self::own( $cursor['package'], null );
 		if ( is_wp_error( $before ) ) {
 			return $before;
+		}
+		if ( $purpose !== $before['manifest']['purpose'] ) {
+			return self::cursor_refusal();
 		}
 		$from = array(
 			'kind'  => $cursor['kind'],

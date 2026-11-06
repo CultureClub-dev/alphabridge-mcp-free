@@ -2121,7 +2121,9 @@ final class AB_MCP_Sync_Proposal {
 	 * by its prefix, number and SHA-256.
 	 *
 	 * @param string   $gid    Group.
-	 * @param string   $prefix h, c, d, e or x (i: put directly, as text).
+	 * @param string   $prefix h, c, d, e or x (i: put directly, as text; v:
+	 *                         a part of the environment of a report, put by
+	 *                         AB_MCP_Sync_Report).
 	 * @param int|null $seq    Number (c, d, e).
 	 * @param mixed    $data   What it holds (d and e: a list, wrapped).
 	 * @param string   $format The format of the files of the group.
@@ -2224,7 +2226,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array|null prefix, seq, sha, name.
 	 */
 	public static function parse_name( $name ) {
-		if ( 1 !== preg_match( '/^([hx])([a-z2-7]{52})\z|^([cdei])([0-9]{4})-([a-z2-7]{52})\z/', $name, $m ) ) {
+		if ( 1 !== preg_match( '/^([hx])([a-z2-7]{52})\z|^([cdeiv])([0-9]{4})-([a-z2-7]{52})\z/', $name, $m ) ) {
 			return null;
 		}
 		$prefix  = '' !== $m[1] ? $m[1] : $m[3];

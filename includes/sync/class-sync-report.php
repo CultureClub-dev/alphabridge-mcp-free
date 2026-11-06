@@ -34,6 +34,20 @@
  * are for (decision 5). A report belongs to the account and connection that
  * made it.
  *
+ * THE ENVIRONMENT (branch 7; decision 14, «Lesende Bestandsaufnahme der
+ * übrigen Arten»): with environment, the packages of the environment of the
+ * staging site (purpose env) of one whole series in its order
+ * (environment()), and once the inventory of this site is read, its own
+ * environment in parts of the group (live_environment(), at least ENV_MIN
+ * seconds a call), compared by AB_MCP_Sync_Env::compare(): an entry of kind
+ * environment for each line of either side, after the objects and numbered
+ * on, its locks with the others in blocked, its counts in environment.
+ * The names the staging site holds (AB_MCP_Sync_Env::held_names(), by
+ * their SHA-256) are kept with the head, read before this site reads its
+ * own, so that each part of this site is stored with the rules of both
+ * sites (AB_MCP_Sync_Env::held_there()). Without environment, one entry
+ * says it is not compared, with the way.
+ *
  * THE ANSWER: counts, what is locked with its reason and stage, the first
  * 200 entries and a cursor for the next ones. No hash, no value; a name
  * holding a credential by the SHA-256 of its ref only (B9 never in plain
@@ -48,14 +62,15 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-decision.php';
+require_once __DIR__ . '/class-sync-env.php';
 
 /**
  * Class AB_MCP_Sync_Report
  */
 final class AB_MCP_Sync_Report {
 
-	/** The format of the files of a report. */
-	const FORMAT = 'ab-sync-report/1';
+	/** The format of the files of a report (2: the head keeps the names the staging site holds, held). */
+	const FORMAT = 'ab-sync-report/2';
 
 	/** The label of its group in the area reports. */
 	const LABEL = 'report';
@@ -66,6 +81,15 @@ final class AB_MCP_Sync_Report {
 	/** Entries of one stored part. */
 	const PART = 1000;
 
+	/** Packages of the environment of the staging site at most (one series). */
+	const MAX_ENVIRONMENT = 50;
+
+	/** The format of a part of the environment of this site in the group. */
+	const ENV_FORMAT = 'ab-sync-report-env/1';
+
+	/** Seconds a call keeps at least for a part of the environment of this site; with less left, the next call reads it. */
+	const ENV_MIN = 10;
+
 	/** The anchors of the page «Staging» the ways lead to. */
 	const ANCHOR_PAIR  = 'ab-staging-partner';
 	const ANCHOR_TRUST = 'ab-staging-trust';
@@ -75,6 +99,9 @@ final class AB_MCP_Sync_Report {
 
 	/** Entries of one answer at most; PAGE when null. Set by tests only. */
 	public static $page = null;
+
+	/** Lines of one part of the environment of this site at most; AB_MCP_Sync_Export::OBJECTS when null. Set by tests only. */
+	public static $env_lines = null;
 
 	/* ---------------------------------------------------------- the tool */
 
@@ -109,9 +136,22 @@ final class AB_MCP_Sync_Report {
 				self::ANCHOR_TRUST
 			);
 		}
+		$environment = isset( $a['environment'] ) ? $a['environment'] : array();
+		if ( ! is_array( $environment ) || ! array_is_list( $environment ) || count( $environment ) > self::MAX_ENVIRONMENT || count( array_unique( array_map( 'strval', $environment ) ) ) !== count( $environment ) || array() !== array_intersect( array_map( 'strval', $environment ), array_map( 'strval', $packages ) ) ) {
+			return self::refusal(
+				'ab_mcp_sync_report_environment',
+				sprintf( 'environment names the package_ids of the environment of the staging site this site took over completely, each once, at most %d, in the order of their series, and none of the packages of the inventory.', self::MAX_ENVIRONMENT ),
+				'1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk with purpose=env until it answers complete true. 3. Call wp_site_diff with packages and environment.',
+				self::ANCHOR_TRUST
+			);
+		}
 		$staging = self::packages( $packages );
 		if ( is_wp_error( $staging ) ) {
 			return $staging;
+		}
+		$env = self::environment( $environment );
+		if ( is_wp_error( $env ) ) {
+			return $env;
 		}
 		$version = self::wordpress_refusal( $staging['wordpress'], AB_MCP_Sync_Manifest::wordpress() );
 		if ( null !== $version ) {
@@ -126,15 +166,19 @@ final class AB_MCP_Sync_Report {
 			return $gid;
 		}
 		$head = array(
-			'canon'      => AB_MCP_Sync_Canon::VERSION,
-			'connection' => AB_MCP_Sync_Proposal::connection(),
-			'created'    => self::now(),
-			'expires'    => min( $staging['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),
-			'format'     => self::FORMAT,
-			'packages'   => array_values( array_map( 'strval', $packages ) ),
-			'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),
-			'source_id'  => $source,
-			'wordpress'  => array(
+			'canon'       => AB_MCP_Sync_Canon::VERSION,
+			'connection'  => AB_MCP_Sync_Proposal::connection(),
+			'created'     => self::now(),
+			'environment' => array_values( array_map( 'strval', $environment ) ),
+			'expires'     => min( $staging['expires'], $env['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),
+			'format'      => self::FORMAT,
+			// The names the staging site holds, by their SHA-256: before this
+			// site reads its own environment (Codex, round 2 of branch 7, A1).
+			'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),
+			'packages'    => array_values( array_map( 'strval', $packages ) ),
+			'print'       => (string) AB_MCP_Sync_Anchor::pair_print(),
+			'source_id'   => $source,
+			'wordpress'   => array(
 				'live'    => AB_MCP_Sync_Manifest::wordpress(),
 				'staging' => $staging['wordpress'],
 			),
@@ -247,6 +291,52 @@ final class AB_MCP_Sync_Report {
 	}
 
 	/**
+	 * The packages of the environment of the staging site (branch 7), each
+	 * manifest checked again (AB_MCP_Sync_Import::taken() with purpose env),
+	 * as one whole series in order: the page of each the first line, one
+	 * walk, the parts 1 to n without a gap, the last one last. The lines of
+	 * a package are signed with it (each chunk by its SHA-256 in the signed
+	 * manifest), so a series cannot be put together from two readings. A
+	 * line whose name the import held by the rules of this site is shown by
+	 * the SHA-256 of its name (AB_MCP_Sync_Env::held_here()).
+	 *
+	 * @param string[] $ids Package ids, in the order of their series; none: no environment.
+	 * @return array{lines:array[],expires:int,packages:int}|WP_Error
+	 */
+	public static function environment( array $ids ) {
+		$lines   = array();
+		$expires = PHP_INT_MAX;
+		$walk    = null;
+		foreach ( array_values( $ids ) as $i => $id ) {
+			$part = AB_MCP_Sync_Import::taken( $id, 'env' );
+			if ( is_wp_error( $part ) ) {
+				return self::refusal( $part->get_error_code(), $part->get_error_message(), '', self::ANCHOR_TRUST );
+			}
+			$page = $part['lines'][0] ?? null;
+			if ( ! is_array( $page ) || 'page' !== ( $page['env'] ?? null ) || $i + 1 !== $page['seq'] || ( null !== $walk && $walk !== $page['walk'] ) || ( count( $ids ) === $i + 1 ) !== $page['last'] ) {
+				return self::refusal(
+					'ab_mcp_sync_report_environment_series',
+					'The packages of the environment are not one whole series in its order: each package of a reading of the environment names its place in it, and the last one says it is the last.',
+					'1. Pass in environment every package one wp_site_export with purpose=env and its cursors made, in that order, from the first to the one without a cursor. 2. Or export the environment anew on the staging site and take it over here.',
+					self::ANCHOR_TRUST
+				);
+			}
+			$walk    = $page['walk'];
+			$expires = min( $expires, (int) $part['manifest']['expires'] );
+			// A name a credential holds by the rules of this site (the list of
+			// the import): by its SHA-256 only (Codex, round 1 of branch 7, A1).
+			foreach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {
+				$lines[] = $line;
+			}
+		}
+		return array(
+			'lines'    => $lines,
+			'expires'  => $expires,
+			'packages' => count( $ids ),
+		);
+	}
+
+	/**
 	 * The refusal where WordPress on the staging site is newer than here
 	 * (decision 14; concept A17: no takeover onto an older WordPress), or
 	 * null. Both are versions as the manifest takes them
@@ -288,7 +378,8 @@ final class AB_MCP_Sync_Report {
 	 * @return array|WP_Error
 	 */
 	private static function step( array $found ) {
-		$seq = count( $found['parts'] );
+		$start = self::clock();
+		$seq   = count( $found['parts'] );
 		if ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {
 			$found = AB_MCP_Sync_Proposal::read_on( $found, self::FORMAT, self::concurrent() );
 			if ( is_wp_error( $found ) ) {
@@ -296,7 +387,25 @@ final class AB_MCP_Sync_Report {
 			}
 		}
 		if ( null === end( $found['parts'] )['cursor'] ) {
-			return self::finish( $found );
+			$env = self::live_environment( $found, $start );
+			if ( is_wp_error( $env ) ) {
+				return $env;
+			}
+			if ( null !== $env['lines'] ) {
+				return self::finish( $found, $env['lines'] );
+			}
+			return array(
+				'report_id'   => $found['gid'],
+				'done'        => false,
+				'live'        => array(
+					'objects' => array_sum( array_column( $found['parts'], 'objects' ) ),
+				),
+				'environment' => array(
+					'parts' => $env['parts'],
+				),
+				'expires'     => (int) $found['head']['expires'],
+				'next'        => sprintf( 'The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d parts so far). Call wp_site_diff again with this report_id to go on.', $env['parts'] ),
+			);
 		}
 		$read_so_far = array_sum( array_column( $found['parts'], 'objects' ) );
 		return array(
@@ -311,19 +420,130 @@ final class AB_MCP_Sync_Report {
 	}
 
 	/**
+	 * The environment of this site for a report with packages of the
+	 * environment of the staging site, in parts of the group (one per call,
+	 * within what is left of the budget of the call, at least ENV_MIN
+	 * seconds): its lines once read to its end; none for a report without
+	 * them. A part is stored with the rules of both sites: a name the
+	 * staging site holds (held in the head) by its SHA-256 only.
+	 *
+	 * @param array $found find().
+	 * @param float $start When the call began.
+	 * @return array{lines:array[]|null,parts:int}|WP_Error lines null: not read to its end yet.
+	 */
+	private static function live_environment( array $found, $start ) {
+		if ( array() === ( $found['head']['environment'] ?? array() ) ) {
+			return array(
+				'lines' => array(),
+				'parts' => 0,
+			);
+		}
+		$parts = self::env_parts( $found['gid'] );
+		if ( is_wp_error( $parts ) ) {
+			return $parts;
+		}
+		$last = end( $parts );
+		if ( false === $last || null !== $last['state'] ) {
+			$left = AB_MCP_Sync_Inventory::BUDGET - AB_MCP_Sync_Proposal::RESERVE - ( self::clock() - $start );
+			if ( $left < self::ENV_MIN ) {
+				return array(
+					'lines' => null,
+					'parts' => count( $parts ),
+				);
+			}
+			$read = AB_MCP_Sync_Env::read( false === $last ? null : $last['state'], $left, null === self::$env_lines ? AB_MCP_Sync_Export::OBJECTS : (int) self::$env_lines );
+			if ( is_wp_error( $read ) ) {
+				return $read;
+			}
+			$part = array(
+				'format' => self::ENV_FORMAT,
+				'lines'  => AB_MCP_Sync_Env::held_there( $read['lines'], (array) ( $found['head']['held'] ?? array() ) ),
+				'seq'    => count( $parts ) + 1,
+				'state'  => $read['state'],
+			);
+			$text = AB_MCP_Sync_Canon::encode( $part );
+			$put  = AB_MCP_Protected_Store::put( 'reports', $found['gid'], AB_MCP_Sync_Proposal::name( 'v', $part['seq'], hash( 'sha256', $text ) ), $text );
+			if ( is_wp_error( $put ) ) {
+				return $put;
+			}
+			$parts[] = $part;
+			if ( null !== $read['state'] ) {
+				return array(
+					'lines' => null,
+					'parts' => count( $parts ),
+				);
+			}
+		}
+		$lines = array();
+		foreach ( $parts as $part ) {
+			foreach ( $part['lines'] as $line ) {
+				$lines[] = $line;
+			}
+		}
+		return array(
+			'lines' => $lines,
+			'parts' => count( $parts ),
+		);
+	}
+
+	/**
+	 * The parts of the environment of this site in a group, in order: one
+	 * per number, without a gap, each read against its SHA-256 and of the
+	 * walk of the first.
+	 *
+	 * @param string $gid Group.
+	 * @return array[]|WP_Error
+	 */
+	private static function env_parts( $gid ) {
+		$files = AB_MCP_Protected_Store::files( 'reports', $gid );
+		if ( is_wp_error( $files ) ) {
+			return $files;
+		}
+		$found = array();
+		foreach ( array_keys( $files ) as $name ) {
+			$parsed = AB_MCP_Sync_Proposal::parse_name( (string) $name );
+			if ( null === $parsed || 'v' !== $parsed['prefix'] ) {
+				continue;
+			}
+			if ( isset( $found[ $parsed['seq'] ] ) ) {
+				return self::concurrent();
+			}
+			$found[ $parsed['seq'] ] = $parsed;
+		}
+		ksort( $found );
+		$out = array();
+		foreach ( $found as $seq => $parsed ) {
+			$text = AB_MCP_Protected_Store::get( 'reports', $gid, $parsed['name'], $parsed['sha'] );
+			$part = is_string( $text ) ? json_decode( $text, true, 64 ) : null;
+			if ( count( $out ) + 1 !== $seq || ! is_array( $part ) || self::ENV_FORMAT !== ( $part['format'] ?? null ) || $seq !== ( $part['seq'] ?? null ) || ! is_array( $part['lines'] ?? null ) || ( isset( $out[0] ) && $out[0]['lines'][0]['walk'] !== ( $part['lines'][0]['walk'] ?? null ) ) ) {
+				return self::concurrent();
+			}
+			$out[] = $part;
+		}
+		return $out;
+	}
+
+	/**
 	 * Work out the report of a group whose inventory is read to its end:
 	 * the packages checked again, the pairs, the decision of every entry,
 	 * the entries stored with the report_hash.
 	 *
-	 * @param array $found find().
+	 * @param array        $found find().
+	 * @param array[]      $env   The lines of the environment of this site (none without packages of the environment).
 	 * @return array|WP_Error The first page.
 	 */
-	private static function finish( array $found ) {
+	private static function finish( array $found, array $env = array() ) {
 		$head    = $found['head'];
 		$staging = self::packages( $head['packages'] );
 		if ( is_wp_error( $staging ) ) {
 			return $staging;
 		}
+		$ids      = $head['environment'] ?? array();
+		$env_side = self::environment( $ids );
+		if ( is_wp_error( $env_side ) ) {
+			return $env_side;
+		}
+		$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env );
 		$live = AB_MCP_Sync_Proposal::live( $found, self::concurrent() );
 		if ( is_wp_error( $live ) ) {
 			return $live;
@@ -342,6 +562,11 @@ final class AB_MCP_Sync_Report {
 			$live['b9_refs']
 		);
 		unset( $live['lines'] );
+		// The environment after the objects, numbered on (one cursor).
+		$n = count( $report['entries'] );
+		foreach ( $environment['entries'] as $entry ) {
+			$report['entries'][] = array( 'n' => ++$n ) + $entry;
+		}
 		$parts = array();
 		foreach ( array_chunk( $report['entries'], self::PART ) as $i => $chunk ) {
 			$put = AB_MCP_Sync_Proposal::put( $found['gid'], 'e', $i + 1, $chunk, self::FORMAT );
@@ -363,23 +588,37 @@ final class AB_MCP_Sync_Report {
 				) + self::type_lock( $kind, $subtype );
 			}
 		}
+		$blocked = $report['blocked'];
+		foreach ( $environment['blocked'] as $lock ) {
+			$blocked[] = $lock;
+		}
+		usort(
+			$blocked,
+			static function ( $a, $b ) {
+				return strcmp( $a['key'], $b['key'] );
+			}
+		);
 		$index                = array(
-			'blocked' => $report['blocked'],
-			'counts'  => $report['counts'],
-			'format'  => self::FORMAT,
-			'live'    => array(
+			'blocked'     => $blocked,
+			'counts'      => $report['counts'],
+			'environment' => array(
+				'packages' => count( $ids ),
+				'counts'   => $environment['counts'],
+			),
+			'format'      => self::FORMAT,
+			'live'        => array(
 				'objects'     => array_sum( array_column( $found['parts'], 'objects' ) ),
 				'credentials' => (int) $live['b9'],
 			),
-			'pairs'   => $report['pairs'],
-			'parts'   => $parts,
-			'staging' => array(
+			'pairs'       => $report['pairs'],
+			'parts'       => $parts,
+			'staging'     => array(
 				'packages'   => count( $head['packages'] ),
 				'objects'    => $staging['objects'],
 				'held'       => $staging['held'],
 				'incomplete' => $incomplete,
 			),
-			'total'   => count( $report['entries'] ),
+			'total'       => count( $report['entries'] ),
 		);
 		$index['report_hash'] = self::report_hash( $head, $index );
 		$put                  = AB_MCP_Sync_Proposal::put( $found['gid'], 'x', null, $index, self::FORMAT );
@@ -514,10 +753,11 @@ final class AB_MCP_Sync_Report {
 			'pairs'       => $index['pairs'],
 			'staging'     => $index['staging'],
 			'live'        => $index['live'],
+			'environment' => $index['environment'] ?? null,
 			'total'       => $index['total'],
 			'entries'     => $entries,
 			'cursor'      => $more ? $last : null,
-			'next'        => 'Show the report to the person: nothing was written on either site. Each entry says what differs (result, sides) and what a takeover would do (action): take_over and create are written by a run, choose waits for the choice of a person, waits and locked are held back (waits_for and locks name why, each lock with the stage that brings it), pair asks for wp_site_pairs first, keep and none leave the object as it is.' . ( $more ? ' More entries: call wp_site_diff again with this report_id and cursor=' . $last . '.' : '' ),
+			'next'        => 'Show the report to the person: nothing was written on either site. Each entry says what differs (result, sides) and what a takeover would do (action): take_over and create are written by a run, choose waits for the choice of a person, waits and locked are held back (waits_for and locks name why, each lock with the stage that brings it), pair asks for wp_site_pairs first, keep and none leave the object as it is. The entries of kind environment come after the objects: plugins, themes, must-use plugins, drop-ins, tables, files and the host; equal or differs only for what was read by its SHA-256 (must-use plugins, drop-ins), same_value or differs for the values of the host and the language (shown only, what lies behind a value not compared), counted for what was only counted or summed (contents not compared; stage says from when they are), host for what is changed at the host (the drop-ins and the host, whatever the result); a name held (held) is shown by its SHA-256 only; nothing of the environment is taken over.' . ( $more ? ' More entries: call wp_site_diff again with this report_id and cursor=' . $last . '.' : '' ),
 		);
 	}
 
@@ -646,6 +886,13 @@ final class AB_MCP_Sync_Report {
 	 */
 	private static function refusal( $code, $reason, $steps, $anchor ) {
 		return new WP_Error( $code, AB_MCP_Guidance::compose( $reason, $steps, AB_MCP_Guidance::settings_url( $anchor, 'staging' ), false ) );
+	}
+
+	/**
+	 * @return float Seconds, for the budget of a call (the clock of AB_MCP_Sync_Env).
+	 */
+	private static function clock() {
+		return null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
 	}
 
 	/**

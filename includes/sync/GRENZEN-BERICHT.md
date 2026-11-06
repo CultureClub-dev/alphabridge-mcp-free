@@ -530,3 +530,335 @@ Weg.
   Einträge, nicht Verbindung und Zeit.
 - Wie der Vorschlag hält der letzte Aufruf beide Bestandsaufnahmen im
   Speicher; gemessen in den Prüffällen, grosse Sites misst Z11c.
+
+## Zweig 7 (Bestandsaufnahme)
+
+Die lesende Bestandsaufnahme der übrigen Arten und von Gruppe U
+(`AB_MCP_Sync_Env`; Paket-Zweck `env`, `wp_site_diff` mit `environment`).
+Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
+
+### Was verglichen heisst
+
+- «equal» oder «differs» nach Inhalt gibt es nur für Must-Use-Plugins und
+  Drop-ins (SHA-256 der Datei). Die Werte von Gruppe U (Versionen von PHP
+  und Datenbank, Objekt-Cache, `.htaccess`-Block und Must-Use-Lader als
+  SHA-256, Konstanten) und die Sprache zeigen beide Seiten: «same_value»,
+  wo der Wert auf beiden gleich ist, sonst «differs» (Codex-Runde 1, B4).
+  Grund: gleiche PHP-Version heisst nicht gleiches PHP (Erweiterungen,
+  Einstellungen des Hosters); der Bericht behauptet nur, was er gelesen hat,
+  den Wert. «same_value» steht neben «counted» (gezählt, Inhalt nicht
+  verglichen) und hat keine Etappe: diese Werte übernimmt keine Etappe,
+  sie ändert der Hoster. Plugins, Themes und WordPress mit gleicher Version, Tabellen
+  mit gleichen Zeilen und gleichem Schema, Wurzeln mit gleicher Zahl und
+  Grösse heissen «counted», mit `contents: not compared` und der Etappe des
+  Inhaltsvergleichs (Z8b für Dateien und Code, Z8d für Tabellen). Grund:
+  gleiche Version oder Zahl sagt nichts über veränderte Dateien oder Zeilen
+  (Befund R2-18). Eine abweichende Zahl oder Version heisst «differs»: sie
+  belegt einen Unterschied.
+- Die Sprache (`WPLANG`) wird nur gezeigt (Aktion `none`, «same_value» oder
+  «differs»): sie ist eine Option und gehört nach der Zuständigkeitsregel
+  der Options-Art; ihre Dateien zählt die Wurzel `languages`.
+- Nichts davon ist übernehmbar. Code, Dateien und Tabellen tragen eine
+  Sperre mit Grund und Etappe (`env:plugin`, `env:theme`, `env:wordpress`,
+  `env:mu_plugin`, `env:mu_files`, `env:languages`, `env:fonts`,
+  `env:uploads`, `env:table`); Drop-ins und Gruppe U tragen immer die
+  Aktion `host` («change at the host»), auch ein gleiches Drop-in und ein
+  gleicher Wert: was dort zu ändern ist, ändert der Hoster. Die Sperren stehen in `AB_MCP_Sync_Env::LOCKS`, nicht in
+  `AB_MCP_Sync_Kinds`: keine Art des Datenbank-Vertrags beansprucht sie, und
+  die Schlüssel mit `env:` stossen mit keinem dort zusammen.
+- Die Plugin-Version kommt aus dem Kopf der Datei (`get_plugins()`), die
+  Theme-Version aus `WP_Theme::get()`; ob etwas läuft, aus den gespeicherten
+  Zeilen `active_plugins`, `stylesheet` und `template` ohne Filter. Ein
+  Plugin, das Code zur Laufzeit abschaltet, zeigt sich hier als aktiv.
+  Netzwerkweit aktive Plugins gibt es nicht: Multisite ist abgelehnt.
+
+### Wurzeln und Dateien
+
+- Gezählt werden reguläre Dateien und ihre Grössen; eine Verknüpfung wird
+  nicht verfolgt und als `skipped` gezählt, ebenso was weder Datei noch
+  Ordner ist. Ein Ordner, der sich nicht lesen lässt, macht die ganze Wurzel
+  «not compared» (fail closed), auch wo der Rest gezählt wäre.
+- `uploads` zählt die Dateien ausserhalb der Dateilisten der Anhänge
+  (`AB_MCP_Sync_Media::reverse()`, genau die Pfade von
+  `wp_delete_attachment_files()`); `attached` nennt, wie viele Dateien
+  einer Liste angehören. Ausgelassen sind `fonts/` (eigene Wurzel), der
+  Undo-Ordner und die geschützte Ablage von AlphaBridge (`ab-mcp-undo`,
+  `ab-mcp-store-*`). Caches und Sicherungen anderer Plugins unter
+  `uploads` werden mitgezählt: ohne Wissen über das Plugin ist ein Ordner
+  nicht als Cache zu erkennen, und ein Raten würde Dateien verschweigen.
+- Seitenweise: Die Zählung geht in der Reihenfolge von `order()` (Ordner
+  zuerst in die Tiefe, Namen nach `strcmp()`) und setzt nach dem zuletzt
+  gezählten Pfad fort; die Uhr wird alle 64 Einträge gefragt, so kommt jeder
+  Aufruf mindestens 64 Einträge weiter. Eine Datei, die zwischen zwei
+  Aufrufen vor dem Fortsetzungspunkt entsteht oder verschwindet, fehlt oder
+  zählt nach dem Stand ihres Teils; die Zahl ist ein Stand über die Dauer der
+  Zählung, kein Schnappschuss.
+- Die Dateilisten der Anhänge liest jeder Aufruf neu, der in `uploads`
+  zählt. Mehr als 500 000 Pfade, oder ein Lesen, das mehr als die Hälfte des
+  verbleibenden Budgets braucht, macht `uploads` «not compared»
+  (`attachments_too_many`); eine Liste, die sich nicht ganz lesen lässt,
+  ebenso (`attachments_unreadable`). Grund: ohne die vollständige Liste wäre
+  «ausserhalb der Anhänge» geraten. Messung grosser Mediatheken mit Z11c.
+- Entscheidet Code, wo die Uploads oder Schriften liegen (Filter auf
+  `upload_dir`, `upload_path` oder `font_dir`), wird die Wurzel nicht
+  gezählt (`by_code`), wie bei den Anhängen (`attachment:uploads_by_code`).
+- `mu-plugins` als Wurzel zählt, was WordPress dort nicht selbst lädt
+  (Unterordner, andere Dateien); die PHP-Dateien der obersten Ebene sind je
+  eine Zeile mit SHA-256, ohne den Lader von AlphaBridge (Gruppe U). Was ein
+  Must-Use-Plugin aus einem Unterordner lädt, ist darum nur gezählt.
+- Die Wurzel `languages` ist `WP_LANG_DIR`, wie WordPress sie beim Laden
+  festlegt; Sprachdateien in Plugin- oder Theme-Ordnern gehören zu deren
+  Code.
+
+### Tabellen
+
+- Gelesen werden nur Name, `COUNT(*)` und `SHOW CREATE TABLE`; keine Zeile.
+  Das Schema wird ohne `AUTO_INCREMENT=` und ohne das Präfix der Site am
+  Anfang eines Tabellen- oder Constraint-Namens verglichen: der Name nach
+  `CREATE TABLE`, nach `CONSTRAINT` (MySQL benennt einen Fremdschlüssel nach
+  seiner Tabelle, `<tabelle>_ibfk_1`) und nach `REFERENCES`. Spalten,
+  Indexnamen und Text in Anführungszeichen (ein Kommentar) behalten ihren
+  Namen: eine Spalte `wp_id` unter `wp_` ist keine Spalte `id` unter `live_`,
+  und dieselbe Spalte `wp_id` unter zwei Präfixen ist kein Unterschied
+  (GitHub-Codex, PR #136, P2; vorher fiel das Präfix aus jedem Namen in
+  Backticks). Ein Constraint-Name mit dem Präfix in der Mitte
+  (`fk_wp_…`) und eine Ansicht (`CREATE VIEW`) behalten das Präfix und heissen
+  unter zwei Präfixen «differs», ebenso ein Schema mit Namen in doppelten
+  Anführungszeichen (`ANSI_QUOTES`). Andere Unterschiede der Erzeugung (Zeichensatz der Verbindung,
+  Version von MariaDB oder MySQL, `ROW_FORMAT`) lassen ein gleiches Schema
+  «differs» heissen. Grund: lieber ein Unterschied zu viel als eine
+  Gleichheit, die nicht belegt ist.
+- `COUNT(*)` läuft je Tabelle in der Zeit des Aufrufs; eine sehr grosse
+  Tabelle ohne schnellen Zähler (InnoDB zählt die Zeilen ab) kann einen
+  Aufruf über das Budget dehnen, weil die Uhr zwischen den Tabellen gefragt
+  wird. Ausgenommen sind die Tabellen von `$wpdb->tables()` und von
+  `AB_MCP_Sync_Schema`; Tabellen eines anderen Präfixes sieht die
+  Bestandsaufnahme nicht.
+- Ob eine Tabelle Betriebsdaten hält (Konzept Abschnitt 3: `*_log`,
+  `*_sessions`), sagt der Bericht noch nicht: Klassifikation und Adapter
+  sind Z8d.
+
+### Gruppe U und Konstanten
+
+- Die Konstanten sind eine feste Liste ohne Geheimnisse
+  (`AB_MCP_Sync_Env::CONSTANTS`); zusätzlich werden nie die Namen von
+  `NEVER` (Datenbankzugang, Schlüssel und Salze) und keine Namen gelesen,
+  die `AB_MCP_Redactor::redacts_key()` mit den Regeln der Site
+  (`ab_mcp_redact_keys`) schwärzt. Ein Text, der kein kurzes einfaches Wort
+  ist (ein Pfad, eine Adresse), steht nur als SHA-256 im Paket und heisst im
+  Bericht «not shown»; zwei Sites vergleichen ihn so ohne Klartext. Ein
+  SHA-256 eines kurzen Werts lässt sich erraten; die Liste nimmt darum keine
+  Konstante auf, deren Wert vertraulich ist.
+- Die Regeln dieser Site gelten auch für die Konstanten der Staging-Site:
+  zeigt diese Site eine Konstante nicht (`shown()`, etwa weil
+  `ab_mcp_redact_keys` hier `WP_DEFAULT_THEME` nennt), steht ihr Wert aus dem
+  Paket der Staging-Site im Bericht als «not shown», bevor er gespeichert
+  oder ausgegeben wird (`AB_MCP_Sync_Env::held_here()`); `defined` bleibt,
+  der Eintrag heisst «only_staging», weil diese Site die Konstante auslässt.
+  Vorher übersprang die Prüfung jede Zeile ausserhalb von `NAMED`, und der
+  Wert stand im Bericht und in seinen gespeicherten Einträgen; der Redactor
+  sah ihn nicht, weil das Feld `value` heisst (GitHub-Codex, PR #136, P2).
+- Der `.htaccess`-Block ist der Text zwischen `# BEGIN WordPress` und
+  `# END WordPress` neben WordPress (`ABSPATH`). Liegt die Site in einem
+  anderen Ordner als WordPress (`home` und `siteurl` mit anderem Pfad), wird
+  er nicht gelesen («not compared»): `get_home_path()` fragt das Skript der
+  Anfrage. Eine Regel des Servers ausserhalb dieser Datei (nginx) sieht die
+  Bestandsaufnahme nicht.
+- Die Datenbankversion ist die des Servers (`db_server_info()`), nicht die
+  der Verbindung.
+
+### Pakete und Teile
+
+- Eine Bestandsaufnahme der Umgebung ist eine Reihe von Paketen; jedes
+  beginnt mit seiner Seite (`walk`, `seq`, `last`), die mit den Zeilen
+  signiert ist. Der Bericht nimmt nur die ganze Reihe in ihrer Reihenfolge
+  (Teile 1 bis n, eine `walk`, der letzte zuletzt). So lässt sich eine
+  Reihe nicht aus zwei Lesungen zusammensetzen; eine ganze ältere Reihe
+  innerhalb ihres Tages bleibt gültig (wie ein Paket des Inventars).
+- Die Zeilen der Site (Kern, Plugins, Themes, Must-Use-Plugins, Drop-ins,
+  Gruppe U) stehen immer im ersten Teil; eine Site mit mehr als rund 4900
+  Plugins und Themes zusammen überschreitet die Grenze eines Pakets
+  (5000 Zeilen) und wird mit dem Weg der Paketgrösse abgelehnt.
+- Die Umgebung dieser Site liest der Bericht in Teilen der Ablage (`v`),
+  nach dem Inventar; ein Aufruf, dem weniger als 10 Sekunden seines Budgets
+  bleiben, liest sie im nächsten Aufruf. Ohne `environment` liest er sie
+  nicht und nennt die Umgebung als einen Eintrag «not compared» mit dem Weg.
+- Die Zeilen eines Pakets der Umgebung prüft der Import auf ihre Struktur
+  (`AB_MCP_Sync_Env::shaped()`) und ihre Namen auf Zugangsdaten nach den
+  Regeln dieser Site (siehe «Namen»); was er hält, steht in seiner Liste
+  `held` wie beim Inventar. Werte von Konstanten kommen nur aus der festen
+  Liste.
+- Ein Paket gehört dem Konto und der Verbindung (dem Token von MCP), die
+  den Import begannen (`GRENZEN-PAKET.md`); ein Bericht aus Paketen eines
+  anderen Tokens desselben Kontos lehnt mit `ab_mcp_sync_import_unknown` ab.
+- Ein Folgeaufruf eines Imports, der einen anderen Zweck nennt als den des
+  Beginns, wird abgelehnt (`ab_mcp_sync_import_purpose_other`, mit Weg);
+  das Paket bleibt, wie es war (Codex-Runde 1, A3).
+
+### Namen
+
+- Namen der Site in der Umgebung (Plugins, Themes, Must-Use-Plugins,
+  Tabellen) gehen als Ganzes (ein Pfad mit seinen Ordnern, eine Tabelle mit
+  ihrem ganzen Namen) durch dieselbe Prüfung, die der Import über die Namen
+  einer Zeile des Inventars legt (`AB_MCP_Sync_Env::held()`: die
+  Inhaltsprüfung von `AB_MCP_Sync_Credentials` und das Netz über den rohen
+  Namen, mit `ab_mcp_redact_keys`). Ein Name mit einem eingeschriebenen
+  Feld einer Zugangsangabe (`password=…`, auch kodiert, etwa in base64),
+  einer mit dem Namen einer Zugangsangabe vor `=`, `:`, `;`, `"` oder `'`
+  (nächster Punkt)
+  oder einer, der sich nicht zu Ende lesen lässt, steht in Paket, Bericht,
+  Ablage und Antwort nur als SHA-256 (`sha256:…`) mit `held`
+  (`credential_field`, `unreadable_name`); beide Sites bilden denselben
+  SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin heisst
+  weiter «equal»). Codex-Runden 1 bis 3, A1.
+- Regel für Namen der Umgebung, zusätzlich zu den Prüfungen oben
+  (`AB_MCP_Sync_Net::keyed()`, aufgerufen von `over_name()` mit `$site` in
+  jeder Schicht des Namens, also auch kodiert): steht an irgendeiner Stelle
+  des ganzen Namens der Name einer Zugangsangabe unmittelbar vor `=`, `:`,
+  `;`, `"` oder `'` (Leerraum dazwischen erlaubt), wird der Name gehalten,
+  gleich ob und was danach steht (`password:;…`, `password:`,
+  `x.token = …`). `;` und die Anführungszeichen schliessen den Schlüssel
+  eines serialisierten Arrays oder einen Schlüssel in Anführungszeichen ab
+  (`a:1:{s:8:"password";s:14:"…";}`, `{"password" : "…"}`); die
+  Inhaltsprüfung liest die serialisierte Form mit `.php` dahinter als
+  sauber, das Netz ohne diese Zeichen ebenso (C, nach Codex-Runde 3). Jedes Zeichen wird für sich geprüft; kein früherer
+  Treffer verbraucht Zeichen des nächsten (`note:password:…`,
+  Codex-Runde 3). Vor dem Zeichen
+  gilt: der Text endet, klein geschrieben oder so, wie `normalize_key()`
+  ihn liest, auf einen Namen aus `CREDENTIAL_EXACT`, `EXTRA_NAMES` oder
+  `ab_mcp_redact_keys` (`xpassword:`, `my-auth:`, `my vault=`), oder sein
+  letztes Wort nennt eine Zugangsangabe so, wie die übrige Prüfung es liest
+  (`names_credential()`: `CREDENTIAL_NEEDLES` an jeder Stelle des Wortes,
+  also auch am Ende, `EXTRA_LAST`; `oauth_server:`, `api_key.v1:`). Grund:
+  ein Datei- oder Tabellenname ist keine Prosa; eine Regel ohne Blick auf
+  den Wert lässt keine Schreibweise nach dem Zeichen offen. Bei den Namen
+  des Inventars (darunter Titel, `held_code()` im Import) bleibt die Regel
+  der Werte, nach der «Token: x» in Prosa nichts hält.
+- Das Muster `BARE` der Runde 2 (Name, `:`, ein Wert) ist entfernt. Die
+  Regel oben prüft dasselbe letzte Wort vor dem Doppelpunkt mit
+  `names_credential()`, dazu jedes Wortende, ohne einen Wert zu verlangen
+  und ohne Zeichen zu verbrauchen; sie hält damit, was `BARE` hielt, wo
+  `BARE` das ganze Wort las. Ein kürzeres Wort las `BARE` nur, wo ein
+  früherer Treffer den Anfang verbraucht hatte (der Fehler der Runde 3) oder
+  das Wort länger als 256 Zeichen war.
+- Nicht angewandt wird die Regel für Schlüssel (`names_credential()`, B9 der
+  Optionen) auf den ganzen Namen ohne `=` oder `:`: ein Name der Umgebung
+  nennt eine Datei, einen Ordner oder eine Tabelle, wie ein Slug einen
+  Beitrag, keinen gespeicherten Wert. Grund: sie hielte gewöhnliche Namen
+  fest (`reset-password`, `wp-oauth-server`, `password-protected`,
+  `my-token-plugin`, WooCommerces Tabelle `woocommerce_api_keys`), deren
+  Inhalt die Bestandsaufnahme ohnehin nicht liest; der Bericht nennte dann
+  Plugins nur noch als SHA-256. Diese Namen und `note:EXAMPLE.php`,
+  `password-x:EXAMPLE.php`, `R&D notes.pdf` oder `R&D notes.php` bleiben im
+  Klartext.
+- Grenze (C, hingenommen): ein gewöhnlicher Name mit dem Namen einer
+  Zugangsangabe vor `=` oder `:` wird ebenfalls gehalten
+  (`reset-password:guide.php`, `compass:map.php` über `pass`); er steht dann
+  nur als SHA-256 mit `credential_field`. Grund: fail closed; solche Namen
+  sind selten, ein Doppelpunkt in Datei- und Ordnernamen ist unter Windows
+  unzulässig. Mit `;`, `"` und `'` als Trennern kommen seltene gewöhnliche
+  Namen hinzu (`reset-password;v2.php`, `O'Reilly password's.pdf`); auch sie
+  stehen nur als SHA-256 mit `credential_field`. Grund: derselbe; ein
+  Apostroph oder Strichpunkt unmittelbar nach dem Namen einer Zugangsangabe
+  ist in Plugin-, Theme- und Tabellennamen ungewöhnlich, die serialisierte
+  Form im Klartext dagegen ein Leck.
+- Die Inhaltsprüfung in `held()` hält auch, was Netz und `keyed()` nicht
+  halten: das Feld eines Formulars, wie die HTML-API des Kerns es liest
+  (`<button name=password>.php`, `<button id=api_key>.php`, eine Tabelle
+  `abenv_<button name=password>`: kein Wert daneben, kein Trenner nach dem
+  Namen). Die Unit-Suite hat keine HTML-API (dort ist ein solcher Name
+  `unreadable_name`); die Integration hält die Klausel
+  (`testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt`,
+  Mutation `inventar/r1-held-field`). Grund für den Wechsel: seit Runde 3
+  hält `keyed()` die bisherigen Fälle der Unit-Suite (`password=…`) auch
+  ohne die Inhaltsprüfung, die Mutation überlebte dort.
+- Was eine Zeile nicht als Text hält (kein UTF-8, ein Steuerzeichen, länger
+  als 1024 Bytes), steht ebenfalls als SHA-256, ohne `held`; ebenso eine
+  zu lange Versionsangabe, die der Bericht «not shown» nennt (Codex-Runde 1,
+  C6). So bleibt jede Zeile in der Form, die der Import annimmt.
+- Der Fortsetzungspunkt eines Teils (`after` im Zustand: im Cursor von
+  `wp_site_export` und in den Teilen eines Berichts) trägt keinen Namen und
+  keinen Teil eines Namens, auch keinen gewöhnlichen: nur den SHA-256 jedes
+  Ordners, durch den sein Pfad geht, und zuletzt den des ganzen relativen
+  Pfads (einer Tabelle: den ihres ganzen Namens), `AB_MCP_Sync_Env::place()`
+  (Codex-Runden 1 und 2, A1 und C5; damit sind auch Namen ohne UTF-8
+  gelöst). Der nächste Teil sucht ihn Ordner für Ordner unter den Namen
+  wieder (`found()`). Einen SHA-256 je Ordner statt eines einzigen für den
+  ganzen Pfad, damit die Fortsetzung nicht alles bis zur Stelle neu liest,
+  was die Teile davor gezählt haben. Ist der Eintrag oder einer seiner
+  Ordner inzwischen weg, gilt die Wurzel als nicht zu Ende gezählt («not
+  compared», `moved`), die Tabellen als nicht ganz gelesen. Grund: ohne den
+  Namen lässt sich die Stelle in der Reihenfolge nicht mehr bestimmen, und
+  eine Zählung von vorn zählte doppelt. Das gilt jetzt für jeden Namen,
+  nicht nur für gehaltene. Grenze (C, hingenommen, Codex-Runde 3): eine
+  Datei, die zwischen zwei Aufrufen genau an der Stelle gelöscht wird, an
+  der ein Teil endete, lässt ihre Wurzel «not compared»; ein neuer Aufruf
+  von vorn zählt sie wieder.
+- Kennt nur die Live-Site eine Regel (`ab_mcp_redact_keys` dort), hält erst
+  ihr Import den Namen: im empfangenen Paket (Ablage `in` der Live-Site,
+  `out` der Staging-Site) steht er, wie die Staging-Site ihn schrieb und
+  signierte, wie bei den Paketen des Inventars; Bericht, Teile dieser Site
+  und Antwort zeigen ihn nur als SHA-256. Diese Ausnahme bleibt.
+- Hält umgekehrt nur die Staging-Site einen Namen, gelten ihre Regeln auch
+  für die Teile dieser Site, bevor sie in die Ablage kommen: der Bericht
+  liest die Pakete der Umgebung beim ersten Aufruf, bevor er die Umgebung
+  dieser Site liest, und legt die SHA-256 der Namen, die die Staging-Site
+  hält, mit ihrem Grund in den Kopf seiner Gruppe
+  (`AB_MCP_Sync_Env::held_names()`, Feld `held`, Format
+  `ab-sync-report/2`); jeder Teil dieser Site wird damit gekürzt
+  gespeichert (`held_there()`): ein Name, dessen SHA-256 die Staging-Site
+  hält, steht nur als SHA-256 mit `held`, gleich welcher Art (ein
+  gleichnamiges Plugin ebenso wie das Must-Use-Plugin). Der Bericht zeigt
+  einen Eintrag unter dem SHA-256 (kein «nur hier» und «nur Staging»).
+  Codex-Runde 2, A1. Ein Bericht im Format `ab-sync-report/1` (vor dieser
+  Änderung begonnen) gilt als unbekannt und wird neu begonnen.
+
+### Prüfung
+
+- Unit (`tests/SyncEnvTest.php`) hält die Klauseln ohne WordPress (Lauf der
+  Wurzeln, Kopf einer Datei, Plugins und Themes in Ordnern, `.htaccess`,
+  Schema, Konstanten, Struktur der Zeilen, Namen und Fortsetzungspunkte,
+  Vergleich); Integration (`tests/integration/SyncEnvTest.php`) den Bericht
+  über zwei Sites, die Reihe der Pakete, die Teile dieser Site, dass keine
+  geheime Konstante in Antwort oder Ablage steht und kein gehaltener Name
+  (`password=EXAMPLE_SECRET`, `password:EXAMPLE_SECRET`, ein Ordner
+  `password=` über `EXAMPLE_SECRET/…`, eine Regel nur auf der Staging-Site;
+  Runde 3: `note:password:EXAMPLE_SECRET.php`, `password:;EXAMPLE_SECRET.php`,
+  ein Plugin-Ordner `api_key:EXAMPLE_SECRET`, Tabellen
+  `note:password:EXAMPLE_SECRET` und `token = EXAMPLE_SECRET`, daneben
+  `note:EXAMPLE.php`, `R&D notes.php`, `my-token-plugin` und
+  `password-protected` im Klartext; nach Runde 3: das Feld eines Formulars im
+  Namen, das nur die Inhaltsprüfung mit der HTML-API des Kerns hält)
+  in Antwort, Cursor, Zustand, Paket oder einer Datei der Ablage beider
+  Sites, die Fortsetzung über Teile mit der neuen Stelle (auch mit einem
+  inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs;
+  dazu eine Konstante, die nur die Regeln dieser Site schwärzen
+  (`FS_METHOD` mit einem Wert nur auf der Staging-Site): «not shown», der
+  Wert in keiner Antwort und keiner Datei der Ablage beider Sites. Die Bindung an die
+  Verbindung hält `tests/integration/SyncPackageTest.php`.
+- Ein Dateiname ohne UTF-8 lässt sich auf APFS (macOS) nicht anlegen; die
+  Integration prüft den Fortsetzungspunkt darum mit gehaltenen Namen, die
+  Unit-Suite die Form ohne UTF-8 über die kanonische Form hin und zurück. Mutationen: `tests/mutation/lists/inventar.php`
+  (aus `tests/mutation/gen/inventar.py`).
+- Nicht als Mutation geführt: `is_file()` vor `hash_file()` in
+  `file_hash()` (ohne diese Prüfung blockierte eine FIFO an der Stelle eines
+  Drop-ins den Aufruf; ein Test darauf liefe in die Zeitgrenze des Runners
+  statt rot), die Ablauf-Zeit eines Berichts über die Pakete der Umgebung
+  (sie entstehen Sekunden nach denen des Inventars) und die Fehlerwege der
+  Leser, die eine Test-Site nicht auslöst (`SHOW TABLES`, `COUNT`, `SHOW
+  CREATE TABLE`, unlesbare Zeilen `WPLANG`, `stylesheet`, `template`,
+  `active_plugins`). Ebenso fünf Wächter, deren Wegfall nichts ändert, was
+  ein Test sehen kann (Codex-Runde 1): die Art in `held_line()` (eine Ref
+  einer festen Liste hält nie etwas), der SHA-256 dort (ein SHA-256 hält
+  nichts), `isset( held )` in `held_here()` (eine gehaltene Zeile bleibt
+  beim Kürzen dieselbe), der Platz in `held_alike()` (eine Seite hat einen
+  Namen nicht zugleich als Text und als SHA-256) und die Art einer
+  gehaltenen Zeile in `shaped()` (die Arten ausserhalb von `NAMED` haben
+  Refs fester Listen, die nie die Form eines SHA-256 haben); dazu (Runde 2)
+  die Art und die Form des SHA-256 in `held_names()`: die Zeilen kommen
+  durch `shaped()`, das `held` nur bei `NAMED` mit einer Ref in Form eines
+  SHA-256 zulässt. Nach GitHub-Codex (PR #136): in `held_here()` die Prüfung
+  auf `constant:` (die übrigen Refs von `host` sind kürzer als das Präfix,
+  `shown('')` lässt alles durch), in `schema()` die Ausnahme für Text in
+  Anführungszeichen beim Merken des Worts davor (nach einem Text folgt nie
+  unmittelbar ein Name).

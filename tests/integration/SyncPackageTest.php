@@ -80,6 +80,13 @@ final class SyncPackageTest extends TestCase {
 			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
 		}
 		AB_MCP_Protected_Store::forget();
+		self::connection( '' );
+	}
+
+	/** The token of the call in this process, as AB_MCP_Auth sets it for a call over MCP ('' for none: the account). */
+	private static function connection( string $token_hash ): void {
+		$property = new \ReflectionProperty( \AB_MCP_Auth::class, 'current_token_hash' );
+		$property->setValue( null, $token_hash );
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -1124,6 +1131,8 @@ final class SyncPackageTest extends TestCase {
 			'manifest'   => $package['manifest'],
 			'purpose'    => 'inventory',
 		);
+		// Both accounts over one token: the account alone tells them apart.
+		self::connection( str_repeat( 'c', 64 ) );
 		self::assertIsArray( AB_MCP_Sync_Import::call( $args ) );
 		$other = wp_insert_user(
 			array(
@@ -1149,6 +1158,60 @@ final class SyncPackageTest extends TestCase {
 		self::assertTrue( $done['complete'] );
 		wp_set_current_user( $other );
 		self::assertFalse( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) )['complete'], 'The other account\'s package stays its own.' );
+	}
+
+	public function testAnImportBelongsToTheConnectionThatBeganIt(): void {
+		self::pair();
+		$package = self::export();
+		$data    = self::b( array( array( 'op' => 'export_chunk', 'package_id' => $package['package_id'], 'chunk' => 0, 'as' => 'c' ) ) )['c']['data'];
+		$args    = array(
+			'package_id' => $package['package_id'],
+			'manifest'   => $package['manifest'],
+			'purpose'    => 'inventory',
+		);
+		self::connection( str_repeat( 'a', 64 ) );
+		self::assertIsArray( AB_MCP_Sync_Import::call( $args ) );
+		self::assertTrue( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => 0, 'data' => $data ) )['complete'] );
+		self::assertIsArray( AB_MCP_Sync_Import::taken( $package['package_id'] ), 'Read over the connection that took it over.' );
+
+		// Another connection of the same account, and the account without a token.
+		foreach ( array( str_repeat( 'b', 64 ), '' ) as $other ) {
+			self::connection( $other );
+			$unknown = 'ab_mcp_sync_import_unknown';
+			$call = AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) );
+			self::refused( $call, $unknown );
+			self::assertStringContainsString( 'this connection', $call->get_error_message() );
+			self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => 0, 'data' => $data ) ), $unknown );
+			$taken = AB_MCP_Sync_Import::taken( $package['package_id'] );
+			self::refused( $taken, $unknown );
+			self::assertStringContainsString( 'account and connection', $taken->get_error_message() );
+		}
+		self::connection( str_repeat( 'b', 64 ) );
+		$own = AB_MCP_Sync_Import::call( $args );
+		self::assertSame( array( 0 ), $own['missing'], 'Its own group, from the start.' );
+		self::assertCount( 2, array_filter( AB_MCP_Protected_Store::groups( 'in' ), static fn( $g ) => 'package-' . $package['package_id'] === $g['label'] ), 'Two groups, one of each connection.' );
+		self::connection( str_repeat( 'a', 64 ) );
+		self::assertTrue( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) )['complete'], 'The first one stays its own.' );
+
+		// A record that keeps no connection (begun before this rule) is of none.
+		$id  = bin2hex( random_bytes( 16 ) );
+		$gid = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 1048576 + AB_MCP_Sync_Import::RECORD_MAX, 'label' => AB_MCP_Sync_Import::LABEL . $id ) );
+		self::assertIsString( $gid );
+		$record = \AB_MCP_Sync_Canon::encode(
+			array(
+				'expect'    => array( 'package_id' => $id, 'purpose' => 'inventory' ),
+				'format'    => AB_MCP_Sync_Import::RECORD,
+				'manifest'  => $package['manifest']['manifest'],
+				'print'     => AB_MCP_Sync_Anchor::pair_print(),
+				'signature' => $package['manifest']['signature'],
+			)
+		);
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record ) );
+		foreach ( array( str_repeat( 'a', 64 ), '' ) as $any ) {
+			self::connection( $any );
+			self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $id ) ), 'ab_mcp_sync_import_unknown' );
+		}
+		self::assertContains( $gid, array_column( AB_MCP_Protected_Store::groups( 'in' ), 'gid' ), 'Not removed by another connection: the store removes it after its day.' );
 	}
 
 	/* ------------------------------------------- the time of a fetch (B-2) */
@@ -1625,11 +1688,12 @@ final class SyncPackageTest extends TestCase {
 		self::assertIsString( $gid );
 		$record = \AB_MCP_Sync_Canon::encode(
 			array(
-				'expect'    => array( 'package_id' => $id, 'purpose' => 'objects' ),
-				'format'    => AB_MCP_Sync_Import::RECORD,
-				'manifest'  => $signed['manifest'],
-				'print'     => AB_MCP_Sync_Anchor::pair_print(),
-				'signature' => $signed['signature'],
+				'connection' => AB_MCP_Sync_Import::connection(),
+				'expect'     => array( 'package_id' => $id, 'purpose' => 'objects' ),
+				'format'     => AB_MCP_Sync_Import::RECORD,
+				'manifest'   => $signed['manifest'],
+				'print'      => AB_MCP_Sync_Anchor::pair_print(),
+				'signature'  => $signed['signature'],
 			)
 		);
 		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record ) );
@@ -1651,10 +1715,11 @@ final class SyncPackageTest extends TestCase {
 		self::assertIsString( $gid );
 		$record = \AB_MCP_Sync_Canon::encode(
 			array(
-				'expect'    => array( 'package_id' => $id, 'purpose' => 'inventory' ),
-				'format'    => AB_MCP_Sync_Import::RECORD,
-				'manifest'  => $package['manifest']['manifest'],
-				'signature' => $package['manifest']['signature'],
+				'connection' => AB_MCP_Sync_Import::connection(),
+				'expect'     => array( 'package_id' => $id, 'purpose' => 'inventory' ),
+				'format'     => AB_MCP_Sync_Import::RECORD,
+				'manifest'   => $package['manifest']['manifest'],
+				'signature'  => $package['manifest']['signature'],
 			)
 		);
 		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record ) );

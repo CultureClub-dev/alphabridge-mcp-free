@@ -361,13 +361,21 @@ final class AB_MCP_Sync_Net {
 	 * no text in UTF-8, braces of code that cannot be counted), the name is
 	 * unreadable.
 	 *
+	 * With $site (a name of a file, a folder or a table of the environment,
+	 * AB_MCP_Sync_Env::held()), a name of a credential before an =, a :, a ;
+	 * or a quote counts as well, whatever follows it (keyed()), in every layer; a name
+	 * of the inventory (a title among them) keeps the rule of a value, where
+	 * a word in prose before a colon counts for nothing.
+	 *
 	 * @param string   $text  The name (bytes).
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @param bool     $site  Whether it is a name of the environment (keyed()).
 	 * @return string|null credential where a layer holds the name of a
-	 *                     credential with a value beside it, unreadable
-	 *                     where a layer is not read to its end, else null.
+	 *                     credential with a value beside it (of the
+	 *                     environment: before = : ; " or '), unreadable where a
+	 *                     layer is not read to its end, else null.
 	 */
-	public static function over_name( $text, array $extra ) {
+	public static function over_name( $text, array $extra, $site = false ) {
 		$deep   = false;
 		$unread = array();
 		foreach ( self::layers( (string) $text, $deep, $unread ) as $layer ) {
@@ -375,11 +383,59 @@ final class AB_MCP_Sync_Net {
 			if ( array() !== self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $layer[0], -5 ) ) ) {
 				return 'credential';
 			}
+			if ( $site && self::keyed( $layer[1], $extra ) ) {
+				return 'credential';
+			}
 			if ( $undecidable ) {
 				return 'unreadable';
 			}
 		}
 		return $deep || array() !== $unread ? 'unreadable' : null;
+	}
+
+	/**
+	 * Whether a name of the environment (a file, a folder, a table) holds the
+	 * name of a credential right before an =, a :, a ; or a quote (" or '),
+	 * white space between them allowed, whatever follows (a value, «;»,
+	 * nothing): a name of a file or a table is no prose, so a key in it is
+	 * one (Codex, rounds 2 and 3 of branch 7, A1); the ; and the quotes end a
+	 * key of a serialized array or a quoted key (s:8:"password";…,
+	 * {"password" : …}), which the content check may read as clean. Each sign
+	 * on its own, so that no match before takes a part of the name of the
+	 * next (note:password:…). There, the text
+	 * before it ends in a name of the credential check (CREDENTIAL_EXACT,
+	 * EXTRA_NAMES, ab_mcp_redact_keys), in lower case or as normalize_key()
+	 * reads it (xpassword:, my-auth:, my vault=), or its last word names one
+	 * as the check does (names_credential(): CREDENTIAL_NEEDLES anywhere in
+	 * it, so one at its end too, and EXTRA_LAST; oauth_server:, api_key.v1:).
+	 * «reset-password» or «note:EXAMPLE.php» holds none;
+	 * «reset-password:guide.php», «reset-password;v2.php» or «O'Reilly
+	 * password's.pdf» does (fail closed, rare: GRENZEN-BERICHT, branch 7, C).
+	 *
+	 * @param string   $text  A layer of the name.
+	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @return bool
+	 */
+	public static function keyed( $text, array $extra ) {
+		$text = (string) $text;
+		if ( ! preg_match_all( '/[=:;"\']/', $text, $m, PREG_OFFSET_CAPTURE ) ) {
+			return false;
+		}
+		$keys = array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra );
+		foreach ( $m[0] as $hit ) {
+			$before = rtrim( (string) substr( $text, 0, (int) $hit[1] ), " \t\n\r\x0B\f" );
+			foreach ( array( strtolower( $before ), AB_MCP_Redactor::normalize_key( $before ) ) as $form ) {
+				foreach ( $keys as $key ) {
+					if ( '' !== (string) $key && str_ends_with( $form, (string) $key ) ) {
+						return true;
+					}
+				}
+			}
+			if ( preg_match( '/[A-Za-z0-9_\-.\x80-\xFF]+\z/', $before, $word ) && AB_MCP_Sync_Credentials::names_credential( $word[0], $extra ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/* ------------------------------------------------------------ unfold */

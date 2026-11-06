@@ -168,9 +168,17 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   es mit dem geschützten Schreiber; nur wo es
   sich nicht speichern lässt, lehnt der Export mit Weg ab
   (`ab_mcp_sync_mac_failed`), Schlüssel und Bestätigung bleiben.
-- Ein Import gehört dem Konto, das ihn begann; ein anderes Konto beginnt
-  eine eigene Gruppe. Jede offene Gruppe zählt bis zu ihrem Abschluss gegen
-  die fünf offenen Pakete der Site.
+- Ein Import gehört dem Konto und der Verbindung (dem Token von MCP, ohne
+  Token dem Konto allein), die ihn begannen; eine andere Verbindung desselben
+  Kontos sieht die Gruppe nicht und beginnt eine eigene, wie ein anderes
+  Konto (Codex-Runde 1 von Zweig 7, A2). Grund: Bericht und Vorschlag sind
+  an ihre Verbindung gebunden (Entscheid 15), so auch die Pakete, aus denen
+  sie entstehen. Der Relay und `wp_site_import_chunk` über mehrere Aufrufe
+  laufen über dieselbe Verbindung und bleiben, wie sie sind. Ein neues Token
+  (erneuert oder ersetzt) holt ein Paket neu; eine Gruppe, deren Aufzeichnung
+  keine Verbindung hält (vor dieser Regel), gehört keiner und bleibt bis zu
+  ihrem Ablauf. Jede offene Gruppe zählt bis zu ihrem Abschluss gegen die
+  fünf offenen Pakete der Site.
 - Ein Import hält das `pair_print` seines Beginns und den Zweck, für den er
   begann; jede Fortsetzung prüft beide, bevor sie etwas des Pakets liest,
   und endet, wo sich Rolle, Paar oder Anker geändert haben
