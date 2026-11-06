@@ -8,6 +8,14 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request stops the run of the head it replaces; the group
+# is the pull request's number, so pull requests from forks with the same branch
+# name stay apart. Each push to main gets a group of its own (its run id), so no
+# run on main is cancelled or replaced while it waits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Parses on PHP ${{ matrix.php }}
@@ -51,6 +59,18 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
+
+      # Only the downloaded archives are kept; Composer still resolves the
+      # versions on every run, so the cache changes nothing it installs.
+      - name: Where Composer keeps its downloads
+        id: composer-cache
+        run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-files-${{ runner.os }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-files-${{ runner.os }}-
 
       - name: Install dev dependencies
         run: composer update --no-interaction --no-progress --prefer-dist
@@ -188,6 +208,18 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # Only the downloaded archives are kept; Composer still resolves the
+      # versions on every run, so the cache changes nothing it installs.
+      - name: Where Composer keeps its downloads
+        id: composer-cache
+        run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-files-${{ runner.os }}-${{ hashFiles('plugin/composer.json') }}
+          restore-keys: composer-files-${{ runner.os }}-
+
       - name: Install dev dependencies
         run: composer update --no-interaction --no-progress --prefer-dist
 
@@ -210,16 +242,17 @@ jobs:
   # tests/mutation/lists/ takes one clause out and expects its tests to fail;
   # the file is written back and compared byte for byte. The lists of the
   # heikel/ branches ask the integration suite, so the sites run here too.
-  # Six jobs share the entries (--shard), each well inside the time limit;
-  # three reached it with the lists of Z8 branch 5 (about 1540 entries).
+  # Twelve jobs share the entries (--shard). With three, one job reached the
+  # time limit on the lists of Z8 branch 5 (about 1540 entries); with six, each
+  # job took 12.7 to 15.6 minutes (06.11.2026).
   mutation:
-    name: Every listed clause is held by a test (${{ matrix.shard }}/6)
+    name: Every listed clause is held by a test (${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     services:
       mariadb:
         image: mariadb:11.4
@@ -267,6 +300,18 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # Only the downloaded archives are kept; Composer still resolves the
+      # versions on every run, so the cache changes nothing it installs.
+      - name: Where Composer keeps its downloads
+        id: composer-cache
+        run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-files-${{ runner.os }}-${{ hashFiles('plugin/composer.json') }}
+          restore-keys: composer-files-${{ runner.os }}-
+
       - name: Install dev dependencies
         run: composer update --no-interaction --no-progress --prefer-dist
 
@@ -279,7 +324,7 @@ jobs:
           bash tests/integration/bin/serve.sh start
 
       - name: Mutation probes
-        run: php tests/mutation/run.php --shard=${{ matrix.shard }}/6
+        run: php tests/mutation/run.php --shard=${{ matrix.shard }}/12
 
       - name: The checkout is unchanged
         if: always()
