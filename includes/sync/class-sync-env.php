@@ -47,10 +47,11 @@
  * NAMES. A name of the site (a plugin, a theme, a must-use plugin, a
  * table: NAMED) goes, whole, through the check the import runs over the
  * names of a line of the inventory (held(): a field of a credential written
- * into it, after = or :, also encoded, by the rules of the site with
- * ab_mcp_redact_keys); one it holds is in a line by its SHA-256 only, with
- * why (held), and so is a name that is no text a line holds (no UTF-8, a
- * control character, longer than MAX_TEXT). A name the staging site holds
+ * into it, or the name of one right before = or :, whatever follows, also
+ * encoded, by the rules of the site with ab_mcp_redact_keys); one it holds
+ * is in a line by its SHA-256 only, with why (held), and so is a name that
+ * is no text a line holds (no UTF-8, a control character, longer than
+ * MAX_TEXT). A name the staging site holds
  * is held in the lines of this site as well before the report stores them
  * (held_names(), held_there()). The place a part ends at (the state: the
  * cursor of wp_site_export, a part of a report) holds no name and no part
@@ -1433,12 +1434,14 @@ final class AB_MCP_Sync_Env {
 	 * credential check and the net over the raw name, with the names of the
 	 * filter ab_mcp_redact_keys): a field of a credential written into it
 	 * (password=…, also encoded), or a name that does not read to its end
-	 * (deeper than the check or the net reads); the net over a name of the
-	 * site also after a colon without quotes (password:…: a name of a file or
-	 * a table is no prose; Codex, round 2 of branch 7, A1). A name is the
-	 * name of a file, a folder or a table, as a slug is that of a post:
-	 * «reset-password» or «woocommerce_api_keys» holds nothing (Codex, round
-	 * 1 of branch 7, A1).
+	 * (deeper than the check or the net reads); and, a name of the site
+	 * being no prose, the name of a credential at any place in it right
+	 * before an = or a :, whatever follows (AB_MCP_Sync_Net::keyed():
+	 * note:password:…, password:;…, x.token = …; Codex, rounds 2 and 3 of
+	 * branch 7, A1). A name is the name of a file, a folder or a table, as a
+	 * slug is that of a post: «reset-password» or «woocommerce_api_keys»
+	 * holds nothing (Codex, round 1 of branch 7, A1); «reset-password:guide.php»
+	 * is held as well (fail closed).
 	 *
 	 * @param string        $name  Name.
 	 * @param string[]|null $extra AB_MCP_Redactor::extra_keys() (read when null).

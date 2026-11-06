@@ -243,14 +243,31 @@ e('r1-held-extra', 'held(): the names of ab_mcp_redact_keys (A1)', EN,
 COLON = 'testANameWithACredentialAfterAColonIsHeldAsOneAfterAnEqualsSign'
 e('r2-held-bare', 'held(): a name of the site also after a colon without quotes (A1)', EN,
   "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra, true );", "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );", 'env', COLON)
-BARE_IF = "\t\t\tif ( $bare && preg_match_all( self::BARE, $layer[1], $m ) ) {"
-e('r2-net-bare', 'over_name(): name:value without quotes, for a name of the site (A1)', NET, BARE_IF, "\t\t\tif ( false ) {", 'env', COLON)
-e('r2-net-bare-only', 'over_name(): only where it is asked for (a name of the inventory keeps its rule) (A1)', NET, BARE_IF, BARE_IF.replace('$bare && ', ''), 'env', COLON)
-e('r2-net-bare-name', 'over_name(): only the name of a credential before the colon (A1)', NET,
-  "\t\t\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( (string) $name, $extra ) ) {", "\t\t\t\t\tif ( true ) {", 'env', COLON)
-BARE_RE = "\tconst BARE = '/(' . self::NAME . ')\\s*:\\s*' . self::VALUE . '/';"
-e('r2-net-bare-space', 'BARE: white space around the colon (A1)', NET, BARE_RE, BARE_RE.replace("\\s*:\\s*", ":"), 'env', COLON)
-e('r2-net-bare-value', 'BARE: a value after the colon (A1)', NET, BARE_RE, BARE_RE.replace(" . self::VALUE . '/'", " . '/'"), 'env', COLON)
+KEYED = 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows'
+KEYED_IF = "\t\t\tif ( $site && self::keyed( $layer[1], $extra ) ) {"
+e('r3-net-keyed', 'over_name(): the name of a credential before = or :, for a name of the site (A1)', NET, KEYED_IF, "\t\t\tif ( false ) {", 'env', KEYED)
+e('r3-net-keyed-only', 'over_name(): only where it is asked for (a name of the inventory keeps its rule) (A1)', NET, KEYED_IF, KEYED_IF.replace('$site && ', ''), 'env', KEYED)
+SIGNS = "\t\tif ( ! preg_match_all( '/[=:]/', $text, $m, PREG_OFFSET_CAPTURE ) ) {"
+e('r3-keyed-colon', 'keyed(): before a colon (A1)', NET, SIGNS, SIGNS.replace('[=:]', '[=]'), 'env', KEYED)
+e('r3-keyed-equals', 'keyed(): before an equals sign (A1)', NET, SIGNS, SIGNS.replace('[=:]', '[:]'), 'env', KEYED)
+EACH = "\t\tforeach ( $m[0] as $hit ) {\n\t\t\t$before"
+e('r3-keyed-each-first', 'keyed(): each = and :, not only the first (A1, Codex round 3)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], 0, 1 ) as'), 'env', KEYED)
+e('r3-keyed-each-last', 'keyed(): each = and :, not only the last (A1)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], -1 ) as'), 'env', KEYED)
+BEFORE = "\t\t\t$before = rtrim( (string) substr( $text, 0, (int) $hit[1] ), \" \\t\\n\\r\\x0B\\f\" );"
+e('r3-keyed-space', 'keyed(): white space before the sign left out (A1)', NET, BEFORE, "\t\t\t$before = (string) substr( $text, 0, (int) $hit[1] );", 'env', KEYED)
+FORMS = "\t\t\tforeach ( array( strtolower( $before ), AB_MCP_Redactor::normalize_key( $before ) ) as $form ) {"
+e('r3-keyed-lower', 'keyed(): the text before it in lower case (A1)', NET, FORMS, FORMS.replace('strtolower( $before ), ', ''), 'env', KEYED)
+e('r3-keyed-normal', 'keyed(): the text before it as normalize_key() reads it (A1)', NET, FORMS, FORMS.replace(', AB_MCP_Redactor::normalize_key( $before )', ''), 'env', KEYED)
+KEYS = "\t\t$keys = array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra );"
+e('r3-keyed-exact', 'keyed(): the names of CREDENTIAL_EXACT (A1)', NET, KEYS, KEYS.replace('AB_MCP_Redactor::CREDENTIAL_EXACT, ', ''), 'env', KEYED)
+e('r3-keyed-extra-names', 'keyed(): the names of EXTRA_NAMES (A1)', NET, KEYS, KEYS.replace('AB_MCP_Redactor::EXTRA_NAMES, ', ''), 'env', KEYED)
+e('r3-keyed-redact-keys', 'keyed(): the names of ab_mcp_redact_keys (A1)', NET, KEYS, KEYS.replace(', $extra', ''), 'env', KEYED)
+ENDS = "\t\t\t\t\tif ( '' !== (string) $key && str_ends_with( $form, (string) $key ) ) {"
+e('r3-keyed-empty', 'keyed(): an empty name is none (A1)', NET, ENDS, ENDS.replace("'' !== (string) $key && ", ''), 'env', KEYED)
+e('r3-keyed-ends', 'keyed(): the text before it ends in the name, not only holds it (A1)', NET, ENDS, ENDS.replace('str_ends_with', 'str_contains'), 'env', KEYED)
+WORD = "\t\t\tif ( preg_match( '/[A-Za-z0-9_\\-.\\x80-\\xFF]+\\z/', $before, $word ) && AB_MCP_Sync_Credentials::names_credential( $word[0], $extra ) ) {"
+e('r3-keyed-word', 'keyed(): the last word before it names a credential as the check does (A1)', NET, WORD, "\t\t\tif ( false ) {", 'env', KEYED)
+e('r3-keyed-word-last', 'keyed(): the last word, right before the sign (A1)', NET, WORD, WORD.replace('+\\z/', '+/'), 'env', KEYED)
 THERE = 'testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored'
 HN = "\t\t\tif ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {"
 e('r2-held-names-held', 'held_names(): the lines held only (A1)', EN, HN, HN.replace(", $line['held'] )", ' )'), 'env', THERE)
@@ -461,6 +478,9 @@ e('r2-report-part-held', 'live_environment(): a part of this site stored with th
 IT_COLON = 'testANameWithACredentialAfterAColonOrBelowAFolderIsInNoAnswerCursorPackageOrFileOfTheStore'
 e('r2-held-bare-it', 'held(): a name after a colon held in package, cursor, report and store (A1, two sites)', EN,
   "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra, true );", "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );", 'it', IT_COLON)
+IT_KEYED = 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsInNoAnswerCursorPackageOrFileOfTheStore'
+e('r3-net-keyed-it', 'over_name(): a name before = or : held in package, cursor, report and store (A1, two sites, Codex round 3)', NET,
+  "\t\t\tif ( $site && self::keyed( $layer[1], $extra ) ) {", "\t\t\tif ( false ) {", 'it', IT_KEYED)
 e('r2-root-place-it', 'root(): a state below a folder by SHA-256 only, over parts on both sites (A1, two sites)', EN,
   "\t\t\t$at    = null === $at ? $part : $at . '/' . $part;", "\t\t\t$at    = $part;", 'it', IT_COLON)
 e('r1-import-purpose', 'held(): a later call names the purpose it was begun for (A3)', IM,
@@ -521,8 +541,8 @@ out.append('''<?php
  * of a package, the comparison (counted never equal, equal only by a hash,
  * a value of the host the same value, not compared with why, each lock with its stage, the host changed
  * there, no hash shown; a name a credential holds by its SHA-256 only, also
- * after a colon, the place of a part by SHA-256 only, a name the staging
- * site holds held here before it is stored), reading in parts on a
+ * the name of one before = or :, the place of a part by SHA-256 only, a
+ * name the staging site holds held here before it is stored), reading in parts on a
  * WordPress site (the pages,
  * the tables, the uploads against the file lists of attachments), the
  * packages of the environment in wp_site_export and wp_site_import_chunk,

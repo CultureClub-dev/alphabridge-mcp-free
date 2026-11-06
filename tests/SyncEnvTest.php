@@ -512,7 +512,7 @@ final class SyncEnvTest extends TestCase {
 		foreach ( array( 'password:EXAMPLE_SECRET.php', 'my-plugin/api_key:EXAMPLE_SECRET.php', 'token : EXAMPLE_SECRET', 'abenv_password:EXAMPLE_SECRET', 'keep/client_secret:EXAMPLE_SECRET/f.txt', '-password:EXAMPLE_SECRET.php', '.token:EXAMPLE_SECRET.php', base64_encode( 'password:EXAMPLE_SECRET' ) . '.php' ) as $name ) {
 			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name ), $name );
 		}
-		foreach ( array( 'reset-password/reset-password.php', 'wp-oauth-server/wp-oauth-server.php', 'woocommerce_api_keys', 'password-protected/password-protected.php', 'note:EXAMPLE.php', 'password:', 'a:b:c' ) as $name ) {
+		foreach ( array( 'reset-password/reset-password.php', 'wp-oauth-server/wp-oauth-server.php', 'woocommerce_api_keys', 'password-protected/password-protected.php', 'note:EXAMPLE.php', 'a:b:c' ) as $name ) {
 			self::assertNull( AB_MCP_Sync_Env::held( $name ), $name . ': an ordinary name, shown as it is.' );
 		}
 		self::assertNull( AB_MCP_Sync_Env::held( 'vault:EXAMPLE_SECRET.php', array() ) );
@@ -521,6 +521,57 @@ final class SyncEnvTest extends TestCase {
 		// prose («Password: reset») is no field of a credential.
 		self::assertNull( \AB_MCP_Sync_Net::over_name( 'password:EXAMPLE_SECRET', array() ) );
 		self::assertSame( 'credential', \AB_MCP_Sync_Net::over_name( 'password:EXAMPLE_SECRET', array(), true ) );
+	}
+
+	public function testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows(): void {
+		$held = array(
+			'note:password:EXAMPLE_SECRET.php',          // A colon before it (Codex, round 3 of branch 7, A).
+			'password:;EXAMPLE_SECRET.php',              // A character after it that ends a value (round 3, A).
+			'x.token = EXAMPLE_SECRET',                  // White space around it.
+			'api_key:EXAMPLE_SECRET',                    // A folder (a theme).
+			'api_key:EXAMPLE_SECRET/api.php',            // A folder (a plugin).
+			'keep/note:password:EXAMPLE_SECRET/f.txt',   // A folder below a folder.
+			'PASSWORD=EXAMPLE_SECRET',                   // Upper case, as the rest of the check reads it.
+			'Password : EXAMPLE_SECRET',
+			'accessToken:EXAMPLE_SECRET.php',            // In camelCase.
+			'my-oauth-server:EXAMPLE_SECRET.php',        // The name of a credential inside the name before it.
+			'password:',                                 // Nothing after it.
+			'password=',
+			'a=b:token=;EXAMPLE_SECRET',
+			'xpassword:EXAMPLE_SECRET',                  // At any place in the name.
+			'xpassWord:EXAMPLE_SECRET',                  // In lower case only.
+			'password:x:b.php',                          // Not only at the last = or :.
+			'keep/oauth_server:EXAMPLE_SECRET',          // The last word before it.
+			'keep/oauth_server :x',
+			'xpassWord :x',
+			'my-auth:EXAMPLE_SECRET',                    // A name of EXTRA_NAMES.
+			rawurlencode( 'password:;EXAMPLE_SECRET' ) . '.php', // Encoded, in every layer.
+			base64_encode( 'note:password:EXAMPLE_SECRET' ) . '.php',
+			'reset-password:guide.php',                  // An ordinary name held as well (fail closed, rare).
+		);
+		foreach ( $held as $name ) {
+			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name, array() ), $name );
+		}
+		foreach ( array( 'reset-password', 'wp-oauth-server', 'woocommerce_api_keys', 'password-protected', 'note:EXAMPLE.php', 'my-token-plugin', 'a:b:c', 'password-x:EXAMPLE.php', 'tokens.php', 'akismet/akismet.php' ) as $name ) {
+			self::assertNull( AB_MCP_Sync_Env::held( $name, array() ), $name . ': an ordinary name, shown as it is.' );
+		}
+		// The content check reads «&» with the decoder of the core only (on a
+		// site: the integration suite); the net holds nothing in it.
+		self::assertFalse( \AB_MCP_Sync_Net::keyed( 'R&D notes.pdf', array() ) );
+		self::assertNull( \AB_MCP_Sync_Net::over_name( 'R&D notes.pdf', array(), true ) );
+		// The names of ab_mcp_redact_keys, in the spellings the check reads alike.
+		foreach ( array( 'note:vault:EXAMPLE_SECRET.php', 'vault:;EXAMPLE_SECRET', 'my-vault=EXAMPLE_SECRET', 'myVault : EXAMPLE_SECRET', 'MY_VAULT:x', 'my vault:x' ) as $name ) {
+			self::assertNull( AB_MCP_Sync_Env::held( $name, array() ), $name );
+			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name, array( 'vault', 'my_vault' ) ), $name . ': with the names of ab_mcp_redact_keys.' );
+		}
+		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( 'my vault:x', array( 'my_vault' ) ), 'A name of ab_mcp_redact_keys as normalize_key() reads the text before it.' );
+		self::assertNull( AB_MCP_Sync_Env::held( 'vault-plugin/vault.php', array( 'vault' ) ), 'Without = or : after it, an ordinary name.' );
+		self::assertNull( AB_MCP_Sync_Env::held( 'note:EXAMPLE.php', array( '' ) ), 'An empty name is no name of a credential.' );
+		// The net over a name of the inventory keeps its rule.
+		foreach ( array( 'note:password:EXAMPLE_SECRET', 'password:;EXAMPLE_SECRET', 'Password: reset' ) as $text ) {
+			self::assertNull( \AB_MCP_Sync_Net::over_name( $text, array() ), $text );
+			self::assertSame( 'credential', \AB_MCP_Sync_Net::over_name( $text, array(), true ), $text );
+		}
 	}
 
 	public function testAPlaceHoldsNoNameOnlyTheSha256OfEachFolderAndOfTheWholePath(): void {

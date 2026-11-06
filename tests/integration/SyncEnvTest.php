@@ -142,7 +142,7 @@ final class SyncEnvTest extends TestCase {
 	private static function unwrite(): void {
 		$root = (string) AB_MCP_IT_Sites::state()['root'];
 		foreach ( array( 'a', 'b' ) as $site ) {
-			foreach ( array( 'plugins/ab-it-env-same', 'plugins/ab-it-env-version', 'mu-plugins', 'languages', 'uploads', 'db-error.php', 'php-error.php' ) as $rel ) {
+			foreach ( array( 'plugins/ab-it-env-same', 'plugins/ab-it-env-version', 'plugins/api_key:EXAMPLE_SECRET', 'plugins/my-token-plugin', 'mu-plugins', 'languages', 'uploads', 'db-error.php', 'php-error.php' ) as $rel ) {
 				self::remove_tree( self::content( $site ) . '/' . $rel, $root );
 			}
 		}
@@ -601,6 +601,65 @@ final class SyncEnvTest extends TestCase {
 		self::assertGreaterThan( 3, count( $parts ), 'The environment of this site in parts of the store.' );
 
 		$texts = array( 'the report' => (string) json_encode( $answer ), 'the answers' => (string) json_encode( $answers ) ) + self::store_texts();
+		foreach ( $texts as $where => $text ) {
+			self::assertStringNotContainsString( $secret, $text, "The name in $where." );
+		}
+	}
+
+	public function testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsInNoAnswerCursorPackageOrFileOfTheStore(): void {
+		self::pair();
+		$secret = 'EXAMPLE_SECRET';
+		$held   = array(
+			// Codex, round 3 of branch 7, A: a colon before it, a «;» after it.
+			'mu_plugin:' . AB_MCP_Sync_Env::hashed( 'note:password:' . $secret . '.php' ),
+			'mu_plugin:' . AB_MCP_Sync_Env::hashed( 'password:;' . $secret . '.php' ),
+			'plugin:' . AB_MCP_Sync_Env::hashed( 'api_key:' . $secret . '/api.php' ),
+		);
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'mu-plugins/note:password:' . $secret . '.php', "<?php\n// The same on both.\n" );
+			self::write( $site, 'mu-plugins/password:;' . $secret . '.php', "<?php\n// The same on both.\n" );
+			self::write( $site, 'plugins/api_key:' . $secret . '/api.php', self::plugin( 'Env key', '1.0' ) );
+			// Ordinary names, shown as they are.
+			self::write( $site, 'mu-plugins/note:EXAMPLE.php', "<?php\n// An ordinary name.\n" );
+			self::write( $site, 'mu-plugins/R&D notes.php', "<?php\n// An ordinary name.\n" );
+			self::write( $site, 'plugins/my-token-plugin/my-token-plugin.php', self::plugin( 'Env token', '1.0' ) );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_a` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_note:password:' . $secret . '` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_password-protected` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_token = ' . $secret . '` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_zz` ( id INT )' );
+		}
+		wp_cache_delete( 'plugins', 'plugins' );
+		$answers = array();
+		$ids     = self::staged( 'env', 2, $answers );
+		$cursors = array_column( array_filter( $answers, static fn( $a ) => isset( $a['cursor'] ) ), 'cursor' );
+		$keyed   = array( array( hash( 'sha256', 'abenv_note:password:' . $secret ) ), array( hash( 'sha256', 'abenv_token = ' . $secret ) ) );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => in_array( $c['inner']['after'], $keyed, true ) ), 'A cursor at such a table, by the SHA-256 of its name.' );
+
+		AB_MCP_Sync_Report::$env_lines = 2;
+		$answer                        = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => $ids,
+			)
+		);
+		$env = self::env( $answer['all'] );
+		foreach ( $held as $ref ) {
+			self::assertArrayHasKey( $ref, $env, $ref );
+			self::assertSame( 'credential_field', $env[ $ref ]['held'], $ref );
+		}
+		foreach ( array( 'abenv_note:password:' . $secret, 'abenv_token = ' . $secret ) as $table ) {
+			$ref = 'table:' . AB_MCP_Sync_Env::hashed( $table );
+			self::assertSame( array( 'counted', 'locked', 'Z8d', 'credential_field' ), array_merge( self::said( $env[ $ref ] ), array( $env[ $ref ]['held'] ) ), $table );
+		}
+		foreach ( array( 'mu_plugin:note:EXAMPLE.php', 'mu_plugin:R&D notes.php', 'plugin:my-token-plugin/my-token-plugin.php', 'table:abenv_password-protected', 'table:abenv_a', 'table:abenv_zz' ) as $plain ) {
+			self::assertArrayHasKey( $plain, $env, 'An ordinary name as it is: ' . $plain );
+			self::assertArrayNotHasKey( 'held', $env[ $plain ], $plain );
+		}
+
+		$texts = array( 'the report' => (string) json_encode( $answer ), 'the answers' => (string) json_encode( $answers ) ) + self::store_texts();
+		self::assertGreaterThan( 5, count( $texts ), 'The packages of both sites and the report.' );
+		self::assertNotEmpty( array_filter( $texts, static fn( $t ) => false !== strpos( $t, AB_MCP_Sync_Env::hashed( 'password:;' . $secret . '.php' ) ) ), 'The name is in the store, by its SHA-256.' );
 		foreach ( $texts as $where => $text ) {
 			self::assertStringNotContainsString( $secret, $text, "The name in $where." );
 		}

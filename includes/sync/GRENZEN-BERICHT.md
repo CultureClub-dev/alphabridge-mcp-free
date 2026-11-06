@@ -684,25 +684,53 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   einer Zeile des Inventars legt (`AB_MCP_Sync_Env::held()`: die
   Inhaltsprüfung von `AB_MCP_Sync_Credentials` und das Netz über den rohen
   Namen, mit `ab_mcp_redact_keys`). Ein Name mit einem eingeschriebenen
-  Feld einer Zugangsangabe (`password=…`, `password:…`, auch kodiert, etwa
-  in base64) oder einer, der sich nicht zu Ende lesen lässt, steht in
-  Paket, Bericht, Ablage und Antwort nur als SHA-256 (`sha256:…`) mit
-  `held` (`credential_field`, `unreadable_name`); beide Sites bilden
-  denselben SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin
-  heisst weiter «equal»). Codex-Runden 1 und 2, A1.
-- Den Doppelpunkt ohne Anführungszeichen (`password:…`) erkennt das Netz
-  nur für Namen der Umgebung (`AB_MCP_Sync_Net::over_name()` mit `$bare`,
-  Muster `BARE`), an jeder Stelle des Namens, auch nach `-` oder `.`. Grund:
-  ein Datei- oder Tabellenname ist keine Prosa; bei den Namen des Inventars
-  (darunter Titel) bleibt die Regel der Werte, nach der «Token: x» in Prosa
-  nichts hält. Ohne Wert danach (`password:`) hält der Doppelpunkt nichts.
+  Feld einer Zugangsangabe (`password=…`, auch kodiert, etwa in base64),
+  einer mit dem Namen einer Zugangsangabe vor `=` oder `:` (nächster Punkt)
+  oder einer, der sich nicht zu Ende lesen lässt, steht in Paket, Bericht,
+  Ablage und Antwort nur als SHA-256 (`sha256:…`) mit `held`
+  (`credential_field`, `unreadable_name`); beide Sites bilden denselben
+  SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin heisst
+  weiter «equal»). Codex-Runden 1 bis 3, A1.
+- Regel für Namen der Umgebung, zusätzlich zu den Prüfungen oben
+  (`AB_MCP_Sync_Net::keyed()`, aufgerufen von `over_name()` mit `$site` in
+  jeder Schicht des Namens, also auch kodiert): steht an irgendeiner Stelle
+  des ganzen Namens der Name einer Zugangsangabe unmittelbar vor `=` oder
+  `:` (Leerraum dazwischen erlaubt), wird der Name gehalten, gleich ob und
+  was danach steht (`password:;…`, `password:`, `x.token = …`). Jedes `=`
+  und jedes `:` wird für sich geprüft; kein früherer Treffer verbraucht
+  Zeichen des nächsten (`note:password:…`, Codex-Runde 3). Vor dem Zeichen
+  gilt: der Text endet, klein geschrieben oder so, wie `normalize_key()`
+  ihn liest, auf einen Namen aus `CREDENTIAL_EXACT`, `EXTRA_NAMES` oder
+  `ab_mcp_redact_keys` (`xpassword:`, `my-auth:`, `my vault=`), oder sein
+  letztes Wort nennt eine Zugangsangabe so, wie die übrige Prüfung es liest
+  (`names_credential()`: `CREDENTIAL_NEEDLES` an jeder Stelle des Wortes,
+  also auch am Ende, `EXTRA_LAST`; `oauth_server:`, `api_key.v1:`). Grund:
+  ein Datei- oder Tabellenname ist keine Prosa; eine Regel ohne Blick auf
+  den Wert lässt keine Schreibweise nach dem Zeichen offen. Bei den Namen
+  des Inventars (darunter Titel, `held_code()` im Import) bleibt die Regel
+  der Werte, nach der «Token: x» in Prosa nichts hält.
+- Das Muster `BARE` der Runde 2 (Name, `:`, ein Wert) ist entfernt. Die
+  Regel oben prüft dasselbe letzte Wort vor dem Doppelpunkt mit
+  `names_credential()`, dazu jedes Wortende, ohne einen Wert zu verlangen
+  und ohne Zeichen zu verbrauchen; sie hält damit, was `BARE` hielt, wo
+  `BARE` das ganze Wort las. Ein kürzeres Wort las `BARE` nur, wo ein
+  früherer Treffer den Anfang verbraucht hatte (der Fehler der Runde 3) oder
+  das Wort länger als 256 Zeichen war.
 - Nicht angewandt wird die Regel für Schlüssel (`names_credential()`, B9 der
-  Optionen): ein Name der Umgebung nennt eine Datei, einen Ordner oder eine
-  Tabelle, wie ein Slug einen Beitrag, keinen gespeicherten Wert. Grund:
-  sie hielte gewöhnliche Namen fest (`reset-password`, `wp-oauth-server`,
-  WooCommerces Tabelle `woocommerce_api_keys`), deren Inhalt die
-  Bestandsaufnahme ohnehin nicht liest; der Bericht nennte dann Plugins nur
-  noch als SHA-256.
+  Optionen) auf den ganzen Namen ohne `=` oder `:`: ein Name der Umgebung
+  nennt eine Datei, einen Ordner oder eine Tabelle, wie ein Slug einen
+  Beitrag, keinen gespeicherten Wert. Grund: sie hielte gewöhnliche Namen
+  fest (`reset-password`, `wp-oauth-server`, `password-protected`,
+  `my-token-plugin`, WooCommerces Tabelle `woocommerce_api_keys`), deren
+  Inhalt die Bestandsaufnahme ohnehin nicht liest; der Bericht nennte dann
+  Plugins nur noch als SHA-256. Diese Namen und `note:EXAMPLE.php` oder
+  `R&D notes.pdf` bleiben im Klartext.
+- Grenze (C, hingenommen): ein gewöhnlicher Name mit dem Namen einer
+  Zugangsangabe vor `=` oder `:` wird ebenfalls gehalten
+  (`reset-password:guide.php`, `compass:map.php` über `pass`); er steht dann
+  nur als SHA-256 mit `credential_field`. Grund: fail closed; solche Namen
+  sind selten, ein Doppelpunkt in Datei- und Ordnernamen ist unter Windows
+  unzulässig.
 - Was eine Zeile nicht als Text hält (kein UTF-8, ein Steuerzeichen, länger
   als 1024 Bytes), steht ebenfalls als SHA-256, ohne `held`; ebenso eine
   zu lange Versionsangabe, die der Bericht «not shown» nennt (Codex-Runde 1,
@@ -721,9 +749,10 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   compared», `moved`), die Tabellen als nicht ganz gelesen. Grund: ohne den
   Namen lässt sich die Stelle in der Reihenfolge nicht mehr bestimmen, und
   eine Zählung von vorn zählte doppelt. Das gilt jetzt für jeden Namen,
-  nicht nur für gehaltene: eine Datei, die zwischen zwei Aufrufen genau an
-  der Stelle gelöscht wird, an der ein Teil endete, lässt ihre Wurzel «not
-  compared».
+  nicht nur für gehaltene. Grenze (C, hingenommen, Codex-Runde 3): eine
+  Datei, die zwischen zwei Aufrufen genau an der Stelle gelöscht wird, an
+  der ein Teil endete, lässt ihre Wurzel «not compared»; ein neuer Aufruf
+  von vorn zählt sie wieder.
 - Kennt nur die Live-Site eine Regel (`ab_mcp_redact_keys` dort), hält erst
   ihr Import den Namen: im empfangenen Paket (Ablage `in` der Live-Site,
   `out` der Staging-Site) steht er, wie die Staging-Site ihn schrieb und
@@ -752,7 +781,12 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   über zwei Sites, die Reihe der Pakete, die Teile dieser Site, dass keine
   geheime Konstante in Antwort oder Ablage steht und kein gehaltener Name
   (`password=EXAMPLE_SECRET`, `password:EXAMPLE_SECRET`, ein Ordner
-  `password=` über `EXAMPLE_SECRET/…`, eine Regel nur auf der Staging-Site)
+  `password=` über `EXAMPLE_SECRET/…`, eine Regel nur auf der Staging-Site;
+  Runde 3: `note:password:EXAMPLE_SECRET.php`, `password:;EXAMPLE_SECRET.php`,
+  ein Plugin-Ordner `api_key:EXAMPLE_SECRET`, Tabellen
+  `note:password:EXAMPLE_SECRET` und `token = EXAMPLE_SECRET`, daneben
+  `note:EXAMPLE.php`, `R&D notes.php`, `my-token-plugin` und
+  `password-protected` im Klartext)
   in Antwort, Cursor, Zustand, Paket oder einer Datei der Ablage beider
   Sites, die Fortsetzung über Teile mit der neuen Stelle (auch mit einem
   inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs. Die Bindung an die
