@@ -17,7 +17,8 @@
  * (code: prepared and confirmed
  * as a person does), sign_manifest (package); for its packages: export
  * (purpose, cursor, objects; slow_index: out of time after each page of the
- * index of identities; index_slice: its slices this many bytes),
+ * index of identities; index_slice: its slices this many bytes; redact_keys,
+ * env_clock; constants: name => value defined for it where not defined),
  * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
@@ -177,6 +178,15 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				// The rules of this site only (ab_mcp_redact_keys), for this export.
 				$ab_it_keys = (array) $ab_it_step['redact_keys'];
 				add_filter( 'ab_mcp_redact_keys', static fn( $keys ) => array_merge( (array) $keys, $ab_it_keys ) );
+			}
+			if ( isset( $ab_it_step['constants'] ) ) {
+				// Constants of CONSTANTS this site defines for this export only
+				// (one WordPress does not define itself).
+				foreach ( (array) $ab_it_step['constants'] as $ab_it_name => $ab_it_value ) {
+					if ( ! defined( $ab_it_name ) ) {
+						define( $ab_it_name, $ab_it_value );
+					}
+				}
 			}
 			if ( isset( $ab_it_step['env_clock'] ) ) {
 				// Each look at the clock of the environment that many seconds

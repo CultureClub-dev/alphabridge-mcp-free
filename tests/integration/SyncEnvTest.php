@@ -13,7 +13,8 @@
  *   files counted or differing, tables without an engine counted or
  *   differing by their rows; nothing of either site written.
  * - No constant that holds a secret, neither in the answer nor in a file of
- *   the protected store of either site.
+ *   the protected store of either site; one only this site redacts not
+ *   from the staging site either, in the answer or the report.
  * - The packages of the environment one whole series in order; a package of
  *   the environment is no package of the inventory and the other way round;
  *   a line of another shape refuses the package.
@@ -459,6 +460,28 @@ final class SyncEnvTest extends TestCase {
 			foreach ( $names as $name ) {
 				self::assertStringNotContainsString( '"constant:' . $name . '"', $t, "$name in $where." );
 			}
+		}
+	}
+
+	public function testAConstantOnlyTheRulesOfThisSiteRedactIsNotShownFromTheStagingSiteInTheAnswerOrTheReport(): void {
+		self::pair();
+		// The rules of this site only; the staging site shows the constant
+		// with a value of its own (GitHub-Codex, PR #136, P2).
+		add_filter( 'ab_mcp_redact_keys', static fn( array $keys ): array => array_merge( $keys, array( 'FS_METHOD' ) ) );
+		$answers = array();
+		$answer  = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => self::staged( 'env', null, $answers, array( 'constants' => array( 'FS_METHOD' => 'EXAMPLE_FS_OF_B' ) ) ),
+			)
+		);
+		$env = self::env( $answer['all'] );
+		self::assertSame( array( 'only_staging', 'host', array( 'defined' => true, 'value' => 'not shown' ) ), array( $env['host:constant:FS_METHOD']['result'], $env['host:constant:FS_METHOD']['action'], $env['host:constant:FS_METHOD']['staging'] ), 'Defined there, its value not shown; this site leaves it out.' );
+		self::assertStringNotContainsString( 'EXAMPLE_FS_OF_B', (string) json_encode( $answer ) );
+		$texts = self::store_texts();
+		self::assertNotEmpty( array_filter( $texts, static fn( $t ) => false !== strpos( $t, '"constant:FS_METHOD"' ) ), 'The entry is in the store.' );
+		foreach ( $texts as $where => $text ) {
+			self::assertStringNotContainsString( 'EXAMPLE_FS_OF_B', $text, "The value in $where." );
 		}
 	}
 

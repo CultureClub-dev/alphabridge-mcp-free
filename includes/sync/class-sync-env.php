@@ -21,11 +21,14 @@
  *    SHA-256, and the constants of CONSTANTS, none of which holds a secret
  *    (never a value of a key, a salt, a password or of the access to the
  *    database: NEVER, and no name AB_MCP_Redactor redacts, the names of the
- *    filter ab_mcp_redact_keys included);
+ *    filter ab_mcp_redact_keys included; a constant of the staging site
+ *    this site does not show with its value not shown, held_here());
  *  - table: each table with the prefix of the site that neither the core
  *    nor the takeover covers (the tables of $wpdb and of AB_MCP_Sync_Schema),
  *    by its name without the prefix, with its rows (COUNT) and the SHA-256 of
- *    SHOW CREATE TABLE with the prefix and AUTO_INCREMENT taken out; tables
+ *    SHOW CREATE TABLE with AUTO_INCREMENT and the prefix of the names of
+ *    tables and constraints taken out, never of a column or an index
+ *    (schema()); tables
  *    (one line) says whether the list was read whole. Nothing else of a
  *    table is read;
  *  - files: the roots of ROOTS, each counted and summed (files, bytes),
@@ -194,6 +197,12 @@ final class AB_MCP_Sync_Env {
 	 * database, the keys and salts of wp-config.php, the salt of a cache.
 	 */
 	const NEVER = array( 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT', 'WP_CACHE_KEY_SALT', 'COOKIEHASH' );
+
+	/**
+	 * The words of SHOW CREATE TABLE right before a name that has the prefix
+	 * of the site (schema()): CREATE TABLE, CONSTRAINT, REFERENCES.
+	 */
+	const SCHEMA_NAMES = array( 'TABLE', 'CONSTRAINT', 'REFERENCES' );
 
 	/** A text of a constant shown as it is. */
 	const PLAIN = '/^[A-Za-z0-9_.\-]{0,64}\z/';
@@ -1046,15 +1055,39 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * The SHA-256 of a SHOW CREATE TABLE without what differs between two
-	 * copies of one schema: the prefix of every name, AUTO_INCREMENT.
+	 * copies of one schema: AUTO_INCREMENT, and the prefix of the site at the
+	 * beginning of a name of a table (SCHEMA_NAMES: the table itself, the
+	 * table a foreign key references) and of a constraint (MySQL names one
+	 * after its table, <table>_ibfk_1). A column, an index and what a text in
+	 * quotes says keep their names: a column wp_id is no column id under
+	 * another prefix (GitHub-Codex, PR #136, P2).
 	 *
 	 * @param string $create The statement.
 	 * @param string $prefix The prefix of the site.
 	 * @return string
 	 */
 	public static function schema( $create, $prefix ) {
-		$text = (string) preg_replace( '/ AUTO_INCREMENT=[0-9]+/', '', (string) $create );
-		$text = str_replace( '`' . $prefix, '`', $text );
+		$text   = (string) preg_replace( '/ AUTO_INCREMENT=[0-9]+/', '', (string) $create );
+		$prefix = '`' . (string) $prefix;
+		$before = null;
+		// A text in quotes, a name in backticks (`` within it), a word: a
+		// name right after a word of SCHEMA_NAMES loses the prefix.
+		$text = (string) preg_replace_callback(
+			"/'(?:[^'\\\\]|\\\\.)*'|`(?:[^`]|``)*`|[A-Za-z_]+/",
+			static function ( $match ) use ( $prefix, &$before ) {
+				$token = $match[0];
+				if ( '`' !== $token[0] ) {
+					if ( "'" !== $token[0] ) {
+						$before = $token;
+					}
+					return $token;
+				}
+				$word   = $before;
+				$before = null;
+				return in_array( $word, self::SCHEMA_NAMES, true ) && 0 === strpos( $token, $prefix ) ? '`' . substr( $token, strlen( $prefix ) ) : $token;
+			},
+			$text
+		);
 		return hash( 'sha256', $text );
 	}
 
@@ -1525,13 +1558,18 @@ final class AB_MCP_Sync_Env {
 	 * The lines of a package of the environment as this site shows them:
 	 * a line the import listed as held here (kind, SHA-256 of its ref in the
 	 * spelling of AB_MCP_Sync_Canon::encode(), code) by the SHA-256 of its
-	 * name, with why (the report, AB_MCP_Sync_Report::environment()).
+	 * name, with why; a constant this site does not show (shown(), by its
+	 * rules) with its value not shown, whatever the staging site showed
+	 * (GitHub-Codex, PR #136, P2). For the report, before it stores or shows
+	 * a line (AB_MCP_Sync_Report::environment()).
 	 *
-	 * @param array[] $lines Lines.
-	 * @param array[] $held  The list of held objects of the import.
+	 * @param array[]       $lines Lines.
+	 * @param array[]       $held  The list of held objects of the import.
+	 * @param string[]|null $extra AB_MCP_Redactor::extra_keys() (read when null).
 	 * @return array[]
 	 */
-	public static function held_here( array $lines, array $held ) {
+	public static function held_here( array $lines, array $held, $extra = null ) {
+		$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();
 		$codes = array();
 		foreach ( $held as $one ) {
 			if ( is_array( $one ) && isset( $one[0], $one[1], $one[2] ) ) {
@@ -1541,6 +1579,9 @@ final class AB_MCP_Sync_Env {
 		$out = array();
 		foreach ( $lines as $line ) {
 			$key   = is_array( $line ) && isset( $line['env'], $line['ref'] ) ? $line['env'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ) : null;
+			if ( null !== $key && 'host' === $line['env'] && 0 === strpos( (string) $line['ref'], 'constant:' ) && ! self::shown( substr( (string) $line['ref'], 9 ), $extra ) ) {
+				$line['value'] = 'not shown';
+			}
 			$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;
 		}
 		return $out;

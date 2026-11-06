@@ -9,9 +9,11 @@
  *   root leaves out, a folder that cannot be read, and the same counts over
  *   parts as in one go;
  * - the WordPress block of the .htaccess, the schema of a table without
- *   prefix and AUTO_INCREMENT, the value of a constant (a text that is not
- *   plain by its SHA-256 only), and no constant that holds a secret
- *   (NEVER, a name the redactor or ab_mcp_redact_keys redacts);
+ *   AUTO_INCREMENT and the prefix of the names of tables and constraints
+ *   (never of a column, an index or a text), the value of a constant (a
+ *   text that is not plain by its SHA-256 only), and no constant that holds
+ *   a secret (NEVER, a name the redactor or ab_mcp_redact_keys redacts,
+ *   also where the staging site shows it);
  * - the structure of a line of a package (each kind, each field, each type,
  *   the lists of refs);
  * - the comparison: only a must-use plugin, a drop-in and group U equal or
@@ -257,6 +259,27 @@ final class SyncEnvTest extends TestCase {
 		self::assertNotSame( AB_MCP_Sync_Env::schema( $a, 'wpa_' ), AB_MCP_Sync_Env::schema( str_replace( 'bigint(20)', 'int(11)', $b ), 'wpb_' ), 'Another column type is another schema.' );
 		self::assertNotSame( AB_MCP_Sync_Env::schema( $a, 'wpa_' ), AB_MCP_Sync_Env::schema( $a, 'wpb_' ), 'Only the prefix of the site is taken out.' );
 		self::assertMatchesRegularExpression( '/^[0-9a-f]{64}\z/', AB_MCP_Sync_Env::schema( $a, 'wpa_' ) );
+	}
+
+	public function testOnlyTheNamesOfTablesLoseThePrefixNeverAColumnOrAnIndex(): void {
+		// A column of another name under another prefix: another schema
+		// (GitHub-Codex, PR #136, P2: the prefix was taken out of every name).
+		$staging = "CREATE TABLE `wp_events` (\n  `wp_id` bigint(20) NOT NULL,\n  KEY `wp_id` (`wp_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		$live    = "CREATE TABLE `live_events` (\n  `id` bigint(20) NOT NULL,\n  KEY `id` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		self::assertNotSame( AB_MCP_Sync_Env::schema( $staging, 'wp_' ), AB_MCP_Sync_Env::schema( $live, 'live_' ), 'A column wp_id is no column id, whatever the prefix.' );
+		$same = "CREATE TABLE `live_events` (\n  `wp_id` bigint(20) NOT NULL,\n  KEY `wp_id` (`wp_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		self::assertSame( AB_MCP_Sync_Env::schema( $staging, 'wp_' ), AB_MCP_Sync_Env::schema( $same, 'live_' ), 'The same column and index under two prefixes: the same schema.' );
+		// A foreign key: the table it references loses the prefix, the
+		// columns after it do not.
+		$fk = static fn( string $p, string $col ): string => "CREATE TABLE `{$p}log` (\n  `wp_id` bigint(20) NOT NULL,\n  KEY `wp_id` (`wp_id`),\n  CONSTRAINT `{$p}log_ibfk_1` FOREIGN KEY (`wp_id`) REFERENCES `{$p}events` (`$col`) ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		self::assertSame( AB_MCP_Sync_Env::schema( $fk( 'wp_', 'wp_id' ), 'wp_' ), AB_MCP_Sync_Env::schema( $fk( 'live_', 'wp_id' ), 'live_' ), 'A table of a plugin with a foreign key on another one: the same schema under two prefixes.' );
+		self::assertNotSame( AB_MCP_Sync_Env::schema( $fk( 'wp_', 'wp_id' ), 'wp_' ), AB_MCP_Sync_Env::schema( $fk( 'live_', 'id' ), 'live_' ), 'The column a foreign key references keeps its name.' );
+		// A text is no name: what a comment says stays as it is.
+		$comment = static fn( string $p ): string => "CREATE TABLE `{$p}notes` (\n  `id` bigint(20) NOT NULL COMMENT 'REFERENCES `wp_events`'\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		self::assertSame( AB_MCP_Sync_Env::schema( $comment( 'wp_' ), 'wp_' ), AB_MCP_Sync_Env::schema( $comment( 'live_' ), 'live_' ), 'The same comment on both sides: the same schema.' );
+		// As MariaDB writes a comment: a quote doubled, a backslash escaped.
+		$escaped = static fn( string $p ): string => "CREATE TABLE `{$p}notes` (\n  `id` int(11) DEFAULT NULL COMMENT 'it''s a \\\\ back REFERENCES `wp_events`'\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+		self::assertSame( AB_MCP_Sync_Env::schema( $escaped( 'wp_' ), 'wp_' ), AB_MCP_Sync_Env::schema( $escaped( 'live_' ), 'live_' ), 'A comment with a doubled quote and a backslash: the same schema.' );
 	}
 
 	public function testTheValueOfAConstantIsShownPlainOrByItsHashOnly(): void {
@@ -506,6 +529,28 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( $other, $here[1], 'A line the list does not name stays.' );
 		self::assertSame( array( $other ), AB_MCP_Sync_Env::held_here( array( $other ), array( array( 'plugin', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'other/other.php' ) ), 'credential_field' ) ) ) );
 		self::assertSame( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), AB_MCP_Sync_Env::held_here( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), array( array( 'core', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'locale' ) ), 'credential_field' ) ) ), 'Only a name of the site.' );
+	}
+
+	public function testAConstantTheRulesOfThisSiteDoNotShowIsNotShownFromTheStagingSiteEither(): void {
+		// The staging site shows it, this site redacts its name
+		// (ab_mcp_redact_keys): its value is not shown here either (GitHub-Codex,
+		// PR #136, P2), as constants() leaves it out here.
+		$line  = array( 'defined' => true, 'env' => 'host', 'ref' => 'constant:WP_DEFAULT_THEME', 'value' => 'EXAMPLE_THEME_OF_STAGING' );
+		$other = array( 'defined' => true, 'env' => 'host', 'ref' => 'constant:WP_DEBUG', 'value' => true );
+		$php   = array( 'defined' => true, 'env' => 'host', 'ref' => 'php', 'value' => '8.3.1' );
+		$named = self::plugin( '1' );
+		$named['ref'] = 'constant:WP_DEFAULT_THEME';
+		$here  = AB_MCP_Sync_Env::held_here( array( $line, $other, $php, $named ), array(), array( 'wp_default_theme' ) );
+		self::assertSame( array_replace( $line, array( 'value' => 'not shown' ) ), $here[0], 'Defined, its value not shown.' );
+		self::assertTrue( AB_MCP_Sync_Env::shaped( $here[0] ) );
+		self::assertSame( array( $other, $php, $named ), array_slice( $here, 1 ), 'A constant this site shows, a value of the host and a name of the site stay.' );
+		self::assertSame( array( $line ), AB_MCP_Sync_Env::held_here( array( $line ), array(), array() ), 'Without the rule, as it is.' );
+		add_filter( 'ab_mcp_redact_keys', static fn( array $keys ): array => array_merge( $keys, array( 'WP_DEFAULT_THEME' ) ) );
+		$here = AB_MCP_Sync_Env::held_here( array( $line ), array() );
+		self::assertSame( 'not shown', $here[0]['value'], 'The rules of this site where none are given.' );
+		$e = self::one( $here[0], null );
+		self::assertSame( array( 'only_staging', array( 'defined' => true, 'value' => 'not shown' ) ), array( $e['result'], $e['staging'] ), 'Only on staging, as this site leaves it out.' );
+		self::assertStringNotContainsString( 'EXAMPLE_THEME_OF_STAGING', (string) json_encode( $e ) );
 	}
 
 	public function testANameWithACredentialAfterAColonIsHeldAsOneAfterAnEqualsSign(): void {

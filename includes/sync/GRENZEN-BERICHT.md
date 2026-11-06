@@ -613,8 +613,18 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
 ### Tabellen
 
 - Gelesen werden nur Name, `COUNT(*)` und `SHOW CREATE TABLE`; keine Zeile.
-  Das Schema wird ohne das Präfix der Site und ohne `AUTO_INCREMENT=`
-  verglichen; andere Unterschiede der Erzeugung (Zeichensatz der Verbindung,
+  Das Schema wird ohne `AUTO_INCREMENT=` und ohne das Präfix der Site am
+  Anfang eines Tabellen- oder Constraint-Namens verglichen: der Name nach
+  `CREATE TABLE`, nach `CONSTRAINT` (MySQL benennt einen Fremdschlüssel nach
+  seiner Tabelle, `<tabelle>_ibfk_1`) und nach `REFERENCES`. Spalten,
+  Indexnamen und Text in Anführungszeichen (ein Kommentar) behalten ihren
+  Namen: eine Spalte `wp_id` unter `wp_` ist keine Spalte `id` unter `live_`,
+  und dieselbe Spalte `wp_id` unter zwei Präfixen ist kein Unterschied
+  (GitHub-Codex, PR #136, P2; vorher fiel das Präfix aus jedem Namen in
+  Backticks). Ein Constraint-Name mit dem Präfix in der Mitte
+  (`fk_wp_…`) und eine Ansicht (`CREATE VIEW`) behalten das Präfix und heissen
+  unter zwei Präfixen «differs», ebenso ein Schema mit Namen in doppelten
+  Anführungszeichen (`ANSI_QUOTES`). Andere Unterschiede der Erzeugung (Zeichensatz der Verbindung,
   Version von MariaDB oder MySQL, `ROW_FORMAT`) lassen ein gleiches Schema
   «differs» heissen. Grund: lieber ein Unterschied zu viel als eine
   Gleichheit, die nicht belegt ist.
@@ -639,6 +649,15 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   Bericht «not shown»; zwei Sites vergleichen ihn so ohne Klartext. Ein
   SHA-256 eines kurzen Werts lässt sich erraten; die Liste nimmt darum keine
   Konstante auf, deren Wert vertraulich ist.
+- Die Regeln dieser Site gelten auch für die Konstanten der Staging-Site:
+  zeigt diese Site eine Konstante nicht (`shown()`, etwa weil
+  `ab_mcp_redact_keys` hier `WP_DEFAULT_THEME` nennt), steht ihr Wert aus dem
+  Paket der Staging-Site im Bericht als «not shown», bevor er gespeichert
+  oder ausgegeben wird (`AB_MCP_Sync_Env::held_here()`); `defined` bleibt,
+  der Eintrag heisst «only_staging», weil diese Site die Konstante auslässt.
+  Vorher übersprang die Prüfung jede Zeile ausserhalb von `NAMED`, und der
+  Wert stand im Bericht und in seinen gespeicherten Einträgen; der Redactor
+  sah ihn nicht, weil das Feld `value` heisst (GitHub-Codex, PR #136, P2).
 - Der `.htaccess`-Block ist der Text zwischen `# BEGIN WordPress` und
   `# END WordPress` neben WordPress (`ABSPATH`). Liegt die Site in einem
   anderen Ordner als WordPress (`home` und `siteurl` mit anderem Pfad), wird
@@ -812,7 +831,10 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   Namen, das nur die Inhaltsprüfung mit der HTML-API des Kerns hält)
   in Antwort, Cursor, Zustand, Paket oder einer Datei der Ablage beider
   Sites, die Fortsetzung über Teile mit der neuen Stelle (auch mit einem
-  inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs. Die Bindung an die
+  inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs;
+  dazu eine Konstante, die nur die Regeln dieser Site schwärzen
+  (`FS_METHOD` mit einem Wert nur auf der Staging-Site): «not shown», der
+  Wert in keiner Antwort und keiner Datei der Ablage beider Sites. Die Bindung an die
   Verbindung hält `tests/integration/SyncPackageTest.php`.
 - Ein Dateiname ohne UTF-8 lässt sich auf APFS (macOS) nicht anlegen; die
   Integration prüft den Fortsetzungspunkt darum mit gehaltenen Namen, die
@@ -835,4 +857,8 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   Refs fester Listen, die nie die Form eines SHA-256 haben); dazu (Runde 2)
   die Art und die Form des SHA-256 in `held_names()`: die Zeilen kommen
   durch `shaped()`, das `held` nur bei `NAMED` mit einer Ref in Form eines
-  SHA-256 zulässt.
+  SHA-256 zulässt. Nach GitHub-Codex (PR #136): in `held_here()` die Prüfung
+  auf `constant:` (die übrigen Refs von `host` sind kürzer als das Präfix,
+  `shown('')` lässt alles durch), in `schema()` die Ausnahme für Text in
+  Anführungszeichen beim Merken des Worts davor (nach einem Text folgt nie
+  unmittelbar ein Name).

@@ -86,9 +86,25 @@ e('block-begin', 'block(): the lines after its beginning only', EN,
   "\t\t\t} elseif ( false !== strpos( $line, '# BEGIN WordPress' ) ) {", "\t\t\t} elseif ( true ) {", 'env', BLOCK)
 SCHEMA = 'testTheSchemaOfATableIsHashedWithoutItsPrefixAndAutoIncrement'
 e('schema-auto', 'schema(): without AUTO_INCREMENT', EN,
-  "\t\t$text = (string) preg_replace( '/ AUTO_INCREMENT=[0-9]+/', '', (string) $create );", "\t\t$text = (string) $create;", 'env', SCHEMA)
-e('schema-prefix', 'schema(): without the prefix of the site', EN,
-  "\t\t$text = str_replace( '`' . $prefix, '`', $text );", '', 'env', SCHEMA)
+  "\t\t$text   = (string) preg_replace( '/ AUTO_INCREMENT=[0-9]+/', '', (string) $create );", "\t\t$text   = (string) $create;", 'env', SCHEMA)
+SCHEMA_RET = "\t\t\t\treturn in_array( $word, self::SCHEMA_NAMES, true ) && 0 === strpos( $token, $prefix ) ? '`' . substr( $token, strlen( $prefix ) ) : $token;"
+e('schema-prefix', 'schema(): without the prefix of the site', EN, SCHEMA_RET, "\t\t\t\treturn $token;", 'env', SCHEMA)
+NAMES = 'testOnlyTheNamesOfTablesLoseThePrefixNeverAColumnOrAnIndex'
+SCHEMA_WORDS = "\tconst SCHEMA_NAMES = array( 'TABLE', 'CONSTRAINT', 'REFERENCES' );"
+e('gh1-schema-names-only', 'schema(): the prefix out of the names of tables and constraints only, never of a column or an index (GitHub-Codex, PR #136, P2)', EN,
+  SCHEMA_RET, SCHEMA_RET.replace('in_array( $word, self::SCHEMA_NAMES, true ) && ', ''), 'env', NAMES)
+e('gh1-schema-table', 'schema(): the name of the table without the prefix (GitHub-Codex, PR #136, P2)', EN,
+  SCHEMA_WORDS, SCHEMA_WORDS.replace("'TABLE', ", ''), 'env', NAMES)
+e('gh1-schema-constraint', 'schema(): the name of a constraint without the prefix (GitHub-Codex, PR #136, P2)', EN,
+  SCHEMA_WORDS, SCHEMA_WORDS.replace("'CONSTRAINT', ", ''), 'env', NAMES)
+e('gh1-schema-references', 'schema(): the table a foreign key references without the prefix (GitHub-Codex, PR #136, P2)', EN,
+  SCHEMA_WORDS, SCHEMA_WORDS.replace(", 'REFERENCES'", ''), 'env', NAMES)
+e('gh1-schema-after-name', 'schema(): only the name right after the word, not the columns after it (GitHub-Codex, PR #136, P2)', EN,
+  "\t\t\t\t$word   = $before;\n\t\t\t\t$before = null;", "\t\t\t\t$word   = $before;", 'env', NAMES)
+e('gh1-schema-quoted', 'schema(): a text in quotes is no name (GitHub-Codex, PR #136, P2)', EN,
+  "\"/'(?:[^'\\\\\\\\]|\\\\\\\\.)*'|`", "\"/`", 'env', NAMES)
+e('gh1-schema-backslash', 'schema(): a backslash in a text in quotes escapes what follows (GitHub-Codex, PR #136, P2)', EN,
+  "\"/'(?:[^'\\\\\\\\]|\\\\\\\\.)*'|`", "\"/'(?:[^'\\\\\\\\])*'|`", 'env', NAMES)
 VALUE = 'testTheValueOfAConstantIsShownPlainOrByItsHashOnly'
 e('value-plain', 'constant_value(): a text that is not plain by its SHA-256 only', EN,
   "\t\tif ( is_string( $value ) && 1 === preg_match( self::PLAIN, $value ) ) {", "\t\tif ( is_string( $value ) ) {", 'env', VALUE)
@@ -305,6 +321,14 @@ e('r1-held-line-rules', 'held_line(): a name by the rules of this site (A1)', EN
 HH = "\t\t\t$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;"
 e('r1-held-here-listed', 'held_here(): a line the list names only (A1)', EN, HH, HH.replace(' && isset( $codes[ $key ] )', ' && array() !== $codes'), 'env', IH)
 e('r1-held-here-named', 'held_here(): a name of the site only (A1)', EN, HH, HH.replace(" && in_array( $line['env'], self::NAMED, true )", ''), 'env', IH)
+CONST = 'testAConstantTheRulesOfThisSiteDoNotShowIsNotShownFromTheStagingSiteEither'
+HC = "\t\t\tif ( null !== $key && 'host' === $line['env'] && 0 === strpos( (string) $line['ref'], 'constant:' ) && ! self::shown( substr( (string) $line['ref'], 9 ), $extra ) ) {"
+e('gh1-held-here-constant', 'held_here(): a constant this site does not show, its value not shown from the staging site either (GitHub-Codex, PR #136, P2)', EN, HC, "\t\t\tif ( false ) {", 'env', CONST)
+e('gh1-held-here-constant-host', 'held_here(): a constant of the host only (GitHub-Codex, PR #136, P2)', EN, HC, HC.replace("'host' === $line['env'] && ", ''), 'env', CONST)
+e('gh1-held-here-constant-shown', 'held_here(): only a constant shown() does not let through (GitHub-Codex, PR #136, P2)', EN, HC, HC.replace('! self::shown(', 'self::shown('), 'env', CONST)
+e('gh1-held-here-rules', 'held_here(): by the rules of this site where none are given (GitHub-Codex, PR #136, P2)', EN,
+  "\t\t$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();\n\t\t$codes = array();", "\t\t$extra = is_array( $extra ) ? $extra : array();\n\t\t$codes = array();", 'env', CONST)
+e('gh1-held-here-constant-it', 'held_here(): a constant only this site redacts, its value of the staging site in no answer and no file of the store (GitHub-Codex, PR #136, P2, two sites)', EN, HC, "\t\t\tif ( false ) {", 'it', 'testAConstantOnlyTheRulesOfThisSiteRedactIsNotShownFromTheStagingSiteInTheAnswerOrTheReport')
 HA = 'testAHeldNameIsOneEntryByItsSha256OnBothSidesAndShownNowhere'
 e('r1-alike-live', 'compare(): a name the staging site holds, this site by its SHA-256 as well (A1)', EN,
   "\t\t$l     = self::held_alike( $s, $l );", '', 'env', HA)
