@@ -45,15 +45,19 @@
  * holds the packages of the staging site to one whole series.
  *
  * NAMES. A name of the site (a plugin, a theme, a must-use plugin, a
- * table: NAMED) goes through the check the import runs over the names of a
- * line of the inventory (held(): a field of a credential written into it,
- * also encoded, by the rules of the site with ab_mcp_redact_keys); one it
- * holds is in a line by its SHA-256 only, with why (held), and so is a name
- * that is no text a line holds (no UTF-8, a control character, longer than
- * MAX_TEXT). The place a part ends at (the state: the cursor of
- * wp_site_export, a part of a report) keeps each part of its path the same
- * way (place()), and the next part finds it again among the names where it
- * lies (found()); one gone since leaves its root not counted to its end.
+ * table: NAMED) goes, whole, through the check the import runs over the
+ * names of a line of the inventory (held(): a field of a credential written
+ * into it, after = or :, also encoded, by the rules of the site with
+ * ab_mcp_redact_keys); one it holds is in a line by its SHA-256 only, with
+ * why (held), and so is a name that is no text a line holds (no UTF-8, a
+ * control character, longer than MAX_TEXT). A name the staging site holds
+ * is held in the lines of this site as well before the report stores them
+ * (held_names(), held_there()). The place a part ends at (the state: the
+ * cursor of wp_site_export, a part of a report) holds no name and no part
+ * of one: the SHA-256 of each folder its path goes through and of the whole
+ * path (place()), by which the next part finds it again among the names
+ * where it lies (found()); one gone since leaves its root not counted to its
+ * end, the tables not read whole (Codex, round 2 of branch 7, A1).
  *
  * WHAT IT SAYS (compare()): an entry per line of either side. Only a
  * must-use plugin and a drop-in are equal or differ by what was read (the
@@ -424,8 +428,7 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
-	 * Whether a place is one place() writes: a list of parts, each a text
-	 * a line holds as it is (no «/» in it) or a SHA-256 alone.
+	 * Whether a place is one place() writes: a list of SHA-256, 64 hex each.
 	 *
 	 * @param mixed $place Place.
 	 * @return bool
@@ -434,10 +437,8 @@ final class AB_MCP_Sync_Env {
 		if ( ! is_array( $place ) || array() === $place || ! array_is_list( $place ) ) {
 			return false;
 		}
-		foreach ( $place as $part ) {
-			$text = is_string( $part ) && '' !== $part && false === strpos( $part, '/' ) && self::name( $part ) === $part && 1 !== preg_match( self::HASHED, $part );
-			$hash = is_array( $part ) && array( 'sha256' ) === array_keys( $part ) && is_string( $part['sha256'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $part['sha256'] );
-			if ( ! $text && ! $hash ) {
+		foreach ( $place as $hash ) {
+			if ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $hash ) ) {
 				return false;
 			}
 		}
@@ -445,54 +446,58 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
-	 * The place a part ended at, as a state keeps it (after): the parts of
-	 * its path, each as it is where a line would show it as it is (plain()),
-	 * else by its SHA-256 alone, so that no state (the cursor of
-	 * wp_site_export, a part of a report) carries a name a credential holds,
-	 * or one that is no text (Codex, round 1 of branch 7, A1 and C5).
+	 * The place a part ended at, as a state keeps it (after): no name and no
+	 * part of one, only the SHA-256 of each folder the path goes through and,
+	 * last, of the whole path (of a table: of its whole name), so that no
+	 * state (the cursor of wp_site_export, a part of a report) carries a name
+	 * in any spelling, a credential written into it or not (Codex, rounds 1
+	 * and 2 of branch 7, A1 and C5). One SHA-256 per folder, so that the next
+	 * part finds it again folder by folder (found()), without reading again
+	 * what the parts before counted.
 	 *
 	 * @param string|null $path  A path of a root, or the name of a table.
-	 * @param bool        $split Whether it is a path (by its parts), not the
-	 *                           name of a table (one part, «/» in it too).
-	 * @return array|null
+	 * @param bool        $split Whether it is a path (through its folders),
+	 *                           not the name of a table («/» in it too).
+	 * @return string[]|null
 	 */
 	public static function place( $path, $split = true ) {
 		if ( null === $path ) {
 			return null;
 		}
 		$out = array();
+		$at  = null;
 		foreach ( $split ? explode( '/', (string) $path ) : array( (string) $path ) as $part ) {
-			$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );
+			$at    = null === $at ? $part : $at . '/' . $part;
+			$out[] = hash( 'sha256', $at );
 		}
 		return $out;
 	}
 
 	/**
-	 * The path a place names, each part held by its SHA-256 found again among
-	 * the names where it lies; null where such a part is no longer there.
+	 * The path a place names, found again folder by folder: in the folder of
+	 * the path found so far, the name whose path has the next SHA-256; null
+	 * where one is no longer there (gone, renamed, moved).
 	 *
-	 * @param array    $place place().
+	 * @param string[] $place place().
 	 * @param callable $names function( string $path ): string[]|null, the
 	 *                        names in the folder of a path ('' the root).
 	 * @return string|null
 	 */
 	public static function found( array $place, callable $names ) {
-		$path = '';
-		foreach ( $place as $part ) {
-			if ( is_array( $part ) ) {
-				$hit = null;
-				foreach ( (array) $names( $path ) as $name ) {
-					if ( hash_equals( $part['sha256'], hash( 'sha256', (string) $name ) ) ) {
-						$hit = (string) $name;
-						break;
-					}
+		$path = null;
+		foreach ( $place as $hash ) {
+			$hit = null;
+			foreach ( (array) $names( (string) $path ) as $name ) {
+				$at = null === $path ? (string) $name : $path . '/' . $name;
+				if ( hash_equals( (string) $hash, hash( 'sha256', $at ) ) ) {
+					$hit = $at;
+					break;
 				}
-				if ( null === $hit ) {
-					return null;
-				}
-				$part = $hit;
 			}
-			$path = '' === $path ? $part : $path . '/' . $part;
+			if ( null === $hit ) {
+				return null;
+			}
+			$path = $hit;
 		}
 		return $path;
 	}
@@ -930,14 +935,15 @@ final class AB_MCP_Sync_Env {
 	 * be read).
 	 *
 	 * @param array|null $place    Where the part before ended: the table
-	 *                            (without the prefix) as place() keeps it.
+	 *                            (without the prefix) as place() keeps it,
+	 *                            by the SHA-256 of its name.
 	 * @param float      $deadline Until when.
 	 * @param int        $room     Lines at most.
 	 * @return array{lines:array[],done:bool,after:array|null} after as place() keeps it.
 	 */
 	public static function table_lines( $place, $deadline, $room ) {
 		$names = self::tables();
-		// A table held by its SHA-256 that is gone since: the list is not read
+		// The table the part before ended at, gone since: the list is not read
 		// whole (fail closed), as where SHOW TABLES fails.
 		$after = null === $names || null === $place ? null : self::found( $place, static fn() => $names );
 		if ( null === $names || ( null !== $place && null === $after ) ) {
@@ -1085,8 +1091,8 @@ final class AB_MCP_Sync_Env {
 				'line' => self::files_line( $root, $state, ! file_exists( $place['dir'] ), file_exists( $place['dir'] ) ? 'not_a_folder' : null ),
 			);
 		}
-		// The place of the part before, a part held by its SHA-256 found
-		// again; one gone since leaves the root not counted to its end.
+		// The place of the part before, found again by its SHA-256; gone
+		// since, the root is not counted to its end.
 		$dir   = $place['dir'];
 		$after = null === $state['after'] ? null : self::found(
 			$state['after'],
@@ -1421,14 +1427,18 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * Why a name of the site is held by the rules of this site, or null:
-	 * the check the import runs over each name of a line of the inventory
-	 * (AB_MCP_Sync_Import::held_code(): the content check of the credential
-	 * check and the net over the raw name, with the names of the filter
-	 * ab_mcp_redact_keys): a field of a credential written into it
+	 * over the whole name (a path with its folders, a table with its whole
+	 * name), the check the import runs over each name of a line of the
+	 * inventory (AB_MCP_Sync_Import::held_code(): the content check of the
+	 * credential check and the net over the raw name, with the names of the
+	 * filter ab_mcp_redact_keys): a field of a credential written into it
 	 * (password=…, also encoded), or a name that does not read to its end
-	 * (deeper than the check or the net reads). A name is the name of a file, a
-	 * folder or a table, as a slug is that of a post: «reset-password» or
-	 * «woocommerce_api_keys» holds nothing (Codex, round 1 of branch 7, A1).
+	 * (deeper than the check or the net reads); the net over a name of the
+	 * site also after a colon without quotes (password:…: a name of a file or
+	 * a table is no prose; Codex, round 2 of branch 7, A1). A name is the
+	 * name of a file, a folder or a table, as a slug is that of a post:
+	 * «reset-password» or «woocommerce_api_keys» holds nothing (Codex, round
+	 * 1 of branch 7, A1).
 	 *
 	 * @param string        $name  Name.
 	 * @param string[]|null $extra AB_MCP_Redactor::extra_keys() (read when null).
@@ -1443,7 +1453,7 @@ final class AB_MCP_Sync_Env {
 		if ( 'unreadable' === $check['state'] ) {
 			return 'unreadable_name';
 		}
-		$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );
+		$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra, true );
 		if ( 'credential' === $net ) {
 			return 'credential_field';
 		}
@@ -1451,21 +1461,10 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
-	 * Whether a name is shown as it is: a text a line holds as it is
-	 * (name()), not of the form of a hash, and held by nothing (held()).
-	 *
-	 * @param string $name Name.
-	 * @return bool
-	 */
-	public static function plain( $name ) {
-		$name = (string) $name;
-		return '' !== $name && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) && null === self::held( $name );
-	}
-
-	/**
-	 * The line of a name of the site (NAMED): its ref the name where it is
-	 * shown as it is (plain()), else its SHA-256 (hashed()), with held, why,
-	 * where a credential holds it.
+	 * The line of a name of the site (NAMED): its ref the name where nothing
+	 * holds it (held()) and a line holds it as it is (name(), not of the form
+	 * of a hash), else its SHA-256 (hashed()), with held, why, where a
+	 * credential holds it.
 	 *
 	 * @param string $env    Kind.
 	 * @param string $name   Name.
@@ -1540,6 +1539,51 @@ final class AB_MCP_Sync_Env {
 			$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;
 		}
 		return $out;
+	}
+
+	/**
+	 * The names the lines of the staging site hold (NAMED, with held): the
+	 * SHA-256 of each name (its ref, hashed()) with why, by strcmp(). For the
+	 * report, which keeps them with its group (AB_MCP_Sync_Report) and holds
+	 * the lines of this site by them before it stores them (held_there()).
+	 *
+	 * @param array[] $lines Lines of the staging site.
+	 * @return array<string,string> hashed() => a code of HELD.
+	 */
+	public static function held_names( array $lines ) {
+		$out = array();
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {
+				$out[ (string) $line['ref'] ] = (string) $line['held'];
+			}
+		}
+		ksort( $out, SORT_STRING );
+		return $out;
+	}
+
+	/**
+	 * The lines of this site with a name the staging site holds (held_names(),
+	 * of whatever kind of NAMED) by its SHA-256 with why, before a part of
+	 * them is stored: the rules of both sites hold what this site keeps, not
+	 * only those of this one (Codex, round 2 of branch 7, A1). A line held
+	 * here already stays as it is.
+	 *
+	 * @param array[]              $lines Lines of this site.
+	 * @param array<string,string> $names held_names() of the staging site.
+	 * @return array[]
+	 */
+	public static function held_there( array $lines, array $names ) {
+		foreach ( $lines as $i => $line ) {
+			if ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) || isset( $line['held'] ) || ! in_array( $line['env'], self::NAMED, true ) ) {
+				continue;
+			}
+			$ref    = (string) $line['ref'];
+			$hashed = 1 === preg_match( self::HASHED, $ref ) ? $ref : self::hashed( $ref );
+			if ( isset( $names[ $hashed ] ) ) {
+				$lines[ $i ] = self::reduced( $line, (string) $names[ $hashed ] );
+			}
+		}
+		return $lines;
 	}
 
 	/**
@@ -1948,7 +1992,7 @@ final class AB_MCP_Sync_Env {
 			'not_a_folder'           => 'its place is no folder',
 			'attachments_unreadable' => 'the file list of an attachment could not be read whole',
 			'attachments_too_many'   => 'the file lists of the attachments are too many to hold within one call',
-			'moved'                  => 'the file or folder the call before stopped at, kept by its SHA-256 because its name holds a credential or is no text, is gone since',
+			'moved'                  => 'the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known',
 		);
 		return $say[ $why ] ?? 'not known why';
 	}

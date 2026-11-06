@@ -21,7 +21,8 @@ RE = 'includes/sync/class-sync-report.php'
 EX = 'includes/sync/class-sync-export.php'
 IM = 'includes/sync/class-sync-import.php'
 P = 'includes/sync/class-sync-proposal.php'
-FILEVAR = {EN: '$en', RE: '$re', EX: '$ex', IM: '$im', P: '$p'}
+NET = 'includes/sync/class-sync-net.php'
+FILEVAR = {EN: '$en', RE: '$re', EX: '$ex', IM: '$im', P: '$p', NET: '$net'}
 
 RUNS = {
     'env': ('unit', 'SyncEnvTest'),
@@ -209,25 +210,24 @@ e('state-after', 'state_shaped(): after a place as place() writes it, or none', 
 PL = "\t\tif ( ! is_array( $place ) || array() === $place || ! array_is_list( $place ) ) {"
 e('r1-place-list', 'place_shaped(): a list (A1, C5)', EN, PL, PL.replace(' || ! array_is_list( $place )', ''), 'env', STATE)
 e('r1-place-empty', 'place_shaped(): not empty (A1, C5)', EN, PL, PL.replace(' || array() === $place', ''), 'env', STATE)
-PT = "\t\t\t$text = is_string( $part ) && '' !== $part && false === strpos( $part, '/' ) && self::name( $part ) === $part && 1 !== preg_match( self::HASHED, $part );"
-e('r1-place-part-empty', 'place_shaped(): no empty part (A1, C5)', EN, PT, PT.replace(" && '' !== $part", ''), 'env', STATE)
-e('r1-place-part-slash', 'place_shaped(): a part without «/» (A1, C5)', EN, PT, PT.replace(" && false === strpos( $part, '/' )", ''), 'env', STATE)
-e('r1-place-part-text', 'place_shaped(): a part a line holds as it is (A1, C5)', EN, PT, PT.replace(' && self::name( $part ) === $part', ''), 'env', STATE)
-e('r1-place-part-hashed', 'place_shaped(): no part of the form of a hash (A1, C5)', EN, PT, PT.replace(' && 1 !== preg_match( self::HASHED, $part )', ''), 'env', STATE)
-PH = "\t\t\t$hash = is_array( $part ) && array( 'sha256' ) === array_keys( $part ) && is_string( $part['sha256'] ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $part['sha256'] );"
-e('r1-place-hash-keys', 'place_shaped(): a SHA-256 alone (A1, C5)', EN, PH, PH.replace(" && array( 'sha256' ) === array_keys( $part )", " && isset( $part['sha256'] )"), 'env', STATE)
-e('r1-place-hash-hex', 'place_shaped(): 64 hex (A1, C5)', EN, PH, PH.replace(" && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $part['sha256'] )", ''), 'env', STATE)
-PLACE = 'testAPlaceKeepsAHeldOrOddPartByItsSha256AndIsFoundAgain'
-e('r1-place-plain', 'place(): a part as it is only where it is plain (A1)', EN,
-  "\t\t\t$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", "\t\t\t$out[] = $part;", 'env', PLACE)
-e('r1-place-table', 'place(): the name of a table one part, a «/» in it by its SHA-256 (A1)', EN,
-  "\t\t\t$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", "\t\t\t$out[] = self::plain( $part ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", 'env', PLACE)
-e('r1-place-split', 'place(): a path by its parts (A1)', EN,
-  "\t\tforeach ( $split ? explode( '/', (string) $path ) : array( (string) $path ) as $part ) {", "\t\tforeach ( array( (string) $path ) as $part ) {", 'env', PLACE)
-e('r1-found-gone', 'found(): a part held by its SHA-256 that is gone: none (A1)', EN,
-  "\t\t\t\tif ( null === $hit ) {\n\t\t\t\t\treturn null;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn null;", 'env', PLACE)
-e('r1-found-name', 'found(): the name found takes the place of the hash (A1)', EN,
-  "\t\t\t\t$part = $hit;", '', 'env', PLACE)
+# Codex, round 2 of branch 7, A1: the place of a part holds no name, only the SHA-256 of each folder and of the whole path.
+PS = "\t\t\tif ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $hash ) ) {"
+e('r2-place-hex', 'place_shaped(): each a SHA-256 of 64 hex (A1)', EN, PS, PS.replace(" || 1 !== preg_match( '/^[0-9a-f]{64}\\z/', $hash )", ''), 'env', STATE)
+e('r2-place-text', 'place_shaped(): each a text (A1)', EN, PS, PS.replace("! is_string( $hash ) || ", ''), 'env', STATE)
+PLACE = 'testAPlaceHoldsNoNameOnlyTheSha256OfEachFolderAndOfTheWholePath'
+e('r2-place-prefix', 'place(): the SHA-256 of the path up to each folder, not of the folder alone (A1)', EN,
+  "\t\t\t$at    = null === $at ? $part : $at . '/' . $part;", "\t\t\t$at    = $part;", 'env', PLACE)
+e('r2-place-each', 'place(): one SHA-256 per folder (A1)', EN,
+  "\t\t\t$out[] = hash( 'sha256', $at );", "\t\t\t$out   = array( hash( 'sha256', $at ) );", 'env', PLACE)
+PSPLIT = "\t\tforeach ( $split ? explode( '/', (string) $path ) : array( (string) $path ) as $part ) {"
+e('r2-place-split', 'place(): a path through its folders (A1)', EN, PSPLIT, "\t\tforeach ( array( (string) $path ) as $part ) {", 'env', PLACE)
+e('r2-place-table', 'place(): a table by its whole name, a «/» in it too (A1)', EN, PSPLIT, "\t\tforeach ( explode( '/', (string) $path ) as $part ) {", 'env', PLACE)
+e('r2-found-path', 'found(): the SHA-256 of the path up to the name (A1)', EN,
+  "\t\t\t\t$at = null === $path ? (string) $name : $path . '/' . $name;", "\t\t\t\t$at = (string) $name;", 'env', PLACE)
+e('r2-found-gone', 'found(): a folder or entry gone: none (A1)', EN,
+  "\t\t\tif ( null === $hit ) {\n\t\t\t\treturn null;", "\t\t\tif ( false ) {\n\t\t\t\treturn null;", 'env', PLACE)
+e('r2-found-hit', 'found(): the name found is the path to go on in (A1)', EN,
+  "\t\t\t$path = $hit;", '', 'env', PLACE)
 # held()
 HELD_T = 'testANameWithACredentialWrittenIntoItIsHeld'
 e('r1-held-field', 'held(): a field of a credential in a name (A1)', EN,
@@ -240,11 +240,30 @@ e('r1-held-net-unreadable', 'held(): a name the net does not read to its end (A1
   "\t\treturn 'unreadable' === $net ? 'unreadable_name' : null;", "\t\treturn null;", 'env', HELD_T)
 e('r1-held-extra', 'held(): the names of ab_mcp_redact_keys (A1)', EN,
   "\t\t$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();\n\t\t$check", "\t\t$extra = is_array( $extra ) ? $extra : array();\n\t\t$check", 'env', HELD_T)
-PN = "\t\treturn '' !== $name && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) && null === self::held( $name );"
-e('r1-plain-empty', 'plain(): no empty name (A1)', EN, PN, PN.replace("'' !== $name && ", ''), 'env', HELD_T)
-e('r1-plain-text', 'plain(): a name a line holds as it is (A1, C5)', EN, PN, PN.replace(' && self::name( $name ) === $name', ''), 'env', HELD_T)
-e('r1-plain-hashed', 'plain(): no name of the form of a hash (A1)', EN, PN, PN.replace(' && 1 !== preg_match( self::HASHED, $name )', ''), 'env', HELD_T)
-e('r1-plain-held', 'plain(): no name a credential holds (A1)', EN, PN, PN.replace(' && null === self::held( $name )', ''), 'env', HELD_T)
+COLON = 'testANameWithACredentialAfterAColonIsHeldAsOneAfterAnEqualsSign'
+e('r2-held-bare', 'held(): a name of the site also after a colon without quotes (A1)', EN,
+  "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra, true );", "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );", 'env', COLON)
+BARE_IF = "\t\t\tif ( $bare && preg_match_all( self::BARE, $layer[1], $m ) ) {"
+e('r2-net-bare', 'over_name(): name:value without quotes, for a name of the site (A1)', NET, BARE_IF, "\t\t\tif ( false ) {", 'env', COLON)
+e('r2-net-bare-only', 'over_name(): only where it is asked for (a name of the inventory keeps its rule) (A1)', NET, BARE_IF, BARE_IF.replace('$bare && ', ''), 'env', COLON)
+e('r2-net-bare-name', 'over_name(): only the name of a credential before the colon (A1)', NET,
+  "\t\t\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( (string) $name, $extra ) ) {", "\t\t\t\t\tif ( true ) {", 'env', COLON)
+BARE_RE = "\tconst BARE = '/(' . self::NAME . ')\\s*:\\s*' . self::VALUE . '/';"
+e('r2-net-bare-space', 'BARE: white space around the colon (A1)', NET, BARE_RE, BARE_RE.replace("\\s*:\\s*", ":"), 'env', COLON)
+e('r2-net-bare-value', 'BARE: a value after the colon (A1)', NET, BARE_RE, BARE_RE.replace(" . self::VALUE . '/'", " . '/'"), 'env', COLON)
+THERE = 'testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored'
+HN = "\t\t\tif ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {"
+e('r2-held-names-held', 'held_names(): the lines held only (A1)', EN, HN, HN.replace(", $line['held'] )", ' )'), 'env', THERE)
+e('r2-held-names-code', 'held_names(): each with why (A1)', EN,
+  "\t\t\t\t$out[ (string) $line['ref'] ] = (string) $line['held'];", "\t\t\t\t$out[ (string) $line['ref'] ] = 'credential_field';", 'env', THERE)
+e('r2-held-names-order', 'held_names(): in one order (A1)', EN, "\t\tksort( $out, SORT_STRING );\n\t\treturn $out;", "\t\treturn $out;", 'env', THERE)
+HT = "\t\t\tif ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) || isset( $line['held'] ) || ! in_array( $line['env'], self::NAMED, true ) ) {"
+e('r2-held-there-here', 'held_there(): a line held here already stays as it is (A1)', EN, HT, HT.replace(" || isset( $line['held'] )", ''), 'env', THERE)
+e('r2-held-there-named', 'held_there(): a name of the site only (A1)', EN, HT, HT.replace(" || ! in_array( $line['env'], self::NAMED, true )", ''), 'env', THERE)
+e('r2-held-there-hashed', 'held_there(): a name by its SHA-256 already by that SHA-256 (A1)', EN,
+  "\t\t\t$hashed = 1 === preg_match( self::HASHED, $ref ) ? $ref : self::hashed( $ref );", "\t\t\t$hashed = self::hashed( $ref );", 'env', THERE)
+e('r2-held-there-reduced', 'held_there(): a name the staging site holds by its SHA-256 with why (A1)', EN,
+  "\t\t\t\t$lines[ $i ] = self::reduced( $line, (string) $names[ $hashed ] );", '', 'env', THERE)
 SHAPE_HELD = "\t\tif ( $held && ( ! in_array( $line['env'], self::NAMED, true ) || ! in_array( $line['held'], self::HELD, true ) || 1 !== preg_match( self::HASHED, $line['ref'] ) ) ) {"
 LH = 'testALineOfAHeldNameCarriesItsSha256AndWhyOnly'
 e('r1-shape-held-code', 'shaped(): held with a code of HELD (A1)', EN, SHAPE_HELD, SHAPE_HELD.replace(" || ! in_array( $line['held'], self::HELD, true )", ''), 'env', LH)
@@ -434,6 +453,16 @@ e('r1-import-held', 'unpacked(): a name of the environment held by the rules of 
   "\t\t\t\t\tif ( null !== $code ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", 'it', RULES)
 e('r1-report-held', 'environment(): the lines the import held by the SHA-256 of their name (A1, two sites)', RE,
   "\t\t\tforeach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {", "\t\t\tforeach ( array_slice( $part['lines'], 1 ) as $line ) {", 'it', RULES)
+IT_THERE = 'testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell'
+e('r2-report-head-held', 'call(): the head keeps the names the staging site holds, before this site reads its own (A1, two sites)', RE,
+  "\t\t\t'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),", "\t\t\t'held'        => array(),", 'it', IT_THERE)
+e('r2-report-part-held', 'live_environment(): a part of this site stored with the rules of both sites (A1, two sites)', RE,
+  "\t\t\t\t'lines'  => AB_MCP_Sync_Env::held_there( $read['lines'], (array) ( $found['head']['held'] ?? array() ) ),", "\t\t\t\t'lines'  => $read['lines'],", 'it', IT_THERE)
+IT_COLON = 'testANameWithACredentialAfterAColonOrBelowAFolderIsInNoAnswerCursorPackageOrFileOfTheStore'
+e('r2-held-bare-it', 'held(): a name after a colon held in package, cursor, report and store (A1, two sites)', EN,
+  "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra, true );", "\t\t$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );", 'it', IT_COLON)
+e('r2-root-place-it', 'root(): a state below a folder by SHA-256 only, over parts on both sites (A1, two sites)', EN,
+  "\t\t\t$at    = null === $at ? $part : $at . '/' . $part;", "\t\t\t$at    = $part;", 'it', IT_COLON)
 e('r1-import-purpose', 'held(): a later call names the purpose it was begun for (A3)', IM,
   "\t\tif ( array_key_exists( 'purpose', $a ) && $expect['purpose'] !== $a['purpose'] ) {", "\t\tif ( false ) {", 'it', 'testALaterCallOfAnImportNamesNoOtherPurpose')
 e('blocked', 'finish(): the locks of the environment with the others', RE,
@@ -491,8 +520,10 @@ out.append('''<?php
  * (none that holds a secret, the rules of the site), the structure of a line
  * of a package, the comparison (counted never equal, equal only by a hash,
  * a value of the host the same value, not compared with why, each lock with its stage, the host changed
- * there, no hash shown; a name a credential holds by its SHA-256 only, the
- * place of a part by its parts), reading in parts on a WordPress site (the pages,
+ * there, no hash shown; a name a credential holds by its SHA-256 only, also
+ * after a colon, the place of a part by SHA-256 only, a name the staging
+ * site holds held here before it is stored), reading in parts on a
+ * WordPress site (the pages,
  * the tables, the uploads against the file lists of attachments), the
  * packages of the environment in wp_site_export and wp_site_import_chunk,
  * and the environment in wp_site_diff (the argument, one whole series, the
@@ -513,10 +544,11 @@ out.append('''<?php
  * the inventory, so no test tells the two apart), and the readers whose
  * failure WordPress gives no way to cause on a test site (SHOW TABLES,
  * COUNT, SHOW CREATE TABLE failing; the rows of WPLANG, stylesheet,
- * template and active_plugins unreadable), and five guards whose loss no
+ * template and active_plugins unreadable), and seven guards whose loss no
  * test can see (the kind and the SHA-256 in held_line(), isset( held ) in
  * held_here(), the place in held_alike(), the kind of a held line in
- * shaped()); GRENZEN-BERICHT.md, Zweig 7.
+ * shaped(), the kind and the SHA-256 in held_names()); GRENZEN-BERICHT.md,
+ * Zweig 7.
  *
  * @package AlphaBridge_MCP
  */
@@ -533,6 +565,7 @@ $re = 'includes/sync/class-sync-report.php';
 $ex = 'includes/sync/class-sync-export.php';
 $im = 'includes/sync/class-sync-import.php';
 $p  = 'includes/sync/class-sync-proposal.php';
+$net = 'includes/sync/class-sync-net.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

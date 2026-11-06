@@ -420,9 +420,7 @@ final class SyncEnvTest extends TestCase {
 	public function testANameWithACredentialWrittenIntoItIsHeld(): void {
 		foreach ( array( 'password=', 'password=EXAMPLE_SECRET.php', 'my-plugin/api_key=EXAMPLE_SECRET.php', 'token%3DEXAMPLE_SECRET', base64_encode( 'password=EXAMPLE_SECRET' ) . '.php', '{"secret":"EXAMPLE_SECRET"}' ) as $name ) {
 			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name ), $name );
-			self::assertFalse( AB_MCP_Sync_Env::plain( $name ), $name );
 		}
-		self::assertFalse( AB_MCP_Sync_Env::plain( "\xffA.php" ), 'No UTF-8: by its SHA-256 (name()).' );
 		self::assertSame( 'unreadable_name', AB_MCP_Sync_Env::held( str_repeat( '[', 80 ) . str_repeat( ']', 80 ) ), 'Deeper than the check reads.' );
 		$nested = 'password=x';
 		for ( $i = 0; $i < 8; $i++ ) {
@@ -431,10 +429,7 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( 'unreadable_name', AB_MCP_Sync_Env::held( $nested ), 'Deeper than the net reads.' );
 		foreach ( array( 'akismet/akismet.php', 'reset-password/reset-password.php', 'woocommerce_api_keys', 'wp-oauth-server/wp-oauth.php', '2026/10/photo-150x150.jpg', 'gf_form', 'twentytwentyfive', 'secret-santa.php' ) as $name ) {
 			self::assertNull( AB_MCP_Sync_Env::held( $name ), $name . ': an ordinary name, shown as it is.' );
-			self::assertTrue( AB_MCP_Sync_Env::plain( $name ), $name );
 		}
-		self::assertFalse( AB_MCP_Sync_Env::plain( 'sha256:' . str_repeat( 'a', 64 ) ), 'A name of the form of a hash is shown by its own hash.' );
-		self::assertFalse( AB_MCP_Sync_Env::plain( '' ) );
 		self::assertNull( AB_MCP_Sync_Env::held( 'vault=1.php' ) );
 		add_filter( 'ab_mcp_redact_keys', static fn( array $keys ): array => array_merge( $keys, array( 'vault' ) ) );
 		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( 'vault=1.php' ), 'With the names of ab_mcp_redact_keys.' );
@@ -513,30 +508,104 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), AB_MCP_Sync_Env::held_here( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), array( array( 'core', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'locale' ) ), 'credential_field' ) ) ), 'Only a name of the site.' );
 	}
 
-	public function testAPlaceKeepsAHeldOrOddPartByItsSha256AndIsFoundAgain(): void {
+	public function testANameWithACredentialAfterAColonIsHeldAsOneAfterAnEqualsSign(): void {
+		foreach ( array( 'password:EXAMPLE_SECRET.php', 'my-plugin/api_key:EXAMPLE_SECRET.php', 'token : EXAMPLE_SECRET', 'abenv_password:EXAMPLE_SECRET', 'keep/client_secret:EXAMPLE_SECRET/f.txt', '-password:EXAMPLE_SECRET.php', '.token:EXAMPLE_SECRET.php', base64_encode( 'password:EXAMPLE_SECRET' ) . '.php' ) as $name ) {
+			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name ), $name );
+		}
+		foreach ( array( 'reset-password/reset-password.php', 'wp-oauth-server/wp-oauth-server.php', 'woocommerce_api_keys', 'password-protected/password-protected.php', 'note:EXAMPLE.php', 'password:', 'a:b:c' ) as $name ) {
+			self::assertNull( AB_MCP_Sync_Env::held( $name ), $name . ': an ordinary name, shown as it is.' );
+		}
+		self::assertNull( AB_MCP_Sync_Env::held( 'vault:EXAMPLE_SECRET.php', array() ) );
+		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( 'vault:EXAMPLE_SECRET.php', array( 'vault' ) ), 'With the names of ab_mcp_redact_keys.' );
+		// The net over a name of the inventory keeps its rule: there a title in
+		// prose («Password: reset») is no field of a credential.
+		self::assertNull( \AB_MCP_Sync_Net::over_name( 'password:EXAMPLE_SECRET', array() ) );
+		self::assertSame( 'credential', \AB_MCP_Sync_Net::over_name( 'password:EXAMPLE_SECRET', array(), true ) );
+	}
+
+	public function testAPlaceHoldsNoNameOnlyTheSha256OfEachFolderAndOfTheWholePath(): void {
 		self::assertNull( AB_MCP_Sync_Env::place( null ) );
-		self::assertSame( array( '2026', '10', 'photo.jpg' ), AB_MCP_Sync_Env::place( '2026/10/photo.jpg' ), 'Ordinary names as they are.' );
-		$place = AB_MCP_Sync_Env::place( 'keep/password=EXAMPLE_SECRET/f.txt' );
-		self::assertSame( array( 'keep', array( 'sha256' => hash( 'sha256', 'password=EXAMPLE_SECRET' ) ), 'f.txt' ), $place );
-		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $place ) );
+		$place = AB_MCP_Sync_Env::place( 'password=/EXAMPLE_SECRET.php' );
+		self::assertSame( array( hash( 'sha256', 'password=' ), hash( 'sha256', 'password=/EXAMPLE_SECRET.php' ) ), $place );
+		$ordinary = AB_MCP_Sync_Env::place( '2026/10/photo.jpg' );
+		self::assertSame( array( hash( 'sha256', '2026' ), hash( 'sha256', '2026/10' ), hash( 'sha256', '2026/10/photo.jpg' ) ), $ordinary, 'An ordinary path the same way.' );
+		$table = AB_MCP_Sync_Env::place( 'abenv_password:EXAMPLE_SECRET', false );
+		self::assertSame( array( hash( 'sha256', 'abenv_password:EXAMPLE_SECRET' ) ), $table, 'A table by the SHA-256 of its whole name.' );
+		self::assertSame( array( hash( 'sha256', 'odd/table' ) ), AB_MCP_Sync_Env::place( 'odd/table', false ), 'A «/» in it as well.' );
+		foreach ( array( 'EXAMPLE_SECRET', 'password', 'photo', '2026', 'odd' ) as $word ) {
+			self::assertStringNotContainsString( $word, (string) json_encode( array( $place, $ordinary, $table ) ) );
+		}
 		$names = static function ( string $path ): array {
 			return array(
-				''                             => array( 'a', 'keep' ),
-				'keep'                         => array( 'other', 'password=EXAMPLE_SECRET' ),
-				'keep/password=EXAMPLE_SECRET' => array( 'f.txt' ),
+				''          => array( 'a', 'password=' ),
+				'password=' => array( 'EXAMPLE_SECRET.php', 'z.php' ),
 			)[ $path ] ?? array();
 		};
-		self::assertSame( 'keep/password=EXAMPLE_SECRET/f.txt', AB_MCP_Sync_Env::found( $place, $names ) );
-		self::assertNull( AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'keep/token=gone/f.txt' ), $names ), 'A part held by its SHA-256 that is gone.' );
-		self::assertSame( 'keep/plain-gone/f.txt', AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'keep/plain-gone/f.txt' ), $names ), 'A plain part need not be there: the walk goes on after it.' );
-		self::assertSame( array( 'gf_form' ), AB_MCP_Sync_Env::place( 'gf_form', false ), 'A table by its name.' );
-		$slash = AB_MCP_Sync_Env::place( 'odd/table', false );
-		self::assertSame( array( array( 'sha256' => hash( 'sha256', 'odd/table' ) ) ), $slash, 'The name of a table one part: with «/» by its SHA-256.' );
-		self::assertSame( 'odd/table', AB_MCP_Sync_Env::found( $slash, static fn() => array( 'a', 'odd/table' ) ) );
+		self::assertSame( 'password=/EXAMPLE_SECRET.php', AB_MCP_Sync_Env::found( $place, $names ) );
+		self::assertSame( 'password=', AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'password=' ), $names ), 'A folder.' );
+		self::assertNull( AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'password=/gone.php' ), $names ), 'The entry gone since.' );
+		self::assertNull( AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'gone/z.php' ), $names ), 'Its folder gone since.' );
+		self::assertNull( AB_MCP_Sync_Env::found( array( hash( 'sha256', 'password=/z.php' ) ), $names ), 'Each folder by its own SHA-256, not the whole path at the top.' );
+		self::assertNull( AB_MCP_Sync_Env::found( array( hash( 'sha256', 'gone' ), hash( 'sha256', 'a' ) ), $names ), 'A folder gone: none, not a name of the same SHA-256 elsewhere.' );
+		$tables = static fn() => array( 'abenv_a', 'abenv_password:EXAMPLE_SECRET', 'odd/table' );
+		self::assertSame( 'abenv_password:EXAMPLE_SECRET', AB_MCP_Sync_Env::found( $table, $tables ) );
+		self::assertSame( 'odd/table', AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'odd/table', false ), $tables ) );
+		self::assertNull( AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'abenv_gone', false ), $tables ), 'A table gone since.' );
+	}
+
+	/** The names in a folder of this test, by strcmp(), as the walk reads them. */
+	private function names_in(): callable {
+		$dir = $this->dir;
+		return static function ( string $rel ) use ( $dir ): array {
+			$names = array_values( array_diff( (array) scandir( '' === $rel ? $dir : $dir . '/' . $rel ), array( '.', '..' ) ) );
+			usort( $names, 'strcmp' );
+			return $names;
+		};
+	}
+
+	public function testAWalkOverPartsGoesOnFromItsPlaceByItsSha256AndNotWhereItIsGone(): void {
+		for ( $i = 0; $i < 300; $i++ ) {
+			$this->file( sprintf( 'password=/EXAMPLE_SECRET/%03d.txt', $i ), 'x' );
+		}
+		$this->file( 'a/x.txt', 'xx' );
+		$this->file( 'z/y.txt', 'yyy' );
+		$whole = self::acc();
+		self::assertSame( 'done', AB_MCP_Sync_Env::walk( $this->dir, null, $whole, PHP_INT_MAX, self::none() ) );
+
+		// Each look at the clock a second later, two seconds a part.
+		$now                    = 0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$now ) {
+			return (float) ++$now;
+		};
+		$acc    = self::acc();
+		$place  = null;
+		$places = array();
+		$parts  = 0;
+		do {
+			$after = null === $place ? null : AB_MCP_Sync_Env::found( $place, $this->names_in() );
+			self::assertTrue( null === $place || null !== $after, 'Found again.' );
+			$acc['after'] = $after;
+			$walked       = AB_MCP_Sync_Env::walk( $this->dir, $after, $acc, $now + 2, self::none() );
+			$place        = 'stopped' === $walked ? AB_MCP_Sync_Env::place( $acc['after'] ) : null;
+			$places[]     = $place;
+			++$parts;
+		} while ( 'stopped' === $walked && $parts < 100 );
+		self::assertSame( 'done', $walked );
+		self::assertSame( array( $whole['files'], $whole['bytes'] ), array( $acc['files'], $acc['bytes'] ), 'Over parts, each file counted once.' );
+		$inside = array_values( array_filter( $places, static fn( $p ) => is_array( $p ) && 3 === count( $p ) && hash( 'sha256', 'password=' ) === $p[0] ) );
+		self::assertNotEmpty( $inside, 'Parts that stopped in that folder.' );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $places ) );
+		self::assertStringNotContainsString( '.txt', (string) json_encode( $places ), 'No name of an ordinary file either.' );
+
+		// The file a part stopped at gone since: the place is found no more.
+		$at = AB_MCP_Sync_Env::found( $inside[0], $this->names_in() );
+		self::assertIsString( $at );
+		unlink( $this->dir . '/' . $at );
+		self::assertNull( AB_MCP_Sync_Env::found( $inside[0], $this->names_in() ) );
 	}
 
 	public function testAStateWithANameThatIsNoUtf8ReadsBackAsOneReadWrites(): void {
-		$state          = array(
+		$state = array(
 			'after'    => AB_MCP_Sync_Env::place( "dir/\xffname.txt" ),
 			'attached' => 0,
 			'bytes'    => 3,
@@ -550,12 +619,64 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( $state, $round, 'The canonical form keeps it as it is: no part in the byte form.' );
 		self::assertTrue( AB_MCP_Sync_Env::state_shaped( $round ) );
 		self::assertSame( "dir/\xffname.txt", AB_MCP_Sync_Env::found( $round['after'], static fn( string $p ): array => '' === $p ? array( 'dir' ) : array( "\xffname.txt" ) ) );
-		self::assertSame( 'gf_form', AB_MCP_Sync_Env::found( AB_MCP_Sync_Env::place( 'gf_form', false ), static fn() => array( 'gf_form' ) ), 'A table by its name.' );
+	}
+
+	public function testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored(): void {
+		$name    = 'vault=EXAMPLE_SECRET.php';
+		$table   = 'abenv_vault=EXAMPLE_SECRET';
+		$staging = array(
+			self::held_mu( $name ),
+			self::plugin( '1' ),
+			array( 'env' => 'table', 'held' => 'unreadable_name', 'ref' => AB_MCP_Sync_Env::hashed( $table ), 'rows' => 1, 'schema' => null ),
+			array( 'env' => 'core', 'ref' => 'locale', 'value' => 'de_CH' ),
+			array( 'active' => true, 'env' => 'plugin', 'ref' => AB_MCP_Sync_Env::name( "\xffA" ), 'version' => '1' ),
+		);
+		$held = AB_MCP_Sync_Env::held_names( $staging );
+		$want = array(
+			AB_MCP_Sync_Env::hashed( $name )  => 'credential_field',
+			AB_MCP_Sync_Env::hashed( $table ) => 'unreadable_name',
+		);
+		ksort( $want, SORT_STRING );
+		self::assertSame( $want, $held, 'The names the staging site holds, by their SHA-256 with why, in one order.' );
+		self::assertSame( $held, AB_MCP_Sync_Env::held_names( array_reverse( $staging ) ), 'Whatever the order of the lines; a name by its SHA-256 that is no text is held by nothing.' );
+		$mu   = array( 'bytes' => 3, 'env' => 'mu_plugin', 'ref' => $name, 'sha256' => str_repeat( 'a', 64 ) );
+		$live = array(
+			$mu,
+			array( 'ref' => 'other.php' ) + $mu,
+			array( 'active' => true, 'env' => 'plugin', 'ref' => $name, 'version' => '1' ),
+			array( 'env' => 'table', 'ref' => $table, 'rows' => 2, 'schema' => null ),
+			array( 'env' => 'core', 'ref' => 'locale', 'value' => 'de_CH' ),
+			self::held_mu( 'x=1.php' ),
+			array( 'held' => 'unreadable_name' ) + self::held_mu( $name ),
+		);
+		$out = AB_MCP_Sync_Env::held_there( $live, $held );
+		$want = array( 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( $name ) ) + $mu;
+		ksort( $want );
+		self::assertSame( $want, $out[0], 'By its SHA-256 with why, before it is stored.' );
+		self::assertSame( $live[1], $out[1], 'Another name stays as it is.' );
+		self::assertSame( array( 'credential_field', AB_MCP_Sync_Env::hashed( $name ) ), array( $out[2]['held'], $out[2]['ref'] ), 'The same name of another kind as well.' );
+		self::assertSame( array( 'unreadable_name', AB_MCP_Sync_Env::hashed( $table ) ), array( $out[3]['held'], $out[3]['ref'] ) );
+		self::assertSame( array_slice( $live, 4 ), array_slice( $out, 4 ), 'No name of the site, or held here already (for its own reason): as it is.' );
+		$odd     = "\xffvault=EXAMPLE_SECRET.php";
+		$dropin  = array( 'bytes' => 1, 'env' => 'dropin', 'ref' => 'db.php', 'sha256' => null );
+		$by_hash = array( 'ref' => AB_MCP_Sync_Env::name( $odd ) ) + $mu;
+		$there   = array(
+			AB_MCP_Sync_Env::hashed( $odd )     => 'unreadable_name',
+			AB_MCP_Sync_Env::hashed( 'db.php' ) => 'credential_field',
+		);
+		$out = AB_MCP_Sync_Env::held_there( array( $by_hash, $dropin ), $there );
+		self::assertSame( array( 'unreadable_name', AB_MCP_Sync_Env::hashed( $odd ) ), array( $out[0]['held'] ?? null, $out[0]['ref'] ), 'A name by its SHA-256 already, held by it.' );
+		self::assertSame( $dropin, $out[1], 'A drop-in is no name of the site.' );
+		foreach ( $out as $line ) {
+			self::assertTrue( AB_MCP_Sync_Env::shaped( $line ), (string) json_encode( $line ) );
+		}
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $out ) );
+		self::assertSame( $live, AB_MCP_Sync_Env::held_there( $live, array() ), 'Nothing held there: as it is.' );
 	}
 
 	public function testAStateIsOnlyOneReadWrites(): void {
 		$state = array(
-			'after'    => array( 'gf_form' ),
+			'after'    => array( hash( 'sha256', 'gf_form' ) ),
 			'attached' => 0,
 			'bytes'    => 0,
 			'files'    => 0,
@@ -565,7 +686,7 @@ final class SyncEnvTest extends TestCase {
 			'walk'     => str_repeat( 'ab', 16 ),
 		);
 		self::assertTrue( AB_MCP_Sync_Env::state_shaped( $state ) );
-		self::assertTrue( AB_MCP_Sync_Env::state_shaped( array( 'after' => array( 'a', array( 'sha256' => str_repeat( 'c', 64 ) ), 'b' ) ) + $state ) );
+		self::assertTrue( AB_MCP_Sync_Env::state_shaped( array( 'after' => array( str_repeat( 'a', 64 ), str_repeat( 'c', 64 ), str_repeat( 'b', 64 ) ) ) + $state ) );
 		self::assertTrue( AB_MCP_Sync_Env::state_shaped( array( 'after' => null ) + $state ) );
 		$wrong = array(
 			array( 'seq', 0 ),
@@ -575,14 +696,18 @@ final class SyncEnvTest extends TestCase {
 			array( 'after', '' ),
 			array( 'after', 3 ),
 			array( 'after', 'gf_form' ),
+			array( 'after', str_repeat( 'a', 64 ) ),
 			array( 'after', array() ),
-			array( 'after', array( 'a/b' ) ),
+			array( 'after', array( 'gf_form' ) ),
 			array( 'after', array( '' ) ),
-			array( 'after', array( "\xff" ) ),
+			array( 'after', array( str_repeat( 'a', 63 ) ) ),
+			array( 'after', array( str_repeat( 'a', 64 ) . "\n" ) ),
+			array( 'after', array( str_repeat( 'A', 64 ) ) ),
 			array( 'after', array( 'sha256:' . str_repeat( 'a', 64 ) ) ),
-			array( 'after', array( 'a' => 'b' ) ),
-			array( 'after', array( array( 'sha256' => 'x' ) ) ),
-			array( 'after', array( array( 'sha256' => str_repeat( 'a', 64 ), 'name' => 'x' ) ) ),
+			array( 'after', array( 'a' => str_repeat( 'a', 64 ) ) ),
+			array( 'after', array( 1 => str_repeat( 'a', 64 ) ) ),
+			array( 'after', array( str_repeat( 'a', 64 ), 'b' ) ),
+			array( 'after', array( array( 'sha256' => str_repeat( 'a', 64 ) ) ) ),
 			array( 'after', array( array( '~b' => 'AA==' ) ) ),
 			array( 'files', -1 ),
 			array( 'bytes', '1' ),

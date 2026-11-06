@@ -679,16 +679,23 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
 ### Namen
 
 - Namen der Site in der Umgebung (Plugins, Themes, Must-Use-Plugins,
-  Tabellen) gehen durch dieselbe Prüfung, die der Import über die Namen
+  Tabellen) gehen als Ganzes (ein Pfad mit seinen Ordnern, eine Tabelle mit
+  ihrem ganzen Namen) durch dieselbe Prüfung, die der Import über die Namen
   einer Zeile des Inventars legt (`AB_MCP_Sync_Env::held()`: die
   Inhaltsprüfung von `AB_MCP_Sync_Credentials` und das Netz über den rohen
   Namen, mit `ab_mcp_redact_keys`). Ein Name mit einem eingeschriebenen
-  Feld einer Zugangsangabe (`password=…`, auch kodiert, etwa in base64) oder
-  einer, der sich nicht zu Ende lesen lässt, steht in Paket, Bericht,
-  Ablage und Antwort nur als SHA-256 (`sha256:…`) mit `held`
-  (`credential_field`, `unreadable_name`); beide Sites bilden denselben
-  SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin heisst
-  weiter «equal»). Codex-Runde 1, A1.
+  Feld einer Zugangsangabe (`password=…`, `password:…`, auch kodiert, etwa
+  in base64) oder einer, der sich nicht zu Ende lesen lässt, steht in
+  Paket, Bericht, Ablage und Antwort nur als SHA-256 (`sha256:…`) mit
+  `held` (`credential_field`, `unreadable_name`); beide Sites bilden
+  denselben SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin
+  heisst weiter «equal»). Codex-Runden 1 und 2, A1.
+- Den Doppelpunkt ohne Anführungszeichen (`password:…`) erkennt das Netz
+  nur für Namen der Umgebung (`AB_MCP_Sync_Net::over_name()` mit `$bare`,
+  Muster `BARE`), an jeder Stelle des Namens, auch nach `-` oder `.`. Grund:
+  ein Datei- oder Tabellenname ist keine Prosa; bei den Namen des Inventars
+  (darunter Titel) bleibt die Regel der Werte, nach der «Token: x» in Prosa
+  nichts hält. Ohne Wert danach (`password:`) hält der Doppelpunkt nichts.
 - Nicht angewandt wird die Regel für Schlüssel (`names_credential()`, B9 der
   Optionen): ein Name der Umgebung nennt eine Datei, einen Ordner oder eine
   Tabelle, wie ein Slug einen Beitrag, keinen gespeicherten Wert. Grund:
@@ -701,21 +708,40 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   zu lange Versionsangabe, die der Bericht «not shown» nennt (Codex-Runde 1,
   C6). So bleibt jede Zeile in der Form, die der Import annimmt.
 - Der Fortsetzungspunkt eines Teils (`after` im Zustand: im Cursor von
-  `wp_site_export` und in den Teilen eines Berichts) hält die Teile seines
-  Pfads auf dieselbe Weise (`AB_MCP_Sync_Env::place()`): gewöhnliche Namen
-  als Text, ein gehaltener oder einer ohne UTF-8 als SHA-256 allein
-  (Codex-Runde 1, A1 und C5). Der nächste Teil sucht ihn unter den Namen
-  seines Ordners wieder. Ist er inzwischen weg, gilt die Wurzel als nicht zu
-  Ende gezählt («not compared», `moved`), die Tabellen als nicht ganz
-  gelesen. Grund: ohne den Namen lässt sich die Reihenfolge danach nicht
-  bestimmen, und eine Zählung von vorn zählte doppelt.
+  `wp_site_export` und in den Teilen eines Berichts) trägt keinen Namen und
+  keinen Teil eines Namens, auch keinen gewöhnlichen: nur den SHA-256 jedes
+  Ordners, durch den sein Pfad geht, und zuletzt den des ganzen relativen
+  Pfads (einer Tabelle: den ihres ganzen Namens), `AB_MCP_Sync_Env::place()`
+  (Codex-Runden 1 und 2, A1 und C5; damit sind auch Namen ohne UTF-8
+  gelöst). Der nächste Teil sucht ihn Ordner für Ordner unter den Namen
+  wieder (`found()`). Einen SHA-256 je Ordner statt eines einzigen für den
+  ganzen Pfad, damit die Fortsetzung nicht alles bis zur Stelle neu liest,
+  was die Teile davor gezählt haben. Ist der Eintrag oder einer seiner
+  Ordner inzwischen weg, gilt die Wurzel als nicht zu Ende gezählt («not
+  compared», `moved`), die Tabellen als nicht ganz gelesen. Grund: ohne den
+  Namen lässt sich die Stelle in der Reihenfolge nicht mehr bestimmen, und
+  eine Zählung von vorn zählte doppelt. Das gilt jetzt für jeden Namen,
+  nicht nur für gehaltene: eine Datei, die zwischen zwei Aufrufen genau an
+  der Stelle gelöscht wird, an der ein Teil endete, lässt ihre Wurzel «not
+  compared».
 - Kennt nur die Live-Site eine Regel (`ab_mcp_redact_keys` dort), hält erst
   ihr Import den Namen: im empfangenen Paket (Ablage `in` der Live-Site,
   `out` der Staging-Site) steht er, wie die Staging-Site ihn schrieb und
   signierte, wie bei den Paketen des Inventars; Bericht, Teile dieser Site
-  und Antwort zeigen ihn nur als SHA-256. Hält umgekehrt nur die
-  Staging-Site einen Namen, zeigt der Bericht auch die Zeile dieser Site
-  unter dem SHA-256 (ein Eintrag, kein «nur hier» und «nur Staging»).
+  und Antwort zeigen ihn nur als SHA-256. Diese Ausnahme bleibt.
+- Hält umgekehrt nur die Staging-Site einen Namen, gelten ihre Regeln auch
+  für die Teile dieser Site, bevor sie in die Ablage kommen: der Bericht
+  liest die Pakete der Umgebung beim ersten Aufruf, bevor er die Umgebung
+  dieser Site liest, und legt die SHA-256 der Namen, die die Staging-Site
+  hält, mit ihrem Grund in den Kopf seiner Gruppe
+  (`AB_MCP_Sync_Env::held_names()`, Feld `held`, Format
+  `ab-sync-report/2`); jeder Teil dieser Site wird damit gekürzt
+  gespeichert (`held_there()`): ein Name, dessen SHA-256 die Staging-Site
+  hält, steht nur als SHA-256 mit `held`, gleich welcher Art (ein
+  gleichnamiges Plugin ebenso wie das Must-Use-Plugin). Der Bericht zeigt
+  einen Eintrag unter dem SHA-256 (kein «nur hier» und «nur Staging»).
+  Codex-Runde 2, A1. Ein Bericht im Format `ab-sync-report/1` (vor dieser
+  Änderung begonnen) gilt als unbekannt und wird neu begonnen.
 
 ### Prüfung
 
@@ -725,8 +751,11 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   Vergleich); Integration (`tests/integration/SyncEnvTest.php`) den Bericht
   über zwei Sites, die Reihe der Pakete, die Teile dieser Site, dass keine
   geheime Konstante in Antwort oder Ablage steht und kein gehaltener Name
-  (`password=EXAMPLE_SECRET`) in Antwort, Cursor, Paket oder einer Datei
-  der Ablage, sowie den Zweck eines Folgeaufrufs. Die Bindung an die
+  (`password=EXAMPLE_SECRET`, `password:EXAMPLE_SECRET`, ein Ordner
+  `password=` über `EXAMPLE_SECRET/…`, eine Regel nur auf der Staging-Site)
+  in Antwort, Cursor, Zustand, Paket oder einer Datei der Ablage beider
+  Sites, die Fortsetzung über Teile mit der neuen Stelle (auch mit einem
+  inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs. Die Bindung an die
   Verbindung hält `tests/integration/SyncPackageTest.php`.
 - Ein Dateiname ohne UTF-8 lässt sich auf APFS (macOS) nicht anlegen; die
   Integration prüft den Fortsetzungspunkt darum mit gehaltenen Namen, die
@@ -746,4 +775,7 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   beim Kürzen dieselbe), der Platz in `held_alike()` (eine Seite hat einen
   Namen nicht zugleich als Text und als SHA-256) und die Art einer
   gehaltenen Zeile in `shaped()` (die Arten ausserhalb von `NAMED` haben
-  Refs fester Listen, die nie die Form eines SHA-256 haben).
+  Refs fester Listen, die nie die Form eines SHA-256 haben); dazu (Runde 2)
+  die Art und die Form des SHA-256 in `held_names()`: die Zeilen kommen
+  durch `shaped()`, das `held` nur bei `NAMED` mit einer Ref in Form eines
+  SHA-256 zulässt.

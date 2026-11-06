@@ -213,8 +213,9 @@ final class AB_MCP_Sync_Export {
 	 * its page; the cursor goes on where it ended, in the same series.
 	 * Nothing of an object is in it, and no value of a credential
 	 * (AB_MCP_Sync_Env: group U shows no constant that holds a secret); a
-	 * name of the site a credential holds only by its SHA-256, in the lines
-	 * and in the cursor (AB_MCP_Sync_Env::held(), ::place()).
+	 * name of the site a credential holds only by its SHA-256 in the lines
+	 * (AB_MCP_Sync_Env::held()), and no name at all in the cursor, only the
+	 * SHA-256 of where the reading stopped (AB_MCP_Sync_Env::place()).
 	 *
 	 * @param mixed $cursor The cursor of the answer before, or null.
 	 * @param int   $lines  Lines one package holds at most.

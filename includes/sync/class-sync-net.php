@@ -234,6 +234,15 @@ final class AB_MCP_Sync_Net {
 	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'`&;,)}\]>])';
 
 	/**
+	 * A name with a value after a colon without quotes (password:…), for a
+	 * name of a file, a folder or a table only (over_name() with $bare): such
+	 * a name is no prose, where «Token: x» is none (Codex, round 2 of branch
+	 * 7, A1). From any place in the name, so that a name after «-» or «.»
+	 * (-password:…, .token:…) counts as well.
+	 */
+	const BARE = '/(' . self::NAME . ')\s*:\s*' . self::VALUE . '/';
+
+	/**
 	 * The locks of the readers that make a unit one that is never clean
 	 * (the credential check, the depth, an object): the net adds nothing to
 	 * it. Beside them the readers lock a reference in another spelling
@@ -361,19 +370,33 @@ final class AB_MCP_Sync_Net {
 	 * no text in UTF-8, braces of code that cannot be counted), the name is
 	 * unreadable.
 	 *
+	 * With $bare (a name of a file, a folder or a table of the environment,
+	 * AB_MCP_Sync_Env::held()), a name of a credential with a value after a
+	 * colon without quotes counts as well (BARE), in every layer; a name of
+	 * the inventory (a title among them) keeps the rule of a value, where
+	 * a word in prose before a colon counts for nothing.
+	 *
 	 * @param string   $text  The name (bytes).
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @param bool     $bare  Whether name:value without quotes counts too.
 	 * @return string|null credential where a layer holds the name of a
 	 *                     credential with a value beside it, unreadable
 	 *                     where a layer is not read to its end, else null.
 	 */
-	public static function over_name( $text, array $extra ) {
+	public static function over_name( $text, array $extra, $bare = false ) {
 		$deep   = false;
 		$unread = array();
 		foreach ( self::layers( (string) $text, $deep, $unread ) as $layer ) {
 			$undecidable = false;
 			if ( array() !== self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $layer[0], -5 ) ) ) {
 				return 'credential';
+			}
+			if ( $bare && preg_match_all( self::BARE, $layer[1], $m ) ) {
+				foreach ( $m[1] as $name ) {
+					if ( AB_MCP_Sync_Credentials::names_credential( (string) $name, $extra ) ) {
+						return 'credential';
+					}
+				}
 			}
 			if ( $undecidable ) {
 				return 'unreadable';

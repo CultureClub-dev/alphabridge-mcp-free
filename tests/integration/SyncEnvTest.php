@@ -215,12 +215,16 @@ final class SyncEnvTest extends TestCase {
 		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
 	}
 
-	/** B packs one purpose (a series) and A takes it over: the package ids; $answers gets the answers of both sites. */
-	private static function staged( string $purpose, ?int $objects = null, array &$answers = array() ): array {
+	/**
+	 * B packs one purpose (a series) and A takes it over: the package ids;
+	 * $answers gets the answers of both sites; $with more of each export
+	 * step on B (redact_keys, env_clock: tests/integration/bin/sync-site.php).
+	 */
+	private static function staged( string $purpose, ?int $objects = null, array &$answers = array(), array $with = array() ): array {
 		$ids    = array();
 		$cursor = null;
 		do {
-			$step = array(
+			$step = $with + array(
 				'op'      => 'export',
 				'purpose' => $purpose,
 				'as'      => 'package',
@@ -490,8 +494,8 @@ final class SyncEnvTest extends TestCase {
 		$ids     = self::staged( 'env', 2, $answers );
 		self::assertGreaterThan( 3, count( $ids ), 'A table a package: a cursor at each table.' );
 		$cursors = array_column( array_filter( $answers, static fn( $a ) => isset( $a['cursor'] ) ), 'cursor' );
-		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( array( 'sha256' => hash( 'sha256', 'abenv_token=' . $secret ) ) ) === $c['inner']['after'] ), 'A cursor at that table, by its SHA-256.' );
-		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( 'abenv_a' ) === $c['inner']['after'] ), 'An ordinary table by its name.' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( hash( 'sha256', 'abenv_token=' . $secret ) ) === $c['inner']['after'] ), 'A cursor at that table, by its SHA-256.' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( hash( 'sha256', 'abenv_a' ) ) === $c['inner']['after'] ), 'An ordinary table by the SHA-256 of its name as well.' );
 		$exported = array_values( array_filter( $answers, static fn( $a ) => isset( $a['credentials'] ) ) );
 		self::assertSame( 1, $exported[0]['credentials']['held'], 'The first package: the must-use plugin held.' );
 
@@ -534,7 +538,7 @@ final class SyncEnvTest extends TestCase {
 			$states[] = $state;
 		} while ( null !== $state && count( $states ) < 200 );
 		self::assertNull( $state );
-		$inside = array_filter( $states, static fn( $s ) => is_array( $s ) && 'uploads' === AB_MCP_Sync_Env::STEPS[ $s['step'] ] && is_array( $s['after'] ) && array( 'sha256' => hash( 'sha256', 'api_key=' . $secret ) ) === $s['after'][0] );
+		$inside = array_filter( $states, static fn( $s ) => is_array( $s ) && 'uploads' === AB_MCP_Sync_Env::STEPS[ $s['step'] ] && is_array( $s['after'] ) && hash( 'sha256', 'api_key=' . $secret ) === $s['after'][0] );
 		self::assertNotEmpty( $inside, 'Parts that stopped in that folder, kept by its SHA-256.' );
 		$uploads = static fn( array $all ) => array_values( array_filter( $all, static fn( $l ) => 'files' === $l['env'] && 'uploads' === $l['ref'] ) );
 		self::assertSame( $uploads( $whole['lines'] ), $uploads( $lines ), 'Each file counted once, over parts.' );
@@ -545,6 +549,92 @@ final class SyncEnvTest extends TestCase {
 		self::assertNotEmpty( array_filter( $texts, static fn( $t ) => false !== strpos( $t, AB_MCP_Sync_Env::hashed( 'password=' . $secret . '.php' ) ) ), 'The name is in the store, by its SHA-256.' );
 		foreach ( $texts as $where => $text ) {
 			self::assertStringNotContainsString( $secret, $text, "The name in $where." );
+		}
+	}
+
+	public function testANameWithACredentialAfterAColonOrBelowAFolderIsInNoAnswerCursorPackageOrFileOfTheStore(): void {
+		self::pair();
+		$secret = 'EXAMPLE_SECRET';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'mu-plugins/password:' . $secret . '.php', "<?php\n// The same on both.\n" );
+			self::write( $site, 'mu-plugins/reset-password.php', "<?php\n// An ordinary name.\n" );
+			// Files below a folder whose name holds it, more than one part counts.
+			for ( $i = 0; $i < 300; $i++ ) {
+				self::write( $site, sprintf( 'uploads/password=/%s/%03d.txt', $secret, $i ), 'x' );
+			}
+			self::sql( $site, 'CREATE TABLE `{p}abenv_a` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_password:' . $secret . '` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_woocommerce_api_keys` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_zz` ( id INT )' );
+		}
+		$answers = array();
+		$ids     = self::staged( 'env', 2, $answers, array( 'env_clock' => 15 ) );
+		$cursors = array_column( array_filter( $answers, static fn( $a ) => isset( $a['cursor'] ) ), 'cursor' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( hash( 'sha256', 'abenv_password:' . $secret ) ) === $c['inner']['after'] ), 'A cursor at that table, by the SHA-256 of its name.' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => 'uploads' === AB_MCP_Sync_Env::STEPS[ $c['inner']['step'] ] && 3 === count( (array) $c['inner']['after'] ) ), 'A cursor below that folder, by SHA-256 only.' );
+
+		AB_MCP_Sync_Report::$env_lines = 2;
+		$inventory                     = self::staged( 'inventory' );
+		$now                           = 0.0;
+		AB_MCP_Sync_Env::$clock        = static function () use ( &$now ) {
+			$now += 15;
+			return $now;
+		};
+		$answer = self::report(
+			array(
+				'packages'    => $inventory,
+				'environment' => $ids,
+			)
+		);
+		AB_MCP_Sync_Env::$clock = null;
+		$env  = self::env( $answer['all'] );
+		$file = 'mu_plugin:' . AB_MCP_Sync_Env::hashed( 'password:' . $secret . '.php' );
+		self::assertSame( array( 'equal', 'none', null, 'credential_field' ), array_merge( self::said( $env[ $file ] ), array( $env[ $file ]['held'] ) ), 'Held on both sites, compared by the SHA-256 of its file still.' );
+		$table = 'table:' . AB_MCP_Sync_Env::hashed( 'abenv_password:' . $secret );
+		self::assertSame( array( 'counted', 'locked', 'Z8d', 'credential_field' ), array_merge( self::said( $env[ $table ] ), array( $env[ $table ]['held'] ) ) );
+		self::assertSame( array( 'counted', 'locked', 'Z8b' ), self::said( $env['files:uploads'] ), 'The uploads counted to their end over parts on both sites.' );
+		foreach ( array( 'mu_plugin:reset-password.php', 'table:abenv_woocommerce_api_keys', 'table:abenv_zz', 'table:abenv_a' ) as $plain ) {
+			self::assertArrayHasKey( $plain, $env, 'An ordinary name as it is.' );
+			self::assertArrayNotHasKey( 'held', $env[ $plain ] );
+		}
+		$parts = array_filter( self::store_texts(), static fn( $where ) => false !== strpos( $where, '/reports/' ), ARRAY_FILTER_USE_KEY );
+		self::assertGreaterThan( 3, count( $parts ), 'The environment of this site in parts of the store.' );
+
+		$texts = array( 'the report' => (string) json_encode( $answer ), 'the answers' => (string) json_encode( $answers ) ) + self::store_texts();
+		foreach ( $texts as $where => $text ) {
+			self::assertStringNotContainsString( $secret, $text, "The name in $where." );
+		}
+	}
+
+	public function testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell(): void {
+		self::pair();
+		$name  = 'vault=EXAMPLE_SECRET.php';
+		$table = 'vault=EXAMPLE_SECRET';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'mu-plugins/' . $name, "<?php\n// The same on both.\n" );
+			self::sql( $site, 'CREATE TABLE `{p}' . $table . '` ( id INT )' );
+		}
+		// The rules of the staging site only: there both names are held, here not.
+		$answers = array();
+		$ids     = self::staged( 'env', null, $answers, array( 'redact_keys' => array( 'vault' ) ) );
+		AB_MCP_Sync_Report::$env_lines = 2;
+		$answer                        = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => $ids,
+			)
+		);
+		$env = self::env( $answer['all'] );
+		$key = 'mu_plugin:' . AB_MCP_Sync_Env::hashed( $name );
+		self::assertSame( array( 'equal', 'none', null, 'credential_field' ), array_merge( self::said( $env[ $key ] ), array( $env[ $key ]['held'] ) ), 'One entry, by its SHA-256.' );
+		$key = 'table:' . AB_MCP_Sync_Env::hashed( $table );
+		self::assertSame( array( 'counted', 'credential_field' ), array( $env[ $key ]['result'], $env[ $key ]['held'] ) );
+		$parts = array_filter( self::store_texts(), static fn( $where ) => false !== strpos( $where, '/reports/' ), ARRAY_FILTER_USE_KEY );
+		self::assertNotEmpty( $parts );
+		self::assertNotEmpty( array_filter( $parts, static fn( $t ) => false !== strpos( $t, AB_MCP_Sync_Env::hashed( $name ) ) ), 'The name of this site in its parts, by its SHA-256.' );
+		$texts = array( 'the report' => (string) json_encode( $answer ), 'the answers' => (string) json_encode( $answers ) ) + self::store_texts();
+		foreach ( $texts as $where => $text ) {
+			self::assertStringNotContainsString( 'EXAMPLE_SECRET', $text, "The name in $where." );
 		}
 	}
 
@@ -580,8 +670,8 @@ final class SyncEnvTest extends TestCase {
 		foreach ( $reports as $where => $text ) {
 			self::assertStringNotContainsString( 'EXAMPLE_', $text, "A name in $where." );
 		}
-		foreach ( array( 'R&D notes.pdf', 'reset-password/reset-password.php', 'woocommerce_api_keys', '&amp;' ) as $plain ) {
-			self::assertTrue( AB_MCP_Sync_Env::plain( $plain ), $plain . ': an ordinary name, as it is.' );
+		foreach ( array( 'R&D notes.pdf', 'reset-password/reset-password.php', 'woocommerce_api_keys', '&amp;', 'wp-oauth-server/wp-oauth-server.php', 'password-protected/password-protected.php' ) as $plain ) {
+			self::assertNull( AB_MCP_Sync_Env::held( $plain ), $plain . ': an ordinary name, as it is.' );
 		}
 	}
 
@@ -604,7 +694,17 @@ final class SyncEnvTest extends TestCase {
 		$read = AB_MCP_Sync_Env::read( $state, 60 );
 		self::assertIsArray( $read );
 		self::assertSame( array( false, 'moved' ), array( $read['lines'][1]['complete'], $read['lines'][1]['why'] ), 'Gone since: not counted to its end (fail closed).' );
-		$tables = array( 'after' => array( array( 'sha256' => hash( 'sha256', 'token=gone' ) ) ), 'step' => 1 ) + $state;
+		// An ordinary name the same: no name in the place, so nothing says where to go on.
+		self::write( 'a', 'uploads/zz/b.txt', 'y' );
+		$ordinary = array( 'after' => AB_MCP_Sync_Env::place( 'zz/b.txt' ) ) + $state;
+		$read     = AB_MCP_Sync_Env::read( $ordinary, 60 );
+		self::assertIsArray( $read );
+		self::assertTrue( $read['lines'][1]['complete'], 'There: counted to its end.' );
+		unlink( self::content( 'a' ) . '/uploads/zz/b.txt' );
+		$read = AB_MCP_Sync_Env::read( $ordinary, 60 );
+		self::assertIsArray( $read );
+		self::assertSame( array( false, 'moved' ), array( $read['lines'][1]['complete'], $read['lines'][1]['why'] ), 'An ordinary file gone since as well.' );
+		$tables = array( 'after' => array( hash( 'sha256', 'token=gone' ) ), 'step' => 1 ) + $state;
 		$read   = AB_MCP_Sync_Env::read( $tables, 60, 2 );
 		self::assertIsArray( $read );
 		self::assertSame( array( 'complete' => false, 'count' => 0, 'env' => 'tables', 'ref' => 'tables' ), $read['lines'][1], 'A table kept by its SHA-256 that is gone: the list not read whole.' );

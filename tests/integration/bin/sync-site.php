@@ -173,6 +173,21 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 					return microtime( true );
 				};
 			}
+			if ( isset( $ab_it_step['redact_keys'] ) ) {
+				// The rules of this site only (ab_mcp_redact_keys), for this export.
+				$ab_it_keys = (array) $ab_it_step['redact_keys'];
+				add_filter( 'ab_mcp_redact_keys', static fn( $keys ) => array_merge( (array) $keys, $ab_it_keys ) );
+			}
+			if ( isset( $ab_it_step['env_clock'] ) ) {
+				// Each look at the clock of the environment that many seconds
+				// later: a part of it stops within a few looks of its walk.
+				$ab_it_now              = 0.0;
+				$ab_it_tick             = (float) $ab_it_step['env_clock'];
+				AB_MCP_Sync_Env::$clock = static function () use ( &$ab_it_now, $ab_it_tick ) {
+					$ab_it_now += $ab_it_tick;
+					return $ab_it_now;
+				};
+			}
 			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
 			break;
 		case 'import':

@@ -42,7 +42,11 @@
  * seconds a call), compared by AB_MCP_Sync_Env::compare(): an entry of kind
  * environment for each line of either side, after the objects and numbered
  * on, its locks with the others in blocked, its counts in environment.
- * Without environment, one entry says it is not compared, with the way.
+ * The names the staging site holds (AB_MCP_Sync_Env::held_names(), by
+ * their SHA-256) are kept with the head, read before this site reads its
+ * own, so that each part of this site is stored with the rules of both
+ * sites (AB_MCP_Sync_Env::held_there()). Without environment, one entry
+ * says it is not compared, with the way.
  *
  * THE ANSWER: counts, what is locked with its reason and stage, the first
  * 200 entries and a cursor for the next ones. No hash, no value; a name
@@ -65,8 +69,8 @@ require_once __DIR__ . '/class-sync-env.php';
  */
 final class AB_MCP_Sync_Report {
 
-	/** The format of the files of a report. */
-	const FORMAT = 'ab-sync-report/1';
+	/** The format of the files of a report (2: the head keeps the names the staging site holds, held). */
+	const FORMAT = 'ab-sync-report/2';
 
 	/** The label of its group in the area reports. */
 	const LABEL = 'report';
@@ -168,6 +172,9 @@ final class AB_MCP_Sync_Report {
 			'environment' => array_values( array_map( 'strval', $environment ) ),
 			'expires'     => min( $staging['expires'], $env['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),
 			'format'      => self::FORMAT,
+			// The names the staging site holds, by their SHA-256: before this
+			// site reads its own environment (Codex, round 2 of branch 7, A1).
+			'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),
 			'packages'    => array_values( array_map( 'strval', $packages ) ),
 			'print'       => (string) AB_MCP_Sync_Anchor::pair_print(),
 			'source_id'   => $source,
@@ -417,7 +424,8 @@ final class AB_MCP_Sync_Report {
 	 * environment of the staging site, in parts of the group (one per call,
 	 * within what is left of the budget of the call, at least ENV_MIN
 	 * seconds): its lines once read to its end; none for a report without
-	 * them.
+	 * them. A part is stored with the rules of both sites: a name the
+	 * staging site holds (held in the head) by its SHA-256 only.
 	 *
 	 * @param array $found find().
 	 * @param float $start When the call began.
@@ -449,7 +457,7 @@ final class AB_MCP_Sync_Report {
 			}
 			$part = array(
 				'format' => self::ENV_FORMAT,
-				'lines'  => $read['lines'],
+				'lines'  => AB_MCP_Sync_Env::held_there( $read['lines'], (array) ( $found['head']['held'] ?? array() ) ),
 				'seq'    => count( $parts ) + 1,
 				'state'  => $read['state'],
 			);
