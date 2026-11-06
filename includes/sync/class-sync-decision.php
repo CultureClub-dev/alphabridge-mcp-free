@@ -16,7 +16,10 @@
  * of one series, AB_MCP_Sync_Proposal::complete()): incomplete never means
  * deleted. This site's inventory is read whole; an object of it missing
  * because its name holds a credential (B9, counted by its kind and the
- * SHA-256 of its ref) is not compared, never deleted.
+ * SHA-256 of its ref) is not compared, never deleted, and its entry shows
+ * neither side by its name: both by the SHA-256 of their refs, as a held
+ * line (Codex round 1 of part 2, A). Where the difference counts, deleted
+ * says which: in the trash, or removed (rule 0, rule 2, row 10).
  *
  * THE ORDER (concept section 4, «Vorrang»), the first that applies:
  *
@@ -24,19 +27,23 @@
  *     error, decision 14, finding R6-4): it keeps its mapping and is shown as
  *     rest with its run and object; no row of the table applies, nothing is
  *     taken over or created for it, also where staging changes it. Its
- *     object gone from this site: «rest removed». A widget area so as a
+ *     object no longer on this site: «rest removed»; in the trash here it is
+ *     still the rest (Codex round 1 of part 2, C). A widget area so as a
  *     whole, its instance mapping (base_extra) as it is (decision 23).
  *  1. A pair unclear: like a conflict (a person chooses per object) until a
  *     person confirms its bases (wp_site_pairs).
  *  2. A pair taken over as deleted (not reached in Z8, decision 22): this
- *     site has it again → the live state is its base, then rule 3 with the
- *     staging side; else deleted on staging → nothing; there again on
- *     staging → «restored on staging», which Z8 does not bring back.
+ *     site has it again (there and not in the trash: one in the trash is
+ *     still deleted, Codex round 1 of part 2, C) → the live state is its
+ *     base, then rule 3 with the staging side; else deleted on staging →
+ *     nothing; there again on staging → «restored on staging», which Z8 does
+ *     not bring back.
  *  3. A pair active: the table TABLE, one row for each of the nine states of
- *     both sides, two for changed on both (the mapped forms the same or
- *     not); a pair with an override (a confirmed target such as status
- *     draft, decision 17) is compared against that target (base_live is its
- *     hash) and names it.
+ *     both sides, two for changed on both (alike or not: refs_agree()); row
+ *     10 ends the pair only where both objects are removed, in the trash on
+ *     a side the pair is taken over as deleted (with Z8d); a pair with an
+ *     override (a confirmed target such as status draft, decision 17) is
+ *     compared against that target (base_live is its hash) and names it.
  *  4. No pair: WITHOUT (only staging, only live, new on both; the match of
  *     AB_MCP_Sync_Proposal::match(), so the report and the proposal name an
  *     object alike).
@@ -85,7 +92,10 @@ final class AB_MCP_Sync_Decision {
 	/**
 	 * The table of an active pair (concept section 4): the state of the
 	 * staging side, of this side, the result and what a takeover does. Row 5
-	 * is changed on both with other mapped forms, row 6 with the same.
+	 * is changed on both with other mapped forms, row 6 with the same (and
+	 * the references to objects of pairs agreeing, refs_agree()). Row 10 is
+	 * deleted_both where both objects are removed, deleted_both_trash where
+	 * one is in the trash (table_result()).
 	 */
 	const TABLE = array(
 		1  => array( 'unchanged', 'unchanged', 'equal', 'none' ),
@@ -118,7 +128,8 @@ final class AB_MCP_Sync_Decision {
 		'deleted_against_changed_live' => 'Deleted on staging, changed on this site: a conflict, kept on this site by default; the deletion is taken over from Z8d.',
 		'deleted_live'                 => 'Deleted on this site, unchanged on staging: nothing to do, the deletion holds.',
 		'deleted_live_changed_staging' => 'Deleted on this site, changed on staging: a conflict, deleted here by default; bringing it back from staging follows with Z8d.',
-		'deleted_both'                 => 'Deleted on both sides: nothing to do; wp_site_pairs action=discard ends the pair.',
+		'deleted_both'                 => 'Deleted on both sides, removed on both (neither is in the trash): nothing to do; wp_site_pairs action=discard ends the pair.',
+		'deleted_both_trash'           => 'Deleted on both sides, in the trash on at least one: nothing to do. The pair is then taken over as deleted (the deletion holds), which follows with Z8d; until then it stays as it is, and it is not ended: only a pair whose objects are removed on both sides is, so an object in the trash can still come back to its pair.',
 		'only_staging'                 => 'Only on staging, new: created on this site.',
 		'only_live'                    => 'Only on this site, new (written here): kept and shown. Refresh the staging site to have it there as well.',
 		'new_both'                     => 'New on both sides, without a pair: pair them first (wp_site_pairs action=propose, then confirm).',
@@ -157,7 +168,7 @@ final class AB_MCP_Sync_Decision {
 	 * @return array entries (numbered), counts, blocked, pairs.
 	 */
 	public static function report( array $staging, array $live, array $pairs, callable $complete, array $b9 = array() ) {
-		$ctx   = self::context( $complete, $b9 );
+		$ctx   = self::context( $complete, $b9, $pairs );
 		$by    = array(
 			's' => self::index( $staging ),
 			'l' => self::index( $live ),
@@ -226,15 +237,31 @@ final class AB_MCP_Sync_Decision {
 	 *
 	 * @param callable $complete See report().
 	 * @param array    $b9       See report().
+	 * @param array[]  $pairs    See report().
 	 * @return array complete, b9, kinds (the pair kinds this site's inventory
 	 *               reads: an object of another one missing here is not
-	 *               deleted, it was never read).
+	 *               deleted, it was never read), paired (by side and ID space,
+	 *               the id of the pair of each object a pair names, for
+	 *               refs_agree()).
 	 */
-	public static function context( callable $complete, array $b9 = array() ) {
+	public static function context( callable $complete, array $b9 = array(), array $pairs = array() ) {
+		$paired = array(
+			's' => array(),
+			'l' => array(),
+		);
+		foreach ( $pairs as $pair ) {
+			foreach ( self::SPACES as $space => $kinds ) {
+				if ( in_array( $pair['kind'], $kinds, true ) ) {
+					$paired['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];
+					$paired['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];
+				}
+			}
+		}
 		return array(
 			'complete' => $complete,
 			'b9'       => $b9,
 			'kinds'    => AB_MCP_Sync_Proposal::db_kinds(),
+			'paired'   => $paired,
 		);
 	}
 
@@ -250,6 +277,14 @@ final class AB_MCP_Sync_Decision {
 	 * @return array
 	 */
 	public static function pair_item( array $pair, $s, $l, array $ctx ) {
+		// A name this site calls a credential (B9): its staging line is
+		// reduced as a held one, so neither side shows the name (Codex round
+		// 1 of part 2, A; the import holds a line by the rules of the day it
+		// came, this report by those of now).
+		$b9 = null === $l && self::held_here( $pair, $ctx );
+		if ( $b9 && null !== $s && ! isset( $s['held'] ) ) {
+			$s = AB_MCP_Sync_Proposal::reduced( $s, 'credential_name' );
+		}
 		$subtype = self::subtype( null !== $l ? $l : $s );
 		$ss      = self::side_state( 's', $s, $pair, $pair['base_staging'], $ctx, $subtype );
 		$ls      = self::side_state( 'l', $l, $pair, $pair['base_live'], $ctx, $subtype );
@@ -263,9 +298,15 @@ final class AB_MCP_Sync_Decision {
 				'staging' => $ss[0],
 				'live'    => $ls[0],
 			),
+			'b9'      => $b9,
 		);
-		// Rule 0: a rest keeps its mapping, nothing applies to it.
+		// Rule 0: a rest keeps its mapping, nothing applies to it. Removed
+		// only where its object is no longer on this site; in the trash here
+		// it is still the rest.
 		if ( 'residual' === $pair['state'] ) {
+			if ( self::trashed( $l ) ) {
+				return self::result( $item, 'residual', '0', null, 'none', 'In the trash on this site: still a rest. A rest is removed only where its object is no longer on this site.' );
+			}
 			return self::result( $item, 'deleted' === $ls[0] ? 'residual_removed' : 'residual', '0', null, 'none' );
 		}
 		if ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
@@ -277,8 +318,9 @@ final class AB_MCP_Sync_Decision {
 		}
 		// Rule 2: taken over as deleted (not reached in Z8).
 		if ( 'deleted' === $pair['state'] ) {
-			if ( null !== $l && ! isset( $l['held'] ) ) {
+			if ( null !== $l && ! isset( $l['held'] ) && ! self::trashed( $l ) ) {
 				// This site has it again: its state is the base, then rule 3.
+				// In the trash here it is still deleted (fail closed).
 				$item['sides']['live'] = 'unchanged';
 				$row                   = self::row( $ss[0], 'unchanged', false );
 				if ( null === $row ) {
@@ -301,13 +343,79 @@ final class AB_MCP_Sync_Decision {
 				return self::result( $item, 'not_compared', '3', null, 'none', $state[1] );
 			}
 		}
-		return self::table_result( $item, '3', self::row( $ss[0], $ls[0], 'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l ) ), null );
+		return self::table_result( $item, '3', self::row( $ss[0], $ls[0], 'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l ) && self::refs_agree( $s, $l, $ctx ) ), null );
+	}
+
+	/**
+	 * Whether the references of the two lines of a pair name the same
+	 * objects where a pair names their targets (Codex round 1 of part 2, A).
+	 * The mapped forms compare a reference by the identity of its target;
+	 * an object of a pair renamed on one side while another object there
+	 * takes its slug has the identity of that other one, so the same mapped
+	 * form can point to the object of a pair on one side and to another
+	 * object on the other. A reference whose target an object of a pair is,
+	 * on either side, is the same only where the other side names the other
+	 * object of that same pair:
+	 *  - by the place of each reference (its ID space and where it stands,
+	 *    at), in its order, each target as the id of its pair or as none;
+	 *  - a place no target of which has a pair on either side is left to the
+	 *    mapped forms (both name objects without a pair, by identity);
+	 *  - in a set of the canonical form (AB_MCP_Sync_Canon::set(): the terms
+	 *    of a taxonomy, at term:<taxonomy>, and the menus of a menu item, at
+	 *    menu) the order does not count, but only where every target of the
+	 *    place has a pair on both sides; a set that mixes targets with and
+	 *    without a pair is not alike (the line does not say which object
+	 *    without a pair stands for which: fail closed, the person chooses);
+	 *  - a place on one side only, with a target of a pair: not alike.
+	 *
+	 * @param array $s   The staging line.
+	 * @param array $l   This site's line.
+	 * @param array $ctx context().
+	 * @return bool
+	 */
+	public static function refs_agree( array $s, array $l, array $ctx ) {
+		$by = array(
+			's' => array(),
+			'l' => array(),
+		);
+		foreach ( array(
+			's' => $s,
+			'l' => $l,
+		) as $side => $line ) {
+			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
+				$space = (string) ( $ref['space'] ?? '' );
+				$at    = (string) ( $ref['at'] ?? '' );
+				$pair  = $ctx['paired'][ $side ][ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';
+				$by[ $side ][ $space . "\0" . $at ][] = $pair;
+			}
+		}
+		foreach ( array_unique( array_merge( array_keys( $by['s'] ), array_keys( $by['l'] ) ) ) as $key ) {
+			$there = $by['s'][ $key ] ?? array();
+			$here  = $by['l'][ $key ] ?? array();
+			$all   = array_merge( $there, $here );
+			if ( array() === array_diff( $all, array( '' ) ) ) {
+				continue;
+			}
+			$at = explode( "\0", $key, 2 )[1];
+			if ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {
+				if ( in_array( '', $all, true ) ) {
+					return false;
+				}
+				sort( $there );
+				sort( $here );
+			}
+			if ( $there !== $here ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
 	 * The item of a row of the table, with the locks of what the row would
 	 * do in Z8: a deletion on staging (rows 3 and 7, decision 22), bringing
-	 * back from staging what this site deleted (row 9).
+	 * back from staging what this site deleted (row 9); row 10 by whether an
+	 * object of it is in the trash.
 	 *
 	 * @param array       $item Item.
 	 * @param string      $rule 2 or 3.
@@ -316,7 +424,13 @@ final class AB_MCP_Sync_Decision {
 	 * @return array
 	 */
 	private static function table_result( array $item, $rule, $row, $note ) {
-		$out = self::result( $item, self::TABLE[ $row ][2], $rule, $row, self::TABLE[ $row ][3], $note );
+		$result = self::TABLE[ $row ][2];
+		// Row 10: the pair ends only where both objects are removed; in the
+		// trash on a side it is taken over as deleted (concept section 4).
+		if ( 10 === $row && ( self::trashed( $item['s'] ) || self::trashed( $item['l'] ) ) ) {
+			$result = 'deleted_both_trash';
+		}
+		$out = self::result( $item, $result, $rule, $row, self::TABLE[ $row ][3], $note );
 		if ( 3 === $row || 7 === $row ) {
 			$out['locks'][] = self::lock( '*:delete' );
 		}
@@ -348,7 +462,7 @@ final class AB_MCP_Sync_Decision {
 					? array( 'deleted', null )
 					: array( 'not_compared', 'The inventory of the staging site does not show that it holds every object of this kind (it was read across packages, or objects of it were withheld from the account that made it), so an object missing there is not called deleted. Where objects were withheld, export again with an account that may read every object (wp_site_export).' );
 			}
-			if ( isset( $ctx['b9'][ $pair['kind'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $pair['live_ref'] ) ) ] ) ) {
+			if ( self::held_here( $pair, $ctx ) ) {
 				return array( 'not_compared', self::WORDS['held'] );
 			}
 			return array( 'deleted', null );
@@ -1036,7 +1150,8 @@ final class AB_MCP_Sync_Decision {
 	 * One side of an entry as shown: its ref, identity, status and the
 	 * status of a post (and the path of parents and the instances of a widget
 	 * area, as the match shows them); a held one by the SHA-256 of its ref;
-	 * a side not there by the ref of its pair.
+	 * a side not there by the ref of its pair, or by the SHA-256 of it where
+	 * this site calls the name a credential.
 	 *
 	 * @param array  $item Item.
 	 * @param string $side s or l.
@@ -1047,7 +1162,16 @@ final class AB_MCP_Sync_Decision {
 		$line  = $item[ $side ];
 		if ( null === $line ) {
 			if ( null !== $item['pair'] ) {
-				return array( 'ref' => (string) $item['pair'][ 's' === $side ? 'staging_ref' : 'live_ref' ] );
+				$ref = (string) $item['pair'][ 's' === $side ? 'staging_ref' : 'live_ref' ];
+				// A name this site calls a credential: by the SHA-256 of the
+				// ref of its pair only, as a held line (pair_item()).
+				if ( ! empty( $item['b9'] ) ) {
+					return array(
+						'held'       => 'credential_name',
+						'ref_sha256' => hash( 'sha256', AB_MCP_Sync_Canon::encode( $ref ) ),
+					);
+				}
+				return array( 'ref' => $ref );
 			}
 			if ( ! is_array( $shown ) || array() === $shown ) {
 				return null;
@@ -1133,6 +1257,30 @@ final class AB_MCP_Sync_Decision {
 			'stage'  => AB_MCP_Sync_Kinds::LOCKS[ $key ]['stage'],
 			'reason' => AB_MCP_Sync_Kinds::LOCKS[ $key ]['reason'],
 		);
+	}
+
+	/**
+	 * Whether the object of this site of a pair is missing because its name
+	 * holds a credential by the rules of this site (B9: counted by its kind
+	 * and the SHA-256 of its ref).
+	 *
+	 * @param array $pair Pair.
+	 * @param array $ctx  context().
+	 * @return bool
+	 */
+	private static function held_here( array $pair, array $ctx ) {
+		return isset( $ctx['b9'][ $pair['kind'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $pair['live_ref'] ) ) ] );
+	}
+
+	/**
+	 * Whether a line is of an object in the trash of its site (deleted, but
+	 * there: where the difference counts, rule 0, rule 2, row 10).
+	 *
+	 * @param array|null $line Line.
+	 * @return bool
+	 */
+	private static function trashed( $line ) {
+		return is_array( $line ) && 'trash' === ( $line['post_status'] ?? null );
 	}
 
 	/**

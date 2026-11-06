@@ -348,11 +348,16 @@ Weg.
   Zugangsangabe (Regeln `ab_mcp_redact_keys`), fehlt es in ihrer
   Bestandsaufnahme; der Bericht kennt es über Art und SHA-256 seiner
   Kennung (`b9_refs` der Teile) und nennt es «nicht verglichen», nie
-  gelöscht. Auf der Staging-Seite fehlt dafür ein solcher Nachweis im Paket
-  (es zählt nur `credentials.names`): ein gepaartes Objekt, dessen Name dort
-  seither eine Zugangsangabe ist, erscheint als «auf Staging gelöscht –
-  Übernahme ab Z8d», ohne Schreibweg (konstruiert: die Regeln einer Site
-  ändern sich nach der Paarung).
+  gelöscht. Der Eintrag nennt dann keine Seite beim Namen (Codex Runde 1 von
+  Teil 2, A): beide Seiten erscheinen wie eine zurückgehaltene Zeile
+  (`held: credential_name`, SHA-256 der Kennung), auch wo die Staging-Zeile
+  den Namen noch trägt (der Import hält eine Zeile nach den Regeln seines
+  Tages zurück, der Bericht nach denen von heute) und wo sie fehlt (statt der
+  Kennung des Paars). Auf der Staging-Seite fehlt dafür ein solcher
+  Nachweis im Paket (es zählt nur `credentials.names`): ein gepaartes
+  Objekt, dessen Name dort seither eine Zugangsangabe ist, erscheint als
+  «auf Staging gelöscht – Übernahme ab Z8d», ohne Schreibweg (konstruiert:
+  die Regeln einer Site ändern sich nach der Paarung).
 - Ein Paar einer Art, die die Bestandsaufnahme dieser Fassung nicht liest
   (etwa `attachment` vor Zweig 10), heisst auf beiden Seiten «nicht
   verglichen», nie gelöscht.
@@ -360,14 +365,38 @@ Weg.
 ### Ordnung (Regel 0, Vorrang 1–4)
 
 - Vorrang 2 (*gelöscht übernommen*) tritt in Z8 nicht ein. Der Bericht
-  entscheidet ihn trotzdem nach dem Konzept: live wieder da → der Live-Stand
-  ist die Basis, danach die Tabelle mit der Staging-Seite; auf Staging
-  gelöscht → nichts; auf Staging wieder da → «auf Staging wiederhergestellt»,
-  gesperrt bis Z8d (`*:restore_deleted`). Er schreibt kein Paar: «Paar aktiv,
-  B := Live-Stand» (Vorrang 2), «B := gemeinsamer Stand» (Zeile 6), «Paar
-  gelöscht übernommen» (Zeile 8) und «Paar schliessen» (Zeile 10) folgen mit
-  dem Lauf beziehungsweise mit `wp_site_pairs action=discard`; der Bericht
-  nennt den Weg.
+  entscheidet ihn trotzdem nach dem Konzept: live wieder da (vorhanden und
+  nicht im Papierkorb; ein Post im Papierkorb gilt weiter als gelöscht, Codex
+  Runde 1 von Teil 2, C) → der Live-Stand ist die Basis, danach die Tabelle
+  mit der Staging-Seite; auf Staging gelöscht → nichts; auf Staging wieder da
+  → «auf Staging wiederhergestellt», gesperrt bis Z8d (`*:restore_deleted`).
+  Er schreibt kein Paar: «Paar aktiv, B := Live-Stand» (Vorrang 2), «B :=
+  gemeinsamer Stand» (Zeile 6), «Paar gelöscht übernommen» (Zeile 8) und
+  «Paar schliessen» (Zeile 10) folgen mit dem Lauf beziehungsweise mit
+  `wp_site_pairs action=discard`; der Bericht nennt den Weg.
+- Zeile 10 unterscheidet nach dem Konzept: beide Objekte entfernt →
+  `deleted_both` mit dem Weg `wp_site_pairs action=discard`; mindestens eines
+  im Papierkorb → `deleted_both_trash`, der Übergang «gelöscht übernommen»
+  folgt mit Z8d, das Paar bleibt bis dahin, wie es ist (Entscheid 22), und
+  der Bericht bietet kein Verwerfen an (Codex Runde 1 von Teil 2, B).
+- Regel 0: «Rest entfernt» heisst nur, dass das Objekt des Rests auf dieser
+  Site fehlt. Liegt es hier im Papierkorb, bleibt es der Rest («Rest nach
+  Rückweg oder Fehler», mit dem Grund), ohne den Weg eines entfernten Rests
+  (Codex Runde 1 von Teil 2, C).
+- Zeile 6 («beidseitig gleich geändert») verlangt neben derselben
+  abgebildeten Form, dass jeder Verweis auf ein Objekt eines Paars auf der
+  anderen Seite an derselben Stelle das andere Objekt desselben Paars nennt
+  (`refs_agree()`, Codex Runde 1 von Teil 2, A): die abgebildete Form nennt
+  ein Ziel über seine Identität, und ein umbenanntes Objekt eines Paars,
+  dessen Slug ein anderes Objekt übernimmt, hätte sonst dieselbe Form wie
+  das andere. Sonst heisst es Konflikt (Zeile 5, eine Person wählt). In einer
+  Menge der kanonischen Form (Terme einer Taxonomie, Menüs eines
+  Menüeintrags) zählt die Reihenfolge nicht, aber nur, wo jedes Ziel der
+  Stelle auf beiden Seiten ein Paar hat; mischt die Menge Ziele mit und ohne
+  Paar, heisst es Konflikt (die Zeile sagt nicht, welches Objekt ohne Paar
+  für welches steht; ein auf beiden Seiten neuer Term ist ohnehin zuerst zu
+  paaren). Eine Stelle ohne Ziel eines Paars entscheidet weiter die
+  abgebildete Form.
 - Zeile 9 (live gelöscht, Staging geändert): Standard «live behalten»; die
   Wahl «aus Staging wiederherstellen» braucht ein neues Live-Objekt unter
   einem bestehenden Paar und ist bis Z8d gesperrt (`*:restore_deleted`).

@@ -109,6 +109,9 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'update_option':
 			$ab_it_out = update_option( $ab_it_step['name'], $ab_it_step['value'] );
 			break;
+		case 'delete_option':
+			$ab_it_out = delete_option( $ab_it_step['name'] );
+			break;
 		case 'canonical':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 			$ab_it_kind = null;

@@ -20,7 +20,9 @@
  *   stages; mutual references; a reference to an attachment waits.
  * - Rule 0 and an override on rows: a rest stays a rest, also where staging
  *   changes it, a rest removed here, a confirmed target compared and named.
- * - A name holding a credential never in plain text.
+ * - A name holding a credential never in plain text: also of a pair whose
+ *   name this site calls a credential since, on neither side, in the answer
+ *   and in every file of the report.
  *
  * @package AlphaBridge_MCP
  */
@@ -817,14 +819,37 @@ final class SyncReportTest extends TestCase {
 		$ids = self::staged();
 		self::paired( $ids );
 		self::assertIsArray( AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'option', 'my_setting' ) );
+		$held = array(
+			'held'       => 'credential_name',
+			'ref_sha256' => hash( 'sha256', '"my_setting"' ),
+		);
+		// Neither side by its name (Codex round 1 of part 2, A): not in the
+		// answer, not in any file of the report in the protected store.
+		$check = static function ( array $answer, string $case ) use ( $held ): void {
+			$entries = array_values( array_filter( $answer['all'], static fn( $e ) => 'option' === $e['kind'] && $held === $e['live'] ) );
+			self::assertCount( 1, $entries, $case );
+			self::assertSame( $held, $entries[0]['staging'], $case . ': the staging side as well, by the SHA-256 of its ref' );
+			self::assertSame( array( 'not_compared', 'not_compared', 'none' ), array( $entries[0]['result'], $entries[0]['sides']['live'], $entries[0]['action'] ), $case . ': not deleted, counted here by the SHA-256 of its ref' );
+			self::assertStringNotContainsString( 'my_setting', (string) json_encode( $answer ), $case );
+			$text = '';
+			foreach ( array_keys( AB_MCP_Protected_Store::files( 'reports', $answer['report_id'] ) ) as $name ) {
+				$parsed = AB_MCP_Sync_Proposal::parse_name( (string) $name );
+				self::assertNotNull( $parsed, (string) $name );
+				$text .= (string) AB_MCP_Protected_Store::get( 'reports', $answer['report_id'], $parsed['name'], $parsed['sha'] );
+			}
+			self::assertStringContainsString( $held['ref_sha256'], $text, $case );
+			self::assertStringNotContainsString( 'my_setting', $text, $case . ': the stored report' );
+		};
 		// The rules of this site call the name a credential from now on.
 		add_filter( 'ab_mcp_redact_keys', static fn( $keys ) => array_merge( (array) $keys, array( 'my_setting' ) ) );
 		try {
-			$entry = self::entry_of( self::report( $ids )['all'], 'option', 'staging', 'my_setting' );
+			$check( self::report( $ids ), 'its staging line there' );
+			// Then removed on staging: the staging side by the ref of its pair.
+			self::b( array( array( 'op' => 'delete_option', 'name' => 'my_setting' ) ) );
+			$check( self::report( self::staged() ), 'its staging line gone' );
 		} finally {
 			remove_all_filters( 'ab_mcp_redact_keys' );
 		}
-		self::assertSame( array( 'not_compared', 'not_compared', 'none' ), array( $entry['result'], $entry['sides']['live'], $entry['action'] ), 'Not deleted: counted here by the SHA-256 of its ref.' );
 	}
 
 	public function testANewAlignmentOfAWidgetAreaKeepsWhatItsBaseExtraHolds(): void {

@@ -737,20 +737,30 @@ IT_REALIGN = 'testANewAlignmentOfAWidgetAreaKeepsWhatItsBaseExtraHolds'
 IT_TERM = 'testANewTermWithMetaIsLockedAndOneWithoutIsCreated'
 IT_KINDS = 'testTheKindsZ8LocksAreShownWithTheirReasonAndStage'
 IT_MENU = 'testAMenuWithAnItemRemovedOnStagingIsLockedAsAWhole'
+# Codex round 1 of part 2
+B9U = 'testAPairWhoseNameThisSiteCallsACredentialShowsNeitherSideByItsName'
+R0T = 'testRuleZeroARestInTheTrashIsStillARest'
+R2T = 'testRuleTwoALiveObjectInTheTrashIsStillDeleted'
+ROW10 = 'testRowTenEndsThePairOnlyWhereBothObjectsAreRemoved'
+CODEX = 'testChangedAlikeOnlyWhereBothSidesNameTheObjectsOfOnePair'
+PARTNER = 'testAReferenceToAPairedTargetIsAlikeOnlyWhereTheOtherSideNamesItsPartner'
 
 # ---------------------------------------------------- the order (rules 0-3)
 e('r0-residual', 'rule 0: a residual pair is a rest, no row applies', D,
   "\t\tif ( 'residual' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R0)
 e('r0-removed', 'rule 0: a rest gone here is «rest removed»', D,
   "'deleted' === $ls[0] ? 'residual_removed' : 'residual'", "'residual'", 'rep', R0)
+e('r0-trash', 'rule 0: a rest in the trash here is still the rest, not removed', D,
+  "\t\t\tif ( self::trashed( $l ) ) {", "\t\t\tif ( false ) {", 'rep', R0T)
 e('r0-canon', 'rule 3: bases of another version of the canon are not compared', D,
   "\t\tif ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {", "\t\tif ( false ) {", 'rep', NC)
 e('r1-unclear', 'rule 1: an unclear pair is like a conflict', D,
   "\t\tif ( 'unclear' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R1)
 e('r2-deleted', 'rule 2: a pair taken over as deleted', D,
   "\t\tif ( 'deleted' === $pair['state'] ) {", "\t\tif ( false ) {", 'rep', R2)
-e('r2-live-again', 'rule 2: there again here, its state the base, then the table', D,
-  "\t\t\tif ( null !== $l && ! isset( $l['held'] ) ) {", "\t\t\tif ( false ) {", 'rep', R2)
+R2L = "\t\t\tif ( null !== $l && ! isset( $l['held'] ) && ! self::trashed( $l ) ) {"
+e('r2-live-again', 'rule 2: there again here, its state the base, then the table', D, R2L, "\t\t\tif ( false ) {", 'rep', R2)
+e('r2-live-trash', 'rule 2: a live object in the trash is still deleted', D, R2L, R2L.replace(' && ! self::trashed( $l )', ''), 'rep', R2T)
 e('r2-live-base', 'rule 2: the live side is its base (unchanged)', D,
   "\t\t\t\t$item['sides']['live'] = 'unchanged';\n", "", 'rep', R2)
 e('r2-done', 'rule 2: deleted on staging as well, nothing', D,
@@ -763,9 +773,43 @@ e('r3-alike', 'rule 3: changed alike by the mapped forms (row 6, not 5)', D,
   "'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l )", "false", 'rep', ROWS + ' with data set "row 6: changed, changed, alike"')
 e('r3-other-forms', 'rule 3: changed differently is a conflict (row 5, not 6)', D,
   "'changed' === $ss[0] && 'changed' === $ls[0] && AB_MCP_Sync_Proposal::mapped_same( $s, $l )", "'changed' === $ss[0] && 'changed' === $ls[0]", 'rep', ROWS + ' with data set "row 5: changed, changed, other forms"')
+e('r3-refs', 'rule 3: changed alike only where the references to objects of pairs agree', D,
+  " && self::refs_agree( $s, $l, $ctx )", "", 'rep', CODEX)
+e('report-context-pairs', 'report(): the decision knows the pairs', D,
+  "\t\t$ctx   = self::context( $complete, $b9, $pairs );", "\t\t$ctx   = self::context( $complete, $b9 );", 'rep', CODEX)
+e('context-paired-staging', 'context(): the pairs by their staging objects', D,
+  "\t\t\t\t\t$paired['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];\n", "", 'rep', CODEX)
+e('context-paired-live', 'context(): the pairs by their objects here', D,
+  "\t\t\t\t\t$paired['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];\n", "", 'rep', CODEX)
+e('refs-pair', 'refs_agree(): a target by the id of its pair', D,
+  "\t\t\t\t$pair  = $ctx['paired'][ $side ][ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';", "\t\t\t\t$pair  = '';", 'rep', CODEX)
+e('refs-unpaired-place', 'refs_agree(): a place without a target of a pair is left to the mapped forms', D,
+  "\t\t\tif ( array() === array_diff( $all, array( '' ) ) ) {", "\t\t\tif ( false ) {", 'rep', PARTNER)
+e('refs-places-both', 'refs_agree(): the places of both sides', D,
+  "\t\tforeach ( array_unique( array_merge( array_keys( $by['s'] ), array_keys( $by['l'] ) ) ) as $key ) {", "\t\tforeach ( array_keys( $by['s'] ) as $key ) {", 'rep', PARTNER)
+RS = "\t\t\tif ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {"
+e('refs-set', 'refs_agree(): in a set of the canonical form the order does not count', D, RS, "\t\t\tif ( false ) {", 'rep', PARTNER)
+e('refs-set-menu', 'refs_agree(): the menus of a menu item are a set', D, RS, RS.replace("'menu' === $at || ", ''), 'rep', PARTNER)
+e('refs-set-terms', 'refs_agree(): the terms of a taxonomy are a set', D, RS, RS.replace(" || 0 === strpos( $at, 'term:' )", ''), 'rep', PARTNER)
+e('refs-set-mixed', 'refs_agree(): a set mixing targets with and without a pair is not alike', D,
+  "\t\t\t\tif ( in_array( '', $all, true ) ) {\n\t\t\t\t\treturn false;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;", 'rep', PARTNER)
+e('refs-set-sort', 'refs_agree(): a set compared in one order', D,
+  "\t\t\t\tsort( $there );\n\t\t\t\tsort( $here );\n", "", 'rep', PARTNER)
+e('refs-place', 'refs_agree(): each place in its order, by the ids of the pairs', D,
+  "\t\t\tif ( $there !== $here ) {\n\t\t\t\treturn false;", "\t\t\tif ( false ) {\n\t\t\t\treturn false;", 'rep', PARTNER)
 TR = "\t\tif ( 3 === $row || 7 === $row ) {"
 e('row-delete-3', 'table_result(): row 3 locks the deletion', D, TR, "\t\tif ( 7 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
 e('row-delete-7', 'table_result(): row 7 locks the deletion', D, TR, "\t\tif ( 3 === $row ) {", 'rep', 'testADeletionOnStagingIsShownWithoutAWayAndTakenOverFromZ8d')
+T10 = "\t\tif ( 10 === $row && ( self::trashed( $item['s'] ) || self::trashed( $item['l'] ) ) ) {"
+e('row10-trash', 'table_result(): row 10 with an object in the trash: the pair taken over as deleted, not ended', D, T10, "\t\tif ( false ) {", 'rep', ROW10)
+e('row10-trash-staging', 'table_result(): row 10 in the trash on staging', D, T10, T10.replace("self::trashed( $item['s'] ) || ", ''), 'rep', ROW10)
+e('row10-trash-live', 'table_result(): row 10 in the trash here', D, T10, T10.replace(" || self::trashed( $item['l'] )", ''), 'rep', ROW10)
+e('words-row10-removed', 'WORDS: row 10 removed on both, the pair ended by discard', D,
+  "\t\t'deleted_both'                 => 'Deleted on both sides, removed on both (neither is in the trash): nothing to do; wp_site_pairs action=discard ends the pair.',",
+  "\t\t'deleted_both'                 => 'Deleted on both sides: nothing to do.',", 'rep', ROW10)
+e('words-row10-transition', 'WORDS: row 10 in the trash names the transition «taken over as deleted» and no end of the pair', D,
+  "\t\t'deleted_both_trash'           => 'Deleted on both sides, in the trash on at least one: nothing to do. The pair is then taken over as deleted (the deletion holds), which follows with Z8d; until then it stays as it is, and it is not ended: only a pair whose objects are removed on both sides is, so an object in the trash can still come back to its pair.',",
+  "\t\t'deleted_both_trash'           => 'Deleted on both sides: nothing to do; wp_site_pairs action=discard ends the pair.',", 'rep', ROW10)
 e('row-restore-9', 'table_result(): row 9 locks bringing it back', D,
   "\t\tif ( 9 === $row ) {", "\t\tif ( false ) {", 'rep', 'testChangedHereAndDeletedThereNamesTheWayBackAsLocked')
 e('row-five-alike', 'row(): changed on both with the same form is not row 5', D,
@@ -779,7 +823,16 @@ e('side-incomplete', 'side_state(): incomplete never means deleted', D,
 e('side-subtype', 'side_state(): asked by the subtype the line of this site names', D,
   "\t\t$subtype = self::subtype( null !== $l ? $l : $s );", "\t\t$subtype = null;", 'rep', 'testIncompleteNeverMeansDeleted')
 e('side-b9', 'side_state(): an object here whose name holds a credential is not deleted', D,
-  "\t\t\tif ( isset( $ctx['b9'][ $pair['kind'] . \"\\0\" . hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $pair['live_ref'] ) ) ] ) ) {", "\t\t\tif ( false ) {", 'rep', 'testAnObjectHereWhoseNameHoldsACredentialIsNotDeleted')
+  "\t\t\tif ( self::held_here( $pair, $ctx ) ) {", "\t\t\tif ( false ) {", 'rep', 'testAnObjectHereWhoseNameHoldsACredentialIsNotDeleted')
+B9H = "\t\t$b9 = null === $l && self::held_here( $pair, $ctx );"
+B9R = "\t\tif ( $b9 && null !== $s && ! isset( $s['held'] ) ) {"
+B9S = "\t\t\t\tif ( ! empty( $item['b9'] ) ) {"
+e('b9-here', 'pair_item(): a pair whose object here is missing as B9 is known as such', D, B9H, "\t\t$b9 = false;", 'rep', B9U)
+e('b9-reduce', 'pair_item(): its staging line reduced as a held one (no name)', D, B9R, "\t\tif ( false ) {", 'rep', B9U)
+e('b9-item', 'pair_item(): its item carries it to show()', D, "\t\t\t'b9'      => $b9,\n", "\t\t\t'b9'      => false,\n", 'rep', B9U)
+e('b9-show', 'show(): a side of such a pair by the SHA-256 of the ref of its pair, not by the ref', D, B9S, "\t\t\t\tif ( false ) {", 'rep', B9U)
+e('it-b9-reduce', 'pair_item(): the staging line of a pair B9 here reduced, over two sites', D, B9R, "\t\tif ( false ) {", 'itrep', IT_B9)
+e('it-b9-show', 'show(): a side of a pair B9 here by the SHA-256 of its ref, answer and store', D, B9S, "\t\t\t\tif ( false ) {", 'itrep', IT_B9)
 e('rep-side-held', 'side_state(): a held line is not compared', D,
   "\t\tif ( isset( $line['held'] ) ) {\n\t\t\treturn array( 'not_compared', self::WORDS['held'] );", "\t\tif ( false ) {\n\t\t\treturn array( 'not_compared', self::WORDS['held'] );", 'rep', NC)
 e('side-trash', 'side_state(): the trash is a deletion', D,
