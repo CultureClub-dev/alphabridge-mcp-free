@@ -665,6 +665,19 @@ final class SyncEnvTest extends TestCase {
 		}
 	}
 
+	public function testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt(): void {
+		// The field of a form (name or id of a button) the content check reads
+		// with the HTML API of the core; neither the net nor keyed() holds it
+		// (no value beside it, no = : ; or quote after the name of the
+		// credential): held by the content check only.
+		foreach ( array( '<button name=password>.php', '<button id=api_key>.php', 'abenv_<button name=password>' ) as $name ) {
+			self::assertSame( 'mixed', \AB_MCP_Sync_Credentials::unit( '', $name, array() )['state'], $name );
+			self::assertNull( \AB_MCP_Sync_Net::over_name( $name, array(), true ), $name . ': not by the net.' );
+			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name, array() ), $name );
+		}
+		self::assertNull( AB_MCP_Sync_Env::held( '<b>notes</b>', array() ), 'A tag without a field: an ordinary name.' );
+	}
+
 	public function testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell(): void {
 		self::pair();
 		$name  = 'vault=EXAMPLE_SECRET.php';

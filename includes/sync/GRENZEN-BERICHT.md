@@ -685,7 +685,8 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   Inhaltsprüfung von `AB_MCP_Sync_Credentials` und das Netz über den rohen
   Namen, mit `ab_mcp_redact_keys`). Ein Name mit einem eingeschriebenen
   Feld einer Zugangsangabe (`password=…`, auch kodiert, etwa in base64),
-  einer mit dem Namen einer Zugangsangabe vor `=` oder `:` (nächster Punkt)
+  einer mit dem Namen einer Zugangsangabe vor `=`, `:`, `;`, `"` oder `'`
+  (nächster Punkt)
   oder einer, der sich nicht zu Ende lesen lässt, steht in Paket, Bericht,
   Ablage und Antwort nur als SHA-256 (`sha256:…`) mit `held`
   (`credential_field`, `unreadable_name`); beide Sites bilden denselben
@@ -694,11 +695,16 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
 - Regel für Namen der Umgebung, zusätzlich zu den Prüfungen oben
   (`AB_MCP_Sync_Net::keyed()`, aufgerufen von `over_name()` mit `$site` in
   jeder Schicht des Namens, also auch kodiert): steht an irgendeiner Stelle
-  des ganzen Namens der Name einer Zugangsangabe unmittelbar vor `=` oder
-  `:` (Leerraum dazwischen erlaubt), wird der Name gehalten, gleich ob und
-  was danach steht (`password:;…`, `password:`, `x.token = …`). Jedes `=`
-  und jedes `:` wird für sich geprüft; kein früherer Treffer verbraucht
-  Zeichen des nächsten (`note:password:…`, Codex-Runde 3). Vor dem Zeichen
+  des ganzen Namens der Name einer Zugangsangabe unmittelbar vor `=`, `:`,
+  `;`, `"` oder `'` (Leerraum dazwischen erlaubt), wird der Name gehalten,
+  gleich ob und was danach steht (`password:;…`, `password:`,
+  `x.token = …`). `;` und die Anführungszeichen schliessen den Schlüssel
+  eines serialisierten Arrays oder einen Schlüssel in Anführungszeichen ab
+  (`a:1:{s:8:"password";s:14:"…";}`, `{"password" : "…"}`); die
+  Inhaltsprüfung liest die serialisierte Form mit `.php` dahinter als
+  sauber, das Netz ohne diese Zeichen ebenso (C, nach Codex-Runde 3). Jedes Zeichen wird für sich geprüft; kein früherer
+  Treffer verbraucht Zeichen des nächsten (`note:password:…`,
+  Codex-Runde 3). Vor dem Zeichen
   gilt: der Text endet, klein geschrieben oder so, wie `normalize_key()`
   ihn liest, auf einen Namen aus `CREDENTIAL_EXACT`, `EXTRA_NAMES` oder
   `ab_mcp_redact_keys` (`xpassword:`, `my-auth:`, `my vault=`), oder sein
@@ -723,14 +729,30 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   fest (`reset-password`, `wp-oauth-server`, `password-protected`,
   `my-token-plugin`, WooCommerces Tabelle `woocommerce_api_keys`), deren
   Inhalt die Bestandsaufnahme ohnehin nicht liest; der Bericht nennte dann
-  Plugins nur noch als SHA-256. Diese Namen und `note:EXAMPLE.php` oder
-  `R&D notes.pdf` bleiben im Klartext.
+  Plugins nur noch als SHA-256. Diese Namen und `note:EXAMPLE.php`,
+  `password-x:EXAMPLE.php`, `R&D notes.pdf` oder `R&D notes.php` bleiben im
+  Klartext.
 - Grenze (C, hingenommen): ein gewöhnlicher Name mit dem Namen einer
   Zugangsangabe vor `=` oder `:` wird ebenfalls gehalten
   (`reset-password:guide.php`, `compass:map.php` über `pass`); er steht dann
   nur als SHA-256 mit `credential_field`. Grund: fail closed; solche Namen
   sind selten, ein Doppelpunkt in Datei- und Ordnernamen ist unter Windows
-  unzulässig.
+  unzulässig. Mit `;`, `"` und `'` als Trennern kommen seltene gewöhnliche
+  Namen hinzu (`reset-password;v2.php`, `O'Reilly password's.pdf`); auch sie
+  stehen nur als SHA-256 mit `credential_field`. Grund: derselbe; ein
+  Apostroph oder Strichpunkt unmittelbar nach dem Namen einer Zugangsangabe
+  ist in Plugin-, Theme- und Tabellennamen ungewöhnlich, die serialisierte
+  Form im Klartext dagegen ein Leck.
+- Die Inhaltsprüfung in `held()` hält auch, was Netz und `keyed()` nicht
+  halten: das Feld eines Formulars, wie die HTML-API des Kerns es liest
+  (`<button name=password>.php`, `<button id=api_key>.php`, eine Tabelle
+  `abenv_<button name=password>`: kein Wert daneben, kein Trenner nach dem
+  Namen). Die Unit-Suite hat keine HTML-API (dort ist ein solcher Name
+  `unreadable_name`); die Integration hält die Klausel
+  (`testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt`,
+  Mutation `inventar/r1-held-field`). Grund für den Wechsel: seit Runde 3
+  hält `keyed()` die bisherigen Fälle der Unit-Suite (`password=…`) auch
+  ohne die Inhaltsprüfung, die Mutation überlebte dort.
 - Was eine Zeile nicht als Text hält (kein UTF-8, ein Steuerzeichen, länger
   als 1024 Bytes), steht ebenfalls als SHA-256, ohne `held`; ebenso eine
   zu lange Versionsangabe, die der Bericht «not shown» nennt (Codex-Runde 1,
@@ -786,7 +808,8 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   ein Plugin-Ordner `api_key:EXAMPLE_SECRET`, Tabellen
   `note:password:EXAMPLE_SECRET` und `token = EXAMPLE_SECRET`, daneben
   `note:EXAMPLE.php`, `R&D notes.php`, `my-token-plugin` und
-  `password-protected` im Klartext)
+  `password-protected` im Klartext; nach Runde 3: das Feld eines Formulars im
+  Namen, das nur die Inhaltsprüfung mit der HTML-API des Kerns hält)
   in Antwort, Cursor, Zustand, Paket oder einer Datei der Ablage beider
   Sites, die Fortsetzung über Teile mit der neuen Stelle (auch mit einem
   inzwischen verschwundenen Eintrag), sowie den Zweck eines Folgeaufrufs. Die Bindung an die

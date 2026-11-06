@@ -574,6 +574,39 @@ final class SyncEnvTest extends TestCase {
 		}
 	}
 
+	public function testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows(): void {
+		$held = array(
+			'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}.php', // Serialized: the content check reads it as clean.
+			'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}',
+			'{"password" : "EXAMPLE_SECRET"}',                 // A quoted key, white space after it.
+			"{'api_key' : 'EXAMPLE_SECRET'}.php",
+			'password;EXAMPLE_SECRET.php',                     // A semicolon right after it.
+			'x.token ; EXAMPLE_SECRET',
+			'password"EXAMPLE_SECRET.php',
+			"keep/client_secret'EXAMPLE_SECRET/f.txt",
+			'note;password;EXAMPLE_SECRET.php',                // Each sign on its own.
+			'keep/oauth_server"x',                             // The last word before it.
+			base64_encode( 'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}' ) . '.php', // Encoded, in every layer.
+			'reset-password;v2.php',                           // Ordinary names held as well (fail closed, rare).
+			"O'Reilly password's.pdf",
+		);
+		foreach ( $held as $name ) {
+			self::assertSame( 'credential', \AB_MCP_Sync_Net::over_name( $name, array(), true ), $name . ': by the net.' );
+			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name, array() ), $name );
+		}
+		self::assertTrue( \AB_MCP_Sync_Net::keyed( '<input name="password" value="EXAMPLE_SECRET">.php', array() ), 'A quoted name of a field of a form, whatever the content check reads.' );
+		foreach ( array( 'reset-password', 'wp-oauth-server', 'woocommerce_api_keys', 'password-protected', 'my-token-plugin', 'note:EXAMPLE.php', 'password-x:EXAMPLE.php', 'note;EXAMPLE.php', "O'Reilly notes.pdf", 'say "hello".txt' ) as $name ) {
+			self::assertFalse( \AB_MCP_Sync_Net::keyed( $name, array() ), $name );
+			self::assertNull( AB_MCP_Sync_Env::held( $name, array() ), $name . ': an ordinary name, shown as it is.' );
+		}
+		self::assertFalse( \AB_MCP_Sync_Net::keyed( 'R&D notes.php', array() ) );
+		self::assertNull( \AB_MCP_Sync_Net::over_name( 'R&D notes.php', array(), true ) );
+		self::assertNull( AB_MCP_Sync_Env::held( 'vault;EXAMPLE_SECRET.php', array() ) );
+		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( 'vault;EXAMPLE_SECRET.php', array( 'vault' ) ), 'With the names of ab_mcp_redact_keys.' );
+		// The net over a name of the inventory keeps its rule.
+		self::assertNull( \AB_MCP_Sync_Net::over_name( 'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}.php', array() ) );
+	}
+
 	public function testAPlaceHoldsNoNameOnlyTheSha256OfEachFolderAndOfTheWholePath(): void {
 		self::assertNull( AB_MCP_Sync_Env::place( null ) );
 		$place = AB_MCP_Sync_Env::place( 'password=/EXAMPLE_SECRET.php' );

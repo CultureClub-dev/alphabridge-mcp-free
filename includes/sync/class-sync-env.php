@@ -1436,9 +1436,11 @@ final class AB_MCP_Sync_Env {
 	 * (password=…, also encoded), or a name that does not read to its end
 	 * (deeper than the check or the net reads); and, a name of the site
 	 * being no prose, the name of a credential at any place in it right
-	 * before an = or a :, whatever follows (AB_MCP_Sync_Net::keyed():
-	 * note:password:…, password:;…, x.token = …; Codex, rounds 2 and 3 of
-	 * branch 7, A1). A name is the name of a file, a folder or a table, as a
+	 * before an =, a :, a ; or a quote, whatever follows
+	 * (AB_MCP_Sync_Net::keyed(): note:password:…, password:;…, x.token = …,
+	 * s:8:"password";…; Codex, rounds 2 and 3 of branch 7, A1). The content
+	 * check holds what neither holds: a field of a form as the HTML API of
+	 * the core reads it (<button name=password>). A name is the name of a file, a folder or a table, as a
 	 * slug is that of a post: «reset-password» or «woocommerce_api_keys»
 	 * holds nothing (Codex, round 1 of branch 7, A1); «reset-password:guide.php»
 	 * is held as well (fail closed).

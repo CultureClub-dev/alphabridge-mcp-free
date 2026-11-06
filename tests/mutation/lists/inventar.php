@@ -9,7 +9,7 @@
  * of a package, the comparison (counted never equal, equal only by a hash,
  * a value of the host the same value, not compared with why, each lock with its stage, the host changed
  * there, no hash shown; a name a credential holds by its SHA-256 only, also
- * the name of one before = or :, the place of a part by SHA-256 only, a
+ * the name of one before = : ; or a quote, the place of a part by SHA-256 only, a
  * name the staging site holds held here before it is stored), reading in parts on a
  * WordPress site (the pages,
  * the tables, the uploads against the file lists of attachments), the
@@ -868,12 +868,12 @@ return array(
 	),
 	array(
 		'id'      => 'inventar/r1-held-field',
-		'clause'  => 'held(): a field of a credential in a name (A1)',
+		'clause'  => 'held(): a field of a credential in a name, as the content check reads it (A1)',
 		'file'    => $en,
 		'search'  => "\t\tif ( 'mixed' === \$check['state'] ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncEnvTest', 'testANameWithACredentialWrittenIntoItIsHeld' ),
-		'expect'  => '/testANameWithACredentialWrittenIntoItIsHeld/',
+		'run'     => $it( 'SyncEnvTest', 'testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt' ),
+		'expect'  => '/testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt/',
 	),
 	array(
 		'id'      => 'inventar/r1-held-unreadable',
@@ -942,8 +942,8 @@ return array(
 		'id'      => 'inventar/r3-keyed-colon',
 		'clause'  => 'keyed(): before a colon (A1)',
 		'file'    => $net,
-		'search'  => "\t\tif ( ! preg_match_all( '/[=:]/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
-		'replace' => "\t\tif ( ! preg_match_all( '/[=]/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'search'  => "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'replace' => "\t\tif ( ! preg_match_all( '/[=;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
 		'run'     => $unit( 'SyncEnvTest', 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows' ),
 		'expect'  => '/testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows/',
 	),
@@ -951,10 +951,37 @@ return array(
 		'id'      => 'inventar/r3-keyed-equals',
 		'clause'  => 'keyed(): before an equals sign (A1)',
 		'file'    => $net,
-		'search'  => "\t\tif ( ! preg_match_all( '/[=:]/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
-		'replace' => "\t\tif ( ! preg_match_all( '/[:]/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'search'  => "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'replace' => "\t\tif ( ! preg_match_all( '/[:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
 		'run'     => $unit( 'SyncEnvTest', 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows' ),
 		'expect'  => '/testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhateverFollows/',
+	),
+	array(
+		'id'      => 'inventar/r4-keyed-semicolon',
+		'clause'  => 'keyed(): before a semicolon (A1, serialized)',
+		'file'    => $net,
+		'search'  => "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'replace' => "\t\tif ( ! preg_match_all( '/[=:\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'run'     => $unit( 'SyncEnvTest', 'testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows' ),
+		'expect'  => '/testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows/',
+	),
+	array(
+		'id'      => 'inventar/r4-keyed-double-quote',
+		'clause'  => 'keyed(): before a double quote (A1, a quoted key)',
+		'file'    => $net,
+		'search'  => "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'replace' => "\t\tif ( ! preg_match_all( '/[=:;\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'run'     => $unit( 'SyncEnvTest', 'testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows' ),
+		'expect'  => '/testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows/',
+	),
+	array(
+		'id'      => 'inventar/r4-keyed-single-quote',
+		'clause'  => 'keyed(): before a single quote (A1, a quoted key)',
+		'file'    => $net,
+		'search'  => "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'replace' => "\t\tif ( ! preg_match_all( '/[=:;\"]/', \$text, \$m, PREG_OFFSET_CAPTURE ) ) {",
+		'run'     => $unit( 'SyncEnvTest', 'testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows' ),
+		'expect'  => '/testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows/',
 	),
 	array(
 		'id'      => 'inventar/r3-keyed-each-first',

@@ -230,8 +230,12 @@ e('r2-found-hit', 'found(): the name found is the path to go on in (A1)', EN,
   "\t\t\t$path = $hit;", '', 'env', PLACE)
 # held()
 HELD_T = 'testANameWithACredentialWrittenIntoItIsHeld'
-e('r1-held-field', 'held(): a field of a credential in a name (A1)', EN,
-  "\t\tif ( 'mixed' === $check['state'] ) {", "\t\tif ( false ) {", 'env', HELD_T)
+# What the content check alone holds of a name of the site: a field of a form
+# as the HTML API of the core reads it (the unit suite has no HTML API, so the
+# integration suite; the net and keyed() hold the other fields).
+FORM_IT = 'testANameWithAFieldOfAFormOfACredentialIsHeldByTheContentCheckAsTheHtmlApiOfTheCoreReadsIt'
+e('r1-held-field', 'held(): a field of a credential in a name, as the content check reads it (A1)', EN,
+  "\t\tif ( 'mixed' === $check['state'] ) {", "\t\tif ( false ) {", 'it', FORM_IT)
 e('r1-held-unreadable', 'held(): a name the check does not read to its end (A1)', EN,
   "\t\tif ( 'unreadable' === $check['state'] ) {", "\t\tif ( false ) {", 'env', HELD_T)
 e('r1-held-net', 'held(): the net over the raw name (A1)', EN,
@@ -247,9 +251,13 @@ KEYED = 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhatev
 KEYED_IF = "\t\t\tif ( $site && self::keyed( $layer[1], $extra ) ) {"
 e('r3-net-keyed', 'over_name(): the name of a credential before = or :, for a name of the site (A1)', NET, KEYED_IF, "\t\t\tif ( false ) {", 'env', KEYED)
 e('r3-net-keyed-only', 'over_name(): only where it is asked for (a name of the inventory keeps its rule) (A1)', NET, KEYED_IF, KEYED_IF.replace('$site && ', ''), 'env', KEYED)
-SIGNS = "\t\tif ( ! preg_match_all( '/[=:]/', $text, $m, PREG_OFFSET_CAPTURE ) ) {"
-e('r3-keyed-colon', 'keyed(): before a colon (A1)', NET, SIGNS, SIGNS.replace('[=:]', '[=]'), 'env', KEYED)
-e('r3-keyed-equals', 'keyed(): before an equals sign (A1)', NET, SIGNS, SIGNS.replace('[=:]', '[:]'), 'env', KEYED)
+SIGNS = "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', $text, $m, PREG_OFFSET_CAPTURE ) ) {"
+e('r3-keyed-colon', 'keyed(): before a colon (A1)', NET, SIGNS, SIGNS.replace('[=:', '[=', 1), 'env', KEYED)
+e('r3-keyed-equals', 'keyed(): before an equals sign (A1)', NET, SIGNS, SIGNS.replace('[=:', '[:', 1), 'env', KEYED)
+QUOTED = 'testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows'
+e('r4-keyed-semicolon', 'keyed(): before a semicolon (A1, serialized)', NET, SIGNS, SIGNS.replace(':;', ':', 1), 'env', QUOTED)
+e('r4-keyed-double-quote', 'keyed(): before a double quote (A1, a quoted key)', NET, SIGNS, SIGNS.replace(';\"', ';', 1), 'env', QUOTED)
+e('r4-keyed-single-quote', 'keyed(): before a single quote (A1, a quoted key)', NET, SIGNS, SIGNS.replace('\\\']', ']', 1), 'env', QUOTED)
 EACH = "\t\tforeach ( $m[0] as $hit ) {\n\t\t\t$before"
 e('r3-keyed-each-first', 'keyed(): each = and :, not only the first (A1, Codex round 3)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], 0, 1 ) as'), 'env', KEYED)
 e('r3-keyed-each-last', 'keyed(): each = and :, not only the last (A1)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], -1 ) as'), 'env', KEYED)
@@ -541,7 +549,7 @@ out.append('''<?php
  * of a package, the comparison (counted never equal, equal only by a hash,
  * a value of the host the same value, not compared with why, each lock with its stage, the host changed
  * there, no hash shown; a name a credential holds by its SHA-256 only, also
- * the name of one before = or :, the place of a part by SHA-256 only, a
+ * the name of one before = : ; or a quote, the place of a part by SHA-256 only, a
  * name the staging site holds held here before it is stored), reading in parts on a
  * WordPress site (the pages,
  * the tables, the uploads against the file lists of attachments), the
