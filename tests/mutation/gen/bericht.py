@@ -714,8 +714,8 @@ e('taken-id', 'taken(): a package id is 32 hex', IM,
   "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named", 'tool', TOOL_IDS)
 e('taken-unknown', 'taken(): a package this account took over only', IM,
   "\t\tif ( null === $found ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", 'it', 'testOnlyAPackageTakenOverCompletelyIsRead')
-e('taken-purpose', 'taken(): a package held for the inventory only', IM,
-  "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || AB_MCP_Sync_Export::PURPOSES[0] !== $expect['purpose'] ) {", "\t\tif ( ! is_array( $expect ) ) {", 'it', 'testTakenReadsOnlyAPackageOfTheInventoryWithItsChunksAsSigned')
+e('taken-purpose', 'taken(): a package held for the purpose it is read for only', IM,
+  "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {", "\t\tif ( ! is_array( $expect ) ) {", 'it', 'testTakenReadsOnlyAPackageOfTheInventoryWithItsChunksAsSigned')
 e('taken-bound', 'taken(): a package of the pair of sites as it is now', IM,
   "\t\tif ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
 e('taken-verify', 'taken(): its manifest checked again', IM,
@@ -1042,7 +1042,7 @@ e('rep-replace-own', 'replace_own(): a new report removes the earlier ones of it
 e('rep-step-read', 'step(): an inventory read to its end is not read again', R,
   "\t\tif ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {", "\t\tif ( true ) {", 'itrep', IT_FAIL)
 e('rep-step-finish', 'step(): the inventory read to its end is worked out', R,
-  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'itrep', IT_PARTS)
+  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\t$env = self::live_environment( $found, $start );", "\t\tif ( false ) {\n\t\t\t$env = self::live_environment( $found, $start );", 'itrep', IT_PARTS)
 e('rep-find-connection', 'find(): the connection that made it only', R,
   "\t\tif ( ! hash_equals( (string) $head['connection'], AB_MCP_Sync_Proposal::connection() ) ) {", "\t\tif ( false ) {", 'itrep', IT_HEAD)
 e('rep-find-account', 'find(): another account, another connection', R,

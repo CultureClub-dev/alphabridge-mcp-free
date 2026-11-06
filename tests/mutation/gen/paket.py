@@ -850,7 +850,7 @@ for name, search in (
     e('paket/export-refuse-' + name, 'refusal(): no package ' + {'network': 'on a network', 'role': 'but on the confirmed staging site', 'pair': 'without a pair', 'key': 'without a key'}[name], EX,
       search, search.replace(search.split('\n')[0], "\t\tif ( false ) {"), 'package', REFUSE)
 e('paket/export-purpose', 'make(): the inventory only, in this version', EX,
-  "\t\tif ( ! in_array( $purpose, self::PURPOSES, true ) ) {", "\t\tif ( false ) {", 'package', 'testThisVersionMakesPackagesOfTheInventoryOnly')
+  "\t\tif ( ! in_array( $purpose, self::PURPOSES, true ) ) {", "\t\tif ( false ) {", 'package', 'testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly')
 CUR = "\t\tif ( ! is_array( $cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) {"
 CURS = 'testACursorIsOneAnAnswerGave with data set "%s"'
 e('paket/export-cursor-array', 'follows(): a cursor is an array', EX, CUR, CUR.replace('! is_array( $cursor ) || ', ''), 'package', CURS % 'text')
@@ -1037,9 +1037,9 @@ BN = "\t\tif ( null === $key || null === $record['pair'] || null === $bind ) {"
 e('paket/binding-no-key', 'binding(): none without a key', EX, BN, BN.replace('null === $key || ', ''), 'package', BIND)
 e('paket/binding-no-pair', 'binding(): none without a pair', EX, BN, BN.replace(" || null === $record['pair']", ''), 'package', BIND)
 e('paket/import-purpose-inventory', 'expect(): the inventory only, in this version', IM,
-  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly')
+  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly')
 e('paket/import-expect-first', 'call(): the purpose checked before anything is read', IM,
-  "\t\tif ( array_key_exists( 'manifest', $a ) ) {\n\t\t\t$expect = self::expect(", "\t\tif ( false ) {\n\t\t\t$expect = self::expect(", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly')
+  "\t\tif ( array_key_exists( 'manifest', $a ) ) {\n\t\t\t$expect = self::expect(", "\t\tif ( false ) {\n\t\t\t$expect = self::expect(", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly')
 BU = 'StoreBudget'
 SERIES_T = 'testThePackagesOfASeriesCountAsOneExportAndOnePackage'
 CLOSED_T = 'testAClosedPackageCountsAsOpenNoMoreButItsBytesDo'

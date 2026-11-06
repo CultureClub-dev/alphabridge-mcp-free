@@ -50,6 +50,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'has_filter'                           => 'Asks the hooks registered in this request, code, no stored value.',
 		'get_post_status_object'               => 'The post statuses registered in this request, code, no stored value.',
 		'is_multisite'                         => 'The constants MULTISITE and SUBDOMAIN_INSTALL.',
+		'wp_using_ext_object_cache'            => 'The global this request set when it loaded object-cache.php (group U of the environment, branch 7).',
 		// Static methods of this plugin outside includes/sync/.
 		'AB_MCP_Builders::signatures'          => 'signatures.php and the filter ab_mcp_builder_signatures; no post and no option.',
 		'AB_MCP_Builders::signature'           => 'One entry of signatures().',
@@ -78,6 +79,7 @@ final class SyncSafeCallsTest extends TestCase {
 		'->suppress_errors'                    => '$wpdb: the error output.',
 		'->esc_like'                           => '$wpdb: escapes a LIKE pattern.',
 		'->get_charset_collate'                => '$wpdb: the collation of the connection.',
+		'->db_server_info'                     => '$wpdb: the version the database server of the connection names (group U of the environment, branch 7).',
 		'->next_tag'                           => 'WP_HTML_Tag_Processor: parses the text it is given.',
 		'->get_attribute'                      => 'WP_HTML_Tag_Processor.',
 		'->set_attribute'                      => 'WP_HTML_Tag_Processor.',

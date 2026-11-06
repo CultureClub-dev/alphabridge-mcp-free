@@ -530,3 +530,135 @@ Weg.
   Einträge, nicht Verbindung und Zeit.
 - Wie der Vorschlag hält der letzte Aufruf beide Bestandsaufnahmen im
   Speicher; gemessen in den Prüffällen, grosse Sites misst Z11c.
+
+## Zweig 7 (Bestandsaufnahme)
+
+Die lesende Bestandsaufnahme der übrigen Arten und von Gruppe U
+(`AB_MCP_Sync_Env`; Paket-Zweck `env`, `wp_site_diff` mit `environment`).
+Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
+
+### Was verglichen heisst
+
+- «equal» oder «differs» nach Inhalt gibt es nur für Must-Use-Plugins und
+  Drop-ins (SHA-256 der Datei) und für die Werte von Gruppe U (Versionen,
+  Objekt-Cache, `.htaccess`-Block und Must-Use-Lader als SHA-256,
+  Konstanten). Plugins, Themes und WordPress mit gleicher Version, Tabellen
+  mit gleichen Zeilen und gleichem Schema, Wurzeln mit gleicher Zahl und
+  Grösse heissen «counted», mit `contents: not compared` und der Etappe des
+  Inhaltsvergleichs (Z8b für Dateien und Code, Z8d für Tabellen). Grund:
+  gleiche Version oder Zahl sagt nichts über veränderte Dateien oder Zeilen
+  (Befund R2-18). Eine abweichende Zahl oder Version heisst «differs»: sie
+  belegt einen Unterschied.
+- Die Sprache (`WPLANG`) wird nur gezeigt (Aktion `none`): sie ist eine
+  Option und gehört nach der Zuständigkeitsregel der Options-Art; ihre
+  Dateien zählt die Wurzel `languages`.
+- Nichts davon ist übernehmbar. Code, Dateien und Tabellen tragen eine
+  Sperre mit Grund und Etappe (`env:plugin`, `env:theme`, `env:wordpress`,
+  `env:mu_plugin`, `env:mu_files`, `env:languages`, `env:fonts`,
+  `env:uploads`, `env:table`); Drop-ins und Gruppe U heissen «change at the
+  host». Die Sperren stehen in `AB_MCP_Sync_Env::LOCKS`, nicht in
+  `AB_MCP_Sync_Kinds`: keine Art des Datenbank-Vertrags beansprucht sie, und
+  die Schlüssel mit `env:` stossen mit keinem dort zusammen.
+- Die Plugin-Version kommt aus dem Kopf der Datei (`get_plugins()`), die
+  Theme-Version aus `WP_Theme::get()`; ob etwas läuft, aus den gespeicherten
+  Zeilen `active_plugins`, `stylesheet` und `template` ohne Filter. Ein
+  Plugin, das Code zur Laufzeit abschaltet, zeigt sich hier als aktiv.
+  Netzwerkweit aktive Plugins gibt es nicht: Multisite ist abgelehnt.
+
+### Wurzeln und Dateien
+
+- Gezählt werden reguläre Dateien und ihre Grössen; eine Verknüpfung wird
+  nicht verfolgt und als `skipped` gezählt, ebenso was weder Datei noch
+  Ordner ist. Ein Ordner, der sich nicht lesen lässt, macht die ganze Wurzel
+  «not compared» (fail closed), auch wo der Rest gezählt wäre.
+- `uploads` zählt die Dateien ausserhalb der Dateilisten der Anhänge
+  (`AB_MCP_Sync_Media::reverse()`, genau die Pfade von
+  `wp_delete_attachment_files()`); `attached` nennt, wie viele Dateien
+  einer Liste angehören. Ausgelassen sind `fonts/` (eigene Wurzel), der
+  Undo-Ordner und die geschützte Ablage von AlphaBridge (`ab-mcp-undo`,
+  `ab-mcp-store-*`). Caches und Sicherungen anderer Plugins unter
+  `uploads` werden mitgezählt: ohne Wissen über das Plugin ist ein Ordner
+  nicht als Cache zu erkennen, und ein Raten würde Dateien verschweigen.
+- Seitenweise: Die Zählung geht in der Reihenfolge von `order()` (Ordner
+  zuerst in die Tiefe, Namen nach `strcmp()`) und setzt nach dem zuletzt
+  gezählten Pfad fort; die Uhr wird alle 64 Einträge gefragt, so kommt jeder
+  Aufruf mindestens 64 Einträge weiter. Eine Datei, die zwischen zwei
+  Aufrufen vor dem Fortsetzungspunkt entsteht oder verschwindet, fehlt oder
+  zählt nach dem Stand ihres Teils; die Zahl ist ein Stand über die Dauer der
+  Zählung, kein Schnappschuss.
+- Die Dateilisten der Anhänge liest jeder Aufruf neu, der in `uploads`
+  zählt. Mehr als 500 000 Pfade, oder ein Lesen, das mehr als die Hälfte des
+  verbleibenden Budgets braucht, macht `uploads` «not compared»
+  (`attachments_too_many`); eine Liste, die sich nicht ganz lesen lässt,
+  ebenso (`attachments_unreadable`). Grund: ohne die vollständige Liste wäre
+  «ausserhalb der Anhänge» geraten. Messung grosser Mediatheken mit Z11c.
+- Entscheidet Code, wo die Uploads oder Schriften liegen (Filter auf
+  `upload_dir`, `upload_path` oder `font_dir`), wird die Wurzel nicht
+  gezählt (`by_code`), wie bei den Anhängen (`attachment:uploads_by_code`).
+- `mu-plugins` als Wurzel zählt, was WordPress dort nicht selbst lädt
+  (Unterordner, andere Dateien); die PHP-Dateien der obersten Ebene sind je
+  eine Zeile mit SHA-256, ohne den Lader von AlphaBridge (Gruppe U). Was ein
+  Must-Use-Plugin aus einem Unterordner lädt, ist darum nur gezählt.
+- Die Wurzel `languages` ist `WP_LANG_DIR`, wie WordPress sie beim Laden
+  festlegt; Sprachdateien in Plugin- oder Theme-Ordnern gehören zu deren
+  Code.
+
+### Tabellen
+
+- Gelesen werden nur Name, `COUNT(*)` und `SHOW CREATE TABLE`; keine Zeile.
+  Das Schema wird ohne das Präfix der Site und ohne `AUTO_INCREMENT=`
+  verglichen; andere Unterschiede der Erzeugung (Zeichensatz der Verbindung,
+  Version von MariaDB oder MySQL, `ROW_FORMAT`) lassen ein gleiches Schema
+  «differs» heissen. Grund: lieber ein Unterschied zu viel als eine
+  Gleichheit, die nicht belegt ist.
+- `COUNT(*)` läuft je Tabelle in der Zeit des Aufrufs; eine sehr grosse
+  Tabelle ohne schnellen Zähler (InnoDB zählt die Zeilen ab) kann einen
+  Aufruf über das Budget dehnen, weil die Uhr zwischen den Tabellen gefragt
+  wird. Ausgenommen sind die Tabellen von `$wpdb->tables()` und von
+  `AB_MCP_Sync_Schema`; Tabellen eines anderen Präfixes sieht die
+  Bestandsaufnahme nicht.
+- Ob eine Tabelle Betriebsdaten hält (Konzept Abschnitt 3: `*_log`,
+  `*_sessions`), sagt der Bericht noch nicht: Klassifikation und Adapter
+  sind Z8d.
+
+### Gruppe U und Konstanten
+
+- Die Konstanten sind eine feste Liste ohne Geheimnisse
+  (`AB_MCP_Sync_Env::CONSTANTS`); zusätzlich werden nie die Namen von
+  `NEVER` (Datenbankzugang, Schlüssel und Salze) und keine Namen gelesen,
+  die `AB_MCP_Redactor::redacts_key()` mit den Regeln der Site
+  (`ab_mcp_redact_keys`) schwärzt. Ein Text, der kein kurzes einfaches Wort
+  ist (ein Pfad, eine Adresse), steht nur als SHA-256 im Paket und heisst im
+  Bericht «not shown»; zwei Sites vergleichen ihn so ohne Klartext. Ein
+  SHA-256 eines kurzen Werts lässt sich erraten; die Liste nimmt darum keine
+  Konstante auf, deren Wert vertraulich ist.
+- Der `.htaccess`-Block ist der Text zwischen `# BEGIN WordPress` und
+  `# END WordPress` neben WordPress (`ABSPATH`). Liegt die Site in einem
+  anderen Ordner als WordPress (`home` und `siteurl` mit anderem Pfad), wird
+  er nicht gelesen («not compared»): `get_home_path()` fragt das Skript der
+  Anfrage. Eine Regel des Servers ausserhalb dieser Datei (nginx) sieht die
+  Bestandsaufnahme nicht.
+- Die Datenbankversion ist die des Servers (`db_server_info()`), nicht die
+  der Verbindung.
+
+### Pakete und Teile
+
+- Eine Bestandsaufnahme der Umgebung ist eine Reihe von Paketen; jedes
+  beginnt mit seiner Seite (`walk`, `seq`, `last`), die mit den Zeilen
+  signiert ist. Der Bericht nimmt nur die ganze Reihe in ihrer Reihenfolge
+  (Teile 1 bis n, eine `walk`, der letzte zuletzt). So lässt sich eine
+  Reihe nicht aus zwei Lesungen zusammensetzen; eine ganze ältere Reihe
+  innerhalb ihres Tages bleibt gültig (wie ein Paket des Inventars).
+- Die Zeilen der Site (Kern, Plugins, Themes, Must-Use-Plugins, Drop-ins,
+  Gruppe U) stehen immer im ersten Teil; eine Site mit mehr als rund 4900
+  Plugins und Themes zusammen überschreitet die Grenze eines Pakets
+  (5000 Zeilen) und wird mit dem Weg der Paketgrösse abgelehnt.
+- Die Umgebung dieser Site liest der Bericht in Teilen der Ablage (`v`),
+  nach dem Inventar; ein Aufruf, dem weniger als 10 Sekunden seines Budgets
+  bleiben, liest sie im nächsten Aufruf. Ohne `environment` liest er sie
+  nicht und nennt die Umgebung als einen Eintrag «not compared» mit dem Weg.
+- Die Zeilen eines Pakets der Umgebung prüft der Import auf ihre Struktur
+  (`AB_MCP_Sync_Env::shaped()`); eine Prüfung auf Zugangsdaten in Namen wie
+  beim Inventar (`held`) gibt es dafür nicht, weil die Namen Dateien,
+  Plugins und Tabellen nennen, keine gespeicherten Werte; Werte von
+  Konstanten kommen nur aus der festen Liste.

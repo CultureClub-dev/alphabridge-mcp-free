@@ -1185,8 +1185,8 @@ final class SyncReportTest extends TestCase {
 		self::assertTrue( AB_MCP_Tool_Registry::scope_allows( 'read', 'wp_site_diff', $def ) );
 		self::assertFalse( AB_MCP_Staging_Gate::concerns( 'wp_site_diff', $def ), 'A reader stands outside «Staging first».' );
 		self::assertArrayNotHasKey( 'confirm', $def );
-		self::assertSame( array( 'packages', 'report_id', 'cursor' ), array_keys( $def['inputSchema']['properties'] ) );
-		foreach ( array( 'wp_update_core', 'multisite', 'Z8d', 'no object is deleted', 'as a whole', 'roles, Customizer changesets, options of plugins, theme mods other than the menu positions', 'creating additional CSS and creating terms with meta', 'mutual references', 'residual', '60 seconds', 'the first 200 entries', 'cursor', 'SHA-256 of its ref only', 'Needs manage_options' ) as $says ) {
+		self::assertSame( array( 'packages', 'environment', 'report_id', 'cursor' ), array_keys( $def['inputSchema']['properties'] ) );
+		foreach ( array( 'wp_update_core', 'multisite', 'Z8d', 'purpose=env', 'counted, contents not compared', 'never equal', 'Z8b for files and code, Z8d for tables', 'changed at the host', 'no constant that holds a secret', 'not compared, with the way', 'no object is deleted', 'as a whole', 'roles, Customizer changesets, options of plugins, theme mods other than the menu positions', 'creating additional CSS and creating terms with meta', 'mutual references', 'residual', '60 seconds', 'the first 200 entries', 'cursor', 'SHA-256 of its ref only', 'Needs manage_options' ) as $says ) {
 			self::assertStringContainsString( $says, $def['description'] );
 		}
 		foreach ( array( 'Pro', 'Agency', 'upgrade' ) as $never ) {

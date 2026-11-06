@@ -6,7 +6,8 @@
  * Every call first checks the signed manifest (AB_MCP_Sync_Manifest::
  * verify(): the key a person confirmed, this site's address exactly, the
  * staging site's address exactly, not expired, the purpose the caller reads
- * it for; in this version the inventory only). The first call brings the
+ * it for; in this version the inventory or the environment, whose lines
+ * have a structure of their own, AB_MCP_Sync_Env::shaped()). The first call brings the
  * manifest; this site keeps it in a group of the area in of the protected
  * store, of the account that brought it, and checks it again on every call
  * after, so a new key, another pair or the end of its day stops the package
@@ -332,12 +333,15 @@ final class AB_MCP_Sync_Import {
 	 * what refuses here names the way, and the store removes the group after
 	 * its day.
 	 *
-	 * @param mixed $package_id Package (32 hex).
+	 * @param mixed  $package_id Package (32 hex).
+	 * @param string $purpose    What the caller reads it for: inventory, or
+	 *                           env for a package of the environment
+	 *                           (wp_site_diff, branch 7).
 	 * @return array|WP_Error manifest (the array verify() read), lines (the
 	 *                        objects, in order), held (kind, SHA-256 of the
 	 *                        ref, code of each object held here).
 	 */
-	public static function taken( $package_id ) {
+	public static function taken( $package_id, $purpose = 'inventory' ) {
 		if ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_package', 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.' );
 		}
@@ -349,8 +353,8 @@ final class AB_MCP_Sync_Import {
 			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( 'This site holds no package %s taken over by this account (packages are kept a day, and each belongs to the account that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', $package_id ) );
 		}
 		$expect = $found['expect'];
-		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || AB_MCP_Sync_Export::PURPOSES[0] !== $expect['purpose'] ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %s for a purpose this version does not take, so it is not read. Fetch it anew: call wp_site_export on the staging site, then wp_site_import_chunk here with purpose=%s.', $package_id, AB_MCP_Sync_Export::PURPOSES[0] ) );
+		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', $package_id, 'env' === $purpose ? 'env' : 'inventory' ) );
 		}
 		if ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', $package_id ) );
@@ -463,7 +467,7 @@ final class AB_MCP_Sync_Import {
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site held the package for a purpose this version does not take (it takes purpose=%s only), so what arrived of it was removed. Call again with the manifest and purpose=%s as wp_site_export gave them on the staging site.', AB_MCP_Sync_Export::PURPOSES[0], AB_MCP_Sync_Export::PURPOSES[0] ) );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory and purpose=env), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
 		}
 		// The pair it was begun with (decision 15): a new confirmation of the
 		// role, another pair or another anchor ends it, before its manifest
@@ -494,7 +498,7 @@ final class AB_MCP_Sync_Import {
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
 		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', sprintf( 'This version takes packages of the inventory of the staging site only (purpose says what a package is read for); packages of objects, media and the environment come with the takeover. Pass purpose=%s with the manifest.', AB_MCP_Sync_Export::PURPOSES[0] ) );
+			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site (purpose says what a package is read for); packages of objects and media come with the takeover. Pass purpose=inventory or purpose=env with the manifest, as wp_site_export gave it.' );
 		}
 		return array(
 			'purpose'    => $purpose,
@@ -843,6 +847,8 @@ final class AB_MCP_Sync_Import {
 		$manifest = $held['manifest'];
 		$limits   = AB_MCP_Store_Budget::UNPACK;
 		$extra    = AB_MCP_Redactor::extra_keys();
+		// A package of the environment holds lines of AB_MCP_Sync_Env, no object.
+		$env      = 'env' === $manifest['purpose'];
 		$total = 0;
 		$count = 0;
 		$out   = array();
@@ -878,6 +884,12 @@ final class AB_MCP_Sync_Import {
 				}
 				if ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== $line ) {
 					return self::unpack_refusal( 'A line is not an object in the one spelling of the staging site.' );
+				}
+				if ( $env ) {
+					if ( ! AB_MCP_Sync_Env::shaped( $object ) ) {
+						return self::unpack_refusal( 'A line is not one of the environment as the staging site writes it: a kind of line or a field it has no place for, or a field of another type.' );
+					}
+					continue;
 				}
 				if ( ! self::line_shaped( $object ) ) {
 					return self::unpack_refusal( 'A line is not one as the staging site writes it: a field it has no place for or of another type, a status, lock, space, strength or reason code outside its list, bytes not in the byte form, an identity not of its kind or naming another object, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );

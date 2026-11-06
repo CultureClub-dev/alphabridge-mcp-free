@@ -2645,8 +2645,8 @@ return array(
 		'file'    => $ex,
 		'search'  => "\t\tif ( ! in_array( \$purpose, self::PURPOSES, true ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncPackageTest', 'testThisVersionMakesPackagesOfTheInventoryOnly' ),
-		'expect'  => '/testThisVersionMakesPackagesOfTheInventoryOnly/',
+		'run'     => $unit( 'SyncPackageTest', 'testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly' ),
+		'expect'  => '/testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly/',
 	),
 	array(
 		'id'      => 'paket/export-cursor-array',
@@ -3419,8 +3419,8 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {",
 		'replace' => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {",
-		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly' ),
-		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryOnly/',
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly' ),
+		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly/',
 	),
 	array(
 		'id'      => 'paket/import-expect-first',
@@ -3428,8 +3428,8 @@ return array(
 		'file'    => $im,
 		'search'  => "\t\tif ( array_key_exists( 'manifest', \$a ) ) {\n\t\t\t\$expect = self::expect(",
 		'replace' => "\t\tif ( false ) {\n\t\t\t\$expect = self::expect(",
-		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryOnly' ),
-		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryOnly/',
+		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly' ),
+		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly/',
 	),
 	array(
 		'id'      => 'paket/budget-series',

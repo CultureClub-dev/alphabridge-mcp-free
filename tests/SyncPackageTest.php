@@ -674,13 +674,13 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( 'ab-sync-held/3', AB_MCP_Sync_Import::HELD_FORMAT );
 	}
 
-	public function testThisVersionMakesPackagesOfTheInventoryOnly(): void {
+	public function testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		foreach ( array( 'objects', 'media', 'env', null, 'INVENTORY' ) as $purpose ) {
+		foreach ( array( 'objects', 'media', 'ENV', null, 'INVENTORY' ) as $purpose ) {
 			self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( $purpose )->get_error_code(), var_export( $purpose, true ) );
 		}
-		self::assertSame( array( 'inventory' ), AB_MCP_Sync_Export::PURPOSES );
+		self::assertSame( array( 'inventory', 'env' ), AB_MCP_Sync_Export::PURPOSES );
 	}
 
 	/** @return array<string,array{0:mixed}> */
@@ -779,7 +779,7 @@ final class SyncPackageTest extends TestCase {
 		self::assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_site_import_chunk', $r->get( 'wp_site_import_chunk' ) ), 'With fetch it asks the staging site.' );
 		self::assertSame( AB_MCP_Sync_Export::PURPOSES, AB_MCP_Tools_Staging::EXPORT_PURPOSES );
 		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_export' )['inputSchema']['properties']['purpose']['enum'] );
-		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'], 'The import takes the inventory only in this version.' );
+		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'], 'The import takes the inventory and the environment in this version.' );
 		self::assertArrayNotHasKey( 'report_hash', $r->get( 'wp_site_import_chunk' )['inputSchema']['properties'] );
 		foreach ( array( 'wp_site_export' => '10 minutes', 'wp_site_export_chunk' => 'without passing it through the model', 'wp_site_import_chunk' => 'following no redirect' ) as $name => $says ) {
 			self::assertStringContainsString( $says, $r->get( $name )['description'], $name );
@@ -957,8 +957,8 @@ final class SyncPackageTest extends TestCase {
 
 	/* --------------------------------------------------- the import, in Teil 2 */
 
-	public function testTheProductionSiteTakesPackagesOfTheInventoryOnly(): void {
-		foreach ( array( 'objects', 'media', 'env', null, 'Inventory' ) as $purpose ) {
+	public function testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly(): void {
+		foreach ( array( 'objects', 'media', 'Env', null, 'Inventory' ) as $purpose ) {
 			$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array( 'manifest' => 'x', 'signature' => 'y' ), 'purpose' => $purpose ) );
 			self::assertSame( 'ab_mcp_sync_import_purpose', $refused->get_error_code(), var_export( $purpose, true ) . ': before anything is read.' );
 			self::assertStringContainsString( 'purpose=inventory', $refused->get_error_message() );
